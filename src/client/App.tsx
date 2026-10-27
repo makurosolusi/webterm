@@ -1,71 +1,136 @@
-import { useCallback, useMemo, useState } from 'react'
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  applyNodeChanges,
-} from '@xyflow/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ReactFlow, Background, Controls, applyNodeChanges } from '@xyflow/react'
 import type { Node, NodeChange } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import TerminalNode from './TerminalNode'
-import { loadNodes, saveNodes, addNode } from './store'
-import type { TermNode } from './store'
+import AgentNode from './AgentNode'
+import WorkspaceBar from './WorkspaceBar'
+import { toFlow, toWsNode, addNode } from './store'
 import { send } from './ws'
+import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
+import { AGENTS, DEFAULT_VIEWPORT } from '../shared/workspace'
+import type { AgentId, Viewport, Workspace, WsNode } from '../shared/workspace'
 
-const nodeTypes = { terminal: TerminalNode }
-
-function toFlow(t: TermNode): Node {
-  return { id: t.id, type: 'terminal', position: { x: t.x, y: t.y }, data: { id: t.id } }
-}
-
-function toTerm(n: Node): TermNode {
-  return { id: n.id, x: n.position.x, y: n.position.y }
-}
+const nodeTypes = { terminal: TerminalNode, agent: AgentNode }
 
 export default function App() {
-  const [nodes, setNodes] = useState<Node[]>(() => loadNodes(localStorage).map(toFlow))
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeWs, setActiveWs] = useState<Workspace | null>(null)
+  const [nodes, setNodes] = useState<Node[]>([])
 
-  const persist = useCallback((ns: Node[]) => saveNodes(localStorage, ns.map(toTerm)), [])
+  const activeWsRef = useRef<Workspace | null>(null)
+  const nodesRef = useRef<Node[]>([])
+  const viewportRef = useRef<Viewport>(DEFAULT_VIEWPORT)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((prev) => {
-        const next = applyNodeChanges(changes, prev)
-        // Persist on drag-stop (position settled) and on removal; also close removed terms.
-        const settled = changes.some((c) => (c.type === 'position' && !c.dragging) || c.type === 'remove')
-        if (changes.some((c) => c.type === 'remove')) {
-          for (const c of changes) if (c.type === 'remove') send({ t: 'close', id: c.id })
-        }
-        if (settled) persist(next)
-        return next
-      })
-    },
-    [persist]
-  )
-
-  const onAdd = useCallback(() => {
-    setNodes((prev) => {
-      const n = prev.length
-      const t: TermNode = { id: crypto.randomUUID(), x: 80 + n * 40, y: 80 + n * 40 }
-      const terms = addNode(prev.map(toTerm), t)
-      saveNodes(localStorage, terms)
-      return terms.map(toFlow)
-    })
+  const applyWorkspace = useCallback((ws: Workspace) => {
+    setActiveWs(ws)
+    activeWsRef.current = ws
+    viewportRef.current = ws.viewport ?? DEFAULT_VIEWPORT
+    const flow = ws.nodes.map(toFlow)
+    nodesRef.current = flow
+    setNodes(flow)
   }, [])
 
-  const btnStyle = useMemo<React.CSSProperties>(
-    () => ({
-      position: 'absolute', zIndex: 10, top: 12, left: 12,
-      padding: '8px 14px', background: '#2563eb', color: '#fff',
-      border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-    }),
-    []
-  )
+  const loadWorkspace = useCallback(async (id: string) => {
+    applyWorkspace(await getWorkspace(id))
+  }, [applyWorkspace])
+
+  useEffect(() => {
+    void (async () => {
+      const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
+      setWorkspaces(list)
+      let id = active
+      if (!id && list.length) { id = list[0].id; await setActive(id) }
+      if (id) { setActiveId(id); await loadWorkspace(id) }
+    })()
+  }, [loadWorkspace])
+
+  const scheduleSave = useCallback(() => {
+    const ws = activeWsRef.current
+    if (!ws) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      const updated: Workspace = { ...ws, nodes: nodesRef.current.map(toWsNode), viewport: viewportRef.current, updatedAt: Date.now() }
+      activeWsRef.current = updated
+      void saveWorkspace(updated)
+    }, 400)
+  }, [])
+
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((prev) => {
+      const next = applyNodeChanges(changes, prev)
+      nodesRef.current = next
+      if (changes.some((c) => c.type === 'remove')) {
+        for (const c of changes) if (c.type === 'remove') send({ t: 'close', id: c.id })
+      }
+      const settled = changes.some((c) => (c.type === 'position' && !c.dragging) || c.type === 'remove')
+      if (settled) scheduleSave()
+      return next
+    })
+  }, [scheduleSave])
+
+  const onMoveEnd = useCallback((_e: unknown, vp: Viewport) => {
+    viewportRef.current = vp
+    scheduleSave()
+  }, [scheduleSave])
+
+  const addFlowNode = useCallback((make: (n: number, ws: Workspace) => WsNode) => {
+    const ws = activeWsRef.current
+    if (!ws) return
+    setNodes((prev) => {
+      const node = make(prev.length, ws)
+      const next = addNode(prev.map(toWsNode), node).map(toFlow)
+      nodesRef.current = next
+      scheduleSave()
+      return next
+    })
+  }, [scheduleSave])
+
+  const onAddTerminal = useCallback(() => {
+    addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', x: 80 + n * 40, y: 80 + n * 40, cwd: ws.cwd }))
+  }, [addFlowNode])
+
+  const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string) => {
+    const color = agentId !== 'custom' ? AGENTS[agentId].color : undefined
+    addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'agent', x: 80 + n * 40, y: 80 + n * 40, cmd, agentId, cwd: cwd ?? ws.cwd, color }))
+  }, [addFlowNode])
+
+  const onSelect = useCallback(async (id: string) => {
+    if (!id || id === activeId) return
+    await setActive(id)
+    setActiveId(id)
+    await loadWorkspace(id)
+  }, [activeId, loadWorkspace])
+
+  const onCreateWorkspace = useCallback(async (name: string, cwd?: string) => {
+    const ws = await createWorkspace(name, cwd)
+    setWorkspaces((prev) => [...prev, ws])
+    await setActive(ws.id)
+    setActiveId(ws.id)
+    applyWorkspace(ws)
+  }, [applyWorkspace])
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#111' }}>
-      <button style={btnStyle} onClick={onAdd}>+ Terminal</button>
-      <ReactFlow nodes={nodes} nodeTypes={nodeTypes} onNodesChange={onNodesChange} fitView={false}>
+      <WorkspaceBar
+        workspaces={workspaces}
+        activeId={activeId}
+        onSelect={onSelect}
+        onCreateWorkspace={onCreateWorkspace}
+        onAddTerminal={onAddTerminal}
+        onAddAgent={onAddAgent}
+      />
+      <ReactFlow
+        key={activeId ?? 'empty'}
+        nodes={nodes}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onMoveEnd={onMoveEnd}
+        defaultViewport={activeWs?.viewport ?? DEFAULT_VIEWPORT}
+        fitView={false}
+      >
         <Background />
         <Controls />
       </ReactFlow>
