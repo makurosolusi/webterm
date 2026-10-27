@@ -13,6 +13,20 @@ export const AGENTS: Record<Exclude<AgentId, 'custom'>, AgentConfig> = {
 
 export interface Viewport { x: number; y: number; zoom: number }
 
+export interface Comment {
+  id: string
+  text: string
+  ts: number          // epoch ms
+  author?: string
+}
+
+export interface BridgeLink {
+  id: string
+  source: string      // node id the link comes FROM (link-out)
+  target: string      // node id the link goes TO   (link-in / reader)
+  kind: 'context'
+}
+
 export interface WsNode {
   id: string
   kind: 'terminal' | 'agent'
@@ -26,6 +40,8 @@ export interface WsNode {
   agentId?: AgentId
   color?: string
   sessionId?: string      // UUID pre-set at launch (claude --session-id); enables --resume
+  collapsed?: boolean     // node chrome collapsed to header only
+  comments?: Comment[]    // per-node activity/notes thread
 }
 
 export interface Workspace {
@@ -35,10 +51,21 @@ export interface Workspace {
   color?: string
   viewport: Viewport
   nodes: WsNode[]
+  bridges: BridgeLink[]   // context-link edges between nodes
   updatedAt: number
 }
 
 export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
+
+// A node is context-capable iff it is an agent node running claude/codex/gemini.
+export function isContextCapable(agentId?: AgentId): boolean {
+  return agentId === 'claude' || agentId === 'codex' || agentId === 'gemini'
+}
+
+// Both ends context-capable → a 'context' link may form; otherwise no link.
+export function classifyLink(a?: AgentId, b?: AgentId): 'context' | null {
+  return isContextCapable(a) && isContextCapable(b) ? 'context' : null
+}
 
 // Build an agent launch command line. envman profile is optional; when given,
 // wrap the agent's base command as `envman -e <profile> -- <launchCmd>`.

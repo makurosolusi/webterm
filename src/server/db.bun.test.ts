@@ -46,3 +46,15 @@ test('delete removes from get and list', () => {
   expect(db.get(ws.id)).toBe(null)
   expect(db.list().some((w) => w.id === ws.id)).toBe(false)
 })
+
+test('save round-trips bridges intact', () => {
+  const db = freshDb()
+  const ws = db.create('proj')
+  // fresh workspace starts with an empty bridges array
+  expect(JSON.stringify(ws.bridges)).toBe('[]')
+  const bridges = [{ id: 'b1', source: 'n1', target: 'n2', kind: 'context' as const }]
+  ws.bridges = bridges
+  db.save(ws)
+  const got = db.get(ws.id)
+  expect(JSON.stringify(got?.bridges)).toBe(JSON.stringify(bridges))
+})

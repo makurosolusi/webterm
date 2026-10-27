@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import type { Workspace, WsNode, Viewport } from '../shared/workspace'
+import type { Workspace, WsNode, Viewport, BridgeLink } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import { dbPath } from './config'
 
@@ -8,8 +8,15 @@ export function openDb(path: string = dbPath()): Database {
   d.exec(`CREATE TABLE IF NOT EXISTS workspace (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, cwd TEXT, color TEXT,
     viewport TEXT NOT NULL DEFAULT '{"x":0,"y":0,"zoom":1}',
-    nodes TEXT NOT NULL DEFAULT '[]', updated_at INTEGER NOT NULL);`)
+    nodes TEXT NOT NULL DEFAULT '[]', bridges TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL);`)
   d.exec(`CREATE TABLE IF NOT EXISTS app (key TEXT PRIMARY KEY, value TEXT);`)
+  // Back-compat: add the bridges column to workspaces created before context-link
+  // bridges existed. SQLite has no ADD COLUMN IF NOT EXISTS, so guard via pragma.
+  const cols = d.query('PRAGMA table_info(workspace)').all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'bridges')) {
+    d.exec("ALTER TABLE workspace ADD COLUMN bridges TEXT NOT NULL DEFAULT '[]'")
+  }
   return d
 }
 
@@ -20,6 +27,7 @@ interface Row {
   color: string | null
   viewport: string
   nodes: string
+  bridges: string
   updated_at: number
 }
 
@@ -31,6 +39,7 @@ function toWorkspace(r: Row): Workspace {
     color: r.color ?? undefined,
     viewport: JSON.parse(r.viewport) as Viewport,
     nodes: JSON.parse(r.nodes) as WsNode[],
+    bridges: JSON.parse(r.bridges ?? '[]') as BridgeLink[],
     updatedAt: r.updated_at,
   }
 }
@@ -56,23 +65,25 @@ export class Db {
       color,
       viewport: DEFAULT_VIEWPORT,
       nodes: [],
+      bridges: [],
       updatedAt: Date.now(),
     }
     this.d.query(
-      'INSERT INTO workspace (id, name, cwd, color, viewport, nodes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), ws.updatedAt)
+      'INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), ws.updatedAt)
     return ws
   }
 
   save(ws: Workspace): void {
     const updatedAt = Date.now()
     this.d.query(
-      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name=excluded.name, cwd=excluded.cwd, color=excluded.color,
-         viewport=excluded.viewport, nodes=excluded.nodes, updated_at=excluded.updated_at`
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), updatedAt)
+         viewport=excluded.viewport, nodes=excluded.nodes, bridges=excluded.bridges,
+         updated_at=excluded.updated_at`
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), updatedAt)
   }
 
   delete(id: string): void {

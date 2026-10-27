@@ -5,6 +5,7 @@ import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
 import { hookStatus } from './hooks'
+import type { BridgeLink } from '../shared/workspace'
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body)
@@ -45,9 +46,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return ws ? json(res, 200, ws) : json(res, 404, { error: 'not found' })
     }
     if (method === 'PUT') {
-      let body: { name: string; cwd?: string; color?: string; viewport: unknown; nodes: unknown }
+      let body: { name: string; cwd?: string; color?: string; viewport: unknown; nodes: unknown; bridges?: BridgeLink[] }
       try { body = JSON.parse(await readBody(req)) } catch { return json(res, 400, { error: 'bad json' }) }
-      const ws = { id, name: body.name, cwd: body.cwd, color: body.color, viewport: body.viewport, nodes: body.nodes, updatedAt: Date.now() } as Parameters<typeof db.save>[0]
+      const ws = { id, name: body.name, cwd: body.cwd, color: body.color, viewport: body.viewport, nodes: body.nodes, bridges: body.bridges ?? [], updatedAt: Date.now() } as Parameters<typeof db.save>[0]
       db.save(ws)
       const saved = db.get(id)
       return saved ? json(res, 200, saved) : json(res, 404, { error: 'not found' })

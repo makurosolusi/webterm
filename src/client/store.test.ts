@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { toFlow, toWsNode, addNode, removeNode, groupByStatus, workspaceNameFromPath } from './store'
-import type { AgentStatus, WsNode } from '../shared/workspace'
+import { toFlow, toWsNode, addNode, removeNode, groupByStatus, workspaceNameFromPath, toFlowEdge, toBridge } from './store'
+import type { AgentStatus, WsNode, BridgeLink } from '../shared/workspace'
+import type { Edge } from '@xyflow/react'
 
 describe('store serializer', () => {
   it('round-trips a terminal node (kind, cwd)', () => {
@@ -57,6 +58,38 @@ describe('store serializer', () => {
     const back = toWsNode(toFlow(n))
     expect(back.width).toBe(640)
     expect(back.height).toBe(420)
+  })
+
+  it('round-trips collapsed and comments through toFlow -> toWsNode', () => {
+    const n: WsNode = {
+      id: 'f', kind: 'agent', x: 0, y: 0, agentId: 'claude',
+      collapsed: true, comments: [{ id: 'c1', text: 'note', ts: 123 }],
+    }
+    const back = toWsNode(toFlow(n))
+    expect(back.collapsed).toBe(true)
+    expect(back.comments).toEqual([{ id: 'c1', text: 'note', ts: 123 }])
+  })
+})
+
+describe('edge serializer', () => {
+  it('toFlowEdge preserves id/source/target and sets context type + kind', () => {
+    const b: BridgeLink = { id: 'e1', source: 'a', target: 'b', kind: 'context' }
+    const e = toFlowEdge(b)
+    expect(e.id).toBe('e1')
+    expect(e.source).toBe('a')
+    expect(e.target).toBe('b')
+    expect(e.type).toBe('context')
+    expect(e.data).toEqual({ kind: 'context' })
+  })
+
+  it('toBridge recovers id/source/target/kind from an Edge', () => {
+    const e: Edge = { id: 'e2', source: 's', target: 't', type: 'context' }
+    expect(toBridge(e)).toEqual({ id: 'e2', source: 's', target: 't', kind: 'context' })
+  })
+
+  it('round-trips a BridgeLink through toFlowEdge -> toBridge', () => {
+    const b: BridgeLink = { id: 'e3', source: 'x', target: 'y', kind: 'context' }
+    expect(toBridge(toFlowEdge(b))).toEqual(b)
   })
 })
 
