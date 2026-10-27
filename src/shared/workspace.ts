@@ -1,5 +1,7 @@
 export type AgentId = 'claude' | 'codex' | 'gemini' | 'custom'
 
+export type AgentStatus = 'working' | 'waiting' | 'blocked' | 'done'
+
 export interface AgentConfig { label: string; color: string; launchCmd: string }
 
 // Built-in agents (custom is handled by a free-text command, not in this map).
@@ -21,6 +23,7 @@ export interface WsNode {
   cmd?: string            // agent launch line, e.g. "envman -e malik-opus -- claude"
   agentId?: AgentId
   color?: string
+  sessionId?: string      // UUID pre-set at launch (claude --session-id); enables --resume
 }
 
 export interface Workspace {
