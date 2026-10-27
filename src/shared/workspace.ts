@@ -41,6 +41,7 @@ export interface WsNode {
   color?: string
   sessionId?: string      // UUID pre-set at launch (claude --session-id); enables --resume
   collapsed?: boolean     // node chrome collapsed to header only
+  hideLinks?: boolean     // context edges hidden from this node
   comments?: Comment[]    // per-node activity/notes thread
 }
 

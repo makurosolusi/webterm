@@ -10,7 +10,7 @@ export function toFlow(n: WsNode): Node {
     position: { x: n.x, y: n.y },
     width: n.width ?? 400,
     height: n.height ?? 300,
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, collapsed: n.collapsed, comments: n.comments },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments },
   }
 }
 
@@ -30,6 +30,7 @@ export function toWsNode(n: Node): WsNode {
     title: d.title,
     sessionId: d.sessionId,
     collapsed: d.collapsed,
+    hideLinks: d.hideLinks,
     comments: d.comments,
   }
 }

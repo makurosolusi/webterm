@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
-import { NodeResizer, useReactFlow } from '@xyflow/react'
-import { AGENTS } from '../shared/workspace'
+import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react'
+import { AGENTS, isContextCapable } from '../shared/workspace'
 import type { AgentId, AgentStatus, Comment } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
@@ -149,6 +149,10 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
             onClose={() => { setSearchOpen(false); termRef.current?.clearSearch() }}
           />
         )}
+        {isContextCapable(agentId) && (<>
+          <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />
+          <Handle id="link-in"  type="target" position={Position.Left}  className="bridge-handle" />
+        </>)}
       </div>
     </>
   )
