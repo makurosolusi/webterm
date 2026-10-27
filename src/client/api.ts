@@ -49,3 +49,7 @@ export async function setActive(id: string): Promise<void> {
   })
   if (!res.ok) throw new Error(`PUT /api/active -> ${res.status}`)
 }
+
+export function listDir(path?: string): Promise<{ path: string; parent: string | null; dirs: string[] }> {
+  return jsonFetch('/api/fs' + (path ? `?path=${encodeURIComponent(path)}` : ''))
+}
