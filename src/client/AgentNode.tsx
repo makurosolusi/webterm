@@ -1,16 +1,26 @@
-import { useEffect, useState } from 'react'
-import type { NodeProps } from '@xyflow/react'
-import { NodeResizer } from '@xyflow/react'
+import { useEffect, useRef, useState } from 'react'
+import type { NodeProps, Viewport } from '@xyflow/react'
+import { NodeResizer, useReactFlow } from '@xyflow/react'
 import { AGENTS } from '../shared/workspace'
-import type { AgentId, AgentStatus } from '../shared/workspace'
+import type { AgentId, AgentStatus, Comment } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
+import type { TerminalHandle } from './TerminalCore'
+import NodeChrome from './NodeChrome'
+import UsagePill from './UsagePill'
+import FindBar from './FindBar'
 import { send, subscribeStatus, getStatus } from './ws'
 
-export default function AgentNode({ data, selected }: NodeProps) {
-  const { id, cmd, cwd, agentId, color, title, sessionId, onSession } = data as {
-    id: string; cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
-    sessionId?: string; onSession?: (id: string, uuid: string) => void
+const COLLAPSED_H = 40
+
+export default function AgentNode({ id, data, selected, height }: NodeProps) {
+  const d = data as {
+    cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
+    sessionId?: string; collapsed?: boolean; comments?: Comment[]
+    onSession?: (id: string, uuid: string) => void
   }
+  const { cmd, cwd, agentId, sessionId, onSession } = d
+  const rf = useReactFlow()
+  const termRef = useRef<TerminalHandle>(null)
 
   const [status, setStatus] = useState<AgentStatus | undefined>(() => getStatus(id))
   useEffect(() => subscribeStatus((sid, s) => { if (sid === id) setStatus(s) }), [id])
@@ -25,8 +35,21 @@ export default function AgentNode({ data, selected }: NodeProps) {
   useEffect(() => { if (!sessionId) onSession?.(id, sid) }, [])
 
   const builtin = agentId && agentId !== 'custom' ? AGENTS[agentId] : undefined
-  const swatch = color ?? builtin?.color ?? '#888'
-  const label = title ?? builtin?.label ?? agentId ?? 'agent'
+  const swatch = d.color ?? builtin?.color ?? '#0a84ff'
+  const label = d.title ?? builtin?.label ?? agentId ?? 'agent'
+  const collapsed = d.collapsed ?? false
+  const comments = d.comments ?? []
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [micActive, setMicActive] = useState(false)
+  const [maximized, setMaximized] = useState(false)
+
+  // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
+  // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
+  const expandedH = useRef(height ?? 300)
+  const savedVp = useRef<Viewport | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Web Speech API belum ada di lib.dom TS
+  const recogRef = useRef<any>(null)
 
   // Restart kills the PTY and mints a NEW uuid (claude can't reuse a --session-id).
   const restart = () => {
@@ -36,32 +59,82 @@ export default function AgentNode({ data, selected }: NodeProps) {
   }
   // Resume reattaches claude's prior session via the SAME uuid + --resume.
   const doResume = () => { setResume(true); setGen((g) => g + 1) }
-
   const canResume = agentId === 'claude' && status === 'done'
+
+  const toggleCollapse = () => {
+    if (!collapsed) { expandedH.current = height ?? 300; rf.updateNode(id, { height: COLLAPSED_H }) }
+    else rf.updateNode(id, { height: expandedH.current })
+    rf.updateNodeData(id, { collapsed: !collapsed })
+  }
+
+  const addComment = (text: string) =>
+    rf.updateNodeData(id, { comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now() }] })
+
+  const toggleMic = () => {
+    if (micActive) { recogRef.current?.stop(); return }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Web Speech API belum ada di lib.dom TS
+    const SR = (window as any).webkitSpeechRecognition ?? (window as any).SpeechRecognition
+    if (!SR) return
+    const recog = new SR()
+    recog.continuous = false
+    recog.interimResults = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SpeechRecognitionEvent belum ada di lib.dom TS
+    recog.onresult = (e: any) => {
+      const transcript = e.results?.[0]?.[0]?.transcript
+      if (transcript) send({ t: 'input', id, data: transcript })
+    }
+    recog.onend = () => setMicActive(false)
+    recog.onerror = () => setMicActive(false)
+    recogRef.current = recog
+    recog.start()
+    setMicActive(true)
+  }
+
+  const toggleMaximize = () => {
+    if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }
+    else { if (savedVp.current) rf.setViewport(savedVp.current, { duration: 200 }); setMaximized(false) }
+  }
+
+  // Agent-only toolbar props are filled by B3/Wave C; undefined now → buttons stay hidden.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- passthrough of not-yet-wired handlers
+  const ext = data as any
 
   return (
     <>
-      <NodeResizer isVisible={!!selected} minWidth={240} minHeight={160} color={swatch} />
-      <div className={`term-node${selected ? ' term-node--selected' : ''}`} style={{ borderTopColor: swatch }}>
-        <div className="node-header">
-          <span className="node-swatch" style={{ background: swatch }} />
-          <span className="node-title">{label}</span>
-          <span
-            title={status ?? 'unknown'}
-            className={status ? `node-status node-status--${status}` : 'node-status'}
-          />
-          {canResume && (
-            <button className="nodrag icon-btn" onClick={doResume} style={{ width: 'auto', padding: '0 6px', fontSize: 10 }}>
-              Resume
-            </button>
-          )}
-          <button className="nodrag icon-btn" onClick={restart} style={{ width: 'auto', padding: '0 6px', fontSize: 10 }}>
-            Restart
-          </button>
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
+      <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
+      <div
+        className={`term-node${selected ? ' term-node--selected' : ''}${collapsed ? ' term-node--collapsed' : ''}`}
+        style={{ borderTopColor: swatch }}
+      >
+        <NodeChrome
+          title={label}
+          onRename={(t) => rf.updateNodeData(id, { title: t })}
+          collapsed={collapsed} onToggleCollapse={toggleCollapse}
+          color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
+          status={status}
+          pill={<UsagePill modelLabel={label} />}
+          comments={comments} onAddComment={addComment}
+          onRefresh={() => termRef.current?.refit()}
+          searchOpen={searchOpen} onToggleSearch={() => setSearchOpen((o) => !o)}
+          micActive={micActive} onToggleMic={toggleMic}
+          maximized={maximized} onToggleMaximize={toggleMaximize}
+          onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
+          onAiName={ext.onAiName} aiNaming={ext.aiNaming}
+          onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
+          hideLinks={ext.hideLinks} onToggleHideLinks={ext.onToggleHideLinks}
+          extraHeader={
+            <>
+              {canResume && (
+                <button className="nodrag icon-btn" onClick={doResume} style={{ width: 'auto', padding: '0 6px', fontSize: 10 }}>Resume</button>
+              )}
+              <button className="nodrag icon-btn" onClick={restart} style={{ width: 'auto', padding: '0 6px', fontSize: 10 }}>Restart</button>
+            </>
+          }
+        />
+        <div className="node-body">
           <TerminalCore
             key={gen}
+            ref={termRef}
             id={id}
             cmd={cmd}
             cwd={cwd}
@@ -70,6 +143,12 @@ export default function AgentNode({ data, selected }: NodeProps) {
             resume={resume}
           />
         </div>
+        {searchOpen && (
+          <FindBar
+            onSearch={(t, dir) => termRef.current?.search(t, { direction: dir })}
+            onClose={() => { setSearchOpen(false); termRef.current?.clearSearch() }}
+          />
+        )}
       </div>
     </>
   )
