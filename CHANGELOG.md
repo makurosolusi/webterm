@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0] - 2026-10-27
+### Added
+- Dock: a floating toolbar at the bottom of the canvas to add a node (Terminal, Agent, or Workspace), undo/redo layout changes, step viewport navigation back/forward, fit the view, toggle the Board, and zoom out/in.
+- Resizable nodes: select a node and drag its edges to resize it; the size is saved with the workspace and restored on reload.
+- Minimap: a bottom-right overview whose dots are colored by agent status (working, waiting, blocked, done) or blue for terminals, over a dot-grid canvas background.
+### Changed
+- The top-left panel is now a slim workspace switcher; adding terminals, agents, and workspaces moved into the dock.
+- Terminal and agent nodes, plus the Welcome, Board, and folder-picker screens, were restyled to a consistent nodeterm palette.
+
 ## [0.3.0] - 2026-10-27
 ### Added
 - Live agent status: each agent node shows a colored dot — working, waiting, blocked (needs permission), or done. Claude uses session hooks; other agents show liveness (working until exit).

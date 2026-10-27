@@ -8,6 +8,8 @@ export function toFlow(n: WsNode): Node {
     id: n.id,
     type: n.kind,
     position: { x: n.x, y: n.y },
+    width: n.width ?? 400,
+    height: n.height ?? 300,
     data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId },
   }
 }
@@ -19,6 +21,8 @@ export function toWsNode(n: Node): WsNode {
     kind: (n.type as WsNode['kind']) ?? 'terminal',
     x: n.position.x,
     y: n.position.y,
+    width: typeof n.width === 'number' ? n.width : undefined,
+    height: typeof n.height === 'number' ? n.height : undefined,
     cmd: d.cmd,
     cwd: d.cwd,
     agentId: d.agentId,

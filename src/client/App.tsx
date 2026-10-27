@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReactFlow, Background, Controls, applyNodeChanges } from '@xyflow/react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { ReactFlow, Background, BackgroundVariant, MiniMap, applyNodeChanges } from '@xyflow/react'
 import type { Node, NodeChange, ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import TerminalNode from './TerminalNode'
 import AgentNode from './AgentNode'
 import WorkspaceBar from './WorkspaceBar'
+import Dock from './Dock'
 import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import { toFlow, toWsNode, addNode, workspaceNameFromPath } from './store'
+import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
 import { AGENTS, DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -24,12 +26,17 @@ export default function App() {
   const [statuses, setStatuses] = useState<Record<string, AgentStatus>>({})
   const [board, setBoard] = useState(false)
   const [picker, setPicker] = useState<{ onPick: (p: string) => void } | null>(null)
+  const [zoom, setZoom] = useState(DEFAULT_VIEWPORT.zoom)
 
   const activeWsRef = useRef<Workspace | null>(null)
   const nodesRef = useRef<Node[]>([])
   const viewportRef = useRef<Viewport>(DEFAULT_VIEWPORT)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rf = useRef<ReactFlowInstance | null>(null)
+
+  const nodeHist = useRef(createHistory<Node[]>())
+  const vpHist = useRef(createHistory<Viewport>())
+  const [, bump] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
     const unsub = subscribeStatus((id, s) => setStatuses((prev) => ({ ...prev, [id]: s })))
@@ -39,10 +46,17 @@ export default function App() {
   const applyWorkspace = useCallback((ws: Workspace) => {
     setActiveWs(ws)
     activeWsRef.current = ws
-    viewportRef.current = ws.viewport ?? DEFAULT_VIEWPORT
+    const vp = ws.viewport ?? DEFAULT_VIEWPORT
+    viewportRef.current = vp
+    setZoom(vp.zoom)
     const flow = ws.nodes.map(toFlow)
     nodesRef.current = flow
     setNodes(flow)
+    nodeHist.current = createHistory<Node[]>()
+    vpHist.current = createHistory<Viewport>()
+    nodeHist.current.push(flow)
+    vpHist.current.push(vp)
+    bump()
   }, [])
 
   const loadWorkspace = useCallback(async (id: string) => {
@@ -77,14 +91,23 @@ export default function App() {
       if (changes.some((c) => c.type === 'remove')) {
         for (const c of changes) if (c.type === 'remove') send({ t: 'close', id: c.id })
       }
-      const settled = changes.some((c) => (c.type === 'position' && !c.dragging) || c.type === 'remove')
-      if (settled) scheduleSave()
+      const settled = changes.some(
+        (c) => (c.type === 'position' && !c.dragging) || c.type === 'remove' || (c.type === 'dimensions' && !c.resizing),
+      )
+      if (settled) {
+        scheduleSave()
+        nodeHist.current.push(next)
+        bump()
+      }
       return next
     })
   }, [scheduleSave])
 
   const onMoveEnd = useCallback((_e: unknown, vp: Viewport) => {
     viewportRef.current = vp
+    setZoom(vp.zoom)
+    vpHist.current.push(vp)
+    bump()
     scheduleSave()
   }, [scheduleSave])
 
@@ -96,6 +119,8 @@ export default function App() {
       const next = addNode(prev.map(toWsNode), node).map(toFlow)
       nodesRef.current = next
       scheduleSave()
+      nodeHist.current.push(next)
+      bump()
       return next
     })
   }, [scheduleSave])
@@ -110,6 +135,7 @@ export default function App() {
   }, [addFlowNode])
 
   // A node minted its own session uuid (or restarted): persist it to that node.
+  // Data-only change — not pushed to layout history (undo must not drop a live session id).
   const onSession = useCallback((nodeId: string, uuid: string) => {
     setNodes((prev) => {
       const next = prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, sessionId: uuid } } : n))
@@ -145,6 +171,49 @@ export default function App() {
     setPicker({ onPick: (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p) })
   }, [onCreateWorkspace])
 
+  // Programmatic viewport moves (setViewport/zoomIn/fitView) mark sourceEvent.internal,
+  // so onMoveEnd does NOT fire for them — sync the readout + persist after the animation.
+  const syncViewport = useCallback((delay: number) => {
+    setTimeout(() => {
+      const vp = rf.current?.getViewport()
+      if (vp) { viewportRef.current = vp; setZoom(vp.zoom); scheduleSave() }
+    }, delay)
+  }, [scheduleSave])
+
+  const onUndo = useCallback(() => {
+    const s = nodeHist.current.undo()
+    if (s) { nodesRef.current = s; setNodes(s); scheduleSave() }
+    bump()
+  }, [scheduleSave])
+
+  const onRedo = useCallback(() => {
+    const s = nodeHist.current.redo()
+    if (s) { nodesRef.current = s; setNodes(s); scheduleSave() }
+    bump()
+  }, [scheduleSave])
+
+  const onBack = useCallback(() => {
+    const v = vpHist.current.undo()
+    if (v) { viewportRef.current = v; rf.current?.setViewport(v, { duration: 300 }); setZoom(v.zoom); scheduleSave() }
+    bump()
+  }, [scheduleSave])
+
+  const onForward = useCallback(() => {
+    const v = vpHist.current.redo()
+    if (v) { viewportRef.current = v; rf.current?.setViewport(v, { duration: 300 }); setZoom(v.zoom); scheduleSave() }
+    bump()
+  }, [scheduleSave])
+
+  const nodeColor = useCallback((n: Node) => {
+    if (n.type === 'terminal') return '#0a84ff'
+    const s = statuses[n.id]
+    if (s === 'working') return '#d97757'
+    if (s === 'waiting') return '#ff9f0a'
+    if (s === 'blocked') return '#ff453a'
+    if (s === 'done') return '#98989d'
+    return ((n.data as { color?: string }).color) ?? '#0a84ff'
+  }, [statuses])
+
   // Inject onSession into agent nodes for rendering only; toWsNode drops it, so
   // saves are unaffected. Derived (not mutated) to keep persisted state clean.
   const flowNodes = useMemo(
@@ -153,21 +222,12 @@ export default function App() {
   )
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#111' }}>
+    <div style={{ width: '100vw', height: '100vh' }}>
       {workspaces.length === 0 ? (
         <Welcome onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateWorkspace(name)} />
       ) : (
         <>
-          <WorkspaceBar
-            workspaces={workspaces}
-            activeId={activeId}
-            onSelect={onSelect}
-            onCreateWorkspace={onCreateWorkspace}
-            onAddTerminal={onAddTerminal}
-            onAddAgent={onAddAgent}
-            onToggleBoard={() => setBoard((v) => !v)}
-            onBrowse={(onPick) => setPicker({ onPick })}
-          />
+          <WorkspaceBar workspaces={workspaces} activeId={activeId} onSelect={onSelect} />
           <ReactFlow
             key={activeId ?? 'empty'}
             nodes={flowNodes}
@@ -177,10 +237,36 @@ export default function App() {
             onInit={(i) => (rf.current = i)}
             defaultViewport={activeWs?.viewport ?? DEFAULT_VIEWPORT}
             fitView={false}
+            minZoom={0.01}
+            maxZoom={2}
+            snapToGrid
+            snapGrid={[24, 24]}
+            panOnScroll
+            zoomOnScroll={false}
+            proOptions={{ hideAttribution: true }}
           >
-            <Background />
-            <Controls />
+            <Background variant={BackgroundVariant.Dots} gap={24} size={2.5} color="var(--canvas-dot)" />
+            <MiniMap className="minimap-dock" pannable zoomable maskColor="rgba(10,12,18,0.6)" nodeColor={nodeColor} />
           </ReactFlow>
+          <Dock
+            onAddTerminal={onAddTerminal}
+            onAddAgent={onAddAgent}
+            onCreateWorkspace={onCreateWorkspace}
+            onBrowse={(onPick) => setPicker({ onPick })}
+            onUndo={onUndo}
+            onRedo={onRedo}
+            canUndo={nodeHist.current.canUndo()}
+            canRedo={nodeHist.current.canRedo()}
+            onBack={onBack}
+            onForward={onForward}
+            canBack={vpHist.current.canUndo()}
+            canForward={vpHist.current.canRedo()}
+            onFit={() => { rf.current?.fitView({ duration: 300 }); syncViewport(320) }}
+            onToggleBoard={() => setBoard((v) => !v)}
+            zoomPct={Math.round(zoom * 100)}
+            onZoomIn={() => { rf.current?.zoomIn({ duration: 150 }); syncViewport(170) }}
+            onZoomOut={() => { rf.current?.zoomOut({ duration: 150 }); syncViewport(170) }}
+          />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
         </>
       )}
