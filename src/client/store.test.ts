@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toFlow, toWsNode, addNode, removeNode, groupByStatus } from './store'
+import { toFlow, toWsNode, addNode, removeNode, groupByStatus, workspaceNameFromPath } from './store'
 import type { AgentStatus, WsNode } from '../shared/workspace'
 
 describe('store serializer', () => {
@@ -67,5 +67,18 @@ describe('groupByStatus', () => {
     expect(g.working[0].label).toBe('Alpha')
     expect(g.working[1].label).toBe('claude')
     expect(g.done[0].label).toBe('cccccccc')
+  })
+})
+
+describe('workspaceNameFromPath', () => {
+  it('takes the last path segment', () => {
+    expect(workspaceNameFromPath('/Users/bip/Documents/myproj')).toBe('myproj')
+  })
+  it('ignores a trailing slash', () => {
+    expect(workspaceNameFromPath('/Users/bip/proj/')).toBe('proj')
+  })
+  it('falls back to "project" for root or empty', () => {
+    expect(workspaceNameFromPath('/')).toBe('project')
+    expect(workspaceNameFromPath('')).toBe('project')
   })
 })

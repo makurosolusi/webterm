@@ -7,7 +7,8 @@ import AgentNode from './AgentNode'
 import WorkspaceBar from './WorkspaceBar'
 import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
-import { toFlow, toWsNode, addNode } from './store'
+import Welcome from './Welcome'
+import { toFlow, toWsNode, addNode, workspaceNameFromPath } from './store'
 import { send, subscribeStatus } from './ws'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
 import { AGENTS, DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -140,6 +141,10 @@ export default function App() {
     applyWorkspace(ws)
   }, [applyWorkspace])
 
+  const onNewProject = useCallback(() => {
+    setPicker({ onPick: (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p) })
+  }, [onCreateWorkspace])
+
   // Inject onSession into agent nodes for rendering only; toWsNode drops it, so
   // saves are unaffected. Derived (not mutated) to keep persisted state clean.
   const flowNodes = useMemo(
@@ -149,30 +154,36 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#111' }}>
-      <WorkspaceBar
-        workspaces={workspaces}
-        activeId={activeId}
-        onSelect={onSelect}
-        onCreateWorkspace={onCreateWorkspace}
-        onAddTerminal={onAddTerminal}
-        onAddAgent={onAddAgent}
-        onToggleBoard={() => setBoard((v) => !v)}
-        onBrowse={(onPick) => setPicker({ onPick })}
-      />
-      <ReactFlow
-        key={activeId ?? 'empty'}
-        nodes={flowNodes}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onMoveEnd={onMoveEnd}
-        onInit={(i) => (rf.current = i)}
-        defaultViewport={activeWs?.viewport ?? DEFAULT_VIEWPORT}
-        fitView={false}
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
-      {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
+      {workspaces.length === 0 ? (
+        <Welcome onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateWorkspace(name)} />
+      ) : (
+        <>
+          <WorkspaceBar
+            workspaces={workspaces}
+            activeId={activeId}
+            onSelect={onSelect}
+            onCreateWorkspace={onCreateWorkspace}
+            onAddTerminal={onAddTerminal}
+            onAddAgent={onAddAgent}
+            onToggleBoard={() => setBoard((v) => !v)}
+            onBrowse={(onPick) => setPicker({ onPick })}
+          />
+          <ReactFlow
+            key={activeId ?? 'empty'}
+            nodes={flowNodes}
+            nodeTypes={nodeTypes}
+            onNodesChange={onNodesChange}
+            onMoveEnd={onMoveEnd}
+            onInit={(i) => (rf.current = i)}
+            defaultViewport={activeWs?.viewport ?? DEFAULT_VIEWPORT}
+            fitView={false}
+          >
+            <Background />
+            <Controls />
+          </ReactFlow>
+          {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
+        </>
+      )}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
     </div>
   )
