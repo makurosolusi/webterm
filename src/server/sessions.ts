@@ -1,5 +1,9 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
+import type { AgentStatus } from '../shared/workspace'
 import { spawnPty, type Pty } from './pty'
+import { buildClaudeFlags } from './hooks'
+
+const PORT = Number(process.env.PORT) || 8700
 
 interface Session {
   id: string
@@ -14,6 +18,12 @@ const SCROLLBACK_BYTES = 256 * 1024
 
 export class Sessions {
   private map = new Map<string, Session>()
+  private status = new Map<string, AgentStatus>()
+
+  setStatus(id: string, status: AgentStatus): void {
+    this.status.set(id, status)
+    this.map.get(id)?.send?.({ t: 'status', id, status })
+  }
 
   open(msg: OpenMsg, send: (m: ServerMsg) => void): void {
     const existing = this.map.get(msg.id)
@@ -21,10 +31,16 @@ export class Sessions {
       // PTY survived the previous socket — re-attach and replay scrollback.
       existing.send = send
       for (const chunk of existing.buffer) send({ t: 'output', id: msg.id, data: chunk })
+      const st = this.status.get(msg.id)
+      if (st) send({ t: 'status', id: msg.id, status: st })
       return
     }
 
-    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, cmd: msg.cmd })
+    const flags = msg.agentId === 'claude' && msg.sessionId
+      ? ' ' + buildClaudeFlags(msg.id, msg.sessionId, PORT, !!msg.resume)
+      : ''
+    const cmd = msg.cmd ? msg.cmd + flags : undefined
+    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, cmd })
     const session: Session = { id: msg.id, pty, buffer: [], bytes: 0, send }
     this.map.set(msg.id, session)
 
@@ -38,8 +54,11 @@ export class Sessions {
     })
     pty.onExit((code) => {
       session.send?.({ t: 'exit', id: session.id, code })
+      this.setStatus(session.id, 'done')
       this.map.delete(session.id)
     })
+
+    if (msg.agentId) this.setStatus(msg.id, 'working')
   }
 
   input(id: string, data: string): void {
@@ -55,6 +74,7 @@ export class Sessions {
     if (!session) return
     session.pty.kill()
     this.map.delete(id)
+    this.status.delete(id)
   }
 
   // Socket gone: forget the subscriber but keep the PTY running so a reconnect

@@ -1,5 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { readdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import npath from 'node:path'
 import { db } from './db'
+import { sessions } from './sessions'
+import { hookStatus } from './hooks'
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body)
@@ -65,6 +70,29 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       res.statusCode = 204
       res.end()
       return
+    }
+  }
+
+  // Hook callback from a claude session (body is the hook stdin JSON).
+  if (path === '/api/agent-status' && method === 'POST') {
+    const node = url.searchParams.get('node')
+    let body: { hook_event_name?: string; message?: string }
+    try { body = JSON.parse(await readBody(req)) } catch { body = {} }
+    const status = node ? hookStatus(body) : null
+    if (node && status) sessions.setStatus(node, status)
+    res.statusCode = 204; res.end(); return
+  }
+
+  // Server-side folder picker: list subdirectories of a dir (dotfiles hidden).
+  if (path === '/api/fs' && method === 'GET') {
+    const dir = url.searchParams.get('path') || homedir()
+    try {
+      const entries = await readdir(dir, { withFileTypes: true })
+      const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name).sort()
+      const parent = npath.dirname(dir)
+      return json(res, 200, { path: dir, parent: parent === dir ? null : parent, dirs })
+    } catch {
+      return json(res, 404, { error: 'cannot read dir' })
     }
   }
 
