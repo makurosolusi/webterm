@@ -53,3 +53,9 @@ export function addNode(nodes: WsNode[], n: WsNode): WsNode[] {
 export function removeNode(nodes: WsNode[], id: string): WsNode[] {
   return nodes.filter((n) => n.id !== id)
 }
+
+// Default workspace name from a folder path: last non-empty segment, fallback 'project'.
+export function workspaceNameFromPath(path: string): string {
+  const seg = path.split('/').filter(Boolean).pop()
+  return seg || 'project'
+}
