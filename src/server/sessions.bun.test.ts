@@ -50,3 +50,12 @@ test('pty survives detach and replays scrollback on re-attach', async () => {
   expect(d.joined()).toBe('')
   s.close('t1')
 })
+
+test('open with a cmd launches it through the login shell', async () => {
+  const s = new Sessions()
+  const a = collector()
+  s.open({ t: 'open', id: 'c1', cols: 80, rows: 24, cmd: 'echo hi' }, a.send)
+  await pollFor(a.joined, 'hi')
+  expect(a.joined()).toContain('hi')
+  s.close('c1')
+})

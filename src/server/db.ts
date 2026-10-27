@@ -1,0 +1,94 @@
+import { Database } from 'bun:sqlite'
+import type { Workspace, WsNode, Viewport } from '../shared/workspace'
+import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import { dbPath } from './config'
+
+export function openDb(path: string = dbPath()): Database {
+  const d = new Database(path)
+  d.exec(`CREATE TABLE IF NOT EXISTS workspace (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, cwd TEXT, color TEXT,
+    viewport TEXT NOT NULL DEFAULT '{"x":0,"y":0,"zoom":1}',
+    nodes TEXT NOT NULL DEFAULT '[]', updated_at INTEGER NOT NULL);`)
+  d.exec(`CREATE TABLE IF NOT EXISTS app (key TEXT PRIMARY KEY, value TEXT);`)
+  return d
+}
+
+interface Row {
+  id: string
+  name: string
+  cwd: string | null
+  color: string | null
+  viewport: string
+  nodes: string
+  updated_at: number
+}
+
+function toWorkspace(r: Row): Workspace {
+  return {
+    id: r.id,
+    name: r.name,
+    cwd: r.cwd ?? undefined,
+    color: r.color ?? undefined,
+    viewport: JSON.parse(r.viewport) as Viewport,
+    nodes: JSON.parse(r.nodes) as WsNode[],
+    updatedAt: r.updated_at,
+  }
+}
+
+export class Db {
+  constructor(private d: Database) {}
+
+  list(): Workspace[] {
+    const rows = this.d.query('SELECT * FROM workspace ORDER BY updated_at DESC').all() as Row[]
+    return rows.map(toWorkspace)
+  }
+
+  get(id: string): Workspace | null {
+    const row = this.d.query('SELECT * FROM workspace WHERE id = ?').get(id) as Row | null
+    return row ? toWorkspace(row) : null
+  }
+
+  create(name: string, cwd?: string, color?: string): Workspace {
+    const ws: Workspace = {
+      id: crypto.randomUUID(),
+      name,
+      cwd,
+      color,
+      viewport: DEFAULT_VIEWPORT,
+      nodes: [],
+      updatedAt: Date.now(),
+    }
+    this.d.query(
+      'INSERT INTO workspace (id, name, cwd, color, viewport, nodes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), ws.updatedAt)
+    return ws
+  }
+
+  save(ws: Workspace): void {
+    const updatedAt = Date.now()
+    this.d.query(
+      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, cwd=excluded.cwd, color=excluded.color,
+         viewport=excluded.viewport, nodes=excluded.nodes, updated_at=excluded.updated_at`
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), updatedAt)
+  }
+
+  delete(id: string): void {
+    this.d.query('DELETE FROM workspace WHERE id = ?').run(id)
+  }
+
+  getActive(): string | null {
+    const row = this.d.query("SELECT value FROM app WHERE key = 'active'").get() as { value: string } | null
+    return row ? row.value : null
+  }
+
+  setActive(id: string): void {
+    this.d.query(
+      "INSERT INTO app (key, value) VALUES ('active', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    ).run(id)
+  }
+}
+
+export const db = new Db(openDb())
