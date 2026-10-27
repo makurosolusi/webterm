@@ -8,5 +8,15 @@ export default defineConfig({
   build: { outDir: '../../dist', emptyOutDir: true },
   plugins: [react()],
   // *.bun.test.ts need Bun globals (Bun.Terminal); they run under `bun test`, not vitest.
-  test: { exclude: ['**/node_modules/**', '**/dist/**', '**/*.bun.test.ts'] }
+  // dir '../..' scans the repo root (so src/shared + src/server vitest files are
+  // found), but a custom `exclude` replaces vitest's defaults — so the noise dirs
+  // (.git/.cache/out) must be re-listed or discovery globs .git and hangs.
+  // Discover tests outside src/client (root) by reaching up with `../` globs —
+  // `dir` hangs discovery in vitest 5. The `../**` exclude variant is needed
+  // because `**` won't cross a `..` segment, so plain `**/*.bun.test.ts` misses
+  // the parent-relative server bun tests.
+  test: {
+    include: ['**/*.test.{ts,tsx}', '../shared/**/*.test.{ts,tsx}', '../server/**/*.test.{ts,tsx}'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/*.bun.test.ts', '../**/*.bun.test.ts'],
+  }
 })

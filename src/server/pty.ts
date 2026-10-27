@@ -30,7 +30,7 @@ function cleanEnv(): Record<string, string> {
   return env
 }
 
-export function spawnPty(opts: { cols: number; rows: number; cwd?: string }): Pty {
+export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string }): Pty {
   let onData: (data: string) => void = () => {}
   let onExit: (code: number) => void = () => {}
   // Streaming decoder so a multi-byte UTF-8 rune split across two read chunks
@@ -45,7 +45,10 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string }): Pt
   })
 
   const shell = process.env.SHELL || 'bash'
-  const proc = Bun.spawn([shell], {
+  // A command launches through the login shell (-l -c) so PATH/aliases/envman
+  // resolve and shell quoting works; without one, a plain login shell.
+  const argv = opts.cmd ? [shell, '-l', '-c', opts.cmd] : [shell]
+  const proc = Bun.spawn(argv, {
     terminal,
     cwd: opts.cwd || process.env.HOME || process.cwd(),
     env: cleanEnv(),

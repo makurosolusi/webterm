@@ -8,3 +8,16 @@ declare module 'bun:test' {
     toBe(expected: unknown): void
   }
 }
+
+// bun:sqlite self-typed too — only the slice db.ts uses.
+declare module 'bun:sqlite' {
+  export class Database {
+    constructor(filename?: string)
+    exec(sql: string): void
+    query(sql: string): {
+      all(...params: unknown[]): unknown[]
+      get(...params: unknown[]): unknown
+      run(...params: unknown[]): void
+    }
+  }
+}

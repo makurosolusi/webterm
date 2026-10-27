@@ -2,7 +2,7 @@
 // One socket multiplexes many terminals by `id` (client-generated, stable across
 // reconnects so the server can re-attach a surviving PTY and replay its scrollback).
 
-export interface OpenMsg { t: 'open'; id: string; cols: number; rows: number; cwd?: string }
+export interface OpenMsg { t: 'open'; id: string; cols: number; rows: number; cwd?: string; cmd?: string }
 export interface InputMsg { t: 'input'; id: string; data: string }
 export interface ResizeMsg { t: 'resize'; id: string; cols: number; rows: number }
 export interface CloseMsg { t: 'close'; id: string }

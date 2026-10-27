@@ -24,7 +24,7 @@ export class Sessions {
       return
     }
 
-    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd })
+    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, cmd: msg.cmd })
     const session: Session = { id: msg.id, pty, buffer: [], bytes: 0, send }
     this.map.set(msg.id, session)
 
