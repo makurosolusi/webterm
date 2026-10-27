@@ -18,6 +18,8 @@ export interface WsNode {
   kind: 'terminal' | 'agent'
   x: number
   y: number
+  width?: number          // canvas size; defaults applied in store.toFlow
+  height?: number         // canvas size; defaults applied in store.toFlow
   title?: string
   cwd?: string            // falls back to the workspace cwd when absent
   cmd?: string            // agent launch line, e.g. "envman -e malik-opus -- claude"

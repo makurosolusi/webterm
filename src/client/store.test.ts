@@ -45,6 +45,19 @@ describe('store serializer', () => {
     const n: WsNode = { id: 'c', kind: 'agent', x: 0, y: 0, agentId: 'claude', sessionId: 'uuid-1' }
     expect(toWsNode(toFlow(n)).sessionId).toBe('uuid-1')
   })
+
+  it('applies default size when WsNode has none', () => {
+    const f = toFlow({ id: 'd', kind: 'terminal', x: 0, y: 0 })
+    expect(f.width).toBe(400)
+    expect(f.height).toBe(300)
+  })
+
+  it('round-trips an explicit size through toFlow -> toWsNode', () => {
+    const n: WsNode = { id: 'e', kind: 'terminal', x: 0, y: 0, width: 640, height: 420 }
+    const back = toWsNode(toFlow(n))
+    expect(back.width).toBe(640)
+    expect(back.height).toBe(420)
+  })
 })
 
 describe('groupByStatus', () => {

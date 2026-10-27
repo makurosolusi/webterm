@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { NodeProps } from '@xyflow/react'
+import { NodeResizer } from '@xyflow/react'
 import { AGENTS } from '../shared/workspace'
 import type { AgentId, AgentStatus } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
 import { send, subscribeStatus, getStatus } from './ws'
 
-const DOT: Record<AgentStatus, string> = { working: '#22c55e', waiting: '#eab308', blocked: '#ef4444', done: '#6b7280' }
-
-export default function AgentNode({ data }: NodeProps) {
+export default function AgentNode({ data, selected }: NodeProps) {
   const { id, cmd, cwd, agentId, color, title, sessionId, onSession } = data as {
     id: string; cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
     sessionId?: string; onSession?: (id: string, uuid: string) => void
@@ -39,45 +38,39 @@ export default function AgentNode({ data }: NodeProps) {
   const doResume = () => { setResume(true); setGen((g) => g + 1) }
 
   const canResume = agentId === 'claude' && status === 'done'
-  const dotColor = status ? DOT[status] : '#555'
 
   return (
-    <div style={{ width: 480, height: 320, background: '#1e1e1e', borderRadius: 6, overflow: 'hidden', border: '1px solid #333' }}>
-      <div style={{ height: 24, background: '#2a2a2a', color: '#ccc', fontSize: 11, lineHeight: '24px', padding: '0 8px', fontFamily: 'monospace', cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 9, height: 9, borderRadius: '50%', background: swatch, flex: '0 0 auto' }} />
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        <span
-          title={status ?? 'unknown'}
-          style={{ width: 9, height: 9, borderRadius: '50%', background: dotColor, flex: '0 0 auto' }}
-        />
-        {canResume && (
-          <button
-            className="nodrag"
-            onClick={doResume}
-            style={{ background: '#444', color: '#eee', border: 'none', borderRadius: 4, fontSize: 10, padding: '1px 6px', cursor: 'pointer' }}
-          >
-            Resume
+    <>
+      <NodeResizer isVisible={!!selected} minWidth={240} minHeight={160} color={swatch} />
+      <div className={`term-node${selected ? ' term-node--selected' : ''}`} style={{ borderTopColor: swatch }}>
+        <div className="node-header">
+          <span className="node-swatch" style={{ background: swatch }} />
+          <span className="node-title">{label}</span>
+          <span
+            title={status ?? 'unknown'}
+            className={status ? `node-status node-status--${status}` : 'node-status'}
+          />
+          {canResume && (
+            <button className="nodrag icon-btn" onClick={doResume} style={{ width: 'auto', padding: '0 6px', fontSize: 10 }}>
+              Resume
+            </button>
+          )}
+          <button className="nodrag icon-btn" onClick={restart} style={{ width: 'auto', padding: '0 6px', fontSize: 10 }}>
+            Restart
           </button>
-        )}
-        <button
-          className="nodrag"
-          onClick={restart}
-          style={{ background: '#444', color: '#eee', border: 'none', borderRadius: 4, fontSize: 10, padding: '1px 6px', cursor: 'pointer' }}
-        >
-          Restart
-        </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <TerminalCore
+            key={gen}
+            id={id}
+            cmd={cmd}
+            cwd={cwd}
+            agentId={agentId}
+            sessionId={agentId === 'claude' ? sid : undefined}
+            resume={resume}
+          />
+        </div>
       </div>
-      <div style={{ height: 'calc(100% - 24px)', width: '100%' }}>
-        <TerminalCore
-          key={gen}
-          id={id}
-          cmd={cmd}
-          cwd={cwd}
-          agentId={agentId}
-          sessionId={agentId === 'claude' ? sid : undefined}
-          resume={resume}
-        />
-      </div>
-    </div>
+    </>
   )
 }
