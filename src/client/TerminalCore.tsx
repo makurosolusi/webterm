@@ -3,11 +3,14 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { subscribe, send } from './ws'
+import type { AgentId } from '../shared/workspace'
 
 // The reusable xterm body: mounts a terminal, subscribes to its PTY, and sends
 // the initial `open` (with optional cwd/cmd). Does NOT send `close` on cleanup —
 // App owns close on node removal, so switching workspaces keeps the PTY alive.
-export default function TerminalCore({ id, cmd, cwd }: { id: string; cmd?: string; cwd?: string }) {
+export default function TerminalCore({ id, cmd, cwd, agentId, sessionId, resume }: {
+  id: string; cmd?: string; cwd?: string; agentId?: AgentId; sessionId?: string; resume?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,7 +34,9 @@ export default function TerminalCore({ id, cmd, cwd }: { id: string; cmd?: strin
     )
     term.onData((d) => send({ t: 'input', id, data: d }))
     // Initial open after fit so the server spawns the PTY at the right size.
-    send({ t: 'open', id, cols: term.cols, rows: term.rows, ...(cwd ? { cwd } : {}), ...(cmd ? { cmd } : {}) })
+    send({ t: 'open', id, cols: term.cols, rows: term.rows,
+      ...(cwd ? { cwd } : {}), ...(cmd ? { cmd } : {}),
+      ...(agentId ? { agentId } : {}), ...(sessionId ? { sessionId } : {}), ...(resume ? { resume: true } : {}) })
 
     const ro = new ResizeObserver(() => {
       fit.fit()
@@ -44,7 +49,7 @@ export default function TerminalCore({ id, cmd, cwd }: { id: string; cmd?: strin
       unsub()
       term.dispose()
     }
-  }, [id, cmd, cwd])
+  }, [id, cmd, cwd, agentId, sessionId, resume])
 
   return <div ref={ref} className="nodrag" style={{ height: '100%', width: '100%' }} />
 }

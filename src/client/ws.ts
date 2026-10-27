@@ -3,6 +3,7 @@
 // re-sent on every (re)connect so the server re-attaches the PTY and replays scrollback.
 import { WS_PATH } from '../shared/protocol'
 import type { ClientMsg, ServerMsg } from '../shared/protocol'
+import type { AgentStatus } from '../shared/workspace'
 
 interface Sub {
   onOutput: (data: string) => void
@@ -11,6 +12,18 @@ interface Sub {
 }
 
 const subs = new Map<string, Sub>()
+
+// Status is per-node but consumed by two readers: the node's own dot and the
+// board overlay. Keep it on a separate channel so it survives independent of
+// whether a terminal is currently mounted/subscribed.
+const statuses = new Map<string, AgentStatus>()
+const statusListeners = new Set<(id: string, status: AgentStatus) => void>()
+
+export function subscribeStatus(cb: (id: string, status: AgentStatus) => void): () => void {
+  statusListeners.add(cb)
+  return () => { statusListeners.delete(cb) }
+}
+export function getStatus(id: string): AgentStatus | undefined { return statuses.get(id) }
 let ws: WebSocket | null = null
 let queue: ClientMsg[] = []
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -34,6 +47,11 @@ function connect() {
     try {
       msg = JSON.parse(ev.data)
     } catch {
+      return
+    }
+    if (msg.t === 'status') {
+      statuses.set(msg.id, msg.status)
+      for (const l of statusListeners) l(msg.id, msg.status)
       return
     }
     const sub = subs.get(msg.id)

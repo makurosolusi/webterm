@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { toFlow, toWsNode, addNode, removeNode } from './store'
-import type { WsNode } from '../shared/workspace'
+import { toFlow, toWsNode, addNode, removeNode, groupByStatus } from './store'
+import type { AgentStatus, WsNode } from '../shared/workspace'
 
 describe('store serializer', () => {
   it('round-trips a terminal node (kind, cwd)', () => {
@@ -39,5 +39,33 @@ describe('store serializer', () => {
     const next = removeNode(orig, 'a')
     expect(orig).toHaveLength(2)
     expect(next.map((n) => n.id)).toEqual(['b'])
+  })
+
+  it('round-trips sessionId on an agent node', () => {
+    const n: WsNode = { id: 'c', kind: 'agent', x: 0, y: 0, agentId: 'claude', sessionId: 'uuid-1' }
+    expect(toWsNode(toFlow(n)).sessionId).toBe('uuid-1')
+  })
+})
+
+describe('groupByStatus', () => {
+  it('groups agent nodes by live status, omits statusless, falls back on label', () => {
+    const nodes = [
+      { id: 'aaaaaaaa-1', data: { kind: 'agent', title: 'Alpha' } },
+      { id: 'bbbbbbbb-2', data: { kind: 'agent', agentId: 'claude' } },
+      { id: 'cccccccc-3', data: { kind: 'agent' } },
+      { id: 'dddddddd-4', data: { kind: 'agent', title: 'Dangling' } }, // no status -> omitted
+    ]
+    const statuses: Record<string, AgentStatus> = {
+      'aaaaaaaa-1': 'working', 'bbbbbbbb-2': 'working', 'cccccccc-3': 'done',
+    }
+    const g = groupByStatus(nodes, statuses)
+    expect(g.working.map((c) => c.id)).toEqual(['aaaaaaaa-1', 'bbbbbbbb-2'])
+    expect(g.done).toHaveLength(1)
+    expect(g.waiting).toHaveLength(0)
+    expect(g.blocked).toHaveLength(0)
+    // label fallback: title, then agentId, then id.slice(0, 8)
+    expect(g.working[0].label).toBe('Alpha')
+    expect(g.working[1].label).toBe('claude')
+    expect(g.done[0].label).toBe('cccccccc')
   })
 })
