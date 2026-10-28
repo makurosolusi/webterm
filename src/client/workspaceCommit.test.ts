@@ -60,6 +60,37 @@ describe('urutan commit workspace', () => {
   })
 })
 
+/**
+ * Klik minimap memindahkan viewport lewat `setCenter`. `onMoveEnd` kemungkinan besar tetap jalan
+ * untuk perpindahan programatik (`setTransform` tidak mengirim `sourceEvent`, jadi bukan `internal`),
+ * tapi `syncViewport` di sampingnya adalah persist yang disengaja supaya posisi baru tak bergantung
+ * pada jalur event — itu bagian yang paling mudah terhapus saat orang menyunting blok `<MiniMap>`
+ * nanti, jadi keduanya dijaga sebagai satu pasangan.
+ */
+const minimapJsx = (s: string) => s.split('<MiniMap')[1]?.split('/>')[0] ?? ''
+const clickIsSynced = (s: string) => {
+  const m = minimapJsx(s)
+  return /\bonClick=/.test(m) && /\bsetCenter\(/.test(m) && /\bsyncViewport\(/.test(m)
+}
+
+// Bentuk sebelum klik dipasang, untuk membuktikan guard di atas benar-benar menggigit.
+const OLD_MINIMAP = '<MiniMap className="minimap-dock" pannable zoomable nodeColor={nodeColor} />'
+
+describe('klik minimap', () => {
+  it('punya handler klik yang memindahkan viewport DAN mempersistnya', () => {
+    expect(clickIsSynced(src('App.tsx'))).toBe(true)
+  })
+
+  it('zoom berjalan diteruskan eksplisit — `setCenter` tanpa `zoom` melompat ke maxZoom', () => {
+    expect(minimapJsx(src('App.tsx'))).toMatch(/zoom: vp\.zoom/)
+  })
+
+  it('guard menolak minimap tanpa klik, dan klik tanpa sync', () => {
+    expect(clickIsSynced(OLD_MINIMAP)).toBe(false)
+    expect(clickIsSynced('<MiniMap onClick={(_, p) => rf.current?.setCenter(p.x, p.y)} />')).toBe(false)
+  })
+})
+
 describe('gerbang hidrasi', () => {
   it('`Welcome` tidak dirender sebelum fetch pertama selesai', () => {
     // Tiga keadaan, bukan dua: belum tahu (tidak merender apa pun), tidak ada workspace, ada.

@@ -342,8 +342,9 @@ export default function App() {
     setPicker({ onPick: (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p) })
   }, [onCreateWorkspace])
 
-  // Programmatic viewport moves (setViewport/zoomIn/fitView) mark sourceEvent.internal,
-  // so onMoveEnd does NOT fire for them — sync the readout + persist after the animation.
+  // Perpindahan programatik (setViewport/zoomIn/fitView) lewat setTransform tidak mengirim
+  // sourceEvent sama sekali, jadi onMoveEnd kemungkinan besar TETAP jalan. Panggilan ini
+  // jaring pengaman eksplisit: sync readout + persist tanpa bergantung pada jalur event.
   const syncViewport = useCallback((delay: number) => {
     setTimeout(() => {
       const vp = rf.current?.getViewport()
@@ -447,7 +448,16 @@ export default function App() {
             {settings.canvasDots && (
               <Background variant={BackgroundVariant.Dots} gap={settings.gridSize} size={2.5} color="var(--canvas-dot)" />
             )}
-            <MiniMap className="minimap-dock" pannable zoomable maskColor="rgba(10,12,18,0.6)" nodeColor={nodeColor} />
+            <MiniMap
+              className="minimap-dock" pannable zoomable maskColor="rgba(10,12,18,0.6)" nodeColor={nodeColor}
+              // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.
+              // `setCenter` tanpa `zoom` jatuh ke maxZoom, bukan zoom sekarang — klik cuma boleh
+              // memindahkan titik pandang, jadi zoom berjalan diteruskan eksplisit.
+              onClick={(_, p) => {
+                const vp = rf.current?.getViewport()
+                if (vp) { rf.current?.setCenter(p.x, p.y, { zoom: vp.zoom, duration: 300 }); syncViewport(320) }
+              }}
+            />
             <ZoomRail
               locked={locked}
               onToggleLock={() => setLocked((v) => !v)}
