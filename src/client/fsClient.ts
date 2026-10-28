@@ -7,11 +7,11 @@
 //
 // FAIL-OPEN, sama seperti sisi server (lihat kontrak di kepala `src/server/fsOps.ts`): request yang
 // gagal — jaringan mati, 4xx, JSON rusak — menjawab nilai kosong yang sama dengan "tidak ada di
-// sana", karena `classifyEmptyListing` di `./filesNode` dirancang untuk MEMBEDAKAN keduanya dengan
+// sana", karena `classifyEmptyListing` di `./fileBrowse` dirancang untuk MEMBEDAKAN keduanya dengan
 // bertanya ke direktori induk, bukan dari error. Tiap catch mengembalikan nilai yang
 // didokumentasikan, bukan `catch {}` kosong.
 import { tokenQuery } from './api'
-import type { DirEntry } from './filesNode'
+import type { DirEntry } from './fileBrowse'
 
 function url(verb: string, params?: Record<string, string>): string {
   const q = new URLSearchParams(params)

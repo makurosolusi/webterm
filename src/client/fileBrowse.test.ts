@@ -17,7 +17,7 @@ import {
   newEntryPath,
   opensInEditor,
   parentDir,
-} from './filesNode'
+} from './fileBrowse'
 
 describe('folderTitle', () => {
   it('names the deepest segment', () => {

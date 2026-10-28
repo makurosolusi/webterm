@@ -8,7 +8,7 @@
 //
 // FAIL-OPEN ADALAH KONTRAK, BUKAN KELALAIAN. Tiap helper mengembalikan nilai kosong/false pada
 // kegagalan alih-alih throw, dan client BERGANTUNG pada itu: `classifyEmptyListing`
-// (src/client/filesNode.ts) memutuskan arti listing kosong dengan bertanya ke direktori INDUK,
+// (src/client/fileBrowse.ts) memutuskan arti listing kosong dengan bertanya ke direktori INDUK,
 // justru karena `list` tidak pernah throw. Mengubahnya jadi re-throw akan membuat empat empty
 // state di UI runtuh jadi satu pesan error. Tiap catch di bawah karena itu mengembalikan nilai
 // yang didokumentasikan, bukan `catch {}` kosong.
@@ -33,7 +33,7 @@ import { FS_READ_BINARY_MAX_BYTES, FS_READ_MAX_BYTES, tooLargeSentinel } from '.
 const run = promisify(execFile)
 
 /**
- * Satu entry direktori di wire. Kembarannya ada di `src/client/filesNode.ts` — dua deklarasi,
+ * Satu entry direktori di wire. Kembarannya ada di `src/client/fileBrowse.ts` — dua deklarasi,
  * satu per sisi batas HTTP, karena `src/shared` final dan client tidak boleh menarik `node:fs`
  * ke dalam graph bundle-nya.
  */

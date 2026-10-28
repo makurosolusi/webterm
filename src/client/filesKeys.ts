@@ -1,6 +1,6 @@
 /**
  * Interaksi KEYBOARD untuk listing node files: type-ahead, aksi tombol navigasi, dan scroll
- * minimal yang menampakkan baris terpilih. Dipisahkan dari `./filesNode.ts` — yang itu soal
+ * minimal yang menampakkan baris terpilih. Dipisahkan dari `./fileBrowse.ts` — yang itu soal
  * SEMANTIK path dan listing, ini soal apa yang dilakukan tangan pengguna; keduanya tidak saling
  * bergantung, dan satu file berisi keduanya melewati batas ukuran.
  *

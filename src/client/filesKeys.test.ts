@@ -1,5 +1,5 @@
 // Diadaptasi dari nodeterm `src/renderer/lib/filesNode.test.ts` — bagian interaksi keyboard; sisi
-// semantik path/listing ada di `./filesNode.test.ts`.
+// semantik path/listing ada di `./fileBrowse.test.ts`.
 import { describe, expect, it } from 'vitest'
 import { listKeyAction, scrollTopToReveal, TYPEAHEAD_RESET_MS, typeAhead, typeAheadIndex } from './filesKeys'
 
