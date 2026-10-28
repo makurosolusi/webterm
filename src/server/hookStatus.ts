@@ -11,15 +11,50 @@ export interface HookStatusBody {
   hook_event_name?: string
   /** Id subagent claude. Absen pada event agent utama. */
   agent_id?: string
+  /** Sub-jenis sebuah `Notification`. Satu event, beberapa arti — lihat `NOTIFICATION_STATUS`. */
+  notification_type?: string
+}
+
+/**
+ * Sub-jenis `Notification` yang BENAR-BENAR memindahkan status, disalin dari nodeterm
+ * `src/shared/agents/normalize.ts:451-481` (`normalizeClaude`, cabang `Notification`).
+ *
+ * `Notification` bukan satu keadaan: ia satu event dengan beberapa arti, dan memetakannya borongan
+ * ke `waiting` menggabungkan "aku minta izinmu" dengan "turn-ku sudah habis". Selama chip webterm
+ * membaca keduanya "NEEDS YOU" kesalahan itu tak terlihat; begitu labelnya dipecah, notifikasi izin
+ * jadi terbaca "turn selesai" — kebalikan dari maksudnya.
+ *
+ * Yang SENGAJA tidak ada di sini, dan kenapa:
+ * - `idle_prompt` → TIDAK memetakan ke apa pun. nodeterm memakainya sebagai penyelamat node yang
+ *   tersangkut `working`, tapi hanya di bawah aturan sempit "ia boleh memindahkan node yang MASIH
+ *   working" (normalize.ts:472-479). `hookStatus` fungsi murni atas payload — ia tidak tahu status
+ *   sekarang — jadi webterm tak bisa menyatakan aturan itu, dan tanpa aturan itu `idle_prompt`
+ *   menurunkan node yang sedang `blocked`: nodeterm mencatat ia BISA menyala saat prompt izin masih
+ *   terbuka ("`blocked`/`waiting` → must NOT be cleared"). Menurunkan badge merah padahal dialog
+ *   izinnya masih menunggu adalah kebohongan ke arah yang berbahaya. Node yang tersangkut `working`
+ *   di webterm sudah punya penyelamatnya sendiri: sapuan basi (`src/shared/agentStale.ts`).
+ * - `auth_success`, `elicitation_complete`, `elicitation_response`, `agent_completed`, dan jenis
+ *   apa pun yang belum kita kenal: informasional. Default-nya no-op, bukan badge yang menempel —
+ *   aturan nodeterm yang sama (normalize.ts:454-456, `return null` di akhir cabangnya).
+ *
+ * TIDAK ADA sniff regex atas `message`-nya: mencocokkan kata di teks notifikasi salah ke dua arah
+ * (nudge idle yang menyebut "approve" terbaca blocked; prompt izin dalam bahasa lain tidak terbaca
+ * sama sekali). `notification_type` adalah field yang memang menyatakannya.
+ */
+const NOTIFICATION_STATUS: Record<string, AgentStatus> = {
+  // Prompt izin yang datang sebagai notifikasi, bukan sebagai `PermissionRequest`. MANDEG.
+  permission_prompt: 'blocked',
+  // Agent menanyakan sesuatu lewat dialog, bukan memblokir sebuah tool.
+  elicitation_dialog: 'waiting',
+  agent_needs_input: 'waiting',
 }
 
 /**
  * Memetakan stdin JSON sebuah hook claude ke status live. null = event yang kita abaikan.
  *
- * TIDAK ADA sniff regex pada `Notification`: `PermissionRequest` adalah event yang sebenarnya
- * untuk "sedang menunggu izin", dan mencocokkan kata di pesan `Notification` adalah heuristik yang
- * salah ke dua arah (nudge idle yang menyebut kata "approve" terbaca blocked; prompt permission
- * dalam bahasa lain tidak terbaca sama sekali).
+ * `Notification` bercabang pada `notification_type` (lihat `NOTIFICATION_STATUS`), TANPA sniff
+ * regex atas teks pesannya: `PermissionRequest` dan `notification_type: 'permission_prompt'` adalah
+ * sinyal yang sebenarnya untuk "sedang menunggu izin".
  *
  * `SessionStart` SENGAJA TIDAK ADA di tabel ini. Claude menyalakannya saat CLI start — sebelum
  * prompt pertama diketik — jadi memetakannya ke `working` membuat setiap node yang baru lahir,
@@ -73,9 +108,10 @@ export function hookStatus(body: HookStatusBody): AgentStatus | null {
     // giliranmu", kurang dalam hal "ia berakhir karena error". Upgrade: tambahkan 'errored' ke
     // AgentStatus di src/shared/workspace.ts bila ada permukaan yang merendernya.
     case 'StopFailure':
-    // Nudge idle. Prompt permission datang sebagai PermissionRequest, bukan di sini.
-    case 'Notification':
       return 'waiting'
+    // Satu event, beberapa arti: jenisnya yang memutuskan, dan jenis yang tak dikenal no-op.
+    case 'Notification':
+      return NOTIFICATION_STATUS[body.notification_type ?? ''] ?? null
     case 'PermissionRequest':
       return 'blocked'
     case 'SessionEnd':

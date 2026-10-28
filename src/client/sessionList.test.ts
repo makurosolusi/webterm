@@ -13,6 +13,7 @@ import {
   sidebarEmptyState,
   sidebarFilterKeyAction,
   signalCounts,
+  stateLabelOf,
   STATE_LABEL,
   STATUS_GROUP_LABEL,
   type SessionRowVM,
@@ -64,6 +65,27 @@ describe('STATE_LABEL', () => {
       done: 'Done',
       unknown: 'Unknown',
     })
+  })
+})
+
+// Bentuk LAMA: `stateLabel` barisnya dibaca dari `STATE_LABEL[statusKind]`, jadi `waiting` dan
+// `blocked` sama-sama mengaku "Waiting for your response" — di `title` bel DAN di `aria-label`
+// barisnya (`SessionRow.tsx`). Satu permukaan yang masih menggabungkan keduanya membuat chip node
+// yang baru dipecah tak berguna.
+const OLD_ROW_LABEL = (s: AgentStatus) => STATE_LABEL[sessionStatusKind(s)]
+
+describe('stateLabelOf', () => {
+  it('memisahkan blocked dari waiting, dan bentuk lama gagal guard ini', () => {
+    expect(stateLabelOf('blocked')).toMatch(/approval/i)
+    expect(stateLabelOf('blocked')).not.toBe(stateLabelOf('waiting'))
+    expect(OLD_ROW_LABEL('waiting')).toBe(OLD_ROW_LABEL('blocked'))
+    expect(stateLabelOf('waiting')).not.toBe(OLD_ROW_LABEL('waiting'))
+  })
+
+  it('status lain tetap memakai kalimat STATE_LABEL yang sudah ada', () => {
+    expect(stateLabelOf('working')).toBe(STATE_LABEL.working)
+    expect(stateLabelOf('done')).toBe(STATE_LABEL.done)
+    expect(stateLabelOf(undefined)).toBe(STATE_LABEL.unknown)
   })
 })
 

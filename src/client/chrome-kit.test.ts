@@ -13,15 +13,57 @@ describe('contextFillColor', () => {
   it('59 → green', () => { expect(contextFillColor(59)).toBe(USAGE_GREEN) })
   it('0 → green', () => { expect(contextFillColor(0)).toBe(USAGE_GREEN) })
 })
-describe('statusChip (kosakata chip nodeterm)', () => {
+// -----------------------------------------------------------------------------------------------
+// Gejala yang dilaporkan: node agent memasang chip NEEDS YOU, pengguna membaca percakapannya dan
+// tidak menemukan permintaan konfirmasi apa pun — agent-nya cuma menyelesaikan turn. Chip yang
+// berteriak palsu berhenti dipercaya.
+//
+// Akar: BUKAN di server. `hookStatus` sudah membedakan `blocked` (mandeg menunggu izin) dari
+// `waiting` (turn habis); peta label di `statusChip` yang menggabungkan keduanya kembali.
+//
+// Bentuk LAMA dibawa sebagai konstanta supaya terbukti test ini menggigit — bukan hijau karena
+// polanya mustahil ditemukan.
+const OLD_CHIP: Record<'waiting' | 'blocked', { cls: string; label: string }> = {
+  waiting: { cls: 'node-status--attention', label: 'NEEDS YOU' },
+  blocked: { cls: 'node-status--attention', label: 'NEEDS YOU' },
+}
+
+describe('statusChip', () => {
   it('working → RUNNING, diwarnai state working', () => {
     expect(statusChip('working')).toEqual({ cls: 'node-status--busy', label: 'RUNNING', title: 'Agent is working' })
   })
-  it('waiting dan blocked keduanya → NEEDS YOU', () => {
-    expect(statusChip('waiting')?.label).toBe('NEEDS YOU')
-    expect(statusChip('blocked')?.label).toBe('NEEDS YOU')
-    expect(statusChip('blocked')?.cls).toBe('node-status--attention')
+
+  it('blocked tetap pemegang penanda terkuat: NEEDS YOU', () => {
+    // Hanya `blocked` yang berarti kerja MANDEG sampai pengguna bertindak, jadi ia yang mewarisi
+    // chip paling keras — kata, warna, dan denyut dot.
+    expect(statusChip('blocked')).toEqual({
+      cls: 'node-status--attention',
+      label: 'NEEDS YOU',
+      title: 'Blocked — waiting for your approval',
+    })
   })
+
+  it('waiting TIDAK lagi meminjam chip blocked — beda kata DAN beda kelas warna', () => {
+    const waiting = statusChip('waiting')
+    const blocked = statusChip('blocked')
+    expect(waiting?.label).not.toBe(OLD_CHIP.waiting.label)
+    expect(waiting?.cls).not.toBe(OLD_CHIP.waiting.cls)
+    // Dua sumbu, bukan satu: label yang beda tapi warna sama tidak bisa dibedakan dalam sekejap
+    // pada chip sebesar itu.
+    expect(waiting?.label).not.toBe(blocked?.label)
+    expect(waiting?.cls).not.toBe(blocked?.cls)
+    // Dan ia tidak boleh ikut menuntut tindakan dalam kalimatnya.
+    expect(waiting?.title).not.toBe(blocked?.title)
+  })
+
+  it('bentuk lama akan gagal guard ini', () => {
+    // Bukti arah: kalau peta lama dipasang kembali, dua status itu menghasilkan chip identik —
+    // tepat gejala yang dilaporkan.
+    expect(OLD_CHIP.waiting).toEqual(OLD_CHIP.blocked)
+    expect({ cls: statusChip('waiting')?.cls, label: statusChip('waiting')?.label })
+      .not.toEqual({ cls: statusChip('blocked')?.cls, label: statusChip('blocked')?.label })
+  })
+
   it('tidak ada chip untuk done maupun status yang hilang (nodeterm tidak punya chip DONE)', () => {
     expect(statusChip('done')).toBeNull()
     expect(statusChip(undefined)).toBeNull()
@@ -38,8 +80,13 @@ describe('termNodeClass', () => {
   })
   it('working/attention TANPA prefiks — selector glow :has() nodeterm mencocokkan kelas polos', () => {
     expect(termNodeClass({ status: 'working' })).toBe('term-node working')
-    expect(termNodeClass({ status: 'waiting' })).toBe('term-node attention')
     expect(termNodeClass({ status: 'blocked' })).toBe('term-node attention')
+  })
+  it('waiting tidak lagi memakai halo merah berdenyut milik blocked', () => {
+    // Halo node adalah penanda terkencang di canvas. Kalau turn yang cuma habis ikut memakainya,
+    // chip amber di header dibatalkan oleh node yang mengelilinginya.
+    expect(termNodeClass({ status: 'waiting' })).not.toBe('term-node attention')
+    expect(termNodeClass({ status: 'waiting' })).toBe('term-node waiting')
   })
   it('done tidak menyalakan glow apa pun', () => {
     expect(termNodeClass({ status: 'done' })).toBe('term-node')
@@ -53,6 +100,31 @@ describe('NODE_COLORS', () => {
   it('is a non-empty palette of hex strings', () => {
     expect(NODE_COLORS.length).toBeGreaterThan(0)
     for (const c of NODE_COLORS) expect(c).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+})
+
+describe('node-chrome.css — chip waiting vs blocked benar-benar beda', () => {
+  // `statusChip` hanya mengembalikan NAMA kelas; yang membuat dua chip itu beda dalam sekejap ada
+  // di sheet-nya. Tanpa DOM di vitest (`getComputedStyle` tak ada) yang bisa diuji adalah BENTUK
+  // sumbernya: kelas baru itu harus ADA, memakai token warna yang LAIN, dan tidak ikut berdenyut.
+  const chrome = readFileSync(fileURLToPath(new URL('./node-chrome.css', import.meta.url)), 'utf8')
+  const decl = (sel: string) => chrome.match(new RegExp(`\\${sel}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
+
+  it('dua kelas chip memakai dua token warna', () => {
+    expect(decl('.node-status--attention')).toContain('var(--state-attention)')
+    expect(decl('.node-status--waiting')).toContain('var(--state-warning)')
+    expect(decl('.node-status--waiting')).not.toContain('var(--state-attention)')
+  })
+
+  it('hanya blocked yang dot-nya berdenyut', () => {
+    expect(chrome).toContain('.node-status--attention .node-status-dot { animation:')
+    expect(chrome).not.toContain('.node-status--waiting .node-status-dot { animation:')
+  })
+
+  it('kelas glow waiting ada dan tidak memakai halo pseudo merah', () => {
+    // Kelas yang dikembalikan `termNodeClass` tapi tak pernah didefinisikan = node tanpa penanda.
+    expect(decl('.term-node.waiting')).toContain('var(--state-warning)')
+    expect(chrome).not.toContain(':has(.term-node.waiting)')
   })
 })
 

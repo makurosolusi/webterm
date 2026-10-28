@@ -16,7 +16,9 @@ describe('hookStatus', () => {
     // Setiap jalur yang mengakhiri sebuah turn.
     Stop: 'waiting',
     StopFailure: 'waiting',
-    Notification: 'waiting',
+    // Satu event, beberapa arti: TANPA `notification_type` tidak ada yang bisa dikatakan. Tabel
+    // jenisnya ada di describe-nya sendiri di bawah.
+    Notification: null,
     PermissionRequest: 'blocked',
     SessionEnd: 'done',
     // Batas siklus hidup, BUKAN perubahan state (lihat doc `hookStatus`).
@@ -54,13 +56,68 @@ describe('hookStatus', () => {
   })
 
   it('no longer sniffs Notification text for permission wording', () => {
-    // Heuristik lama memetakan ini ke 'blocked'; PermissionRequest sekarang satu-satunya sumber.
+    // Heuristik lama memetakan ini ke 'blocked' dari teks pesannya. Yang menentukan sekarang
+    // `notification_type`, jadi pesan yang menyebut "permission" tanpa jenis itu bukan apa-apa.
     const body = { hook_event_name: 'Notification', message: 'Claude needs your permission to run Bash' }
-    expect(hookStatus(body as { hook_event_name?: string })).toBe('waiting')
+    expect(hookStatus(body as { hook_event_name?: string })).toBeNull()
   })
 
   it('returns null for an unknown event', () => {
     expect(hookStatus({ hook_event_name: 'Nope' })).toBeNull()
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// `Notification` yang disamaratakan.
+//
+// Gejala (setelah chip node dipecah): sebuah notifikasi yang MEMINTA izin terbaca "TURN ENDED" —
+// kebalikan dari maksudnya. Selama `waiting` dan `blocked` sama-sama berbunyi NEEDS YOU, salah-arah
+// ini tak terlihat.
+//
+// Akar: `Notification` bukan satu keadaan. nodeterm bercabang pada `notification_type`
+// (`src/shared/agents/normalize.ts:451-481`); webterm memetakan event itu BORONGAN ke 'waiting'.
+//
+// Pemetaan LAMA dibawa sebagai konstanta supaya guard di bawah terbukti menggigit.
+const OLD_NOTIFICATION_STATUS: AgentStatus = 'waiting'
+
+describe('Notification bercabang pada notification_type (aturan nodeterm)', () => {
+  const notify = (notification_type?: string) =>
+    hookStatus({ hook_event_name: 'Notification', notification_type })
+
+  it('permission_prompt MANDEG, bukan selesai', () => {
+    // Prompt izin yang datang sebagai notifikasi alih-alih sebagai PermissionRequest.
+    expect(notify('permission_prompt')).toBe('blocked')
+    expect(notify('permission_prompt')).not.toBe(OLD_NOTIFICATION_STATUS)
+  })
+
+  it('dialog pertanyaan tetap waiting — giliranmu, tapi tidak ada yang diblokir', () => {
+    expect(notify('elicitation_dialog')).toBe('waiting')
+    expect(notify('agent_needs_input')).toBe('waiting')
+  })
+
+  it('idle_prompt TIDAK memindahkan status', () => {
+    // nodeterm memakainya sebagai penyelamat node yang tersangkut `working`, tapi hanya di bawah
+    // aturan "boleh memindahkan node yang MASIH working" — aturan yang tak bisa dinyatakan fungsi
+    // murni atas payload. Tanpa aturan itu ia menurunkan node yang sedang `blocked`, padahal
+    // nodeterm mencatat ia bisa menyala saat prompt izin masih terbuka. Node tersangkut `working`
+    // di webterm sudah ditangani sapuan basi (`src/shared/agentStale.ts`).
+    expect(notify('idle_prompt')).toBeNull()
+    expect(notify('idle_prompt')).not.toBe(OLD_NOTIFICATION_STATUS)
+  })
+
+  it('jenis informasional dan jenis yang belum dikenal no-op, bukan badge menempel', () => {
+    for (const t of ['auth_success', 'elicitation_complete', 'elicitation_response', 'agent_completed', 'something_new', undefined]) {
+      expect(notify(t), String(t)).toBeNull()
+    }
+  })
+
+  it('pemetaan lama akan gagal guard ini', () => {
+    // Bukti guard menggigit: borongan 'waiting' membuat permintaan izin terbaca selesai, dan
+    // membuat setiap notifikasi informasional memasang badge yang tak pernah turun.
+    expect(OLD_NOTIFICATION_STATUS).toBe('waiting')
+    for (const t of ['permission_prompt', 'idle_prompt', 'auth_success', undefined]) {
+      expect(notify(t), String(t)).not.toBe(OLD_NOTIFICATION_STATUS)
+    }
   })
 })
 

@@ -54,6 +54,25 @@ export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
   unknown: 'No status',
 }
 
+/**
+ * Kalimat per BARIS, dipilih dari status mentahnya — bukan dari `StatusKind`-nya.
+ *
+ * `sessionStatusKind` melipat `waiting` dan `blocked` ke satu `attention` karena baris sidebar hanya
+ * punya satu slot glyph, dan lipatan itu memang benar untuk glyph-nya ("yang ini mau kamu"). Tapi
+ * `stateLabel` bukan glyph: ia mengisi `title` bel DAN `aria-label` barisnya (`SessionRow.tsx`),
+ * jadi lewat peta `STATE_LABEL` sebuah turn yang cuma habis ikut mengaku "Waiting for your
+ * response" — klaim yang sama palsunya dengan chip NEEDS YOU yang dilaporkan pengguna. Teks punya
+ * ruang yang tidak dimiliki glyph, jadi di sinilah perbedaannya dipulihkan.
+ */
+const AGENT_STATE_LABEL: Partial<Record<AgentStatus, string>> = {
+  blocked: 'Blocked — waiting for your approval',
+  waiting: 'Turn ended — nothing is blocked',
+}
+
+export function stateLabelOf(status: AgentStatus | undefined): string {
+  return (status && AGENT_STATE_LABEL[status]) ?? STATE_LABEL[sessionStatusKind(status)]
+}
+
 /** Default untuk pemanggil yang tidak peduli unread (mis. tab workspace, yang hanya butuh dot
  *  status). Dibagi satu instance: himpunan ini tidak pernah ditulis. */
 const NO_UNREAD: ReadonlySet<string> = new Set()
@@ -234,7 +253,7 @@ function toRow(
     agentId: n.agentId,
     isAgent: !!n.agentId,
     statusKind,
-    stateLabel: STATE_LABEL[statusKind],
+    stateLabel: stateLabelOf(status),
     unread: unread.has(n.id),
     cwd: n.cwd ?? ws.cwd,
     projectId: ws.id,

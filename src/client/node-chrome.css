@@ -62,8 +62,9 @@
   70% { opacity: 1; }
 }
 
-/* Needs-you (waiting/blocked): kembaran merah dari glow di atas — sedikit lebih mendesak daripada
-   working (pulse lebih dalam, siklus lebih cepat): ia sedang meminta kamu. */
+/* Needs-you (blocked): kembaran merah dari glow working — sedikit lebih mendesak daripada working
+   (pulse lebih dalam, siklus lebih cepat): ia sedang meminta izinmu dan tidak bisa lanjut tanpa
+   jawaban. */
 .term-node.attention {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--state-attention) 40%, transparent),
@@ -88,6 +89,18 @@
 @keyframes nt-attention-glow {
   0%, 100% { opacity: 0.15; }
   50% { opacity: 1; }
+}
+
+/* Turn-ended (waiting): sepupu TENANG dari dua glow di atas — amber, satu ring tipis, TANPA halo
+   pseudo dan tanpa animasi. Turn yang habis bukan keadaan mendesak: ia laporan. Halo merah
+   berdenyut sengaja tinggal milik `blocked`, satu-satunya status yang berarti kerja MANDEG sampai
+   pengguna bertindak — kalau keduanya memakai halo yang sama, chip amber di header dibatalkan oleh
+   node yang mengelilinginya. */
+.term-node.waiting {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--state-warning) 35%, transparent),
+    0 0 10px 1px color-mix(in srgb, var(--state-warning) 16%, transparent),
+    var(--shadow-node);
 }
 
 /* ---- Header ---- */
@@ -184,9 +197,14 @@
 /* RUNNING senada dengan glow working (clay), bukan hijau dasar. */
 .node-status--busy { color: var(--state-working); }
 .node-status--busy .node-status-dot { animation: nt-pulse 1.1s ease-in-out infinite; }
-/* NEEDS YOU merah di mana pun. */
+/* NEEDS YOU (blocked) merah di mana pun, dan satu-satunya chip yang berdenyut selain RUNNING:
+   kerjanya MANDEG sampai kamu menjawab. */
 .node-status--attention { color: var(--state-attention); }
 .node-status--attention .node-status-dot { animation: nt-pulse 1.1s ease-in-out infinite; }
+/* TURN ENDED (waiting) amber — token yang sama dengan yang dipakai MiniMap & Kanban untuk status
+   ini. Dot-nya DIAM dengan sengaja: gerak dicadangkan untuk yang masih berubah (RUNNING) atau yang
+   memblokir (NEEDS YOU), jadi diam adalah bagian dari pesannya, bukan gaya yang terlupa. */
+.node-status--waiting { color: var(--state-warning); }
 
 @keyframes nt-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
