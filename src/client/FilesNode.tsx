@@ -123,7 +123,13 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     else addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: e.name }, { ...EDITOR_SIZE, selected: true })
     // Kabel penanda "file ini sedang terbuka". Dibuat langsung, BUKAN lewat `onConnect`: `canLink`
     // hanya meloloskan pasangan agent context-capable.
-    if (plan.edge) rf.addEdges({ ...plan.edge, type: 'context' })
+    // `kind` WAJIB masuk ke `data`, bukan level atas: itu satu-satunya tempat yang dibaca
+    // `decorateEdges` (label "↔ open") dan `toBridge` (persistensi). Di level atas React Flow
+    // menyimpannya tanpa keluhan, lalu kabelnya tampil "⇄ context" dan tersimpan sebagai context.
+    if (plan.edge) {
+      const { kind: edgeKind, ...edge } = plan.edge
+      rf.addEdges({ ...edge, type: 'context', data: { kind: edgeKind } })
+    }
   }
 
   const createEntry = async (dir: boolean) => {

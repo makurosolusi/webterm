@@ -1,0 +1,177 @@
+// Satu-satunya setup DOM untuk test canvas webterm: jsdom + React Flow + App yang sungguhan.
+//
+// KENAPA ADA: 749 test lain berjalan di node-env dan karena itu tidak satu pun bisa mengeksekusi
+// jalur "klik file → node editor + kabel penanda". Jalur itu hidup di dalam React Flow, dan React
+// Flow MENGUKUR node lewat DOM untuk tahu di mana menggambar edge — tanpa DOM ia tidak pernah
+// berjalan, jadi fitur yang hilang di sana tidak membuat satu test pun merah.
+//
+// KENAPA SATU MODUL: setup di bawah bukan boilerplate, ia tiruan layout. Disalin per file test, dua
+// test akan tidak sepakat tentang lingkungannya sendiri dan yang satu "lulus" karena tiruannya
+// lebih longgar.
+//
+// PERINGATAN: lingkungannya jsdom, JANGAN ditukar happy-dom — alasan terukurnya ada di kepala
+// `./markdown.test.ts`. Pragma environment ditaruh di FILE TEST, bukan di sini.
+import { cleanup, render, waitFor } from '@testing-library/react'
+import { vi } from 'vitest'
+import App from './App'
+import { DEFAULT_SETTINGS } from '../shared/settings'
+import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
+import type { DirEntry } from './fileBrowse'
+
+/** Ukuran pane yang dilaporkan ke React Flow. Angka apa pun yang cukup besar untuk memuat node
+ *  fixture; jsdom tidak punya layout, jadi ini satu-satunya sumbernya. */
+const PANE = { width: 1280, height: 800 }
+/** Fallback saat sebuah elemen tidak punya style width/height (mis. wrapper). 1, bukan 0:
+ *  `updateNodeInternals` React Flow membuang pengukuran berukuran nol. */
+const MIN_BOX = 1
+
+let domInstalled = false
+
+/**
+ * Tambal tiga lubang jsdom yang membuat React Flow mount tapi tidak menggambar apa pun. Idempoten:
+ * dipanggil sekali per file test, lewat `beforeAll`.
+ *
+ * ResizeObserver di sini SENGAJA MENYALA (bukan no-op): di browser, `observe()` langsung mengirim
+ * satu entry, dan dari situlah React Flow menghitung `measured` + `handleBounds` tiap node. Stub
+ * yang diam membuat node selamanya "belum terukur" — test akan menguji canvas yang tidak pernah
+ * ada di browser mana pun.
+ */
+export function installCanvasDom(): void {
+  if (domInstalled) return
+  domInstalled = true
+
+  const box = (el: HTMLElement, axis: 'width' | 'height'): number =>
+    parseFloat(el.style[axis]) || MIN_BOX
+
+  // Ditulis LANGSUNG ke globalThis, bukan lewat `vi.stubGlobal`: stub global dicabut per test
+  // (`unstubAllGlobals`), dan tiruan layout harus berumur sepanjang file — kalau tidak, test kedua
+  // dan seterusnya mount canvas di lingkungan yang berbeda dari test pertama.
+  const g = globalThis as unknown as Record<string, unknown>
+
+  class FiringResizeObserver implements ResizeObserver {
+    constructor(private cb: ResizeObserverCallback) {}
+    observe(target: Element): void {
+      // Asinkron, seperti browser: callback-nya memanggil setState React Flow, dan dari dalam
+      // `observe()` yang dipanggil di effect itu jadi tulisan state saat render.
+      setTimeout(() => {
+        const el = target as HTMLElement
+        const rect = { width: box(el, 'width'), height: box(el, 'height') } as DOMRectReadOnly
+        this.cb([{ target, contentRect: rect } as ResizeObserverEntry], this)
+      }, 0)
+    }
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  g.ResizeObserver = FiringResizeObserver
+
+  // Dipakai `updateNodeInternals` untuk membaca zoom dari `transform` viewport. Hanya `m22` yang
+  // dibaca; 1 = zoom 100%, dan itu memang zoom default fixture.
+  class ScaleOnlyMatrix {
+    m22 = 1
+    constructor(transform?: string) {
+      const scale = /scale\(([^)]+)\)/.exec(transform ?? '')
+      if (scale) this.m22 = parseFloat(scale[1]) || 1
+    }
+  }
+  g.DOMMatrixReadOnly = ScaleOnlyMatrix
+
+  // Ukuran node: React Flow menulis width/height node sebagai inline style lalu membacanya balik
+  // lewat offsetWidth/offsetHeight (`getDimensions` di @xyflow/system). jsdom selalu 0 di sana.
+  for (const axis of ['Width', 'Height'] as const) {
+    Object.defineProperty(HTMLElement.prototype, `offset${axis}`, {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains('react-flow')
+          ? PANE[axis === 'Width' ? 'width' : 'height']
+          : box(this, axis === 'Width' ? 'width' : 'height')
+      },
+    })
+  }
+
+  // Label edge (`EdgeText`) mengukur teksnya sendiri; jsdom tidak mengimplementasikan getBBox.
+  Object.defineProperty(SVGElement.prototype, 'getBBox', {
+    configurable: true,
+    value: () => ({ x: 0, y: 0, width: 60, height: 12 }),
+  })
+}
+
+export interface CanvasFixture {
+  nodes: WsNode[]
+  bridges?: BridgeLink[]
+  /** Isi tiap direktori yang boleh dibaca node files, per path absolut. */
+  dirs: Record<string, DirEntry[]>
+  /** Isi tiap file yang boleh dibaca node editor, per path absolut. */
+  files?: Record<string, string>
+}
+
+const WORKSPACE_ID = 'ws-harness'
+
+function fixtureWorkspace(fx: CanvasFixture): Workspace {
+  return {
+    id: WORKSPACE_ID,
+    name: 'harness',
+    cwd: '/',
+    nodes: fx.nodes,
+    bridges: fx.bridges ?? [],
+    viewport: DEFAULT_VIEWPORT,
+    updatedAt: 0,
+  }
+}
+
+/** Batas I/O yang distub: HANYA `fetch`. Semua keputusan (navigasi, dedupe, pembuatan node & kabel,
+ *  persistensi) tetap kode produksi — yang dipalsukan cuma server di ujung kabelnya. */
+function routeFetch(fx: CanvasFixture) {
+  const ws = fixtureWorkspace(fx)
+  const reply = (body: unknown) =>
+    Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: async () => body } as Response)
+
+  return vi.fn((input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost')
+    const path = url.pathname
+    const arg = url.searchParams.get('path') ?? ''
+    if (path === '/api/settings') return reply(DEFAULT_SETTINGS)
+    if (path === '/api/workspaces') return reply([ws])
+    if (path.startsWith('/api/workspaces/')) return reply(ws)
+    if (path === '/api/active') return reply({ id: WORKSPACE_ID })
+    if (path === '/api/fs/list') return reply(fx.dirs[arg] ?? [])
+    if (path === '/api/fs/read') return reply({ content: fx.files?.[arg] ?? '' })
+    if (path === '/api/fs/exists') return reply({ exists: fx.files?.[arg] !== undefined })
+    // Rute tak dikenal TIDAK dijawab 200 kosong: itu menyembunyikan request yang fixture-nya
+    // ketinggalan di balik "lulus".
+    return Promise.resolve({ ok: false, status: 404, statusText: 'no fixture', json: async () => ({}) } as Response)
+  })
+}
+
+/**
+ * Mount `App` yang SUNGGUHAN di atas satu workspace fixture, dan tunggu sampai canvas-nya hidrat.
+ * Bukan tiruan canvas: wiring `onEdgesChange`/`decorateEdges`/`withLinkHandles`/`nodeTypes` yang
+ * diuji adalah milik App, jadi harness yang merakit ReactFlow-nya sendiri akan bisa hijau sementara
+ * app-nya rusak.
+ */
+export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof render>> {
+  installCanvasDom()
+  vi.stubGlobal('fetch', routeFetch(fx))
+  const view = render(<App />)
+  await waitFor(() => {
+    if (!document.querySelector('.react-flow__pane')) throw new Error('canvas belum hidrat')
+  })
+  return view
+}
+
+/** Lepas canvas yang ter-mount. WAJIB dipanggil di `afterEach`: auto-cleanup
+ *  `@testing-library/react` hanya terpasang kalau ada `afterEach` global, dan vitest webterm
+ *  berjalan dengan `globals: false` — tanpa ini App kedua mount di atas yang pertama dan query
+ *  `screen` menemukan dua canvas. */
+export function unmountCanvas(): void {
+  cleanup()
+  vi.unstubAllGlobals()
+}
+
+/** Semua kabel yang BENAR-BENAR dirender React Flow, sebagai id. Sengaja membaca DOM, bukan state:
+ *  kabel yang ada di state tapi dibuang React Flow saat render adalah persis bug yang dicari. */
+export function renderedEdgeIds(): string[] {
+  return Array.from(document.querySelectorAll('.react-flow__edge')).map(
+    (el) => el.getAttribute('data-id') ?? '',
+  )
+}
