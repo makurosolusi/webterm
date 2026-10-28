@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -7,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 process.env.WEBTERM_DATA_DIR = join(tmpdir(), 'webterm-hooks-test')
 
 import type { AgentPermissionMode, AgentStatus } from '../shared/workspace'
+import { TOKEN_HEADER } from './auth'
 import {
   CLAUDE_HOOK_EVENTS,
   NODE_TOKEN_ENV,
@@ -82,6 +85,13 @@ describe('hookStatus', () => {
   })
 })
 
+/** Baris curl yang dibangun untuk satu node, diambil dari event `Stop` (semua event memakai baris
+ *  yang sama persis — lihat test "subscribes the 11 nodeterm events"). */
+function commandFor(nodeId: string): string {
+  const hooks = claudeHooksSettings(nodeId, 8700).hooks as Record<string, unknown[]>
+  return (hooks['Stop'][0] as { hooks: { command: string }[] }).hooks[0].command
+}
+
 describe('claudeHooksSettings', () => {
   it('subscribes the 11 nodeterm events, each with a node-keyed command', () => {
     const hooks = claudeHooksSettings('n1', 8700).hooks as Record<string, unknown[]>
@@ -112,6 +122,80 @@ describe('claudeHooksSettings', () => {
     ).hooks[0].command
     expect(cmd).toContain(`${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}`)
     expect(cmd).not.toContain(tok)
+  })
+  it('sends the transport token too, also by reference, without dropping the node token', () => {
+    // Seluruh `/api/` digerbangi `authorize()` lewat `x-webterm-token`, jadi hook butuh KEDUA
+    // header. Nama env var ditulis literal di sini, bukan di-import: justru itu yang membuat
+    // test ini gagal kalau ejaan di hooks.ts berubah.
+    const cmd = commandFor('n-transport')
+    expect(cmd).toContain(`${TOKEN_HEADER}: $WEBTERM_TOKEN`)
+    expect(cmd).toContain(`${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}`)
+  })
+  it('builds a line sh can parse', () => {
+    execFileSync('sh', ['-n'], { input: commandFor('n-syntax') })
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// Apa yang BENAR-BENAR diterima curl. Bentuk string saja tidak membuktikan apa pun: ekspansi tak
+// terkutip akan tetap "memuat" header-nya sambil memecahnya jadi beberapa argumen. Jadi `curl`
+// di-stub lewat shim di PATH yang mencatat argv-nya, lalu barisnya dijalankan `sh` sungguhan.
+
+/** Token palsu yang sengaja memuat spasi, `$`, dan kutip tunggal — tiga hal yang hancur duluan
+ *  kalau ekspansinya tak terkutip atau ter-word-split. BUKAN dibaca dari environment. */
+const FAKE_TRANSPORT_TOKEN = `fa ke$it's`
+const FAKE_NODE_TOKEN = 'not-a-real-node-token'
+
+/** Jalankan baris hook dengan `curl` yang di-stub; kembalikan argv yang diterima stub itu. */
+function curlArgv(cmd: string, env: Record<string, string>): string[] {
+  const dir = mkdtempSync(join(tmpdir(), 'webterm-curl-shim-'))
+  try {
+    const out = join(dir, 'argv')
+    writeFileSync(join(dir, 'curl'), '#!/bin/sh\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "$ARGV_OUT"; done\n', {
+      mode: 0o755,
+    })
+    // Interpreter-nya absolut justru supaya `PATH` boleh memuat shim SAJA: dengan begitu `curl`
+    // di baris itu tidak mungkin me-resolve ke curl sungguhan (yang akan mem-POST ke dev server
+    // kalau ada yang berjalan di port 8700).
+    // `</dev/null`: baris itu memuat `--data-binary @-`, dan tanpa ini stub-nya menggantung
+    // menunggu stdin milik test runner.
+    execFileSync('/bin/sh', ['-c', `${cmd} </dev/null`], {
+      env: { PATH: dir, ARGV_OUT: out, ...env },
+    })
+    return readFileSync(out, 'utf8').split('\n').slice(0, -1)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+describe('the argv curl actually receives', () => {
+  it('passes each token as ONE argument, special characters intact', () => {
+    const argv = curlArgv(commandFor('n-argv'), {
+      WEBTERM_TOKEN: FAKE_TRANSPORT_TOKEN,
+      [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN,
+    })
+    // Elemen utuh, bukan `toContain` pada string gabungan: inilah yang membedakan satu argumen
+    // dari tiga pecahan hasil word splitting.
+    expect(argv).toContain(`${TOKEN_HEADER}: ${FAKE_TRANSPORT_TOKEN}`)
+    expect(argv).toContain(`${NODE_TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`)
+    // Tiap nilai header didahului `-H`-nya sendiri.
+    expect(argv[argv.indexOf(`${TOKEN_HEADER}: ${FAKE_TRANSPORT_TOKEN}`) - 1]).toBe('-H')
+    expect(argv[argv.indexOf(`${NODE_TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`) - 1]).toBe('-H')
+    // Tidak ada pecahan nyasar: token ber-spasi yang ter-split akan memunculkan `ke$it's` sendirian.
+    expect(argv).not.toContain(`ke$it's`)
+    expect(argv).not.toContain(TOKEN_HEADER + ':')
+  })
+  it('stays well-formed when no token is configured', () => {
+    // Tanpa `WEBTERM_TOKEN` barisnya tetap mengemit header bernilai kosong sebagai DUA argumen
+    // (`-H`, lalu nilai kosongnya) — curl sendiri yang membuangnya, dan server di keadaan ini tidak
+    // menegakkan token apa pun. Yang dijaga di sini: barisnya tidak berantakan.
+    const argv = curlArgv(commandFor('n-argv-empty'), { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+    expect(argv).toContain(`${TOKEN_HEADER}: `)
+    expect(argv[argv.indexOf(`${TOKEN_HEADER}: `) - 1]).toBe('-H')
+    // Node token tetap lewat: token transport yang absen tidak boleh menggeser argumen lain.
+    expect(argv).toContain(`${NODE_TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`)
+    expect(argv).toContain('--data-binary')
+    expect(argv.filter((a) => a === '-H')).toHaveLength(2)
   })
 })
 

@@ -2,6 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isPermissionMode, type AgentPermissionMode, type AgentStatus } from '../shared/workspace'
+import { TOKEN_HEADER } from './auth'
 import { dataDir } from './config'
 
 // ---------------------------------------------------------------------------------------------
@@ -171,11 +172,26 @@ export function stateVerified(nodeId: string, header: string | string[] | undefi
  * tidak boleh mendarat di baris perintah: di sana ia terbaca semua proses pengguna lewat `ps`.
  * Tanda `$` bertahan melewati single-quote baris peluncuran dan di-expand oleh shell yang
  * menjalankan hook, yang mewarisi env sesi agent (lihat `hookEnv`).
+ *
+ * DUA header, bukan satu. `x-nodeterm-node-token` adalah identitas per-node (fail-open, dibaca
+ * `stateVerified`); `x-webterm-token` adalah token TRANSPORT yang menggerbangi seluruh `/api/`
+ * (`authorize` di index.ts) — tanpanya setiap POST hook dibalas 403 begitu `WEBTERM_TOKEN` diset,
+ * yang mematikan badge status DAN registrasi transcript (sumber data context-link).
+ *
+ * `$WEBTERM_TOKEN` juga REFERENSI, pola yang sama, dengan dua konsekuensi yang disengaja:
+ * tidak ada perhitungan token kedua yang bisa menyimpang dari `resolveToken` (index.ts membaca env
+ * var yang sama persis, dan `cleanEnv` di pty.ts menurunkannya ke tiap anak PTY), dan nilainya
+ * tidak pernah muncul di `ps`. Diemit TANPA SYARAT: saat var itu kosong/absen ekspansinya jadi
+ * `-H "x-webterm-token: "` dan curl membuang header bernilai kosong (diverifikasi pada curl 8.7.1),
+ * sementara server di keadaan itu memang tidak menegakkan token apa pun. Emit kondisional
+ * (`${VAR:+-H "..."}`) justru SALAH di sini: hasil ekspansinya tak terkutip, jadi tunduk pada word
+ * splitting dan merusak token ber-spasi.
  */
 export function claudeHooksSettings(nodeId: string, port: number): Record<string, unknown> {
   const cmd =
     `curl -s 'http://127.0.0.1:${port}/api/agent-status?node=${nodeId}' ` +
-    `-H "${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}" --data-binary @- >/dev/null 2>&1 || true`
+    `-H "${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}" -H "${TOKEN_HEADER}: $WEBTERM_TOKEN" ` +
+    `--data-binary @- >/dev/null 2>&1 || true`
   const hooks: Record<string, unknown[]> = {}
   for (const e of CLAUDE_HOOK_EVENTS) {
     const timeout = typeof e === 'string' ? undefined : e.timeout
