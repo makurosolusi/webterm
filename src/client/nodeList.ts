@@ -15,8 +15,9 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   editor: 'Editor',
 }
 
-/** Bentuk jamak khusus header seksi. Terpisah dari `NODE_KIND_LABEL` karena peta itu masih dipakai
- *  sebagai meta per baris, di mana yang dinamai cuma satu node. */
+/** Jamaknya menamai HIMPUNAN: header seksi, dan lewat itu haystack filter. Tetap terpisah karena
+ *  `NODE_KIND_LABEL` menamai SATU node — rantai fallback judul di `nodeRowLabel` untuk files/editor
+ *  tanpa path. Satu peta saja berarti node editor tanpa path bernama 'Editors'. */
 const NODE_KIND_PLURAL: Record<WsNodeKind, string> = {
   terminal: 'Terminals',
   agent: 'Agents',
