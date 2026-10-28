@@ -13,16 +13,45 @@
 // tombol `+` adalah satu-satunya hal baru di permukaan ini, dan header yang baru muncul setelah
 // workspace pertama membuat identitas app berkedip masuk lalu memindahkan canvas 46px ke bawah
 // tepat saat pengguna menekan tombol. Strip nol-tab cuma brand + `+`, yang sudah benar sendiri.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MoreVertical, Plus, SquareTerminal } from 'lucide-react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
-import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
+import { scrollTopToReveal } from './filesKeys'
+import { canScrollStripBy, tabStripOverflow, workspaceTabDot, workspaceTabTitle, type TabOverflow } from './workspaceTabs'
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
 const MENU_GAP = 4
+
+/** Lebar pita pudar strip, dibaca dari `--tab-fade` di `styles.css` — satu sumber angka, bukan
+ *  salinan yang bisa menyimpang dari CSS-nya. Properti hilang → 0, yaitu perilaku tanpa pudar. */
+const fadeWidth = (strip: HTMLElement): number =>
+  parseFloat(getComputedStyle(strip).getPropertyValue('--tab-fade')) || 0
+
+/**
+ * Gulung tab aktif ke dalam pandangan, "sedekat mungkin": tab yang sudah terlihat seluruhnya tidak
+ * bergerak sama sekali. Kotaknya DIMEKARKAN selebar pita pudar di kedua sisi — tanpa itu tab yang
+ * baru digulung mendarat rata di tepi, yaitu persis di bawah gradien yang memudarkannya, jadi
+ * "sudah terlihat" akan berarti "terlihat separuh transparan".
+ *
+ * Pakai ulang `scrollTopToReveal` (filesKeys): matematikanya agnostik terhadap sumbu
+ * (offset/ukuran/gulungan/pandangan), jadi ini pemakaian sumbu-X-nya, bukan duplikat baru. Hasil di
+ * luar rentang (negatif, atau melewati gulungan maksimum) tidak perlu di-clamp — browser
+ * meng-clamp sendiri saat `scrollLeft` di-assign.
+ */
+const revealActiveTab = (strip: HTMLElement): void => {
+  const tab = strip.querySelector<HTMLElement>('.tab--active')
+  if (!tab) return
+  const fade = fadeWidth(strip)
+  strip.scrollLeft = scrollTopToReveal(
+    tab.offsetLeft - fade,
+    tab.offsetWidth + fade * 2,
+    strip.scrollLeft,
+    strip.clientWidth,
+  )
+}
 
 export interface WorkspaceBarProps {
   /** Semua workspace, urutan tab mengikuti urutan array ini. */
@@ -60,6 +89,53 @@ export default function WorkspaceBar({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
+  const stripRef = useRef<HTMLDivElement | null>(null)
+  const [overflow, setOverflow] = useState<TabOverflow>('none')
+
+  // Dipasang sekali: posisi gulung strip dilaporkan oleh elemennya sendiri, tidak oleh React.
+  useEffect(() => {
+    const strip = stripRef.current
+    if (!strip) return
+    const sync = (): void =>
+      setOverflow(tabStripOverflow(strip.scrollLeft, strip.clientWidth, strip.scrollWidth))
+    // Roda mouse biasa HANYA memancarkan deltaY (trackpad memancarkan deltaX dan sudah menggulung
+    // sendiri), dan deltaY tidak menggulung kontainer `overflow-x` di hampir semua browser — tanpa
+    // terjemahan ini roda di atas strip tidak melakukan apa pun. `preventDefault` butuh listener
+    // NON-passive, yang tidak bisa didapat dari prop `onWheel` React (React mendaftarkan wheel
+    // sebagai passive di root-nya sejak v17), jadi listener-nya dipasang tangan.
+    const onWheel = (e: WheelEvent): void => {
+      if (e.deltaX !== 0 || e.deltaY === 0) return
+      // Strip yang tidak bisa bergerak ke arah itu TIDAK menelan event: biarkan halaman/canvas
+      // menerimanya, daripada mencuri gulungan dan tidak memberi apa pun.
+      if (!canScrollStripBy(strip.scrollLeft, strip.clientWidth, strip.scrollWidth, e.deltaY)) return
+      e.preventDefault()
+      strip.scrollLeft += e.deltaY
+    }
+    sync()
+    strip.addEventListener('scroll', sync, { passive: true })
+    strip.addEventListener('wheel', onWheel, { passive: false })
+    // Lebar strip ikut berubah tanpa render apa pun (jendela diubah ukurannya, sidebar dibuka), dan
+    // itu memindahkan batas "masih ada yang tersembunyi".
+    const ro = new ResizeObserver(sync)
+    ro.observe(strip)
+    return () => {
+      strip.removeEventListener('scroll', sync)
+      strip.removeEventListener('wheel', onWheel)
+      ro.disconnect()
+    }
+  }, [])
+
+  // Berpindah workspace lewat jalan LAIN (sidebar sesi, palet ⌘K) meninggalkan tab aktifnya di luar
+  // layar: board berganti tapi header masih memperlihatkan tab lama sebagai satu-satunya yang
+  // terlihat. `groups.length` ikut jadi dep karena menambah/menghapus tab mengubah lebar konten
+  // strip tanpa mengubah ukuran elemennya (ResizeObserver tidak melihat itu).
+  useEffect(() => {
+    const strip = stripRef.current
+    if (!strip) return
+    revealActiveTab(strip)
+    setOverflow(tabStripOverflow(strip.scrollLeft, strip.clientWidth, strip.scrollWidth))
+  }, [activeId, groups.length])
+
   const menuGroup = menu ? groups.find((g) => g.projectId === menu.id) : undefined
 
   const commitRename = (): void => {
@@ -87,7 +163,16 @@ export default function WorkspaceBar({
       {/* `+` SAUDARA strip, bukan anaknya: dengan 10+ workspace strip yang menggulung tidak boleh
           membawa tombol tambah keluar layar (nodeterm issue #375). */}
       <div className="tabbar__projects">
-        <div className="tabbar__tabs" role="tablist" aria-label="Workspaces">
+        {/* `data-overflow` hanya menyetel sisi mana yang dipudarkan — aturan maskernya di
+            `styles.css`. 'none' tetap dikirim (bukan atribut yang dibuang) supaya selektornya
+            selalu eksplisit. */}
+        <div
+          ref={stripRef}
+          className="tabbar__tabs"
+          data-overflow={overflow}
+          role="tablist"
+          aria-label="Workspaces"
+        >
           {groups.map((g) => (
             // `div`, bukan `button` seperti dulu: tab sekarang MEMUAT tombol (kebab) dan sebuah
             // input, dan button di dalam button adalah HTML tidak sah — browser memecah DOM-nya

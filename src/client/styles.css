@@ -201,11 +201,36 @@ body {
   flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
-  /* Scrollbar native di dalam header terbaca seperti elemen asing; roda/trackpad tetap jalan. */
+  /* Scrollbar native di dalam header terbaca seperti elemen asing. Trackpad memancarkan deltaX
+     jadi ia menggulung sendiri; roda mouse biasa hanya memancarkan deltaY dan TIDAK menggulung
+     kontainer overflow-x — itu diterjemahkan di `WorkspaceBar.tsx`, bukan di sini. */
   scrollbar-width: none;
+  /* Lebar pita pudar di tepi yang menyembunyikan tab. SATU-SATUNYA tempat angka ini hidup:
+     `WorkspaceBar.tsx` membacanya kembali dari sini untuk menyisihkan tab yang digulungnya ke
+     tampak dari bawah pita, jadi tidak ada angka kembar yang bisa menyimpang. */
+  --tab-fade: 24px;
 }
 .tabbar__tabs::-webkit-scrollbar {
   display: none;
+}
+/* Satu-satunya petunjuk "ada tab lain di luar layar": scrollbar-nya disembunyikan dan tepi strip
+   terpotong rata, jadi dengan 20 workspace tidak ada apa pun yang mengatakan deretannya berlanjut.
+   Dipasang PER SISI (atribut `data-overflow` dihitung di `workspaceTabs.ts`) dan bukan selalu
+   dua-duanya: memudarkan tepi yang sudah memperlihatkan tab terakhirnya adalah janji palsu. */
+.tabbar__tabs[data-overflow='left'] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--tab-fade));
+}
+.tabbar__tabs[data-overflow='right'] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--tab-fade));
+}
+.tabbar__tabs[data-overflow='both'] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--tab-fade),
+    #000 calc(100% - var(--tab-fade)),
+    transparent
+  );
 }
 
 .tab {

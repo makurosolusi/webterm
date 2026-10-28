@@ -41,3 +41,42 @@ export function workspaceTabTitle(group: SessionGroup): string {
   if (working > 0) parts.push(`${working} running`)
   return `${group.projectName} — ${parts.join(', ')}`
 }
+
+/** Sisi strip tab yang masih MENYEMBUNYIKAN tab. 'none' = seluruh deretan terlihat. */
+export type TabOverflow = 'none' | 'left' | 'right' | 'both'
+
+/** Toleransi sub-piksel. `scrollLeft` fraksional (zoom halaman, display HiDPI) sementara
+ *  `scrollWidth`/`clientWidth` dibulatkan ke integer, jadi strip yang sudah digulung habis ke kanan
+ *  bisa menyisakan beda <1px dan perbandingan ketat akan melaporkan "masih ada yang tersembunyi"
+ *  selamanya — pita pudar yang tidak pernah hilang justru berbohong tentang tab yang tidak ada. */
+const SCROLL_SLACK_PX = 1
+
+/**
+ * Sisi mana yang pantas dipudarkan, dari geometri gulung strip. Hanya sisi yang BENAR-BENAR punya
+ * konten tersembunyi: memudarkan tepi yang tidak menyembunyikan apa pun menjanjikan tab yang tidak
+ * ada. Semua argumen piksel layout, jadi aman dipanggil dengan nilai apa adanya dari elemen.
+ */
+export function tabStripOverflow(scrollLeft: number, clientWidth: number, scrollWidth: number): TabOverflow {
+  const hiddenLeft = scrollLeft > SCROLL_SLACK_PX
+  const hiddenRight = scrollLeft + clientWidth < scrollWidth - SCROLL_SLACK_PX
+  if (hiddenLeft && hiddenRight) return 'both'
+  if (hiddenLeft) return 'left'
+  return hiddenRight ? 'right' : 'none'
+}
+
+/**
+ * Apakah strip masih punya ruang gulung ke arah `delta` (positif = ke kanan). Dipakai untuk
+ * memutuskan apakah roda mouse boleh DITELAN: menelannya di strip yang sudah habis (atau yang tidak
+ * menggulung sama sekali) mencuri gulungan dari halaman/canvas di bawahnya tanpa memberi apa pun.
+ */
+export function canScrollStripBy(
+  scrollLeft: number,
+  clientWidth: number,
+  scrollWidth: number,
+  delta: number,
+): boolean {
+  const sides = tabStripOverflow(scrollLeft, clientWidth, scrollWidth)
+  if (delta > 0) return sides === 'right' || sides === 'both'
+  if (delta < 0) return sides === 'left' || sides === 'both'
+  return false
+}

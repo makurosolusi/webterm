@@ -105,3 +105,90 @@ describe('markup yang memasang penandanya', () => {
     expect(bar).toContain("className={g.isActive ? 'tab tab--active' : 'tab'}")
   })
 })
+
+// ---- Luapan strip tab: petunjuk bahwa deretannya berlanjut di luar layar ----
+// Dengan 20 workspace strip menggulung, tapi scrollbar-nya disembunyikan dan tepinya terpotong
+// rata, jadi tidak ada apa pun yang mengatakan ada tab lain. Perhitungan sisinya diuji di
+// `workspaceTabs.test.ts`; yang dijaga di sini adalah bahwa CHROME-nya benar-benar terpasang —
+// tanpa DOM tidak ada computed style yang bisa dibaca, jadi source-nya yang dibaca.
+
+/** Selektor mana saja di `styles.css` yang memasang `mask-image` pada strip tab. */
+const maskedStripSelectors = (css: string): string[] =>
+  [...css.matchAll(/\n([^\n{]+)\{[^}]*mask-image:/g)]
+    .map((m) => m[1])
+    .filter((s) => s.includes('.tabbar__tabs'))
+
+/**
+ * Pudarnya harus PER SISI: tiga aturan, semuanya di bawah `[data-overflow=...]`. Masker yang
+ * dipasang langsung di `.tabbar__tabs` memudarkan kedua tepi selamanya — termasuk saat tab terakhir
+ * sudah tampak seluruhnya, yang menjanjikan tab yang tidak ada.
+ */
+const fadesOnlyTheSideThatHides = (css: string): boolean => {
+  const sel = maskedStripSelectors(css)
+  return sel.length === 3 && sel.every((s) => /\[data-overflow='(left|right|both)'\]/.test(s))
+}
+
+/** Roda boleh ditelan hanya kalau strip memang bisa bergerak, dan `preventDefault` butuh listener
+ *  NON-passive — prop `onWheel` React tidak bisa memberikannya. */
+const wheelIsConditionalAndNonPassive = (tsx: string): boolean =>
+  /addEventListener\('wheel',[^)]*\{ passive: false \}\)/.test(tsx) &&
+  /if \(!canScrollStripBy\(/.test(tsx) &&
+  !/onWheel=/.test(tsx)
+
+// Bentuk lama, persis seperti sebelum dibetulkan — buktinya guard di atas menggigit.
+const OLD_ALWAYS_FADED_CSS = `
+.tabbar__tabs {
+  overflow-x: auto;
+  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+`
+const OLD_WHEEL_TSX = `
+  const onWheel = (e: React.WheelEvent) => { e.preventDefault(); strip.scrollLeft += e.deltaY }
+  return <div onWheel={onWheel} />
+`
+
+describe('pudar tepi strip tab', () => {
+  it('terpasang per sisi lewat `data-overflow`, tidak permanen di `.tabbar__tabs`', () => {
+    expect(fadesOnlyTheSideThatHides(src('styles.css'))).toBe(true)
+  })
+
+  it('lebar pita pudar hidup di CSS sebagai `--tab-fade`, satu sumber angka', () => {
+    // `WorkspaceBar.tsx` membacanya kembali; dua angka kembar akan menyimpang diam-diam.
+    expect(rule(src('styles.css'), '.tabbar__tabs')).toMatch(/--tab-fade:\s*\d+px/)
+    expect(src('WorkspaceBar.tsx')).toContain("getPropertyValue('--tab-fade')")
+  })
+
+  it('luapan dasarnya TIDAK dibongkar: strip tetap menggulung, bukan membungkus', () => {
+    const body = rule(src('styles.css'), '.tabbar__tabs')
+    expect(body).toMatch(/overflow-x:\s*auto/)
+    expect(body).toMatch(/min-width:\s*0/)
+    expect(body).not.toMatch(/flex-wrap/)
+  })
+
+  it('guard menolak bentuk lamanya', () => {
+    expect(fadesOnlyTheSideThatHides(OLD_ALWAYS_FADED_CSS)).toBe(false)
+    expect(wheelIsConditionalAndNonPassive(OLD_WHEEL_TSX)).toBe(false)
+  })
+})
+
+describe('strip menyusul tab aktif dan roda mouse', () => {
+  it('tab aktif digulung ke tampak setiap kali `activeId` berubah', () => {
+    const bar = src('WorkspaceBar.tsx')
+    expect(bar).toContain('revealActiveTab(strip)')
+    expect(bar).toMatch(/\}, \[activeId, groups\.length\]\)/)
+  })
+
+  it('revealnya "sedekat mungkin", bukan `scrollIntoView` yang menyeret ancestor', () => {
+    const bar = src('WorkspaceBar.tsx')
+    expect(bar).toContain('scrollTopToReveal(')
+    expect(bar).not.toContain('scrollIntoView')
+  })
+
+  it('roda vertikal diterjemahkan jadi horizontal, dan tidak ditelan kalau sia-sia', () => {
+    expect(wheelIsConditionalAndNonPassive(src('WorkspaceBar.tsx'))).toBe(true)
+  })
+
+  it('`data-overflow` benar-benar sampai ke elemen strip', () => {
+    expect(src('WorkspaceBar.tsx')).toContain('data-overflow={overflow}')
+  })
+})
