@@ -21,10 +21,17 @@ import {
   signalCounts,
   type SidebarGrouping,
 } from './sessionList'
+import { buildNodeList, NODE_KIND_LABEL } from './nodeList'
 import type { ClosedEntry } from './closedHistory'
 import { subscribeUnread, unreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import './sessions-panel.css'
+
+const TAB_LABEL: Record<SidebarGrouping, string> = {
+  project: 'Project',
+  status: 'Status',
+  nodes: 'Nodes',
+}
 
 const PIN_KEY = 'webterm.sessionsPinned'
 /** Peta lipatan (JSON `{ kunci: terlipat }`). Dipersist karena membuka ulang board tiap reload
@@ -129,10 +136,22 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
   )
 
+  const nodeRows = useMemo(
+    () => buildNodeList(workspaces, liveActiveNodes, activeId, filter),
+    [workspaces, liveActiveNodes, activeId, filter],
+  )
+
   const total = sections.reduce((n, s) => n + s.rows.length, 0)
   const attention = sections.find((s) => s.kind === 'attention')?.rows.length ?? 0
-  const rowCount = grouping === 'status' ? total : groups.reduce((n, g) => n + g.sessions.length, 0)
+  const rowCount =
+    grouping === 'nodes'
+      ? nodeRows.length
+      : grouping === 'status'
+        ? total
+        : groups.reduce((n, g) => n + g.sessions.length, 0)
   const empty = sidebarEmptyState(rowCount === 0, filter)
+  // Tab Nodes mendaftar lebih dari sesi, jadi pesan kosongnya tidak boleh bilang "sessions".
+  const noun = grouping === 'nodes' ? 'nodes' : 'sessions'
 
   if (!pinned && !peek) {
     return (
@@ -187,7 +206,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       </div>
 
       <div className="ss-tabs" role="tablist" aria-label="Group sessions by">
-        {(['project', 'status'] as const).map((g) => (
+        {(['project', 'status', 'nodes'] as const).map((g) => (
           <button
             key={g}
             type="button"
@@ -196,7 +215,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             aria-selected={grouping === g}
             onClick={() => setGrouping(g)}
           >
-            {g === 'project' ? 'Project' : 'Status'}
+            {TAB_LABEL[g]}
           </button>
         ))}
       </div>
@@ -231,15 +250,51 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       <div className="sessions-sidebar__body nowheel">
         {empty === 'no-matches' && (
           <div className="ss-empty">
-            <div>No sessions match “{filter.trim()}”.</div>
+            <div>
+              No {noun} match “{filter.trim()}”.
+            </div>
             <button type="button" onClick={() => setFilter('')}>
               Clear filter
             </button>
           </div>
         )}
-        {empty === 'no-sessions' && <div className="ss-empty">No sessions yet.</div>}
+        {empty === 'no-sessions' && <div className="ss-empty">No {noun} yet.</div>}
 
-        {grouping === 'status'
+        {/* Satu-satunya daftar yang memuat node files/editor juga — jadi satu-satunya jalan
+            memusatkan canvas ke node yang bukan shell. Baris memakai ulang `.ss-row` apa adanya
+            (nol CSS baru); fokus, zoom, dan pindah workspace sudah milik `onFocusNode`. */}
+        {grouping === 'nodes' ? (
+          <ul className="ss-rows ss-status__rows">
+            {nodeRows.map((r) => (
+              <li key={r.id}>
+                <div
+                  className="ss-row"
+                  role="button"
+                  tabIndex={0}
+                  title={r.detail ?? ''}
+                  aria-label={`Focus ${r.label}`}
+                  onClick={() => onFocusNode(r.id)}
+                  onKeyDown={(ev) => {
+                    if (ev.key !== 'Enter' && ev.key !== ' ') return
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    onFocusNode(r.id)
+                  }}
+                >
+                  <span className="ss-row__text">
+                    <span className="ss-row__title">{r.label}</span>
+                    {/* Kind SELALU ikut: tiga node tanpa judul kustom hanya bisa dibedakan dari
+                        sini. Nama workspace hanya untuk node di board lain — di board aktif ia
+                        sama untuk semua baris, jadi cuma kebisingan. */}
+                    <span className="ss-meta">
+                      {r.isActive ? NODE_KIND_LABEL[r.kind] : `${NODE_KIND_LABEL[r.kind]} · ${r.workspaceName}`}
+                    </span>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : grouping === 'status'
           ? // `buildStatusList` menahan section kosong supaya posisinya tetap — tapi kalau SELURUH
             // daftar nol, pesan kosong di atas sudah menjawabnya dan lima header "0" di bawahnya
             // cuma kebisingan. Jadi header permanen hanya berlaku selagi ada sesi.
@@ -346,7 +401,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             baru saja ditutup adalah justru saat daftar ini paling berguna. Memakai ulang kelas
             `.ss-group__*` + `.ss-row` apa adanya (nol CSS baru): seksi ketiga dengan bahasa visual
             sendiri akan membuat sidebar terbaca seperti tiga panel yang ditempel. */}
-        {closedSessions.length > 0 && (
+        {grouping !== 'nodes' && closedSessions.length > 0 && (
           <section className="ss-group" aria-label="Recently closed">
             <div
               className="ss-group__head"
