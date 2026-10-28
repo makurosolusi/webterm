@@ -19,6 +19,7 @@ import { NodeActionsProvider } from './nodeActions'
 import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode, workspaceNameFromPath } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
+import { spawnAt } from './nodeSpawn'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
@@ -187,12 +188,15 @@ export default function App() {
     })
   }, [scheduleSave])
 
-  const addFlowNode = useCallback((make: (n: number, ws: Workspace) => WsNode) => {
+  // Spawn SEBELUM `make`: node baru lahir di tengah pandangan, node yang dibuka ulang menimpanya dengan x/y aslinya.
+  const addFlowNode = useCallback((make: (n: number, ws: Workspace) => Omit<WsNode, 'x' | 'y'>) => {
     const ws = activeWsRef.current
     if (!ws) return
     setNodes((prev) => {
-      const node = { width: settings.defaultNodeWidth, height: settings.defaultNodeHeight, ...make(prev.length, ws) }
+      const node = { width: settings.defaultNodeWidth, height: settings.defaultNodeHeight, ...spawnAt(rf.current, settings, prev.length), ...make(prev.length, ws) }
       const next = addNode(prev.map(toWsNode), node).map(toFlow)
+      // Round-trip `toWsNode`/`toFlow` tidak membawa `selected`, jadi yang lain sudah ter-deselect;
+      next[next.length - 1].selected = true // node baru selalu terakhir (`addNode` append).
       nodesRef.current = next
       scheduleSave()
       nodeHist.current.push(next)
@@ -201,19 +205,15 @@ export default function App() {
     })
   }, [scheduleSave, settings.defaultNodeWidth, settings.defaultNodeHeight])
 
-  const onAddTerminal = useCallback(() => {
-    addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', x: 80 + n * 40, y: 80 + n * 40, cwd: ws.cwd }))
-  }, [addFlowNode])
+  const onAddTerminal = useCallback(() => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', cwd: ws.cwd })), [addFlowNode])
 
   // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
-  const onAddFiles = useCallback(() => {
-    addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'files', x: 80 + n * 40, y: 80 + n * 40, dirPath: ws.cwd }))
-  }, [addFlowNode])
+  const onAddFiles = useCallback(() => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'files', dirPath: ws.cwd })), [addFlowNode])
 
   const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string) => {
     const color = agentConfig(agentId)?.color
-    addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'agent', x: 80 + n * 40, y: 80 + n * 40, cmd, agentId, cwd: cwd ?? ws.cwd, color, sessionId: crypto.randomUUID() }))
+    addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color, sessionId: crypto.randomUUID() }))
   }, [addFlowNode])
 
   // A node minted its own session uuid (or restarted): persist it to that node.
