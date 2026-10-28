@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import {
@@ -193,5 +195,35 @@ describe('applyLiveOptions', () => {
     const same = fakeTerm(base)
     expect(applyLiveOptions(same.term, { ...base, terminalTheme: base.terminalTheme }).themeChanged)
       .toBe(false)
+  })
+})
+
+// Fungsi di atas benar tapi pernah MATI: `TerminalCore` menerima settings sebagai prop, dan tak
+// satu pun dari kedua call site-nya (`TerminalNode`, `AgentNode`) mengirimnya — jadi tiap kontrol
+// di panel Settings tidak berpengaruh ke terminal yang hidup. Regresi sunyi: tak ada yang pecah.
+// Vitest di sini node-env tanpa DOM, komponen tak bisa dirender, jadi jalurnya dijaga sebagai
+// teks. Yang dijaga adalah SIFATNYA, bukan ejaan barisnya: siapa sumber settings, dan effect mana
+// yang boleh bereaksi padanya.
+const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
+const core = src('TerminalCore.tsx')
+/** Deps array yang menutup `}, [...])`. */
+const deps = (s: string): string[] => [...s.matchAll(/\}, (\[[^\]]*\])\)/g)].map((m) => m[1])
+
+describe('jalur settings → xterm', () => {
+  it('mengambil settings dari context, bukan dari prop atau data node', () => {
+    expect(core).toContain('useLiveSettings()')
+    // Prop opsional yang tak pernah dikirim = default senyap. Itu bug-nya; jangan kembali.
+    expect(core).not.toMatch(/settings\?: Settings/)
+    // Dan App tidak lagi menyuntikkannya ke `data` setiap node (identitas data baru tiap drag).
+    expect(src('App.tsx')).not.toMatch(/\.\.\.n\.data, settings/)
+  })
+
+  it('bereaksi ke settings TANPA membuat ulang terminal', () => {
+    // Effect pembuatan ber-deps `[id]` SAJA: menambahkan settings ke sana membuang scrollback
+    // setiap kali slider digeser. Deps terakhir sebelum `applyLiveOptions` adalah milik effect itu.
+    const creation = core.slice(core.indexOf('new Terminal('), core.indexOf('applyLiveOptions(term'))
+    expect(deps(creation).at(-1)).toBe('[id]')
+    // Sebaliknya effect penerap HARUS bereaksi — di sinilah settings menyentuh terminal hidup.
+    expect(deps(core.slice(core.indexOf('applyLiveOptions(term')))[0]).toContain('settings')
   })
 })

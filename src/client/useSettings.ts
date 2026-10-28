@@ -4,7 +4,7 @@
 // xterm bereaksi seketika), persistensi membuntut dengan paling banyak satu request per jendela
 // 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
 // update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 
@@ -142,4 +142,22 @@ export function useSettings(): UseSettings {
   }, [])
 
   return { settings, hydrated, update }
+}
+
+/**
+ * Settings live untuk konsumen yang jauh dari App: xterm di dalam node, dan wrapper editor di
+ * `nodeTypes`. Dulu App menyuntikkannya ke `data` SETIAP node (`flowNodes`), yang punya dua
+ * akibat buruk: identitas `data` baru untuk semua node pada tiap tick drag, dan — karena kedua
+ * call site `TerminalCore` tidak pernah meneruskan prop `settings`-nya — tidak ada satu pun
+ * setting terminal yang benar-benar sampai ke xterm. Context memotong perantaranya.
+ *
+ * Default `DEFAULT_SETTINGS` supaya komponen yang dites/dirender di luar provider tetap waras,
+ * bukan meledak.
+ */
+const SettingsContext = createContext<Settings>(DEFAULT_SETTINGS)
+
+export const SettingsProvider = SettingsContext.Provider
+
+export function useLiveSettings(): Settings {
+  return useContext(SettingsContext)
 }

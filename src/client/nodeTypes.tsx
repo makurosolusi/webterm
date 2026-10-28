@@ -7,21 +7,24 @@ import AgentNode from './AgentNode'
 import FilesNode from './FilesNode'
 import EditorNode from './EditorNode'
 import { read, readBinary, write } from './fsClient'
-import type { Settings } from '../shared/settings'
+import { useLiveSettings } from './useSettings'
 
 export const nodeTypes = {
   terminal: TerminalNode,
   agent: AgentNode,
   files: FilesNode,
-  // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya datang di
-  // data node, jalur yang sama dengan node lain — lihat `flowNodes` di App.
-  editor: (p: NodeProps) => (
-    <EditorNode
-      {...p}
-      read={read}
-      write={write}
-      readBinary={readBinary}
-      openMarkdownPreview={(p.data as { settings?: Settings }).settings?.openMarkdownPreview}
-    />
-  ),
+  // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya dari
+  // context, bukan lagi dari data node — lihat `useLiveSettings`.
+  editor: function EditorNodeType(p: NodeProps) {
+    const settings = useLiveSettings()
+    return (
+      <EditorNode
+        {...p}
+        read={read}
+        write={write}
+        readBinary={readBinary}
+        openMarkdownPreview={settings.openMarkdownPreview}
+      />
+    )
+  },
 }

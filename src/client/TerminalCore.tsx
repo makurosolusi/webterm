@@ -16,7 +16,7 @@ import {
   terminalFontZoomChord,
   terminalKeyAction,
 } from './terminalKeys'
-import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
+import { useLiveSettings } from './useSettings'
 import type { AgentId } from '../shared/workspace'
 
 export interface TerminalHandle {
@@ -34,8 +34,6 @@ export interface TerminalCoreProps {
   agentId?: AgentId
   sessionId?: string
   resume?: boolean
-  /** Settings live. Prop, bukan store: integrator yang menyambungkannya. */
-  settings?: Settings
   /** Judul yang dilaporkan terminal (OSC 0/2) — nama proses foreground di shell biasa. */
   onTitle?: (title: string) => void
 }
@@ -65,7 +63,10 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   props,
   ref,
 ) {
-  const { id, settings = DEFAULT_SETTINGS } = props
+  const { id } = props
+  // Dari context, BUKAN prop: kedua call site (`TerminalNode`, `AgentNode`) tak pernah mengirim
+  // prop itu, jadi ia selalu jatuh ke default dan tak satu pun setting terminal sampai ke xterm.
+  const settings = useLiveSettings()
   const elRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)

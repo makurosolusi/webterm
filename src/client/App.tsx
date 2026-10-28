@@ -14,7 +14,7 @@ import SessionsPanel from './SessionsPanel'
 import HelpOverlay from './HelpOverlay'
 import { SettingsPanel } from './SettingsPanel'
 import { nodeTypes } from './nodeTypes'
-import { useSettings } from './useSettings'
+import { SettingsProvider, useSettings } from './useSettings'
 import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode, workspaceNameFromPath } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
@@ -382,19 +382,17 @@ export default function App() {
     rf.current?.updateNodeData(id, { hideLinks: !(cur?.data as { hideLinks?: boolean })?.hideLinks })
   }, [])
 
-  // Inject live settings into every node plus onSession + the hideLinks eye handler into agent
-  // nodes, for rendering only; toWsNode drops both, so saves are unaffected.
-  // Hasilnya DIPAKU ke `Node[]`: tanpa itu React Flow menyimpulkan tipe node dari bentuk data yang
-  // disuntik di sini, dan `ReactFlowInstance` default yang dipegang `rf` tidak cocok lagi.
+  // Inject onSession + the hideLinks eye handler into agent nodes, for rendering only; toWsNode
+  // drops both. Settings TIDAK lewat sini — lihat `useLiveSettings`. Hasilnya DIPAKU ke `Node[]`:
+  // tanpa itu React Flow menyimpulkan tipe node dari suntikan ini dan `rf` default tak cocok lagi.
   const flowNodes = useMemo<Node[]>(
     () => nodes.map((n) => {
       const base = withLinkHandles(n)
-      const data = { ...n.data, settings }
       return n.type === 'agent'
-        ? { ...base, data: { ...data, onSession, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
-        : { ...base, data }
+        ? { ...base, data: { ...n.data, onSession, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
+        : base
     }),
-    [nodes, settings, onSession, onToggleHideLinks],
+    [nodes, onSession, onToggleHideLinks],
   )
 
   const liveNodes = useMemo(() => nodes.map(toWsNode), [nodes])
@@ -404,6 +402,7 @@ export default function App() {
   const noWorkspaces = workspaces.length === 0
 
   return (
+    <SettingsProvider value={settings}>
     <div className="app-shell">
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
@@ -514,5 +513,6 @@ export default function App() {
       {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
+    </SettingsProvider>
   )
 }
