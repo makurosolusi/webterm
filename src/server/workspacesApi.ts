@@ -19,6 +19,7 @@ export type WorkspacesResult = { status: number; body?: unknown } | null
 
 const BAD_JSON = { status: 400, body: { error: 'bad json' } }
 const NOT_FOUND = { status: 404, body: { error: 'not found' } }
+const BAD_ID = { status: 400, body: { error: 'id must be a non-empty string' } }
 
 type CreateBody = { name: string; cwd?: string; color?: string }
 type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[] }
@@ -92,8 +93,13 @@ export async function workspacesRoute(
   if (path === '/api/active') {
     if (method === 'GET') return { status: 200, body: { id: store.getActive() } }
     if (method === 'PUT') {
-      const b = parseObjectBody<{ id: string }>(await body())
+      const b = parseObjectBody<{ id?: unknown }>(await body())
       if (!b) return BAD_JSON
+      // Bentuk penjaga sama dengan `pathParam` di `fsApi.ts`: tipe saja tidak cukup karena
+      // `parseObjectBody` hanya menjamin "ini objek". Tanpa ini `{}` lolos, `undefined` terikat
+      // sebagai NULL di SQLite, dan rute menjawab 204 SAMBIL menghapus workspace aktif pengguna —
+      // kegagalan senyap yang merusak state. Pesan tidak menggemakan nilai yang dikirim client.
+      if (typeof b.id !== 'string' || b.id.trim() === '') return BAD_ID
       store.setActive(b.id)
       return { status: 204 }
     }

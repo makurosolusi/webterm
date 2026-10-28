@@ -72,6 +72,21 @@ test('a non-object JSON body is 400 on every route that reads one', async () => 
   expect(store.getActive()).toBe(null)
 })
 
+// `parseObjectBody` hanya menjamin "ini objek", jadi `{}` dulu lolos, `b.id` adalah `undefined`,
+// dan `setActive(undefined)` terikat NULL: 204 SAMBIL menghapus workspace aktif. Yang dikunci di
+// sini bukan status code-nya saja tapi invariannya — aktif yang tersimpan harus tetap utuh.
+test('PUT /api/active rejects an unusable id at 400 and leaves the stored active intact', async () => {
+  const store = freshStore()
+  const ws = store.create('proj')
+  await workspacesRoute(store, '/api/active', 'PUT', withBody({ id: ws.id }))
+  expect(store.getActive()).toBe(ws.id)
+
+  for (const v of [{}, { id: 42 }, { id: null }, { id: '   ' }]) {
+    expect((await workspacesRoute(store, '/api/active', 'PUT', withBody(v)))?.status).toBe(400)
+    expect(store.getActive()).toBe(ws.id) // tidak tersentuh
+  }
+})
+
 test('an unknown id is 404 and a foreign path is null so the caller falls through', async () => {
   const store = freshStore()
   expect((await workspacesRoute(store, '/api/workspaces/nope', 'GET', noBody))?.status).toBe(404)
