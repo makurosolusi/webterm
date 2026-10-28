@@ -4,6 +4,7 @@
 import { WS_PATH } from '../shared/protocol'
 import type { ClientMsg, ServerMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
+import { tokenQuery } from './api'
 
 interface Sub {
   onOutput: (data: string) => void
@@ -30,7 +31,9 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 function url(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}${WS_PATH}`
+  // `new WebSocket` cannot set headers, so the token (when there is one) rides in the query.
+  const q = tokenQuery()
+  return `${proto}://${location.host}${WS_PATH}${q === '' ? '' : `?${q}`}`
 }
 
 function connect() {

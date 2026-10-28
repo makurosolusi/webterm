@@ -1,8 +1,63 @@
 // Thin same-origin REST wrappers for the workspace API. JSON in/out; throw on non-2xx.
 import type { Workspace } from '../shared/workspace'
 
+/** Must match TOKEN_HEADER / TOKEN_PARAM in src/server/auth.ts. */
+const TOKEN_HEADER = 'x-webterm-token'
+const TOKEN_PARAM = 'token'
+const TOKEN_KEY = 'webterm.token'
+
+/**
+ * The transport token, when the server asked for one (non-loopback bind). It arrives once in
+ * the page URL — `?token=…` — and is moved straight into sessionStorage so it does not sit in
+ * the address bar to be screenshotted, bookmarked or pasted into a chat. sessionStorage, not
+ * local: the token should not outlive the tab.
+ *
+ * Returns '' on the loopback default, where no token exists and nothing about the client's
+ * behaviour changes.
+ */
+function sessionStore(): Storage | null {
+  // Private mode and blocked site data make even *touching* sessionStorage throw; a token read
+  // from the URL must still work there, it just will not survive a reload.
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage
+  } catch {
+    return null
+  }
+}
+
+function readToken(): string {
+  if (typeof location === 'undefined' || typeof location.href !== 'string') return '' // non-browser
+  const store = sessionStore()
+  const url = new URL(location.href)
+  const fromUrl = url.searchParams.get(TOKEN_PARAM)
+  if (fromUrl === null || fromUrl === '') return store?.getItem(TOKEN_KEY) ?? ''
+  try {
+    store?.setItem(TOKEN_KEY, fromUrl)
+  } catch {
+    // Safari private mode allows the read but throws on write (quota 0). The token still works
+    // for this page load; only persistence across a reload is lost.
+  }
+  url.searchParams.delete(TOKEN_PARAM)
+  if (typeof history !== 'undefined') history.replaceState(null, '', url.pathname + url.search + url.hash)
+  return fromUrl
+}
+
+const token = readToken()
+
+/** Query suffix carrying the token, or '' when there is none. For the WebSocket URL, which
+ *  cannot carry headers. Caller supplies the leading separator. */
+export function tokenQuery(): string {
+  return token === '' ? '' : `${TOKEN_PARAM}=${encodeURIComponent(token)}`
+}
+
+/** Request headers plus the token header when there is one — absent entirely otherwise. */
+function withToken(headers?: Record<string, string>): Record<string, string> | undefined {
+  if (token === '') return headers
+  return { ...headers, [TOKEN_HEADER]: token }
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
+  const res = await fetch(url, { ...init, headers: withToken(init?.headers as Record<string, string>) })
   if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}`)
   return res.json() as Promise<T>
 }
@@ -32,7 +87,10 @@ export function saveWorkspace(ws: Workspace): Promise<Workspace> {
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {
-  const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: withToken(),
+  })
   if (!res.ok) throw new Error(`DELETE /api/workspaces/${id} -> ${res.status}`)
 }
 
@@ -44,7 +102,7 @@ export async function getActive(): Promise<string | null> {
 export async function setActive(id: string): Promise<void> {
   const res = await fetch('/api/active', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withToken({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id }),
   })
   if (!res.ok) throw new Error(`PUT /api/active -> ${res.status}`)
