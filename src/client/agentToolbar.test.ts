@@ -65,6 +65,8 @@ const micHiddenWhenUnsupported = (s: string) =>
 const eyeGatedOnContextCapable = (s: string) =>
   /const onToggleHideLinksProp = isContextCapable\(agentId\) \? \(\) => onToggleHideLinks\(id\) : undefined/.test(s) &&
   /onToggleHideLinks=\{onToggleHideLinksProp\}/.test(s)
+/** Tanpa `supported` yang diambil dari hook, `micSupported` cuma undefined dan gatingnya bohong. */
+const takesSupportedFromHook = (s: string) => /\{ micActive, toggleMic, supported: micSupported \} = useSpeechInput/.test(s)
 const reportsRecogError = (s: string) => /recog\.onerror = \(e\) => \{[^}]*onError\?\.\(speechErrorText\(e\?\.error\)\)/.test(s)
 const guardsRecogStart = (s: string) => /try \{\s*recog\.start\(\)\s*\} catch \(/.test(s)
 
@@ -120,6 +122,24 @@ describe('AgentNode: tombol header tidak boleh gagal diam-diam', () => {
   it('`hideLinks` TETAP dibaca dari data node', () => {
     // Dijaga nodeRender.test.ts juga; diulang di sini karena gating di atas menyentuh baris yang sama.
     expect(src('AgentNode.tsx')).toMatch(/hideLinks=\{d\.hideLinks\}/)
+  })
+})
+
+// Bentuk LAMA `TerminalNode.tsx`, yang kena bug mic bisu yang sama persis seperti node agent.
+const OLD_TERMINAL_MIC = `const { micActive, toggleMic } = useSpeechInput((text) => send({ t: 'input', id, data: text }))
+          micActive={micActive} onToggleMic={toggleMic}`
+
+describe('TerminalNode: tombol mic tidak boleh dirender saat Web Speech tidak ada', () => {
+  it('mengambil `supported` dari hook dan mengirim undefined saat tidak didukung', () => {
+    const s = src('TerminalNode.tsx')
+    expect(takesSupportedFromHook(s)).toBe(true)
+    expect(micHiddenWhenUnsupported(s)).toBe(true)
+  })
+
+  it('guard menolak bentuk lama yang selalu merender tombol mic', () => {
+    expect(takesSupportedFromHook(OLD_TERMINAL_MIC)).toBe(false)
+    expect(micHiddenWhenUnsupported(OLD_TERMINAL_MIC)).toBe(false)
+    expect(micHiddenWhenUnsupported(OLD_MIC_PROP)).toBe(false)
   })
 })
 

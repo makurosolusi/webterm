@@ -22,7 +22,14 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
-  const { micActive, toggleMic } = useSpeechInput((text) => send({ t: 'input', id, data: text }))
+  // Tanpa `onError`: node terminal tidak punya thread aktivitas seperti node agent, jadi kegagalan
+  // RUNTIME dikte belum punya permukaan di sini. Yang dijaga cuma kasus "tidak didukung" di bawah.
+  const { micActive, toggleMic, supported: micSupported } = useSpeechInput((text) => send({ t: 'input', id, data: text }))
+
+  // `undefined` MENYEMBUNYIKAN tombolnya (kontrak NodeToolbar: "omit button if undefined"). Web Speech
+  // menuntut secure context, jadi webterm yang dibuka lewat alamat LAN `http://` tidak punya API-nya
+  // sama sekali — tombolnya hadir tapi bisu, tak bisa dibedakan pengguna dari tombol yang rusak.
+  const onToggleMicProp = micSupported ? toggleMic : undefined
 
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
@@ -58,7 +65,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           comments={comments} onAddComment={addComment}
           onRefresh={() => termRef.current?.refit()}
           searchOpen={searchOpen} onToggleSearch={() => setSearchOpen((o) => !o)}
-          micActive={micActive} onToggleMic={toggleMic}
+          micActive={micActive} onToggleMic={onToggleMicProp}
           maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
