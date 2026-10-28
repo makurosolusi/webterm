@@ -317,13 +317,29 @@ export default function App() {
 
   const displayEdges = useMemo(() => decorateEdges(edges, nodes), [edges, nodes])
 
+  const noWorkspaces = workspaces.length === 0
+
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      {workspaces.length === 0 ? (
-        <Welcome onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateWorkspace(name)} />
-      ) : (
-        <>
-          <WorkspaceBar workspaces={workspaces} activeId={activeId} onSelect={onSelect} />
+    <div className="app-shell">
+      {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
+          sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
+          46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
+      <WorkspaceBar
+        workspaces={workspaces}
+        activeId={activeId}
+        liveActiveNodes={liveNodes}
+        statuses={statuses}
+        onSelect={onSelect}
+        onNewWorkspace={onNewProject}
+      />
+      {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
+          ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
+          dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
+          .app-main akan menghitung tinggi header dua kali. */}
+      <div className="app-main">
+        {noWorkspaces ? (
+          <Welcome onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateWorkspace(name)} />
+        ) : (
           <ReactFlow
             key={activeId ?? 'empty'}
             nodes={flowNodes}
@@ -360,6 +376,10 @@ export default function App() {
               onFit={() => { rf.current?.fitView({ duration: 300 }); syncViewport(320) }}
             />
           </ReactFlow>
+        )}
+      </div>
+      {!noWorkspaces && (
+        <>
           <Dock
             onAddTerminal={onAddTerminal}
             onAddAgent={onAddAgent}

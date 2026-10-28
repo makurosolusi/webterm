@@ -54,6 +54,11 @@
   --shadow-node: 0 8px 28px rgba(0, 0, 0, calc(0.4 * var(--shadow-k)));
   --canvas-dot: #303030;
   --float-gap: 22px;
+  /* Tinggi header bar, dan satu-satunya sumbernya. `canvas-ui.css` menurunkan cluster kontrol
+     dengan token ini. 46px, bukan 40px nodeterm: `--ss-top-chrome` di `sessions-panel.css`
+     sudah dipaku 46px, jadi tinggi ini membuat sidebar sesi dan cluster kontrol mengapung di
+     baris yang SAMA tanpa mengubah sheet milik komponen lain. */
+  --tabbar-h: 46px;
   /* Lebar LUAR kolom kontrol kiri-bawah: satu tombol plus border 1px di tiap sisi. */
   --controls-w: 30px;
 
@@ -121,37 +126,159 @@ body {
   border-radius: var(--radius);
 }
 
-/* Workspace switcher — top left */
-.ws-switcher {
-  position: absolute;
-  top: var(--float-gap);
-  left: var(--float-gap);
+/* ---- Rangka app: header bar yang memakan tinggi + sisanya untuk canvas ---- */
+.app-shell {
   display: flex;
-  gap: 2px;
-  padding: 4px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-node);
-  z-index: 10;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
 }
-.ws-switcher-item {
-  padding: 4px 8px;
+/* Pembawa tinggi canvas. `position: relative` supaya `Welcome` (yang `inset: 0`) berhenti di
+   bawah header alih-alih menutupinya. `min-height: 0` load-bearing: tinggi minimum flex item
+   default dihitung dari kontennya, dan tanpa itu canvas mendorong header keluar layar. Tingginya
+   DEFINIT karena `flex-basis: 0` + grow, jadi `height: 100%` milik ReactFlow menyelesaikan
+   dengan benar di dalamnya — tak perlu override apa pun di sisi ReactFlow. */
+.app-main {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* ---- Header bar: brand, satu tab per workspace, tombol tambah ----
+   Angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (.tabbar 369, .brand 449,
+   .tabbar__projects 470, .tab 517, .tab__dot 641, .tab__add) — bukan karangan. Yang tidak
+   diikut: flare cekung tab aktif, yang hanya terbaca kalau tab mewarisi warna canvas persis;
+   webterm memakai fill terangkat yang lebih sederhana dan tidak bergantung pada itu. */
+.tabbar {
+  position: relative;
+  /* Di atas canvas dan di atas backdrop menu dock, supaya tab tetap bisa diklik. */
+  z-index: 30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--tabbar-h);
+  padding: 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.brand__mark {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+.brand__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+
+.tabbar__projects {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  /* Load-bearing (nodeterm issue #375): min-width flex item default `auto`, yang dihitung dari
+     lebar KONTEN strip — dengan 10+ workspace wrapper menolak menyusut dan mendorong tombol `+`
+     melewati tepi jendela. */
+  min-width: 0;
+}
+.tabbar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* Sebesar kontennya sampai bar kehabisan ruang, lalu menyusut dan menggulung — bukan
+     membungkus: header harus tetap satu baris berapa pun jumlah workspace-nya. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  /* Scrollbar native di dalam header terbaca seperti elemen asing; roda/trackpad tetap jalan. */
+  scrollbar-width: none;
+}
+.tabbar__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  /* Satu nama sepanjang kalimat tidak boleh menguasai strip; hanya DI ATAS batas ini ia dipotong. */
+  max-width: 220px;
+  height: 28px;
+  padding: 0 10px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-size: 12px;
   font-family: inherit;
+  font-size: 12.5px;
+  /* Satu berat untuk semua tab: tab aktif yang lebih tebal menggeser metrik seluruh strip tiap
+     kali berpindah, dan fill-nya sudah mengatakan mana yang aktif. */
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.ws-switcher-item:hover {
+.tab:hover {
   background: rgba(var(--tint-rgb), 0.08);
+  color: var(--text);
 }
-.ws-switcher-item--active {
+.tab--active {
   background: var(--raised);
   color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, calc(0.3 * var(--shadow-k)));
+}
+.tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* 'neutral' berarti TIDAK DIKETAHUI, bukan "sehat": status agent hanya hidup untuk workspace
+   yang terbuka — lihat catatan kepala `workspaceTabs.ts`. */
+.tab__dot--neutral { background: rgba(var(--tint-rgb), 0.3); }
+.tab__dot--idle { background: var(--state-queued); }
+.tab__dot--working { background: var(--state-working); }
+.tab__dot--attention { background: var(--state-attention); }
+
+.tab__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Load-bearing: tanpa ini bar yang sempit menyusutkan tombol `+` alih-alih menggulung strip. */
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tab__add:hover {
+  background: rgba(var(--tint-rgb), 0.1);
+  color: var(--text);
+}
+/* lucide menulis width/height sebagai ATRIBUT (24px), yang kalah dari CSS. */
+.tab__add svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Shared form controls */

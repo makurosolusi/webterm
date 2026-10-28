@@ -26,6 +26,10 @@ describe('styles.css — token sheet', () => {
       '--state-attention: #ff453a',
       '--radius-node: 10px',
       '--float-gap: 22px',
+      // Tinggi header bar. Dipaku: `canvas-ui.css` menurunkan cluster kontrol dengan token ini,
+      // dan nilainya harus sama dengan `--ss-top-chrome` (46px) di `sessions-panel.css` supaya
+      // sidebar sesi dan cluster itu mengapung di baris yang sama di bawah header.
+      '--tabbar-h: 46px',
     ]) {
       expect(tokens).toContain(tok)
     }
@@ -60,10 +64,40 @@ describe('styles.css — token sheet', () => {
 
   it('keeps the shared controls and canvas furniture', () => {
     for (const cls of [
-      '.minimap-dock', '.ws-switcher', '.ws-switcher-item', '.ws-switcher-item--active',
+      '.minimap-dock', '.app-shell', '.app-main',
       '.btn', '.btn--accent', '.btn--ghost', '.field', '.panel', '.bridge-handle',
     ]) {
       expect(tokens).toContain(cls)
+    }
+  })
+
+  it('lays the app out as header + canvas, not an overlay floating over the canvas', () => {
+    const shell = tokens.slice(tokens.indexOf('.app-shell {'), tokens.indexOf('/* ---- Header bar'))
+    expect(shell).toContain('flex-direction: column')
+    // Tanpa min-height: 0 tinggi minimum flex item jatuh ke tinggi kontennya dan canvas
+    // mendorong header keluar layar; tanpa flex-basis definit `height: 100%` ReactFlow runtuh.
+    expect(shell).toContain('flex: 1 1 0')
+    expect(shell).toContain('min-height: 0')
+    // Welcome memposisikan diri dengan `inset: 0` — containing block-nya harus .app-main.
+    expect(shell).toContain('position: relative')
+    const bar = tokens.slice(tokens.indexOf('.tabbar {'), tokens.indexOf('.brand {'))
+    expect(bar).toContain('height: var(--tabbar-h)')
+    expect(bar).toContain('flex-shrink: 0')
+    expect(bar).not.toContain('position: absolute')
+  })
+
+  it('keeps the tab strip on one line and the + reachable with many workspaces', () => {
+    const strip = tokens.slice(tokens.indexOf('.tabbar__projects {'), tokens.indexOf('.tab {'))
+    expect(strip).toContain('overflow-x: auto')
+    // Dua min-width: 0 + flex-shrink: 0 pada tombolnya adalah yang menahan `+` di dalam layar.
+    expect((strip.match(/min-width: 0/g) ?? []).length).toBe(2)
+    const add = tokens.slice(tokens.indexOf('.tab__add {'))
+    expect(add).toContain('flex-shrink: 0')
+  })
+
+  it('gives every tab dot kind a colour, neutral included', () => {
+    for (const kind of ['neutral', 'idle', 'working', 'attention']) {
+      expect(tokens).toContain(`.tab__dot--${kind} {`)
     }
   })
 })
@@ -176,6 +210,7 @@ describe('CSS mati sudah dibuang', () => {
       '.node-status-text',   // teks chip sekarang bagian dari .node-status
       '.dock-flyout',        // digantikan .dock-menu
       'pulse-working',       // digantikan nt-pulse / nt-working-glow
+      '.ws-switcher',        // pil melayang, digantikan header bar .tabbar
     ]) {
       expect(all).not.toContain(gone)
     }
