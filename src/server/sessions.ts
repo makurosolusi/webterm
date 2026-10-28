@@ -200,13 +200,14 @@ export class Sessions {
       session.send?.({ t: 'output', id: session.id, data })
     })
     pty.onExit((code) => {
-      session.send?.({ t: 'exit', id: session.id, code })
       // Sesi ini sudah tidak terdaftar = `close` yang membunuhnya, jadi exit ini gema dari kematian
-      // yang KITA minta, bukan agent yang menyelesaikan sesuatu — ia tidak boleh menulis 'done' atas
-      // nama node (itu menghidupkan ulang status yang baru dicabut, dan menggerbangi Resume di atas
-      // klaim mati) maupun menghapus sesi PENGGANTI yang sudah mendaftar dengan id yang sama.
-      // Restart = `close` lalu `open` serentak, jadi perlombaan itu nyata, bukan teoretis.
+      // yang KITA minta. Digerbangi SEBELUM `exit` dipancarkan, bukan hanya sebelum status: client
+      // mencocokkan `exit` BY ID (`ws.ts`), jadi "New session" — `close` lalu remount id yang sama
+      // seketika — menyuapkan `[process exited]` PTY mati ke terminal yang baru lahir. Dan ia tidak
+      // boleh menulis 'done' atas nama node (menghidupkan ulang status yang baru dicabut, dan
+      // menggerbangi Resume di atas klaim mati) maupun menghapus sesi PENGGANTI ber-id sama.
       if (this.map.get(session.id) !== session) return
+      session.send?.({ t: 'exit', id: session.id, code })
       this.setStatus(session.id, 'done')
       this.map.delete(session.id)
     })
