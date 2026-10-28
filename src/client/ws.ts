@@ -112,6 +112,16 @@ export function send(msg: ClientMsg) {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
     return // never queue 'open' — the reconnect/onopen replay covers the not-open case
   }
+  if (msg.t === 'resize') {
+    // `open` yang diingat ikut dibarui, kalau tidak ia membawa ukuran SAAT NODE LAHIR selamanya.
+    // Selama PTY-nya hidup ukuran basi itu tak berakibat (re-attach mengabaikan `cols`/`rows`), tapi
+    // sesudah RESTART SERVER registri sesinya kosong dan replay yang sama benar-benar MELUNCURKAN —
+    // `spawnPty` memakai `cols`/`rows` pesan itu, jadi PTY duduk di ukuran lahir sementara xterm di
+    // browser sudah di ukuran sekarang. Di sinilah satu-satunya tempat yang semua resize lewati.
+    const sub = subs.get(msg.id)
+    // Disalin, bukan dimutasi: `replayOpen` bisa mengembalikan objek pemanggil apa adanya.
+    if (sub?.open) sub.open = { ...sub.open, cols: msg.cols, rows: msg.rows }
+  }
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
   else queue.push(msg)
 }

@@ -127,6 +127,75 @@ test('a plain terminal has nothing to resume, so its replayed open is byte-for-b
   expect(replayOpen(unsafe)).toBe(unsafe)
 })
 
+// Perilaku LAMA: `open` yang diingat membawa `cols`/`rows` SAAT NODE LAHIR selamanya. Selama PTY-nya
+// hidup itu tak berakibat — re-attach di server mengabaikan `cols`/`rows` — tapi sesudah restart
+// server replay itu benar-benar MELUNCURKAN, dan `spawnPty` memakai ukuran lahir ini. Sejak SIGWINCH
+// dikirim pada resize (commit 128c4ef) TUI benar-benar menggambar diri pada geometri salah itu.
+const OLD_REPLAYED_COLS = 80
+const OLD_REPLAYED_ROWS = 24
+
+test('a resize updates the remembered open, so the replay carries the latest size', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-resized'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: OLD_REPLAYED_COLS, rows: OLD_REPLAYED_ROWS })
+  // Node diperbesar selagi socket-nya HIDUP: PTY ikut benar, tapi tidak ada apa pun yang tertinggal
+  // di antrean untuk mengoreksi replay nanti.
+  send({ t: 'resize', id, cols: 120, rows: 40 })
+
+  sock.sent.length = 0
+  sock.onopen!() // server restart / sambung ulang: replay mendarat di cabang spawn
+  const replayed = JSON.parse(sock.sent[0])
+  expect(replayed.t).toBe('open')
+  expect(replayed.cols).toBe(120)
+  expect(replayed.rows).toBe(40)
+  expect(replayed.cols).not.toBe(OLD_REPLAYED_COLS)
+  expect(replayed.rows).not.toBe(OLD_REPLAYED_ROWS)
+})
+
+test('a resize touches only cols/rows — the resume chain of the remembered open is untouched', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'agent-resized'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({
+    t: 'open', id, cols: 80, rows: 24, cwd: '/tmp/proj', cmd: 'claude',
+    agentId: 'claude', sessionId: SID, resume: false,
+  })
+  send({ t: 'resize', id, cols: 100, rows: 30 })
+
+  sock.sent.length = 0
+  sock.onopen!()
+  const replayed = JSON.parse(sock.sent[0])
+  expect(replayed.cols).toBe(100)
+  expect(replayed.rows).toBe(30)
+  // Resize bukan pintu belakang untuk mengubah bentuk peluncuran: id sesi masih hanya dicetak sekali.
+  expect(replayed.resume).toBe(true)
+  expect(replayed.sessionId).toBe(SID)
+  expect(replayed.cmd).toBe('claude')
+  expect(replayed.cwd).toBe('/tmp/proj')
+  expect(replayed.agentId).toBe('claude')
+})
+
+test('a resize for an id that never opened is forwarded without inventing an open to replay', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-no-open'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'resize', id, cols: 90, rows: 25 })
+
+  sock.sent.length = 0
+  sock.onopen!()
+  expect(sock.sent.map((s) => JSON.parse(s).t)).not.toContain('open')
+})
+
 test('token survives a reload via sessionStorage, with no token in the URL', async () => {
   ;(globalThis as any).sessionStorage = {
     getItem: (k: string) => (k === 'webterm.token' ? 'kept' : null),
