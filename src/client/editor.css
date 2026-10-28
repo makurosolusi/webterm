@@ -1,0 +1,239 @@
+/* Node editor/preview file. Diimpor dari `EditorNode.tsx`, bukan dari `styles.css`: sheet ini
+   ikut masuk chunk malas node editor, jadi board yang isinya cuma terminal tidak mengunduhnya.
+   Token (--bg, --panel, --border, --text, --muted, --accent, --raised, --sunken, --radius-sm,
+   --tint-rgb) datang dari styles.css. */
+
+.editor-node__body {
+  position: relative;
+}
+
+.editor-node__spacer {
+  flex: 1;
+}
+
+.editor-node__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-node__btn {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.editor-node__btn:hover:not(:disabled) {
+  background: rgba(var(--tint-rgb), 0.08);
+  color: var(--text);
+}
+.editor-node__btn--save:not(:disabled) {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.editor-node__btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.editor-node__close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.editor-node__close:hover {
+  background: rgba(var(--tint-rgb), 0.08);
+  color: var(--text);
+}
+
+.editor-node__monaco {
+  position: absolute;
+  inset: 0;
+  /* Menjaga layer internal Monaco di bawah preview markdown yang jadi sibling-nya TANPA
+     meng-unmount editornya (yang berarti kehilangan seleksi, posisi scroll, dan undo history). */
+  isolation: isolate;
+}
+
+.editor-node__notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.editor-node__dims {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Gambar: papan kotak-kotak supaya transparansi terlihat. Tanpa zoom/pan — nodeterm juga tidak. */
+.editor-node__body--image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+  background-color: var(--sunken);
+  background-image: linear-gradient(45deg, var(--raised) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--raised) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--raised) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--raised) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+.editor-node__body--image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+/* PDF: viewer platform mengisi seluruh body — ia membawa toolbar, scrollbar, dan chrome halaman
+   sendiri, jadi tanpa padding di sini. */
+.editor-node__body--pdf {
+  background: var(--sunken);
+}
+.editor-node__body--pdf iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Preview markdown: menumpuk DI ATAS Monaco yang tetap hidup. */
+.editor-node__md {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.editor-node__md-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+}
+.editor-node__md-hint {
+  opacity: 0.8;
+}
+
+.editor-node__md-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  /* Node React Flow tidak bisa diseleksi secara default; preview harus bisa dikopi. */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: auto;
+}
+
+.editor-node__md-body h1,
+.editor-node__md-body h2,
+.editor-node__md-body h3 {
+  margin: 14px 0 8px;
+  line-height: 1.3;
+}
+.editor-node__md-body h1 {
+  font-size: 1.54em;
+}
+.editor-node__md-body h2 {
+  font-size: 1.31em;
+}
+.editor-node__md-body h3 {
+  font-size: 1.15em;
+}
+
+.editor-node__md-body p,
+.editor-node__md-body ul,
+.editor-node__md-body ol,
+.editor-node__md-body blockquote {
+  margin: 0 0 10px;
+}
+
+.editor-node__md-body a {
+  color: var(--accent);
+}
+
+.editor-node__md-body code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(var(--tint-rgb), 0.08);
+  font-size: 0.92em;
+}
+
+.editor-node__md-body pre {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--canvas-bg);
+  overflow: auto;
+}
+.editor-node__md-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.editor-node__md-body blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+.editor-node__md-body img {
+  max-width: 100%;
+}
+
+.editor-node__md-body table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+  margin: 0 0 10px;
+}
+.editor-node__md-body th,
+.editor-node__md-body td {
+  padding: 5px 9px;
+  border: 1px solid rgba(var(--tint-rgb), 0.18);
+}
+.editor-node__md-body th {
+  background: rgba(var(--tint-rgb), 0.06);
+}
+/* Alignment `:---:` datang sebagai atribut `align`; hanya header TANPA atribut itu yang diatur,
+   supaya default "center" browser tidak melawan perataan sel-selnya. */
+.editor-node__md-body th:not([align]) {
+  text-align: start;
+}
