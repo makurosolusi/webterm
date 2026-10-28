@@ -227,12 +227,28 @@ export default function App() {
     })
   }, [scheduleSave])
 
-  const onFocus = useCallback((id: string) => {
+  const onSelect = useCallback(async (id: string) => {
+    if (!id || id === activeId) return
+    await setActive(id)
+    setActiveId(id)
+    await loadWorkspace(id)
+  }, [activeId, loadWorkspace])
+
+  // Baris sidebar bisa milik workspace LAIN yang nodenya tidak ter-mount, kelas jebakan yang sama
+  // dengan `closeSession` di bawah: dulu `if (!node) return` menelan klik itu diam-diam. Node dicari
+  // ULANG setelah pindah karena `onSelect` → `applyWorkspace` menulis `nodesRef` secara sinkron,
+  // jadi begitu await selesai isinya sudah board yang baru — tanpa perlu menunggu render.
+  const onFocus = useCallback(async (id: string) => {
+    if (!nodesRef.current.some((n) => n.id === id)) {
+      const owner = workspaces.find((w) => w.nodes.some((n) => n.id === id))
+      if (!owner) return
+      await onSelect(owner.id)
+    }
     const node = nodesRef.current.find((n) => n.id === id)
     if (!node) return
     rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
     setBoard(false)
-  }, [])
+  }, [onSelect, workspaces])
 
   // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di
   // canvas yang ter-mount. Yang di luar canvas dibuang dari salinan TERBARU di server: snapshot
@@ -252,13 +268,6 @@ export default function App() {
     await saveWorkspace(updated)
     setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
   }, [recordClosed, workspaces])
-
-  const onSelect = useCallback(async (id: string) => {
-    if (!id || id === activeId) return
-    await setActive(id)
-    setActiveId(id)
-    await loadWorkspace(id)
-  }, [activeId, loadWorkspace])
 
   // Rename dari menu kebab header. Rutenya BEDA tergantung workspace itu sedang terbuka atau
   // tidak — kelas jebakan yang sama dengan `closeSession` di atas.
