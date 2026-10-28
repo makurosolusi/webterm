@@ -5,7 +5,7 @@ import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
-import { installContextLinkShim } from './contextLink'
+import { installContextLink } from './contextLink'
 import { DEFAULT_HOST, TOKEN_PARAM, authorize, resolveToken } from './auth'
 
 const PORT = Number(process.env.PORT) || 8700
@@ -34,8 +34,9 @@ function refuse(res: http.ServerResponse): void {
   res.end('forbidden')
 }
 
-// Write the context-link sh shim the installed get-linked-context skill invokes.
-installContextLinkShim()
+// Write the context-link sh shim AND the skill that points an agent at it. Takes TOKEN because a
+// shim that cannot authenticate is a shim that 403s the moment WEBTERM_TOKEN is set.
+installContextLink(TOKEN)
 applyPtyOptions()
 
 const server = http.createServer()
