@@ -64,7 +64,16 @@ export default function App() {
   const [, bump] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
-    const unsub = subscribeStatus((id, s) => setStatuses((prev) => ({ ...prev, [id]: s })))
+    // `s` undefined = sapuan basi mencabut statusnya (`shared/agentStale.ts`), jadi key-nya DIHAPUS:
+    // menaruh `undefined` di bawah key yang masih ada akan membuat node terbaca berstatus kosong.
+    const unsub = subscribeStatus((id, s) =>
+      setStatuses((prev) => {
+        const next = { ...prev }
+        if (s) next[id] = s
+        else delete next[id]
+        return next
+      })
+    )
     return unsub
   }, [])
 

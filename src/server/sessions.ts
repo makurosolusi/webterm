@@ -9,6 +9,7 @@ import {
   withSessionId,
 } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
+import { STALE_SWEEP_MS, isStaleWorking } from '../shared/agentStale'
 import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
 import { buildClaudeFlags, forgetNodeToken, hookEnv } from './hooks'
 
@@ -98,13 +99,38 @@ export class Sessions {
   }
 
   private map = new Map<string, Session>()
-  private status = new Map<string, AgentStatus>()
+  // Status MEMBAWA WAKTU. Tanpa itu tidak ada yang bisa membedakan `working` yang masih berjalan
+  // dari `working` yang ditinggal mati, dan status terakhir bertahan selamanya (lihat `agentStale`).
+  private status = new Map<string, { status: AgentStatus; updatedAt: number }>()
   // Hook-fed claude transcript path per node, for context-link reads.
   private transcripts = new Map<string, string>()
 
-  setStatus(id: string, status: AgentStatus): void {
-    this.status.set(id, status)
+  /** `now` di-inject supaya sapuan bisa dites tanpa menunggu 20 menit; pemanggil nyata melewatkannya. */
+  setStatus(id: string, status: AgentStatus, now: number = Date.now()): void {
+    // Jamnya dimundurkan pada SETIAP penulisan, termasuk `working` yang berulang — itulah yang
+    // membuat turn panjang yang sah tidak pernah tersapu: tiap tool call menulis ulang `working`.
+    this.status.set(id, { status, updatedAt: now })
     this.map.get(id)?.send?.({ t: 'status', id, status })
+  }
+
+  /**
+   * Hapus status `working` yang sudah diam melewati jendela. MENGHAPUS, bukan menggantinya dengan
+   * `done`/`waiting` — alasannya di `agentStale.ts`. Self-healing: event berikutnya menulis ulang.
+   */
+  sweepStale(now: number = Date.now()): void {
+    for (const [id, entry] of this.status) {
+      if (!isStaleWorking(entry.status, entry.updatedAt, now)) continue
+      this.status.delete(id)
+      // `status` absen = "tidak ada status lagi". Client menghapus entry-nya dan merender "Unknown".
+      this.map.get(id)?.send?.({ t: 'status', id })
+    }
+  }
+
+  /** Nyalakan jamnya; mengembalikan penghentinya. `unref` supaya ia tidak pernah menahan proses. */
+  startStaleSweep(intervalMs: number = STALE_SWEEP_MS): () => void {
+    const timer = setInterval(() => this.sweepStale(), intervalMs)
+    timer.unref?.()
+    return () => clearInterval(timer)
   }
 
   setTranscript(id: string, path: string): void { this.transcripts.set(id, path) }
@@ -117,8 +143,10 @@ export class Sessions {
       // PTY survived the previous socket — re-attach and replay scrollback.
       existing.send = send
       for (const chunk of existing.buffer) send({ t: 'output', id: msg.id, data: chunk })
+      // Node yang jadi basi selagi socket-nya pergi sudah dihapus oleh sapuan (yang jalan terlepas
+      // dari ada tidaknya socket), jadi tidak ada yang perlu diperiksa ulang di sini.
       const st = this.status.get(msg.id)
-      if (st) send({ t: 'status', id: msg.id, status: st })
+      if (st) send({ t: 'status', id: msg.id, status: st.status })
       return
     }
 
@@ -227,3 +255,6 @@ export class Sessions {
 }
 
 export const sessions = new Sessions()
+// Jamnya hidup sekali per proses, di singleton — bukan di constructor, supaya `new Sessions()` di
+// test tetap bebas timer dan memilih sendiri kapan menyapu.
+sessions.startStaleSweep()

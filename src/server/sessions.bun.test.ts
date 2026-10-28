@@ -265,7 +265,8 @@ test('a claude session carries its hook token and loses it when the session clos
 
 test('a freshly spawned agent session reports NO status until something real says so', async () => {
   const s = new Sessions()
-  const seen: AgentStatus[] = []
+  // `status` bisa ABSEN di kawat (sapuan basi mencabutnya), jadi penampungnya ikut mengizinkannya.
+  const seen: (AgentStatus | undefined)[] = []
   const send = (m: ServerMsg) => { if (m.t === 'status') seen.push(m.status) }
   // `sleep` supaya PTY-nya tetap hidup: sesi yang keluar memancarkan 'done' lewat onExit dan itu
   // akan mengaburkan apa yang sedang diuji.
@@ -276,7 +277,7 @@ test('a freshly spawned agent session reports NO status until something real say
   expect(seen.join(',')).toBe('')
 
   // Dan tidak ada status yang DISIMPAN diam-diam: socket yang re-attach pun tidak memutar apa pun.
-  const again: AgentStatus[] = []
+  const again: (AgentStatus | undefined)[] = []
   s.open({ t: 'open', id: 'st1', cols: 80, rows: 24 }, (m) => { if (m.t === 'status') again.push(m.status) })
   expect(again.join(',')).toBe('')
 

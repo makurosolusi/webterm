@@ -18,10 +18,12 @@ const subs = new Map<string, Sub>()
 // Status is per-node but consumed by two readers: the node's own dot and the
 // board overlay. Keep it on a separate channel so it survives independent of
 // whether a terminal is currently mounted/subscribed.
+// `undefined` ikut disiarkan: itu sapuan basi mencabut status (lihat `shared/agentStale.ts`), dan
+// pembaca yang tidak mendengarnya akan menyimpan 'working' yang sudah dicabut selamanya.
 const statuses = new Map<string, AgentStatus>()
-const statusListeners = new Set<(id: string, status: AgentStatus) => void>()
+const statusListeners = new Set<(id: string, status: AgentStatus | undefined) => void>()
 
-export function subscribeStatus(cb: (id: string, status: AgentStatus) => void): () => void {
+export function subscribeStatus(cb: (id: string, status: AgentStatus | undefined) => void): () => void {
   statusListeners.add(cb)
   return () => { statusListeners.delete(cb) }
 }
@@ -54,10 +56,17 @@ function connect() {
       return
     }
     if (msg.t === 'status') {
-      statuses.set(msg.id, msg.status)
-      // Aturan SET unread hidup DI SINI, bukan di komponen node: ini satu-satunya tempat yang
-      // melihat status node mana pun, termasuk node workspace non-aktif yang tak ter-mount.
-      noteStatus(msg.id, msg.status)
+      if (msg.status === undefined) {
+        // Sapuan basi: statusnya DICABUT, bukan diganti. Dan sengaja TIDAK lewat `noteStatus` —
+        // sapuan bukan kabar, tidak ada yang terjadi untuk dibaca, jadi node ini tidak ditandai
+        // belum-dibaca.
+        statuses.delete(msg.id)
+      } else {
+        statuses.set(msg.id, msg.status)
+        // Aturan SET unread hidup DI SINI, bukan di komponen node: ini satu-satunya tempat yang
+        // melihat status node mana pun, termasuk node workspace non-aktif yang tak ter-mount.
+        noteStatus(msg.id, msg.status)
+      }
       for (const l of statusListeners) l(msg.id, msg.status)
       return
     }
