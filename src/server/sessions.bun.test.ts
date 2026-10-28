@@ -177,6 +177,27 @@ test('launchLine resumes with the harness resume grammar', () => {
   expect(r('custom', 'mycli')).toBe('mycli')
 })
 
+test('launchLine mints the id again when the transcript it would resume is gone', () => {
+  const msg = open({ cmd: 'claude', agentId: 'claude', sessionId: SID, resume: true })
+  // Perilaku LAMA sebagai konstanta supaya guard ini terbukti menggigit: tanpa probe, `resume: true`
+  // selalu memancarkan `--resume <sid>` — dan itulah yang membunuh node dengan "No conversation
+  // found with session ID: <uuid>" ketika transcript-nya sudah hilang.
+  const OLD_ALWAYS_RESUMES = `--resume ${SID}`
+  expect(launchLine(msg, 9999)).toContain(OLD_ALWAYS_RESUMES)
+
+  // Keputusan "transcript mati" disalurkan lewat opts — `launchLine` tetap murni, probe-nya milik
+  // `open()` (lihat transcriptPresence.ts). webterm mencetak ULANG id-nya, tidak meluncur polos:
+  // id itu milik webterm, jadi rantai resume node tetap utuh.
+  const dead = launchLine(msg, 9999, { resumeIsDead: true }) ?? ''
+  expect(dead).toContain(`--session-id ${SID}`)
+  expect(dead.includes('--resume')).toBe(false)
+  // Dan flag claude lainnya tidak ikut hilang: cabang ini jalur peluncuran yang sudah ada.
+  expect(dead).toContain('--settings ')
+
+  // `resumeIsDead: false` harus identik byte demi byte dengan sebelum modul ini ada.
+  expect(launchLine(msg, 9999, { resumeIsDead: false })).toBe(launchLine(msg, 9999))
+})
+
 test('writeClaudeSettings lands the hook object in a file whose path has no colon', () => {
   const path = writeClaudeSettings('n-file', 9999)
   // Lewat JSON.parse → stringify: membuktikan file itu JSON sah DAN isinya objek hook yang sama.

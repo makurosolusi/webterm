@@ -12,6 +12,7 @@ import { DEFAULT_SETTINGS } from '../shared/settings'
 import { STALE_SWEEP_MS, isStaleWorking } from '../shared/agentStale'
 import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
 import { buildClaudeFlags, forgetNodeToken, hookEnv } from './hooks'
+import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 
 const PORT = Number(process.env.PORT) || 8700
 
@@ -62,12 +63,15 @@ const wrapperMissingNotice = (bin: string): string =>
 export function launchLine(
   msg: OpenMsg,
   port = PORT,
-  opts?: { permissionMode?: AgentPermissionMode }
+  opts?: { permissionMode?: AgentPermissionMode; resumeIsDead?: boolean }
 ): string | undefined {
   const cmd = msg.cmd
   if (!cmd) return undefined
   const agentId = msg.agentId
   const sid = msg.sessionId?.trim()
+  // Transcript yang sudah hilang = resume yang membunuh node di peluncuran; keputusannya diprobe
+  // oleh pemanggil (fungsi ini tetap murni) — alasan lengkapnya di `transcriptPresence.ts`.
+  const resume = !!msg.resume && !opts?.resumeIsDead
   // Session id mendarat di baris perintah shell dan datang lewat WebSocket, jadi divalidasi ulang
   // di sini — batas input, bukan sekadar janji tipe.
   if (!agentId || !sid || !isSafeSessionId(sid, true)) return cmd
@@ -77,11 +81,11 @@ export function launchLine(
   // `--settings` membawa PATH file settings yang baru ditulis, bukan blob JSON inline (alasannya di
   // `writeClaudeSettings`, hooks.ts) — jadi peluncuran ini menyentuh disk, bukan sekadar merakit string.
   if (hasClaudeHookSettings(agentId)) {
-    return `${cmd} ${buildClaudeFlags(msg.id, sid, port, !!msg.resume, {
+    return `${cmd} ${buildClaudeFlags(msg.id, sid, port, resume, {
       permissionMode: opts?.permissionMode,
     })}`
   }
-  if (msg.resume) {
+  if (resume) {
     // Perintah client dipakai utuh sebagai program, jadi pembungkus apa pun tetap terpasang.
     return canResumeWith(agentId, sid) ? resumeCommandWith(cmd, agentId, sid) ?? cmd : cmd
   }
@@ -154,7 +158,14 @@ export class Sessions {
       return
     }
 
-    let cmd = launchLine(msg, PORT, { permissionMode: this.options.claudePermissionMode })
+    // Diprobe SEKALI (filesystem), lalu dipakai dua kali: menjatuhkan `--resume` dan memberi tahu
+    // pengguna. Hanya transcript yang TERBUKTI tidak ada yang menjatuhkannya — `transcriptPresence.ts`.
+    const deadResume = !!msg.resume && resumeIsDead(msg.sessionId, msg.agentId)
+    let cmd = launchLine(msg, PORT, {
+      permissionMode: this.options.claudePermissionMode,
+      resumeIsDead: deadResume,
+    })
+    if (deadResume) send({ t: 'output', id: msg.id, data: transcriptMissingNotice })
     if (cmd) {
       const unwrapped = unwrapMissingWrapper(cmd, binaryExists)
       if (unwrapped) {
