@@ -18,7 +18,7 @@ const IconClose = svg(<path d="M4 4l8 8M12 4l-8 8" />)
 export interface NodeToolbarProps {
   onRefresh: () => void
   searchOpen: boolean; onToggleSearch: () => void
-  micActive: boolean; onToggleMic: () => void
+  micActive?: boolean; onToggleMic?: () => void      // node dengan input teks saja — omit button if undefined
   commentsOpen: boolean; onToggleComments: () => void; commentCount?: number
   maximized: boolean; onToggleMaximize: () => void; maximizeDisabled?: boolean
   onClose: () => void
@@ -40,10 +40,12 @@ export default function NodeToolbar(props: NodeToolbarProps) {
         title="Search" onClick={props.onToggleSearch}
       ><IconSearch /></button>
 
-      <button
-        className={`icon-btn${props.micActive ? ' icon-btn--active' : ''}`}
-        title="Dictate" onClick={props.onToggleMic}
-      ><IconMic /></button>
+      {props.onToggleMic && (
+        <button
+          className={`icon-btn${props.micActive ? ' icon-btn--active' : ''}`}
+          title="Dictate" onClick={props.onToggleMic}
+        ><IconMic /></button>
+      )}
 
       {props.onAiName && (
         <button className="icon-btn" title="Name with AI" onClick={props.onAiName} disabled={props.aiNaming}><IconSparkle /></button>

@@ -1,5 +1,5 @@
 // Node file-manager. Diport dari nodeterm `src/renderer/nodes/FilesNode.tsx`; SEMUA keputusannya
-// (naik ke mana, breadcrumb apa, filter cocok apa, tombol melakukan apa) ada di `./filesNode.ts`
+// (naik ke mana, breadcrumb apa, filter cocok apa, tombol melakukan apa) ada di `./fileBrowse.ts`
 // supaya bisa dites tanpa DOM — vitest webterm berjalan di node-env.
 //
 // TANPA FILE WATCHER, sama seperti nodeterm: refresh `⟳` manual menaikkan `version`. Watcher berarti
@@ -27,7 +27,7 @@ import {
   parentDir,
   type DirEntry,
   type EmptyListingVerdict,
-} from './filesNode'
+} from './fileBrowse'
 import { listKeyAction, scrollTopToReveal, typeAhead } from './filesKeys'
 import './files.css'
 
@@ -192,8 +192,6 @@ export default function FilesNode({ id, data, selected, height }: NodeProps) {
             rf.updateNodeData(id, { comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now() }] })}
           onRefresh={() => setVersion((v) => v + 1)}
           searchOpen={filterOpen} onToggleSearch={() => setFilterOpen((o) => !o)}
-          // Node files tidak punya input suara; `micActive`/`onToggleMic` masih wajib di NodeToolbar.
-          micActive={false} onToggleMic={() => {}}
           maximized={maximized}
           onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}

@@ -16,7 +16,7 @@ export interface NodeChromeProps {
   // toolbar passthrough (NodeChrome owns comments open-state internally):
   onRefresh: () => void
   searchOpen: boolean; onToggleSearch: () => void
-  micActive: boolean; onToggleMic: () => void
+  micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
   maximized: boolean; onToggleMaximize: () => void
   onClose: () => void
   onAiName?: () => void; aiNaming?: boolean

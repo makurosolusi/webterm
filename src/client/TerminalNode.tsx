@@ -5,6 +5,7 @@ import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import FindBar from './FindBar'
+import { useSpeechInput } from './useSpeechInput'
 import { send } from './ws'
 import type { Comment } from '../shared/workspace'
 
@@ -20,15 +21,13 @@ export default function TerminalNode({ id, data, selected, height }: NodeProps) 
   const comments = d.comments ?? []
 
   const [searchOpen, setSearchOpen] = useState(false)
-  const [micActive, setMicActive] = useState(false)
   const [maximized, setMaximized] = useState(false)
+  const { micActive, toggleMic } = useSpeechInput((text) => send({ t: 'input', id, data: text }))
 
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
   const expandedH = useRef(height ?? 300)
   const savedVp = useRef<Viewport | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Web Speech API belum ada di lib.dom TS
-  const recogRef = useRef<any>(null)
 
   const toggleCollapse = () => {
     if (!collapsed) { expandedH.current = height ?? 300; rf.updateNode(id, { height: COLLAPSED_H }) }
@@ -38,26 +37,6 @@ export default function TerminalNode({ id, data, selected, height }: NodeProps) 
 
   const addComment = (text: string) =>
     rf.updateNodeData(id, { comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now() }] })
-
-  const toggleMic = () => {
-    if (micActive) { recogRef.current?.stop(); return }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Web Speech API belum ada di lib.dom TS
-    const SR = (window as any).webkitSpeechRecognition ?? (window as any).SpeechRecognition
-    if (!SR) return
-    const recog = new SR()
-    recog.continuous = false
-    recog.interimResults = false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SpeechRecognitionEvent belum ada di lib.dom TS
-    recog.onresult = (e: any) => {
-      const transcript = e.results?.[0]?.[0]?.transcript
-      if (transcript) send({ t: 'input', id, data: transcript })
-    }
-    recog.onend = () => setMicActive(false)
-    recog.onerror = () => setMicActive(false)
-    recogRef.current = recog
-    recog.start()
-    setMicActive(true)
-  }
 
   const toggleMaximize = () => {
     if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }
