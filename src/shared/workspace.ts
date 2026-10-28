@@ -375,7 +375,10 @@ export interface BridgeLink {
   id: string
   source: string      // node id asal link (link-out)
   target: string      // node id tujuan link (link-in / pembaca)
-  kind: 'context'
+  /** 'context' = link antar agent yang digambar pengguna lewat handle. 'file' = penanda "file ini
+   *  sedang terbuka" dari node files ke node editor-nya, dibuat otomatis (bukan lewat onConnect).
+   *  Dibedakan karena labelnya beda: melabeli kabel buka-file "⇄ context" adalah label bohong. */
+  kind: 'context' | 'file'
 }
 
 export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor'

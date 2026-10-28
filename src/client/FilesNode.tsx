@@ -7,7 +7,7 @@
 // jarang berubah di belakang punggung pengguna.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { NodeProps } from '@xyflow/react'
+import type { Node, NodeProps } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
 import { ChevronRight, ClipboardCopy, File, FilePlus, Folder, FolderPlus, TerminalSquare } from 'lucide-react'
 import type { Comment } from '../shared/workspace'
@@ -28,6 +28,7 @@ import {
   type DirEntry,
   type EmptyListingVerdict,
 } from './fileBrowse'
+import { EDITOR_SIZE, planFileOpen } from './fileOpen'
 import { listKeyAction, scrollTopToReveal, typeAhead } from './filesKeys'
 import './files.css'
 
@@ -100,12 +101,14 @@ export default function FilesNode({ id, data, selected, height }: NodeProps) {
     rf.updateNodeData(id, { dirPath: to, ...(auto ? { title: folderTitle(to) } : {}) })
   }, [cwd, d.title, id, rf])
 
-  const addNodeBeside = (kind: 'terminal' | 'editor', extra: Record<string, unknown>) => {
+  const addNodeBeside = (
+    nid: string, kind: 'terminal' | 'editor', extra: Record<string, unknown>, attrs?: Partial<Node>,
+  ) => {
     const me = rf.getNode(id)
-    const nid = crypto.randomUUID()
     rf.addNodes({
       id: nid, type: kind,
       position: { x: (me?.position.x ?? 0) + (me?.measured?.width ?? 420) + 32, y: me?.position.y ?? 0 },
+      ...attrs,
       data: { id: nid, kind, color: swatch, ...extra },
     })
   }
@@ -113,9 +116,14 @@ export default function FilesNode({ id, data, selected, height }: NodeProps) {
   const open = (e: DirEntry) => {
     const p = childPath(cwd, e.name)
     if (e.dir) { navigate(p); return }
-    if (fileOpenTarget(p) === 'canvas') addNodeBeside('editor', { filePath: p, title: e.name })
     // Tab browser tidak bisa menyerahkan file ke OS mesin server — katakan, jangan buka buffer sampah.
-    else setNotice(`${e.name} needs an application on the server to open.`)
+    if (fileOpenTarget(p) !== 'canvas') { setNotice(`${e.name} needs an application on the server to open.`); return }
+    const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, crypto.randomUUID())
+    if (plan.focus) rf.updateNode(plan.nodeId, { selected: true })
+    else addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: e.name }, { ...EDITOR_SIZE, selected: true })
+    // Kabel penanda "file ini sedang terbuka". Dibuat langsung, BUKAN lewat `onConnect`: `canLink`
+    // hanya meloloskan pasangan agent context-capable.
+    if (plan.edge) rf.addEdges({ ...plan.edge, type: 'context' })
   }
 
   const createEntry = async (dir: boolean) => {
@@ -265,7 +273,7 @@ export default function FilesNode({ id, data, selected, height }: NodeProps) {
               </button>
             )
           })()}
-          <button onClick={() => { setMenu(null); addNodeBeside('terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
+          <button onClick={() => { setMenu(null); addNodeBeside(crypto.randomUUID(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
             <TerminalSquare size={13} /> New terminal here
           </button>
           <button onClick={() => { void createEntry(false); setMenu(null) }}><FilePlus size={13} /> New file…</button>

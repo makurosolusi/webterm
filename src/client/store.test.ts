@@ -103,6 +103,13 @@ describe('edge serializer', () => {
     const b: BridgeLink = { id: 'e3', source: 'x', target: 'y', kind: 'context' }
     expect(toBridge(toFlowEdge(b))).toEqual(b)
   })
+
+  // Kabel buka-file harus tetap 'file' setelah reload; kalau jatuh ke 'context' labelnya
+  // berubah jadi "⇄ context" — bohong tentang apa yang dibaca agent.
+  it('round-trips a file link without turning it into a context link', () => {
+    const b: BridgeLink = { id: 'bridge-f1-e1', source: 'f1', target: 'e1', kind: 'file' }
+    expect(toBridge(toFlowEdge(b))).toEqual(b)
+  })
 })
 
 describe('groupByStatus', () => {

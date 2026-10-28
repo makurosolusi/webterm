@@ -18,7 +18,7 @@ import { useSettings } from './useSettings'
 import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode, workspaceNameFromPath } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
-import { decorateEdges, miniMapNodeColor } from './canvasStyle'
+import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
@@ -166,7 +166,10 @@ export default function App() {
     setEdges((prev) => {
       const next = applyEdgeChanges(changes, prev)
       edgesRef.current = next
-      if (changes.some((c) => c.type === 'remove')) scheduleSave()
+      // 'add' ikut dihitung, kelas bug yang sama dengan node di `onNodesChange`: kabel yang dibuat
+      // di dalam node lain (FilesNode menandai file yang terbuka) masuk lewat `rf.addEdges`, yang
+      // diantar ke sini sebagai change 'add' — tanpa cabang ini kabelnya hilang setelah reload.
+      if (changes.some((c) => c.type === 'remove' || c.type === 'add')) scheduleSave()
       return next
     })
   }, [scheduleSave])
@@ -301,10 +304,11 @@ export default function App() {
   // disuntik di sini, dan `ReactFlowInstance` default yang dipegang `rf` tidak cocok lagi.
   const flowNodes = useMemo<Node[]>(
     () => nodes.map((n) => {
+      const base = withLinkHandles(n)
       const data = { ...n.data, settings }
       return n.type === 'agent'
-        ? { ...n, data: { ...data, onSession, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
-        : { ...n, data }
+        ? { ...base, data: { ...data, onSession, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
+        : { ...base, data }
     }),
     [nodes, settings, onSession, onToggleHideLinks],
   )

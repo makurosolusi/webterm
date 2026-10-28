@@ -43,7 +43,10 @@ export function toFlowEdge(b: BridgeLink): Edge {
 }
 
 export function toBridge(e: Edge): BridgeLink {
-  return { id: e.id, source: e.source, target: e.target, kind: 'context' }
+  // Kind ikut edge-nya: meng-hardcode 'context' membuat kabel buka-file berubah jenis (dan salah
+  // label) begitu workspace dimuat ulang. Edge dari sebelum `kind` ada tidak punya data → 'context'.
+  const kind = (e.data as { kind?: BridgeLink['kind'] } | undefined)?.kind
+  return { id: e.id, source: e.source, target: e.target, kind: kind === 'file' ? 'file' : 'context' }
 }
 
 export const KANBAN_COLUMNS: AgentStatus[] = ['working', 'waiting', 'blocked', 'done']
