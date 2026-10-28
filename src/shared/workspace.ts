@@ -198,12 +198,28 @@ export const MODEL_SWITCH_CAPABLE = [
   'antigravity',
 ] as const
 
+// Agent yang menerima konfigurasi hook webterm INLINE di baris peluncuran, lewat flag `--settings`
+// milik Claude Code (lihat `claudeHooksSettings` di src/server/hooks.ts). Itu grammar claude: tidak
+// ada harness lain yang mengerti flag maupun bentuk JSON-nya.
+//
+// SENGAJA LEBIH SEMPIT dari nodeterm. `AGENT_HOOK_TARGETS` nodeterm v0.4.5 memuat kedelapan builtin
+// (diverifikasi), tapi di sana hook dipasang lewat installer PER AGENT di luar baris perintah —
+// bukan lewat `--settings`. Jadi JANGAN melebarkan daftar ini untuk "menyamai nodeterm": begitu
+// codex/gemini/grok masuk, mereka diluncurkan dengan flag claude yang tidak mereka kenal dan node
+// mereka mati di peluncuran. Agent baru boleh masuk hanya bila harness-nya benar-benar menerima
+// `--settings` claude; kalau hook-nya butuh jalur lain, ia butuh daftarnya sendiri.
+export const CLAUDE_HOOK_SETTINGS_CAPABLE = ['claude'] as const
+
 export const canResume = (id: AgentId): boolean => includes(RESUMABLE_AGENTS, id)
 export const mintsSessionId = (id: AgentId): boolean => includes(SESSION_ID_CAPABLE, id)
 export const canContextLink = (id: AgentId): boolean => includes(CONTEXT_LINK_CAPABLE, id)
 export const hasUsage = (id: AgentId): boolean => includes(USAGE_CAPABLE, id)
 export const hasPermissionMode = (id: AgentId): boolean => includes(PERMISSION_MODE_CAPABLE, id)
 export const canSwitchModel = (id: AgentId): boolean => includes(MODEL_SWITCH_CAPABLE, id)
+/** Apakah baris peluncuran `id` membawa konfigurasi hook lewat `--settings` claude? Sadar-pewarisan,
+ *  jadi agent custom ber-`baseAgent: 'claude'` ikut mendapat hook. */
+export const hasClaudeHookSettings = (id: AgentId): boolean =>
+  includes(CLAUDE_HOOK_SETTINGS_CAPABLE, id)
 
 /** Mode permission yang dipakai sesi agent saat START. Pengguna masih bisa memutar mode saat
  *  runtime dengan Shift+Tab — ini hanya menentukan keadaan awal, persis seperti flag
@@ -327,19 +343,20 @@ export function canResumeWith(id: AgentId, sessionId: string): boolean {
 }
 
 /**
- * Bangun baris perintah peluncuran agent. Profil envman opsional; bila diberikan, bungkus perintah
- * dasar agent sebagai `envman -e <profile> -- <launchCmd>`.
+ * Bangun baris perintah peluncuran agent: override milik pengguna bila ada
+ * (`settings.agentLaunchCommands[agentId]`, mis. skrip pemilih akun), selain itu `launchCmd`
+ * builtin. `base` DIKIRIMKAN, bukan dibaca di sini — modul ini tidak boleh menjangkau store
+ * settings, persis seperti parameter `base` di `resumeCommand`.
  *
  * Perintah ini nantinya dijalankan via login shell, jadi string biasa sudah benar — JANGAN
  * dipecah jadi argv lebih dulu.
  *
- * CATATAN: pembungkusan envman adalah invensi webterm (bukan dari nodeterm) dan sumber error
- * `load envman: no such file or directory` yang dilihat pengguna ketika envman tidak terpasang.
- * Perbaikannya ada di jalur spawn PTY, bukan di sini.
+ * TIDAK ADA pembungkus yang dihasilkan di sini. nodeterm tidak pernah membungkus perintah agent
+ * (nol kemunculan wrapper semacam itu di source v0.4.5); pemilihan akun/profil adalah urusan
+ * override di atas, yang dikarang pengguna sendiri sehingga binary-nya pasti ada di mesinnya.
  */
-export function assembleCmd(agentId: BuiltinAgentId, profile?: string): string {
-  const base = AGENT_CONFIG[agentId].launchCmd
-  return profile ? `envman -e ${profile} -- ${base}` : base
+export function assembleCmd(agentId: BuiltinAgentId, base?: string): string {
+  return base?.trim() || AGENT_CONFIG[agentId].launchCmd
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -374,7 +391,7 @@ export interface WsNode {
   height?: number         // ukuran di canvas; default diterapkan di store.toFlow
   title?: string
   cwd?: string            // jatuh ke cwd workspace bila tidak ada
-  cmd?: string            // baris peluncuran agent, mis. "envman -e malik-opus -- claude"
+  cmd?: string            // baris peluncuran agent, mis. "claude" atau override milik pengguna
   agentId?: AgentId
   color?: string
   sessionId?: string      // UUID dicetak saat peluncuran; memungkinkan resume

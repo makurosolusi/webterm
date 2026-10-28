@@ -1,8 +1,8 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
-import type { AgentStatus } from '../shared/workspace'
+import type { AgentPermissionMode, AgentStatus } from '../shared/workspace'
 import {
   canResumeWith,
-  capabilityAgentId,
+  hasClaudeHookSettings,
   isContextCapable,
   isSafeSessionId,
   resumeCommandWith,
@@ -10,7 +10,7 @@ import {
 } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
-import { buildClaudeFlags } from './hooks'
+import { buildClaudeFlags, forgetNodeToken, hookEnv } from './hooks'
 
 const PORT = Number(process.env.PORT) || 8700
 
@@ -29,6 +29,13 @@ export interface SessionsOptions {
   shell?: string
   /** Batas ring buffer scrollback dalam BYTE (`settings.scrollbackBytes`). */
   scrollbackBytes?: number
+  /** Mode permission awal sesi claude (`settings.claudePermissionMode`). Absen = tidak ada flag
+   *  `--permission-mode` sama sekali, sehingga peluncuran tetap polos selama integrator belum
+   *  menyambungkan settings. */
+  claudePermissionMode?: AgentPermissionMode
+  /** `settings.hookReplyApprovals`. Absen/false = `NODETERM_PERM_WAIT_SECS` tidak dikirim, jadi hook
+   *  permission tidak menahan apa pun — perilaku sebelum setting ini ada. */
+  hookReplyApprovals?: boolean
 }
 
 /** Catatan peluncuran yang terlihat pengguna, ditulis ke stream terminal. Bahasa Inggris supaya
@@ -51,7 +58,11 @@ const wrapperMissingNotice = (bin: string): string =>
  * PERTAMA, bukan merusak state. Kalau muncul di lapangan, tambahkan probe-nya — jangan diam-diam
  * mengecilkan daftar kapabilitas.
  */
-export function launchLine(msg: OpenMsg, port = PORT): string | undefined {
+export function launchLine(
+  msg: OpenMsg,
+  port = PORT,
+  opts?: { permissionMode?: AgentPermissionMode }
+): string | undefined {
   const cmd = msg.cmd
   if (!cmd) return undefined
   const agentId = msg.agentId
@@ -60,13 +71,12 @@ export function launchLine(msg: OpenMsg, port = PORT): string | undefined {
   // di sini — batas input, bukan sekadar janji tipe.
   if (!agentId || !sid || !isSafeSessionId(sid, true)) return cmd
 
-  // Flag `--settings` (hook status per node) hanya dimengerti harness claude. webterm belum punya
-  // daftar kapabilitas hook seperti `AGENT_HOOK_TARGETS` milik nodeterm, jadi gerbangnya di sini —
-  // lewat `capabilityAgentId` supaya agent custom ber-`baseAgent: 'claude'` ikut dapat hook.
-  // `buildClaudeFlags` memancarkan flag id claude DAN `--settings` sebagai satu unit; begitu
-  // `hooks.ts` memisahkan bagian `--settings`, cabang ini bisa ikut lewat helper bersama di atas.
-  if (capabilityAgentId(agentId) === 'claude') {
-    return `${cmd} ${buildClaudeFlags(msg.id, sid, port, !!msg.resume)}`
+  // `buildClaudeFlags` memancarkan flag id claude, `--permission-mode` dan `--settings` sebagai satu
+  // unit, dan ketiganya grammar claude — jadi gerbangnya daftar kapabilitas, bukan nama agent.
+  if (hasClaudeHookSettings(agentId)) {
+    return `${cmd} ${buildClaudeFlags(msg.id, sid, port, !!msg.resume, {
+      permissionMode: opts?.permissionMode,
+    })}`
   }
   if (msg.resume) {
     // Perintah client dipakai utuh sebagai program, jadi pembungkus apa pun tetap terpasang.
@@ -110,7 +120,7 @@ export class Sessions {
       return
     }
 
-    let cmd = launchLine(msg, PORT)
+    let cmd = launchLine(msg, PORT, { permissionMode: this.options.claudePermissionMode })
     if (cmd) {
       const unwrapped = unwrapMissingWrapper(cmd, binaryExists)
       if (unwrapped) {
@@ -120,8 +130,25 @@ export class Sessions {
         send({ t: 'output', id: msg.id, data: wrapperMissingNotice(unwrapped.missing) })
       }
     }
-    const env = isContextCapable(msg.agentId) ? { NODETERM_NODE_ID: msg.id, NODETERM_PORT: String(PORT) } : undefined
-    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, cmd, shell: this.options.shell, env })
+    // Dua set env var yang digerbangi TERPISAH: yang pertama dibaca skill konteks-tertaut di dalam
+    // sesi agent, yang kedua dibaca perintah curl yang kita tanam lewat `--settings` (token node +
+    // batas tahan hook permission). Node tanpa keduanya mewarisi env apa adanya.
+    const env: Record<string, string> = {
+      ...(isContextCapable(msg.agentId)
+        ? { NODETERM_NODE_ID: msg.id, NODETERM_PORT: String(PORT) }
+        : {}),
+      ...(msg.agentId && hasClaudeHookSettings(msg.agentId)
+        ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })
+        : {}),
+    }
+    const pty = spawnPty({
+      cols: msg.cols,
+      rows: msg.rows,
+      cwd: msg.cwd,
+      cmd,
+      shell: this.options.shell,
+      env: Object.keys(env).length ? env : undefined,
+    })
     const session: Session = { id: msg.id, pty, buffer: [], bytes: 0, send }
     this.map.set(msg.id, session)
 
@@ -156,6 +183,11 @@ export class Sessions {
   }
 
   close(id: string): void {
+    // Token hook terikat pada NODE, bukan pada PTY — jadi dilupakan SEBELUM gerbang sesi hidup di
+    // bawah. Sebuah agent yang prosesnya keluar sendiri sudah dihapus dari `map` oleh `onExit`,
+    // sehingga `close` yang menyusul akan return lebih awal dan token itu tetap sah selamanya
+    // padahal node id-nya bisa dipakai ulang sesi berikutnya.
+    forgetNodeToken(id)
     const session = this.map.get(id)
     if (!session) return
     session.pty.kill()

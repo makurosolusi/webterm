@@ -66,9 +66,32 @@ describe('assembleCmd', () => {
     expect(assembleCmd('antigravity')).toBe('agy')
   })
 
-  it('membungkus perintah dengan envman saat profil diberikan', () => {
-    expect(assembleCmd('claude', 'malik-opus')).toBe('envman -e malik-opus -- claude')
-    expect(assembleCmd('codex', 'work')).toBe('envman -e work -- codex')
+  it('tidak pernah membungkus perintah dengan wrapper apa pun', () => {
+    // Regresi dari bug nyata: versi sebelumnya memancarkan `envman -e <profil> -- <agent>`, dan di
+    // mesin tanpa envman SETIAP node agent mati dengan `load envman: no such file or directory`.
+    // nodeterm tidak membungkus perintah agent sama sekali, jadi webterm juga tidak boleh.
+    for (const id of BUILTIN_AGENT_IDS) {
+      const cmd = assembleCmd(id)
+      expect(cmd).not.toContain('envman')
+      expect(cmd).not.toContain(' -- ')
+      // Yang diluncurkan adalah program itu sendiri: token pertama = seluruh perintah.
+      expect(cmd.split(' ')[0]).toBe(cmd)
+    }
+  })
+
+  it('memakai override peluncuran pengguna sebagai program, bila diberikan', () => {
+    // Override MENANG atas nama CLI polos, untuk SETIAP builtin — ini jalur hidup
+    // `settings.agentLaunchCommands` (Dock meneruskannya saat menambah agent), yaitu cara pengguna
+    // memilih akun/profil. Kalau default-nya yang menang, setting itu diam-diam tak berefek.
+    for (const id of BUILTIN_AGENT_IDS) {
+      const override = `wrapper-for-${id}`
+      expect(assembleCmd(id, override)).toBe(override)
+      expect(assembleCmd(id, override)).not.toBe(AGENT_CONFIG[id].launchCmd)
+    }
+    // Kosong/spasi/absen = tidak ada override, jatuh ke default builtin.
+    expect(assembleCmd('antigravity', '')).toBe('agy')
+    expect(assembleCmd('codex', '   ')).toBe('codex')
+    expect(assembleCmd('antigravity', undefined)).toBe('agy')
   })
 })
 

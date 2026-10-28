@@ -4,6 +4,12 @@ import { test, expect } from 'bun:test'
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
+import {
+  BUILTIN_AGENT_IDS,
+  assembleCmd,
+  setCustomAgentBaseResolver,
+} from '../shared/workspace'
+import { NODE_TOKEN_ENV, nodeToken } from './hooks'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -94,6 +100,60 @@ test('launchLine mints the session id with each harness own grammar', () => {
   expect(launchLine(open({ agentId: 'claude', sessionId: SID }), 9999)).toBe(undefined)
 })
 
+test('no builtin launch command carries a wrapper webterm invented', () => {
+  // Regresi dari bug nyata: `assembleCmd` dulu memancarkan `envman -e <profil> -- <agent>`, dan di
+  // mesin tanpa envman SETIAP node agent mati dengan `load envman: no such file or directory`.
+  // nodeterm tidak membungkus perintah agent sama sekali, jadi webterm juga tidak boleh.
+  for (const id of BUILTIN_AGENT_IDS) {
+    const cmd = assembleCmd(id)
+    expect(cmd).not.toContain('envman')
+    expect(cmd).not.toContain(' -- ')
+    // Yang diluncurkan harus program itu sendiri: token pertama = seluruh perintah.
+    expect(cmd.split(' ')[0]).toBe(cmd)
+    expect(launchLine(open({ cmd, agentId: id, sessionId: SID }), 9999)).not.toContain('envman')
+  }
+
+  // Override peluncuran milik pengguna menggantikan bagian program secara utuh — ini mekanisme
+  // pemilihan akun/profil yang sebenarnya (`settings.agentLaunchCommands`), seperti di nodeterm.
+  expect(assembleCmd('claude', 'claude-via-work-account')).toBe('claude-via-work-account')
+  expect(assembleCmd('codex', '   ')).toBe('codex')
+  expect(assembleCmd('antigravity', undefined)).toBe('agy')
+})
+
+test('the claude hook flags are gated by capability, not by the agent id', () => {
+  const flagged = (agentId: string) =>
+    launchLine(open({ cmd: 'mycli', agentId, sessionId: SID }), 9999) ?? ''
+
+  // Agent custom yang mewarisi harness claude IKUT dapat hook — binary-nya sendiri, flag claude.
+  setCustomAgentBaseResolver((id) => (id === 'custom:proxy' ? 'claude' : undefined))
+  try {
+    const inherited = flagged('custom:proxy')
+    expect(inherited).toContain('--settings ')
+    expect(inherited).toContain(`--session-id ${SID}`)
+    expect(inherited.startsWith('mycli ')).toBe(true)
+    // Custom tanpa baseAgent tidak mewarisi apa pun: tidak ada flag yang ditempelkan.
+    expect(flagged('custom:bare')).toBe('mycli')
+  } finally {
+    setCustomAgentBaseResolver(null)
+  }
+
+  // `--settings` adalah grammar claude. Builtin lain TIDAK boleh menerimanya: flag yang tidak
+  // dikenal membuat CLI-nya menolak di peluncuran, yaitu node mati.
+  for (const id of BUILTIN_AGENT_IDS.filter((a) => a !== 'claude')) {
+    expect(launchLine(open({ cmd: id, agentId: id, sessionId: SID }), 9999)).not.toContain('--settings')
+  }
+})
+
+test('launchLine sends the configured permission mode and nothing when unset', () => {
+  const msg = open({ cmd: 'claude', agentId: 'claude', sessionId: SID })
+  expect(launchLine(msg, 9999, { permissionMode: 'acceptEdits' })).toContain(
+    '--permission-mode acceptEdits'
+  )
+  // `manual` dan "belum disambungkan" sama-sama berarti perintah polos — tanpa flag.
+  expect(launchLine(msg, 9999, { permissionMode: 'manual' })).not.toContain('--permission-mode')
+  expect(launchLine(msg, 9999)).not.toContain('--permission-mode')
+})
+
 test('launchLine resumes with the harness resume grammar', () => {
   const r = (agentId: string, cmd: string) =>
     launchLine(open({ cmd, agentId, sessionId: SID, resume: true }), 9999)
@@ -154,6 +214,39 @@ test('a missing wrapper degrades to the bare command and says so once', async ()
   expect(a.joined()).toContain(`'webterm-missing-wrapper-9f3a' is not installed`)
   expect(a.joined().includes('load envman')).toBe(false)
   s.close('w1')
+})
+
+// --- Env hook ------------------------------------------------------------------------------------
+
+test('a claude session carries its hook token and loses it when the session closes', async () => {
+  const s = new Sessions()
+  const a = collector()
+  // Tanpa sessionId supaya perintahnya lolos apa adanya; gerbang env dipegang agentId, bukan cmd.
+  // PANJANG token yang dicetak, bukan nilainya — nilai token tidak boleh mendarat di output.
+  s.open(
+    { t: 'open', id: 'h1', cols: 80, rows: 24, cmd: `echo "tok_len:\${#${NODE_TOKEN_ENV}}"`, agentId: 'claude' },
+    a.send
+  )
+  await pollFor(a.joined, 'tok_len:')
+  expect(a.joined()).toContain(`tok_len:${nodeToken('h1').length}`)
+
+  // Token per-node tidak boleh tetap sah setelah sesinya mati: node id bisa dipakai ulang sesi
+  // berikutnya, jadi `close` harus melupakannya dan permintaan berikut mencetak token BARU.
+  const before = nodeToken('h1')
+  s.close('h1')
+  expect(nodeToken('h1') === before).toBe(false)
+})
+
+test('a plain terminal gets no hook token at all', async () => {
+  const s = new Sessions()
+  const a = collector()
+  s.open(
+    { t: 'open', id: 'h2', cols: 80, rows: 24, cmd: `echo "tok_len:\${#${NODE_TOKEN_ENV}}"` },
+    a.send
+  )
+  await pollFor(a.joined, 'tok_len:')
+  expect(a.joined()).toContain('tok_len:0')
+  s.close('h2')
 })
 
 // --- Knob settings ------------------------------------------------------------------------------

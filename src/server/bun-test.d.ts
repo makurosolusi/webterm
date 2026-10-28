@@ -3,10 +3,11 @@
 // The *.bun.test.ts files run under `bun test`, never vitest.
 declare module 'bun:test' {
   export function test(name: string, fn: () => void | Promise<void>): void
-  export function expect(value: unknown): {
+  interface Matchers {
     toContain(expected: string): void
     toBe(expected: unknown): void
   }
+  export function expect(value: unknown): Matchers & { not: Matchers }
 }
 
 // bun:sqlite self-typed too — only the slice db.ts uses.

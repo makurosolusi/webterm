@@ -26,6 +26,9 @@ export interface DockProps {
   /** Dari settings; tombolnya hilang dari menu Add. Prop, bukan store — integrator yang menyambung. */
   disabledAgents?: AgentId[]
   customAgents?: CustomAgent[]
+  /** Override perintah peluncuran per builtin (mis. skrip pemilih akun). Hanya builtin: agent
+   *  custom sudah membawa `launchCmd`-nya sendiri. */
+  agentLaunchCommands?: Partial<Record<BuiltinAgentId, string>>
 }
 
 /** Preset zoom dock, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
@@ -40,6 +43,7 @@ export default function Dock(props: DockProps) {
 
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
   const customs = props.customAgents ?? DEFAULT_SETTINGS.customAgents
+  const launchCmds = props.agentLaunchCommands ?? DEFAULT_SETTINGS.agentLaunchCommands
   const builtins = BUILTIN_AGENT_IDS.filter((a) => !disabled.includes(a))
   const visibleCustoms = customs.filter((c) => !disabled.includes(c.id))
 
@@ -48,7 +52,7 @@ export default function Dock(props: DockProps) {
   const addBuiltin = (id: BuiltinAgentId) => {
     // cwd dibiarkan undefined: server memakai cwd workspace, sama seperti nodeterm yang
     // menambah agent dengan satu klik tanpa form.
-    props.onAddAgent(assembleCmd(id), id)
+    props.onAddAgent(assembleCmd(id, launchCmds[id]), id)
     close()
   }
 
