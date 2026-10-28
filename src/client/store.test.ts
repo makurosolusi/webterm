@@ -69,6 +69,18 @@ describe('store serializer', () => {
     expect(back.collapsed).toBe(true)
     expect(back.comments).toEqual([{ id: 'c1', text: 'note', ts: 123 }])
   })
+
+  // Satu-satunya state node files/editor adalah path-nya; kalau serializer menjatuhkannya, node
+  // itu kembali setelah reload sebagai panel kosong tanpa folder/file.
+  it('round-trips dirPath and filePath through toFlow -> toWsNode', () => {
+    const dir = toWsNode(toFlow({ id: 'g', kind: 'files', x: 0, y: 0, dirPath: '/tmp/st/proj' }))
+    expect(dir.kind).toBe('files')
+    expect(dir.dirPath).toBe('/tmp/st/proj')
+
+    const file = toWsNode(toFlow({ id: 'h', kind: 'editor', x: 0, y: 0, filePath: '/tmp/st/proj/a.md' }))
+    expect(file.kind).toBe('editor')
+    expect(file.filePath).toBe('/tmp/st/proj/a.md')
+  })
 })
 
 describe('edge serializer', () => {

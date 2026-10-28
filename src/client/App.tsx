@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { ReactFlow, Background, BackgroundVariant, MiniMap, applyNodeChanges, applyEdgeChanges, addEdge, MarkerType } from '@xyflow/react'
+import { ReactFlow, Background, BackgroundVariant, MiniMap, applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
 import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import TerminalNode from './TerminalNode'
-import AgentNode from './AgentNode'
 import ContextEdge from './ContextEdge'
 import WorkspaceBar from './WorkspaceBar'
 import Dock from './Dock'
 import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
+import CanvasToolbar from './CanvasToolbar'
+import ZoomRail from './ZoomRail'
+import SessionsPanel from './SessionsPanel'
+import HelpOverlay from './HelpOverlay'
+import { SettingsPanel } from './SettingsPanel'
+import { nodeTypes } from './nodeTypes'
+import { useSettings } from './useSettings'
+import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode, workspaceNameFromPath } from './store'
-import { canLink, bridgeExists, hiddenEdgeNodeIds, edgeVisible } from './floatingEdge'
+import { canLink, bridgeExists } from './floatingEdge'
+import { decorateEdges, miniMapNodeColor } from './canvasStyle'
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
 
-const nodeTypes = { terminal: TerminalNode, agent: AgentNode }
 const edgeTypes = { context: ContextEdge }
 
 export default function App() {
@@ -31,6 +37,10 @@ export default function App() {
   const [board, setBoard] = useState(false)
   const [picker, setPicker] = useState<{ onPick: (p: string) => void } | null>(null)
   const [zoom, setZoom] = useState(DEFAULT_VIEWPORT.zoom)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [locked, setLocked] = useState(false)
+  const { settings, update } = useSettings()
 
   const activeWsRef = useRef<Workspace | null>(null)
   const nodesRef = useRef<Node[]>([])
@@ -47,6 +57,16 @@ export default function App() {
     const unsub = subscribeStatus((id, s) => setStatuses((prev) => ({ ...prev, [id]: s })))
     return unsub
   }, [])
+
+  // Satu-satunya penulis `data-theme`; `styles.css` menyimpan varian terangnya di
+  // `:root[data-theme='light']`. 'auto' mengikut tema terminal supaya memilih skema terang
+  // tidak menyisakan rangka hitam di sekelilingnya.
+  useEffect(() => {
+    const dark = settings.appTheme === 'auto'
+      ? resolveTerminalTheme(settings.terminalTheme).dark
+      : settings.appTheme === 'dark'
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+  }, [settings.appTheme, settings.terminalTheme])
 
   const applyWorkspace = useCallback((ws: Workspace) => {
     setActiveWs(ws)
@@ -99,8 +119,11 @@ export default function App() {
       if (changes.some((c) => c.type === 'remove')) {
         for (const c of changes) if (c.type === 'remove') send({ t: 'close', id: c.id })
       }
+      // 'add' ikut dihitung: node yang dibuat di dalam node lain (FilesNode membuka file sebagai
+      // node editor di sebelahnya) masuk lewat `addNodes`, bukan lewat `addFlowNode` di bawah —
+      // tanpa cabang ini node itu tidak pernah tersimpan dan tidak bisa di-undo.
       const settled = changes.some(
-        (c) => (c.type === 'position' && !c.dragging) || c.type === 'remove' || (c.type === 'dimensions' && !c.resizing),
+        (c) => (c.type === 'position' && !c.dragging) || c.type === 'remove' || c.type === 'add' || (c.type === 'dimensions' && !c.resizing),
       )
       if (settled) {
         scheduleSave()
@@ -152,7 +175,7 @@ export default function App() {
     const ws = activeWsRef.current
     if (!ws) return
     setNodes((prev) => {
-      const node = make(prev.length, ws)
+      const node = { width: settings.defaultNodeWidth, height: settings.defaultNodeHeight, ...make(prev.length, ws) }
       const next = addNode(prev.map(toWsNode), node).map(toFlow)
       nodesRef.current = next
       scheduleSave()
@@ -160,10 +183,16 @@ export default function App() {
       bump()
       return next
     })
-  }, [scheduleSave])
+  }, [scheduleSave, settings.defaultNodeWidth, settings.defaultNodeHeight])
 
   const onAddTerminal = useCallback(() => {
     addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', x: 80 + n * 40, y: 80 + n * 40, cwd: ws.cwd }))
+  }, [addFlowNode])
+
+  // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
+  // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
+  const onAddFiles = useCallback(() => {
+    addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'files', x: 80 + n * 40, y: 80 + n * 40, dirPath: ws.cwd }))
   }, [addFlowNode])
 
   const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string) => {
@@ -188,6 +217,24 @@ export default function App() {
     rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
     setBoard(false)
   }, [])
+
+  // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di
+  // canvas yang ter-mount. Yang di luar canvas dibuang dari salinan TERBARU di server: snapshot
+  // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi menulis ulang dari sana
+  // akan mengembalikan layout workspace itu ke keadaan lama.
+  const closeSession = useCallback(async (id: string) => {
+    if (nodesRef.current.some((n) => n.id === id)) {
+      await rf.current?.deleteElements({ nodes: [{ id }] })
+      return
+    }
+    const owner = workspaces.find((w) => w.nodes.some((n) => n.id === id))
+    if (!owner) return
+    send({ t: 'close', id })
+    const fresh = await getWorkspace(owner.id)
+    const updated: Workspace = { ...fresh, nodes: fresh.nodes.filter((n) => n.id !== id), updatedAt: Date.now() }
+    await saveWorkspace(updated)
+    setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
+  }, [workspaces])
 
   const onSelect = useCallback(async (id: string) => {
     if (!id || id === activeId) return
@@ -241,44 +288,30 @@ export default function App() {
     bump()
   }, [scheduleSave])
 
-  const nodeColor = useCallback((n: Node) => {
-    if (n.type === 'terminal') return '#0a84ff'
-    const s = statuses[n.id]
-    if (s === 'working') return '#d97757'
-    if (s === 'waiting') return '#ff9f0a'
-    if (s === 'blocked') return '#ff453a'
-    if (s === 'done') return '#98989d'
-    return ((n.data as { color?: string }).color) ?? '#0a84ff'
-  }, [statuses])
+  const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
 
   const onToggleHideLinks = useCallback((id: string) => {
     const cur = nodesRef.current.find((n) => n.id === id)
     rf.current?.updateNodeData(id, { hideLinks: !(cur?.data as { hideLinks?: boolean })?.hideLinks })
   }, [])
 
-  // Inject onSession + hideLinks eye handler into agent nodes for rendering only;
-  // toWsNode drops the handlers, so saves are unaffected. Derived to keep state clean.
-  const flowNodes = useMemo(
-    () => nodes.map((n) => (n.type === 'agent'
-      ? { ...n, data: { ...n.data, onSession, hideLinks: (n.data as { hideLinks?: boolean }).hideLinks, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
-      : n)),
-    [nodes, onSession, onToggleHideLinks],
+  // Inject live settings into every node plus onSession + the hideLinks eye handler into agent
+  // nodes, for rendering only; toWsNode drops both, so saves are unaffected.
+  // Hasilnya DIPAKU ke `Node[]`: tanpa itu React Flow menyimpulkan tipe node dari bentuk data yang
+  // disuntik di sini, dan `ReactFlowInstance` default yang dipegang `rf` tidak cocok lagi.
+  const flowNodes = useMemo<Node[]>(
+    () => nodes.map((n) => {
+      const data = { ...n.data, settings }
+      return n.type === 'agent'
+        ? { ...n, data: { ...data, onSession, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
+        : { ...n, data }
+    }),
+    [nodes, settings, onSession, onToggleHideLinks],
   )
 
-  const displayEdges = useMemo<Edge[]>(() => {
-    const hidden = hiddenEdgeNodeIds(nodes as { id: string; data: { hideLinks?: boolean } }[])
-    const accent = '#0a84ff'
-    return edges.filter((e) => edgeVisible(e, hidden)).map((e) => {
-      const stroke = e.selected ? '#ffffff' : accent
-      const arrow = { type: MarkerType.ArrowClosed, color: stroke, width: 14, height: 14 }
-      return { ...e, data: { anchor: 'horizontal' },
-        label: e.selected ? '⇄ context — ⌫ to remove' : '⇄ context',
-        labelStyle: { fill: stroke, fontSize: 11, fontWeight: 600 },
-        labelBgStyle: { fill: '#1c1c1e', fillOpacity: 0.85 },
-        style: { stroke, strokeWidth: e.selected ? 3.5 : 2 },
-        markerStart: arrow, markerEnd: arrow }
-    })
-  }, [edges, nodes])
+  const liveNodes = useMemo(() => nodes.map(toWsNode), [nodes])
+
+  const displayEdges = useMemo(() => decorateEdges(edges, nodes), [edges, nodes])
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
@@ -303,14 +336,25 @@ export default function App() {
             fitView={false}
             minZoom={0.01}
             maxZoom={2}
-            snapToGrid
-            snapGrid={[24, 24]}
-            panOnScroll
+            snapToGrid={settings.snapToGrid}
+            snapGrid={[settings.gridSize, settings.gridSize]}
+            panOnDrag={!locked}
+            panOnScroll={!locked}
+            zoomOnPinch={!locked}
             zoomOnScroll={false}
             proOptions={{ hideAttribution: true }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={24} size={2.5} color="var(--canvas-dot)" />
+            {settings.canvasDots && (
+              <Background variant={BackgroundVariant.Dots} gap={settings.gridSize} size={2.5} color="var(--canvas-dot)" />
+            )}
             <MiniMap className="minimap-dock" pannable zoomable maskColor="rgba(10,12,18,0.6)" nodeColor={nodeColor} />
+            <ZoomRail
+              locked={locked}
+              onToggleLock={() => setLocked((v) => !v)}
+              onZoomIn={() => { rf.current?.zoomIn({ duration: 150 }); syncViewport(170) }}
+              onZoomOut={() => { rf.current?.zoomOut({ duration: 150 }); syncViewport(170) }}
+              onFit={() => { rf.current?.fitView({ duration: 300 }); syncViewport(320) }}
+            />
           </ReactFlow>
           <Dock
             onAddTerminal={onAddTerminal}
@@ -330,11 +374,33 @@ export default function App() {
             zoomPct={Math.round(zoom * 100)}
             onZoomIn={() => { rf.current?.zoomIn({ duration: 150 }); syncViewport(170) }}
             onZoomOut={() => { rf.current?.zoomOut({ duration: 150 }); syncViewport(170) }}
+            onZoomTo={(p) => { rf.current?.zoomTo(p / 100, { duration: 150 }); syncViewport(170) }}
+            disabledAgents={settings.disabledAgents}
+            customAgents={settings.customAgents}
+            agentLaunchCommands={settings.agentLaunchCommands}
+          />
+          <CanvasToolbar
+            nodes={flowNodes}
+            onFocusNode={onFocus}
+            onOpenExplorer={onAddFiles}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenHelp={() => setShowHelp(true)}
+          />
+          <SessionsPanel
+            workspaces={workspaces}
+            activeId={activeId}
+            liveActiveNodes={liveNodes}
+            statuses={statuses}
+            onFocusNode={onFocus}
+            onCloseSession={(id) => void closeSession(id)}
+            onSelectWorkspace={(id) => void onSelect(id)}
           />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
         </>
       )}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
+      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} />}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
   )
 }
