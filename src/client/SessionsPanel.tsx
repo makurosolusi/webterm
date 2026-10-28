@@ -268,6 +268,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                     className="ss-group__head"
                     role="button"
                     tabIndex={0}
+                    // Penandanya tidak boleh cuma warna: pembaca layar harus bisa menyebut board
+                    // mana yang sedang terbuka di canvas.
+                    aria-current={g.isActive ? 'true' : undefined}
                     onClick={head}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter' && e.key !== ' ') return

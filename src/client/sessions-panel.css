@@ -250,8 +250,10 @@
   font-weight: 600;
 }
 
+/* Penanda board aktif, accent pada nama seperti nodeterm. Sebelumnya `var(--text)` — nilai yang
+   sudah dipasang `.ss-group__head`, jadi no-op dan semua board terlihat identik. */
 .ss-group--active .ss-group__name {
-  color: var(--text);
+  color: var(--accent);
 }
 
 .ss-group__count {
