@@ -24,6 +24,26 @@ type CreateBody = { name: string; cwd?: string; color?: string }
 type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[] }
 
 /**
+ * Body JSON yang WAJIB objek biasa, atau `null` → 400.
+ *
+ * `JSON.parse` saja tidak cukup: `null`, `42`, `"teks"`, dan `[]` adalah JSON SAH, jadi
+ * `try/catch` di sekitarnya lolos, lalu pembacaan properti melempar di runtime (`b.name` pada
+ * `null`) atau meneruskan `undefined` ke store. Pola sama dengan `parseBody` di `fsApi.ts`;
+ * disalin, bukan dibagi, karena tipe di sana sempit untuk verb fs-nya sendiri.
+ *
+ * `T` tetap sebuah janji ke compiler soal BENTUK FIELD yang tidak diperiksa di sini — penjaga ini
+ * hanya menjamin "ini objek". Field yang hilang/salah tipe masih mungkin lewat.
+ */
+function parseObjectBody<T>(raw: string): T | null {
+  try {
+    const v: unknown = JSON.parse(raw)
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : null
+  } catch {
+    return null // bukan JSON sama sekali
+  }
+}
+
+/**
  * Rute satu request workspace. `store` di-inject (bukan import singleton `db`) supaya tabel rute
  * ini bisa diuji di atas SQLite in-memory tanpa menyentuh DB pengguna.
  *
@@ -39,8 +59,8 @@ export async function workspacesRoute(
   if (path === '/api/workspaces') {
     if (method === 'GET') return { status: 200, body: store.list() }
     if (method === 'POST') {
-      let b: CreateBody
-      try { b = JSON.parse(await body()) as CreateBody } catch { return BAD_JSON }
+      const b = parseObjectBody<CreateBody>(await body())
+      if (!b) return BAD_JSON
       return { status: 201, body: store.create(b.name, b.cwd, b.color) }
     }
   }
@@ -53,8 +73,8 @@ export async function workspacesRoute(
       return ws ? { status: 200, body: ws } : NOT_FOUND
     }
     if (method === 'PUT') {
-      let b: SaveBody
-      try { b = JSON.parse(await body()) as SaveBody } catch { return BAD_JSON }
+      const b = parseObjectBody<SaveBody>(await body())
+      if (!b) return BAD_JSON
       const ws: Workspace = {
         id, name: b.name, cwd: b.cwd, color: b.color,
         viewport: b.viewport, nodes: b.nodes, bridges: b.bridges ?? [], updatedAt: Date.now(),
@@ -72,8 +92,8 @@ export async function workspacesRoute(
   if (path === '/api/active') {
     if (method === 'GET') return { status: 200, body: { id: store.getActive() } }
     if (method === 'PUT') {
-      let b: { id: string }
-      try { b = JSON.parse(await body()) as { id: string } } catch { return BAD_JSON }
+      const b = parseObjectBody<{ id: string }>(await body())
+      if (!b) return BAD_JSON
       store.setActive(b.id)
       return { status: 204 }
     }

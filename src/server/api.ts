@@ -119,8 +119,22 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
 // Returns true when it has taken over the response; false lets the caller fall
 // through to Vite/static. The response is finished asynchronously.
+//
+// Every route rides the one net below. A dropped rejection left the socket open with no status and
+// no body until the client timed out, so the net lives here, not per route family: the next route
+// that throws is covered without touching it.
 export function handleApi(req: IncomingMessage, res: ServerResponse): boolean {
   if (!req.url || !req.url.startsWith('/api/')) return false
-  void route(req, res)
+  route(req, res).catch((err: unknown) => {
+    // Method + pathname ONLY: the query string carries the auth token (TOKEN_PARAM), and the
+    // error itself can quote absolute paths or request bodies — so it goes to the log, never
+    // to the body the client reads.
+    console.error(`api ${req.method || 'GET'} ${new URL(req.url || '/', 'http://x').pathname} failed:`, err)
+    if (res.writableEnded) return
+    // A partially sent response (context-link flushes headers before its body) cannot take a
+    // status any more — setting one throws again. Just close what the client already has.
+    if (res.headersSent) { res.end(); return }
+    json(res, 500, { error: 'internal error' })
+  })
   return true
 }

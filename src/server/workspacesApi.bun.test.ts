@@ -57,6 +57,21 @@ test('a malformed body is 400, not a crash', async () => {
   expect(r?.status).toBe(400)
 })
 
+// `null`, angka, string, dan array adalah JSON SAH: dulu lolos `JSON.parse`, lalu pembacaan
+// properti melempar di runtime dan respons tidak pernah ditutup (client menggantung).
+test('a non-object JSON body is 400 on every route that reads one', async () => {
+  const store = freshStore()
+  const ws = store.create('proj')
+  for (const v of [null, 42, 'teks', []]) {
+    expect((await workspacesRoute(store, '/api/workspaces', 'POST', withBody(v)))?.status).toBe(400)
+    expect((await workspacesRoute(store, `/api/workspaces/${ws.id}`, 'PUT', withBody(v)))?.status).toBe(400)
+    expect((await workspacesRoute(store, '/api/active', 'PUT', withBody(v)))?.status).toBe(400)
+  }
+  // tidak ada yang tertulis: store harus utuh seperti sebelum keempat body itu masuk
+  expect(store.get(ws.id)?.name).toBe('proj')
+  expect(store.getActive()).toBe(null)
+})
+
 test('an unknown id is 404 and a foreign path is null so the caller falls through', async () => {
   const store = freshStore()
   expect((await workspacesRoute(store, '/api/workspaces/nope', 'GET', noBody))?.status).toBe(404)
