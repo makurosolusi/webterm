@@ -18,6 +18,27 @@ import { generateName as apiGenerateName } from './api'
 
 const COLLAPSED_H = 40
 
+/** Penanda catatan yang ditulis MESIN di thread aktivitas node, supaya tidak tertukar dengan
+ *  catatan pengguna sendiri (`NodeComments` merender `author` di baris meta). */
+const NOTE_AUTHOR = 'webterm'
+
+/**
+ * Apakah peluncuran PERTAMA node ini harus `--resume`, bukan `--session-id`?
+ *
+ * Node yang DATANG sudah membawa `sessionId` adalah node yang pernah diluncurkan: id itu sudah
+ * dilihat CLI-nya, dan `claude --session-id <id-yang-sudah-ada>` menolaknya ("Session ID … is
+ * already in use.", lihat `withSessionId` di shared/workspace.ts). Itu persis jalur close →
+ * "Recently closed" → reopen: snapshot node dipulihkan utuh sehingga `sessionId` ikut kembali,
+ * tapi PTY-nya sudah mati sehingga `open` benar-benar meluncurkan ulang, bukan re-attach.
+ *
+ * Digerbangi `mintsSessionId` dengan alasan yang sama seperti `resumableSid`: untuk agent lain
+ * `sessionId` cuma uuid lokal yang tak pernah dilihat CLI-nya, jadi me-resume-nya akan membuka chat
+ * kosong alih-alih melanjutkan percakapan.
+ */
+export function resumesOnFirstLaunch(agentId: AgentId | undefined, sessionId: string | undefined): boolean {
+  return !!sessionId && !!agentId && mintsSessionId(agentId)
+}
+
 function AgentNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
     cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
@@ -44,7 +65,11 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
 
   // Pre-generated session UUID enables claude --session-id (and later --resume).
   const [sid, setSid] = useState<string>(sessionId ?? crypto.randomUUID())
-  const [resume, setResume] = useState(false)
+  // DITURUNKAN dari props, tidak dipaku `false`: node yang datang sudah ber-`sessionId` pernah
+  // diluncurkan, dan meluncurkannya ulang dengan `--session-id` yang sama ditolak CLI. Lihat
+  // `resumesOnFirstLaunch`. Initializer lazy supaya ia dibaca sekali per mount — bukan tiap render,
+  // di mana `onSession` di bawah sudah mengisi `sessionId` dan node BARU pun akan terbaca resume.
+  const [resume, setResume] = useState(() => resumesOnFirstLaunch(agentId, sessionId))
   // Bumping the key remounts TerminalCore so it re-sends `open`.
   const [gen, setGen] = useState(0)
 
@@ -71,7 +96,20 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
   const expandedH = useRef(height ?? 300)
   const savedVp = useRef<Viewport | null>(null)
-  const { micActive, toggleMic } = useSpeechInput((text) => send({ t: 'input', id, data: text }))
+
+  // Dideklarasikan SEBELUM `useSpeechInput` di bawah, yang memakainya sebagai permukaan error.
+  const addComment = (text: string, author?: string) =>
+    rf.updateNodeData(id, {
+      comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now(), ...(author ? { author } : {}) }],
+    })
+
+  // Kegagalan dikte DILAPORKAN ke thread aktivitas node (field `comments`), bukan ditelan: webterm
+  // belum punya toast, dan thread itu satu-satunya kanal yang sudah terlihat di node ini — badge
+  // hitungnya muncul persis di sebelah tombol mic yang baru diklik.
+  const { micActive, toggleMic, supported: micSupported } = useSpeechInput(
+    (text) => send({ t: 'input', id, data: text }),
+    (message) => addComment(message, NOTE_AUTHOR),
+  )
 
   // Hanya id yang KITA cetak saat peluncuran yang benar-benar bisa di-resume. Untuk agent lain
   // `sid` cuma uuid lokal yang tak pernah dilihat CLI-nya, jadi me-resume-nya akan membuka chat
@@ -150,21 +188,41 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     rf.updateNodeData(id, { collapsed: !collapsed })
   }
 
-  const addComment = (text: string) =>
-    rf.updateNodeData(id, { comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now() }] })
-
   const toggleMaximize = () => {
     if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }
     else { if (savedVp.current) rf.setViewport(savedVp.current, { duration: 200 }); setMaximized(false) }
   }
 
+  /**
+   * Beri nama node lewat AI. Kegagalan HARUS terlihat: `r.message` membawa diagnosis nyata dari
+   * server ("No terminal output to read yet.", "is the claude CLI on PATH?"), dan sebelumnya ia
+   * dibuang sehingga judulnya dibiarkan apa adanya — dari sisi pengguna tombol ini "tidak
+   * berfungsi". Permukaannya thread aktivitas node, bukan toast (webterm belum punya satu pun).
+   */
   const aiName = async () => {
     setAiNaming(true)
-    // ponytail: on !r.ok the title is left unchanged (no error surface) — webterm has no
-    // toast yet. Upgrade: surface message via toast when a notification surface exists.
-    try { const r = await apiGenerateName(id); if (r.ok) rf.updateNodeData(id, { title: r.message }) }
-    finally { setAiNaming(false) }
+    try {
+      const r = await apiGenerateName(id)
+      if (r.ok) rf.updateNodeData(id, { title: r.message })
+      else addComment(r.message, NOTE_AUTHOR)
+    } catch (e) {
+      // Dilempar = tak terduga (fetch gagal / respons bukan JSON). Dilaporkan DUA kali dengan
+      // sengaja: catatan untuk pengguna, console untuk stack-nya. Node id saja, tanpa env/token.
+      console.error(`ai name node ${id}:`, e)
+      addComment(`AI naming failed: ${String(e)}`, NOTE_AUTHOR)
+    } finally {
+      setAiNaming(false)
+    }
   }
+
+  // `undefined` MENYEMBUNYIKAN tombolnya (kontrak NodeToolbar: "omit button if undefined"), dan di
+  // kedua kasus ini tombolnya tidak akan pernah bisa bekerja — tombol yang hadir tapi bisu tidak
+  // bisa dibedakan pengguna dari tombol yang rusak, dan itu persis keluhannya.
+  // - mic: browser/origin tanpa Web Speech (ia menuntut secure context).
+  // - mata: node yang TIDAK context-capable tidak pernah dapat handle link (lihat `isContextCapable`
+  //   di bawah), jadi ia tak punya edge untuk disembunyikan dan `hideLinks` tak mengubah apa pun.
+  const onToggleMicProp = micSupported ? toggleMic : undefined
+  const onToggleHideLinksProp = isContextCapable(agentId) ? () => onToggleHideLinks(id) : undefined
 
   // onBroadcast stays via `ext` (undefined → hidden): webterm deliberately has no live-link,
   // mirroring nodeterm Server Edition where loopback single-user has no viewer/relay — a
@@ -190,12 +248,12 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           comments={comments} onAddComment={addComment}
           onRefresh={() => termRef.current?.refit()}
           searchOpen={searchOpen} onToggleSearch={() => setSearchOpen((o) => !o)}
-          micActive={micActive} onToggleMic={toggleMic}
+          micActive={micActive} onToggleMic={onToggleMicProp}
           maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
           onAiName={aiName} aiNaming={aiNaming}
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
-          hideLinks={d.hideLinks} onToggleHideLinks={() => onToggleHideLinks(id)}
+          hideLinks={d.hideLinks} onToggleHideLinks={onToggleHideLinksProp}
         />
         <div className="node-body">
           <TerminalCore
