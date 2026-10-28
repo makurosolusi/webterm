@@ -3,7 +3,7 @@
 // Props-driven: komponen ini tidak memanggil API apa pun — integrator yang menyuplai data.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, PanelLeft, Pin, PinOff, X } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, PanelLeft, Pin, PinOff, X } from 'lucide-react'
 import SessionRow from './SessionRow'
 import {
   buildSessionList,
@@ -196,14 +196,38 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         {empty === 'no-sessions' && <div className="ss-empty">No sessions yet.</div>}
 
         {grouping === 'status'
-          ? sections.map((s) => (
-              <section key={s.kind} aria-label={s.label}>
-                <div className="ss-status__label">{s.label}</div>
-                <ul className="ss-rows">
-                  {s.rows.map((r) => (
-                    <SessionRow key={r.id} row={r} showProject onFocusNode={onFocusNode} onCloseSession={onCloseSession} />
-                  ))}
-                </ul>
+          ? // `buildStatusList` menahan section kosong supaya posisinya tetap — tapi kalau SELURUH
+            // daftar nol, pesan kosong di atas sudah menjawabnya dan empat header "0" di bawahnya
+            // cuma kebisingan. Jadi header permanen hanya berlaku selagi ada sesi.
+            empty === 'none' &&
+            sections.map((s) => (
+              <section key={s.kind} className="ss-status" aria-label={s.label}>
+                <div className="ss-status__head">
+                  {/* Bel untuk attention, titik berwarna untuk sisanya — glyph yang sama dengan
+                      barisnya, supaya header dan isi bicara dalam satu bahasa. */}
+                  {s.kind === 'attention' ? (
+                    <span className="ss-status__icon ss-status__icon--attention">
+                      <Bell aria-hidden />
+                    </span>
+                  ) : (
+                    <span className={`ss-status__icon ss-status__icon--${s.kind}`} aria-hidden />
+                  )}
+                  <span className="ss-status__label">{s.label}</span>
+                  <span className="ss-status__count">{s.rows.length}</span>
+                </div>
+                {s.rows.length > 0 && (
+                  <ul className="ss-rows ss-status__rows">
+                    {s.rows.map((r) => (
+                      <SessionRow
+                        key={r.id}
+                        row={r}
+                        showProject
+                        onFocusNode={onFocusNode}
+                        onCloseSession={onCloseSession}
+                      />
+                    ))}
+                  </ul>
+                )}
               </section>
             ))
           : groups.map((g) => {

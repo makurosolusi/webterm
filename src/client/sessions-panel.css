@@ -282,13 +282,76 @@
 }
 
 /* ---- Section status ---- */
+/* Header hadir walau barisnya nol (lihat `buildStatusList`), jadi ia dibentuk sebagai KARTU
+   berlatar — teks menggantung tanpa isi di bawahnya akan terbaca seperti sisa render. Ukuran
+   dan jarak disamakan dengan .ss-group__head supaya kedua tab terasa satu panel. */
+.ss-status + .ss-status {
+  margin-top: 6px;
+}
+
+.ss-status__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  background: rgba(var(--tint-rgb, 255, 255, 255), 0.05);
+}
+
+.ss-status__icon {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+}
+
 .ss-status__label {
-  padding: 8px 8px 3px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ss-status__count {
   color: var(--muted-2);
   font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bel punya bentuk sendiri, jadi ia melepas kotak 9px titik. */
+.ss-status__icon--attention {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  display: inline-flex;
+  color: var(--state-attention);
+}
+
+.ss-status__icon--attention svg {
+  width: 11px;
+  height: 11px;
+}
+
+.ss-status__icon--working {
+  background: var(--state-working);
+}
+
+/* Idle = turn yang sudah mendarat: hijau sukses, tapi diredam supaya tidak menarik mata. */
+.ss-status__icon--idle {
+  background: var(--state-success);
+  opacity: 0.7;
+}
+
+.ss-status__icon--unknown {
+  background: var(--muted-2);
+}
+
+.ss-status__rows {
+  padding: 2px 0 2px 2px;
 }
 
 /* ---- Baris sesi ---- */

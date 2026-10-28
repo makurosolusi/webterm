@@ -289,14 +289,16 @@ export function buildStatusList(
     )
   }
 
-  // Section kosong DIBUANG di sini (nodeterm menahannya supaya header tak melompat; ia punya
-  // sinyal unread yang membuat tiap section sering terisi). webterm hanya punya empat status,
-  // jadi header permanen untuk bucket kosong lebih banyak daripada isinya.
+  // Section kosong TETAP dikembalikan, sama seperti nodeterm. Dua alasan: posisi tiap section
+  // jadi tetap, sehingga satu sesi yang berganti status tidak menggeser seluruh daftar di bawah
+  // kursor; dan "0" itu sendiri jawaban — "tidak ada yang menuntut perhatian" adalah informasi,
+  // bukan ketiadaan informasi. Yang memutuskan kapan daftar nol-semua tak layak dirender adalah
+  // komponen (lihat `sidebarEmptyState`), bukan fungsi ini.
   return STATUS_GROUP_ORDER.map((kind) => ({
     kind,
     label: STATUS_GROUP_LABEL[kind],
     rows: (byStatus.get(kind) ?? []).map((t) => t.row),
-  })).filter((s) => s.rows.length > 0)
+  }))
 }
 
 /** Arti sebuah keydown di dalam field filter. */

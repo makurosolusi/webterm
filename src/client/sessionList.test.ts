@@ -12,6 +12,9 @@ import {
   sidebarFilterKeyAction,
   signalCounts,
   STATE_LABEL,
+  type SessionRowVM,
+  type StatusGroup,
+  type StatusSection,
 } from './sessionList'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
@@ -172,24 +175,42 @@ describe('buildStatusList', () => {
     ws('p2', 'Beta', [node('b1', { title: 'beta' })]),
   ]
 
+  // test-only: section tidak lagi dibuang saat kosong, jadi kasus di bawah menyebut section yang
+  // diuji alih-alih mengandalkan posisi [0].
+  const rowsOf = (sections: StatusSection[], kind: StatusGroup): SessionRowVM[] =>
+    sections.find((s) => s.kind === kind)?.rows ?? []
+
   it('meratakan semua workspace dan menaruh attention paling atas', () => {
     const sections = buildStatusList(projects, null, 'p1', { a1: 'working', a2: 'waiting', b1: 'done' }, '')
     expect(sections.map((s) => [s.kind, s.rows.map((r) => r.id)])).toEqual([
       ['attention', ['a2']],
       ['working', ['a1']],
       ['idle', ['b1']],
+      ['unknown', []],
     ])
   })
 
-  it('membuang section kosong', () => {
+  it('menahan section kosong, dengan label dan hitungan nol', () => {
+    // Keempat section selalu hadir dalam urutan tetap: posisi section tidak boleh bergeser saat
+    // satu sesi berganti status, dan "0" itu sendiri jawaban yang perlu dibaca.
     const sections = buildStatusList(projects, null, 'p1', noStatus, '')
-    expect(sections.map((s) => s.kind)).toEqual(['unknown'])
-    expect(sections[0].label).toBe('Unknown')
+    expect(sections.map((s) => [s.kind, s.label, s.rows.length])).toEqual([
+      ['attention', 'Need attention', 0],
+      ['working', 'Running', 0],
+      ['idle', 'Idle', 0],
+      ['unknown', 'Unknown', 3],
+    ])
+  })
+
+  it('tetap mengembalikan keempat section walau filter tak cocok sama sekali', () => {
+    const sections = buildStatusList(projects, null, 'p1', noStatus, 'zzz')
+    expect(sections.map((s) => s.kind)).toEqual(['attention', 'working', 'idle', 'unknown'])
+    expect(sections.every((s) => s.rows.length === 0)).toBe(true)
   })
 
   it('mengurutkan dalam section per urutan workspace lalu judul', () => {
     const all: Record<string, AgentStatus> = { a1: 'working', a2: 'working', b1: 'working' }
-    const rows = buildStatusList(projects, null, 'p1', all, '')[0].rows
+    const rows = rowsOf(buildStatusList(projects, null, 'p1', all, ''), 'working')
     expect(rows.map((r) => r.id)).toEqual(['a2', 'a1', 'b1'])
   })
 
@@ -197,19 +218,19 @@ describe('buildStatusList', () => {
     // Jendela nyata: activeProjectId sudah pindah ke p2 sementara liveActiveNodes masih
     // memegang node p1. Tanpa dedup, a1 terpancar di bawah Alpha DAN Beta.
     const live = [node('a1', { title: 'zeta' })]
-    const rows = buildStatusList(projects, live, 'p2', noStatus, '')[0].rows
+    const rows = rowsOf(buildStatusList(projects, live, 'p2', noStatus, ''), 'unknown')
     expect(rows.filter((r) => r.id === 'a1')).toHaveLength(1)
   })
 
   it('membawa nama workspace di setiap baris', () => {
-    const rows = buildStatusList(projects, null, 'p1', noStatus, '')[0].rows
+    const rows = rowsOf(buildStatusList(projects, null, 'p1', noStatus, ''), 'unknown')
     expect(rows.find((r) => r.id === 'b1')?.projectName).toBe('Beta')
   })
 
   it('menghormati filter, termasuk nama workspace sebagai pintu masuk', () => {
     // 'beta' tidak cocok judul mana pun di Alpha; ia masuk lewat nama workspace Beta.
-    expect(buildStatusList(projects, null, 'p1', noStatus, 'beta').map((s) => s.rows.map((r) => r.id)))
-      .toEqual([['b1']])
+    expect(buildStatusList(projects, null, 'p1', noStatus, 'beta').flatMap((s) => s.rows.map((r) => r.id)))
+      .toEqual(['b1'])
     expect(buildStatusList(projects, null, 'p1', noStatus, 'zet').flatMap((s) => s.rows.map((r) => r.id)))
       .toEqual(['a1'])
   })
