@@ -29,7 +29,12 @@
    menandai "baru mulai bekerja", lalu ia tinggal menyala di 0.7 sepanjang turn.
 
    Pseudo-nya hidup di wrapper React Flow (lewat :has) karena .term-node itu overflow:hidden dan
-   akan meng-clip ::after-nya sendiri. */
+   akan meng-clip ::after-nya sendiri.
+
+   JANGAN tambahkan `will-change` di pseudo glow ini. Ia mempromosikan SETIAP node jadi compositing
+   layer permanen (bukan cuma selama animasi), dan layer composited di dalam viewport React Flow
+   yang di-transform itulah sumber kedip repaint. Animasi opacity sudah dipromosikan sendiri oleh
+   browser selama ia berjalan. */
 .term-node.working {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--state-working) 35%, transparent),
@@ -49,7 +54,6 @@
     0 0 22px 3px color-mix(in srgb, var(--state-working) 35%, transparent);
   opacity: 0.7;
   animation: nt-working-glow 2.6s ease-in-out 4;
-  will-change: opacity;
 }
 
 @keyframes nt-working-glow {
@@ -79,7 +83,6 @@
     0 0 22px 3px color-mix(in srgb, var(--state-attention) 40%, transparent);
   opacity: 0.15;
   animation: nt-attention-glow 1.8s ease-in-out infinite;
-  will-change: opacity;
 }
 
 @keyframes nt-attention-glow {
@@ -276,11 +279,9 @@
   .react-flow__node:has(.term-node.working)::after {
     animation: none;
     opacity: 0.7;
-    will-change: auto;
   }
   .react-flow__node:has(.term-node.attention)::after {
     animation: none;
     opacity: 0.8;
-    will-change: auto;
   }
 }

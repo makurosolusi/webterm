@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import { contextFillColor, USAGE_RED, USAGE_YELLOW, USAGE_GREEN } from './UsagePill'
 import { NODE_COLORS } from './NodeColorSwatch'
@@ -51,5 +53,21 @@ describe('NODE_COLORS', () => {
   it('is a non-empty palette of hex strings', () => {
     expect(NODE_COLORS.length).toBeGreaterThan(0)
     for (const c of NODE_COLORS) expect(c).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+})
+
+describe('node-chrome.css — ongkos compositing', () => {
+  // Seluruh sheet ini menata isi viewport React Flow, yang hidup di bawah `transform`. Satu
+  // `will-change` di sini mempromosikan tiap node jadi compositing layer PERMANEN (bukan hanya
+  // selama animasi), dan layer composited di dalam parent yang di-transform adalah penyebab kedip
+  // repaint di Chromium. Animasi opacity tidak butuh hint itu — browser mempromosikannya sendiri
+  // selagi berjalan. Jadi: nol `will-change` di sheet ini, glow status termasuk.
+  it('tidak memakai will-change sama sekali', () => {
+    const chrome = readFileSync(fileURLToPath(new URL('./node-chrome.css', import.meta.url)), 'utf8')
+    expect(chrome).toContain('animation: nt-working-glow')
+    expect(chrome).toContain('animation: nt-attention-glow')
+    // Komentar dibuang dulu: yang dilarang itu DEKLARASI-nya, sedangkan komentar di sheet itu
+    // memang menyebut `will-change` untuk menjelaskan kenapa ia tidak ada.
+    expect(chrome.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('will-change')
   })
 })
