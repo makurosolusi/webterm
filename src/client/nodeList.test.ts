@@ -48,15 +48,39 @@ describe('buildNodeGroups', () => {
     expect(groups[0].rows.map((r) => r.label)).toEqual(['baru'])
   })
 
-  it('di dalam grup: workspace aktif lebih dulu, lalu alfabet case-insensitive', () => {
+  it('hanya board yang sedang dibuka; node proyek lain tidak ikut, alfabet case-insensitive', () => {
     const a = ws('w1', 'satu', [node('n1', 'terminal', { title: 'beta' })])
     const b = ws('w2', 'dua', [
       node('n2', 'terminal', { title: 'Zeta' }),
       node('n3', 'terminal', { title: 'alfa' }),
     ])
     const groups = buildNodeGroups([a, b], null, 'w2', '')
-    expect(groups[0].rows.map((r) => r.id)).toEqual(['n3', 'n2', 'n1'])
-    expect(groups[0].rows.map((r) => r.isActive)).toEqual([true, true, false])
+    expect(groups[0].rows.map((r) => r.id)).toEqual(['n3', 'n2'])
+  })
+
+  it('node proyek lain tetap disembunyikan walau judulnya cocok dengan filter', () => {
+    const a = ws('w1', 'satu', [node('n1', 'agent', { title: 'deploy' })])
+    const b = ws('w2', 'dua', [node('n2', 'agent', { title: 'deploy' })])
+    const groups = buildNodeGroups([a, b], null, 'w2', 'deploy')
+    expect(groups.map((g) => [g.kind, g.rows.map((r) => r.id)])).toEqual([['agent', ['n2']]])
+  })
+
+  it('tanpa board terpilih: daftar kosong, bukan crash dan bukan node proyek mana pun', () => {
+    const list = [ws('w1', 'satu', [node('n1', 'terminal')])]
+    expect(buildNodeGroups(list, null, null, '')).toEqual([])
+    // `activeId` menunjuk board yang tak ada di snapshot — jangan jatuh ke board pertama.
+    expect(buildNodeGroups(list, [node('n9', 'terminal')], 'hilang', '')).toEqual([])
+  })
+
+  it('filter mengenali bentuk jamak yang terbaca di header seksi, bukan hanya tunggalnya', () => {
+    const list = [ws('w1', 'makuro', [node('n1', 'agent'), node('n2', 'terminal')])]
+    const ids = (filter: string) =>
+      buildNodeGroups(list, null, 'w1', filter).flatMap((g) => g.rows.map((r) => r.id))
+
+    expect(ids('Agents')).toEqual(['n1'])
+    expect(ids('agent')).toEqual(['n1'])
+    expect(ids('Terminals')).toEqual(['n2'])
+    expect(ids('Editors')).toEqual([])
   })
 
   it('filter menyaring lewat judul, kind, path, dan nama workspace', () => {

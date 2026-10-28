@@ -307,14 +307,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                         </span>
                         <span className="ss-row__text">
                           <span className="ss-row__title">{r.label}</span>
-                          {/* Kind SELALU ikut: tiga node tanpa judul kustom hanya bisa dibedakan
-                              dari sini. Nama workspace hanya untuk node di board lain — di board
-                              aktif ia sama untuk semua baris, jadi cuma kebisingan. */}
-                          <span className="ss-meta">
-                            {r.isActive
-                              ? NODE_KIND_LABEL[r.kind]
-                              : `${NODE_KIND_LABEL[r.kind]} · ${r.workspaceName}`}
-                          </span>
+                          {/* Kind saja: daftar ini hanya board yang sedang dibuka, jadi nama
+                              workspace sama untuk semua baris dan cuma jadi kebisingan. */}
+                          <span className="ss-meta">{NODE_KIND_LABEL[r.kind]}</span>
                         </span>
                       </div>
                     </li>

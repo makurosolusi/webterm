@@ -1,7 +1,8 @@
-// Daftar node untuk tab "Nodes" di sidebar: SEMUA node di board, bukan hanya node sesi.
-// Itu bedanya dengan `./sessionList` dan `./closedHistory`, yang sengaja membuang 'files'/'editor'
-// karena keduanya bukan shell. Di sini justru itu intinya: tab ini pintu untuk memusatkan canvas
-// ke node APA PUN, jadi membuangnya akan membuat node files/editor tak pernah bisa dituju.
+// Daftar node untuk tab "Nodes" di sidebar: semua node di board yang SEDANG DIBUKA, bukan hanya
+// node sesi. Itu bedanya dengan `./sessionList` dan `./closedHistory`, yang sengaja membuang
+// 'files'/'editor' karena keduanya bukan shell. Di sini justru itu intinya: tab ini pintu untuk
+// memusatkan canvas ke node APA PUN, jadi membuangnya akan membuat node files/editor tak pernah
+// bisa dituju. Pindah antar proyek bukan tugas tab ini — itu rumahnya tab Project.
 import { sessionLabel } from './sessionList'
 import { folderTitle } from './fileBrowse'
 import { fileBaseName } from './editorFile'
@@ -34,9 +35,7 @@ export interface NodeRowVM {
   kind: WsNodeKind
   /** Path yang diwakili node: cwd shell, direktori files, atau file editor. */
   detail?: string
-  workspaceId: string
   workspaceName: string
-  isActive: boolean
 }
 
 /** Nama node seperti yang dilihat pengguna di chrome-nya. Tiap kind memakai rantai fallback milik
@@ -56,20 +55,21 @@ function detailOf(n: WsNode): string | undefined {
   return n.cwd
 }
 
-function toRow(n: WsNode, ws: Workspace, isActive: boolean): NodeRowVM {
+function toRow(n: WsNode, ws: Workspace): NodeRowVM {
   return {
     id: n.id,
     label: nodeRowLabel(n),
     kind: n.kind,
     detail: detailOf(n),
-    workspaceId: ws.id,
     workspaceName: ws.name,
-    isActive,
   }
 }
 
+/** Kind masuk haystack dalam bentuk JAMAK karena itu yang terbaca pengguna di header seksi;
+ *  mengetik "Agents" tidak boleh menghasilkan nol baris. Bentuk tunggalnya ikut tercakup gratis
+ *  karena ia prefiks dari jamaknya ('agent' ⊂ 'agents'), jadi satu bentuk saja cukup. */
 function matches(row: NodeRowVM, needle: string): boolean {
-  const hay = `${row.label} ${NODE_KIND_LABEL[row.kind]} ${row.detail ?? ''} ${row.workspaceName}`
+  const hay = `${row.label} ${NODE_KIND_PLURAL[row.kind]} ${row.detail ?? ''} ${row.workspaceName}`
   return hay.toLowerCase().includes(needle)
 }
 
@@ -81,16 +81,17 @@ export interface NodeGroup {
 }
 
 /**
- * Semua node di semua workspace, dikelompokkan per kind; di dalam grup workspace aktif lebih dulu,
- * lalu alfabet. Daftar datar lintas kind menyelipkan file editor di antara dua node agent, dan
- * satu-satunya pembedanya cuma meta kecil di bawah judul.
+ * Node workspace AKTIF saja, dikelompokkan per kind, alfabet case-insensitive di dalam grup.
+ * Daftar lintas-workspace membuat seksi "Agents 3" memuat node tiga proyek yang hanya dibedakan
+ * teks kecil di bawah judul — pengguna membacanya sebagai tiga agent di proyek yang sedang dibuka.
  *
  * Grup kosong dibuang — beda dengan tab Status yang menahan header kosong demi posisi tetap; di
  * sini tak ada posisi yang perlu dijaga.
  *
- * Untuk workspace aktif, `liveActiveNodes` adalah kebenaran — snapshot `workspaces` hanya
- * di-refresh saat workspace dibuat, jadi node yang baru ditambahkan atau baru diganti judulnya
- * hanya ada di canvas. Alasan yang sama dengan `nodesOf` di `./sessionList`.
+ * Bila ada, `liveActiveNodes` adalah kebenaran — snapshot `workspaces` hanya di-refresh saat
+ * workspace dibuat, jadi node yang baru ditambahkan atau baru diganti judulnya hanya ada di
+ * canvas. Alasan yang sama dengan `nodesOf` di `./sessionList`. `workspaces` tetap dibutuhkan
+ * untuk nama board-nya, yang ikut jadi bahan filter.
  */
 export function buildNodeGroups(
   workspaces: Workspace[],
@@ -98,21 +99,15 @@ export function buildNodeGroups(
   activeId: string | null,
   filter: string,
 ): NodeGroup[] {
-  const needle = filter.trim().toLowerCase()
-  const ordered = [...workspaces].sort(
-    (a, b) => Number(b.id === activeId) - Number(a.id === activeId),
-  )
+  // `activeId` null = belum ada board terpilih; tak ada yang bisa didaftar, bukan kondisi error.
+  const active = workspaces.find((ws) => ws.id === activeId)
+  if (!active) return []
 
-  const rows: NodeRowVM[] = []
-  for (const ws of ordered) {
-    const isActive = ws.id === activeId
-    const nodes = isActive && liveActiveNodes ? liveActiveNodes : ws.nodes
-    const group = nodes
-      .map((n) => toRow(n, ws, isActive))
-      .filter((r) => !needle || matches(r, needle))
-    group.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
-    rows.push(...group)
-  }
+  const needle = filter.trim().toLowerCase()
+  const rows = (liveActiveNodes ?? active.nodes)
+    .map((n) => toRow(n, active))
+    .filter((r) => !needle || matches(r, needle))
+  rows.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
 
   return NODE_KIND_ORDER.map((kind) => ({
     kind,
