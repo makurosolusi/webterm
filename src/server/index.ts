@@ -6,12 +6,15 @@ import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { DEFAULT_HOST, TOKEN_PARAM, authorize, resolveToken } from './auth'
+import { DEFAULT_HOST, TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
 
 const PORT = Number(process.env.PORT) || 8700
 const HOST = process.env.WEBTERM_HOST || DEFAULT_HOST
 // Throws (and so refuses to start) when HOST is reachable off-machine without a token.
 const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
+// Before anything can spawn a PTY: make the env agree with what we enforce, so children that
+// reference $WEBTERM_TOKEN inherit the same form `authorize` compares against.
+writeTokenToEnv(TOKEN)
 const dev = process.env.NODE_ENV !== 'production'
 
 const API_PREFIX = '/api/'

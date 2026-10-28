@@ -57,6 +57,19 @@ export function resolveToken(host: string, raw: string | undefined): string | un
   return undefined
 }
 
+/**
+ * MUTATES `process.env.WEBTERM_TOKEN` so it holds exactly the token this process enforces.
+ * Children inherit the whole env (see `pty.ts` `cleanEnv`), so a raw ` s3cret ` would otherwise
+ * leave two canonical forms around: the trimmed one `authorize` compares against, and the
+ * untrimmed one a child expands from `$WEBTERM_TOKEN` — which then 403s. One form, one place.
+ * Unset (rather than keep a whitespace-only leftover) when no token is enforced: a var that is
+ * set makes children send a header we do not require, and the env would be lying about it.
+ */
+export function writeTokenToEnv(token: string | undefined): void {
+  if (token === undefined) delete process.env.WEBTERM_TOKEN
+  else process.env.WEBTERM_TOKEN = token
+}
+
 /** Constant-time compare. `timingSafeEqual` throws on a length mismatch, hence the guard — and
  *  the guard leaks only the length, which an attacker who chose the candidate already knows. */
 export function tokensMatch(expected: string | undefined, candidate: string | null | undefined): boolean {
