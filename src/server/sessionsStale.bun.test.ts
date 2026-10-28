@@ -18,6 +18,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 // terakhir bertahan selamanya — sebuah node yang pernah 'working' tetap 'working' selamanya.
 const OLD_STATUS_AFTER_SILENCE: AgentStatus = 'working'
 
+// Perilaku LAMA pada RE-ATTACH: SENYAP. Server memutar status hanya `if (st)`, jadi node yang
+// statusnya sudah dicabut tidak menghasilkan pesan apa pun — dan client, yang menyimpan salinannya
+// di map modul, membaca senyap itu sebagai "tidak ada perubahan", bukan "tidak ada status".
+const OLD_REATTACH_AFTER_SWEEP = ''
+
 /** Sesi hidup + perekam status. `sleep` supaya PTY tidak keluar dan memancarkan 'done' sendiri. */
 function live(id: string) {
   const s = new Sessions()
@@ -33,7 +38,10 @@ function live(id: string) {
     s.open({ t: 'open', id, cols: 80, rows: 24 }, record)
     return replay.join(',')
   }
-  return { s, seen, stored }
+  // Socket-nya pergi tanpa sesinya mati — wifi HP mati, laptop sleep, tab tertidur. `detach`
+  // mencocokkan pelanggan lewat identitas fungsi, jadi yang dilepas harus `record` yang sama.
+  const drop = () => s.detach(record)
+  return { s, seen, stored, drop }
 }
 
 const t0 = 1_700_000_000_000
@@ -52,8 +60,9 @@ test('a working node that goes silent past the window loses its status', () => {
   expect(seen).toContain('NONE')
 
   // Berakhir TANPA status — bukan 'done'. 'done' menggerbangi tombol Resume/Restart (canResumeNode),
-  // jadi mengklaimnya berarti membuka tombol di atas tebakan.
-  expect(stored()).toBe('')
+  // jadi mengklaimnya berarti membuka tombol di atas tebakan. Socket yang re-attach menerima
+  // pernyataan itu secara eksplisit ('NONE' = pesan status tanpa field `status`), bukan senyap.
+  expect(stored()).toBe('NONE')
   expect(seen).not.toContain('done')
   // Bukti guard menggigit: inilah yang masih tersimpan sebelum ada jam.
   expect(stored()).not.toBe(OLD_STATUS_AFTER_SILENCE)
@@ -90,7 +99,7 @@ test('the sweep actually runs on its own clock, and can be stopped', async () =>
   const stop = s.startStaleSweep(5)
   s.setStatus('sw4', 'working', t0)
   await sleep(40)
-  expect(stored()).toBe('')
+  expect(stored()).toBe('NONE')
 
   // Dan penghentinya nyata: sesudah stop, tidak ada lagi yang menyapu.
   stop()
@@ -98,4 +107,27 @@ test('the sweep actually runs on its own clock, and can be stopped', async () =>
   await sleep(40)
   expect(stored()).toBe('working')
   s.close('sw4')
+})
+
+test('a node swept while its socket was gone hears the withdrawal on re-attach', () => {
+  const { s, seen, stored, drop } = live('sw5')
+  s.setStatus('sw5', 'working', t0)
+  expect(stored()).toBe('working')
+
+  // Urutan nyatanya: socket pergi, lalu sapuan jalan — sapuan tidak peduli ada socket atau tidak.
+  drop()
+  const emitted = seen.length
+  s.sweepStale(t0 + WORKING_STALE_MS + 1)
+  // Pencabutannya memang HILANG di kawat: saat dipancarkan tidak ada tujuan pengiriman. Itulah yang
+  // membuat re-attach satu-satunya kesempatan mengabarkannya.
+  expect(seen.length).toBe(emitted)
+
+  // Dan di re-attach ia sampai, sebagai pernyataan eksplisit.
+  expect(stored()).toBe('NONE')
+  // Bukti guard menggigit: dulu re-attach senyap di sini, dan browser menyimpan 'working' selamanya.
+  expect(stored()).not.toBe(OLD_REATTACH_AFTER_SWEEP)
+  expect(stored()).not.toBe(OLD_STATUS_AFTER_SILENCE)
+  // Tanpa mengarang nilai nyata apa pun — khususnya bukan 'done', yang membuka Resume/Restart.
+  expect(seen).not.toContain('done')
+  s.close('sw5')
 })

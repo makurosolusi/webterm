@@ -143,10 +143,14 @@ export class Sessions {
       // PTY survived the previous socket — re-attach and replay scrollback.
       existing.send = send
       for (const chunk of existing.buffer) send({ t: 'output', id: msg.id, data: chunk })
-      // Node yang jadi basi selagi socket-nya pergi sudah dihapus oleh sapuan (yang jalan terlepas
-      // dari ada tidaknya socket), jadi tidak ada yang perlu diperiksa ulang di sini.
-      const st = this.status.get(msg.id)
-      if (st) send({ t: 'status', id: msg.id, status: st.status })
+      // SELALU dijawab, termasuk ketika yang kita tahu adalah "tidak ada status". Senyap itu
+      // ambigu: client MENYIMPAN salinan status (`statuses` di `client/ws.ts` adalah map modul,
+      // bertahan melewati putus-sambung socket), jadi tidak mengirim apa pun terbaca "tidak ada
+      // perubahan", bukan "tidak ada status". Node yang disapu selagi socket-nya pergi kehilangan
+      // pencabutannya — sapuan memancarkannya ke `send` yang sudah `undefined` lewat `detach` —
+      // dan tanpa cabang ini salinan 'working' di browser bertahan selamanya: persis gejala yang
+      // mau dibunuh jam basi, lewat pintu lain. Re-attach adalah momen sinkronisasi.
+      send({ t: 'status', id: msg.id, status: this.status.get(msg.id)?.status })
       return
     }
 

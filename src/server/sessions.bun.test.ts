@@ -10,7 +10,6 @@ import { join } from 'node:path'
 process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-sessions-'))
 
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
-import type { AgentStatus } from '../shared/workspace'
 import { Sessions, launchLine } from './sessions'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
 import {
@@ -265,25 +264,30 @@ test('a claude session carries its hook token and loses it when the session clos
 
 test('a freshly spawned agent session reports NO status until something real says so', async () => {
   const s = new Sessions()
-  // `status` bisa ABSEN di kawat (sapuan basi mencabutnya), jadi penampungnya ikut mengizinkannya.
-  const seen: (AgentStatus | undefined)[] = []
-  const send = (m: ServerMsg) => { if (m.t === 'status') seen.push(m.status) }
+  // `status` bisa ABSEN di kawat ("tidak ada status"), dan di sini bedanya dengan SENYAP harus
+  // terlihat: `join` saja tidak cukup karena `[undefined].join(',')` juga '', jadi absen dipetakan
+  // ke 'NONE' dan yang diperiksa adalah daftar pesannya, bukan hasil gabungnya.
+  const seen: string[] = []
+  const send = (m: ServerMsg) => { if (m.t === 'status') seen.push(m.status ?? 'NONE') }
   // `sleep` supaya PTY-nya tetap hidup: sesi yang keluar memancarkan 'done' lewat onExit dan itu
   // akan mengaburkan apa yang sedang diuji.
   s.open({ t: 'open', id: 'st1', cols: 80, rows: 24, cmd: 'sleep 5', agentId: 'claude' }, send)
 
   // Regresi: dulu `open` langsung memancarkan 'working' untuk setiap sesi ber-agentId, jadi node
   // claude yang baru lahir — masih di banner, belum pernah diberi prompt — terbaca RUNNING.
+  // Sesi BARU tidak memancarkan pesan status sama sekali: tidak ada yang perlu disinkronkan. Dan
+  // '' di sini sekarang hanya bisa berarti nol pesan — pesan "tidak ada status" akan muncul 'NONE'.
   expect(seen.join(',')).toBe('')
 
-  // Dan tidak ada status yang DISIMPAN diam-diam: socket yang re-attach pun tidak memutar apa pun.
-  const again: (AgentStatus | undefined)[] = []
-  s.open({ t: 'open', id: 'st1', cols: 80, rows: 24 }, (m) => { if (m.t === 'status') again.push(m.status) })
-  expect(again.join(',')).toBe('')
+  // Dan tidak ada status yang DISIMPAN diam-diam. Socket yang re-attach sekarang selalu dijawab,
+  // tapi jawabannya "tidak ada status" — bukan satu pun nilai AgentStatus yang dikarang.
+  const again: string[] = []
+  s.open({ t: 'open', id: 'st1', cols: 80, rows: 24 }, (m) => { if (m.t === 'status') again.push(m.status ?? 'NONE') })
+  expect(again.join(',')).toBe('NONE')
 
   // Sinyal nyata (jalur yang dipakai hook UserPromptSubmit) tetap sampai ke client.
   s.setStatus('st1', 'working')
-  expect(again.join(',')).toBe('working')
+  expect(again.join(',')).toBe('NONE,working')
   s.close('st1')
 })
 
