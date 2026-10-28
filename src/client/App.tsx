@@ -21,7 +21,9 @@ import { canLink, bridgeExists } from './floatingEdge'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
-import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
+import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
+import { nextActiveWorkspaceId } from './workspaceMenu'
+import { useClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
 
@@ -41,6 +43,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [locked, setLocked] = useState(false)
   const { settings, update } = useSettings()
+  const { entries: closedSessions, record: recordClosed, reopen: reopenClosed } = useClosedHistory(workspaces, nodes)
 
   const activeWsRef = useRef<Workspace | null>(null)
   const nodesRef = useRef<Node[]>([])
@@ -95,9 +98,16 @@ export default function App() {
     void (async () => {
       const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
       setWorkspaces(list)
-      let id = active
-      if (!id && list.length) { id = list[0].id; await setActive(id) }
-      if (id) { setActiveId(id); await loadWorkspace(id) }
+      // Pointer aktif di server bisa menunjuk row yang sudah DIHAPUS: menghapus workspace terakhir
+      // tidak bisa mengosongkan pointer itu (`PUT /api/active` menolak id kosong dengan 400), dan
+      // memuat id mati melempar 404 tepat di sini. Jadi hanya id yang masih ada yang dipakai,
+      // sisanya tab pertama — atau tidak ada sama sekali, yang berarti layar `Welcome`.
+      const id = active && list.some((w) => w.id === active) ? active : list[0]?.id ?? null
+      if (id) {
+        if (id !== active) await setActive(id)
+        setActiveId(id)
+        await loadWorkspace(id)
+      }
     })()
   }, [loadWorkspace])
 
@@ -113,6 +123,9 @@ export default function App() {
   }, [])
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
+    // Di LUAR updater: `recordClosed` setState, dan dari dalam updater itu menulis di fase render.
+    const gone = changes.flatMap((c) => (c.type === 'remove' ? [c.id] : []))
+    if (gone.length) recordClosed(gone, nodesRef.current.map(toWsNode), activeWsRef.current)
     setNodes((prev) => {
       const next = applyNodeChanges(changes, prev)
       nodesRef.current = next
@@ -136,7 +149,7 @@ export default function App() {
       }
       return next
     })
-  }, [scheduleSave])
+  }, [recordClosed, scheduleSave])
 
   const onMoveEnd = useCallback((_e: unknown, vp: Viewport) => {
     viewportRef.current = vp
@@ -234,10 +247,11 @@ export default function App() {
     if (!owner) return
     send({ t: 'close', id })
     const fresh = await getWorkspace(owner.id)
+    recordClosed([id], fresh.nodes, fresh)
     const updated: Workspace = { ...fresh, nodes: fresh.nodes.filter((n) => n.id !== id), updatedAt: Date.now() }
     await saveWorkspace(updated)
     setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
-  }, [workspaces])
+  }, [recordClosed, workspaces])
 
   const onSelect = useCallback(async (id: string) => {
     if (!id || id === activeId) return
@@ -245,6 +259,67 @@ export default function App() {
     setActiveId(id)
     await loadWorkspace(id)
   }, [activeId, loadWorkspace])
+
+  // Rename dari menu kebab header. Rutenya BEDA tergantung workspace itu sedang terbuka atau
+  // tidak — kelas jebakan yang sama dengan `closeSession` di atas.
+  const onRenameWorkspace = useCallback(async (id: string, name: string) => {
+    const live = activeWsRef.current
+    if (live?.id === id) {
+      // Workspace AKTIF tidak boleh lewat GET+PUT: salinan server bisa ketinggalan sampai 400ms
+      // dari canvas yang hidup (debounce `scheduleSave`), jadi menulisnya kembali membatalkan edit
+      // terakhir pengguna. Yang benar: ganti nama di `activeWsRef` — sumber payload `scheduleSave`
+      // — lalu biarkan save berikutnya membawa nama baru bersama layout TERBARU. Nama yang hanya
+      // hidup di state React akan ditimpa kembali dengan nama lama oleh edit canvas berikutnya.
+      activeWsRef.current = { ...live, name }
+      setActiveWs((ws) => (ws && ws.id === id ? { ...ws, name } : ws))
+      setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, name } : w)))
+      scheduleSave()
+      return
+    }
+    // Workspace lain: ambil salinan TERBARU dari server, ubah satu field, kirim itu. Snapshot
+    // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi PUT dari sana akan
+    // mengembalikan node/viewport workspace itu ke keadaan lama.
+    const fresh = await getWorkspace(id)
+    const updated: Workspace = { ...fresh, name, updatedAt: Date.now() }
+    await saveWorkspace(updated)
+    setWorkspaces((prev) => prev.map((w) => (w.id === id ? updated : w)))
+  }, [scheduleSave])
+
+  // Hapus workspace (sudah dikonfirmasi di header). Tidak bisa dibatalkan: row + board tersimpan.
+  const onDeleteWorkspace = useCallback(async (id: string) => {
+    if (id === activeId && saveTimer.current) {
+      // Debounce yang masih menggantung akan PUT id ini SETELAH row-nya hilang dan menghidupkannya
+      // kembali (PUT = upsert). Hanya untuk workspace aktif: timer itu selalu milik board aktif,
+      // membatalkannya saat menghapus workspace lain berarti membuang save yang sah.
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    // Sesi PTY tidak mati sendiri saat row-nya hilang — node yang unmount sengaja TIDAK menutup
+    // sesinya (itu yang membuat board bertahan saat pindah workspace), jadi shell-nya ditutup di
+    // sini atau bocor tanpa pemilik. Daftar node diambil dari server karena snapshot client bisa
+    // ketinggalan untuk workspace yang tidak aktif; GET gagal pun hapusnya tetap jalan.
+    const doomed = await getWorkspace(id).catch(() => null)
+    for (const n of doomed?.nodes ?? []) send({ t: 'close', id: n.id })
+    await deleteWorkspace(id)
+    const next = nextActiveWorkspaceId(workspaces.map((w) => w.id), id, activeId)
+    setWorkspaces((prev) => prev.filter((w) => w.id !== id))
+    if (next === activeId) return // yang dihapus bukan yang aktif: board di layar tidak tersentuh
+    if (next) {
+      await setActive(next)
+      setActiveId(next)
+      await loadWorkspace(next)
+      return
+    }
+    // Workspace terakhir: mendarat di `Welcome` dengan canvas kosong. `activeWsRef` dikosongkan
+    // supaya `scheduleSave` berhenti di baris pertamanya, bukan menulis board hantu.
+    setActiveId(null)
+    setActiveWs(null)
+    activeWsRef.current = null
+    nodesRef.current = []
+    edgesRef.current = []
+    setNodes([])
+    setEdges([])
+  }, [activeId, loadWorkspace, workspaces])
 
   const onCreateWorkspace = useCallback(async (name: string, cwd?: string) => {
     const ws = await createWorkspace(name, cwd)
@@ -331,6 +406,8 @@ export default function App() {
         statuses={statuses}
         onSelect={onSelect}
         onNewWorkspace={onNewProject}
+        onRenameWorkspace={(id, name) => void onRenameWorkspace(id, name)}
+        onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
       />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
@@ -418,6 +495,8 @@ export default function App() {
             onFocusNode={onFocus}
             onCloseSession={(id) => void closeSession(id)}
             onSelectWorkspace={(id) => void onSelect(id)}
+            closedSessions={closedSessions}
+            onReopenSession={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
           />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
         </>

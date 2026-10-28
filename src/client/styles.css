@@ -216,7 +216,9 @@ body {
   /* Satu nama sepanjang kalimat tidak boleh menguasai strip; hanya DI ATAS batas ini ia dipotong. */
   max-width: 220px;
   height: 28px;
-  padding: 0 10px;
+  /* Asimetris dengan sengaja (sama seperti nodeterm): tepi kanan berakhir di tombol kebab, yang
+     glyph-nya jauh lebih sempit dari nama di kiri — padding yang sama besar terbaca sebagai celah. */
+  padding: 0 4px 0 10px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -256,6 +258,66 @@ body {
 .tab__dot--idle { background: var(--state-queued); }
 .tab__dot--working { background: var(--state-working); }
 .tab__dot--attention { background: var(--state-attention); }
+
+/* Input rename INLINE di dalam tab (nodeterm `.tab__edit`): menggantikan `.tab__name` di tempat,
+   jadi lebarnya harus lebar tab — `width: 0` + `flex: 1 1 0` supaya lebar KONTEN input (default
+   ~20 karakter) tidak melebarkan tab melewati `max-width`-nya. */
+.tab__edit {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 48px;
+  padding: 2px 6px;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+
+/* Cluster aksi tab: satu-satunya isinya sekarang kebab. `flex-shrink: 0` load-bearing — tanpa itu
+   nama sepanjang kalimat memeras tombolnya sampai nol dan rename/hapus jadi tak tergapai. */
+.tab__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.tab__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Kotak tetap, bukan padding di sekitar glyph: tiga titik berdiri di tengah kotak 14px-nya, jadi
+     plate hover-nya harus datang dari kotaknya sendiri. */
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: currentColor;
+  line-height: 1;
+  cursor: pointer;
+  /* Terlihat di SETIAP tab, bukan hanya saat hover: affordance yang baru muncul kalau disentuh
+     tidak bisa ditemukan orang yang belum tahu ia ada — dan ini satu-satunya jalan rename/hapus. */
+  opacity: 0.45;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+.tab:hover .tab__caret {
+  opacity: 0.7;
+}
+.tab__caret:hover {
+  background: rgba(var(--tint-rgb), 0.1);
+  color: var(--text);
+  opacity: 1;
+}
+/* lucide menulis width/height sebagai ATRIBUT (24px), yang kalah dari CSS. */
+.tab__caret svg {
+  width: 14px;
+  height: 14px;
+}
 
 .tab__add {
   display: inline-flex;

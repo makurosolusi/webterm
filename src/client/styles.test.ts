@@ -95,6 +95,30 @@ describe('styles.css — token sheet', () => {
     expect(add).toContain('flex-shrink: 0')
   })
 
+  it('keeps the tab kebab reachable and visible without hovering', () => {
+    const caret = tokens.slice(tokens.indexOf('.tab__caret {'), tokens.indexOf('.tab:hover .tab__caret'))
+    // Kotak tetap + glyph 14px: lucide menulis ukurannya sebagai atribut, jadi tanpa aturan svg
+    // tombolnya jadi 24px dan merusak tinggi baris tab.
+    expect(caret).toContain('width: 22px')
+    expect(caret).toContain('height: 22px')
+    expect(tokens.slice(tokens.indexOf('.tab__caret svg {'))).toContain('width: 14px')
+    // Affordance rename/hapus satu-satunya: ia tidak boleh hanya muncul saat hover.
+    expect(caret).toContain('opacity: 0.45')
+    // Nama sepanjang kalimat tidak boleh memeras tombolnya sampai nol.
+    const actions = tokens.slice(tokens.indexOf('.tab__actions {'), tokens.indexOf('.tab__caret {'))
+    expect(actions).toContain('flex-shrink: 0')
+    // Tepi kanan tab berakhir di kebab, jadi padding-nya asimetris (seperti nodeterm).
+    expect(tokens.slice(tokens.indexOf('.tab {'), tokens.indexOf('.tab:hover'))).toContain('padding: 0 4px 0 10px')
+  })
+
+  it('keeps the inline rename input inside the tab instead of widening it', () => {
+    const edit = tokens.slice(tokens.indexOf('.tab__edit {'), tokens.indexOf('.tab__actions {'))
+    // Lebar konten input default (~20 karakter) akan mendorong tab melewati max-width 220px-nya.
+    expect(edit).toContain('flex: 1 1 0')
+    expect(edit).toContain('width: 0')
+    expect(edit).toContain('min-width: 48px')
+  })
+
   it('gives every tab dot kind a colour, neutral included', () => {
     for (const kind of ['neutral', 'idle', 'working', 'attention']) {
       expect(tokens).toContain(`.tab__dot--${kind} {`)

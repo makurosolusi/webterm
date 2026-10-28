@@ -1,6 +1,9 @@
 // Sidebar sesi (kiri): satu daftar dari SEMUA workspace, dikelompokkan per workspace atau per
 // status. Dibentuk mengikuti nodeterm v0.4.5 `SessionsSidebar.tsx` + `SessionRow.tsx`.
-// Props-driven: komponen ini tidak memanggil API apa pun — integrator yang menyuplai data.
+// Props-driven untuk SEMUA data board (workspace, node, status): integrator yang menyuplainya.
+// SATU pengecualian, dan alasannya: tanda `unread` disubscribe langsung dari `./unread` di sini.
+// Ia state turunan-transport dengan tepat satu pembaca — section "Unread" di panel ini — jadi
+// mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, ChevronDown, ChevronRight, PanelLeft, Pin, PinOff, X } from 'lucide-react'
@@ -12,10 +15,13 @@ import {
   projectCollapseKey,
   projectHeadClickAction,
   sidebarEmptyState,
+  sessionLabel,
   sidebarFilterKeyAction,
   signalCounts,
   type SidebarGrouping,
 } from './sessionList'
+import type { ClosedEntry } from './closedHistory'
+import { subscribeUnread, unreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import './sessions-panel.css'
 
@@ -23,6 +29,9 @@ const PIN_KEY = 'webterm.sessionsPinned'
 /** Jeda tutup hover-peek. Tanpa jeda, gerak diagonal dari ikon ke panel melewati celah dan
  *  panel tertutup di tengah jalan. Sama dengan nodeterm. */
 const PEEK_CLOSE_MS = 140
+/** Kunci disclosure seksi "Recently closed", berbagi `collapsed` dengan baris workspace. Tidak bisa
+ *  bertabrakan: kunci workspace selalu berawalan `project:` (lihat `projectCollapseKey`). */
+const CLOSED_KEY = 'closed'
 
 export interface SessionsPanelProps {
   /** Semua workspace, urutan tampil mengikuti urutan array ini. */
@@ -34,6 +43,11 @@ export interface SessionsPanelProps {
   onFocusNode: (id: string) => void
   onCloseSession: (id: string) => void
   onSelectWorkspace: (id: string) => void
+  /** Sesi yang baru ditutup, terbaru dulu — sudah disaring `visibleClosed` (lihat
+   *  `./closedHistory`). Kosong berarti seksinya TIDAK dirender sama sekali: header "Recently
+   *  closed" tanpa isi adalah chrome mati di tiap install baru. */
+  closedSessions?: ClosedEntry[]
+  onReopenSession?: (nodeId: string) => void
 }
 
 function readPinned(): boolean {
@@ -52,12 +66,17 @@ function monogram(name: string): string {
 
 export default function SessionsPanel(props: SessionsPanelProps) {
   const { workspaces, activeId, liveActiveNodes, statuses, onFocusNode, onCloseSession, onSelectWorkspace } = props
+  const { closedSessions = [], onReopenSession } = props
   const [pinned, setPinned] = useState(readPinned)
   const [peek, setPeek] = useState(false)
   const [grouping, setGrouping] = useState<SidebarGrouping>('project')
   const [filter, setFilter] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Snapshot awal dibaca saat mount: kanal unread tidak memancar ulang saat disubscribe, dan
+  // panel ini bisa di-mount setelah status pertama sudah lewat.
+  const [unread, setUnread] = useState<ReadonlySet<string>>(unreadIds)
+  useEffect(() => subscribeUnread(setUnread), [])
 
   useEffect(() => {
     try {
@@ -80,12 +99,12 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   }, [])
 
   const groups = useMemo(
-    () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter),
-    [workspaces, liveActiveNodes, activeId, statuses, filter],
+    () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter, unread),
+    [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
   )
   const sections = useMemo(
-    () => buildStatusList(workspaces, liveActiveNodes, activeId, statuses, filter),
-    [workspaces, liveActiveNodes, activeId, statuses, filter],
+    () => buildStatusList(workspaces, liveActiveNodes, activeId, statuses, filter, unread),
+    [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
   )
 
   const total = sections.reduce((n, s) => n + s.rows.length, 0)
@@ -105,6 +124,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   }
 
   const toggle = (key: string, cur: boolean) => setCollapsed((prev) => ({ ...prev, [key]: !cur }))
+  // Default TERBUKA, beda dari baris workspace: seksi ini cuma muncul kalau ada isinya, jadi
+  // menyembunyikan isi itu di balik satu klik lagi akan menghapus satu-satunya alasan ia muncul.
+  const closedCollapsed = collapsed[CLOSED_KEY] ?? false
 
   return (
     <aside
@@ -197,7 +219,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
 
         {grouping === 'status'
           ? // `buildStatusList` menahan section kosong supaya posisinya tetap — tapi kalau SELURUH
-            // daftar nol, pesan kosong di atas sudah menjawabnya dan empat header "0" di bawahnya
+            // daftar nol, pesan kosong di atas sudah menjawabnya dan lima header "0" di bawahnya
             // cuma kebisingan. Jadi header permanen hanya berlaku selagi ada sesi.
             empty === 'none' &&
             sections.map((s) => (
@@ -294,6 +316,63 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                 </section>
               )
             })}
+
+        {/* Dirender HANYA bila ada isinya — dan di luar gerbang `empty`: board yang seluruh sesinya
+            baru saja ditutup adalah justru saat daftar ini paling berguna. Memakai ulang kelas
+            `.ss-group__*` + `.ss-row` apa adanya (nol CSS baru): seksi ketiga dengan bahasa visual
+            sendiri akan membuat sidebar terbaca seperti tiga panel yang ditempel. */}
+        {closedSessions.length > 0 && (
+          <section className="ss-group" aria-label="Recently closed">
+            <div
+              className="ss-group__head"
+              role="button"
+              tabIndex={0}
+              onClick={() => toggle(CLOSED_KEY, closedCollapsed)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return
+                e.preventDefault()
+                e.stopPropagation()
+                toggle(CLOSED_KEY, closedCollapsed)
+              }}
+            >
+              <span className="ss-group__chev" aria-hidden>
+                {closedCollapsed ? <ChevronRight /> : <ChevronDown />}
+              </span>
+              <span className="ss-group__name">Recently closed</span>
+              <span className="ss-group__count">{closedSessions.length}</span>
+            </div>
+            {!closedCollapsed && (
+              <ul className="ss-rows ss-status__rows">
+                {closedSessions.map((e) => (
+                  <li key={e.node.id}>
+                    <div
+                      className="ss-row"
+                      role="button"
+                      tabIndex={0}
+                      title={e.node.cwd ?? ''}
+                      aria-label={`Reopen ${sessionLabel(e.node)}`}
+                      onClick={() => onReopenSession?.(e.node.id)}
+                      onKeyDown={(ev) => {
+                        if (ev.key !== 'Enter' && ev.key !== ' ') return
+                        ev.preventDefault()
+                        ev.stopPropagation()
+                        onReopenSession?.(e.node.id)
+                      }}
+                    >
+                      <span className="ss-row__text">
+                        <span className="ss-row__title">{sessionLabel(e.node)}</span>
+                        {/* Nama workspace SELALU ikut: daftar ini meruntuhkan dinding workspace
+                            seperti mode status, jadi tanpa itu barisnya tidak bilang akan muncul
+                            kembali di board mana. */}
+                        <span className="ss-meta">{e.workspaceName}</span>
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </aside>
   )
