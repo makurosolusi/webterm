@@ -205,9 +205,13 @@ export default function App() {
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
   const onAddFiles = useCallback(() => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'files', dirPath: ws.cwd })), [addFlowNode])
 
+  // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
+  // saat mount (lalu mem-persist-nya lewat `onSession` di bawah). Mencetaknya di sini membuat
+  // `resumesOnFirstLaunch` membaca node yang baru lahir sebagai "pernah diluncurkan" → claude dipanggil
+  // dengan `--resume <uuid>` yang belum pernah ada di disk → "No conversation found with session ID".
   const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string) => {
     const color = agentConfig(agentId)?.color
-    addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color, sessionId: crypto.randomUUID() }))
+    addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }))
   }, [addFlowNode])
 
   // A node minted its own session uuid (or restarted): persist it to that node.

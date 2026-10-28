@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { BUILTIN_AGENT_IDS, SESSION_ID_CAPABLE } from '../shared/workspace'
 import { resumesOnFirstLaunch } from './AgentNode'
+import { type ClosedEntry, takeClosed } from './closedHistory'
 import { speechErrorText } from './useSpeechInput'
 
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
@@ -42,6 +43,70 @@ describe('resumesOnFirstLaunch', () => {
 
   it('terminal biasa (tanpa agentId) tidak pernah resume', () => {
     expect(resumesOnFirstLaunch(undefined, SID)).toBe(false)
+  })
+})
+
+// Bentuk LAMA `onAddAgent`, yang mencetak session id di titik pembuatan node. Ada untuk membuktikan
+// guard di bawah bisa merah.
+const OLD_ADD_AGENT_MINTS_SID = 'sessionId: crypto.randomUUID()'
+
+/** Pencarian `onAddAgent` sebagai TEKS: vitest repo ini jalan di node-env tanpa DOM, jadi komposisi
+ *  App → AgentNode tidak bisa dirender. Diambil sampai `]` penutup useCallback-nya. */
+const addAgentBody = (s: string) => {
+  const i = s.indexOf('const onAddAgent = useCallback(')
+  const j = s.indexOf('}, [addFlowNode])', i)
+  expect(i, 'onAddAgent tidak ditemukan di App.tsx').toBeGreaterThan(-1)
+  expect(j, 'badan onAddAgent tidak berujung di [addFlowNode]').toBeGreaterThan(i)
+  return s.slice(i, j)
+}
+const mintsSidAtCreation = (s: string) => /sessionId:\s*crypto\.randomUUID\(\)/.test(s)
+/** `AgentNode` mencetak id-nya sendiri saat props-nya kosong, DAN mem-persist-nya sekali. Itu yang
+ *  membuat penghapusan di `App.tsx` tidak kehilangan apa pun. */
+const agentNodeMintsOwnSid = (s: string) =>
+  /const \[sid, setSid\] = useState<string>\(sessionId \?\? crypto\.randomUUID\(\)\)/.test(s) &&
+  /if \(!sessionId\) onSession\(id, sid\)/.test(s)
+
+describe('titik pembuatan node agent TIDAK mencetak session id', () => {
+  // Inti bug "nambah agent baru malah langsung error": `resumesOnFirstLaunch` memakai ADA-TIDAKNYA
+  // `sessionId` sebagai proksi untuk "pernah diluncurkan". Proksi itu hanya benar kalau tak ada yang
+  // mencetak id di muka. Ini KOMPOSISInya — yang di atas cuma menguji fungsinya dengan input manual.
+  it('`onAddAgent` di App.tsx melahirkan node tanpa sessionId', () => {
+    expect(mintsSidAtCreation(addAgentBody(src('App.tsx')))).toBe(false)
+  })
+
+  it('guard menolak bentuk lama yang mencetaknya di muka', () => {
+    expect(mintsSidAtCreation(OLD_ADD_AGENT_MINTS_SID)).toBe(true)
+  })
+
+  it('node yang lahir dari `onAddAgent` meluncur dengan --session-id, bukan --resume', () => {
+    expect(resumesOnFirstLaunch('claude', undefined)).toBe(false)
+  })
+
+  it('`AgentNode` tetap mencetak dan mem-persist id-nya sendiri', () => {
+    expect(agentNodeMintsOwnSid(src('AgentNode.tsx'))).toBe(true)
+    expect(agentNodeMintsOwnSid('const [sid, setSid] = useState<string>(crypto.randomUUID())')).toBe(false)
+  })
+})
+
+describe('bug reopen yang sudah ditutup tetap tertutup', () => {
+  // Penghapusan di App.tsx tidak boleh diam-diam menghidupkan lagi "Session ID … is already in use.":
+  // jalur reopen punya sessionId-nya dari snapshot node, bukan dari titik pembuatan.
+  it('node ber-sessionId tetap resume', () => {
+    expect(resumesOnFirstLaunch('claude', SID)).toBe(true)
+  })
+
+  it('reopen memulihkan snapshot `WsNode` UTUH, jadi `sessionId` ikut kembali', () => {
+    const closed: ClosedEntry = {
+      node: { id: 'n1', kind: 'agent', x: 0, y: 0, agentId: 'claude', sessionId: SID },
+      workspaceId: 'w1',
+      workspaceName: 'w',
+      closedAt: 0,
+    }
+    // `takeClosed` adalah apa yang dibaca `reopen` sebelum menyerahkan `entry.node` ke `addNode`.
+    expect(takeClosed([closed], 'n1').entry?.node.sessionId).toBe(SID)
+    expect(resumesOnFirstLaunch('claude', takeClosed([closed], 'n1').entry?.node.sessionId)).toBe(true)
+    // Dan reopen memang menyerahkan node itu apa adanya, bukan membangun ulang sebagiannya.
+    expect(src('closedHistory.ts')).toMatch(/deps\.addNode\(\(\) => entry\.node\)/)
   })
 })
 
