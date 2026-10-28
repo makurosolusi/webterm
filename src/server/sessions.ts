@@ -73,6 +73,8 @@ export function launchLine(
 
   // `buildClaudeFlags` memancarkan flag id claude, `--permission-mode` dan `--settings` sebagai satu
   // unit, dan ketiganya grammar claude — jadi gerbangnya daftar kapabilitas, bukan nama agent.
+  // `--settings` membawa PATH file settings yang baru ditulis, bukan blob JSON inline (alasannya di
+  // `writeClaudeSettings`, hooks.ts) — jadi peluncuran ini menyentuh disk, bukan sekadar merakit string.
   if (hasClaudeHookSettings(agentId)) {
     return `${cmd} ${buildClaudeFlags(msg.id, sid, port, !!msg.resume, {
       permissionMode: opts?.permissionMode,
