@@ -201,6 +201,12 @@ export class Sessions {
     })
     pty.onExit((code) => {
       session.send?.({ t: 'exit', id: session.id, code })
+      // Sesi ini sudah tidak terdaftar = `close` yang membunuhnya, jadi exit ini gema dari kematian
+      // yang KITA minta, bukan agent yang menyelesaikan sesuatu — ia tidak boleh menulis 'done' atas
+      // nama node (itu menghidupkan ulang status yang baru dicabut, dan menggerbangi Resume di atas
+      // klaim mati) maupun menghapus sesi PENGGANTI yang sudah mendaftar dengan id yang sama.
+      // Restart = `close` lalu `open` serentak, jadi perlombaan itu nyata, bukan teoretis.
+      if (this.map.get(session.id) !== session) return
       this.setStatus(session.id, 'done')
       this.map.delete(session.id)
     })
@@ -226,18 +232,27 @@ export class Sessions {
     this.map.get(id)?.pty.resize(cols, rows)
   }
 
-  close(id: string): void {
-    // Token hook terikat pada NODE, bukan pada PTY — jadi dilupakan SEBELUM gerbang sesi hidup di
-    // bawah. Sebuah agent yang prosesnya keluar sendiri sudah dihapus dari `map` oleh `onExit`,
-    // sehingga `close` yang menyusul akan return lebih awal dan token itu tetap sah selamanya
-    // padahal node id-nya bisa dipakai ulang sesi berikutnya.
+  /** `send` = socket PEMANGGIL close, bukan socket sesi. Opsional supaya pemanggil non-socket tetap
+   *  bisa membersihkan node tanpa punya tujuan pengiriman. */
+  close(id: string, send?: (m: ServerMsg) => void): void {
+    // Token hook, status dan transcript terikat pada NODE, bukan pada PTY — jadi ketiganya dilepas
+    // SEBELUM gerbang sesi hidup di bawah. Sebuah agent yang prosesnya keluar sendiri sudah dihapus
+    // dari `map` oleh `onExit`, sehingga `close` yang menyusul akan return lebih awal: token tetap
+    // sah selamanya, dan sesi berikutnya dengan node id yang sama mewarisi 'done' serta path
+    // transcript milik sesi mati itu. Itulah jalur restart — CLI-nya selalu keluar lebih dulu.
     forgetNodeToken(id)
+    this.status.delete(id)
+    this.transcripts.delete(id)
+    // Pencabutannya memang harus lewat socket PEMANGGIL: kasus di atas justru tidak punya entry di
+    // `map`, jadi tidak ada `session.send` untuk dicapai. Tanpa pesan ini salinan status di client
+    // (map modul di `client/ws.ts`, bertahan lepas dari mount) tidak pernah tercabut dan node yang
+    // baru di-restart tetap terbaca Done. `status` absen = "tidak ada status lagi" — tidak ada nilai
+    // yang dikarang, khususnya bukan 'done' yang menggerbangi Resume/Restart.
+    send?.({ t: 'status', id })
     const session = this.map.get(id)
     if (!session) return
     session.pty.kill()
     this.map.delete(id)
-    this.status.delete(id)
-    this.transcripts.delete(id)
   }
 
   // Socket gone: forget the subscriber but keep the PTY running so a reconnect
@@ -253,7 +268,7 @@ export class Sessions {
       case 'open': this.open(msg, send); break
       case 'input': this.input(msg.id, msg.data); break
       case 'resize': this.resize(msg.id, msg.cols, msg.rows); break
-      case 'close': this.close(msg.id); break
+      case 'close': this.close(msg.id, send); break
     }
   }
 }
