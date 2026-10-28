@@ -202,3 +202,68 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* Menu konteks canvas (`CanvasContextMenu.tsx`). Panel, baris, ikon, dan separator dasarnya
+   dipakai bersama `.node-menu*` di agent.css — menu node dan menu canvas adalah permukaan yang
+   sama di mata pengguna. Yang ditambahkan di sini hanya yang khas canvas: submenu dan caret-nya,
+   titik warna agent, serta state nonaktif/aktif versi aria (menu canvas memakai `aria-disabled`,
+   bukan atribut `disabled` native — lihat alasannya di komentar `Row`). */
+
+.node-menu--canvas {
+  /* Lebih lapang dari menu node: barisnya membawa nama agent panjang plus caret submenu. */
+  min-width: var(--canvas-menu-w, 244px);
+}
+
+/* Jangkar flyout: `position: relative` di sini yang menjadikan baris ini offsetParent flyout-nya,
+   dan `useLayoutEffect` di `Submenu` membaca rect offsetParent itu untuk memilih sisi. */
+.node-menu__row {
+  position: relative;
+}
+
+.node-menu__caret {
+  margin-left: auto;
+  opacity: 0.45;
+}
+
+.node-menu__dot {
+  width: 8px;
+  height: 8px;
+  margin: auto;
+  border-radius: 50%;
+}
+
+/* `--submenu-top` mencerminkan SUBMENU_TOP_PX, dan `--submenu-overlap` mencerminkan
+   SUBMENU_OVERLAP_PX di canvasMenu.geometry.ts — keduanya HARUS sama: JS memakai angka itu untuk
+   memutuskan sisi mana yang muat, CSS memakainya untuk benar-benar menempatkannya. Tumpang-tindih
+   itulah yang membuat kursor tidak pernah menyeberangi celah kosong menuju flyout. */
+.node-menu__sub {
+  --submenu-top: -6px;
+  --submenu-overlap: 4px;
+  position: absolute;
+  top: var(--submenu-top);
+  max-width: min(320px, 70vw);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.node-menu__sub[data-side='right'] {
+  left: calc(100% - var(--submenu-overlap));
+}
+
+.node-menu__sub[data-side='left'] {
+  right: calc(100% - var(--submenu-overlap));
+}
+
+/* Aturan hover di agent.css memakai `:not(:disabled)`, yang TIDAK menangkap `aria-disabled` —
+   tanpa override ini baris mati tetap menyala saat disinggahi dan terlihat bisa diklik. */
+.node-menu__item[aria-disabled='true'],
+.node-menu__item[aria-disabled='true']:hover {
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Baris aktif keyboard, disorot sama seperti hover supaya panah dan kursor terasa satu hal. */
+.node-menu__item[aria-current='true'] {
+  background: rgba(var(--tint-rgb), 0.1);
+}

@@ -11,12 +11,12 @@
 //
 // PERINGATAN: lingkungannya jsdom, JANGAN ditukar happy-dom — alasan terukurnya ada di kepala
 // `./markdown.test.ts`. Pragma environment ditaruh di FILE TEST, bukan di sini.
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import App from './App'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
-import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
+import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
 import type { DirEntry } from './fileBrowse'
 
 /** Ukuran pane yang dilaporkan ke React Flow. Angka apa pun yang cukup besar untuk memuat node
@@ -25,6 +25,10 @@ const PANE = { width: 1280, height: 800 }
 /** Fallback saat sebuah elemen tidak punya style width/height (mis. wrapper). 1, bukan 0:
  *  `updateNodeInternals` React Flow membuang pengukuran berukuran nol. */
 const MIN_BOX = 1
+/** Jeda sesudah pane muncul, untuk menguras timer "siap" React Flow: `onInit` lewat
+ *  `setTimeout(…, 1)` dan ResizeObserver tiruan di atas lewat `setTimeout(…, 0)`. Beberapa ms,
+ *  bukan nol, supaya keduanya pasti sudah lewat; bukan angka layout, jadi tidak perlu dituning. */
+const READY_FLUSH_MS = 5
 
 let domInstalled = false
 
@@ -94,6 +98,24 @@ export function installCanvasDom(): void {
     configurable: true,
     value: () => ({ x: 0, y: 0, width: 60, height: 12 }),
   })
+
+  // xterm memanggil `matchMedia` saat `term.open()` (melacak perubahan devicePixelRatio); jsdom
+  // tidak punya. Tanpa stub ini `term.open` MELEMPAR, dan setiap node terminal/agent mati saat
+  // mount — jadi test apa pun yang melahirkan node terminal tidak bisa jalan sama sekali.
+  // `matches: false` sudah cukup: yang dipakai hanya pendaftaran listener, bukan jawabannya.
+  if (typeof window.matchMedia !== 'function') {
+    g.matchMedia = (media: string): MediaQueryList =>
+      ({
+        media,
+        matches: false,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList
+  }
 }
 
 export interface CanvasFixture {
@@ -103,6 +125,10 @@ export interface CanvasFixture {
   dirs: Record<string, DirEntry[]>
   /** Isi tiap file yang boleh dibaca node editor, per path absolut. */
   files?: Record<string, string>
+  /** Viewport awal canvas. Default identitas — tapi dengan viewport identitas koordinat layar SAMA
+   *  dengan koordinat flow, jadi test yang mau membuktikan sebuah konversi layar→flow benar-benar
+   *  terjadi harus menggeser viewport-nya di sini. */
+  viewport?: Viewport
 }
 
 const WORKSPACE_ID = 'ws-harness'
@@ -114,7 +140,7 @@ function fixtureWorkspace(fx: CanvasFixture): Workspace {
     cwd: '/',
     nodes: fx.nodes,
     bridges: fx.bridges ?? [],
-    viewport: DEFAULT_VIEWPORT,
+    viewport: fx.viewport ?? DEFAULT_VIEWPORT,
     updatedAt: 0,
   }
 }
@@ -156,6 +182,11 @@ export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof 
   await waitFor(() => {
     if (!document.querySelector('.react-flow__pane')) throw new Error('canvas belum hidrat')
   })
+  // Pane yang muncul BELUM berarti React Flow siap: `onInit` dipanggil dari dalam sebuah
+  // `setTimeout`, jadi `rf.current` App masih null sesaat sesudahnya — dan tanpa instance itu
+  // `screenToFlowPosition` tidak ada, sehingga node baru lahir di posisi fallback. Test yang
+  // mengklik lebih cepat dari ini menguji canvas yang tidak pernah ada di browser mana pun.
+  await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
   return view
 }
 

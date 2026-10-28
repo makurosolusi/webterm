@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlow, Background, BackgroundVariant, MiniMap, applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
-import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance } from '@xyflow/react'
+import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import ContextEdge from './ContextEdge'
 import WorkspaceBar from './WorkspaceBar'
@@ -19,9 +19,12 @@ import { NodeActionsProvider } from './nodeActions'
 import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
-import { spawnAt } from './nodeSpawn'
+import { spawnAt, spawnPosition } from './nodeSpawn'
+import { spawnSpot } from './canvasMenu.geometry'
+import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
-import { createHistory } from './history'
+import { useCanvasViewport } from './canvasViewport'
+import { useLayoutHistory } from './layoutHistory'
 import { send, subscribeStatus } from './ws'
 import { saveWorkspace } from './api'
 import { useWorkspaceLifecycle } from './workspaceLifecycle'
@@ -45,7 +48,6 @@ export default function App() {
   const [statuses, setStatuses] = useState<Record<string, AgentStatus>>({})
   const [board, setBoard] = useState(false)
   const [picker, setPicker] = useState<{ onPick: (p: string) => void } | null>(null)
-  const [zoom, setZoom] = useState(DEFAULT_VIEWPORT.zoom)
   const [showSettings, setShowSettings] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [locked, setLocked] = useState(false)
@@ -58,10 +60,6 @@ export default function App() {
   const viewportRef = useRef<Viewport>(DEFAULT_VIEWPORT)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rf = useRef<ReactFlowInstance | null>(null)
-
-  const nodeHist = useRef(createHistory<Node[]>())
-  const vpHist = useRef(createHistory<Viewport>())
-  const [, bump] = useReducer((x: number) => x + 1, 0)
 
   useEffect(() => {
     // `s` undefined = sapuan basi mencabut statusnya (`shared/agentStale.ts`), jadi key-nya DIHAPUS:
@@ -87,25 +85,6 @@ export default function App() {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
   }, [settings.appTheme, settings.terminalTheme])
 
-  const applyWorkspace = useCallback((ws: Workspace) => {
-    setActiveWs(ws)
-    activeWsRef.current = ws
-    const vp = ws.viewport ?? DEFAULT_VIEWPORT
-    viewportRef.current = vp
-    setZoom(vp.zoom)
-    const flow = ws.nodes.map(toFlow)
-    nodesRef.current = flow
-    setNodes(flow)
-    const fe = (ws.bridges ?? []).map(toFlowEdge)
-    edgesRef.current = fe
-    setEdges(fe)
-    nodeHist.current = createHistory<Node[]>()
-    vpHist.current = createHistory<Viewport>()
-    nodeHist.current.push(flow)
-    vpHist.current.push(vp)
-    bump()
-  }, [])
-
   const scheduleSave = useCallback(() => {
     const ws = activeWsRef.current
     if (!ws) return
@@ -116,6 +95,32 @@ export default function App() {
       void saveWorkspace(updated)
     }, 400)
   }, [])
+
+  // Concern viewport — readout zoom, zoom/fit, riwayat pandangan. Lihat `./canvasViewport`:
+  // `viewportRef` dipinjam ke sana, jadi `scheduleSave` di atas mem-persist viewport yang
+  // ditulis hook itu, bukan salinan yang sudah basi. Dideklarasikan SEBELUM `applyWorkspace`
+  // karena pemasangan board memanggil `resetViewport`.
+  const {
+    zoom, syncViewport, onMoveEnd, onFit, onZoomIn, onZoomOut, onZoomTo,
+    onBack, onForward, canBack, canForward, resetViewport,
+  } = useCanvasViewport({ rf, viewportRef, scheduleSave })
+
+  // Undo/redo layout node — tumpukan terpisah dari riwayat pandangan di atas. Lihat `./layoutHistory`.
+  const { onUndo, onRedo, canUndo, canRedo, pushLayout, resetLayout } =
+    useLayoutHistory({ nodesRef, setNodes, scheduleSave })
+
+  const applyWorkspace = useCallback((ws: Workspace) => {
+    setActiveWs(ws)
+    activeWsRef.current = ws
+    resetViewport(ws.viewport ?? DEFAULT_VIEWPORT)
+    const flow = ws.nodes.map(toFlow)
+    nodesRef.current = flow
+    setNodes(flow)
+    const fe = (ws.bridges ?? []).map(toFlowEdge)
+    edgesRef.current = fe
+    setEdges(fe)
+    resetLayout(flow)
+  }, [resetViewport, resetLayout])
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // Di LUAR updater: `recordClosed` setState, dan dari dalam updater itu menulis di fase render.
@@ -135,8 +140,7 @@ export default function App() {
       )
       if (settled) {
         scheduleSave()
-        nodeHist.current.push(next)
-        bump()
+        pushLayout(next)
       } else if (changes.some((c) => c.type === 'replace')) {
         // Data-only change (collapse/color/rename/comments/hideLinks via updateNodeData):
         // persist but DON'T push to layout history — mirrors onSession.
@@ -144,15 +148,7 @@ export default function App() {
       }
       return next
     })
-  }, [recordClosed, scheduleSave])
-
-  const onMoveEnd = useCallback((_e: unknown, vp: Viewport) => {
-    viewportRef.current = vp
-    setZoom(vp.zoom)
-    vpHist.current.push(vp)
-    bump()
-    scheduleSave()
-  }, [scheduleSave])
+  }, [recordClosed, scheduleSave, pushLayout])
 
   const onConnect = useCallback((c: Connection) => {
     if (!c.source || !c.target) return
@@ -183,35 +179,37 @@ export default function App() {
   }, [scheduleSave])
 
   // Spawn SEBELUM `make`: node baru lahir di tengah pandangan, node yang dibuka ulang menimpanya dengan x/y aslinya.
-  const addFlowNode = useCallback((make: (n: number, ws: Workspace) => Omit<WsNode, 'x' | 'y'>) => {
+  // `at` (koordinat FLOW) menggantikan "tengah pandangan": menu konteks canvas memakainya.
+  const addFlowNode = useCallback((make: (n: number, ws: Workspace) => Omit<WsNode, 'x' | 'y'>, at?: XYPosition) => {
     const ws = activeWsRef.current
     if (!ws) return
     setNodes((prev) => {
-      const node = { width: settings.defaultNodeWidth, height: settings.defaultNodeHeight, ...spawnAt(rf.current, settings, prev.length), ...make(prev.length, ws) }
+      const size = { width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }
+      const spot = spawnSpot(at) // Lihat `spawnSpot`: `at` bisa berisi event, bukan titik.
+      const node = { ...size, ...(spot ? spawnPosition(spot, size, 0) : spawnAt(rf.current, settings, prev.length)), ...make(prev.length, ws) }
       const next = addNode(prev.map(toWsNode), node).map(toFlow)
       // Round-trip `toWsNode`/`toFlow` tidak membawa `selected`, jadi yang lain sudah ter-deselect;
       next[next.length - 1].selected = true // node baru selalu terakhir (`addNode` append).
       nodesRef.current = next
       scheduleSave()
-      nodeHist.current.push(next)
-      bump()
+      pushLayout(next)
       return next
     })
-  }, [scheduleSave, settings.defaultNodeWidth, settings.defaultNodeHeight])
+  }, [scheduleSave, pushLayout, settings.defaultNodeWidth, settings.defaultNodeHeight])
 
-  const onAddTerminal = useCallback(() => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', cwd: ws.cwd })), [addFlowNode])
+  const onAddTerminal = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', cwd: ws.cwd }), at), [addFlowNode])
 
   // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
-  const onAddFiles = useCallback(() => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'files', dirPath: ws.cwd })), [addFlowNode])
+  const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
 
   // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
   // saat mount (lalu mem-persist-nya lewat `onSession` di bawah). Mencetaknya di sini membuat
   // `resumesOnFirstLaunch` membaca node yang baru lahir sebagai "pernah diluncurkan" → claude dipanggil
   // dengan `--resume <uuid>` yang belum pernah ada di disk → "No conversation found with session ID".
-  const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string) => {
+  const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => {
     const color = agentConfig(agentId)?.color
-    addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }))
+    addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }), at)
   }, [addFlowNode])
 
   // A node minted its own session uuid (or restarted): persist it to that node.
@@ -235,39 +233,14 @@ export default function App() {
       activeWsRef, nodesRef, edgesRef, saveTimer, rf,
     })
 
-  // Perpindahan programatik (setViewport/zoomIn/fitView) lewat setTransform tidak mengirim
-  // sourceEvent sama sekali, jadi onMoveEnd kemungkinan besar TETAP jalan. Panggilan ini
-  // jaring pengaman eksplisit: sync readout + persist tanpa bergantung pada jalur event.
-  const syncViewport = useCallback((delay: number) => {
-    setTimeout(() => {
-      const vp = rf.current?.getViewport()
-      if (vp) { viewportRef.current = vp; setZoom(vp.zoom); scheduleSave() }
-    }, delay)
-  }, [scheduleSave])
+  // Lewat `onNodesChange`, bukan setNodes langsung: riwayat & persistensi menggantung di sana.
+  const onSelectAll = useCallback(() => {
+    onNodesChange(nodesRef.current.map((n) => ({ type: 'select' as const, id: n.id, selected: true })))
+  }, [onNodesChange])
 
-  const onUndo = useCallback(() => {
-    const s = nodeHist.current.undo()
-    if (s) { nodesRef.current = s; setNodes(s); scheduleSave() }
-    bump()
-  }, [scheduleSave])
-
-  const onRedo = useCallback(() => {
-    const s = nodeHist.current.redo()
-    if (s) { nodesRef.current = s; setNodes(s); scheduleSave() }
-    bump()
-  }, [scheduleSave])
-
-  const onBack = useCallback(() => {
-    const v = vpHist.current.undo()
-    if (v) { viewportRef.current = v; rf.current?.setViewport(v, { duration: 300 }); setZoom(v.zoom); scheduleSave() }
-    bump()
-  }, [scheduleSave])
-
-  const onForward = useCallback(() => {
-    const v = vpHist.current.redo()
-    if (v) { viewportRef.current = v; rf.current?.setViewport(v, { duration: 300 }); setZoom(v.zoom); scheduleSave() }
-    bump()
-  }, [scheduleSave])
+  const { onPaneContextMenu, menu: paneMenu } = useCanvasPaneMenu({
+    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddAgent, onFit, onSelectAll,
+  })
 
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
 
@@ -325,6 +298,7 @@ export default function App() {
             onConnect={onConnect}
             onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
             onMoveEnd={onMoveEnd}
+            onPaneContextMenu={onPaneContextMenu}
             onInit={(i) => (rf.current = i)}
             defaultViewport={activeWs?.viewport ?? DEFAULT_VIEWPORT}
             fitView={false}
@@ -354,9 +328,9 @@ export default function App() {
             <ZoomRail
               locked={locked}
               onToggleLock={() => setLocked((v) => !v)}
-              onZoomIn={() => { rf.current?.zoomIn({ duration: 150 }); syncViewport(170) }}
-              onZoomOut={() => { rf.current?.zoomOut({ duration: 150 }); syncViewport(170) }}
-              onFit={() => { rf.current?.fitView({ duration: 300 }); syncViewport(320) }}
+              onZoomIn={onZoomIn}
+              onZoomOut={onZoomOut}
+              onFit={onFit}
             />
           </ReactFlow>
         )}
@@ -370,18 +344,18 @@ export default function App() {
             onBrowse={(onPick) => setPicker({ onPick })}
             onUndo={onUndo}
             onRedo={onRedo}
-            canUndo={nodeHist.current.canUndo()}
-            canRedo={nodeHist.current.canRedo()}
+            canUndo={canUndo}
+            canRedo={canRedo}
             onBack={onBack}
             onForward={onForward}
-            canBack={vpHist.current.canUndo()}
-            canForward={vpHist.current.canRedo()}
-            onFit={() => { rf.current?.fitView({ duration: 300 }); syncViewport(320) }}
+            canBack={canBack}
+            canForward={canForward}
+            onFit={onFit}
             onToggleBoard={() => setBoard((v) => !v)}
             zoomPct={Math.round(zoom * 100)}
-            onZoomIn={() => { rf.current?.zoomIn({ duration: 150 }); syncViewport(170) }}
-            onZoomOut={() => { rf.current?.zoomOut({ duration: 150 }); syncViewport(170) }}
-            onZoomTo={(p) => { rf.current?.zoomTo(p / 100, { duration: 150 }); syncViewport(170) }}
+            onZoomIn={onZoomIn}
+            onZoomOut={onZoomOut}
+            onZoomTo={onZoomTo}
             disabledAgents={settings.disabledAgents}
             customAgents={settings.customAgents}
             agentLaunchCommands={settings.agentLaunchCommands}
@@ -405,6 +379,7 @@ export default function App() {
             onReopenSession={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
           />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
+          {paneMenu}
         </>
       )}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
