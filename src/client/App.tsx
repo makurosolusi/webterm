@@ -15,7 +15,7 @@ import { canLink, bridgeExists, hiddenEdgeNodeIds, edgeVisible } from './floatin
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace } from './api'
-import { AGENTS, DEFAULT_VIEWPORT } from '../shared/workspace'
+import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
 
 const nodeTypes = { terminal: TerminalNode, agent: AgentNode }
@@ -167,7 +167,7 @@ export default function App() {
   }, [addFlowNode])
 
   const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string) => {
-    const color = agentId !== 'custom' ? AGENTS[agentId].color : undefined
+    const color = agentConfig(agentId)?.color
     addFlowNode((n, ws) => ({ id: crypto.randomUUID(), kind: 'agent', x: 80 + n * 40, y: 80 + n * 40, cmd, agentId, cwd: cwd ?? ws.cwd, color, sessionId: crypto.randomUUID() }))
   }, [addFlowNode])
 

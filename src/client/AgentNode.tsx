@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react'
-import { AGENTS, isContextCapable } from '../shared/workspace'
+import { agentConfig, isContextCapable } from '../shared/workspace'
 import type { AgentId, AgentStatus, Comment } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
@@ -35,7 +35,7 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
   // Persist a freshly generated id up to App exactly once.
   useEffect(() => { if (!sessionId) onSession?.(id, sid) }, [])
 
-  const builtin = agentId && agentId !== 'custom' ? AGENTS[agentId] : undefined
+  const builtin = agentId ? agentConfig(agentId) : undefined
   const swatch = d.color ?? builtin?.color ?? '#0a84ff'
   const label = d.title ?? builtin?.label ?? agentId ?? 'agent'
   const collapsed = d.collapsed ?? false

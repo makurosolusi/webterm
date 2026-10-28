@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AGENTS, assembleCmd } from '../shared/workspace'
+import { AGENTS, assembleCmd, isBuiltinAgent } from '../shared/workspace'
 import type { AgentId } from '../shared/workspace'
 
 export interface DockProps {
@@ -40,7 +40,7 @@ export default function Dock(props: DockProps) {
   const [wsCwd, setWsCwd] = useState('')
 
   const addAgent = () => {
-    const cmd = agentId === 'custom' ? customCmd.trim() : assembleCmd(agentId, profile.trim() || undefined)
+    const cmd = isBuiltinAgent(agentId) ? assembleCmd(agentId, profile.trim() || undefined) : customCmd.trim()
     if (!cmd) return
     props.onAddAgent(cmd, agentId, agentCwd.trim() || undefined)
     setProfile(''); setCustomCmd(''); setAgentCwd(''); setMode(null)
