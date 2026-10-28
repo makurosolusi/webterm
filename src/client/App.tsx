@@ -17,14 +17,14 @@ import { nodeTypes } from './nodeTypes'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { resolveTerminalTheme } from './themes'
-import { toFlow, toWsNode, toFlowEdge, toBridge, addNode, workspaceNameFromPath } from './store'
+import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
 import { spawnAt } from './nodeSpawn'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
-import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
-import { bootWorkspaceId, nextActiveWorkspaceId } from './workspaceMenu'
+import { saveWorkspace } from './api'
+import { useWorkspaceLifecycle } from './workspaceLifecycle'
 import { useClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
@@ -96,21 +96,6 @@ export default function App() {
     vpHist.current.push(vp)
     bump()
   }, [])
-
-  // Board diambil LENGKAP sebelum satu pun state di-commit. React Flow membaca `defaultViewport`
-  // hanya saat mount, jadi commit `activeId` lebih dulu me-mount canvas dengan viewport default dan
-  // tanpa node — board tersimpan baru menyusul di render berikutnya.
-  useEffect(() => {
-    void (async () => {
-      const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
-      const id = bootWorkspaceId(list.map((w) => w.id), active)
-      const ws = id ? await getWorkspace(id) : null
-      if (id && id !== active) await setActive(id)
-      setWorkspaces(list)
-      if (ws) applyWorkspace(ws)
-      setHydrated(true)
-    })()
-  }, [applyWorkspace])
 
   const scheduleSave = useCallback(() => {
     const ws = activeWsRef.current
@@ -227,120 +212,15 @@ export default function App() {
     })
   }, [scheduleSave])
 
-  const onSelect = useCallback(async (id: string) => {
-    if (!id || id === activeId) return
-    const ws = await getWorkspace(id)
-    await setActive(id)
-    applyWorkspace(ws)
-  }, [activeId, applyWorkspace])
-
-  // Baris sidebar bisa milik workspace LAIN yang nodenya tidak ter-mount, kelas jebakan yang sama
-  // dengan `closeSession` di bawah: dulu `if (!node) return` menelan klik itu diam-diam. Node dicari
-  // ULANG setelah pindah karena `onSelect` → `applyWorkspace` menulis `nodesRef` secara sinkron,
-  // jadi begitu await selesai isinya sudah board yang baru — tanpa perlu menunggu render.
-  const onFocus = useCallback(async (id: string) => {
-    if (!nodesRef.current.some((n) => n.id === id)) {
-      const owner = workspaces.find((w) => w.nodes.some((n) => n.id === id))
-      if (!owner) return
-      await onSelect(owner.id)
-    }
-    const node = nodesRef.current.find((n) => n.id === id)
-    if (!node) return
-    rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
-    setBoard(false)
-  }, [onSelect, workspaces])
-
-  // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di
-  // canvas yang ter-mount. Yang di luar canvas dibuang dari salinan TERBARU di server: snapshot
-  // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi menulis ulang dari sana
-  // akan mengembalikan layout workspace itu ke keadaan lama.
-  const closeSession = useCallback(async (id: string) => {
-    if (nodesRef.current.some((n) => n.id === id)) {
-      await rf.current?.deleteElements({ nodes: [{ id }] })
-      return
-    }
-    const owner = workspaces.find((w) => w.nodes.some((n) => n.id === id))
-    if (!owner) return
-    send({ t: 'close', id })
-    const fresh = await getWorkspace(owner.id)
-    recordClosed([id], fresh.nodes, fresh)
-    const updated: Workspace = { ...fresh, nodes: fresh.nodes.filter((n) => n.id !== id), updatedAt: Date.now() }
-    await saveWorkspace(updated)
-    setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
-  }, [recordClosed, workspaces])
-
-  // Rename dari menu kebab header. Rutenya BEDA tergantung workspace itu sedang terbuka atau
-  // tidak — kelas jebakan yang sama dengan `closeSession` di atas.
-  const onRenameWorkspace = useCallback(async (id: string, name: string) => {
-    const live = activeWsRef.current
-    if (live?.id === id) {
-      // Workspace AKTIF tidak boleh lewat GET+PUT: salinan server bisa ketinggalan sampai 400ms
-      // dari canvas yang hidup (debounce `scheduleSave`), jadi menulisnya kembali membatalkan edit
-      // terakhir pengguna. Yang benar: ganti nama di `activeWsRef` — sumber payload `scheduleSave`
-      // — lalu biarkan save berikutnya membawa nama baru bersama layout TERBARU. Nama yang hanya
-      // hidup di state React akan ditimpa kembali dengan nama lama oleh edit canvas berikutnya.
-      activeWsRef.current = { ...live, name }
-      setActiveWs((ws) => (ws && ws.id === id ? { ...ws, name } : ws))
-      setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, name } : w)))
-      scheduleSave()
-      return
-    }
-    // Workspace lain: ambil salinan TERBARU dari server, ubah satu field, kirim itu. Snapshot
-    // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi PUT dari sana akan
-    // mengembalikan node/viewport workspace itu ke keadaan lama.
-    const fresh = await getWorkspace(id)
-    const updated: Workspace = { ...fresh, name, updatedAt: Date.now() }
-    await saveWorkspace(updated)
-    setWorkspaces((prev) => prev.map((w) => (w.id === id ? updated : w)))
-  }, [scheduleSave])
-
-  // Hapus workspace (sudah dikonfirmasi di header). Tidak bisa dibatalkan: row + board tersimpan.
-  const onDeleteWorkspace = useCallback(async (id: string) => {
-    if (id === activeId && saveTimer.current) {
-      // Debounce yang masih menggantung akan PUT id ini SETELAH row-nya hilang dan menghidupkannya
-      // kembali (PUT = upsert). Hanya untuk workspace aktif: timer itu selalu milik board aktif,
-      // membatalkannya saat menghapus workspace lain berarti membuang save yang sah.
-      clearTimeout(saveTimer.current)
-      saveTimer.current = null
-    }
-    // Sesi PTY tidak mati sendiri saat row-nya hilang — node yang unmount sengaja TIDAK menutup
-    // sesinya (itu yang membuat board bertahan saat pindah workspace), jadi shell-nya ditutup di
-    // sini atau bocor tanpa pemilik. Daftar node diambil dari server karena snapshot client bisa
-    // ketinggalan untuk workspace yang tidak aktif; GET gagal pun hapusnya tetap jalan.
-    const doomed = await getWorkspace(id).catch(() => null)
-    for (const n of doomed?.nodes ?? []) send({ t: 'close', id: n.id })
-    await deleteWorkspace(id)
-    const next = nextActiveWorkspaceId(workspaces.map((w) => w.id), id, activeId)
-    // Board pengganti diambil sebelum daftar tab dikecilkan supaya hilangnya tab dan datangnya
-    // board baru mendarat dalam SATU render, bukan dua.
-    const ws = next && next !== activeId ? await getWorkspace(next) : null
-    if (ws) await setActive(ws.id)
-    setWorkspaces((prev) => prev.filter((w) => w.id !== id))
-    if (next === activeId) return // yang dihapus bukan yang aktif: board di layar tidak tersentuh
-    if (ws) {
-      applyWorkspace(ws)
-      return
-    }
-    // Workspace terakhir: mendarat di `Welcome` dengan canvas kosong. `activeWsRef` dikosongkan
-    // supaya `scheduleSave` berhenti di baris pertamanya, bukan menulis board hantu.
-    setActiveWs(null)
-    activeWsRef.current = null
-    nodesRef.current = []
-    edgesRef.current = []
-    setNodes([])
-    setEdges([])
-  }, [activeId, applyWorkspace, workspaces])
-
-  const onCreateWorkspace = useCallback(async (name: string, cwd?: string) => {
-    const ws = await createWorkspace(name, cwd)
-    await setActive(ws.id)
-    setWorkspaces((prev) => [...prev, ws])
-    applyWorkspace(ws)
-  }, [applyWorkspace])
-
-  const onNewProject = useCallback(() => {
-    setPicker({ onPick: (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p) })
-  }, [onCreateWorkspace])
+  // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
+  // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
+  // jadi `scheduleSave` dan canvas tetap membaca ref yang SAMA dengan yang ditulis di sana.
+  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onNewProject } =
+    useWorkspaceLifecycle({
+      workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
+      setWorkspaces, setActiveWs, setHydrated, setNodes, setEdges, setBoard, setPicker,
+      activeWsRef, nodesRef, edgesRef, saveTimer, rf,
+    })
 
   // Perpindahan programatik (setViewport/zoomIn/fitView) lewat setTransform tidak mengirim
   // sourceEvent sama sekali, jadi onMoveEnd kemungkinan besar TETAP jalan. Panggilan ini

@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// Yang dijaga di sini adalah URUTAN di App.tsx, dan urutan hanya hidup di JSX/callback — vitest
+// Yang dijaga di sini adalah URUTAN di App.tsx + `workspaceLifecycle.ts` (yang memuat jalur commit
+// board-nya), dan urutan hanya hidup di JSX/callback — vitest
 // webterm jalan di node-env tanpa DOM, jadi tidak ada komponen yang bisa dirender untuk
 // membuktikannya. Yang bisa dilakukan: membaca source-nya dan menolak bentuk yang salah, pola yang
 // sama dengan `nodeRender.test.ts`.
@@ -39,11 +40,17 @@ describe('urutan commit workspace', () => {
   it('App tidak lagi punya dua state aktif yang di-commit terpisah', () => {
     const app = src('App.tsx')
     expect(hasSplitActiveState(app)).toBe(false)
+    // Jalur commit-nya pindah ke `workspaceLifecycle`, jadi bentuk lamanya dijaga di sana juga.
+    expect(hasSplitActiveState(src('workspaceLifecycle.ts'))).toBe(false)
     expect(app).toMatch(/const activeId = activeWs\?\.id \?\? null/)
   })
 
   it('tidak ada `await` setelah board di-commit, di callback mana pun', () => {
-    expect(appliesAfterLastAwait(src('App.tsx'))).toBe(true)
+    // Semua pemanggil `applyWorkspace` ada di `workspaceLifecycle`. Dihitung dulu: `.every()` atas
+    // daftar kosong lulus tanpa menjaga apa pun, dan file yang salah akan lulus begitu saja.
+    const life = src('workspaceLifecycle.ts')
+    expect(tailsAfterApply(life).length).toBeGreaterThan(0)
+    expect(appliesAfterLastAwait(life)).toBe(true)
   })
 
   it('kedua guard menolak bentuk lamanya', () => {
@@ -56,7 +63,7 @@ describe('urutan commit workspace', () => {
 
   it('setiap pindah workspace mengambil board DULU, lewat variabel, bukan di dalam commit', () => {
     // `const ws = await getWorkspace(...)` di tiap jalur: boot, pilih tab, dan hapus workspace.
-    expect(src('App.tsx').match(/const ws = .*getWorkspace\(/g)?.length).toBe(3)
+    expect(src('workspaceLifecycle.ts').match(/const ws = .*getWorkspace\(/g)?.length).toBe(3)
   })
 })
 
