@@ -173,7 +173,17 @@ export class Sessions {
       this.map.delete(session.id)
     })
 
-    if (msg.agentId) this.setStatus(msg.id, 'working')
+    // SENGAJA TIDAK ADA status awal di sini. Dulu baris ini `setStatus(msg.id, 'working')` untuk
+    // setiap sesi ber-agentId, padahal yang baru terjadi hanyalah PTY-nya lahir: CLI-nya masih
+    // memuat banner dan belum diberi satu pun prompt. Itu klaim tanpa bukti, dan ia yang membuat
+    // node agent yang baru dibuka terbaca RUNNING serta ikut terhitung di seksi Running sidebar.
+    // Status pertama sekarang datang dari sinyal nyata — hook claude (`hookStatus`) atau `onExit`.
+    //
+    // Konsekuensi yang diterima: agent yang BELUM punya pemasok status di webterm (semua selain
+    // claude — hanya `CLAUDE_HOOK_SETTINGS_CAPABLE` yang dipasangi hook) kini duduk di "Unknown"
+    // sampai prosesnya keluar. Itu memang keadaan pengetahuan kita yang sebenarnya; obatnya
+    // memasang pemasok status untuk harness lain (nodeterm punya normalizer codex/gemini sendiri),
+    // bukan menebak "working" untuk semua.
   }
 
   input(id: string, data: string): void {

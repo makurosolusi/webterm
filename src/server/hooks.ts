@@ -39,6 +39,10 @@ export const PERM_WAIT_SECS_INTERACTIVE = 540
  *    eksplisit karena hook terkelola menahannya (lihat PERM_WAIT_SECS_INTERACTIVE).
  *  - `SubagentStart`/`SubagentStop` adalah siklus hidup subagent claude sendiri; keduanya menjaga
  *    node induk tetap terbaca "working" selama anak berjalan.
+ *
+ * `SessionStart` TETAP dilanggani meski tidak lagi memetakan ke status apa pun (lihat `hookStatus`):
+ * ia hook PERTAMA yang menyala, jadi ia yang memasok `transcript_path` ke `setTranscript`
+ * (`api.ts`) — tanpa itu konteks-tertaut buta sampai prompt pertama dikirim.
  */
 export const CLAUDE_HOOK_EVENTS: readonly HookSubscription[] = [
   'SessionStart',
@@ -64,10 +68,18 @@ export const CLAUDE_HOOK_EVENTS: readonly HookSubscription[] = [
  * untuk "sedang menunggu izin", dan mencocokkan kata di pesan `Notification` adalah heuristik yang
  * salah ke dua arah (nudge idle yang menyebut kata "approve" terbaca blocked; prompt permission
  * dalam bahasa lain tidak terbaca sama sekali).
+ *
+ * `SessionStart` SENGAJA TIDAK ADA di tabel ini. Claude menyalakannya saat CLI start — sebelum
+ * prompt pertama diketik — jadi memetakannya ke `working` membuat setiap node yang baru lahir,
+ * yang sedang duduk diam di input box-nya, terbaca RUNNING padahal tidak ada yang berjalan. Ia
+ * batas SIKLUS HIDUP sesi, bukan perubahan state; nodeterm memperlakukannya persis begitu
+ * (`normalizeClaude` → `{ kind: 'session', sessionPhase: 'start' }`, yang di Canvas jatuh ke
+ * `setState(id, undefined)`). Sinyal mulai-kerja yang jujur adalah `UserPromptSubmit`: pekerjaan
+ * ada karena ada yang meminta. Node yang belum punya sinyal apa pun jadi TIDAK punya status, dan
+ * webterm merendernya "Unknown" — jawaban yang benar untuk "kami belum tahu".
  */
 export function hookStatus(body: { hook_event_name?: string }): AgentStatus | null {
   switch (body.hook_event_name) {
-    case 'SessionStart':
     case 'UserPromptSubmit':
     case 'PreToolUse':
     case 'PostToolUse':
