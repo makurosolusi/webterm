@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deleteWorkspaceMessage, nextActiveWorkspaceId, normalizeWorkspaceName } from './workspaceMenu'
+import { bootWorkspaceId, deleteWorkspaceMessage, nextActiveWorkspaceId, normalizeWorkspaceName } from './workspaceMenu'
 
 describe('normalizeWorkspaceName', () => {
   it('membuang spasi pinggir', () => {
@@ -45,6 +45,29 @@ describe('nextActiveWorkspaceId', () => {
 
   it('memilih tab pertama ketika id yang dihapus tidak ada di daftar', () => {
     expect(nextActiveWorkspaceId(ids, 'zz', 'zz')).toBe('a')
+  })
+})
+
+describe('bootWorkspaceId', () => {
+  const ids = ['a', 'b', 'c']
+
+  it('memakai pointer aktif selama row-nya masih ada', () => {
+    expect(bootWorkspaceId(ids, 'b')).toBe('b')
+  })
+
+  it('jatuh ke tab pertama kalau pointer menunjuk row yang sudah dihapus', () => {
+    // Ini keadaan nyata, bukan karangan: pointer tidak bisa dikosongkan saat workspace terakhir
+    // dihapus, jadi `GET /api/workspaces/<mati>` akan 404 kalau id itu dipakai apa adanya.
+    expect(bootWorkspaceId(ids, 'zz')).toBe('a')
+  })
+
+  it('jatuh ke tab pertama kalau belum ada pointer sama sekali', () => {
+    expect(bootWorkspaceId(ids, null)).toBe('a')
+  })
+
+  it('null untuk daftar kosong — termasuk saat pointer masih menyisa', () => {
+    expect(bootWorkspaceId([], null)).toBeNull()
+    expect(bootWorkspaceId([], 'zz')).toBeNull()
   })
 })
 

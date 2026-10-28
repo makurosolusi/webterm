@@ -23,7 +23,7 @@ import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { createHistory } from './history'
 import { send, subscribeStatus } from './ws'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
-import { nextActiveWorkspaceId } from './workspaceMenu'
+import { bootWorkspaceId, nextActiveWorkspaceId } from './workspaceMenu'
 import { useClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
@@ -32,8 +32,13 @@ const edgeTypes = { context: ContextEdge }
 
 export default function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
+  // "Belum tahu" vs "memang tidak ada": sebelum fetch pertama selesai keduanya sama-sama daftar
+  // kosong, dan `Welcome` yang dirender atas dasar itu selalu berkelebat sekejap.
+  const [hydrated, setHydrated] = useState(false)
   const [activeWs, setActiveWs] = useState<Workspace | null>(null)
+  // Diturunkan, bukan state sendiri: id dan board-nya pernah di-commit terpisah, dan tiap jeda
+  // antara keduanya adalah satu render dengan canvas yang sudah pindah tapi datanya belum ada.
+  const activeId = activeWs?.id ?? null
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [statuses, setStatuses] = useState<Record<string, AgentStatus>>({})
@@ -91,26 +96,20 @@ export default function App() {
     bump()
   }, [])
 
-  const loadWorkspace = useCallback(async (id: string) => {
-    applyWorkspace(await getWorkspace(id))
-  }, [applyWorkspace])
-
+  // Board diambil LENGKAP sebelum satu pun state di-commit. React Flow membaca `defaultViewport`
+  // hanya saat mount, jadi commit `activeId` lebih dulu me-mount canvas dengan viewport default dan
+  // tanpa node — board tersimpan baru menyusul di render berikutnya.
   useEffect(() => {
     void (async () => {
       const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
+      const id = bootWorkspaceId(list.map((w) => w.id), active)
+      const ws = id ? await getWorkspace(id) : null
+      if (id && id !== active) await setActive(id)
       setWorkspaces(list)
-      // Pointer aktif di server bisa menunjuk row yang sudah DIHAPUS: menghapus workspace terakhir
-      // tidak bisa mengosongkan pointer itu (`PUT /api/active` menolak id kosong dengan 400), dan
-      // memuat id mati melempar 404 tepat di sini. Jadi hanya id yang masih ada yang dipakai,
-      // sisanya tab pertama — atau tidak ada sama sekali, yang berarti layar `Welcome`.
-      const id = active && list.some((w) => w.id === active) ? active : list[0]?.id ?? null
-      if (id) {
-        if (id !== active) await setActive(id)
-        setActiveId(id)
-        await loadWorkspace(id)
-      }
+      if (ws) applyWorkspace(ws)
+      setHydrated(true)
     })()
-  }, [loadWorkspace])
+  }, [applyWorkspace])
 
   const scheduleSave = useCallback(() => {
     const ws = activeWsRef.current
@@ -230,10 +229,10 @@ export default function App() {
 
   const onSelect = useCallback(async (id: string) => {
     if (!id || id === activeId) return
+    const ws = await getWorkspace(id)
     await setActive(id)
-    setActiveId(id)
-    await loadWorkspace(id)
-  }, [activeId, loadWorkspace])
+    applyWorkspace(ws)
+  }, [activeId, applyWorkspace])
 
   // Baris sidebar bisa milik workspace LAIN yang nodenya tidak ter-mount, kelas jebakan yang sama
   // dengan `closeSession` di bawah: dulu `if (!node) return` menelan klik itu diam-diam. Node dicari
@@ -312,30 +311,30 @@ export default function App() {
     for (const n of doomed?.nodes ?? []) send({ t: 'close', id: n.id })
     await deleteWorkspace(id)
     const next = nextActiveWorkspaceId(workspaces.map((w) => w.id), id, activeId)
+    // Board pengganti diambil sebelum daftar tab dikecilkan supaya hilangnya tab dan datangnya
+    // board baru mendarat dalam SATU render, bukan dua.
+    const ws = next && next !== activeId ? await getWorkspace(next) : null
+    if (ws) await setActive(ws.id)
     setWorkspaces((prev) => prev.filter((w) => w.id !== id))
     if (next === activeId) return // yang dihapus bukan yang aktif: board di layar tidak tersentuh
-    if (next) {
-      await setActive(next)
-      setActiveId(next)
-      await loadWorkspace(next)
+    if (ws) {
+      applyWorkspace(ws)
       return
     }
     // Workspace terakhir: mendarat di `Welcome` dengan canvas kosong. `activeWsRef` dikosongkan
     // supaya `scheduleSave` berhenti di baris pertamanya, bukan menulis board hantu.
-    setActiveId(null)
     setActiveWs(null)
     activeWsRef.current = null
     nodesRef.current = []
     edgesRef.current = []
     setNodes([])
     setEdges([])
-  }, [activeId, loadWorkspace, workspaces])
+  }, [activeId, applyWorkspace, workspaces])
 
   const onCreateWorkspace = useCallback(async (name: string, cwd?: string) => {
     const ws = await createWorkspace(name, cwd)
-    setWorkspaces((prev) => [...prev, ws])
     await setActive(ws.id)
-    setActiveId(ws.id)
+    setWorkspaces((prev) => [...prev, ws])
     applyWorkspace(ws)
   }, [applyWorkspace])
 
@@ -418,7 +417,7 @@ export default function App() {
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
           .app-main akan menghitung tinggi header dua kali. */}
       <div className="app-main">
-        {noWorkspaces ? (
+        {!hydrated ? null : noWorkspaces ? (
           <Welcome onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateWorkspace(name)} />
         ) : (
           <ReactFlow
@@ -459,7 +458,7 @@ export default function App() {
           </ReactFlow>
         )}
       </div>
-      {!noWorkspaces && (
+      {hydrated && !noWorkspaces && (
         <>
           <Dock
             onAddTerminal={onAddTerminal}

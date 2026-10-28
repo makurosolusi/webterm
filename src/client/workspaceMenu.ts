@@ -42,6 +42,19 @@ export function nextActiveWorkspaceId(
 }
 
 /**
+ * Workspace mana yang dibuka saat boot: pointer aktif di server bila row-nya masih ada, kalau tidak
+ * tab pertama, dan `null` bila tak ada workspace sama sekali (App jatuh ke layar `Welcome`).
+ *
+ * Pointer itu bisa menunjuk row yang sudah DIHAPUS: menghapus workspace terakhir tidak bisa
+ * mengosongkannya (`PUT /api/active` menolak id kosong dengan 400), dan memuat id mati melempar
+ * 404 — jadi yang memvalidasinya harus di sini, sebelum ada satu pun request detail.
+ */
+export function bootWorkspaceId(ids: string[], activeId: string | null): string | null {
+  if (activeId && ids.includes(activeId)) return activeId
+  return ids[0] ?? null
+}
+
+/**
  * Kalimat konfirmasi hapus. Bentuknya mengikuti nodeterm `lib/projectCloseSessions.ts`
  * (`deleteConfirmCopy`): sebut NAMA-nya, sebut apa yang ikut berakhir, lalu tegaskan apa yang TIDAK
  * ikut terhapus — folder di disk — supaya "Delete" tidak terbaca sebagai menghapus pekerjaan.
