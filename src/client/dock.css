@@ -1,0 +1,191 @@
+/* Dock bawah-tengah. Metrik diambil dari nodeterm `src/renderer/styles.css`
+   (blok `---- Bottom-center dock ----`). */
+
+/* Lapisan tangkap-klik di bawah menu dock: satu klik di luar menutup menu yang terbuka. */
+.dock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+}
+
+.dock {
+  position: absolute;
+  bottom: var(--float-gap);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px;
+  background: rgba(var(--menu-rgb), 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)));
+}
+
+.dock-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.dock-btn:hover:not(:disabled) { background: var(--panel-header); }
+.dock-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Satu-satunya tombol dock yang terisi accent: menambah node adalah aksi utama permukaan ini. */
+.dock-add { background: var(--accent); color: #fff; }
+.dock-btn.dock-add:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, black); }
+.dock-btn.dock-add.active:not(:disabled) { background: color-mix(in srgb, var(--accent) 72%, black); color: #fff; }
+
+.dock-btn.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent-hover);
+}
+
+.dock-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* Titik "ada perubahan belum disimpan", di sudut tombol Save. */
+.dock-dirty {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+.dock-dirty.dirty { background: var(--caution); }
+
+/* Pengangkur menu: menu dock absolut terhadap tombol pembukanya, bukan terhadap dock. */
+.dock-slot {
+  position: relative;
+  display: inline-flex;
+}
+.dock-zoom {
+  min-width: 52px;
+  padding: 5px 6px;
+  text-align: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  user-select: none;
+  cursor: pointer;
+}
+.dock-zoom:hover,
+.dock-zoom.active { background: var(--panel-header); color: var(--text); }
+
+/* ---- Menu di atas dock ---- */
+.dock-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: rgba(var(--menu-rgb), 0.98);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, calc(0.55 * var(--shadow-k)));
+}
+
+/* Menu Add memuat tiap jenis node plus delapan agent builtin, jadi di window pendek ia melewati
+   atas layar. Dibatasi ke ruang antara tepi atas dan dock (54px tinggi dock + 16px jarak), dan
+   baris-barisnya yang menggulir, bukan kotaknya. */
+.dock-add-menu {
+  max-height: calc(100vh - var(--float-gap) - 54px - 16px);
+}
+.dock-menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dock-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.dock-menu button:hover:not(:disabled) { background: var(--panel-header); }
+.dock-menu button:disabled { color: var(--muted); cursor: not-allowed; }
+.dock-menu svg { color: var(--muted); flex-shrink: 0; }
+
+/* Titik warna agent sebagai pengganti ikon brand (webterm tidak membawa aset SVG agent). */
+.dock-menu__glyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dock-menu__rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+/* Preset zoom, diangkur ke readout-nya sendiri alih-alih ke tepi kiri dock. */
+.dock-zoom-menu {
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 168px;
+}
+.dock-zoom-menu button { gap: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }
+/* Aturan umum `.dock-menu svg` mewarnai tiap glyph menu jadi muted; tick adalah penanda STATE,
+   bukan ikon pembuka, jadi ia mempertahankan accent yang bilang "di sini posisimu". */
+.dock-zoom-menu .dock-menu__check svg { color: inherit; }
+.dock-zoom-menu button.is-current { color: var(--accent); }
+
+.dock-menu__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+/* Form dalam menu (workspace baru): baris input, bukan baris tombol. */
+.dock-menu__form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  min-width: 240px;
+}
+.dock-menu__form-row { display: flex; gap: 6px; }

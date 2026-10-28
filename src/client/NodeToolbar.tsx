@@ -30,7 +30,9 @@ export interface NodeToolbarProps {
 export default function NodeToolbar(props: NodeToolbarProps) {
   const count = props.commentCount ?? 0
   return (
-    <div className="node-toolbar">
+    // `nodrag` di container: React Flow mencocokkannya lewat `target.closest()`, jadi satu kelas di
+    // sini cukup untuk semua tombol — tanpa itu klik tombol ikut menggeser node.
+    <div className="nodrag node-toolbar">
       <button className="icon-btn" title="Refresh view" onClick={props.onRefresh}><IconRefresh /></button>
 
       <button

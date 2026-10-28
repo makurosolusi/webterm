@@ -26,7 +26,7 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
   }
 
   return (
-    <div className="node-comments">
+    <div className="nodrag node-comments">
       <div className="node-comments__list">
         {comments.length === 0 ? (
           <div className="node-comments__empty">No comments yet</div>
@@ -49,7 +49,7 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
         />
-        <button className="icon-btn" title="Send" onClick={send}>Send</button>
+        <button className="btn btn--accent" title="Send" onClick={send}>Send</button>
         <button className="icon-btn" title="Close" onClick={onClose}>×</button>
       </div>
     </div>

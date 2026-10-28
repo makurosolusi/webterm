@@ -11,17 +11,13 @@ export default function NodeColorSwatch({ color, onColor }: NodeColorSwatchProps
   const [open, setOpen] = useState(false)
   return (
     <span style={{ position: 'relative', display: 'inline-flex' }}>
-      <button className="node-swatch" title="Color" style={{ background: color }} onClick={() => setOpen((o) => !o)} />
+      <button className="nodrag node-swatch" title="Color" style={{ background: color }} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <span style={{
-          position: 'absolute', top: '100%', left: 0, zIndex: 10, marginTop: 4, display: 'flex',
-          gap: 6, padding: 6, borderRadius: 8, background: 'var(--surface-raised, #1c1c1e)',
-          border: '1px solid var(--border, #38383a)', boxShadow: '0 4px 16px rgba(0,0,0,.4)',
-        }}>
+        <span className="node-swatch-pop">
           {NODE_COLORS.map((c) => (
             <button
               key={c}
-              className="node-swatch"
+              className="nodrag node-swatch"
               title={c}
               style={{ background: c }}
               onClick={() => { onColor(c); setOpen(false) }}

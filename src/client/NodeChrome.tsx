@@ -25,6 +25,41 @@ export interface NodeChromeProps {
   extraHeader?: ReactNode         // Resume/Restart buttons for agent node (rendered just before toolbar)
 }
 
+/** Judul yang dipakai saat node belum punya nama — nodeterm merender `data.title || 'Untitled'`. */
+export const UNTITLED = 'Untitled'
+
+/**
+ * Chip status di header, atau `null` kalau tidak ada yang perlu dikatakan.
+ *
+ * Kosakata & aturan "kapan chip muncul" diambil dari nodeterm `src/renderer/nodes/TerminalNode.tsx`:
+ * `working` → RUNNING, `waiting`/`blocked` → NEEDS YOU, dan state idle/selesai TIDAK merender chip
+ * apa pun (nodeterm tidak punya chip `DONE`). Labelnya literal di markup, bukan hasil
+ * `text-transform`, karena di nodeterm tidak semua label huruf besar (chip `unread` huruf kecil).
+ */
+export function statusChip(status?: AgentStatus): { cls: string; label: string; title: string } | null {
+  if (status === 'working') return { cls: 'node-status--busy', label: 'RUNNING', title: 'Agent is working' }
+  if (status === 'waiting' || status === 'blocked')
+    return { cls: 'node-status--attention', label: 'NEEDS YOU', title: 'Agent needs your input' }
+  return null
+}
+
+/**
+ * className untuk elemen `.term-node`.
+ *
+ * `working`/`attention` sengaja TANPA prefiks: glow node digantung pada
+ * `.react-flow__node:has(.term-node.working)::after` (pseudo-nya harus hidup di luar `.term-node`
+ * yang `overflow: hidden`), dan selector itu disalin apa adanya dari nodeterm.
+ */
+export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; status?: AgentStatus }): string {
+  return (
+    'term-node' +
+    (o.selected ? ' term-node--selected' : '') +
+    (o.collapsed ? ' term-node--collapsed' : '') +
+    (o.status === 'working' ? ' working' : '') +
+    (o.status === 'waiting' || o.status === 'blocked' ? ' attention' : '')
+  )
+}
+
 const IconChevron = (p: React.SVGProps<SVGSVGElement>) => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
     strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M4 6l4 4 4-4" /></svg>
@@ -46,10 +81,12 @@ export default function NodeChrome(props: NodeChromeProps) {
     else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
   }
 
+  const chip = statusChip(props.status)
+
   return (
     <div className="node-header" style={{ position: 'relative' }}>
       <button
-        className={`node-chevron${props.collapsed ? ' node-chevron--collapsed' : ''}`}
+        className={`nodrag icon-btn node-chevron${props.collapsed ? ' node-chevron--collapsed' : ''}`}
         title={props.collapsed ? 'Expand' : 'Collapse'}
         onClick={props.onToggleCollapse}
       ><IconChevron /></button>
@@ -58,21 +95,19 @@ export default function NodeChrome(props: NodeChromeProps) {
 
       {editing ? (
         <input
-          className="field" autoFocus value={draft}
+          className="nodrag node-title--edit" autoFocus value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onTitleKey} onBlur={commit}
         />
-      ) : props.title ? (
-        <span className="node-title" title="Rename" onClick={beginEdit}>{props.title}</span>
       ) : (
-        <button className="node-labeladd" onClick={beginEdit}>+ Label</button>
+        <span className="nodrag node-title" title="Rename" onClick={beginEdit}>{props.title || UNTITLED}</span>
       )}
 
-      {props.status && (
-        <>
-          <span className={`node-status node-status--${props.status}`} />
-          <span className="node-status-text">{props.status}</span>
-        </>
+      {chip && (
+        <span className={`node-status ${chip.cls}`} title={chip.title}>
+          <span className="node-status-dot" />
+          {chip.label}
+        </span>
       )}
 
       {props.pill}

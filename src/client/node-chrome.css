@@ -1,0 +1,286 @@
+/* Chrome node: frame, glow status, header, chip status, toolbar, pill, comments.
+   Metrik diambil dari nodeterm `src/renderer/styles.css` (blok `---- Terminal node ----`); nama
+   selector-nya datar (`node-*`) karena itu kosakata webterm — BEM `term-node__*` nodeterm tidak
+   disalin verbatim. Nama ANIMASI dipertahankan (`nt-*`) supaya cocok dengan sumbernya. */
+
+.term-node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  /* Hanya LEBAR-nya di sini: warnanya datang dari `style={{ borderTopColor }}` tiap node, jadi
+     garis atas memang warna node. Meng-hardcode var(--accent) di sini membuat setiap node tampak
+     biru selama satu frame sebelum inline style menimpanya. */
+  border-top-width: 3px;
+  border-radius: var(--radius-node);
+  box-shadow: var(--shadow-node);
+}
+
+.term-node--selected {
+  border-color: var(--accent);
+}
+
+/* Working (agent di tengah turn): glow clay lembut — #d97757 yang sama dengan spinner — di
+   BELAKANG node. Yang dianimasikan OPACITY pada pseudo-element, bukan box-shadow: menganimasikan
+   shadow memaksa repaint tiap node yang menyala setiap frame. Pulse-nya TERBATAS: empat siklus
+   menandai "baru mulai bekerja", lalu ia tinggal menyala di 0.7 sepanjang turn.
+
+   Pseudo-nya hidup di wrapper React Flow (lewat :has) karena .term-node itu overflow:hidden dan
+   akan meng-clip ::after-nya sendiri. */
+.term-node.working {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--state-working) 35%, transparent),
+    0 0 14px 1px color-mix(in srgb, var(--state-working) 22%, transparent),
+    var(--shadow-node);
+}
+
+.react-flow__node:has(.term-node.working)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-node);
+  pointer-events: none;
+  z-index: -1;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--state-working) 45%, transparent),
+    0 0 22px 3px color-mix(in srgb, var(--state-working) 35%, transparent);
+  opacity: 0.7;
+  animation: nt-working-glow 2.6s ease-in-out 4;
+  will-change: opacity;
+}
+
+@keyframes nt-working-glow {
+  0%, 100% { opacity: 0.7; }
+  35% { opacity: 0.25; }
+  70% { opacity: 1; }
+}
+
+/* Needs-you (waiting/blocked): kembaran merah dari glow di atas — sedikit lebih mendesak daripada
+   working (pulse lebih dalam, siklus lebih cepat): ia sedang meminta kamu. */
+.term-node.attention {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--state-attention) 40%, transparent),
+    0 0 14px 1px color-mix(in srgb, var(--state-attention) 25%, transparent),
+    var(--shadow-node);
+}
+
+.react-flow__node:has(.term-node.attention)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-node);
+  pointer-events: none;
+  z-index: -1;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--state-attention) 55%, transparent),
+    0 0 22px 3px color-mix(in srgb, var(--state-attention) 40%, transparent);
+  opacity: 0.15;
+  animation: nt-attention-glow 1.8s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes nt-attention-glow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+
+/* ---- Header ---- */
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px;
+  background: var(--panel-header);
+  color: var(--text);
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+/* Judul sebagai teks; hanya namanya yang bisa diklik untuk rename. Tanpa `flex: 1` — yang mendorong
+   toolbar ke kanan adalah `.node-toolbar { margin-left: auto }`, dan judul yang melar membuat chip
+   status terlempar menjauh dari namanya. */
+.node-title {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: text;
+}
+.node-title:hover {
+  background: rgba(var(--tint-rgb), 0.06);
+}
+/* Input rename: bentuk yang sama, hanya tanpa chrome field — judul tidak boleh bergeser saat
+   berpindah dari teks ke input. */
+.node-title--edit {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(var(--tint-rgb), 0.06);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
+.node-swatch {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.node-swatch-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius);
+  background: rgba(var(--card-rgb), 0.98);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-node);
+}
+
+/* ---- Chip status ----
+   Teks label-nya LITERAL di markup (nodeterm: 'RUNNING', 'NEEDS YOU', 'unread'), jadi sengaja TIDAK
+   ada `text-transform` di sini — chip 'unread' nodeterm memang huruf kecil. */
+.node-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--state-success);
+}
+.node-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* RUNNING senada dengan glow working (clay), bukan hijau dasar. */
+.node-status--busy { color: var(--state-working); }
+.node-status--busy .node-status-dot { animation: nt-pulse 1.1s ease-in-out infinite; }
+/* NEEDS YOU merah di mana pun. */
+.node-status--attention { color: var(--state-attention); }
+.node-status--attention .node-status-dot { animation: nt-pulse 1.1s ease-in-out infinite; }
+
+@keyframes nt-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* ---- Toolbar header ---- */
+.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--muted);
+  line-height: 1;
+  cursor: pointer;
+}
+/* Wash netral, bukan accent: header penuh tombol biru-saat-hover bersaing dengan chip status dan
+   warna project, yang justru hal-hal bermakna di baris itu. */
+.icon-btn:hover {
+  background: rgba(var(--tint-rgb), 0.1);
+  color: var(--text);
+}
+/* Menutup node mengakhiri sesinya, jadi ia satu-satunya aksi header yang menjawab dengan merah. */
+.icon-btn--danger:hover {
+  background: color-mix(in srgb, var(--state-attention) 20%, transparent);
+  color: var(--state-attention);
+}
+.icon-btn--active { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
+.icon-btn:disabled { opacity: 0.6; cursor: default; }
+.icon-btn:disabled:hover { background: transparent; color: var(--muted); }
+
+/* Collapse chevron (berotasi saat collapsed) */
+.node-chevron { display: inline-flex; transition: transform 0.12s ease; color: var(--muted); }
+.node-chevron--collapsed { transform: rotate(-90deg); }
+
+/* ---- Body ---- */
+.node-body { flex: 1; min-height: 0; overflow: hidden; }
+.term-node--collapsed { height: auto !important; }
+.term-node--collapsed .node-body { display: none; }
+
+/* ---- Model / usage pill (agent node) ---- */
+.usage-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px;
+  padding: 0 8px; border-radius: 13px; background: var(--raised);
+  border: 1px solid var(--border); color: var(--text);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1;
+}
+.usage-pill__label { white-space: nowrap; }
+.usage-pill__minibar {
+  width: 42px; height: 6px; border-radius: 3px; overflow: hidden;
+  background: var(--sunken); flex-shrink: 0;
+}
+.usage-pill__fill { height: 100%; border-radius: 3px; }
+/* lebar fill + background-color di-set inline oleh JS (hijau/kuning/merah menurut % terpakai) */
+
+/* ---- Popover komentar per-node (dibuka tombol header) ---- */
+.node-comments {
+  position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 20;
+  display: flex; flex-direction: column; width: 260px; max-height: 320px;
+  background: rgba(var(--card-rgb), 0.98); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-node);
+}
+.node-comments__list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.node-comments__item { font-size: 12px; color: var(--text); }
+.node-comments__meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.node-comments__empty { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 8px; }
+.node-comments__composer { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+.node-comments__composer textarea {
+  flex: 1; resize: none; min-height: 32px; max-height: 96px; padding: 6px 8px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--sunken); color: var(--text); font-family: inherit; font-size: 12px;
+}
+.node-comments__composer textarea:focus { outline: none; border-color: var(--accent); }
+
+/* Reduce Motion: glow tetap MENYALA (statis) alih-alih hilang — status node adalah informasi, dan
+   nilai statisnya diambil dari frame istirahat tiap keyframe. */
+@media (prefers-reduced-motion: reduce) {
+  .node-status--busy .node-status-dot,
+  .node-status--attention .node-status-dot {
+    animation: none;
+  }
+  .react-flow__node:has(.term-node.working)::after {
+    animation: none;
+    opacity: 0.7;
+    will-change: auto;
+  }
+  .react-flow__node:has(.term-node.attention)::after {
+    animation: none;
+    opacity: 0.8;
+    will-change: auto;
+  }
+}

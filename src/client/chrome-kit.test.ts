@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { contextFillColor, USAGE_RED, USAGE_YELLOW, USAGE_GREEN } from './UsagePill'
 import { NODE_COLORS } from './NodeColorSwatch'
+import { statusChip, termNodeClass, UNTITLED } from './NodeChrome'
 
 describe('contextFillColor', () => {
   it('> 85 → red', () => { expect(contextFillColor(90)).toBe(USAGE_RED) })
@@ -10,6 +11,42 @@ describe('contextFillColor', () => {
   it('59 → green', () => { expect(contextFillColor(59)).toBe(USAGE_GREEN) })
   it('0 → green', () => { expect(contextFillColor(0)).toBe(USAGE_GREEN) })
 })
+describe('statusChip (kosakata chip nodeterm)', () => {
+  it('working → RUNNING, diwarnai state working', () => {
+    expect(statusChip('working')).toEqual({ cls: 'node-status--busy', label: 'RUNNING', title: 'Agent is working' })
+  })
+  it('waiting dan blocked keduanya → NEEDS YOU', () => {
+    expect(statusChip('waiting')?.label).toBe('NEEDS YOU')
+    expect(statusChip('blocked')?.label).toBe('NEEDS YOU')
+    expect(statusChip('blocked')?.cls).toBe('node-status--attention')
+  })
+  it('tidak ada chip untuk done maupun status yang hilang (nodeterm tidak punya chip DONE)', () => {
+    expect(statusChip('done')).toBeNull()
+    expect(statusChip(undefined)).toBeNull()
+  })
+})
+
+describe('termNodeClass', () => {
+  it('node polos hanya .term-node', () => {
+    expect(termNodeClass({})).toBe('term-node')
+  })
+  it('selected dan collapsed memakai modifier BEM yang sudah dipakai AgentNode', () => {
+    expect(termNodeClass({ selected: true, collapsed: true }))
+      .toBe('term-node term-node--selected term-node--collapsed')
+  })
+  it('working/attention TANPA prefiks — selector glow :has() nodeterm mencocokkan kelas polos', () => {
+    expect(termNodeClass({ status: 'working' })).toBe('term-node working')
+    expect(termNodeClass({ status: 'waiting' })).toBe('term-node attention')
+    expect(termNodeClass({ status: 'blocked' })).toBe('term-node attention')
+  })
+  it('done tidak menyalakan glow apa pun', () => {
+    expect(termNodeClass({ status: 'done' })).toBe('term-node')
+  })
+  it('judul kosong jatuh ke fallback nodeterm', () => {
+    expect(UNTITLED).toBe('Untitled')
+  })
+})
+
 describe('NODE_COLORS', () => {
   it('is a non-empty palette of hex strings', () => {
     expect(NODE_COLORS.length).toBeGreaterThan(0)

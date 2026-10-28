@@ -3,7 +3,7 @@ import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
 import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
-import NodeChrome from './NodeChrome'
+import NodeChrome, { termNodeClass } from './NodeChrome'
 import FindBar from './FindBar'
 import { send } from './ws'
 import type { Comment } from '../shared/workspace'
@@ -68,7 +68,7 @@ export default function TerminalNode({ id, data, selected, height }: NodeProps) 
     <>
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
-        className={`term-node${selected ? ' term-node--selected' : ''}${collapsed ? ' term-node--collapsed' : ''}`}
+        className={termNodeClass({ selected: !!selected, collapsed })}
         style={{ borderTopColor: swatch }}
       >
         <NodeChrome
