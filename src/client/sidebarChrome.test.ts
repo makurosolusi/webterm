@@ -38,6 +38,11 @@ const rendersNodeSections = (s: string) => {
   )
 }
 
+/** Tanpa baris meta: kind sudah dinyatakan header seksi + ikon baris, dan daftar ini satu board
+ *  saja jadi nama workspace tak membedakan apa pun. Dijaga di sini karena `ss-meta` yang lain di
+ *  file yang sama (tab Project, Recently closed) memang membawa nama workspace. */
+const nodeRowsHaveNoMeta = (s: string) => !nodesBranch(s).includes('ss-meta')
+
 /** Ikon kind duduk di slot glyph yang sudah ada, bukan di kelas baru. */
 const rowsHaveKindGlyph = (s: string) => {
   const b = nodesBranch(s)
@@ -64,6 +69,15 @@ const OLD_NODES_BRANCH = `        {grouping === 'nodes' ? (
               </li>
             ))}
           </ul>
+        ) : grouping === 'status'`
+/** Bentuk sebelum meta dibuang — baris yang mengulang kind-nya di bawah judulnya sendiri. */
+const OLD_NODES_META = `        {grouping === 'nodes' ? (
+          nodeGroups.map((g) => (
+            <span className="ss-row__text">
+              <span className="ss-row__title">{r.label}</span>
+              <span className="ss-meta">{NODE_KIND_LABEL[r.kind]}</span>
+            </span>
+          ))
         ) : grouping === 'status'`
 
 describe('judul sidebar', () => {
@@ -123,6 +137,20 @@ describe('tab Nodes', () => {
       expect(panel).toMatch(new RegExp(String.raw`\b${kind}: ${icon},`))
       expect(panel.split("from 'lucide-react'")[0]).toContain(icon)
     }
+  })
+
+  it('barisnya tidak mengulang kind di baris meta', () => {
+    const panel = src('SessionsPanel.tsx')
+    expect(nodesBranch(panel).length).toBeGreaterThan(0)
+    expect(nodeRowsHaveNoMeta(panel)).toBe(true)
+    // `ss-meta` di luar blok Nodes (tab Project, Recently closed) harus tetap ada: yang dibawanya
+    // nama workspace, bukan kind. Tanpa ini guard di atas bisa "lulus" dengan menyapu semuanya.
+    expect(panel).toContain('ss-meta')
+  })
+
+  it('guard meta merah pada bentuk lama yang mencetak NODE_KIND_LABEL per baris', () => {
+    expect(nodesBranch(OLD_NODES_META).length).toBeGreaterThan(0)
+    expect(nodeRowsHaveNoMeta(OLD_NODES_META)).toBe(false)
   })
 
   it('guard menolak daftar datar tanpa seksi dan tanpa ikon', () => {

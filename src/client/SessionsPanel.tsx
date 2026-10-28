@@ -21,7 +21,7 @@ import {
   signalCounts,
   type SidebarGrouping,
 } from './sessionList'
-import { buildNodeGroups, NODE_KIND_LABEL } from './nodeList'
+import { buildNodeGroups } from './nodeList'
 import type { ClosedEntry } from './closedHistory'
 import { subscribeUnread, unreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode, WsNodeKind } from '../shared/workspace'
@@ -305,11 +305,10 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                         <span className="ss-row__glyph">
                           <Icon aria-hidden />
                         </span>
+                        {/* Tanpa meta: satu board saja (nama workspace sama di tiap baris), dan
+                            kind sudah disebut header seksi + ikon — kadang judulnya sendiri. */}
                         <span className="ss-row__text">
                           <span className="ss-row__title">{r.label}</span>
-                          {/* Kind saja: daftar ini hanya board yang sedang dibuka, jadi nama
-                              workspace sama untuk semua baris dan cuma jadi kebisingan. */}
-                          <span className="ss-meta">{NODE_KIND_LABEL[r.kind]}</span>
                         </span>
                       </div>
                     </li>
