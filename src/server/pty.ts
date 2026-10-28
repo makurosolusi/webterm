@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
 
@@ -104,6 +105,58 @@ export function shellArgv(shell?: string, cmd?: string): string[] {
   return cmd ? [bin, '-l', '-c', cmd] : [bin]
 }
 
+/** Jeda SIGTERM → SIGKILL saat node ditutup. Meniru grace nodeterm (`pty-manager.ts:7099-7110`,
+ *  30 × 50 ms): beri harness agent jendela untuk menulis transcript/resume id sebelum dipaksa. */
+const KILL_GRACE_MS = 1500
+
+/** PID keturunan `pid` menurut satu snapshot `ps` (tiap baris `pid ppid`), terdangkal lebih dulu.
+ *  Dipisah dari pemanggilan `ps` supaya bisa dites tanpa men-spawn proses apa pun. */
+export function descendantPids(pid: number, psOutput: string): number[] {
+  const kids = new Map<number, number[]>()
+  for (const line of psOutput.split('\n')) {
+    const [child, parent] = line.trim().split(/\s+/).map(Number)
+    if (!Number.isInteger(child) || !Number.isInteger(parent)) continue
+    kids.set(parent as number, [...(kids.get(parent as number) ?? []), child as number])
+  }
+  const found: number[] = []
+  const walk = (parent: number): void => {
+    for (const child of kids.get(parent) ?? []) {
+      // Pid yang sudah terdaftar dilewati supaya penelusuran pasti berhenti walau snapshot `ps`
+      // sempat memberi baris yang bertabrakan (pid daur ulang), bukan karena pohon proses bersiklus.
+      if (child === pid || found.includes(child)) continue
+      found.push(child)
+      walk(child)
+    }
+  }
+  walk(pid)
+  return found
+}
+
+/** Keturunan hidup `pid`. Pid server sendiri dibuang sebagai jaring pengaman: tak ada pohon nyata
+ *  yang menaruhnya di bawah anak kita, dan satu baris `ps` yang salah baca tidak boleh berujung
+ *  server menyinyal dirinya sendiri. */
+function liveDescendants(pid: number): number[] {
+  try {
+    const ps = execFileSync('ps', ['-Ao', 'pid=,ppid='], { encoding: 'utf8' })
+    return descendantPids(pid, ps).filter((p) => p > 1 && p !== process.pid)
+  } catch {
+    // `ps` absen/gagal: kehilangan sweep lebih baik daripada menebak pid. Perilaku lama (sinyal
+    // ke pid anak saja) tetap berlaku.
+    return []
+  }
+}
+
+/** Sinyal ke tiap pid, mengabaikan yang sudah keluar. */
+function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL'): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal)
+    } catch {
+      // ESRCH: proses sudah mati lebih dulu — itu justru hasil yang diinginkan, bukan kegagalan.
+    }
+  }
+}
+
 export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> }): Pty {
   let onData: (data: string) => void = () => {}
   let onExit: (code: number) => void = () => {}
@@ -135,6 +188,23 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?:
     onExit(cb) { onExit = cb },
     write(data) { terminal.write(data) },
     resize(cols, rows) { terminal.resize(cols, rows) },
-    kill() { proc.kill() },
+    /**
+     * KENAPA bukan `process.kill(-pid)`: `Bun.spawn({ terminal })` TIDAK memanggil setsid, jadi anak
+     * mewarisi process group SERVER (diukur pada Bun 1.4.2: pgid anak = pid proses webterm sendiri).
+     * Menyinyal grup itu berarti menembak server. nodeterm boleh menyinyal grup karena pane-nya milik
+     * tmux dan ia memakai tpgid pane (`pty-manager.ts:7095-7098`); di sini tak ada grup terpisah untuk
+     * ditembak, jadi keturunan didaftar satu per satu.
+     *
+     * Daftar dikumpulkan SEBELUM shell mati: sesudahnya cucu di-reparent ke pid 1 dan `ps` tak lagi
+     * bisa menghubungkannya ke node ini.
+     */
+    kill() {
+      const strays = liveDescendants(proc.pid)
+      proc.kill()
+      signalAll(strays, 'SIGTERM')
+      // Yang mengabaikan SIGTERM dipaksa setelah grace. Inilah inti perbaikannya: cucu yang lolos
+      // terus memakai CPU — dan untuk node agent, terus memakan token.
+      setTimeout(() => signalAll([proc.pid, ...strays], 'SIGKILL'), KILL_GRACE_MS)
+    },
   }
 }
