@@ -15,6 +15,7 @@ import HelpOverlay from './HelpOverlay'
 import { SettingsPanel } from './SettingsPanel'
 import { nodeTypes } from './nodeTypes'
 import { SettingsProvider, useSettings } from './useSettings'
+import { NodeActionsProvider } from './nodeActions'
 import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode, workspaceNameFromPath } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
@@ -382,18 +383,12 @@ export default function App() {
     rf.current?.updateNodeData(id, { hideLinks: !(cur?.data as { hideLinks?: boolean })?.hideLinks })
   }, [])
 
-  // Inject onSession + the hideLinks eye handler into agent nodes, for rendering only; toWsNode
-  // drops both. Settings TIDAK lewat sini — lihat `useLiveSettings`. Hasilnya DIPAKU ke `Node[]`:
-  // tanpa itu React Flow menyimpulkan tipe node dari suntikan ini dan `rf` default tak cocok lagi.
-  const flowNodes = useMemo<Node[]>(
-    () => nodes.map((n) => {
-      const base = withLinkHandles(n)
-      return n.type === 'agent'
-        ? { ...base, data: { ...n.data, onSession, onToggleHideLinks: () => onToggleHideLinks(n.id) } }
-        : base
-    }),
-    [nodes, onSession, onToggleHideLinks],
-  )
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks }), [onSession, onToggleHideLinks])
+
+  // TIDAK ada suntikan apa pun ke `data` di sini — callback lewat `useNodeActions`, settings lewat
+  // `useLiveSettings`. Node terminal/agent jadi mewarisi identitas objek aslinya (`withLinkHandles`
+  // memulangkan `n` itu sendiri kecuali files/editor), satu-satunya cara `memo` menggigit saat drag.
+  const flowNodes = useMemo(() => nodes.map(withLinkHandles), [nodes])
 
   const liveNodes = useMemo(() => nodes.map(toWsNode), [nodes])
 
@@ -403,6 +398,7 @@ export default function App() {
 
   return (
     <SettingsProvider value={settings}>
+    <NodeActionsProvider value={nodeActions}>
     <div className="app-shell">
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
@@ -513,6 +509,7 @@ export default function App() {
       {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
+    </NodeActionsProvider>
     </SettingsProvider>
   )
 }

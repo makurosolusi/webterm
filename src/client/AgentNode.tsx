@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react'
 import { agentConfig, canResume, hasUsage, isContextCapable, mintsSessionId } from '../shared/workspace'
@@ -13,17 +13,19 @@ import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
 import { EXIT_SETTLE_MS, ineligibleHint, restartEligibility, sendExitSequence } from './agentActions'
 import { send, subscribeStatus, getStatus } from './ws'
 import { unwatchNode, watchNode } from './unread'
+import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
 
 const COLLAPSED_H = 40
 
-export default function AgentNode({ id, data, selected, height }: NodeProps) {
+function AgentNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
     cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
     sessionId?: string; collapsed?: boolean; comments?: Comment[]; agentModel?: string
-    onSession?: (id: string, uuid: string) => void
+    hideLinks?: boolean
   }
-  const { cmd, cwd, agentId, sessionId, onSession } = d
+  const { cmd, cwd, agentId, sessionId } = d
+  const { onSession, onToggleHideLinks } = useNodeActions()
   const rf = useReactFlow()
   const termRef = useRef<TerminalHandle>(null)
 
@@ -47,7 +49,7 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
   const [gen, setGen] = useState(0)
 
   // Persist a freshly generated id up to App exactly once.
-  useEffect(() => { if (!sessionId) onSession?.(id, sid) }, [])
+  useEffect(() => { if (!sessionId) onSession(id, sid) }, [])
 
   const builtin = agentId ? agentConfig(agentId) : undefined
   const swatch = d.color ?? builtin?.color ?? '#0a84ff'
@@ -81,7 +83,7 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
   const newSession = () => {
     send({ t: 'close', id })
     const n = crypto.randomUUID()
-    setSid(n); setResume(false); onSession?.(id, n); setGen((g) => g + 1)
+    setSid(n); setResume(false); onSession(id, n); setGen((g) => g + 1)
   }
   // Resume menyambung kembali percakapan sebelumnya lewat uuid yang SAMA + `--resume`.
   const doResume = () => { setResume(true); setGen((g) => g + 1) }
@@ -193,7 +195,7 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
           onAiName={aiName} aiNaming={aiNaming}
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
-          hideLinks={ext.hideLinks} onToggleHideLinks={ext.onToggleHideLinks}
+          hideLinks={d.hideLinks} onToggleHideLinks={() => onToggleHideLinks(id)}
         />
         <div className="node-body">
           <TerminalCore
@@ -225,3 +227,5 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
     </>
   )
 }
+
+export default memo(AgentNode)

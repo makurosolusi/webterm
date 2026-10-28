@@ -5,7 +5,7 @@
 // TANPA FILE WATCHER, sama seperti nodeterm: refresh `⟳` manual menaikkan `version`. Watcher berarti
 // satu `fs.watch` per node yang terbuka plus debounce plus rekonsiliasi seleksi, demi sesuatu yang
 // jarang berubah di belakang punggung pengguna.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Node, NodeProps } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
@@ -37,7 +37,7 @@ const UNREACHABLE = 'Could not reach this folder. It may be gone, or its filesys
 
 type Menu = { x: number; y: number; entry: DirEntry | null }
 
-export default function FilesNode({ id, data, selected, height }: NodeProps) {
+function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
     dirPath?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]
   }
@@ -289,3 +289,5 @@ export default function FilesNode({ id, data, selected, height }: NodeProps) {
     </>
   )
 }
+
+export default memo(FilesNode)

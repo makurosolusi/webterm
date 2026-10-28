@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
 import TerminalCore from './TerminalCore'
@@ -11,7 +11,7 @@ import type { Comment } from '../shared/workspace'
 
 const COLLAPSED_H = 40
 
-export default function TerminalNode({ id, data, selected, height }: NodeProps) {
+function TerminalNode({ id, data, selected, height }: NodeProps) {
   const d = data as { cwd?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
   const rf = useReactFlow()
   const termRef = useRef<TerminalHandle>(null)
@@ -73,3 +73,5 @@ export default function TerminalNode({ id, data, selected, height }: NodeProps) 
     </>
   )
 }
+
+export default memo(TerminalNode)

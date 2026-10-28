@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { X } from 'lucide-react'
 // Type-only: terhapus saat compile, jadi tidak membatalkan lazy-load Monaco.
@@ -43,7 +43,7 @@ const errText = (err: unknown): string => (err instanceof Error ? err.message : 
  * Port dari nodeterm `src/renderer/nodes/EditorNode.tsx`. Bedanya: fs masuk sebagai prop callback
  * (webterm tidak punya preload Electron), dan tidak ada cabang SSH/worktree.
  */
-export default function EditorNode({
+function EditorNode({
   id,
   data,
   selected,
@@ -355,3 +355,5 @@ export default function EditorNode({
     </>
   )
 }
+
+export default memo(EditorNode)
