@@ -7,6 +7,10 @@
 // menyambungkannya ke `useSettings()`.
 import { useEffect, useState } from 'react'
 import type { Settings } from '../shared/settings'
+import {
+  TERMINAL_SCROLLBACK_LINES_MAX,
+  TERMINAL_SCROLLBACK_LINES_MIN,
+} from './terminalConfig'
 import { TERMINAL_THEMES } from './themes'
 import { AgentSettings } from './SettingsAgents'
 import { ColorField, NumberField, SelectField, TextField, ToggleField } from './SettingsFields'
@@ -169,9 +173,13 @@ function ShellSection({ settings: s, onChange }: P): React.JSX.Element {
     <>
       <TextField id="st-defaultShell" label="Shell default" value={s.defaultShell} mono placeholder="(shell default sistem)"
         hint="Kosong = pakai shell default sistem." onChange={(v) => onChange({ defaultShell: v })} />
-      <NumberField id="st-scrollback" label="Scrollback" value={s.scrollbackBytes} min={16 * 1024} max={64 * 1024 * 1024} step={16 * 1024} unit="byte"
-        hint="Dalam BYTE, bukan baris: yang membatasi adalah ring buffer byte mentah PTY di server. Default 256 KiB (262144)."
+      <NumberField id="st-scrollback" label="Buffer replay server" value={s.scrollbackBytes} min={16 * 1024} max={64 * 1024 * 1024} step={16 * 1024} unit="byte"
+        hint="Dalam BYTE: ring buffer byte mentah PTY di server, yang diputar ulang saat tab di-reload. Default 256 KiB (262144)."
         onChange={(v) => onChange({ scrollbackBytes: v })} />
+      <NumberField id="st-scrollbackLines" label="Scrollback terminal" value={s.scrollbackLines}
+        min={TERMINAL_SCROLLBACK_LINES_MIN} max={TERMINAL_SCROLLBACK_LINES_MAX} step={1000} unit="baris"
+        hint="Dalam BARIS: berapa jauh ke atas bisa discroll di dalam node terminal. Biayanya per node. Default 10000."
+        onChange={(v) => onChange({ scrollbackLines: v })} />
     </>
   )
 }

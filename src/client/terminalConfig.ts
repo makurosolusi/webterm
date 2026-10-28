@@ -1,4 +1,5 @@
 import type { FontWeight, ITheme } from '@xterm/xterm'
+import { DEFAULT_SETTINGS } from '../shared/settings'
 import type {
   Settings,
   TerminalCursorInactiveStyle,
@@ -35,21 +36,11 @@ export const TERMINAL_FONT_WEIGHT_MAX = 900
 /** Batas kontras xterm sendiri: 1 mematikan penyesuaian, 21 memaksa hitam-di-atas-putih. */
 export const TERMINAL_MIN_CONTRAST_MIN = 1
 export const TERMINAL_MIN_CONTRAST_MAX = 21
-
-/**
- * Batas scrollback xterm dalam BARIS — bukan `settings.scrollbackBytes`, yang membatasi ring
- * buffer BYTE di `src/server/sessions.ts` (baca doc kuncinya di `src/shared/settings.ts`).
- *
- * Konstanta, bukan setting, karena belum ada permukaan yang mengaturnya: nodeterm menurunkan
- * nilainya dari `tmuxScrollback` lalu meng-clamp-nya ke 10.000 (`@shared/scrollback`), jadi angka
- * yang benar-benar dipakai xterm di sana selalu 10.000 selama pengguna tidak menurunkan
- * `tmuxScrollback` di bawah itu. Biayanya per node dan satu canvas memuat banyak node: xterm
- * mengalokasikan `cols × 12 B` untuk SETIAP baris yang di-buffer.
- *
- * ponytail: konstanta; butuh kunci `scrollbackLines` sendiri di `src/shared/settings.ts` kalau
- * nilainya harus bisa diatur pengguna.
- */
-export const XTERM_SCROLLBACK_LINES = 10_000
+/** Baris scrollback xterm (`settings.scrollbackLines`). Di bawah batas bawah ini satu `clear` saja
+ *  sudah membuang output yang baru lewat; di atas batas atas biayanya nyata — xterm mengalokasikan
+ *  `cols × 12 B` untuk SETIAP baris yang di-buffer, per node, dan satu canvas memuat banyak node. */
+export const TERMINAL_SCROLLBACK_LINES_MIN = 1_000
+export const TERMINAL_SCROLLBACK_LINES_MAX = 100_000
 
 function clamp(value: number, min: number, max: number, fallback: number): number {
   // Nilai settings bisa diedit tangan dan datang lewat HTTP: nilai hilang/NaN harus mendarat di
@@ -73,6 +64,15 @@ export function terminalFontWeight(value: number, fallback: number): number {
 
 export function terminalMinContrast(value: number): number {
   return clamp(value, TERMINAL_MIN_CONTRAST_MIN, TERMINAL_MIN_CONTRAST_MAX, 1)
+}
+
+export function terminalScrollbackLines(value: number): number {
+  return clamp(
+    value,
+    TERMINAL_SCROLLBACK_LINES_MIN,
+    TERMINAL_SCROLLBACK_LINES_MAX,
+    DEFAULT_SETTINGS.scrollbackLines,
+  )
 }
 
 /** Opsi turunan-appearance, sudah diresolve dan di-clamp. */
@@ -112,6 +112,9 @@ export type XtermVisualSettings = Pick<
   | 'cursorStyle'
   | 'cursorInactiveStyle'
   | 'cursorBlink'
+  // Bukan appearance, tapi satu-satunya kunci yang memberi xterm batas scrollback-nya (BARIS —
+  // bukan `scrollbackBytes`, yang milik ring buffer PTY di server).
+  | 'scrollbackLines'
 >
 
 /**
@@ -142,7 +145,7 @@ export function xtermOptionsFromSettings(
     cursorInactiveStyle: s.cursorInactiveStyle,
     lineHeight: terminalLineHeight(s.terminalLineHeight),
     letterSpacing: terminalLetterSpacing(s.terminalLetterSpacing),
-    scrollback: XTERM_SCROLLBACK_LINES,
+    scrollback: terminalScrollbackLines(s.scrollbackLines),
     theme: resolveTerminalTheme(s.terminalTheme).theme,
     allowProposedApi: true,
     // Di dalam app yang meminta mouse tracking (vim, htop) drag biasa diteruskan ke app;

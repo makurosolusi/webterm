@@ -122,11 +122,19 @@ export interface Settings {
    * 256 KiB = nilai konstanta yang berjalan hari ini, jadi mengangkatnya ke settings tidak
    * mengubah perilaku apa pun.
    *
-   * Kalau nanti xterm sisi client butuh batas `scrollback`-nya sendiri (xterm menghitung BARIS),
-   * itu kunci TERPISAH dengan nama yang menyebut satuannya. Jangan diam-diam mengubah arti kunci
-   * ini menjadi baris.
+   * Batas sisi client punya kunci TERPISAH, `scrollbackLines`. Jangan diam-diam mengubah arti
+   * kunci ini menjadi baris.
    */
   scrollbackBytes: number
+  /**
+   * Scrollback xterm sisi CLIENT dalam BARIS — kunci terpisah dari `scrollbackBytes` karena
+   * satuan dan konsumennya berbeda: yang ini mendarat di opsi `scrollback` xterm (xterm menghitung
+   * baris grid), sedangkan `scrollbackBytes` membatasi ring buffer byte mentah PTY di server.
+   * Satu nilai tidak bisa melayani keduanya — byte yang dipakai sebagai baris memberi xterm
+   * ratusan ribu baris buffer per node, dan biayanya per node (`cols × 12 B` per baris) sementara
+   * satu canvas memuat banyak node.
+   */
+  scrollbackLines: number
 
   // --- Agent -----------------------------------------------------------------------------------
   /** Agent yang diluncurkan tombol quick-add. */
@@ -197,6 +205,9 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultShell: '',
   // 256 KiB — persis `SCROLLBACK_BYTES` yang berjalan di server hari ini. Lihat doc kuncinya.
   scrollbackBytes: 256 * 1024,
+  // 10.000 baris — angka yang dipakai xterm hari ini (dan clamp nodeterm), jadi mengangkatnya ke
+  // settings tidak mengubah perilaku. Lihat doc kuncinya.
+  scrollbackLines: 10_000,
   defaultAgent: 'claude',
   agentLaunchCommands: {},
   customAgents: [],

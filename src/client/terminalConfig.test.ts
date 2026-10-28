@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '../shared/settings'
+import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import {
   TERMINAL_LETTER_SPACING_MAX,
   TERMINAL_LETTER_SPACING_MIN,
   TERMINAL_LINE_HEIGHT_MAX,
   TERMINAL_LINE_HEIGHT_MIN,
-  XTERM_SCROLLBACK_LINES,
+  TERMINAL_SCROLLBACK_LINES_MAX,
+  TERMINAL_SCROLLBACK_LINES_MIN,
   applyLiveOptions,
   terminalFontWeight,
   terminalLetterSpacing,
@@ -72,11 +73,29 @@ describe('xtermOptionsFromSettings', () => {
     expect(xtermOptionsFromSettings(base).macOptionClickForcesSelection).toBe(true)
   })
 
-  it('sets scrollback in LINES, not from scrollbackBytes', () => {
+  it('sets scrollback from scrollbackLines, never from scrollbackBytes', () => {
     // `settings.scrollbackBytes` membatasi ring buffer BYTE di server. Memakainya di sini akan
     // memberi xterm 262.144 BARIS buffer per node.
-    expect(xtermOptionsFromSettings(base).scrollback).toBe(XTERM_SCROLLBACK_LINES)
-    expect(XTERM_SCROLLBACK_LINES).not.toBe(DEFAULT_SETTINGS.scrollbackBytes)
+    expect(xtermOptionsFromSettings(base).scrollback).toBe(DEFAULT_SETTINGS.scrollbackLines)
+    expect(DEFAULT_SETTINGS.scrollbackLines).not.toBe(DEFAULT_SETTINGS.scrollbackBytes)
+    // Nilai non-default ikut terbawa, dan mengubah kunci BYTE tidak menggeser scrollback xterm.
+    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: 4_000 }).scrollback).toBe(4_000)
+    const tinyServerBuffer: Settings = { ...DEFAULT_SETTINGS, scrollbackBytes: 1024 }
+    expect(xtermOptionsFromSettings(tinyServerBuffer).scrollback).toBe(
+      DEFAULT_SETTINGS.scrollbackLines,
+    )
+  })
+
+  it('clamps a hand-edited scrollbackLines instead of handing xterm a useless buffer', () => {
+    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: 1 }).scrollback).toBe(
+      TERMINAL_SCROLLBACK_LINES_MIN,
+    )
+    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: 10_000_000 }).scrollback).toBe(
+      TERMINAL_SCROLLBACK_LINES_MAX,
+    )
+    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: NaN }).scrollback).toBe(
+      DEFAULT_SETTINGS.scrollbackLines,
+    )
   })
 
   it('layers the per-terminal font size override over the global size', () => {
