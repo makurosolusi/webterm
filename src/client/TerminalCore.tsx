@@ -47,6 +47,18 @@ function writeClipboard(nodeId: string, text: string): void {
   })
 }
 
+/** Node yang di-collapse hanya DISEMBUNYIKAN (`.term-node--collapsed .node-body { display: none }`
+ *  di node-chrome.css), bukan di-unmount — itulah sebabnya ia mempertahankan PTY-nya. Konsekuensinya
+ *  elemen host xterm jadi 0×0, dan FitAddon tetap menghitung cols/rows dari dimensi nol itu.
+ *  `term.resize()` ke ukuran mikro hasilnya ME-REFLOW buffer, dan reflow tidak punya operasi
+ *  balikan: scrollback-nya rusak PERMANEN, bukan cuma tak tergambar — karena itu menggambar ulang
+ *  (tombol refresh) tak bisa memulihkannya. Jadi 0×0 dibaca sebagai "sedang tersembunyi": tidak ada
+ *  ukuran bermakna untuk dipasang, dan saat node di-expand elemen kembali punya ukuran sehingga
+ *  ResizeObserver menyala sendiri. */
+function hasSize(el: HTMLElement): boolean {
+  return el.clientWidth > 0 && el.clientHeight > 0
+}
+
 /**
  * Badan xterm yang dipakai ulang: memasang terminal, berlangganan PTY-nya, dan mengirim `open`
  * awal. SENGAJA tidak mengirim `close` saat cleanup — App yang memiliki close saat node dihapus,
@@ -82,10 +94,13 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   const live = useRef({ ...props, settings, fontZoom })
   live.current = { ...props, settings, fontZoom }
 
+  // SATU-SATUNYA jalur fit+resize: `ResizeObserver` memakai ini juga, supaya gerbang `hasSize`
+  // cukup ditegakkan di satu tempat.
   const refit = useCallback(() => {
     const term = termRef.current
     const fit = fitRef.current
-    if (!term || !fit) return
+    const el = elRef.current
+    if (!term || !fit || !el || !hasSize(el)) return
     fit.fit()
     term.refresh(0, term.rows - 1)
     send({ t: 'resize', id, cols: term.cols, rows: term.rows })
@@ -136,7 +151,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       console.warn(`terminal ${p.id}: Unicode 11 width tables unavailable`, err)
     }
     term.open(el)
-    fit.fit()
+    // Node bisa LAHIR sudah ter-collapse (collapse ikut tersimpan di layout workspace), jadi jalur
+    // ini pun bergerbang — kalau tidak, `open` di bawah men-spawn PTY selebar ~1 kolom.
+    if (hasSize(el)) fit.fit()
     termRef.current = term
     fitRef.current = fit
     searchRef.current = search
@@ -201,10 +218,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       ...(p.resume ? { resume: true } : {}),
     })
 
-    const ro = new ResizeObserver(() => {
-      fit.fit()
-      send({ t: 'resize', id, cols: term.cols, rows: term.rows })
-    })
+    const ro = new ResizeObserver(refit)
     ro.observe(el)
 
     return () => {
@@ -219,6 +233,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       searchRef.current = null
       webglRef.current = null
     }
+    // `refit` dipakai di dalam tapi SENGAJA tidak didaftarkan: ia di-memo pada `[id]` juga, jadi
+    // `[id]` sudah menutupinya — dan deps effect ini wajib tetap `[id]` saja (terminalConfig.test.ts),
+    // karena dependency tambahan apa pun men-dispose terminal dan membuang scrollback-nya.
   }, [id])
 
   // Terapkan settings ke terminal yang hidup. Jalan juga tepat setelah pembuatan: semua opsi sudah
