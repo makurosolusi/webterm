@@ -24,6 +24,8 @@ Serves http://127.0.0.1:8700.
 Environment variables:
 
 - `PORT` — listen port (default `8700`).
+- `WEBTERM_HOST` — bind address (default `127.0.0.1`).
+- `WEBTERM_TOKEN` — shared secret required on `/api` and the `/ws` upgrade. Optional on a loopback bind; **mandatory** when `WEBTERM_HOST` is reachable from other machines — the server refuses to start without it rather than expose an unauthenticated shell.
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`.
 
@@ -40,10 +42,13 @@ NODE_ENV=production bun src/server/index.ts  # serve dist/
 
 Split by runtime:
 
-- `npm run test` — vitest (client store + ws reconnect).
-- `tsc --noEmit` — typecheck gate.
-- `bun test src/server/sessions.bun.test.ts` — Bun-only PTY round-trip / detach / scrollback-replay (needs `Bun.Terminal`, excluded from vitest).
-- `bun test src/server/db.bun.test.ts` — Bun-only SQLite workspace store round-trip.
+- `TMPDIR=/tmp/st npm run typecheck` — `tsc --noEmit` typecheck gate.
+- `TMPDIR=/tmp/st npm run test` — vitest (client store + ws reconnect).
+- `TMPDIR=/tmp/st bun test src/server/sessions.bun.test.ts` — Bun-only PTY round-trip / detach / scrollback-replay (needs `Bun.Terminal`, excluded from vitest).
+- `TMPDIR=/tmp/st bun test src/server/db.bun.test.ts` — Bun-only SQLite workspace store round-trip.
+- `TMPDIR=/tmp/st bun test src/server/fsOps.bun.test.ts` — Bun-only filesystem helpers (also excluded from vitest).
+
+The `TMPDIR` prefix is not optional on macOS: the tests bind unix sockets under `$TMPDIR`, and the default path blows past the 104-character `sun_path` limit, failing with `EINVAL`.
 
 The vitest run now also covers `src/shared` (assembleCmd / agent config).
 
