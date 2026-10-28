@@ -147,15 +147,25 @@ function liveDescendants(pid: number): number[] {
 }
 
 /** Sinyal ke tiap pid, mengabaikan yang sudah keluar. */
-function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL'): void {
+function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL' | 'SIGWINCH'): void {
   for (const pid of pids) {
     try {
       process.kill(pid, signal)
     } catch {
-      // ESRCH: proses sudah mati lebih dulu — itu justru hasil yang diinginkan, bukan kegagalan.
+      // Daftar pid-nya SELALU satu snapshot `ps` yang sudah basi beberapa milidetik saat dipakai,
+      // jadi ESRCH di sini normal, bukan anomali — dan tak satu pun pemanggil bisa menindaklanjutinya:
+      // untuk SIGTERM/SIGKILL proses yang sudah mati justru hasil yang diminta, dan untuk SIGWINCH
+      // proses yang mati tidak punya layar untuk digambar ulang. Mempropagasikannya hanya akan
+      // menjatuhkan resize node yang sah gara-gara satu cucu yang kebetulan keluar barengan.
     }
   }
 }
+
+/** Winsize yang masuk akal. Bukan paranoia tipe: `resize` datang lewat WebSocket dari `fit()` di
+ *  client, dan `fit()` pada elemen 0x0 (node yang dilipat / belum ter-layout) bisa memberi 0 atau
+ *  NaN. Nol tak berarti bagi termios, dan NaN LOLOS gerbang perubahan di bawah karena `NaN !== NaN`
+ *  — artinya setiap detak ResizeObserver akan jadi satu putaran `ps` + badai SIGWINCH. */
+const saneWinsize = (n: number): boolean => Number.isInteger(n) && n > 0
 
 export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> }): Pty {
   let onData: (data: string) => void = () => {}
@@ -182,12 +192,52 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?:
     terminal.close()
   })
 
+  // Winsize yang TERAKHIR benar-benar dipasang ke termios. Gerbangnya hidup di sini, bukan di
+  // `Sessions`, karena PTY-lah yang memang tahu nilai ini — `Sessions.resize` hanya meneruskan.
+  let lastCols = opts.cols
+  let lastRows = opts.rows
+
   return {
     pid: proc.pid,
     onData(cb) { onData = cb },
     onExit(cb) { onExit = cb },
     write(data) { terminal.write(data) },
-    resize(cols, rows) { terminal.resize(cols, rows) },
+    /**
+     * KENAPA SIGWINCH dikirim sendiri: `Bun.spawn({ terminal })` TIDAK memanggil setsid/TIOCSCTTY,
+     * jadi PTY ini bukan controlling terminal anak dan tty-nya tak punya foreground process group
+     * (diukur pada Bun 1.4.2 dari dalam PTY: `ps -o tpgid` → TPGID 0; dilaporkan upstream sebagai
+     * oven-sh/bun#33237). `terminal.resize()` MEMANG memperbarui winsize termios — `stty size` di
+     * dalam PTY ikut berubah — tapi tanpa foreground group kernel tidak punya siapa pun untuk
+     * disinyali. TUI full-screen (Claude Code, vim, tmux) hanya menggambar ulang saat menerima
+     * SIGWINCH, jadi ia terus memakai geometri yang dibacanya saat start: node dikecilkan →
+     * frame kebesaran terpotong `overflow: hidden` sehingga TAMPAK menyesuaikan, node diperbesar →
+     * frame kekecilan dan sisa ruangnya terlihat kosong. Itu asimetri yang dikeluhkan.
+     *
+     * KENAPA keturunan ikut disinyali, bukan hanya pid anak: pemegang layar sering bukan anak
+     * langsung. `cmd` webterm dijalankan lewat login shell (`shellArgv`), jadi `claude` adalah CUCU;
+     * dengan pembungkus (envman, tmux) ia lebih dalam lagi. Karena tak ada foreground process group,
+     * kernel tidak bisa memilihkan penerima untuk kita, dan menyinyal process group juga bukan opsi
+     * (anak mewarisi pgid SERVER — lihat `kill()` di bawah), jadi pohonnya didatangi satu per satu.
+     *
+     * Kalau Bun kelak memperbaiki setsid, kernel akan ikut mengirim satu SIGWINCH dan penerima
+     * mendapat dua. Itu aman: handler SIGWINCH yang benar MEMBACA winsize saat ini, tidak menghitung
+     * sinyal — jadi dua sinyal berarti dua kali membaca ukuran yang sama.
+     */
+    resize(cols, rows) {
+      if (!saneWinsize(cols) || !saneWinsize(rows)) return
+      // Gerbang perubahan. `TerminalCore` mengirim `resize` pada SETIAP detak ResizeObserver, dan
+      // sebelum perbaikan di atas itu tak terasa karena resize-nya tak berefek. Sekarang berefek:
+      // tanpa gerbang ini, menyeret handle resize node akan jadi satu putaran `ps` + redraw penuh
+      // TUI per frame. SENGAJA tanpa debounce — cukup gerbang kesetaraan, karena `fit()` memetakan
+      // piksel ke sel, jadi ukuran baru hanya muncul saat seretan melewati batas sel (puluhan kali
+      // per seretan, bukan per frame). Debounce di sisi server justru akan menahan resize TERAKHIR
+      // dan meninggalkan node yang berhenti diseret pada ukuran yang salah.
+      if (cols === lastCols && rows === lastRows) return
+      lastCols = cols
+      lastRows = rows
+      terminal.resize(cols, rows)
+      signalAll([proc.pid, ...liveDescendants(proc.pid)], 'SIGWINCH')
+    },
     /**
      * KENAPA bukan `process.kill(-pid)`: `Bun.spawn({ terminal })` TIDAK memanggil setsid, jadi anak
      * mewarisi process group SERVER (diukur pada Bun 1.4.2: pgid anak = pid proses webterm sendiri).
