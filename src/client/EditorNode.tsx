@@ -73,6 +73,11 @@ export default function EditorNode({
   const [preview, setPreview] = useState(false)
   const [previewHtml, setPreviewHtml] = useState('')
   const [loadError, setLoadError] = useState('')
+  // TERPISAH dari `loadError` dengan sengaja — konsekuensinya berlawanan. Gagal BACA harus menolak
+  // merender editor (buffer kosong di atas file berisi = ⌘S menimpanya). Gagal SIMPAN harus
+  // MEMPERTAHANKAN editor: editan yang belum tersimpan hanya hidup di dalam instance Monaco, jadi
+  // meng-unmount host-nya berarti membuang pekerjaan pengguna justru di saat penyimpanan gagal.
+  const [saveError, setSaveError] = useState('')
   const [imageSrc, setImageSrc] = useState('')
   const [imageDims, setImageDims] = useState('')
   const [pdfSrc, setPdfSrc] = useState('')
@@ -97,13 +102,16 @@ export default function EditorNode({
     write(filePath, value).then(
       (ok) => {
         if (!ok) {
-          setLoadError(`Couldn’t save ${fileName}.`)
+          setSaveError(`Couldn’t save ${fileName}.`)
           return
         }
         savedRef.current = value
         setDirty(false)
+        // Pesan basi dibersihkan di sini, bukan di awal percobaan: kalau save gagal lagi, strip-nya
+        // tidak sempat berkedip hilang-muncul.
+        setSaveError('')
       },
-      (err: unknown) => setLoadError(`Couldn’t save ${fileName}: ${errText(err)}`)
+      (err: unknown) => setSaveError(`Couldn’t save ${fileName}: ${errText(err)}`)
     )
   }
   const saveRef = useRef(save)
@@ -333,7 +341,16 @@ export default function EditorNode({
             <X size={14} />
           </button>
         </div>
-        <div className={`node-body editor-node__body editor-node__body--${kind}`}>{body()}</div>
+        <div className={`node-body editor-node__body editor-node__body--${kind}`}>
+          {body()}
+          {/* Strip DI ATAS body, bukan pengganti body: editor tetap terpasang, isinya tetap
+              terlihat, dan tombol Save tetap `dirty` sehingga bisa dicoba ulang. */}
+          {saveError && (
+            <div className="editor-node__save-error nodrag" role="alert">
+              {saveError}
+            </div>
+          )}
+        </div>
       </div>
     </>
   )

@@ -81,6 +81,25 @@
   text-align: center;
 }
 
+/* Kegagalan SIMPAN: strip di dasar body, menumpuk di atas Monaco DAN di atas preview markdown
+   (z-index 3) supaya tetap terbaca dari dua tampilan itu. Tidak pernah menggantikan body — editan
+   yang belum tersimpan cuma ada di dalam instance Monaco. */
+.editor-node__save-error {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 5px 10px;
+  border-top: 1px solid var(--state-attention);
+  background: var(--panel);
+  color: var(--state-attention);
+  font-size: 11px;
+  /* Pesannya perlu bisa dikopi; node React Flow tidak bisa diseleksi secara default. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .editor-node__dims {
   flex-shrink: 0;
   color: var(--muted);
