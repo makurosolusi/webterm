@@ -9,6 +9,7 @@ import NodeChrome from './NodeChrome'
 import UsagePill from './UsagePill'
 import FindBar from './FindBar'
 import { send, subscribeStatus, getStatus } from './ws'
+import { generateName as apiGenerateName } from './api'
 
 const COLLAPSED_H = 40
 
@@ -43,6 +44,7 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [micActive, setMicActive] = useState(false)
   const [maximized, setMaximized] = useState(false)
+  const [aiNaming, setAiNaming] = useState(false)
 
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
@@ -95,7 +97,17 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
     else { if (savedVp.current) rf.setViewport(savedVp.current, { duration: 200 }); setMaximized(false) }
   }
 
-  // Agent-only toolbar props are filled by B3/Wave C; undefined now → buttons stay hidden.
+  const aiName = async () => {
+    setAiNaming(true)
+    // ponytail: on !r.ok the title is left unchanged (no error surface) — webterm has no
+    // toast yet. Upgrade: surface message via toast when a notification surface exists.
+    try { const r = await apiGenerateName(id); if (r.ok) rf.updateNodeData(id, { title: r.message }) }
+    finally { setAiNaming(false) }
+  }
+
+  // onBroadcast stays via `ext` (undefined → hidden): webterm deliberately has no live-link,
+  // mirroring nodeterm Server Edition where loopback single-user has no viewer/relay — a
+  // faithful mirror, not a TODO. onAiName is now local (above).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- passthrough of not-yet-wired handlers
   const ext = data as any
 
@@ -119,7 +131,7 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
           micActive={micActive} onToggleMic={toggleMic}
           maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
-          onAiName={ext.onAiName} aiNaming={ext.aiNaming}
+          onAiName={aiName} aiNaming={aiNaming}
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
           hideLinks={ext.hideLinks} onToggleHideLinks={ext.onToggleHideLinks}
           extraHeader={

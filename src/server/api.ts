@@ -100,6 +100,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     return
   }
 
+  // AI name-gen: spawn claude -p on a node's terminal buffer, return a suggested title.
+  if (path === '/api/generate-name' && method === 'GET') {
+    const node = url.searchParams.get('node') || ''
+    const { generateName } = await import('./nameGen')
+    return json(res, 200, await generateName(node))
+  }
+
   // Server-side folder picker: list subdirectories of a dir (dotfiles hidden).
   if (path === '/api/fs' && method === 'GET') {
     const dir = url.searchParams.get('path') || homedir()

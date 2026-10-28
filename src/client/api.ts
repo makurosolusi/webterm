@@ -53,3 +53,7 @@ export async function setActive(id: string): Promise<void> {
 export function listDir(path?: string): Promise<{ path: string; parent: string | null; dirs: string[] }> {
   return jsonFetch('/api/fs' + (path ? `?path=${encodeURIComponent(path)}` : ''))
 }
+
+export function generateName(nodeId: string): Promise<{ ok: boolean; message: string }> {
+  return jsonFetch(`/api/generate-name?node=${encodeURIComponent(nodeId)}`)
+}
