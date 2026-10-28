@@ -148,7 +148,7 @@ body {
    Angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (.tabbar 369, .brand 449,
    .tabbar__projects 470, .tab 517, .tab__dot 641, .tab__add) — bukan karangan. Yang tidak
    diikut: flare cekung tab aktif, yang hanya terbaca kalau tab mewarisi warna canvas persis;
-   webterm memakai fill terangkat yang lebih sederhana dan tidak bergantung pada itu. */
+   webterm menandai tab aktif dengan aksen (lihat `.tab--active`), yang tidak bergantung pada itu. */
 .tabbar {
   position: relative;
   /* Di atas canvas dan di atas backdrop menu dock, supaya tab tetap bisa diklik. */
@@ -232,14 +232,30 @@ body {
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.tab:hover {
+/* `:not(.tab--active)` load-bearing, bukan kerapian: `.tab:hover` punya spesifisitas lebih tinggi
+   daripada `.tab--active` (dua kelas lawan satu), jadi tanpa pengecualian ini menyentuh tab yang
+   sedang aktif akan MENIMPA penandanya dengan fill hover netral — tab aktif terbaca non-aktif
+   justru saat pointer ada di atasnya. Sama seperti nodeterm (`.tab:not(.active):hover`). */
+.tab:not(.tab--active):hover {
   background: rgba(var(--tint-rgb), 0.08);
   color: var(--text);
 }
+/* Penanda terpilih: fill ber-aksen + garis dasar 2px — kosakata yang SAMA dengan
+   `.ss-tab[aria-selected='true']` di `sessions-panel.css` dan `.icon-btn--active` di
+   `node-chrome.css`, bukan gaya baru.
+   KENAPA diganti: fill lamanya `var(--raised)` (#242424) duduk di atas bar `var(--panel)`
+   (#282828) — selisih 4 dari 255, di bawah ambang yang bisa dilihat mata, jadi satu-satunya
+   sinyal "ini yang kamu lihat" yang tersisa adalah kecerahan `.tab__dot`. Dot itu membawa status
+   agent, BUKAN keterpilihan (lihat `workspaceTabs.ts`), jadi ia tidak bisa memikul pekerjaan ini.
+   Aksen mengubah HUE, bukan kecerahan, jadi tab aktif terbaca sendiri tanpa dibandingkan dengan
+   tetangganya; garis dasarnya adalah kanal BENTUK, supaya penanda ini tidak bersandar pada warna
+   saja (markup-nya juga membawa `aria-selected`). Keduanya berangkat dari satu token `--accent`,
+   jadi tema terang ikut benar tanpa deklarasi kedua — di sana `--panel` dan `--canvas-bg` sama
+   dekatnya, jadi fill permukaan apa pun akan menghilang dengan cara yang sama. */
 .tab--active {
-  background: var(--raised);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, calc(0.3 * var(--shadow-k)));
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .tab__name {
   overflow: hidden;
