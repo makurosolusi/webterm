@@ -6,6 +6,7 @@ import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
 import { fsApiRoute } from './fsApi'
+import { readErrorResult } from './fsOps'
 import { hookStatus } from './hooks'
 import { renderForRequester, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
 import type { BridgeLink } from '../shared/workspace'
@@ -100,7 +101,10 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
   // Six filesystem verbs under /api/fs/<verb>; returns null for anything else, including the
   // exact /api/fs folder picker below, whose response shape is different.
+  // `read`/`read-binary` throw on an unreadable file (see the fsOps header): 200 with an empty
+  // body looks like a readable EMPTY file, and the editor then truncates it on the next save.
   const fsRes = await fsApiRoute(path, method, url.searchParams, () => readBody(req))
+    .catch(readErrorResult)
   if (fsRes) return json(res, fsRes.status, fsRes.body)
 
   // Hook callback from a claude session (body is the hook stdin JSON).

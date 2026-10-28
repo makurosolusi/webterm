@@ -112,8 +112,11 @@ describe('readText', () => {
     expect(await readText(at('utf.txt'))).toBe('héllo — ok')
   })
 
-  it('answers an empty string for a missing file', async () => {
-    expect(await readText(at('ghost.txt'))).toBe('')
+  // Kontrak sengaja berbeda dari `listDir`: untuk isi file, `''` adalah jawaban SAH (file yang
+  // memang kosong), jadi kegagalan baca harus terlihat sebagai kegagalan — kalau tidak, editor
+  // membuka buffer kosong dan Save menimpa file aslinya.
+  it('reports a missing file as a failure, not as empty content', async () => {
+    await expect(readText(at('ghost.txt'))).rejects.toThrow(/^fs read failed: /)
   })
 
   // File sparse: `truncate` membuat ukuran 10 MB + 1 byte tanpa benar-benar menulisnya, jadi test
@@ -141,8 +144,8 @@ describe('readBinary', () => {
     expect(Buffer.from(await readBinary(at('blob.bin')), 'base64').equals(bytes)).toBe(true)
   })
 
-  it('answers an empty string for a missing file', async () => {
-    expect(await readBinary(at('ghost.bin'))).toBe('')
+  it('reports a missing file as a failure, not as empty content', async () => {
+    await expect(readBinary(at('ghost.bin'))).rejects.toThrow(/^fs read-binary failed: /)
   })
 
   // Cap biner lebih tinggi dari cap teks, jadi file yang ditolak sebagai teks masih boleh dibaca

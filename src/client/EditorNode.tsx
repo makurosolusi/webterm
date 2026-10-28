@@ -20,11 +20,12 @@ import './editor.css'
 const MONACO_THEME = 'vs-dark'
 
 export interface EditorNodeProps extends NodeProps {
-  /** Isi teks file; '' saat gagal baca, sentinel too-large saat melewati cap `fsLimits`. */
+  /** Isi teks file; REJECT saat gagal baca ('' berarti file memang kosong), sentinel too-large
+   *  saat melewati cap `fsLimits`. Kontrak di kepala `./fsClient`. */
   read: (path: string) => Promise<string>
   /** Tulis teks; resolve true saat berhasil. */
   write: (path: string, content: string) => Promise<boolean>
-  /** Isi file sebagai base64 (gambar & PDF); '' saat gagal baca. */
+  /** Isi file sebagai base64 (gambar & PDF); REJECT saat gagal baca. */
   readBinary: (path: string) => Promise<string>
   /** Setting: file Markdown dibuka langsung sebagai preview terender. Hanya menentukan tampilan
    *  SAAT node dibuka — toggle Preview/Edit tetap dua arah sesudahnya. */
@@ -210,6 +211,9 @@ export default function EditorNode({
         }
       },
       (err: unknown) => {
+        // `read` yang reject TIDAK boleh berakhir sebagai editor kosong: `loadError` membuat
+        // `body()` merender notice alih-alih host Monaco, jadi editor tak pernah dibuat,
+        // `loadedRef` tetap false dan `save()` keluar lebih awal — file asli aman dari ⌘S.
         if (!disposed) setLoadError(`Couldn’t open ${fileName}: ${errText(err)}`)
       }
     )

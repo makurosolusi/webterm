@@ -6,12 +6,28 @@
 // quick-open di webterm), jalur sshFs, relay, dan tiket download. Dari 229 + 126 baris di sana
 // yang relevan untuk 6 method ini hanya ±120 baris, bukan ±250.
 //
-// FAIL-OPEN ADALAH KONTRAK, BUKAN KELALAIAN. Tiap helper mengembalikan nilai kosong/false pada
-// kegagalan alih-alih throw, dan client BERGANTUNG pada itu: `classifyEmptyListing`
-// (src/client/fileBrowse.ts) memutuskan arti listing kosong dengan bertanya ke direktori INDUK,
-// justru karena `list` tidak pernah throw. Mengubahnya jadi re-throw akan membuat empat empty
-// state di UI runtuh jadi satu pesan error. Tiap catch di bawah karena itu mengembalikan nilai
-// yang didokumentasikan, bukan `catch {}` kosong.
+// DUA KONTRAK YANG SENGAJA BERBEDA — JANGAN DISERAGAMKAN.
+//
+// 1. PENELUSURAN (`listDir`, `pathExists`) FAIL-OPEN, dan itu kontrak, bukan kelalaian: keduanya
+//    mengembalikan nilai kosong/false pada kegagalan, dan client BERGANTUNG pada itu.
+//    `classifyEmptyListing` (src/client/fileBrowse.ts) memutuskan arti listing kosong dengan
+//    bertanya ke direktori INDUK, justru karena `list` tidak pernah throw. Mengubahnya jadi
+//    re-throw akan membuat empat empty state di UI runtuh jadi satu pesan error.
+//
+// 2. PEMBACAAN ISI (`readText`, `readBinary`) MELEMPAR. Untuk sebuah listing, kosong masih bisa
+//    ditafsirkan; untuk isi file, kosong adalah jawaban yang SAH — file yang memang kosong tidak
+//    bisa dibedakan dari file yang gagal dibaca (EPERM, ENOENT, direktori yang disangka file,
+//    galat I/O). Akibatnya bukan kosmetik: editor yang membuka buffer kosong untuk file
+//    tak-terbaca akan MENIMPA file aslinya dengan kosong saat pengguna menekan Save. Karena itu
+//    kegagalan baca harus tetap terlihat sebagai kegagalan sampai ke browser — route menjawab
+//    non-2xx lewat `readErrorResult`, bukan 200 berisi `content: ''`.
+//
+// Sentinel too-large (`src/shared/fsLimits.ts`) BUKAN kegagalan: ia jawaban sukses yang
+// disengaja dan bagian dari wire-protocol. `writeText`/`makeDir` melaporkan sukses sebagai
+// boolean — pemanggil tetap bisa membedakannya, jadi itu juga bukan fail-open.
+//
+// Tiap catch di bawah karena itu mengembalikan nilai yang didokumentasikan atau melempar dengan
+// konteks, bukan `catch {}` kosong.
 //
 // KEAMANAN PATH — sengaja TIDAK ada jail. nodeterm mengambil keputusan yang sama
 // (`src/core/relay/access-policy.ts`: "relay peers were fully trusted, so fs:read is not jailed";
@@ -120,28 +136,63 @@ export async function listDir(dirPath: string): Promise<DirEntry[]> {
   return entries
 }
 
-/** Isi UTF-8 sebuah file. `''` pada kegagalan apa pun, sentinel too-large di atas cap. */
+/** Kegagalan baca dengan konteks (operasi + path + penyebab asal). `Error` biasa, bukan subclass:
+ *  satu-satunya hal yang perlu dibedakan pemanggil adalah errno, dan itu sudah ada di `cause`. */
+function readFailed(op: string, target: string, err: unknown): Error {
+  return new Error(`fs ${op} failed: ${target}`, { cause: err })
+}
+
+/** errno di balik sebuah kegagalan baca — `readFailed` menyimpan error asal di `cause`. */
+function errnoOf(err: unknown): string {
+  const origin = err instanceof Error && err.cause !== undefined ? err.cause : err
+  return origin !== null && typeof origin === 'object' && 'code' in origin ? String(origin.code) : ''
+}
+
+/** errno yang bisa dibedakan dengan murah → status + pesan. Sisanya 500: menebak lebih buruk
+ *  daripada mengaku tidak tahu. */
+const READ_FAILURES = new Map<string, [number, string]>([
+  ['ENOENT', [404, 'file not found']],
+  ['ENOTDIR', [404, 'file not found']],
+  ['EACCES', [403, 'permission denied']],
+  ['EPERM', [403, 'permission denied']],
+  ['EISDIR', [400, 'not a file']],
+])
+
+/**
+ * Status HTTP + body untuk Error dari `readText`/`readBinary`. Bentuknya sengaja cocok dengan
+ * `FsApiResult` supaya route hanya perlu `.catch(readErrorResult)`.
+ *
+ * Pesannya generik dan tanpa path: body respons bukan tempat stack trace, isi file, atau detail
+ * filesystem. Konteks lengkap ada di `Error.message` untuk diagnosis sisi server.
+ */
+export function readErrorResult(err: unknown): { status: number; body: { error: string } } {
+  const [status, error] = READ_FAILURES.get(errnoOf(err)) ?? [500, 'cannot read file']
+  return { status, body: { error } }
+}
+
+/** Isi UTF-8 sebuah file; sentinel too-large di atas cap. MELEMPAR bila file tidak terbaca — `''`
+ *  hanya berarti file yang memang kosong. Lihat kontrak di kepala file. */
 export async function readText(filePath: string): Promise<string> {
   const target = resolveFsPath(filePath)
   try {
     const { size } = await fs.stat(target)
     if (size > FS_READ_MAX_BYTES) return tooLargeSentinel(size)
     return await fs.readFile(target, 'utf-8')
-  } catch {
-    return ''
+  } catch (err) {
+    throw readFailed('read', target, err)
   }
 }
 
-/** Isi file sebagai base64 (preview gambar/biner). `''` pada kegagalan, sentinel di atas cap —
- *  cap-nya lebih besar tapi base64 masih menggelembungkan payload 1.33×. */
+/** Isi file sebagai base64 (preview gambar/biner). Sentinel di atas cap — cap-nya lebih besar tapi
+ *  base64 masih menggelembungkan payload 1.33×. MELEMPAR bila file tidak terbaca. */
 export async function readBinary(filePath: string): Promise<string> {
   const target = resolveFsPath(filePath)
   try {
     const { size } = await fs.stat(target)
     if (size > FS_READ_BINARY_MAX_BYTES) return tooLargeSentinel(size)
     return (await fs.readFile(target)).toString('base64')
-  } catch {
-    return ''
+  } catch (err) {
+    throw readFailed('read-binary', target, err)
   }
 }
 
