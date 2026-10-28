@@ -5,6 +5,7 @@ import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
 import { hookStatus } from './hooks'
+import { renderForRequester, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
 import type { BridgeLink } from '../shared/workspace'
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -77,11 +78,26 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (path === '/api/agent-status' && method === 'POST') {
     const node = url.searchParams.get('node')
-    let body: { hook_event_name?: string; message?: string }
+    let body: { hook_event_name?: string; message?: string; transcript_path?: string }
     try { body = JSON.parse(await readBody(req)) } catch { body = {} }
     const status = node ? hookStatus(body) : null
     if (node && status) sessions.setStatus(node, status)
+    if (node && typeof body.transcript_path === 'string') sessions.setTranscript(node, body.transcript_path)
     res.statusCode = 204; res.end(); return
+  }
+
+  // Read-only context-link: a linked node reads a bridged peer's transcript/terminal.
+  if (path === '/api/context-link' && method === 'GET') {
+    const requester = url.searchParams.get('node') || ''
+    const raw = url.searchParams.get('verb') || 'list'
+    const verb = (CONTEXT_LINK_VERBS as string[]).includes(raw) ? (raw as ContextLinkVerb) : 'list'
+    const want = url.searchParams.get('want') || undefined
+    const n = url.searchParams.get('n') || undefined
+    const text = await renderForRequester(requester, verb, { node: want, n })
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.end(text)
+    return
   }
 
   // Server-side folder picker: list subdirectories of a dir (dotfiles hidden).

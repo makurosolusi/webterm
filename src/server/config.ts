@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 
 export function dataDir(): string {
-  const dir = process.env.WEBTERM_DATA_DIR || join(homedir(), '.webterm')
+  const dir = process.env.WEBTERM_DATA_DIR || join(homedir(), '.webterm-server')
   mkdirSync(dir, { recursive: true })
   return dir
 }
