@@ -4,6 +4,7 @@
 import { test, expect } from 'bun:test'
 import type { WsNode } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import { DEFAULT_SETTINGS } from '../shared/settings'
 import { Db, openDb } from './db'
 
 function freshDb(): Db {
@@ -45,6 +46,45 @@ test('delete removes from get and list', () => {
   db.delete(ws.id)
   expect(db.get(ws.id)).toBe(null)
   expect(db.list().some((w) => w.id === ws.id)).toBe(false)
+})
+
+test('getSettings returns defaults before anything is saved', () => {
+  const db = freshDb()
+  expect(db.getSettings().fontSize).toBe(DEFAULT_SETTINGS.fontSize)
+  expect(db.getSettings().customAgents.length).toBe(0)
+})
+
+test('saveSettings persists a patch and leaves untouched keys at their default', () => {
+  const db = freshDb()
+  db.saveSettings({ fontSize: 17, accent: '#ff0000' })
+  expect(db.getSettings().fontSize).toBe(17)
+  expect(db.getSettings().accent).toBe('#ff0000')
+  expect(db.getSettings().gridSize).toBe(DEFAULT_SETTINGS.gridSize)
+})
+
+test('a second patch merges over the first instead of replacing it', () => {
+  const db = freshDb()
+  db.saveSettings({ fontSize: 17 })
+  db.saveSettings({ cursorBlink: false })
+  expect(db.getSettings().fontSize).toBe(17)
+  expect(db.getSettings().cursorBlink).toBe(false)
+})
+
+test('saveSettings drops unknown keys and wrong-shaped values', () => {
+  const db = freshDb()
+  const got = db.saveSettings({ fontSize: 'huge', nope: 1, customAgents: { not: 'an array' } })
+  expect(got.fontSize).toBe(DEFAULT_SETTINGS.fontSize)
+  expect(Array.isArray(got.customAgents)).toBe(true)
+  expect('nope' in (got as unknown as Record<string, unknown>)).toBe(false)
+})
+
+test('settings and the active-workspace id share the app table without colliding', () => {
+  const db = freshDb()
+  const ws = db.create('proj')
+  db.setActive(ws.id)
+  db.saveSettings({ fontSize: 19 })
+  expect(db.getActive()).toBe(ws.id)
+  expect(db.getSettings().fontSize).toBe(19)
 })
 
 test('save round-trips bridges intact', () => {
