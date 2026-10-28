@@ -8,7 +8,7 @@ import { settingsRoute } from './settingsApi'
 import { workspacesRoute } from './workspacesApi'
 import { fsApiRoute } from './fsApi'
 import { readErrorResult } from './fsOps'
-import { hookStatus } from './hooks'
+import { hookStatus, type HookStatusBody } from './hookStatus'
 import { renderForRequester, buildLinkDoc, findWorkspaceFor, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
 import { nextHookContext } from './hookContext'
 
@@ -73,7 +73,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (path === '/api/agent-status' && method === 'POST') {
     const node = url.searchParams.get('node')
-    let body: { hook_event_name?: string; message?: string; transcript_path?: string }
+    // `HookStatusBody` dipakai apa adanya, bukan disalin ulang: field mana yang menentukan status
+    // adalah milik `hookStatus`, dan dua daftar yang harus berubah bersamaan pasti akan menyimpang.
+    let body: HookStatusBody & { message?: string; transcript_path?: string }
     try { body = JSON.parse(await readBody(req)) } catch { body = {} }
     const status = node ? hookStatus(body) : null
     if (node && status) sessions.setStatus(node, status)

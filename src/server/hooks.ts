@@ -1,7 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isPermissionMode, type AgentPermissionMode, type AgentStatus } from '../shared/workspace'
+import { isPermissionMode, type AgentPermissionMode } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
 import { dataDir } from './config'
 import { forgetHookContext } from './hookContext'
@@ -39,8 +39,9 @@ export const PERM_WAIT_SECS_INTERACTIVE = 540
  *    Tanpa itu badge status tersangkut di "working" setelah setiap turn yang gagal.
  *  - `PermissionRequest` adalah sinyal prompt-permission yang SEBENARNYA. Ia membawa `timeout`
  *    eksplisit karena hook terkelola menahannya (lihat PERM_WAIT_SECS_INTERACTIVE).
- *  - `SubagentStart`/`SubagentStop` adalah siklus hidup subagent claude sendiri; keduanya menjaga
- *    node induk tetap terbaca "working" selama anak berjalan.
+ *  - `SubagentStart`/`SubagentStop` adalah siklus hidup subagent claude sendiri. Keduanya TIDAK
+ *    memetakan ke status node (lihat `hookStatus`); dilanggani karena POST-nya tetap membawa
+ *    `transcript_path` yang dipanen `setTranscript` untuk konteks-tertaut.
  *
  * `SessionStart` TETAP dilanggani meski tidak lagi memetakan ke status apa pun (lihat `hookStatus`):
  * ia hook PERTAMA yang menyala, jadi ia yang memasok `transcript_path` ke `setTranscript`
@@ -59,53 +60,6 @@ export const CLAUDE_HOOK_EVENTS: readonly HookSubscription[] = [
   'SubagentStart',
   'SubagentStop',
 ]
-
-// ---------------------------------------------------------------------------------------------
-// Pemetaan event → status.
-
-/**
- * Memetakan stdin JSON sebuah hook claude ke status live. null = event yang kita abaikan.
- *
- * TIDAK ADA sniff regex pada `Notification`: `PermissionRequest` adalah event yang sebenarnya
- * untuk "sedang menunggu izin", dan mencocokkan kata di pesan `Notification` adalah heuristik yang
- * salah ke dua arah (nudge idle yang menyebut kata "approve" terbaca blocked; prompt permission
- * dalam bahasa lain tidak terbaca sama sekali).
- *
- * `SessionStart` SENGAJA TIDAK ADA di tabel ini. Claude menyalakannya saat CLI start — sebelum
- * prompt pertama diketik — jadi memetakannya ke `working` membuat setiap node yang baru lahir,
- * yang sedang duduk diam di input box-nya, terbaca RUNNING padahal tidak ada yang berjalan. Ia
- * batas SIKLUS HIDUP sesi, bukan perubahan state; nodeterm memperlakukannya persis begitu
- * (`normalizeClaude` → `{ kind: 'session', sessionPhase: 'start' }`, yang di Canvas jatuh ke
- * `setState(id, undefined)`). Sinyal mulai-kerja yang jujur adalah `UserPromptSubmit`: pekerjaan
- * ada karena ada yang meminta. Node yang belum punya sinyal apa pun jadi TIDAK punya status, dan
- * webterm merendernya "Unknown" — jawaban yang benar untuk "kami belum tahu".
- */
-export function hookStatus(body: { hook_event_name?: string }): AgentStatus | null {
-  switch (body.hook_event_name) {
-    case 'UserPromptSubmit':
-    case 'PreToolUse':
-    case 'PostToolUse':
-    // Anak mulai/berhenti; induknya masih di tengah turn.
-    case 'SubagentStart':
-    case 'SubagentStop':
-      return 'working'
-    case 'Stop':
-    // CATATAN BEDA DARI NODETERM: nodeterm punya state `errored` tersendiri untuk ini. `AgentStatus`
-    // webterm hanya punya empat nilai, jadi turn yang gagal mendarat di `waiting` — benar dalam hal
-    // "turn-nya sudah berakhir, giliranmu", kurang dalam hal "ia berakhir karena error". Upgrade:
-    // tambahkan 'errored' ke AgentStatus di src/shared/workspace.ts bila ada permukaan yang merendernya.
-    case 'StopFailure':
-    // Nudge idle. Prompt permission datang sebagai PermissionRequest, bukan di sini.
-    case 'Notification':
-      return 'waiting'
-    case 'PermissionRequest':
-      return 'blocked'
-    case 'SessionEnd':
-      return 'done'
-    default:
-      return null
-  }
-}
 
 // ---------------------------------------------------------------------------------------------
 // Token auth per-node.

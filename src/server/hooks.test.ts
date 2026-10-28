@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 // supaya test ini tidak pernah mengutak-atik data dir pengguna.
 process.env.WEBTERM_DATA_DIR = join(tmpdir(), 'webterm-hooks-test')
 
-import type { AgentPermissionMode, AgentStatus } from '../shared/workspace'
+import type { AgentPermissionMode } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
 import {
   CLAUDE_HOOK_EVENTS,
@@ -22,70 +22,11 @@ import {
   forgetNodeToken,
   hookEnv,
   hookEventName,
-  hookStatus,
   nodeToken,
   permissionModeFlag,
   stateVerified,
 } from './hooks'
 import { nextHookContext } from './hookContext'
-
-describe('hookStatus', () => {
-  // Tabel LENGKAP event→status, satu baris per event yang dilanggani. Ditulis eksplisit supaya
-  // setiap perubahan pemetaan harus melewati test ini, bukan lewat diam-diam.
-  const TABLE: Record<string, AgentStatus | null> = {
-    // Start-of-work yang jujur: ada pekerjaan karena ada yang memintanya.
-    UserPromptSubmit: 'working',
-    // Penjaga turn tetap hidup di tengah jalan.
-    PreToolUse: 'working',
-    PostToolUse: 'working',
-    SubagentStart: 'working',
-    SubagentStop: 'working',
-    // Setiap jalur yang mengakhiri sebuah turn.
-    Stop: 'waiting',
-    StopFailure: 'waiting',
-    Notification: 'waiting',
-    PermissionRequest: 'blocked',
-    SessionEnd: 'done',
-    // Batas siklus hidup, BUKAN perubahan state (lihat doc `hookStatus`).
-    SessionStart: null,
-  }
-
-  it('maps every subscribed event exactly as the table says', () => {
-    for (const [event, want] of Object.entries(TABLE)) {
-      expect(hookStatus({ hook_event_name: event })).toBe(want)
-    }
-  })
-
-  it('covers every subscribed event and nothing it does not subscribe', () => {
-    expect(Object.keys(TABLE).sort()).toEqual(CLAUDE_HOOK_EVENTS.map(hookEventName).sort())
-  })
-
-  it('does NOT report working for a session that has only just started (regression)', () => {
-    // Bug nyata: node claude yang baru di-spawn, masih memperlihatkan banner sambutan dan belum
-    // pernah diberi prompt, terbaca RUNNING di chrome node dan terhitung di seksi Running sidebar.
-    // SessionStart menyala saat CLI start, jadi memetakannya ke 'working' adalah klaim tanpa bukti.
-    expect(hookStatus({ hook_event_name: 'SessionStart' })).toBeNull()
-    // Dan sinyal yang BOLEH menyatakan kerja tetap menyatakannya — jadi perbaikan ini tidak
-    // sekadar membungkam badge.
-    expect(hookStatus({ hook_event_name: 'UserPromptSubmit' })).toBe('working')
-  })
-
-  it('keeps SessionStart subscribed even though it carries no status', () => {
-    // Ia hook pertama yang menyala, jadi ia pemasok `transcript_path` paling awal (api.ts memanen
-    // field itu TERPISAH dari status). Mencabut langganannya membutakan konteks-tertaut sampai
-    // prompt pertama.
-    expect(CLAUDE_HOOK_EVENTS.map(hookEventName)).toContain('SessionStart')
-  })
-
-  it('no longer sniffs Notification text for permission wording', () => {
-    // Heuristik lama memetakan ini ke 'blocked'; PermissionRequest sekarang satu-satunya sumber.
-    const body = { hook_event_name: 'Notification', message: 'Claude needs your permission to run Bash' }
-    expect(hookStatus(body as { hook_event_name?: string })).toBe('waiting')
-  })
-  it('returns null for an unknown event', () => {
-    expect(hookStatus({ hook_event_name: 'Nope' })).toBeNull()
-  })
-})
 
 /** Baris curl yang dibangun untuk satu node, diambil dari event `Stop` (semua event memakai baris
  *  yang sama persis — lihat test "subscribes the 11 nodeterm events"). */
