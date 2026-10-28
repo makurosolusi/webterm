@@ -55,6 +55,29 @@ describe('styles.css token & class contract', () => {
     }
   })
 
+  it('defines the node-chrome vocabulary for the component wave', () => {
+    for (const cls of [
+      '.node-body',
+      '.term-node--collapsed',
+      '.node-toolbar',
+      '.icon-btn--danger',
+      '.icon-btn--active',
+      '.node-chevron',
+      '.node-status-text',
+      '.usage-pill',
+      '.usage-pill__label',
+      '.usage-pill__minibar',
+      '.usage-pill__fill',
+      '.node-labeladd',
+      '.node-mdhint',
+      '.node-comments',
+      '.node-comments__composer',
+      '.bridge-handle',
+    ]) {
+      expect(css).toContain(cls)
+    }
+  })
+
   it('defines the working-status pulse keyframes', () => {
     expect(css).toContain('@keyframes pulse-working')
     expect(css).toContain('animation: pulse-working 1.4s ease-in-out infinite')

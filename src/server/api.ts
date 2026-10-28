@@ -5,6 +5,8 @@ import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
 import { hookStatus } from './hooks'
+import { renderForRequester, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
+import type { BridgeLink } from '../shared/workspace'
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body)
@@ -45,9 +47,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return ws ? json(res, 200, ws) : json(res, 404, { error: 'not found' })
     }
     if (method === 'PUT') {
-      let body: { name: string; cwd?: string; color?: string; viewport: unknown; nodes: unknown }
+      let body: { name: string; cwd?: string; color?: string; viewport: unknown; nodes: unknown; bridges?: BridgeLink[] }
       try { body = JSON.parse(await readBody(req)) } catch { return json(res, 400, { error: 'bad json' }) }
-      const ws = { id, name: body.name, cwd: body.cwd, color: body.color, viewport: body.viewport, nodes: body.nodes, updatedAt: Date.now() } as Parameters<typeof db.save>[0]
+      const ws = { id, name: body.name, cwd: body.cwd, color: body.color, viewport: body.viewport, nodes: body.nodes, bridges: body.bridges ?? [], updatedAt: Date.now() } as Parameters<typeof db.save>[0]
       db.save(ws)
       const saved = db.get(id)
       return saved ? json(res, 200, saved) : json(res, 404, { error: 'not found' })
@@ -76,11 +78,33 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (path === '/api/agent-status' && method === 'POST') {
     const node = url.searchParams.get('node')
-    let body: { hook_event_name?: string; message?: string }
+    let body: { hook_event_name?: string; message?: string; transcript_path?: string }
     try { body = JSON.parse(await readBody(req)) } catch { body = {} }
     const status = node ? hookStatus(body) : null
     if (node && status) sessions.setStatus(node, status)
+    if (node && typeof body.transcript_path === 'string') sessions.setTranscript(node, body.transcript_path)
     res.statusCode = 204; res.end(); return
+  }
+
+  // Read-only context-link: a linked node reads a bridged peer's transcript/terminal.
+  if (path === '/api/context-link' && method === 'GET') {
+    const requester = url.searchParams.get('node') || ''
+    const raw = url.searchParams.get('verb') || 'list'
+    const verb = (CONTEXT_LINK_VERBS as string[]).includes(raw) ? (raw as ContextLinkVerb) : 'list'
+    const want = url.searchParams.get('want') || undefined
+    const n = url.searchParams.get('n') || undefined
+    const text = await renderForRequester(requester, verb, { node: want, n })
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.end(text)
+    return
+  }
+
+  // AI name-gen: spawn claude -p on a node's terminal buffer, return a suggested title.
+  if (path === '/api/generate-name' && method === 'GET') {
+    const node = url.searchParams.get('node') || ''
+    const { generateName } = await import('./nameGen')
+    return json(res, 200, await generateName(node))
   }
 
   // Server-side folder picker: list subdirectories of a dir (dotfiles hidden).

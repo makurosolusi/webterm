@@ -1,7 +1,7 @@
 // Pure serializers between React Flow nodes and persisted WsNodes.
 // The DB (via api.ts) is the source of truth; these functions carry no DOM/IO.
-import type { Node } from '@xyflow/react'
-import type { AgentStatus, WsNode } from '../shared/workspace'
+import type { Node, Edge } from '@xyflow/react'
+import type { AgentStatus, WsNode, BridgeLink } from '../shared/workspace'
 
 export function toFlow(n: WsNode): Node {
   return {
@@ -10,7 +10,7 @@ export function toFlow(n: WsNode): Node {
     position: { x: n.x, y: n.y },
     width: n.width ?? 400,
     height: n.height ?? 300,
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments },
   }
 }
 
@@ -29,7 +29,19 @@ export function toWsNode(n: Node): WsNode {
     color: d.color,
     title: d.title,
     sessionId: d.sessionId,
+    collapsed: d.collapsed,
+    hideLinks: d.hideLinks,
+    comments: d.comments,
   }
+}
+
+// Pure serializers between a React Flow Edge and a persisted BridgeLink.
+export function toFlowEdge(b: BridgeLink): Edge {
+  return { id: b.id, source: b.source, target: b.target, type: 'context', data: { kind: b.kind } }
+}
+
+export function toBridge(e: Edge): BridgeLink {
+  return { id: e.id, source: e.source, target: e.target, kind: 'context' }
 }
 
 export const KANBAN_COLUMNS: AgentStatus[] = ['working', 'waiting', 'blocked', 'done']

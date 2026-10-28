@@ -30,7 +30,7 @@ function cleanEnv(): Record<string, string> {
   return env
 }
 
-export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string }): Pty {
+export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string; env?: Record<string, string> }): Pty {
   let onData: (data: string) => void = () => {}
   let onExit: (code: number) => void = () => {}
   // Streaming decoder so a multi-byte UTF-8 rune split across two read chunks
@@ -51,7 +51,7 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?:
   const proc = Bun.spawn(argv, {
     terminal,
     cwd: opts.cwd || process.env.HOME || process.cwd(),
-    env: cleanEnv(),
+    env: { ...cleanEnv(), ...(opts.env ?? {}) },
   })
 
   proc.exited.then((code) => {

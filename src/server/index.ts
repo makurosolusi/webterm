@@ -5,9 +5,13 @@ import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { handleApi } from './api'
+import { installContextLinkShim } from './contextLink'
 
 const PORT = Number(process.env.PORT) || 8700
 const dev = process.env.NODE_ENV !== 'production'
+
+// Write the context-link sh shim the installed get-linked-context skill invokes.
+installContextLinkShim()
 
 const server = http.createServer()
 

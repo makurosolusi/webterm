@@ -309,3 +309,82 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* Node body (terminal/xterm area) — collapse hides it */
+.node-body { flex: 1; min-height: 0; overflow: hidden; }
+.term-node--collapsed { height: auto !important; }
+.term-node--collapsed .node-body { display: none; }
+
+/* Header toolbar — icon button row, pushed to the right of the title */
+.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+
+/* Icon-button state variants (base .icon-btn already exists) */
+.icon-btn--danger:hover { background: rgba(255, 69, 58, 0.15); color: var(--state-attention); }
+.icon-btn--active { background: rgba(10, 132, 255, 0.18); color: var(--accent-text); }
+.icon-btn:disabled { opacity: 0.3; cursor: default; }
+.icon-btn:disabled:hover { background: transparent; color: var(--muted); }
+
+/* Collapse chevron (rotates when collapsed) */
+.node-chevron { display: inline-flex; transition: transform 0.12s ease; color: var(--muted); }
+.node-chevron--collapsed { transform: rotate(-90deg); }
+
+/* Status label text next to the status dot (uppercase, tiny) */
+.node-status-text {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* Model / usage pill (agent nodes) */
+.usage-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px;
+  padding: 0 8px; border-radius: 13px; background: var(--raised);
+  border: 1px solid var(--border); color: var(--text);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1;
+}
+.usage-pill__label { white-space: nowrap; }
+.usage-pill__minibar {
+  width: 42px; height: 6px; border-radius: 3px; overflow: hidden;
+  background: var(--sunken); flex-shrink: 0;
+}
+.usage-pill__fill { height: 100%; border-radius: 3px; }
+/* fill width + background-color are set inline by JS (green/yellow/red by % used) */
+
+/* +Label chip (add a label to an unnamed node) */
+.node-labeladd {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px;
+  border: 1px dashed var(--muted-2); border-radius: var(--radius-sm);
+  color: var(--muted); font-size: 11px; cursor: pointer; background: transparent;
+}
+.node-labeladd:hover { color: var(--text); border-color: var(--muted); }
+
+/* ⌘M markdown/chat-view hint */
+.node-mdhint { font-size: 10px; color: var(--muted-2); font-family: var(--font-mono); }
+
+/* Per-node comments popover (opened by the 💬 header button) */
+.node-comments {
+  position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 20;
+  display: flex; flex-direction: column; width: 260px; max-height: 320px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-node);
+}
+.node-comments__list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.node-comments__item { font-size: 12px; color: var(--text); }
+.node-comments__meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.node-comments__empty { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 8px; }
+.node-comments__composer { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+.node-comments__composer textarea {
+  flex: 1; resize: none; min-height: 32px; max-height: 96px; padding: 6px 8px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--sunken); color: var(--text); font-family: inherit; font-size: 12px;
+}
+.node-comments__composer textarea:focus { outline: none; border-color: var(--accent); }
+
+/* Context-link bridge handles on node edges (React Flow handle override) */
+.react-flow__handle.bridge-handle {
+  width: 13px; height: 13px; border: none; background: var(--accent);
+  opacity: 0.4; transition: opacity 0.12s ease, box-shadow 0.12s ease;
+}
+.react-flow__handle.bridge-handle:hover { opacity: 1; box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.25); }
+
+/* attention/blocked status dots pulse too (working pulse already defined) */
+.node-status--blocked { animation: pulse-working 1.1s ease-in-out infinite; }

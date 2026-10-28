@@ -1,5 +1,6 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
+import { isContextCapable } from '../shared/workspace'
 import { spawnPty, type Pty } from './pty'
 import { buildClaudeFlags } from './hooks'
 
@@ -19,11 +20,17 @@ const SCROLLBACK_BYTES = 256 * 1024
 export class Sessions {
   private map = new Map<string, Session>()
   private status = new Map<string, AgentStatus>()
+  // Hook-fed claude transcript path per node, for context-link reads.
+  private transcripts = new Map<string, string>()
 
   setStatus(id: string, status: AgentStatus): void {
     this.status.set(id, status)
     this.map.get(id)?.send?.({ t: 'status', id, status })
   }
+
+  setTranscript(id: string, path: string): void { this.transcripts.set(id, path) }
+  getTranscript(id: string): string | undefined { return this.transcripts.get(id) }
+  getTerminal(id: string): string { return this.map.get(id)?.buffer.join('') ?? '' }
 
   open(msg: OpenMsg, send: (m: ServerMsg) => void): void {
     const existing = this.map.get(msg.id)
@@ -40,7 +47,8 @@ export class Sessions {
       ? ' ' + buildClaudeFlags(msg.id, msg.sessionId, PORT, !!msg.resume)
       : ''
     const cmd = msg.cmd ? msg.cmd + flags : undefined
-    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, cmd })
+    const env = isContextCapable(msg.agentId) ? { NODETERM_NODE_ID: msg.id, NODETERM_PORT: String(PORT) } : undefined
+    const pty = spawnPty({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, cmd, env })
     const session: Session = { id: msg.id, pty, buffer: [], bytes: 0, send }
     this.map.set(msg.id, session)
 
@@ -75,6 +83,7 @@ export class Sessions {
     session.pty.kill()
     this.map.delete(id)
     this.status.delete(id)
+    this.transcripts.delete(id)
   }
 
   // Socket gone: forget the subscriber but keep the PTY running so a reconnect
