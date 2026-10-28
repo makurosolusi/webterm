@@ -105,18 +105,31 @@ export function projectCollapseKey(projectId: string): string {
 }
 
 /**
- * Apakah baris workspace sedang terlipat? `overrides` adalah pilihan eksplisit pengguna dan selalu
- * menang. Tanpa override, `autoCollapse` membiarkan hanya workspace aktif yang terbuka — itulah
- * default nodeterm, dan tanpanya daftar panjang dibuka semua sekaligus.
+ * Apakah baris workspace sedang terlipat? MURNI pilihan pengguna, tanpa override berarti terbuka.
+ * SENGAJA tidak lagi diturunkan dari "apakah workspace ini aktif": begitu keadaan lipatan ikut
+ * `isActive`, mengklik header board lain melipat board yang tadinya aktif padahal pengguna tak
+ * pernah menutupnya.
  */
-export function isProjectCollapsed(
-  overrides: Record<string, boolean>,
-  key: string,
-  isActive: boolean,
-  autoCollapse = true,
-): boolean {
-  if (key in overrides) return overrides[key]
-  return autoCollapse ? !isActive : false
+export function isProjectCollapsed(overrides: Record<string, boolean>, key: string): boolean {
+  return overrides[key] ?? false
+}
+
+/**
+ * Peta lipatan dari localStorage. Isinya tulisan sesi sebelumnya — bisa korup, bisa dari versi
+ * lain — jadi apa pun yang bukan objek boolean jatuh ke `{}` alih-alih melempar dan merobohkan
+ * panel. Nilai non-boolean dibuang supaya tipe kembaliannya bukan janji palsu.
+ */
+export function parseCollapsed(raw: string | null): Record<string, boolean> {
+  if (!raw) return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const out: Record<string, boolean> = {}
+    for (const [key, value] of Object.entries(parsed)) if (typeof value === 'boolean') out[key] = value
+    return out
+  } catch {
+    return {}
+  }
 }
 
 /** Apa yang dilakukan klik kiri pada header workspace — persis SATU dari dua, tidak pernah dua-duanya.

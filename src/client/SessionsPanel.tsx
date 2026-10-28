@@ -12,6 +12,7 @@ import {
   buildSessionList,
   buildStatusList,
   isProjectCollapsed,
+  parseCollapsed,
   projectCollapseKey,
   projectHeadClickAction,
   sidebarEmptyState,
@@ -26,6 +27,9 @@ import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import './sessions-panel.css'
 
 const PIN_KEY = 'webterm.sessionsPinned'
+/** Peta lipatan (JSON `{ kunci: terlipat }`). Dipersist karena membuka ulang board tiap reload
+ *  adalah kerja yang pengguna sudah lakukan sekali. */
+const COLLAPSED_KEY = 'webterm.sessionsCollapsed'
 /** Jeda tutup hover-peek. Tanpa jeda, gerak diagonal dari ikon ke panel melewati celah dan
  *  panel tertutup di tengah jalan. Sama dengan nodeterm. */
 const PEEK_CLOSE_MS = 140
@@ -60,6 +64,16 @@ function readPinned(): boolean {
   }
 }
 
+function readCollapsed(): Record<string, boolean> {
+  // Sama seperti `readPinned`: akses localStorage sendiri bisa melempar (mode privat / site data
+  // diblokir), dan panel harus tetap jalan tanpa penyimpanan.
+  try {
+    return parseCollapsed(localStorage.getItem(COLLAPSED_KEY))
+  } catch {
+    return {}
+  }
+}
+
 function monogram(name: string): string {
   return (name.trim()[0] ?? '?').toUpperCase()
 }
@@ -71,7 +85,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const [peek, setPeek] = useState(false)
   const [grouping, setGrouping] = useState<SidebarGrouping>('project')
   const [filter, setFilter] = useState('')
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Snapshot awal dibaca saat mount: kanal unread tidak memancar ulang saat disubscribe, dan
   // panel ini bisa di-mount setelah status pertama sudah lewat.
@@ -85,6 +99,14 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       // Penyimpanan ditolak (mode privat): pilihan pin berlaku untuk sesi tab ini saja.
     }
   }, [pinned])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed))
+    } catch {
+      // Penyimpanan ditolak (mode privat): lipatan berlaku untuk sesi tab ini saja.
+    }
+  }, [collapsed])
 
   useEffect(() => () => void (closeTimer.current && clearTimeout(closeTimer.current)), [])
 
@@ -256,7 +278,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
               const key = projectCollapseKey(g.projectId)
               // Selagi memfilter semuanya dibuka: hasil yang disembunyikan di balik baris
               // terlipat terbaca seperti "tidak ada hasil".
-              const isCollapsed = filter.trim() === '' && isProjectCollapsed(collapsed, key, g.isActive)
+              const isCollapsed = filter.trim() === '' && isProjectCollapsed(collapsed, key)
               const sig = signalCounts(g.sessions)
               const head = () => {
                 if (projectHeadClickAction(g.isActive) === 'switch') onSelectWorkspace(g.projectId)

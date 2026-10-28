@@ -3,6 +3,7 @@ import {
   buildSessionList,
   buildStatusList,
   isProjectCollapsed,
+  parseCollapsed,
   projectCollapseKey,
   projectHeadClickAction,
   sessionLabel,
@@ -102,14 +103,41 @@ describe('sessionLabel', () => {
 describe('isProjectCollapsed', () => {
   const key = projectCollapseKey('p1')
 
-  it('membuka hanya workspace aktif selagi belum ada pilihan pengguna', () => {
-    expect(isProjectCollapsed({}, key, true)).toBe(false)
-    expect(isProjectCollapsed({}, key, false)).toBe(true)
+  it('terbuka selagi pengguna belum memilih apa pun', () => {
+    expect(isProjectCollapsed({}, key)).toBe(false)
   })
 
-  it('menghormati override eksplisit, termasuk yang melawan default', () => {
-    expect(isProjectCollapsed({ [key]: true }, key, true)).toBe(true)
-    expect(isProjectCollapsed({ [key]: false }, key, false)).toBe(false)
+  it('hanya pilihan pengguna yang melipat — berpindah board tidak menutup board lain', () => {
+    const user = { [projectCollapseKey('p2')]: true }
+    // p2 ditutup manual dan tetap tertutup; p1 tak pernah disentuh, jadi tetap terbuka
+    // walau board aktif berganti ke mana pun.
+    expect(isProjectCollapsed(user, projectCollapseKey('p2'))).toBe(true)
+    expect(isProjectCollapsed(user, key)).toBe(false)
+    expect(isProjectCollapsed({ [key]: false }, key)).toBe(false)
+  })
+})
+
+describe('parseCollapsed', () => {
+  it('mengembalikan peta lipatan yang tersimpan', () => {
+    expect(parseCollapsed('{"project:p1":true,"closed":false}')).toEqual({
+      'project:p1': true,
+      closed: false,
+    })
+  })
+
+  it('jatuh ke peta kosong untuk penyimpanan kosong atau rusak, tanpa melempar', () => {
+    expect(parseCollapsed(null)).toEqual({})
+    expect(parseCollapsed('')).toEqual({})
+    expect(parseCollapsed('{oops')).toEqual({})
+    expect(parseCollapsed('"project:p1"')).toEqual({})
+    expect(parseCollapsed('[true]')).toEqual({})
+    expect(parseCollapsed('null')).toEqual({})
+  })
+
+  it('membuang nilai non-boolean alih-alih meneruskannya sebagai keadaan lipatan', () => {
+    expect(parseCollapsed('{"project:p1":"true","project:p2":1,"project:p3":true}')).toEqual({
+      'project:p3': true,
+    })
   })
 })
 
