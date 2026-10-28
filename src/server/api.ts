@@ -4,6 +4,8 @@ import { homedir } from 'node:os'
 import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
+import { settingsRoute } from './settingsApi'
+import { fsApiRoute } from './fsApi'
 import { hookStatus } from './hooks'
 import { renderForRequester, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
 import type { BridgeLink } from '../shared/workspace'
@@ -22,6 +24,20 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(data))
     req.on('error', reject)
   })
+}
+
+/** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
+export function applyPtyOptions(): void {
+  const s = db.getSettings()
+  sessions.options = {
+    shell: s.defaultShell,
+    scrollbackBytes: s.scrollbackBytes,
+    // `--permission-mode auto` baru ada di Claude Code >= 2.1.71 dan webterm belum punya probe
+    // versi CLI, jadi mode default 'auto' diteruskan sebagai ABSEN: peluncuran claude tetap polos
+    // persis seperti sebelum setting ini ada. Mode pilihan user eksplisit tetap diteruskan.
+    claudePermissionMode: s.claudePermissionMode === 'auto' ? undefined : s.claudePermissionMode,
+    hookReplyApprovals: s.hookReplyApprovals,
+  }
 }
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -74,6 +90,18 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return
     }
   }
+
+  if (path === '/api/settings') {
+    await settingsRoute(req, res, method)
+    // A saved defaultShell/scrollbackBytes must reach the NEXT spawned PTY without a restart.
+    if (method === 'PUT') applyPtyOptions()
+    return
+  }
+
+  // Six filesystem verbs under /api/fs/<verb>; returns null for anything else, including the
+  // exact /api/fs folder picker below, whose response shape is different.
+  const fsRes = await fsApiRoute(path, method, url.searchParams, () => readBody(req))
+  if (fsRes) return json(res, fsRes.status, fsRes.body)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (path === '/api/agent-status' && method === 'POST') {

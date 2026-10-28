@@ -4,7 +4,7 @@ import path from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
-import { handleApi } from './api'
+import { applyPtyOptions, handleApi } from './api'
 import { installContextLinkShim } from './contextLink'
 import { DEFAULT_HOST, TOKEN_PARAM, authorize, resolveToken } from './auth'
 
@@ -36,6 +36,7 @@ function refuse(res: http.ServerResponse): void {
 
 // Write the context-link sh shim the installed get-linked-context skill invokes.
 installContextLinkShim()
+applyPtyOptions()
 
 const server = http.createServer()
 
