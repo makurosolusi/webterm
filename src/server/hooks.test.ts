@@ -1,4 +1,12 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+// `forgetNodeToken` menyapu file settings node, jadi ia menyentuh data dir. Diarahkan ke temp
+// supaya test ini tidak pernah mengutak-atik data dir pengguna.
+process.env.WEBTERM_DATA_DIR = join(tmpdir(), 'webterm-hooks-test')
+
+import type { AgentPermissionMode } from '../shared/workspace'
 import {
   CLAUDE_HOOK_EVENTS,
   NODE_TOKEN_ENV,
@@ -131,24 +139,34 @@ describe('permissionModeFlag', () => {
 })
 
 describe('buildClaudeFlags', () => {
+  // Penulis settings di-stub: test ini harus tetap bebas I/O.
+  const writeSettings = () => '/tmp/x.json'
+  const flags = (resume: boolean, permissionMode?: AgentPermissionMode) =>
+    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings })
+
   it('uses --session-id for a fresh session', () => {
-    const f = buildClaudeFlags('n1', 'uuid-x', 8700, false)
+    const f = flags(false)
     expect(f).toContain('--session-id uuid-x')
-    expect(f).toContain("--settings '")
+    expect(f).toContain("--settings '/tmp/x.json'")
   })
   it('uses --resume when resuming, not --session-id', () => {
-    const f = buildClaudeFlags('n1', 'uuid-x', 8700, true)
+    const f = flags(true)
     expect(f).toContain('--resume uuid-x')
     expect(f).not.toContain('--session-id')
   })
   it('emits --permission-mode when one is passed in', () => {
-    expect(buildClaudeFlags('n1', 'uuid-x', 8700, false, { permissionMode: 'acceptEdits' })).toContain(
-      '--permission-mode acceptEdits'
-    )
+    expect(flags(false, 'acceptEdits')).toContain('--permission-mode acceptEdits')
   })
   it('stays byte-identical to the bare line for manual mode', () => {
-    expect(buildClaudeFlags('n1', 'uuid-x', 8700, false, { permissionMode: 'manual' })).toBe(
-      buildClaudeFlags('n1', 'uuid-x', 8700, false)
-    )
+    expect(flags(false, 'manual')).toBe(flags(false))
+  })
+  it('never puts a URL on the command line (regression: envman 404 on `http:`)', () => {
+    // Blob JSON inline membawa URL callback hook ke argv; pembungkus seperti envman memindai tiap
+    // argumen untuk pola referensi `slug:path`, membaca `http://127.0.0.1:...` sebagai project
+    // bernama `http`, lalu keluar 404 — claude tidak pernah dieksekusi. Path tidak punya `:`.
+    const f = flags(false)
+    expect(f).not.toContain('://')
+    expect(f).not.toContain('127.0.0.1')
+    expect(f).toContain('/tmp/x.json')
   })
 })

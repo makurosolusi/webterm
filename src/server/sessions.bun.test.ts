@@ -1,6 +1,14 @@
 // Bun-only (needs Bun.Terminal via spawnPty); runs under `bun test`, excluded
 // from vitest. Ambient types for 'bun:test' live in ./bun-test.d.ts.
 import { test, expect } from 'bun:test'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+// `launchLine` untuk claude menulis file settings sungguhan: seluruh file diisolasi ke temp supaya
+// test tidak pernah menyentuh data dir pengguna.
+process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-sessions-'))
+
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
@@ -9,7 +17,7 @@ import {
   assembleCmd,
   setCustomAgentBaseResolver,
 } from '../shared/workspace'
-import { NODE_TOKEN_ENV, nodeToken } from './hooks'
+import { NODE_TOKEN_ENV, claudeHooksSettings, nodeToken, writeClaudeSettings } from './hooks'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -74,11 +82,13 @@ const open = (over: Partial<OpenMsg>): OpenMsg =>
   ({ t: 'open', id: 'n1', cols: 80, rows: 24, ...over })
 
 test('launchLine mints the session id with each harness own grammar', () => {
-  // claude: flag id spasi-terpisah PLUS objek hook --settings.
+  // claude: flag id spasi-terpisah PLUS path file hook --settings.
   const claude = launchLine(open({ cmd: 'claude', agentId: 'claude', sessionId: SID }), 9999)
   expect(claude).toContain(`--session-id ${SID}`)
   expect(claude).toContain('--settings ')
-  expect(claude).toContain('127.0.0.1:9999')
+  expect(claude).toContain('node-settings/')
+  // URL callback hidup di dalam file, bukan di argv (lihat regresi envman di hooks.test.ts).
+  expect(claude).not.toContain('://')
 
   // copilot: bentuk `=`, dan TIDAK mengerti --settings.
   const copilot = launchLine(open({ cmd: 'copilot', agentId: 'copilot', sessionId: SID }), 9999)
@@ -165,6 +175,19 @@ test('launchLine resumes with the harness resume grammar', () => {
   expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex resume ${SID}`)
   // Agent tak dikenal tanpa kapabilitas apa pun: tidak ada flag yang ditempelkan.
   expect(r('custom', 'mycli')).toBe('mycli')
+})
+
+test('writeClaudeSettings lands the hook object in a file whose path has no colon', () => {
+  const path = writeClaudeSettings('n-file', 9999)
+  // Lewat JSON.parse → stringify: membuktikan file itu JSON sah DAN isinya objek hook yang sama.
+  expect(JSON.stringify(JSON.parse(readFileSync(path, 'utf8')))).toBe(
+    JSON.stringify(claudeHooksSettings('n-file', 9999))
+  )
+  // `:` adalah pemicu salah-tafsir pembungkus pihak ketiga (envman `slug:path`) — tidak boleh ada.
+  expect(path).not.toContain(':')
+  // Nama file di-hash, bukan node id mentah: id datang dari client dan bisa berisi `../`.
+  expect(path).not.toContain('n-file')
+  expect(writeClaudeSettings('n-file', 9999)).toBe(path)
 })
 
 test('launchLine rejects a session id that is unsafe on a command line', () => {

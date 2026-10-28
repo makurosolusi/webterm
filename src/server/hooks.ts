@@ -1,5 +1,8 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { isPermissionMode, type AgentPermissionMode, type AgentStatus } from '../shared/workspace'
+import { dataDir } from './config'
 
 // ---------------------------------------------------------------------------------------------
 // Langganan event hook.
@@ -114,9 +117,16 @@ export function nodeToken(nodeId: string): string {
   return t
 }
 
-/** Lupakan token sebuah node (node dihapus / sesi ditutup). */
+/** Lupakan segala jejak sebuah node: token DAN file settings-nya (node dihapus / sesi ditutup). */
 export function forgetNodeToken(nodeId: string): void {
   tokens.delete(nodeId)
+  // Best-effort: file yatim tidak membahayakan apa pun, tapi gagal menghapusnya tidak boleh
+  // menggagalkan penutupan sesi.
+  try {
+    rmSync(claudeSettingsPath(nodeId), { force: true })
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -141,7 +151,7 @@ export function stateVerified(nodeId: string, header: string | string[] | undefi
 // Perakitan baris peluncuran.
 
 /**
- * Objek `--settings` inline: satu curl catch-all per event, mem-POST stdin hook ke endpoint
+ * Isi file `--settings`: satu curl catch-all per event, mem-POST stdin hook ke endpoint
  * agent-status kita dengan key node id. Dikembalikan sebagai OBJEK supaya test bisa meng-assert
  * strukturnya tanpa mem-parse quoting shell.
  *
@@ -162,6 +172,33 @@ export function claudeHooksSettings(nodeId: string, port: number): Record<string
     ]
   }
   return { hooks }
+}
+
+/**
+ * Nama file di-hash, bukan `nodeId` mentah: id itu datang dari client lewat WebSocket dan tidak
+ * pernah divalidasi sebagai nama file, jadi memakainya langsung adalah path traversal.
+ */
+function claudeSettingsPath(nodeId: string): string {
+  const name = createHash('sha256').update(nodeId).digest('hex').slice(0, 16)
+  return join(dataDir(), 'node-settings', `${name}.json`)
+}
+
+/**
+ * Tulis settings hook node ini ke file dan kembalikan path-nya.
+ *
+ * Lewat FILE, bukan blob JSON inline: baris peluncuran bisa dibungkus perintah pihak ketiga
+ * (`envman -e p:e -- claude`), dan pembungkus seperti itu memindai argumennya sendiri — URL callback
+ * `http://127.0.0.1:...` di dalam blob terbaca sebagai referensi `slug:path` miliknya, yang membuat
+ * peluncuran mati sebelum claude jalan. Sebuah path tidak memuat `:` sama sekali.
+ *
+ * Mode 0600: isinya tidak rahasia (token masuk sebagai nama env var), tapi file ini mengarahkan ke
+ * mana sebuah sesi agent mem-POST — bukan sesuatu yang perlu bisa ditulis pengguna lain.
+ */
+export function writeClaudeSettings(nodeId: string, port: number): string {
+  const path = claudeSettingsPath(nodeId)
+  mkdirSync(join(dataDir(), 'node-settings'), { recursive: true })
+  writeFileSync(path, JSON.stringify(claudeHooksSettings(nodeId, port)), { mode: 0o600 })
+  return path
 }
 
 /** Single-quote sebuah string untuk shell POSIX (tutup-escape-buka untuk quote di dalamnya). */
@@ -210,11 +247,14 @@ export function buildClaudeFlags(
   sessionId: string,
   port: number,
   resume: boolean,
-  opts?: { permissionMode?: AgentPermissionMode }
+  opts?: {
+    permissionMode?: AgentPermissionMode
+    /** Di-inject supaya test tetap bebas I/O (pola sama dengan `unwrapMissingWrapper` di pty.ts). */
+    writeSettings?: (nodeId: string, port: number) => string
+  }
 ): string {
   const idFlag = resume ? `--resume ${sessionId}` : `--session-id ${sessionId}`
   const perm = permissionModeFlag(opts?.permissionMode)
-  return [idFlag, perm, `--settings ${shq(JSON.stringify(claudeHooksSettings(nodeId, port)))}`]
-    .filter(Boolean)
-    .join(' ')
+  const settings = (opts?.writeSettings ?? writeClaudeSettings)(nodeId, port)
+  return [idFlag, perm, `--settings ${shq(settings)}`].filter(Boolean).join(' ')
 }
