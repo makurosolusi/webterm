@@ -5,15 +5,17 @@ import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
+import { workspacesRoute } from './workspacesApi'
 import { fsApiRoute } from './fsApi'
 import { readErrorResult } from './fsOps'
 import { hookStatus } from './hooks'
 import { renderForRequester, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
-import type { BridgeLink } from '../shared/workspace'
 
-function json(res: ServerResponse, status: number, body: unknown): void {
-  const data = JSON.stringify(body)
+function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
+  // No body at all when a route omits one (204): a JSON body on a 204 is a contract change.
+  if (body === undefined) { res.end(); return }
+  const data = JSON.stringify(body)
   res.setHeader('Content-Type', 'application/json')
   res.end(data)
 }
@@ -46,51 +48,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const path = url.pathname
   const method = req.method || 'GET'
 
-  // /api/workspaces[/:id]
-  if (path === '/api/workspaces') {
-    if (method === 'GET') return json(res, 200, db.list())
-    if (method === 'POST') {
-      let body: { name: string; cwd?: string; color?: string }
-      try { body = JSON.parse(await readBody(req)) } catch { return json(res, 400, { error: 'bad json' }) }
-      return json(res, 201, db.create(body.name, body.cwd, body.color))
-    }
-  }
-
-  const wsMatch = path.match(/^\/api\/workspaces\/([^/]+)$/)
-  if (wsMatch) {
-    const id = decodeURIComponent(wsMatch[1])
-    if (method === 'GET') {
-      const ws = db.get(id)
-      return ws ? json(res, 200, ws) : json(res, 404, { error: 'not found' })
-    }
-    if (method === 'PUT') {
-      let body: { name: string; cwd?: string; color?: string; viewport: unknown; nodes: unknown; bridges?: BridgeLink[] }
-      try { body = JSON.parse(await readBody(req)) } catch { return json(res, 400, { error: 'bad json' }) }
-      const ws = { id, name: body.name, cwd: body.cwd, color: body.color, viewport: body.viewport, nodes: body.nodes, bridges: body.bridges ?? [], updatedAt: Date.now() } as Parameters<typeof db.save>[0]
-      db.save(ws)
-      const saved = db.get(id)
-      return saved ? json(res, 200, saved) : json(res, 404, { error: 'not found' })
-    }
-    if (method === 'DELETE') {
-      db.delete(id)
-      res.statusCode = 204
-      res.end()
-      return
-    }
-  }
-
-  // /api/active
-  if (path === '/api/active') {
-    if (method === 'GET') return json(res, 200, { id: db.getActive() })
-    if (method === 'PUT') {
-      let body: { id: string }
-      try { body = JSON.parse(await readBody(req)) } catch { return json(res, 400, { error: 'bad json' }) }
-      db.setActive(body.id)
-      res.statusCode = 204
-      res.end()
-      return
-    }
-  }
+  // /api/workspaces[/:id] and /api/active; returns null for anything else, including a method
+  // this family does not answer, which then falls through to the 404 at the bottom.
+  // A 204 route answers WITHOUT a `body` key, and `json` keeps those body-less.
+  const wsRes = await workspacesRoute(db, path, method, () => readBody(req))
+  if (wsRes) return json(res, wsRes.status, wsRes.body)
 
   if (path === '/api/settings') {
     await settingsRoute(req, res, method)
