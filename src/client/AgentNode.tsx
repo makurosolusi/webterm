@@ -12,6 +12,7 @@ import { useSpeechInput } from './useSpeechInput'
 import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
 import { EXIT_SETTLE_MS, ineligibleHint, restartEligibility, sendExitSequence } from './agentActions'
 import { send, subscribeStatus, getStatus } from './ws'
+import { unwatchNode, watchNode } from './unread'
 import { generateName as apiGenerateName } from './api'
 
 const COLLAPSED_H = 40
@@ -28,6 +29,16 @@ export default function AgentNode({ id, data, selected, height }: NodeProps) {
 
   const [status, setStatus] = useState<AgentStatus | undefined>(() => getStatus(id))
   useEffect(() => subscribeStatus((sid, s) => { if (sid === id) setStatus(s) }), [id])
+
+  // Keadaan BACA, terpisah dari keadaan kerja: memilih node ini membacanya (tanda unread hilang)
+  // DAN menjadikannya node yang ditonton, sehingga turn yang berakhir sementara kamu duduk di sini
+  // tidak pernah ditandai. Hanya di AgentNode, bukan TerminalNode: status hook cuma pernah datang
+  // untuk node agent, jadi shell biasa tak punya turn yang bisa ditandai belum-dibaca.
+  useEffect(() => {
+    if (!selected) return
+    watchNode(id)
+    return () => unwatchNode(id)
+  }, [selected, id])
 
   // Pre-generated session UUID enables claude --session-id (and later --resume).
   const [sid, setSid] = useState<string>(sessionId ?? crypto.randomUUID())

@@ -66,10 +66,22 @@ describe('STATE_LABEL', () => {
 
 describe('sessionStatusGroup', () => {
   it('menaruh done di idle, bukan di attention', () => {
-    expect(sessionStatusGroup('attention')).toBe('attention')
-    expect(sessionStatusGroup('working')).toBe('working')
-    expect(sessionStatusGroup('done')).toBe('idle')
-    expect(sessionStatusGroup('unknown')).toBe('unknown')
+    expect(sessionStatusGroup('attention', false)).toBe('attention')
+    expect(sessionStatusGroup('working', false)).toBe('working')
+    expect(sessionStatusGroup('done', false)).toBe('idle')
+    expect(sessionStatusGroup('unknown', false)).toBe('unknown')
+  })
+
+  it('menaruh yang belum dibaca di unread, termasuk yang tanpa sinyal hook', () => {
+    expect(sessionStatusGroup('done', true)).toBe('unread')
+    expect(sessionStatusGroup('unknown', true)).toBe('unread')
+  })
+
+  it('attention dan working mengalahkan tanda unread', () => {
+    // Prioritas keanggotaan, bukan urutan tampil: turn BARU yang sedang jalan tetap di Running,
+    // lalu muncul lagi sebagai Unread begitu turn itu berakhir.
+    expect(sessionStatusGroup('attention', true)).toBe('attention')
+    expect(sessionStatusGroup('working', true)).toBe('working')
   })
 })
 
@@ -162,6 +174,15 @@ describe('buildSessionList', () => {
     expect(buildSessionList(projects, null, 'p1', noStatus, '   ')).toHaveLength(2)
   })
 
+  it('menganggap baris sudah dibaca bila himpunan unread tidak disebut', () => {
+    // Default itu yang membuat pemanggil mode-project (mis. tab workspace) tak perlu tahu soal
+    // kanal baca sama sekali.
+    expect(buildSessionList(projects, null, 'p1', noStatus, '')[0].sessions[0].unread).toBe(false)
+    expect(
+      buildSessionList(projects, null, 'p1', noStatus, '', new Set(['a1']))[0].sessions[0].unread,
+    ).toBe(true)
+  })
+
   it('mewarisi cwd workspace untuk sesi tanpa cwd sendiri', () => {
     const groups = buildSessionList(projects, null, 'p2', noStatus, '')
     expect(groups[0].sessions[0].cwd).toBeUndefined() // Alpha tanpa cwd
@@ -184,27 +205,56 @@ describe('buildStatusList', () => {
     const sections = buildStatusList(projects, null, 'p1', { a1: 'working', a2: 'waiting', b1: 'done' }, '')
     expect(sections.map((s) => [s.kind, s.rows.map((r) => r.id)])).toEqual([
       ['attention', ['a2']],
+      ['unread', []],
       ['working', ['a1']],
       ['idle', ['b1']],
       ['unknown', []],
     ])
   })
 
+  it('menaruh Unread tepat di bawah attention, dan hanya yang turn-nya sudah berakhir', () => {
+    // a1 bertanda tapi turn barunya jalan → tetap Running; a2 bertanda dan sudah selesai → Unread;
+    // b1 selesai tanpa tanda → Idle.
+    const sections = buildStatusList(
+      projects,
+      null,
+      'p1',
+      { a1: 'working', a2: 'done', b1: 'done' },
+      '',
+      new Set(['a1', 'a2']),
+    )
+    expect(sections.map((s) => [s.kind, s.rows.map((r) => r.id)])).toEqual([
+      ['attention', []],
+      ['unread', ['a2']],
+      ['working', ['a1']],
+      ['idle', ['b1']],
+      ['unknown', []],
+    ])
+  })
+
+  it('membawa tanda unread ke barisnya, supaya glyph bisa membedakannya dari done biasa', () => {
+    const rows = buildStatusList(projects, null, 'p1', { a1: 'done', b1: 'done' }, '', new Set(['a1']))
+      .flatMap((s) => s.rows)
+    expect(rows.find((r) => r.id === 'a1')?.unread).toBe(true)
+    expect(rows.find((r) => r.id === 'b1')?.unread).toBe(false)
+  })
+
   it('menahan section kosong, dengan label dan hitungan nol', () => {
-    // Keempat section selalu hadir dalam urutan tetap: posisi section tidak boleh bergeser saat
+    // Kelima section selalu hadir dalam urutan tetap: posisi section tidak boleh bergeser saat
     // satu sesi berganti status, dan "0" itu sendiri jawaban yang perlu dibaca.
     const sections = buildStatusList(projects, null, 'p1', noStatus, '')
     expect(sections.map((s) => [s.kind, s.label, s.rows.length])).toEqual([
       ['attention', 'Need attention', 0],
+      ['unread', 'Unread', 0],
       ['working', 'Running', 0],
       ['idle', 'Idle', 0],
       ['unknown', 'Unknown', 3],
     ])
   })
 
-  it('tetap mengembalikan keempat section walau filter tak cocok sama sekali', () => {
+  it('tetap mengembalikan kelima section walau filter tak cocok sama sekali', () => {
     const sections = buildStatusList(projects, null, 'p1', noStatus, 'zzz')
-    expect(sections.map((s) => s.kind)).toEqual(['attention', 'working', 'idle', 'unknown'])
+    expect(sections.map((s) => s.kind)).toEqual(['attention', 'unread', 'working', 'idle', 'unknown'])
     expect(sections.every((s) => s.rows.length === 0)).toBe(true)
   })
 

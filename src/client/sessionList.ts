@@ -2,10 +2,11 @@
 // dan pencocokan filter. Porting dari nodeterm v0.4.5 `src/renderer/lib/sessionList.ts` +
 // `src/renderer/lib/sidebarFilter.ts`. Semua di sini bebas DOM supaya bisa dites di node-env.
 //
+// Tanda `unread` datang dari `./unread` — murni sisi klien, diturunkan dari kanal status dan BUKAN
+// dari protokol (`StatusMsg` hanya membawa `AgentStatus`). Modul ini tidak membacanya sendiri:
+// himpunan id unread disuntikkan sebagai argumen supaya di sini tetap bebas state global.
+//
 // Yang DIBUANG dari nodeterm, beserta alasannya (bukan kelalaian):
-// - Tanda `unread`. webterm tidak punya konsep baca/belum-baca: `StatusMsg` (src/shared/protocol.ts)
-//   hanya membawa `AgentStatus`. Section "Unread" nodeterm karena itu akan selalu kosong, jadi
-//   `sessionStatusGroup` tidak memerlukan parameter kedua dan section-nya tidak ada.
 // - Frame group canvas (`kind: 'group'`). `WsNodeKind` webterm tidak punya frame, jadi pohonnya
 //   dua tingkat (workspace → sesi), bukan rekursif.
 // - Jam status (`lastEventAt` / `lastSeen`). Status webterm tidak membawa timestamp, jadi urutan
@@ -31,18 +32,27 @@ export const STATE_LABEL: Record<StatusKind, string> = {
   unknown: 'Unknown',
 }
 
-export type StatusGroup = 'attention' | 'working' | 'idle' | 'unknown'
+/** Section mode-status. Beda dari `StatusKind` (yang menggerakkan glyph) karena ia juga memantulkan
+ *  tanda `unread`: turn selesai yang belum kamu lihat dapat section sendiri supaya mudah dicari,
+ *  terpisah dari yang sudah-dibaca-dan-diam. */
+export type StatusGroup = 'attention' | 'unread' | 'working' | 'idle' | 'unknown'
 
-// Urutan tampil section pada mode status: yang menuntut kamu dulu, lalu yang hidup, lalu yang
-// sudah selesai. Sama seperti nodeterm, minus 'unread' yang tak punya sumber data di webterm.
-const STATUS_GROUP_ORDER: readonly StatusGroup[] = ['attention', 'working', 'idle', 'unknown']
+// Urutan tampil section pada mode status: yang menuntut kamu dulu, lalu yang BARU untukmu, lalu
+// yang hidup, lalu yang sudah diam. Unread duduk tinggi (kedua) supaya hasil yang belum dilihat
+// menonjol — walau menurut prioritas keanggotaan sesi yang masih berjalan tetap di Running.
+const STATUS_GROUP_ORDER: readonly StatusGroup[] = ['attention', 'unread', 'working', 'idle', 'unknown']
 
 export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
   attention: 'Need attention',
+  unread: 'Unread',
   working: 'Running',
   idle: 'Idle',
   unknown: 'Unknown',
 }
+
+/** Default untuk pemanggil yang tidak peduli unread (mis. tab workspace, yang hanya butuh dot
+ *  status). Dibagi satu instance: himpunan ini tidak pernah ditulis. */
+const NO_UNREAD: ReadonlySet<string> = new Set()
 
 /**
  * `waiting` dan `blocked` dilipat jadi SATU kind `attention`: keduanya berarti giliranmu, dan
@@ -63,11 +73,19 @@ export function sessionStatusKind(state: AgentStatus | undefined): StatusKind {
   }
 }
 
-/** Section mode-status untuk sebuah baris. Prioritas keanggotaan (match pertama menang) — bukan
- *  urutan tampil, yang ditetapkan `STATUS_GROUP_ORDER`. */
-export function sessionStatusGroup(kind: StatusKind): StatusGroup {
+/**
+ * Section mode-status untuk sebuah baris. Prioritas keanggotaan (match pertama menang) — SENGAJA
+ * bukan urutan tampil, yang ditetapkan `STATUS_GROUP_ORDER`: `attention` (kamu harus bertindak) →
+ * `working` (turn hidup itu Running, bukan Unread, sama dengan glyph-nya) → `unread` (sudah selesai
+ * tapi belum dilihat) → `idle` (selesai dan sudah dilihat) → `unknown` (tak ada sinyal hook).
+ * Jadi node bertanda yang turn BARUnya sedang jalan tetap di Running, lalu muncul lagi sebagai
+ * Unread begitu turn itu berakhir. `unread` wajib disebut: default diam-diam "sudah dibaca" akan
+ * membuat pemanggil yang lupa kehilangan section-nya tanpa pesan.
+ */
+export function sessionStatusGroup(kind: StatusKind, unread: boolean): StatusGroup {
   if (kind === 'attention') return 'attention'
   if (kind === 'working') return 'working'
+  if (unread) return 'unread'
   if (kind === 'done') return 'idle'
   return 'unknown'
 }
@@ -134,6 +152,11 @@ export interface SessionRowVM {
   isAgent: boolean
   statusKind: StatusKind
   stateLabel: string
+  /** Turn yang berakhir selagi baris ini tidak ditonton. Status KERJA tetap `statusKind` — ini
+   *  keadaan BACA, jadi keduanya dibawa terpisah dan glyph-lah yang mendamaikannya.
+   *  OPSIONAL (absen = sudah dibaca) demi fixture lain yang hanya menguji dot status dan tak
+   *  membaca field ini; `toRow` — satu-satunya pembuat baris di produksi — selalu mengisinya. */
+  unread?: boolean
   cwd?: string
   /** Workspace pemilik baris. Selalu terisi (beda dari nodeterm, yang mengisinya hanya di mode
    *  status): callback tutup/fokus webterm butuh id ini di KEDUA mode. Komponen yang memutuskan
@@ -162,7 +185,12 @@ export interface StatusSection {
 
 const isSession = (n: WsNode): boolean => SESSION_KINDS.includes(n.kind)
 
-function toRow(n: WsNode, status: AgentStatus | undefined, ws: Workspace): SessionRowVM {
+function toRow(
+  n: WsNode,
+  status: AgentStatus | undefined,
+  ws: Workspace,
+  unread: ReadonlySet<string>,
+): SessionRowVM {
   const statusKind = sessionStatusKind(status)
   return {
     id: n.id,
@@ -172,6 +200,7 @@ function toRow(n: WsNode, status: AgentStatus | undefined, ws: Workspace): Sessi
     isAgent: !!n.agentId,
     statusKind,
     stateLabel: STATE_LABEL[statusKind],
+    unread: unread.has(n.id),
     cwd: n.cwd ?? ws.cwd,
     projectId: ws.id,
     projectName: ws.name,
@@ -218,6 +247,9 @@ export function buildSessionList(
   activeProjectId: string | null,
   statuses: Record<string, AgentStatus>,
   filter: string,
+  // Opsional, default "tak ada yang unread": mode project tidak punya section Unread, jadi
+  // pemanggil yang hanya butuh grup per workspace tak perlu tahu soal kanal baca sama sekali.
+  unread: ReadonlySet<string> = NO_UNREAD,
 ): SessionGroup[] {
   const needle = filter.trim().toLowerCase()
   const nameMatched = matchedProjectIds(workspaces, needle)
@@ -234,7 +266,7 @@ export function buildSessionList(
       isActive,
       // Urutan array node, BUKAN aktif-dulu: sidebar mencerminkan urutan canvas.
       sessions: nodesOf(ws, liveActiveNodes, isActive)
-        .map((n) => toRow(n, statuses[n.id], ws))
+        .map((n) => toRow(n, statuses[n.id], ws, unread))
         .filter(keep),
     }
   })
@@ -252,6 +284,7 @@ export function buildStatusList(
   activeProjectId: string | null,
   statuses: Record<string, AgentStatus>,
   filter: string,
+  unread: ReadonlySet<string> = NO_UNREAD,
 ): StatusSection[] {
   const needle = filter.trim().toLowerCase()
   const nameMatched = matchedProjectIds(workspaces, needle)
@@ -267,14 +300,14 @@ export function buildStatusList(
     for (const n of nodesOf(ws, liveActiveNodes, isActive)) {
       if (seen.has(n.id)) continue
       seen.add(n.id)
-      const row = toRow(n, statuses[n.id], ws)
+      const row = toRow(n, statuses[n.id], ws, unread)
       if (!needle || nameMatched.has(ws.id) || matches(row, needle)) tagged.push({ row, pidx })
     }
   })
 
   const byStatus = new Map<StatusGroup, { row: SessionRowVM; pidx: number }[]>()
   for (const t of tagged) {
-    const group = sessionStatusGroup(t.row.statusKind)
+    const group = sessionStatusGroup(t.row.statusKind, t.row.unread === true)
     const list = byStatus.get(group)
     if (list) list.push(t)
     else byStatus.set(group, [t])

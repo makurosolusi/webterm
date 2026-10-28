@@ -5,6 +5,7 @@ import { WS_PATH } from '../shared/protocol'
 import type { ClientMsg, ServerMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
 import { tokenQuery } from './api'
+import { noteStatus } from './unread'
 
 interface Sub {
   onOutput: (data: string) => void
@@ -54,6 +55,9 @@ function connect() {
     }
     if (msg.t === 'status') {
       statuses.set(msg.id, msg.status)
+      // Aturan SET unread hidup DI SINI, bukan di komponen node: ini satu-satunya tempat yang
+      // melihat status node mana pun, termasuk node workspace non-aktif yang tak ter-mount.
+      noteStatus(msg.id, msg.status)
       for (const l of statusListeners) l(msg.id, msg.status)
       return
     }

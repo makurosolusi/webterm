@@ -336,6 +336,12 @@
   height: 11px;
 }
 
+/* Unread = selesai tapi belum dilihat. Memakai --accent (pilihan warna nodeterm juga): ia satu
+   token yang sudah ada di kedua tema, dan "baru untukmu" memang bahasa aksen, bukan bahasa status. */
+.ss-status__icon--unread {
+  background: var(--accent);
+}
+
 .ss-status__icon--working {
   background: var(--state-working);
 }
@@ -401,6 +407,12 @@
 
 .ss-check {
   color: var(--state-success);
+}
+
+/* Centang yang belum dibaca: bentuk sama, warna aksen — "selesai" dan "selesai DAN baru untukmu"
+   adalah dua fakta, dan yang kedua harus bisa dipisahkan sekilas dari deretan centang hijau. */
+.ss-check--unread {
+  color: var(--accent);
 }
 
 .ss-dot {

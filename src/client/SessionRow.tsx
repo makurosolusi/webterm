@@ -11,13 +11,29 @@ function dirName(p: string | undefined): string {
   return parts[parts.length - 1] ?? p
 }
 
-/** Urutan prioritas glyph: bel (giliranmu) → centang (selesai) → titik status. Satu baris hanya
- *  punya satu slot, jadi sinyal yang paling menuntut tindakan yang menang. */
+/** Kalimat glyph belum-dibaca, dipakai juga sebagai bagian nama aksesibel barisnya. */
+const UNREAD_TITLE = 'Finished — new for you'
+
+/** Apakah baris ini memakai glyph belum-dibaca? Bel (giliranmu) dan turn yang sedang jalan
+ *  MENGALAHKANNYA — prompt izin atau turn baru lebih mendesak daripada tanda lama; sama dengan
+ *  prioritas `sessionStatusGroup`. Satu predikat karena dua pembaca (glyph dan aria-label). */
+const showsUnread = (row: SessionRowVM): boolean =>
+  row.unread === true && row.statusKind !== 'attention' && row.statusKind !== 'working'
+
+/** Urutan prioritas glyph: bel (giliranmu) → centang belum-dibaca → centang (selesai) → titik
+ *  status. Satu baris hanya punya satu slot, jadi sinyal yang paling menuntut tindakan yang menang. */
 function StatusGlyph({ row }: { row: SessionRowVM }) {
   if (row.statusKind === 'attention') {
     return (
       <span className="ss-row__glyph ss-bell" title={row.stateLabel}>
         <Bell aria-hidden />
+      </span>
+    )
+  }
+  if (showsUnread(row)) {
+    return (
+      <span className="ss-row__glyph ss-check ss-check--unread" title={UNREAD_TITLE}>
+        <Check aria-hidden />
       </span>
     )
   }
@@ -52,7 +68,9 @@ export default function SessionRow({ row, showProject, onFocusNode, onCloseSessi
         className="ss-row"
         role="button"
         tabIndex={0}
-        aria-label={`${row.label} — ${row.stateLabel}`}
+        // Glyph belum-dibaca hanya punya `title`, yang tidak diumumkan dengan andal — jadi fakta
+        // itu ikut ke nama aksesibel barisnya, bukan hanya ke warna centangnya.
+        aria-label={`${row.label} — ${row.stateLabel}${showsUnread(row) ? ` — ${UNREAD_TITLE}` : ''}`}
         onClick={() => onFocusNode(row.id)}
         // Klik tengah menutup sesi: kebiasaan tab browser, dan nodeterm memakainya juga.
         onAuxClick={(e) => {
