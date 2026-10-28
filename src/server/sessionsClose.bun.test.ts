@@ -23,6 +23,13 @@ const OLD_TRANSCRIPT_AFTER_CLOSE = '/tmp/webterm-close-probe.jsonl'
 // jadi tepat satu `exit` tetap lolos dan — karena client mencocokkannya by id — mendarat di
 // pelanggan berikutnya dengan node id yang sama.
 const OLD_EXITS_AFTER_CLOSE_KILL = 1
+// Perilaku LAMA di cabang SPAWN: senyap, nol pesan status. Client menyimpan salinan statusnya di map
+// modul (`client/ws.ts`), jadi senyap terbaca "tidak ada perubahan" — dan sesudah restart server
+// itulah yang membuat node yang tadinya 'working' terbaca RUNNING selamanya.
+const OLD_SPAWN_STATUS_MESSAGES = 0
+// Perilaku LAMA di cabang spawn untuk status yang ditinggalkan PTY yang sudah mati: entry-nya tetap
+// di `this.status`, jadi re-attach berikutnya memutarnya ulang di atas PTY yang baru lahir.
+const OLD_STATUS_AFTER_RESPAWN: AgentStatus = 'working'
 
 /** Perekam status; status absen dipetakan ke 'NONE' karena `[undefined].join(',')` sama dengan
  *  senyap — tanpa penandaan ini SENYAP dan PENCABUTAN EKSPLISIT tak terbedakan. `exits` terpisah
@@ -158,6 +165,37 @@ test('a pty that exits on its own still emits its exit', async () => {
 
   expect(r.exits.length).toBe(1)
   expect(r.exits[0]).toBe(0)
+})
+
+test('a fresh server answering a replayed open says there is no status', () => {
+  const s = new Sessions()
+  const r = recorder()
+  // Inilah restart server dari sisi server: proses BARU, `map` kosong, lalu `open` yang diputar
+  // ulang client (`client/ws.ts` mengirim ulang setiap `open` tersimpan di tiap sambung ulang)
+  // mendarat di cabang SPAWN — bukan re-attach — untuk node id yang belum pernah dilihat proses ini.
+  s.open({ t: 'open', id: 'cl7', cols: 80, rows: 24, cmd: 'sleep 20', agentId: 'claude' }, r.send)
+
+  // Tepat satu pesan, dan isinya PENCABUTAN. Bukan 'working': PTY-nya baru lahir dan belum punya
+  // bukti apa pun. Tapi juga bukan senyap, karena browser masih memegang status sebelum restart.
+  expect(r.seen.length).toBe(1)
+  expect(r.seen[0]).toBe('NONE')
+  expect(r.seen.length).not.toBe(OLD_SPAWN_STATUS_MESSAGES)
+  s.close('cl7', r.send)
+})
+
+test('a spawn drops the status left behind by a pty that is gone, not just announces it', () => {
+  const s = new Sessions()
+  const r = recorder()
+  // Status tanpa sesi hidup — bentuk yang ditinggalkan `onExit` (ia menyimpan statusnya lalu
+  // menghapus sesinya dari `map`), di sini ditulis langsung supaya tidak bergantung pada timing.
+  s.setStatus('cl8', 'working')
+  s.open({ t: 'open', id: 'cl8', cols: 80, rows: 24, cmd: 'sleep 20', agentId: 'claude' }, r.send)
+
+  // Bukan cuma pesannya: entry server-nya ikut hilang, jadi RE-ATTACH berikutnya tidak memutar
+  // ulang status milik proses yang sudah mati di atas PTY yang baru.
+  expect(stored(s, 'cl8', r.send)).toContain('NONE')
+  expect(stored(s, 'cl8', r.send)).not.toContain(OLD_STATUS_AFTER_RESPAWN)
+  s.close('cl8', r.send)
 })
 
 test('close clears the transcript path of a node whose pty is already gone', () => {

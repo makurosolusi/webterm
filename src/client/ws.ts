@@ -2,7 +2,8 @@
 // Survives refresh/reconnect: each subscriber's `open` params are retained and
 // re-sent on every (re)connect so the server re-attaches the PTY and replays scrollback.
 import { WS_PATH } from '../shared/protocol'
-import type { ClientMsg, ServerMsg } from '../shared/protocol'
+import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
+import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
 import { tokenQuery } from './api'
 import { noteStatus } from './unread'
@@ -82,10 +83,32 @@ function connect() {
   ws.onerror = () => ws?.close()
 }
 
+/**
+ * Bentuk `open` yang DISIMPAN untuk replay, yang belum tentu sama dengan yang dikirim sekarang.
+ *
+ * Peluncuran pertama sebuah node agent mencetak session id-nya (`--session-id <sid>`), dan id itu
+ * hanya bisa dicetak SEKALI: claude menolak yang kedua dengan "Session ID … is already in use."
+ * (lihat `withSessionId` di shared/workspace.ts). Selama PTY-nya hidup itu tak berakibat — server
+ * me-re-attach dan mengabaikan `cmd`/`resume` sepenuhnya — tapi sesudah RESTART SERVER registri
+ * sesinya kosong, jadi replay yang sama benar-benar MELUNCURKAN, dan node-nya mati di peluncuran.
+ * Jadi yang disimpan adalah bentuk sambungnya: `--resume <sid>` yang sama.
+ *
+ * Tanpa pemeriksaan transcript di sini dengan sengaja: kalau percakapannya sudah tidak ada di disk,
+ * server menurunkan kembali `resume` lewat probe-nya sendiri (`server/transcriptPresence.ts`) dan
+ * meluncurkan dengan `--session-id` plus catatan ke terminal. Jadi aman di kedua arah.
+ */
+export function replayOpen(msg: OpenMsg): OpenMsg {
+  const sid = msg.sessionId
+  // Digerbangi `canResumeWith`: tanpa bentuk resume yang membawa id, membalik `resume` justru
+  // meluncurkan polos dan node itu kehilangan rantai sesinya (`launchLine`).
+  if (!sid || !msg.agentId || !canResumeWith(msg.agentId, sid)) return msg
+  return { ...msg, resume: true }
+}
+
 export function send(msg: ClientMsg) {
   if (msg.t === 'open') {
     const sub = subs.get(msg.id)
-    if (sub) sub.open = msg // remembered; onopen replays it on every (re)connect
+    if (sub) sub.open = replayOpen(msg) // remembered; onopen replays it on every (re)connect
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
     return // never queue 'open' — the reconnect/onopen replay covers the not-open case
   }

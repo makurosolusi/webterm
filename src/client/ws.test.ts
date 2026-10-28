@@ -77,6 +77,56 @@ test('token in the page URL is stashed in sessionStorage and sent on the WS url'
   expect(lastSocket().url).toBe('ws://10.0.0.5:8700/ws?token=s3cret%2Fx')
 })
 
+// Perilaku LAMA: `open` disimpan APA ADANYA, jadi replay reconnect mengirim `resume: false` lagi.
+// Selama PTY-nya hidup itu tak berakibat (server re-attach dan mengabaikan `cmd`/`resume`), tapi
+// sesudah restart server replay itu benar-benar MELUNCURKAN `--session-id <sid>` pada id yang
+// transcript-nya sudah ada — yang ditolak claude dengan "Session ID … is already in use."
+const OLD_REPLAYED_RESUME = false
+
+const SID = '11111111-2222-4333-8444-555555555555'
+
+test('the replayed open resumes, while the first launch still mints the session id', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'agent-replay'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  // Bentuk yang dikirim node agent yang lahir di sesi browser ini: `resume: false` (lihat
+  // `resumesOnFirstLaunch` di AgentNode.tsx).
+  send({ t: 'open', id, cols: 80, rows: 24, agentId: 'claude', sessionId: SID, resume: false })
+
+  // Peluncuran PERTAMA tetap mencetak id-nya — tidak ada percakapan untuk disambung.
+  expect(JSON.parse(sock.sent[0]).resume).toBe(false)
+
+  sock.sent.length = 0
+  sock.onopen!() // sambung ulang: inilah yang diputar ulang
+  const replayed = JSON.parse(sock.sent[0])
+  expect(replayed.resume).toBe(true)
+  expect(replayed.sessionId).toBe(SID) // id yang SAMA: rantai sesi node tidak terputus
+  expect(replayed.resume).not.toBe(OLD_REPLAYED_RESUME)
+})
+
+test('a plain terminal has nothing to resume, so its replayed open is byte-for-byte the same', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send, replayOpen } = await fresh().ws
+  const id = 'term-replay'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  const open = { t: 'open', id, cols: 80, rows: 24 } as const
+  send(open)
+
+  sock.sent.length = 0
+  sock.onopen!()
+  expect(sock.sent[0]).toBe(JSON.stringify(open))
+  // Dan gerbangnya memang bentuk node-nya, bukan kebetulan: id tak sah / agent tanpa bentuk resume
+  // yang membawa id juga lewat apa adanya — membalik `resume` di sana meluncurkan polos dan node
+  // itu kehilangan rantai sesinya.
+  const unsafe = { t: 'open', id, cols: 80, rows: 24, agentId: 'claude', sessionId: '-x; rm -rf /' } as const
+  expect(replayOpen(unsafe)).toBe(unsafe)
+})
+
 test('token survives a reload via sessionStorage, with no token in the URL', async () => {
   ;(globalThis as any).sessionStorage = {
     getItem: (k: string) => (k === 'webterm.token' ? 'kept' : null),

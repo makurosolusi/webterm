@@ -16,6 +16,7 @@ import {
   BUILTIN_AGENT_IDS,
   assembleCmd,
   setCustomAgentBaseResolver,
+  type AgentStatus,
 } from '../shared/workspace'
 import { NODE_TOKEN_ENV, claudeHooksSettings, nodeToken, writeClaudeSettings } from './hooks'
 
@@ -285,6 +286,10 @@ test('a claude session carries its hook token and loses it when the session clos
 
 test('a freshly spawned agent session reports NO status until something real says so', async () => {
   const s = new Sessions()
+  // Bentuk LAMA yang harus tetap mati: `open` menulis 'working' untuk tiap sesi ber-agentId, jadi
+  // node claude yang baru lahir — masih memuat banner, belum pernah diberi prompt — terbaca RUNNING
+  // dan ikut terhitung di seksi Running. Yang dijaga test ini adalah itu, bukan jumlah pesannya.
+  const OLD_STATUS_AT_SPAWN: AgentStatus = 'working'
   // `status` bisa ABSEN di kawat ("tidak ada status"), dan di sini bedanya dengan SENYAP harus
   // terlihat: `join` saja tidak cukup karena `[undefined].join(',')` juga '', jadi absen dipetakan
   // ke 'NONE' dan yang diperiksa adalah daftar pesannya, bukan hasil gabungnya.
@@ -294,19 +299,25 @@ test('a freshly spawned agent session reports NO status until something real say
   // akan mengaburkan apa yang sedang diuji.
   s.open({ t: 'open', id: 'st1', cols: 80, rows: 24, cmd: 'sleep 5', agentId: 'claude' }, send)
 
-  // Regresi: dulu `open` langsung memancarkan 'working' untuk setiap sesi ber-agentId, jadi node
-  // claude yang baru lahir — masih di banner, belum pernah diberi prompt — terbaca RUNNING.
-  // Sesi BARU tidak memancarkan pesan status sama sekali: tidak ada yang perlu disinkronkan. Dan
-  // '' di sini sekarang hanya bisa berarti nol pesan — pesan "tidak ada status" akan muncul 'NONE'.
-  expect(seen.join(',')).toBe('')
+  // Sesi BARU memancarkan TEPAT SATU pesan, dan isinya PENCABUTAN: 'NONE' di sini berarti "server
+  // tidak punya status untuk node ini", BUKAN senyap. Senyap pun salah — client memegang salinan
+  // status per node yang bertahan melewati reconnect, jadi `open` yang diputar ulang sesudah server
+  // restart (map proses baru kosong → mendarat di cabang spawn) butuh jawaban eksplisit.
+  expect(seen.length).toBe(1)
+  expect(seen[0]).toBe('NONE')
+  // Dan yang dipancarkan bukan nilai AgentStatus yang dikarang: regresi aslinya tetap tergigit.
+  expect(seen.join(',')).not.toContain(OLD_STATUS_AT_SPAWN)
 
   // Dan tidak ada status yang DISIMPAN diam-diam. Socket yang re-attach sekarang selalu dijawab,
   // tapi jawabannya "tidak ada status" — bukan satu pun nilai AgentStatus yang dikarang.
   const again: string[] = []
   s.open({ t: 'open', id: 'st1', cols: 80, rows: 24 }, (m) => { if (m.t === 'status') again.push(m.status ?? 'NONE') })
   expect(again.join(',')).toBe('NONE')
+  expect(again.join(',')).not.toContain(OLD_STATUS_AT_SPAWN)
 
-  // Sinyal nyata (jalur yang dipakai hook UserPromptSubmit) tetap sampai ke client.
+  // Sinyal nyata (jalur yang dipakai hook UserPromptSubmit) tetap sampai ke client. Ia juga yang
+  // membuktikan dua predikat `not.toContain` di atas tidak hijau secara hampa: 'working' MEMANG
+  // bisa muncul di daftar ini, cuma tidak boleh lahir dari spawn.
   s.setStatus('st1', 'working')
   expect(again.join(',')).toBe('NONE,working')
   s.close('st1')

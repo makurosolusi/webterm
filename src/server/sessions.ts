@@ -223,17 +223,26 @@ export class Sessions {
       this.map.delete(session.id)
     })
 
-    // SENGAJA TIDAK ADA status awal di sini. Dulu baris ini `setStatus(msg.id, 'working')` untuk
-    // setiap sesi ber-agentId, padahal yang baru terjadi hanyalah PTY-nya lahir: CLI-nya masih
-    // memuat banner dan belum diberi satu pun prompt. Itu klaim tanpa bukti, dan ia yang membuat
-    // node agent yang baru dibuka terbaca RUNNING serta ikut terhitung di seksi Running sidebar.
-    // Status pertama sekarang datang dari sinyal nyata — hook claude (`hookStatus`) atau `onExit`.
+    // TIDAK ADA status NYATA di sini — tapi juga tidak senyap. Dulu baris ini
+    // `setStatus(msg.id, 'working')` untuk tiap sesi ber-agentId, padahal yang baru terjadi hanyalah
+    // PTY-nya lahir: CLI-nya masih memuat banner, belum diberi satu pun prompt. Klaim tanpa bukti,
+    // dan ia yang membuat node agent baru terbaca RUNNING serta ikut terhitung di seksi Running.
+    // Status pertama datang dari sinyal nyata — hook claude (`hookStatus`) atau `onExit`.
     //
-    // Konsekuensi yang diterima: agent yang BELUM punya pemasok status di webterm (semua selain
-    // claude — hanya `CLAUDE_HOOK_SETTINGS_CAPABLE` yang dipasangi hook) kini duduk di "Unknown"
-    // sampai prosesnya keluar. Itu memang keadaan pengetahuan kita yang sebenarnya; obatnya
-    // memasang pemasok status untuk harness lain (nodeterm punya normalizer codex/gemini sendiri),
-    // bukan menebak "working" untuk semua.
+    // Yang dikirim adalah PENCABUTANNYA, karena senyap pun salah — itu jalur RESTART SERVER: `map`
+    // proses baru kosong, jadi replay `open` client (`client/ws.ts` memutar ulang tiap `open`
+    // tersimpan di setiap sambung ulang) mendarat di cabang INI, sementara browser masih memegang
+    // salinan status lamanya (map modul, lepas dari socket). Tanpa pesan ini node yang tadinya
+    // 'working' terbaca RUNNING selamanya, dan jam basi tak menolong: jamnya di server, dan server
+    // itu baru lahir tanpa ingatan. `status` absen = "tidak ada status", bentuk yang sama yang
+    // dipakai sapuan basi dan `close` — bukan nilai yang dikarang. Entry server-nya ikut dihapus
+    // supaya re-attach berikutnya tidak memutar ulang status milik PTY yang sudah mati.
+    //
+    // Konsekuensi diterima: agent tanpa pemasok status (semua selain claude, satu-satunya yang
+    // dipasangi hook) duduk di "Unknown" sampai prosesnya keluar. Itu keadaan pengetahuan kita yang
+    // sebenarnya; obatnya memasang pemasok untuk harness lain, bukan menebak "working" untuk semua.
+    this.status.delete(msg.id)
+    send({ t: 'status', id: msg.id })
   }
 
   input(id: string, data: string): void {
