@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { Node } from '@xyflow/react'
 import type { AgentStatus } from '../shared/workspace'
 import { groupByStatus, KANBAN_COLUMNS } from './store'
@@ -13,13 +14,27 @@ interface Props {
 }
 
 export default function Kanban({ nodes, statuses, onFocus, onClose }: Props) {
+  // Jalan keluar kedua: tombol Close bisa saja tertutup chrome lain, dan overlay modal tanpa
+  // Escape mengurung pengguna. Pola sama seperti HelpOverlay.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const groups = groupByStatus(
     nodes.map((n) => ({ id: n.id, data: n.data as { kind?: string; agentId?: string; title?: string } })),
     statuses,
   )
 
+  // Overlay ini saudara .app-main (bukan anaknya) dan .app-shell static, jadi `inset: 0` mengukur
+  // dari atas viewport: baris header (judul + Close) tenggelam di bawah .tabbar. Turunkan setinggi
+  // --tabbar-h, pola sama seperti .controls-cluster di canvas-ui.css. zIndex di atas cluster
+  // kontrol (26) dan tabbar (30) supaya Close tidak tertimpa tombol mengapung kanan-atas.
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', padding: 16 }}>
+    <div style={{ position: 'absolute', top: 'var(--tabbar-h, 0px)', left: 0, right: 0, bottom: 0, zIndex: 40, background: 'rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ color: 'var(--text)', fontSize: 15, fontFamily: 'monospace' }}>Board</span>
         <button className="btn btn--accent" onClick={onClose}>Close</button>
