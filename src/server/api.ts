@@ -9,7 +9,8 @@ import { workspacesRoute } from './workspacesApi'
 import { fsApiRoute } from './fsApi'
 import { readErrorResult } from './fsOps'
 import { hookStatus } from './hooks'
-import { renderForRequester, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
+import { renderForRequester, buildLinkDoc, findWorkspaceFor, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
+import { nextHookContext } from './hookContext'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -77,6 +78,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const status = node ? hookStatus(body) : null
     if (node && status) sessions.setStatus(node, status)
     if (node && typeof body.transcript_path === 'string') sessions.setTranscript(node, body.transcript_path)
+    // Balasan hook adalah satu-satunya kanal PUSH ke konteks agent. `nextHookContext` sendiri yang
+    // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
+    // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
+    const ws = node ? findWorkspaceFor(db.list(), node) : undefined
+    const ctx = node && ws ? nextHookContext(node, body.hook_event_name, buildLinkDoc(ws, node)) : null
+    if (ctx) return json(res, 200, { hookSpecificOutput: ctx })
     res.statusCode = 204; res.end(); return
   }
 

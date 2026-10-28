@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 // `forgetNodeToken` menyapu file settings node, jadi ia menyentuh data dir. Diarahkan ke temp
@@ -26,6 +27,7 @@ import {
   permissionModeFlag,
   stateVerified,
 } from './hooks'
+import { nextHookContext } from './hookContext'
 
 describe('hookStatus', () => {
   // Tabel LENGKAP event→status, satu baris per event yang dilanggani. Ditulis eksplisit supaya
@@ -137,6 +139,50 @@ describe('claudeHooksSettings', () => {
 })
 
 // -----------------------------------------------------------------------------------------------
+// Redirect baris hook. Stdout hook adalah kanal masuk ke konteks agent, jadi ia TIDAK boleh dibuang;
+// stderr curl justru harus dibungkam sendiri, karena di stdout ia jadi teks sampah di konteks agent.
+
+/** Ada redirect stdout ke /dev/null? Redirect stderr disingkirkan dulu: `2>/dev/null` memuat
+ *  `>/dev/null` sebagai substring, jadi pencocokan naif akan selalu "menemukan" stdout dibuang. */
+const dropsStdout = (cmd: string) => />\s*\/dev\/null/.test(cmd.replace(/2>\s*\/dev\/null/g, ''))
+const silencesStderr = (cmd: string) => /2>\s*\/dev\/null/.test(cmd) && !/2>&1/.test(cmd)
+const survivesFailure = (cmd: string) => /\|\|\s*true/.test(cmd)
+
+/** Bentuk LAMA, persis seperti sebelum kanalnya dibuka. Dipakai untuk membuktikan guard di atas
+ *  benar-benar menggigit, bukan lulus karena polanya mustahil ditemukan. */
+const OLD_CMD =
+  `curl -s 'http://127.0.0.1:8700/api/agent-status?node=n1' ` +
+  `-H "${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}" -H "${TOKEN_HEADER}: $WEBTERM_TOKEN" ` +
+  `--data-binary @- >/dev/null 2>&1 || true`
+
+describe('redirect baris hook', () => {
+  it('tidak lagi membuang stdout — di situlah balasan konteks agent lewat', () => {
+    expect(dropsStdout(commandFor('n-stdout'))).toBe(false)
+  })
+
+  it('membungkam stderr SENDIRI, tidak menggabungnya ke stdout', () => {
+    const cmd = commandFor('n-stderr')
+    expect(silencesStderr(cmd)).toBe(true)
+    // Dipaku terpisah: `2>&1` yang kembali mengirim pesan gagal-konek curl ke konteks agent.
+    expect(cmd).not.toContain('2>&1')
+  })
+
+  it('tetap `|| true` — hook yang gagal tidak boleh menggagalkan turn agent', () => {
+    expect(survivesFailure(commandFor('n-fail'))).toBe(true)
+  })
+
+  it('ketiga guard menolak bentuk lamanya', () => {
+    expect(dropsStdout(OLD_CMD)).toBe(true)
+    expect(silencesStderr(OLD_CMD)).toBe(false)
+    // Dan melewatkan bentuk yang benar, supaya bukan guard yang selalu merah.
+    expect(dropsStdout('curl -s x --data-binary @- 2>/dev/null || true')).toBe(false)
+    expect(silencesStderr('curl -s x --data-binary @- 2>/dev/null || true')).toBe(true)
+    expect(survivesFailure(OLD_CMD)).toBe(true)
+    expect(survivesFailure('curl -s x --data-binary @- 2>/dev/null')).toBe(false)
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
 // Apa yang BENAR-BENAR diterima curl. Bentuk string saja tidak membuktikan apa pun: ekspansi tak
 // terkutip akan tetap "memuat" header-nya sambil memecahnya jadi beberapa argumen. Jadi `curl`
 // di-stub lewat shim di PATH yang mencatat argv-nya, lalu barisnya dijalankan `sh` sungguhan.
@@ -218,6 +264,16 @@ describe('node token', () => {
     forgetNodeToken('n-gone')
     expect(stateVerified('n-gone', 'anything')).toBe(false)
   })
+  it('sweeps the hook-context memo too, so a reused id is announced again', () => {
+    // Memo pengumuman roster hidup per node di memori proses. Dibuktikan lewat perilaku, bukan mock:
+    // umumkan sekali, pastikan turn kedua senyap (dedup bekerja), lupakan node, lalu turn ketiga
+    // harus berbunyi lagi. Tanpa `forgetHookContext` di `forgetNodeToken`, turn ketiga tetap senyap.
+    const doc = { links: [{ id: 'peer-1', title: 'agent berita' }] }
+    expect(nextHookContext('n-memo', 'UserPromptSubmit', doc)).not.toBeNull()
+    expect(nextHookContext('n-memo', 'UserPromptSubmit', doc)).toBeNull()
+    forgetNodeToken('n-memo')
+    expect(nextHookContext('n-memo', 'UserPromptSubmit', doc)).not.toBeNull()
+  })
 })
 
 describe('hookEnv', () => {
@@ -278,5 +334,62 @@ describe('buildClaudeFlags', () => {
     expect(f).not.toContain('://')
     expect(f).not.toContain('127.0.0.1')
     expect(f).toContain('/tmp/x.json')
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// Bentuk route `POST /api/agent-status`. Ia butuh `./db` (bun:sqlite) dan sebuah
+// IncomingMessage/ServerResponse nyata, jadi tidak bisa diimpor atau dijalankan di suite node-env
+// ini. Yang bisa: membaca source-nya dan menolak bentuk yang salah — pola yang sama dengan
+// `src/client/workspaceCommit.test.ts`.
+const apiSrc = () => readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
+
+/** Blok `if (path === '/api/agent-status' ...)` saja, sampai `}` penutupnya di indentasi 2 spasi. */
+const agentStatusBlock = (s: string) => s.split("path === '/api/agent-status'")[1]?.split('\n  }')[0] ?? ''
+
+/** Route-nya MEMBALAS payload hook, dan tetap punya jalur 204 untuk `null`. */
+const repliesWithHookPayload = (b: string) =>
+  /nextHookContext\(/.test(b) && /hookSpecificOutput/.test(b) && /res\.statusCode = 204/.test(b)
+
+/** Badge status + registrasi transcript dijalankan DULU: itu jalur yang sudah ada, dan ia tidak
+ *  boleh bergantung pada apakah ada pengumuman konteks untuk dikirim. */
+const statusPathRunsFirst = (b: string) =>
+  b.includes('setStatus') &&
+  b.includes('setTranscript') &&
+  b.indexOf('setTranscript') < b.indexOf('nextHookContext')
+
+// Bentuk LAMA route-nya, persis seperti sebelum balasannya diisi — membuktikan guard menggigit.
+const OLD_ROUTE = `
+    const status = node ? hookStatus(body) : null
+    if (node && status) sessions.setStatus(node, status)
+    if (node && typeof body.transcript_path === 'string') sessions.setTranscript(node, body.transcript_path)
+    res.statusCode = 204; res.end(); return`
+
+describe('route POST /api/agent-status', () => {
+  it('membalas payload hook, dan masih punya jalur 204 saat tidak ada payload', () => {
+    const b = agentStatusBlock(apiSrc())
+    // Dihitung dulu: blok kosong akan meluluskan guard apa pun tanpa menjaga apa-apa.
+    expect(b.length).toBeGreaterThan(0)
+    expect(repliesWithHookPayload(b)).toBe(true)
+    // 204 tetap TANPA body — `json(res, 204)` pun akan tetap body-less, tapi jalur lamanya dijaga
+    // apa adanya supaya kontrak 204-nya tidak bergeser diam-diam.
+    expect(b).toContain('res.statusCode = 204; res.end(); return')
+  })
+
+  it('menjalankan jalur status/transcript sebelum menghitung pengumuman', () => {
+    expect(statusPathRunsFirst(agentStatusBlock(apiSrc()))).toBe(true)
+  })
+
+  it('tidak menduplikasi keputusan event di route — itu milik hookContext', () => {
+    // `nextHookContext` sendiri yang memutuskan event mana layak diumumkan. Menyalin daftarnya ke
+    // sini berarti dua tempat harus berubah bersamaan, dan yang satu akan tertinggal.
+    const b = agentStatusBlock(apiSrc())
+    expect(b).not.toContain('SessionStart')
+    expect(b).not.toContain("'UserPromptSubmit'")
+  })
+
+  it('kedua guard menolak bentuk lama route-nya', () => {
+    expect(repliesWithHookPayload(OLD_ROUTE)).toBe(false)
+    expect(statusPathRunsFirst(OLD_ROUTE)).toBe(false)
   })
 })

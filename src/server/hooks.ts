@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { isPermissionMode, type AgentPermissionMode, type AgentStatus } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
 import { dataDir } from './config'
+import { forgetHookContext } from './hookContext'
 
 // ---------------------------------------------------------------------------------------------
 // Langganan event hook.
@@ -133,6 +134,9 @@ export function nodeToken(nodeId: string): string {
 /** Lupakan segala jejak sebuah node: token DAN file settings-nya (node dihapus / sesi ditutup). */
 export function forgetNodeToken(nodeId: string): void {
   tokens.delete(nodeId)
+  // Memo pengumuman roster hidup per node di memori: tanpa disapu di sini Map-nya tumbuh selamanya,
+  // dan id yang dipakai ulang mewarisi dedup milik node yang sudah mati.
+  forgetHookContext(nodeId)
   // Best-effort: file yatim tidak membahayakan apa pun, tapi gagal menghapusnya tidak boleh
   // menggagalkan penutupan sesi.
   try {
@@ -186,12 +190,19 @@ export function stateVerified(nodeId: string, header: string | string[] | undefi
  * sementara server di keadaan itu memang tidak menegakkan token apa pun. Emit kondisional
  * (`${VAR:+-H "..."}`) justru SALAH di sini: hasil ekspansinya tak terkutip, jadi tunduk pada word
  * splitting dan merusak token ber-spasi.
+ *
+ * STDOUT DIBIARKAN HIDUP (`>/dev/null` dilepas): stdout hook adalah satu-satunya kanal yang Claude
+ * Code sendiri buka untuk MENDORONG teks ke konteks agent (`hookSpecificOutput.additionalContext`
+ * pada `SessionStart`/`UserPromptSubmit`) — dibuang, dan agent tak pernah tahu node tetangganya ada
+ * sampai ia kebetulan memanggil skill-nya. Maka stderr dibungkam SENDIRI (`2>/dev/null`), tak lagi
+ * digabung (`2>&1`): di stdout, pesan gagal-konek/DNS/timeout curl jadi sampah di konteks agent.
+ * `|| true` tetap — hook yang gagal tidak boleh menggagalkan turn agent.
  */
 export function claudeHooksSettings(nodeId: string, port: number): Record<string, unknown> {
   const cmd =
     `curl -s 'http://127.0.0.1:${port}/api/agent-status?node=${nodeId}' ` +
     `-H "${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}" -H "${TOKEN_HEADER}: $WEBTERM_TOKEN" ` +
-    `--data-binary @- >/dev/null 2>&1 || true`
+    `--data-binary @- 2>/dev/null || true`
   const hooks: Record<string, unknown[]> = {}
   for (const e of CLAUDE_HOOK_EVENTS) {
     const timeout = typeof e === 'string' ? undefined : e.timeout
