@@ -14,6 +14,20 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   editor: 'Editor',
 }
 
+/** Bentuk jamak khusus header seksi. Terpisah dari `NODE_KIND_LABEL` karena peta itu masih dipakai
+ *  sebagai meta per baris, di mana yang dinamai cuma satu node. */
+const NODE_KIND_PLURAL: Record<WsNodeKind, string> = {
+  terminal: 'Terminals',
+  agent: 'Agents',
+  files: 'Files',
+  editor: 'Editors',
+}
+
+/** Urutan seksi dipaku, bukan mengikuti isi board: node agent paling sering ditindaklanjuti,
+ *  terminal berikutnya, editor/files cuma artefak statis. Urutan yang bergeser mengikuti isi
+ *  memaksa mata mencari ulang tiap kali ada node baru. */
+const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'terminal', 'editor', 'files']
+
 export interface NodeRowVM {
   id: string
   label: string
@@ -59,19 +73,31 @@ function matches(row: NodeRowVM, needle: string): boolean {
   return hay.toLowerCase().includes(needle)
 }
 
+export interface NodeGroup {
+  kind: WsNodeKind
+  /** Siap tampil sebagai header seksi, bentuk jamak: 'Agents' | 'Terminals' | 'Editors' | 'Files'. */
+  label: string
+  rows: NodeRowVM[]
+}
+
 /**
- * Semua node di semua workspace, workspace aktif lebih dulu.
+ * Semua node di semua workspace, dikelompokkan per kind; di dalam grup workspace aktif lebih dulu,
+ * lalu alfabet. Daftar datar lintas kind menyelipkan file editor di antara dua node agent, dan
+ * satu-satunya pembedanya cuma meta kecil di bawah judul.
+ *
+ * Grup kosong dibuang — beda dengan tab Status yang menahan header kosong demi posisi tetap; di
+ * sini tak ada posisi yang perlu dijaga.
  *
  * Untuk workspace aktif, `liveActiveNodes` adalah kebenaran — snapshot `workspaces` hanya
  * di-refresh saat workspace dibuat, jadi node yang baru ditambahkan atau baru diganti judulnya
  * hanya ada di canvas. Alasan yang sama dengan `nodesOf` di `./sessionList`.
  */
-export function buildNodeList(
+export function buildNodeGroups(
   workspaces: Workspace[],
   liveActiveNodes: WsNode[] | null,
   activeId: string | null,
   filter: string,
-): NodeRowVM[] {
+): NodeGroup[] {
   const needle = filter.trim().toLowerCase()
   const ordered = [...workspaces].sort(
     (a, b) => Number(b.id === activeId) - Number(a.id === activeId),
@@ -87,5 +113,10 @@ export function buildNodeList(
     group.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
     rows.push(...group)
   }
-  return rows
+
+  return NODE_KIND_ORDER.map((kind) => ({
+    kind,
+    label: NODE_KIND_PLURAL[kind],
+    rows: rows.filter((r) => r.kind === kind),
+  })).filter((g) => g.rows.length > 0)
 }

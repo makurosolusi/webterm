@@ -6,6 +6,7 @@ import {
   parseCollapsed,
   projectCollapseKey,
   projectHeadClickAction,
+  rowMeta,
   sessionLabel,
   sessionStatusGroup,
   sessionStatusKind,
@@ -13,6 +14,7 @@ import {
   sidebarFilterKeyAction,
   signalCounts,
   STATE_LABEL,
+  STATUS_GROUP_LABEL,
   type SessionRowVM,
   type StatusGroup,
   type StatusSection,
@@ -62,6 +64,49 @@ describe('STATE_LABEL', () => {
       done: 'Done',
       unknown: 'Unknown',
     })
+  })
+})
+
+describe('STATUS_GROUP_LABEL', () => {
+  it('menamai grup tanpa status dengan bahasa pengguna, bukan nama kind-nya', () => {
+    // "Unknown" terbaca seperti kegagalan membaca sesuatu; yang sebenarnya ada di grup itu adalah
+    // terminal biasa yang memang tidak punya status agent.
+    expect(STATUS_GROUP_LABEL.unknown).toBe('No status')
+    expect(STATUS_GROUP_LABEL.unknown).not.toBe('Unknown')
+  })
+
+  it('tooltip per baris TETAP memakai STATE_LABEL — dua peta, dua pembaca', () => {
+    // Perubahan header tidak boleh ikut mengubah `stateLabel`, yang dipakai sebagai title glyph.
+    expect(STATE_LABEL.unknown).toBe('Unknown')
+  })
+})
+
+describe('rowMeta', () => {
+  it('membuang pengulangan saat workspace dinamai sama dengan foldernya', () => {
+    // Kasus nyatanya: board `wibu` dengan cwd berujung di folder `wibu` — `wibu · wibu` di layar
+    // terbaca seperti bug.
+    expect(rowMeta('wibu', '/Users/x/wibu')).toEqual(['wibu'])
+  })
+
+  it('menyebut keduanya saat memang dua fakta, nama workspace di depan', () => {
+    expect(rowMeta('wibu', '/Users/x/api')).toEqual(['wibu', 'api'])
+  })
+
+  it('tinggal foldernya saat nama workspace tidak diminta', () => {
+    // Mode project sudah menyebut nama board di header grupnya, jadi barisnya mengirim undefined.
+    expect(rowMeta(undefined, '/Users/x/api')).toEqual(['api'])
+  })
+
+  it('tinggal nama workspace saat sesi tak punya cwd, dan kosong saat tak ada keduanya', () => {
+    expect(rowMeta('wibu', undefined)).toEqual(['wibu'])
+    expect(rowMeta(undefined, undefined)).toEqual([])
+    expect(rowMeta('   ', '')).toEqual([])
+  })
+
+  it('memakai basename, bukan path penuh, dan tahan trailing slash', () => {
+    expect(rowMeta(undefined, '/Users/x/api/')).toEqual(['api'])
+    // Root tak punya basename; path itu sendiri yang dipakai, karena "/" memang nama yang benar.
+    expect(rowMeta(undefined, '/')).toEqual(['/'])
   })
 })
 
@@ -276,7 +321,7 @@ describe('buildStatusList', () => {
       ['unread', 'Unread', 0],
       ['working', 'Running', 0],
       ['idle', 'Idle', 0],
-      ['unknown', 'Unknown', 3],
+      ['unknown', 'No status', 3],
     ])
   })
 

@@ -42,12 +42,16 @@ export type StatusGroup = 'attention' | 'unread' | 'working' | 'idle' | 'unknown
 // menonjol — walau menurut prioritas keanggotaan sesi yang masih berjalan tetap di Running.
 const STATUS_GROUP_ORDER: readonly StatusGroup[] = ['attention', 'unread', 'working', 'idle', 'unknown']
 
+// Header seksi dibaca sebagai kalimat tentang sesi di bawahnya, jadi kosakatanya bukan kosakata
+// internal: `unknown` di sini berarti "terminal biasa, belum punya status agent" — "Unknown"
+// terbaca seperti kegagalan membaca sesuatu. Peta ini TERPISAH dari `STATE_LABEL` (yang mengisi
+// tooltip per baris) justru supaya header bisa bicara lebih longgar dari nama kind-nya.
 export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
   attention: 'Need attention',
   unread: 'Unread',
   working: 'Running',
   idle: 'Idle',
-  unknown: 'Unknown',
+  unknown: 'No status',
 }
 
 /** Default untuk pemanggil yang tidak peduli unread (mis. tab workspace, yang hanya butuh dot
@@ -97,6 +101,24 @@ export function sessionLabel(n: Pick<WsNode, 'title' | 'agentId' | 'kind'>): str
   if (title) return title
   if (n.agentId) return agentConfig(n.agentId)?.label ?? n.agentId
   return 'Terminal'
+}
+
+/** Nama folder terakhir dari sebuah path — cwd penuh tidak muat di baris selebar 300px. */
+function dirName(p: string | undefined): string {
+  if (!p) return ''
+  const parts = p.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? p
+}
+
+/**
+ * Baris meta di bawah judul sesi: nama workspace (hanya bila barisnya perlu menyebutnya) lalu
+ * folder cwd-nya. Duplikat dibuang karena menamai workspace sama dengan foldernya adalah kebiasaan,
+ * bukan kecelakaan — board `wibu` di `~/dev/wibu` akan keluar sebagai `wibu · wibu`, yang terbaca
+ * seperti bug padahal cuma satu fakta yang disebut dua kali. Urutan dipertahankan: nama workspace
+ * adalah konteks yang lebih luas, jadi ia tetap di depan folder.
+ */
+export function rowMeta(projectName: string | undefined, cwd: string | undefined): string[] {
+  return [...new Set([projectName?.trim() ?? '', dirName(cwd)].filter(Boolean))]
 }
 
 /** Kunci disclosure untuk baris workspace. */

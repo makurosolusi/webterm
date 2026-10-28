@@ -2,14 +2,7 @@
 // kerangka panel (tab, filter, grup) tetap terbaca dalam satu layar. Mengikuti nodeterm v0.4.5
 // `src/renderer/components/SessionRow.tsx`.
 import { Bell, Check, X } from 'lucide-react'
-import type { SessionRowVM } from './sessionList'
-
-/** Nama folder terakhir dari sebuah path — cwd penuh tidak muat di baris selebar 300px. */
-function dirName(p: string | undefined): string {
-  if (!p) return ''
-  const parts = p.split('/').filter(Boolean)
-  return parts[parts.length - 1] ?? p
-}
+import { rowMeta, type SessionRowVM } from './sessionList'
 
 /** Kalimat glyph belum-dibaca, dipakai juga sebagai bagian nama aksesibel barisnya. */
 const UNREAD_TITLE = 'Finished — new for you'
@@ -61,7 +54,7 @@ export interface SessionRowProps {
 }
 
 export default function SessionRow({ row, showProject, onFocusNode, onCloseSession }: SessionRowProps) {
-  const meta = [showProject ? row.projectName : '', dirName(row.cwd)].filter(Boolean)
+  const meta = rowMeta(showProject ? row.projectName : undefined, row.cwd)
   return (
     <li>
       <div

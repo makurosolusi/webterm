@@ -6,7 +6,7 @@
 // mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, ChevronDown, ChevronRight, PanelLeft, Pin, PinOff, X } from 'lucide-react'
+import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, PanelLeft, Pin, PinOff, Terminal, X } from 'lucide-react'
 import SessionRow from './SessionRow'
 import {
   buildSessionList,
@@ -21,16 +21,26 @@ import {
   signalCounts,
   type SidebarGrouping,
 } from './sessionList'
-import { buildNodeList, NODE_KIND_LABEL } from './nodeList'
+import { buildNodeGroups, NODE_KIND_LABEL } from './nodeList'
 import type { ClosedEntry } from './closedHistory'
 import { subscribeUnread, unreadIds } from './unread'
-import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
+import type { AgentStatus, Workspace, WsNode, WsNodeKind } from '../shared/workspace'
 import './sessions-panel.css'
 
 const TAB_LABEL: Record<SidebarGrouping, string> = {
   project: 'Project',
   status: 'Status',
   nodes: 'Nodes',
+}
+
+/** Ikon per kind untuk baris tab Nodes. Baris di sana tidak punya status, jadi slot glyph-nya
+ *  kosong — dan bentuk adalah satu-satunya pembeda yang terbaca tanpa membaca: judul kustom
+ *  ("notes", "scratch") sama-sama mungkin milik editor, terminal, atau folder. */
+const KIND_ICON: Record<WsNodeKind, typeof Bot> = {
+  agent: Bot,
+  terminal: Terminal,
+  editor: FileText,
+  files: Folder,
 }
 
 const PIN_KEY = 'webterm.sessionsPinned'
@@ -136,8 +146,8 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
   )
 
-  const nodeRows = useMemo(
-    () => buildNodeList(workspaces, liveActiveNodes, activeId, filter),
+  const nodeGroups = useMemo(
+    () => buildNodeGroups(workspaces, liveActiveNodes, activeId, filter),
     [workspaces, liveActiveNodes, activeId, filter],
   )
 
@@ -145,7 +155,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const attention = sections.find((s) => s.kind === 'attention')?.rows.length ?? 0
   const rowCount =
     grouping === 'nodes'
-      ? nodeRows.length
+      ? nodeGroups.reduce((n, g) => n + g.rows.length, 0)
       : grouping === 'status'
         ? total
         : groups.reduce((n, g) => n + g.sessions.length, 0)
@@ -177,8 +187,11 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       onMouseLeave={pinned ? undefined : closePeekSoon}
     >
       <div className="sessions-sidebar__head">
-        <span className="sessions-sidebar__title">Sessions</span>
-        <span className="sessions-sidebar__count">{total}</span>
+        {/* Judul DAN hitungan ikut tab aktif: tab Nodes mendaftar editor dan files juga, jadi
+            "Sessions" di atasnya menamai — dan `total` menghitung — himpunan lain dari yang
+            terbaca di bawahnya. `rowCount` selalu baris yang benar-benar dirender. */}
+        <span className="sessions-sidebar__title">{grouping === 'nodes' ? 'Nodes' : 'Sessions'}</span>
+        <span className="sessions-sidebar__count">{rowCount}</span>
         <div className="sessions-sidebar__head-actions">
           <button
             type="button"
@@ -264,42 +277,60 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             memusatkan canvas ke node yang bukan shell. Baris memakai ulang `.ss-row` apa adanya
             (nol CSS baru); fokus, zoom, dan pindah workspace sudah milik `onFocusNode`. */}
         {grouping === 'nodes' ? (
-          <ul className="ss-rows ss-status__rows">
-            {nodeRows.map((r) => (
-              <li key={r.id}>
-                <div
-                  className="ss-row"
-                  role="button"
-                  tabIndex={0}
-                  title={r.detail ?? ''}
-                  aria-label={`Focus ${r.label}`}
-                  onClick={() => onFocusNode(r.id)}
-                  onKeyDown={(ev) => {
-                    if (ev.key !== 'Enter' && ev.key !== ' ') return
-                    ev.preventDefault()
-                    ev.stopPropagation()
-                    onFocusNode(r.id)
-                  }}
-                >
-                  <span className="ss-row__text">
-                    <span className="ss-row__title">{r.label}</span>
-                    {/* Kind SELALU ikut: tiga node tanpa judul kustom hanya bisa dibedakan dari
-                        sini. Nama workspace hanya untuk node di board lain — di board aktif ia
-                        sama untuk semua baris, jadi cuma kebisingan. */}
-                    <span className="ss-meta">
-                      {r.isActive ? NODE_KIND_LABEL[r.kind] : `${NODE_KIND_LABEL[r.kind]} · ${r.workspaceName}`}
-                    </span>
-                  </span>
+          nodeGroups.map((g) => {
+            const Icon = KIND_ICON[g.kind]
+            return (
+              <section key={g.kind} className="ss-status" aria-label={g.label}>
+                <div className="ss-status__head">
+                  <span className="ss-status__label">{g.label}</span>
+                  <span className="ss-status__count">{g.rows.length}</span>
                 </div>
-              </li>
-            ))}
-          </ul>
+                <ul className="ss-rows ss-status__rows">
+                  {g.rows.map((r) => (
+                    <li key={r.id}>
+                      <div
+                        className="ss-row"
+                        role="button"
+                        tabIndex={0}
+                        title={r.detail ?? ''}
+                        aria-label={`Focus ${r.label}`}
+                        onClick={() => onFocusNode(r.id)}
+                        onKeyDown={(ev) => {
+                          if (ev.key !== 'Enter' && ev.key !== ' ') return
+                          ev.preventDefault()
+                          ev.stopPropagation()
+                          onFocusNode(r.id)
+                        }}
+                      >
+                        <span className="ss-row__glyph">
+                          <Icon aria-hidden />
+                        </span>
+                        <span className="ss-row__text">
+                          <span className="ss-row__title">{r.label}</span>
+                          {/* Kind SELALU ikut: tiga node tanpa judul kustom hanya bisa dibedakan
+                              dari sini. Nama workspace hanya untuk node di board lain — di board
+                              aktif ia sama untuk semua baris, jadi cuma kebisingan. */}
+                          <span className="ss-meta">
+                            {r.isActive
+                              ? NODE_KIND_LABEL[r.kind]
+                              : `${NODE_KIND_LABEL[r.kind]} · ${r.workspaceName}`}
+                          </span>
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })
         ) : grouping === 'status'
-          ? // `buildStatusList` menahan section kosong supaya posisinya tetap — tapi kalau SELURUH
-            // daftar nol, pesan kosong di atas sudah menjawabnya dan lima header "0" di bawahnya
-            // cuma kebisingan. Jadi header permanen hanya berlaku selagi ada sesi.
+          ? // `buildStatusList` menahan SEMUA section supaya posisinya tetap; yang memutuskan mana
+            // yang layak dirender adalah di sini. Section kosong disembunyikan — header "0" tidak
+            // membawa apa pun dan tiga di antaranya memakan separuh panel. Satu pengecualian:
+            // `attention`, karena nol di sana adalah kabar baik yang justru dicari pengguna, jadi
+            // ketiadaannya tidak boleh dibaca sebagai "belum dihitung".
             empty === 'none' &&
-            sections.map((s) => (
+            sections.filter((s) => s.kind === 'attention' || s.rows.length > 0).map((s) => (
               <section key={s.kind} className="ss-status" aria-label={s.label}>
                 <div className="ss-status__head">
                   {/* Bel untuk attention, titik berwarna untuk sisanya — glyph yang sama dengan
