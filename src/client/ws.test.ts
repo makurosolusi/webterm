@@ -205,3 +205,33 @@ test('token survives a reload via sessionStorage, with no token in the URL', asy
   const { tokenQuery } = await fresh().api
   expect(tokenQuery()).toBe('token=kept')
 })
+
+test('a reconnect resets each terminal before the server replays its scrollback', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-reconnect'
+  let sentAtReset = -1
+  const onReset = vi.fn(() => { sentAtReset = lastSocket().sent.length })
+  subscribe(id, () => {}, () => {}, onReset)
+  const first = lastSocket()
+  first.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+  first.onopen!()
+  // First connect: the terminal is freshly mounted and empty — nothing to reset.
+  expect(onReset).not.toHaveBeenCalled()
+
+  vi.useFakeTimers()
+  first.onclose!()              // socket dropped (e.g. a proxy idle-closed it)
+  vi.advanceTimersByTime(1000)  // ws.ts schedules the reconnect 1s later
+  vi.useRealTimers()
+  const second = lastSocket()
+  expect(second).not.toBe(first)
+  second.readyState = FakeWS.OPEN
+  second.onopen!()
+
+  // Reconnect: the xterm still holds what it showed, so it is reset before the replay —
+  // otherwise the replayed scrollback (the macOS banner) would stack a second copy.
+  expect(onReset).toHaveBeenCalledTimes(1)
+  expect(sentAtReset).toBe(0) // reset ran before the replayed open was sent
+  expect(second.sent.map((s) => JSON.parse(s).t)).toContain('open') // replay still happens
+})

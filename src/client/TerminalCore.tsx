@@ -213,6 +213,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       id,
       (d) => term.write(d),
       () => term.write('\r\n[process exited]'),
+      () => term.reset(),
     )
     term.onData((d) => send({ t: 'input', id, data: d }))
     // `open` menyusul fit supaya server men-spawn PTY pada ukuran yang benar.
