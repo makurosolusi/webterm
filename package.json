@@ -1,11 +1,12 @@
 {
   "name": "webterm",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "bun src/server/index.ts",
-    "build": "vite build",
+    "build": "vite build && bun scripts/embedDist.ts",
+    "build:binary": "bun run build && bun build --compile --define \"process.env.NODE_ENV='production'\" --external vite --outfile webterm src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

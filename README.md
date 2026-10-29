@@ -24,18 +24,27 @@ Serves http://127.0.0.1:8700.
 Environment variables:
 
 - `PORT` — listen port (default `8700`).
-- `WEBTERM_HOST` — bind address (default `127.0.0.1`).
+- `HOST` — bind address (default `127.0.0.1`); `WEBTERM_HOST` is an accepted fallback.
 - `WEBTERM_TOKEN` — shared secret required on `/api` and the `/ws` upgrade. Optional on a loopback bind; **mandatory** when `WEBTERM_HOST` is reachable from other machines — the server refuses to start without it rather than expose an unauthenticated shell.
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`.
+
+Any of these can go in a `.env` file in the working directory instead of the environment — Bun loads it automatically, for both the dev server and the compiled binary.
 
 Dev is not full browser HMR for every change: Vite HMR covers client edits live, but server edits need a restart.
 
 ## Build / production
 
 ```sh
-vite build                                  # emits dist/
-NODE_ENV=production bun src/server/index.ts  # serve dist/
+vite build                                   # emits dist/
+NODE_ENV=production bun src/server/index.ts  # serve dist/ from disk
+```
+
+Or compile a single self-contained executable that needs no `dist/` beside it — the built assets are embedded into the binary:
+
+```sh
+bun run build:binary   # emits ./webterm
+./webterm              # runs from any directory; reads HOST / PORT (and a .env) from the cwd
 ```
 
 ## Tests
