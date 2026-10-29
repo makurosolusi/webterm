@@ -2,20 +2,30 @@ import { execFileSync } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
 
-// Bun-native PTY wrapper. node-pty's POSIX spawn is broken under Bun, so we use
-// Bun.Terminal + Bun.spawn (verified on Bun 1.4.2). Bun's globals are typed
-// locally on purpose: @types/bun ships a global `fetch` override that reddens
-// unrelated files, so we declare only the slice we use.
+/**
+ * Pembungkus PTY Bun-native: POSIX spawn node-pty rusak di bawah Bun, jadi PTY-nya datang dari
+ * `Bun.spawn({ terminal })` (diverifikasi pada Bun 1.4.2).
+ *
+ * KENAPA bentuk INLINE `terminal: { cols, rows, data }` dan BUKAN objek `new Bun.Terminal(...)`:
+ * keduanya memberi PTY yang bisa dibaca-tulis, tapi hanya bentuk inline yang membuat Bun memanggil
+ * setsid + TIOCSCTTY, sehingga PTY itu benar-benar jadi CONTROLLING TERMINAL anaknya. Tanpa itu
+ * tty-nya tak punya foreground process group (`ps -o tpgid` → 0) dan kernel tak punya siapa pun
+ * untuk disinyali: line discipline menerima `\x03` tapi SIGINT tak pernah terkirim (Ctrl+C tak
+ * mengeluarkan htop), dan `resize` memperbarui winsize tanpa ada yang menerima SIGWINCH (TUI
+ * full-screen tak menggambar ulang). Diukur berdampingan pada Bun 1.4.2 — bentuk objek: tpgid 0,
+ * proses foreground selamat dari `\x03`; bentuk inline: tpgid = pid anak, tty sendiri, proses
+ * foreground mati. Isu upstream yang mencatat bentuk objek: oven-sh/bun#33237.
+ *
+ * Global Bun ditipekan lokal dengan sengaja: @types/bun mengirim override global `fetch` yang
+ * memerahkan file-file tak terkait, jadi hanya irisan yang dipakai di sini yang dideklarasikan.
+ */
 declare namespace Bun {
-  interface Terminal { write(data: string): void; resize(cols: number, rows: number): void; close(): void }
-  interface TerminalConstructor {
-    new (options: { name?: string; cols?: number; rows?: number; data: (terminal: Terminal, bytes: Uint8Array) => void }): Terminal
-  }
-  interface Subprocess { readonly pid: number; readonly exited: Promise<number>; kill(signal?: number): void }
+  interface Terminal { write(data: string): void; resize(cols: number, rows: number): void }
+  interface TerminalOptions { cols?: number; rows?: number; data: (terminal: Terminal, bytes: Uint8Array) => void }
+  interface Subprocess { readonly pid: number; readonly terminal: Terminal; readonly exited: Promise<number>; kill(signal?: number): void }
 }
 declare const Bun: {
-  Terminal: Bun.TerminalConstructor
-  spawn(cmd: string[], options: { terminal: Bun.Terminal; cwd?: string; env?: Record<string, string> }): Bun.Subprocess
+  spawn(cmd: string[], options: { terminal: Bun.TerminalOptions; cwd?: string; env?: Record<string, string> }): Bun.Subprocess
 }
 
 export interface Pty {
@@ -27,6 +37,10 @@ export interface Pty {
   kill(): void
 }
 
+/** Env anak. `TERM` di sini LOAD-BEARING, bukan kerapian: bentuk inline `terminal` tidak menerima
+ *  `name` seperti konstruktor `Bun.Terminal` dulu, jadi env inilah satu-satunya yang memberi tahu
+ *  program di dalam PTY tipe terminalnya. Dibiarkan jatuh ke `dumb` berarti warna dan TUI mati di
+ *  seluruh aplikasi. (Diukur dari dalam PTY sesudah pindah ke bentuk inline: `$TERM` = xterm-256color.) */
 function cleanEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v
@@ -109,8 +123,8 @@ export function shellArgv(shell?: string, cmd?: string): string[] {
  *  30 × 50 ms): beri harness agent jendela untuk menulis transcript/resume id sebelum dipaksa. */
 const KILL_GRACE_MS = 1500
 
-/** PID keturunan `pid` menurut satu snapshot `ps` (tiap baris `pid ppid`), terdangkal lebih dulu.
- *  Dipisah dari pemanggilan `ps` supaya bisa dites tanpa men-spawn proses apa pun. */
+/** Keturunan `pid` dari satu snapshot `ps`. Dipisah dari I/O supaya bisa diuji tanpa men-spawn
+ *  apa pun (lihat `pty.test.ts`). */
 export function descendantPids(pid: number, psOutput: string): number[] {
   const kids = new Map<number, number[]>()
   for (const line of psOutput.split('\n')) {
@@ -140,23 +154,21 @@ function liveDescendants(pid: number): number[] {
     const ps = execFileSync('ps', ['-Ao', 'pid=,ppid='], { encoding: 'utf8' })
     return descendantPids(pid, ps).filter((p) => p > 1 && p !== process.pid)
   } catch {
-    // `ps` absen/gagal: kehilangan sweep lebih baik daripada menebak pid. Perilaku lama (sinyal
-    // ke pid anak saja) tetap berlaku.
+    // `ps` absen/gagal: kehilangan sweep lebih baik daripada menebak pid. Perilaku lama (sinyal ke
+    // pid anak saja) tetap berlaku.
     return []
   }
 }
 
 /** Sinyal ke tiap pid, mengabaikan yang sudah keluar. */
-function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL' | 'SIGWINCH'): void {
+function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL'): void {
   for (const pid of pids) {
     try {
       process.kill(pid, signal)
     } catch {
       // Daftar pid-nya SELALU satu snapshot `ps` yang sudah basi beberapa milidetik saat dipakai,
-      // jadi ESRCH di sini normal, bukan anomali — dan tak satu pun pemanggil bisa menindaklanjutinya:
-      // untuk SIGTERM/SIGKILL proses yang sudah mati justru hasil yang diminta, dan untuk SIGWINCH
-      // proses yang mati tidak punya layar untuk digambar ulang. Mempropagasikannya hanya akan
-      // menjatuhkan resize node yang sah gara-gara satu cucu yang kebetulan keluar barengan.
+      // jadi ESRCH di sini normal, bukan anomali — dan untuk SIGTERM/SIGKILL proses yang sudah mati
+      // justru hasil yang diminta, jadi tak ada pemanggil yang bisa menindaklanjutinya.
     }
   }
 }
@@ -164,7 +176,8 @@ function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL' | 'SIGWINCH'): 
 /** Winsize yang masuk akal. Bukan paranoia tipe: `resize` datang lewat WebSocket dari `fit()` di
  *  client, dan `fit()` pada elemen 0x0 (node yang dilipat / belum ter-layout) bisa memberi 0 atau
  *  NaN. Nol tak berarti bagi termios, dan NaN LOLOS gerbang perubahan di bawah karena `NaN !== NaN`
- *  — artinya setiap detak ResizeObserver akan jadi satu putaran `ps` + badai SIGWINCH. */
+ *  — artinya setiap detak ResizeObserver akan menulis ulang termios dan memicu satu SIGWINCH dari
+ *  kernel, yaitu satu redraw penuh TUI per detak. */
 const saneWinsize = (n: number): boolean => Number.isInteger(n) && n > 0
 
 export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> }): Pty {
@@ -174,22 +187,33 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?:
   // is not mangled into replacement characters.
   const decoder = new TextDecoder('utf-8')
 
-  const terminal = new Bun.Terminal({
-    name: 'xterm-256color',
-    cols: opts.cols,
-    rows: opts.rows,
-    data: (_t, bytes) => onData(decoder.decode(bytes, { stream: true })),
-  })
-
+  // Bentuk inline — lihat komentar bentuk spawn di kepala file. PTY-nya diakses lewat
+  // `proc.terminal`, bukan objek yang kita pegang sendiri.
   const proc = Bun.spawn(shellArgv(opts.shell, opts.cmd), {
-    terminal,
+    terminal: {
+      cols: opts.cols,
+      rows: opts.rows,
+      data: (_t, bytes) => onData(decoder.decode(bytes, { stream: true })),
+    },
     cwd: opts.cwd || process.env.HOME || process.cwd(),
     env: { ...cleanEnv(), ...(opts.env ?? {}) },
   })
+  const terminal = proc.terminal
 
+  /**
+   * TIDAK ada `terminal.close()` di sini, dan itu DISENGAJA — bentuk inline membuat PTY-nya milik
+   * Bun, dan Bun menutup master-nya sendiri saat `Subprocess`-nya dikumpulkan GC. Diukur pada Bun
+   * 1.4.2: 60 PTY yang keluar sendiri meninggalkan 56 fd ptmx terbuka, lalu 2 sesudah `Bun.gc(true)`
+   * — jadi fd-nya tertunda sampai GC, bukan bocor.
+   *
+   * Menutupnya sendiri justru MERUSAK: close kita + close milik Bun saat GC adalah DOUBLE CLOSE, dan
+   * close kedua mendarat kapan saja nanti — menutup nomor fd yang saat itu sudah dipegang PTY yang
+   * LEBIH BARU. PTY baru itu lalu diam total, dan sekali satu rusak, spawn-spawn sesudahnya ikut
+   * rusak. Diukur: dengan close eksplisit 2/25 putaran diam, tanpa close 0/25 pada tiga kali
+   * pengulangan (probe: spawn `exit 0`, tunggu exit, lalu spawn PTY baru dan tunggu outputnya).
+   */
   proc.exited.then((code) => {
     onExit(code)
-    terminal.close()
   })
 
   // Winsize yang TERAKHIR benar-benar dipasang ke termios. Gerbangnya hidup di sini, bukan di
@@ -203,57 +227,49 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?:
     onExit(cb) { onExit = cb },
     write(data) { terminal.write(data) },
     /**
-     * KENAPA SIGWINCH dikirim sendiri: `Bun.spawn({ terminal })` TIDAK memanggil setsid/TIOCSCTTY,
-     * jadi PTY ini bukan controlling terminal anak dan tty-nya tak punya foreground process group
-     * (diukur pada Bun 1.4.2 dari dalam PTY: `ps -o tpgid` → TPGID 0; dilaporkan upstream sebagai
-     * oven-sh/bun#33237). `terminal.resize()` MEMANG memperbarui winsize termios — `stty size` di
-     * dalam PTY ikut berubah — tapi tanpa foreground group kernel tidak punya siapa pun untuk
-     * disinyali. TUI full-screen (Claude Code, vim, tmux) hanya menggambar ulang saat menerima
-     * SIGWINCH, jadi ia terus memakai geometri yang dibacanya saat start: node dikecilkan →
-     * frame kebesaran terpotong `overflow: hidden` sehingga TAMPAK menyesuaikan, node diperbesar →
-     * frame kekecilan dan sisa ruangnya terlihat kosong. Itu asimetri yang dikeluhkan.
-     *
-     * KENAPA keturunan ikut disinyali, bukan hanya pid anak: pemegang layar sering bukan anak
-     * langsung. `cmd` webterm dijalankan lewat login shell (`shellArgv`), jadi `claude` adalah CUCU;
-     * dengan pembungkus (envman, tmux) ia lebih dalam lagi. Karena tak ada foreground process group,
-     * kernel tidak bisa memilihkan penerima untuk kita, dan menyinyal process group juga bukan opsi
-     * (anak mewarisi pgid SERVER — lihat `kill()` di bawah), jadi pohonnya didatangi satu per satu.
-     *
-     * Kalau Bun kelak memperbaiki setsid, kernel akan ikut mengirim satu SIGWINCH dan penerima
-     * mendapat dua. Itu aman: handler SIGWINCH yang benar MEMBACA winsize saat ini, tidak menghitung
-     * sinyal — jadi dua sinyal berarti dua kali membaca ukuran yang sama.
+     * SIGWINCH TIDAK dikirim dari sini: PTY ini controlling terminal anaknya, jadi `terminal.resize()`
+     * (TIOCSWINSZ) membuat KERNEL menyinyali foreground process group — termasuk pemegang layar yang
+     * merupakan keturunan, karena `cmd` dijalankan lewat login shell (`shellArgv`) sehingga `claude`
+     * adalah cucu dan satu grup dengannya. Diukur dari dalam PTY: `stty size` ikut berubah DAN trap
+     * WINCH di cucu jalan tanpa fan-out apa pun dari sisi server.
      */
     resize(cols, rows) {
       if (!saneWinsize(cols) || !saneWinsize(rows)) return
       // Gerbang perubahan. `TerminalCore` mengirim `resize` pada SETIAP detak ResizeObserver, dan
-      // sebelum perbaikan di atas itu tak terasa karena resize-nya tak berefek. Sekarang berefek:
-      // tanpa gerbang ini, menyeret handle resize node akan jadi satu putaran `ps` + redraw penuh
-      // TUI per frame. SENGAJA tanpa debounce — cukup gerbang kesetaraan, karena `fit()` memetakan
-      // piksel ke sel, jadi ukuran baru hanya muncul saat seretan melewati batas sel (puluhan kali
-      // per seretan, bukan per frame). Debounce di sisi server justru akan menahan resize TERAKHIR
-      // dan meninggalkan node yang berhenti diseret pada ukuran yang salah.
+      // sekarang setiap resize yang lolos berarti satu redraw penuh TUI. SENGAJA tanpa debounce —
+      // cukup gerbang kesetaraan, karena `fit()` memetakan piksel ke sel, jadi ukuran baru hanya
+      // muncul saat seretan melewati batas sel (puluhan kali per seretan, bukan per frame). Debounce
+      // di sisi server justru akan menahan resize TERAKHIR dan meninggalkan node yang berhenti
+      // diseret pada ukuran yang salah.
       if (cols === lastCols && rows === lastRows) return
       lastCols = cols
       lastRows = rows
       terminal.resize(cols, rows)
-      signalAll([proc.pid, ...liveDescendants(proc.pid)], 'SIGWINCH')
     },
     /**
-     * KENAPA bukan `process.kill(-pid)`: `Bun.spawn({ terminal })` TIDAK memanggil setsid, jadi anak
-     * mewarisi process group SERVER (diukur pada Bun 1.4.2: pgid anak = pid proses webterm sendiri).
-     * Menyinyal grup itu berarti menembak server. nodeterm boleh menyinyal grup karena pane-nya milik
-     * tmux dan ia memakai tpgid pane (`pty-manager.ts:7095-7098`); di sini tak ada grup terpisah untuk
-     * ditembak, jadi keturunan didaftar satu per satu.
+     * KENAPA tetap mendaftar keturunan lewat `ps` dan BUKAN `process.kill(-pid)`, padahal bentuk
+     * inline memang membuat anak jadi session leader dengan pgid = pid-nya sendiri (terukur): varian
+     * process-group sudah dicoba dan DIUKUR LEBIH BURUK. Dengan `kill(-pid)` suite penuh jadi
+     * intermiten — PTY yang baru di-spawn kadang tidak mengeluarkan output sama sekali lalu
+     * spawn-spawn sesudahnya ikut rusak (8 putaran: bentuk daftar-keturunan 0 putaran bermasalah,
+     * bentuk grup 3-4). Sinyal grupnya juga terbukti KELUAR dari pohon kita sendiri: log sinyal
+     * mencatat `kill(-pid, SIGTERM)` membalas EPERM pada 3 dari 6 putaran — kernel mengatakan grup
+     * itu bukan milik kita, padahal pid-nya baru saja kita spawn. Akar persisnya belum terjelaskan,
+     * jadi ini BUKAN klaim "grup salah dihitung"; yang pasti hanya bahwa jalur grup menembak sesuatu
+     * di luar pohon ini, dan jalur `ps` tidak. Daftar pid eksplisit hanya menyinyal pid yang sudah
+     * diverifikasi keturunan, jadi salah tebak paling buruk KEHILANGAN satu sweep, bukan membunuh
+     * proses milik orang lain.
      *
      * Daftar dikumpulkan SEBELUM shell mati: sesudahnya cucu di-reparent ke pid 1 dan `ps` tak lagi
      * bisa menghubungkannya ke node ini.
+     *
+     * Grace SIGTERM → SIGKILL tetap ada: yang mengabaikan SIGTERM dipaksa sesudahnya, karena cucu
+     * yang lolos terus memakai CPU — dan untuk node agent, terus memakan token.
      */
     kill() {
       const strays = liveDescendants(proc.pid)
       proc.kill()
       signalAll(strays, 'SIGTERM')
-      // Yang mengabaikan SIGTERM dipaksa setelah grace. Inilah inti perbaikannya: cucu yang lolos
-      // terus memakai CPU — dan untuk node agent, terus memakan token.
       setTimeout(() => signalAll([proc.pid, ...strays], 'SIGKILL'), KILL_GRACE_MS)
     },
   }

@@ -5,13 +5,14 @@
 // dideklarasikan di src/server/bun-test.d.ts.
 import { test, expect } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { descendantPids, spawnPty } from './pty'
+import { spawnPty } from './pty'
 
-// Perilaku LAMA: `terminal.resize()` saja. Ia MEMANG memperbarui winsize termios — `stty size` di
-// dalam PTY ikut berubah — tapi `Bun.spawn({ terminal })` pada Bun 1.4.2 tidak memanggil
-// setsid/TIOCSCTTY, jadi tty itu tak punya foreground process group (diukur: `ps -o tpgid` → 0;
-// dilaporkan upstream sebagai oven-sh/bun#33237). Tanpa foreground group, kernel tidak punya siapa
-// pun untuk disinyali, jadi handler WINCH di dalam PTY TIDAK PERNAH JALAN: nol baris geometri baru.
+// Perilaku LAMA: `Bun.spawn` diberi objek `new Bun.Terminal(...)` yang sudah jadi. Winsize termios
+// MEMANG ikut diperbarui — `stty size` di dalam PTY berubah — tapi bentuk objek itu tidak memanggil
+// setsid/TIOCSCTTY, jadi tty-nya tak punya foreground process group (diukur pada Bun 1.4.2:
+// `ps -o tpgid` → 0; dilaporkan upstream sebagai oven-sh/bun#33237). Tanpa foreground group, kernel
+// tidak punya siapa pun untuk disinyali, jadi handler WINCH di dalam PTY TIDAK PERNAH JALAN: nol
+// baris geometri baru.
 const OLD_GEOMETRY_LINES_AFTER_RESIZE = 0
 // Konsekuensinya bagi TUI full-screen (Claude Code, vim, tmux): ia terus menggambar pada geometri
 // yang dibacanya saat start. Inilah angka yang "menempel" dan jadi gejala yang dilaporkan pengguna —
@@ -77,6 +78,21 @@ const DUPLICATE_GAP_MS = 320
  *  yang akan dihasilkan perilaku lama, supaya predikatnya terbukti membedakan keduanya. */
 const DUPLICATE_RESIZES = 2
 
+/** Anggaran satu putaran `readUntil`. Yang dibatasi di sini adalah KESABARAN, bukan kecepatan: tiap
+ *  putaran menunggu login shell NYATA (`bash -l`, baca rc) lalu satu trap bash. Angka 6 s yang
+ *  dipakai sebelumnya membuat mesin yang sedang sibuk terbaca sebagai jalur yang rusak — diukur:
+ *  shell yang biasanya mencetak baris pertamanya dalam ~0,7 s bisa lewat 6 s saat load average 6.
+ *  Jalur yang benar-benar rusak tidak pernah mencetak apa pun, jadi menaikkan plafon hanya menunda
+ *  merah yang sah, tidak menyembunyikannya. */
+const READ_BUDGET_MS = 15_000
+
+/** Batas per-test. Anggaran polling di dalam kedua test ini sejak awal melebihi batas default
+ *  `bun test` yang 5 s, jadi keduanya hanya hijau selama login shell nyata kebetulan start cepat —
+ *  di suite penuh yang sibuk ia merah sebagai timeout runner, merah yang tidak menyebut apa pun
+ *  tentang apa yang salah. Nilainya harus melampaui jumlah seluruh anggaran di dalam test terpanjang
+ *  (tiga putaran `READ_BUDGET_MS` plus jeda duplikat). Lihat catatan yang sama di `pty.bun.test.ts`. */
+const PTY_TEST_TIMEOUT_MS = 60_000
+
 test('resize memberi tahu pemegang layar yang merupakan keturunan, bukan hanya pid anak', async () => {
   let out = ''
   const pty = spawnPty({ cols: START_COLS, rows: START_ROWS, cwd: '/tmp', cmd: WINCH_REPORTER })
@@ -86,17 +102,20 @@ test('resize memberi tahu pemegang layar yang merupakan keturunan, bukan hanya p
 
   try {
     // Prasyarat 1: program di dalam PTY sudah jalan dan membaca ukuran awalnya.
-    expect(await readUntil(() => out, new RegExp(OLD_STUCK_GEOMETRY), 6000)).toBe(true)
+    expect(await readUntil(() => out, new RegExp(OLD_STUCK_GEOMETRY), READ_BUDGET_MS)).toBe(true)
 
-    // Prasyarat 2 — inilah yang membuat test ini menggigit pada `liveDescendants`: pemegang trap
-    // BUKAN pid anak. Kalau `resize` hanya menyinyal `proc.pid`, login shell (yang mengabaikan
-    // SIGWINCH secara default) yang kena dan tidak ada yang mencetak apa pun.
-    const kids = descendantPids(pty.pid, execFileSync('ps', ['-Ao', 'pid=,ppid='], { encoding: 'utf8' }))
-    expect(kids.length > 0).toBe(true)
+    // Prasyarat 2 — inilah yang membuat test ini menggigit: pemegang trap BUKAN pid anak, jadi
+    // menyinyal `proc.pid` saja tidak akan mencetak apa pun (login shell mengabaikan SIGWINCH).
+    // Yang membuatnya tetap sampai adalah foreground process group: anak dan keturunannya satu
+    // grup, dan kernel menyinyali seluruh grup saat winsize berubah.
+    const forked = execFileSync('ps', ['-Ao', 'ppid='], { encoding: 'utf8' })
+      .split('\n')
+      .filter((line) => Number(line.trim()) === pty.pid).length
+    expect(forked > 0).toBe(true)
 
     const before = out.length
     pty.resize(160, 50)
-    expect(await readUntil(() => out, new RegExp(geometry(160, 50)), 6000)).toBe(true)
+    expect(await readUntil(() => out, new RegExp(geometry(160, 50)), READ_BUDGET_MS)).toBe(true)
 
     // Predikatnya dinyatakan dua kali dengan sengaja: baris geometri BARU harus ada, dan jumlahnya
     // bukan nol — angka yang dihasilkan perilaku lama, ketika winsize berubah tanpa ada yang
@@ -108,7 +127,7 @@ test('resize memberi tahu pemegang layar yang merupakan keturunan, bukan hanya p
     pty.kill()
     if (alive(pty.pid)) process.kill(pty.pid, 'SIGKILL')
   }
-})
+}, PTY_TEST_TIMEOUT_MS)
 
 test('resize ke ukuran yang sama tidak menyinyal lagi, ukuran baru tetap lewat', async () => {
   let out = ''
@@ -118,11 +137,11 @@ test('resize ke ukuran yang sama tidak menyinyal lagi, ukuran baru tetap lewat',
   })
 
   try {
-    expect(await readUntil(() => out, new RegExp(OLD_STUCK_GEOMETRY), 6000)).toBe(true)
+    expect(await readUntil(() => out, new RegExp(OLD_STUCK_GEOMETRY), READ_BUDGET_MS)).toBe(true)
     const before = out.length
 
     pty.resize(160, 50)
-    expect(await readUntil(() => out, new RegExp(geometry(160, 50)), 6000)).toBe(true)
+    expect(await readUntil(() => out, new RegExp(geometry(160, 50)), READ_BUDGET_MS)).toBe(true)
 
     // Dua detak ResizeObserver berikutnya dengan ukuran IDENTIK — bentuk yang dikirim client saat
     // node disentuh tanpa benar-benar melewati batas sel. Jedanya cukup panjang supaya tiap sinyal
@@ -145,10 +164,10 @@ test('resize ke ukuran yang sama tidak menyinyal lagi, ukuran baru tetap lewat',
     // Arah sebaliknya, dan ini yang jauh lebih penting daripada bug aslinya: gerbang yang terlalu
     // rakus akan MEMBEKUKAN terminal pada satu ukuran. Ukuran baru wajib tetap lewat.
     pty.resize(100, 30)
-    expect(await readUntil(() => out, new RegExp(geometry(100, 30)), 6000)).toBe(true)
+    expect(await readUntil(() => out, new RegExp(geometry(100, 30)), READ_BUDGET_MS)).toBe(true)
     expect(out.slice(before)).toContain(geometry(100, 30))
   } finally {
     pty.kill()
     if (alive(pty.pid)) process.kill(pty.pid, 'SIGKILL')
   }
-})
+}, PTY_TEST_TIMEOUT_MS)

@@ -160,12 +160,19 @@ test('a pty that exits on its own still emits its exit', async () => {
   // Arah sebaliknya: shell biasa yang diketik `exit`. Gerbangnya tidak boleh ikut menelan ini —
   // baris `[process exited]`-nya SAH, dan menghapus pancarannya sama sekali akan lolos test di atas.
   s.open({ t: 'open', id: 'cl6', cols: 80, rows: 24, cmd: 'exit 0' }, r.send)
-  const deadline = Date.now() + 5000
+  // Anggaran 5 s yang dipakai sebelumnya PERSIS sama dengan batas default per-test `bun test`,
+  // jadi runner selalu menang dan test ini tak pernah bisa melaporkan assertion-nya sendiri — di
+  // suite penuh yang sibuk ia merah sebagai "timed out after 5000ms" tanpa menyebut apa yang salah.
+  // Plafonnya dinaikkan DAN batas per-test dipasang eksplisit di bawah. Yang dibatasi adalah
+  // kesabaran, bukan kecepatan: `onExit` di jalur ini diukur ~0,65 s (25/25 sampel, terburuk 1,3 s),
+  // tapi login shell nyata bisa lewat 6 s saat load average 6 — sedangkan jalur yang rusak tidak
+  // memancarkan `exit` sama sekali, jadi plafon tinggi menunda merah yang sah, bukan menutupinya.
+  const deadline = Date.now() + 15_000
   while (!r.exits.length && Date.now() < deadline) await sleep(25)
 
   expect(r.exits.length).toBe(1)
   expect(r.exits[0]).toBe(0)
-})
+}, 60_000)
 
 test('a fresh server answering a replayed open says there is no status', () => {
   const s = new Sessions()
