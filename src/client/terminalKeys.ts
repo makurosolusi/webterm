@@ -124,6 +124,23 @@ function isDigitChord(e: TerminalKeyEvent, isMac: boolean): boolean {
 }
 
 /**
+ * ⌘. (macOS) / Ctrl+. — satu-satunya chord app yang DIJAMIN lolos dari xterm ke window. Ia jalan
+ * keluar dari clean view: di sana semua chrome disembunyikan, jadi keyboard adalah satu-satunya
+ * jalan pulang, dan fokus hampir selalu di dalam xterm yang menelan hampir semua tombol.
+ *
+ * BUKAN Ctrl+\ — di terminal itu SIGQUIT dan akan membunuh proses foreground pengguna.
+ *
+ * Diekspor supaya listener window clean view memakai predikat yang SAMA; dua definisi chord yang
+ * terpisah pasti menyimpang. Positional (`e.code`) seperti `isDigitChord`, modifier primer per
+ * platform saja (Ctrl+. di macOS adalah tombol yang dikirim orang ke shell), Shift/Alt ditolak
+ * supaya aturannya tidak melebar ke bentuk chord lain.
+ */
+export function isCleanViewChord(e: TerminalKeyEvent, isMac: boolean): boolean {
+  if (e.type !== 'keydown' || e.altKey || e.shiftKey || e.code !== 'Period') return false
+  return isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
+}
+
+/**
  * Apa yang harus dilakukan keydown di dalam terminal:
  * - `copy`        — chord copy: telan tombolnya, dan salin seleksi KALAU ada. Menelan saat tidak
  *   ada seleksi itu kritis untuk Ctrl+Shift+C: melewatkannya berarti xterm memetakan ctrl+c ke
@@ -172,6 +189,10 @@ export function terminalKeyAction(
   // terminal sendiri" di `terminal-first`.
   if (isCopyShortcut(e)) return 'copy'
   if (isPasteShortcut(e, platform.isWindows)) return 'native'
+  // SENGAJA tidak digerbangi `policy`, beda dari ⌘+digit: jalan keluar darurat tidak boleh bisa
+  // dimatikan lewat setting, kalau tidak `terminal-first` mengunci pengguna di clean view tanpa
+  // chrome untuk kembali.
+  if (isCleanViewChord(e, platform.isMac)) return 'bubble'
   if (policy === 'app-first' && isDigitChord(e, platform.isMac)) return 'bubble'
   return 'pass'
 }

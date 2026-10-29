@@ -3,6 +3,7 @@ import {
   SHIFT_ENTER_SEQ,
   TERMINAL_FONT_SIZE_MAX,
   TERMINAL_FONT_SIZE_MIN,
+  isCleanViewChord,
   isCopyShortcut,
   isPasteShortcut,
   nextTerminalFontSize,
@@ -70,6 +71,26 @@ describe('isPasteShortcut', () => {
   })
 })
 
+describe('isCleanViewChord', () => {
+  it('claims the platform primary modifier with Period', () => {
+    expect(isCleanViewChord(key({ key: '.', code: 'Period', metaKey: true }), true)).toBe(true)
+    expect(isCleanViewChord(key({ key: '.', code: 'Period', ctrlKey: true }), false)).toBe(true)
+  })
+
+  it('rejects the other platform modifier, extra modifiers and keyup', () => {
+    // Ctrl+. di macOS bukan chord app — ia tombol yang dikirim orang ke shell.
+    expect(isCleanViewChord(key({ key: '.', code: 'Period', ctrlKey: true }), true)).toBe(false)
+    expect(isCleanViewChord(key({ key: '.', code: 'Period', metaKey: true }), false)).toBe(false)
+    expect(isCleanViewChord(key({ key: '.', code: 'Period' }), true)).toBe(false)
+    expect(isCleanViewChord(key({ key: '>', code: 'Period', metaKey: true, shiftKey: true }), true))
+      .toBe(false)
+    expect(isCleanViewChord(key({ key: '.', code: 'Period', metaKey: true, altKey: true }), true))
+      .toBe(false)
+    expect(isCleanViewChord(key({ key: '.', code: 'Period', metaKey: true, type: 'keyup' }), true))
+      .toBe(false)
+  })
+})
+
 describe('terminalKeyAction', () => {
   it('maps Shift+Enter to the newline sequence', () => {
     expect(terminalKeyAction(key({ key: 'Enter', shiftKey: true }), 'app-first', MAC))
@@ -103,6 +124,33 @@ describe('terminalKeyAction', () => {
     const ctrl0 = key({ key: '0', code: 'Digit0', ctrlKey: true })
     expect(terminalKeyAction(ctrl0, 'app-first', LINUX)).toBe('bubble')
     expect(terminalKeyAction(ctrl0, 'terminal-first', LINUX)).toBe('pass')
+  })
+
+  it('bubbles the clean-view escape chord under EITHER policy', () => {
+    // Satu-satunya chord yang `terminal-first` tidak boleh matikan: tanpa chrome, mematikannya
+    // mengunci pengguna di clean view.
+    const cmdPeriod = key({ key: '.', code: 'Period', metaKey: true })
+    expect(terminalKeyAction(cmdPeriod, 'app-first', MAC)).toBe('bubble')
+    expect(terminalKeyAction(cmdPeriod, 'terminal-first', MAC)).toBe('bubble')
+    const ctrlPeriod = key({ key: '.', code: 'Period', ctrlKey: true })
+    expect(terminalKeyAction(ctrlPeriod, 'app-first', LINUX)).toBe('bubble')
+    expect(terminalKeyAction(ctrlPeriod, 'terminal-first', LINUX)).toBe('bubble')
+  })
+
+  it('leaves the wrong-platform, modified and released Period to the PTY', () => {
+    expect(terminalKeyAction(key({ key: '.', code: 'Period', ctrlKey: true }), 'app-first', MAC))
+      .toBe('pass')
+    expect(terminalKeyAction(key({ key: '.', code: 'Period', metaKey: true }), 'app-first', LINUX))
+      .toBe('pass')
+    expect(
+      terminalKeyAction(key({ key: '>', code: 'Period', metaKey: true, shiftKey: true }), 'app-first', MAC),
+    ).toBe('pass')
+    expect(
+      terminalKeyAction(key({ key: '.', code: 'Period', metaKey: true, altKey: true }), 'app-first', MAC),
+    ).toBe('pass')
+    expect(
+      terminalKeyAction(key({ key: '.', code: 'Period', metaKey: true, type: 'keyup' }), 'app-first', MAC),
+    ).toBe('pass')
   })
 
   it('uses the primary modifier of the platform, not both', () => {
