@@ -2,11 +2,14 @@
 // without adding @types/bun (its global fetch override reddens unrelated files).
 // The *.bun.test.ts files run under `bun test`, never vitest.
 declare module 'bun:test' {
-  export function test(name: string, fn: () => void | Promise<void>): void
-  export function expect(value: unknown): {
+  // `timeoutMs` dipakai test PTY: batas default `bun test` 5 s, sedangkan satu login shell nyata
+  // (`bash -l`) kadang butuh lebih dari 2 s untuk start dan test itu menunggu beberapa putaran.
+  export function test(name: string, fn: () => void | Promise<void>, timeoutMs?: number): void
+  interface Matchers {
     toContain(expected: string): void
     toBe(expected: unknown): void
   }
+  export function expect(value: unknown): Matchers & { not: Matchers }
 }
 
 // bun:sqlite self-typed too — only the slice db.ts uses.

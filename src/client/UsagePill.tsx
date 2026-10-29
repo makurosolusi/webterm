@@ -12,26 +12,26 @@ export function contextFillColor(usedPercent: number): string {
 }
 
 export interface UsagePillProps {
-  modelLabel: string
+  /** Nama MODEL (mis. 'sonnet-4.6'), bukan judul node — judul sudah dirender di sebelahnya. */
+  modelLabel?: string
   usedPercent?: number
 }
 
 export default function UsagePill({ modelLabel, usedPercent }: UsagePillProps): ReactNode {
-  if (typeof usedPercent !== 'number') {
-    return (
-      <span className="usage-pill">
-        <span className="usage-pill__label">{modelLabel}</span>
-      </span>
-    )
-  }
-  const pct = Math.min(100, Math.max(0, usedPercent))
+  const pct = typeof usedPercent === 'number' ? Math.min(100, Math.max(0, usedPercent)) : null
+  // Tanpa model DAN tanpa persen tidak ada yang bisa dilaporkan; pill kosong cuma menambah chrome.
+  if (!modelLabel && pct === null) return null
   return (
     <span className="usage-pill">
-      <span className="usage-pill__label">{modelLabel}</span>
-      <span className="usage-pill__minibar">
-        <span className="usage-pill__fill" style={{ width: `${pct}%`, background: contextFillColor(pct) }} />
-      </span>
-      <span className="usage-pill__label">{Math.round(pct)}%</span>
+      {modelLabel && <span className="usage-pill__label">{modelLabel}</span>}
+      {pct !== null && (
+        <>
+          <span className="usage-pill__minibar">
+            <span className="usage-pill__fill" style={{ width: `${pct}%`, background: contextFillColor(pct) }} />
+          </span>
+          <span className="usage-pill__label">{Math.round(pct)}%</span>
+        </>
+      )}
     </span>
   )
 }

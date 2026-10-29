@@ -1,4 +1,15 @@
+/* Chrome node & dock dipisah ke sheet sendiri: sheet ini tinggal token + base + kontrol bersama.
+   @import harus mendahului semua style rule, jadi ia tetap di puncak file. */
+@import './node-chrome.css';
+@import './dock.css';
+
 :root {
+  /* Satu triple yang jadi sumber SEMUA overlay di sheet ini: border, teks, fill hover. Di
+     permukaan TERANG semuanya harus menggelapkan, bukan menerangkan — merutekannya lewat satu
+     triple membuat pembalikan tema jadi satu deklarasi, bukan puluhan edit, dan tiap alpha yang
+     sudah dipilih tetap utuh. */
+  --tint-rgb: 255, 255, 255;
+
   /* surfaces */
   --canvas-bg: #000000;
   --bg: #1e1e1e;
@@ -7,32 +18,92 @@
   --sunken: #141416;
   --raised: #242424;
   --overlay: #2c2c2e;
-  --border: rgba(255, 255, 255, 0.1);
+  /* Permukaan mengapung juga ditulis sebagai triple (ide yang sama dengan --tint-rgb): dock dan
+     menu memakai alpha berbeda di atas warna yang sama. */
+  --menu-rgb: 40, 40, 42;
+  --card-rgb: 28, 28, 30;
+  --border: rgba(var(--tint-rgb), 0.1);
+
   /* text */
-  --text: rgba(255, 255, 255, 0.85);
-  --muted: rgba(255, 255, 255, 0.55);
-  --muted-2: rgba(255, 255, 255, 0.25);
+  --text: rgba(var(--tint-rgb), 0.85);
+  --muted: rgba(var(--tint-rgb), 0.55);
+  --muted-2: rgba(var(--tint-rgb), 0.25);
+
   /* accent */
   --accent: #0a84ff;
   --accent-hover: #3a9bff;
   --accent-text: #6cb0ff;
+
   /* status */
   --state-working: #d97757;
   --state-attention: #ff453a;
   --state-success: #30d158;
   --state-warning: #ff9f0a;
   --state-queued: #98989d;
+  --caution: #ffd60a;
+
   /* geometry */
   --radius: 8px;
   --radius-sm: 6px;
   --radius-lg: 12px;
   --radius-node: 10px;
-  --shadow-node: 0 8px 28px rgba(0, 0, 0, 0.4);
+  /* Pengali berat drop-shadow. Shadow hitam di KEDUA tema; yang berubah seberapa keras ia boleh
+     mendarat — 0.4 hitam terbaca sebagai kedalaman di atas bidang gelap dan sebagai lumpur di atas
+     bidang putih. Tiap alpha box-shadow dikalikan token ini. */
+  --shadow-k: 1;
+  --shadow-node: 0 8px 28px rgba(0, 0, 0, calc(0.4 * var(--shadow-k)));
   --canvas-dot: #303030;
   --float-gap: 22px;
+  /* Tinggi header bar, dan satu-satunya sumbernya. `canvas-ui.css` menurunkan cluster kontrol
+     dengan token ini. 46px, bukan 40px nodeterm: `--ss-top-chrome` di `sessions-panel.css`
+     sudah dipaku 46px, jadi tinggi ini membuat sidebar sesi dan cluster kontrol mengapung di
+     baris yang SAMA tanpa mengubah sheet milik komponen lain. */
+  --tabbar-h: 46px;
+  /* Lebar LUAR kolom kontrol kiri-bawah: satu tombol plus border 1px di tiap sisi. */
+  --controls-w: 30px;
+
   /* type */
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   --font-mono: Menlo, Monaco, 'Courier New', monospace;
+}
+
+/* Palet terang: HANGAT, bukan putih. Nilainya diambil apa adanya dari nodeterm
+   `src/renderer/styles.css` (blok `:root[data-theme='light']`) — tiap permukaan punya cast krem dan
+   tak satu pun mencapai 255, dan TINTA-nya near-black hangat, bukan #000. Alpha sekunder
+   dinaikkan karena cokelat di atas krem punya rentang lebih pendek daripada hitam di atas putih. */
+:root[data-theme='light'] {
+  --tint-rgb: 58, 48, 38;
+  --border: rgba(var(--tint-rgb), 0.14);
+  --muted: rgba(var(--tint-rgb), 0.7);
+  --muted-2: rgba(var(--tint-rgb), 0.4);
+
+  --bg: #fbf8f3;
+  --panel: #f3efe7;
+  --panel-header: #eae5db;
+  --sunken: #efeae1;
+  --raised: #fdfbf7;
+  --overlay: #fdfbf7;
+  --menu-rgb: 253, 251, 247;
+  --card-rgb: 253, 251, 247;
+  /* Canvas ada DI BAWAH setiap node, jadi ia satu-satunya permukaan yang harus lebih gelap dari
+     panel — kalau tidak, node melebur ke bidangnya dan layout kehilangan tepi. */
+  --canvas-bg: #f4efe6;
+  --canvas-dot: #eae3d6;
+
+  --accent: #007aff;
+  --accent-hover: #0a6ed1;
+  --accent-text: #0060df;
+
+  /* Hue status disetel untuk bidang gelap; di bidang pucat kuning dan oranye jatuh di bawah
+     ambang kontras apa pun. Digelapkan di sini, bukan di ~50 call site-nya. */
+  --state-working: #b04a28;
+  --state-attention: #c62a1f;
+  --state-warning: #a85c00;
+  --state-success: #1f7a38;
+  --caution: #806100;
+
+  /* Shadow mode terang macOS kira-kira sepertiga berat shadow mode gelapnya. */
+  --shadow-k: 0.35;
 }
 
 * { box-sizing: border-box; }
@@ -45,174 +116,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Dock — floating pill, bottom center */
-.dock {
-  position: absolute;
-  bottom: var(--float-gap);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-  padding: 6px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-node);
-  z-index: 10;
-}
-.dock-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.dock-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-}
-.dock-btn:disabled,
-.dock-btn--disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-.dock-btn:disabled:hover,
-.dock-btn--disabled:hover {
-  background: transparent;
-  color: var(--muted);
-}
-.dock-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px 4px;
-  background: var(--border);
-}
-.dock-zoom {
-  min-width: 44px;
-  text-align: center;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.dock-flyout {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
-  padding: 6px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-node);
-}
-.dock-flyout-item {
-  width: 100%;
-  text-align: left;
-  padding: 6px 8px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  transition: background 0.12s ease;
-}
-.dock-flyout-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-/* Node chrome */
-.term-node {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--accent);
-  border-radius: var(--radius-node);
-  box-shadow: var(--shadow-node);
-}
-.term-node--selected {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-node), 0 0 0 1px var(--accent);
-}
-.node-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  padding: 6px 8px;
-  background: var(--panel-header);
-  color: var(--text);
-  font-size: 12px;
-  cursor: grab;
-  user-select: none;
-}
-.node-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.node-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.node-status {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--muted-2);
-}
-.node-status--working {
-  background: var(--state-working);
-  animation: pulse-working 1.4s ease-in-out infinite;
-}
-.node-status--waiting {
-  background: var(--state-warning);
-}
-.node-status--blocked {
-  background: var(--state-attention);
-}
-.node-status--done {
-  background: var(--state-queued);
-}
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-}
-
 /* Minimap dock */
 .minimap-dock {
   position: absolute;
@@ -223,37 +126,262 @@ body {
   border-radius: var(--radius);
 }
 
-/* Workspace switcher — top left */
-.ws-switcher {
-  position: absolute;
-  top: var(--float-gap);
-  left: var(--float-gap);
+/* ---- Rangka app: header bar yang memakan tinggi + sisanya untuk canvas ---- */
+.app-shell {
   display: flex;
-  gap: 2px;
-  padding: 4px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-node);
-  z-index: 10;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
 }
-.ws-switcher-item {
-  padding: 4px 8px;
+/* Pembawa tinggi canvas. `position: relative` supaya `Welcome` (yang `inset: 0`) berhenti di
+   bawah header alih-alih menutupinya. `min-height: 0` load-bearing: tinggi minimum flex item
+   default dihitung dari kontennya, dan tanpa itu canvas mendorong header keluar layar. Tingginya
+   DEFINIT karena `flex-basis: 0` + grow, jadi `height: 100%` milik ReactFlow menyelesaikan
+   dengan benar di dalamnya — tak perlu override apa pun di sisi ReactFlow. */
+.app-main {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* ---- Header bar: brand, satu tab per workspace, tombol tambah ----
+   Angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (.tabbar 369, .brand 449,
+   .tabbar__projects 470, .tab 517, .tab__dot 641, .tab__add) — bukan karangan. Yang tidak
+   diikut: flare cekung tab aktif, yang hanya terbaca kalau tab mewarisi warna canvas persis;
+   webterm menandai tab aktif dengan aksen (lihat `.tab--active`), yang tidak bergantung pada itu. */
+.tabbar {
+  position: relative;
+  /* Di atas canvas dan di atas backdrop menu dock, supaya tab tetap bisa diklik. */
+  z-index: 30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--tabbar-h);
+  padding: 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.brand__mark {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+.brand__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+
+.tabbar__projects {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  /* Load-bearing (nodeterm issue #375): min-width flex item default `auto`, yang dihitung dari
+     lebar KONTEN strip — dengan 10+ workspace wrapper menolak menyusut dan mendorong tombol `+`
+     melewati tepi jendela. */
+  min-width: 0;
+}
+.tabbar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* Sebesar kontennya sampai bar kehabisan ruang, lalu menyusut dan menggulung — bukan
+     membungkus: header harus tetap satu baris berapa pun jumlah workspace-nya. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  /* Scrollbar native di dalam header terbaca seperti elemen asing. Trackpad memancarkan deltaX
+     jadi ia menggulung sendiri; roda mouse biasa hanya memancarkan deltaY dan TIDAK menggulung
+     kontainer overflow-x — itu diterjemahkan di `WorkspaceBar.tsx`, bukan di sini. */
+  scrollbar-width: none;
+  /* Lebar pita pudar di tepi yang menyembunyikan tab. SATU-SATUNYA tempat angka ini hidup:
+     `WorkspaceBar.tsx` membacanya kembali dari sini untuk menyisihkan tab yang digulungnya ke
+     tampak dari bawah pita, jadi tidak ada angka kembar yang bisa menyimpang. */
+  --tab-fade: 24px;
+}
+.tabbar__tabs::-webkit-scrollbar {
+  display: none;
+}
+/* Satu-satunya petunjuk "ada tab lain di luar layar": scrollbar-nya disembunyikan dan tepi strip
+   terpotong rata, jadi dengan 20 workspace tidak ada apa pun yang mengatakan deretannya berlanjut.
+   Dipasang PER SISI (atribut `data-overflow` dihitung di `workspaceTabs.ts`) dan bukan selalu
+   dua-duanya: memudarkan tepi yang sudah memperlihatkan tab terakhirnya adalah janji palsu. */
+.tabbar__tabs[data-overflow='left'] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--tab-fade));
+}
+.tabbar__tabs[data-overflow='right'] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--tab-fade));
+}
+.tabbar__tabs[data-overflow='both'] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--tab-fade),
+    #000 calc(100% - var(--tab-fade)),
+    transparent
+  );
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  /* Satu nama sepanjang kalimat tidak boleh menguasai strip; hanya DI ATAS batas ini ia dipotong. */
+  max-width: 220px;
+  height: 28px;
+  /* Asimetris dengan sengaja (sama seperti nodeterm): tepi kanan berakhir di tombol kebab, yang
+     glyph-nya jauh lebih sempit dari nama di kiri — padding yang sama besar terbaca sebagai celah. */
+  padding: 0 4px 0 10px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-size: 12px;
   font-family: inherit;
+  font-size: 12.5px;
+  /* Satu berat untuk semua tab: tab aktif yang lebih tebal menggeser metrik seluruh strip tiap
+     kali berpindah, dan fill-nya sudah mengatakan mana yang aktif. */
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.ws-switcher-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-.ws-switcher-item--active {
-  background: var(--raised);
+/* `:not(.tab--active)` load-bearing, bukan kerapian: `.tab:hover` punya spesifisitas lebih tinggi
+   daripada `.tab--active` (dua kelas lawan satu), jadi tanpa pengecualian ini menyentuh tab yang
+   sedang aktif akan MENIMPA penandanya dengan fill hover netral — tab aktif terbaca non-aktif
+   justru saat pointer ada di atasnya. Sama seperti nodeterm (`.tab:not(.active):hover`). */
+.tab:not(.tab--active):hover {
+  background: rgba(var(--tint-rgb), 0.08);
   color: var(--text);
+}
+/* Penanda terpilih: fill ber-aksen + garis dasar 2px — kosakata yang SAMA dengan
+   `.ss-tab[aria-selected='true']` di `sessions-panel.css` dan `.icon-btn--active` di
+   `node-chrome.css`, bukan gaya baru.
+   KENAPA diganti: fill lamanya `var(--raised)` (#242424) duduk di atas bar `var(--panel)`
+   (#282828) — selisih 4 dari 255, di bawah ambang yang bisa dilihat mata, jadi satu-satunya
+   sinyal "ini yang kamu lihat" yang tersisa adalah kecerahan `.tab__dot`. Dot itu membawa status
+   agent, BUKAN keterpilihan (lihat `workspaceTabs.ts`), jadi ia tidak bisa memikul pekerjaan ini.
+   Aksen mengubah HUE, bukan kecerahan, jadi tab aktif terbaca sendiri tanpa dibandingkan dengan
+   tetangganya; garis dasarnya adalah kanal BENTUK, supaya penanda ini tidak bersandar pada warna
+   saja (markup-nya juga membawa `aria-selected`). Keduanya berangkat dari satu token `--accent`,
+   jadi tema terang ikut benar tanpa deklarasi kedua — di sana `--panel` dan `--canvas-bg` sama
+   dekatnya, jadi fill permukaan apa pun akan menghilang dengan cara yang sama. */
+.tab--active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* 'neutral' berarti TIDAK DIKETAHUI, bukan "sehat": status agent hanya hidup untuk workspace
+   yang terbuka — lihat catatan kepala `workspaceTabs.ts`. */
+.tab__dot--neutral { background: rgba(var(--tint-rgb), 0.3); }
+.tab__dot--idle { background: var(--state-queued); }
+.tab__dot--working { background: var(--state-working); }
+.tab__dot--attention { background: var(--state-attention); }
+
+/* Input rename INLINE di dalam tab (nodeterm `.tab__edit`): menggantikan `.tab__name` di tempat,
+   jadi lebarnya harus lebar tab — `width: 0` + `flex: 1 1 0` supaya lebar KONTEN input (default
+   ~20 karakter) tidak melebarkan tab melewati `max-width`-nya. */
+.tab__edit {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 48px;
+  padding: 2px 6px;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+
+/* Cluster aksi tab: satu-satunya isinya sekarang kebab. `flex-shrink: 0` load-bearing — tanpa itu
+   nama sepanjang kalimat memeras tombolnya sampai nol dan rename/hapus jadi tak tergapai. */
+.tab__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.tab__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Kotak tetap, bukan padding di sekitar glyph: tiga titik berdiri di tengah kotak 14px-nya, jadi
+     plate hover-nya harus datang dari kotaknya sendiri. */
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: currentColor;
+  line-height: 1;
+  cursor: pointer;
+  /* Terlihat di SETIAP tab, bukan hanya saat hover: affordance yang baru muncul kalau disentuh
+     tidak bisa ditemukan orang yang belum tahu ia ada — dan ini satu-satunya jalan rename/hapus. */
+  opacity: 0.45;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+.tab:hover .tab__caret {
+  opacity: 0.7;
+}
+.tab__caret:hover {
+  background: rgba(var(--tint-rgb), 0.1);
+  color: var(--text);
+  opacity: 1;
+}
+/* lucide menulis width/height sebagai ATRIBUT (24px), yang kalah dari CSS. */
+.tab__caret svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Load-bearing: tanpa ini bar yang sempit menyusutkan tombol `+` alih-alih menggulung strip. */
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tab__add:hover {
+  background: rgba(var(--tint-rgb), 0.1);
+  color: var(--text);
+}
+/* lucide menulis width/height sebagai ATRIBUT (24px), yang kalah dari CSS. */
+.tab__add svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Shared form controls */
@@ -284,7 +412,7 @@ body {
   border-color: var(--border);
 }
 .btn--ghost:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
 }
 .field {
   padding: 6px 8px;
@@ -305,86 +433,12 @@ body {
   border-radius: var(--radius-lg);
 }
 
-@keyframes pulse-working {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-/* Node body (terminal/xterm area) — collapse hides it */
-.node-body { flex: 1; min-height: 0; overflow: hidden; }
-.term-node--collapsed { height: auto !important; }
-.term-node--collapsed .node-body { display: none; }
-
-/* Header toolbar — icon button row, pushed to the right of the title */
-.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-
-/* Icon-button state variants (base .icon-btn already exists) */
-.icon-btn--danger:hover { background: rgba(255, 69, 58, 0.15); color: var(--state-attention); }
-.icon-btn--active { background: rgba(10, 132, 255, 0.18); color: var(--accent-text); }
-.icon-btn:disabled { opacity: 0.3; cursor: default; }
-.icon-btn:disabled:hover { background: transparent; color: var(--muted); }
-
-/* Collapse chevron (rotates when collapsed) */
-.node-chevron { display: inline-flex; transition: transform 0.12s ease; color: var(--muted); }
-.node-chevron--collapsed { transform: rotate(-90deg); }
-
-/* Status label text next to the status dot (uppercase, tiny) */
-.node-status-text {
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em;
-  text-transform: uppercase; color: var(--muted);
-}
-
-/* Model / usage pill (agent nodes) */
-.usage-pill {
-  display: inline-flex; align-items: center; gap: 6px; height: 26px;
-  padding: 0 8px; border-radius: 13px; background: var(--raised);
-  border: 1px solid var(--border); color: var(--text);
-  font-family: var(--font-mono); font-size: 11px; line-height: 1;
-}
-.usage-pill__label { white-space: nowrap; }
-.usage-pill__minibar {
-  width: 42px; height: 6px; border-radius: 3px; overflow: hidden;
-  background: var(--sunken); flex-shrink: 0;
-}
-.usage-pill__fill { height: 100%; border-radius: 3px; }
-/* fill width + background-color are set inline by JS (green/yellow/red by % used) */
-
-/* +Label chip (add a label to an unnamed node) */
-.node-labeladd {
-  display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px;
-  border: 1px dashed var(--muted-2); border-radius: var(--radius-sm);
-  color: var(--muted); font-size: 11px; cursor: pointer; background: transparent;
-}
-.node-labeladd:hover { color: var(--text); border-color: var(--muted); }
-
-/* ⌘M markdown/chat-view hint */
-.node-mdhint { font-size: 10px; color: var(--muted-2); font-family: var(--font-mono); }
-
-/* Per-node comments popover (opened by the 💬 header button) */
-.node-comments {
-  position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 20;
-  display: flex; flex-direction: column; width: 260px; max-height: 320px;
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius); box-shadow: var(--shadow-node);
-}
-.node-comments__list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-.node-comments__item { font-size: 12px; color: var(--text); }
-.node-comments__meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
-.node-comments__empty { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 8px; }
-.node-comments__composer { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
-.node-comments__composer textarea {
-  flex: 1; resize: none; min-height: 32px; max-height: 96px; padding: 6px 8px;
-  border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: var(--sunken); color: var(--text); font-family: inherit; font-size: 12px;
-}
-.node-comments__composer textarea:focus { outline: none; border-color: var(--accent); }
-
 /* Context-link bridge handles on node edges (React Flow handle override) */
 .react-flow__handle.bridge-handle {
   width: 13px; height: 13px; border: none; background: var(--accent);
   opacity: 0.4; transition: opacity 0.12s ease, box-shadow 0.12s ease;
 }
-.react-flow__handle.bridge-handle:hover { opacity: 1; box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.25); }
-
-/* attention/blocked status dots pulse too (working pulse already defined) */
-.node-status--blocked { animation: pulse-working 1.1s ease-in-out infinite; }
+.react-flow__handle.bridge-handle:hover {
+  opacity: 1;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}

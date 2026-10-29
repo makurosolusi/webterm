@@ -1,0 +1,222 @@
+/* Kolom kontrol kiri — SATU-SATUNYA kumpulan tombol canvas. Metrik plat & tombol tetap dari
+   nodeterm `src/renderer/styles.css` (blok `---- Bottom-center dock ----`); yang berubah hanya
+   arahnya: kolom ini menelan rail zoom kiri-bawah yang dulu terpisah, jadi zoom in/out/fit tidak
+   lagi ada dobel di dua tempat dan lock ikut pindah ke sini. */
+
+:root {
+  /* Metrik tombol dock dari nodeterm. Dijadikan token karena `--dock-w` di bawahnya dihitung dari
+     keduanya — bukan untuk tema. */
+  --dock-btn-size: 38px;
+  --dock-pad: 7px;
+  /* Lebar kolom dock, dan satu-satunya sumbernya: `sessions-panel.css` menggeser panel sejauh angka
+     ini. Dihitung, bukan ditulis 54px: angka mati akan tetap 54px saat tombol/padding dock berubah
+     dan panel menindih dock lagi tanpa satu test pun merah. +2px = border kiri + kanan. */
+  --dock-w: calc(var(--dock-btn-size) + 2 * var(--dock-pad) + 2px);
+}
+
+/* Lapisan tangkap-klik di bawah menu dock: satu klik di luar menutup menu yang terbuka. */
+.dock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+}
+
+/* Diangkur di bawah-kiri dan TIDAK PERNAH bergerak, termasuk saat panel Sessions terbuka: dock
+   adalah kumpulan tombol permanen, dan tombol yang pindah tiap kali panel dibuka merusak otot-memori
+   pengguna — tangan sudah hafal di mana zoom/undo berada. Panel adalah permukaan sementara, jadi
+   panel yang mengalah ke kanan dock (`--dock-w` dipakai `.sessions-sidebar` di sessions-panel.css).
+   Tumbuh ke atas dari dasar layar, jadi panjangnya isi tidak pernah menabrak apa pun di kiri-atas. */
+.dock {
+  position: absolute;
+  bottom: var(--float-gap);
+  left: var(--float-gap);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--dock-pad);
+  background: rgba(var(--menu-rgb), 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)));
+}
+
+.dock-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dock-btn-size);
+  height: var(--dock-btn-size);
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.dock-btn:hover:not(:disabled) { background: var(--panel-header); }
+.dock-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Satu-satunya tombol dock yang terisi accent: menambah node adalah aksi utama permukaan ini. */
+.dock-add { background: var(--accent); color: #fff; }
+.dock-btn.dock-add:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, black); }
+.dock-btn.dock-add.active:not(:disabled) { background: color-mix(in srgb, var(--accent) 72%, black); color: #fff; }
+
+.dock-btn.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent-hover);
+}
+
+/* Garis pemisah kelompok — HORIZONTAL karena docknya kolom; panjang garis nodeterm (22px) pindah
+   dari tinggi ke lebar. */
+.dock-sep {
+  width: 22px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+/* Titik "ada perubahan belum disimpan", di sudut tombol Save. */
+.dock-dirty {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+.dock-dirty.dirty { background: var(--caution); }
+
+/* Pengangkur menu: menu dock absolut terhadap tombol pembukanya, bukan terhadap dock. */
+.dock-slot {
+  position: relative;
+  display: inline-flex;
+}
+/* Selebar tombol, bukan 52px seperti di bar horizontal: angka zoom adalah satu-satunya slot
+   berisi teks, dan kalau ia lebih lebar dari tombolnya seluruh kolom ikut melebar. 11px supaya
+   "200%" masih utuh di lebar itu. */
+.dock-zoom {
+  min-width: var(--dock-btn-size);
+  padding: 5px 2px;
+  text-align: center;
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  user-select: none;
+  cursor: pointer;
+}
+.dock-zoom:hover,
+.dock-zoom.active { background: var(--panel-header); color: var(--text); }
+
+/* ---- Menu di sebelah KANAN kolom ---- */
+/* Dock mengapung di tepi kiri, jadi satu-satunya arah buka yang tidak keluar layar adalah ke kanan.
+   Pagar tinggi: dock diangkur ke dasar layar dan menu diangkur ke salah satu ujung dock, jadi ruang
+   terburuk yang bisa dipakai menu = tinggi dock yang masih muat di viewport. */
+.dock-menu {
+  position: absolute;
+  left: calc(100% + 10px);
+  max-height: calc(100vh - 2 * var(--float-gap));
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: rgba(var(--menu-rgb), 0.98);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, calc(0.55 * var(--shadow-k)));
+}
+
+/* Arah vertikal menu mengikuti letak pembukanya DI DALAM kolom: tombol Add ada di ujung atas, jadi
+   menunya tumbuh ke bawah; readout zoom ada di ujung bawah, jadi menunya tumbuh ke atas. Dibalik,
+   keduanya menembus tepi layar. */
+.dock-add-menu,
+.dock-menu__form {
+  top: 0;
+}
+.dock-zoom-menu {
+  bottom: 0;
+}
+
+/* Menu Add memuat tiap jenis node plus delapan agent builtin, jadi di window pendek ia tetap bisa
+   lebih tinggi dari pagar di atas — baris-barisnya yang menggulir, bukan kotaknya. */
+.dock-menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dock-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.dock-menu button:hover:not(:disabled) { background: var(--panel-header); }
+.dock-menu button:disabled { color: var(--muted); cursor: not-allowed; }
+.dock-menu svg { color: var(--muted); flex-shrink: 0; }
+
+/* Titik warna agent sebagai pengganti ikon brand (webterm tidak membawa aset SVG agent). */
+.dock-menu__glyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dock-menu__rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+/* Preset zoom, diangkur ke readout-nya sendiri alih-alih ke ujung dock. */
+.dock-zoom-menu {
+  min-width: 168px;
+}
+.dock-zoom-menu button { gap: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }
+/* Aturan umum `.dock-menu svg` mewarnai tiap glyph menu jadi muted; tick adalah penanda STATE,
+   bukan ikon pembuka, jadi ia mempertahankan accent yang bilang "di sini posisimu". */
+.dock-zoom-menu .dock-menu__check svg { color: inherit; }
+.dock-zoom-menu button.is-current { color: var(--accent); }
+
+.dock-menu__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+/* Form dalam menu (workspace baru): baris input, bukan baris tombol. */
+.dock-menu__form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  min-width: 240px;
+}
+.dock-menu__form-row { display: flex; gap: 6px; }

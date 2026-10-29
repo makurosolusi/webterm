@@ -1,0 +1,92 @@
+import { test, expect, afterEach } from 'vitest'
+import { list, read, readBinary } from './fsClient'
+import { tooLargeSentinel } from '../shared/fsLimits'
+
+/**
+ * Yang dijaga file ini adalah DUA kontrak error `./fsClient`, dan terutama bedanya:
+ * `read`/`readBinary` melempar saat gagal, sementara `list` tetap fail-open karena
+ * `classifyEmptyListing` bergantung padanya. Assertion `list` di bawah ada supaya perbaikan
+ * kejujuran pada pembacaan isi tidak diam-diam ikut merusak penelusuran.
+ */
+
+const realFetch = globalThis.fetch
+
+/** Stub `globalThis.fetch` dengan satu respons; pola stub global yang sama dengan `./ws.test.ts`. */
+function stubFetch(init: { ok?: boolean; status?: number; body?: unknown; reject?: string }): void {
+  globalThis.fetch = (() =>
+    init.reject !== undefined
+      ? Promise.reject(new Error(init.reject))
+      : Promise.resolve({
+          ok: init.ok ?? true,
+          status: init.status ?? 200,
+          statusText: '',
+          json: () =>
+            init.body === undefined
+              ? Promise.reject(new Error('Unexpected end of JSON input'))
+              : Promise.resolve(init.body),
+        })) as typeof globalThis.fetch
+}
+
+afterEach(() => {
+  globalThis.fetch = realFetch
+})
+
+test('read throws on a failing HTTP response, with operation + path in the message', async () => {
+  stubFetch({ ok: false, status: 403 })
+  await expect(read('/secret/notes.txt')).rejects.toThrow(/fs read "\/secret\/notes\.txt".*403/)
+})
+
+test('read throws when the network itself fails', async () => {
+  stubFetch({ reject: 'Failed to fetch' })
+  await expect(read('/a.txt')).rejects.toThrow(/fs read "\/a\.txt": Failed to fetch/)
+})
+
+test('read throws on a malformed JSON body instead of answering empty', async () => {
+  stubFetch({ ok: true }) // body undefined → res.json() rejects
+  await expect(read('/a.txt')).rejects.toThrow(/fs read "\/a\.txt"/)
+})
+
+test('read throws when the response has no content field', async () => {
+  stubFetch({ body: {} })
+  await expect(read('/a.txt')).rejects.toThrow(/respons tanpa field content/)
+})
+
+test('read returns the file contents on success', async () => {
+  stubFetch({ body: { content: 'hello\nworld\n' } })
+  await expect(read('/a.txt')).resolves.toBe('hello\nworld\n')
+})
+
+// INTI dari perubahan ini: dulu '' bisa berarti "kosong" ATAU "gagal", dan node editor tidak bisa
+// membedakannya — buffer kosong yang bisa disimpan menimpa file asli. Sekarang gagal = reject,
+// jadi '' hanya punya satu arti.
+test('a genuinely empty file resolves to "" and does NOT throw', async () => {
+  stubFetch({ body: { content: '' } })
+  await expect(read('/empty.txt')).resolves.toBe('')
+})
+
+test('the too-large sentinel passes through as a success, not a failure', async () => {
+  const sentinel = tooLargeSentinel(99_000_000)
+  stubFetch({ body: { content: sentinel } })
+  await expect(read('/huge.log')).resolves.toBe(sentinel)
+})
+
+test('readBinary throws on failure but passes an empty payload through', async () => {
+  stubFetch({ ok: false, status: 500 })
+  await expect(readBinary('/img.png')).rejects.toThrow(/fs read-binary "\/img\.png".*500/)
+  stubFetch({ body: { base64: 'AAAA' } })
+  await expect(readBinary('/img.png')).resolves.toBe('AAAA')
+})
+
+// Kontrak penelusuran, DIJAGA: `classifyEmptyListing` membedakan "direktori kosong" dari "tidak ada
+// di sana" dengan bertanya ke direktori induk, justru karena `list` tidak pernah melempar.
+test('list stays fail-open: a failing response yields [] and never rejects', async () => {
+  stubFetch({ ok: false, status: 404 })
+  await expect(list('/nope')).resolves.toEqual([])
+  stubFetch({ reject: 'Failed to fetch' })
+  await expect(list('/nope')).resolves.toEqual([])
+})
+
+test('list returns entries on success', async () => {
+  stubFetch({ body: [{ name: 'a.txt', isDir: false }] })
+  await expect(list('/dir')).resolves.toHaveLength(1)
+})

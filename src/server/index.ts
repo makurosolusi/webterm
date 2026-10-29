@@ -4,14 +4,43 @@ import path from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
-import { handleApi } from './api'
-import { installContextLinkShim } from './contextLink'
+import { applyPtyOptions, handleApi } from './api'
+import { installContextLink } from './contextLink'
+import { DEFAULT_HOST, TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
 
 const PORT = Number(process.env.PORT) || 8700
+const HOST = process.env.WEBTERM_HOST || DEFAULT_HOST
+// Throws (and so refuses to start) when HOST is reachable off-machine without a token.
+const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
+// Before anything can spawn a PTY: make the env agree with what we enforce, so children that
+// reference $WEBTERM_TOKEN inherit the same form `authorize` compares against.
+writeTokenToEnv(TOKEN)
 const dev = process.env.NODE_ENV !== 'production'
 
-// Write the context-link sh shim the installed get-linked-context skill invokes.
-installContextLinkShim()
+const API_PREFIX = '/api/'
+
+function reqUrl(req: http.IncomingMessage): URL {
+  return new URL(req.url || '/', 'http://x')
+}
+
+/**
+ * Gate for the two surfaces that act on the machine: /api (filesystem, workspaces) and the
+ * /ws upgrade (PTYs). Static assets are deliberately NOT gated — the app bundle is not a
+ * privilege, and gating it would break every sub-resource request, which carries no token.
+ */
+function allowed(req: http.IncomingMessage, url: URL): boolean {
+  return authorize({ headers: req.headers, expectedToken: TOKEN, queryToken: url.searchParams.get(TOKEN_PARAM) })
+}
+
+function refuse(res: http.ServerResponse): void {
+  res.statusCode = 403
+  res.end('forbidden')
+}
+
+// Write the context-link sh shim AND the skill that points an agent at it. Takes TOKEN because a
+// shim that cannot authenticate is a shim that 403s the moment WEBTERM_TOKEN is set.
+installContextLink(TOKEN)
+applyPtyOptions()
 
 const server = http.createServer()
 
@@ -21,6 +50,8 @@ if (dev) {
   const { createServer: createViteServer } = await import('vite')
   const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server } } })
   server.on('request', (req, res) => {
+    const url = reqUrl(req)
+    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
     if (handleApi(req, res)) return
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
@@ -31,8 +62,10 @@ if (dev) {
   }
   const indexHtml = path.join(distDir, 'index.html')
   server.on('request', (req, res) => {
+    const url = reqUrl(req)
+    const urlPath = url.pathname
+    if (urlPath.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
     if (handleApi(req, res)) return
-    const urlPath = new URL(req.url || '/', 'http://x').pathname
     const resolved = path.resolve(distDir, '.' + urlPath)
     // Path-traversal guard: never serve outside dist/.
     const file = resolved.startsWith(distDir) && fs.existsSync(resolved) && fs.statSync(resolved).isFile()
@@ -47,11 +80,19 @@ if (dev) {
 const wss = new WebSocketServer({ noServer: true })
 server.on('upgrade', (req, socket, head) => {
   // Only /ws is ours; Vite's own HMR upgrade uses a different path, leave it be.
-  if (new URL(req.url || '/', 'http://x').pathname === WS_PATH) {
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
-  } else {
+  const url = reqUrl(req)
+  if (url.pathname !== WS_PATH) {
     socket.destroy()
+    return
   }
+  // A WebSocket upgrade is the single most valuable thing on this server to steal — it ends in
+  // a PTY. Refuse before `handleUpgrade`, so an unauthorized peer never gets a socket at all.
+  if (!allowed(req, url)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+    socket.destroy()
+    return
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
 })
 
 wss.on('connection', (ws) => {
@@ -64,4 +105,10 @@ wss.on('connection', (ws) => {
   ws.on('close', () => sessions.detach(send))
 })
 
-server.listen(PORT, () => console.log(`webterm listening on http://127.0.0.1:${PORT} (${dev ? 'dev+HMR' : 'prod'})`))
+server.listen(PORT, HOST, () =>
+  // Never print the token itself — only whether one is in force, and how long it is.
+  console.log(
+    `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, ` +
+      `token ${TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`})`
+  )
+)

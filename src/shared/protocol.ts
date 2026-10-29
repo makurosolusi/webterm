@@ -12,7 +12,9 @@ export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg
 
 export interface OutputMsg { t: 'output'; id: string; data: string }
 export interface ExitMsg { t: 'exit'; id: string; code: number }
-export interface StatusMsg { t: 'status'; id: string; status: AgentStatus }
+// `status` ABSEN = "tidak ada status lagi" (sapuan basi, lihat `agentStale.ts`), bukan "tidak
+// berubah". Satu-satunya cara server bisa MENCABUT klaim yang pernah ia kirim.
+export interface StatusMsg { t: 'status'; id: string; status?: AgentStatus }
 export type ServerMsg = OutputMsg | ExitMsg | StatusMsg
 
 export const WS_PATH = '/ws'

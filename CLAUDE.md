@@ -31,17 +31,19 @@ Data dir webterm SENDIRI: `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
 ## Verifikasi (gerbang korektness)
 
 - `TMPDIR=/tmp/st npm run typecheck` — `tsc --noEmit`. Gate tercepat.
-- `TMPDIR=/tmp/st npm test` — vitest (`vitest run`, node-env, helper murni saja).
-- `TMPDIR=/tmp/st bun test src/server/sessions.bun.test.ts` — round-trip PTY (Bun-only).
-- `TMPDIR=/tmp/st bun test src/server/db.bun.test.ts` — store SQLite (Bun-only).
+- `TMPDIR=/tmp/st npm test` — vitest (`vitest run`, node-env default, test DOM per-file via pragma `/** @vitest-environment jsdom */`).
+- `TMPDIR=/tmp/st bun test src/server/*.bun.test.ts` — semua test Bun-only (round-trip PTY,
+  store SQLite, API workspace, operasi fs). Glob, bukan daftar nama: daftar nama basi tanpa
+  pernah merah.
 - **Jebakan macOS:** test bind unix socket di `$TMPDIR`; path default bisa >104 char (batas
   `sun_path`) → `EINVAL`. Jalankan dengan `TMPDIR=/tmp/st`.
 
 ## Struktur
 
-- `src/client` — UI React (canvas React Flow, node chrome, dock).
-- `src/server` — entry Bun: `index.ts`, `api.ts`, `config.ts`, `db.ts`, `sessions.ts`, `pty.ts`, `hooks.ts`, `contextLink.ts`, `nameGen.ts`.
-- `src/shared` — tipe/util bersama (`workspace.ts`).
+- `src/client` — UI React (canvas React Flow, node chrome, dock); harness test DOM `canvasHarness.tsx`.
+- `src/server` — proses Bun (entry `index.ts`): HTTP + WebSocket, sesi PTY nyata, workspace di
+  SQLite, auth token node, operasi fs, pengaturan, hook status agent.
+- `src/shared` — tipe & util yang dipakai bersama client dan server.
 
 ## Aturan rumah
 

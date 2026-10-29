@@ -1,0 +1,163 @@
+// Settings sisi client: baca sekali saat mount, tulis di-coalesce.
+//
+// Pola persis dari nodeterm `src/renderer/state/settings.ts`: state in-memory sinkron (UI dan
+// xterm bereaksi seketika), persistensi membuntut dengan paling banyak satu request per jendela
+// 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
+// update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
+import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
+
+export const SAVE_COALESCE_MS = 300
+
+export interface Coalescer<T> {
+  /** Catat nilai terbaru; jadwalkan flush bila belum ada yang terjadwal. */
+  push(value: T): void
+  /** Kirim nilai tertunda SEKARANG (dipakai `beforeunload`). No-op bila tidak ada. */
+  flush(): void
+}
+
+/**
+ * Trailing-edge coalescer: timer pertama yang menyala menetapkan jendela, `push` berikutnya di
+ * dalam jendela itu digabung ke payload tertunda — jadi N gerakan slider jadi satu `send`.
+ *
+ * `merge` wajib disetel bila payload-nya PATCH: defaultnya last-wins, dan last-wins pada patch
+ * akan MENJATUHKAN kunci yang disetel lebih awal di jendela yang sama (geser fontSize lalu
+ * toggle kursor dalam 300 ms ⇒ fontSize hilang). Beda dari nodeterm, yang mengirim snapshot
+ * penuh dan karena itu tidak butuh penggabung — tapi snapshot penuh membuat dua tab saling
+ * menimpa kunci yang tidak mereka sentuh.
+ *
+ * Terpisah dari hook dan bebas DOM supaya bisa dites di node-env; `onError` ada karena `send`
+ * di sini async dan tidak punya pemanggil yang bisa menangkap rejection-nya.
+ */
+export function createCoalescer<T>(
+  send: (value: T) => Promise<void>,
+  opts: {
+    ms?: number
+    merge?: (pending: T, next: T) => T
+    onError?: (err: unknown) => void
+  } = {}
+): Coalescer<T> {
+  const ms = opts.ms ?? SAVE_COALESCE_MS
+  const merge = opts.merge ?? ((_pending: T, next: T) => next)
+  const onError = opts.onError ?? ((err: unknown) => console.error('settings save failed', err))
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let pending: { value: T } | null = null
+  const fire = (): void => {
+    if (!pending) return
+    const { value } = pending
+    pending = null
+    send(value).catch(onError)
+  }
+  return {
+    push(value) {
+      pending = pending ? { value: merge(pending.value, value) } : { value }
+      if (timer) return
+      timer = setTimeout(() => {
+        timer = null
+        fire()
+      }, ms)
+    },
+    flush() {
+      if (timer) clearTimeout(timer)
+      timer = null
+      fire()
+    },
+  }
+}
+
+async function putSettings(patch: Partial<Settings>): Promise<void> {
+  const res = await fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(`PUT /api/settings -> ${res.status}`)
+}
+
+// Snapshot modul supaya resolver `baseAgent` di bawah bisa dibaca sinkron dari luar React.
+let current: Settings = DEFAULT_SETTINGS
+
+// Lookup `custom:<uuid>` → `baseAgent` yang dibutuhkan `capabilityAgentId` (lihat catatan
+// BaseResolver di `shared/workspace.ts`). Didaftarkan sekali di sini karena ini satu-satunya
+// modul client yang memegang settings; tanpa ini agent custom tidak mewarisi kapabilitas apa pun.
+setCustomAgentBaseResolver((id: AgentId): BuiltinAgentId | undefined => {
+  for (const a of current.customAgents) if (a.id === id) return a.baseAgent
+  return undefined
+})
+
+export interface UseSettings {
+  settings: Settings
+  /** True setelah GET pertama selesai, supaya logika first-run bisa menunggu. */
+  hydrated: boolean
+  /** Terapkan patch ke state sekarang; persistensi menyusul (coalesce 300 ms). */
+  update(patch: Partial<Settings>): void
+}
+
+export function useSettings(): UseSettings {
+  const [settings, setSettings] = useState<Settings>(current)
+  const [hydrated, setHydrated] = useState(false)
+  const saver = useRef<Coalescer<Partial<Settings>> | null>(null)
+  if (!saver.current) {
+    saver.current = createCoalescer(putSettings, {
+      merge: (pending, next) => ({ ...pending, ...next }),
+    })
+  }
+
+  useEffect(() => {
+    let alive = true
+    fetch('/api/settings')
+      .then((res) => {
+        if (!res.ok) throw new Error(`GET /api/settings -> ${res.status}`)
+        return res.json()
+      })
+      .then((raw) => {
+        if (!alive) return
+        // mergeSettings juga di jalur BACA: respons bisa datang dari server versi lain.
+        current = mergeSettings(raw)
+        setSettings(current)
+        setHydrated(true)
+      })
+      .catch((err) => {
+        // Default yang bisa dipakai lebih baik daripada canvas kosong; jangan telan diam-diam.
+        console.error('settings load failed, using defaults', err)
+        if (alive) setHydrated(true)
+      })
+    return () => { alive = false }
+  }, [])
+
+  // Reload/tutup tab di dalam jendela coalesce tidak boleh menjatuhkan edit terakhir.
+  useEffect(() => {
+    const flush = (): void => saver.current?.flush()
+    window.addEventListener('beforeunload', flush)
+    return () => window.removeEventListener('beforeunload', flush)
+  }, [])
+
+  const update = useCallback((patch: Partial<Settings>) => {
+    current = { ...current, ...patch }
+    setSettings(current)
+    // Kirim patch, bukan snapshot penuh: server me-merge-nya, jadi dua tab yang menyetel kunci
+    // berbeda tidak saling menimpa kunci yang tidak mereka sentuh.
+    saver.current?.push(patch)
+  }, [])
+
+  return { settings, hydrated, update }
+}
+
+/**
+ * Settings live untuk konsumen yang jauh dari App: xterm di dalam node, dan wrapper editor di
+ * `nodeTypes`. Dulu App menyuntikkannya ke `data` SETIAP node (`flowNodes`), yang punya dua
+ * akibat buruk: identitas `data` baru untuk semua node pada tiap tick drag, dan — karena kedua
+ * call site `TerminalCore` tidak pernah meneruskan prop `settings`-nya — tidak ada satu pun
+ * setting terminal yang benar-benar sampai ke xterm. Context memotong perantaranya.
+ *
+ * Default `DEFAULT_SETTINGS` supaya komponen yang dites/dirender di luar provider tetap waras,
+ * bukan meledak.
+ */
+const SettingsContext = createContext<Settings>(DEFAULT_SETTINGS)
+
+export const SettingsProvider = SettingsContext.Provider
+
+export function useLiveSettings(): Settings {
+  return useContext(SettingsContext)
+}

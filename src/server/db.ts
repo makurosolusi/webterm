@@ -1,6 +1,8 @@
 import { Database } from 'bun:sqlite'
 import type { Workspace, WsNode, Viewport, BridgeLink } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import type { Settings } from '../shared/settings'
+import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
 import { dbPath } from './config'
 
 export function openDb(path: string = dbPath()): Database {
@@ -100,6 +102,29 @@ export class Db {
       "INSERT INTO app (key, value) VALUES ('active', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
     ).run(id)
   }
+
+  /** Settings hidup sebagai SATU baris JSON di tabel `app` yang sudah ada (kunci `'settings'`),
+   *  jadi mengangkatnya ke persistensi butuh nol migrasi skema. */
+  getSettings(): Settings {
+    const row = this.d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string } | null
+    return parseStored(row ? row.value : null)
+  }
+
+  /** Merge `patch` di atas yang tersimpan, tulis, kembalikan snapshot hasilnya. Sinkron dari ujung
+   *  ke ujung — lihat catatan di `settingsStore.ts` soal kenapa tidak ada rantai tulis. */
+  saveSettings(patch: unknown): Settings {
+    const row = this.d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string } | null
+    const next = nextSettings(row ? row.value : null, patch)
+    this.d.query(
+      "INSERT INTO app (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    ).run(JSON.stringify(next))
+    return next
+  }
 }
 
 export const db = new Db(openDb())
+
+// Agent custom mewarisi kapabilitas harness lewat `baseAgent`; resolvernya harus didaftarkan
+// sekali per runtime (lihat `shared/workspace.ts`). Di sini, bukan di entry server, karena ini
+// satu-satunya modul yang memegang store settings sisi server.
+registerAgentBaseResolver(() => db.getSettings())

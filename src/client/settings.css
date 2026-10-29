@@ -1,0 +1,188 @@
+/* Halaman settings. Prefix `st-` supaya tidak bertabrakan dengan kelas di styles.css, dan hanya
+   memakai token yang sudah dideklarasikan di sana (--panel, --border, --text, --accent, …) —
+   tidak ada satu pun warna literal di file ini selain yang transparan. */
+
+.st-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.st-sidebar {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.st-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 12px;
+}
+
+.st-title { font-size: 15px; font-weight: 600; }
+
+.st-nav {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 7px 10px;
+  text-align: left;
+}
+.st-nav:hover { background: var(--raised); color: var(--text); }
+.st-nav.is-active { background: var(--accent); color: #fff; }
+
+.st-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 28px 32px 64px;
+}
+.st-main > * { max-width: 760px; }
+
+.st-section-title { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+.st-note, .st-muted { color: var(--muted); }
+.st-note { margin: 0 0 8px; }
+
+/* --- Field ------------------------------------------------------------------------------- */
+
+.st-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.st-field-text { flex: 1 1 auto; min-width: 0; }
+.st-label { display: block; font-weight: 500; }
+.st-hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 3px 0 0; }
+
+.st-control {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 1px;
+}
+.st-unit { color: var(--muted); font-size: 12px; }
+
+.st-input {
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  padding: 5px 8px;
+  width: 240px;
+}
+.st-input:focus-visible { border-color: var(--accent); outline: none; }
+.st-input-num { width: 84px; }
+.st-input-hex { width: 92px; }
+.st-select { width: 240px; }
+.st-mono { font-family: var(--font-mono); font-size: 12px; }
+
+.st-color {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  height: 28px;
+  padding: 2px;
+  width: 42px;
+}
+
+.st-toggle {
+  appearance: none;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  height: 22px;
+  padding: 0;
+  position: relative;
+  transition: background 120ms ease;
+  width: 40px;
+}
+.st-toggle.is-on { background: var(--accent); border-color: transparent; }
+.st-toggle-knob {
+  background: #fff;
+  border-radius: 50%;
+  height: 16px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: left 120ms ease;
+  width: 16px;
+}
+.st-toggle.is-on .st-toggle-knob { left: 20px; }
+
+/* --- Daftar: launch command, chip agent, kartu agent custom -------------------------------- */
+
+.st-btn {
+  appearance: none;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 5px 11px;
+}
+.st-btn:hover { background: var(--overlay); }
+.st-btn-danger:hover { border-color: var(--state-attention); color: var(--state-attention); }
+
+/* Grup lebar-penuh di bawah label field-nya: baris launch command dan kartu agent terlalu lebar
+   untuk kolom kontrol di kanan. */
+.st-rows, .st-cards, .st-chips { display: flex; flex-direction: column; gap: 8px; }
+.st-chips { flex-direction: row; flex-wrap: wrap; gap: 6px; max-width: 320px; }
+
+.st-row { display: flex; align-items: center; gap: 10px; }
+.st-row-label { flex: 0 0 104px; font-weight: 500; }
+
+.st-chip {
+  appearance: none;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.st-chip.is-off {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.st-cards { margin-top: 12px; }
+.st-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 14px 12px;
+}
+.st-card .st-field:last-of-type { border-bottom: 0; }
+.st-card-foot {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 8px;
+}

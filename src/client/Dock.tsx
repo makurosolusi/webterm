@@ -1,6 +1,12 @@
 import { useState } from 'react'
-import { AGENTS, assembleCmd } from '../shared/workspace'
-import type { AgentId } from '../shared/workspace'
+import {
+  Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
+  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus,
+} from 'lucide-react'
+import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
+import type { AgentId, BuiltinAgentId } from '../shared/workspace'
+import { DEFAULT_SETTINGS } from '../shared/settings'
+import type { CustomAgent } from '../shared/settings'
 
 export interface DockProps {
   onAddTerminal: () => void
@@ -11,107 +17,213 @@ export interface DockProps {
   onBack: () => void; onForward: () => void; canBack: boolean; canForward: boolean
   onFit: () => void
   onToggleBoard: () => void
+  /** Panel Sessions terbuka? Tombol pembukanya hidup DI SINI, dan ini satu-satunya keadaan panel
+   *  yang dock perlu tahu: hanya untuk menyalakan tombolnya (`active`/`aria-pressed`/title). Letak
+   *  plat tidak lagi ikut berubah — dock diam, panel yang minggir (lihat `.dock` di dock.css). */
+  sessionsOpen: boolean
+  onToggleSessions: () => void
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
+  /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
+  onZoomTo?: (pct: number) => void
+  /** Kunci PANDANGAN (pan/zoom) sementara node tetap bisa digeser — semantik nodeterm, kebalikan
+   *  dari `showInteractive` bawaan React Flow yang justru mematikan drag node. Props-driven karena
+   *  pemanggil menyetel panOnDrag/panOnScroll/zoomOnPinch dari state yang sama. */
+  locked: boolean
+  onToggleLock: () => void
+  /** Clean view menyala? Tombol ini SATU-SATUNYA jalan masuk lewat mouse; jalan keluarnya chord
+   *  ⌘./Ctrl+. karena dock ini sendiri ikut tersembunyi di sana (lihat `cleanView.tsx`). Karena
+   *  itu `aria-pressed`-nya praktis selalu 'false' saat terlihat — ia tetap ditulis supaya keadaan
+   *  tombolnya benar bagi pembaca layar yang menyusuri DOM yang disembunyikan CSS. */
+  cleanView: boolean
+  onToggleCleanView: () => void
+  onSave?: () => void; dirty?: boolean
+  onLayouts?: () => void
+  micActive?: boolean; onToggleMic?: () => void
+  /** Dari settings; tombolnya hilang dari menu Add. Prop, bukan store — integrator yang menyambung. */
+  disabledAgents?: AgentId[]
+  customAgents?: CustomAgent[]
+  /** Override perintah peluncuran per builtin (mis. skrip pemilih akun). Hanya builtin: agent
+   *  custom sudah membawa `launchCmd`-nya sendiri. */
+  agentLaunchCommands?: Partial<Record<BuiltinAgentId, string>>
 }
 
-const AGENT_IDS: AgentId[] = [...(Object.keys(AGENTS) as Exclude<AgentId, 'custom'>[]), 'custom']
+/** Preset zoom dock, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
+export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
 
-type Svg = React.SVGProps<SVGSVGElement>
-const svg = (children: React.ReactNode) => (p: Svg) => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
-)
-const IconPlus = svg(<path d="M8 3v10M3 8h10" />)
-const IconUndo = svg(<><path d="M4 8h7a3 3 0 0 1 0 6H8" /><path d="M6.5 5.5 4 8l2.5 2.5" /></>)
-const IconRedo = svg(<><path d="M12 8H5a3 3 0 0 0 0 6h3" /><path d="M9.5 5.5 12 8l-2.5 2.5" /></>)
-const IconBack = svg(<path d="M10 4 6 8l4 4" />)
-const IconForward = svg(<path d="M6 4l4 4-4 4" />)
-const IconFit = svg(<path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" />)
-const IconBoard = svg(<path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" />)
-const IconMinus = svg(<path d="M3 8h10" />)
+const ICON = 16
 
 export default function Dock(props: DockProps) {
-  const [mode, setMode] = useState<'menu' | 'agent' | 'workspace' | null>(null)
-  const [agentId, setAgentId] = useState<AgentId>('claude')
-  const [profile, setProfile] = useState('')
-  const [customCmd, setCustomCmd] = useState('')
-  const [agentCwd, setAgentCwd] = useState('')
+  const [menu, setMenu] = useState<'add' | 'workspace' | 'zoom' | null>(null)
   const [wsName, setWsName] = useState('')
   const [wsCwd, setWsCwd] = useState('')
 
-  const addAgent = () => {
-    const cmd = agentId === 'custom' ? customCmd.trim() : assembleCmd(agentId, profile.trim() || undefined)
-    if (!cmd) return
-    props.onAddAgent(cmd, agentId, agentCwd.trim() || undefined)
-    setProfile(''); setCustomCmd(''); setAgentCwd(''); setMode(null)
+  const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
+  const customs = props.customAgents ?? DEFAULT_SETTINGS.customAgents
+  const launchCmds = props.agentLaunchCommands ?? DEFAULT_SETTINGS.agentLaunchCommands
+  const builtins = BUILTIN_AGENT_IDS.filter((a) => !disabled.includes(a))
+  const visibleCustoms = customs.filter((c) => !disabled.includes(c.id))
+
+  const close = () => setMenu(null)
+
+  const addBuiltin = (id: BuiltinAgentId) => {
+    // cwd dibiarkan undefined: server memakai cwd workspace, sama seperti nodeterm yang
+    // menambah agent dengan satu klik tanpa form.
+    props.onAddAgent(assembleCmd(id, launchCmds[id]), id)
+    close()
   }
 
   const createWs = () => {
     if (!wsName.trim()) return
     props.onCreateWorkspace(wsName.trim(), wsCwd.trim() || undefined)
-    setWsName(''); setWsCwd(''); setMode(null)
+    setWsName(''); setWsCwd(''); close()
   }
 
   return (
-    <div className="dock">
-      <div style={{ position: 'relative', display: 'flex' }}>
-        <button className="dock-btn" title="Add" onClick={() => setMode((m) => (m ? null : 'menu'))}><IconPlus /></button>
+    <>
+      {menu && <div className="dock-backdrop" onClick={close} />}
+      <div className="dock">
+        {/* Di ujung ATAS kolom, dipisah dari sisanya: satu-satunya tombol dock yang membuka
+            permukaan lain alih-alih bekerja pada canvas. */}
+        <button
+          className={`dock-btn${props.sessionsOpen ? ' active' : ''}`}
+          aria-label="Toggle sessions panel"
+          title={props.sessionsOpen ? 'Hide sessions' : 'Show sessions'}
+          aria-pressed={props.sessionsOpen}
+          onClick={props.onToggleSessions}
+        ><PanelLeft size={ICON} /></button>
 
-        {mode === 'menu' && (
-          <div className="dock-flyout">
-            <button className="dock-flyout-item" onClick={() => { props.onAddTerminal(); setMode(null) }}>Terminal</button>
-            <button className="dock-flyout-item" onClick={() => setMode('agent')}>Agent</button>
-            <button className="dock-flyout-item" onClick={() => setMode('workspace')}>Workspace</button>
-          </div>
-        )}
+        <div className="dock-sep" />
 
-        {mode === 'agent' && (
-          <div className="dock-flyout" style={{ minWidth: 240, gap: 6 }}>
-            <select className="field" value={agentId} onChange={(e) => setAgentId(e.target.value as AgentId)}>
-              {AGENT_IDS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-            {agentId === 'custom' ? (
-              <input className="field" placeholder="custom command" value={customCmd} onChange={(e) => setCustomCmd(e.target.value)} />
-            ) : (
-              <input className="field" placeholder="envman profile (optional)" value={profile} onChange={(e) => setProfile(e.target.value)} />
-            )}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input className="field" style={{ flex: 1 }} placeholder="cwd (optional)" value={agentCwd} onChange={(e) => setAgentCwd(e.target.value)} />
-              <button className="btn btn--ghost" onClick={() => props.onBrowse(setAgentCwd)}>Browse</button>
+        <div className="dock-slot">
+          {menu === 'add' && (
+            <div className="dock-menu dock-add-menu">
+              <div className="dock-menu__list">
+                <button onClick={() => { props.onAddTerminal(); close() }}>
+                  <SquareTerminal size={ICON} /> Terminal
+                </button>
+                <div className="dock-menu__rule" />
+                {builtins.map((a) => {
+                  const cfg = agentConfig(a)
+                  return (
+                    <button key={a} title={cfg?.notice} onClick={() => addBuiltin(a)}>
+                      <span className="dock-menu__glyph" style={{ background: cfg?.color ?? FALLBACK_AGENT_COLOR }} />
+                      {cfg?.label ?? a}
+                    </button>
+                  )
+                })}
+                {visibleCustoms.length > 0 && <div className="dock-menu__rule" />}
+                {visibleCustoms.map((c) => (
+                  <button key={c.id} onClick={() => { props.onAddAgent(c.launchCmd, c.id); close() }}>
+                    <span className="dock-menu__glyph" style={{ background: c.color ?? FALLBACK_AGENT_COLOR }} />
+                    {c.label}
+                  </button>
+                ))}
+                <div className="dock-menu__rule" />
+                <button onClick={() => setMenu('workspace')}>
+                  <FolderPlus size={ICON} /> Workspace…
+                </button>
+              </div>
             </div>
-            <button className="btn btn--accent" onClick={addAgent}>Add</button>
-          </div>
+          )}
+
+          {menu === 'workspace' && (
+            <div className="dock-menu dock-menu__form">
+              <input className="field" placeholder="name" autoFocus value={wsName}
+                onChange={(e) => setWsName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createWs() }} />
+              <div className="dock-menu__form-row">
+                <input className="field" style={{ flex: 1 }} placeholder="cwd (optional)" value={wsCwd}
+                  onChange={(e) => setWsCwd(e.target.value)} />
+                <button className="btn btn--ghost" onClick={() => props.onBrowse(setWsCwd)}>Browse</button>
+              </div>
+              <button className="btn btn--accent" onClick={createWs}>Create</button>
+            </div>
+          )}
+
+          <button
+            className={`dock-btn dock-add${menu === 'add' ? ' active' : ''}`}
+            aria-label="Add node" title="Add node" onClick={() => setMenu((m) => (m ? null : 'add'))}
+          ><Plus size={ICON} /></button>
+        </div>
+
+        <div className="dock-sep" />
+
+        <button className="dock-btn" title="Undo" onClick={props.onUndo} disabled={!props.canUndo}><Undo2 size={ICON} /></button>
+        <button className="dock-btn" title="Redo" onClick={props.onRedo} disabled={!props.canRedo}><Redo2 size={ICON} /></button>
+        <button className="dock-btn" title="Go back" onClick={props.onBack} disabled={!props.canBack}><ChevronLeft size={ICON} /></button>
+        <button className="dock-btn" title="Go forward" onClick={props.onForward} disabled={!props.canForward}><ChevronRight size={ICON} /></button>
+
+        <div className="dock-sep" />
+
+        {props.onSave && (
+          <button className="dock-btn" title="Save layout" onClick={props.onSave}>
+            <Save size={ICON} />
+            <span className={`dock-dirty${props.dirty ? ' dirty' : ''}`} />
+          </button>
+        )}
+        <button className="dock-btn" aria-label="Fit view" title="Fit view" onClick={props.onFit}><Scan size={ICON} /></button>
+        {props.onLayouts && (
+          <button className="dock-btn" title="Layouts" onClick={props.onLayouts}><Layers size={ICON} /></button>
+        )}
+        <button className="dock-btn" title="Board" onClick={props.onToggleBoard}><LayoutGrid size={ICON} /></button>
+        {props.onToggleMic && (
+          <button
+            className={`dock-btn${props.micActive ? ' active' : ''}`}
+            title="Dictate" onClick={props.onToggleMic}
+          ><Mic size={ICON} /></button>
         )}
 
-        {mode === 'workspace' && (
-          <div className="dock-flyout" style={{ minWidth: 240, gap: 6 }}>
-            <input className="field" placeholder="name" value={wsName} onChange={(e) => setWsName(e.target.value)} />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input className="field" style={{ flex: 1 }} placeholder="cwd (optional)" value={wsCwd} onChange={(e) => setWsCwd(e.target.value)} />
-              <button className="btn btn--ghost" onClick={() => props.onBrowse(setWsCwd)}>Browse</button>
+        <div className="dock-sep" />
+
+        <button className="dock-btn" aria-label="Zoom out" title="Zoom out" onClick={props.onZoomOut}><Minus size={ICON} /></button>
+        <div className="dock-slot">
+          {menu === 'zoom' && props.onZoomTo && (
+            <div className="dock-menu dock-zoom-menu">
+              {ZOOM_PRESETS.map((p) => (
+                <button
+                  key={p} className={p === props.zoomPct ? 'is-current' : undefined}
+                  onClick={() => { props.onZoomTo?.(p); close() }}
+                >
+                  <span className="dock-menu__check">{p === props.zoomPct && <Check size={13} />}</span>
+                  {p}%
+                </button>
+              ))}
             </div>
-            <button className="btn btn--accent" onClick={createWs}>Create</button>
-          </div>
-        )}
+          )}
+          {props.onZoomTo ? (
+            <button
+              className={`dock-zoom${menu === 'zoom' ? ' active' : ''}`}
+              title="Zoom presets" onClick={() => setMenu((m) => (m === 'zoom' ? null : 'zoom'))}
+            >{props.zoomPct}%</button>
+          ) : (
+            <span className="dock-zoom">{props.zoomPct}%</span>
+          )}
+        </div>
+        <button className="dock-btn" aria-label="Zoom in" title="Zoom in" onClick={props.onZoomIn}><Plus size={ICON} /></button>
+
+        {/* SATU separator sebelum lock, alasan yang sama seperti di rail lama: zoom in/out/fit
+            semuanya gerakan kamera, lock adalah toggle mode dan satu-satunya yang mengubah apa
+            yang boleh dilakukan tiga lainnya. */}
+        <div className="dock-sep" />
+
+        <button
+          className={`dock-btn${props.locked ? ' active' : ''}`}
+          aria-label={props.locked ? 'Unlock view' : 'Lock view'}
+          title={props.locked ? 'Unlock view (pan/zoom)' : 'Lock view (pan/zoom); nodes stay movable'}
+          aria-pressed={props.locked}
+          onClick={props.onToggleLock}
+        >{props.locked ? <Lock size={ICON} /> : <LockOpen size={ICON} />}</button>
+
+        {/* Bersebelahan dengan lock, kelompok yang sama: dua-duanya toggle MODE, bukan gerakan
+            kamera. */}
+        <button
+          className={`dock-btn${props.cleanView ? ' active' : ''}`}
+          aria-label="Clean view"
+          title="Clean view — hide all chrome (⌘./Ctrl+. to exit)"
+          aria-pressed={props.cleanView}
+          onClick={props.onToggleCleanView}
+        ><Focus size={ICON} /></button>
       </div>
-
-      <div className="dock-sep" />
-
-      <button className="dock-btn" title="Undo" onClick={props.onUndo} disabled={!props.canUndo}><IconUndo /></button>
-      <button className="dock-btn" title="Redo" onClick={props.onRedo} disabled={!props.canRedo}><IconRedo /></button>
-      <button className="dock-btn" title="Back" onClick={props.onBack} disabled={!props.canBack}><IconBack /></button>
-      <button className="dock-btn" title="Forward" onClick={props.onForward} disabled={!props.canForward}><IconForward /></button>
-
-      <div className="dock-sep" />
-
-      <button className="dock-btn" title="Fit view" onClick={props.onFit}><IconFit /></button>
-      <button className="dock-btn" title="Board" onClick={props.onToggleBoard}><IconBoard /></button>
-
-      <div className="dock-sep" />
-
-      <button className="dock-btn" title="Zoom out" onClick={props.onZoomOut}><IconMinus /></button>
-      <span className="dock-zoom">{props.zoomPct}%</span>
-      <button className="dock-btn" title="Zoom in" onClick={props.onZoomIn}><IconPlus /></button>
-    </div>
+    </>
   )
 }

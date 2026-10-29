@@ -5,3 +5,5 @@ dist/
 .env
 .env.*
 !.env.example
+# lockfile repo ini bun.lock; package-lock.json hanya lahir kalau npm dipakai keliru
+package-lock.json
