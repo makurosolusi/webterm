@@ -32,6 +32,8 @@ export interface WorkspaceLifecycleDeps {
   setWorkspaces: Dispatch<SetStateAction<Workspace[]>>
   setActiveWs: Dispatch<SetStateAction<Workspace | null>>
   setHydrated: Dispatch<SetStateAction<boolean>>
+  /** Dinaikkan saat boot fetch menjawab 403: token hilang/salah → render layar Login. */
+  setAuthRequired: Dispatch<SetStateAction<boolean>>
   setNodes: Dispatch<SetStateAction<Node[]>>
   setEdges: Dispatch<SetStateAction<Edge[]>>
   setBoard: Dispatch<SetStateAction<boolean>>
@@ -56,7 +58,7 @@ export interface WorkspaceLifecycle {
 export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLifecycle {
   const {
     workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
-    setWorkspaces, setActiveWs, setHydrated, setNodes, setEdges, setBoard, setPicker,
+    setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
     activeWsRef, nodesRef, edgesRef, saveTimer, rf,
   } = deps
 
@@ -65,13 +67,22 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   // tanpa node — board tersimpan baru menyusul di render berikutnya.
   useEffect(() => {
     void (async () => {
-      const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
-      const id = bootWorkspaceId(list.map((w) => w.id), active)
-      const ws = id ? await getWorkspace(id) : null
-      if (id && id !== active) await setActive(id)
-      setWorkspaces(list)
-      if (ws) applyWorkspace(ws)
-      setHydrated(true)
+      try {
+        const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
+        const id = bootWorkspaceId(list.map((w) => w.id), active)
+        const ws = id ? await getWorkspace(id) : null
+        if (id && id !== active) await setActive(id)
+        setWorkspaces(list)
+        if (ws) applyWorkspace(ws)
+        setHydrated(true)
+      } catch (e) {
+        // 403 = gate server menolak token: pakai ulang fetch boot ini sebagai probe auth, jadi tak
+        // ada ronde jaringan terpisah. `hydrated` tetap dinaikkan — tanpa itu App menahan render di
+        // `null` dan layar Login tidak pernah muncul. Error lain diteruskan: blank screen lama
+        // tetap menjadi sinyal bahwa boot benar-benar gagal, bukan sekadar belum login.
+        if ((e as { status?: number }).status === 403) { setAuthRequired(true); setHydrated(true) }
+        else throw e
+      }
     })()
   }, [applyWorkspace])
 
