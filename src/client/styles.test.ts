@@ -194,7 +194,9 @@ describe('node-chrome.css', () => {
 describe('dock.css', () => {
   it('matches nodeterm dock plate metrics', () => {
     const plate = dock.slice(dock.indexOf('.dock {'), dock.indexOf('.dock-btn {'))
-    expect(plate).toContain('padding: 7px')
+    // Nilai nodeterm-nya kini hidup di token `--dock-pad`, karena `--dock-w` dihitung darinya.
+    expect(dock).toContain('--dock-pad: 7px')
+    expect(plate).toContain('padding: var(--dock-pad)')
     expect(plate).toContain('border-radius: 16px')
     expect(plate).toContain('background: rgba(var(--menu-rgb), 0.92)')
     expect(plate).toContain('backdrop-filter: blur(10px)')
@@ -203,8 +205,9 @@ describe('dock.css', () => {
 
   it('matches nodeterm dock button metrics', () => {
     const btn = dock.slice(dock.indexOf('.dock-btn {'), dock.indexOf('.dock-btn:hover'))
-    expect(btn).toContain('width: 38px')
-    expect(btn).toContain('height: 38px')
+    expect(dock).toContain('--dock-btn-size: 38px')
+    expect(btn).toContain('width: var(--dock-btn-size)')
+    expect(btn).toContain('height: var(--dock-btn-size)')
     expect(btn).toContain('border-radius: 10px')
     expect(dock).toContain('.dock-add { background: var(--accent); color: #fff; }')
     expect(dock).toContain('color-mix(in srgb, var(--accent) 85%, black)')
@@ -228,7 +231,7 @@ describe('dock.css', () => {
   it('defines the dirty marker, the zoom readout and the menus', () => {
     expect(dock).toContain('.dock-dirty.dirty { background: var(--caution); }')
     // Selebar tombol: readout teks tidak boleh melebarkan kolom.
-    expect(dock.slice(dock.indexOf('.dock-zoom {'))).toContain('min-width: 38px')
+    expect(dock.slice(dock.indexOf('.dock-zoom {'))).toContain('min-width: var(--dock-btn-size)')
     for (const cls of [
       '.dock-backdrop', '.dock-slot', '.dock-menu', '.dock-add-menu', '.dock-menu__list',
       '.dock-menu__glyph', '.dock-menu__rule', '.dock-menu__check', '.dock-menu__form',

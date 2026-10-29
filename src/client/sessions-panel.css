@@ -11,15 +11,17 @@
    wajar bernilai 0 di webterm) justru akan menaruhnya di bawah switcher. */
 :root {
   --ss-top-chrome: 46px;
-  /* Lebar panel, dan satu-satunya sumbernya: `dock.css` menggeser kolom dock sejauh angka ini saat
-     panel terbuka. Disalin ke dua sheet, keduanya bebas menyimpang dan docknya menindih lagi. */
   --ss-w: 300px;
 }
 
+/* Berdiri di KANAN kolom dock, bukan di tepi kiri bersamanya: dock yang diam dan panel yang mengalah
+   (alasannya di `.dock` dock.css). `--dock-w` dihitung di dock.css, satu-satunya sumber lebar itu —
+   dua --float-gap = jarak tepi→dock plus jarak dock→panel. Panel mount/unmount, tidak meluncur,
+   jadi tidak ada transition di sini. */
 .sessions-sidebar {
   position: absolute;
   top: calc(var(--ss-top-chrome) + var(--float-gap));
-  left: var(--float-gap);
+  left: calc(var(--dock-w) + 2 * var(--float-gap));
   z-index: 12;
   width: var(--ss-w);
   max-height: calc(100vh - var(--ss-top-chrome) - 2 * var(--float-gap) - 26px);

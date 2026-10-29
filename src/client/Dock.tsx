@@ -17,9 +17,9 @@ export interface DockProps {
   onBack: () => void; onForward: () => void; canBack: boolean; canForward: boolean
   onFit: () => void
   onToggleBoard: () => void
-  /** Panel Sessions terbuka? Tombol pembukanya hidup DI SINI (dock dan panel sama-sama diangkur ke
-   *  tepi kiri; dua plat mengapung di tepi yang sama adalah yang dulu saling menutupi), jadi dock
-   *  juga yang harus minggir: lihat `.dock--shifted` di dock.css. */
+  /** Panel Sessions terbuka? Tombol pembukanya hidup DI SINI, dan ini satu-satunya keadaan panel
+   *  yang dock perlu tahu: hanya untuk menyalakan tombolnya (`active`/`aria-pressed`/title). Letak
+   *  plat tidak lagi ikut berubah — dock diam, panel yang minggir (lihat `.dock` di dock.css). */
   sessionsOpen: boolean
   onToggleSessions: () => void
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
@@ -81,7 +81,7 @@ export default function Dock(props: DockProps) {
   return (
     <>
       {menu && <div className="dock-backdrop" onClick={close} />}
-      <div className={`dock${props.sessionsOpen ? ' dock--shifted' : ''}`}>
+      <div className="dock">
         {/* Di ujung ATAS kolom, dipisah dari sisanya: satu-satunya tombol dock yang membuka
             permukaan lain alih-alih bekerja pada canvas. */}
         <button

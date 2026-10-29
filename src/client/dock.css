@@ -3,6 +3,17 @@
    arahnya: kolom ini menelan rail zoom kiri-bawah yang dulu terpisah, jadi zoom in/out/fit tidak
    lagi ada dobel di dua tempat dan lock ikut pindah ke sini. */
 
+:root {
+  /* Metrik tombol dock dari nodeterm. Dijadikan token karena `--dock-w` di bawahnya dihitung dari
+     keduanya — bukan untuk tema. */
+  --dock-btn-size: 38px;
+  --dock-pad: 7px;
+  /* Lebar kolom dock, dan satu-satunya sumbernya: `sessions-panel.css` menggeser panel sejauh angka
+     ini. Dihitung, bukan ditulis 54px: angka mati akan tetap 54px saat tombol/padding dock berubah
+     dan panel menindih dock lagi tanpa satu test pun merah. +2px = border kiri + kanan. */
+  --dock-w: calc(var(--dock-btn-size) + 2 * var(--dock-pad) + 2px);
+}
+
 /* Lapisan tangkap-klik di bawah menu dock: satu klik di luar menutup menu yang terbuka. */
 .dock-backdrop {
   position: fixed;
@@ -10,9 +21,11 @@
   z-index: 19;
 }
 
-/* Diangkur di BAWAH-kiri, bukan ditengahkan vertikal: sisi kiri bagian atas milik tombol/panel
-   Sessions (`--ss-top-chrome` + `--float-gap` di sessions-panel.css), jadi kolom yang tumbuh ke
-   atas dari dasar layar tidak pernah menabraknya seberapa pun panjang isinya. */
+/* Diangkur di bawah-kiri dan TIDAK PERNAH bergerak, termasuk saat panel Sessions terbuka: dock
+   adalah kumpulan tombol permanen, dan tombol yang pindah tiap kali panel dibuka merusak otot-memori
+   pengguna — tangan sudah hafal di mana zoom/undo berada. Panel adalah permukaan sementara, jadi
+   panel yang mengalah ke kanan dock (`--dock-w` dipakai `.sessions-sidebar` di sessions-panel.css).
+   Tumbuh ke atas dari dasar layar, jadi panjangnya isi tidak pernah menabrak apa pun di kiri-atas. */
 .dock {
   position: absolute;
   bottom: var(--float-gap);
@@ -22,28 +35,13 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 7px;
+  padding: var(--dock-pad);
   background: rgba(var(--menu-rgb), 0.92);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)));
-  transition: left 160ms ease;
-}
-
-/* Panel Sessions terbuka: dock minggir ke KANAN panel, tidak bersembunyi di belakangnya. Menurunkan
-   z-index-nya saja akan menyembunyikan dock sekaligus mematikan tiap tombolnya selama panel terbuka —
-   satu bug ditukar bug lain. Lebarnya dibaca dari `--ss-w` (sessions-panel.css), satu-satunya sumber
-   angka itu, plus satu --float-gap sebagai jarak antar plat. */
-.dock--shifted {
-  left: calc(var(--ss-w) + 2 * var(--float-gap));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dock {
-    transition: none;
-  }
 }
 
 .dock-btn {
@@ -51,8 +49,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: var(--dock-btn-size);
+  height: var(--dock-btn-size);
   padding: 0;
   background: transparent;
   color: var(--text);
@@ -99,11 +97,11 @@
   position: relative;
   display: inline-flex;
 }
-/* Selebar tombol (38px), bukan 52px seperti di bar horizontal: angka zoom adalah satu-satunya slot
+/* Selebar tombol, bukan 52px seperti di bar horizontal: angka zoom adalah satu-satunya slot
    berisi teks, dan kalau ia lebih lebar dari tombolnya seluruh kolom ikut melebar. 11px supaya
    "200%" masih utuh di lebar itu. */
 .dock-zoom {
-  min-width: 38px;
+  min-width: var(--dock-btn-size);
   padding: 5px 2px;
   text-align: center;
   font-family: inherit;
