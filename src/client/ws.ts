@@ -11,6 +11,7 @@ import { noteStatus } from './unread'
 interface Sub {
   onOutput: (data: string) => void
   onExit: (code: number) => void
+  onReset?: () => void
   open?: ClientMsg & { t: 'open' } // last open sent for this id; replayed on reconnect
 }
 
@@ -30,6 +31,7 @@ export function subscribeStatus(cb: (id: string, status: AgentStatus | undefined
 }
 export function getStatus(id: string): AgentStatus | undefined { return statuses.get(id) }
 let ws: WebSocket | null = null
+let everConnected = false
 let queue: ClientMsg[] = []
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -43,7 +45,12 @@ function url(): string {
 function connect() {
   ws = new WebSocket(url())
   ws.onopen = () => {
-    // Re-attach every known terminal first (replay), then drain anything queued.
+    // A reconnect re-attaches to live PTYs and the server replays their scrollback. The xterm
+    // still holds what it showed before the drop, so replaying onto it duplicates every line
+    // (the macOS login banner piling up while idle). Reset first so replay reproduces the buffer
+    // once. Skipped on the first connect: terminals are freshly mounted and empty.
+    if (everConnected) for (const sub of subs.values()) sub.onReset?.()
+    everConnected = true
     for (const sub of subs.values()) if (sub.open) ws!.send(JSON.stringify(sub.open))
     const pending = queue
     queue = []
@@ -129,9 +136,10 @@ export function send(msg: ClientMsg) {
 export function subscribe(
   id: string,
   onOutput: (data: string) => void,
-  onExit: (code: number) => void
+  onExit: (code: number) => void,
+  onReset?: () => void
 ): () => void {
-  subs.set(id, { onOutput, onExit })
+  subs.set(id, { onOutput, onExit, onReset })
   if (!ws) connect()
   return () => { subs.delete(id) }
 }
