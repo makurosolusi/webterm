@@ -383,6 +383,19 @@ export interface BridgeLink {
 
 export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor'
 
+/** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
+ *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
+export interface PaneLeaf { id: string }
+
+/** Pembagian dua sebuah ruang. `dir: 'h'` = anak BERDAMPINGAN (`a` kiri, `b` kanan), pembatasnya
+ *  tegak dan digeser di sumbu X. `dir: 'v'` = anak BERTUMPUK (`a` atas, `b` bawah). `ratio` adalah
+ *  porsi untuk `a`, 0..1. Operasinya di `client/paneTree.ts`. */
+export interface PaneSplit { dir: 'h' | 'v'; ratio: number; a: Pane; b: Pane }
+
+/** Pohon pane sebuah node terminal. REKURSIF, bukan daftar datar: susunan 2×2 adalah split di
+ *  dalam split, dan daftar datar tidak bisa menyatakan sisi mana yang terbagi. */
+export type Pane = PaneLeaf | PaneSplit
+
 // CATATAN PERSISTENSI: `WsNode` dipersist sebagai satu blob JSON di satu kolom SQLite
 // (`src/server/db.ts`), jadi menambah kind atau field di sini adalah NOL migration.
 export interface WsNode {
@@ -403,6 +416,7 @@ export interface WsNode {
   comments?: Comment[]    // thread aktivitas/catatan per node
   dirPath?: string        // node 'files': direktori akar yang ditampilkan
   filePath?: string       // node 'editor': file yang dibuka
+  panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node
 }
 
 export interface Workspace {

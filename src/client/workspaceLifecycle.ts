@@ -15,6 +15,7 @@ import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
 import { bootWorkspaceId, nextActiveWorkspaceId } from './workspaceMenu'
 import { workspaceNameFromPath } from './store'
+import { sessionIdsOf } from './paneTree'
 import { send } from './ws'
 import type { ClosedHistory } from './closedHistory'
 import type { Workspace } from '../shared/workspace'
@@ -108,7 +109,9 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     }
     const owner = workspaces.find((w) => w.nodes.some((n) => n.id === id))
     if (!owner) return
-    send({ t: 'close', id })
+    // Tiap DAUN, bukan id node: node terminal yang terbelah memegang satu PTY per pane, dan `close`
+    // untuk id node saja meninggalkan sisanya hidup tanpa pemilik (lihat `sessionIdsOf`).
+    for (const sid of sessionIdsOf(owner.nodes.find((n) => n.id === id)?.panes, id)) send({ t: 'close', id: sid })
     const fresh = await getWorkspace(owner.id)
     recordClosed([id], fresh.nodes, fresh)
     const updated: Workspace = { ...fresh, nodes: fresh.nodes.filter((n) => n.id !== id), updatedAt: Date.now() }
@@ -155,7 +158,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     // sini atau bocor tanpa pemilik. Daftar node diambil dari server karena snapshot client bisa
     // ketinggalan untuk workspace yang tidak aktif; GET gagal pun hapusnya tetap jalan.
     const doomed = await getWorkspace(id).catch(() => null)
-    for (const n of doomed?.nodes ?? []) send({ t: 'close', id: n.id })
+    for (const n of doomed?.nodes ?? []) for (const sid of sessionIdsOf(n.panes, n.id)) send({ t: 'close', id: sid })
     await deleteWorkspace(id)
     const next = nextActiveWorkspaceId(workspaces.map((w) => w.id), id, activeId)
     // Board pengganti diambil sebelum daftar tab dikecilkan supaya hilangnya tab dan datangnya

@@ -253,6 +253,28 @@
 .term-node--collapsed { height: auto !important; }
 .term-node--collapsed .node-body { display: none; }
 
+/* ---- Split pane (node terminal) ----
+   ABSOLUT, bukan flex bersarang: posisi tiap pane datang dari `paneLayout` sebagai persen, karena
+   elemen bersarang membuat tiap split memindahkan daun satu tingkat lebih dalam dan React membuang
+   terminal yang berpindah posisi di pohon (alasan lengkapnya di doc `paneLayout` di paneTree.ts).
+   Konsekuensinya di sini: pane TIDAK boleh ikut mengatur ukurannya sendiri — `width`/`height`-nya
+   milik inline style, dan deklarasi apa pun di sini akan menimpanya untuk semua pane sekaligus. */
+.pane-host { position: relative; width: 100%; height: 100%; }
+.pane { position: absolute; overflow: hidden; }
+/* Penanda pane aktif: garis tipis di dalam, bukan border — border menambah ukuran kotak dan
+   setiap pane akan mengubah geometri terminalnya sendiri saat fokus pindah. */
+.pane--active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+/* Pembatas duduk DI ATAS batas kedua pane (digeser setengah ketebalannya oleh inline style), jadi
+   ketebalan 6px ini satu-satunya sumbernya — `HALF_DIVIDER` di PaneView.tsx separuhnya.
+   `aria-orientation` yang menentukan sumbunya, dan itu kontrak yang sama yang dibaca
+   `ratioFromPointer` ('h' → sumbu x → pembatas tegak) — kalau tak cocok, menggeser pembatas
+   menggerakkan pane ke arah yang tidak diikuti kursor. */
+.pane-divider { position: absolute; z-index: 1; background: var(--border); }
+.pane-divider[aria-orientation='vertical'] { width: 6px; cursor: col-resize; }
+.pane-divider[aria-orientation='horizontal'] { height: 6px; cursor: row-resize; }
+.pane-divider:hover { background: var(--accent); }
+.pane-split-btns { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+
 /* ---- Model / usage pill (agent node) ---- */
 .usage-pill {
   display: inline-flex; align-items: center; gap: 6px; height: 26px;

@@ -25,6 +25,7 @@ import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { useLayoutHistory } from './layoutHistory'
+import { paneSessionIds } from './paneTree'
 import { send, subscribeStatus } from './ws'
 import { saveWorkspace } from './api'
 import { useWorkspaceLifecycle } from './workspaceLifecycle'
@@ -130,13 +131,17 @@ export default function App() {
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // Di LUAR updater: `recordClosed` setState, dan dari dalam updater itu menulis di fase render.
     const gone = changes.flatMap((c) => (c.type === 'remove' ? [c.id] : []))
-    if (gone.length) recordClosed(gone, nodesRef.current.map(toWsNode), activeWsRef.current)
+    if (gone.length) {
+      recordClosed(gone, nodesRef.current.map(toWsNode), activeWsRef.current)
+      // Satu node bisa memegang banyak PTY (split pane), jadi yang ditutup adalah tiap DAUN-nya:
+      // `close` untuk id node saja meninggalkan shell pane kedua dan seterusnya hidup tanpa pemilik
+      // sampai server restart. Di LUAR updater, alasannya sama dengan `recordClosed`: updater
+      // setState bisa dijalankan lebih dari sekali dan efeknya ikut terkirim dua kali.
+      for (const sid of paneSessionIds(nodesRef.current, gone)) send({ t: 'close', id: sid })
+    }
     setNodes((prev) => {
       const next = applyNodeChanges(changes, prev)
       nodesRef.current = next
-      if (changes.some((c) => c.type === 'remove')) {
-        for (const c of changes) if (c.type === 'remove') send({ t: 'close', id: c.id })
-      }
       // 'add' ikut dihitung: node yang dibuat di dalam node lain (FilesNode membuka file sebagai
       // node editor di sebelahnya) masuk lewat `addNodes`, bukan lewat `addFlowNode` di bawah —
       // tanpa cabang ini node itu tidak pernah tersimpan dan tidak bisa di-undo.

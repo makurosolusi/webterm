@@ -178,8 +178,27 @@ describe('node-chrome.css', () => {
     expect(chip).not.toContain('text-transform')
   })
 
+  it('leaves split-pane geometry to each pane inline style, and sizes dividers per axis', () => {
+    expect(chrome).toContain('.pane-host { position: relative; width: 100%; height: 100%; }')
+    // `.pane` TIDAK boleh menyebut ukuran: tiap pane diposisikan `paneLayout` lewat inline style,
+    // dan satu deklarasi di sini menimpanya untuk SEMUA pane sekaligus — keempat pane 2×2 akan
+    // menumpuk di satu tempat. Satu-satunya blok `.pane {`, supaya aturan kedua di bawahnya (yang
+    // justru dipakai cascade) tidak lolos.
+    expect(chrome.match(/^\.pane \{/gm) ?? []).toHaveLength(1)
+    const leaf = chrome.slice(chrome.indexOf('.pane {'), chrome.indexOf('/* Penanda pane aktif'))
+    expect(leaf).toContain('position: absolute')
+    expect(leaf).not.toContain('width')
+    expect(leaf).not.toContain('height')
+    // Sumbu pembatas, kontrak yang sama yang dibaca `ratioFromPointer`: 'h' membelah sumbu x jadi
+    // pembatasnya TEGAK dan tebalnya `width`; 'v' sebaliknya. Tertukar = pita setipis nol yang
+    // tidak bisa ditangkap kursor.
+    expect(chrome).toContain(".pane-divider[aria-orientation='vertical'] { width: 6px; cursor: col-resize; }")
+    expect(chrome).toContain(".pane-divider[aria-orientation='horizontal'] { height: 6px; cursor: row-resize; }")
+  })
+
   it('defines the rest of the chrome vocabulary', () => {
     for (const cls of [
+      '.pane-host', '.pane--active', '.pane-divider', '.pane-split-btns',
       '.node-header', '.node-title--edit', '.node-swatch', '.node-swatch-pop',
       '.icon-btn--danger', '.icon-btn--active', '.node-chevron', '.node-chevron--collapsed',
       '.node-body', '.term-node--collapsed',
