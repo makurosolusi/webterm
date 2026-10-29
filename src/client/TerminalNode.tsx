@@ -10,6 +10,7 @@ import { closeLeaf, leafIds, nextPaneId, rootPane, setRatio, splitLeaf } from '.
 import { useSpeechInput } from './useSpeechInput'
 import { send } from './ws'
 import type { Comment, Pane } from '../shared/workspace'
+import { randomId } from './randomId'
 
 const COLLAPSED_H = 40
 
@@ -77,7 +78,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
   }
 
   const addComment = (text: string) =>
-    rf.updateNodeData(id, { comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now() }] })
+    rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })
 
   /** Pane baru lahir di sebelah (`h`) atau di bawah (`v`) `target`, dan langsung jadi pane aktif —
    *  seperti Ghostty/tmux, di mana split berikutnya membelah yang baru itu. */

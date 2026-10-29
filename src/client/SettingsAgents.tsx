@@ -11,6 +11,7 @@ import {
   type BuiltinAgentId,
 } from '../shared/workspace'
 import { ColorField, Field, SelectField, TextField, ToggleField } from './SettingsFields'
+import { randomId } from './randomId'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
   { value: 'manual', label: 'manual — tanya tiap aksi' },
@@ -49,7 +50,7 @@ export function AgentSettings({
     onChange({
       customAgents: [
         ...s.customAgents,
-        { id: `custom:${crypto.randomUUID()}`, label: 'Custom agent', launchCmd: '' },
+        { id: `custom:${randomId()}`, label: 'Custom agent', launchCmd: '' },
       ],
     })
 

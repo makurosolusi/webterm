@@ -21,6 +21,7 @@ import { resolveTerminalTheme } from './themes'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
 import { spawnAt, spawnPosition } from './nodeSpawn'
+import { randomId } from './randomId'
 import { spawnSpot } from './canvasMenu.geometry'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
@@ -216,11 +217,11 @@ export default function App() {
     })
   }, [scheduleSave, pushLayout, settings.defaultNodeWidth, settings.defaultNodeHeight])
 
-  const onAddTerminal = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'terminal', cwd: ws.cwd }), at), [addFlowNode])
+  const onAddTerminal = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'terminal', cwd: ws.cwd }), at), [addFlowNode])
 
   // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
-  const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
+  const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
 
   // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
   // saat mount (lalu mem-persist-nya lewat `onSession` di bawah). Mencetaknya di sini membuat
@@ -228,7 +229,7 @@ export default function App() {
   // dengan `--resume <uuid>` yang belum pernah ada di disk → "No conversation found with session ID".
   const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => {
     const color = agentConfig(agentId)?.color
-    addFlowNode((_, ws) => ({ id: crypto.randomUUID(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }), at)
+    addFlowNode((_, ws) => ({ id: randomId(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }), at)
   }, [addFlowNode])
 
   // A node minted its own session uuid (or restarted): persist it to that node.

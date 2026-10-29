@@ -13,6 +13,7 @@ import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
 import { EXIT_SETTLE_MS, ineligibleHint, restartEligibility, sendExitSequence } from './agentActions'
 import { send, subscribeStatus, getStatus } from './ws'
 import { unwatchNode, watchNode } from './unread'
+import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
 
@@ -64,7 +65,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   }, [selected, id])
 
   // Pre-generated session UUID enables claude --session-id (and later --resume).
-  const [sid, setSid] = useState<string>(sessionId ?? crypto.randomUUID())
+  const [sid, setSid] = useState<string>(sessionId ?? randomId())
   // DITURUNKAN dari props, tidak dipaku `false`: node yang datang sudah ber-`sessionId` pernah
   // diluncurkan, dan meluncurkannya ulang dengan `--session-id` yang sama ditolak CLI. Lihat
   // `resumesOnFirstLaunch`. Initializer lazy supaya ia dibaca sekali per mount — bukan tiap render,
@@ -100,7 +101,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   // Dideklarasikan SEBELUM `useSpeechInput` di bawah, yang memakainya sebagai permukaan error.
   const addComment = (text: string, author?: string) =>
     rf.updateNodeData(id, {
-      comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now(), ...(author ? { author } : {}) }],
+      comments: [...comments, { id: randomId(), text, ts: Date.now(), ...(author ? { author } : {}) }],
     })
 
   // Kegagalan dikte DILAPORKAN ke thread aktivitas node (field `comments`), bukan ditelan: webterm
@@ -120,7 +121,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   // claude menolak memakai ulang `--session-id` yang sudah ada.
   const newSession = () => {
     send({ t: 'close', id })
-    const n = crypto.randomUUID()
+    const n = randomId()
     setSid(n); setResume(false); onSession(id, n); setGen((g) => g + 1)
   }
   // Resume menyambung kembali percakapan sebelumnya lewat uuid yang SAMA + `--resume`.
