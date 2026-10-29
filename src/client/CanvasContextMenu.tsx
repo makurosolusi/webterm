@@ -75,10 +75,17 @@ export default function CanvasContextMenu({ x, y, rows, onClose }: CanvasContext
   useEffect(() => {
     // `capture`: terminal xterm di bawahnya menghentikan propagasi pointer-nya sendiri, jadi
     // listener fase bubble tidak akan pernah melihat klik yang jatuh di atas terminal.
-    const close = (): void => onClose()
+    //
+    // Pointerdown DI DALAM panel dibiarkan: ia menutup panel sebelum `click` terbentuk (click
+    // menuntut pointerdown & pointerup di elemen yang sama), jadi barisnya lenyap dan aksinya
+    // tidak pernah jalan. Ref root sudah mencakup flyout submenu — ia anak panel, bukan portal
+    // tersendiri; itu yang dijaga test "baris di dalam flyout submenu tetap bisa dipilih".
+    const close = (e: Event): void => {
+      if (!place.ref.current?.contains(e.target as Node)) onClose()
+    }
     window.addEventListener('pointerdown', close, true)
     return () => window.removeEventListener('pointerdown', close, true)
-  }, [onClose])
+  }, [onClose, place.ref])
 
   // Fokus panelnya, bukan barisnya: seluruh navigasi digerakkan satu `onKeyDown` di sini, jadi
   // tidak ada fokus yang perlu dipindah-pindahkan antar elemen saat submenu membuka dan menutup.
@@ -165,7 +172,6 @@ export default function CanvasContextMenu({ x, y, rows, onClose }: CanvasContext
       aria-activedescendant={activeId}
       tabIndex={-1}
       onKeyDown={onKeyDown}
-      onPointerDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
       {rows.map((row, i) =>

@@ -56,6 +56,14 @@ const pane = (): HTMLElement => {
 
 const menu = () => document.querySelector('[role="menu"]')
 
+/** Satu klik SEPERTI BROWSER: `pointerdown` lebih dulu, baru `click`. `fireEvent.click` saja tidak
+ *  pernah mengirim `pointerdown`, jadi pembubar menu tidak pernah jalan — test yang cuma meng-klik
+ *  tetap hijau di atas menu yang mati total di browser. Itulah cara bug ini lolos sebelumnya. */
+function pointerClick(el: HTMLElement): void {
+  fireEvent.pointerDown(el)
+  fireEvent.click(el)
+}
+
 /** Posisi node React Flow dibaca dari `transform` wrapper-nya — itulah yang BENAR-BENAR digambar,
  *  bukan apa yang ada di state. `translate(Xpx, Ypx)`. */
 function nodePositions(kind: string): { x: number; y: number }[] {
@@ -157,6 +165,60 @@ describe('menu konteks canvas', () => {
     fireEvent.click(await screen.findByText(MENU_LABELS.selectAll))
 
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node.selected')).toHaveLength(1))
+  })
+
+  // Pembubar menu dulu menutup panel pada pointerdown MANA PUN, termasuk yang mendarat di dalam
+  // panel itu sendiri: barisnya lenyap sebelum `click` terbentuk, jadi aksinya tak pernah jalan.
+  // Test-test di atas tidak melihatnya karena `fireEvent.click` tidak mengirim `pointerdown`.
+  it('New terminal tetap melahirkan node saat diklik dengan pointerdown lebih dulu', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.contextMenu(pane(), CLICK)
+
+    pointerClick(await screen.findByText(MENU_LABELS.terminal))
+
+    await waitFor(() => expect(nodePositions('terminal')).toHaveLength(1))
+    await waitFor(() => expect(menu()).toBeNull())
+  })
+
+  it('pointerdown di dalam panel tidak menutup menunya', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.contextMenu(pane(), CLICK)
+
+    fireEvent.pointerDown(await screen.findByText(MENU_LABELS.terminal))
+
+    expect(menu()).not.toBeNull()
+  })
+
+  // Flyout submenu dirender DI DALAM panel root, bukan di portal-nya sendiri — jadi `contains()`
+  // pada ref root mencakupnya. Kalau suatu saat ia dipindah ke portal terpisah, test ini yang
+  // merah, bukan pengguna yang menemukannya: klik baris submenu akan menutup menu tanpa aksi.
+  it('baris di dalam flyout submenu tetap bisa dipilih', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.contextMenu(pane(), CLICK)
+    fireEvent.mouseEnter(await screen.findByText(MENU_LABELS.agentGroup))
+
+    const subRow = await waitFor(() => {
+      const el = document.querySelector('.node-menu__sub button')
+      if (!el) throw new Error('flyout submenu tidak terbuka')
+      return el as HTMLElement
+    })
+    pointerClick(subRow)
+
+    await waitFor(() => expect(nodePositions('agent')).toHaveLength(1))
+    expect(menu()).toBeNull()
+  })
+
+  // Kasus yang melahirkan listener fase CAPTURE: `stopPropagation` di bawah meniru xterm, yang
+  // menelan propagasi pointer-nya sendiri. Pembubar fase-bubble tidak akan pernah melihat klik ini.
+  it('klik di luar menu tetap menutupnya walau propagasi pointer ditelan di bawahnya', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.contextMenu(pane(), CLICK)
+    await waitFor(() => expect(menu()).not.toBeNull())
+    pane().addEventListener('pointerdown', (e) => e.stopPropagation())
+
+    fireEvent.pointerDown(pane())
+
+    await waitFor(() => expect(menu()).toBeNull())
   })
 
   // Bukan bagian menu, tapi akibat langsung dari wiring di atas: `onAddFiles` kini punya parameter

@@ -102,6 +102,12 @@ export default function App() {
     }, 400)
   }, [])
 
+  // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
+  // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
+  // di test ia menulis lewat `fetch` yang stub-nya sudah dicabut — rejection liar yang tidak bisa
+  // ditelusuri ke test mana pun, dan muncul-hilang tergantung balapan.
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
+
   // Concern viewport — readout zoom, zoom/fit, riwayat pandangan. Lihat `./canvasViewport`:
   // `viewportRef` dipinjam ke sana, jadi `scheduleSave` di atas mem-persist viewport yang
   // ditulis hook itu, bukan salinan yang sudah basi. Dideklarasikan SEBELUM `applyWorkspace`

@@ -48,6 +48,19 @@ function stubClipboard(value: unknown): void {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value })
 }
 
+/** Pane terminal yang BENAR-BENAR dirender (satu per daun pohon pane). Jumlahnya inilah bukti
+ *  sebuah split terjadi: state pohon yang benar tapi tidak pernah dirender bukan split. */
+const panes = (): HTMLElement[] =>
+  Array.from(document.querySelectorAll('.react-flow__node-terminal [data-pane-id]'))
+
+/** Satu klik SEPERTI BROWSER: `pointerdown` lebih dulu, baru `click`. Bedanya bukan kosmetik —
+ *  `fireEvent.click` saja tidak pernah mengirim `pointerdown`, jadi listener pembubar menu tidak
+ *  pernah jalan dan test yang cuma meng-klik akan hijau di atas menu yang mati total di browser. */
+function pointerClick(el: HTMLElement): void {
+  fireEvent.pointerDown(el)
+  fireEvent.click(el)
+}
+
 /** Klik kanan yang `cancelable`, supaya `defaultPrevented` punya arti. */
 async function openMenu(): Promise<MouseEvent> {
   const ev = new MouseEvent('contextmenu', { ...CLICK, bubbles: true, cancelable: true })
@@ -112,6 +125,52 @@ describe('menu konteks node terminal', () => {
     fireEvent.click(row('Clear'))
 
     expect(clear).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(nodeMenu()).toBeNull())
+  })
+
+  // Keluhan aslinya: Split di HEADER node bekerja, baris Split di menu klik-kanan tidak. Menunya
+  // muncul, menunya tertutup saat diklik, aksinya tak pernah terjadi — karena pembubar menu
+  // menutup panel pada pointerdown mana pun, termasuk pointerdown yang mendarat di dalam panel
+  // itu sendiri. Barisnya lenyap sebelum `click` terbentuk, jadi `onClick` tidak pernah terpanggil.
+  it('Split right di baris menu benar-benar membelah pane, bukan cuma menutup menunya', async () => {
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    expect(panes()).toHaveLength(1)
+    await openMenu()
+
+    pointerClick(row('Split right'))
+
+    await waitFor(() => expect(panes()).toHaveLength(2))
+    expect(nodeMenu()).toBeNull()
+  })
+
+  it('pointerdown di dalam panel tidak menutup menunya', async () => {
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await openMenu()
+
+    fireEvent.pointerDown(row('Split down'))
+
+    expect(nodeMenu()).not.toBeNull()
+  })
+
+  // Justru kasus inilah yang melahirkan listener fase CAPTURE, jadi ia yang paling mudah ikut
+  // rusak saat pembubarnya diperbaiki. `stopPropagation` di badan node meniru apa yang dilakukan
+  // xterm pada pointer-nya sendiri: pembubar fase-bubble tidak akan pernah melihat klik ini.
+  it('klik di luar menu tetap menutupnya walau terminal menelan propagasi pointer-nya', async () => {
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await openMenu()
+    termBody().addEventListener('pointerdown', (e) => e.stopPropagation())
+
+    fireEvent.pointerDown(panes()[0])
+
+    await waitFor(() => expect(nodeMenu()).toBeNull())
+  })
+
+  it('Escape menutup menu', async () => {
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await openMenu()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
     await waitFor(() => expect(nodeMenu()).toBeNull())
   })
 })

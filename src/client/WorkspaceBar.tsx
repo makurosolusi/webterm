@@ -226,10 +226,11 @@ export default function WorkspaceBar({
                       // Klik kebab TIDAK berpindah workspace (nodeterm sama): menu ini juga jalan
                       // untuk tab yang tidak aktif, dan membuka menu bukan permintaan pindah board.
                       e.stopPropagation()
-                      // Tanpa cabang toggle "klik lagi untuk menutup": `NodeContextMenu` sudah
-                      // menutup diri pada pointerdown mana pun lewat listener CAPTURE di window,
-                      // yang jalan sebelum handler ini — jadi menu selalu sudah tertutup di sini
-                      // dan cabang itu tidak akan pernah benar. Penutupnya: klik di luar + Escape.
+                      // Tanpa cabang toggle "klik lagi untuk menutup": `NodeContextMenu` menutup
+                      // diri pada pointerdown di luar panelnya lewat listener CAPTURE di window,
+                      // dan kebab ini ada di luar panel itu. Listener-nya jalan sebelum handler
+                      // ini, jadi menu selalu sudah tertutup di sini dan cabang itu tidak akan
+                      // pernah benar. Penutupnya: klik di luar + Escape.
                       const r = e.currentTarget.getBoundingClientRect()
                       setMenu({ id: g.projectId, x: r.left, y: r.bottom + MENU_GAP })
                     }}

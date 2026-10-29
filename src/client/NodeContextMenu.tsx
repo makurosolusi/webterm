@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import './agent.css'
 
@@ -33,8 +33,15 @@ export default function NodeContextMenu({
   rows: MenuRow[]
   onClose: () => void
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
-    const close = (): void => onClose()
+    // Pointerdown DI DALAM panel dibiarkan: ia menutup panel sebelum `click` terbentuk (click
+    // menuntut pointerdown & pointerup di elemen yang sama), jadi barisnya lenyap dan `onClick`
+    // tidak pernah terpanggil — seluruh menu tampak muncul lalu diam.
+    const close = (e: Event): void => {
+      if (!ref.current?.contains(e.target as Node)) onClose()
+    }
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
     }
@@ -49,9 +56,9 @@ export default function NodeContextMenu({
 
   return createPortal(
     <div
+      ref={ref}
       className="node-menu nodrag nopan"
       style={{ left: x, top: y }}
-      onPointerDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
       role="menu"
     >
