@@ -1,6 +1,7 @@
 /* Sidebar sesi (kiri). Angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css`
-   (.sessions-sidebar 9790, .ss-tab 9880, .ss-row 10050, .ss-group__head 9960,
-   .sessions-icon-cluster 10420) — bukan karangan.
+   (.sessions-sidebar 9790, .ss-tab 9880, .ss-row 10050, .ss-group__head 9960) — bukan karangan.
+   Pelontarnya TIDAK di sini: ia tombol dock biasa (`dock.css`), karena plat terapung kedua di
+   tepi kiri adalah yang dulu bertumpuk dengan dock.
    Token --card-rgb/--menu-rgb/--shadow-k/--tint-rgb/--controls-w milik styles.css
    (wkr-chrome-01); tiap var() punya fallback nilai nodeterm supaya tampilan tidak pecah
    kalau namanya bergeser.
@@ -10,6 +11,9 @@
    wajar bernilai 0 di webterm) justru akan menaruhnya di bawah switcher. */
 :root {
   --ss-top-chrome: 46px;
+  /* Lebar panel, dan satu-satunya sumbernya: `dock.css` menggeser kolom dock sejauh angka ini saat
+     panel terbuka. Disalin ke dua sheet, keduanya bebas menyimpang dan docknya menindih lagi. */
+  --ss-w: 300px;
 }
 
 .sessions-sidebar {
@@ -17,7 +21,7 @@
   top: calc(var(--ss-top-chrome) + var(--float-gap));
   left: var(--float-gap);
   z-index: 12;
-  width: 300px;
+  width: var(--ss-w);
   max-height: calc(100vh - var(--ss-top-chrome) - 2 * var(--float-gap) - 26px);
   display: flex;
   flex-direction: column;
@@ -483,54 +487,3 @@
   color: var(--state-attention);
 }
 
-/* ---- Keadaan terlipat: satu tombol 34px ---- */
-.sessions-icon-cluster {
-  position: absolute;
-  top: calc(var(--ss-top-chrome) + var(--float-gap));
-  left: var(--float-gap);
-  z-index: 11;
-}
-
-.sessions-icon-cluster > button {
-  position: relative;
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(var(--menu-rgb, 40, 40, 42), 0.92);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--text);
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, calc(0.3 * var(--shadow-k, 1)));
-}
-
-.sessions-icon-cluster > button:hover {
-  background: var(--panel-header);
-}
-
-.sessions-icon-cluster > button svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* Jumlah sesi yang menuntut perhatian terbaca TANPA membuka panel — itu satu-satunya alasan
-   keadaan terlipat masih layak dipakai. */
-.ss-cluster__badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--state-attention);
-  color: #fff;
-  font-size: 9.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}

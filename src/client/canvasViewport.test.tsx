@@ -62,7 +62,7 @@ describe('useCanvasViewport — zoom & fit', () => {
     expect(scheduleSave).toHaveBeenCalledTimes(1)
   })
 
-  it('zoom in/out memakai durasi 150 dan sync 170 — satu definisi, dua pemakai (ZoomRail + Dock)', () => {
+  it('zoom in/out memakai durasi 150 dan sync 170 — satu definisi, dua pemakai (Dock + menu konteks)', () => {
     const { result, fake, scheduleSave } = mountViewport()
     act(() => result.current.onZoomIn())
     expect(fake.zoomIn).toHaveBeenCalledWith({ duration: 150 })

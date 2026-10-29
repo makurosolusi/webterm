@@ -29,6 +29,21 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)));
+  transition: left 160ms ease;
+}
+
+/* Panel Sessions terbuka: dock minggir ke KANAN panel, tidak bersembunyi di belakangnya. Menurunkan
+   z-index-nya saja akan menyembunyikan dock sekaligus mematikan tiap tombolnya selama panel terbuka —
+   satu bug ditukar bug lain. Lebarnya dibaca dari `--ss-w` (sessions-panel.css), satu-satunya sumber
+   angka itu, plus satu --float-gap sebagai jarak antar plat. */
+.dock--shifted {
+  left: calc(var(--ss-w) + 2 * var(--float-gap));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock {
+    transition: none;
+  }
 }
 
 .dock-btn {

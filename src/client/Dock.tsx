@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
-  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen,
+  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft,
 } from 'lucide-react'
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
@@ -17,6 +17,11 @@ export interface DockProps {
   onBack: () => void; onForward: () => void; canBack: boolean; canForward: boolean
   onFit: () => void
   onToggleBoard: () => void
+  /** Panel Sessions terbuka? Tombol pembukanya hidup DI SINI (dock dan panel sama-sama diangkur ke
+   *  tepi kiri; dua plat mengapung di tepi yang sama adalah yang dulu saling menutupi), jadi dock
+   *  juga yang harus minggir: lihat `.dock--shifted` di dock.css. */
+  sessionsOpen: boolean
+  onToggleSessions: () => void
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
   /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
   onZoomTo?: (pct: number) => void
@@ -70,7 +75,19 @@ export default function Dock(props: DockProps) {
   return (
     <>
       {menu && <div className="dock-backdrop" onClick={close} />}
-      <div className="dock">
+      <div className={`dock${props.sessionsOpen ? ' dock--shifted' : ''}`}>
+        {/* Di ujung ATAS kolom, dipisah dari sisanya: satu-satunya tombol dock yang membuka
+            permukaan lain alih-alih bekerja pada canvas. */}
+        <button
+          className={`dock-btn${props.sessionsOpen ? ' active' : ''}`}
+          aria-label="Toggle sessions panel"
+          title={props.sessionsOpen ? 'Hide sessions' : 'Show sessions'}
+          aria-pressed={props.sessionsOpen}
+          onClick={props.onToggleSessions}
+        ><PanelLeft size={ICON} /></button>
+
+        <div className="dock-sep" />
+
         <div className="dock-slot">
           {menu === 'add' && (
             <div className="dock-menu dock-add-menu">

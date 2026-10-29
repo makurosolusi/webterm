@@ -9,7 +9,7 @@ import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import CanvasToolbar from './CanvasToolbar'
-import SessionsPanel from './SessionsPanel'
+import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import HelpOverlay from './HelpOverlay'
 import { SettingsPanel } from './SettingsPanel'
 import { nodeTypes } from './nodeTypes'
@@ -50,6 +50,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [locked, setLocked] = useState(false)
+  // Di App, bukan di dalam panel: tombol pembukanya ada di Dock dan geseran dock ikut keadaan ini.
+  const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
   const { settings, update } = useSettings()
   const { entries: closedSessions, record: recordClosed, reopen: reopenClosed } = useClosedHistory(workspaces, nodes)
 
@@ -344,6 +346,8 @@ export default function App() {
             canForward={canForward}
             onFit={onFit}
             onToggleBoard={() => setBoard((v) => !v)}
+            sessionsOpen={sessionsOpen}
+            onToggleSessions={() => setSessionsOpen((v) => !v)}
             zoomPct={Math.round(zoom * 100)}
             onZoomIn={onZoomIn}
             onZoomOut={onZoomOut}
@@ -362,6 +366,8 @@ export default function App() {
             onOpenHelp={() => setShowHelp(true)}
           />
           <SessionsPanel
+            open={sessionsOpen}
+            onClose={() => setSessionsOpen(false)}
             workspaces={workspaces}
             activeId={activeId}
             liveActiveNodes={liveNodes}

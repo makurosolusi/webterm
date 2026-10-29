@@ -6,7 +6,7 @@
 // mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useEffect, useMemo, useState } from 'react'
-import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, PanelLeft, Terminal, X } from 'lucide-react'
+import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, Terminal, X } from 'lucide-react'
 import SessionRow from './SessionRow'
 import {
   buildSessionList,
@@ -54,6 +54,11 @@ const COLLAPSED_KEY = 'webterm.sessionsCollapsed'
 const CLOSED_KEY = 'closed'
 
 export interface SessionsPanelProps {
+  /** Terkontrol: tombol pembukanya ada di Dock, jadi keadaan ini dimiliki integrator (lihat
+   *  `useSessionsOpen` di bawah). Tertutup = panel tidak merender apa pun — TIDAK ada tombol
+   *  pelontar kedua di tepi kiri. */
+  open: boolean
+  onClose: () => void
   /** Semua workspace, urutan tampil mengikuti urutan array ini. */
   workspaces: Workspace[]
   activeId: string | null
@@ -80,6 +85,23 @@ function readOpen(): boolean {
   }
 }
 
+/**
+ * Keadaan buka/tutup panel + persistensinya, dipakai integrator (`App`). Hidup DI LUAR panel karena
+ * tombol pembukanya ada di Dock: dua permukaan membaca satu keadaan, dan state di dalam panel
+ * membuat panel yang tertutup jadi satu-satunya yang tahu ia tertutup.
+ */
+export function useSessionsOpen() {
+  const [open, setOpen] = useState(readOpen)
+  useEffect(() => {
+    try {
+      localStorage.setItem(PIN_KEY, open ? '1' : '0')
+    } catch {
+      // Penyimpanan ditolak (mode privat): pilihan buka/tutup berlaku untuk sesi tab ini saja.
+    }
+  }, [open])
+  return [open, setOpen] as const
+}
+
 function readCollapsed(): Record<string, boolean> {
   // Sama seperti `readOpen`: akses localStorage sendiri bisa melempar (mode privat / site data
   // diblokir), dan panel harus tetap jalan tanpa penyimpanan.
@@ -96,8 +118,7 @@ function monogram(name: string): string {
 
 export default function SessionsPanel(props: SessionsPanelProps) {
   const { workspaces, activeId, liveActiveNodes, statuses, onFocusNode, onCloseSession, onSelectWorkspace } = props
-  const { closedSessions = [], onReopenSession } = props
-  const [open, setOpen] = useState(readOpen)
+  const { open, onClose, closedSessions = [], onReopenSession } = props
   const [grouping, setGrouping] = useState<SidebarGrouping>('project')
   const [filter, setFilter] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed)
@@ -105,14 +126,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   // panel ini bisa di-mount setelah status pertama sudah lewat.
   const [unread, setUnread] = useState<ReadonlySet<string>>(unreadIds)
   useEffect(() => subscribeUnread(setUnread), [])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PIN_KEY, open ? '1' : '0')
-    } catch {
-      // Penyimpanan ditolak (mode privat): pilihan buka/tutup berlaku untuk sesi tab ini saja.
-    }
-  }, [open])
 
   useEffect(() => {
     try {
@@ -137,7 +150,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   )
 
   const total = sections.reduce((n, s) => n + s.rows.length, 0)
-  const attention = sections.find((s) => s.kind === 'attention')?.rows.length ?? 0
   const rowCount =
     grouping === 'nodes'
       ? nodeGroups.reduce((n, g) => n + g.rows.length, 0)
@@ -148,18 +160,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   // Tab Nodes mendaftar lebih dari sesi, jadi pesan kosongnya tidak boleh bilang "sessions".
   const noun = grouping === 'nodes' ? 'nodes' : 'sessions'
 
-  // Hover TIDAK membuka: panel yang muncul sendiri saat kursor lewat adalah yang dikeluhkan.
-  // Satu-satunya jalan membuka adalah klik tombol di bawah.
-  if (!open) {
-    return (
-      <div className="sessions-icon-cluster nodrag">
-        <button type="button" aria-label="Show sessions" title="Sessions" onClick={() => setOpen(true)}>
-          <PanelLeft aria-hidden />
-          {attention > 0 && <span className="ss-cluster__badge">{attention}</span>}
-        </button>
-      </div>
-    )
-  }
+  // Tertutup = tidak ada apa pun di tepi kiri. Hover TIDAK pernah membuka (panel yang muncul
+  // sendiri saat kursor lewat adalah yang dikeluhkan), dan satu-satunya pelontarnya ada di Dock.
+  if (!open) return null
 
   const toggle = (key: string, cur: boolean) => setCollapsed((prev) => ({ ...prev, [key]: !cur }))
   // Default TERBUKA, beda dari baris workspace: seksi ini cuma muncul kalau ada isinya, jadi
@@ -180,7 +183,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             className="ss-iconbtn"
             aria-label="Hide sessions panel"
             title="Hide"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
           >
             <X aria-hidden />
           </button>

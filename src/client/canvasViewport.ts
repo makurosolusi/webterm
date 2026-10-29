@@ -4,7 +4,7 @@
 // posisi tidak tersimpan, atau tombol back yang mati.
 //
 // KENAPA BUKAN DI App.tsx. App menembus hard limit 20.000 karakter (Rule 8), dan `zoomIn`/`zoomOut`
-// sempat ditulis DUA KALI identik di sana (sekali untuk ZoomRail, sekali untuk Dock) justru karena
+// sempat ditulis DUA KALI identik di sana (sekali untuk rail zoom lama, sekali untuk Dock) justru karena
 // tidak ada tempat bersama untuk menaruhnya — dua salinan durasi animasi yang bebas menyimpang.
 // Satu definisi di sini = satu durasi.
 //
@@ -70,7 +70,7 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
     scheduleSave()
   }, [viewportRef, scheduleSave])
 
-  // Satu definisi untuk tiga jalan masuk (ZoomRail, Dock, menu konteks) — durasinya tidak menyimpang.
+  // Satu definisi untuk dua jalan masuk (Dock, menu konteks) — durasinya tidak menyimpang.
   const onFit = useCallback(() => {
     rf.current?.fitView({ duration: 300 })
     syncViewport(320)
