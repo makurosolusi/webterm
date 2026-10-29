@@ -50,8 +50,8 @@ export function resolveToken(host: string, raw: string | undefined): string | un
   if (token !== '') return token
   if (requiresToken(host)) {
     throw new Error(
-      `WEBTERM_HOST="${host}" is reachable from other machines, which would expose a full shell. ` +
-        `Set WEBTERM_TOKEN to a long random secret, or drop WEBTERM_HOST to stay on ${DEFAULT_HOST}.`
+      `HOST="${host}" is reachable from other machines, which would expose a full shell. ` +
+        `Set WEBTERM_TOKEN to a long random secret, or use a loopback HOST (localhost/127.0.0.1/::1).`
     )
   }
   return undefined

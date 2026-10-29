@@ -1,15 +1,17 @@
 import http from 'node:http'
-import fs from 'node:fs'
-import path from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { DEFAULT_HOST, TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
+import { TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
+import { resolveHostPort } from './serverConfig'
+import { resolveAsset } from './staticAssets'
 
-const PORT = Number(process.env.PORT) || 8700
-const HOST = process.env.WEBTERM_HOST || DEFAULT_HOST
+// Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
+declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
+
+const { host: HOST, port: PORT } = resolveHostPort(process.env)
 // Throws (and so refuses to start) when HOST is reachable off-machine without a token.
 const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
 // Before anything can spawn a PTY: make the env agree with what we enforce, so children that
@@ -56,24 +58,18 @@ if (dev) {
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
 } else {
-  const distDir = path.resolve('dist')
-  const types: Record<string, string> = {
-    '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml',
-  }
-  const indexHtml = path.join(distDir, 'index.html')
+  // Aset di-embed ke binary saat build (bun `with { type: 'file' }`), bukan dibaca dari dist/ di
+  // disk — jadi binary hasil `--compile` jalan sendiri tanpa dist/ di sampingnya. Import dinamis:
+  // modul generated ini mungkin belum dibangun di checkout segar / jalur dev tak boleh memaksanya.
+  const { assets } = await import('./distAssets.generated')
   server.on('request', (req, res) => {
     const url = reqUrl(req)
-    const urlPath = url.pathname
-    if (urlPath.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
     if (handleApi(req, res)) return
-    const resolved = path.resolve(distDir, '.' + urlPath)
-    // Path-traversal guard: never serve outside dist/.
-    const file = resolved.startsWith(distDir) && fs.existsSync(resolved) && fs.statSync(resolved).isFile()
-      ? resolved
-      : indexHtml
-    const ext = path.extname(file)
-    res.setHeader('Content-Type', types[ext] || 'application/octet-stream')
-    fs.createReadStream(file).pipe(res)
+    const hit = resolveAsset(url.pathname, assets)
+    if (!hit) { res.statusCode = 404; res.end('not found'); return }
+    res.setHeader('Content-Type', hit.contentType)
+    Bun.file(hit.assetPath).arrayBuffer().then((buf) => res.end(Buffer.from(buf)))
   })
 }
 
