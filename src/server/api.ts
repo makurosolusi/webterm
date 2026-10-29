@@ -7,6 +7,7 @@ import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
 import { workspacesRoute } from './workspacesApi'
 import { fsApiRoute } from './fsApi'
+import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
 import { hookStatus, type HookStatusBody } from './hookStatus'
 import { renderForRequester, buildLinkDoc, findWorkspaceFor, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
@@ -69,6 +70,10 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const fsRes = await fsApiRoute(path, method, url.searchParams, () => readBody(req))
     .catch(readErrorResult)
   if (fsRes) return json(res, fsRes.status, fsRes.body)
+
+  // Batch git state for a set of node cwds; null for anything else, including a GET of this path.
+  const gitRes = await gitInfoRoute(path, method, () => readBody(req))
+  if (gitRes) return json(res, gitRes.status, gitRes.body)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (path === '/api/agent-status' && method === 'POST') {
