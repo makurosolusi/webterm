@@ -5,8 +5,8 @@
 // Ia state turunan-transport dengan tepat satu pembaca — section "Unread" di panel ini — jadi
 // mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, PanelLeft, Pin, PinOff, Terminal, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, PanelLeft, Terminal, X } from 'lucide-react'
 import SessionRow from './SessionRow'
 import {
   buildSessionList,
@@ -43,13 +43,12 @@ const KIND_ICON: Record<WsNodeKind, typeof Bot> = {
   files: Folder,
 }
 
+/** Kunci persist keadaan terbuka/tertutup. Namanya warisan dari masa panel ini punya hover-peek
+ *  (dulu "pinned" vs "peek"); JANGAN diganti — nilainya sudah tersimpan di browser pengguna. */
 const PIN_KEY = 'webterm.sessionsPinned'
 /** Peta lipatan (JSON `{ kunci: terlipat }`). Dipersist karena membuka ulang board tiap reload
  *  adalah kerja yang pengguna sudah lakukan sekali. */
 const COLLAPSED_KEY = 'webterm.sessionsCollapsed'
-/** Jeda tutup hover-peek. Tanpa jeda, gerak diagonal dari ikon ke panel melewati celah dan
- *  panel tertutup di tengah jalan. Sama dengan nodeterm. */
-const PEEK_CLOSE_MS = 140
 /** Kunci disclosure seksi "Recently closed", berbagi `collapsed` dengan baris workspace. Tidak bisa
  *  bertabrakan: kunci workspace selalu berawalan `project:` (lihat `projectCollapseKey`). */
 const CLOSED_KEY = 'closed'
@@ -71,7 +70,7 @@ export interface SessionsPanelProps {
   onReopenSession?: (nodeId: string) => void
 }
 
-function readPinned(): boolean {
+function readOpen(): boolean {
   // Mode privat / site data diblokir membuat sentuhan ke localStorage sendiri melempar;
   // default-nya tersemat (panel terbuka), jadi sidebar tetap jalan tanpa penyimpanan.
   try {
@@ -82,7 +81,7 @@ function readPinned(): boolean {
 }
 
 function readCollapsed(): Record<string, boolean> {
-  // Sama seperti `readPinned`: akses localStorage sendiri bisa melempar (mode privat / site data
+  // Sama seperti `readOpen`: akses localStorage sendiri bisa melempar (mode privat / site data
   // diblokir), dan panel harus tetap jalan tanpa penyimpanan.
   try {
     return parseCollapsed(localStorage.getItem(COLLAPSED_KEY))
@@ -98,12 +97,10 @@ function monogram(name: string): string {
 export default function SessionsPanel(props: SessionsPanelProps) {
   const { workspaces, activeId, liveActiveNodes, statuses, onFocusNode, onCloseSession, onSelectWorkspace } = props
   const { closedSessions = [], onReopenSession } = props
-  const [pinned, setPinned] = useState(readPinned)
-  const [peek, setPeek] = useState(false)
+  const [open, setOpen] = useState(readOpen)
   const [grouping, setGrouping] = useState<SidebarGrouping>('project')
   const [filter, setFilter] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed)
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Snapshot awal dibaca saat mount: kanal unread tidak memancar ulang saat disubscribe, dan
   // panel ini bisa di-mount setelah status pertama sudah lewat.
   const [unread, setUnread] = useState<ReadonlySet<string>>(unreadIds)
@@ -111,11 +108,11 @@ export default function SessionsPanel(props: SessionsPanelProps) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(PIN_KEY, pinned ? '1' : '0')
+      localStorage.setItem(PIN_KEY, open ? '1' : '0')
     } catch {
-      // Penyimpanan ditolak (mode privat): pilihan pin berlaku untuk sesi tab ini saja.
+      // Penyimpanan ditolak (mode privat): pilihan buka/tutup berlaku untuk sesi tab ini saja.
     }
-  }, [pinned])
+  }, [open])
 
   useEffect(() => {
     try {
@@ -124,18 +121,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       // Penyimpanan ditolak (mode privat): lipatan berlaku untuk sesi tab ini saja.
     }
   }, [collapsed])
-
-  useEffect(() => () => void (closeTimer.current && clearTimeout(closeTimer.current)), [])
-
-  const openPeek = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current)
-    setPeek(true)
-  }, [])
-
-  const closePeekSoon = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current)
-    closeTimer.current = setTimeout(() => setPeek(false), PEEK_CLOSE_MS)
-  }, [])
 
   const groups = useMemo(
     () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter, unread),
@@ -163,10 +148,12 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   // Tab Nodes mendaftar lebih dari sesi, jadi pesan kosongnya tidak boleh bilang "sessions".
   const noun = grouping === 'nodes' ? 'nodes' : 'sessions'
 
-  if (!pinned && !peek) {
+  // Hover TIDAK membuka: panel yang muncul sendiri saat kursor lewat adalah yang dikeluhkan.
+  // Satu-satunya jalan membuka adalah klik tombol di bawah.
+  if (!open) {
     return (
-      <div className="sessions-icon-cluster nodrag" onMouseEnter={openPeek} onMouseLeave={closePeekSoon}>
-        <button type="button" aria-label="Show sessions" title="Sessions" onClick={() => setPinned(true)}>
+      <div className="sessions-icon-cluster nodrag">
+        <button type="button" aria-label="Show sessions" title="Sessions" onClick={() => setOpen(true)}>
           <PanelLeft aria-hidden />
           {attention > 0 && <span className="ss-cluster__badge">{attention}</span>}
         </button>
@@ -180,12 +167,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const closedCollapsed = collapsed[CLOSED_KEY] ?? false
 
   return (
-    <aside
-      className="sessions-sidebar nodrag"
-      aria-label="Sessions"
-      onMouseEnter={openPeek}
-      onMouseLeave={pinned ? undefined : closePeekSoon}
-    >
+    <aside className="sessions-sidebar nodrag" aria-label="Sessions">
       <div className="sessions-sidebar__head">
         {/* Judul DAN hitungan ikut tab aktif: tab Nodes mendaftar editor dan files juga, jadi
             "Sessions" di atasnya menamai — dan `total` menghitung — himpunan lain dari yang
@@ -196,22 +178,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
           <button
             type="button"
             className="ss-iconbtn"
-            aria-pressed={pinned}
-            aria-label={pinned ? 'Unpin sessions panel' : 'Pin sessions panel'}
-            title={pinned ? 'Unpin (peek on hover)' : 'Pin open'}
-            onClick={() => setPinned((v) => !v)}
-          >
-            {pinned ? <Pin aria-hidden /> : <PinOff aria-hidden />}
-          </button>
-          <button
-            type="button"
-            className="ss-iconbtn"
             aria-label="Hide sessions panel"
             title="Hide"
-            onClick={() => {
-              setPinned(false)
-              setPeek(false)
-            }}
+            onClick={() => setOpen(false)}
           >
             <X aria-hidden />
           </button>
