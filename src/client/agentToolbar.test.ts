@@ -63,7 +63,7 @@ const mintsSidAtCreation = (s: string) => /sessionId:\s*crypto\.randomUUID\(\)/.
 /** `AgentNode` mencetak id-nya sendiri saat props-nya kosong, DAN mem-persist-nya sekali. Itu yang
  *  membuat penghapusan di `App.tsx` tidak kehilangan apa pun. */
 const agentNodeMintsOwnSid = (s: string) =>
-  /const \[sid, setSid\] = useState<string>\(sessionId \?\? crypto\.randomUUID\(\)\)/.test(s) &&
+  /const \[sid, setSid\] = useState<string>\(sessionId \?\? randomId\(\)\)/.test(s) &&
   /if \(!sessionId\) onSession\(id, sid\)/.test(s)
 
 describe('titik pembuatan node agent TIDAK mencetak session id', () => {
@@ -84,7 +84,7 @@ describe('titik pembuatan node agent TIDAK mencetak session id', () => {
 
   it('`AgentNode` tetap mencetak dan mem-persist id-nya sendiri', () => {
     expect(agentNodeMintsOwnSid(src('AgentNode.tsx'))).toBe(true)
-    expect(agentNodeMintsOwnSid('const [sid, setSid] = useState<string>(crypto.randomUUID())')).toBe(false)
+    expect(agentNodeMintsOwnSid('const [sid, setSid] = useState<string>(randomId())')).toBe(false)
   })
 })
 

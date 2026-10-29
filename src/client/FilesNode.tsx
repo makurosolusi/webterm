@@ -30,6 +30,7 @@ import {
 } from './fileBrowse'
 import { EDITOR_SIZE, planFileOpen } from './fileOpen'
 import { listKeyAction, scrollTopToReveal, typeAhead } from './filesKeys'
+import { randomId } from './randomId'
 import './files.css'
 
 const COLLAPSED_H = 40
@@ -118,7 +119,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     if (e.dir) { navigate(p); return }
     // Tab browser tidak bisa menyerahkan file ke OS mesin server — katakan, jangan buka buffer sampah.
     if (fileOpenTarget(p) !== 'canvas') { setNotice(`${e.name} needs an application on the server to open.`); return }
-    const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, crypto.randomUUID())
+    const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, randomId())
     if (plan.focus) rf.updateNode(plan.nodeId, { selected: true })
     else addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: e.name }, { ...EDITOR_SIZE, selected: true })
     // Kabel penanda "file ini sedang terbuka". Dibuat langsung, BUKAN lewat `onConnect`: `canLink`
@@ -203,7 +204,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           comments={comments}
           onAddComment={(text) =>
-            rf.updateNodeData(id, { comments: [...comments, { id: crypto.randomUUID(), text, ts: Date.now() }] })}
+            rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           onRefresh={() => setVersion((v) => v + 1)}
           searchOpen={filterOpen} onToggleSearch={() => setFilterOpen((o) => !o)}
           maximized={maximized}
@@ -279,7 +280,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
               </button>
             )
           })()}
-          <button onClick={() => { setMenu(null); addNodeBeside(crypto.randomUUID(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
+          <button onClick={() => { setMenu(null); addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
             <TerminalSquare size={13} /> New terminal here
           </button>
           <button onClick={() => { void createEntry(false); setMenu(null) }}><FilePlus size={13} /> New file…</button>
