@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
-  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft,
+  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus,
 } from 'lucide-react'
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
@@ -30,6 +30,12 @@ export interface DockProps {
    *  pemanggil menyetel panOnDrag/panOnScroll/zoomOnPinch dari state yang sama. */
   locked: boolean
   onToggleLock: () => void
+  /** Clean view menyala? Tombol ini SATU-SATUNYA jalan masuk lewat mouse; jalan keluarnya chord
+   *  ⌘./Ctrl+. karena dock ini sendiri ikut tersembunyi di sana (lihat `cleanView.tsx`). Karena
+   *  itu `aria-pressed`-nya praktis selalu 'false' saat terlihat — ia tetap ditulis supaya keadaan
+   *  tombolnya benar bagi pembaca layar yang menyusuri DOM yang disembunyikan CSS. */
+  cleanView: boolean
+  onToggleCleanView: () => void
   onSave?: () => void; dirty?: boolean
   onLayouts?: () => void
   micActive?: boolean; onToggleMic?: () => void
@@ -207,6 +213,16 @@ export default function Dock(props: DockProps) {
           aria-pressed={props.locked}
           onClick={props.onToggleLock}
         >{props.locked ? <Lock size={ICON} /> : <LockOpen size={ICON} />}</button>
+
+        {/* Bersebelahan dengan lock, kelompok yang sama: dua-duanya toggle MODE, bukan gerakan
+            kamera. */}
+        <button
+          className={`dock-btn${props.cleanView ? ' active' : ''}`}
+          aria-label="Clean view"
+          title="Clean view — hide all chrome (⌘./Ctrl+. to exit)"
+          aria-pressed={props.cleanView}
+          onClick={props.onToggleCleanView}
+        ><Focus size={ICON} /></button>
       </div>
     </>
   )

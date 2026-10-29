@@ -10,6 +10,7 @@ import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import CanvasToolbar from './CanvasToolbar'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
+import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
 import { SettingsPanel } from './SettingsPanel'
 import { nodeTypes } from './nodeTypes'
@@ -52,6 +53,9 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   // Di App, bukan di dalam panel: tombol pembukanya ada di Dock dan geseran dock ikut keadaan ini.
   const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
+  // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
+  // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
+  const [cleanView, toggleCleanView] = useCleanView()
   const { settings, update } = useSettings()
   const { entries: closedSessions, record: recordClosed, reopen: reopenClosed } = useClosedHistory(workspaces, nodes)
 
@@ -354,6 +358,8 @@ export default function App() {
             onZoomTo={onZoomTo}
             locked={locked}
             onToggleLock={() => setLocked((v) => !v)}
+            cleanView={cleanView}
+            onToggleCleanView={toggleCleanView}
             disabledAgents={settings.disabledAgents}
             customAgents={settings.customAgents}
             agentLaunchCommands={settings.agentLaunchCommands}
@@ -382,6 +388,9 @@ export default function App() {
           {paneMenu}
         </>
       )}
+      {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi
+          petunjuk jalan keluarnya juga tidak boleh. */}
+      {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
       {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}

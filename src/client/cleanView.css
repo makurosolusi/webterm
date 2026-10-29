@@ -1,0 +1,69 @@
+/* Clean view — mode fokus. Lihat `cleanView.tsx`: `body.clean-view` dipasang oleh `useCleanView`,
+   dan SEMUA penyembunyiannya ada di satu aturan di bawah. */
+
+/* Yang hilang: header workspace, dock, panel sesi, minimap, cluster kontrol kanan-atas.
+   Yang TETAP: canvas, node, dan header tiap node — tanpa header node tidak bisa ditutup atau
+   digeser dengan enak, dan yang diminta fokus, bukan kios.
+
+   `.dock-backdrop` ikut: ia `position: fixed; inset: 0` tak terlihat yang menangkap klik untuk
+   menutup menu dock, jadi menyalakan clean view selagi sebuah menu terbuka akan meninggalkan
+   lapisan pemakan klik di atas seluruh canvas.
+
+   `display: none`, bukan `visibility: hidden`: `.tabbar` adalah flex item 46px di dalam
+   `.app-shell` dan harus BENAR-BENAR runtuh supaya canvas mengisi layar.
+
+   TIDAK ADA hover-reveal / proximity-reveal di sini. nodeterm punya itu dan komentarnya sendiri
+   memperingatkan bahwa pita hover tak terlihat "memakan klik di baris yang justru dipakai shell
+   untuk prompt". */
+body.clean-view .tabbar,
+body.clean-view .dock,
+body.clean-view .dock-backdrop,
+body.clean-view .sessions-sidebar,
+body.clean-view .minimap-dock,
+body.clean-view .controls-cluster {
+  display: none;
+}
+
+/* Petunjuk jalan keluar yang redup sendiri.
+
+   `pointer-events: none` WAJIB dan bukan kosmetik: ia melayang di atas canvas tempat shell
+   menggambar prompt-nya, dan pita tak terlihat yang memakan klik adalah tepat kegagalan yang
+   dicatat hover-reveal nodeterm.
+
+   Hanya OPACITY yang dianimasikan (bukan transform/posisi), jadi tidak ada override
+   `prefers-reduced-motion`: fade bukan gerak, dan `animation: none` di sana justru akan
+   meninggalkan petunjuknya di layar selamanya. */
+.clean-view-hint {
+  position: fixed;
+  bottom: var(--float-gap);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(var(--menu-rgb), 0.92);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)));
+  pointer-events: none;
+  /* `forwards`: tanpa fill-mode ia melompat balik ke opacity penuh begitu animasinya selesai dan
+     menetap di layar. Tahan penuh dulu, baru pudar — petunjuk yang langsung mulai memudar terbaca
+     sebagai kedipan, bukan kalimat. */
+  animation: clean-view-hint-fade 4.5s ease-out forwards;
+}
+
+@keyframes clean-view-hint-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
