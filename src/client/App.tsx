@@ -8,6 +8,7 @@ import Dock from './Dock'
 import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
+import Login from './Login'
 import CanvasToolbar from './CanvasToolbar'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import { CleanViewHint, useCleanView } from './cleanView'
@@ -27,7 +28,7 @@ import { useCanvasViewport } from './canvasViewport'
 import { useLayoutHistory } from './layoutHistory'
 import { paneSessionIds } from './paneTree'
 import { send, subscribeStatus } from './ws'
-import { saveWorkspace } from './api'
+import { saveWorkspace, validateToken, storeToken, clearToken, hasToken } from './api'
 import { useWorkspaceLifecycle } from './workspaceLifecycle'
 import { useClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -40,6 +41,8 @@ export default function App() {
   // "Belum tahu" vs "memang tidak ada": sebelum fetch pertama selesai keduanya sama-sama daftar
   // kosong, dan `Welcome` yang dirender atas dasar itu selalu berkelebat sekejap.
   const [hydrated, setHydrated] = useState(false)
+  // Dinaikkan saat boot fetch menjawab 403 (lihat workspaceLifecycle): render Login, bukan board.
+  const [authRequired, setAuthRequired] = useState(false)
   const [activeWs, setActiveWs] = useState<Workspace | null>(null)
   // Diturunkan, bukan state sendiri: id dan board-nya pernah di-commit terpisah, dan tiap jeda
   // antara keduanya adalah satu render dengan canvas yang sudah pindah tapi datanya belum ada.
@@ -245,9 +248,18 @@ export default function App() {
   const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onNewProject } =
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
-      setWorkspaces, setActiveWs, setHydrated, setNodes, setEdges, setBoard, setPicker,
+      setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
       activeWsRef, nodesRef, edgesRef, saveTimer, rf,
     })
+
+  // Token disimpan lalu halaman di-reload: `api.ts` menangkap token sekali saat import, jadi hanya
+  // load berikutnya yang membacanya kembali — reload adalah cara termalas yang benar, bukan membuat
+  // modul token bisa dimutasi hidup-hidup.
+  const onLogin = useCallback(async (t: string) => {
+    if (await validateToken(t)) { storeToken(t); location.reload(); return true }
+    return false
+  }, [])
+  const onLogout = useCallback(() => { clearToken(); location.reload() }, [])
 
   // Lewat `onNodesChange`, bukan setNodes langsung: riwayat & persistensi menggantung di sana.
   const onSelectAll = useCallback(() => {
@@ -278,6 +290,10 @@ export default function App() {
 
   const noWorkspaces = workspaces.length === 0
 
+  // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
+  // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
+  if (authRequired) return <div className="app-shell"><Login onSubmit={onLogin} /></div>
+
   return (
     <SettingsProvider value={settings}>
     <NodeActionsProvider value={nodeActions}>
@@ -294,6 +310,8 @@ export default function App() {
         onNewWorkspace={onNewProject}
         onRenameWorkspace={(id, name) => void onRenameWorkspace(id, name)}
         onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
+        onLogout={onLogout}
+        showLogout={hasToken()}
       />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
@@ -301,7 +319,12 @@ export default function App() {
           .app-main akan menghitung tinggi header dua kali. */}
       <div className="app-main">
         {!hydrated ? null : noWorkspaces ? (
-          <Welcome onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateWorkspace(name)} />
+          <Welcome
+            onNewProject={onNewProject}
+            onCreateEmpty={(name) => void onCreateWorkspace(name)}
+            closedSessions={closedSessions}
+            onReopen={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
+          />
         ) : (
           <ReactFlow
             key={activeId ?? 'empty'}

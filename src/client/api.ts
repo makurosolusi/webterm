@@ -2,7 +2,7 @@
 import type { Workspace } from '../shared/workspace'
 
 /** Must match TOKEN_HEADER / TOKEN_PARAM in src/server/auth.ts. */
-const TOKEN_HEADER = 'x-webterm-token'
+export const TOKEN_HEADER = 'x-webterm-token'
 const TOKEN_PARAM = 'token'
 const TOKEN_KEY = 'webterm.token'
 
@@ -44,6 +44,31 @@ function readToken(): string {
 
 const token = readToken()
 
+/** Whether this page load carries a token (URL or sessionStorage). */
+export function hasToken(): boolean {
+  return token !== ''
+}
+
+// `token` above is captured at import, so a freshly typed token only takes effect after a reload:
+// the login flow stores it here, then App reloads the page and readToken() picks it up next load.
+export function storeToken(t: string): void {
+  try {
+    sessionStore()?.setItem(TOKEN_KEY, t)
+  } catch {}
+}
+
+export function clearToken(): void {
+  try {
+    sessionStore()?.removeItem(TOKEN_KEY)
+  } catch {}
+}
+
+/** Probe /api/workspaces with a candidate token; true when the server accepts it. */
+export async function validateToken(t: string): Promise<boolean> {
+  const res = await fetch('/api/workspaces', { headers: { [TOKEN_HEADER]: t } })
+  return res.ok
+}
+
 /** Query suffix carrying the token, or '' when there is none. For the WebSocket URL, which
  *  cannot carry headers. Caller supplies the leading separator. */
 export function tokenQuery(): string {
@@ -58,7 +83,11 @@ function withToken(headers?: Record<string, string>): Record<string, string> | u
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: withToken(init?.headers as Record<string, string>) })
-  if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}`)
+  if (!res.ok) {
+    const e = new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}`)
+    ;(e as { status?: number }).status = res.status
+    throw e
+  }
   return res.json() as Promise<T>
 }
 

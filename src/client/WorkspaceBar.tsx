@@ -14,7 +14,7 @@
 // workspace pertama membuat identitas app berkedip masuk lalu memindahkan canvas 46px ke bawah
 // tepat saat pengguna menekan tombol. Strip nol-tab cuma brand + `+`, yang sudah benar sendiri.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MoreVertical, Plus, SquareTerminal } from 'lucide-react'
+import { LogOut, MoreVertical, Plus, SquareTerminal } from 'lucide-react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
 import { scrollTopToReveal } from './filesKeys'
@@ -66,6 +66,10 @@ export interface WorkspaceBarProps {
   onRenameWorkspace: (id: string, name: string) => void
   /** Sudah dikonfirmasi pengguna di sini — pemanggil langsung menghapus. */
   onDeleteWorkspace: (id: string) => void
+  /** Buang token lalu reload ke layar Login. Hanya dirender bila `showLogout`. */
+  onLogout?: () => void
+  /** Ada token tersimpan → tampilkan tombol logout. Loopback tanpa token: tak ada yang di-logout. */
+  showLogout?: boolean
 }
 
 export default function WorkspaceBar({
@@ -77,6 +81,8 @@ export default function WorkspaceBar({
   onNewWorkspace,
   onRenameWorkspace,
   onDeleteWorkspace,
+  onLogout,
+  showLogout,
 }: WorkspaceBarProps) {
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
@@ -252,6 +258,18 @@ export default function WorkspaceBar({
           <Plus aria-hidden />
         </button>
       </div>
+
+      {showLogout && (
+        <button
+          type="button"
+          className="tab__add"
+          title="Logout"
+          aria-label="Logout"
+          onClick={onLogout}
+        >
+          <LogOut aria-hidden />
+        </button>
+      )}
 
       {menu && menuGroup && (
         <NodeContextMenu
