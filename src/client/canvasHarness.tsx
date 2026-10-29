@@ -129,13 +129,29 @@ export interface CanvasFixture {
    *  dengan koordinat flow, jadi test yang mau membuktikan sebuah konversi layar→flow benar-benar
    *  terjadi harus menggeser viewport-nya di sini. */
   viewport?: Viewport
+  /** Workspace LAIN yang ikut terdaftar (tab kedua dst). Fixture utama tetap yang aktif saat boot;
+   *  ini untuk test yang perlu BERPINDAH board. Pakai `harnessWorkspace` untuk membuatnya. */
+  others?: Workspace[]
+  /** Server TANPA satu pun workspace, yaitu layar `Welcome`. Default: fixture utama selalu ada. */
+  blank?: boolean
+  /** Tunda tiap respons (ms, timer NYATA). Default 0, yang berarti respons mendarat di microtask
+   *  yang sama dengan pemanggilnya — React membatch semuanya dan TIDAK pernah merender di tengah
+   *  rantai request. Test yang menguji URUTAN commit wajib memasang tunda: tanpa itu urutan apa pun
+   *  menghasilkan render yang sama, dan guard-nya lulus karena jaringannya terlalu cepat. */
+  delay?: number
 }
 
-const WORKSPACE_ID = 'ws-harness'
+export const HARNESS_WS_ID = 'ws-harness'
+
+/** Workspace lengkap dari beberapa field saja — supaya `others` di atas tidak perlu mengulang
+ *  cwd/bridges/updatedAt yang tidak diuji siapa pun. */
+export function harnessWorkspace(over: Partial<Workspace> & { id: string }): Workspace {
+  return { name: over.id, cwd: '/', nodes: [], bridges: [], viewport: DEFAULT_VIEWPORT, updatedAt: 0, ...over }
+}
 
 function fixtureWorkspace(fx: CanvasFixture): Workspace {
   return {
-    id: WORKSPACE_ID,
+    id: HARNESS_WS_ID,
     name: 'harness',
     cwd: '/',
     nodes: fx.nodes,
@@ -149,17 +165,26 @@ function fixtureWorkspace(fx: CanvasFixture): Workspace {
  *  persistensi) tetap kode produksi — yang dipalsukan cuma server di ujung kabelnya. */
 function routeFetch(fx: CanvasFixture) {
   const ws = fixtureWorkspace(fx)
-  const reply = (body: unknown) =>
-    Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: async () => body } as Response)
+  const all = fx.blank ? [] : [ws, ...(fx.others ?? [])]
+  const reply = (body: unknown) => {
+    const res = { ok: true, status: 200, statusText: 'OK', json: async () => body } as Response
+    if (!fx.delay) return Promise.resolve(res)
+    return new Promise<Response>((r) => setTimeout(() => r(res), fx.delay))
+  }
 
   return vi.fn((input: RequestInfo | URL) => {
     const url = new URL(String(input), 'http://localhost')
     const path = url.pathname
     const arg = url.searchParams.get('path') ?? ''
     if (path === '/api/settings') return reply(DEFAULT_SETTINGS)
-    if (path === '/api/workspaces') return reply([ws])
-    if (path.startsWith('/api/workspaces/')) return reply(ws)
-    if (path === '/api/active') return reply({ id: WORKSPACE_ID })
+    if (path === '/api/workspaces') return reply(all)
+    if (path.startsWith('/api/workspaces/')) {
+      // Dicari per id, bukan selalu fixture utama: test pindah-board membaca board KEDUA dari sini,
+      // dan rute yang memulangkan board aktif untuk id apa pun akan lulus walau pindahnya tak jalan.
+      const id = decodeURIComponent(path.slice('/api/workspaces/'.length))
+      return reply(all.find((w) => w.id === id) ?? ws)
+    }
+    if (path === '/api/active') return reply({ id: fx.blank ? null : HARNESS_WS_ID })
     if (path === '/api/fs/list') return reply(fx.dirs[arg] ?? [])
     if (path === '/api/fs/read') return reply({ content: fx.files?.[arg] ?? '' })
     if (path === '/api/fs/exists') return reply({ exists: fx.files?.[arg] !== undefined })
@@ -188,6 +213,41 @@ export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof 
   // mengklik lebih cepat dari ini menguji canvas yang tidak pernah ada di browser mana pun.
   await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
   return view
+}
+
+/**
+ * Mount `App` dengan SEMUA respons fetch ditahan, dan pulangkan pelepasnya. Satu-satunya cara
+ * melihat keadaan "belum tahu": begitu fetch pertama selesai, keadaan itu lewat dalam satu render
+ * dan tidak bisa di-assert lagi. Tidak menunggu canvas — yang diuji justru belum adanya canvas.
+ */
+export function mountHeld(fx: CanvasFixture): () => Promise<void> {
+  installCanvasDom()
+  const inner = routeFetch(fx)
+  let open = (): void => {}
+  const gate = new Promise<void>((r) => (open = r))
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    await gate
+    return inner(input)
+  }))
+  render(<App />)
+  return async () => {
+    open()
+    // Dua giliran: rantai request boot (`/api/workspaces` → `/api/workspaces/:id`) plus timer
+    // "siap" React Flow. Satu `await` saja berhenti di tengah rantai itu.
+    await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
+    await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
+  }
+}
+
+/** Viewport yang BENAR-BENAR terpasang di canvas, dibaca dari `transform` elemen viewport React
+ *  Flow — itu yang digambar. State App bisa benar sementara canvas memakai viewport default:
+ *  `defaultViewport` hanya dibaca saat mount, jadi bedanya cuma terlihat di DOM. */
+export function renderedViewport(): Viewport {
+  const el = document.querySelector('.react-flow__viewport')
+  const t = (el as HTMLElement | null)?.style.transform ?? ''
+  const m = /translate\((-?[\d.]+)px,\s*(-?[\d.]+)px\)\s*scale\(([\d.]+)\)/.exec(t)
+  if (!m) throw new Error(`viewport tanpa transform terbaca: "${t}"`)
+  return { x: parseFloat(m[1]), y: parseFloat(m[2]), zoom: parseFloat(m[3]) }
 }
 
 /** Lepas canvas yang ter-mount. WAJIB dipanggil di `afterEach`: auto-cleanup

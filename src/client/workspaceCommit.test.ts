@@ -1,115 +1,188 @@
+/**
+ * @vitest-environment jsdom
+ */
+// Tiga invarian yang semuanya cuma terlihat di DOM: viewport tersimpan yang BENAR-BENAR terpasang
+// saat board di-mount, klik minimap, dan gerbang hidrasi.
+//
+// Dulu file ini menguji dengan MEMBACA source `App.tsx`/`workspaceLifecycle.ts` lalu meregexnya,
+// karena belum ada harness DOM. Itu mengunci BENTUK TEKS App: refactor yang perilakunya identik
+// bisa memerahkannya, sementara perubahan yang betul-betul membuang viewport tersimpan bisa lolos
+// selama teksnya masih cocok. Sekarang lewat `./canvasHarness` — App sungguhan, aksi sungguhan.
+//
+// Kenapa viewport jadi alat ukurnya: React Flow membaca `defaultViewport` HANYA saat mount, jadi
+// satu render dengan board belum lengkap (id benar, viewport masih default) membuang viewport
+// tersimpan untuk selamanya — `applyWorkspace` berikutnya tidak me-mount ulang canvas. Jadi
+// "viewport yang terpasang == yang tersimpan" adalah pembacaan langsung atas urutan commit-nya.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
+import {
+  harnessWorkspace, installCanvasDom, mountCanvas, mountHeld, renderedViewport, unmountCanvas,
+} from './canvasHarness'
+import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import type { Viewport, Workspace } from '../shared/workspace'
 
-// Yang dijaga di sini adalah URUTAN di App.tsx + `workspaceLifecycle.ts` (yang memuat jalur commit
-// board-nya), dan urutan hanya hidup di JSX/callback — vitest
-// webterm jalan di node-env tanpa DOM, jadi tidak ada komponen yang bisa dirender untuk
-// membuktikannya. Yang bisa dilakukan: membaca source-nya dan menolak bentuk yang salah, pola yang
-// sama dengan `nodeRender.test.ts`.
-const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
+/** Dua viewport tersimpan yang BUKAN default dan berbeda satu sama lain — keduanya syarat: dengan
+ *  viewport default, test di bawah lulus walau viewport tersimpan dibuang sama sekali. */
+const VP_A: Viewport = { x: -300, y: -120, zoom: 0.5 }
+const VP_B: Viewport = { x: 410, y: -640, zoom: 1.25 }
+const wsB = harnessWorkspace({ id: 'ws-b', name: 'bravo', viewport: VP_B })
 
-/** Potongan dari tiap `applyWorkspace(...)` sampai ujung callback-nya (`}, [deps])`). */
-const tailsAfterApply = (s: string) =>
-  s.split(/\bapplyWorkspace\(/).slice(1).map((t) => t.split(/\n *\}, \[/)[0])
+beforeAll(installCanvasDom)
+afterEach(unmountCanvas)
 
-/**
- * Board boleh di-commit hanya setelah semua request selesai. Satu `await` SETELAH commit berarti
- * React sudah merender canvas yang pindah sebelum datanya lengkap — `defaultViewport` React Flow
- * dibaca saat mount, jadi render pertama itu yang membuang viewport tersimpan.
- */
-const appliesAfterLastAwait = (s: string) => tailsAfterApply(s).every((t) => !/\bawait\b/.test(t))
+const tab = (name: string): HTMLElement => {
+  const el = screen.getAllByRole('tab').find((t) => t.textContent?.includes(name))
+  if (!el) throw new Error(`tab ${name} tidak ada`)
+  return el
+}
 
-/** Dua state yang di-commit terpisah adalah mesin kedipnya; `activeId` wajib turunan. */
-const hasSplitActiveState = (s: string) => /\bsetActiveId\b|\bloadWorkspace\b/.test(s)
+/** Viewport SETELAH animasi `setCenter` (300ms) berhenti. Nilai di tengah animasi bukan hasil yang
+ *  diuji: d3 menginterpolasi zoom juga, jadi pembacaan dini melaporkan zoom yang menggoyang. */
+async function settledAfter(from: Viewport): Promise<Viewport> {
+  let prev = from
+  for (let i = 0; i < 30; i++) {
+    await act(() => new Promise<void>((r) => setTimeout(r, 50)))
+    const now = renderedViewport()
+    if (now.x !== from.x && now.x === prev.x && now.y === prev.y && now.zoom === prev.zoom) return now
+    prev = now
+  }
+  throw new Error('viewport tidak pernah pindah lalu berhenti')
+}
 
-// Bentuk lama, persis seperti sebelum urutannya dibetulkan. Dipakai untuk membuktikan guard di
-// bawah benar-benar menggigit, bukan lulus karena polanya mustahil ditemukan.
-const OLD_SELECT = `  const onSelect = useCallback(async (id: string) => {
-    if (!id || id === activeId) return
-    await setActive(id)
-    setActiveId(id)
-    await loadWorkspace(id)
-  }, [activeId, loadWorkspace])`
-const OLD_APPLY_THEN_AWAIT = `  const onSelect = useCallback(async (id: string) => {
-    applyWorkspace(await getWorkspace(id))
-    await setActive(id)
-  }, [applyWorkspace])`
+/** Viewport di tiap PUT workspace yang benar-benar dikirim ke server. */
+const putViewports = (): Viewport[] =>
+  (fetch as unknown as Mock).mock.calls
+    .filter((c) => (c[1] as RequestInit | undefined)?.method === 'PUT' && String(c[0]).startsWith('/api/workspaces/'))
+    .map((c) => (JSON.parse(String((c[1] as RequestInit).body)) as Workspace).viewport ?? DEFAULT_VIEWPORT)
 
-describe('urutan commit workspace', () => {
-  it('App tidak lagi punya dua state aktif yang di-commit terpisah', () => {
-    const app = src('App.tsx')
-    expect(hasSplitActiveState(app)).toBe(false)
-    // Jalur commit-nya pindah ke `workspaceLifecycle`, jadi bentuk lamanya dijaga di sana juga.
-    expect(hasSplitActiveState(src('workspaceLifecycle.ts'))).toBe(false)
-    expect(app).toMatch(/const activeId = activeWs\?\.id \?\? null/)
+describe('viewport tersimpan terpasang saat board di-mount', () => {
+  // `delay` WAJIB di sini, bukan hiasan: dengan fetch yang menjawab di microtask yang sama, React
+  // membatch seluruh rantai boot jadi satu render dan urutan commit apa pun lulus. Jaringan yang
+  // (sedikit) lambat memberi React kesempatan merender di tengah rantai — persis kondisi yang
+  // memunculkan bug ini di browser nyata.
+  it('boot memasang viewport workspace aktif, bukan viewport default', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsB], delay: 20 })
+    expect(renderedViewport()).toEqual(VP_A)
+    expect(VP_A).not.toEqual(DEFAULT_VIEWPORT) // gerbang: fixture-nya memang bukan default
   })
 
-  it('tidak ada `await` setelah board di-commit, di callback mana pun', () => {
-    // Semua pemanggil `applyWorkspace` ada di `workspaceLifecycle`. Dihitung dulu: `.every()` atas
-    // daftar kosong lulus tanpa menjaga apa pun, dan file yang salah akan lulus begitu saja.
-    const life = src('workspaceLifecycle.ts')
-    expect(tailsAfterApply(life).length).toBeGreaterThan(0)
-    expect(appliesAfterLastAwait(life)).toBe(true)
+  it('pindah tab memasang viewport workspace TUJUAN', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsB] })
+    fireEvent.click(tab('bravo'))
+    // Tidak ada jalan pulang dari viewport yang salah: `defaultViewport` sudah terbaca saat mount,
+    // jadi kalau render pertama board ini memakai default, nilainya tinggal default selamanya.
+    await waitFor(() => expect(renderedViewport()).toEqual(VP_B))
   })
 
-  it('kedua guard menolak bentuk lamanya', () => {
-    expect(hasSplitActiveState(OLD_SELECT)).toBe(true)
-    expect(appliesAfterLastAwait(OLD_APPLY_THEN_AWAIT)).toBe(false)
-    // Dan melewatkan bentuk yang benar, supaya bukan guard yang selalu merah.
-    expect(hasSplitActiveState(src('App.tsx'))).toBe(false)
-    expect(appliesAfterLastAwait('applyWorkspace(ws)\n  }, [applyWorkspace])')).toBe(true)
-  })
-
-  it('setiap pindah workspace mengambil board DULU, lewat variabel, bukan di dalam commit', () => {
-    // `const ws = await getWorkspace(...)` di tiap jalur: boot, pilih tab, dan hapus workspace.
-    expect(src('workspaceLifecycle.ts').match(/const ws = .*getWorkspace\(/g)?.length).toBe(3)
+  it('menghapus workspace aktif memasang viewport board penggantinya', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsB] })
+    fireEvent.click(screen.getAllByLabelText('Workspace options')[0])
+    fireEvent.click(await screen.findByText('Delete'))
+    await waitFor(() => expect(renderedViewport()).toEqual(VP_B))
   })
 })
 
-/**
- * Klik minimap memindahkan viewport lewat `setCenter`. `onMoveEnd` kemungkinan besar tetap jalan
- * untuk perpindahan programatik (`setTransform` tidak mengirim `sourceEvent`, jadi bukan `internal`),
- * tapi `syncViewport` di sampingnya adalah persist yang disengaja supaya posisi baru tak bergantung
- * pada jalur event — itu bagian yang paling mudah terhapus saat orang menyunting blok `<MiniMap>`
- * nanti, jadi keduanya dijaga sebagai satu pasangan.
- */
-const minimapJsx = (s: string) => s.split('<MiniMap')[1]?.split('/>')[0] ?? ''
-const clickIsSynced = (s: string) => {
-  const m = minimapJsx(s)
-  return /\bonClick=/.test(m) && /\bsetCenter\(/.test(m) && /\bsyncViewport\(/.test(m)
-}
-
-// Bentuk sebelum klik dipasang, untuk membuktikan guard di atas benar-benar menggigit.
-const OLD_MINIMAP = '<MiniMap className="minimap-dock" pannable zoomable nodeColor={nodeColor} />'
-
 describe('klik minimap', () => {
-  it('punya handler klik yang memindahkan viewport DAN mempersistnya', () => {
-    expect(clickIsSynced(src('App.tsx'))).toBe(true)
+  // Titik klik, koordinat layar. jsdom melaporkan `getBoundingClientRect` di origin, jadi d3
+  // memulangkan titik ini apa adanya sebagai titik flow — yang diuji di sini memang bukan
+  // konversinya, melainkan apa yang App lakukan dengan titik itu.
+  const P1 = { clientX: 120, clientY: 90 }
+  const P2 = { clientX: 320, clientY: 250 }
+
+  const minimap = (): Element => {
+    const el = document.querySelector('.react-flow__minimap-svg')
+    if (!el) throw new Error('minimap tidak dirender')
+    return el
+  }
+
+  it('memindahkan pandangan ke titik yang diklik, dan zoom berjalan tidak melompat', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A })
+    fireEvent.click(minimap(), P1)
+    const first = await settledAfter(VP_A)
+    fireEvent.click(minimap(), P2)
+    const second = await settledAfter(first)
+
+    // `setCenter` tanpa `zoom` jatuh ke maxZoom (2), bukan zoom sekarang: klik cuma boleh
+    // memindahkan titik pandang.
+    expect(first.zoom).toBe(VP_A.zoom)
+    expect(second.zoom).toBe(VP_A.zoom)
+    // Geseran pandangan = geseran titik klik × zoom, berlawanan arah. Diuji sebagai SELISIH dua
+    // klik supaya tidak bergantung pada ukuran pane tiruan jsdom — dan tetap mati kalau titik
+    // kliknya diabaikan, tertukar sumbunya, atau tidak dikalikan zoom.
+    expect(second.x - first.x).toBeCloseTo(-(P2.clientX - P1.clientX) * VP_A.zoom)
+    expect(second.y - first.y).toBeCloseTo(-(P2.clientY - P1.clientY) * VP_A.zoom)
   })
 
-  it('zoom berjalan diteruskan eksplisit — `setCenter` tanpa `zoom` melompat ke maxZoom', () => {
-    expect(minimapJsx(src('App.tsx'))).toMatch(/zoom: vp\.zoom/)
+  it('posisi pandangan yang baru ikut di-persist, bukan cuma terlihat', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A })
+    fireEvent.click(minimap(), P1)
+    const moved = await settledAfter(VP_A)
+    // Debounce `scheduleSave` 400ms, di belakang `syncViewport(320)`.
+    await waitFor(() => expect(putViewports().at(-1)).toEqual(moved), { timeout: 2000 })
   })
+})
 
-  it('guard menolak minimap tanpa klik, dan klik tanpa sync', () => {
-    expect(clickIsSynced(OLD_MINIMAP)).toBe(false)
-    expect(clickIsSynced('<MiniMap onClick={(_, p) => rf.current?.setCenter(p.x, p.y)} />')).toBe(false)
+// SATU-SATUNYA penjaga teks yang bertahan di file ini: membuang `syncViewport(320)` dari `onClick`
+// minimap TIDAK memerahkan satu test pun (sudah dicoba) — di jsdom `onMoveEnd` React Flow ikut
+// memanggil persist untuk perpindahan programatik, jadi PUT-nya tetap mendarat. Panggilan itu jaring
+// pengaman eksplisit untuk jalur/browser yang TIDAK mengirim `onMoveEnd`, dan ketiadaannya memang
+// tak bisa diamati dari DOM. Jadi bentuk teksnya dijaga, bukan perilakunya.
+describe('jaring pengaman persist klik minimap (penjaga teks)', () => {
+  it('`onClick` minimap masih memanggil syncViewport', () => {
+    // Path disusun dari STRING, bukan `new URL('./App.tsx', import.meta.url)`: `URL` di file jsdom
+    // ini milik jsdom, yang mengabaikan base `file://` dan memulangkan `http://localhost/App.tsx`.
+    const app = readFileSync(fileURLToPath(import.meta.url).replace(/[^/]+$/, 'App.tsx'), 'utf8')
+    const open = app.indexOf('<MiniMap')
+    const jsx = app.slice(open, app.indexOf('/>', open))
+    expect(open).toBeGreaterThan(-1)
+    expect(jsx).toMatch(/syncViewport\(/)
   })
 })
 
 describe('gerbang hidrasi', () => {
-  it('`Welcome` tidak dirender sebelum fetch pertama selesai', () => {
-    // Tiga keadaan, bukan dua: belum tahu (tidak merender apa pun), tidak ada workspace, ada.
-    expect(src('App.tsx')).toMatch(/\{!hydrated \? null : noWorkspaces \? \(/)
+  const dock = () => document.querySelector('.dock')
+  const canvas = () => document.querySelector('.react-flow__pane')
+  const welcome = () => screen.queryByText(/New project/)
+
+  it('sebelum fetch pertama selesai: tidak ada canvas, tidak ada Welcome, tidak ada dock', async () => {
+    const release = mountHeld({ nodes: [], dirs: {}, viewport: VP_A })
+    // Tiga keadaan, bukan dua: "belum tahu" tidak boleh dirender sebagai "tidak ada workspace" —
+    // itu `Welcome` yang berkelebat sekejap di tiap muat halaman.
+    expect(welcome()).toBeNull()
+    expect(canvas()).toBeNull()
+    expect(dock()).toBeNull()
+
+    await release()
+    expect(canvas()).not.toBeNull()
+    expect(dock()).not.toBeNull()
+    expect(welcome()).toBeNull()
   })
 
-  it('dock ikut digerbang — ia hanya milik board yang sudah ada', () => {
-    expect(src('App.tsx')).toMatch(/\{hydrated && !noWorkspaces && \(/)
+  it('setelah fetch pertama tanpa satu pun workspace: Welcome, dan dock tetap tidak ada', async () => {
+    const release = mountHeld({ nodes: [], dirs: {}, blank: true })
+    await release()
+    expect(welcome()).not.toBeNull()
+    // Dock milik board yang ADA: tombolnya menumbuhkan node ke workspace yang belum dibuat.
+    expect(dock()).toBeNull()
+    expect(canvas()).toBeNull()
   })
 
-  it('header TIDAK digerbang: tombol `+`-nya satu-satunya jalan masuk di layar Welcome', () => {
-    const app = src('App.tsx')
-    expect(app.indexOf('<WorkspaceBar')).toBeLessThan(app.indexOf('!hydrated'))
+  it('header TIDAK ikut digerbang: tombol `+` sudah bisa diklik sebelum fetch pertama selesai', async () => {
+    const release = mountHeld({ nodes: [], dirs: {}, blank: true })
+    // Satu-satunya jalan masuk selain `Welcome`; header yang baru muncul setelah hidrasi juga
+    // menggeser canvas 46px tepat saat pengguna menekan tombolnya.
+    expect(screen.queryByLabelText('New workspace')).not.toBeNull()
+    await release()
+    expect(screen.queryByLabelText('New workspace')).not.toBeNull()
   })
 })
+
+// Satu-satunya hal dari versi regex file ini yang TIDAK dipromosikan: `hydrated &&` di gerbang dock.
+// Sebabnya ia tak teruji perilaku, bukan terlewat — `workspaces` dan `hydrated` di-commit dalam satu
+// render yang sama, jadi tidak ada keadaan di mana `hydrated && !noWorkspaces` berbeda hasil dari
+// `!noWorkspaces` saja. Penjaga teksnya tidak dibawa: ia mengunci token yang tak bisa diamati.
+// Yang bisa diamati — dock tidak muncul sebelum ada board — dijaga dua test di atas.
