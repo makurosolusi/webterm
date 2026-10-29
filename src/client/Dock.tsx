@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
-  Save, Layers, Mic, SquareTerminal, FolderPlus, Check,
+  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen,
 } from 'lucide-react'
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
@@ -20,6 +20,11 @@ export interface DockProps {
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
   /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
   onZoomTo?: (pct: number) => void
+  /** Kunci PANDANGAN (pan/zoom) sementara node tetap bisa digeser — semantik nodeterm, kebalikan
+   *  dari `showInteractive` bawaan React Flow yang justru mematikan drag node. Props-driven karena
+   *  pemanggil menyetel panOnDrag/panOnScroll/zoomOnPinch dari state yang sama. */
+  locked: boolean
+  onToggleLock: () => void
   onSave?: () => void; dirty?: boolean
   onLayouts?: () => void
   micActive?: boolean; onToggleMic?: () => void
@@ -114,7 +119,7 @@ export default function Dock(props: DockProps) {
 
           <button
             className={`dock-btn dock-add${menu === 'add' ? ' active' : ''}`}
-            title="Add node" onClick={() => setMenu((m) => (m ? null : 'add'))}
+            aria-label="Add node" title="Add node" onClick={() => setMenu((m) => (m ? null : 'add'))}
           ><Plus size={ICON} /></button>
         </div>
 
@@ -133,7 +138,7 @@ export default function Dock(props: DockProps) {
             <span className={`dock-dirty${props.dirty ? ' dirty' : ''}`} />
           </button>
         )}
-        <button className="dock-btn" title="Fit view" onClick={props.onFit}><Scan size={ICON} /></button>
+        <button className="dock-btn" aria-label="Fit view" title="Fit view" onClick={props.onFit}><Scan size={ICON} /></button>
         {props.onLayouts && (
           <button className="dock-btn" title="Layouts" onClick={props.onLayouts}><Layers size={ICON} /></button>
         )}
@@ -147,7 +152,7 @@ export default function Dock(props: DockProps) {
 
         <div className="dock-sep" />
 
-        <button className="dock-btn" title="Zoom out" onClick={props.onZoomOut}><Minus size={ICON} /></button>
+        <button className="dock-btn" aria-label="Zoom out" title="Zoom out" onClick={props.onZoomOut}><Minus size={ICON} /></button>
         <div className="dock-slot">
           {menu === 'zoom' && props.onZoomTo && (
             <div className="dock-menu dock-zoom-menu">
@@ -171,7 +176,20 @@ export default function Dock(props: DockProps) {
             <span className="dock-zoom">{props.zoomPct}%</span>
           )}
         </div>
-        <button className="dock-btn" title="Zoom in" onClick={props.onZoomIn}><Plus size={ICON} /></button>
+        <button className="dock-btn" aria-label="Zoom in" title="Zoom in" onClick={props.onZoomIn}><Plus size={ICON} /></button>
+
+        {/* SATU separator sebelum lock, alasan yang sama seperti di rail lama: zoom in/out/fit
+            semuanya gerakan kamera, lock adalah toggle mode dan satu-satunya yang mengubah apa
+            yang boleh dilakukan tiga lainnya. */}
+        <div className="dock-sep" />
+
+        <button
+          className={`dock-btn${props.locked ? ' active' : ''}`}
+          aria-label={props.locked ? 'Unlock view' : 'Lock view'}
+          title={props.locked ? 'Unlock view (pan/zoom)' : 'Lock view (pan/zoom); nodes stay movable'}
+          aria-pressed={props.locked}
+          onClick={props.onToggleLock}
+        >{props.locked ? <Lock size={ICON} /> : <LockOpen size={ICON} />}</button>
       </div>
     </>
   )

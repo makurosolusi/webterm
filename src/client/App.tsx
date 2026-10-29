@@ -9,7 +9,6 @@ import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import CanvasToolbar from './CanvasToolbar'
-import ZoomRail from './ZoomRail'
 import SessionsPanel from './SessionsPanel'
 import HelpOverlay from './HelpOverlay'
 import { SettingsPanel } from './SettingsPanel'
@@ -325,13 +324,6 @@ export default function App() {
                 if (vp) { rf.current?.setCenter(p.x, p.y, { zoom: vp.zoom, duration: 300 }); syncViewport(320) }
               }}
             />
-            <ZoomRail
-              locked={locked}
-              onToggleLock={() => setLocked((v) => !v)}
-              onZoomIn={onZoomIn}
-              onZoomOut={onZoomOut}
-              onFit={onFit}
-            />
           </ReactFlow>
         )}
       </div>
@@ -356,6 +348,8 @@ export default function App() {
             onZoomIn={onZoomIn}
             onZoomOut={onZoomOut}
             onZoomTo={onZoomTo}
+            locked={locked}
+            onToggleLock={() => setLocked((v) => !v)}
             disabledAgents={settings.disabledAgents}
             customAgents={settings.customAgents}
             agentLaunchCommands={settings.agentLaunchCommands}

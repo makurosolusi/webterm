@@ -208,14 +208,27 @@ describe('dock.css', () => {
     expect(btn).toContain('border-radius: 10px')
     expect(dock).toContain('.dock-add { background: var(--accent); color: #fff; }')
     expect(dock).toContain('color-mix(in srgb, var(--accent) 85%, black)')
+    // Dock adalah KOLOM di tepi kiri, bukan bar di bawah: pemisahnya garis horizontal (panjang
+    // nodeterm 22px pindah ke lebar) dan menunya harus terbuka ke kanan, bukan ke atas.
     const sep = dock.slice(dock.indexOf('.dock-sep {'), dock.indexOf('.dock-dirty {'))
-    expect(sep).toContain('height: 22px')
-    expect(sep).toContain('margin: 0 4px')
+    expect(sep).toContain('width: 22px')
+    expect(sep).toContain('margin: 4px 0')
+  })
+
+  it('lays the dock out as a left-edge column with menus opening to the right', () => {
+    const plate = dock.slice(dock.indexOf('.dock {'), dock.indexOf('.dock-btn {'))
+    expect(plate).toContain('flex-direction: column')
+    expect(plate).toContain('left: var(--float-gap)')
+    expect(plate).not.toContain('translateX(-50%)')
+    const menu = dock.slice(dock.indexOf('.dock-menu {'), dock.indexOf('.dock-menu__list {'))
+    expect(menu).toContain('left: calc(100% + 10px)')
+    expect(menu).not.toContain('bottom: calc(100% + 10px)')
   })
 
   it('defines the dirty marker, the zoom readout and the menus', () => {
     expect(dock).toContain('.dock-dirty.dirty { background: var(--caution); }')
-    expect(dock.slice(dock.indexOf('.dock-zoom {'))).toContain('min-width: 52px')
+    // Selebar tombol: readout teks tidak boleh melebarkan kolom.
+    expect(dock.slice(dock.indexOf('.dock-zoom {'))).toContain('min-width: 38px')
     for (const cls of [
       '.dock-backdrop', '.dock-slot', '.dock-menu', '.dock-add-menu', '.dock-menu__list',
       '.dock-menu__glyph', '.dock-menu__rule', '.dock-menu__check', '.dock-menu__form',

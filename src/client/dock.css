@@ -1,5 +1,7 @@
-/* Dock bawah-tengah. Metrik diambil dari nodeterm `src/renderer/styles.css`
-   (blok `---- Bottom-center dock ----`). */
+/* Kolom kontrol kiri — SATU-SATUNYA kumpulan tombol canvas. Metrik plat & tombol tetap dari
+   nodeterm `src/renderer/styles.css` (blok `---- Bottom-center dock ----`); yang berubah hanya
+   arahnya: kolom ini menelan rail zoom kiri-bawah yang dulu terpisah, jadi zoom in/out/fit tidak
+   lagi ada dobel di dua tempat dan lock ikut pindah ke sini. */
 
 /* Lapisan tangkap-klik di bawah menu dock: satu klik di luar menutup menu yang terbuka. */
 .dock-backdrop {
@@ -8,13 +10,16 @@
   z-index: 19;
 }
 
+/* Diangkur di BAWAH-kiri, bukan ditengahkan vertikal: sisi kiri bagian atas milik tombol/panel
+   Sessions (`--ss-top-chrome` + `--float-gap` di sessions-panel.css), jadi kolom yang tumbuh ke
+   atas dari dasar layar tidak pernah menabraknya seberapa pun panjang isinya. */
 .dock {
   position: absolute;
   bottom: var(--float-gap);
-  left: 50%;
-  transform: translateX(-50%);
+  left: var(--float-gap);
   z-index: 20;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 4px;
   padding: 7px;
@@ -53,11 +58,13 @@
   color: var(--accent-hover);
 }
 
+/* Garis pemisah kelompok — HORIZONTAL karena docknya kolom; panjang garis nodeterm (22px) pindah
+   dari tinggi ke lebar. */
 .dock-sep {
-  width: 1px;
-  height: 22px;
+  width: 22px;
+  height: 1px;
   background: var(--border);
-  margin: 0 4px;
+  margin: 4px 0;
 }
 
 /* Titik "ada perubahan belum disimpan", di sudut tombol Save. */
@@ -77,12 +84,15 @@
   position: relative;
   display: inline-flex;
 }
+/* Selebar tombol (38px), bukan 52px seperti di bar horizontal: angka zoom adalah satu-satunya slot
+   berisi teks, dan kalau ia lebih lebar dari tombolnya seluruh kolom ikut melebar. 11px supaya
+   "200%" masih utuh di lebar itu. */
 .dock-zoom {
-  min-width: 52px;
-  padding: 5px 6px;
+  min-width: 38px;
+  padding: 5px 2px;
   text-align: center;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   background: transparent;
@@ -94,11 +104,14 @@
 .dock-zoom:hover,
 .dock-zoom.active { background: var(--panel-header); color: var(--text); }
 
-/* ---- Menu di atas dock ---- */
+/* ---- Menu di sebelah KANAN kolom ---- */
+/* Dock mengapung di tepi kiri, jadi satu-satunya arah buka yang tidak keluar layar adalah ke kanan.
+   Pagar tinggi: dock diangkur ke dasar layar dan menu diangkur ke salah satu ujung dock, jadi ruang
+   terburuk yang bisa dipakai menu = tinggi dock yang masih muat di viewport. */
 .dock-menu {
   position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
+  left: calc(100% + 10px);
+  max-height: calc(100vh - 2 * var(--float-gap));
   min-width: 190px;
   display: flex;
   flex-direction: column;
@@ -112,12 +125,19 @@
   box-shadow: 0 12px 36px rgba(0, 0, 0, calc(0.55 * var(--shadow-k)));
 }
 
-/* Menu Add memuat tiap jenis node plus delapan agent builtin, jadi di window pendek ia melewati
-   atas layar. Dibatasi ke ruang antara tepi atas dan dock (54px tinggi dock + 16px jarak), dan
-   baris-barisnya yang menggulir, bukan kotaknya. */
-.dock-add-menu {
-  max-height: calc(100vh - var(--float-gap) - 54px - 16px);
+/* Arah vertikal menu mengikuti letak pembukanya DI DALAM kolom: tombol Add ada di ujung atas, jadi
+   menunya tumbuh ke bawah; readout zoom ada di ujung bawah, jadi menunya tumbuh ke atas. Dibalik,
+   keduanya menembus tepi layar. */
+.dock-add-menu,
+.dock-menu__form {
+  top: 0;
 }
+.dock-zoom-menu {
+  bottom: 0;
+}
+
+/* Menu Add memuat tiap jenis node plus delapan agent builtin, jadi di window pendek ia tetap bisa
+   lebih tinggi dari pagar di atas — baris-barisnya yang menggulir, bukan kotaknya. */
 .dock-menu__list {
   display: flex;
   flex-direction: column;
@@ -159,10 +179,8 @@
   background: var(--border);
 }
 
-/* Preset zoom, diangkur ke readout-nya sendiri alih-alih ke tepi kiri dock. */
+/* Preset zoom, diangkur ke readout-nya sendiri alih-alih ke ujung dock. */
 .dock-zoom-menu {
-  left: 50%;
-  transform: translateX(-50%);
   min-width: 168px;
 }
 .dock-zoom-menu button { gap: 8px; padding: 7px 10px; font-variant-numeric: tabular-nums; }

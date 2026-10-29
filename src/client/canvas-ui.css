@@ -1,7 +1,8 @@
-/* Chrome mengapung di canvas: cluster kontrol kanan-atas, rail zoom kiri-bawah, dan ⌘K palette.
+/* Chrome mengapung di canvas: cluster kontrol kanan-atas dan ⌘K palette. (Rail zoom kiri-bawah
+   sudah tidak ada: isinya dilebur ke kolom dock di `dock.css`.)
    Semua angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (controls-cluster 5293,
-   tombol cluster 5719, palette 7603, react-flow controls 8362) — bukan karangan.
-   Token --menu-rgb/--controls-w/--tint-rgb/--shadow-k/--tabbar-h milik styles.css (wkr-chrome-01);
+   tombol cluster 5719, palette 7603) — bukan karangan.
+   Token --menu-rgb/--tint-rgb/--shadow-k/--tabbar-h milik styles.css (wkr-chrome-01);
    fallback di tiap var() memakai nilai nodeterm supaya tampilan tidak pecah bila namanya beda. */
 
 /* ---- Cluster kontrol (kanan-atas) ---- */
@@ -56,55 +57,6 @@
   border-radius: 5px;
   padding: 1px 6px;
   line-height: 1.4;
-}
-
-/* ---- Rail zoom (kiri-bawah) ---- */
-/* Plat, blur, dan border ada di KOLOM, bukan di tiap tombol: dengan background per tombol,
-   keempatnya terbaca sebagai empat chip bertumpuk dan bordernya tak membungkus apa pun. */
-.react-flow__controls {
-  margin: var(--float-gap) !important;
-  background: rgba(var(--menu-rgb, 40, 40, 42), 0.92);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, calc(0.4 * var(--shadow-k, 1)));
-}
-
-.react-flow__controls-button {
-  width: calc(var(--controls-w, 34px) - 2px);
-  height: calc(var(--controls-w, 34px) - 2px);
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--text);
-}
-
-/* SATU separator. Zoom in/out/fit semuanya gerakan kamera; lock adalah toggle mode dan satu-satunya
-   yang mengubah apa yang boleh dilakukan tiga lainnya. */
-.react-flow__controls-button.canvas-lock-btn {
-  border-top: 1px solid var(--border);
-}
-
-.react-flow__controls-button svg {
-  width: 15px;
-  height: 15px;
-  max-width: none;
-  max-height: none;
-  fill: none;
-  stroke: currentColor;
-}
-
-.react-flow__controls-button:hover {
-  background: var(--panel-header);
-}
-
-.react-flow__controls-button.canvas-lock-btn.locked {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* ---- Command palette (⌘K) ---- */
