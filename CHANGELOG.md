@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0] - 2026-10-29
+### Added
+- A single-file standalone binary. `bun run build:binary` builds the web assets, embeds every one of them into the server, and compiles the whole thing to one executable `webterm`. It runs as `./webterm` from any directory with no `dist/` beside it — the assets travel inside the binary, not on disk.
+- `HOST` as the name for the bind address, to sit beside the `PORT` it pairs with. `WEBTERM_HOST` still works as a fallback so existing setups are untouched, and a non-loopback `HOST` still refuses to start without `WEBTERM_TOKEN` rather than expose an unauthenticated shell.
+- `.env.example` showing the `HOST` / `PORT` keys. Both the binary and the dev server read a `.env` from the working directory, so these no longer have to be exported by hand.
+
 ## [0.6.0] - 2026-10-29
 ### Added
 - Split panes: a terminal node can be split into nested panes, the way Ghostty, iTerm and tmux do it inside one window. Each pane is its own shell, a split can itself be split (so a 2x2 is reachable), dividers drag to re-balance, and the layout is saved with the workspace. An unsplit node is unchanged, so existing boards keep working untouched.
