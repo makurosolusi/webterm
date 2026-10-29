@@ -5,6 +5,7 @@
 // 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
 // update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { tokenQuery } from './api'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 
@@ -66,8 +67,15 @@ export function createCoalescer<T>(
   }
 }
 
+/** `/api/settings` plus the web-channel token (same as fsClient does for fs requests). Without it the
+ *  request is bare and the server's token gate answers 403 — settings never load or persist. */
+export function settingsUrl(): string {
+  const q = tokenQuery()
+  return q ? `/api/settings?${q}` : '/api/settings'
+}
+
 async function putSettings(patch: Partial<Settings>): Promise<void> {
-  const res = await fetch('/api/settings', {
+  const res = await fetch(settingsUrl(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -106,7 +114,7 @@ export function useSettings(): UseSettings {
 
   useEffect(() => {
     let alive = true
-    fetch('/api/settings')
+    fetch(settingsUrl())
       .then((res) => {
         if (!res.ok) throw new Error(`GET /api/settings -> ${res.status}`)
         return res.json()
