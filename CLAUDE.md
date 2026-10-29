@@ -40,9 +40,10 @@ Data dir webterm SENDIRI: `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
 
 ## Struktur
 
-- `src/client` — UI React (canvas React Flow, node chrome, dock).
-- `src/server` — entry Bun: `index.ts`, `api.ts`, `config.ts`, `db.ts`, `sessions.ts`, `pty.ts`, `hooks.ts`, `contextLink.ts`, `nameGen.ts`.
-- `src/shared` — tipe/util bersama (`workspace.ts`).
+- `src/client` — UI React (canvas React Flow, node chrome, dock); harness test DOM `canvasHarness.tsx`.
+- `src/server` — proses Bun (entry `index.ts`): HTTP + WebSocket, sesi PTY nyata, workspace di
+  SQLite, auth token node, operasi fs, pengaturan, hook status agent.
+- `src/shared` — tipe & util yang dipakai bersama client dan server.
 
 ## Aturan rumah
 
