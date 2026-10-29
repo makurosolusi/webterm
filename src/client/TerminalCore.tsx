@@ -16,6 +16,7 @@ import {
   terminalFontZoomChord,
   terminalKeyAction,
 } from './terminalKeys'
+import { installPointerScaleFix } from './terminalScale'
 import { useLiveSettings } from './useSettings'
 import type { AgentId } from '../shared/workspace'
 
@@ -25,6 +26,9 @@ export interface TerminalHandle {
   refit(): void
   /** Tulis data MENTAH ke PTY, seperti pengguna mengetiknya. Dipakai restart agent in-place. */
   sendKeys(data: string): void
+  /** Buang scrollback, sisakan baris yang sedang tampil. Murni sisi klien: PTY tidak diberi tahu,
+   *  jadi prompt dan proses foreground tidak tersentuh. */
+  clear(): void
 }
 
 export interface TerminalCoreProps {
@@ -123,6 +127,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       sendKeys(data) {
         send({ t: 'input', id, data })
       },
+      clear() {
+        termRef.current?.clear()
+      },
     }),
     [id, refit],
   )
@@ -151,6 +158,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       console.warn(`terminal ${p.id}: Unicode 11 width tables unavailable`, err)
     }
     term.open(el)
+    // SESUDAH `open`: service pointer yang dibungkusnya baru lahir di dalam `open()`. Tanpa ini
+    // seleksi mendarat di baris yang salah begitu canvas di-zoom; lihat `terminalScale.ts`.
+    installPointerScaleFix(term)
     // Node bisa LAHIR sudah ter-collapse (collapse ikut tersimpan di layout workspace), jadi jalur
     // ini pun bergerbang — kalau tidak, `open` di bawah men-spawn PTY selebar ~1 kolom.
     if (hasSize(el)) fit.fit()
