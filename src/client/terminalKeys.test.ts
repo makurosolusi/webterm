@@ -7,6 +7,7 @@ import {
   isCopyShortcut,
   isPasteShortcut,
   nextTerminalFontSize,
+  optionArrowSeq,
   suppressMiddleClickPaste,
   terminalFontZoomChord,
   terminalKeyAction,
@@ -68,6 +69,26 @@ describe('isPasteShortcut', () => {
   it('ignores Ctrl+Shift+V, which xterm already passes through', () => {
     expect(isPasteShortcut(key({ key: 'V', code: 'KeyV', ctrlKey: true, shiftKey: true }), true))
       .toBe(false)
+  })
+})
+
+describe('optionArrowSeq', () => {
+  it('maps Option+Left/Right on macOS to word-back/word-forward', () => {
+    expect(optionArrowSeq(key({ key: 'ArrowLeft', altKey: true }), true)).toBe('\x1bb')
+    expect(optionArrowSeq(key({ key: 'ArrowRight', altKey: true }), true)).toBe('\x1bf')
+  })
+
+  it('does nothing off macOS', () => {
+    expect(optionArrowSeq(key({ key: 'ArrowLeft', altKey: true }), false)).toBeNull()
+  })
+
+  it('ignores extra modifiers, plain arrows, keyup and other arrows', () => {
+    expect(optionArrowSeq(key({ key: 'ArrowLeft', altKey: true, shiftKey: true }), true)).toBeNull()
+    expect(optionArrowSeq(key({ key: 'ArrowLeft', altKey: true, ctrlKey: true }), true)).toBeNull()
+    expect(optionArrowSeq(key({ key: 'ArrowLeft', altKey: true, metaKey: true }), true)).toBeNull()
+    expect(optionArrowSeq(key({ key: 'ArrowLeft' }), true)).toBeNull()
+    expect(optionArrowSeq(key({ key: 'ArrowLeft', altKey: true, type: 'keyup' }), true)).toBeNull()
+    expect(optionArrowSeq(key({ key: 'ArrowUp', altKey: true }), true)).toBeNull()
   })
 })
 

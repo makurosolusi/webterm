@@ -53,7 +53,7 @@ const OLD_RO_SKIPS_REFRESH = true
 const refitBody = (s: string) =>
   flat(s).match(/const refit = useCallback\(\(\) => \{(.*?)\}, \[id\]\)/)?.[1] ?? ''
 const roPathRedraws = (s: string) =>
-  flat(s).includes('new ResizeObserver(refit)') && refitBody(s).includes('term.refresh(')
+  flat(s).includes('coalesceFrames(refit)') && refitBody(s).includes('term.refresh(')
 
 describe('gerbang fit TerminalCore', () => {
   it('predikatnya menggigit bentuk lama', () => {
@@ -82,7 +82,8 @@ describe('gerbang fit TerminalCore', () => {
 
   it('ResizeObserver memakai `refit`, jadi gerbangnya cuma satu dan tak ada jalur pintas', () => {
     const s = flat(src('TerminalCore.tsx'))
-    expect(s).toContain('new ResizeObserver(refit)')
+    expect(s).toContain('coalesceFrames(refit)')
+    expect(s).toContain('new ResizeObserver(frames.schedule)')
     expect(s).not.toContain(flat(OLD_RO_FITS_WHILE_HIDDEN))
     expect(s).not.toContain(flat(OLD_REFIT_FITS_WHILE_HIDDEN))
   })
@@ -99,6 +100,6 @@ describe('gerbang fit TerminalCore', () => {
   it('gerbangnya tidak membunuh fitur: `refit` tetap fit, gambar ulang, dan kabari PTY', () => {
     const s = flat(src('TerminalCore.tsx'))
     expect(s).toContain('fit.fit() term.refresh(0, term.rows - 1)')
-    expect(s).toContain("send({ t: 'resize', id, cols: term.cols, rows: term.rows })")
+    expect(s).toContain("send({ t: 'resize', id, ...next })")
   })
 })

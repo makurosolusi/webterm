@@ -100,7 +100,9 @@ wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
     let msg: ClientMsg
     try { msg = JSON.parse(String(raw)) } catch { return }
-    sessions.handle(msg, send)
+    try { sessions.handle(msg, send) } catch (err) {
+      console.error(`ws message handling failed (t=${msg?.t}):`, err instanceof Error ? err.message : err)
+    }
   })
   ws.on('close', () => sessions.detach(send))
 })

@@ -62,6 +62,22 @@ export interface TerminalKeyEvent {
 export const SHIFT_ENTER_SEQ = '\x1b\r'
 
 /**
+ * Option+←/→ di macOS → `ESC b` / `ESC f` (word-back / word-forward), seperti Terminal.app dan
+ * iTerm. xterm 6.0.0 mengirim CSI mentah `ESC[1;3D` / `ESC[1;3C`; readline /bin/bash 3.2 tak punya
+ * binding-nya, jadi ia memakan `ESC [ 1` lalu menge-echo sisanya (`;3C`). `ESC b/f` di-bind readline
+ * dan zsh. Hanya Alt murni: modifier lain tetap lewat ke xterm.
+ */
+export function optionArrowSeq(
+  e: TerminalKeyEvent,
+  isMac: boolean = isMacPlatform(),
+): string | null {
+  if (!isMac || e.type !== 'keydown' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return null
+  if (e.key === 'ArrowLeft') return '\x1bb'
+  if (e.key === 'ArrowRight') return '\x1bf'
+  return null
+}
+
+/**
  * True untuk keydown yang harus menyalin seleksi terminal: ⌘C (mac), Ctrl+Shift+C (Linux, Windows)
  * dan Ctrl+Insert (binding terminal tradisional). Ctrl+C polos SENGAJA bukan salah satunya — ia
  * harus tetap sampai ke PTY sebagai SIGINT.
