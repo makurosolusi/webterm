@@ -13,6 +13,7 @@ import {
   attachCopyOnSelect,
   guardMiddleClickPaste,
   nextTerminalFontSize,
+  optionArrowSeq,
   terminalFontZoomChord,
   terminalKeyAction,
 } from './terminalKeys'
@@ -177,6 +178,12 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
           setFontZoom((cur) => nextTerminalFontSize(zoom, cur, live.current.settings.fontSize))
           return false
         }
+      }
+      const optionSeq = optionArrowSeq(e)
+      if (optionSeq) {
+        e.preventDefault()
+        send({ t: 'input', id: live.current.id, data: optionSeq })
+        return false
       }
       switch (terminalKeyAction(e, s.terminalShortcutPolicy)) {
         case 'copy':
