@@ -12,6 +12,7 @@ process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-sessions-'))
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
+import { resolveShell } from './ptyShell'
 import {
   BUILTIN_AGENT_IDS,
   assembleCmd,
@@ -340,11 +341,11 @@ test('a plain terminal gets no hook token at all', async () => {
 test('shellArgv honours the shell parameter and falls back to the system default', () => {
   const argv = (...a: Parameters<typeof shellArgv>) => shellArgv(...a).join('\u0000')
   expect(argv('/bin/sh', 'echo hi')).toBe(['/bin/sh', '-l', '-c', 'echo hi'].join('\u0000'))
-  expect(argv('/bin/sh')).toBe('/bin/sh')
+  // Shell biasa = login shell, seperti Terminal.app.
+  expect(argv('/bin/sh')).toBe(['/bin/sh', '-l'].join('\u0000'))
   // Kosong / hanya spasi = default sistem, persis arti settings.defaultShell.
-  const fallback = process.env.SHELL || 'bash'
-  expect(argv('   ')).toBe(fallback)
-  expect(argv(undefined, 'x')).toBe([fallback, '-l', '-c', 'x'].join('\u0000'))
+  expect(argv('   ')).toBe(argv(undefined))
+  expect(argv(undefined, 'x')).toBe([resolveShell(undefined), '-l', '-c', 'x'].join('\u0000'))
 })
 
 test('a configured shell is the one that actually runs the command', async () => {
@@ -361,8 +362,9 @@ test('the scrollback limit drops old output and keeps the newest', async () => {
   const a = collector()
   s.open({ t: 'open', id: 'sb1', cols: 80, rows: 24 }, a.send)
 
-  s.input('sb1', 'echo FIRST_MARKER_9f3a\n')
-  await pollFor(() => s.getTerminal('sb1'), 'FIRST_MARKER_9f3a')
+  // Marker disusun shell ($((..))) agar echo tty tidak cocok: login shell lambat start, input berikutnya harus menunggu shell hidup.
+  s.input('sb1', 'echo FIRST_MARKER_$((9*1))f3a\n')
+  await pollFor(() => s.getTerminal('sb1'), 'FIRST_MARKER_9f3a', 10000)
   expect(s.getTerminal('sb1')).toContain('FIRST_MARKER_9f3a')
 
   // Lebih dari 512 byte output sesudahnya harus mendorong marker pertama keluar ring buffer.
@@ -374,7 +376,7 @@ test('the scrollback limit drops old output and keeps the newest', async () => {
   expect(kept).toContain('LAST_MARKER_9f3a')
   expect(kept.includes('FIRST_MARKER_9f3a')).toBe(false)
   s.close('sb1')
-})
+}, 15000)
 
 test('an unusable scrollback setting falls back to the default instead of losing output', async () => {
   // Shell polos (tanpa cmd) supaya sesi tetap hidup: sesi yang keluar dihapus dari map, sehingga

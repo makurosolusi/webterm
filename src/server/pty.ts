@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { accessSync, constants } from 'node:fs'
-import { join } from 'node:path'
+import { binaryExists, ptyEnv, resolveCwd, shellArgv } from './ptyShell'
+
+export { binaryExists, shellArgv }
 
 /**
  * Pembungkus PTY Bun-native: POSIX spawn node-pty rusak di bawah Bun, jadi PTY-nya datang dari
@@ -35,39 +36,6 @@ export interface Pty {
   write(data: string): void
   resize(cols: number, rows: number): void
   kill(): void
-}
-
-/** Env anak. `TERM` di sini LOAD-BEARING, bukan kerapian: bentuk inline `terminal` tidak menerima
- *  `name` seperti konstruktor `Bun.Terminal` dulu, jadi env inilah satu-satunya yang memberi tahu
- *  program di dalam PTY tipe terminalnya. Dibiarkan jatuh ke `dumb` berarti warna dan TUI mati di
- *  seluruh aplikasi. (Diukur dari dalam PTY sesudah pindah ke bentuk inline: `$TERM` = xterm-256color.) */
-function cleanEnv(): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v
-  env.TERM = 'xterm-256color'
-  return env
-}
-
-/** Apakah `bin` bisa dieksekusi — path langsung bila mengandung `/`, selain itu dicari di PATH.
- *  Hanya cek keberadaan + bit executable: TIDAK pernah menjalankan binary-nya.
- *
- *  BATASNYA: yang dibaca PATH PROSES SERVER, sedangkan perintah berjalan di login shell yang
- *  mungkin punya PATH lebih luas (nvm/asdf/homebrew lewat rc) — jebakan yang nodeterm juga catat di
- *  `pty-manager.ts`. Karena itu hasil negatif hanya dipakai untuk MEMBUANG pembungkus (lihat
- *  `unwrapMissingWrapper`), bukan untuk menolak peluncuran: salah tebak paling buruk mengabaikan
- *  satu pembungkus dan mengatakannya, bukan mematikan node. */
-export function binaryExists(bin: string, pathEnv = process.env.PATH ?? ''): boolean {
-  const executable = (p: string): boolean => {
-    try {
-      accessSync(p, constants.X_OK)
-      return true
-    } catch {
-      // Tidak ada / tidak executable / tidak boleh dibaca — ketiganya berarti "tak bisa dipakai".
-      return false
-    }
-  }
-  if (bin.includes('/')) return executable(bin)
-  return pathEnv.split(':').some((dir) => dir && executable(join(dir, bin)))
 }
 
 /** Nama binary yang (mungkin) dipakai sebuah baris perintah: token pertama, hanya bila ia nama
@@ -109,14 +77,6 @@ export function unwrapMissingWrapper(
     rest = rest.slice(sep + WRAPPER_SEP.length).trim()
   }
   return missing ? { cmd: rest, missing } : null
-}
-
-/** argv untuk login shell. `shell` kosong/absen = default sistem, persis arti `settings.defaultShell`.
- *  Sebuah perintah diluncurkan lewat login shell (`-l -c`) supaya PATH/alias resolve dan quoting
- *  shell berlaku; tanpa perintah, login shell biasa. */
-export function shellArgv(shell?: string, cmd?: string): string[] {
-  const bin = shell?.trim() || process.env.SHELL || 'bash'
-  return cmd ? [bin, '-l', '-c', cmd] : [bin]
 }
 
 /** Jeda SIGTERM → SIGKILL saat node ditutup. Meniru grace nodeterm (`pty-manager.ts:7099-7110`,
@@ -180,7 +140,27 @@ function signalAll(pids: number[], signal: 'SIGTERM' | 'SIGKILL'): void {
  *  kernel, yaitu satu redraw penuh TUI per detak. */
 const saneWinsize = (n: number): boolean => Number.isInteger(n) && n > 0
 
-export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> }): Pty {
+export const SPAWN_FAILED_EXIT_CODE = 127
+
+/** Node tetap bersuara saat spawn gagal: pesan terbaca lalu `exit`, dikirim sesudah pemanggil sempat
+ *  memasang callback. */
+function failedPty(err: unknown): Pty {
+  let onData: (data: string) => void = () => {}
+  let onExit: (code: number) => void = () => {}
+  const reason = err instanceof Error ? err.message : String(err)
+  queueMicrotask(() => {
+    onData(`\r\n[webterm] gagal memulai shell: ${reason}\r\n`)
+    onExit(SPAWN_FAILED_EXIT_CODE)
+  })
+  return { pid: -1, onData(cb) { onData = cb }, onExit(cb) { onExit = cb }, write() {}, resize() {}, kill() {} }
+}
+
+type SpawnFn = (cmd: string[], options: Parameters<typeof Bun.spawn>[1]) => Bun.Subprocess
+
+export function spawnPty(
+  opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> },
+  spawn: SpawnFn = Bun.spawn
+): Pty {
   let onData: (data: string) => void = () => {}
   let onExit: (code: number) => void = () => {}
   // Streaming decoder so a multi-byte UTF-8 rune split across two read chunks
@@ -189,15 +169,20 @@ export function spawnPty(opts: { cols: number; rows: number; cwd?: string; cmd?:
 
   // Bentuk inline — lihat komentar bentuk spawn di kepala file. PTY-nya diakses lewat
   // `proc.terminal`, bukan objek yang kita pegang sendiri.
-  const proc = Bun.spawn(shellArgv(opts.shell, opts.cmd), {
-    terminal: {
-      cols: opts.cols,
-      rows: opts.rows,
-      data: (_t, bytes) => onData(decoder.decode(bytes, { stream: true })),
-    },
-    cwd: opts.cwd || process.env.HOME || process.cwd(),
-    env: { ...cleanEnv(), ...(opts.env ?? {}) },
-  })
+  let proc: Bun.Subprocess
+  try {
+    proc = spawn(shellArgv(opts.shell, opts.cmd), {
+      terminal: {
+        cols: opts.cols,
+        rows: opts.rows,
+        data: (_t, bytes) => onData(decoder.decode(bytes, { stream: true })),
+      },
+      cwd: resolveCwd(opts.cwd),
+      env: { ...ptyEnv(process.env, { interactive: !opts.cmd }), ...(opts.env ?? {}) },
+    })
+  } catch (err) {
+    return failedPty(err)
+  }
   const terminal = proc.terminal
 
   /**
