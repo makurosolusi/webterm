@@ -7,6 +7,7 @@ import { installContextLink } from './contextLink'
 import { TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
+import { upgradeRoute } from './upgradeRouting'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
 declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
@@ -75,12 +76,15 @@ if (dev) {
 
 const wss = new WebSocketServer({ noServer: true })
 server.on('upgrade', (req, socket, head) => {
-  // Only /ws is ours; Vite's own HMR upgrade uses a different path, leave it be.
+  // Only /ws is ours. In dev Vite's upgrade listener (same server) already claimed its HMR upgrade,
+  // so destroying the socket here would kill it; only prod, with no other listener, destroys.
   const url = reqUrl(req)
-  if (url.pathname !== WS_PATH) {
+  const route = upgradeRoute(url.pathname, WS_PATH, dev)
+  if (route === 'destroy') {
     socket.destroy()
     return
   }
+  if (route === 'ignore') return
   // A WebSocket upgrade is the single most valuable thing on this server to steal — it ends in
   // a PTY. Refuse before `handleUpgrade`, so an unauthorized peer never gets a socket at all.
   if (!allowed(req, url)) {
