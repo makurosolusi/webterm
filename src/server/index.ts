@@ -50,7 +50,7 @@ if (dev) {
   // Vite in middleware mode shares this port, so the app and its HMR websocket
   // live on one origin — no separate dev server, no CORS, no proxy.
   const { createServer: createViteServer } = await import('vite')
-  const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server } } })
+  const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
   server.on('request', (req, res) => {
     const url = reqUrl(req)
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
