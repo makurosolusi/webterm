@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
 import type { TerminalHandle } from './TerminalCore'
@@ -9,6 +9,7 @@ import PaneView from './PaneView'
 import { closeLeaf, leafIds, nextPaneId, rootPane, setRatio, splitLeaf } from './paneTree'
 import { useSpeechInput } from './useSpeechInput'
 import { send } from './ws'
+import { writeClipboard } from './clipboard'
 import type { Comment, Pane } from '../shared/workspace'
 import { randomId } from './randomId'
 
@@ -104,11 +105,14 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
   // Dibaca saat render, bukan di dalam handler: baris menunya harus sudah tahu kalau API-nya absen.
   const canPaste = typeof navigator.clipboard?.readText === 'function'
 
+  const hasSelection = (target: string) => handles.current.get(target)?.hasSelection() ?? false
+
   const paste = (target: string) => {
     // Kegagalan di sini normal (izin ditolak, dokumen tak fokus) tapi tidak boleh ditelan: tanpa
     // jejak, paste yang tidak terjadi tak bisa dibedakan dari clipboard yang kosong.
     navigator.clipboard.readText().then(
-      (text) => { if (text) send({ t: 'input', id: target, data: text }) },
+      // `paste` lewat xterm, bukan `input` mentah: bracketed paste dan normalisasi newline ikut.
+      (text) => { if (text) handles.current.get(target)?.paste(text) },
       (err: unknown) => { console.warn(`terminal ${target}: clipboard read rejected`, err) },
     )
   }
@@ -116,6 +120,15 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
   /** Baris menu untuk pane YANG DIKLIK, bukan untuk node: di node yang terbelah, "Close pane" yang
    *  mengenai pane lain dari yang ditunjuk pengguna membunuh terminal yang salah. */
   const menuRows = (target: string): MenuRow[] => [
+    {
+      label: 'Copy',
+      disabled: !hasSelection(target),
+      hint: hasSelection(target) ? 'Salin teks yang dipilih ke clipboard.' : 'Pilih teks di terminal dulu.',
+      onClick: () => {
+        const text = handles.current.get(target)?.getSelection()
+        if (text) void writeClipboard(text).then((ok) => { if (!ok) console.warn(`terminal ${target}: clipboard write failed`) })
+      },
+    },
     {
       label: 'Paste',
       disabled: !canPaste,
@@ -146,6 +159,11 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
       onClick: () => handles.current.get(target)?.clear(),
     },
   ]
+
+  // Node yang baru dipilih / pane aktif yang berganti → keyboard langsung ke terminal itu.
+  useEffect(() => {
+    if (selected && !collapsed) term()?.focus()
+  }, [selected, collapsed, activePane])
 
   const toggleMaximize = () => {
     if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }

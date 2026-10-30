@@ -115,6 +115,42 @@ describe('menu konteks node terminal', () => {
     expect(readText).toHaveBeenCalledTimes(1)
   })
 
+  it('Paste multi-baris lewat menu memanggil term.paste (bracketed paste), bukan input mentah', async () => {
+    const paste = vi.spyOn(Terminal.prototype, 'paste').mockImplementation(() => {})
+    stubClipboard({ readText: vi.fn().mockResolvedValue('satu\ndua\ntiga') })
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await openMenu()
+
+    fireEvent.click(row('Paste'))
+
+    await waitFor(() => expect(paste).toHaveBeenCalledWith('satu\ndua\ntiga'))
+    expect(paste).toHaveBeenCalledTimes(1)
+  })
+
+  it('Copy mati tanpa seleksi', async () => {
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await openMenu()
+
+    const copy = row('Copy')
+    expect(copy.disabled).toBe(true)
+    expect(copy.title).not.toBe('')
+  })
+
+  it('Copy aktif saat ada seleksi dan menulis seleksi itu ke clipboard', async () => {
+    vi.spyOn(Terminal.prototype, 'hasSelection').mockReturnValue(true)
+    vi.spyOn(Terminal.prototype, 'getSelection').mockReturnValue('teks terpilih')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    stubClipboard({ writeText })
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await openMenu()
+
+    const copy = row('Copy')
+    expect(copy.disabled).toBe(false)
+    fireEvent.click(copy)
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('teks terpilih'))
+  })
+
   it('Clear membersihkan scrollback terminalnya lewat handle', async () => {
     // Prototype publik xterm, bukan tiruan: ini membuktikan `clear()` di `TerminalHandle`
     // benar-benar sampai ke terminal yang hidup, bukan cuma ada di interface-nya.

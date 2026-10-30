@@ -107,7 +107,18 @@ async function splitVia(title: 'Split right' | 'Split down'): Promise<void> {
   await waitFor(() => expect(paneIds()).toHaveLength(before + 1))
 }
 
-beforeAll(installCanvasDom)
+// jsdom tidak punya layout: tanpa ini host terminal 0x0 dan `open` ditunda sampai fallback waktu.
+// Hanya host terminal (kelas `nowheel`) yang diberi ukuran, supaya ukuran React Flow tak berubah.
+function sizeTerminalHosts(): void {
+  for (const dim of ['clientWidth', 'clientHeight'] as const) {
+    Object.defineProperty(HTMLElement.prototype, dim, {
+      configurable: true,
+      get(this: HTMLElement) { return this.classList.contains('nowheel') ? 400 : 0 },
+    })
+  }
+}
+
+beforeAll(() => { installCanvasDom(); sizeTerminalHosts() })
 afterEach(() => {
   unmountCanvas()
   vi.restoreAllMocks()

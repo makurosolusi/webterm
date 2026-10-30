@@ -7,6 +7,11 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { send, subscribe } from './ws'
+import { writeClipboard } from './clipboard'
+import { lineEditSeq } from './terminalLineEdit'
+import { OPEN_SIZE_FALLBACK_MS, canOpenSession, coalesceFrames, sizeChanged } from './terminalSizing'
+import type { TermSize } from './terminalSizing'
+import { canClaimFocus, exitMessage, openLinkOnModifiedClick } from './terminalSession'
 import { applyLiveOptions, xtermOptionsFromSettings } from './terminalConfig'
 import {
   SHIFT_ENTER_SEQ,
@@ -30,6 +35,12 @@ export interface TerminalHandle {
   /** Buang scrollback, sisakan baris yang sedang tampil. Murni sisi klien: PTY tidak diberi tahu,
    *  jadi prompt dan proses foreground tidak tersentuh. */
   clear(): void
+  /** Paste ala terminal asli: `term.paste` membungkus bracketed-paste bila aplikasi memintanya. */
+  paste(text: string): void
+  hasSelection(): boolean
+  getSelection(): string
+  /** Fokus ke terminal, kecuali input lain (rename, dialog) sedang memegangnya. */
+  focus(): void
 }
 
 export interface TerminalCoreProps {
@@ -43,12 +54,11 @@ export interface TerminalCoreProps {
   onTitle?: (title: string) => void
 }
 
-/** Clipboard sistem. Jalur `writeText` bisa ditolak (permission, dokumen tak fokus, non-HTTPS);
- *  itu bukan kondisi fatal, tapi juga tidak boleh ditelan — pengguna harus bisa tahu kenapa
- *  copy-nya tidak terjadi. */
-function writeClipboard(nodeId: string, text: string): void {
-  navigator.clipboard?.writeText(text).catch((err: unknown) => {
-    console.warn(`terminal ${nodeId}: clipboard write rejected`, err)
+/** Copy gagal bukan fatal, tapi tidak boleh ditelan: tanpa jejak, copy yang tak terjadi tak
+ *  bisa dibedakan dari seleksi kosong. */
+function copyText(nodeId: string, text: string): void {
+  void writeClipboard(text).then((ok) => {
+    if (!ok) console.warn(`terminal ${nodeId}: clipboard write failed`)
   })
 }
 
@@ -89,6 +99,12 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   const fitRef = useRef<FitAddon | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
   const webglRef = useRef<WebglAddon | null>(null)
+  // `last` = ukuran terakhir yang dikirim (via `open` atau `resize`); dedupe SIGWINCH bertumpu padanya.
+  const session = useRef<{ opened: boolean; last: TermSize | null; open: () => void }>({
+    opened: false,
+    last: null,
+    open: () => {},
+  })
 
   // ponytail: zoom font per-terminal hidup di state komponen, jadi ia hilang saat node ditutup.
   // Mempersistennya butuh field di data node (milik worker lain) — angkat ke sana kalau diminta.
@@ -100,7 +116,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   live.current = { ...props, settings, fontZoom }
 
   // SATU-SATUNYA jalur fit+resize: `ResizeObserver` memakai ini juga, supaya gerbang `hasSize`
-  // cukup ditegakkan di satu tempat.
+  // cukup ditegakkan di satu tempat. Sebelum `open` terkirim, ukuran pertama ikut di `open`.
   const refit = useCallback(() => {
     const term = termRef.current
     const fit = fitRef.current
@@ -108,7 +124,15 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     if (!term || !fit || !el || !hasSize(el)) return
     fit.fit()
     term.refresh(0, term.rows - 1)
-    send({ t: 'resize', id, cols: term.cols, rows: term.rows })
+    const s = session.current
+    if (!s.opened) {
+      s.open()
+      return
+    }
+    const next = { cols: term.cols, rows: term.rows }
+    if (!sizeChanged(s.last, next)) return
+    s.last = next
+    send({ t: 'resize', id, ...next })
   }, [id])
 
   useImperativeHandle(
@@ -131,6 +155,14 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       clear() {
         termRef.current?.clear()
       },
+      paste(text) {
+        termRef.current?.paste(text)
+      },
+      hasSelection: () => termRef.current?.hasSelection() ?? false,
+      getSelection: () => termRef.current?.getSelection() ?? '',
+      focus() {
+        if (canClaimFocus(document.activeElement as HTMLElement | null, true)) termRef.current?.focus()
+      },
     }),
     [id, refit],
   )
@@ -148,7 +180,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     // nodeterm sengaja TIDAK memakai addon ini (TerminalNode.tsx:3283): addon-nya tidak bisa
     // menyambung baris yang dipotong-keras tmux, jadi URL yang terlipat jadi dua link rusak.
     // webterm tidak punya tmux — output PTY tiba utuh, jadi di sini addon-nya tepat.
-    term.loadAddon(new WebLinksAddon())
+    term.loadAddon(new WebLinksAddon((e, uri) => openLinkOnModifiedClick(e, uri)))
     try {
       term.loadAddon(new Unicode11Addon())
       // Tabel lebar default xterm adalah Unicode 6: di sana emoji selebar SATU sel. Setiap TUI
@@ -168,6 +200,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     termRef.current = term
     fitRef.current = fit
     searchRef.current = search
+    if (canClaimFocus(document.activeElement as HTMLElement | null, false)) term.focus()
 
     term.attachCustomKeyEventHandler((e) => {
       const s = live.current.settings
@@ -179,10 +212,10 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
           return false
         }
       }
-      const optionSeq = optionArrowSeq(e)
-      if (optionSeq) {
+      const lineSeq = optionArrowSeq(e) ?? lineEditSeq(e)
+      if (lineSeq) {
         e.preventDefault()
-        send({ t: 'input', id: live.current.id, data: optionSeq })
+        send({ t: 'input', id: live.current.id, data: lineSeq })
         return false
       }
       switch (terminalKeyAction(e, s.terminalShortcutPolicy)) {
@@ -190,7 +223,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
           // Ditelan APA PUN hasilnya: melewatkan Ctrl+Shift+C saat tidak ada seleksi membuat
           // xterm memetakan ctrl+c ke \x03 dan mem-SIGINT proses foreground.
           e.preventDefault()
-          if (term.hasSelection()) writeClipboard(live.current.id, term.getSelection())
+          if (term.hasSelection()) copyText(live.current.id, term.getSelection())
           return false
         case 'shift-enter':
           e.preventDefault()
@@ -208,7 +241,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
 
     const detachCopy = attachCopyOnSelect(term, {
       enabled: () => live.current.settings.copyOnSelect,
-      write: (text) => writeClipboard(live.current.id, text),
+      write: (text) => copyText(live.current.id, text),
     })
     const detachMiddle = guardMiddleClickPaste(
       el,
@@ -219,27 +252,45 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const unsub = subscribe(
       id,
       (d) => term.write(d),
-      () => term.write('\r\n[process exited]'),
+      (code) => term.write(exitMessage(code)),
       () => term.reset(),
     )
     term.onData((d) => send({ t: 'input', id, data: d }))
-    // `open` menyusul fit supaya server men-spawn PTY pada ukuran yang benar.
-    send({
-      t: 'open',
-      id,
-      cols: term.cols,
-      rows: term.rows,
-      ...(p.cwd ? { cwd: p.cwd } : {}),
-      ...(p.cmd ? { cmd: p.cmd } : {}),
-      ...(p.agentId ? { agentId: p.agentId } : {}),
-      ...(p.sessionId ? { sessionId: p.sessionId } : {}),
-      ...(p.resume ? { resume: true } : {}),
-    })
+    // `open` menyusul fit supaya server men-spawn PTY pada ukuran yang benar. Elemen yang belum
+    // berukuran menunda `open` ke `refit` pertama yang berukuran, dengan batas waktu supaya node
+    // yang tetap collapsed tidak menggantung tanpa sesi.
+    const s = session.current
+    s.opened = false
+    s.last = null
+    let fallback: ReturnType<typeof setTimeout> | undefined
+    s.open = () => {
+      if (s.opened) return
+      s.opened = true
+      clearTimeout(fallback)
+      s.last = { cols: term.cols, rows: term.rows }
+      send({
+        t: 'open',
+        id,
+        cols: term.cols,
+        rows: term.rows,
+        ...(p.cwd ? { cwd: p.cwd } : {}),
+        ...(p.cmd ? { cmd: p.cmd } : {}),
+        ...(p.agentId ? { agentId: p.agentId } : {}),
+        ...(p.sessionId ? { sessionId: p.sessionId } : {}),
+        ...(p.resume ? { resume: true } : {}),
+      })
+    }
+    if (canOpenSession(hasSize(el), false)) s.open()
+    else fallback = setTimeout(() => { if (canOpenSession(false, true)) s.open() }, OPEN_SIZE_FALLBACK_MS)
 
-    const ro = new ResizeObserver(refit)
+    const frames = coalesceFrames(refit)
+    const ro = new ResizeObserver(frames.schedule)
     ro.observe(el)
 
     return () => {
+      clearTimeout(fallback)
+      frames.cancel()
+      s.opened = false
       ro.disconnect()
       titleSub.dispose()
       detachMiddle()
@@ -288,7 +339,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     }
   }, [id, settings, fontZoom, refit])
 
-  return <div ref={elRef} className="nodrag" style={{ height: '100%', width: '100%' }} />
+  return <div ref={elRef} className="nodrag nowheel" style={{ height: '100%', width: '100%' }} />
 })
 
 export default TerminalCore
