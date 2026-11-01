@@ -125,6 +125,34 @@ describe('conversation reads', () => {
 })
 
 describe('message submit', () => {
+  it('auto-creates a canonical conversation on first POST, replays, and rejects an unknown project', async () => {
+    fixture.db.exec('DELETE FROM central_conversation')
+    const globalPath = '/api/central/conversations/central%3Aglobal/messages'
+    const body = JSON.stringify({ clientMessageId: 'fresh', text: 'hello' })
+    const first = await call(deps(), globalPath, { body })
+    expect(first.status).toBe(202)
+    expect(first.json).toMatchObject({ seq: 1, status: 'running' })
+
+    const replay = await call(deps(), globalPath, { body })
+    expect(replay.status).toBe(202)
+    expect(replay.json).toMatchObject({
+      messageId: first.json['messageId'], seq: 1, turnId: first.json['turnId'],
+    })
+    const listed = await call(deps(), '/api/central/conversations')
+    expect((listed.json['items'] as { id: string }[]).map((item) => item.id)).toContain('central:global')
+
+    const missingProject = await call(deps(), '/api/central/conversations/central%3Aproject%3Amissing/messages', {
+      body: JSON.stringify({ clientMessageId: 'p-missing', text: 'hello' }),
+    })
+    expect(missingProject.status).toBe(404)
+    expect((missingProject.json as { error: { code: string } }).error.code).toBe('project_not_found')
+
+    const existingProject = await call(deps(), '/api/central/conversations/central%3Aproject%3Ap1/messages', {
+      body: JSON.stringify({ clientMessageId: 'p1-first', text: 'hello' }),
+    })
+    expect(existingProject.status).toBe(202)
+  })
+
   it('accepts a message with 202 and replays the same ids for the same clientMessageId', async () => {
     const body = JSON.stringify({ clientMessageId: 'c1', text: 'hello' })
     const first = await call(deps(), '/api/central/conversations/central%3Aglobal/messages', { body })

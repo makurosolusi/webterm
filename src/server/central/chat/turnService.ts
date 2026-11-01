@@ -17,7 +17,7 @@ import type { StreamHub } from './streamHub'
 import { CentralChatError, chatErrorStatus } from './chatErrors'
 import {
   appendAssistantMessage, busyError, findByClientMessageId, finalizeTurn, recordEvent,
-  requireConversation, type StoredMessage,
+  resolveOrCreateConversation, type StoredMessage,
 } from './turnPersistence'
 import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents'
 
@@ -70,7 +70,7 @@ export class TurnService {
   /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
   submit(input: { conversationId: string; clientMessageId?: unknown; text: unknown }): SubmitResult {
     if (this.runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
-    const conversation = requireConversation(this.db, input.conversationId)
+    const conversation = resolveOrCreateConversation(this.db, input.conversationId)
     const clientMessageId = normalizeClientMessageId(input.clientMessageId)
     if (clientMessageId === null) throw new CentralChatError('invalid_message', 'clientMessageId is required', 400)
     const text = validateMessageText(input.text)

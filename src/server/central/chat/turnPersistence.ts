@@ -51,11 +51,19 @@ export function recordEvent(
   stream.publish(conversationId, event)
 }
 
-export function requireConversation(db: Database, rawId: string): Conversation {
+/**
+ * Canonical ids auto-create on first use. A project conversation is only created
+ * when the project row exists; an unknown project is a typed 404, not an empty chat.
+ */
+export function resolveOrCreateConversation(db: Database, rawId: string): Conversation {
   const scope = scopeFromConversationId(rawId)
-  const conversation = getConversation(db, conversationIdForScope(scope))
-  if (!conversation) throw new CentralChatError('conversation_not_found', `conversation not found: ${rawId}`, 404)
-  return conversation
+  const canonicalId = conversationIdForScope(scope)
+  const existing = getConversation(db, canonicalId)
+  if (existing) return existing
+  if (scope.kind === 'project' && getRow(db, 'SELECT 1 AS one FROM project WHERE id = ?', scope.projectId) === null) {
+    throw new CentralChatError('project_not_found', `project not found: ${scope.projectId}`, 404)
+  }
+  return getOrCreateConversation(db, scope.kind === 'global' ? 'global' : `project:${scope.projectId}`)
 }
 
 export function findByClientMessageId(
