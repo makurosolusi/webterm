@@ -8,6 +8,7 @@ import type { PlanItem } from './orchestrator/planModel'
 import type { WorktreeService } from './orchestrator/worktree'
 import {
   assignmentProblem,
+  projectPaused,
   projectRepo,
   resolveWorktrees,
   worktreeRoot,
@@ -64,6 +65,16 @@ describe('orchestratorRunProduction', () => {
     expect(projectRepo(blank as never, 'p1')).toBeNull()
     const missing = { query: () => ({ get: () => null }) }
     expect(projectRepo(missing as never, 'p1')).toBeNull()
+  })
+
+  it('reports only an exact `paused` status, and null when the project row is missing', () => {
+    const row = (value: unknown) => ({ query: () => ({ get: () => value }) })
+    expect(projectPaused(row({ status: 'paused' }) as never, 'p1')).toBe(true)
+    expect(projectPaused(row({ status: 'active' }) as never, 'p1')).toBe(false)
+    expect(projectPaused(row({ status: 'PAUSED' }) as never, 'p1')).toBe(false)
+    expect(projectPaused(row({ status: null }) as never, 'p1')).toBe(false)
+    expect(projectPaused(row({ path: '/srv/repo' }) as never, 'p1')).toBe(false)
+    expect(projectPaused(row(null) as never, 'p1')).toBeNull()
   })
 
   it('accepts only an assigned item that has a task and assignee', () => {

@@ -21,6 +21,7 @@ import {
   agentCommand,
   assignmentProblem,
   productionRuntime,
+  projectPaused,
   projectRepo,
   resolveWorktrees,
   worktreeRoot,
@@ -50,6 +51,24 @@ export async function orchestratorRunRoute(
   const parsed = parseRunBody(body)
   if (!parsed.ok) return parsed.result
   const request = parsed.value
+
+  // A paused project must not start new work. Checked before repo/plan/worktree so a paused
+  // request creates no runtime, worktree root or git exec at all.
+  let paused: boolean | null
+  try {
+    paused = projectPaused(ledger.db, request.projectId)
+  } catch {
+    return { status: 500, body: { error: 'internal' } }
+  }
+  if (paused === true) {
+    return {
+      status: 409,
+      body: {
+        error: 'project_paused',
+        message: `project ${request.projectId} is paused; resume it before running`,
+      },
+    }
+  }
 
   let repo: string | null
   try {

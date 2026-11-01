@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
@@ -27,10 +27,11 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-function runtime(projectPath: string | null = REPO): LedgerRuntime {
+// The fake row answers both the repo query and the pause query, like a real project row would.
+function runtime(projectPath: string | null = REPO, status = 'active'): LedgerRuntime {
   const db = {
     query: () => ({
-      get: () => (projectPath === null ? null : { path: projectPath }),
+      get: () => (projectPath === null ? null : { path: projectPath, status }),
     }),
   }
   return { db, mode: 'on', path: ':memory:', ledger: {} } as unknown as LedgerRuntime
@@ -196,6 +197,31 @@ describe('orchestrator run route', () => {
     const failed = await orchestratorRunRoute(valid, broken.deps)
     expect(failed.status).toBe(500)
     expect(JSON.stringify(failed.body)).not.toContain(REPO)
+  })
+
+  it('answers 409 project_paused for a paused project and touches nothing', async () => {
+    const dataDir = tempDataDir()
+    const run = deps(async () => outcome(), {
+      ledger: runtime(REPO, 'paused'),
+      dataDir: () => dataDir,
+    })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result).toEqual({
+      status: 409,
+      body: { error: 'project_paused', message: 'project p1 is paused; resume it before running' },
+    })
+    expect(run.captured.calls).toBe(0)
+    expect(run.captured.compose).toBeUndefined()
+    // No worktree root is created before the gate, so a paused project leaves no trace.
+    expect(existsSync(join(dataDir, 'worktrees'))).toBe(false)
+  })
+
+  it('still runs an active project unchanged', async () => {
+    const run = deps(async () => outcome(), { ledger: runtime(REPO, 'active') })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ ok: true })
+    expect(run.captured.calls).toBe(1)
   })
 
   it('treats a project without a repo path as not runnable', async () => {

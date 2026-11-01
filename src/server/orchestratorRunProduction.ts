@@ -53,6 +53,19 @@ export function projectRepo(db: Database, projectId: string): string | null {
   return typeof row?.path === 'string' && row.path.trim() !== '' ? row.path : null
 }
 
+/**
+ * Pause gate for worker runs: `true` only when the project row is exactly `paused`.
+ * `null` means no such project row, so a missing project is never reported as paused
+ * (the route keeps its existing `not_assigned` answer for that case).
+ */
+export function projectPaused(db: Database, projectId: string): boolean | null {
+  const row = db.query('SELECT status FROM project WHERE id = ?').get(projectId) as
+    | { status?: unknown }
+    | null
+  if (row === null || row === undefined) return null
+  return row.status === 'paused'
+}
+
 /** 409 `not_assigned`: plan/item/assignment must already exist. The route never creates them. */
 export function assignmentProblem(
   plan: Pick<PlanStore, 'get'>,
