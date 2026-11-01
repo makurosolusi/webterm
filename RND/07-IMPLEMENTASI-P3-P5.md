@@ -60,7 +60,7 @@ Gate wave 5-6 (HEAD `5214ea2`, 2026-11-01 21:36; suite di `51dab65`+, acceptance
 | Cek | Hasil |
 |---|---|
 | `tsc --noEmit` (strict + unused) | bersih |
-| `vitest run` penuh (`TMPDIR=/tmp`) | 138 file / 1835 test lulus |
+| `vitest run` penuh (`TMPDIR=/tmp`) | 138 file / 1840 test lulus |
 | `bun test` penuh | 29 file / 204 test lulus |
 | Wave-5 terarah (verifier, orchestratorRun, approvalHumanApi, centralAutonomy) | 4 file / 65 test lulus |
 | Acceptance HTTP publik (agen PTY palsu, port 8830/8831) | 29/29 PASS (`RND/qc/wave5-public-acceptance.md`) |
@@ -465,7 +465,7 @@ aktifkan bila klien bisa mengirim header itu.
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 138 file / 1835 test dan bun 29 file / 204 test lulus pada `5214ea2` (`TMPDIR=/tmp`) |
+| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 138 file / 1840 test dan bun 29 file / 204 test lulus pada `3fe7231` (`TMPDIR=/tmp`) |
 | G1 seam | ✅ | P0 |
 | G2 auth/capability | ⚠️ | capability ✅; family root-only dipin test; aktor approval manusia kini dari transport (`human:root`/`human:loopback`) ✅, tetapi identitas per-user/per-agent dan ikatan ke capability belum |
 | G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; kanal memakai store JSON sehingga **tidak** butuh slot v4 |
@@ -494,7 +494,7 @@ TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
-Wave 5-6 (`51dab65`..`5214ea2`): vitest penuh 138 file / 1835 test, bun penuh 29 file / 204 test,
+Wave 5-6 (`51dab65`..`5214ea2`): vitest penuh 138 file / 1840 test, bun penuh 29 file / 204 test,
 `tsc` strict + unused bersih; hijau dengan `TMPDIR=/tmp` (gate §9). Harness soak dan acceptance
 HTTP 29/29 (agen PTY palsu) PASS; `controlCwd` butuh `TMPDIR=/tmp`.
 Terarah wave 5: 4 file / 65 test (`verifier`, `orchestratorRun`, `approvalHumanApi`,
