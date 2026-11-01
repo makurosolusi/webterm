@@ -9,6 +9,7 @@ import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
+import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -35,6 +36,11 @@ if (ledgerRuntime) {
 // `null` means no route exists at all, not a route that rejects every request.
 const channelsRuntime = startChannelsRuntime(activeLedgerRuntime()?.ledger)
 if (channelsRuntime) console.log(`telegram channel: on (POST ${TELEGRAM_WEBHOOK_PATH})`)
+
+// Central autonomy (off by default) is a timer over the existing ledger runtime; it never
+// starts a second server. Boot is fail-closed: it logs one line and starts only when
+// WEBTERM_CENTRAL_AUTONOMY=on, a ledger runtime exists, and WEBTERM_ORCHESTRATOR_RUN=on.
+startCentralAutonomyBoot({ runtime: activeLedgerRuntime() })
 
 const API_PREFIX = '/api/'
 
