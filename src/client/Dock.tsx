@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
   Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus, Inbox,
+  MessageSquare,
 } from 'lucide-react'
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
@@ -27,6 +28,11 @@ export interface DockProps {
    *  di atas canvas, bukan aksi pada node. */
   inboxOpen: boolean
   onToggleInbox: () => void
+  /** Chat panel terbuka? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
+   *  tombolnya hanya dirender ketika integrator menyediakan handler. Panel Chat adalah sibling
+   *  Inbox/Sessions — permukaan yang mengapung di atas canvas, bukan node. */
+  chatOpen?: boolean
+  onToggleChat?: () => void
   /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;
    *  dock tidak pernah memanggil `fetch` sendiri. */
   inboxUnread?: number
@@ -114,6 +120,18 @@ export default function Dock(props: DockProps) {
           <Inbox size={ICON} />
           {badge && <span className="dock-badge" aria-hidden="true">{badge}</span>}
         </button>
+
+        {/* Chat is a third floating surface, not a canvas node: a conversation needs a stable
+            keyboard focus and a chronological log, which a node loses off-viewport. */}
+        {props.onToggleChat && (
+          <button
+            className={`dock-btn${props.chatOpen ? ' active' : ''}`}
+            aria-label="Toggle chat panel"
+            title={props.chatOpen ? 'Hide chat' : 'Show chat'}
+            aria-pressed={props.chatOpen === true}
+            onClick={props.onToggleChat}
+          ><MessageSquare size={ICON} /></button>
+        )}
 
         <div className="dock-sep" />
 

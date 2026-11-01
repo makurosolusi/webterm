@@ -12,6 +12,7 @@ import Login from './Login'
 import CanvasToolbar from './CanvasToolbar'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import InboxPanel from './InboxPanel'
+import ChatPanel, { useChatOpen } from './ChatPanel'
 import { useInboxOpen } from './inboxPanelModel'
 import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { CleanViewHint, useCleanView } from './cleanView'
@@ -63,6 +64,9 @@ export default function App() {
   const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
   // Sama seperti Sessions: tombolnya di Dock, jadi keadaannya milik App yang merender keduanya.
   const [inboxOpen, setInboxOpen] = useInboxOpen()
+  // Chat adalah permukaan ketiga yang mengapung di atas canvas (bukan node): state-nya di App
+  // karena tombol pembukanya di Dock, sama seperti Sessions/Inbox.
+  const [chatOpen, setChatOpen] = useChatOpen()
   // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
   // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
   const [cleanView, toggleCleanView] = useCleanView()
@@ -399,6 +403,8 @@ export default function App() {
             inboxOpen={inboxOpen}
             onToggleInbox={() => setInboxOpen(!inboxOpen)}
             inboxUnread={inboxUnread}
+            chatOpen={chatOpen}
+            onToggleChat={() => setChatOpen(!chatOpen)}
             zoomPct={Math.round(zoom * 100)}
             onZoomIn={onZoomIn}
             onZoomOut={onZoomOut}
@@ -434,6 +440,9 @@ export default function App() {
           {/* Panel menutup sendiri lewat Escape (`onClose`), dan dialog persetujuan di dalamnya
               yang memegang consent. Dock/badge tidak pernah menyetujui apa pun. */}
           <InboxPanel open={inboxOpen} onClose={() => setInboxOpen(false)} pollMs={30000} />
+          {/* Panel menutup sendiri lewat tombol X-nya. Saat Inbox terbuka, Chat minggir ke kiri
+              supaya dua permukaan itu tidak saling menimpa. */}
+          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} offsetForInbox={inboxOpen} />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
         </>
