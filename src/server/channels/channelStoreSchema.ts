@@ -1,6 +1,6 @@
 // Schema + strict validation for the channel store document. Kept apart from the file I/O in
 // channelStore.ts so the shape check is a pure function that tests can feed arbitrary JSON.
-import { CHANNEL_ROLES, type ChannelBinding, type ChannelRole } from './identity'
+import { APPROVAL_ROLES, CHANNEL_ROLES, type ChannelBinding, type ChannelRole } from './identity'
 
 export const CHANNEL_STORE_VERSION = 1
 export const CHANNEL_STORE_FILE = 'channels.json'
@@ -64,6 +64,23 @@ export function parseBinding(value: unknown): ChannelBinding | null {
   return { projectId, role, ...(userId === undefined ? {} : { userId }) }
 }
 
+/** Telegram group/supergroup ids are negative. Mirrors the bind API's group detection. */
+function isGroupChatId(chatId: string): boolean {
+  return chatId.startsWith('-')
+}
+
+/**
+ * Load-time group policy (P5 residual): the bind API refuses an approval role for a group chat, but a
+ * hand-edited file can still contain one. Reapply the rule here so it never takes effect: downgrade
+ * the role in memory to `operator` (read/operator capability kept, approval removed) instead of
+ * dropping the binding, so an operator still sees the chat is bound and can rebind it. The file is
+ * not rewritten during load; the next save persists the sanitized value.
+ */
+export function applyGroupApprovalPolicy(chatId: string, binding: ChannelBinding): ChannelBinding {
+  if (!isGroupChatId(chatId) || !APPROVAL_ROLES.includes(binding.role)) return binding
+  return { ...binding, role: 'operator' }
+}
+
 function parseReply(value: unknown): StoredReply | null {
   if (!isRecord(value)) return null
   const key = value['key']
@@ -123,7 +140,7 @@ export function parseStoreState(raw: string): ChannelStoreState {
     const binding = parseBinding(value)
     const at = key.indexOf(':')
     if (!binding || at <= 0 || at === key.length - 1) throw new StoreCorruptError('corrupt')
-    bindings[key] = binding
+    bindings[key] = applyGroupApprovalPolicy(key.slice(at + 1), binding)
   }
 
   const processed: Record<string, number> = {}

@@ -109,6 +109,67 @@ describe('ChannelStore persistence', () => {
   })
 })
 
+describe('ChannelStore reapplies the group policy on load', () => {
+  /** Hand-written file, as a user could produce by editing channels.json directly. */
+  function writeStoreFile(bindings: Record<string, { projectId: string; role: string }>): string {
+    const path = tempStorePath()
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(
+      path,
+      JSON.stringify({ version: CHANNEL_STORE_VERSION, bindings, processed: {}, cursor: 0, outbox: [] })
+    )
+    return path
+  }
+
+  it('downgrades a group owner/approver binding to operator instead of honoring it', () => {
+    const path = writeStoreFile({
+      'telegram:-100123': { projectId: 'p', role: 'owner' },
+      'telegram:-100456': { projectId: 'p', role: 'approver' },
+    })
+    const store = new ChannelStore(path)
+    expect(store.binding('telegram', '-100123')).toEqual({ projectId: 'p', role: 'operator' })
+    expect(store.binding('telegram', '-100456')).toEqual({ projectId: 'p', role: 'operator' })
+    expect(store.snapshot().bindings['telegram:-100123']).toEqual({ projectId: 'p', role: 'operator' })
+  })
+
+  it('keeps group viewer/operator and private owner bindings unchanged', () => {
+    const path = writeStoreFile({
+      'telegram:-100123': { projectId: 'p', role: 'viewer' },
+      'telegram:-100456': { projectId: 'p', role: 'operator' },
+      'telegram:424242': { projectId: 'p', role: 'owner' },
+      'telegram:515151': { projectId: 'p', role: 'approver' },
+    })
+    const store = new ChannelStore(path)
+    expect(store.binding('telegram', '-100123')?.role).toBe('viewer')
+    expect(store.binding('telegram', '-100456')?.role).toBe('operator')
+    expect(store.binding('telegram', '424242')?.role).toBe('owner')
+    expect(store.binding('telegram', '515151')?.role).toBe('approver')
+  })
+
+  it('does not rewrite the file on load, but a later save persists operator', () => {
+    const raw = JSON.stringify({
+      version: CHANNEL_STORE_VERSION,
+      bindings: { 'telegram:-100123': { projectId: 'p', role: 'owner' } },
+      processed: {},
+      cursor: 0,
+      outbox: [],
+    })
+    const path = tempStorePath()
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, raw)
+
+    const store = new ChannelStore(path)
+    expect(store.binding('telegram', '-100123')?.role).toBe('operator')
+    expect(readFileSync(path, 'utf8')).toBe(raw)
+
+    // Any save round-trips the in-memory state, so the downgrade becomes durable.
+    store.bind('telegram', '424242', { projectId: 'p', role: 'viewer' })
+    const persisted = JSON.parse(readFileSync(path, 'utf8')) as { bindings: Record<string, { role: string }> }
+    expect(persisted.bindings['telegram:-100123']?.role).toBe('operator')
+    expect(new ChannelStore(path).binding('telegram', '-100123')?.role).toBe('operator')
+  })
+})
+
 describe('ChannelStore fails closed', () => {
   it('throws on corrupt JSON and never overwrites the file', () => {
     const path = tempStorePath()
