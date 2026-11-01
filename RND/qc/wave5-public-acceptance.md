@@ -8,7 +8,7 @@ the user's.
 
 ## Result
 
-**30/30 checks passed** after three real bugs were found and fixed.
+**33/33 checks passed** after three real bugs were found and fixed.
 
 | Requirement | Observed |
 |---|---|
@@ -23,6 +23,9 @@ the user's.
 | Correct digest retried after wrong digest | **200**, still runs |
 | Approval issued for project A used on project B | **409 `approval_project_mismatch`**, nothing consumed |
 | Task-bound approval for task A used on item B (same project) | **409 `approval_task_mismatch`**, nothing consumed |
+| Task-bound approval used on its own task | **200**, task verified |
+| Consumed approval reused on a second assigned item | **409 `approval_already_consumed`** |
+| Approval request body >cap | **413** |
 | Worker task result | `verified` |
 | Evidence provenance | `verifiedBy: "server-verifier"` |
 | Changed files | `["src/change.txt"]` |
