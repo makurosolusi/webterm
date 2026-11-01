@@ -1,6 +1,6 @@
-// HTTP edge for the Telegram channel (P5-3): flag check, secret check, 64 KiB body cap, dedupe,
-// dispatch, fast 200. Kept out of index.ts so server startup stays one readable block and so the
-// webhook body can be exercised without binding a port.
+// HTTP edge for the Telegram channel (P5-3/P3): flag check, secret check, 64 KiB body cap, dedupe,
+// dispatch, fast 200, plus the root-only human binding API and the egress drainer. Kept out of
+// index.ts so startup stays one readable block and both routes can be exercised without a port.
 //
 // Enabled only when ALL of these hold; otherwise no route is installed at all:
 //   WEBTERM_TELEGRAM=on
@@ -25,6 +25,15 @@ import {
   type ChannelAuditEvent,
   type DispatchOutcome,
 } from './channelDispatch'
+import { handleChannelBindingsApi } from './channelBindingsHttp'
+import { declaredLength, readCappedBody, writeJson, type BodyReadResult } from './channelHttp'
+import {
+  flushChannelSender,
+  startChannelSenderFor,
+  stopChannelSender,
+  type SenderBootOptions,
+} from './channelSenderBoot'
+import type { FlushResult } from './telegramSender'
 import { MAX_WEBHOOK_BODY_BYTES, redactSecrets, verifyTelegramSecret } from './webhook'
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
@@ -44,7 +53,7 @@ export {
 } from './channelSecret'
 export { WEBHOOK_FAILURE_LIMIT, WEBHOOK_FAILURE_WINDOW_MS } from './channelThrottle'
 
-export type WebhookBodyResult = { ok: true; body: string } | { ok: false; reason: 'too_large' | 'read_failed' }
+export type WebhookBodyResult = BodyReadResult
 
 export interface ChannelWebhookRequest {
   method?: string
@@ -143,7 +152,15 @@ export function ledgerApprovalPort(ledger: Ledger): ChannelApprovalPort {
 
 export interface ChannelsRuntime {
   store: ChannelStore
+  /** True when the egress interval is running (a bot token was configured at boot). */
+  readonly senderRunning: boolean
   handle(req: IncomingMessage, res: ServerResponse): boolean
+  /** Root-only binding CRUD. The caller MUST authorize first; false for any other path. */
+  handleApi(req: IncomingMessage, res: ServerResponse): boolean
+  /** Drain the reply outbox now; resolves to an idle result when egress is not configured. */
+  flushNow(): Promise<FlushResult>
+  /** Stop the egress interval. Safe to call more than once. */
+  stop(): void
 }
 
 export interface ChannelsRuntimeOptions {
@@ -152,6 +169,8 @@ export interface ChannelsRuntimeOptions {
   now?: () => number
   /** Injection seam for tests; production reads the real filesystem. */
   readSecret?: (path: string) => SecretFileRead
+  /** Egress pacing and transport seam; omitted in production (5s interval, global fetch). */
+  sender?: SenderBootOptions
 }
 
 /**
@@ -194,14 +213,27 @@ export function startChannelsRuntime(
     dispatch: (update) => dispatchTelegramUpdate(update, { store, approval, audit }),
   }
   const throttle = new FailureThrottle(undefined, undefined, options.now ?? Date.now)
+  // A missing bot token only disables egress; ingress and the binding API stay available.
+  const sender = startChannelSenderFor(store, env, options.sender ?? {})
 
   return {
     store,
+    get senderRunning() {
+      return sender !== null && sender.running
+    },
     handle(req, res) {
       const path = new URL(req.url || '/', 'http://x').pathname
       if (path !== TELEGRAM_WEBHOOK_PATH) return false
       void respondToWebhook(req, res, runtime, throttle)
       return true
+    },
+    handleApi(req, res) {
+      // Authorization already happened: index.ts only calls this after `allowed`.
+      return handleChannelBindingsApi(req, res, store)
+    },
+    flushNow: () => flushChannelSender(sender),
+    stop() {
+      stopChannelSender(sender)
     },
   }
 }
@@ -230,7 +262,7 @@ async function respondToWebhook(
         method: req.method,
         headers: req.headers,
         declaredLength: declaredLength(req.headers['content-length']),
-        readBody: () => readCappedBody(req),
+        readBody: () => readCappedBody(req, MAX_WEBHOOK_BODY_BYTES),
       },
       runtime
     )
@@ -239,59 +271,4 @@ async function respondToWebhook(
   }
   if (result.status === 401) throttle.recordFailure(peer)
   writeJson(res, result.status, result.body)
-}
-
-function writeJson(
-  res: ServerResponse,
-  status: number,
-  body: ChannelWebhookResponseBody,
-  extraHeaders: Record<string, string> = {}
-): void {
-  if (res.headersSent) return
-  res.statusCode = status
-  res.setHeader('Content-Type', 'application/json')
-  res.setHeader('Cache-Control', 'no-store')
-  for (const [name, value] of Object.entries(extraHeaders)) res.setHeader(name, value)
-  res.end(JSON.stringify(body))
-}
-
-function declaredLength(raw: string | string[] | undefined): number | undefined {
-  const value = Array.isArray(raw) ? raw[0] : raw
-  if (value === undefined || !/^\d{1,12}$/.test(value)) return undefined
-  return Number(value)
-}
-
-/** Read with a hard byte cap. The overflow path drops the listener and drains, so the 413 can be
- *  written without buffering an unbounded body (a declared length is not trusted). */
-function readCappedBody(req: IncomingMessage): Promise<WebhookBodyResult> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = []
-    let total = 0
-    let settled = false
-    const cleanup = (): void => {
-      req.off('data', onData)
-      req.off('end', onEnd)
-      req.off('error', onError)
-    }
-    const finish = (result: WebhookBodyResult): void => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve(result)
-    }
-    const onData = (chunk: Buffer): void => {
-      total += chunk.length
-      if (total > MAX_WEBHOOK_BODY_BYTES) {
-        req.resume()
-        finish({ ok: false, reason: 'too_large' })
-        return
-      }
-      chunks.push(chunk)
-    }
-    const onEnd = (): void => finish({ ok: true, body: Buffer.concat(chunks).toString('utf8') })
-    const onError = (): void => finish({ ok: false, reason: 'read_failed' })
-    req.on('data', onData)
-    req.on('end', onEnd)
-    req.on('error', onError)
-  })
 }

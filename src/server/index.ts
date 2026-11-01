@@ -92,6 +92,8 @@ if (dev) {
     // before the /api gate. `handle` owns only its exact path.
     if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
+    if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
@@ -106,6 +108,8 @@ if (dev) {
     // before the /api gate. `handle` owns only its exact path.
     if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
+    if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
