@@ -116,15 +116,16 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   WAL), schema v1 (project/agent/task/event/decision/approval/run/usage/prefix/budget/memory/
   memory_fts), repository task state machine (fence, lease, suspect, evidence) + event atomik.
   Startup sudah wired lewat `WEBTERM_LEDGER` (default off).
-- Gates P2: 51 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
+- Gates P2: 59 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
 - **P2 QC fixed**: attempt cap, claimDone lease owner/expiry, FK pragma assertion, depth/project
   invariants, event reference consistency, per-project idem_key + lookup, index coverage,
   pagination clamps, workspace-wide delete, migration version validation.
-- **P2.1 sebagian selesai**: runtime flag `WEBTERM_LEDGER=off|shadow|on`, reaper sweep lease
-  kedaluwarsa, `cancelTask`/`blockTask`, wire startup (default off). Gates: 51 bun ledger test.
-- Sisa P2.1 (belum): repository run/usage/budget, backup otomatis sebelum migrasi destruktif,
-  metrics, scheduler tick.
-- Fase berikutnya: P2.1 lalu P3 approval blocking.
+- **P2.1 selesai**: runtime flag
+  `WEBTERM_LEDGER=off|shadow|on`, reaper tick 30s, `cancelTask`/`blockTask`, repository
+  run/usage/budget (provider_response_id idempotent, unknown token != 0, hard cap), backup
+  otomatis sebelum upgrade file DB, metrics in-memory (migration_ms, lease_expired, suspect,
+  stale_fence, reaper_tick/error).
+- Fase berikutnya: P3 approval blocking + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
 
@@ -157,3 +158,6 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 | `49373c3` | repository project/task/event |
 | `83556ad` | fix invariant ledger pasca-QC |
 | `b55540a` | runtime flag + reaper sweep + stop transition |
+| `e315c53` | run/usage/budget repository + reaper tick |
+| `476cda4` | backup otomatis sebelum upgrade migrasi |
+| `9c05bf8` | metrics P2 in-memory |
