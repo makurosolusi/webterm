@@ -15,6 +15,7 @@ import { orchestratorRoute } from './orchestratorApi'
 import { approvalHumanRoute } from './approvalHumanApi'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { contextLinkRoute } from './contextLinkApi'
+import { centralChatRoute } from './centralChatApi'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
@@ -119,6 +120,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Read-only ledger projections for the UI (inbox/memory/orchestrator). Ledger off answers 503
   // `ledger_off` instead of an empty list; null from a family = keep falling through to 404.
   const ledger = activeLedgerRuntime()
+  // Central chat (exact paths only; flags inside). Mounted before the read-only projections
+  // and the 404 fallback so its SSE response can stay open; portfolio routes are untouched.
+  if (await centralChatRoute(req, res, url, { ledger })) return
   if (await extendedApiRoute(req, res, url, () => readBody(req), ledger)) return
   if (await approvalHumanRoute(req, res, url)) return
   // Memory writes (claim/promote). Body capped at 64 KiB and read lazily, so the read-only GETs

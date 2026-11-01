@@ -1,0 +1,72 @@
+// Runtime-event projection for one chat turn (RND/08 §7, RND/13 §4 C1).
+// Pure: turns normalized `RuntimeEvent`s into ledger event payloads plus the
+// in-memory tool/text state the final assistant message needs. No SQL, no stream.
+import type { CentralEventType } from '../conversationModel'
+import type { RuntimeEvent, RuntimeUsage } from '../runtime/centralRuntime'
+import { zeroUsage } from '../runtime/centralRuntime'
+
+export interface ToolRecord {
+  toolCallId: string
+  name: string
+  state: 'succeeded' | 'failed' | 'cancelled'
+  args?: unknown
+  result?: unknown
+}
+
+export interface RunState {
+  text: string
+  usage: RuntimeUsage
+  tools: Map<string, ToolRecord>
+}
+
+export interface ProjectedEvent {
+  type: CentralEventType
+  payload: Record<string, unknown>
+}
+
+export function createRunState(): RunState {
+  return { text: '', usage: zeroUsage(), tools: new Map() }
+}
+
+/** `usage` only updates state; `turn.result` is consumed by the service, not persisted here. */
+export function projectRuntimeEvent(
+  state: RunState, messageId: string, event: RuntimeEvent
+): ProjectedEvent | null {
+  if (event.type === 'text.delta') {
+    state.text += event.text
+    return { type: 'part.delta', payload: { messageId, part: 'text', delta: event.text } }
+  }
+  if (event.type === 'tool.requested') {
+    state.tools.set(event.toolCallId, {
+      toolCallId: event.toolCallId, name: event.name, state: 'failed', args: event.input,
+    })
+    return {
+      type: 'tool.requested',
+      payload: { messageId, toolCallId: event.toolCallId, name: event.name, input: event.input, risk: 'R0' },
+    }
+  }
+  if (event.type === 'tool.completed') {
+    const record = state.tools.get(event.toolCallId)
+    if (record) {
+      record.state = event.ok ? 'succeeded' : event.errorCode === 'cancelled' ? 'cancelled' : 'failed'
+      record.result = event.output
+    }
+    return {
+      type: 'tool.completed',
+      payload: {
+        messageId, toolCallId: event.toolCallId, name: event.name, ok: event.ok,
+        output: event.output, errorCode: event.errorCode, durationMs: event.durationMs,
+      },
+    }
+  }
+  if (event.type === 'error') {
+    return {
+      type: 'error',
+      payload: { messageId, code: event.code, message: event.message, retryable: event.retryable },
+    }
+  }
+  if (event.type === 'usage') {
+    state.usage = event.usage
+  }
+  return null
+}
