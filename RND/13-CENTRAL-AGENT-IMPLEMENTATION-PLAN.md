@@ -183,7 +183,7 @@ Tanpa webhook publik, phase ini tetap "belum teruji delivery".
 | test | boundary, canary, token budget, stale, provenance | ≤400/file |
 Tidak perlu migrasi: `project_id` nullable dan scope tanpa CHECK SQL. Unique index
 `(project_id, scope, key)` memperlakukan NULL berbeda; de-dupe di service + test.
-**Flag E:** `WEBTERM_CENTRAL_MEMORY=on` (default off); `**Exit E:**` hanya `fact`/`core`/ringkasan
+**Flag E:** `WEBTERM_CENTRAL_MEMORY=on` (default off). **Exit E:** hanya `fact`/`core`/ringkasan
 berprovenance; total ≤6.000 token; secret canary dan cross-project leak = 0; memori = data.
 **Manual/human:** putuskan `core` file-backed vs SQLite-only; isi preferensi user; review fact
 lintas-project.
