@@ -8,12 +8,24 @@ const root = mkdtempSync(join(tmpdir(), 'webterm-ledger-runtime-'))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
 
 test('flag parsing: only shadow/on enable the ledger', () => {
-  expect(ledgerMode(undefined)).toBe('off')
-  expect(ledgerMode('')).toBe('off')
-  expect(ledgerMode('garbage')).toBe('off')
-  expect(ledgerMode(' OFF ')).toBe('off')
-  expect(ledgerMode('shadow')).toBe('shadow')
-  expect(ledgerMode('ON')).toBe('on')
+  // Bun auto-loads .env, so the ambient WEBTERM_LEDGER must not leak into this test.
+  const previous = process.env.WEBTERM_LEDGER
+  try {
+    delete process.env.WEBTERM_LEDGER
+    expect(ledgerMode(undefined)).toBe('off')
+    expect(ledgerMode('')).toBe('off')
+    expect(ledgerMode('garbage')).toBe('off')
+    expect(ledgerMode(' OFF ')).toBe('off')
+    expect(ledgerMode('shadow')).toBe('shadow')
+    expect(ledgerMode('ON')).toBe('on')
+
+    // The default parameter falls back to the env flag when no argument is given.
+    process.env.WEBTERM_LEDGER = 'on'
+    expect(ledgerMode()).toBe('on')
+  } finally {
+    if (previous === undefined) delete process.env.WEBTERM_LEDGER
+    else process.env.WEBTERM_LEDGER = previous
+  }
 })
 
 test('off starts nothing', () => {
