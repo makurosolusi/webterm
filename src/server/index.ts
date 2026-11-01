@@ -7,6 +7,7 @@ import { installContextLink } from './contextLink'
 import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
 import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
+import { startLedgerRuntime } from './ledger/ledgerRuntime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -21,6 +22,10 @@ const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
 // reference $WEBTERM_TOKEN inherit the same form `authorize` compares against.
 writeTokenToEnv(TOKEN)
 const dev = process.env.NODE_ENV !== 'production'
+
+// Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
+const ledgerRuntime = startLedgerRuntime()
+if (ledgerRuntime) console.log(`ledger ${ledgerRuntime.mode}: ${ledgerRuntime.path}`)
 
 const API_PREFIX = '/api/'
 

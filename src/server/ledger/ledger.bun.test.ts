@@ -378,3 +378,36 @@ test('ledger works on a file-backed DB and reopens with data intact', () => {
   expect(again.now()).toBe(T0 + 1)
   close(reopened)
 })
+
+test('cancel and block revoke a live lease and are audited', () => {
+  const fx = fixture()
+  makeTask(fx, 't-cancel')
+  fx.ledger.task.leaseTask('t-cancel', { owner: 'w', ttlMs: 60_000 })
+  const cancelled = fx.ledger.task.cancelTask('t-cancel', 'user stopped it')
+  expect(cancelled.status).toBe('cancelled')
+  expect(cancelled.fence).toBe(2)
+  expect(cancelled.leaseOwner).toBe(null)
+  expect(kinds(fx.ledger.event.listEvents({ taskId: 't-cancel' }))).toContain('task.cancelled')
+
+  makeTask(fx, 't-block')
+  const blocked = fx.ledger.task.blockTask('t-block', 'waiting on approval')
+  expect(blocked.status).toBe('blocked')
+  expectThrow(() => fx.ledger.task.cancelTask('nope', 'x'), 'not found')
+  fx.ledger.task.reopenTask('t-block', { actor: 'human' })
+  expect(fx.ledger.task.getTask('t-block')?.status).toBe('reopened')
+})
+
+test('sweepExpiredLeases moves only expired leases to suspect', () => {
+  const fx = fixture()
+  makeTask(fx, 't-old')
+  makeTask(fx, 't-live')
+  fx.ledger.task.leaseTask('t-old', { owner: 'w1', ttlMs: 10_000 })
+  fx.advance(5_000)
+  fx.ledger.task.leaseTask('t-live', { owner: 'w2', ttlMs: 60_000 })
+  fx.advance(5_000)
+
+  expect(fx.ledger.task.sweepExpiredLeases().join(',')).toBe('t-old')
+  expect(fx.ledger.task.getTask('t-old')?.status).toBe('suspect')
+  expect(fx.ledger.task.getTask('t-live')?.status).toBe('leased')
+  expect(fx.ledger.task.sweepExpiredLeases().join(',')).toBe('')
+})

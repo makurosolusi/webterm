@@ -9,6 +9,15 @@ import { appendEvent } from './ledgerEvent'
 export const LEASEABLE: readonly TaskStatus[] = ['pending', 'reopened', 'suspect']
 export const REOPENABLE: readonly TaskStatus[] = ['suspect', 'failed', 'blocked', 'cancelled']
 export const FAILABLE: readonly TaskStatus[] = ['leased', 'claimed_done']
+export const CANCELABLE: readonly TaskStatus[] = [
+  'pending',
+  'leased',
+  'suspect',
+  'reopened',
+  'blocked',
+  'failed',
+]
+export const BLOCKABLE: readonly TaskStatus[] = ['pending', 'leased', 'suspect', 'reopened']
 export const DEFAULT_PAGE = 200
 export const MAX_PAGE = 1000
 

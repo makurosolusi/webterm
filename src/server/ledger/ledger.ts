@@ -40,6 +40,7 @@ import {
   verifyTask,
 } from './ledgerTask'
 import { createTask, getTask, listTasks } from './ledgerTaskCreate'
+import { blockTask, cancelTask, sweepExpiredLeases } from './ledgerTaskStop'
 
 export * from './ledgerModel'
 
@@ -71,6 +72,10 @@ export interface Ledger {
     verifyTask(id: string, fence: number, evidence: unknown, opts?: TaskActorOptions): Task
     failTask(id: string, fence: number, reason: string, opts?: TaskActorOptions): Task
     reopenTask(id: string, opts?: TaskActorOptions): Task
+    cancelTask(id: string, reason: string, opts?: TaskActorOptions): Task
+    blockTask(id: string, reason: string, opts?: TaskActorOptions): Task
+    /** Reaper: expired leases -> suspect. Returns moved task ids. */
+    sweepExpiredLeases(limit?: number, now?: number): string[]
   }
   event: {
     appendEvent(input: AppendEventInput): LedgerEvent
@@ -118,6 +123,9 @@ export function createLedger(db: Database, options: LedgerOptions = {}): Ledger 
       verifyTask: (id, fence, evidence, opts) => verifyTask(ctx, id, fence, evidence, opts),
       failTask: (id, fence, reason, opts) => failTask(ctx, id, fence, reason, opts),
       reopenTask: (id, opts) => reopenTask(ctx, id, opts),
+      cancelTask: (id, reason, opts) => cancelTask(ctx, id, reason, opts),
+      blockTask: (id, reason, opts) => blockTask(ctx, id, reason, opts),
+      sweepExpiredLeases: (limit, now) => sweepExpiredLeases(ctx, limit, now),
     },
     event: {
       appendEvent: (input) => appendEvent(ctx, input),
