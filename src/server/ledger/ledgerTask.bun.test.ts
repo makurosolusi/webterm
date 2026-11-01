@@ -77,6 +77,27 @@ test('maxAttempts caps re-leasing: lease, expire, suspect, lease again returns n
   close(fx.db)
 })
 
+test('leaseTask refuses a terminal task and leaves the row untouched', () => {
+  const fx = fixture()
+  const task = leased(fx, 't1', 1000, 'w-1')
+  fx.ledger.task.claimDone('t1', task.fence, { ok: 1 }, { owner: 'w-1' })
+  expect(fx.ledger.task.verifyTask('t1', task.fence, null, { owner: 'w-1' }).status).toBe('verified')
+
+  const before = fx.ledger.task.getTask('t1')
+  expect(before?.status).toBe('verified')
+  const fence = before?.fence
+  const attempt = before?.attempt
+
+  expect(fx.ledger.task.leaseTask('t1', { owner: 'w-2', ttlMs: 100 })).toBe(null)
+
+  const after = fx.ledger.task.getTask('t1')
+  expect(after?.status).toBe('verified')
+  expect(after?.fence).toBe(fence)
+  expect(after?.leaseOwner).toBe(null)
+  expect(after?.attempt).toBe(attempt)
+  close(fx.db)
+})
+
 test('claimDone rejects a dead lease after expiry', () => {
   const fx = fixture()
   const task = leased(fx, 't1', 100)
