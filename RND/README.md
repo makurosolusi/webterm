@@ -141,6 +141,10 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   capability hilang; body chunked 70KB tetap `413`.
 - **Batas presisi**: `sessionId` UUID dari client diterima dan benar-benar muncul di proses claude;
   body tepat 65.536 byte `201`, 65.537 byte `413` (`max: 65536`).
+- **Mutation check** (scratch worktree, repo tidak diubah): deps fresh per request → test replay B2
+  gagal; sessionId mint dihapus → 2 test B4 gagal; cap body dinaikkan → 2 test cap gagal;
+  guard ghost close dihapus → 2 test close gagal; `tokensMatch` root dihapus → test 403 gagal.
+  Test suite memang menangkap regresi pada kelima invariant ini.
 - Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
