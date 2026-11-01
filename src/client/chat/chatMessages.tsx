@@ -8,6 +8,7 @@ import { Wrench } from 'lucide-react'
 import { renderMarkdown } from '../markdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
+import { splitProposalBlocks, type VisibleProposal } from './proposalBlocks'
 
 const NEAR_BOTTOM_PX = 80
 
@@ -39,6 +40,34 @@ function ToolCard(props: { part: Extract<ChatPart, { type: 'tool' }> }) {
   )
 }
 
+function proposalGoal(proposal: VisibleProposal): string | undefined {
+  try {
+    const input = (JSON.parse(proposal.raw.slice('<webterm-proposal>'.length, -'</webterm-proposal>'.length)) as { input?: { goal?: unknown; statement?: unknown } }).input
+    const value = input?.goal ?? input?.statement
+    return typeof value === 'string' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function ProposalCard({ proposal }: { proposal: VisibleProposal }) {
+  const label = proposal.tool === 'goal.propose'
+    ? 'Goal proposal'
+    : proposal.tool === 'plan.propose'
+      ? 'Plan proposal'
+      : proposal.tool === 'task.assign'
+        ? 'Task assignment'
+        : `${proposal.tool} proposal`
+  const details = [proposal.projectId, proposal.itemId, proposalGoal(proposal)].filter(Boolean).join(' · ')
+  return (
+    <div className="chat-proposal" data-tool={proposal.tool}>
+      <span className="chat-proposal__icon" aria-hidden="true">•</span>
+      <span className="chat-proposal__label">{label}</span>
+      {details && <span className="chat-proposal__details">{details}</span>}
+    </div>
+  )
+}
+
 function PartView(props: { part: ChatPart; assistant: boolean }) {
   const { part, assistant } = props
   if (part.type === 'tool') return <ToolCard part={part} />
@@ -48,7 +77,13 @@ function PartView(props: { part: ChatPart; assistant: boolean }) {
   if (part.type === 'error') return <div className="chat-error-inline">{part.message}</div>
   if (part.type !== 'text') return null
   if (!assistant) return <p className="chat-text chat-text--plain">{part.text}</p>
-  return <div className="chat-markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }} />
+  const parsed = splitProposalBlocks(part.text)
+  return (
+    <>
+      {parsed.visible !== '' && <div className="chat-markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(parsed.visible) }} />}
+      {parsed.proposals.map((proposal, index) => <ProposalCard key={`${proposal.tool}-${index}`} proposal={proposal} />)}
+    </>
+  )
 }
 
 function MessageRow(props: { message: ChatMessage }) {

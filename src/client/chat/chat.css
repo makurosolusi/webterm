@@ -256,7 +256,26 @@
 .chat-markdown ul, .chat-markdown ol { margin: 4px 0; padding-left: 18px; }
 .chat-markdown a { color: var(--accent-text, #6cb0ff); }
 
-/* ---- tool card -------------------------------------------------------------------------- */
+.chat-proposal {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 7px;
+  border: 1px solid rgba(var(--accent, #0a84ff), 0.35);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(var(--accent, #0a84ff), 0.08);
+  color: var(--text, rgba(255, 255, 255, 0.85));
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.chat-proposal__icon { color: var(--accent-text, #6cb0ff); font-size: 16px; line-height: 10px; }
+.chat-proposal__label { font-weight: 650; }
+.chat-proposal__details { color: var(--muted, rgba(255, 255, 255, 0.6)); }
+.chat-proposal[data-tool="goal.propose"] { border-color: rgba(var(--state-success, #30d158), 0.35); }
+.chat-proposal[data-tool="plan.propose"] { border-color: rgba(var(--state-warning, #ff9f0a), 0.35); }
+
 .chat-tool {
   display: flex;
   align-items: center;
