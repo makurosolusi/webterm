@@ -12,6 +12,7 @@
 // dengan `authorize()` (Origin + token) sebelum `handleApi` dipanggil.
 import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
 import type { Db } from './db'
+import { BodyReadError } from './cappedRequestBody'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
  *  bila path/method bukan milik modul ini. */
@@ -20,6 +21,8 @@ export type WorkspacesResult = { status: number; body?: unknown } | null
 const BAD_JSON = { status: 400, body: { error: 'bad json' } }
 const NOT_FOUND = { status: 404, body: { error: 'not found' } }
 const BAD_ID = { status: 400, body: { error: 'id must be a non-empty string' } }
+const TOO_LARGE = { status: 413, body: { error: 'payload_too_large' } }
+const BODY_READ_FAILED = { status: 400, body: { error: 'body_read_failed' } }
 
 type CreateBody = { name: string; cwd?: string; color?: string }
 type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[] }
@@ -45,6 +48,24 @@ function parseObjectBody<T>(raw: string): T | null {
 }
 
 /**
+ * Baca body lewat getter, lalu petakan penolakan intake ke jawaban HTTP-nya.
+ *
+ * Getter-nya milik pemanggil (`cappedBodyGetter` di `api.ts`), jadi cap 1 MiB ditegakkan di sana
+ * saat streaming — modul ini tidak perlu tahu soal byte. `BodyReadError` = cap/stream menolak;
+ * error lain (bug) tetap naik ke penangan 500 di `api.ts` alih-alih disamarkan jadi 400.
+ */
+async function bodyOrFailure(
+  body: () => Promise<string>
+): Promise<{ ok: true; raw: string } | { ok: false; result: WorkspacesResult }> {
+  try {
+    return { ok: true, raw: await body() }
+  } catch (err) {
+    if (!(err instanceof BodyReadError)) throw err
+    return { ok: false, result: err.reason === 'too_large' ? TOO_LARGE : BODY_READ_FAILED }
+  }
+}
+
+/**
  * Rute satu request workspace. `store` di-inject (bukan import singleton `db`) supaya tabel rute
  * ini bisa diuji di atas SQLite in-memory tanpa menyentuh DB pengguna.
  *
@@ -60,7 +81,9 @@ export async function workspacesRoute(
   if (path === '/api/workspaces') {
     if (method === 'GET') return { status: 200, body: store.list() }
     if (method === 'POST') {
-      const b = parseObjectBody<CreateBody>(await body())
+      const read = await bodyOrFailure(body)
+      if (!read.ok) return read.result
+      const b = parseObjectBody<CreateBody>(read.raw)
       if (!b) return BAD_JSON
       return { status: 201, body: store.create(b.name, b.cwd, b.color) }
     }
@@ -74,7 +97,9 @@ export async function workspacesRoute(
       return ws ? { status: 200, body: ws } : NOT_FOUND
     }
     if (method === 'PUT') {
-      const b = parseObjectBody<SaveBody>(await body())
+      const read = await bodyOrFailure(body)
+      if (!read.ok) return read.result
+      const b = parseObjectBody<SaveBody>(read.raw)
       if (!b) return BAD_JSON
       const ws: Workspace = {
         id, name: b.name, cwd: b.cwd, color: b.color,
@@ -93,7 +118,9 @@ export async function workspacesRoute(
   if (path === '/api/active') {
     if (method === 'GET') return { status: 200, body: { id: store.getActive() } }
     if (method === 'PUT') {
-      const b = parseObjectBody<{ id?: unknown }>(await body())
+      const read = await bodyOrFailure(body)
+      if (!read.ok) return read.result
+      const b = parseObjectBody<{ id?: unknown }>(read.raw)
       if (!b) return BAD_JSON
       // Bentuk penjaga sama dengan `pathParam` di `fsApi.ts`: tipe saja tidak cukup karena
       // `parseObjectBody` hanya menjamin "ini objek". Tanpa ini `{}` lolos, `undefined` terikat

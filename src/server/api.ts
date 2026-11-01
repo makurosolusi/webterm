@@ -18,6 +18,7 @@ import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
+import { cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -59,11 +60,14 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // /api/workspaces[/:id] and /api/active; returns null for anything else, including a method
   // this family does not answer, which then falls through to the 404 at the bottom.
   // A 204 route answers WITHOUT a `body` key, and `json` keeps those body-less.
-  const wsRes = await workspacesRoute(db, path, method, () => readBody(req))
+  // Body-nya berbatas 1 MiB dan hanya dibaca untuk POST/PUT (`cappedBodyGetter`): snapshot
+  // workspace yang wajar ada jauh di bawah itu, sedangkan body GET/DELETE tidak pernah menyentuh
+  // stream. Reader `fs`/`git` di bawah tetap TANPA cap — isi file boleh besar.
+  const wsRes = await workspacesRoute(db, path, method, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES))
   if (wsRes) return json(res, wsRes.status, wsRes.body)
 
   if (path === '/api/settings') {
-    await settingsRoute(req, res, method)
+    await settingsRoute(req, res, method, db)
     // A saved defaultShell/scrollbackBytes must reach the NEXT spawned PTY without a restart.
     if (method === 'PUT') applyPtyOptions()
     return
