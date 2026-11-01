@@ -10,6 +10,7 @@ import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
 import { inboxRoute } from './inboxApi'
 import { memoryRoute } from './memoryApi'
+import { memoryWriteRoute } from './memoryWriteApi'
 import { orchestratorRoute } from './orchestratorApi'
 import { approvalHumanRoute } from './approvalHumanApi'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
@@ -19,6 +20,7 @@ import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
 import { cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
+import { MEMORY_WRITE_BODY_MAX_BYTES } from './memoryWriteApi'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -119,6 +121,15 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const ledger = activeLedgerRuntime()
   if (await extendedApiRoute(req, res, url, () => readBody(req), ledger)) return
   if (await approvalHumanRoute(req, res, url)) return
+  // Memory writes (claim/promote). Body capped at 64 KiB and read lazily, so the read-only GETs
+  // below never touch the stream. Authority is derived here as root human, never from the payload.
+  const memoryWrite = await memoryWriteRoute(
+    path,
+    method,
+    cappedBodyGetter(req, method, MEMORY_WRITE_BODY_MAX_BYTES),
+    ledger
+  )
+  if (memoryWrite) return json(res, memoryWrite.status, memoryWrite.body)
   for (const family of [inboxRoute, memoryRoute, orchestratorRoute]) {
     const result = family(path, method, url.searchParams, ledger)
     if (result) return json(res, result.status, result.body)
