@@ -18,8 +18,9 @@ Urutan baca untuk agent berikutnya:
 5. `04-OMNICHANNEL.md` — Telegram/webhook, identitas, approval chat.
 6. `05-TRACEABILITY.md` — coverage dan gap.
 7. `06-BUG-RISK.md` — bug B1-B12 dan deteksi dini.
-8. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
-9. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
+8. `07-IMPLEMENTASI-P3-P5.md` — peta kode P3/P4/P5, gap, acceptance, gate.
+9. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
+10. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
 
 ---
 
@@ -35,6 +36,7 @@ RND/
   04-OMNICHANNEL.md
   05-TRACEABILITY.md
   06-BUG-RISK.md
+  07-IMPLEMENTASI-P3-P5.md
   90-REFERENSI/
     AGENT_PUSAT.md
     BUKTI.md
@@ -100,6 +102,14 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 ---
 
 ## 7. Status singkat
+
+- **Snapshot 2026-11-01 11:36** (commit `9933afe`): P0-P2 terverifikasi (tsc bersih, 1201 vitest,
+  ledger bun lulus). P3-P5 masih **WIP untracked** di working tree: approval API + 17 test,
+  roles/caps/plan/worktree/orchestrator, memory + FTS, inbox projection, klien inbox, channels
+  webhook/dedupe/identity/telegram/outbox + 33 test. Working tree typecheck bersih 11:34; suite
+  WIP 1348/1349 dengan 1 flake `terminalCore.test.tsx` (0x0 open, ulang lulus). Belum ada spawn
+  PTY, verifikasi independen, route task/plan/agent, migrasi v3 kanal, secret file, atau mount UI.
+  Detail: `07-IMPLEMENTASI-P3-P5.md`; **jangan klaim P3-P5 selesai** sebelum gate §9 hijau.
 
 - Riset: 46 worker wave 1-4, 13 worker wave 5 (implementasi), 12 worker wave 6 (omnichannel),
   6 QC P0, 5 fix P0, 1 fix flake; 3 QC P1 + 5 fix P1; 2 QC P2 + 2 fix P2.

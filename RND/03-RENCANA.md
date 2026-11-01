@@ -1,7 +1,7 @@
 # RENCANA: Implementasi Agent Terpusat di webterm
 
-Tanggal: 2026-10-31
-Status: rencana eksekusi. Belum ada kode yang diubah.
+Tanggal: 2026-10-31 (status P3-P5: 2026-11-01)
+Status: rencana eksekusi. P0-P2 terimplementasi; P3-P5 sebagian ada di working tree. Peta aktual dan gap: `07-IMPLEMENTASI-P3-P5.md`.
 Bahan: `01-TEMUAN.md`, `02-KEBUTUHAN.md`, `90-REFERENSI/AGENT_PUSAT.md`, 13 audit wave 5.
 Tujuan: langkah perencanaan, mitigasi langsung, deteksi dini bug, dan keselarasan presisi
 dengan kode webterm yang sudah ada.
@@ -29,11 +29,12 @@ dengan kode webterm yang sudah ada.
 | Area | Fakta | Dampak ke rencana |
 |---|---|---|
 | PTY | `Session.send` satu slot; `open` menimpa; `close` menghapus map sebelum `kill` | P0 wajib sebelum API/orkestrator |
-| File health | `sessions.ts` tepat 300 | Ekstrak `subscribers.ts`, `outputLog.ts`, `launchLine.ts` dulu |
-| API | `api.ts` 154, batas route 150 | Ekstrak `agentStatusApi.ts` sebelum P1 |
-| DB | Hanya `workspace` + `app`; tanpa `user_version`, WAL, busy_timeout. Default Bun: FK off, busy_timeout 0, `db.transaction()` DEFERRED | P2 wajib migration runner + pragma + `BEGIN IMMEDIATE` |
+| File health | `sessions.ts` 338 (di atas batas 300); `api.ts` 130, `mount.ts` 136, `controlApi.ts` 220, `ledgerApproval.ts` 261 | Jangan tambah kode ke `sessions.ts`; ekstrak dulu |
+| API | `api.ts` 130 (batas route 150) | Ekstrak `agentStatusApi.ts` sebelum P1 |
+| DB | `workspace` + `app` + ledger SQLite (v1; v2 plan WIP); pragma/FK/WAL di `migration.ts` | P2 sudah punya migration runner + `BEGIN IMMEDIATE` |
 | Auth | Satu token proses; loopback tanpa token; `tokensMatch(undefined,x)=true` | Scope test bisa lolos diam-diam; perlu principal |
-| Env | `ptyShell` mempertahankan `WEBTERM_*` | Setiap child membawa token root |
+| Env | `ptyShell` membuang `WEBTERM_*`/`NODETERM_*`; token node di-inject per sesi | Root token tidak diwarisi; node token tetap same-UID public |
+| Env lokal | `.env` mode 600; `WEBTERM_TOKEN` dikomentari (65 char) | Bun auto-load; tanpa token loopback token-free |
 | Hooks | `stateVerified` tidak dipanggil; `nodeId` disisipkan tanpa escape | Fail-open dan shell injection |
 | Autosave | PUT whole workspace, debounce 400 ms, tanpa ETag | Ada bug lintas-workspace; P2 perbaiki |
 | Test | 1.104 `test(`/`it(`, 12 file bun test | Seam palsu dan clock belum ada |
@@ -192,6 +193,11 @@ workspace delete cascade project/agent/task/run, memory tetap.
 - Audit append-only dengan actor, action digest, decision, result.
 - Split `App.tsx`/`SessionsPanel.tsx` hanya saat disentuh.
 
+**Status 2026-11-01:** `[V]` ledger approval (digest/nonce/single-use). `[W]` roles, caps,
+plan store, worktree service, orkestrator assign/run, `control/approvalApi.ts` (17 test) belum
+di-wire. Gap: spawn PTY, verifikasi independen, route task/plan/agent, gate blocking, audit
+event, migrasi v2 plan, worktree cleanup. Detail dan acceptance: `07-IMPLEMENTASI-P3-P5.md` §3.
+
 **Acceptance:** plan dengan 3 worker; worker ke-4 ditolak; worker spawn ditolak; evidence
 tanpa test bukan `verified`; gate menolak aksi tanpa decision; manusia mengetik tidak mencuri
 stream agent; kill switch dan rollback drill lulus.
@@ -212,6 +218,10 @@ defrag lewat PR. Jangan dual-write; SQLite tetap indeks.
 **Central (opsional):** router + portfolio projection, prioritas/budget dalam amplop manusia,
 pause/resume, status lintas project. Tidak spawn worker, tidak tulis fact/CORE.
 
+**Status 2026-11-01:** `[W]` memory claim/promote/supersede/quarantine + FTS teruji, inbox
+projection teruji, klien inbox ada. Gap: route HTTP, otoritas `actorKind` dari principal,
+kontrak shape inbox, mount UI. Detail: `07-IMPLEMENTASI-P3-P5.md` §4.
+
 **Acceptance:** worker tidak bisa tulis central/CORE; claim tanpa source ditolak; supersede
 menjaga history; FTS `MATCH`/bm25; path traversal ditolak; approve/reject mengubah task+decision;
 inbox tidak memuat aksi otomatis; central menjawab dari proyeksi, bukan scan event.
@@ -228,6 +238,10 @@ inbox tidak memuat aksi otomatis; central menjawab dari proyeksi, bukan scan eve
 **Deliverable:** adapter contract, ingress/dedupe, identity binding, conversation ke project,
 command grammar, approval bridge, outbound outbox, notification policy. v1 hanya Telegram dan
 generic webhook. Detail: `04-OMNICHANNEL.md`; requirement: `02-KEBUTUHAN.md` O1-O22.
+
+**Status 2026-11-01:** `[W]` webhook verify/HMAC, dedupe, identity/grammar, Telegram parse/send,
+outbox in-memory + 33 test. Gap: migrasi v3 tabel kanal, route ingress, secret file 0600,
+identitas persisten, callback approval, outbox durable. Detail: `07-IMPLEMENTASI-P3-P5.md` §5.
 
 **Acceptance:** replay 100x satu aksi; cross-project ditolak; approval blocking + digest;
 channel down tidak memblokir ledger; secret tidak di env/log; group tidak bisa approve.
@@ -360,6 +374,8 @@ menyentuh client; migration bernomor dan append-only; tidak ada commit/push dari
 7. **G7 Omnichannel:** replay 100x satu aksi; cross-project ditolak; approval chat blocking +
    digest; channel down tidak memblokir ledger; token tidak ada di env/log.
 
+Checklist operasional, status per gate, dan blocker produksi: `07-IMPLEMENTASI-P3-P5.md` §9.
+
 ---
 
 ## 18. Tujuh hari pertama
@@ -385,6 +401,13 @@ menyentuh client; migration bernomor dan append-only; tidak ada commit/push dari
 7. Siapa owner requirement C/X/T/R yang saat ini 0/145?
 8. Apakah Telegram cukup private chat + topic, atau perlu forum supergroup sejak v1?
 9. Apakah approval chat diizinkan untuk aksi irreversible, atau hanya notify + step-up web?
+10. Mint capability di loopback: CLI lokal atau route `/token` khusus loopback? Tanpa ini
+    control API tidak bisa dipakai pada install default tanpa `WEBTERM_TOKEN`.
+11. Bolehkah requester memegang `approval.decide`? Rekomendasi: tidak, approver harus principal
+    manusia berbeda.
+12. Kontrak inbox: server memakai `state`/`detail` atau klien menerima `category`/null?
+13. Secret kanal: file 0600 atau Keychain; apakah env hanya untuk dev?
+14. Worktree dirty: `--force` membuang kerja worker, atau pertahankan sampai approval?
 
 ---
 
