@@ -1,7 +1,7 @@
 // Test runtime worker P3 memakai fake yang sudah ada (orc/ledger/worktree) plus port sesi,
 // verifier, jam, dan tidur palsu. Tidak ada git/PTY nyata di sini.
 import { describe, expect, it } from 'vitest'
-import { isSafeNodeId } from '../../shared/workspace'
+import { isSafeNodeId, isSafeSessionId } from '../../shared/workspace'
 import type { AgentStatus } from '../../shared/workspace'
 import type { OpenMsg, ServerMsg } from '../../shared/protocol'
 import { PROJECT, REPO, item, planOf, setup } from './orchestrator.fake.testutil'
@@ -55,7 +55,7 @@ function verdict(patch: Partial<VerifyOutcome> = {}): VerifyOutcome {
 }
 
 interface FakeSessions extends WorkerSessionPort {
-  opened: { nodeId: string; cwd: string; cmd?: string; agentId?: string }[]
+  opened: { nodeId: string; cwd: string; cmd?: string; agentId?: string; sessionId?: string }[]
   inputs: { nodeId: string; text: string }[]
   closed: string[]
   live: Set<string>
@@ -180,6 +180,11 @@ describe('runTask success path', () => {
     expect(recorded).toBe(1)
     expect(sessions.opened).toHaveLength(1)
     expect(sessions.opened[0]).toMatchObject({ cwd: '/tmp/wt/t1', cmd: CMD, agentId: AGENT })
+    // Sesi baru wajib dikirim supaya launchLine bisa memasang hooks/`--settings`; id harus aman
+    // untuk masuk baris perintah shell.
+    const sessionId = sessions.opened[0]?.sessionId
+    expect(sessionId).toBeTruthy()
+    expect(isSafeSessionId(sessionId, true)).toBe(true)
     const prompt = sessions.inputs[0]?.text ?? ''
     expect(prompt).toContain('/tmp/wt/t1')
     expect(prompt).toContain('agent/t1')
@@ -194,6 +199,25 @@ describe('runTask success path', () => {
 })
 
 describe('failure paths', () => {
+  it('fails when the verifier reports no changed files, even with green checks', async () => {
+    const fixture = assigned()
+    const { runtime, sessions } = harness({
+      fixture,
+      verify: async () => verdict({ changedFiles: [] }),
+    })
+    sessions.onInput = (nodeId) => sessions.status.set(nodeId, 'done')
+    const outcome = await runtime.runTask(runInput())
+    expect(outcome.ok).toBe(false)
+    expect(outcome.error?.code).toBe('verify_failed')
+    expect(outcome.error?.message).toContain('no files changed')
+    expect(outcome.evidence?.tests).toMatchObject({ passed: 3, failed: 0 })
+    expect(outcome.task?.status).not.toBe('verified')
+    expect(outcome.task?.status).toBe('failed')
+    expect(outcome.plan?.items[0]?.status).toBe('failed')
+    expect(fixture.ledger.events.filter((e) => e.kind === 'orchestrator.result_recorded')).toHaveLength(1)
+    expectClosed(sessions, outcome)
+  })
+
   it('fails the task and plan when the verifier rejects the worktree', async () => {
     const fixture = assigned()
     const { runtime, sessions, verifyInputs } = harness({
@@ -403,6 +427,27 @@ describe('bounded input and output', () => {
   })
 })
 
+describe('session id minting', () => {
+  it('uses the injected newSessionId once per run when an agent is set', async () => {
+    const fixture = assigned()
+    let minted = 0
+    const { runtime, sessions } = harness({
+      fixture,
+      runtime: {
+        newSessionId: () => {
+          minted += 1
+          return `sess-fixed-${minted}`
+        },
+      },
+    })
+    sessions.onInput = (nodeId) => sessions.status.set(nodeId, 'done')
+    const outcome = await runtime.runTask(runInput())
+    expect(outcome.ok).toBe(true)
+    expect(minted).toBe(1)
+    expect(sessions.opened[0]?.sessionId).toBe('sess-fixed-1')
+  })
+})
+
 describe('createSessionsPort', () => {
   it('maps the port calls onto the sessions surface without a PTY', () => {
     const opened: OpenMsg[] = []
@@ -421,8 +466,15 @@ describe('createSessionsPort', () => {
     }
     const port = createSessionsPort(source)
 
-    port.open({ nodeId: 'w-t1-1', cwd: '/tmp/wt/t1', cmd: CMD })
-    expect(opened[0]).toMatchObject({ t: 'open', id: 'w-t1-1', cols: 120, rows: 40, cmd: CMD })
+    port.open({ nodeId: 'w-t1-1', cwd: '/tmp/wt/t1', cmd: CMD, sessionId: 'sess-abc' })
+    expect(opened[0]).toMatchObject({
+      t: 'open',
+      id: 'w-t1-1',
+      cols: 120,
+      rows: 40,
+      cmd: CMD,
+      sessionId: 'sess-abc',
+    })
     expect(port.statusOf('w-t1-1')).toBe('working')
     expect(port.getTerminal('w-t1-1')).toBe('screen')
     expect(port.isLive('w-t1-1')).toBe(true)

@@ -66,6 +66,8 @@ export interface WorkerRuntimeDeps {
   worktrees?: WorktreeService
   cmd?: string
   agentId?: string
+  /** Minting id sesi baru per run; default `crypto.randomUUID` (injectable untuk test). */
+  newSessionId?: () => string
   cols?: number
   rows?: number
   now?: () => number

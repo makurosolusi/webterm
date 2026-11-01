@@ -1,10 +1,9 @@
-// Runtime worker P3: menutup loop produksi setelah `startWorker`. Modul ini tidak menyentuh
-// HTTP/UI dan tidak meng-import singleton `sessions`/ledger: sesi PTY masuk lewat
-// `WorkerSessionPort`, verifikasi lewat closure server-owned, dan orkestrator lewat port sempit.
-// Alurnya: startWorker (cap/worktree/lease/plan) -> spawn agent di worktree -> kirim prompt
-// terbatas -> tunggu done/exit/lease/timeout -> verifikasi server -> recordWorkerResult sekali.
-// Port sesi + helper prompt ada di `workerRuntimeSession`/`workerRuntimePrompt`, kontrak di
-// `workerRuntimeTypes`; nama publik tetap diekspor ulang dari sini.
+// Runtime worker P3: startWorker -> spawn agent di worktree -> prompt -> tunggu done/exit/lease/
+// timeout -> verifikasi server -> recordWorkerResult sekali. Tanpa HTTP/UI atau singleton
+// `sessions`/ledger: PTY lewat `WorkerSessionPort`, verifikasi lewat closure server-owned, dan
+// orkestrator lewat port sempit. Port sesi/helper prompt di `workerRuntimeSession`/`workerRuntimePrompt`.
+// Kontrak dan tipe ada di `workerRuntimeTypes`; nama publik tetap diekspor ulang dari sini.
+import { randomUUID } from 'node:crypto'
 import { isSafeNodeId } from '../../shared/workspace'
 import type { VerificationEvidence } from './orchestratorModel'
 import { evidenceVerified } from './orchestratorModel'
@@ -80,6 +79,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
   const pollMs = Math.max(MIN_POLL_MS, deps.pollMs ?? DEFAULT_POLL_MS)
   const maxOutputBytes = deps.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
   const maxPromptBytes = deps.maxPromptBytes ?? DEFAULT_MAX_PROMPT_BYTES
+  const newSessionId = deps.newSessionId ?? (() => randomUUID())
 
   async function runTask(input: WorkerRunInput): Promise<WorkerRunOutcome> {
     const started = await deps.orchestrator.startWorker({
@@ -115,9 +115,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
 
     const planNow = (): Plan | null => deps.plan?.get(projectId) ?? null
 
-    /** Satu-satunya jalan ke ledger: `recorded` menutup double-record di semua cabang.
-     *  Ledger bisa melempar `StaleLeaseError` bila lease sudah direbut reaper; itu tetap
-     *  dipetakan ke deny supaya cleanup dan pemanggil tidak melihat exception. */
+    /** Satu-satunya jalan ke ledger; `recorded` menutup double-record dan `StaleLeaseError` jadi deny. */
     const record = async (
       outcome: 'success' | 'failure',
       evidence: VerificationEvidence | undefined,
@@ -191,11 +189,12 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     }
 
     try {
+      // Sesi baru per run: `launchLine` lalu bisa memasang `--settings`/hooks.
       await deps.sessions.open({
         nodeId,
         cwd: worktree.path,
         ...(deps.cmd ? { cmd: deps.cmd } : {}),
-        ...(deps.agentId ? { agentId: deps.agentId } : {}),
+        ...(deps.agentId ? { agentId: deps.agentId, sessionId: newSessionId() } : {}),
         ...(deps.cols !== undefined ? { cols: deps.cols } : {}),
         ...(deps.rows !== undefined ? { rows: deps.rows } : {}),
       })
@@ -252,6 +251,9 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
         const reasons = verdict.reasons.length > 0 ? verdict.reasons : ['no machine evidence']
         return fail('verify_failed', `verification failed: ${reasons.join('; ')}`, true, output, evidence)
       }
+      // No-op (mis. keluar di prompt trust) bisa lolos diff kosong + test hijau; bukan hasil kerja.
+      if (verdict.changedFiles.length === 0)
+        return fail('verify_failed', 'verification failed: no files changed', true, output, evidence)
 
       const applied = await record('success', evidence)
       if (!applied.ok) {

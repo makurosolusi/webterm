@@ -10,6 +10,8 @@ export interface WorkerSessionPort {
     cwd: string
     cmd?: string
     agentId?: string
+    /** Id sesi baru per run; `launchLine` yang memvalidasi + menggerbangi flag-nya. */
+    sessionId?: string
     cols?: number
     rows?: number
   }): void | Promise<void>
@@ -43,6 +45,7 @@ export function createSessionsPort(source: SessionsLike): WorkerSessionPort {
           cwd: input.cwd,
           ...(input.cmd ? { cmd: input.cmd } : {}),
           ...(input.agentId ? { agentId: input.agentId } : {}),
+          ...(input.sessionId ? { sessionId: input.sessionId } : {}),
         },
         noop
       ),
