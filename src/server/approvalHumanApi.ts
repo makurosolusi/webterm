@@ -7,6 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { approvalAuthAllowed } from './approvalAuth'
 import { APPROVAL_MAX_BODY_BYTES, readCappedBody, sendJson } from './approvalHttp'
+import { actorForRequest } from './approvalHumanShared'
 import {
   challengeRoute,
   consumeRoute,
@@ -17,6 +18,9 @@ import {
 import { asObject } from './control/controlTypes'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
+
+/** Derived audit actor for a human request; implementation lives with the handler constants. */
+export { actorForRequest } from './approvalHumanShared'
 
 export interface HumanApprovalDeps {
   /** Test seam; production uses the process runtime. */
@@ -133,7 +137,7 @@ export async function approvalHumanRoute(
     return true
   }
   const handler = route === 'request' ? requestRoute : route === 'decide' ? decideRoute : consumeRoute
-  const result = handler(runtime, body, now)
+  const result = handler(runtime, body, now, actorForRequest(req, url))
   sendJson(res, result.status, result.body)
   return true
 }

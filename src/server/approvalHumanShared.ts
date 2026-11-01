@@ -1,15 +1,36 @@
 // Shared constants, body coercers, and replay-store selection for the human approval handlers.
 // Split out of `approvalHumanRoutes.ts` so each handler module stays inside the file budget.
+import type { IncomingMessage } from 'node:http'
 import type { ApprovalAcks } from './control/approvalApi'
 import { AckStore } from './control/controlTypes'
+import { TOKEN_HEADER, TOKEN_PARAM } from './auth'
 import { durableAckFor } from './ledger/durableAck'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 
-/** The only actor the human route records; the body cannot override it. */
+/**
+ * Default actor for direct handler calls (tests, in-process callers) and the historical value
+ * before the HTTP seam derived one from the transport credential.
+ */
 export const HUMAN_ACTOR = 'human'
+/** Derived actor when the caller proved possession of the transport root token. */
+export const ROOT_ACTOR = 'human:root'
+/** Derived actor when the surface was allowed without a token (explicit loopback opt-in). */
+export const LOOPBACK_ACTOR = 'human:loopback'
 export const MAX_PROJECT_ID = 200
 export const MAX_KIND = 128
 export const MAX_SECRET = 256
+
+/**
+ * Audit identity derived from the transport credential, never from the body. `?token=` and
+ * `x-webterm-token` are the only credentials this family accepts (the outer gate in `auth.ts` has
+ * compared them), so either present means the root-token path; no token means the loopback opt-in.
+ */
+export function actorForRequest(req: IncomingMessage, url: URL): string {
+  const raw = req.headers[TOKEN_HEADER]
+  const header = (Array.isArray(raw) ? raw[0] : raw)?.trim()
+  const query = url.searchParams.get(TOKEN_PARAM)?.trim()
+  return header || query ? ROOT_ACTOR : LOOPBACK_ACTOR
+}
 
 export type Result = { status: number; body?: unknown }
 

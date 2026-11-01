@@ -3,10 +3,20 @@
 import { boundedText, classifyLedgerError, failure, invalid } from './approvalFailures'
 import { projectExists } from './approvalQuery'
 import { isValidRequestId } from './control/controlTypes'
-import { MAX_KIND, MAX_PROJECT_ID, storeFor, type Result } from './approvalHumanShared'
+import { HUMAN_ACTOR, MAX_KIND, MAX_PROJECT_ID, storeFor, type Result } from './approvalHumanShared'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 
-export function requestRoute(runtime: LedgerRuntime, body: Record<string, unknown>, now: number): Result {
+/**
+ * Minting has no actor column in the ledger (`approval.requestedBy` does not exist), so the
+ * derived actor is accepted only to keep one dispatch signature across the POST handlers. The
+ * identities that matter are recorded when the decision/consumption writes its audit rows.
+ */
+export function requestRoute(
+  runtime: LedgerRuntime,
+  body: Record<string, unknown>,
+  now: number,
+  _actor: string = HUMAN_ACTOR
+): Result {
   const projectId = boundedText(body.projectId, MAX_PROJECT_ID)
   if (!projectId) return invalid('projectId')
   const kind = boundedText(body.kind, MAX_KIND)

@@ -1,12 +1,12 @@
 // Vitest: the human approval surface over a REAL ledger (Node in-memory SQLite), driven through
 // the HTTP seam. Covers the QC P3 findings this task owns: requestId idempotency (B3), the error
 // taxonomy (B5), the byte cap/413 (B7), exact route matching (B12/L3), the approved list (B4),
-// fixed human identity (M1), and the task review transitions (E2E B1/B2).
+// fixed human identity (M1, now derived from the transport credential), and the task review transitions (E2E B1/B2).
 import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import { approvalHumanRoute, type HumanApprovalDeps } from './approvalHumanApi'
-import { HUMAN_ACTOR } from './approvalHumanRoutes'
+import { LOOPBACK_ACTOR, ROOT_ACTOR } from './approvalHumanRoutes'
 import { APPROVAL_MAX_BODY_BYTES } from './approvalHttp'
 import { memoryLedgerRuntime, seedProject, seedReviewTask } from './approvalTestRuntime.testutil'
 
@@ -71,8 +71,8 @@ function setup(opts: { auth?: boolean; ledger?: boolean } = {}) {
     now: () => clock.at,
     authAllowed: () => opts.auth ?? true,
   }
-  const post = (path: string, body: unknown) =>
-    call(deps, path, { method: 'POST', body: JSON.stringify(body) })
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    call(deps, path, { method: 'POST', body: JSON.stringify(body), headers })
   const request = (body: Record<string, unknown>) =>
     post('/api/approvals/request', { requestId: REQ, projectId: 'p1', kind: 'deploy', request: { a: 1 }, ...body })
   return { runtime, clock, deps, call, post, request }
@@ -108,6 +108,25 @@ async function approvedApproval(f: Fixture): Promise<{ id: string; digest: strin
   const view = await challenge(f, String(created.json['id']))
   await decide(f, String(created.json['id']), view['digest'], view['nonce'])
   return { id: String(created.json['id']), digest: String(view['digest']) }
+}
+
+const TOKEN = 'root-secret'
+const TOKEN_HEADERS = { 'x-webterm-token': TOKEN }
+
+/** Task-event actors in write order, read straight from the audit table. */
+function eventActors(f: Fixture, taskId: string): string[] {
+  const db = f.runtime.db as unknown as {
+    query(sql: string): { all(id: string): Array<{ actor: string }> }
+  }
+  return db.query('SELECT actor FROM event WHERE task_id = ? ORDER BY seq').all(taskId).map((r) => r.actor)
+}
+
+/** A claimed_done task plus the pending task approval a human decides on. */
+async function taskApprovalFor(f: Fixture) {
+  const task = seedReviewTask(f.runtime)
+  const body = { kind: 'task', taskId: task.taskId, fence: task.fence, request: { itemId: task.taskId } }
+  const id = String((await f.request(body)).json['id'])
+  return { task, id, view: await challenge(f, id) }
 }
 
 describe('request idempotency', () => {
@@ -160,18 +179,64 @@ describe('request validation and identity', () => {
     expect((await f.request({ projectId: 'ghost' })).json).toEqual({ error: 'project_not_found' })
     expect((await f.request({ taskId: 't1' })).json).toEqual({ error: 'invalid_fence' })
   })
+})
 
-  it('ignores body.actor and records the fixed human actor', async () => {
-    const f = setup()
-    const created = await f.request({})
-    const view = await challenge(f, String(created.json['id']))
-    const res = await decide(f, String(created.json['id']), view['digest'], view['nonce'], true, {
-      actor: 'mallory',
-    })
-    expect(res.status).toBe(200)
-    expect(f.runtime.ledger.approval.getApproval(String(created.json['id']))?.approvedBy).toBe(
-      HUMAN_ACTOR
-    )
+describe('principal-derived actor', () => {
+  it('binds approvedBy to the credential and ignores body.actor', async () => {
+    const cases: Array<[string, Record<string, string>, string]> = [
+      ['', TOKEN_HEADERS, ROOT_ACTOR],
+      [`?token=${TOKEN}`, {}, ROOT_ACTOR],
+      ['', {}, LOOPBACK_ACTOR],
+    ]
+    for (const [suffix, headers, actor] of cases) {
+      const f = setup()
+      const created = await f.request({})
+      const id = String(created.json['id'])
+      const view = await challenge(f, id)
+      const res = await f.post(
+        `/api/approvals/decide${suffix}`,
+        {
+          requestId: 'req-00000020',
+          id,
+          digest: view['digest'],
+          nonce: view['nonce'],
+          approve: true,
+          actor: 'mallory',
+        },
+        headers
+      )
+      expect(res.status).toBe(200)
+      expect(f.runtime.ledger.approval.getApproval(id)?.approvedBy).toBe(actor)
+    }
+  })
+
+  it('records the derived actor on the task verify and reject events', async () => {
+    const verified = setup()
+    const v = await taskApprovalFor(verified)
+    const approve = {
+      requestId: 'req-00000030',
+      id: v.id,
+      digest: v.view['digest'],
+      nonce: v.view['nonce'],
+      approve: true,
+    }
+    expect((await verified.post('/api/approvals/decide', approve, TOKEN_HEADERS)).status).toBe(200)
+    const consumeBody = { requestId: 'req-00000031', id: v.id, digest: v.view['digest'] }
+    const consume = await verified.post('/api/approvals/consume', consumeBody, TOKEN_HEADERS)
+    expect(consume.status).toBe(200)
+    expect(eventActors(verified, v.task.taskId).at(-1)).toBe(ROOT_ACTOR)
+
+    const rejected = setup()
+    const r = await taskApprovalFor(rejected)
+    const deny = {
+      requestId: 'req-00000032',
+      id: r.id,
+      digest: r.view['digest'],
+      nonce: r.view['nonce'],
+      approve: false,
+    }
+    expect((await rejected.post('/api/approvals/decide', deny)).status).toBe(200)
+    expect(eventActors(rejected, r.task.taskId).at(-1)).toBe(LOOPBACK_ACTOR)
   })
 })
 

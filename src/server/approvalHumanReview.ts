@@ -35,7 +35,12 @@ function checkReviewable(runtime: LedgerRuntime, link: ReviewLink): RouteFailure
   return null
 }
 
-export function decideRoute(runtime: LedgerRuntime, body: Record<string, unknown>, now: number): Result {
+export function decideRoute(
+  runtime: LedgerRuntime,
+  body: Record<string, unknown>,
+  now: number,
+  actor: string = HUMAN_ACTOR
+): Result {
   const id = boundedText(body.id, MAX_PROJECT_ID)
   if (!id) return invalid('id')
   const digest = secret(body.digest)
@@ -64,7 +69,7 @@ export function decideRoute(runtime: LedgerRuntime, body: Record<string, unknown
   let decision
   try {
     decision = runtime.ledger.approval.decideApproval(id, {
-      actor: HUMAN_ACTOR,
+      actor,
       approve: body.approve,
       digest,
       nonce,
@@ -76,11 +81,11 @@ export function decideRoute(runtime: LedgerRuntime, body: Record<string, unknown
       const task = runtime.ledger.task.getTask(link.taskId)
       if (task?.status === 'claimed_done') {
         runtime.ledger.task.failTask(link.taskId, link.fence, 'rejected by human review', {
-          actor: HUMAN_ACTOR,
+          actor,
           payload: { approvalId: id },
         })
       } else if (task?.status !== 'failed') {
-        runtime.ledger.task.reopenTask(link.taskId, { actor: HUMAN_ACTOR, payload: { approvalId: id } })
+        runtime.ledger.task.reopenTask(link.taskId, { actor, payload: { approvalId: id } })
       }
     }
   } catch (err) {
@@ -91,7 +96,12 @@ export function decideRoute(runtime: LedgerRuntime, body: Record<string, unknown
   return result
 }
 
-export function consumeRoute(runtime: LedgerRuntime, body: Record<string, unknown>, now: number): Result {
+export function consumeRoute(
+  runtime: LedgerRuntime,
+  body: Record<string, unknown>,
+  now: number,
+  actor: string = HUMAN_ACTOR
+): Result {
   const id = boundedText(body.id, MAX_PROJECT_ID)
   if (!id) return invalid('id')
   const digest = secret(body.digest)
@@ -127,7 +137,7 @@ export function consumeRoute(runtime: LedgerRuntime, body: Record<string, unknow
     if (link) {
       // `null` evidence keeps the worker's claim evidence; the approval is named in the event.
       runtime.ledger.task.verifyTask(link.taskId, link.fence, null, {
-        actor: HUMAN_ACTOR,
+        actor,
         payload: { approvalId: id },
       })
     }
