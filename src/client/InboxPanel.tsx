@@ -9,13 +9,12 @@
 // server challenge; this file never hashes anything. Consume is offered only after the decision
 // came back `approved`. Reject is a first-class decision, not "close and forget".
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronRight, RefreshCw, ShieldAlert, X } from 'lucide-react'
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
-import { CONFIRM_PHRASE, InboxApprovalDialog, type ReviewState } from './inboxApprovalDialog'
-import { InboxItemRow } from './inboxItemRow'
+import { CONFIRM_PHRASE, type ReviewState } from './inboxApprovalDialog'
+import { InboxPanelChrome, type InboxFilter } from './inboxPanelChrome'
+import { InboxPanelDialog } from './inboxPanelDialog'
+import { InboxPanelSections } from './inboxPanelSections'
 import {
-  SECTION_LABEL,
-  SECTION_ORDER,
   approvalRequest,
   resumeApprovalFor,
   resumeReviewState,
@@ -58,7 +57,7 @@ export default function InboxPanel(props: InboxPanelProps) {
   const [loading, setLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [filter, setFilter] = useState<'all' | InboxState>('all')
+  const [filter, setFilter] = useState<InboxFilter>('all')
   const [collapsed, setCollapsed] = useState<ReadonlySet<InboxState>>(() => new Set())
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set())
@@ -145,8 +144,9 @@ export default function InboxPanel(props: InboxPanelProps) {
     })
   }, [items])
 
-  // ---- countdown --------------------------------------------------------------------------
   const dialogOpen = dialog !== null
+  // Countdown for the dialog's expiry label; the panel owns it so `beginReview` can re-sync it
+  // synchronously when a new review opens.
   useEffect(() => {
     if (!dialogOpen) return
     setClock(nowRef.current())
@@ -329,7 +329,7 @@ export default function InboxPanel(props: InboxPanelProps) {
 
   // ---- derived ----------------------------------------------------------------------------
   const counts = useMemo(() => {
-    const out: Record<'all' | InboxState, number> = { all: items.length, needs_you: 0, review: 0, broken: 0 }
+    const out: Record<InboxFilter, number> = { all: items.length, needs_you: 0, review: 0, broken: 0 }
     for (const item of items) out[item.state] += 1
     return out
   }, [items])
@@ -339,136 +339,30 @@ export default function InboxPanel(props: InboxPanelProps) {
     [items, filter]
   )
 
-  const challenge = dialog?.challenge ?? null
-  const remaining = challenge ? challenge.expiresAt - clock : 0
-  const expired = challenge !== null && remaining <= 0
-  const canApprove = !pending && !expired && dialog !== null && dialog.checked && dialog.text === CONFIRM_PHRASE
   const selectedItems = items.filter((item) => selected.has(item.id))
 
   if (!open) return null
 
   return (
     <aside className="inbox-panel" aria-label="Inbox" aria-labelledby={`${uid}-title`}>
-      <header className="inbox-head">
-        <ShieldAlert size={15} aria-hidden="true" />
-        <h2 className="inbox-title" id={`${uid}-title`}>Inbox</h2>
-        <span className="inbox-total" aria-label={`${counts.all} items`}>{counts.all}</span>
-        <span className="inbox-grow" />
-        <button type="button" className="inbox-icon-btn" aria-label="Refresh inbox" title="Refresh inbox"
-          disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>
-          <RefreshCw size={14} aria-hidden="true" />
-        </button>
-        {props.onClose && (
-          <button type="button" className="inbox-icon-btn" aria-label="Close inbox" onClick={props.onClose}>
-            <X size={15} aria-hidden="true" />
-          </button>
-        )}
-      </header>
+      <InboxPanelChrome uid={uid} total={counts.all} loading={loading} filter={filter} counts={counts}
+        listError={listError} selectedCount={selectedItems.length} onClose={props.onClose}
+        onRefresh={() => setRefreshKey((key) => key + 1)} onFilter={setFilter}
+        onReviewSelected={() => beginReview(selectedItems.filter((item) => reviewBlockedReason(item) === null))}
+        onClearSelection={() => setSelected(new Set())} />
 
-      <div className="inbox-filters" role="group" aria-label="Filter inbox">
-        {(['all', ...SECTION_ORDER] as const).map((key) => (
-          <button key={key} type="button" className={`inbox-chip${filter === key ? ' is-active' : ''}`}
-            aria-pressed={filter === key} onClick={() => setFilter(key)}>
-            {key === 'all' ? 'All' : SECTION_LABEL[key]}
-            <span className="inbox-count">{counts[key]}</span>
-          </button>
-        ))}
-      </div>
-
-      {selectedItems.length > 0 && (
-        <div className="inbox-bulk" role="toolbar" aria-label="Group actions">
-          <span aria-live="polite">{selectedItems.length} selected</span>
-          <button type="button" className="inbox-btn inbox-btn--ghost"
-            onClick={() => beginReview(selectedItems.filter((item) => reviewBlockedReason(item) === null))}>
-            Review selected
-          </button>
-          <button type="button" className="inbox-btn inbox-btn--ghost" onClick={() => setSelected(new Set())}>
-            Clear
-          </button>
-        </div>
-      )}
-
-      {listError && (
-        <div className="inbox-error" role="alert">
-          <AlertTriangle size={14} aria-hidden="true" />
-          <span>{listError}</span>
-          <button type="button" className="inbox-btn inbox-btn--ghost" onClick={() => setRefreshKey((key) => key + 1)}>
-            Retry
-          </button>
-        </div>
-      )}
-
-      {loading && items.length === 0 && !listError && (
-        <p className="inbox-status" role="status">Loading inbox…</p>
-      )}
-
-      {!loading && !listError && items.length === 0 && (
-        <p className="inbox-status" role="status">Inbox is clear.</p>
-      )}
-
-      <div className="inbox-sections">
-        {SECTION_ORDER.map((state) => {
-          const rows = visible.filter((item) => item.state === state)
-          if (filter === 'all' && rows.length === 0) return null
-          if (filter !== 'all' && filter !== state) return null
-          const isCollapsed = collapsed.has(state)
-          const bodyId = `${uid}-section-${state}`
-          const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id))
-          return (
-            <section className="inbox-section" key={state} aria-labelledby={`${uid}-section-head-${state}`}>
-              <header className="inbox-section__head">
-                <input type="checkbox" className="inbox-check"
-                  aria-label={`Select all in ${SECTION_LABEL[state]}`}
-                  checked={allSelected} disabled={rows.length === 0}
-                  onChange={(event) => selectSection(rows, event.target.checked)} />
-                <button type="button" className="inbox-section__toggle" id={`${uid}-section-head-${state}`}
-                  aria-expanded={!isCollapsed} aria-controls={bodyId} onClick={() => toggleSection(state)}>
-                  {isCollapsed
-                    ? <ChevronRight size={13} aria-hidden="true" />
-                    : <ChevronDown size={13} aria-hidden="true" />}
-                  <span>{SECTION_LABEL[state]}</span>
-                  <span className="inbox-count">{rows.length}</span>
-                </button>
-              </header>
-              {!isCollapsed && (
-                <div id={bodyId}>
-                  {rows.length === 0 ? (
-                    <p className="inbox-section__empty">Nothing in this section.</p>
-                  ) : (
-                    <ul className="inbox-list">
-                      {rows.map((item) => (
-                        <InboxItemRow key={item.id} item={item} selected={selected.has(item.id)}
-                          resume={resumeApprovalFor(item, approved)} ready={approvedReady}
-                          onToggleSelected={toggleSelected} onOpen={() => beginReview([item])} />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </section>
-          )
-        })}
-      </div>
+      <InboxPanelSections uid={uid} filter={filter} visible={visible} collapsed={collapsed}
+        selected={selected} approved={approved} approvedReady={approvedReady}
+        onToggleSection={toggleSection} onSelectSection={selectSection} onToggleSelected={toggleSelected}
+        onOpen={(item) => beginReview([item])} />
 
       {dialog && (
-        <InboxApprovalDialog
-          state={dialog}
-          challenge={challenge}
-          deferred={dialog.deferred}
-          remainingMs={remaining}
-          expired={expired}
-          pending={pending}
-          canApprove={canApprove}
-          uid={uid}
-          dialogRef={dialogRef}
-          onClose={closeDialog}
-          onDecide={(approve) => void decide(approve)}
-          onConsume={() => void consume()}
-          onAdvance={advance}
+        <InboxPanelDialog state={dialog} clock={clock} pending={pending} uid={uid} dialogRef={dialogRef}
+          onClose={closeDialog} onDecide={(approve) => void decide(approve)}
+          onConsume={() => void consume()} onAdvance={advance}
           onRetry={() => beginReview(dialog.queue, dialog.index)}
           onChecked={(checked) => setDialog((state) => (state ? { ...state, checked } : state))}
-          onText={(text) => setDialog((state) => (state ? { ...state, text } : state))}
-        />
+          onText={(text) => setDialog((state) => (state ? { ...state, text } : state))} />
       )}
     </aside>
   )
