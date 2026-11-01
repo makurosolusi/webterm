@@ -111,7 +111,12 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   PTY), hook claude lewat file header 0600, strict hook auth opt-in, transcript read hardened,
   spawn cwd dikurung ke home/data dir, output node tetap terbaca setelah exit.
 - Gates P1: typecheck, 1199 vitest, 84 bun test, semuanya hijau.
-- Fase berikutnya: P2 memory/evidence + P3 approval blocking. Belum dimulai.
+- **P2 fondasi selesai**: migration runner (BEGIN IMMEDIATE, user_version, backup VACUUM INTO,
+  WAL), schema v1 (project/agent/task/event/decision/approval/run/usage/prefix/budget/memory/
+  memory_fts), repository task state machine (fence, lease, suspect, evidence) + event atomik.
+  Belum di-wire ke startup (`WEBTERM_LEDGER` masih off).
+- Gates P2: 22 bun ledger test, typecheck hijau.
+- Fase berikutnya: wire ledger + usage/run, lalu P3 approval blocking.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
 
@@ -135,3 +140,10 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 | `999a920` | capability-scoped headless API |
 | `2872190` | transport token per node + env scrub |
 | `30d02a7` | fix blocker QC P1 (capability gate, idempotency, exit output, spawn session, identity) |
+
+## 10. Riwayat P2
+
+| Commit | Isi |
+|---|---|
+| `8655602` | migration runner + schema v1 |
+| `49373c3` | repository project/task/event |
