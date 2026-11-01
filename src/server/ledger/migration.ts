@@ -126,6 +126,24 @@ export function preMigrationBackup(db: Database, path: string): string | null {
   return target
 }
 
+/**
+ * Upgrade a FILE database with a backup first. A fresh DB (user_version 0) needs no backup;
+ * an already-current DB has nothing pending. `migrate` itself stays side-effect free so tests
+ * can exercise rollback without writing files.
+ */
+export function migrateWithBackup(
+  db: Database,
+  path: string,
+  migrations: readonly Migration[] = MIGRATIONS
+): number {
+  const current = readUserVersion(db)
+  const pending = migrations.some((m) => m.version > current)
+  if (pending && current > 0 && path !== MEMORY_DB && path !== '') {
+    preMigrationBackup(db, path)
+  }
+  return migrate(db, migrations)
+}
+
 function pruneBackups(path: string): void {
   const dir = dirname(path)
   const base = basename(path)
@@ -147,6 +165,6 @@ export function openLedgerDb(path: string): Database {
   db.exec('PRAGMA busy_timeout = 5000')
   if (path !== MEMORY_DB && path !== '') db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
-  migrate(db)
+  migrateWithBackup(db, path)
   return db
 }

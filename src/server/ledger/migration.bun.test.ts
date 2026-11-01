@@ -5,7 +5,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LATEST_VERSION, migrate, openLedgerDb, preMigrationBackup } from './migration'
+import { LATEST_VERSION, migrate, migrateWithBackup, openLedgerDb, preMigrationBackup } from './migration'
 import { MIGRATIONS, type Migration } from './ledgerSchema'
 
 type Row = Record<string, unknown>
@@ -214,4 +214,20 @@ test('backup writes a readable copy and keeps the last 3', () => {
 test('schema modules list a single v1 migration that matches LATEST_VERSION', () => {
   expect(MIGRATIONS.length).toBe(1)
   expect(MIGRATIONS[0]?.version).toBe(LATEST_VERSION)
+})
+
+test('migrateWithBackup snapshots a file DB before an upgrade, but not for a fresh one', () => {
+  const path = join(root, 'upgrade.db')
+  const db = new Database(path)
+  migrate(db)
+  const v2: Migration = {
+    version: 2,
+    up: (d) => d.exec('CREATE TABLE upgrade_marker (id TEXT PRIMARY KEY)'),
+  }
+  const version = migrateWithBackup(db, path, [...MIGRATIONS, v2])
+  expect(version).toBe(2)
+  expect(Number(q(db, 'PRAGMA user_version').get()?.['user_version'])).toBe(2)
+  const backups = readdirSync(root).filter((f) => f.startsWith('upgrade.db.') && f.endsWith('.bak'))
+  expect(backups.length >= 1).toBe(true)
+  close(db)
 })
