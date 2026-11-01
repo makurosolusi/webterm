@@ -377,8 +377,13 @@ describe('context-link tidak tersentuh', () => {
     const { readFileSync } = await import('node:fs')
     const { fileURLToPath } = await import('node:url')
     const src = readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
-    expect(src).toContain("path === '/api/context-link'")
     expect(src).toContain('await agentStatusRoute(req, res, url)')
+    expect(src).toContain('await contextLinkRoute(req, res, url)')
+    const route = readFileSync(
+      fileURLToPath(new URL('./contextLinkApi.ts', import.meta.url)),
+      'utf8'
+    )
+    expect(route).toContain("url.pathname !== '/api/context-link'")
   })
 })
 

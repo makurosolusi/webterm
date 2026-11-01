@@ -6,13 +6,12 @@ import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
 import { workspacesRoute } from './workspacesApi'
-import { agentStatusRoute, nodeTokenMismatch, requesterNodeId } from './agentStatusApi'
+import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
+import { contextLinkRoute } from './contextLinkApi'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
-import { renderForRequester, buildLinkDoc, findWorkspaceFor, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
-import { isSafeNodeId } from '../shared/workspace'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -83,33 +82,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (await handleControlHttp(req, res, url, () => readBody(req))) return
 
   // Read-only context-link: a linked node reads a bridged peer's transcript/terminal.
-  if (path === '/api/context-link' && method === 'GET') {
-    // `node` yang ADA tapi tidak aman ditolak jujur, bukan diteruskan: id itu menjadi kunci
-    // `findWorkspaceFor`, dan menerimanya sebagai string bebas berarti route ini punya domain
-    // input yang berbeda dari WebSocket. Tanpa `node` sama sekali, perilaku lama tetap: pemanggil
-    // non-agent mendapat balasan "nothing to read" dari `renderForRequester`.
-    const nodeParam = url.searchParams.get('node')
-    if (nodeParam !== null && !isSafeNodeId(nodeParam)) {
-      return json(res, 400, { error: 'invalid node' })
-    }
-    const requester = nodeParam || ''
-    // IKATAN TOKEN→NODE, sama seperti `/api/agent-status`: token node hanya boleh membaca konteks
-    // untuk node-nya sendiri. Tanpa ini, sesi agent bisa mengganti `?node=` ke node tetangga dan
-    // membaca graf tautan/transcript-nya. Root token, tanpa token, dan token asing tetap `undefined`
-    // → perilaku lama (render apa adanya) dipertahankan. Ditolak SEBELUM render.
-    if (nodeTokenMismatch(requesterNodeId(req), requester)) {
-      return json(res, 403, { error: 'node token does not match node' })
-    }
-    const raw = url.searchParams.get('verb') || 'list'
-    const verb = (CONTEXT_LINK_VERBS as string[]).includes(raw) ? (raw as ContextLinkVerb) : 'list'
-    const want = url.searchParams.get('want') || undefined
-    const n = url.searchParams.get('n') || undefined
-    const text = await renderForRequester(requester, verb, { node: want, n })
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-    res.end(text)
-    return
-  }
+  if (await contextLinkRoute(req, res, url)) return
 
   // AI name-gen: spawn claude -p on a node's terminal buffer, return a suggested title.
   if (path === '/api/generate-name' && method === 'GET') {

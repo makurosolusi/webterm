@@ -391,12 +391,14 @@ describe('buildClaudeFlags', () => {
 const apiSrc = () => readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
 const agentStatusSrc = () =>
   readFileSync(fileURLToPath(new URL('./agentStatusApi.ts', import.meta.url)), 'utf8')
+const contextLinkSrc = () =>
+  readFileSync(fileURLToPath(new URL('./contextLinkApi.ts', import.meta.url)), 'utf8')
 
 /** Badan `agentStatusRoute` saja: mulai dari deklarasinya sampai akhir file modul route. */
 const agentStatusBlock = (s: string) => s.split('export async function agentStatusRoute')[1] ?? ''
 
-/** Blok `if (path === '/api/context-link' ...)` saja, dengan pemotongan yang sama. */
-const contextLinkBlock = (s: string) => s.split("path === '/api/context-link'")[1]?.split('\n  }')[0] ?? ''
+/** Badan `contextLinkRoute` saja, dari deklarasi sampai akhir modul route. */
+const contextLinkBlock = (s: string) => s.split('export async function contextLinkRoute')[1] ?? ''
 
 /** Route-nya MEMBALAS payload hook, dan tetap punya jalur 204 untuk `null`. */
 const repliesWithHookPayload = (b: string) =>
@@ -498,10 +500,10 @@ describe('guard node id di route /api', () => {
   })
 
   it('context-link menolak node tidak aman dengan 400 sebelum render', () => {
-    const b = contextLinkBlock(apiSrc())
+    const b = contextLinkBlock(contextLinkSrc())
     expect(b.length).toBeGreaterThan(0)
     expect(/isSafeNodeId\(\s*nodeParam\s*\)/.test(b)).toBe(true)
-    expect(b).toContain('json(res, 400')
+    expect(b).toContain('sendJson(res, 400')
     // Dibandingkan dengan PEMANGGILAN-nya, bukan kata di komentar penjelas.
     expect(b.indexOf('isSafeNodeId')).toBeLessThan(b.indexOf('await renderForRequester('))
   })
@@ -519,10 +521,10 @@ describe('guard node id di route /api', () => {
   })
 
   it('context-link mengikat token node ke `?node` sebelum render', () => {
-    const b = contextLinkBlock(apiSrc())
+    const b = contextLinkBlock(contextLinkSrc())
     expect(b.length).toBeGreaterThan(0)
     expect(b).toContain('nodeTokenMismatch(requesterNodeId(req), requester)')
-    expect(b).toContain('json(res, 403')
+    expect(b).toContain('sendJson(res, 403')
     expect(b.indexOf('nodeTokenMismatch')).toBeLessThan(b.indexOf('await renderForRequester('))
   })
 })

@@ -6,11 +6,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { CapabilityStore, allows, clampTtl } from './capabilities'
 import { controlCwdAllowed } from './controlCwd'
+import {
+  declaredTooLarge,
+  isParseFailure,
+  parseControlBody,
+  writeControlJson,
+} from './controlHttpIo'
 import { handleControl } from './controlApi'
 import {
   CONTROL_MAX_BODY_BYTES,
   CONTROL_PREFIX,
-  headerValue,
   type ControlCapabilities,
   type ControlDeps,
   type ControlRequest,
@@ -81,32 +86,6 @@ function depsFor(overrides?: Partial<ControlDeps>): Promise<ControlDeps> {
   return merged
 }
 
-const PARSE_FAILED = Symbol('control-json-failed')
-
-/** Body JSON; `PARSE_FAILED` dibedakan dari `{}` agar route bisa menjawab `invalid_json`. */
-function parseBody(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown
-  } catch {
-    return PARSE_FAILED
-  }
-}
-
-/** `Content-Length` hanya dipakai sebagai tolak-cepat; akumulasi byte tetap diperiksa setelah baca. */
-function declaredTooLarge(headers: IncomingMessage['headers']): boolean {
-  const raw = headerValue(headers, 'content-length')
-  if (raw === undefined) return false
-  const n = Number(raw)
-  return Number.isFinite(n) && n > CONTROL_MAX_BODY_BYTES
-}
-
-function json(res: ServerResponse, status: number, body?: unknown): void {
-  res.statusCode = status
-  if (body === undefined) { res.end(); return }
-  res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify(body))
-}
-
 /**
  * Tangani `/api/control/*`. `true` = respons sudah ditulis; `false` = bukan milik keluarga ini
  * (atau path dikenal tapi method-nya tidak), biarkan `api.ts` melanjutkan route lain.
@@ -128,17 +107,17 @@ export async function handleControlHttp(
   if (withBody) {
     // Tolak sebelum membaca/menyalin body raksasa. Body yang lolos akan diperiksa lagi di bawah.
     if (declaredTooLarge(req.headers)) {
-      json(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
+      writeControlJson(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
       return true
     }
     const raw = await readBody()
     if (Buffer.byteLength(raw) > CONTROL_MAX_BODY_BYTES) {
-      json(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
+      writeControlJson(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
       return true
     }
-    body = parseBody(raw)
-    if (body === PARSE_FAILED) {
-      json(res, 400, { error: 'invalid_json' })
+    body = parseControlBody(raw)
+    if (isParseFailure(body)) {
+      writeControlJson(res, 400, { error: 'invalid_json' })
       return true
     }
   }
@@ -152,6 +131,6 @@ export async function handleControlHttp(
   const deps = await depsFor(overrides)
   const result = await handleControl(request, deps)
   if (!result) return false
-  json(res, result.status, result.body)
+  writeControlJson(res, result.status, result.body)
   return true
 }
