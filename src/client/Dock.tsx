@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
-  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus,
+  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus, Inbox,
 } from 'lucide-react'
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import type { CustomAgent } from '../shared/settings'
+import { formatInboxBadge } from './inboxDockState'
 
 export interface DockProps {
   onAddTerminal: () => void
@@ -22,6 +23,13 @@ export interface DockProps {
    *  plat tidak lagi ikut berubah — dock diam, panel yang minggir (lihat `.dock` di dock.css). */
   sessionsOpen: boolean
   onToggleSessions: () => void
+  /** Inbox terbuka? Tombolnya duduk SEBARIS dengan Sessions: dua-duanya permukaan yang mengapung
+   *  di atas canvas, bukan aksi pada node. */
+  inboxOpen: boolean
+  onToggleInbox: () => void
+  /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;
+   *  dock tidak pernah memanggil `fetch` sendiri. */
+  inboxUnread?: number
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
   /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
   onZoomTo?: (pct: number) => void
@@ -63,6 +71,8 @@ export default function Dock(props: DockProps) {
   const builtins = BUILTIN_AGENT_IDS.filter((a) => !disabled.includes(a))
   const visibleCustoms = customs.filter((c) => !disabled.includes(c.id))
 
+  const badge = formatInboxBadge(props.inboxUnread ?? 0)
+
   const close = () => setMenu(null)
 
   const addBuiltin = (id: BuiltinAgentId) => {
@@ -82,8 +92,8 @@ export default function Dock(props: DockProps) {
     <>
       {menu && <div className="dock-backdrop" onClick={close} />}
       <div className="dock">
-        {/* Di ujung ATAS kolom, dipisah dari sisanya: satu-satunya tombol dock yang membuka
-            permukaan lain alih-alih bekerja pada canvas. */}
+        {/* Di ujung ATAS kolom, dipisah dari sisanya: kelompok tombol yang membuka permukaan
+            lain alih-alih bekerja pada canvas. */}
         <button
           className={`dock-btn${props.sessionsOpen ? ' active' : ''}`}
           aria-label="Toggle sessions panel"
@@ -91,6 +101,19 @@ export default function Dock(props: DockProps) {
           aria-pressed={props.sessionsOpen}
           onClick={props.onToggleSessions}
         ><PanelLeft size={ICON} /></button>
+
+        {/* Badge hanya informasi: satu klik membuka panel, tidak pernah menyetujui apa pun.
+            Persetujuan tetap lewat dialog eksplisit di dalam panel. */}
+        <button
+          className={`dock-btn${props.inboxOpen ? ' active' : ''}`}
+          aria-label={badge ? `Toggle inbox panel (${badge} unread)` : 'Toggle inbox panel'}
+          title={props.inboxOpen ? 'Hide inbox' : 'Show inbox (i)'}
+          aria-pressed={props.inboxOpen}
+          onClick={props.onToggleInbox}
+        >
+          <Inbox size={ICON} />
+          {badge && <span className="dock-badge" aria-hidden="true">{badge}</span>}
+        </button>
 
         <div className="dock-sep" />
 

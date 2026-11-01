@@ -8,6 +8,10 @@ import { settingsRoute } from './settingsApi'
 import { workspacesRoute } from './workspacesApi'
 import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
+import { inboxRoute } from './inboxApi'
+import { memoryRoute } from './memoryApi'
+import { orchestratorRoute } from './orchestratorApi'
+import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { contextLinkRoute } from './contextLinkApi'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
@@ -102,6 +106,14 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     } catch {
       return json(res, 404, { error: 'cannot read dir' })
     }
+  }
+
+  // Read-only ledger projections for the UI (inbox/memory/orchestrator). Ledger off answers 503
+  // `ledger_off` instead of an empty list; null from a family = keep falling through to 404.
+  const ledger = activeLedgerRuntime()
+  for (const family of [inboxRoute, memoryRoute, orchestratorRoute]) {
+    const result = family(path, method, url.searchParams, ledger)
+    if (result) return json(res, result.status, result.body)
   }
 
   json(res, 404, { error: 'unknown route' })

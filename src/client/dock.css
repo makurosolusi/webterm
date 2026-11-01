@@ -92,6 +92,29 @@
 }
 .dock-dirty.dirty { background: var(--caution); }
 
+/* Jumlah item inbox yang menunggu. Warna ATTENTION, bukan accent: accent dipakai tombol untuk
+   "sedang aktif", sedangkan badge ini berarti "ada yang menunggu keputusanmu". Cincin selebar
+   latar dock memisahkannya dari glyph di bawahnya. `pointer-events: none` supaya klik selalu
+   mendarat di tombol, bukan di badge. */
+.dock-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--state-attention, #e0a030);
+  box-shadow: 0 0 0 2px rgba(var(--menu-rgb), 0.92);
+  color: #1a1206;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
 /* Pengangkur menu: menu dock absolut terhadap tombol pembukanya, bukan terhadap dock. */
 .dock-slot {
   position: relative;

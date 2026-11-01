@@ -6,6 +6,13 @@ import { dataDir } from '../config'
 import { createLedger, type Ledger } from './ledger'
 import { openLedgerDb } from './migration'
 import { ledgerMetrics } from './ledgerMetrics'
+import { setActiveLedgerRuntime } from './ledgerRuntimeState'
+
+// The HTTP layer reads the runtime through this handle; startLedgerRuntime owns the value.
+export {
+  activeLedgerRuntime,
+  resetActiveLedgerRuntimeForTest,
+} from './ledgerRuntimeState'
 
 export type LedgerMode = 'off' | 'shadow' | 'on'
 
@@ -33,19 +40,25 @@ export function startLedgerRuntime(opts: {
   now?: number | (() => number)
 } = {}): LedgerRuntime | null {
   const mode = opts.mode ?? ledgerMode()
-  if (mode === 'off') return null
+  if (mode === 'off') {
+    setActiveLedgerRuntime(null)
+    return null
+  }
   const path = opts.path ?? join(dataDir(), 'ledger.db')
   try {
     const db = openLedgerDb(path)
     const ledger = createLedger(db, { now: opts.now })
-    return {
+    const runtime: LedgerRuntime = {
       mode,
       path,
       db,
       ledger,
       close: () => (db as unknown as { close(): void }).close(),
     }
+    setActiveLedgerRuntime(runtime)
+    return runtime
   } catch (err) {
+    setActiveLedgerRuntime(null)
     if (mode === 'on') throw err
     const reason = err instanceof Error ? err.message : String(err)
     console.error(`ledger shadow disabled: ${reason}`)

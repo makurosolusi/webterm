@@ -11,6 +11,9 @@ import Welcome from './Welcome'
 import Login from './Login'
 import CanvasToolbar from './CanvasToolbar'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
+import InboxPanel from './InboxPanel'
+import { useInboxOpen } from './inboxPanelModel'
+import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
 import { SettingsPanel } from './SettingsPanel'
@@ -58,6 +61,8 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   // Di App, bukan di dalam panel: tombol pembukanya ada di Dock dan geseran dock ikut keadaan ini.
   const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
+  // Sama seperti Sessions: tombolnya di Dock, jadi keadaannya milik App yang merender keduanya.
+  const [inboxOpen, setInboxOpen] = useInboxOpen()
   // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
   // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
   const [cleanView, toggleCleanView] = useCleanView()
@@ -288,6 +293,13 @@ export default function App() {
 
   const noWorkspaces = workspaces.length === 0
 
+  // Inbox + badge berbagi satu endpoint (`GET /api/inbox`), jadi hanya SATU yang memuat pada satu
+  // waktu: panel saat terbuka (pollMs di bawah), hook badge saat tertutup. Sebelum hidrasi dan di
+  // layar Welcome keduanya diam. Tombol `i` hanya hidup ketika memang ada board.
+  const inboxReady = hydrated && !noWorkspaces
+  const inboxUnread = useInboxBadge({ panelOpen: inboxOpen, enabled: inboxReady })
+  useInboxHotkey(() => setInboxOpen(!inboxOpen), inboxReady)
+
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
   if (authRequired) return <div className="app-shell"><Login onSubmit={onLogin} /></div>
@@ -384,6 +396,9 @@ export default function App() {
             onToggleBoard={() => setBoard((v) => !v)}
             sessionsOpen={sessionsOpen}
             onToggleSessions={() => setSessionsOpen((v) => !v)}
+            inboxOpen={inboxOpen}
+            onToggleInbox={() => setInboxOpen(!inboxOpen)}
+            inboxUnread={inboxUnread}
             zoomPct={Math.round(zoom * 100)}
             onZoomIn={onZoomIn}
             onZoomOut={onZoomOut}
@@ -416,6 +431,9 @@ export default function App() {
             closedSessions={closedSessions}
             onReopenSession={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
           />
+          {/* Panel menutup sendiri lewat Escape (`onClose`), dan dialog persetujuan di dalamnya
+              yang memegang consent. Dock/badge tidak pernah menyetujui apa pun. */}
+          <InboxPanel open={inboxOpen} onClose={() => setInboxOpen(false)} pollMs={30000} />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
         </>

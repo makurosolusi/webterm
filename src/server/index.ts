@@ -7,7 +7,8 @@ import { installContextLink } from './contextLink'
 import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
 import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
-import { startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
+import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
+import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -29,6 +30,11 @@ if (ledgerRuntime) {
   console.log(`ledger ${ledgerRuntime.mode}: ${ledgerRuntime.path}`)
   startLedgerReaper(ledgerRuntime.ledger)
 }
+
+// Channel ingress is off by default: `WEBTERM_TELEGRAM=on` + webhook secret + a live ledger.
+// `null` means no route exists at all, not a route that rejects every request.
+const channelsRuntime = startChannelsRuntime(activeLedgerRuntime()?.ledger)
+if (channelsRuntime) console.log(`telegram channel: on (POST ${TELEGRAM_WEBHOOK_PATH})`)
 
 const API_PREFIX = '/api/'
 
@@ -82,6 +88,9 @@ if (dev) {
   const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
   server.on('request', (req, res) => {
     const url = reqUrl(req)
+    // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
+    // before the /api gate. `handle` owns only its exact path.
+    if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
     if (handleApi(req, res)) return
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
@@ -93,6 +102,9 @@ if (dev) {
   const { assets } = await import('./distAssets.generated')
   server.on('request', (req, res) => {
     const url = reqUrl(req)
+    // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
+    // before the /api gate. `handle` owns only its exact path.
+    if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
     if (handleApi(req, res)) return
     const hit = resolveAsset(url.pathname, assets)

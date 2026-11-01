@@ -1,0 +1,284 @@
+/**
+ * @vitest-environment jsdom
+ */
+// Jembatan Dock → Inbox. Yang dijaga di sini adalah hal-hal yang tidak terlihat dari tsc:
+//   1. Badge hanya ANGKA dari `GET /api/inbox`; dock tidak pernah menyetujui apa pun dan tidak
+//      pernah memanggil `fetch` sendiri.
+//   2. Hanya SATU poller pada satu waktu: hook badge diam selama panel terbuka (panel yang
+//      memuat) dan mengambil alih saat panel tertutup. Tanpa ini kedua sisi menembak endpoint
+//      yang sama tiap 30 detik.
+//   3. Panel yang tertutup tidak memuat apa pun.
+//   4. `i` membuka inbox, tapi bukan saat fokus ada di kolom teks/terminal.
+import { readFileSync } from 'node:fs'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import Dock, { type DockProps } from './Dock'
+import InboxPanel from './InboxPanel'
+import type { InboxClient, InboxItem } from './inboxApi'
+import {
+  INBOX_POLL_MS,
+  formatInboxBadge,
+  inboxUnread,
+  isTypingTarget,
+  useInboxBadge,
+  useInboxHotkey,
+  type InboxBadgeOptions,
+} from './inboxDockState'
+import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
+
+const ITEMS: InboxItem[] = [
+  { id: 'i1', kind: 'deploy', state: 'needs_you', projectId: 'proj-a', title: 'Deploy main', ageMs: 1_000 },
+  { id: 'i2', kind: 'rotate', state: 'needs_you', projectId: 'proj-a', title: 'Rotate keys', ageMs: 2_000 },
+  { id: 'i3', kind: 'review', state: 'review', projectId: 'proj-b', title: 'Read diff', ageMs: 3_000 },
+  { id: 'i4', kind: 'ci', state: 'broken', projectId: 'proj-b', title: 'CI failed', ageMs: 4_000 },
+]
+
+function fakeClient(listInbox: InboxClient['listInbox'] = vi.fn(async () => ITEMS)): InboxClient {
+  return {
+    listInbox,
+    requestApproval: vi.fn(),
+    decideApproval: vi.fn(),
+    consumeApproval: vi.fn(),
+  }
+}
+
+function BadgeProbe(props: InboxBadgeOptions) {
+  return <span data-testid="badge">{useInboxBadge(props)}</span>
+}
+
+function HotkeyProbe({ onToggle, enabled }: { onToggle: () => void; enabled?: boolean }) {
+  useInboxHotkey(onToggle, enabled)
+  return <input data-testid="field" />
+}
+
+function dockProps(over: Partial<DockProps> = {}): DockProps {
+  return {
+    onAddTerminal: () => {},
+    onAddAgent: () => {},
+    onCreateWorkspace: () => {},
+    onBrowse: () => {},
+    onUndo: () => {},
+    onRedo: () => {},
+    canUndo: false,
+    canRedo: false,
+    onBack: () => {},
+    onForward: () => {},
+    canBack: false,
+    canForward: false,
+    onFit: () => {},
+    onToggleBoard: () => {},
+    sessionsOpen: false,
+    onToggleSessions: () => {},
+    inboxOpen: false,
+    onToggleInbox: () => {},
+    zoomPct: 100,
+    onZoomIn: () => {},
+    onZoomOut: () => {},
+    locked: false,
+    onToggleLock: () => {},
+    cleanView: false,
+    onToggleCleanView: () => {},
+    ...over,
+  }
+}
+
+/** Delegasi mikro-task, termasuk `.then` dari client palsu. */
+async function flush(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve()
+  })
+}
+
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
+
+describe('pure helpers', () => {
+  it('counts every listed item and caps the badge at three digits', () => {
+    expect(inboxUnread(ITEMS)).toBe(4)
+    expect(inboxUnread([])).toBe(0)
+    expect(formatInboxBadge(0)).toBe('')
+    expect(formatInboxBadge(-1)).toBe('')
+    expect(formatInboxBadge(1)).toBe('1')
+    expect(formatInboxBadge(99)).toBe('99')
+    expect(formatInboxBadge(120)).toBe('99+')
+  })
+
+  it('treats text fields and contenteditable as typing targets', () => {
+    expect(isTypingTarget(document.createElement('input'))).toBe(true)
+    expect(isTypingTarget(document.createElement('textarea'))).toBe(true)
+    expect(isTypingTarget(document.createElement('select'))).toBe(true)
+    expect(isTypingTarget(document.createElement('button'))).toBe(false)
+    expect(isTypingTarget(null)).toBe(false)
+  })
+})
+
+describe('badge hook', () => {
+  it('loads the count once on mount while the panel is closed', async () => {
+    const client = fakeClient()
+    render(<BadgeProbe panelOpen={false} client={client} />)
+    await flush()
+    expect(screen.getByTestId('badge').textContent).toBe('4')
+    expect(client.listInbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('polls every 30s while closed', async () => {
+    vi.useFakeTimers()
+    const client = fakeClient()
+    render(<BadgeProbe panelOpen={false} client={client} />)
+    await flush()
+    expect(client.listInbox).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_POLL_MS)
+    })
+    expect(client.listInbox).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_POLL_MS)
+    })
+    expect(client.listInbox).toHaveBeenCalledTimes(3)
+  })
+
+  it('stays silent while the panel owns the endpoint', async () => {
+    const client = fakeClient()
+    render(<BadgeProbe panelOpen client={client} />)
+    await flush()
+    expect(client.listInbox).not.toHaveBeenCalled()
+    expect(screen.getByTestId('badge').textContent).toBe('0')
+  })
+
+  it('does not overlap its own requests', async () => {
+    vi.useFakeTimers()
+    const listInbox = vi.fn<InboxClient['listInbox']>(() => new Promise<InboxItem[]>(() => {}))
+    render(<BadgeProbe panelOpen={false} client={fakeClient(listInbox)} />)
+    await flush()
+    expect(listInbox).toHaveBeenCalledTimes(1)
+
+    // Tiga interval lewat, tapi request pertama belum pernah selesai: tidak ada yang menumpuk.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_POLL_MS * 3)
+    })
+    expect(listInbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fetch in a hidden tab', async () => {
+    const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    try {
+      const client = fakeClient()
+      render(<BadgeProbe panelOpen={false} client={client} />)
+      await flush()
+      expect(client.listInbox).not.toHaveBeenCalled()
+    } finally {
+      if (visibility) Object.defineProperty(document, 'visibilityState', visibility)
+    }
+  })
+
+  it('does nothing before the board is hydrated', async () => {
+    const client = fakeClient()
+    render(<BadgeProbe panelOpen={false} enabled={false} client={client} />)
+    await flush()
+    expect(client.listInbox).not.toHaveBeenCalled()
+  })
+})
+
+describe('Dock inbox button', () => {
+  it('shows the badge and toggles without fetching or approving anything', () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const onToggleInbox = vi.fn()
+    render(<Dock {...dockProps({ inboxUnread: 4, onToggleInbox })} />)
+
+    const button = screen.getByRole('button', { name: 'Toggle inbox panel (4 unread)' })
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+    const badge = button.querySelector('.dock-badge')
+    expect(badge?.textContent).toBe('4')
+    // Badge dekoratif: pembaca layar sudah menerima angkanya dari aria-label tombol.
+    expect(badge?.getAttribute('aria-hidden')).toBe('true')
+
+    fireEvent.click(button)
+    expect(onToggleInbox).toHaveBeenCalledTimes(1)
+    // Klik badge adalah buka/tutup, bukan persetujuan — tidak ada lalu lintas jaringan sama sekali.
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('reflects the open state and drops the badge at zero', () => {
+    const { rerender } = render(<Dock {...dockProps({ inboxOpen: true, inboxUnread: 0 })} />)
+    const button = screen.getByRole('button', { name: 'Toggle inbox panel' })
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(button.querySelector('.dock-badge')).toBeNull()
+
+    rerender(<Dock {...dockProps({ inboxOpen: false, inboxUnread: 120 })} />)
+    expect(screen.getByRole('button', { name: 'Toggle inbox panel (99+ unread)' }).querySelector('.dock-badge')?.textContent).toBe('99+')
+  })
+})
+
+describe('closed panel', () => {
+  it('never fetches while open={false}', async () => {
+    const client = fakeClient()
+    const view = render(<InboxPanel open={false} client={client} />)
+    await flush()
+    expect(client.listInbox).not.toHaveBeenCalled()
+    expect(view.container.firstChild).toBeNull()
+  })
+})
+
+describe('hotkey', () => {
+  it('toggles on plain i, but not from a text field or with a modifier', () => {
+    const onToggle = vi.fn()
+    render(<HotkeyProbe onToggle={onToggle} />)
+    fireEvent.keyDown(document.body, { key: 'i' })
+    expect(onToggle).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(screen.getByTestId('field'), { key: 'i' })
+    fireEvent.keyDown(document.body, { key: 'i', metaKey: true })
+    expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not yank the panel out from under an open dialog', () => {
+    const onToggle = vi.fn()
+    render(<HotkeyProbe onToggle={onToggle} />)
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    document.body.appendChild(dialog)
+    try {
+      fireEvent.keyDown(document.body, { key: 'i' })
+      expect(onToggle).not.toHaveBeenCalled()
+    } finally {
+      dialog.remove()
+    }
+  })
+})
+
+describe('App wiring', () => {
+  beforeAll(installCanvasDom)
+  afterEach(() => {
+    unmountCanvas()
+    localStorage.clear()
+  })
+
+  it('dock button and i toggle the real InboxPanel mounted by App', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+
+    // `useInboxOpen` default terbuka, sama seperti panel Sessions.
+    expect(screen.queryByRole('complementary', { name: 'Inbox' })).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Toggle inbox panel/ }))
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inbox' })).toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'i' })
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inbox' })).not.toBeNull())
+  })
+})
+
+describe('dock.css contract', () => {
+  it('badge is absolutely anchored and does not eat clicks', () => {
+    const css = readFileSync('src/client/dock.css', 'utf8')
+    const block = /\.dock-badge\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(block).toContain('position: absolute')
+    expect(block).toContain('pointer-events: none')
+  })
+})

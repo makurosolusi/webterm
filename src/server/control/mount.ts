@@ -13,6 +13,8 @@ import {
   writeControlJson,
 } from './controlHttpIo'
 import { handleControl } from './controlApi'
+import { approvalRoute } from './approvalMount'
+import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import {
   CONTROL_MAX_BODY_BYTES,
   CONTROL_PREFIX,
@@ -129,6 +131,16 @@ export async function handleControlHttp(
     ...(withBody ? { body } : {}),
   }
   const deps = await depsFor(overrides)
+  // Approval lebih dulu: keluarga `/approval/*` punya auth capability sendiri. Query string ikut
+  // diteruskan karena GET list membaca `projectId`/`status`/`limit` dari sana.
+  const approval = await approvalRoute(
+    { ...request, path: `${path}${url.search}` },
+    { capabilities: deps.capabilities, approval: activeLedgerRuntime()?.ledger.approval, now: deps.now }
+  )
+  if (approval) {
+    writeControlJson(res, approval.status, approval.body)
+    return true
+  }
   const result = await handleControl(request, deps)
   if (!result) return false
   writeControlJson(res, result.status, result.body)
