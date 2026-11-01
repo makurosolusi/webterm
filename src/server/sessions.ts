@@ -1,148 +1,28 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
-import type { AgentPermissionMode, AgentStatus } from '../shared/workspace'
 import { hasClaudeHookSettings, isContextCapable, isSafeNodeId } from '../shared/workspace'
-import { DEFAULT_SETTINGS } from '../shared/settings'
-import { STALE_SWEEP_MS } from '../shared/agentStale'
-import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
+import { binaryExists, spawnPty, unwrapMissingWrapper } from './pty'
 import { forgetNodeToken, hookEnv, nodeToken } from './hooks'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { OutputLog } from './outputLog'
 import { SubscriberSet } from './subscribers'
-import { NodeRegistry, tailOutputBytes, type NodeExit } from './nodeRegistry'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
+import { SessionsCore, exitOutput } from './sessionsCore'
+import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
 // menjaga kontrak itu tanpa memaksa semua pemanggil tahu file barunya.
 export { launchLine }
 
-/** Satu PTY hidup beserta jalur observasinya: log output bernomor urut dan kumpulan pelanggan. */
-interface Session {
-  id: string
-  pty: Pty
-  log: OutputLog
-  subs: SubscriberSet<ServerMsg>
-  exited: boolean
-}
+// Keadaan sesi (map, registry, jam sweep, emit/onExit) tinggal di `sessionsCore.ts`; tipe-tipenya di
+// `sessionsTypes.ts`. Keduanya dipecah hanya karena ukuran file — kontrak publik tetap di sini.
+export type { SessionInfo, SessionsOptions }
 
-/** Ringkasan sesi hidup untuk endpoint/panel daftar. Tanpa tombstone: sesi yang sudah keluar tidak
- *  pernah muncul di sini (pakai `getExit`/`statusOf` untuk fakta sesudah mati). */
-export interface SessionInfo {
-  id: string
-  pid: number
-  status?: AgentStatus
-}
-
-/** Knob runtime yang disambungkan integrator dari store settings. Absen = default hari ini, jadi
- *  `new Sessions()` berperilaku persis seperti sebelum settings ada. */
-export interface SessionsOptions {
-  /** Shell untuk PTY baru. Kosong = default sistem (`settings.defaultShell`). */
-  shell?: string
-  /** Batas ring buffer scrollback dalam BYTE (`settings.scrollbackBytes`). */
-  scrollbackBytes?: number
-  /** Mode permission awal sesi claude (`settings.claudePermissionMode`). Absen = tidak ada flag
-   *  `--permission-mode` sama sekali, sehingga peluncuran tetap polos selama integrator belum
-   *  menyambungkan settings. */
-  claudePermissionMode?: AgentPermissionMode
-  /** `settings.hookReplyApprovals`. Absen/false = `NODETERM_PERM_WAIT_SECS` tidak dikirim, jadi hook
-   *  permission tidak menahan apa pun — perilaku sebelum setting ini ada. */
-  hookReplyApprovals?: boolean
-  /** Sumber PTY. Di-inject supaya test bisa memakai PTY palsu tanpa `Bun.Terminal`. */
-  spawn?: typeof spawnPty
-  /** Sumber waktu untuk tombstone exit. Di-inject supaya test tidak bergantung jam dinding. */
-  now?: () => number
-}
-
-/** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
- *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
-function exitOutput(log: OutputLog | undefined): string | undefined {
-  const text = log?.text() ?? ''
-  return text === '' ? undefined : tailOutputBytes(text)
-}
-
-export class Sessions {
-  constructor(public options: SessionsOptions = {}) {}
-
-  /** Batas scrollback efektif. Nilai settings bisa diedit tangan / datang lewat HTTP, jadi
-   *  divalidasi di titik pemakaian; nilai tak masuk akal jatuh ke default. */
-  private get scrollbackBytes(): number {
-    const n = this.options.scrollbackBytes
-    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : DEFAULT_SETTINGS.scrollbackBytes
-  }
-
-  private now(): number {
-    return (this.options.now ?? Date.now)()
-  }
-
-  private map = new Map<string, Session>()
-  // Status, transcript, dan tombstone exit hidup LEBIH LAMA dari PTY-nya — makanya di registry,
-  // bukan di `Session`. Node yang sudah mati tetap perlu bisa dijawab (lihat nodeRegistry.ts).
-  private registry = new NodeRegistry()
-
-  /** Tulis status lalu pancarkan ke SEMUA pelanggan sesi. Sesi tanpa pelanggan tetap menyimpan
-   *  statusnya: re-attach berikutnya memutar ulang status itu sebagai snapshot. */
-  setStatus(id: string, status: AgentStatus, now: number = this.now()): void {
-    // Node yang sudah punya tombstone exit adalah node MATI. Hook yang telat (mis. `Stop` claude
-    // mendarat sesudah shell-nya keluar) tidak boleh menghidupkan lagi statusnya — client akan
-    // merender node mati itu sebagai aktif dan menawarkan Resume.
-    if (this.registry.getExit(id)) return
-    this.registry.setStatus(id, status, now)
-    this.map.get(id)?.subs.send({ t: 'status', id, status })
-  }
-
-  /**
-   * Hapus status `working` yang sudah diam melewati jendela. MENGHAPUS, bukan menggantinya dengan
-   * `done`/`waiting` — alasannya di `agentStale.ts`. Self-healing: event berikutnya menulis ulang.
-   */
-  sweepStale(now: number = this.now()): void {
-    for (const id of this.registry.sweepStale(now)) {
-      // `status` absen = "tidak ada status lagi". Client menghapus entry-nya dan merender "Unknown".
-      this.map.get(id)?.subs.send({ t: 'status', id })
-    }
-  }
-
-  /** Nyalakan jamnya; mengembalikan penghentinya. `unref` supaya ia tidak pernah menahan proses. */
-  startStaleSweep(intervalMs: number = STALE_SWEEP_MS): () => void {
-    const timer = setInterval(() => this.sweepStale(), intervalMs)
-    timer.unref?.()
-    return () => clearInterval(timer)
-  }
-
-  setTranscript(id: string, path: string): void { this.registry.setTranscript(id, path) }
-  getTranscript(id: string): string | undefined { return this.registry.getTranscript(id) }
-  /**
-   * Teks terminal: log HIDUP bila sesinya masih ada, kalau tidak ekor output yang tersimpan di
-   * tombstone exit. Tanpa fallback ini, `wait until:exit` selalu menjawab `output: ''` — sesi
-   * dihapus tepat saat keluar, jadi pemanggil kehilangan seluruh alasan ia menunggu. Tombstone
-   * dibaca, bukan dihidupkan lagi: tidak ada PTY atau `Session` yang dibuat ulang di sini.
-   */
-  getTerminal(id: string): string {
-    const live = this.map.get(id)
-    if (live) return live.log.text()
-    return this.registry.getExit(id)?.output ?? ''
-  }
-  statusOf(id: string): AgentStatus | undefined { return this.registry.getStatus(id)?.status }
-  isLive(id: string): boolean { return this.map.has(id) }
-  getExit(id: string): NodeExit | undefined { return this.registry.getExit(id) }
-  pidOf(id: string): number | undefined { return this.map.get(id)?.pty.pid }
-
-  /** Sesi yang masih hidup, urut sesuai waktu spawn. */
-  list(): SessionInfo[] {
-    return [...this.map.values()].map((s) => ({
-      id: s.id,
-      pid: s.pty.pid,
-      status: this.registry.getStatus(s.id)?.status,
-    }))
-  }
-
-  /** Tambah satu pelanggan ke sesi hidup. `undefined` bila sesinya sudah tidak ada — pemanggil
-   *  yang butuh snapshot bisa memutarnya lewat `open`. */
-  subscribe(id: string, send: (m: ServerMsg) => void): (() => void) | undefined {
-    const session = this.map.get(id)
-    if (!session) return undefined
-    session.subs.add(send)
-    return () => { session.subs.remove(send) }
-  }
-
+/**
+ * Jalur socket di atas `SessionsCore`: buka/re-attach, input, resize, close, dan dispatch pesan
+ * client. Setiap perilaku (replay scrollback, tombstone exit, gerbang identitas `onExit`) sama
+ * persis dengan versi satu-file; yang berubah hanya letak kodenya.
+ */
+export class Sessions extends SessionsCore {
   /**
    * Buka/re-attach sesi untuk sebuah intent `open`.
    *
@@ -285,41 +165,6 @@ export class Sessions {
     // Kill SESUDAH map dihapus: `onExit` digerbangi identitas, jadi gema kematian yang kita minta
     // sendiri tidak pernah menjadi `exit` kedua.
     session?.pty.kill()
-  }
-
-  /** Socket gone: forget every subscriber but keep the PTY running so a reconnect with the same id
-   *  re-attaches instead of spawning a fresh shell. */
-  detach(send: (m: ServerMsg) => void): void {
-    for (const session of this.map.values()) session.subs.remove(send)
-  }
-
-  /** Tambah `data` ke log (dengan cap byte) lalu pancarkan ke semua pelanggan, bernomor urut. */
-  private emit(session: Session, data: string): void {
-    // PTY sesekali memanggil onData dengan string kosong. OutputLog tidak memberinya seq (ia
-    // mengembalikan seq terakhir), jadi memancarkannya berarti pelanggan menerima `output` dengan
-    // nomor urut duplikat — no-op, tapi membingungkan deteksi gap di client.
-    if (data === '') return
-    const seq = session.log.append(data, this.scrollbackBytes)
-    session.subs.send({ t: 'output', id: session.id, data, seq })
-  }
-
-  /** PTY keluar SENDIRI. Gerbang identitas: gema dari `close` tidak boleh menulis status/exit. */
-  private onExit(session: Session, code: number): void {
-    if (this.map.get(session.id) !== session || session.exited) return
-    session.exited = true
-    const at = this.now()
-    // `done` DULU, tombstone exit sesudahnya: `setStatus` mengabaikan node yang sudah punya
-    // tombstone (lihat guard di sana), jadi urutan sebaliknya membuat `done` hilang.
-    this.setStatus(session.id, 'done', at)
-    this.registry.setExit(session.id, {
-      code,
-      reason: 'self',
-      at,
-      output: exitOutput(session.log),
-    })
-    session.subs.send({ t: 'exit', id: session.id, code, reason: 'self' })
-    session.subs.clear()
-    this.map.delete(session.id)
   }
 
   handle(msg: ClientMsg, send: (m: ServerMsg) => void): void {

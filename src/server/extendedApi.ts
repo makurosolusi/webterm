@@ -6,18 +6,19 @@
 //   POST /api/memory/export|rebuild (memory files)
 // Everything else returns false and keeps falling through the normal route chain.
 //
-// Bodies are capped hard (16 KiB) *while streaming* and must be a JSON object. Nothing from the
-// body or the auth token is ever logged here; sub-handlers return already-compact responses.
+// Body intake (16 KiB streaming cap + JSON-object parse) lives in `extendedApiBody` and is
+// re-exported here for existing callers. Nothing from the body or the auth token is ever logged
+// here; sub-handlers return already-compact responses.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { centralHttpRoute, isCentralPath, type CentralHttpDeps } from './centralHttp'
-import { declaredLength, readCappedBody } from './channels/channelHttp'
 import {
   memoryFileHttpRoute,
   isMemoryFilePath,
   type MemoryFileHttpDeps,
 } from './memoryFileHttp'
 import { memoryFilesEnabled } from './memory/memoryFile'
+import { parseJsonObject, readBoundedBody } from './extendedApiBody'
 import {
   orchestratorRunRoute,
   orchestratorRunEnabled,
@@ -32,27 +33,12 @@ import {
   type OrchestratorControlDeps,
 } from './orchestratorControlApi'
 
-export const MAX_API_BODY_BYTES = 16 * 1024
+export { MAX_API_BODY_BYTES, parseJsonObject } from './extendedApiBody'
 
 export interface ExtendedApiDeps {
   central?: Omit<CentralHttpDeps, 'runtime'>
   orchestrator?: Omit<OrchestratorRunDeps, 'ledger'> & Omit<OrchestratorControlDeps, 'ledger'>
   memory?: Omit<MemoryFileHttpDeps, 'ledger'>
-}
-
-type JsonResult = { ok: true; value: Record<string, unknown> } | { ok: false }
-
-/** Empty, array, scalar and malformed text are all "not a JSON object". */
-export function parseJsonObject(raw: string): JsonResult {
-  const trimmed = raw.trim()
-  if (trimmed === '') return { ok: false }
-  try {
-    const value = JSON.parse(trimmed) as unknown
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return { ok: false }
-    return { ok: true, value: value as Record<string, unknown> }
-  } catch {
-    return { ok: false }
-  }
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -79,26 +65,14 @@ export async function extendedApiRoute(
   const memory = isMemoryFilePath(path)
   if (!central && !orchestrator && !memory) return false
 
-  // Cap BEFORE buffering anything: a declared oversize is refused without reading a byte, and the
-  // streaming reader stops at MAX+1 (then drains), so a chunked multi-GB body is never accumulated.
-  // `_readBody` stays only so existing call sites keep compiling; it buffers without bound.
-  let raw = ''
-  if (method === 'POST') {
-    const declared = declaredLength(req.headers['content-length'])
-    if (declared !== undefined && declared > MAX_API_BODY_BYTES) {
-      req.resume() // drain so keep-alive is not desynced by an unread body
-      send(res, 413, { error: 'payload_too_large' })
-      return true
-    }
-    const read = await readCappedBody(req, MAX_API_BODY_BYTES)
-    if (!read.ok) {
-      // Overflow already dropped the listener and resumed the stream inside the reader.
-      if (read.reason === 'too_large') send(res, 413, { error: 'payload_too_large' })
-      else send(res, 400, { error: 'body_read_failed' })
-      return true
-    }
-    raw = read.body
+  // `_readBody` stays only so existing call sites keep compiling; it buffers without bound, so the
+  // capped reader is used instead (see `readBoundedBody`).
+  const read = await readBoundedBody(req, method)
+  if (!read.ok) {
+    send(res, read.status, { error: read.error })
+    return true
   }
+  const raw = read.raw
 
   // Flag gates live here so a disabled surface never depends on a valid body. Sub-handlers
   // re-check them; the flags are cheap and process-wide.
