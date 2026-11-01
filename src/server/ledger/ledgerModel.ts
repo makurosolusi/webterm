@@ -130,6 +130,12 @@ export interface LeaseTaskInput {
 export interface TaskActorOptions {
   actor?: string
   payload?: unknown
+  /**
+   * Lease holder asserting the transition. When set, `claimDone`/`failTask` require the
+   * row's lease to be live and owned by this value, so a zombie or foreign worker cannot
+   * complete work after its lease expired or was revoked.
+   */
+  owner?: string
 }
 
 export interface AppendEventInput {
@@ -162,6 +168,13 @@ export class LedgerError extends Error {
 export class StaleFenceError extends LedgerError {
   constructor(readonly taskId: string, readonly expected: number, readonly actual: number) {
     super(`stale fence for task ${taskId}: expected ${expected}, row has ${actual}`)
+  }
+}
+
+/** The caller has no live lease on the task (expired, or held by another owner). */
+export class StaleLeaseError extends LedgerError {
+  constructor(readonly taskId: string, readonly detail: string) {
+    super(`no live lease for task ${taskId}: ${detail}`)
   }
 }
 

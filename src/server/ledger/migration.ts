@@ -2,6 +2,8 @@ import { Database } from 'bun:sqlite'
 import { existsSync, readdirSync, unlinkSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { MIGRATIONS, type Migration } from './ledgerSchema'
+import { inTransaction } from './ledgerCore'
+import { LedgerError } from './ledgerModel'
 
 type Row = Record<string, unknown>
 interface Stmt {
@@ -37,14 +39,32 @@ function writeUserVersion(db: Database, version: number): void {
  */
 export function migrate(db: Database, migrations: readonly Migration[] = MIGRATIONS): number {
   const current = readUserVersion(db)
-  const latest = migrations.reduce((max, m) => Math.max(max, m.version), 0)
+  const sorted = [...migrations].sort((a, b) => a.version - b.version)
+  // Validate the list before touching the DB: a bad version would otherwise be
+  // interpolated into `PRAGMA user_version` after DDL had already run.
+  let previous = 0
+  for (const m of sorted) {
+    if (!Number.isInteger(m.version) || m.version < 1) {
+      throw new LedgerError(`migration version must be a positive integer, got ${String(m.version)}`)
+    }
+    if (m.version <= previous) {
+      throw new LedgerError(
+        `migration versions must be strictly increasing: ${previous} then ${m.version}`
+      )
+    }
+    previous = m.version
+  }
+  const latest = previous
   if (current > latest) {
-    throw new Error(
+    throw new LedgerError(
       `ledger schema is newer than this code: db user_version=${current}, code LATEST_VERSION=${latest}`
     )
   }
-  for (const m of [...migrations].sort((a, b) => a.version - b.version)) {
-    if (m.version <= current) continue
+  // Track the version actually applied in this run so a duplicated entry cannot
+  // slip past the `current` snapshot taken before the loop.
+  let applied = current
+  for (const m of sorted) {
+    if (m.version <= applied) continue
     // db.transaction() is DEFERRED: two writers can both read then deadlock on
     // upgrade, so the lock is taken eagerly and the version bump is in-band.
     db.exec('BEGIN IMMEDIATE')
@@ -52,6 +72,7 @@ export function migrate(db: Database, migrations: readonly Migration[] = MIGRATI
       m.up(db)
       writeUserVersion(db, m.version)
       db.exec('COMMIT')
+      applied = m.version
     } catch (err) {
       try {
         db.exec('ROLLBACK')
@@ -59,7 +80,7 @@ export function migrate(db: Database, migrations: readonly Migration[] = MIGRATI
         // SQLite already rolled back (e.g. the exec itself aborted); nothing to undo.
       }
       const cause = err instanceof Error ? err.message : String(err)
-      throw new Error(`migration ${m.version} failed: ${cause}`, { cause: err })
+      throw new LedgerError(`migration ${m.version} failed: ${cause}`, { cause: err })
     }
   }
   return readUserVersion(db)
@@ -67,10 +88,17 @@ export function migrate(db: Database, migrations: readonly Migration[] = MIGRATI
 
 /** Copies a file DB via VACUUM INTO and verifies the copy; keeps the last 3. */
 export function preMigrationBackup(db: Database, path: string): string | null {
+  // VACUUM cannot run in a transaction, and SQLite would only say so after the
+  // (potentially slow) integrity check. Fail fast with a typed error.
+  if (inTransaction(db)) {
+    throw new LedgerError('preMigrationBackup: cannot run inside a transaction')
+  }
   if (path === MEMORY_DB || path === '') return null
   const check = stmt(db, 'PRAGMA integrity_check').get()
   const verdict = String(check?.['integrity_check'] ?? '')
-  if (verdict !== 'ok') throw new Error(`refusing to back up corrupt ledger: integrity_check=${verdict}`)
+  if (verdict !== 'ok') {
+    throw new LedgerError(`refusing to back up corrupt ledger: integrity_check=${verdict}`)
+  }
 
   const dir = dirname(path)
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')

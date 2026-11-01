@@ -9,7 +9,13 @@ import {
   TASK_STATUSES,
 } from './ledgerModel'
 import { type LedgerContext, allRows, execWrite, getRow, newId, toTask, tx } from './ledgerCore'
-import { DEFAULT_PAGE, MAX_PAGE, emit, loadTask, reload } from './ledgerTaskShared'
+import {
+  clampPageLimit,
+  clampPageOffset,
+  emit,
+  loadTask,
+  reload,
+} from './ledgerTaskShared'
 
 export function createTask(ctx: LedgerContext, input: CreateTaskInput): Task {
   if (typeof input.spec !== 'string' || input.spec.trim() === '') {
@@ -21,6 +27,9 @@ export function createTask(ctx: LedgerContext, input: CreateTaskInput): Task {
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
     throw new LedgerError(`task.maxAttempts must be a positive integer, got ${maxAttempts}`)
   }
+  // '' and blank keys are "no idempotency key", not a shared global key.
+  const idemKey =
+    typeof input.idemKey === 'string' && input.idemKey.trim() !== '' ? input.idemKey : null
   return tx(ctx, () => {
     try {
       execWrite(
@@ -35,15 +44,19 @@ export function createTask(ctx: LedgerContext, input: CreateTaskInput): Task {
         input.spec,
         input.specDigest ?? null,
         maxAttempts,
-        input.idemKey ?? null,
+        idemKey,
         at,
         at
       )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      if (input.idemKey !== undefined && message.includes('task.idem_key')) {
-        const existing = getRow(ctx.db, 'SELECT id FROM task WHERE idem_key = ?', input.idemKey)
-        throw new DuplicateIdemKeyError(input.idemKey, existing ? String(existing['id']) : null)
+      if (idemKey !== null && message.includes('task.idem_key')) {
+        // The composite unique index is (project_id, idem_key); fall back to a global
+        // lookup so an older single-column index still reports the winning task id.
+        const existing =
+          getTaskByIdemKey(ctx, input.projectId, idemKey) ??
+          getTaskByIdemKey(ctx, undefined, idemKey)
+        throw new DuplicateIdemKeyError(idemKey, existing?.id ?? null)
       }
       throw err
     }
@@ -64,7 +77,34 @@ export function getTask(ctx: LedgerContext, id: string): Task | null {
   return loadTask(ctx, id)
 }
 
-/** Oldest-first page; status must be one of the schema's CHECK values. */
+/**
+ * Idempotency lookup scoped to one project (the uniqueness domain is
+ * `UNIQUE(project_id, idem_key)`). Passing `undefined` searches across projects and is
+ * only used to enrich duplicate-key errors.
+ */
+export function getTaskByIdemKey(
+  ctx: LedgerContext,
+  projectId: string | undefined,
+  idemKey: string
+): Task | null {
+  if (typeof idemKey !== 'string' || idemKey.trim() === '') return null
+  const row =
+    projectId === undefined
+      ? getRow(ctx.db, 'SELECT * FROM task WHERE idem_key = ? LIMIT 1', idemKey)
+      : getRow(
+          ctx.db,
+          'SELECT * FROM task WHERE project_id = ? AND idem_key = ? LIMIT 1',
+          projectId,
+          idemKey
+        )
+  return row ? toTask(row) : null
+}
+
+/**
+ * Oldest-first page; status must be one of the schema's CHECK values.
+ * `limit`/`offset` are validated before binding so bad input is a typed `LedgerError`
+ * rather than SQLite's "datatype mismatch".
+ */
 export function listTasks(
   ctx: LedgerContext,
   projectId: string,
@@ -74,8 +114,8 @@ export function listTasks(
   if (status !== undefined && !TASK_STATUSES.includes(status)) {
     throw new LedgerError(`listTasks: unknown status ${String(status)}`)
   }
-  const limit = Math.min(MAX_PAGE, Math.max(1, Math.trunc(opts.limit ?? DEFAULT_PAGE)))
-  const offset = Math.max(0, Math.trunc(opts.offset ?? 0))
+  const limit = clampPageLimit(opts.limit, 'listTasks')
+  const offset = clampPageOffset(opts.offset, 'listTasks')
   const where = status === undefined ? 'project_id = ?' : 'project_id = ? AND status = ?'
   const params: unknown[] = status === undefined ? [projectId] : [projectId, status]
   return allRows(

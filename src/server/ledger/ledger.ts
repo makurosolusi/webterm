@@ -13,20 +13,23 @@ import {
   type TaskActorOptions,
   type TaskStatus,
   LedgerError,
-  LedgerNotFoundError,
 } from './ledgerModel'
 import {
   type LedgerContext,
   allRows,
   execWrite,
   getRow,
-  jsonOf,
-  newId,
-  toAgent,
-  toProject,
   tx,
 } from './ledgerCore'
 import { appendEvent, listEvents } from './ledgerEvent'
+import { agentRepository, projectRepository } from './ledgerEntity'
+import {
+  PROJECT_CASCADE_TABLES,
+  assertConnectionPragmas,
+  assertTaskParents,
+  pragmaInt,
+} from './ledgerInvariants'
+import { migrate } from './migration'
 import {
   claimDone,
   failTask,
@@ -49,7 +52,7 @@ export interface Ledger {
   project: {
     createProject(input: CreateProjectInput): Project
     getProject(id: string): Project | null
-    listProjects(): Project[]
+    listProjects(opts?: { limit?: number; offset?: number }): Project[]
     setLockEpoch(id: string, epoch: number): Project
   }
   agent: {
@@ -75,6 +78,8 @@ export interface Ledger {
   }
   /** Deletes one project; FK cascades remove agents/tasks/runs/events/usage/budget/prefix. */
   deleteProject(id: string): boolean
+  /** Deletes every project owned by a workspace; returns how many projects were removed. */
+  deleteProjectsForWorkspace(workspaceId: string): number
   /** Runs `fn` inside one BEGIN IMMEDIATE transaction (nested calls join it). */
   tx<T>(fn: () => T): T
   now(): number
@@ -86,120 +91,24 @@ function toClock(now: number | (() => number) | undefined): () => number {
   return () => Date.now()
 }
 
-function projectById(ctx: LedgerContext, id: string): Project {
-  const row = getRow(ctx.db, 'SELECT * FROM project WHERE id = ?', id)
-  if (!row) throw new LedgerNotFoundError('project', id)
-  return toProject(row)
-}
-
-function agentById(ctx: LedgerContext, id: string): Agent {
-  const row = getRow(ctx.db, 'SELECT * FROM agent WHERE id = ?', id)
-  if (!row) throw new LedgerNotFoundError('agent', id)
-  return toAgent(row)
-}
-
 /** Typed repository over the v1 ledger schema. All SQL is parameterized. */
 export function createLedger(db: Database, options: LedgerOptions = {}): Ledger {
+  assertConnectionPragmas(db)
+  migrate(db)
   const ctx: LedgerContext = { db, now: toClock(options.now) }
 
-  const project: Ledger['project'] = {
-    createProject(input) {
-      const at = ctx.now()
-      const id = input.id ?? newId()
-      const priority = input.priority ?? 0
-      if (!Number.isInteger(priority)) {
-        throw new LedgerError(`project.priority must be an integer, got ${priority}`)
-      }
-      execWrite(
-        db,
-        `INSERT INTO project (id, workspace_id, name, path, branch_base, priority, budget_json,
-           created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id,
-        input.workspaceId,
-        input.name,
-        input.path,
-        input.branchBase ?? null,
-        priority,
-        jsonOf(input.budget, 'project.budget'),
-        at,
-        at
-      )
-      return projectById(ctx, id)
-    },
-    getProject(id) {
-      const row = getRow(db, 'SELECT * FROM project WHERE id = ?', id)
-      return row ? toProject(row) : null
-    },
-    listProjects() {
-      return allRows(db, 'SELECT * FROM project ORDER BY priority DESC, created_at ASC, id ASC').map(
-        toProject
-      )
-    },
-    setLockEpoch(id, epoch) {
-      if (!Number.isInteger(epoch) || epoch < 0) {
-        throw new LedgerError(`project.lock_epoch must be a non-negative integer, got ${epoch}`)
-      }
-      const at = ctx.now()
-      const changes = execWrite(
-        db,
-        'UPDATE project SET lock_epoch = ?, updated_at = ? WHERE id = ?',
-        epoch,
-        at,
-        id
-      )
-      if (changes !== 1) throw new LedgerNotFoundError('project', id)
-      return projectById(ctx, id)
-    },
-  }
-
-  const agent: Ledger['agent'] = {
-    createAgent(input) {
-      const at = ctx.now()
-      const id = input.id ?? newId()
-      execWrite(
-        db,
-        `INSERT INTO agent (id, project_id, parent_agent_id, name, role, depth,
-           capabilities_json, session_ref, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id,
-        input.projectId,
-        input.parentAgentId ?? null,
-        input.name ?? null,
-        input.role ?? 'worker',
-        input.depth,
-        jsonOf(input.capabilities, 'agent.capabilities'),
-        input.sessionRef ?? null,
-        at
-      )
-      return agentById(ctx, id)
-    },
-    getAgent(id) {
-      const row = getRow(db, 'SELECT * FROM agent WHERE id = ?', id)
-      return row ? toAgent(row) : null
-    },
-    setAgentState(id, state, heartbeatAt) {
-      if (typeof state !== 'string' || state.trim() === '') {
-        throw new LedgerError('agent.state must be a non-empty string')
-      }
-      const at = heartbeatAt ?? ctx.now()
-      const changes = execWrite(
-        db,
-        'UPDATE agent SET state = ?, heartbeat_at = ? WHERE id = ?',
-        state,
-        at,
-        id
-      )
-      if (changes !== 1) throw new LedgerNotFoundError('agent', id)
-      return agentById(ctx, id)
-    },
-  }
+  const project = projectRepository(ctx)
+  const agent = agentRepository(ctx)
 
   return {
     project,
     agent,
     task: {
-      createTask: (input) => createTask(ctx, input),
+      createTask: (input) =>
+        tx(ctx, () => {
+          assertTaskParents(ctx, input)
+          return createTask(ctx, input)
+        }),
       getTask: (id) => getTask(ctx, id),
       listTasks: (projectId, status, opts) => listTasks(ctx, projectId, status, opts),
       leaseTask: (id, input) => leaseTask(ctx, id, input),
@@ -220,7 +129,30 @@ export function createLedger(db: Database, options: LedgerOptions = {}): Ledger 
         // the memory_au trigger, so check existence explicitly instead.
         if (getRow(db, 'SELECT 1 AS one FROM project WHERE id = ?', id) === null) return false
         execWrite(db, 'DELETE FROM project WHERE id = ?', id)
+        for (const table of PROJECT_CASCADE_TABLES) {
+          const left = getRow(db, `SELECT 1 AS one FROM ${table} WHERE project_id = ?`, id)
+          if (left !== null) {
+            throw new LedgerError(
+              `deleteProject ${id}: ${table} rows survived the cascade ` +
+                `(foreign_keys=${pragmaInt(db, 'foreign_keys')})`
+            )
+          }
+        }
         return true
+      })
+    },
+    deleteProjectsForWorkspace(workspaceId) {
+      return tx(ctx, () => {
+        // Ledger sengaja tidak punya FK ke tabel `workspace` (bisa dibuka standalone), jadi
+        // cascade tingkat-workspace harus eksplisit di sini, bukan mengandalkan db.delete.
+        const ids = allRows(
+          db,
+          'SELECT id FROM project WHERE workspace_id = ? ORDER BY id ASC',
+          workspaceId
+        ).map((row) => String(row['id']))
+        let removed = 0
+        for (const id of ids) if (this.deleteProject(id)) removed += 1
+        return removed
       })
     },
     tx: (fn) => tx(ctx, fn),

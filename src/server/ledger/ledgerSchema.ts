@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS task (
   fence INTEGER NOT NULL DEFAULT 0,
   lease_owner TEXT, lease_expires INTEGER, heartbeat_at INTEGER,
   attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
-  idem_key TEXT UNIQUE,
+  idem_key TEXT,
   evidence_json TEXT CHECK (evidence_json IS NULL OR json_valid(evidence_json)),
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
@@ -174,10 +174,16 @@ END;
 
 CREATE INDEX IF NOT EXISTS idx_task_status_project ON task(status, project_id);
 CREATE INDEX IF NOT EXISTS idx_task_lease_expires ON task(lease_expires);
+CREATE INDEX IF NOT EXISTS idx_task_project_created ON task(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_event_task_seq ON event(task_id, seq);
+CREATE INDEX IF NOT EXISTS idx_event_project_seq ON event(project_id, seq);
 CREATE INDEX IF NOT EXISTS idx_event_run_seq ON event(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_project_started ON run(project_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_usage_run ON usage(run_id);
 CREATE INDEX IF NOT EXISTS idx_memory_project_updated ON memory(project_id, updated_at);
+-- Idempotency is per project, not global: the same action key may exist in two
+-- projects. SQLite treats NULLs as distinct, so keyless tasks never collide.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_task_project_idem ON task(project_id, idem_key);
 `
 
 export const MIGRATIONS: readonly Migration[] = [{ version: 1, up: (db) => db.exec(V1) }]

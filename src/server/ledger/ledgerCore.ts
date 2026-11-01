@@ -48,7 +48,8 @@ export function execInsert(db: Database, sql: string, ...params: unknown[]): num
   return Number(result?.lastInsertRowid ?? 0)
 }
 
-function inTransaction(db: Database): boolean {
+/** True while an explicit BEGIN or db.transaction() is open on this connection. */
+export function inTransaction(db: Database): boolean {
   return (db as unknown as { inTransaction?: boolean }).inTransaction === true
 }
 
