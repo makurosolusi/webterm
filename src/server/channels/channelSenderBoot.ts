@@ -1,9 +1,9 @@
 // Egress boot (P3): start the outbox drainer only when a bot token exists. A missing token is a
 // deployment state, not a fatal error — ingress (webhook + bindings UI) must keep working while the
-// human configures the bot, so this logs exactly one redacted line and returns null. The token value
-// is never read into a variable here; only its presence is checked.
+// human configures the bot, so this logs exactly one redacted line and returns null. Presence is
+// resolved through the same precedence as sending (preferred name, then legacy), so boot and send
+// can never disagree. The token value is only tested for presence here, never logged or stored.
 import {
-  TELEGRAM_BOT_TOKEN_ENV,
   TelegramChannelSender,
   startChannelSender,
   type ChannelSenderHandle,
@@ -11,9 +11,10 @@ import {
   type SenderStorePort,
   type TelegramSenderFetch,
 } from './telegramSender'
+import { resolveTelegramBotToken } from './telegramSend'
 
 export const SENDER_DISABLED_LOG =
-  'telegram egress disabled: TELEGRAM_BOT_TOKEN is not set (ingress stays on)'
+  'telegram egress disabled: WEBTERM_TELEGRAM_BOT_TOKEN / TELEGRAM_BOT_TOKEN is not set (ingress stays on)'
 
 export interface SenderBootOptions {
   intervalMs?: number
@@ -41,7 +42,7 @@ export function startChannelSenderFor(
   env: NodeJS.ProcessEnv,
   options: SenderBootOptions = {}
 ): ChannelSenderHandle | null {
-  if (!(env[TELEGRAM_BOT_TOKEN_ENV] ?? '').trim()) {
+  if (resolveTelegramBotToken(env) === undefined) {
     console.warn(SENDER_DISABLED_LOG)
     return null
   }

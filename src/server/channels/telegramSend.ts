@@ -1,11 +1,34 @@
 // Low-level Telegram egress transport. `telegramSender.ts` re-exports this so callers have one
-// import surface. The bot token comes ONLY from env `TELEGRAM_BOT_TOKEN`, read on every send so
-// rotation needs no restart. It is never stored, returned, or logged; every error is scrubbed.
-import { DEFAULT_TELEGRAM_API_BASE, TELEGRAM_MAX_TEXT } from './telegram'
+// import surface. The bot token comes ONLY from env (`WEBTERM_TELEGRAM_BOT_TOKEN`, falling back to
+// legacy `TELEGRAM_BOT_TOKEN`), read on every send so rotation needs no restart. It is never
+// stored, returned, or logged; every error is scrubbed.
+import {
+  DEFAULT_TELEGRAM_API_BASE,
+  TELEGRAM_MAX_TEXT,
+  TELEGRAM_TOKEN_ENV,
+  TELEGRAM_TOKEN_ENV_LEGACY,
+} from './telegram'
 import { redactSecrets } from './webhook'
 
-export const TELEGRAM_BOT_TOKEN_ENV = 'TELEGRAM_BOT_TOKEN'
+/** Legacy env name, kept as an alias for existing imports. Prefer `resolveTelegramBotToken`. */
+export const TELEGRAM_BOT_TOKEN_ENV = TELEGRAM_TOKEN_ENV_LEGACY
+/** Env names tried in precedence order: preferred first, then the legacy alias. */
+export const TELEGRAM_BOT_TOKEN_ENV_NAMES = [TELEGRAM_TOKEN_ENV, TELEGRAM_TOKEN_ENV_LEGACY] as const
 export const TELEGRAM_SEND_TIMEOUT_MS = 10_000
+
+/**
+ * Single bot-token lookup for egress. Precedence: `WEBTERM_TELEGRAM_BOT_TOKEN`, then legacy
+ * `TELEGRAM_BOT_TOKEN`. Values are trimmed and whitespace-only counts as unset, so a blank
+ * preferred name falls back instead of disabling egress. Returns `undefined` when unconfigured.
+ * Call this per send (never at module load) so rotation needs no restart.
+ */
+export function resolveTelegramBotToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  for (const name of TELEGRAM_BOT_TOKEN_ENV_NAMES) {
+    const value = env[name]?.trim()
+    if (value) return value
+  }
+  return undefined
+}
 
 export interface TelegramSenderResponse {
   ok: boolean
@@ -28,6 +51,8 @@ export interface TelegramSendOptions {
   fetch?: TelegramSenderFetch
   /** Test seam only: production reads process.env at send time. */
   env?: () => NodeJS.ProcessEnv
+  /** Explicit token for programmatic callers; wins over the env lookup when non-blank. */
+  token?: string
   apiBase?: string
   timeoutMs?: number
 }
@@ -65,8 +90,8 @@ function errorText(err: unknown): string {
   return typeof err === 'string' ? err : 'telegram_send_failed'
 }
 
-function clean(text: string, token: string): string {
-  return redactSecrets(text, [token]).slice(0, 300)
+function clean(text: string, secrets: Array<string | undefined>): string {
+  return redactSecrets(text, secrets).slice(0, 300)
 }
 
 function failure(
@@ -99,8 +124,11 @@ export async function sendTelegramMessage(
   input: TelegramSendInput,
   options: TelegramSendOptions = {}
 ): Promise<TelegramSendResult> {
-  const token = (options.env?.() ?? process.env)[TELEGRAM_BOT_TOKEN_ENV]?.trim()
+  const env = options.env?.() ?? process.env
+  const token = options.token?.trim() || resolveTelegramBotToken(env)
   if (!token) return failure(0, 'bot_token_not_configured', 'not_configured', false)
+  // Scrub every configured name, not just the winner: a misconfigured deployment may echo either.
+  const secrets = [token, env[TELEGRAM_TOKEN_ENV], env[TELEGRAM_TOKEN_ENV_LEGACY]]
   if (!input.chatId.trim() || !input.text.trim()) {
     return failure(0, 'chat_id_and_text_required', 'rejected', false)
   }
@@ -141,7 +169,7 @@ export async function sendTelegramMessage(
     // The thrown message may embed the request URL, which contains the token; scrub it.
     return timedOut
       ? failure(0, 'timeout', 'timeout', true)
-      : failure(0, clean(errorText(err), token), 'network', true)
+      : failure(0, clean(errorText(err), secrets), 'network', true)
   } finally {
     if (timer !== undefined) clearTimeout(timer)
   }
@@ -150,7 +178,7 @@ export async function sendTelegramMessage(
     const status = response?.status ?? 0
     return failure(
       status,
-      clean(`http_${status}`, token),
+      clean(`http_${status}`, secrets),
       'rejected',
       status === 429 || status >= 500
     )
@@ -169,7 +197,7 @@ export async function sendTelegramMessage(
     const retryAfter = optionalInt(params['retry_after'])
     return failure(
       response.status,
-      clean(description || 'provider_rejected', token),
+      clean(description || 'provider_rejected', secrets),
       'rejected',
       retryAfter !== undefined || response.status === 429,
       retryAfter !== undefined && retryAfter >= 0 ? retryAfter * 1000 : undefined

@@ -41,9 +41,12 @@ function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return { WEBTERM_TELEGRAM: 'on', WEBTERM_TELEGRAM_WEBHOOK_SECRET: SECRET, ...extra } as NodeJS.ProcessEnv
 }
 
-function runtimeWith(sender: { fetch?: TelegramSenderFetch } = {}): ChannelsRuntime {
+function runtimeWith(
+  sender: { fetch?: TelegramSenderFetch } = {},
+  tokenEnv: Record<string, string> = { TELEGRAM_BOT_TOKEN: TOKEN }
+): ChannelsRuntime {
   const started = startChannelsRuntime(fakeLedger(), {
-    env: env({ TELEGRAM_BOT_TOKEN: TOKEN }),
+    env: env(tokenEnv),
     storePath: tempStorePath(),
     sender: { intervalMs: 60_000, ...(sender.fetch === undefined ? {} : { fetch: sender.fetch }) },
   })
@@ -141,6 +144,66 @@ describe('channel egress boot', () => {
       channels.stop()
       interval.mockRestore()
       expect(channels.senderRunning).toBe(false)
+    }
+  })
+
+  it('starts egress when only the preferred WEBTERM_TELEGRAM_BOT_TOKEN is set', async () => {
+    const calls: string[] = []
+    const fetch: TelegramSenderFetch = async (url) => {
+      calls.push(url)
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1 } }) }
+    }
+    const channels = runtimeWith({ fetch }, { WEBTERM_TELEGRAM_BOT_TOKEN: TOKEN })
+    try {
+      expect(channels.senderRunning).toBe(true)
+      channels.store.enqueueReply({ key: 'r1', channel: 'telegram', chatId: '5', text: 'hello' })
+      expect((await channels.flushNow()).sent).toBe(1)
+      expect(calls[0]).toContain(`/bot${TOKEN}/sendMessage`)
+    } finally {
+      channels.stop()
+    }
+  })
+
+  it('prefers the WEBTERM name over the legacy name during boot and send', async () => {
+    const PREFERRED = 'preferred-token-value'
+    const calls: string[] = []
+    const fetch: TelegramSenderFetch = async (url) => {
+      calls.push(url)
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1 } }) }
+    }
+    const channels = runtimeWith(
+      { fetch },
+      { WEBTERM_TELEGRAM_BOT_TOKEN: PREFERRED, TELEGRAM_BOT_TOKEN: TOKEN }
+    )
+    try {
+      channels.store.enqueueReply({ key: 'r1', channel: 'telegram', chatId: '5', text: 'hello' })
+      await channels.flushNow()
+      expect(calls[0]).toContain(`/bot${PREFERRED}/sendMessage`)
+      expect(calls[0]).not.toContain(TOKEN)
+    } finally {
+      channels.stop()
+    }
+  })
+
+  it('falls back to the legacy name when the preferred value is whitespace only', () => {
+    const channels = runtimeWith({}, { WEBTERM_TELEGRAM_BOT_TOKEN: '   ', TELEGRAM_BOT_TOKEN: TOKEN })
+    try {
+      expect(channels.senderRunning).toBe(true)
+    } finally {
+      channels.stop()
+    }
+  })
+
+  it('keeps egress off when both names are blank', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const channels = runtimeWith({}, { WEBTERM_TELEGRAM_BOT_TOKEN: ' ', TELEGRAM_BOT_TOKEN: '\t' })
+    try {
+      expect(channels.senderRunning).toBe(false)
+      const lines = warn.mock.calls.map((entry) => String(entry[0]))
+      expect(lines.filter((text) => text.includes(SENDER_DISABLED_LOG))).toHaveLength(1)
+    } finally {
+      channels.stop()
+      warn.mockRestore()
     }
   })
 

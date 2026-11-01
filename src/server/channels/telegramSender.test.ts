@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ChannelStore } from './channelStore'
 import type { StoredReply } from './channelStoreSchema'
+import { resolveTelegramBotToken } from './telegramSend'
 import {
   TelegramChannelSender,
   sendTelegramMessage,
@@ -15,7 +16,10 @@ import {
 } from './telegramSender'
 
 const TOKEN = '123456:SECRET-TOKEN-VALUE'
-const ENV = () => ({ TELEGRAM_BOT_TOKEN: TOKEN }) as NodeJS.ProcessEnv
+const PREFERRED_TOKEN = '654321:PREFERRED-TOKEN-VALUE'
+const PREFERRED_ENV = 'WEBTERM_TELEGRAM_BOT_TOKEN'
+const LEGACY_ENV = 'TELEGRAM_BOT_TOKEN'
+const ENV = () => ({ [LEGACY_ENV]: TOKEN }) as NodeJS.ProcessEnv
 const NO_ENV = () => ({}) as NodeJS.ProcessEnv
 
 function okResponse(messageId = 11): TelegramSenderResponse {
@@ -106,18 +110,48 @@ describe('sendTelegramMessage', () => {
     })
   })
 
-  it('reads the token only from TELEGRAM_BOT_TOKEN at call time', async () => {
-    let token: string | undefined
+  it('resolves WEBTERM_TELEGRAM_BOT_TOKEN first, then legacy, at call time', async () => {
+    const cases: Array<[NodeJS.ProcessEnv, string | undefined]> = [
+      [{ [PREFERRED_ENV]: `  ${PREFERRED_TOKEN}\n`, [LEGACY_ENV]: TOKEN }, PREFERRED_TOKEN],
+      [{ [LEGACY_ENV]: TOKEN }, TOKEN],
+      [{ [PREFERRED_ENV]: '   ', [LEGACY_ENV]: TOKEN }, TOKEN],
+      [{ [PREFERRED_ENV]: ' ', [LEGACY_ENV]: '\t' }, undefined],
+      [{}, undefined],
+    ]
+    for (const [env, expected] of cases) {
+      expect(resolveTelegramBotToken(env)).toBe(expected)
+      const urls: string[] = []
+      const fetch: TelegramSenderFetch = async (url) => {
+        urls.push(url)
+        return okResponse()
+      }
+      const result = await sendTelegramMessage({ chatId: '42', text: 'x' }, { fetch, env: () => env })
+      if (expected === undefined) {
+        expect(result.ok).toBe(false)
+        if (!result.ok) expect(result.reason).toBe('not_configured')
+        expect(urls).toEqual([])
+      } else {
+        expect(result.ok).toBe(true)
+        expect(urls[0]).toContain(`/bot${expected}/sendMessage`)
+      }
+    }
+  })
+
+  it('lets an explicit option token win over both env names', async () => {
+    const urls: string[] = []
     const fetch: TelegramSenderFetch = async (url) => {
-      token = url.includes(TOKEN) ? TOKEN : undefined
+      urls.push(url)
       return okResponse()
     }
-    const before = await sendTelegramMessage({ chatId: '42', text: 'x' }, { fetch, env: NO_ENV })
-    expect(before.ok).toBe(false)
-    if (!before.ok) expect(before.reason).toBe('not_configured')
-    const after = await sendTelegramMessage({ chatId: '42', text: 'x' }, { fetch, env: ENV })
-    expect(after.ok).toBe(true)
-    expect(token).toBe(TOKEN)
+    await sendTelegramMessage(
+      { chatId: '42', text: 'x' },
+      {
+        fetch,
+        env: () => ({ [PREFERRED_ENV]: PREFERRED_TOKEN, [LEGACY_ENV]: TOKEN }) as NodeJS.ProcessEnv,
+        token: 'explicit-token',
+      }
+    )
+    expect(urls[0]).toContain('/botexplicit-token/sendMessage')
   })
 
   it('redacts the token from thrown and provider errors', async () => {
