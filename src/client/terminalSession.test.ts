@@ -12,6 +12,14 @@ describe('exitMessage', () => {
     expect(exitMessage(0)).toBe('\r\n[process exited with code 0]')
     expect(exitMessage(130)).toBe('\r\n[process exited with code 130]')
   })
+  it('prints nothing when the session was closed by us, not by the process exiting', () => {
+    expect(exitMessage(0, 'closed')).toBe('')
+    expect(exitMessage(137, 'closed')).toBe('')
+  })
+  it('still prints for a process that exited on its own', () => {
+    expect(exitMessage(0, 'self')).toBe('\r\n[process exited with code 0]')
+    expect(exitMessage(1, 'self')).toBe('\r\n[process exited with code 1]')
+  })
 })
 
 describe('canClaimFocus', () => {

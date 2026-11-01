@@ -235,3 +235,23 @@ test('a reconnect resets each terminal before the server replays its scrollback'
   expect(sentAtReset).toBe(0) // reset ran before the replayed open was sent
   expect(second.sent.map((s) => JSON.parse(s).t)).toContain('open') // replay still happens
 })
+
+// `reason` membedakan proses yang keluar sendiri dari sesi yang KITA tutup. Tanpa diteruskan,
+// terminal mencetak `[process exited ...]` untuk close yang diminta pengguna sendiri.
+test('an exit forwards its reason, so a user-close can print no notice', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe } = await fresh().ws
+  const onExit = vi.fn()
+  subscribe('term-exit', () => {}, onExit)
+  const sock = lastSocket()
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 1, reason: 'closed' }) })
+  expect(onExit).toHaveBeenLastCalledWith(1, 'closed')
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 0, reason: 'self' }) })
+  expect(onExit).toHaveBeenLastCalledWith(0, 'self')
+
+  // Server lama belum mengirim `reason`: parameternya tetap diteruskan sebagai undefined.
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 0 }) })
+  expect(onExit).toHaveBeenLastCalledWith(0, undefined)
+})

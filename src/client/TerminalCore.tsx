@@ -252,7 +252,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const unsub = subscribe(
       id,
       (d) => term.write(d),
-      (code) => term.write(exitMessage(code)),
+      (code, reason) => term.write(exitMessage(code, reason)),
       () => term.reset(),
     )
     term.onData((d) => send({ t: 'input', id, data: d }))

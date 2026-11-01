@@ -1,27 +1,35 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import type { AgentPermissionMode, AgentStatus } from '../shared/workspace'
-import {
-  canResumeWith,
-  hasClaudeHookSettings,
-  isContextCapable,
-  isSafeSessionId,
-  resumeCommandWith,
-  withSessionId,
-} from '../shared/workspace'
+import { hasClaudeHookSettings, isContextCapable, isSafeNodeId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
-import { STALE_SWEEP_MS, isStaleWorking } from '../shared/agentStale'
+import { STALE_SWEEP_MS } from '../shared/agentStale'
 import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
-import { buildClaudeFlags, forgetNodeToken, hookEnv } from './hooks'
+import { forgetNodeToken, hookEnv } from './hooks'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
+import { OutputLog } from './outputLog'
+import { SubscriberSet } from './subscribers'
+import { NodeRegistry, type NodeExit } from './nodeRegistry'
+import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 
-const PORT = Number(process.env.PORT) || 8700
+// `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
+// menjaga kontrak itu tanpa memaksa semua pemanggil tahu file barunya.
+export { launchLine }
 
+/** Satu PTY hidup beserta jalur observasinya: log output bernomor urut dan kumpulan pelanggan. */
 interface Session {
   id: string
   pty: Pty
-  buffer: string[]
-  bytes: number
-  send?: (m: ServerMsg) => void
+  log: OutputLog
+  subs: SubscriberSet<ServerMsg>
+  exited: boolean
+}
+
+/** Ringkasan sesi hidup untuk endpoint/panel daftar. Tanpa tombstone: sesi yang sudah keluar tidak
+ *  pernah muncul di sini (pakai `getExit`/`statusOf` untuk fakta sesudah mati). */
+export interface SessionInfo {
+  id: string
+  pid: number
+  status?: AgentStatus
 }
 
 /** Knob runtime yang disambungkan integrator dari store settings. Absen = default hari ini, jadi
@@ -38,58 +46,10 @@ export interface SessionsOptions {
   /** `settings.hookReplyApprovals`. Absen/false = `NODETERM_PERM_WAIT_SECS` tidak dikirim, jadi hook
    *  permission tidak menahan apa pun — perilaku sebelum setting ini ada. */
   hookReplyApprovals?: boolean
-}
-
-/** Catatan peluncuran yang terlihat pengguna, ditulis ke stream terminal. Bahasa Inggris supaya
- *  seragam dengan `[process exited]` di client. */
-const wrapperMissingNotice = (bin: string): string =>
-  `\r\n[webterm] '${bin}' is not installed — launching the agent command without that wrapper.\r\n`
-
-/**
- * Baris peluncuran final untuk sebuah intent open: perintah dasar client plus flag session-id /
- * resume sesuai grammar agent-nya. Murni (tanpa PTY) supaya perakitan flag bisa dites langsung.
- *
- * Grammar TIDAK dirakit di sini — ia milik `src/shared/workspace.ts` (`withSessionId`,
- * `resumeCommandWith`), karena bentuknya beda per harness: `copilot` memakai `--session-id=<sid>`
- * dan `cursor` sama sekali tidak punya flag itu (ia mengadopsi id lewat `--resume <uuid-baru>`).
- *
- * CATATAN RISIKO (beda dari nodeterm, sengaja): nodeterm menggerbangi minting session id di balik
- * probe versi CLI per agent (`supportsSessionIdFlag`, yang menyelidiki `claude --version` dan
- * `grok --help` terpisah — diverifikasi di source v0.4.5). webterm tidak memprobe sama sekali dan
- * memakai `SESSION_ID_CAPABLE` apa adanya. Risikonya terbatas: CLI lama menolak flag di peluncuran
- * PERTAMA, bukan merusak state. Kalau muncul di lapangan, tambahkan probe-nya — jangan diam-diam
- * mengecilkan daftar kapabilitas.
- */
-export function launchLine(
-  msg: OpenMsg,
-  port = PORT,
-  opts?: { permissionMode?: AgentPermissionMode; resumeIsDead?: boolean }
-): string | undefined {
-  const cmd = msg.cmd
-  if (!cmd) return undefined
-  const agentId = msg.agentId
-  const sid = msg.sessionId?.trim()
-  // Transcript yang sudah hilang = resume yang membunuh node di peluncuran; keputusannya diprobe
-  // oleh pemanggil (fungsi ini tetap murni) — alasan lengkapnya di `transcriptPresence.ts`.
-  const resume = !!msg.resume && !opts?.resumeIsDead
-  // Session id mendarat di baris perintah shell dan datang lewat WebSocket, jadi divalidasi ulang
-  // di sini — batas input, bukan sekadar janji tipe.
-  if (!agentId || !sid || !isSafeSessionId(sid, true)) return cmd
-
-  // `buildClaudeFlags` memancarkan flag id claude, `--permission-mode` dan `--settings` sebagai satu
-  // unit, dan ketiganya grammar claude — jadi gerbangnya daftar kapabilitas, bukan nama agent.
-  // `--settings` membawa PATH file settings yang baru ditulis, bukan blob JSON inline (alasannya di
-  // `writeClaudeSettings`, hooks.ts) — jadi peluncuran ini menyentuh disk, bukan sekadar merakit string.
-  if (hasClaudeHookSettings(agentId)) {
-    return `${cmd} ${buildClaudeFlags(msg.id, sid, port, resume, {
-      permissionMode: opts?.permissionMode,
-    })}`
-  }
-  if (resume) {
-    // Perintah client dipakai utuh sebagai program, jadi pembungkus apa pun tetap terpasang.
-    return canResumeWith(agentId, sid) ? resumeCommandWith(cmd, agentId, sid) ?? cmd : cmd
-  }
-  return withSessionId(cmd, agentId, sid)
+  /** Sumber PTY. Di-inject supaya test bisa memakai PTY palsu tanpa `Bun.Terminal`. */
+  spawn?: typeof spawnPty
+  /** Sumber waktu untuk tombstone exit. Di-inject supaya test tidak bergantung jam dinding. */
+  now?: () => number
 }
 
 export class Sessions {
@@ -102,31 +62,30 @@ export class Sessions {
     return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : DEFAULT_SETTINGS.scrollbackBytes
   }
 
-  private map = new Map<string, Session>()
-  // Status MEMBAWA WAKTU. Tanpa itu tidak ada yang bisa membedakan `working` yang masih berjalan
-  // dari `working` yang ditinggal mati, dan status terakhir bertahan selamanya (lihat `agentStale`).
-  private status = new Map<string, { status: AgentStatus; updatedAt: number }>()
-  // Hook-fed claude transcript path per node, for context-link reads.
-  private transcripts = new Map<string, string>()
+  private now(): number {
+    return (this.options.now ?? Date.now)()
+  }
 
-  /** `now` di-inject supaya sapuan bisa dites tanpa menunggu 20 menit; pemanggil nyata melewatkannya. */
-  setStatus(id: string, status: AgentStatus, now: number = Date.now()): void {
-    // Jamnya dimundurkan pada SETIAP penulisan, termasuk `working` yang berulang — itulah yang
-    // membuat turn panjang yang sah tidak pernah tersapu: tiap tool call menulis ulang `working`.
-    this.status.set(id, { status, updatedAt: now })
-    this.map.get(id)?.send?.({ t: 'status', id, status })
+  private map = new Map<string, Session>()
+  // Status, transcript, dan tombstone exit hidup LEBIH LAMA dari PTY-nya — makanya di registry,
+  // bukan di `Session`. Node yang sudah mati tetap perlu bisa dijawab (lihat nodeRegistry.ts).
+  private registry = new NodeRegistry()
+
+  /** Tulis status lalu pancarkan ke SEMUA pelanggan sesi. Sesi tanpa pelanggan tetap menyimpan
+   *  statusnya: re-attach berikutnya memutar ulang status itu sebagai snapshot. */
+  setStatus(id: string, status: AgentStatus, now: number = this.now()): void {
+    this.registry.setStatus(id, status, now)
+    this.map.get(id)?.subs.send({ t: 'status', id, status })
   }
 
   /**
    * Hapus status `working` yang sudah diam melewati jendela. MENGHAPUS, bukan menggantinya dengan
    * `done`/`waiting` — alasannya di `agentStale.ts`. Self-healing: event berikutnya menulis ulang.
    */
-  sweepStale(now: number = Date.now()): void {
-    for (const [id, entry] of this.status) {
-      if (!isStaleWorking(entry.status, entry.updatedAt, now)) continue
-      this.status.delete(id)
+  sweepStale(now: number = this.now()): void {
+    for (const id of this.registry.sweepStale(now)) {
       // `status` absen = "tidak ada status lagi". Client menghapus entry-nya dan merender "Unknown".
-      this.map.get(id)?.send?.({ t: 'status', id })
+      this.map.get(id)?.subs.send({ t: 'status', id })
     }
   }
 
@@ -137,24 +96,58 @@ export class Sessions {
     return () => clearInterval(timer)
   }
 
-  setTranscript(id: string, path: string): void { this.transcripts.set(id, path) }
-  getTranscript(id: string): string | undefined { return this.transcripts.get(id) }
-  getTerminal(id: string): string { return this.map.get(id)?.buffer.join('') ?? '' }
+  setTranscript(id: string, path: string): void { this.registry.setTranscript(id, path) }
+  getTranscript(id: string): string | undefined { return this.registry.getTranscript(id) }
+  getTerminal(id: string): string { return this.map.get(id)?.log.text() ?? '' }
+  statusOf(id: string): AgentStatus | undefined { return this.registry.getStatus(id)?.status }
+  isLive(id: string): boolean { return this.map.has(id) }
+  getExit(id: string): NodeExit | undefined { return this.registry.getExit(id) }
+  pidOf(id: string): number | undefined { return this.map.get(id)?.pty.pid }
 
+  /** Sesi yang masih hidup, urut sesuai waktu spawn. */
+  list(): SessionInfo[] {
+    return [...this.map.values()].map((s) => ({
+      id: s.id,
+      pid: s.pty.pid,
+      status: this.registry.getStatus(s.id)?.status,
+    }))
+  }
+
+  /** Tambah satu pelanggan ke sesi hidup. `undefined` bila sesinya sudah tidak ada — pemanggil
+   *  yang butuh snapshot bisa memutarnya lewat `open`. */
+  subscribe(id: string, send: (m: ServerMsg) => void): (() => void) | undefined {
+    const session = this.map.get(id)
+    if (!session) return undefined
+    session.subs.add(send)
+    return () => { session.subs.remove(send) }
+  }
+
+  /**
+   * Buka/re-attach sesi untuk sebuah intent `open`.
+   *
+   * BATAS INPUT: `msg.id` divalidasi dengan `isSafeNodeId` SEBELUM apa pun disentuh. Id yang tidak
+   * aman DIABAIKAN — tidak ada PTY yang di-spawn, tidak ada entri `map`/status/token yang dibuat.
+   * Id itu mendarat di baris perintah curl hook claude DAN jadi kunci PTY/status, jadi menolak di
+   * pintu masuk membuat keduanya tidak pernah melihat nilai berbahaya (`hooks.ts` mengutip sendiri
+   * sebagai lapis kedua).
+   *
+   * Pelanggan yang SUDAH terdaftar tidak menerima replay lagi: mount berulang di socket yang sama
+   * hanya butuh snapshot status, bukan scrollback yang sudah ia miliki. Pelanggan baru (socket
+   * re-attach) menerima seluruh scrollback sekali, lalu snapshot status.
+   */
   open(msg: OpenMsg, send: (m: ServerMsg) => void): void {
+    if (!isSafeNodeId(msg.id)) return
     const existing = this.map.get(msg.id)
     if (existing) {
-      // PTY survived the previous socket — re-attach and replay scrollback.
-      existing.send = send
-      for (const chunk of existing.buffer) send({ t: 'output', id: msg.id, data: chunk })
-      // SELALU dijawab, termasuk ketika yang kita tahu adalah "tidak ada status". Senyap itu
-      // ambigu: client MENYIMPAN salinan status (`statuses` di `client/ws.ts` adalah map modul,
-      // bertahan melewati putus-sambung socket), jadi tidak mengirim apa pun terbaca "tidak ada
-      // perubahan", bukan "tidak ada status". Node yang disapu selagi socket-nya pergi kehilangan
-      // pencabutannya — sapuan memancarkannya ke `send` yang sudah `undefined` lewat `detach` —
-      // dan tanpa cabang ini salinan 'working' di browser bertahan selamanya: persis gejala yang
-      // mau dibunuh jam basi, lewat pintu lain. Re-attach adalah momen sinkronisasi.
-      send({ t: 'status', id: msg.id, status: this.status.get(msg.id)?.status })
+      const status = this.registry.getStatus(msg.id)?.status
+      if (!existing.subs.add(send)) {
+        send({ t: 'status', id: msg.id, status })
+        return
+      }
+      for (const chunk of existing.log.since(0)) {
+        send({ t: 'output', id: msg.id, data: chunk.data, seq: chunk.seq })
+      }
+      send({ t: 'status', id: msg.id, status })
       return
     }
 
@@ -165,14 +158,15 @@ export class Sessions {
       permissionMode: this.options.claudePermissionMode,
       resumeIsDead: deadResume,
     })
-    if (deadResume) send({ t: 'output', id: msg.id, data: transcriptMissingNotice })
+    const notices: string[] = []
+    if (deadResume) notices.push(transcriptMissingNotice)
     if (cmd) {
       const unwrapped = unwrapMissingWrapper(cmd, binaryExists)
       if (unwrapped) {
         cmd = unwrapped.cmd
         // Hanya NAMA binary yang hilang yang dilaporkan — baris perintah bisa memuat argumen
         // bermuatan rahasia, jadi ia tidak pernah dicetak maupun dikirim.
-        send({ t: 'output', id: msg.id, data: wrapperMissingNotice(unwrapped.missing) })
+        notices.push(wrapperMissingNotice(unwrapped.missing))
       }
     }
     // Dua set env var yang digerbangi TERPISAH: yang pertama dibaca skill konteks-tertaut di dalam
@@ -186,7 +180,8 @@ export class Sessions {
         ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })
         : {}),
     }
-    const pty = spawnPty({
+    const spawn = this.options.spawn ?? spawnPty
+    const pty = spawn({
       cols: msg.cols,
       rows: msg.rows,
       cwd: msg.cwd,
@@ -194,54 +189,25 @@ export class Sessions {
       shell: this.options.shell,
       env: Object.keys(env).length ? env : undefined,
     })
-    const session: Session = { id: msg.id, pty, buffer: [], bytes: 0, send }
+    const session: Session = {
+      id: msg.id,
+      pty,
+      log: new OutputLog(),
+      subs: new SubscriberSet<ServerMsg>(),
+      exited: false,
+    }
     this.map.set(msg.id, session)
+    session.subs.add(send)
+    pty.onData((data) => this.emit(session, data))
+    pty.onExit((code) => this.onExit(session, code))
+    for (const data of notices) this.emit(session, data)
 
-    // Scrollback disimpan per sesi supaya socket yang re-attach bisa memutar ulang yang terlewat.
-    // Satuannya BYTE (lihat doc `settings.scrollbackBytes`), jadi dihitung sebagai byte UTF-8 —
-    // bukan `.length`, yang menghitung unit UTF-16 dan memberi batas ~2x lebih longgar untuk
-    // output non-ASCII (box-drawing TUI agent persisnya).
-    pty.onData((data) => {
-      session.buffer.push(data)
-      session.bytes += Buffer.byteLength(data)
-      // Dibaca per chunk, bukan sekali saat open: perubahan settings ikut berlaku untuk sesi hidup.
-      while (session.bytes > this.scrollbackBytes && session.buffer.length > 1) {
-        session.bytes -= Buffer.byteLength(session.buffer.shift()!)
-      }
-      session.send?.({ t: 'output', id: session.id, data })
-    })
-    pty.onExit((code) => {
-      // Sesi ini sudah tidak terdaftar = `close` yang membunuhnya, jadi exit ini gema dari kematian
-      // yang KITA minta. Digerbangi SEBELUM `exit` dipancarkan, bukan hanya sebelum status: client
-      // mencocokkan `exit` BY ID (`ws.ts`), jadi "New session" — `close` lalu remount id yang sama
-      // seketika — menyuapkan `[process exited]` PTY mati ke terminal yang baru lahir. Dan ia tidak
-      // boleh menulis 'done' atas nama node (menghidupkan ulang status yang baru dicabut, dan
-      // menggerbangi Resume di atas klaim mati) maupun menghapus sesi PENGGANTI ber-id sama.
-      if (this.map.get(session.id) !== session) return
-      session.send?.({ t: 'exit', id: session.id, code })
-      this.setStatus(session.id, 'done')
-      this.map.delete(session.id)
-    })
-
-    // TIDAK ADA status NYATA di sini — tapi juga tidak senyap. Dulu baris ini
-    // `setStatus(msg.id, 'working')` untuk tiap sesi ber-agentId, padahal yang baru terjadi hanyalah
-    // PTY-nya lahir: CLI-nya masih memuat banner, belum diberi satu pun prompt. Klaim tanpa bukti,
-    // dan ia yang membuat node agent baru terbaca RUNNING serta ikut terhitung di seksi Running.
-    // Status pertama datang dari sinyal nyata — hook claude (`hookStatus`) atau `onExit`.
-    //
-    // Yang dikirim adalah PENCABUTANNYA, karena senyap pun salah — itu jalur RESTART SERVER: `map`
-    // proses baru kosong, jadi replay `open` client (`client/ws.ts` memutar ulang tiap `open`
-    // tersimpan di setiap sambung ulang) mendarat di cabang INI, sementara browser masih memegang
-    // salinan status lamanya (map modul, lepas dari socket). Tanpa pesan ini node yang tadinya
-    // 'working' terbaca RUNNING selamanya, dan jam basi tak menolong: jamnya di server, dan server
-    // itu baru lahir tanpa ingatan. `status` absen = "tidak ada status", bentuk yang sama yang
-    // dipakai sapuan basi dan `close` — bukan nilai yang dikarang. Entry server-nya ikut dihapus
-    // supaya re-attach berikutnya tidak memutar ulang status milik PTY yang sudah mati.
-    //
-    // Konsekuensi diterima: agent tanpa pemasok status (semua selain claude, satu-satunya yang
-    // dipasangi hook) duduk di "Unknown" sampai prosesnya keluar. Itu keadaan pengetahuan kita yang
-    // sebenarnya; obatnya memasang pemasok untuk harness lain, bukan menebak "working" untuk semua.
-    this.status.delete(msg.id)
+    // PTY baru = hidup baru. Tombstone exit dan status milik sesi sebelumnya dengan id yang sama
+    // TIDAK boleh diwarisi: node yang di-restart akan terbaca Done lalu menggerbangi Resume.
+    this.registry.clearExit(msg.id)
+    this.registry.deleteStatus(msg.id)
+    // Selalu dijawab, termasuk ketika yang kita tahu adalah "tidak ada status". Senyap terbaca
+    // "tidak berubah" oleh client yang menyimpan salinan status lepas dari socket (restart server).
     send({ t: 'status', id: msg.id })
   }
 
@@ -257,31 +223,59 @@ export class Sessions {
    *  bisa membersihkan node tanpa punya tujuan pengiriman. */
   close(id: string, send?: (m: ServerMsg) => void): void {
     // Token hook, status dan transcript terikat pada NODE, bukan pada PTY — jadi ketiganya dilepas
-    // SEBELUM gerbang sesi hidup di bawah. Sebuah agent yang prosesnya keluar sendiri sudah dihapus
-    // dari `map` oleh `onExit`, sehingga `close` yang menyusul akan return lebih awal: token tetap
-    // sah selamanya, dan sesi berikutnya dengan node id yang sama mewarisi 'done' serta path
-    // transcript milik sesi mati itu. Itulah jalur restart — CLI-nya selalu keluar lebih dulu.
+    // SEBELUM gerbang sesi. Agent yang keluar sendiri sudah dihapus dari `map` oleh `onExit`,
+    // sehingga `close` yang menyusul tetap harus membersihkannya.
     forgetNodeToken(id)
-    this.status.delete(id)
-    this.transcripts.delete(id)
-    // Pencabutannya memang harus lewat socket PEMANGGIL: kasus di atas justru tidak punya entry di
-    // `map`, jadi tidak ada `session.send` untuk dicapai. Tanpa pesan ini salinan status di client
-    // (map modul di `client/ws.ts`, bertahan lepas dari mount) tidak pernah tercabut dan node yang
-    // baru di-restart tetap terbaca Done. `status` absen = "tidak ada status lagi" — tidak ada nilai
-    // yang dikarang, khususnya bukan 'done' yang menggerbangi Resume/Restart.
-    send?.({ t: 'status', id })
+    this.registry.deleteStatus(id)
+    this.registry.deleteTranscript(id)
     const session = this.map.get(id)
-    if (!session) return
-    session.pty.kill()
-    this.map.delete(id)
+    // `self` menang: proses yang terbukti keluar sendiri tidak boleh ditimpa `closed`. `closed` hanya
+    // mengisi slot kosong — tombol Close pada node yang sudah keluar tidak memancarkan `exit` kedua.
+    const firstClose = !this.registry.getExit(id)
+    if (firstClose) this.registry.setExit(id, { code: -1, reason: 'closed', at: this.now() })
+    const status: ServerMsg = { t: 'status', id }
+    const exit: ServerMsg = { t: 'exit', id, code: -1, reason: 'closed' }
+    session?.subs.send(status)
+    if (firstClose) session?.subs.send(exit)
+    // Pencabutan harus sampai ke socket PEMANGGIL juga: kasus restart tidak punya entry `map`.
+    // Bila ia sudah jadi pelanggan, broadcast di atas sudah mengirimnya — jangan gandakan.
+    const callerHeard = session !== undefined && send !== undefined && session.subs.has(send)
+    if (!callerHeard) {
+      send?.(status)
+      if (firstClose) send?.(exit)
+    }
+    if (session) {
+      session.subs.clear()
+      session.exited = true
+      this.map.delete(id)
+    }
+    // Kill SESUDAH map dihapus: `onExit` digerbangi identitas, jadi gema kematian yang kita minta
+    // sendiri tidak pernah menjadi `exit` kedua.
+    session?.pty.kill()
   }
 
-  // Socket gone: forget the subscriber but keep the PTY running so a reconnect
-  // with the same id re-attaches instead of spawning a fresh shell.
+  /** Socket gone: forget every subscriber but keep the PTY running so a reconnect with the same id
+   *  re-attaches instead of spawning a fresh shell. */
   detach(send: (m: ServerMsg) => void): void {
-    for (const session of this.map.values()) {
-      if (session.send === send) session.send = undefined
-    }
+    for (const session of this.map.values()) session.subs.remove(send)
+  }
+
+  /** Tambah `data` ke log (dengan cap byte) lalu pancarkan ke semua pelanggan, bernomor urut. */
+  private emit(session: Session, data: string): void {
+    const seq = session.log.append(data, this.scrollbackBytes)
+    session.subs.send({ t: 'output', id: session.id, data, seq })
+  }
+
+  /** PTY keluar SENDIRI. Gerbang identitas: gema dari `close` tidak boleh menulis status/exit. */
+  private onExit(session: Session, code: number): void {
+    if (this.map.get(session.id) !== session || session.exited) return
+    session.exited = true
+    const at = this.now()
+    this.registry.setExit(session.id, { code, reason: 'self', at })
+    session.subs.send({ t: 'exit', id: session.id, code, reason: 'self' })
+    this.setStatus(session.id, 'done', at)
+    session.subs.clear()
+    this.map.delete(session.id)
   }
 
   handle(msg: ClientMsg, send: (m: ServerMsg) => void): void {

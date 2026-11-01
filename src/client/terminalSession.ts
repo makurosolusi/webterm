@@ -1,5 +1,12 @@
-/** Pesan yang ditulis ke terminal saat proses PTY berakhir. */
-export function exitMessage(code: number): string {
+export type ExitReason = 'self' | 'closed'
+
+/**
+ * Pesan yang ditulis ke terminal saat proses PTY berakhir. `closed` berarti kita sendiri yang
+ * menutup sesinya (pengguna menekan close / node dibuang), jadi tidak ada kabar yang perlu dicetak.
+ * Tanpa `reason` perilakunya sama seperti sebelumnya: `code` selalu dicetak.
+ */
+export function exitMessage(code: number, reason?: ExitReason): string {
+  if (reason === 'closed') return ''
   return `\r\n[process exited with code ${code}]`
 }
 

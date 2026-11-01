@@ -21,8 +21,9 @@ const OLD_STATUS_AFTER_CLOSE: AgentStatus = 'done'
 const OLD_TRANSCRIPT_AFTER_CLOSE = '/tmp/webterm-close-probe.jsonl'
 // Perilaku LAMA sesudah `close` pada PTY yang masih hidup: `exit` dipancarkan DI ATAS gerbangnya,
 // jadi tepat satu `exit` tetap lolos dan — karena client mencocokkannya by id — mendarat di
-// pelanggan berikutnya dengan node id yang sama.
-const OLD_EXITS_AFTER_CLOSE_KILL = 1
+// pelanggan berikutnya dengan node id yang sama, TANPA alasan. Kontrak baru membalik artinya:
+// `close` memang mengabarkan SATU `exit` beralasan 'closed', dan gema `onExit` PTY-nya diabaikan.
+const CLOSED_EXIT_CODE = -1
 // Perilaku LAMA di cabang SPAWN: senyap, nol pesan status. Client menyimpan salinan statusnya di map
 // modul (`client/ws.ts`), jadi senyap terbaca "tidak ada perubahan" — dan sesudah restart server
 // itulah yang membuat node yang tadinya 'working' terbaca RUNNING selamanya.
@@ -32,14 +33,15 @@ const OLD_SPAWN_STATUS_MESSAGES = 0
 const OLD_STATUS_AFTER_RESPAWN: AgentStatus = 'working'
 
 /** Perekam status; status absen dipetakan ke 'NONE' karena `[undefined].join(',')` sama dengan
- *  senyap — tanpa penandaan ini SENYAP dan PENCABUTAN EKSPLISIT tak terbedakan. `exits` terpisah
- *  dari `seen`: dua jenis pesan yang berbeda, dan test lain di file ini hanya membaca status. */
+ *  senyap — tanpa penandaan ini SENYAP dan PENCABUTAN EKSPLISIT tak terbedakan. `exits` menyimpan
+ *  `{code, reason}`: alasanlah yang membedakan kematian yang KITA minta ('closed') dari proses yang
+ *  keluar sendiri ('self'), dan test lain di file ini hanya membaca status. */
 function recorder() {
   const seen: string[] = []
-  const exits: number[] = []
+  const exits: { code: number; reason?: string }[] = []
   const send = (m: ServerMsg) => {
     if (m.t === 'status') seen.push(m.status ?? 'NONE')
-    else if (m.t === 'exit') exits.push(m.code)
+    else if (m.t === 'exit') exits.push({ code: m.code, reason: m.reason })
   }
   return { seen, exits, send }
 }
@@ -57,23 +59,22 @@ async function waitGone(pid: number, budgetMs: number): Promise<boolean> {
   return !alive(pid)
 }
 
-/** Pid PTY sesi `id`. Lewat `map` privat dengan sengaja: ia tidak punya pembaca publik, dan tanpa
- *  pid-nya test di bawah tidak bisa membuktikan `onExit` sudah SEMPAT mendarat — ia akan lulus
- *  hanya karena belum terjadi apa pun. */
+/** Pid PTY sesi `id`, lewat API publik `pidOf`. Tanpa pid-nya test di bawah tidak bisa membuktikan
+ *  `onExit` sudah SEMPAT mendarat — ia akan lulus hanya karena belum terjadi apa pun. */
 function ptyPid(s: Sessions, id: string): number {
-  const map = (s as unknown as { map: Map<string, { pty: { pid: number } }> }).map
-  const pid = map.get(id)?.pty.pid
-  if (!pid) throw new Error(`no live pty for ${id}`)
+  const pid = s.pidOf(id)
+  if (pid === undefined) throw new Error(`no live pty for ${id}`)
   return pid
 }
 
 /** Status yang diputar ulang ke socket yang re-attach = apa yang server masih SIMPAN tentang node.
- *  `open` MENGGANTI `send` sesi (bukan menambah pelanggan), jadi perekam aslinya dipasang kembali
- *  sesudahnya — tanpa itu probe pertama membuat perekam itu tuli untuk sisa test. */
-function stored(s: Sessions, id: string, reinstall: (m: ServerMsg) => void): string[] {
+ *  `open` pada id hidup MENAMBAH pelanggan dan memutar status ke pendatang baru, jadi probe-nya
+ *  harus dilepas lagi (`detach` hanya membuang pelanggan itu); set pelanggan tidak lagi mengevict
+ *  otomatis, dan tanpa `detach` setiap probe menumpuk jadi pelanggan permanen. */
+function stored(s: Sessions, id: string): string[] {
   const probe = recorder()
   s.open({ t: 'open', id, cols: 80, rows: 24 }, probe.send)
-  s.open({ t: 'open', id, cols: 80, rows: 24 }, reinstall)
+  s.detach(probe.send)
   return probe.seen
 }
 
@@ -93,8 +94,8 @@ test('restarting a finished agent does not inherit its done status', async () =>
 
   // PTY-nya baru lahir dan belum berkata apa pun, jadi yang benar adalah TIDAK ADA status —
   // bukan 'done', yang menggerbangi tombol Resume/Restart (`canResumeNode`).
-  expect(stored(s, 'cl1', r.send)).toContain('NONE')
-  expect(stored(s, 'cl1', r.send)).not.toContain(OLD_STATUS_AFTER_CLOSE)
+  expect(stored(s, 'cl1')).toContain('NONE')
+  expect(stored(s, 'cl1')).not.toContain(OLD_STATUS_AFTER_CLOSE)
   s.close('cl1', r.send)
 })
 
@@ -126,8 +127,11 @@ test('a pty killed by close does not post a done status after the fact', async (
   await sleep(150)
 
   s.open({ t: 'open', id: 'cl4', cols: 80, rows: 24, cmd: 'sleep 20', agentId: 'claude' }, r.send)
-  expect(stored(s, 'cl4', r.send)).toContain('NONE')
-  expect(stored(s, 'cl4', r.send)).not.toContain(OLD_STATUS_AFTER_CLOSE)
+  // `onExit` yang mendarat sesudah `close` diabaikan seluruhnya: tidak boleh ada 'done' yang
+  // menghidupkan kembali status yang baru dicabut.
+  expect(r.seen).not.toContain('done')
+  expect(stored(s, 'cl4')).toContain('NONE')
+  expect(stored(s, 'cl4')).not.toContain(OLD_STATUS_AFTER_CLOSE)
   s.close('cl4', r.send)
 })
 
@@ -149,8 +153,12 @@ test('a pty killed by close does not emit a stale exit to the next session', asy
 
   // Satu-satunya konsumen `exit` adalah `\r\n[process exited]` di `TerminalCore`, jadi yang lolos
   // di sini menulis baris itu ke terminal SEGAR yang baru saja mount.
-  expect(r.exits.length).toBe(0)
-  expect(r.exits.length).not.toBe(OLD_EXITS_AFTER_CLOSE_KILL)
+  // Yang benar: SATU `exit` dari `close` itu sendiri — beralasan 'closed' — dan gema `onExit` PTY
+  // yang dibunuh TIDAK menambah yang kedua maupun mengaku 'self'.
+  expect(r.exits.length).toBe(1)
+  expect(r.exits[0].reason).toBe('closed')
+  expect(r.exits[0].code).toBe(CLOSED_EXIT_CODE)
+  expect(r.exits.filter((e) => e.reason === 'self').length).toBe(0)
   s.close('cl5', r.send)
 })
 
@@ -171,7 +179,8 @@ test('a pty that exits on its own still emits its exit', async () => {
   while (!r.exits.length && Date.now() < deadline) await sleep(25)
 
   expect(r.exits.length).toBe(1)
-  expect(r.exits[0]).toBe(0)
+  expect(r.exits[0].code).toBe(0)
+  expect(r.exits[0].reason).toBe('self')
 }, 60_000)
 
 test('a fresh server answering a replayed open says there is no status', () => {
@@ -200,8 +209,8 @@ test('a spawn drops the status left behind by a pty that is gone, not just annou
 
   // Bukan cuma pesannya: entry server-nya ikut hilang, jadi RE-ATTACH berikutnya tidak memutar
   // ulang status milik proses yang sudah mati di atas PTY yang baru.
-  expect(stored(s, 'cl8', r.send)).toContain('NONE')
-  expect(stored(s, 'cl8', r.send)).not.toContain(OLD_STATUS_AFTER_RESPAWN)
+  expect(stored(s, 'cl8')).toContain('NONE')
+  expect(stored(s, 'cl8')).not.toContain(OLD_STATUS_AFTER_RESPAWN)
   s.close('cl8', r.send)
 })
 

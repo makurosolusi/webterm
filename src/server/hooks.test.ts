@@ -186,6 +186,53 @@ describe('the argv curl actually receives', () => {
   })
 })
 
+describe('node id di baris hook', () => {
+  it('memakai id apa adanya untuk id yang aman, dan tetap satu argumen URL', () => {
+    const argv = curlArgv(commandFor('t1'), { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+    expect(argv[1]).toBe('http://127.0.0.1:8700/api/agent-status?node=t1')
+    expect(commandFor('cl7')).toContain('node=cl7')
+  })
+
+  // Meski `isSafeNodeId` menolak id ini di batas WebSocket, `claudeHooksSettings` harus tetap benar
+  // sendirian: ia bisa dipanggil dari jalur lain, dan satu lapis validasi saja bukan pertahanan.
+  const INJECTIONS = [
+    `n1'; rm -rf / #`,
+    'n1$(touch /tmp/pwn)',
+    'n1`id`',
+    'n1 a b',
+    'n1\nwhoami',
+    'n1&x-window=1',
+    'n1"quoted"',
+  ]
+
+  it('tidak pernah meneruskan metakarakter ke shell', () => {
+    for (const id of INJECTIONS) {
+      const cmd = commandFor(id)
+      // Shell sungguhan harus menerimanya sebagai sintaks yang sah.
+      execFileSync('sh', ['-n'], { input: cmd })
+      // Dan yang benar-benar diterima curl: SATU argumen URL, yang id-nya masih utuh saat di-decode
+      // — itu bukti id-nya sampai ke server, bukan cuma "tidak meledak".
+      const argv = curlArgv(cmd, { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+      expect(argv.filter((a) => a.startsWith('http://'))).toHaveLength(1)
+      expect(new URL(argv[1]).searchParams.get('node')).toBe(id)
+      // Tidak ada pecahan mentah yang lolos sebagai argumen tersendiri.
+      expect(argv).not.toContain('rm')
+      expect(argv).not.toContain('-rf')
+      expect(argv).not.toContain('touch')
+      expect(argv).not.toContain('/tmp/pwn')
+      expect(argv).not.toContain('whoami')
+    }
+  })
+
+  it('URL tetap satu blok kutip tunggal, tanpa id mentah di dalamnya', () => {
+    const cmd = commandFor(`n1'; touch /tmp/x; '`)
+    // Kutip id tidak boleh menutup kutip milik URL: satu-satunya `'` di baris itu adalah pembuka
+    // dan penutup argumen URL (dua), jadi kutip id wajib sudah ter-encode.
+    expect(cmd).not.toContain(`node=n1';`)
+    expect(cmd).toContain("curl -s 'http://127.0.0.1:8700/api/agent-status?node=n1%27")
+  })
+})
+
 describe('node token', () => {
   it('mints one stable token per node', () => {
     const a = nodeToken('n-a')

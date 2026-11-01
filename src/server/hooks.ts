@@ -122,6 +122,17 @@ export function stateVerified(nodeId: string, header: string | string[] | undefi
 // Perakitan baris peluncuran.
 
 /**
+ * Encode sebuah nilai untuk query string, LEBIH KETAT dari `encodeURIComponent`.
+ *
+ * `encodeURIComponent` sengaja membiarkan `'`, `(`, `)`, `!`, `*` mentah. Untuk sebuah nilai yang
+ * juga dilarutkan ke baris shell, `'` mentah berarti quoting URL bergantung sepenuhnya pada `shq` —
+ * benar hari ini, tapi satu lapis saja. Di sini `'` (dan kawan-kawannya) dipersenkan sendiri,
+ * sehingga URL-nya aman dibaca siapa pun, bahkan sebelum masuk shell.
+ */
+const encodeQueryValue = (v: string): string =>
+  encodeURIComponent(v).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+
+/**
  * Isi file `--settings`: satu curl catch-all per event, mem-POST stdin hook ke endpoint
  * agent-status kita dengan key node id. Dikembalikan sebagai OBJEK supaya test bisa meng-assert
  * strukturnya tanpa mem-parse quoting shell.
@@ -153,8 +164,18 @@ export function stateVerified(nodeId: string, header: string | string[] | undefi
  * `|| true` tetap — hook yang gagal tidak boleh menggagalkan turn agent.
  */
 export function claudeHooksSettings(nodeId: string, port: number): Record<string, unknown> {
+  // Node id DIDARATKAN ke baris shell dan ke query string. Dua lapis, bukan satu:
+  //  1. `encodeQueryValue` supaya id tidak bisa menutup argumen query atau menyelundupkan
+  //     `&header=…` ke URL (id aman hari ini lewat `isSafeNodeId`; ini lapis kedua yang tetap
+  //     benar kalau alfabetnya suatu saat dilebarkan), termasuk `'` yang `encodeURIComponent`
+  //     biarkan mentah.
+  //  2. `shq` — SELURUH URL jadi satu argumen single-quoted, jadi tidak ada metakarakter id yang
+  //     bisa dibaca shell, dan `$` di dalamnya juga tidak di-expand.
+  // Validasi (`isSafeNodeId`) tetap dilakukan di batas WebSocket; di sini pertahanannya quoting,
+  // karena fungsi ini juga dipanggil dari test dan jalur lain.
+  const url = `http://127.0.0.1:${port}/api/agent-status?node=${encodeQueryValue(nodeId)}`
   const cmd =
-    `curl -s 'http://127.0.0.1:${port}/api/agent-status?node=${nodeId}' ` +
+    `curl -s ${shq(url)} ` +
     `-H "${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}" -H "${TOKEN_HEADER}: $WEBTERM_TOKEN" ` +
     `--data-binary @- 2>/dev/null || true`
   const hooks: Record<string, unknown[]> = {}

@@ -25,8 +25,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function collector() {
   const chunks: string[] = []
-  const send = (m: ServerMsg) => { if (m.t === 'output') chunks.push(m.data) }
-  return { send, joined: () => chunks.join('') }
+  const exits: { code: number; reason?: string }[] = []
+  const send = (m: ServerMsg) => {
+    if (m.t === 'output') chunks.push(m.data)
+    else if (m.t === 'exit') exits.push({ code: m.code, reason: m.reason })
+  }
+  return { send, exits, joined: () => chunks.join('') }
 }
 
 async function pollFor(get: () => string, needle: string, maxMs = 3000) {
@@ -37,31 +41,52 @@ async function pollFor(get: () => string, needle: string, maxMs = 3000) {
   }
 }
 
-test('pty survives detach and replays scrollback on re-attach', async () => {
+test('open on a live id adds a subscriber, replays scrollback only to the joiner, and detach is per-subscriber', async () => {
   const s = new Sessions()
   const a = collector()
   s.open({ t: 'open', id: 't1', cols: 80, rows: 24 }, a.send)
 
-  s.input('t1', 'echo HELLO_WEBTERM\n')
-  await pollFor(a.joined, 'HELLO_WEBTERM')
-  expect(a.joined()).toContain('HELLO_WEBTERM')
+  // Marker output sengaja beda dari teks yang diketik: `echo` terminal ikut masuk scrollback, jadi
+  // marker `SCROLL_ONCE_9f3a` hanya muncul SEKALI (dari output perintah), bukan dari echo barisnya.
+  s.input('t1', "printf 'SCROLL_ONCE_%s\\n' 9f3a\n")
+  await pollFor(a.joined, 'SCROLL_ONCE_9f3a')
+  expect(a.joined()).toContain('SCROLL_ONCE_9f3a')
 
-  // Re-attach a fresh subscriber: scrollback replays immediately (refresh survival).
+  // Re-attach: pelanggan BARU ikut set, dan scrollback diputar SEKALI ke dia saja.
   const b = collector()
   s.open({ t: 'open', id: 't1', cols: 80, rows: 24 }, b.send)
-  expect(b.joined()).toContain('HELLO_WEBTERM')
+  expect(b.joined()).toContain('SCROLL_ONCE_9f3a')
+  expect(b.joined().split('SCROLL_ONCE_9f3a').length - 1).toBe(1)
+  // Pelanggan LAMA tidak menerima putaran ulang itu: dua kali berarti `open` masih memutar buffer
+  // ke semua orang, bukan hanya ke pendatang baru.
+  expect(a.joined().split('SCROLL_ONCE_9f3a').length - 1).toBe(1)
 
-  // Detach must NOT kill the pty: it still accepts input and keeps buffering.
+  // ...dan pelanggan lama TETAP menerima output baru sesudah re-attach.
+  s.input('t1', "printf 'AFTER_JOIN_%s\\n' 9f3a\n")
+  await pollFor(a.joined, 'AFTER_JOIN_9f3a')
+  await pollFor(b.joined, 'AFTER_JOIN_9f3a')
+  expect(a.joined()).toContain('AFTER_JOIN_9f3a')
+  expect(b.joined()).toContain('AFTER_JOIN_9f3a')
+
+  // Detach hanya melepas pelanggan ITU, bukan sesinya: PTY tetap hidup, dan `a` tetap mendengar.
   s.detach(b.send)
-  s.input('t1', 'echo STILL_ALIVE\n')
+  s.input('t1', "printf 'STILL_ALIVE_%s\\n' 9f3a\n")
+  await pollFor(a.joined, 'STILL_ALIVE_9f3a')
+  expect(a.joined()).toContain('STILL_ALIVE_9f3a')
+  expect(b.joined()).not.toContain('STILL_ALIVE_9f3a')
+
   const c = collector()
-  await pollFor(() => { s.open({ t: 'open', id: 't1', cols: 80, rows: 24 }, c.send); return c.joined() }, 'STILL_ALIVE')
-  expect(c.joined()).toContain('STILL_ALIVE')
+  s.open({ t: 'open', id: 't1', cols: 80, rows: 24 }, c.send)
+  expect(c.joined()).toContain('STILL_ALIVE_9f3a')
 
   // close() kills the pty and drops the session. Re-opening the same id now
   // spawns a FRESH shell with an empty buffer, so the replay carries none of
   // the old scrollback — proof the previous session is truly gone.
   s.close('t1')
+  // `close` mengabarkan kematian yang KITA minta: tepat satu `exit`, dan alasannya 'closed'.
+  expect(a.exits.length).toBe(1)
+  expect(a.exits[0].reason).toBe('closed')
+  expect(a.exits[0].code).toBe(-1)
   const d = collector()
   s.open({ t: 'open', id: 't1', cols: 80, rows: 24 }, d.send)
   expect(d.joined()).toBe('')
@@ -304,10 +329,13 @@ test('a freshly spawned agent session reports NO status until something real say
   // tidak punya status untuk node ini", BUKAN senyap. Senyap pun salah — client memegang salinan
   // status per node yang bertahan melewati reconnect, jadi `open` yang diputar ulang sesudah server
   // restart (map proses baru kosong → mendarat di cabang spawn) butuh jawaban eksplisit.
-  expect(seen.length).toBe(1)
-  expect(seen[0]).toBe('NONE')
+  // Snapshot, bukan array hidup: `open` kedua di bawah kini MENAMBAH pelanggan (bukan mengganti
+  // `send`), jadi `seen` tetap berlangganan dan akan ikut menerima `working` dari `setStatus` nanti.
+  const atSpawn = seen.slice()
+  expect(atSpawn.length).toBe(1)
+  expect(atSpawn[0]).toBe('NONE')
   // Dan yang dipancarkan bukan nilai AgentStatus yang dikarang: regresi aslinya tetap tergigit.
-  expect(seen.join(',')).not.toContain(OLD_STATUS_AT_SPAWN)
+  expect(atSpawn.join(',')).not.toContain(OLD_STATUS_AT_SPAWN)
 
   // Dan tidak ada status yang DISIMPAN diam-diam. Socket yang re-attach sekarang selalu dijawab,
   // tapi jawabannya "tidak ada status" — bukan satu pun nilai AgentStatus yang dikarang.

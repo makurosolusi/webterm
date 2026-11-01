@@ -18,7 +18,7 @@ import { nodeTypes } from './nodeTypes'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { resolveTerminalTheme } from './themes'
-import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
+import { toFlow, toWsNode, toFlowEdge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
 import { spawnAt, spawnPosition } from './nodeSpawn'
 import { randomId } from './randomId'
@@ -29,8 +29,8 @@ import { useCanvasViewport } from './canvasViewport'
 import { useLayoutHistory } from './layoutHistory'
 import { paneSessionIds } from './paneTree'
 import { send, subscribeStatus } from './ws'
-import { saveWorkspace, validateToken, storeToken, clearToken, hasToken } from './api'
-import { useWorkspaceLifecycle } from './workspaceLifecycle'
+import { validateToken, storeToken, clearToken, hasToken } from './api'
+import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
 import { useClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
@@ -95,22 +95,16 @@ export default function App() {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
   }, [settings.appTheme, settings.terminalTheme])
 
-  const scheduleSave = useCallback(() => {
-    const ws = activeWsRef.current
-    if (!ws) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      const updated: Workspace = { ...ws, nodes: nodesRef.current.map(toWsNode), bridges: edgesRef.current.map(toBridge), viewport: viewportRef.current, updatedAt: Date.now() }
-      activeWsRef.current = updated
-      void saveWorkspace(updated)
-    }, 400)
-  }, [])
+  // Payload dikunci di `scheduleSave`, bukan dibaca ulang saat timer menembak: board bisa berpindah
+  // workspace dalam 400ms debounce. Lihat `useWorkspaceSaver` — termasuk kenapa `flushSave` wajib
+  // dipanggil `applyWorkspace` sebelum board baru dipasang.
+  const { scheduleSave, flushSave, cancelSave } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer })
 
   // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
   // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
   // di test ia menulis lewat `fetch` yang stub-nya sudah dicabut — rejection liar yang tidak bisa
   // ditelusuri ke test mana pun, dan muncul-hilang tergantung balapan.
-  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
+  useEffect(() => () => cancelSave(), [cancelSave])
 
   // Concern viewport — readout zoom, zoom/fit, riwayat pandangan. Lihat `./canvasViewport`:
   // `viewportRef` dipinjam ke sana, jadi `scheduleSave` di atas mem-persist viewport yang
@@ -126,6 +120,9 @@ export default function App() {
     useLayoutHistory({ nodesRef, setNodes, scheduleSave })
 
   const applyWorkspace = useCallback((ws: Workspace) => {
+    // Save yang masih menggantung milik board LAMA: tulis dulu dengan payload yang sudah terkunci,
+    // baru pasang board ini. Tanpa ini timer-nya menembak belakangan dan menulis board baru ke id lama.
+    flushSave()
     setActiveWs(ws)
     activeWsRef.current = ws
     resetViewport(ws.viewport ?? DEFAULT_VIEWPORT)
@@ -136,7 +133,7 @@ export default function App() {
     edgesRef.current = fe
     setEdges(fe)
     resetLayout(flow)
-  }, [resetViewport, resetLayout])
+  }, [flushSave, resetViewport, resetLayout])
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // Di LUAR updater: `recordClosed` setState, dan dari dalam updater itu menulis di fase render.
@@ -250,7 +247,7 @@ export default function App() {
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-      activeWsRef, nodesRef, edgesRef, saveTimer, rf,
+      activeWsRef, nodesRef, edgesRef, cancelSave, rf,
     })
 
   // Token disimpan lalu halaman di-reload: `api.ts` menangkap token sekali saat import, jadi hanya

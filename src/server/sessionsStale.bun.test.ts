@@ -30,12 +30,14 @@ function live(id: string) {
   const record = (m: ServerMsg) => { if (m.t === 'status') seen.push(m.status ?? 'NONE') }
   s.open({ t: 'open', id, cols: 80, rows: 24, cmd: 'sleep 20', agentId: 'claude' }, record)
   // Status yang diputar ulang ke socket yang re-attach = apa yang server masih SIMPAN tentang node.
-  // Perekam aslinya dipasang kembali sesudahnya: `open` MENGGANTI `send` sesi, bukan menambah
-  // pelanggan — tanpa ini probe pertama membuat `seen` tuli untuk sisa test.
+  // `open` pada id hidup MENAMBAH pelanggan dan memutar status ke pendatang baru saja, jadi probe
+  // harus dilepas lagi: `detach` membuang pelanggan ITU saja, dan tanpa itu setiap probe menumpuk
+  // jadi pelanggan permanen (set pelanggan tidak lagi mengevict otomatis).
   const stored = (): string => {
     const replay: string[] = []
-    s.open({ t: 'open', id, cols: 80, rows: 24 }, (m) => { if (m.t === 'status') replay.push(m.status ?? 'NONE') })
-    s.open({ t: 'open', id, cols: 80, rows: 24 }, record)
+    const probe = (m: ServerMsg) => { if (m.t === 'status') replay.push(m.status ?? 'NONE') }
+    s.open({ t: 'open', id, cols: 80, rows: 24 }, probe)
+    s.detach(probe)
     return replay.join(',')
   }
   // Socket-nya pergi tanpa sesinya mati — wifi HP mati, laptop sleep, tab tertidur. `detach`
@@ -48,16 +50,27 @@ const t0 = 1_700_000_000_000
 
 test('a working node that goes silent past the window loses its status', () => {
   const { s, seen, stored } = live('sw1')
+  // Pelanggan KEDUA lewat API publik `subscribe`: pencabutan adalah siaran, bukan surat pribadi
+  // ke satu socket. Kalau hanya pelanggan pertama yang mendengar, tab lain menyimpan 'working'.
+  const other: string[] = []
+  s.subscribe('sw1', (m) => { if (m.t === 'status') other.push(m.status ?? 'NONE') })
   s.setStatus('sw1', 'working', t0)
   expect(stored()).toBe('working')
+  expect(seen).toContain('working')
+  expect(other).toContain('working')
 
   // Masih di dalam jendela: tidak disentuh. Jeda hook terpanjang yang nyata ~10 menit.
   s.sweepStale(t0 + 10 * 60_000)
   expect(stored()).toBe('working')
 
   // Melewati jendela: statusnya dicabut, dan client diberi tahu lewat pesan tanpa `status`.
+  // Dipotong dari panjang SEBELUM sapuan: pesan `NONE` dari spawn duduk di daftar sejak awal, jadi
+  // `toContain('NONE')` di seluruh array akan hijau tanpa sapuan apa pun.
+  const seenBefore = seen.length
+  const otherBefore = other.length
   s.sweepStale(t0 + WORKING_STALE_MS + 1)
-  expect(seen).toContain('NONE')
+  expect(seen.slice(seenBefore)).toContain('NONE')
+  expect(other.slice(otherBefore)).toContain('NONE')
 
   // Berakhir TANPA status — bukan 'done'. 'done' menggerbangi tombol Resume/Restart (canResumeNode),
   // jadi mengklaimnya berarti membuka tombol di atas tebakan. Socket yang re-attach menerima

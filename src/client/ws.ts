@@ -10,10 +10,13 @@ import { noteStatus } from './unread'
 
 interface Sub {
   onOutput: (data: string) => void
-  onExit: (code: number) => void
+  onExit: (code: number, reason?: ExitReason) => void
   onReset?: () => void
   open?: ClientMsg & { t: 'open' } // last open sent for this id; replayed on reconnect
 }
+
+/** Kenapa PTY berhenti: `closed` = kita sendiri yang menutupnya, bukan prosesnya yang keluar. */
+export type ExitReason = 'self' | 'closed'
 
 const subs = new Map<string, Sub>()
 
@@ -81,7 +84,12 @@ function connect() {
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'output') sub.onOutput(msg.data)
-    else if (msg.t === 'exit') sub.onExit(msg.code)
+    else if (msg.t === 'exit') {
+      // `reason` baru saja ditambahkan ke `ExitMsg` di sisi protokol. Dibaca lewat widening sempit
+      // supaya file ini tidak bergantung pada urutan pendaratan worker protokol.
+      const exit = msg as typeof msg & { reason?: ExitReason }
+      sub.onExit(exit.code, exit.reason)
+    }
   }
   ws.onclose = () => {
     ws = null
@@ -136,7 +144,7 @@ export function send(msg: ClientMsg) {
 export function subscribe(
   id: string,
   onOutput: (data: string) => void,
-  onExit: (code: number) => void,
+  onExit: (code: number, reason?: ExitReason) => void,
   onReset?: () => void
 ): () => void {
   subs.set(id, { onOutput, onExit, onReset })
