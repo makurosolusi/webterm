@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Approval } from './ledger/ledgerApproval'
+import { approvalDigest } from './ledger/ledgerApproval'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import type { ApprovalPort } from './orchestrator/approvalGate'
 import type { PlanStore } from './orchestrator/plan'
 import type { PlanItem, PlanStatus } from './orchestrator/planModel'
 import type { WorktreeService } from './orchestrator/worktree'
@@ -111,6 +114,52 @@ function deps(
 
 const valid = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
 
+// A digest-bound approved decision, the exact shape the ledger gate consumes.
+const APPROVED_ACTION = { action: 'worker.run', projectId: 'p1', itemId: 'i1' }
+const APPROVED_DIGEST = approvalDigest(APPROVED_ACTION)
+
+function approval(patch: Partial<Approval> = {}): Approval {
+  return {
+    id: 'ap1',
+    projectId: 'p1',
+    taskId: 't1',
+    kind: 'worker.run',
+    request: APPROVED_ACTION,
+    status: 'approved',
+    approvedBy: 'human',
+    expiresAt: null,
+    createdAt: 1,
+    updatedAt: 2,
+    ...patch,
+  }
+}
+
+interface ApprovalLedger {
+  port: ApprovalPort
+  /** Ordered trail: `get:<id>`, `consume:<digest>` and any `run` the test pushes itself. */
+  events: string[]
+  consumes: () => number
+}
+
+/** In-memory approval ledger: consumes once, exactly like the atomic SQL one. */
+function approvalPort(record: Approval = approval()): ApprovalLedger {
+  const events: string[] = []
+  let consumed = 0
+  const port: ApprovalPort = {
+    getApproval: (id) => {
+      events.push(`get:${id}`)
+      return id === record.id ? record : null
+    },
+    consumeApproval: (id, input) => {
+      events.push(`consume:${input.digest}`)
+      if (consumed > 0 || id !== record.id) return false
+      consumed += 1
+      return true
+    },
+  }
+  return { port, events, consumes: () => consumed }
+}
+
 describe('orchestrator run validation', () => {
   it('rejects a client-supplied repo or command: those are server-resolved', () => {
     for (const field of ['repo', 'cmd', 'path', 'agent', 'exec'] as const) {
@@ -139,6 +188,20 @@ describe('orchestrator run validation', () => {
     const high = parseRunBody({ ...valid, timeoutMs: 60 * 60_000 })
     expect(low.ok && low.value.timeoutMs).toBe(5_000)
     expect(high.ok && high.value.timeoutMs).toBe(900_000)
+  })
+
+  it('accepts approvalId + a 64-char lowercase hex digest as a pair', () => {
+    const digest = 'a'.repeat(64)
+    const parsed = parseRunBody({ ...valid, approvalId: 'ap1', approvalDigest: digest })
+    expect(parsed.ok && parsed.value).toMatchObject({ approvalId: 'ap1', approvalDigest: digest })
+    expect(parseRunBody({ ...valid }).ok).toBe(true)
+    // Half an approval is malformed, never silently ignored.
+    expect(parseRunBody({ ...valid, approvalId: 'ap1' }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, approvalDigest: digest }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, approvalId: '  ', approvalDigest: digest }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, approvalId: 'ap1', approvalDigest: 'A'.repeat(64) }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, approvalId: 'ap1', approvalDigest: 'a'.repeat(63) }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, approvalId: 'ap1', approvalDigest: 'zz'.repeat(32) }).ok).toBe(false)
   })
 })
 
@@ -308,5 +371,115 @@ describe('orchestrator run route', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('orchestrator run approval gate', () => {
+  const approvedBody = { ...valid, approvalId: 'ap1', approvalDigest: APPROVED_DIGEST }
+
+  it('answers 409 approval_required when the policy is on and no approval is named', async () => {
+    const gate = approvalPort()
+    const run = deps(async () => outcome(), { requireApproval: true, approval: gate.port })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'approval_required' })
+    expect(run.captured.calls).toBe(0)
+    expect(run.captured.compose).toBeUndefined()
+    expect(gate.events).toEqual([])
+  })
+
+  it('consumes one approved digest before the worker runs, and only once', async () => {
+    const gate = approvalPort()
+    const run = deps(
+      async () => {
+        gate.events.push('run')
+        return outcome()
+      },
+      { requireApproval: true, approval: gate.port }
+    )
+    const result = await orchestratorRunRoute(approvedBody, run.deps)
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ ok: true })
+    expect(run.captured.calls).toBe(1)
+    expect(gate.consumes()).toBe(1)
+    expect(gate.events).toEqual(['get:ap1', `consume:${APPROVED_DIGEST}`, 'run'])
+
+    // A replay of the same decision must not start a second worker.
+    const replay = await orchestratorRunRoute(approvedBody, run.deps)
+    expect(replay.status).toBe(409)
+    expect(replay.body).toMatchObject({ error: 'approval_rejected', code: 'approval_already_consumed' })
+    expect(run.captured.calls).toBe(1)
+    expect(gate.consumes()).toBe(1)
+  })
+
+  it.each([
+    ['pending', approval({ status: 'pending' }), 'approval_pending'],
+    ['rejected', approval({ status: 'rejected' }), 'approval_rejected'],
+  ])('answers 409 for a %s decision and leaves no worktree root', async (_label, record, code) => {
+    const dataDir = tempDataDir()
+    const gate = approvalPort(record)
+    const run = deps(async () => outcome(), {
+      requireApproval: true,
+      approval: gate.port,
+      dataDir: () => dataDir,
+    })
+    const result = await orchestratorRunRoute(approvedBody, run.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'approval_rejected', code })
+    expect(run.captured.calls).toBe(0)
+    expect(run.captured.compose).toBeUndefined()
+    expect(existsSync(join(dataDir, 'worktrees'))).toBe(false)
+    expect(gate.consumes()).toBe(0)
+  })
+
+  it('answers 409 for a digest that no longer matches the approved action', async () => {
+    const gate = approvalPort()
+    const run = deps(async () => outcome(), { requireApproval: true, approval: gate.port })
+    const result = await orchestratorRunRoute(
+      { ...valid, approvalId: 'ap1', approvalDigest: 'b'.repeat(64) },
+      run.deps
+    )
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'approval_rejected', code: 'approval_digest_mismatch' })
+    expect(run.captured.calls).toBe(0)
+    expect(gate.consumes()).toBe(0)
+    // The rejection must not leak the digest back to the caller.
+    expect(JSON.stringify(result.body)).not.toContain('b'.repeat(64))
+  })
+
+  it('does not burn an approval when the request is invalid', async () => {
+    const gate = approvalPort()
+    const unassigned = deps(async () => outcome(), {
+      approval: gate.port,
+      planStore: planStore(item({ status: 'pending', taskId: null, assignee: null })),
+    })
+    const result = await orchestratorRunRoute(approvedBody, unassigned.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'not_assigned' })
+    expect(unassigned.captured.calls).toBe(0)
+    expect(gate.events).toEqual([])
+
+    const malformed = deps(async () => outcome(), { approval: gate.port })
+    const bad = await orchestratorRunRoute({ ...approvedBody, projectId: '' }, malformed.deps)
+    expect(bad.status).toBe(400)
+    expect(gate.events).toEqual([])
+  })
+
+  it('runs unchanged with no approval fields while the policy is off', async () => {
+    const gate = approvalPort()
+    const run = deps(async () => outcome(), { approval: gate.port })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result.status).toBe(200)
+    expect(run.captured.calls).toBe(1)
+    expect(gate.events).toEqual([])
+  })
+
+  it('consumes a named approval even when the policy is off', async () => {
+    const gate = approvalPort()
+    const run = deps(async () => outcome(), { approval: gate.port })
+    const result = await orchestratorRunRoute(approvedBody, run.deps)
+    expect(result.status).toBe(200)
+    expect(run.captured.calls).toBe(1)
+    expect(gate.events).toEqual(['get:ap1', `consume:${APPROVED_DIGEST}`])
   })
 })

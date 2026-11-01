@@ -4,15 +4,22 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Approval } from './ledger/ledgerApproval'
+import { approvalDigest } from './ledger/ledgerApproval'
+import type { ApprovalPort } from './orchestrator/approvalGate'
 import type { PlanItem } from './orchestrator/planModel'
 import type { WorktreeService } from './orchestrator/worktree'
 import {
+  approvalMissing,
+  approvalPortOf,
   assignmentProblem,
+  guardedRun,
   projectPaused,
   projectRepo,
   resolveWorktrees,
   worktreeRoot,
 } from './orchestratorRunProduction'
+import type { RawRun } from './orchestratorRunModel'
 
 const tempDirs: string[] = []
 function tempDir(): string {
@@ -129,3 +136,162 @@ describe('orchestratorRunProduction', () => {
     }
   })
 })
+
+const ACTION = { action: 'worker.run', projectId: 'p1', itemId: 'i1' }
+const DIGEST = approvalDigest(ACTION)
+const RUN = { projectId: 'p1', itemId: 'i1', expectedVersion: 1, approvalId: 'ap1', approvalDigest: DIGEST }
+const OK = { status: 200, body: { ok: true } }
+
+function record(patch: Partial<Approval> = {}): Approval {
+  return {
+    id: 'ap1',
+    projectId: 'p1',
+    taskId: 't1',
+    kind: 'worker.run',
+    request: ACTION,
+    status: 'approved',
+    approvedBy: 'human',
+    expiresAt: null,
+    createdAt: 1,
+    updatedAt: 2,
+    ...patch,
+  }
+}
+
+/** In-memory approval ledger; consumption is atomic-once like the SQL one. */
+function approvalLedger(entry: Approval = record()) {
+  const seen: string[] = []
+  let consumed = 0
+  const port: ApprovalPort = {
+    getApproval: (id) => {
+      seen.push(`get:${id}`)
+      return id === entry.id ? entry : null
+    },
+    consumeApproval: (id, input) => {
+      seen.push(`consume:${input.digest}`)
+      if (consumed > 0 || id !== entry.id) return false
+      consumed += 1
+      return true
+    },
+  }
+  return { port, seen, consumes: () => consumed }
+}
+
+describe('orchestratorRunProduction approval port', () => {
+  it('prefers an injected port, then the ledger facade, and refuses a partial one', () => {
+    const injected = approvalLedger().port
+    expect(approvalPortOf({ ledger: null, approval: injected })).toBe(injected)
+    const facade = approvalLedger().port
+    const runtime = { ledger: { approval: facade } } as never
+    expect(approvalPortOf({ ledger: runtime })).toBe(facade)
+    expect(approvalPortOf({ ledger: null })).toBeNull()
+    expect(approvalPortOf({ ledger: { ledger: { getApproval: () => null } } as never })).toBeNull()
+  })
+
+  it('requires approval only when the flag is on and the fields are missing', () => {
+    const bare = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
+    expect(approvalMissing({ ledger: null }, bare)).toBe(false)
+    expect(approvalMissing({ ledger: null, requireApproval: true }, bare)).toBe(true)
+    expect(approvalMissing({ ledger: null, requireApproval: true }, RUN)).toBe(false)
+
+    process.env['WEBTERM_RUN_REQUIRE_APPROVAL'] = 'on'
+    try {
+      expect(approvalMissing({ ledger: null }, bare)).toBe(true)
+      expect(approvalMissing({ ledger: null, requireApproval: false }, bare)).toBe(false)
+    } finally {
+      delete process.env['WEBTERM_RUN_REQUIRE_APPROVAL']
+    }
+  })
+})
+
+describe('guardedRun', () => {
+  async function gate(request: RawRun, deps: Parameters<typeof guardedRun>[0]) {
+    const calls: string[] = []
+    const result = await guardedRun(deps, request, async () => {
+      calls.push('run')
+      return OK
+    })
+    return { result, calls }
+  }
+
+  it('runs gated work only after consuming the approved digest', async () => {
+    const ledger = approvalLedger()
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port })
+    expect(result.status).toBe(200)
+    expect(calls).toEqual(['run'])
+    expect(ledger.consumes()).toBe(1)
+    expect(ledger.seen).toEqual(['get:ap1', `consume:${DIGEST}`])
+  })
+
+  it('answers 409 approval_required without consuming when the policy is on', async () => {
+    const ledger = approvalLedger()
+    const request = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
+    const { result, calls } = await gate(request, {
+      ledger: null,
+      requireApproval: true,
+      approval: ledger.port,
+    })
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'approval_required' })
+    expect(calls).toEqual([])
+    expect(ledger.seen).toEqual([])
+  })
+
+  it.each([
+    ['pending', record({ status: 'pending' }), 'approval_pending'],
+    ['rejected', record({ status: 'rejected' }), 'approval_rejected'],
+    ['expired', record({ status: 'expired' }), 'approval_expired'],
+  ])('maps a %s decision to 409 and skips the action', async (_label, entry, code) => {
+    const ledger = approvalLedger(entry)
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port })
+    expect(result).toMatchObject({ status: 409, body: { error: 'approval_rejected', code } })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+  })
+
+  it('treats an elapsed expiry as expired using the injected clock', async () => {
+    const ledger = approvalLedger(record({ expiresAt: 1_000 }))
+    const live = await gate(RUN, { ledger: null, approval: ledger.port, now: () => 999 })
+    expect(live.result.status).toBe(200)
+    const stale = approvalLedger(record({ expiresAt: 1_000 }))
+    const dead = await gate(RUN, { ledger: null, approval: stale.port, now: () => 1_000 })
+    expect(dead.result).toMatchObject({ status: 409, body: { code: 'approval_expired' } })
+    expect(dead.calls).toEqual([])
+  })
+
+  it('refuses an unknown approval id or a mismatched digest without running', async () => {
+    const known = approvalLedger()
+    const unknown = await gate({ ...RUN, approvalId: 'nope' }, { ledger: null, approval: known.port })
+    expect(unknown.result).toMatchObject({ status: 409, body: { code: 'approval_not_found' } })
+
+    const mismatch = await gate(
+      { ...RUN, approvalDigest: 'b'.repeat(64) },
+      { ledger: null, approval: known.port }
+    )
+    expect(mismatch.result).toMatchObject({ status: 409, body: { code: 'approval_digest_mismatch' } })
+    expect(JSON.stringify(mismatch.result.body)).not.toContain('b'.repeat(64))
+    expect(known.consumes()).toBe(0)
+    expect(unknown.calls).toEqual([])
+    expect(mismatch.calls).toEqual([])
+  })
+
+  it('fails closed when the request names an approval but no port is wired', async () => {
+    const { result, calls } = await gate(RUN, { ledger: null })
+    expect(result).toMatchObject({ status: 409, body: { code: 'approval_unavailable' } })
+    expect(calls).toEqual([])
+  })
+
+  it('consumes before the action, so a failing action still burns the approval', async () => {
+    const ledger = approvalLedger()
+    const result = await guardedRun({ ledger: null, approval: ledger.port }, RUN, async () => {
+      throw new Error('boom')
+    })
+    expect(result).toEqual({
+      status: 500,
+      body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },
+    })
+    expect(ledger.consumes()).toBe(1)
+    expect(JSON.stringify(result.body)).not.toContain('boom')
+  })
+})
+

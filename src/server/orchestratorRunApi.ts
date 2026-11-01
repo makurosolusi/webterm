@@ -2,38 +2,43 @@
 // The request only names a project/item and a plan version. Repo, command, agent and exec are
 // resolved SERVER-SIDE (project.path + settings), never taken from the payload: a run spawns a
 // real PTY, so a client-supplied repo/cmd would be remote command execution.
-//
 // The route does not create tasks/agents/plans. An item must already be `assigned` by the
 // orchestrator (assign flow); otherwise this answers 409 `not_assigned` and touches nothing.
 // A paused project or a terminal plan (`completed`/`abandoned`) answers 409 before any work.
-//
 // This module is the route seam only: payload parsing lives in `orchestratorRunModel` and
 // production composition (repo/agent/worktree/runtime) in `orchestratorRunProduction`.
+// `WEBTERM_RUN_REQUIRE_APPROVAL=on` makes approval mandatory; otherwise a named one is consumed.
 import { createPlanStore, type Plan } from './orchestrator/plan'
-import type { WorkerRunInput, WorkerRunOutcome } from './orchestrator/workerRuntime'
+import type { WorkerRunOutcome } from './orchestrator/workerRuntime'
 import {
+  ORCHESTRATOR_REQUIRE_APPROVAL_FLAG,
   ORCHESTRATOR_RUN_FLAG,
   ORCHESTRATOR_RUN_PATH,
   orchestratorRunEnabled,
+  orchestratorRunRequireApproval,
   parseRunBody,
   type RouteResult,
 } from './orchestratorRunModel'
 import {
   agentCommand,
   assignmentProblem,
+  guardedRun,
   productionRuntime,
   projectPaused,
   projectRepo,
   resolveWorktrees,
+  workerInput,
   worktreeRoot,
   type OrchestratorRunDeps,
   type RuntimeCompose,
 } from './orchestratorRunProduction'
 
 export {
+  ORCHESTRATOR_REQUIRE_APPROVAL_FLAG,
   ORCHESTRATOR_RUN_FLAG,
   ORCHESTRATOR_RUN_PATH,
   orchestratorRunEnabled,
+  orchestratorRunRequireApproval,
   parseRunBody,
   type RouteResult,
 }
@@ -106,38 +111,38 @@ export async function orchestratorRunRoute(
   const problem = assignmentProblem(plan, request.projectId, request.itemId)
   if (problem !== null) return { status: 409, body: { error: 'not_assigned', message: problem } }
 
-  const root = worktreeRoot(deps)
-  const resolved = resolveWorktrees(deps, root)
-  if (!resolved.ok) return resolved.result
-  const worktrees = resolved.worktrees
+  // Everything that could refuse the request has answered by now, so the approval gate below is
+  // the first thing that can consume a decision. It also wraps worktree allocation and runtime
+  // creation, so a rejected approval leaves no root dir, no git exec and no PTY.
+  const startRun = async (): Promise<RouteResult> => {
+    const root = worktreeRoot(deps)
+    const resolved = resolveWorktrees(deps, root)
+    if (!resolved.ok) return resolved.result
+    const worktrees = resolved.worktrees
 
-  try {
-    const compose: RuntimeCompose = { root, repo, cmd: await agentCommand(deps), plan, worktrees }
-    const worker = deps.createRuntime ? deps.createRuntime(compose) : await productionRuntime(deps, compose)
-    const input: WorkerRunInput = {
-      projectId: request.projectId,
-      itemId: request.itemId,
-      expectedVersion: request.expectedVersion,
-      repo,
-      ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
-      ...(request.baseRef === undefined ? {} : { baseRef: request.baseRef }),
-      ...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
-    }
-    const outcome: WorkerRunOutcome = await worker.runTask(input)
-    if (outcome.ok) return { status: 200, body: { ok: true, outcome } }
-    return {
-      status: 409,
-      body: {
-        ok: false,
-        error: {
-          code: outcome.error?.code ?? 'run_failed',
-          message: outcome.error?.message ?? 'worker run failed',
+    try {
+      const compose: RuntimeCompose = { root, repo, cmd: await agentCommand(deps), plan, worktrees }
+      const worker = deps.createRuntime ? deps.createRuntime(compose) : await productionRuntime(deps, compose)
+      const outcome: WorkerRunOutcome = await worker.runTask(workerInput(request, repo))
+      if (outcome.ok) return { status: 200, body: { ok: true, outcome } }
+      return {
+        status: 409,
+        body: {
+          ok: false,
+          error: {
+            code: outcome.error?.code ?? 'run_failed',
+            message: outcome.error?.message ?? 'worker run failed',
+          },
+          outcome,
         },
-        outcome,
-      },
+      }
+    } catch {
+      // Never echo the exception: it can quote absolute worktree paths or worker output.
+      return {
+        status: 500,
+        body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },
+      }
     }
-  } catch {
-    // Never echo the exception: it can quote absolute worktree paths or worker output.
-    return { status: 500, body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } } }
   }
+  return await guardedRun(deps, request, startRun)
 }

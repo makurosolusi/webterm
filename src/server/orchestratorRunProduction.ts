@@ -10,6 +10,7 @@ import { createWorktreeService, type Exec, type WorktreeService } from './orches
 import {
   createSessionsPort,
   createWorkerRuntime,
+  type WorkerRunInput,
   type WorkerRuntime,
   type WorkerSessionPort,
 } from './orchestrator/workerRuntime'
@@ -18,7 +19,13 @@ import { recordWorkerResult, startWorker } from './orchestrator/orchestratorRun'
 import { verifyWorktree, type VerifyInput, type VerifyOutcome } from './orchestrator/verify'
 import { createProcessExec } from './orchestrator/verifier'
 import { dataDir } from './config'
-import { DEFAULT_AGENT_CMD, DEFAULT_AGENT_ID, type RouteResult } from './orchestratorRunModel'
+import { DEFAULT_AGENT_CMD, DEFAULT_AGENT_ID, orchestratorRunRequireApproval, type RawRun, type RouteResult } from './orchestratorRunModel'
+import {
+  ApprovalRequiredError,
+  runApproved,
+  type ApprovalPort,
+  type ApprovalRequest,
+} from './orchestrator/approvalGate'
 
 const GIT_TIMEOUT_MS = 120_000
 const GIT_OUTPUT_BYTES = 256 * 1024
@@ -44,6 +51,12 @@ export interface OrchestratorRunDeps {
   settings?: () => { agentLaunchCommands: Partial<Record<string, string>> }
   dataDir?: () => string
   gitExec?: Exec
+  /** Approval ledger port; production defaults to `ledger.ledger.approval`. */
+  approval?: ApprovalPort
+  /** Defaults to the `WEBTERM_RUN_REQUIRE_APPROVAL` flag; tests may pin it. */
+  requireApproval?: boolean
+  /** Injected clock for approval expiry checks; defaults to `Date.now()`. */
+  now?: () => number
 }
 
 export function projectRepo(db: Database, projectId: string): string | null {
@@ -104,6 +117,95 @@ function gitExecFor(deps: OrchestratorRunDeps, root: string): Exec {
     ((file, args) =>
       runExec(file, args, { cwd: root, timeoutMs: GIT_TIMEOUT_MS, maxOutputBytes: GIT_OUTPUT_BYTES }))
   )
+}
+
+/** Maps a validated request onto the runtime input; `repo` is always server-resolved. */
+export function workerInput(request: RawRun, repo: string): WorkerRunInput {
+  return {
+    projectId: request.projectId,
+    itemId: request.itemId,
+    expectedVersion: request.expectedVersion,
+    repo,
+    ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
+    ...(request.baseRef === undefined ? {} : { baseRef: request.baseRef }),
+    ...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
+  }
+}
+
+const APPROVAL_REQUIRED: RouteResult = {
+  status: 409,
+  body: {
+    error: 'approval_required',
+    message: 'run requires approvalId and approvalDigest from an approved ledger decision',
+  },
+}
+
+const INTERNAL_RUN_FAILURE: RouteResult = {
+  status: 500,
+  body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },
+}
+
+/** Production uses the ledger facade's approval slice; tests may inject a narrow port. */
+export function approvalPortOf(deps: OrchestratorRunDeps): ApprovalPort | null {
+  if (deps.approval) return deps.approval
+  const port = (deps.ledger?.ledger as { approval?: Partial<ApprovalPort> } | undefined)?.approval
+  if (typeof port?.getApproval !== 'function' || typeof port.consumeApproval !== 'function') {
+    return null
+  }
+  return port as ApprovalPort
+}
+
+/** Policy gate: on only when the flag is set AND the request names no approval. */
+export function approvalMissing(deps: OrchestratorRunDeps, request: RawRun): boolean {
+  if (!(deps.requireApproval ?? orchestratorRunRequireApproval())) return false
+  return request.approvalId === undefined || request.approvalDigest === undefined
+}
+
+/**
+ * Runs `action` behind the ledger approval named by the request, so consent is consumed exactly
+ * once BEFORE any spawn or worktree allocation. A rejection returns 409 and never reaches
+ * `action`; the message may name the approval id but never echoes the digest.
+ *
+ * Field presence is decided here, after body/project/plan validation, so an invalid request
+ * never burns an approval and a missing one is reported as policy (409), not malformed (400).
+ */
+export async function guardedRun(
+  deps: OrchestratorRunDeps,
+  request: RawRun,
+  action: () => Promise<RouteResult>
+): Promise<RouteResult> {
+  const { approvalId, approvalDigest } = request
+  if (approvalId === undefined || approvalDigest === undefined) {
+    return approvalMissing(deps, request) ? APPROVAL_REQUIRED : await action()
+  }
+  const port = approvalPortOf(deps)
+  if (port === null) {
+    return {
+      status: 409,
+      body: {
+        error: 'approval_rejected',
+        code: 'approval_unavailable',
+        message: 'approval ledger is unavailable',
+      },
+    }
+  }
+  const now = deps.now?.()
+  const gateRequest: ApprovalRequest =
+    now === undefined
+      ? { approvalId, digest: approvalDigest }
+      : { approvalId, digest: approvalDigest, now }
+  try {
+    return await runApproved({ approval: port }, gateRequest, action)
+  } catch (error) {
+    // A failed action still burns its approval (the gate has no catch), as designed.
+    if (error instanceof ApprovalRequiredError) {
+      return {
+        status: 409,
+        body: { error: 'approval_rejected', code: error.code, message: error.message },
+      }
+    }
+    return INTERNAL_RUN_FAILURE
+  }
 }
 
 /** Production composition: real sessions, real verifier, one runtime per request. */

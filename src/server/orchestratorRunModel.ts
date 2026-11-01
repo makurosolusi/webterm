@@ -6,6 +6,8 @@
 export type RouteResult = { status: number; body: unknown }
 
 export const ORCHESTRATOR_RUN_FLAG = 'WEBTERM_ORCHESTRATOR_RUN'
+/** Opt-in policy gate: when `on`, a run must name an approved, digest-bound ledger approval. */
+export const ORCHESTRATOR_REQUIRE_APPROVAL_FLAG = 'WEBTERM_RUN_REQUIRE_APPROVAL'
 export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'
 
 export const DEFAULT_AGENT_ID = 'claude'
@@ -13,6 +15,8 @@ export const DEFAULT_AGENT_CMD = 'claude'
 export const MAX_ID_CHARS = 200
 export const MAX_PROMPT_CHARS = 2000
 export const MAX_BASE_REF_CHARS = 200
+/** `approvalDigest` is a SHA-256 hex string; anything else cannot match an approved action. */
+export const APPROVAL_DIGEST_CHARS = 64
 export const MIN_TIMEOUT_MS = 5_000
 export const MAX_TIMEOUT_MS = 15 * 60_000
 
@@ -25,6 +29,13 @@ export function orchestratorRunEnabled(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   return env[ORCHESTRATOR_RUN_FLAG] === 'on'
+}
+
+/** Default OFF: approval is optional unless an operator explicitly requires it. */
+export function orchestratorRunRequireApproval(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG] === 'on'
 }
 
 function text(value: unknown, max: number): string | null {
@@ -41,6 +52,19 @@ export interface RawRun {
   prompt?: string
   baseRef?: string
   timeoutMs?: number
+  /** Ledger approval the client claims covers this run; both fields travel together. */
+  approvalId?: string
+  approvalDigest?: string
+}
+
+const APPROVAL_DIGEST_PATTERN = /^[0-9a-f]+$/
+
+function digestText(value: unknown): string | null {
+  return typeof value === 'string' &&
+    value.length === APPROVAL_DIGEST_CHARS &&
+    APPROVAL_DIGEST_PATTERN.test(value)
+    ? value
+    : null
 }
 
 function invalid(error: string, message?: string): { ok: false; result: RouteResult } {
@@ -89,6 +113,23 @@ export function parseRunBody(
     if (typeof value !== 'number' || !Number.isFinite(value)) return invalid('invalid_timeout')
     timeoutMs = Math.min(Math.max(Math.round(value), MIN_TIMEOUT_MS), MAX_TIMEOUT_MS)
   }
+  // Approval fields are allowed (unlike repo/cmd): they name a ledger decision, not an action.
+  // They are paired, so a half-approval is a malformed request rather than a silent no-op.
+  let approvalId: string | undefined
+  if (raw['approvalId'] !== undefined) {
+    const id = text(raw['approvalId'], MAX_ID_CHARS)
+    if (id === null) return invalid('invalid_approval')
+    approvalId = id
+  }
+  let approvalDigest: string | undefined
+  if (raw['approvalDigest'] !== undefined) {
+    const digest = digestText(raw['approvalDigest'])
+    if (digest === null) return invalid('invalid_approval_digest')
+    approvalDigest = digest
+  }
+  if ((approvalId === undefined) !== (approvalDigest === undefined)) {
+    return invalid('invalid_approval', 'approvalId and approvalDigest must be sent together')
+  }
   return {
     ok: true,
     value: {
@@ -98,6 +139,8 @@ export function parseRunBody(
       ...(prompt === undefined ? {} : { prompt }),
       ...(baseRef === undefined ? {} : { baseRef }),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      ...(approvalId === undefined ? {} : { approvalId }),
+      ...(approvalDigest === undefined ? {} : { approvalDigest }),
     },
   }
 }
