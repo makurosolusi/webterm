@@ -18,6 +18,7 @@
 - A task whose approval was approved but never consumed could not be finished from the inbox: the approval disappeared from every list, so a lost response left the task stuck. The inbox now shows "Finish approval" on that row, which opens the existing consent at the Consume step instead of minting a second approval, and the approved list now carries the task id, fence, and request so the row can be matched.
 - Task review approvals no longer consume without effect: reject fails or reopens the task, and consume verifies it with the human reviewer and approval id recorded.
 - The canvas minimap follows the dark canvas background instead of rendering as a white block.
+- Ledger upgrade backups and the ledger database files created on first run are now readable only by their owner (mode `0600`), so other local users on a shared machine cannot read the audit trail or the backups taken before a schema upgrade.
 
 ### Security
 - Human approvals refuse token-free loopback by default. An agent shell on the same machine could otherwise request, read the nonce, approve, and consume its own action. A configured root token, or `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` for a disposable demo, is required.
