@@ -14,6 +14,13 @@ proxy, alias nama token bot Telegram, gate plan terminal, dan dua temuan correct
 percobaan Claude nyata; plus cek status Telegram hidup (tanpa webhook/pesan). Snapshot wave 1/2
 di bawah tidak ditulis ulang.
 
+Update wave 4: 2026-11-01 20:39 (+08:00), HEAD `6a5fa55`, commit kode `e52e767`..`6a5fa55`
+(3 commit: `e52e767` route claim/promote memory, `db20f7b` master switch `WEBTERM_CHANNELS`,
+`6a5fa55` gate approval opt-in di jalur run). Wave 4 menutup route tulis memory, kill switch
+kanal, dan prasyarat approval untuk run. **Tidak** menutup verifikasi independen sebagai
+satu-satunya jalur `verified`, agen pusat otonom, actor binding di auth/capability, soak,
+delivery Telegram, atau E2E Claude nyata/node canvas.
+
 Label: `[V]` terverifikasi di snapshot · `[W]` ada di working tree, belum commit atau belum
 teruji end-to-end · `[P]` rencana saja, belum ada di kode.
 
@@ -62,6 +69,18 @@ alias + plan terminal + correctness worker):
 
 Tanpa `TMPDIR=/tmp`, `controlCwd` gagal (lingkungan, lihat §9), bukan regresi kode.
 
+Gate wave 4 (HEAD `6a5fa55`, 2026-11-01 20:39; fokus memory write, master switch kanal,
+gate approval run):
+
+| Cek | Hasil |
+|---|---|
+| `tsc --noEmit` (strict + unused) | bersih |
+| `vitest run` penuh (`TMPDIR=/tmp`) | 137 file / 1808 test lulus |
+| `bun test` penuh | 29 file / 204 test lulus |
+| Wave-4 terarah (`memoryWriteApi`, `channelsRuntimeMasterGate`, `orchestratorRunApi`, `orchestratorRunProduction`) | 4 file / 64 test lulus |
+
+Angka wave 4 adalah gate terbaru; angka wave 1-3 di atas sengaja tidak ditulis ulang.
+
 ---
 
 ## 2. P3: orchestrator dan approval
@@ -75,7 +94,9 @@ Tanpa `TMPDIR=/tmp`, `controlCwd` gagal (lingkungan, lihat §9), bukan regresi k
 | `orchestrator/worktree.ts` | `createWorktreeService({root,exec})` → allocate/release/get/list; branch + path guard | `[V]` + test; dipakai `workerRuntime` |
 | `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[V]`; spawn PTY produksi di `workerRuntime.ts`; `recordWorkerResult` atomik bila `ledger.tx` ada |
 | `orchestrator/workerRuntime.ts` (+`Prompt`/`Session`/`Settle`/`Types`) | run satu task: worktree → PTY → prompt satu baris → settle/timeout → record → cleanup; cap prompt 8 KiB, output 64 KiB; sessionId baru per run agar Claude memakai `--settings`/hooks; `verified` wajib `changedFiles.length > 0` | `[V]` + test; loop fake-agent terverifikasi, Claude nyata **BLOCKED** (§2b) |
-| `orchestratorRunApi.ts` | `POST /api/orchestrator/run`, gate `WEBTERM_ORCHESTRATOR_RUN=on`; tolak field client (`repo/cmd/...`), repositori dari `project.path`, root worktree dibuat `0700`, timeout 5 s..15 mnt | `[V]` + test; acceptance loop fake-agent (`2f04f77`); C3 ditutup wave 3: `project.status` `paused` → 409 `project_paused` sebelum repo/plan/worktree; plan `completed`/`abandoned` → 409 `plan_closed` sebelum assignment/worktree |
+| `orchestratorRunApi.ts` | `POST /api/orchestrator/run`, gate `WEBTERM_ORCHESTRATOR_RUN=on`; tolak field client (`repo/cmd/...`), repositori dari `project.path`, root worktree dibuat `0700`, timeout 5 s..15 mnt | `[V]` + test; acceptance loop fake-agent (`2f04f77`); C3 ditutup wave 3: `project.status` `paused` → 409 `project_paused` sebelum repo/plan/worktree; plan `completed`/`abandoned` → 409 `plan_closed` sebelum assignment/worktree. Wave 4: body menerima pasangan opsional `approvalId` + `approvalDigest`; `guardedRun` dipanggil setelah semua pemeriksaan body/project/plan dan membungkus worktree/PTY (§2c) |
+| `orchestratorRunModel.ts` | parsing `RawRun` termasuk `approvalId` + `approvalDigest` (wajib berpasangan; digest 64 hex huruf kecil), `orchestratorRunRequireApproval` untuk `WEBTERM_RUN_REQUIRE_APPROVAL` | `[V]` + test (pasangan valid, separuh pasangan ditolak 400 `invalid_approval`) |
+| `orchestrator/approvalGate.ts` | `runApproved`, `ApprovalRequiredError`; consent `approved` di-consume tepat sekali, digest mengikat aksi | `[V]` + test; sebelumnya hanya library, wave 4 mulai dipakai jalur run (§2c) |
 | `orchestratorControlApi.ts` | `POST /api/orchestrator/bootstrap` (project+orchestrator+worker+plan, path harus root git absolut, item wajib `scope` eksplisit) dan `/assign` (task ledger + kunci item, `expectedVersion`, agent id ber-`:` diterima) | `[V]`: acceptance HTTP bootstrap → duplicate 409 → assign → plan/tasks, tanpa worktree/PTY; B1 (`repo` ditolak) + B2 (agent id eksplisit) fixed di `0b63714` |
 | `ledger/ledgerApproval.ts` | request/get/list/decide/consume/expire; digest + nonce + single-use | `[V]` |
 | `ledger/durableAck.ts` | `DurableAckStore` + `durableAckFor(db, scope)`; ack di tabel `request_ack`, `INSERT OR IGNORE` (replay tidak memperpanjang expiry), prune expiry + evict tertua | `[V]` + test |
@@ -134,6 +155,31 @@ Dua temuan correctness dari percobaan itu ditutup di `5d466e7`:
 Test baru mencakup kedua jalur. Ini menutup false-positive verifikasi, tetapi **tidak** membuktikan
 Claude nyata bekerja.
 
+### 2c. Gate approval di jalur run (opt-in, bukan default)
+
+`6a5fa55` memasang prasyarat approval pada `POST /api/orchestrator/run`. Ini **kebijakan opt-in**,
+bukan gate default untuk setiap run:
+
+| Kondisi | Perilaku |
+|---|---|
+| `WEBTERM_RUN_REQUIRE_APPROVAL=on` dan body tanpa `approvalId`/`approvalDigest` | 409 `approval_required` sebelum worktree/PTY |
+| Field dikirim (flag apa pun, termasuk off) | `runApproved` meng-consume approval **tepat sekali** sebelum worktree/PTY |
+| Flag off dan field tidak dikirim | perilaku lama, tanpa approval |
+| Field hanya separuh (id tanpa digest, atau sebaliknya) | 400 `invalid_approval` dari parsing body; digest bukan 64 hex huruf kecil → 400 `invalid_approval_digest` |
+| Approval tidak ada / belum `approved` / expired / digest beda / sudah dipakai | 409 `approval_rejected` dengan `code` dari `ApprovalRejectionCode` (`approval_not_found`, `approval_pending`, `approval_not_approved`, `approval_expired`, `approval_digest_mismatch`, `approval_already_consumed`) |
+
+Urutan yang dijaga (dan diuji): parsing body → cek project (`paused`) → cek plan terminal →
+assignment item → `guardedRun` → resolve worktree → runtime/PTY. Karena gate dipanggil setelah
+semua penolakan murah, request tidak valid tidak pernah membakar approval; dan karena gate
+membungkus `startRun`, approval yang ditolak tidak meninggalkan root dir, git exec, atau PTY.
+Kalau aksi gagal setelah consume, approval tetap terbakar (by design, tidak dihidupkan ulang).
+
+Batas yang penting: route ini tetap root/loopback (`isNodeTokenPath` tidak memuatnya) dan
+approval yang di-consume adalah approval ledger yang dibuat manusia lewat `/api/approvals/*`.
+Artinya gate ini menutup "worker jalan tanpa consent yang bisa ditunjuk", **bukan** menutup
+"worker memverifikasi hasil kerjanya sendiri": verifikasi independen sebagai satu-satunya jalur
+`verified` masih belum ada (§8 G4).
+
 ---
 
 ## 3. P4: memory dan inbox
@@ -145,16 +191,21 @@ Claude nyata bekerja.
 | `memory/memoryCore.ts` | `toFtsQuery`, `validateEvidence`, `assertCanPromote` | `[V]`; redeclare `evidence` snapshot sudah hilang |
 | `memory/memoryFile.ts` (+`FilePath`/`Render`/`Ensure`) | export fact → Markdown+JSON frontmatter, commit git, rebuild files-win; root `0700` + `git init` otomatis, identitas git milik server | `[V]` + test |
 | `memoryFileHttp.ts` (+`Response`) | `POST /api/memory/export`, `POST /api/memory/rebuild`, gate `WEBTERM_MEMORY_FILES=on`; error di-redaksi | `[V]` + test |
+| `memoryWriteApi.ts` (+`test`) | `POST /api/memory/claim`, `POST /api/memory/promote`; body cap 64 KiB dibaca lazy, otoritas server `human:api-root` (field `authority`/`actor`/`status` dari payload diabaikan), root/loopback saja (tidak ada di `isNodeTokenPath`); error stabil 400 `invalid_memory` / 404 `memory_not_found` / 409 `memory_conflict`; ledger off → 503 `ledger_off` | `[V]` + test; dipasang di `api.ts` sebelum route baca (`e52e767`) |
 | `central/*` | portfolio + project projection, pause/resume/priority (lihat §4b) | `[V]` + test |
 | `memoryApi.ts` | `GET /api/memory`, `GET /api/memory/search` (read-only) | `[V]`, ter-mount |
 | `inboxApi.ts` | `GET /api/inbox` + counts; pagination + validasi | `[W]`, ter-mount |
 | `client/inboxApi.ts` + `InboxPanel` | klien inbox, consent dialog, badge dock | `[W]` |
 
-Gap P4 yang masih terbuka:
+Gap P4 setelah wave 4:
 
-- Otoritas tulis file telah dipin ke `{kind:'human', id:'root'}` dan scope `core` ditolak
-  (`memoryFileRender`), jadi body tidak bisa mengklaim otoritas. Route claim/promote tetap
-  belum ada; authority dari payload masih laten di sana.
+- Route tulis memory sekarang ada (`POST /api/memory/claim|promote`, `e52e767`). Otoritas tidak
+  lagi laten di payload: server selalu memakai `human:api-root`, dan field `authority`/`actor`/
+  `status` kiriman client diabaikan (bukan ditolak dengan pesan yang membocorkan bentuk internal).
+  Route ini root/loopback saja dan ber-body-cap 64 KiB. Yang belum: pemakaian nyata dari UI/agent
+  (belum ada pemanggil produksi selain HTTP) dan uji end-to-end claim → promote → export file.
+- Otoritas tulis file tetap dipin ke `{kind:'human', id:'root'}` dan scope `core` ditolak
+  (`memoryFileRender`), jadi body tidak bisa mengklaim otoritas.
 - P4b (fact file + git truth) sekarang `[V]` di balik flag, dengan acceptance cold root nyata
   (`qc/p4-memory-fix-acceptance.md`). Soak 2 project × 2 minggu belum dijalankan.
 - Central agent otonom tetap `[P]`; yang ada hanya proyeksi portfolio + kontrol (§4b).
@@ -173,11 +224,18 @@ Gap P4 yang masih terbuka:
 | `channels/channelStore.ts` | binding + dedupe persisten, file `0600`, dir `0700`; `parseStoreState` menurunkan `owner`/`approver` group (`chatId` mulai `-`) ke `operator` saat load, file tidak ditulis ulang sampai save berikutnya | `[V]` + test (load + no-rewrite) |
 | `channels/channelBindingsApi.ts` + `Http` | `GET/POST/DELETE /api/channels/telegram/bindings`, root-only; tolak `approver`/`owner` untuk group | `[V]` + test |
 | `channels/channelSenderBoot.ts` + `telegramSend.ts` | sender outbox: retry/backoff, dead-letter, redaksi token; boot hanya bila token ada | `[V]` + test; boot dengan token asli terverifikasi (status hidup), delivery belum |
+| `channels/channelsMasterGate.ts` | `channelsMasterState(env)` untuk `WEBTERM_CHANNELS`: kosong/`on` = perilaku lama, `off` = runtime kanal tidak dibuat, nilai lain (`readonly`/`control`) fail-closed jadi off + satu warning; nilai mentah tidak pernah dicetak | `[V]` + test; dipasang paling awal di `startChannelsRuntime` (`db20f7b`) |
+
+Efek master switch `off`: `startChannelsRuntime` mengembalikan `null`, sehingga webhook
+`/webhooks/telegram` dan binding API tidak terpasang sama sekali (request jatuh ke penanganan
+default, bukan 503 `channel_disabled` yang hanya muncul bila store `undefined`), dan sender
+egress tidak pernah di-boot. Karena store kanal berupa JSON di data dir, tidak ada migrasi SQL
+v4 yang dibutuhkan untuk kanal (§8 G3).
 
 Yang **belum** ada:
 
-- `WEBTERM_CHANNELS` belum dibaca kode mana pun. Flag nyata hanya `WEBTERM_TELEGRAM` dan
-  nilainya hanya `on` (tidak ada `off|readonly|control`).
+- `WEBTERM_CHANNELS` sekarang dibaca dan berfungsi sebagai kill switch `on|off` (`db20f7b`).
+  Mode `readonly|control` belum diimplementasi dan sengaja fail-closed (satu warning, kanal mati).
 - Binding punya route dan pemanggil produksi; chat yang belum di-bind tetap ditolak.
 - Delivery Telegram nyata belum diuji: semua test tetap memakai fetch/update palsu, webhook
   publik belum dipasang, dan tidak ada pesan yang dikirim. Yang sudah diverifikasi hanya
@@ -208,7 +266,10 @@ Central adalah proyeksi + kontrol, bukan agen otonom:
 
 Loop yang sekarang bisa dilalui lewat HTTP: `bootstrap` → `assign` → `run` → hasil task.
 `bootstrap`/`assign` hanya metadata (tanpa cmd/worktree/spawn), otoritas root, dan `run` tetap
-menolak field yang dikendalikan klien. Acceptance HTTP: `p4-control-plane-acceptance.md`
+menolak field yang dikendalikan klien. Sejak `6a5fa55`, `run` juga bisa diwajibkan membawa
+approval ledger: dengan `WEBTERM_RUN_REQUIRE_APPROVAL=on`, langkah `run` baru jalan setelah ada
+approval `approved` yang di-consume tepat sekali (§2c). Approval itu tetap dibuat manusia; loop
+belum bisa menyetujui dirinya sendiri. Acceptance HTTP: `p4-control-plane-acceptance.md`
 (bootstrap → 409 duplikat → assign → plan/tasks, nol worktree/PTY, B1/B2 fixed `0b63714`) dan
 `p4-worker-loop-acceptance.md` (fresh data dir: run → worktree → PTY → prompt satu baris →
 SessionEnd → verify independen → `verified` → cleanup; **agen palsu, bukan Claude**).
@@ -273,13 +334,18 @@ Masih terbuka:
 
 - Node canvas interactions belum diuji E2E (E2E P3 memakai workspace kosong).
 - `DedupeStore` teruji tetapi tidak dipakai produksi.
-- Gate blocking (`requireApproval` → `consumeApproval`) di jalur run belum ada; approval masih
-  dipakai untuk review task, bukan sebagai prasyarat aksi worker.
 - Verifikasi independen belum menjadi satu-satunya jalur `verified`.
 - Claude nyata lewat `/api/orchestrator/run` **BLOCKED** (2026-11-01): belum pernah menjalankan
   satu turn. Run 1 keluar di prompt workspace-trust; Run 2 (trust diterima) `Not logged in ·
   Run /login`. Loop penuh hanya lulus dengan agen palsu (PTY, prompt satu baris, SessionEnd,
   verify, cleanup). Lihat §2b.
+- Actor binding di auth/capability belum: otoritas masih diturunkan dari transport (root token /
+  loopback), belum dari identitas aktor yang terikat ke token.
+- Soak P4b (2 project × 2 minggu) dan delivery Telegram nyata (webhook publik + satu pesan)
+  belum dijalankan; E2E Claude nyata + node canvas dipegang user.
+
+Butir "gate blocking (`requireApproval` → `consumeApproval`) di jalur run belum ada" sudah
+**tidak berlaku** per `6a5fa55`: gate-nya ada, tetapi opt-in (§2c), bukan default.
 
 Sudah ditutup di wave 2:
 
@@ -323,6 +389,23 @@ Sudah ditutup di wave 3 (`9af9047`..`5d466e7`):
 - Uji ledger: `ledgerRuntime.bun.test.ts` menyimpan/menghapus `WEBTERM_LEDGER` ambient karena
   Bun auto-load `.env`, lalu memulihkannya di `finally` (`10e2f8e`).
 
+Sudah ditutup di wave 4 (`e52e767`..`6a5fa55`):
+
+- Route tulis memory: `POST /api/memory/claim` dan `/promote` (`e52e767`). Otoritas diturunkan
+  server sebagai `human:api-root`, payload `authority`/`actor`/`status` diabaikan, body cap
+  64 KiB, root/loopback saja, error stabil 400/404/409. Menggantikan catatan "route claim/promote
+  belum ada". Uji: `memoryWriteApi.test.ts`.
+- Master switch kanal: `WEBTERM_CHANNELS` `on|off` (`db20f7b`), dievaluasi sebelum
+  `WEBTERM_TELEGRAM`; nilai tak dikenal fail-closed + satu warning tanpa mencetak nilai mentah.
+  Store kanal JSON, jadi tidak ada migrasi SQL v4. Uji: `channelsRuntimeMasterGate.test.ts`.
+- Gate approval opt-in di jalur run (`6a5fa55`): `WEBTERM_RUN_REQUIRE_APPROVAL=on` mewajibkan
+  `approvalId` + `approvalDigest`; bila field dikirim (flag apa pun) approval di-consume tepat
+  sekali lewat `runApproved` setelah cek body/project/plan dan sebelum worktree/PTY. 409
+  `approval_required`/`approval_rejected`. Uji: `orchestratorRunApi.test.ts`,
+  `orchestratorRunProduction.test.ts`.
+- `WEBTERM_RUN_REQUIRE_APPROVAL` didokumentasikan di `.env.example` dan daftar env README
+  (working tree; belum ikut commit `6a5fa55`).
+
 ---
 
 ## 7. Flag runtime
@@ -335,19 +418,22 @@ Sudah ditutup di wave 3 (`9af9047`..`5d466e7`):
 | `WEBTERM_TELEGRAM` | `off` (`on` saja) | `[V]` boot dengan ledger+secret mencapai `telegram channel: on`; delivery belum |
 | `WEBTERM_TELEGRAM_WEBHOOK_SECRET` | kosong | `[W]` |
 | `WEBTERM_TELEGRAM_BOT_TOKEN` | kosong; legacy `TELEGRAM_BOT_TOKEN` | `[V]` boot terverifikasi (`getMe` read-only); pengiriman belum |
-| `WEBTERM_CHANNELS` | — | `[P]`; belum dibaca kode |
+| `WEBTERM_CHANNELS` | kosong/`on` (perilaku lama); `off` mati total | `[V]` + test; master kill switch di atas `WEBTERM_TELEGRAM`; `readonly`/`control` belum ada dan fail-closed |
 | `WEBTERM_TRUST_PROXY` | `off` | `[V]` + test; `on` memakai hop pertama `x-forwarded-for` untuk throttle webhook |
 | `WEBTERM_ORCHESTRATOR_RUN` | `off` (`on` saja) | `[V]`; gate `/api/orchestrator/run|bootstrap|assign` |
+| `WEBTERM_RUN_REQUIRE_APPROVAL` | `off` | `[V]` + test; `on` mewajibkan `approvalId`+`approvalDigest` pada `/api/orchestrator/run`; didokumentasikan di `.env.example` + README (working tree, belum commit di `6a5fa55`) |
 | `WEBTERM_MEMORY_FILES` | `off` | `[V]`; gate `/api/memory/export|rebuild` |
 | `WEBTERM_MEMORY_DIR` | `<dataDir>/memory`; hanya path absolut | `[V]`; nilai relatif diabaikan |
 | `WEBTERM_CENTRAL` | `off` | `[V]`; gate `/api/central/*` |
 | `WEBTERM_ALLOW_TOKEN_MINT` | `0` | `[V]` |
 | `WEBTERM_STRICT_HOOK_AUTH` | `0` | `[V]` |
 
-Urutan boot yang benar: `WEBTERM_LEDGER=on` dulu (atau `shadow`), lalu `WEBTERM_TELEGRAM=on`
-dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusia butuh
-`WEBTERM_TOKEN` atau opt-in loopback. `WEBTERM_TRUST_PROXY` hanya untuk deployment di belakang
-reverse proxy yang menimpa `x-forwarded-for`; jangan aktifkan bila klien bisa mengirim header itu.
+Urutan boot yang benar: `WEBTERM_CHANNELS` tidak `off`, lalu `WEBTERM_LEDGER=on` dulu (atau
+`shadow`), lalu `WEBTERM_TELEGRAM=on` dengan secret. `WEBTERM_CHANNELS=off` mematikan webhook,
+binding API, dan sender sekalipun `WEBTERM_TELEGRAM=on`. Tanpa ledger, channel tidak dipasang
+sama sekali. Approval manusia butuh `WEBTERM_TOKEN` atau opt-in loopback. `WEBTERM_TRUST_PROXY`
+hanya untuk deployment di belakang reverse proxy yang menimpa `x-forwarded-for`; jangan
+aktifkan bila klien bisa mengirim header itu.
 
 ---
 
@@ -355,21 +441,24 @@ reverse proxy yang menimpa `x-forwarded-for`; jangan aktifkan bila klien bisa me
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 1768 dan bun 204 lulus pada `5d466e7` (`TMPDIR=/tmp`) |
+| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 137 file / 1808 test dan bun 29 file / 204 test lulus pada `6a5fa55` (`TMPDIR=/tmp`) |
 | G1 seam | ✅ | P0 |
-| G2 auth/capability | ⚠️ | capability ✅; family root-only kini dipin test; actor binding belum |
-| G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; migrasi kanal belum (slot v4) |
-| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal + verifikasi wajib ada file berubah ✅; gate blocking approval di jalur run, verifikasi independen satu-satunya jalur, Claude nyata E2E BLOCKED (login/trust) |
-| G5 memory/inbox | ⚠️ | repo + route baca + file/git truth (P4b) ✅; route claim/promote, soak 2×2 minggu belum |
+| G2 auth/capability | ⚠️ | capability ✅; family root-only kini dipin test; route memory write menambah bukti root/loopback, tetapi actor binding (otoritas dari identitas terikat token) belum |
+| G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; kanal memakai store JSON sehingga **tidak** butuh slot v4 |
+| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal + verifikasi wajib ada file berubah ✅; gate approval **opt-in** di jalur run ✅ (`6a5fa55`, bukan default); verifikasi independen satu-satunya jalur belum; Claude nyata E2E BLOCKED (login/trust) |
+| G5 memory/inbox | ⚠️ | repo + route baca + file/git truth (P4b) + route tulis claim/promote ✅ (`e52e767`); soak 2×2 minggu belum, belum ada pemanggil UI/agent untuk claim/promote |
 | G6 central | ⚠️ | proyeksi + pause/resume/priority ✅; agen pusat otonom belum |
-| G7 omnichannel | ⚠️ | ingress + store + binding + sender + throttle proxy + revalidasi group ✅; delivery Telegram nyata (webhook publik + pesan) belum |
+| G7 omnichannel | ⚠️ | ingress + store + binding + sender + throttle proxy + revalidasi group + master switch `WEBTERM_CHANNELS` `on|off` ✅; `readonly`/`control` belum; delivery Telegram nyata (webhook publik + pesan) belum |
 
 **Vonis: jalur P3 (approval + inbox) tertutup end-to-end; loop P4/P5 sekarang ter-wire lewat
-HTTP (bootstrap → assign → run, memory files, central portfolio, Telegram bindings/egress),
-tetapi belum production-ready.** Yang masih menahan: Claude nyata E2E (BLOCKED pada login CLI +
-workspace trust), gate blocking approval di jalur run, verifikasi independen sebagai satu-satunya
-jalur `verified`, soak P4b, route claim/promote memory, delivery Telegram nyata (webhook publik),
-agen pusat otonom, dan E2E node canvas.
+HTTP (bootstrap → assign → run, memory read **dan write**, central portfolio, Telegram
+bindings/egress dengan kill switch), tetapi belum production-ready.**
+Wave 4 menambah tiga hal yang sebelumnya kosong: route tulis memory, master switch kanal, dan
+prasyarat approval untuk run. Yang masih menahan: Claude nyata E2E (BLOCKED pada login CLI +
+workspace trust), verifikasi independen sebagai satu-satunya jalur `verified`, actor binding di
+auth/capability, soak P4b, delivery Telegram nyata (webhook publik), agen pusat otonom, dan E2E
+node canvas. Perlu ditegaskan: gate approval run adalah kebijakan opt-in, jadi deployment default
+**belum** memaksa approval untuk setiap run.
 Jangan sebut P3-P5 production-ready sampai itu ditutup.
 
 ---
@@ -382,9 +471,10 @@ TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
-Wave 3 (`5d466e7`): vitest penuh 135 file / 1768 test, bun penuh 29 file / 204 test, `tsc`
+Wave 4 (`6a5fa55`): vitest penuh 137 file / 1808 test, bun penuh 29 file / 204 test, `tsc`
 strict + unused bersih; semua hijau dengan `TMPDIR=/tmp` (gate §9).
 `TMPDIR` di dalam home membuat `controlCwd`
 gagal (lingkungan, bukan regresi); run tanpa `TMPDIR=/tmp` juga mengumpulkan jumlah test berbeda
 (1 gagal `controlCwd`), jadi selalu pakai `TMPDIR=/tmp` saat membandingkan angka.
-Terarah wave 3: 7 file / 85 test (vitest) + `ledgerRuntime.bun.test.ts` 6 test.
+Terarah wave 4: 4 file / 64 test (`memoryWriteApi`, `channelsRuntimeMasterGate`,
+`orchestratorRunApi`, `orchestratorRunProduction`).
