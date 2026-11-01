@@ -31,6 +31,10 @@ yang sama dan tidak ada perubahan bersamaan.
 Ulangan pada `31c0886` (queue bersih): `tsc --noEmit` bersih, `vitest run` **1526 test lulus**
 (111 file, 0 gagal). Kegagalan di atas milik tree 12:22 dan tidak lagi berlaku di commit ini.
 
+Ulangan pada `5cd492a` (ack persisten): `tsc --noEmit` bersih, `bun test` ledger+approval 80 lulus,
+`bun test` penuh 192 lulus, `vitest run` penuh 1526 lulus (satu flake `terminalCore` di bawah beban
+paralel, lulus saat diisolasi).
+
 ---
 
 ## 2. P3: orchestrator dan approval
@@ -44,8 +48,9 @@ Ulangan pada `31c0886` (queue bersih): `tsc --noEmit` bersih, `vitest run` **152
 | `orchestrator/worktree.ts` | `createWorktreeService({root,exec})` → allocate/release/get/list; branch + path guard | `[W]` + test; exec produksi belum |
 | `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[W]`; spawn PTY produksi belum |
 | `ledger/ledgerApproval.ts` | request/get/list/decide/consume/expire; digest + nonce + single-use | `[V]` |
+| `ledger/durableAck.ts` | `DurableAckStore` + `durableAckFor(db, scope)`; ack di tabel `request_ack`, `INSERT OR IGNORE` (replay tidak memperpanjang expiry), prune expiry + evict tertua | `[V]` + test |
 | `control/approvalApi.ts` | `handleApproval`, rute request/decide/consume/list lewat capability | `[W]` 17 test; di-mount |
-| `control/approvalMount.ts` | deps memo per ledger port supaya AckStore replay 10 menit hidup | `[W]` fixed |
+| `control/approvalMount.ts` | deps memo per ledger port; ack `control` memakai `DurableAckStore` | `[W]` fixed |
 | `approvalAuth.ts` | `approvalAuthAllowed`; tolak loopback tanpa token | `[W]` + test |
 | `approvalHumanApi.ts` | `/api/approvals/*`: challenge, request, decide, consume, **list approved**; transisi task saat review | `[V]`, 20 test modul |
 | `approvalFailures.ts` | `classifyLedgerError`, `boundedText`, `invalid`; error tidak lagi kolaps ke satu kode | `[V]` + test |
@@ -138,16 +143,24 @@ auto-load `.env`, jadi token hanya masuk bila operator mengekspornya secara eksp
 
 Sumber: `RND/qc/p3-security.md`, `p3-integration.md`, `p3-tests.md`, `p3-e2e-ui.md`.
 
-Sudah ditutup (per `31c0886`):
+Sudah ditutup (per `5cd492a`):
 
 - H1: loopback tanpa token tidak lagi bisa request/decide/consume (`approvalAuth.ts`).
-- H2/B1: AckStore memakai deps stabil, replay `requestId` hidup lagi.
+- H2/B1: ack approval disimpan di ledger (`request_ack`, migrasi v3), jadi replay `requestId` hidup
+  lagi **dan bertahan setelah restart**; `approvalMount` tetap memakai deps stabil per ledger port.
 - B2: item task membawa `taskId` + `fence`; review task sekarang punya transisi verify/fail.
 - Minimap putih: specificity + custom property React Flow diperbaiki di `styles.css`.
 - B4 approved-unconsumed: lihat §2; daftar `approved` manusia + tombol **Finish approval**,
   idempoten (tidak mencetak approval baru) dan terverifikasi HTTP + browser.
 - Idempotensi route manusia: `request`/`decide`/`consume` membaca `requestId` lewat ack store
-  per ledger runtime (`approvalHumanRoutes.ts`); diuji replay, key baru, dan retry `decide`.
+  (`approvalHumanRoutes.ts`). Ack route manusia memakai `DurableAckStore` ber-scope `'human'`
+  (`durableAckFor(runtime.db, 'human')`), control plane ber-scope `'control'` (`control/mount.ts`),
+  sehingga replay di satu surface tidak bisa mengembalikan respons milik surface lain. Migrasi v3
+  membuat `request_ack` + indeks `expires_at`; `INSERT OR IGNORE` berarti replay tidak
+  memperpanjang expiry, dan baris kedaluwarsa dipangkas sebelum evict tertua di atas `ACK_LIMIT`.
+  Diuji: replay sebelum dan sesudah restart mengembalikan approval id yang sama, key baru, retry
+  `decide`, dan isolasi human vs control (`durableAck.bun.test.ts`, `migration.bun.test.ts`).
+  Fallback hanya untuk db palsu tanpa `query` (fake db test): ack tetap in-memory `AckStore`.
 - Error taxonomy: `approvalFailures.classifyLedgerError` memetakan digest/nonce/expired/
   not-pending/stale-fence/not-found ke kode berbeda; `internal_error` tidak membocorkan pesan.
 - Task transition punya test: verify setelah consume, reject mem-fail, stale fence, dan verify
@@ -163,7 +176,8 @@ Masih terbuka:
 
 - `inboxItemRow.tsx` baru 63 baris, tetapi `InboxPanel.tsx` 475 masih ≥80% hard cap 500; pecah
   lagi bila menambah fitur.
-- `ledgerSchema.ts` 227 baris > batas 200.
+- `ledgerSchema.ts` 244 baris (naik dari 227 karena migrasi v3 `request_ack`) > batas 200;
+  pisahkan SQL migrasi per file sebelum menambah tabel berikutnya.
 - Node canvas interactions belum diuji E2E (E2E P3 memakai workspace kosong).
 - `DedupeStore` teruji tetapi tidak dipakai produksi.
 - Spawn PTY worker dan gate blocking (`requireApproval` → `consumeApproval`) belum ada.
@@ -199,11 +213,11 @@ dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusi
 | G0b suite penuh | ✅ | 1526 test vitest lulus, 0 gagal |
 | G1 seam | ✅ | P0 |
 | G2 auth/capability | ⚠️ | capability ✅; approval manusia fixed; actor binding belum |
-| G3 data/migrasi | ⚠️ | v1 ✅; v2 plan WIP; v3 kanal belum |
+| G3 data/migrasi | ⚠️ | v1 ✅; v3 `request_ack` ✅; v2 plan WIP; migrasi kanal belum (slot berikutnya v4) |
 | G4 orchestrator | ⚠️ | plan/worktree/verify ada; spawn PTY produksi + gate blocking belum |
 | G5 memory/inbox | ⚠️ | repo + route baca ✅; authority + P4b belum |
 | G6 central | N/A | ditunda |
-| G7 omnichannel | ⚠️ | ingress + store ✅; binding, sender, v3, live test belum |
+| G7 omnichannel | ⚠️ | ingress + store ✅; binding, sender, migrasi kanal (v4), live test belum |
 
 **Vonis: jalur P3 (approval + inbox) sudah tertutup end-to-end, P4/P5 belum production-ready.**
 B4 approved-unconsumed tidak lagi jadi penghalang: pemulihan punya jalur UI yang teruji dan
