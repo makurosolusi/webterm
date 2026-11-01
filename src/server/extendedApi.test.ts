@@ -257,4 +257,53 @@ describe('extended API mount', () => {
     // p1 in the seeded fixture points at /tmp/p1; the client never supplies this.
     expect(repo).toBe('/tmp/p1')
   })
+
+  it('claims both control paths with the same cap, method rule and flag gate', async () => {
+    for (const path of ['/api/orchestrator/bootstrap', '/api/orchestrator/assign']) {
+      const oversized = await hit('POST', path, 'x'.repeat(MAX_API_BODY_BYTES + 1), {
+        orchestrator: { enabled: true },
+      })
+      expect(oversized.status).toBe(413)
+      expect(oversized.json).toEqual({ error: 'payload_too_large' })
+
+      const off = await hit('POST', path, '{}', { orchestrator: { enabled: false } })
+      expect(off.status).toBe(503)
+      expect(off.json).toEqual({ error: 'orchestrator_off' })
+
+      const wrongMethod = await hit('GET', path, '', { orchestrator: { enabled: true } })
+      expect(wrongMethod.status).toBe(405)
+      expect(wrongMethod.json).toEqual({ error: 'method_not_allowed' })
+    }
+  })
+
+  it('dispatches control bodies to bootstrap and assign, refusing command fields', async () => {
+    const bootstrap = await hit('POST', '/api/orchestrator/bootstrap', json({}), {
+      orchestrator: { enabled: true },
+    })
+    expect(bootstrap.status).toBe(400)
+    expect(bootstrap.json).toEqual({ error: 'invalid_project_id' })
+
+    const assign = await hit(
+      'POST',
+      '/api/orchestrator/assign',
+      json({ projectId: 'p1' }),
+      { orchestrator: { enabled: true } }
+    )
+    expect(assign.status).toBe(400)
+    expect(assign.json).toEqual({ error: 'invalid_item_id' })
+
+    const command = await hit(
+      'POST',
+      '/api/orchestrator/assign',
+      json({ projectId: 'p1', itemId: 'i1', expectedVersion: 1, cmd: 'sh' }),
+      { orchestrator: { enabled: true } }
+    )
+    expect(command.status).toBe(400)
+    expect(command.json).toEqual({ error: 'client_controlled_field' })
+  })
+
+  it('does not claim lookalike control paths', async () => {
+    const result = await hit('POST', '/api/orchestrator/bootstrap/extra', '{}')
+    expect(result.handled).toBe(false)
+  })
 })

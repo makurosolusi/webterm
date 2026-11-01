@@ -2,6 +2,7 @@
 // call. Only exact families are claimed:
 //   /api/central/*            (central thin layer, read + pause/resume/priority)
 //   POST /api/orchestrator/run (one production worker run)
+//   POST /api/orchestrator/bootstrap|assign (root-only control plane)
 //   POST /api/memory/export|rebuild (memory files)
 // Everything else returns false and keeps falling through the normal route chain.
 //
@@ -23,12 +24,19 @@ import {
   ORCHESTRATOR_RUN_PATH,
   type OrchestratorRunDeps,
 } from './orchestratorRunApi'
+import {
+  orchestratorAssignRoute,
+  orchestratorBootstrapRoute,
+  ORCHESTRATOR_ASSIGN_PATH,
+  ORCHESTRATOR_BOOTSTRAP_PATH,
+  type OrchestratorControlDeps,
+} from './orchestratorControlApi'
 
 export const MAX_API_BODY_BYTES = 16 * 1024
 
 export interface ExtendedApiDeps {
   central?: Omit<CentralHttpDeps, 'runtime'>
-  orchestrator?: Omit<OrchestratorRunDeps, 'ledger'>
+  orchestrator?: Omit<OrchestratorRunDeps, 'ledger'> & Omit<OrchestratorControlDeps, 'ledger'>
   memory?: Omit<MemoryFileHttpDeps, 'ledger'>
 }
 
@@ -64,7 +72,10 @@ export async function extendedApiRoute(
   const path = url.pathname
   const method = req.method || 'GET'
   const central = isCentralPath(path)
-  const orchestrator = path === ORCHESTRATOR_RUN_PATH
+  const orchestrator =
+    path === ORCHESTRATOR_RUN_PATH ||
+    path === ORCHESTRATOR_BOOTSTRAP_PATH ||
+    path === ORCHESTRATOR_ASSIGN_PATH
   const memory = isMemoryFilePath(path)
   if (!central && !orchestrator && !memory) return false
 
@@ -125,7 +136,13 @@ export async function extendedApiRoute(
     return true
   }
   if (orchestrator) {
-    const result = await orchestratorRunRoute(body, { ...(deps.orchestrator ?? {}), ledger })
+    const controlDeps = { ...(deps.orchestrator ?? {}), ledger }
+    const result =
+      path === ORCHESTRATOR_RUN_PATH
+        ? await orchestratorRunRoute(body, controlDeps)
+        : path === ORCHESTRATOR_BOOTSTRAP_PATH
+          ? await orchestratorBootstrapRoute(body, controlDeps)
+          : await orchestratorAssignRoute(body, controlDeps)
     send(res, result.status, result.body)
     return true
   }
