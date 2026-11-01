@@ -22,7 +22,8 @@ Status: hasil bug hunt wave 5, read-only. Detail: `~/.jcode/scratch/orchestra/wa
 | B11 | `generate-name` spawn tanpa batas | Loop endpoint | Process/fd exhaustion | Single-flight, timeout, secret scrub | Dua call satu child |
 | B12 | Duplicate subscription saling menghapus | Split pane id sama | Terminal mati | Refcount; delete handler sendiri | Subscribe 2x |
 
-B1 dan B3 diperbaiki di P0/P1. B2/B4 adalah blocker orkestrasi.
+B1 dan B3 sudah diperbaiki di P0; B2 (subscriber kedua) juga selesai. B4 (token inheritance)
+dan approval blocking menunggu P1/P3.
 
 ---
 

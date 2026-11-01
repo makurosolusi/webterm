@@ -100,8 +100,24 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 
 ## 7. Status singkat
 
-- Riset: 46 worker wave 1-4, 13 worker wave 5 (implementasi), 12 worker wave 6 (omnichannel).
-- Kode: belum ada perubahan.
-- Dokumen: siap dipakai sebagai bahan implementasi dan review.
-- Risiko terbesar: B1 save lintas-workspace, B3 nodeId injection, B4 token inheritance,
-  single-subscriber PTY, dan approval yang belum blocking.
+- Riset: 46 worker wave 1-4, 13 worker wave 5 (implementasi), 12 worker wave 6 (omnichannel),
+  6 QC P0, 5 fix P0, 1 fix flake.
+- Branch implementasi: `feature/agent-pusat-p0`.
+- **P0 selesai**: multi-subscriber, outputLog seq, nodeRegistry, replay remount, close/exit,
+  B1 save flush, B3 nodeId validation, hook token tidak di argv, API node validation, caps.
+- Gates: typecheck, 1063 vitest, 84 bun test, semuanya hijau.
+- Fase berikutnya: P1 headless control + scoped auth. Belum dimulai.
+- Risiko tersisa: B4 token inheritance/status fail-open, approval belum blocking, P1-P5.
+
+---
+
+## 8. Riwayat P0
+
+| Commit | Isi |
+|---|---|
+| `b274834` | RND baseline |
+| `b4e7f01` | P0 observation seam |
+| `509a61f` | test regresi P0 |
+| `b46a06a` / `65c696f` | laporan QC |
+| `2c276a0` | fix blocker QC |
+| `7effdd2` | hardening test PTY |

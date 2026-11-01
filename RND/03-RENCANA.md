@@ -72,6 +72,10 @@ P3 tidak boleh mulai tanpa P1 (spawn) dan P2 (evidence/fence). Central paling ak
 
 ## 5. P0: Observation seam
 
+**Status: selesai di branch `feature/agent-pusat-p0`.** Commit `b4e7f01`, fix `2c276a0`,
+hardening `7effdd2`. Gate G1 lulus: multi-subscriber, seq log, replay remount, close/exit,
+B1 save flush, B3 nodeId validation, hook token tidak di argv. Test: 1063 vitest + 84 bun.
+
 **Tujuan:** manusia dan orkestrator bisa mengamati PTY yang sama tanpa saling mencuri output.
 
 **Deliverable:**
