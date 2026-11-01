@@ -34,6 +34,9 @@ export function memorySqlDb(source: Database | MemorySqlDb): MemorySqlDb {
 
 export interface WriteMemoryFileResult { status: 'written' | 'unchanged' | 'disabled'; relPath?: string; commit?: string | null }
 
+/** Server-owned git identity so a commit never depends on the host's global config. */
+const GIT_IDENTITY = ['-c', 'user.name=webterm', '-c', 'user.email=webterm@localhost']
+
 function selectRow(sql: MemorySqlDb, where: string, ...params: unknown[]): Row | null {
   return sql.all(`SELECT * FROM memory WHERE ${where} LIMIT 1`, ...params)[0] ?? null
 }
@@ -61,9 +64,11 @@ export async function writeMemoryFactFile(
   source: Database | MemorySqlDb,
   authority: MemoryAuthority,
   id: string,
-  port: MemoryFilePort
+  port: MemoryFilePort,
+  /** Resolved flag; omit to read `WEBTERM_MEMORY_FILES` from the process env. */
+  enabled?: boolean
 ): Promise<WriteMemoryFileResult> {
-  if (!memoryFilesEnabled()) return { status: 'disabled' }
+  if (!(enabled ?? memoryFilesEnabled())) return { status: 'disabled' }
   const actor = requireAuthority(authority)
   const memoryId = requireText(id, 'writeMemoryFactFile.id')
   const sql = memorySqlDb(source)
@@ -73,14 +78,17 @@ export async function writeMemoryFactFile(
   if (memory.status !== 'fact') throw new MemoryConflictError(`not a fact: ${memoryId} is ${memory.status}`)
   if (memory.projectId === null) throw new MemoryConflictError(`writeMemoryFactFile: ${memoryId} has no project`)
   assertCanPromote(actor.kind, memory.scope, 'writeMemoryFactFile')
-  const relPath = memoryFileRelPath(memory.projectId, memory.key)
+  const relPath = memoryFileRelPath(memory.projectId, memory.scope, memory.key)
+  await port.ensure?.()
   await assertConfined(port.root, relPath)
   const content = renderMemoryFile(memory, evidenceDigestOf(sql, memory.id))
   if ((await port.read(relPath)) === content) return { status: 'unchanged', relPath, commit: null }
   await port.write(relPath, content)
   const added = await port.exec('git', ['add', '--', relPath], port.root)
   if (added.code !== 0) throw new MemoryFileError(`git add failed for ${relPath}: ${added.stderr.trim()}`)
-  const commit = await port.exec('git', ['commit', '-m', memoryCommitMessage(memory), '--only', '--', relPath], port.root)
+  const commit = await port.exec(
+    'git', [...GIT_IDENTITY, 'commit', '-m', memoryCommitMessage(memory), '--only', '--', relPath], port.root
+  )
   if (commit.code !== 0) {
     if (/nothing to commit|no changes added/i.test(commit.stdout + commit.stderr)) {
       return { status: 'unchanged', relPath, commit: null }
@@ -116,6 +124,13 @@ function sameContent(row: Row, record: MemoryFileRecord): boolean {
 function applyRecord(sql: MemorySqlDb, record: MemoryFileRecord, report: MemoryRebuildReport): void {
   const existing = selectRow(sql, 'project_id = ? AND scope = ? AND key = ?', record.projectId, record.scope, record.key)
   if (existing !== null) {
+    // A file written before a supersede is older than the live row. Files win for equal or
+    // newer stamps, but never roll a row back: counted as `unchanged` (not an error) so the
+    // report shape stays stable and no quarantine fires for a legitimately stale file.
+    if (Number(existing['updated_at']) > record.updatedAt) {
+      report.unchanged += 1
+      return
+    }
     if (sameContent(existing, record)) {
       report.unchanged += 1
       return
@@ -161,9 +176,11 @@ function quarantine(sql: MemorySqlDb, record: MemoryFileRecord, files: string[],
 export async function rebuildMemoryIndex(
   source: Database | MemorySqlDb,
   port: MemoryFilePort,
-  projectId?: string
+  projectId?: string,
+  /** Resolved flag; omit to read `WEBTERM_MEMORY_FILES` from the process env. */
+  enabled?: boolean
 ): Promise<MemoryRebuildReport> {
-  if (!memoryFilesEnabled()) return emptyReport(projectId ?? null, 'disabled')
+  if (!(enabled ?? memoryFilesEnabled())) return emptyReport(projectId ?? null, 'disabled')
   const sql = memorySqlDb(source)
   const report = emptyReport(projectId ?? null, 'rebuilt')
   const grouped = new Map<string, Array<{ file: string; record: MemoryFileRecord }>>()

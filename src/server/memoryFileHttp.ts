@@ -9,11 +9,6 @@ import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import type { MemoryAuthority } from './memory/memoryModel'
 import {
-  MemoryAuthorityError,
-  MemoryConflictError,
-  MemoryError,
-} from './memory/memoryModel'
-import {
   type MemoryFilePort,
   createMemoryFilePort,
   memoryFilesEnabled,
@@ -21,15 +16,16 @@ import {
   writeMemoryFactFile,
 } from './memory/memoryFile'
 import { dataDir } from './config'
+import { type RouteResult, capped, failure } from './memoryFileHttpResponse'
 
-export type RouteResult = { status: number; body: unknown }
+export type { RouteResult } from './memoryFileHttpResponse'
 
 export const MEMORY_EXPORT_PATH = '/api/memory/export'
 export const MEMORY_REBUILD_PATH = '/api/memory/rebuild'
 export const MEMORY_DIR_ENV = 'WEBTERM_MEMORY_DIR'
 const MAX_ID_CHARS = 200
-const MAX_MESSAGE_CHARS = 300
-const LIST_CAP = 20
+/** Warned-once guard: a relative WEBTERM_MEMORY_DIR is ignored, and must not spam per request. */
+const warnedRelativeDirs = new Set<string>()
 
 export const MEMORY_FILE_AUTHORITY: MemoryAuthority = { kind: 'human', id: 'root' }
 
@@ -55,39 +51,26 @@ function text(value: unknown): string | null {
 
 function memoryRoot(deps: MemoryFileHttpDeps, env: Record<string, string | undefined>): string {
   const configured = env[MEMORY_DIR_ENV]?.trim() ?? ''
-  if (configured !== '' && isAbsolute(configured)) return configured
+  if (configured !== '') {
+    if (isAbsolute(configured)) return configured
+    if (!warnedRelativeDirs.has(configured)) {
+      warnedRelativeDirs.add(configured)
+      const safe = configured.replace(/[\u0000-\u001f]+/g, ' ').slice(0, 120)
+      console.warn(`memory dir ignored: ${MEMORY_DIR_ENV} must be absolute (got "${safe}")`)
+    }
+  }
   return join(deps.dataDir ? deps.dataDir() : dataDir(), 'memory')
-}
-
-function safeMessage(err: Error): string {
-  const message = err.message.replace(/\s+/g, ' ').trim()
-  return message.length > MAX_MESSAGE_CHARS ? `${message.slice(0, MAX_MESSAGE_CHARS)}…` : message
-}
-
-function failure(err: unknown): RouteResult {
-  if (err instanceof MemoryAuthorityError) return { status: 403, body: { error: 'memory_forbidden' } }
-  if (err instanceof MemoryConflictError) {
-    return { status: 409, body: { error: 'memory_conflict', message: safeMessage(err) } }
-  }
-  if (err instanceof MemoryError) {
-    return { status: 400, body: { error: 'memory_file_error', message: safeMessage(err) } }
-  }
-  // Never surface an unexpected error: messages can quote absolute paths.
-  return { status: 500, body: { error: 'memory_file_internal' } }
-}
-
-function capped<T>(items: T[]): { items: T[]; total: number } {
-  return { items: items.slice(0, LIST_CAP), total: items.length }
 }
 
 async function exportFact(
   raw: Record<string, unknown>,
   db: Database,
-  port: MemoryFilePort
+  port: MemoryFilePort,
+  enabled: boolean
 ): Promise<RouteResult> {
   const id = text(raw['id'])
   if (id === null) return { status: 400, body: { error: 'invalid_id' } }
-  const result = await writeMemoryFactFile(db, MEMORY_FILE_AUTHORITY, id, port)
+  const result = await writeMemoryFactFile(db, MEMORY_FILE_AUTHORITY, id, port, enabled)
   if (result.status === 'disabled') return { status: 503, body: { error: 'memory_files_off' } }
   return {
     status: 200,
@@ -98,7 +81,8 @@ async function exportFact(
 async function rebuild(
   raw: Record<string, unknown>,
   db: Database,
-  port: MemoryFilePort
+  port: MemoryFilePort,
+  enabled: boolean
 ): Promise<RouteResult> {
   let projectId: string | undefined
   if (raw['projectId'] !== undefined) {
@@ -106,7 +90,7 @@ async function rebuild(
     if (parsed === null) return { status: 400, body: { error: 'invalid_project_id' } }
     projectId = parsed
   }
-  const report = await rebuildMemoryIndex(db, port, projectId)
+  const report = await rebuildMemoryIndex(db, port, projectId, enabled)
   if (report.status === 'disabled') return { status: 503, body: { error: 'memory_files_off' } }
   const quarantined = capped(report.quarantined)
   const rejected = capped(report.rejected)
@@ -138,7 +122,8 @@ export async function memoryFileHttpRoute(
   if (!isMemoryFilePath(path)) return null
   if (method !== 'POST') return { status: 405, body: { error: 'method_not_allowed' } }
   const env = deps.env ?? process.env
-  if (!(deps.enabled ?? memoryFilesEnabled(env))) {
+  const enabled = deps.enabled ?? memoryFilesEnabled(env)
+  if (!enabled) {
     return { status: 503, body: { error: 'memory_files_off' } }
   }
   const ledger = deps.ledger
@@ -147,11 +132,13 @@ export async function memoryFileHttpRoute(
     return { status: 400, body: { error: 'invalid_body' } }
   }
   const raw = body as Record<string, unknown>
-  const port = deps.port ?? createMemoryFilePort(memoryRoot(deps, env))
+  // Resolve the root eagerly so a misconfigured WEBTERM_MEMORY_DIR warns even with a test port.
+  const root = memoryRoot(deps, env)
+  const port = deps.port ?? createMemoryFilePort(root)
   try {
     return path === MEMORY_EXPORT_PATH
-      ? await exportFact(raw, ledger.db, port)
-      : await rebuild(raw, ledger.db, port)
+      ? await exportFact(raw, ledger.db, port, enabled)
+      : await rebuild(raw, ledger.db, port, enabled)
   } catch (err) {
     return failure(err)
   }

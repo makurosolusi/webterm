@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolve } from 'node:path'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import type { MemoryFilePort, MemorySqlDb } from './memory/memoryFile'
@@ -59,8 +59,8 @@ const originalFlag = process.env.WEBTERM_MEMORY_FILES
 const originalDir = process.env.WEBTERM_MEMORY_DIR
 
 beforeEach(() => {
-  // `writeMemoryFactFile` re-checks the process flag itself; the route-level `enabled` is
-  // only the HTTP gate. Tests pin both so the real memory-file code runs.
+  // The route now threads its resolved flag into the writer; the env is still pinned so the
+  // default `memoryFilesEnabled(env)` path is exercised too.
   process.env.WEBTERM_MEMORY_FILES = 'on'
 })
 afterEach(() => {
@@ -113,8 +113,8 @@ describe('memory file HTTP surface', () => {
     const { port, writes } = fakePort()
     const result = await call(MEMORY_EXPORT_PATH, 'POST', { id: 'm1' }, { port })
     expect(result?.status).toBe(200)
-    expect(result?.body).toMatchObject({ ok: true, status: 'written', relPath: 'p1/k1.md' })
-    expect(writes).toEqual(['p1/k1.md'])
+    expect(result?.body).toMatchObject({ ok: true, status: 'written', relPath: 'p1/project/k1.md' })
+    expect(writes).toEqual(['p1/project/k1.md'])
     expect(JSON.stringify(result?.body)).not.toContain('secret body text')
   })
 
@@ -134,5 +134,36 @@ describe('memory file HTTP surface', () => {
     expect(result?.status).toBe(200)
     expect(result?.body).toMatchObject({ ok: true, status: 'rebuilt', scanned: 0, rejectedCount: 2 })
     expect(JSON.stringify(result?.body)).not.toContain('not a memory file')
+  })
+
+  it('redacts secrets out of git error text', async () => {
+    const token = 'tok-abcdefghijklmnop'
+    const secret = process.env.WEBTERM_TOKEN
+    process.env.WEBTERM_TOKEN = token
+    try {
+      const { port } = fakePort()
+      port.exec = async () => ({ code: 1, stdout: '', stderr: `fatal: hook dumped ${token}` })
+      const result = await call(MEMORY_EXPORT_PATH, 'POST', { id: 'm1' }, { port })
+      expect(result?.status).toBe(400)
+      const body = JSON.stringify(result?.body)
+      expect(body).not.toContain(token)
+      expect(body).toContain('[redacted]')
+    } finally {
+      if (secret === undefined) delete process.env.WEBTERM_TOKEN
+      else process.env.WEBTERM_TOKEN = secret
+    }
+  })
+
+  it('warns once about a relative WEBTERM_MEMORY_DIR instead of ignoring it silently', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const env = { WEBTERM_MEMORY_DIR: 'relative/memory' }
+      await call(MEMORY_EXPORT_PATH, 'POST', { id: 'm1' }, { env, port: fakePort().port })
+      await call(MEMORY_REBUILD_PATH, 'POST', {}, { env, port: fakePort().port })
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain('WEBTERM_MEMORY_DIR must be absolute')
+    } finally {
+      warn.mockRestore()
+    }
   })
 })

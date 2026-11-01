@@ -95,14 +95,17 @@ interface FakePort {
   calls: Array<{ file: string; args: string[]; cwd: string }>
   writes: Array<{ relPath: string; content: string }>
   readonly lists: number
+  readonly ensures: number
 }
 
 function fakePort(root: string, options: { content?: string | null; files?: string[] } = {}): FakePort {
   const calls: FakePort['calls'] = []
   const writes: FakePort['writes'] = []
   let lists = 0
+  let ensures = 0
   const port: MemoryFilePort = {
     root,
+    ensure: async () => void (ensures += 1),
     read: async () => (options.content === undefined ? null : options.content),
     write: async (relPath, content) => void writes.push({ relPath, content }),
     list: async () => {
@@ -111,10 +114,11 @@ function fakePort(root: string, options: { content?: string | null; files?: stri
     },
     exec: async (file, args, cwd) => {
       calls.push({ file, args, cwd })
-      return args[0] === 'commit' ? { code: 0, stdout: `[main abc1234] ${args[2] ?? ''}\n`, stderr: '' } : { code: 0, stdout: '', stderr: '' }
+      const message = args.includes('commit') ? args[args.indexOf('-m') + 1] ?? '' : ''
+      return args.includes('commit') ? { code: 0, stdout: `[main abc1234] ${message}\n`, stderr: '' } : { code: 0, stdout: '', stderr: '' }
     },
   }
-  return { port, calls, writes, get lists() { return lists } }
+  return { port, calls, writes, get lists() { return lists }, get ensures() { return ensures } }
 }
 
 function memoryMd(frontmatter: Record<string, unknown>, body: string): string {
@@ -147,7 +151,7 @@ describe('flag gating', () => {
 
     expect(report.status).toBe('disabled')
     expect(report.scanned).toBe(0)
-    expect([fake.calls.length, fake.writes.length, fake.lists, runCalls.length]).toEqual([0, 0, 0, 0])
+    expect([fake.calls.length, fake.writes.length, fake.lists, fake.ensures, runCalls.length]).toEqual([0, 0, 0, 0, 0])
   })
 })
 describe('fs port', () => {
@@ -180,9 +184,11 @@ describe('path containment', () => {
     expect(() => resolveInside('/tmp/root', '../escape.md')).toThrow(/escapes root/)
     expect(() => resolveInside('/tmp/root', '/etc/passwd')).toThrow(/must be relative/)
     expect(() => resolveInside('/tmp/root', 'a\0b')).toThrow(/must be relative/)
-    const rel = memoryFileRelPath('../../etc', '../../secrets')
+    const rel = memoryFileRelPath('../../etc', '../../project', '../../secrets')
     expect(rel.includes('..')).toBe(false)
     expect(rel.endsWith('.md')).toBe(true)
+    expect(memoryFileRelPath('p1', 'project', 'deploy')).toBe('p1/project/deploy.md')
+    expect(memoryFileRelPath('p1', 'scratch', 'deploy')).toBe('p1/scratch/deploy.md')
     expect(safeSegment('deploy notes')).toMatch(/^deploy-notes-[0-9a-f]{10}$/)
     expect(safeSegment('deploy-notes')).toBe('deploy-notes')
   })
@@ -222,7 +228,7 @@ describe('export (writeMemoryFactFile)', () => {
     const result = await withFlag(() => writeMemoryFactFile(sql, HUMAN, id, fake.port))
 
     expect(result.status).toBe('written')
-    expect(result.relPath).toBe('p1/deploy-notes-63f292d70d.md')
+    expect(result.relPath).toBe('p1/project/deploy-notes-63f292d70d.md')
     expect(fake.writes).toHaveLength(1)
     const content = fake.writes[0]!.content
     expect(content).not.toContain('sk-live-abcdefghijklmnop')
@@ -232,11 +238,12 @@ describe('export (writeMemoryFactFile)', () => {
     expect(content).toContain('\n# Deploy notes\n')
 
     expect(fake.calls.map((call) => call.file)).toEqual(['git', 'git'])
-    expect(fake.calls[0]!.args).toEqual(['add', '--', 'p1/deploy-notes-63f292d70d.md'])
+    expect(fake.calls[0]!.args).toEqual(['add', '--', 'p1/project/deploy-notes-63f292d70d.md'])
     const commitArgs = fake.calls[1]!.args
-    expect(commitArgs.slice(0, 2)).toEqual(['commit', '-m'])
-    expect(commitArgs.slice(3)).toEqual(['--only', '--', 'p1/deploy-notes-63f292d70d.md'])
-    expect(commitArgs[2]).not.toMatch(/[\r\n\u0000-\u001f]/)
+    expect(commitArgs.slice(0, 4)).toEqual(['-c', 'user.name=webterm', '-c', 'user.email=webterm@localhost'])
+    expect(commitArgs.slice(4, 6)).toEqual(['commit', '-m'])
+    expect(commitArgs.slice(7)).toEqual(['--only', '--', 'p1/project/deploy-notes-63f292d70d.md'])
+    expect(commitArgs[6]).not.toMatch(/[\r\n\u0000-\u001f]/)
     expect(fake.calls.every((call) => call.cwd === root)).toBe(true)
   })
 
@@ -247,7 +254,7 @@ describe('export (writeMemoryFactFile)', () => {
     const fake = fakePort(await tempDir(), { content: existing })
 
     const result = await withFlag(() => writeMemoryFactFile(sql, HUMAN, id, fake.port))
-    expect(result).toEqual({ status: 'unchanged', relPath: 'p1/deploy-notes.md', commit: null })
+    expect(result).toEqual({ status: 'unchanged', relPath: 'p1/project/deploy-notes.md', commit: null })
     expect([fake.writes.length, fake.calls.length]).toEqual([0, 0])
   })
 
@@ -280,9 +287,9 @@ describe('rebuild (rebuildMemoryIndex)', () => {
     insertMemory(sql, { body: 'stale body' })
     insertMemory(sql, { id: 'm-old', key: 'old#superseded:m-old', status: 'superseded', title: 'Old' })
     const root = await tempDir()
-    await writeProjectFile(root, 'p1/deploy-notes.md',
+    await writeProjectFile(root, 'p1/project/deploy-notes.md',
       memoryMd({ id: 'm1', projectId: 'p1', scope: 'project', key: 'deploy-notes', title: 'Deploy notes', updatedAt: T0 + 5 }, 'fresh body'))
-    await writeProjectFile(root, 'p1/release.md',
+    await writeProjectFile(root, 'p1/project/release.md',
       memoryMd({ id: 'm-rel', projectId: 'p1', scope: 'project', key: 'release', title: 'Release', updatedAt: T0 + 6 }, 'release body'))
     await writeProjectFile(root, 'p1/notes.txt', 'ignored')
 
@@ -350,6 +357,47 @@ describe('rebuild (rebuildMemoryIndex)', () => {
     expect([report.projectId, report.scanned, report.inserted]).toEqual(['p2', 1, 1])
     expect(sql.all("SELECT id FROM memory WHERE project_id = 'p1'")).toHaveLength(0)
   })
+
+  // D1: the DB key is unique per (project, scope, key); a flat path would collide.
+  it('keeps facts that differ only by scope on distinct paths and restores both', async () => {
+    const { sql } = indexFixture()
+    const proj = insertMemory(sql, { id: 'm-proj', scope: 'project', key: 'deploy', body: 'project body' })
+    const scratch = insertMemory(sql, { id: 'm-scratch', scope: 'scratch', key: 'deploy', body: 'scratch body' })
+    const port = createMemoryFilePort(await tempDir(), async () => ({ code: 0, stdout: '', stderr: '' }))
+
+    const first = await withFlag(() => writeMemoryFactFile(sql, HUMAN, proj, port))
+    const second = await withFlag(() => writeMemoryFactFile(sql, HUMAN, scratch, port))
+
+    expect([first.relPath, second.relPath]).toEqual(['p1/project/deploy.md', 'p1/scratch/deploy.md'])
+    expect(await port.read('p1/project/deploy.md')).toContain('project body')
+    expect(await port.read('p1/scratch/deploy.md')).toContain('scratch body')
+
+    const cold = indexFixture()
+    ensureProject(cold.sql, 'p1')
+    const report = await withFlag(() => rebuildMemoryIndex(cold.sql, port))
+    expect([report.inserted, report.quarantined]).toEqual([2, []])
+    expect(cold.sql.all("SELECT scope, body FROM memory WHERE key = 'deploy' ORDER BY scope").map((row) => [row['scope'], row['body']]))
+      .toEqual([['project', 'project body'], ['scratch', 'scratch body']])
+  })
+
+  // D2: a file written before a supersede must not roll the live row back.
+  it('never lets a stale file revert a newer fact', async () => {
+    const { sql } = indexFixture()
+    const id = insertMemory(sql, { body: 'OLD body' })
+    const port = createMemoryFilePort(await tempDir(), async () => ({ code: 0, stdout: '', stderr: '' }))
+    await withFlag(async () => { await writeMemoryFactFile(sql, HUMAN, id, port) })
+
+    // Same shape as supersedeMemory: old row keeps history under an alias, live row is newer.
+    sql.run("UPDATE memory SET key = ?, status = 'superseded', superseded_at = ?, updated_at = ? WHERE id = ?",
+      `deploy-notes#superseded:${id}`, T0 + 1000, T0 + 1000, id)
+    insertMemory(sql, { id: 'm2', body: 'NEW body', updatedAt: T0 + 1000 })
+
+    const report = await withFlag(() => rebuildMemoryIndex(sql, port))
+    expect([report.updated, report.quarantined]).toEqual([0, []])
+    expect(report.unchanged).toBe(1)
+    const live = sql.all("SELECT id, body FROM memory WHERE key = 'deploy-notes'")[0]!
+    expect([live['id'], live['body']]).toEqual(['m2', 'NEW body'])
+  })
 })
 
 describe('rendering', () => {
@@ -389,11 +437,11 @@ describe('real git integration', () => {
     expect((await run('git', ['commit', '-q', '-m', 'seed'], root)).code).toBe(0)
 
     const result = await withFlag(() => writeMemoryFactFile(sql, ORCH, id, createMemoryFilePort(root, run)))
-    expect([result.status, result.relPath]).toEqual(['written', 'p1/deploy-notes.md'])
+    expect([result.status, result.relPath]).toEqual(['written', 'p1/project/deploy-notes.md'])
     expect((await run('git', ['status', '--porcelain'], root)).stdout.trim()).toBe('')
     expect((await run('git', ['log', '-1', '--format=%s'], root)).stdout.trim())
       .toBe('memory(p1): record fact deploy-notes')
-    expect((await run('git', ['show', '--name-only', '--format=', 'HEAD'], root)).stdout.trim()).toBe('p1/deploy-notes.md')
-    expect((await stat(join(root, 'p1/deploy-notes.md'))).mode & 0o777).toBe(0o600)
+    expect((await run('git', ['show', '--name-only', '--format=', 'HEAD'], root)).stdout.trim()).toBe('p1/project/deploy-notes.md')
+    expect((await stat(join(root, 'p1/project/deploy-notes.md'))).mode & 0o777).toBe(0o600)
   })
 })

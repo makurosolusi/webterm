@@ -4,7 +4,7 @@
  * so a single module stays small and each concern testable on its own.
  */
 import { createHash } from 'node:crypto'
-import { mkdir, open, readdir, readFile, realpath, rename, rm } from 'node:fs/promises'
+import { access, mkdir, open, readdir, readFile, realpath, rename, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { requireText } from '../ledger/ledgerCore'
 import { MemoryError } from './memoryModel'
@@ -31,6 +31,8 @@ export type MemoryFileSpawn = (file: string, args: string[], cwd: string) => Pro
 /** Injectable file + git surface (real impl below; tests inject temp dirs/fakes). */
 export interface MemoryFilePort {
   readonly root: string
+  /** Creates the root (0700) and initialises a git repo there when missing. Idempotent. */
+  ensure?(): Promise<void>
   read(relPath: string): Promise<string | null>
   write(relPath: string, content: string): Promise<void>
   /** Regular files under `relDir`, sorted, posix separators. */
@@ -47,8 +49,10 @@ export function safeSegment(value: string): string {
   return `${slug === '' ? 'fact' : slug}-${digest}`
 }
 
-export function memoryFileRelPath(projectId: string, key: string): string {
-  return `${safeSegment(projectId)}/${safeSegment(key)}.md`
+/** `<project>/<scope>/<key>.md`: scope is its own segment because the DB key is unique per
+ * (project, scope, key) — a flat path would let two facts share one file. */
+export function memoryFileRelPath(projectId: string, scope: string, key: string): string {
+  return `${safeSegment(projectId)}/${safeSegment(scope)}/${safeSegment(key)}.md`
 }
 
 /** Resolves `relPath` under `root`, refusing absolute and `..` escapes. */
@@ -70,6 +74,15 @@ async function realpathOrNull(path: string): Promise<string | null> {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw err
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -106,6 +119,15 @@ export function createMemoryFilePort(root: string, spawn?: MemoryFileSpawn): Mem
   const rootPath = resolve(root)
   return {
     root: rootPath,
+    async ensure() {
+      await mkdir(rootPath, { recursive: true, mode: 0o700 })
+      // A cold install has no repo: `git add` would fail until one exists.
+      if (await pathExists(join(rootPath, '.git'))) return
+      const result = await (spawn ?? bunSpawn)('git', ['init', '-q'], rootPath)
+      if (result.code !== 0) {
+        throw new MemoryFileError(`git init failed for memory root: ${result.stderr.trim()}`)
+      }
+    },
     async read(relPath) {
       try {
         return await readFile(resolveInside(rootPath, relPath), 'utf8')
@@ -144,7 +166,12 @@ export function createMemoryFilePort(root: string, spawn?: MemoryFileSpawn): Mem
           else if (entry.isFile()) out.push(rel)
         }
       }
-      await walk(resolveInside(rootPath, relDir), relDir)
+      try {
+        await walk(resolveInside(rootPath, relDir), relDir)
+      } catch (err) {
+        // A cold install (or an empty root) is an empty tree, not a failure.
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+      }
       return out.sort()
     },
     exec(file, args, cwd) {
