@@ -115,13 +115,15 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 - **P2 fondasi selesai**: migration runner (BEGIN IMMEDIATE, user_version, backup VACUUM INTO,
   WAL), schema v1 (project/agent/task/event/decision/approval/run/usage/prefix/budget/memory/
   memory_fts), repository task state machine (fence, lease, suspect, evidence) + event atomik.
-  Belum di-wire ke startup (`WEBTERM_LEDGER` masih off).
-- Gates P2: 45 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
+  Startup sudah wired lewat `WEBTERM_LEDGER` (default off).
+- Gates P2: 51 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
 - **P2 QC fixed**: attempt cap, claimDone lease owner/expiry, FK pragma assertion, depth/project
   invariants, event reference consistency, per-project idem_key + lookup, index coverage,
   pagination clamps, workspace-wide delete, migration version validation.
-- Sisa P2.1 (belum): wire ledger ke startup, repository run/usage/budget, reaper sweep,
-  cancel/block writer, backup otomatis sebelum migrasi destruktif, metrics.
+- **P2.1 sebagian selesai**: runtime flag `WEBTERM_LEDGER=off|shadow|on`, reaper sweep lease
+  kedaluwarsa, `cancelTask`/`blockTask`, wire startup (default off). Gates: 51 bun ledger test.
+- Sisa P2.1 (belum): repository run/usage/budget, backup otomatis sebelum migrasi destruktif,
+  metrics, scheduler tick.
 - Fase berikutnya: P2.1 lalu P3 approval blocking.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
@@ -154,3 +156,4 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 | `8655602` | migration runner + schema v1 |
 | `49373c3` | repository project/task/event |
 | `83556ad` | fix invariant ledger pasca-QC |
+| `b55540a` | runtime flag + reaper sweep + stop transition |
