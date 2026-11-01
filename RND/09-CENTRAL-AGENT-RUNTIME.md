@@ -1,225 +1,274 @@
 # 09: Runtime Agent Pusat (November 2026)
 
-Tanggal: 2026-11-01 (+08:00). Status: **riset, tanpa perubahan kode, tanpa commit**.
-Semua URL diakses **2026-11-01** (§11). Batasan tetap: state otoritatif di ledger server,
-verifikasi server-owned, root token tidak masuk env agent, runtime bisa diganti tanpa membongkar ledger.
+Tanggal: 2026-11-02 (+08:00). Status: **riset + bukti live, tanpa perubahan kode, tanpa commit**.
+Batasan tetap: state otoritatif di ledger server, verifikasi server-owned, root token tidak masuk
+env agent, runtime bisa diganti tanpa membongkar ledger.
+
+**Perubahan keputusan (2026-11-02):** pengguna tidak punya langganan Claude, jadi runtime primary
+adalah **OpenCode CLI** (`opencode run --format json`), bukan Claude Agent SDK. Claude Agent SDK /
+Codex turun menjadi fallback opsional dan **tidak wajib** untuk MVP maupun gate.
 
 ## 1. Ringkasan keputusan
 
 | Posisi | Pilihan | Alasan |
 |---|---|---|
-| **Primary** | **Claude Agent SDK (TypeScript)**: `query()` in-process, streaming input, `createSdkMcpServer()` | Agent loop + tool + MCP + hooks + resume + cost estimate dalam satu library; CLI ikut dibundel |
-| **Fallback** | **Codex SDK / `codex exec --json`** | JSONL event stabil, thread resume, sandbox eksplisit, memakai login CLI lokal |
-| **Bukan central** | PTY node + prompt satu baris | Tanpa event terstruktur, tanpa cancellation primitive, output dipotong 64 KiB, `done` bergantung hook |
-| **Tool transport** | MCP 2026-07-28 (stateless), **in-process SDK MCP server** | Tanpa port loopback, tanpa token/file konfigurasi di disk |
+| **Primary** | **OpenCode CLI v2.0.26**, `opencode run --format json`, subprocess (bukan PTY) | Sudah terpasang, JSONL terstruktur, `--session` untuk resume, model via flag, tanpa langganan Claude |
+| **Transport tool MVP** | **MCP server stdio lokal** yang didaftarkan lewat config OpenCode + **typed proposal protocol** untuk perubahan | Proses terpisah, jadi SDK MCP in-process tidak ada; stdio MCP memberi capability terpisah dari env agent |
+| **Fallback** | Claude Agent SDK / `codex exec --json` | Opsional; dipakai hanya bila OpenCode tidak tersedia |
+| **Bukan central** | PTY node + prompt satu baris | Tanpa event terstruktur, tanpa cancellation primitive, output dipotong 64 KiB |
 | **Batas keras** | Central tidak spawn worker, tidak tulis fact/CORE, tidak menyetujui approval | Sama dengan `03-RENCANA.md` §7 |
 
 Rekomendasi: satu port sempit `CentralRuntime` (turn, stream, cancel, resume, cost, close) dengan
-dua adapter. Jangan panggil SDK langsung dari route HTTP.
+adapter `OpenCodeRuntime` sebagai default, plus `MockRuntime` dan (opsional) `ClaudeAgentRuntime`.
+Route HTTP tidak pernah memanggil CLI langsung.
 
 ## 2. Kondisi webterm yang mengikat pilihan
 
 | Area | Fakta | Konsekuensi |
 |---|---|---|
-| PTY | `Bun.spawn({ terminal })` POSIX; satu slot per sesi (`src/server/pty.ts`, `sessionsCore.ts`) | Central tidak boleh memakai slot PTY manusia |
-| Launch | `launchLine` merakit `--session-id`/`--resume`, `--permission-mode`, `--settings` (`launchLine.ts`) | Grammar interaktif, bukan headless `-p` |
-| Env anak | `ptyEnv` membuang `WEBTERM_*`, `NODETERM_*`, `PORT`, `HOST`, `BUN_*`; token node di-inject per sesi | Root token aman di PTY; jalur SDK harus allowlist serupa |
-| Status `done` | Dari hook `Stop`/`StopFailure` (`hookStatus.ts`), bukan exit code | Tanpa `--settings`, `status:done` tak pernah datang |
+| PTY | `Bun.spawn({ terminal })` POSIX; satu slot per sesi (`src/server/pty.ts`, `sessionsCore.ts`) | Central memakai subprocess biasa, bukan slot PTY manusia |
+| Env anak | `ptyEnv` membuang `WEBTERM_*`, `NODETERM_*`, `PORT`, `HOST`, `BUN_*` | Jalur OpenCode wajib allowlist serupa (`agentEnv.ts`) |
+| Status `done` | Dari hook `Stop`/`StopFailure` (`hookStatus.ts`) | Tidak berlaku untuk OpenCode; status turn dari event runtime + exit code |
 | Worker | Prompt satu baris cap 8 KiB, output 64 KiB, poll 250 ms, timeout 300 s (`workerRuntime.ts`) | Cukup leaf worker, tidak cukup central multi-turn |
-| Control plane | `/api/control/{spawn,prompt,wait,close}`; `wait` untuk `exit`/`status:done`/`idle` | Ada seam, belum ada stream event terstruktur |
 | Central | Proyeksi + pause/resume/priority + scheduler 1 item/tick (`central/*`, `centralAutonomy.ts`) | Central belum punya "otak" |
-| Build | `bun build --compile` → binary tunggal 77 MB (`package.json`) | Binary SDK native harus di-embed + diekstrak (§9) |
-| Bukti | SDK 0.3.316 + MCP SDK 1.32.2 import lulus di Bun 1.4.2 (`BUKTI.md`) | Import bukan bukti satu turn nyata |
+| Build | `bun build --compile` → binary tunggal (`package.json`) | OpenCode adalah binary eksternal; **tidak** di-embed, di-resolve lewat `WEBTERM_OPENCODE_BIN` |
 
-## 3. Kandidat runtime (fakta per 2026-11-01)
+## 3. OpenCode CLI: bukti live (2026-11-02)
 
-### 3.1 Claude Agent SDK / Claude Code headless (primary)
+Dijalankan di repo ini, tanpa menampilkan nilai kredensial apa pun.
 
-- `@anthropic-ai/claude-agent-sdk` membundel binary Claude Code native per platform; versi SDK
-  mengikuti CLI (SDK v0.3.191 ↔ CLI v2.1.191). `pathToClaudeCodeExecutable` bisa menunjuk CLI lain.
-- API: `query({ prompt, options })` → `AsyncGenerator<SDKMessage>`; `startup()`/`prewarm()`;
-  `tool()` + `createSdkMcpServer()`; `listSessions()`/`getSessionMessages()`/`forkSession()`.
-- Dua mode input: **streaming input** (persisten, antrean, image, interrupt) dan **single message**
-  (one-shot + `resume`). Dokumentasi menganjurkan streaming input untuk interaksi.
-- Opsi relevan: `resume`, `continue`, `forkSession`, `persistSession`, `sessionStore`,
-  `permissionMode`, `allowedTools`/`disallowedTools`, `canUseTool`, `hooks`, `mcpServers`,
-  `settingSources`, `includePartialMessages`, `maxTurns`, `maxBudgetUsd`, `env`.
-- CLI `-p`: `--output-format json|stream-json`, `--input-format stream-json`, `--resume`,
-  `--mcp-config`, `--permission-mode`, `--permission-prompts none`, `--max-turns`,
-  `--max-budget-usd`, `--json-schema`, `--bare`.
-- `--bare` dianjurkan untuk script/CI dan **tidak** membaca OAuth/keychain: hanya
-  `ANTHROPIC_API_KEY` atau `apiKeyHelper`. Jadi `--bare` = API key, non-bare = login langganan.
-- Retry terlihat: `system/api_retry` (`attempt`, `max_retries`, `retry_delay_ms`, `error_status`,
-  kategori `rate_limit`/`overloaded`/dst.). SIGTERM → exit 143, turn tidak dicatat; SIGINT atau
-  `interrupt()` menutup turn.
-- Kebijakan: Anthropic tidak mengizinkan pihak ketiga menawarkan login claude.ai tanpa izin;
-  untuk produk yang dibagikan, pakai API key.
+| Cek | Perintah | Hasil |
+|---|---|---|
+| Binary | `command -v opencode` | `/opt/homebrew/bin/opencode` |
+| Versi | `opencode --version` | `2.0.26` |
+| Turn teks | `opencode run --format json --model opencode/deepseek-v4.1-flash-free "Reply with exactly: OK"` | exit 0, JSONL `step_start` + `text` (`"OK"`), **tanpa** `step_finish` penutup |
+| Tool use | `opencode run --format json --auto --model ... "shell: echo webterm-open-code-ok"` | `tool_use` `tool:"shell"`, `state.status:"completed"`, `exit:0`, output `webterm-open-code-ok`; lalu `step_finish` `reason:"tool-calls"`, `cost:0`, `tokens{input:46,output:44,cache.read:16512}` |
+| Resume flag | `opencode run --session ses_webtermprobe01 ...` | `sessionID` yang dipakai **sama persis** dengan id yang dikirim (create-if-missing dikonfirmasi). Recall lintas proses **belum terverifikasi** (kena kuota) |
+| Error shape | turn ke-5+ | event `{"type":"error","error":{"type":"provider.quota","status":429,...}}`, exit code **1** |
+| Kuota model gratis | 4 turn pendek lalu 429 `FreeUsageLimitError` | Model gratis hanya untuk dev/demo; produksi wajib set `WEBTERM_CENTRAL_MODEL` ke provider ber-kredensial |
+| MCP | `opencode mcp list` | mendukung server **local (stdio)** dengan `environment` + `cwd` + `timeout` |
 
-### 3.2 OpenAI Agents SDK (TypeScript) / Responses API
+Bentuk event: `step_start`, `text`, `tool_use`, `step_finish`, `error` (kutipan di
+`RND/14-CENTRAL-AGENT-S0.md` §6).
 
-`Agent`, `run`, function tools (Zod), hosted tools, MCP tool calling, handoffs, guardrails,
-sessions, human-in-the-loop, tracing; sandbox agent memakai `UnixLocalSandboxClient`.
-Auth hanya `OPENAI_API_KEY` — tidak ada jalur "pakai login CLI lokal". Cocok untuk BYO-key,
-kurang cocok sebagai fallback lokal-first.
+**Temuan penting:** untuk jawaban satu langkah, `step_finish` terakhir **tidak dikirim**.
+Turn harus ditutup oleh **exit proses**, bukan oleh `step_finish`. `step_finish` hanya andal
+sebagai penanda akhir langkah ber-tool. Konsekuensi: biaya/token adalah jumlah `step_finish` yang
+teramati, jadi bisa **undercount**; jangan klaim presisi.
 
-### 3.3 Codex SDK / `codex exec` (fallback)
+## 4. Antarmuka CLI yang dipakai
 
-- `codex exec "<task>"`: progres ke stderr, jawaban ke stdout; `--json` memberi JSONL
-  `thread.started`, `turn.started`, `item.*`, `turn.completed` (dengan `usage`), `turn.failed`,
-  `error`; `--output-schema` + `-o` untuk output terstruktur.
-- Sandbox eksplisit: default read-only; `--sandbox workspace-write`; `--ephemeral`;
-  `--ignore-user-config`. Auth memakai kredensial CLI tersimpan, atau API key eksplisit di CI.
-- `@openai/codex-sdk` (TS, Node 18+): `startThread()`/`resumeThread()`/`run()` + config override.
-- Kekurangan: event lebih coarse (tanpa `canUseTool`), delta token tidak dijanjikan `--json`.
+```
+opencode run --format json \
+  --model "$WEBTERM_CENTRAL_MODEL" \
+  --session "$sessionRef" \
+  [--standalone] \
+  "$prompt"
+```
 
-### 3.4 Lain (dicatat, tidak dipilih)
+| Flag/opsi | Fakta (v2.0.26 `--help`) | Catatan desain |
+|---|---|---|
+| `--format json` | JSONL ke stdout, log ke stderr | Satu baris = satu event; parser streaming, bukan buffer penuh |
+| `--session, -s` | "Session ID to continue, or to create if it does not exist" | Nilai = `session_ref` di ledger; create-if-missing membuat retry aman |
+| `--model, -m` | `provider/model#variant` | Dari `WEBTERM_CENTRAL_MODEL`; **jangan** hardcode |
+| `--standalone` | "private server instead of the background service" | Opsional; isolasi lebih baik, latensi lebih tinggi. Adapter saat ini **tidak** memakainya (pakai service background) |
+| `--auto` | "Auto-approve permissions that are not explicitly denied" | **Jangan** dipakai di produksi; hanya probe. Produksi pakai `permission` eksplisit di config |
+| `--continue` | lanjut sesi terakhir | Tidak dipakai: ambigu antar conversation |
+| `--agent` | pilih agent | Kandidat untuk persona central; belum dipakai |
 
-`opencode serve`: HTTP + OpenAPI 3.1, session CRUD, `prompt_async`, `abort`, SSE `/event`, basic
-auth — adapter bagus, bukan agent loop. `gemini -p --output-format json`: statistik token/tool,
-tanpa resume setara — hanya worker satu-shot.
+Tidak ada flag `--max-turns`, `--max-budget`, atau `--json-schema` di `run`. Artinya **anggaran
+dan batas turn ditegakkan webterm** dengan menghitung event dan membunuh proses (lihat §6).
 
-## 4. MCP sebagai transport tool
+## 5. Konfigurasi OpenCode yang di-inject
 
-Spec terbaru **2026-07-28** bersifat **stateless**: `initialize` dan `Mcp-Session-Id` dihapus,
-metadata ikut body (`_meta.io.modelcontextprotocol/*`), server tidak lagi memulai request, cancel
-via tutup stream (HTTP) atau `notifications/cancelled` (stdio). Binding tetap **stdio** dan
-**Streamable HTTP**.
+OpenCode membaca config berlapis: global → `OPENCODE_CONFIG` (custom) → `opencode.json` project →
+`.opencode` → `OPENCODE_CONFIG_CONTENT` (inline). Semua key di-merge, bukan diganti.
 
-1. **Primary: in-process MCP.** `createSdkMcpServer()` + `tool()` di proses Bun: tanpa port,
-   tanpa `.mcp.json`, tanpa token di disk; agent hanya melihat `mcp__webterm__<tool>`.
-2. **Fallback: stdio MCP** dengan token scoped hanya di env proses MCP, bukan env agent.
-   Streamable HTTP hanya bila central kelak di host lain.
-3. **Jangan** pakai MCP untuk komunikasi antar-level (central → orchestrator → worker); itu
-   tetap HTTP+JSON (`AGENT_PUSAT.md` §2 butir 6).
-4. Izin eksplisit: `allowedTools: ["mcp__webterm__*"]`; jangan `bypassPermissions` hanya untuk tool.
-5. Batas output: hasil > 25.000 token atau > 50.000 karakter disimpan ke file dan diganti path.
-   Tool webterm mengembalikan ringkasan + id, bukan dump besar.
-6. Tool yang butuh manusia mengembalikan `needs_approval`, bukan menahan call sampai timeout.
+Pilihan webterm: **`OPENCODE_CONFIG_CONTENT`** (JSON inline, precedence tertinggi di antara
+config standar, tanpa menulis file) atau **`OPENCODE_CONFIG`** (path file `0600` di state dir
+webterm). **Jangan** menulis `opencode.json` ke worktree pengguna.
 
-## 5. Operasional
+> **Belum terverifikasi:** adapter juga menyetel env `OPENCODE_PERMISSION` (JSON
+> `{bash:"deny",edit:"deny",...}`). Env itu **tidak** ada di dokumentasi OpenCode 2026-11-02,
+> jadi jangan dijadikan satu-satunya pengaman. Gate B2 wajib membuktikan `bash` benar-benar gagal;
+> kalau tidak, pakai `permission`/`tools` di `OPENCODE_CONFIG_CONTENT` dan hapus asumsi env itu.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,          // versi tidak berubah di tengah run
+  "snapshot": false,            // jangan buat git internal di worktree
+  "subagent_depth": 0,          // central tidak boleh spawn agen (I5)
+  "tools": { "bash": false, "edit": false, "write": false, "patch": false },
+  "mcp": {
+    "webterm": {
+      "type": "local",
+      "command": ["bun", "/abs/path/centralMcpServer.js"],
+      "cwd": "/abs/path/webterm",
+      "environment": { "WEBTERM_CENTRAL_CAP": "wcap_..." },  // tidak di prompt/event
+      "timeout": 120000                                      // default 30 s terlalu pendek
+    }
+  }
+}
+```
+
+- `tools` false untuk `bash`/`edit`/`write` menjaga central **read-only** di MVP. Kalau nanti
+  `bash` dibuka, `--auto` tetap dilarang; izin harus eksplisit di `permission`.
+- `subagent_depth: 0` menutup jalur "central membuat agen".
+- Token capability hanya hidup di env proses MCP (anak dari OpenCode), bukan di env agent, prompt,
+  atau event. Prompt hanya berisi data; capability ditegakkan server MCP per call.
+- Global config pengguna tetap ikut termerge (model/provider/kredensial). Itu disengaja:
+  kredensial milik pengguna, bukan milik webterm. `agentEnv` tetap tidak membawa `WEBTERM_TOKEN`.
+
+## 6. Operasional
 
 | Aspek | Aturan |
 |---|---|
-| **Session state** | Transcript di `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl` (atau bawah `CLAUDE_CONFIG_DIR`). Satu session per `(projectId, threadId)`, `session_id` disimpan di ledger; resume lintas direktori didukung, lintas mesin butuh `sessionStore`. Kebenaran state tetap task row + evidence, transcript hanya konteks. `forkSession` untuk eksperimen paralel, bukan retry task yang sama. Satu proses per project aktif, cap konkurensi ~2, idle unload. |
-| **Streaming** | Iterate `SDKMessage`; `system/init` membawa `session_id`, model, tool, status MCP; `includePartialMessages` menambah `stream_event` (delta). Codex: baca JSONL (`item.completed`, `turn.completed.usage`). Petakan ke event bus → WS; **jangan** tulis delta ke `outputLog` PTY. Buffer bounded, drop-oldest hanya untuk delta. |
-| **Cancellation** | SDK `interrupt()`; `AbortController` untuk query. CLI: SIGINT menutup turn, SIGTERM (143) meninggalkan turn tanpa hasil tapi tetap menjalankan `SessionEnd` hook. Timeout berlapis: runtime, lease ledger, deadline HTTP. `cancel(sessionId, turnId)` idempoten; event final terkirim tepat sekali. |
-| **Retry** | Hanya untuk kegagalan sebelum tool non-idempoten, atau setelah `result` final. Sinyal `system/api_retry` dan `result.subtype`; `error_max_turns`/`error_max_budget_usd`/`error_during_execution` dieskalasi ke manusia, bukan retry. Idempotensi tetap `requestId` + ack store webterm. |
-| **Biaya** | `total_cost_usd`/`modelUsage` = **estimasi client-side**, bukan tagihan. Dedupe usage dengan `message.id`; `output_tokens` per step placeholder, total dari `result`. `maxBudgetUsd` hanya menghitung call itu. Simpan `run_id`, provider, model, token (input/output/cache), `cost_usd`, `cost_basis`, `duration_ms`, outcome; kegagalan tetap menagih. |
-| **Auth** | Urutan menang: cloud provider env → `ANTHROPIC_AUTH_TOKEN` → `ANTHROPIC_API_KEY` → `apiKeyHelper` → `CLAUDE_CODE_OAUTH_TOKEN` → profil/federasi → OAuth `/login`. Penyimpanan Keychain macOS / `.credentials.json` `0600`. Opsi webterm: login CLI lokal (developer, jangan ditawarkan sebagai fitur produk pihak ketiga), OAuth token (server tanpa browser), API key + `--bare` (CI deterministik, tidak membaca OAuth), `apiKeyHelper` (rotasi dari vault). Kunci model hanya di env proses agent, tidak di prompt/event/log/tool result. |
+| **Session state** | `--session <session_ref>`; `session_ref` disimpan di `central_turn`/conversation. OpenCode menyimpan sesi di data dir-nya (`~/.local/share/opencode`), jadi proses butuh `HOME`/`XDG_DATA_HOME`; itu bukan root token webterm. Kebenaran state tetap ledger; sesi OpenCode hanya konteks. Satu sesi per `(projectId, threadId)`. |
+| **Streaming** | Parser JSONL baris-per-baris atas stdout. `text` → `text.delta`/`part.completed`; `tool_use` → `tool.requested`+`tool.completed` (satu event membawa `state.status`); `step_start`/`step_finish` → `turn.step`; `error` → `error`. Petakan ke event bus → SSE. Buffer bounded; drop-oldest hanya untuk delta. |
+| **Penutupan turn** | **Exit proses** = akhir turn. `step_finish` terakhir tidak dijamin ada (§3). `error` event menang atas exit code 0; exit code 1 tanpa `error` tetap `failed` dengan kode generik. |
+| **Cancellation** | Kill process group: SIGTERM, tunggu <2 s, lalu SIGKILL. Idempoten lewat `cancelToken`. Teks parsial = akumulasi `text` sampai kill. Event final `cancelled` dikirim tepat sekali. Sesi OpenCode tetap ada sehingga retry bisa `--session` yang sama. |
+| **Anggaran** | Hitung `step_finish` (jumlah langkah = turn budget) dan akumulasi `tokens`/`cost`. Lewat batas → kill + `budget_exhausted`, bukan retry. `cost` adalah estimasi; model gratis selalu `0`. |
+| **Retry** | Hanya kegagalan sebelum efek non-idempoten, atau setelah event final. `provider.quota` (429), 401, dan error config = eskalasi manusia, **bukan** retry. Idempotensi tetap `requestId` + ack store. |
+| **Biaya** | `step_finish.part.cost` + `tokens{input,output,reasoning,cache}` per langkah; simpan `run_id`, provider, model, token, `cost_usd`, `cost_basis:"client_estimate"`, `duration_ms`, outcome. Undercount bila `step_finish` penutup hilang. |
+| **Auth** | Milik OpenCode: `opencode auth login` / kredensial provider di config pengguna, atau env provider. Webterm tidak menyimpan API key; `WEBTERM_CENTRAL_MODEL` hanya menyebut model. Bila model butuh kuota berbayar/gratis habis, runtime melaporkan `provider_quota` dan berhenti. |
+| **Isolasi proses** | Tanpa PTY. `cwd` = worktree project atau state dir; `--standalone` opsional untuk isolasi penuh. Jangan `env: process.env`; bangun `agentEnv` dari allowlist. |
 
-## 6. Fit dengan webterm: PTY vs subprocess vs MCP
+## 7. Fit dengan webterm: PTY vs subprocess vs MCP
 
-| Aspek | PTY | Subprocess SDK/CLI | MCP |
+| Aspek | PTY | Subprocess CLI (OpenCode) | MCP |
 |---|---|---|---|
-| Stream | ANSI + scrape | Message/event | JSON-RPC |
-| Cancel | `\x03` + exit | `interrupt()`, SIGINT/TERM | Tutup stream / `cancelled` |
-| Multi-turn | Ketik baris baru | `resume`/`continue`, antrean | Stateless per call |
-| Prompt | 8 KiB satu baris | String/AsyncIterable penuh | Argumen tool |
-| Approval | Hook `PermissionRequest` 540 s | `canUseTool` + `PreToolUse` | `needs_approval` |
+| Stream | ANSI + scrape | JSONL event | JSON-RPC |
+| Cancel | `\x03` + exit | kill proses (`SIGTERM`→`SIGKILL`) | Tutup stream / `cancelled` |
+| Multi-turn | Ketik baris baru | `--session` | Stateless per call |
+| Prompt | 8 KiB satu baris | Argv/string penuh | Argumen tool |
+| Approval | Hook `PermissionRequest` | `permission` config + `needs_approval` dari tool | `needs_approval` |
 | Visibilitas | Terminal xterm | Panel event + transcript | Tak terlihat |
-| Root token | Dibuang `ptyEnv` | Allowlist manual | Tak terlihat agent |
-| Biaya | Tak terukur | `total_cost_usd`/usage | Tidak relevan |
-| Offline | Ya | Ya (model tetap network) | Ya |
+| Root token | Dibuang `ptyEnv` | Allowlist manual | Hanya env proses MCP |
+| Biaya | Tak terukur | `step_finish` (estimasi) | Tidak relevan |
 
-**Rekomendasi:** central = subprocess SDK di dalam proses server, bukan node PTY. Worker tetap PTY.
-Manusia melihat **stream event** di panel; cermin read-only ke xterm hanya opsional.
+**7.1 Root token dan capability.** `agentEnv` dibangun dari allowlist: `PATH`, `HOME` (atau
+`XDG_DATA_HOME`/`XDG_CONFIG_HOME` ke dir ter-scope), `SHELL`, `LANG`, `TERM`, `TMPDIR`,
+`OPENCODE_CONFIG`, plus kredensial provider yang memang milik OpenCode. Buang `WEBTERM_*`
+(kecuali yang eksplisit), `NODETERM_*`, `PORT`, `HOST`, `BUN_*`. Token node tidak diberikan:
+token itu membuka `/api/control/*`. Central memakai capability sendiri (`wcap_*`, TTL pendek,
+resource-bound): `central.read`, `project.read`, `task.assign`, `run.request`, `memory.claim`;
+**tidak** `approval.decide`, `memory.promote`, `node.prompt` lintas node, `run.finish`.
+Approval manusia tetap lewat `/api/approvals/*`. Audit tiap tool call sebagai `central.tool`.
 
-**6.1 Root token dan capability.** Jalur SDK tidak boleh `env: process.env`; bangun `agentEnv`
-dari allowlist (`PATH`, `HOME`, `SHELL`, `LANG`, `TERM`, `TMPDIR`, `CLAUDE_CONFIG_DIR`, kredensial
-model). Token node tidak diberikan: central tidak butuh hook canvas, dan token itu membuka
-`/api/control/*`. Central memakai capability sendiri (`wcap_*`, TTL pendek, resource-bound):
-`central.read`, `project.read`, `task.assign`, `run.request`, `memory.claim`; **tidak**
-`approval.decide`, `memory.promote`, `node.prompt` lintas node, `run.finish`. Approval manusia
-tetap lewat `/api/approvals/*`; `canUseTool` hanya membuat request dan menunggu decision. Audit
-tiap tool call sebagai `central.tool` (nama tool, digest argumen, hasil).
+**7.2 Offline/local-first.** Ledger, session map, memory, worktree lokal; hanya inference yang
+butuh jaringan. Jangan taruh central di cloud queue atau jadikan MCP HTTP wajib.
 
-**6.2 Offline/local-first.** Ledger, session map, memory, worktree lokal; hanya inference (dan
-MCP remote opsional) butuh jaringan. Jangan taruh central di cloud queue, jangan tambah broker,
-jangan jadikan MCP HTTP wajib.
+## 8. MCP dan protokol proposal (pilihan MVP)
 
-## 7. Arsitektur yang diusulkan (belum diimplementasikan)
+Karena OpenCode adalah proses terpisah, `createSdkMcpServer()` (in-process) **tidak tersedia**.
+Dua opsi yang realistis:
+
+1. **MCP stdio lokal (dipilih untuk tool baca).** Daftarkan server `webterm` di config runtime
+   (§5). OpenCode menjalankan server itu sebagai anak dan mengekspos tool-nya ke model. Capability
+   hanya di env server; hasil tool dibatasi ringkasan + id (bukan dump), dan tool yang butuh
+   manusia mengembalikan `needs_approval`.
+   - Nama tool yang dilihat model diturunkan dari nama server MCP. **Jangan asumsikan**
+     `mcp__webterm__<tool>` seperti SDK; catat nama sebenarnya pada test integrasi pertama dan
+     pakai itu di prompt sistem/allowlist.
+   - `timeout` default 30 s terlalu pendek; set eksplisit (mis. 120 s).
+2. **Typed proposal protocol (dipilih untuk perubahan).** Model mengembalikan satu blok JSON
+   ber-delimiter (mis. ` ```webterm-proposal `) dengan skema ketat: `{kind:"goal.propose"|"plan.propose",
+   payload:{...}}`. Server memvalidasi dengan Zod, menolak field terlarang (`actor`, `authority`,
+   `status`, path absolut, command bebas), lalu menyimpan **draft** `proposed` dengan efek nol.
+   Parse gagal = `proposal_invalid`, bukan tebakan.
+
+**Yang belum diimplementasikan:** tidak ada tool tulis nyata. `goal.propose`/`plan.propose` di MVP
+hanya menghasilkan draft lewat protokol proposal; `task.assign`/`task.run` tetap milik fase B3 dan
+tetap butuh capability + approval. Dokumen ini **tidak** mengklaim tool tulis sudah ada.
+
+Keamanan tambahan: deskripsi tool di-pin (`tools_hash`); hash berubah tanpa review = tolak
+(rug pull). Jangan mengaktifkan MCP remote untuk central.
+
+## 9. Arsitektur yang diusulkan (belum diimplementasikan)
 
 ```
 POST /api/central/turn
    └─► centralTurnRoute ─► CentralRuntime (port)
-                            ├─ ClaudeAgentRuntime: query(streaming) + createSdkMcpServer
-                            ├─ CodexRuntime: codex exec --json / codex-sdk thread.run
-                            └─ mapEvents ─► event bus ─► WS (panel) + ledger event
+                            ├─ OpenCodeRuntime: spawn `opencode run --format json`
+                            ├─ MockRuntime
+                            └─ ClaudeAgentRuntime (opsional, tidak wajib)
+         mapJsonlEvents ─► event bus ─► SSE (panel) + ledger event
+                            └─► centralMcpServer (stdio) ◄─ capability wcap_*
 ```
 
 | File | Isi |
 |---|---|
 | `central/runtime/centralRuntimeTypes.ts` | `CentralRuntime`, `TurnInput`, `RuntimeEvent`, `RuntimeResult`, `CancelToken` |
-| `central/runtime/claudeAgentRuntime.ts` | wrapper `query()`, `interrupt()`, mapping `SDKMessage` |
-| `central/runtime/claudeAgentOptions.ts` | allowlist env, `settingSources`, `allowedTools`, `maxTurns`, `maxBudgetUsd` |
-| `central/runtime/codexRuntime.ts` | spawn `codex exec --json`, parser JSONL, resume `thread_id` |
-| `central/runtime/centralEvents.ts` | murni: `SDKMessage`/JSONL → `RuntimeEvent`, tanpa I/O |
-| `central/runtime/centralSession.ts` | peta `(projectId, threadId) → sessionId`, persist di ledger |
-| `central/mcp/webtermTools.ts` | `tool()` + `createSdkMcpServer()`, validasi capability per call |
-| `central/runtime/centralBudget.ts` | akumulasi usage/cost, dedupe `message.id`, tulis ledger |
+| `central/runtime/opencodeRuntime.ts` | spawn, parser JSONL, exit/error, cancel, resume, budget |
+| `central/runtime/opencodeOptions.ts` | argv (`run --format json --model --session`), scrub env, policy tool |
+| `central/runtime/opencodeEvents.ts` | murni: JSONL → event internal + usage delta |
+| `central/runtime/agentEnv.ts` | allowlist env; buang `WEBTERM_*`/`NODETERM_*`/`PORT`/`HOST` |
+| `central/runtime/runtimeEvents.ts` | normalisasi event + urutan |
+| `central/runtime/centralSession.ts` | peta `(projectId, threadId) → sessionRef`, persist di ledger |
+| `central/mcp/centralMcpServer.ts` | server stdio; validasi capability per call; audit |
+| `central/proposal/proposalParser.ts` | blok JSON ber-delimiter → draft tervalidasi |
+| `central/runtime/centralBudget.ts` | akumulasi `step_finish`, kill saat lewat batas |
 
-Flag `WEBTERM_CENTRAL_RUNTIME=off|claude|codex` (default `off`), terpisah dari `WEBTERM_CENTRAL`
-(proyeksi) dan `WEBTERM_CENTRAL_AUTONOMY` (scheduler). Tanpa ledger hidup, runtime menolak boot.
+Flag: `WEBTERM_CENTRAL_RUNTIME=off|mock|opencode|claude|codex` (default `off`), `WEBTERM_CENTRAL_MODEL`
+(default `opencode/deepseek-v4.1-flash-free` untuk dev), `WEBTERM_OPENCODE_BIN` (default
+`opencode`), `WEBTERM_OPENCODE_ALLOW_TOOLS` (default off; hanya `on` membuka tool mutasi).
+Terpisah dari `WEBTERM_CENTRAL` (proyeksi) dan `WEBTERM_CENTRAL_AUTONOMY` (scheduler).
+Tanpa ledger hidup, runtime menolak boot.
 
-## 8. Tabel keputusan
+## 10. Tabel keputusan
 
-| Kriteria | Claude Agent SDK | Codex SDK / `exec` | OpenAI Agents SDK | opencode `serve` |
+| Kriteria | OpenCode CLI | Claude Agent SDK | Codex `exec --json` | `opencode serve` |
 |---|---|---|---|---|
-| Auth | Login CLI, OAuth, API key, helper | Login CLI, API key | API key | Provider OAuth/API key |
-| Streaming | Message + `stream_event` | JSONL per item | Responses events | SSE `/event` |
-| Tool | Built-in + MCP | Built-in + MCP | Function/hosted/MCP | Internal + MCP |
-| Approval | `canUseTool`, hooks, deny rules | Sandbox + approval policy | Guardrails/HITL | `permission` endpoint |
-| Cost | `total_cost_usd`, `modelUsage` | `turn.completed.usage` | Usage API | Tidak seragam |
-| Resume | `resume`/`continue`/`fork`, store | `thread_id` | Sessions | Session id |
-| Ops | Proses anak, prewarm | Proses anak, ringan | Key + egress | Server + port |
-| Windows | Binary `win32-x64`; PTY webterm tidak | CLI tersedia | Node lintas platform | Tergantung provider |
-| Bun | Import lulus; compile butuh `extractFromBunfs` | Proses anak + parser murni | Node API | HTTP client |
-| Verdict | **Primary** | **Fallback** | Opsi BYO-key | Adapter |
+| Butuh langganan | Tidak (free model / provider sendiri) | Login/API key Claude | Login/API key | Tidak |
+| Streaming | JSONL per event | Message + `stream_event` | JSONL per item | SSE `/event` |
+| Tool | Built-in + MCP stdio/remote | Built-in + MCP in-process | Built-in + MCP | Internal + MCP |
+| Approval | `permission` config; `--auto` ada tapi dilarang | `canUseTool`, hooks | Sandbox + approval policy | `permission` endpoint |
+| Cost | `step_finish.cost`/`tokens` (bisa undercount) | `total_cost_usd`, `modelUsage` | `turn.completed.usage` | Tidak seragam |
+| Resume | `--session` (create-if-missing) | `resume`/`continue`/`fork` | `thread_id` | Session id |
+| Ops | Proses anak, tanpa embed, versi dipin | Proses anak + binary di-embed | Proses anak, ringan | Server + port |
+| Bun | Parser murni, tanpa dependency | Import lulus, compile perlu `extractFromBunfs` | Proses anak | HTTP client |
+| Verdict | **Primary** | Fallback opsional | Fallback opsional | Adapter lanjutan |
 
-## 9. Risiko dan mitigasi
+## 11. Risiko dan mitigasi
 
 | Risiko | Bukti | Mitigasi |
 |---|---|---|
-| Claude nyata belum satu turn | `07` §2b: `Not logged in · Run /login` | Gate: satu turn + satu tool + satu cancel sebelum route |
-| Workspace trust | `-p` tanpa trust dialog, interaktif meminta | Selalu `-p`/SDK, jangan launch interaktif |
-| Binary di `bun build --compile` | `require.resolve` gagal di `$bunfs`; perlu `pathToClaudeCodeExecutable` + `extractFromBunfs()` (v0.3.144+) | Embed per platform; uji binary hasil compile |
-| API cepat berubah | SDK 0.3.x, CLI 2.1.x, MCP 2026-07-28 | Pin versi; feature-detect via `capabilities` di `system/init` |
-| Token bocor lewat env | SDK mewarisi env bila `env` kosong | Allowlist eksplisit + test assert `WEBTERM_TOKEN`/`NODETERM_*` absen |
-| Biaya tak terduga | Estimasi client-side, subagent ikut | Amplop ledger + `maxTurns` + `maxBudgetUsd` |
-| MCP breaking / Tasks Beta | 2026-07-28 hapus `initialize` | In-process dulu; stdio/HTTP hanya bila perlu |
+| Kuota model gratis habis | 429 `FreeUsageLimitError` setelah 4 turn (2026-11-02) | Default gratis hanya dev; pesan `provider_quota` jelas; jangan retry; dokumentasikan set model berbayar |
+| `step_finish` penutup hilang | 2/2 turn satu langkah tanpa `step_finish` | Tutup turn dari exit proses; jangan tunggu event |
+| Item JSONL sangat besar | `tool_use` membawa `output` + `metadata.content` duplikat | Batasi ukuran part; ringkas ke ledger; buang `rawInput`/duplikat |
+| Config global pengguna bocor ke central | Merge config global | Config eksplisit + `tools` false + review config efektif saat boot |
+| Tool bawaan tak sengaja aktif | `bash`/`edit`/`write` default bisa aktif | `tools:false` + deny policy; gate B2 membuktikan `bash` gagal |
+| Env var tak terdokumentasi | `OPENCODE_PERMISSION` tak ada di docs 2026-11-02 | Verifikasi di gate; fallback ke config; jangan bergantung pada satu mekanisme |
+| Nama tool MCP berubah antar versi | Prefix dari nama server, bukan `mcp__` | Catat nama nyata; feature-detect; pin versi OpenCode |
+| Versi OpenCode berubah | `autoupdate` default notify | `autoupdate:false` + pin versi di dokumentasi rilis |
+| Sesi OpenCode di luar ledger | Data dir OpenCode | `session_ref` di ledger; sesi hanya konteks; jangan jadikan sumber kebenaran |
 
-## 10. Gate sebelum implementasi dianggap selesai
+## 12. Gate sebelum implementasi dianggap selesai
 
-1. Satu turn Claude nyata menghasilkan `result` + biaya tercatat di ledger.
-2. Tool MCP in-process dipanggil; capability salah ditolak; tidak ada token di env anak.
-3. Cancel menutup turn < 5 s dan event final terkirim tepat sekali.
-4. Resume setelah restart memakai `session_id` sama, konteks masih ada.
-5. Timeout/lease tidak menulis `verified`; verifikasi tetap server-owned.
-6. `error_max_budget_usd` → eskalasi manusia, bukan retry.
-7. Adapter fallback menghasilkan bentuk event sama untuk sukses dan gagal.
-8. Binary `bun build --compile` menjalankan satu turn (uji `extractFromBunfs`).
+1. Satu turn OpenCode nyata (model ber-kredensial) → teks + `session_ref` + usage tercatat.
+2. Satu tool MCP stdio dipanggil; capability salah ditolak; tidak ada token di env agent.
+3. Cancel menutup proses <2 s dan event final terkirim tepat sekali.
+4. Resume `--session` setelah restart menghasilkan konteks lanjut (butuh verifikasi, §3).
+5. `agentEnv` tanpa `WEBTERM_TOKEN`/`NODETERM_*` (assertion test).
+6. Budget/turn limit membunuh proses dan menulis `budget_exhausted`, bukan retry.
+7. `provider.quota`/401 dieskalasi ke manusia, bukan retry.
+8. `bash`/`edit`/`write` benar-benar nonaktif dan gagal saat dipanggil (bukan hanya absen dari
+dokumentasi); buktikan mekanisme yang dipakai benar-benar ditegakkan CLI.
+9. Binary `bun build --compile` tetap jalan; OpenCode **tidak** di-embed, hanya di-resolve.
 
-## 11. Sumber (diakses 2026-11-01)
+## 13. Sumber (diakses 2026-11-02)
 
-- Claude Agent SDK overview — https://docs.claude.com/en/docs/agent-sdk/overview
-- Agent SDK TypeScript reference — https://docs.claude.com/en/api/agent-sdk/typescript
-- Agent SDK sessions — https://docs.claude.com/en/docs/agent-sdk/sessions
-- Agent SDK streaming input vs single message — https://docs.claude.com/en/docs/agent-sdk/streaming-vs-single-mode
-- Agent SDK permissions — https://docs.claude.com/en/docs/agent-sdk/permissions
-- Agent SDK hooks — https://docs.claude.com/en/docs/agent-sdk/hooks
-- Agent SDK MCP — https://docs.claude.com/en/docs/agent-sdk/mcp
-- Agent SDK cost tracking — https://docs.claude.com/en/api/agent-sdk/cost-tracking
-- Claude Code headless — https://docs.claude.com/en/docs/claude-code/headless
-- Claude Code CLI reference — https://docs.claude.com/en/docs/claude-code/cli-reference
-- Claude Code authentication — https://docs.claude.com/en/docs/claude-code/authentication
-- MCP specification 2026-07-28 transports — https://modelcontextprotocol.io/specification/2026-07-28/basic/transports
-- MCP specification latest — https://modelcontextprotocol.io/specification/latest
-- OpenAI Agents SDK TypeScript — https://openai.github.io/openai-agents-js/
-- Codex non-interactive mode — https://developers.openai.com/codex/non-interactive-mode
-- Codex SDK (TypeScript) — https://developers.openai.com/codex/codex-sdk
-- opencode server API — https://opencode.ai/docs/server/
-- Gemini CLI headless — https://google-gemini.github.io/gemini-cli/docs/cli/headless.html
-- Claude Agent SDK README — https://github.com/anthropics/claude-agent-sdk-typescript
+- OpenCode config (lokasi, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT`, `tools`, `permission`,
+  `subagent_depth`, `snapshot`): https://opencode.ai/docs/config/
+- OpenCode MCP (local stdio, `environment`, `cwd`, `timeout`): https://opencode.ai/docs/mcp-servers/
+- OpenCode server/API (adapter lanjutan): https://opencode.ai/docs/server/
+- Bukti lokal CLI: `opencode --version` 2.0.26, `opencode run --help`, `opencode mcp add --help`,
+  `opencode debug paths|config` (2026-11-02).
 
-Bukti lokal: `RND/90-REFERENSI/BUKTI.md` (Bun 1.4.2, import SDK/MCP),
-`RND/07-IMPLEMENTASI-P3-P5.md` §2b (Claude nyata BLOCKED), `RND/03-RENCANA.md` §7 (batas central).
+Rujukan lama (fallback/konteks, tidak lagi wajib):
+- Claude Agent SDK: https://docs.claude.com/en/docs/agent-sdk/overview
+- Codex non-interactive: https://developers.openai.com/codex/non-interactive-mode
+
+Bukti repo: `RND/14-CENTRAL-AGENT-S0.md` §6 (S0 + probe OpenCode), `RND/03-RENCANA.md` §7
+(batas central), `RND/08-CENTRAL-AGENT.md` (invarian).

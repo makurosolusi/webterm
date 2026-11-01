@@ -10,9 +10,10 @@ agent, central tidak approve/spawn/tulis fact, file budget tetap.
    menaikkan otoritas. **Paralel** hanya setelah seam stabil; satu owner per file.
 ```
 A1 migration/types -> A2 services -> B1 port+mock -> C1 API (mock) -> S0 demo
-  -> B2 Claude adapter -> B3 tool tulis -> C2 UI penuh -> E memory/context -> D Telegram
+  -> B2 OpenCode adapter -> B3 tool tulis -> C2 UI penuh -> E memory/context -> D Telegram
 ```
-D dan E bukan syarat S0; Claude nyata (B2) juga bukan syarat S0.
+D dan E bukan syarat S0; OpenCode nyata (B2) juga bukan syarat S0. Adapter Claude/Codex opsional
+dan **tidak wajib** (pengguna tanpa langganan Claude; lihat `09` §1).
 ## 1. Slice vertikal terkecil (S0)
 **Tujuan:** percakapan tersimpan + satu tool baca + stream web, tanpa LLM nyata/efek samping.
 - Cakupan: migrasi v4, `goalStore`, `conversationStore`, `CentralRuntime` + `MockRuntime`
@@ -26,7 +27,7 @@ Acceptance S0:
 3. `portfolio.read` mengembalikan data project nyata + satu audit `central.tool`.
 4. Putus SSE lalu reconnect `Last-Event-ID` tanpa event hilang.
 5. Cancel menutup turn <2 s + simpan teks parsial; `RUNTIME=off` → chat `503 central_runtime_off`.
-S0 **bukan** agen pusat selesai: belum ada Claude, aktivasi goal, assign/run, Telegram, memori,
+S0 **bukan** agen pusat selesai: belum ada runtime OpenCode nyata, aktivasi goal, assign/run, Telegram, memori,
 atau approval tool. Demo S0 = "chat + baca portfolio", bukan otonomi.
 ## 2. Phase A — Foundation
 **Tujuan:** model data + service yang dipakai semua phase; tanpa runtime LLM.
@@ -85,7 +86,7 @@ saat boot tanpa central.
 **Rollback A:** revert kode; tabel/kolom aditif boleh tertinggal; restore backup hanya bila
 migrasi gagal total.
 ## 3. Phase B — Runtime
-**Tujuan:** port runtime, adapter Claude/Codex/mock, registry tool in-process, policy otoritas.
+**Tujuan:** port runtime, adapter OpenCode (primary) + mock, registry tool MCP stdio, policy otoritas.
 ### B1. Port dan mock
 | Target | Isi | Budget |
 |---|---|---|
@@ -94,25 +95,30 @@ migrasi gagal total.
 | `src/server/central/runtime/mockRuntime.ts` (baru) | deterministik; sukses/gagal/cancel/tool | ≤200 |
 | `src/server/central/runtime/runtimeFlag.ts` (baru) | parse flag; default off | ≤100 |
 | `mockRuntime.test.ts`, `runtimeEvents.test.ts` | urutan, cancel, error | ≤400 |
-### B2. Claude adapter (gate keras)
+### B2. OpenCode adapter (gate keras)
 | Target | Isi | Budget |
 |---|---|---|
-| `src/server/central/runtime/claudeAgentRuntime.ts` (baru) | `query()`, streaming, `interrupt()`, map `SDKMessage` | ≤300 |
-| `src/server/central/runtime/claudeAgentOptions.ts` (baru) | `allowedTools`, `maxTurns`, `maxBudgetUsd`, `canUseTool` | ≤200 |
-| `src/server/central/runtime/agentEnv.ts` (baru) | allowlist env; buang `WEBTERM_*`/`NODETERM_*`/`PORT`/`HOST` | ≤120 |
-| `claudeAgentRuntime.test.ts` | fixture message, init, retry, cancel, budget | ≤400 |
-| `agentEnv.test.ts` | token/secret absen | ≤200 |
+| `src/server/central/runtime/opencodeRuntime.ts` (baru) | spawn `opencode run --format json`, exit/error, cancel, resume, budget | ≤300 |
+| `src/server/central/runtime/opencodeOptions.ts` (baru) | argv, scrub env allowlist, policy tool (deny default) | ≤200 |
+| `src/server/central/runtime/opencodeEvents.ts` (baru) | parser JSONL murni + usage delta | ≤250 |
+| `src/server/central/proposal/proposalParser.ts` (baru) | blok JSON ber-delimiter → draft tervalidasi; tolak field terlarang | ≤200 |
+| `opencodeRuntime.test.ts`, `opencodeOptions.test.ts`, `opencodeEvents.test.ts` | fixture JSONL (text/tool_use/step_finish/error), exit, cancel, budget, env | ≤400/file |
 Gate B2 (gagal salah satu = **STOP** tool tulis):
-1. Satu turn Claude nyata → `result` + usage tercatat.
-2. Satu tool MCP in-process dipanggil; tool di luar allowlist ditolak.
-3. `interrupt()` menutup turn <5 s; event final tepat sekali.
+1. Satu turn OpenCode nyata (model ber-kredensial) → teks + `sessionRef` + usage tercatat.
+2. Satu tool MCP stdio dipanggil; tool di luar allowlist ditolak; nama tool nyata dicatat.
+3. Cancel membunuh proses <2 s; event final tepat sekali; teks parsial tersimpan.
 4. `agentEnv(process.env)` tanpa `WEBTERM_TOKEN`/`NODETERM_*` (assertion).
-5. Resume setelah restart memakai `session_ref` sama.
-6. `bun build --compile` menjalankan satu turn (uji `extractFromBunfs`).
+5. Resume `--session` memakai `sessionRef` yang sama (verifikasi lintas proses).
+6. `bash`/`edit`/`write` gagal saat dipanggil (bukan hanya tidak disebut di docs); `--auto` tidak dipakai.
+7. Kuota/auth error (`provider.quota` 429, 401) → `provider_quota`/`auth_failed`, bukan retry.
+
+Catatan bukti: CLI 2.0.26 sudah diverifikasi hidup (`09` §3). `step_finish` penutup **tidak**
+dikirim untuk jawaban satu langkah, jadi turn ditutup oleh exit proses. Tidak ada flag
+`--max-turns`/`--max-budget`; budget dihitung dari event dan ditegakkan dengan kill.
 ### B3. Tool registry dan policy
 | Target | Isi | Budget |
 |---|---|---|
-| `central/tools/toolRegistry.ts` (baru) | `createSdkMcpServer`, nama `mcp__webterm__*`, schema | ≤200 |
+| `central/mcp/centralMcpServer.ts` (baru) | server MCP **stdio**; validasi capability per call | ≤250 |
 | `central/tools/toolPolicy.ts` (baru) | risk class, capability, tolak field terlarang | ≤200 |
 | `central/tools/toolAudit.ts` (baru) | event `central.tool`, digest argumen | ≤150 |
 | `central/tools/readPortfolio.ts` (+plan/task) | baca via proyeksi/plan store | ≤200 each |
@@ -120,13 +126,15 @@ Gate B2 (gagal salah satu = **STOP** tool tulis):
 | `central/tools/assignTask.ts` (+runTask) | panggil assign/jalur run; `needs_approval` | ≤200 each |
 | `central/tools/pauseRequest.ts` (+approvalRequest) | buat request; tidak pernah decide | ≤150 each |
 | `central/tools/*.test.ts` | allow/deny matrix, idempotensi | ≤400/file |
-Default `WEBTERM_CENTRAL_TOOLS=read` (hanya baca); `write` membuka propose/assign/run. `task.run`
-tetap melewati `WEBTERM_ORCHESTRATOR_RUN` + `WEBTERM_RUN_REQUIRE_APPROVAL`; central tidak memegang
-kunci approval. **Flag B:** `WEBTERM_CENTRAL_RUNTIME=off|mock|claude|codex`; `TOOLS=read|write`.
-**Exit B:** event mock/Claude sama bentuk; policy menolak `approval.decide`, `memory.promote`,
+Default `WEBTERM_CENTRAL_TOOLS=read` (hanya baca lewat MCP stdio); `write` membuka
+propose/assign/run. `task.run` tetap melewati `WEBTERM_ORCHESTRATOR_RUN` +
+`WEBTERM_RUN_REQUIRE_APPROVAL`; central tidak memegang kunci approval. **Flag B:**
+`WEBTERM_CENTRAL_RUNTIME=off|mock|opencode|claude|codex`; `TOOLS=read|write`;
+`WEBTERM_CENTRAL_MODEL`; `WEBTERM_OPENCODE_BIN`; `WEBTERM_OPENCODE_ALLOW_TOOLS` (default off).
+**Exit B:** event mock/OpenCode sama bentuk; policy menolak `approval.decide`, `memory.promote`,
 `spawn`, `run.finish`, `actor`/`authority` dari argumen; audit tertulis.
-**Manual/human:** login Claude CLI/API key, set envelope, approve aksi nyata pertama. Jangan
-menawarkan login claude.ai pihak ketiga sebagai fitur produk.
+**Manual/human:** set model/provider OpenCode yang ber-kredensial (free model hanya dev), set
+envelope, approve aksi nyata pertama. Webterm tidak menyimpan API key.
 **Rollback B:** `WEBTERM_CENTRAL_RUNTIME=off`; adapter di-revert; tool tulis kembali `read`.
 ## 4. Phase C — Chat API dan UI
 **Tujuan:** pengalaman web penuh di atas `turnService` yang sama.
@@ -195,8 +203,9 @@ lintas-project.
 | B1 port+mock | A2 | service goal/conversation ada |
 | C1 API mock | B1 | mock lulus test |
 | **S0 demo** | A+B1+C1 | acceptance S0 lulus |
-| B2 Claude | B1 | env allowlist + cancel test lulus |
-| B3 tool tulis | B2 + A2 + assign/run existing | gate B2 1-6 lulus |
+| B2 OpenCode | B1 | env allowlist + cancel test lulus |
+| B2b Claude/Codex (opsional) | B2 | tidak wajib; hanya bila fallback dibutuhkan |
+| B3 tool tulis | B2 + A2 + assign/run existing | gate B2 1-7 lulus |
 | C2 UI penuh | C1 + B3 | route stabil |
 | E | A2 + B1 | context builder tidak butuh UI |
 | D | C2 + E (opsional) | turnService + approval bridge stabil |
@@ -205,7 +214,10 @@ E aman paralel dengan B2/B3; D setelah C2; jangan B3 + C2 pada file yang sama ta
 | Flag | Default | Phase | Efek |
 |---|---|---|---|
 | `WEBTERM_CENTRAL` | off | A | permukaan `/api/central/*` |
-| `WEBTERM_CENTRAL_RUNTIME` | off | B | `off|mock|claude|codex` |
+| `WEBTERM_CENTRAL_RUNTIME` | off | B | `off|mock|opencode|claude|codex` |
+| `WEBTERM_CENTRAL_MODEL` | `opencode/deepseek-v4.1-flash-free` | B | model `provider/model`; gratis hanya dev |
+| `WEBTERM_OPENCODE_BIN` | `opencode` | B | path binary CLI |
+| `WEBTERM_OPENCODE_ALLOW_TOOLS` | off | B | `on` membuka tool mutasi bawaan; default deny |
 | `WEBTERM_CENTRAL_TOOLS` | read | B | `read|write`; write buka propose/assign/run |
 | `WEBTERM_CENTRAL_CHAT` | off | C | route + panel chat |
 | `WEBTERM_CENTRAL_TELEGRAM` | off | D | bridge Telegram private |
@@ -240,8 +252,11 @@ Nilai lain = off (fail-closed). Tanpa ledger hidup, runtime/chat/memory `503` da
 ## 12. Risiko dan stop/go
 | Risiko | Deteksi | Tindakan |
 |---|---|---|
-| Claude belum satu turn | gate B2 gagal | **STOP** tool tulis |
-| Binary tak menemukan CLI | gate B2.6 gagal | **STOP** rilis binary; dev boleh |
+| OpenCode belum satu turn nyata | gate B2 gagal | **STOP** tool tulis |
+| Kuota model gratis habis (429) | `provider.quota` | pakai model ber-kredensial; **jangan** retry |
+| `step_finish` penutup hilang | turn menggantung | tutup dari exit proses; test fixture |
+| Binary/versi OpenCode tak cocok | `opencode --version` ≠ dipin | **STOP** rilis, pin versi |
+| Tool bawaan aktif | config efektif menunjukkan `bash`/`write` | **STOP**, perbaiki config runtime |
 | Token bocor lewat env | test `agentEnv` gagal | **STOP**, perbaiki allowlist |
 | Self-approval | test policy/approval gagal | **STOP**, audit capability |
 | Migrasi v4 gagal separuh | `user_version` tidak naik | restore backup |
@@ -253,5 +268,5 @@ Jangan tambah dependency runtime sebelum gate B2; jangan `TOOLS=write` sebelum a
 - Phase selesai hanya bila test baru + `tsc` + suite terkait hijau dan acceptance phase lulus.
 - Update `07-IMPLEMENTASI-P3-P5.md` (`[V]/[W]/[P]`) dan `RND/README.md` bila flag baru; `08` bila
   keputusan berubah.
-- Jangan menulis "selesai" untuk Claude nyata, Telegram delivery, atau soak tanpa bukti.
+- Jangan menulis "selesai" untuk OpenCode nyata, tool tulis, Telegram delivery, atau soak tanpa bukti.
 - Tidak ada commit/push dalam pekerjaan dokumen ini; implementasi menunggu perintah.

@@ -6,9 +6,9 @@ Dokumen ini mengikat; `09`-`12` adalah bukti/detail. Eksekusi: `13-CENTRAL-AGENT
 | # | Keputusan | Alasan |
 |---|---|---|
 | D1 | Central = **steward**, bukan pemilik hasil | Manusia memegang goal, approval, definisi "done" |
-| D2 | Runtime **Claude Agent SDK** (in-process subprocess), fallback Codex | Event terstruktur, cancel, resume, biaya (`09`) |
+| D2 | Runtime **OpenCode CLI** (`opencode run --format json`), subprocess tanpa PTY; Claude/Codex fallback opsional | Pengguna tanpa langganan Claude; JSONL terstruktur, `--session`, cancel via kill, model via env (`09`) |
 | D3 | Central **tidak memakai PTY** / slot sesi manusia | PTY untuk worker; central butuh multi-turn + stream |
-| D4 | Tool = **in-process MCP** (`createSdkMcpServer`) | Tanpa port/token di disk; `allowedTools: mcp__webterm__*` |
+| D4 | Tool MVP = **MCP stdio lokal** + **typed proposal protocol** | Proses terpisah: SDK MCP in-process tidak ada; capability hanya di env server MCP |
 | D5 | Goal = `project.goal_json` berversi (MVP), tabel `goal` nanti | Satu goal aktif/project; audit + diff |
 | D6 | Plan tetap `plan`/`plan_item`; `seq` = dependency lane MVP | Tidak perlu DAG untuk slice pertama |
 | D7 | Chat = **proyeksi**, bukan control plane kedua | Web & Telegram memanggil service yang sama |
@@ -55,27 +55,36 @@ Tidak ada `approval.decide`, `memory.promote`, `node.prompt`, `run.finish`.
 | R3 ireversibel | push/merge, hapus branch, migrasi, kirim eksternal, naikkan budget | **selalu** approval + typed confirm |
 R3 tidak punya "flag off = bebas". Tanpa approver, aksi **parkir**.
 ## 4. Runtime
-Satu port sempit, dua adapter, satu mock. Route HTTP tidak pernah memanggil SDK langsung.
+Satu port sempit, adapter OpenCode sebagai default, plus mock dan fallback opsional. Route HTTP
+tidak pernah memanggil CLI langsung.
 ```
 POST /api/central/conversations/:id/messages
   -> turnService (lock, idempotency, persistence)
      -> CentralRuntime.turn(input, emit, signal)
-        -> ClaudeAgentRuntime | CodexRuntime | MockRuntime
-     -> mapEvents -> central_event (seq) -> SSE + audit
+        -> OpenCodeRuntime (spawn `opencode run --format json`) | MockRuntime | ClaudeAgentRuntime (opsional)
+     -> mapJsonlEvents -> central_event (seq) -> SSE + audit
 ```
 `CentralRuntime` wajib punya `turn`, `cancel`, `resume`/`sessionRef`, `cost`, `close`; event
 dinormalkan (`text.delta`, `tool.requested`, `tool.completed`, `turn.result`, `error`).
-- Flag `WEBTERM_CENTRAL_RUNTIME=off|claude|codex|mock` (default `off`), terpisah dari
-  `WEBTERM_CENTRAL` (HTTP) dan `WEBTERM_CENTRAL_AUTONOMY` (scheduler).
-- Satu proses per conversation aktif; idle unload; konkurensi global ≤2. `maxTurns` +
-  `maxBudgetUsd` per turn; `error_max_turns`/`error_max_budget_usd` dieskalasi ke manusia.
-- `interrupt()` untuk cancel; event final tepat sekali; teks parsial disimpan. Resume memakai
-  `session_id` di ledger; transcript SDK konteks, bukan state.
-- `system/init` diverifikasi: MCP terhubung, tool terlihat = allowlist. Binary
-  `bun build --compile` diuji dengan `extractFromBunfs`.
-## 5. Tool MCP in-process
-Nama publik `mcp__webterm__<tool>`; balasan `{ok:true,...}` / `{ok:false, code}`; satu audit
-`central.tool` per call (nama, digest argumen, hasil, durasi; tanpa prompt).
+- Flag `WEBTERM_CENTRAL_RUNTIME=off|mock|opencode|claude|codex` (default `off`), terpisah dari
+  `WEBTERM_CENTRAL` (HTTP) dan `WEBTERM_CENTRAL_AUTONOMY` (scheduler). Model dari
+  `WEBTERM_CENTRAL_MODEL`; binary dari `WEBTERM_OPENCODE_BIN`.
+- Satu proses per conversation aktif; idle unload; konkurensi global ≤2. Batas turn/budget
+  ditegakkan webterm (CLI tidak punya `--max-turns`/`--max-budget`): hitung `step_finish`, kill saat
+  lewat batas, tulis `budget_exhausted`.
+- Cancel = kill process group (`SIGTERM` → `SIGKILL` <2 s); event final tepat sekali; teks parsial
+  disimpan. Turn ditutup oleh **exit proses**, bukan `step_finish` (event itu tidak dikirim pada
+  jawaban satu langkah). Resume memakai `sessionRef` di ledger; sesi OpenCode konteks, bukan state.
+- `error` event (`provider.quota` 429, auth, config) dieskalasi ke manusia, bukan retry. `bash`,
+  `edit`, `write` dimatikan di config runtime MVP; `subagent_depth: 0`; `--auto` dilarang.
+- Config di-inject lewat `OPENCODE_CONFIG` (file `0600` di state dir), **bukan** `opencode.json`
+  di worktree pengguna.
+
+## 5. Tool: MCP stdio + proposal
+Nama tool mengikuti nama server MCP di config runtime; **jangan asumsikan** `mcp__webterm__<tool>`
+(pola itu milik SDK in-process). Catat nama nyata pada test integrasi pertama. Balasan
+`{ok:true,...}` / `{ok:false, code}`; satu audit `central.tool` per call (nama, digest argumen,
+hasil, durasi; tanpa prompt).
 | Tool | Otoritas | Risiko | Perilaku |
 |---|---|---|---|
 | `portfolio.read` | central | R0 | ringkasan project/plan/task/usage |
@@ -93,6 +102,12 @@ Rekonsiliasi: brief menyebut "pause project"; diimplementasikan `project.pause_r
 `needs_approval` + id, tidak menahan call sampai timeout. Tool tak dikenal = error. Deskripsi
 tool di-pin (`tools_hash`); hash berubah tanpa approval = tolak (rug pull). Output besar =
 ringkasan + id, bukan dump.
+
+**Status MVP:** hanya tool **baca** yang jalan lewat MCP stdio. `goal.propose`/`plan.propose`
+belum jadi tool; MVP memakai **typed proposal protocol** (satu blok JSON ber-delimiter, divalidasi
+Zod server, disimpan sebagai draft `proposed`, efek nol). `task.assign`/`task.run` belum ada dan
+butuh capability + approval di fase B3. Jangan klaim tool tulis sudah diimplementasikan.
+
 ## 6. Goal dan plan
 Goal MVP di `project.goal_json` (v4, aditif), dengan version terpisah:
 ```jsonc
@@ -181,13 +196,14 @@ dalam transaksi ledger. Satu keputusan authoritative; kanal lain menampilkan "Ap
 11. Transkrip mentah/secret/PII di log, memori, outbox, atau prompt.
 12. LLM/LLM judge sebagai verifier atau sumber `achieved`.
 13. Schema change tanpa migrasi; edit migrasi lama; dual-write memori.
-14. Dependency runtime agent ditambah sebelum gate satu turn nyata lulus.
+14. Dependency runtime agent ditambah sebelum gate satu turn OpenCode nyata lulus (Claude/Codex
+    tidak wajib, jadi jangan menambahkannya sebagai prasyarat).
 ## 11. MVP vs later
 | Area | MVP (harus terbukti) | Later |
 |---|---|---|
 | Goal | `goal_json` + criteria + transisi + envelope | tabel `goal`, multi-goal/milestone |
 | Plan | draft/replace 1 lane, WIP 1, replan ≤2 | `depends_on`, readiness DAG, paralel nyata |
-| Runtime | Claude SDK satu turn + satu tool + cancel + resume | Codex fallback produksi, routing biaya |
+| Runtime | OpenCode CLI satu turn + satu tool baca + cancel + resume | Adapter Claude/Codex opsional, routing biaya |
 | Tool | baca portfolio/plan/task, propose goal/plan, assign, run request | katalog deferred, output spill, MCP eksternal |
 | Chat | panel web, SSE, history, stop, retry aman, approval card | chat-as-node, queue, edit-and-resend, voice |
 | Telegram | private bind + grammar + status + approval | group mirror, topic otomatis, rich draft |
@@ -207,7 +223,8 @@ conversation store + mock runtime + satu tool baca + panel SSE, dengan runtime n
 7. Satu workspace dipakai dua manusia: siapa owner goal dan approver?
 8. Kapan `WEBTERM_CHANNELS=readonly|control` diimplementasikan?
 ## 13. Rujukan
-- `09-CENTRAL-AGENT-RUNTIME.md`, `10-CENTRAL-AGENT-PLANNING.md`, `11-CENTRAL-AGENT-CHAT.md`,
-  `12-CENTRAL-AGENT-MEMORY.md`; `03-RENCANA.md` §7, `07-IMPLEMENTASI-P3-P5.md` §2-§4c.
+- `09-CENTRAL-AGENT-RUNTIME.md` (bukti live OpenCode CLI 2.0.26, 2026-11-02),
+  `10-CENTRAL-AGENT-PLANNING.md`, `11-CENTRAL-AGENT-CHAT.md`, `12-CENTRAL-AGENT-MEMORY.md`;
+  `03-RENCANA.md` §7, `07-IMPLEMENTASI-P3-P5.md` §2-§4c, `14-CENTRAL-AGENT-S0.md` §6.
 - Kode: `src/server/central/*`, `src/server/orchestrator/{plan,orchestratorAssign,approvalGate}.ts`,
   `src/server/ledger/*`, `src/server/channels/*`, `src/server/memory/*`.
