@@ -42,6 +42,20 @@ import {
 import { createTask, getTask, listTasks } from './ledgerTaskCreate'
 import { blockTask, cancelTask, sweepExpiredLeases } from './ledgerTaskStop'
 import {
+  type Approval,
+  type ApprovalChallenge,
+  type ApprovalStatus,
+  type DecideApprovalInput,
+  type RequestApprovalInput,
+  approvalDigest,
+  consumeApproval,
+  decideApproval,
+  expireApprovals,
+  getApproval,
+  listApprovals,
+  requestApproval,
+} from './ledgerApproval'
+import {
   type Budget,
   type BudgetCheck,
   type FinishRunInput,
@@ -131,6 +145,19 @@ export interface Ledger {
     }): Budget
     getBudget(projectId: string, scope?: string, period?: string): Budget | null
   }
+  approval: {
+    requestApproval(input: RequestApprovalInput): ApprovalChallenge
+    getApproval(id: string): Approval | null
+    listApprovals(opts?: {
+      projectId?: string
+      status?: ApprovalStatus
+      limit?: number
+    }): Approval[]
+    decideApproval(id: string, input: DecideApprovalInput): Approval
+    consumeApproval(id: string, input: { digest: string; now?: number }): boolean
+    expireApprovals(now?: number): number
+    digest(value: unknown): string
+  }
   /** Deletes one project; FK cascades remove agents/tasks/runs/events/usage/budget/prefix. */
   deleteProject(id: string): boolean
   /** Deletes every project owned by a workspace; returns how many projects were removed. */
@@ -196,6 +223,15 @@ export function createLedger(db: Database, options: LedgerOptions = {}): Ledger 
     budget: {
       setBudget: (input) => setBudget(ctx, input),
       getBudget: (projectId, scope, period) => getBudget(ctx, projectId, scope, period),
+    },
+    approval: {
+      requestApproval: (input) => requestApproval(ctx, input),
+      getApproval: (id) => getApproval(ctx, id),
+      listApprovals: (opts) => listApprovals(ctx, opts),
+      decideApproval: (id, input) => decideApproval(ctx, id, input),
+      consumeApproval: (id, input) => consumeApproval(ctx, id, input),
+      expireApprovals: (now) => expireApprovals(ctx, now),
+      digest: (value) => approvalDigest(value),
     },
     deleteProject(id) {
       return tx(ctx, () => {
