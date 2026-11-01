@@ -3,7 +3,7 @@
 ## [Unreleased]
 ### Added
 - OpenCode 2.0.26 as the primary central runtime adapter, with JSON event parsing, env scrubbing, default-deny permissions, cancel, and session resume support.
-- A typed proposal MVP for `goal.propose`, `plan.propose`, and `task.assign`, including policy validation and `central.proposal` audit records.
+- A typed proposal MVP for `goal.propose`, `plan.propose`, `task.assign`, and `approval.request`, including policy validation and `central.proposal` audit records.
 - Central Telegram private-chat dispatch and bounded, read-only project memory retrieval behind their respective flags.
 - Human approval surface under `/api/approvals/*`, separate from the capability-gated control plane. It can read a challenge, request, decide, and consume an approval, and a successful task review now moves the task to verified or failed instead of leaving it in `claimed_done`.
 - Inbox panel with Needs you / Review / Broken filters, a consent dialog that requires the checkbox and the literal `APPROVE`, and an unread count on the dock. Task rows carry their fence so a review decision can target the right task version.
@@ -19,7 +19,7 @@
 - A central thin layer behind `WEBTERM_CENTRAL=on`: `GET /api/central/portfolio`, a per-project projection with plan, task, approval, and budget usage, plus pause, resume, and priority actions written to the audit log. It is a projection and control surface, not an autonomous agent.
 
 ### Changed
-- Central chat can use `WEBTERM_CENTRAL_RUNTIME=opencode`; real free-model E2E now covers `goal.propose` and `task.assign`, including goal creation and task/plan locking. B3 remains partial for `task.run`/approval-request proposals, sustained credentialed-model/soak evidence, and real `plan.propose` E2E. Proposal blocks render as compact cards without claiming applied or approved status. Real Telegram delivery and production memory E2E remain unverified.
+- Central chat can use `WEBTERM_CENTRAL_RUNTIME=opencode`; real free-model E2E now covers all four proposal tools, including pending approval creation without decision/run. B3 remains partial only for `task.run`/`approval.decide` and sustained credentialed-model/soak evidence. Proposal blocks render as compact cards without claiming applied or approved status. Real Telegram delivery and production memory E2E remain unverified.
 - Approval dispatch reuses one deps object per ledger port, so the documented ten-minute `requestId` replay window works in production instead of allocating a fresh ack store per request.
 - `.env` no longer carries `WEBTERM_TOKEN` and is kept at mode `600`. A root token must be exported explicitly, so it is not inherited by every process that reads the auto-loaded file.
 

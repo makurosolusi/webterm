@@ -122,16 +122,22 @@ dikirim untuk jawaban satu langkah, jadi turn ditutup oleh exit proses. Tidak ad
 `--max-turns`/`--max-budget`; budget dihitung dari event dan ditegakkan dengan kill.
 ### B3. Tool registry dan policy
 **Status 2026-11-02:** partial. Typed proposal MVP untuk `goal.propose`, `plan.propose`, dan
-`task.assign` sudah divalidasi policy, diaudit sebagai `central.proposal`, dan diuji. `task.assign`
+`task.assign` dan `approval.request` sudah divalidasi policy, diaudit sebagai `central.proposal`, dan diuji. `task.assign`
 menerima `{projectId,itemId,expectedVersion,assignee?}`, membutuhkan `WEBTERM_CENTRAL_PLANNER=on`,
 `WEBTERM_CENTRAL_TOOLS=write`, dan `WEBTERM_ORCHESTRATOR_RUN=on`, lalu membuat real ledger task
-dan mengunci pending plan item ke worker. Assign tidak spawn, run, atau approval. Yang masih
+dan mengunci pending plan item ke worker. Assign tidak spawn, run, atau approval.
+`approval.request` menerima `{projectId,requestId,kind,request,taskId?}`, hanya membuat pending
+approval, validasi `taskId` sebagai existing task, idempotent by `requestId`, conflict jika request
+berubah, dan audit hanya menyertakan `approvalId`, bukan nonce/digest. Yang masih
 Real OpenCode free-model E2E pada port 8837 membuktikan human request → `goal.propose` → policy
 → `project.goal_json` proposed + audit. Port 8838 membuktikan `task.assign` memakai pending item
 context → real task `worker:p1` pending + plan item assigned + audit. Prompt menyediakan hingga
 50 pending items `{projectId,planVersion,itemId,title}`, exact schema ketiga tools, dan cap sekitar
-8 KiB. B3 tetap partial untuk `task.run`/approval-request proposals, sustained credentialed-model
-dan soak evidence, serta real `plan.propose` E2E yang belum dijalankan.
+8 KiB. Port 8839 membuktikan `plan.propose` version 2 draft dengan pending item dan audit; port
+8840 mendokumentasikan FK failure saat model memakai plan item id sebagai `taskId`, diperbaiki
+dengan validasi `taskId` dan penghapusan contoh dari prompt; port 8841 membuktikan pending
+`approval.request` tanpa decision/run. B3 tetap partial hanya untuk `task.run`/`approval.decide`
+(central tidak boleh decide), sustained credentialed-model/soak evidence.
 | Target | Isi | Budget |
 |---|---|---|
 | `central/mcp/centralMcpServer.ts` (baru) | server MCP **stdio**; validasi capability per call | ≤250 |
@@ -143,7 +149,7 @@ dan soak evidence, serta real `plan.propose` E2E yang belum dijalankan.
 | `central/tools/pauseRequest.ts` (+approvalRequest) | buat request; tidak pernah decide | ≤150 each |
 | `central/tools/*.test.ts` | allow/deny matrix, idempotensi | ≤400/file |
 Default `WEBTERM_CENTRAL_TOOLS=read` (hanya baca lewat MCP stdio); `write` membuka
-proposal goal/plan/assign. `task.assign` memerlukan `WEBTERM_CENTRAL_PLANNER=on` dan
+proposal goal/plan/assign/approval. `task.assign` memerlukan `WEBTERM_CENTRAL_PLANNER=on` dan
 `WEBTERM_ORCHESTRATOR_RUN=on`; `task.run` tetap melewati `WEBTERM_ORCHESTRATOR_RUN` +
 `WEBTERM_RUN_REQUIRE_APPROVAL`; central tidak memegang kunci approval. **Flag B:**
 `WEBTERM_CENTRAL_RUNTIME=off|mock|opencode|claude|codex`; `TOOLS=read|write`;
@@ -245,7 +251,7 @@ E aman paralel dengan B2/B3; D setelah C2; jangan B3 + C2 pada file yang sama ta
 | `WEBTERM_CENTRAL_CHAT` | off | C | route + panel chat |
 | `WEBTERM_CENTRAL_TELEGRAM` | off | D | bridge Telegram private |
 | `WEBTERM_CENTRAL_MEMORY` | off | E | retrieval + context builder |
-| `WEBTERM_CENTRAL_PLANNER` | off | B3 | enable typed proposal handling |
+| `WEBTERM_CENTRAL_PLANNER` | off | B3 | enable four typed proposal tools |
 | `WEBTERM_ORCHESTRATOR_RUN` | off | existing | jalur run |
 | `WEBTERM_RUN_REQUIRE_APPROVAL` | off | existing | gate approval R2 |
 Nilai lain = off (fail-closed). Tanpa ledger hidup, runtime/chat/memory `503` dan tidak boot.

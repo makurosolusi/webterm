@@ -167,8 +167,8 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
   `qc/p4-wave2-fixes.md`.
 
 Central detail dan evidence terbaru ada di `14-CENTRAL-AGENT-S0.md`: B3 masih partial hanya untuk
-`task.run`/approval request paths, sustained credentialed-model/soak evidence, dan real
-`plan.propose` E2E; `task.assign` sudah tersedia. Telegram delivery nyata dan production memory
+`task.run`/`approval.decide`, sustained credentialed-model/soak evidence; goal/plan/assign/approval
+proposal E2E sudah tersedia. Telegram delivery nyata dan production memory
 E2E juga belum diverifikasi.
 
 ### Yang sudah terverifikasi

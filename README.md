@@ -39,7 +39,7 @@ Environment variables:
 - `WEBTERM_CENTRAL_RUNTIME` — default `off`; `mock` or primary `opencode`. The OpenCode adapter runs `opencode run --format json` without PTY or `--auto`.
 - `WEBTERM_CENTRAL_MODEL` — default `opencode/deepseek-v4.1-flash-free`; use a credentialed provider for sustained turns. Free quota may return `provider.quota` 429 and is not retried.
 - `WEBTERM_OPENCODE_BIN` — default `opencode`; override the OpenCode binary path.
-- `WEBTERM_CENTRAL_TOOLS` — default `read`; `write` enables the typed proposal MVP.
+- `WEBTERM_CENTRAL_TOOLS` — default `read`; `write` enables the four-tool typed proposal MVP: `goal.propose`, `plan.propose`, `task.assign`, and `approval.request`.
 - `WEBTERM_CENTRAL_PLANNER` — default `off`; typed proposal handling requires this flag `on` and `WEBTERM_CENTRAL_TOOLS=write`. `task.assign` also requires `WEBTERM_ORCHESTRATOR_RUN=on` and creates/locks a real ledger task without spawning, running, or approving it.
 - `WEBTERM_CENTRAL_TELEGRAM` — default `off`; enables the private Telegram central chat bridge. Real Telegram delivery/webhook E2E is not verified.
 - `WEBTERM_CENTRAL_MEMORY` — default `off`; bounded, read-only project fact retrieval. It does not write or promote memory. Proposal blocks render as compact cards and do not claim applied or approved status.

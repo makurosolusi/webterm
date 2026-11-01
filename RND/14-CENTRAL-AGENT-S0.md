@@ -29,7 +29,7 @@ model dan 2-project soak belum menjadi evidence.
 ### B3 — typed proposal MVP
 
 Protocol yang berjalan adalah typed proposal protocol MVP, bukan MCP. Assistant text dapat
-memuat blok `<webterm-proposal>{"tool":"goal.propose"|"plan.propose"|"task.assign","input":{...}}</webterm-proposal>`.
+memuat blok `<webterm-proposal>{"tool":"goal.propose"|"plan.propose"|"task.assign"|"approval.request","input":{...}}</webterm-proposal>`.
 Server memvalidasi dengan `proposalPolicy`: `WEBTERM_CENTRAL_PLANNER=on` dan
 `WEBTERM_CENTRAL_TOOLS=write` wajib aktif untuk proposal, sedangkan `task.assign` juga
 memerlukan `WEBTERM_ORCHESTRATOR_RUN=on`; actor/status/path dan field terlarang ditolak;
@@ -37,7 +37,10 @@ proposal project-scoped. `goal.propose` membuat goal berstatus `proposed` tanpa 
 `plan.propose` membuat atau mengganti plan `draft` dengan `expectedVersion`. `task.assign`
 menerima `{projectId,itemId,expectedVersion,assignee?}`, membuat real ledger task, dan mengunci
 pending plan item ke worker. Assign tidak melakukan spawn, run, atau approval. Setiap proposal
-menulis satu audit `central.proposal`; proposal ditolak menjadi conversation event
+`approval.request` menerima `{projectId,requestId,kind,request,taskId?}` dan hanya membuat pending
+ledger approval. Tool ini tidak decide atau run, `taskId` harus berupa task yang sudah ada,
+`requestId` idempotent dan conflict jika request berubah. Audit menyertakan `approvalId`, tidak
+pernah nonce atau digest. Setiap proposal menulis satu audit `central.proposal`; proposal ditolak menjadi conversation event
 `entity.updated` dengan payload `proposal.rejected`.
 
 Acceptance HTTP memakai mock runtime pada port `8834`: bootstrap `p1`, proposal block,
@@ -54,13 +57,21 @@ Real OpenCode E2E juga terverifikasi pada 2026-11-02:
   `planVersion`; OpenCode menghasilkan valid `task.assign`. DB menunjukkan task `worker:p1`
   berstatus `pending`, plan item berstatus `assigned` dengan `task_id`, plan version 2, dan audit
   dengan payload `{"tool":"task.assign","ok":true,"projectId":"p1","taskId":"...","planVersion":2}`.
+- Port `8839`: plain request menghasilkan valid `plan.propose`; plan menjadi version 2 berstatus
+  `draft` dengan satu pending item dan audit `{"tool":"plan.propose","ok":true,"projectId":"p1","planVersion":2}`.
+- Port `8840`: attempt pertama gagal karena model memakai plan item id sebagai `taskId`, sehingga
+  foreign-key validation menolak proposal. Fix-nya adalah validasi `taskId` terhadap task yang ada
+  dan menghapus contoh `taskId` yang menyesatkan dari prompt.
+- Port `8841`: valid `approval.request` menghasilkan approval `central-deploy-staging-2` berstatus
+  `pending` dan audit `{"tool":"approval.request","ok":true,"projectId":"p1","approvalId":"central-deploy-staging-2"}`.
+  Tidak ada decision atau run.
 - Prompt sekarang mengekspos hingga 50 pending plan items dengan fields
-  `{projectId,planVersion,itemId,title}`, exact schema untuk ketiga proposal tools, dan cap sekitar
+  `{projectId,planVersion,itemId,title}`, exact schema untuk keempat proposal tools, dan cap sekitar
   8 KiB.
 
-**B3 masih partial:** `task.assign` sudah selesai dan terverifikasi. Yang masih tersisa adalah
-proposal `task.run`/approval-request paths, sustained credentialed-model/soak evidence, dan real
-E2E `plan.propose` yang belum dijalankan.
+**B3 masih partial:** `task.assign`, `plan.propose`, dan `approval.request` sudah terverifikasi.
+Yang masih tersisa hanya proposal `task.run`/`approval.decide` (central tidak boleh decide),
+sustained credentialed-model/soak evidence.
 Proposal blocks sekarang dirender sebagai compact cards. Card tidak mengklaim proposal sudah
 applied atau approved.
 
@@ -89,12 +100,12 @@ ada.
 ### Gates dan remaining work
 
 - `npx tsc --noEmit`: bersih.
-- Targeted tests: 70 lulus.
+- Targeted tests: 73 lulus (proposal + chat + client); Bun assign tests: 2 lulus.
 - Full Vitest: 2014 lulus, 1 failure environment-only pada `controlCwd` karena `TMPDIR` shell ini
   berada di bawah `HOME`; test lulus dengan `TMPDIR=/tmp`.
 - Bun-only: 228/228 lulus.
-- Remaining: B3 `task.run`/approval request paths, sustained credentialed-model/soak evidence,
-  real E2E `plan.propose`, real Telegram delivery, production memory E2E, dan real E2E milik user.
+- Remaining: B3 `task.run`/`approval.decide`, sustained credentialed-model/soak evidence, real
+  Telegram delivery, production memory E2E, dan real E2E milik user.
 
 ## 2. Scope S0
 
@@ -166,7 +177,7 @@ scope menolak project yang tidak ada dengan 404 `project_not_found`. Regression 
    typed proposal parser, real one-turn gate. CLI 2.0.26 sudah terbukti hidup (§6); yang belum:
    satu turn dengan model ber-kredensial, satu tool MCP dipanggil, satu cancel, resume lintas
    proses. Jangan pakai `--auto`; jangan klaim MCP tool write yang belum terverifikasi.
-2. B3: proposal `task.run`/approval request paths and `memory.claim` with authority tests; `task.assign`
+2. B3: proposal `task.run`/`approval.decide` paths and `memory.claim` with authority tests; `task.assign`
    sudah tersedia. `goal.propose`/`plan.propose`/`task.assign` tetap lewat typed proposal MVP.
 3. C: tool/approval cards, cancel/retry, reconnect polish.
 4. D: Telegram private bridge to the same conversation service; group read-only.
