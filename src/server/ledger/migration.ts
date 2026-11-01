@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { existsSync, readdirSync, unlinkSync } from 'node:fs'
+import { chmodSync, existsSync, readdirSync, unlinkSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { MIGRATIONS, type Migration } from './ledgerSchema'
 import { ledgerMetrics } from './ledgerMetrics'
@@ -23,6 +23,27 @@ export const LATEST_VERSION = MIGRATIONS.reduce((max, m) => Math.max(max, m.vers
 
 const BACKUP_KEEP = 3
 const MEMORY_DB = ':memory:'
+/** Ledger files hold approval nonces and request payloads: owner-only on POSIX. */
+const PRIVATE_FILE_MODE = 0o600
+/** SQLite's WAL sidecars; they can contain the same bytes as the database. */
+const SIDECAR_SUFFIXES = ['-wal', '-shm'] as const
+
+function isFileDbPath(path: string): boolean {
+  return path !== MEMORY_DB && path !== ''
+}
+
+/**
+ * chmods `file` to 0600 and throws a typed error on failure. The message names the
+ * operation and path only, never the contents.
+ */
+function secureLedgerFile(file: string, operation: string): void {
+  try {
+    chmodSync(file, PRIVATE_FILE_MODE)
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    throw new LedgerError(`${operation}: cannot chmod ${file} to 0600: ${reason}`, { cause: err })
+  }
+}
 
 function readUserVersion(db: Database): number {
   const row = stmt(db, 'PRAGMA user_version').get()
@@ -123,6 +144,19 @@ export function preMigrationBackup(db: Database, path: string): string | null {
   } finally {
     ;(copy as unknown as { close(): void }).close()
   }
+  // VACUUM INTO inherits the process umask (typically 0644). The backup is a
+  // byte-for-byte copy of the ledger, so it must be as private as the ledger.
+  try {
+    secureLedgerFile(target, 'preMigrationBackup')
+  } catch (err) {
+    // Never leave a world-readable copy behind when hardening fails.
+    try {
+      unlinkSync(target)
+    } catch {
+      // Best effort: the original chmod failure is the error worth reporting.
+    }
+    throw err
+  }
   pruneBackups(path)
   return target
 }
@@ -162,12 +196,31 @@ function pruneBackups(path: string): void {
  */
 export function openLedgerDb(path: string): Database {
   const db = new Database(path)
-  db.exec('PRAGMA foreign_keys = ON')
-  db.exec('PRAGMA busy_timeout = 5000')
-  if (path !== MEMORY_DB && path !== '') db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA synchronous = NORMAL')
-  const started = performance.now()
-  migrateWithBackup(db, path)
-  ledgerMetrics.observe('migration_ms', performance.now() - started)
+  try {
+    db.exec('PRAGMA foreign_keys = ON')
+    db.exec('PRAGMA busy_timeout = 5000')
+    if (isFileDbPath(path)) db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA synchronous = NORMAL')
+    const started = performance.now()
+    migrateWithBackup(db, path)
+    ledgerMetrics.observe('migration_ms', performance.now() - started)
+    // Hardening here protects direct callers (tests, scripts) that never go
+    // through ledgerRuntime. The parent directory stays ledgerRuntime's job.
+    if (isFileDbPath(path)) {
+      secureLedgerFile(path, 'openLedgerDb')
+      for (const suffix of SIDECAR_SUFFIXES) {
+        const sidecar = `${path}${suffix}`
+        if (existsSync(sidecar)) secureLedgerFile(sidecar, 'openLedgerDb')
+      }
+    }
+  } catch (err) {
+    // Do not leak an open handle when the caller gets an error instead of a db.
+    try {
+      ;(db as unknown as { close(): void }).close()
+    } catch {
+      // Closing a db that failed to finish opening may itself fail; ignore.
+    }
+    throw err
+  }
   return db
 }
