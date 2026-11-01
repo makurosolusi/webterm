@@ -57,6 +57,8 @@ function ProposalCard({ proposal }: { proposal: VisibleProposal }) {
       ? 'Plan proposal'
       : proposal.tool === 'task.assign'
         ? 'Task assignment'
+        : proposal.tool === 'approval.request'
+          ? 'Approval request'
         : `${proposal.tool} proposal`
   const details = [proposal.projectId, proposal.itemId, proposalGoal(proposal)].filter(Boolean).join(' · ')
   return (

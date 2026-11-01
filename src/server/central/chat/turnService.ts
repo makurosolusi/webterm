@@ -210,7 +210,7 @@ export class TurnService {
       const result = await applyProposal(this.db, checked.proposal!)
       this.record(conversationId, 'entity.updated', {
         eventType: result.ok ? 'proposal.applied' : 'proposal.rejected', tool: result.tool,
-        ...(result.ok ? { projectId: result.projectId, goalVersion: result.goalVersion, planVersion: result.planVersion } : { code: result.code }),
+        ...(result.ok ? { projectId: result.projectId, goalVersion: result.goalVersion, planVersion: result.planVersion, approvalId: result.approvalId } : { code: result.code }),
       }, turnId, messageId)
     }
   }

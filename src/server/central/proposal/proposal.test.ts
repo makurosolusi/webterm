@@ -102,6 +102,37 @@ describe('proposalPolicy', () => {
 })
 
 describe('applyProposal', () => {
+  it('supports approval requests, replay, conflicts, and safe nested status', async () => {
+    const f = fixture()
+    const base = { db: f.db, conversationId: 'central:project:p1', planner: true, toolsWrite: true }
+    const valid = { projectId: 'p1', requestId: 'req-1', kind: 'deploy', request: { status: 'ready', target: 'staging' } }
+    expect(validateProposal({ tool: 'approval.request', input: { ...valid, taskId: 'plan-item-1' } }, base).code).toBe('task_not_found')
+    const missingTask = await applyProposal(f.db, { tool: 'approval.request', input: { ...valid, requestId: 'missing-task', taskId: 'plan-item-1' }, projectId: 'p1' })
+    expect(missingTask).toMatchObject({ ok: false, code: 'task_not_found' })
+    expect(allRows(f.db, "SELECT id FROM approval WHERE id = 'central-missing-task'")).toHaveLength(0)
+    expect(validateProposal({ tool: 'approval.request', input: valid }, base).ok).toBe(true)
+    for (const input of [
+      { ...valid, requestId: '' },
+      { ...valid, request: [] },
+      { ...valid, request: { nonce: 'bad' } },
+      { ...valid, status: 'pending' },
+      { ...valid, request: { data: 'x'.repeat(8 * 1024) } },
+    ]) expect(validateProposal({ tool: 'approval.request', input }, base).ok).toBe(false)
+    const first = await applyProposal(f.db, { tool: 'approval.request', input: valid, projectId: 'p1' })
+    expect(first).toMatchObject({ ok: true, approvalId: 'central-req-1' })
+    expect(allRows(f.db, "SELECT status FROM approval WHERE id = 'central-req-1'")[0]).toMatchObject({ status: 'pending' })
+    const auditRow = allRows(f.db, "SELECT payload_json FROM event WHERE kind = 'central.proposal'")[0]
+    expect(String(auditRow.payload_json)).not.toContain('nonce')
+    expect(String(auditRow.payload_json)).not.toContain('digest')
+    expect(allRows(f.db, "SELECT choice FROM decision WHERE question = 'deploy'")[0]).toMatchObject({ choice: null })
+    const replay = await applyProposal(f.db, { tool: 'approval.request', input: valid, projectId: 'p1' })
+    expect(replay).toMatchObject({ ok: true, reused: true })
+    expect(allRows(f.db, "SELECT id FROM approval WHERE id = 'central-req-1'")).toHaveLength(1)
+    const conflict = await applyProposal(f.db, { tool: 'approval.request', input: { ...valid, request: { status: 'changed' } }, projectId: 'p1' })
+    expect(conflict).toMatchObject({ ok: false, code: 'request_conflict' })
+    f.close()
+  })
+
   it('creates goal and draft plan, and audits success and stale failure', async () => {
     const f = fixture()
     const goalInputForApply = { ...goalInput, projectId: 'p3' }
