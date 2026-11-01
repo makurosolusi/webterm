@@ -135,6 +135,10 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   replay requestId `201`, duplicate `409 node_exists`, malformed JSON `400 invalid_json`,
   body 70KB `413`, ghost close `closed:false` lalu wait `404 node_not_found`.
   Budget route tetap: `api.ts` 130, `mount.ts` 136.
+- **Validasi tambahan**: requestId sama dipakai lintas route tetap menjalankan close (bukan replay
+  spawn); `sessionId` client tidak aman `400 invalid_session_id`; root token salah `403`;
+  token node tidak bisa mint (`403`) atau baca settings (`403`), dan control nodes `401` karena
+  capability hilang; body chunked 70KB tetap `413`.
 - Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
