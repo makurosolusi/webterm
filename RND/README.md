@@ -145,6 +145,10 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   gagal; sessionId mint dihapus → 2 test B4 gagal; cap body dinaikkan → 2 test cap gagal;
   guard ghost close dihapus → 2 test close gagal; `tokensMatch` root dihapus → test 403 gagal.
   Test suite memang menangkap regresi pada kelima invariant ini.
+- **Loopback tanpa token** (dijalankan dari cwd tanpa `.env`): settings `200`, control nodes tanpa
+  capability tetap `401`, mint `404`, body JSON non-object (`[]`/`null`) `400 invalid_request_id`.
+  Token node/root tidak pernah menjadi satu-satunya gerbang untuk control API.
+- **Batas session id**: 256 karakter diterima `201`, 257 karakter `400 invalid_session_id`.
 - Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
