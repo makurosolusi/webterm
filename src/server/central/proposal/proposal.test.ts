@@ -4,6 +4,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.
 import { applyProposal } from './applyProposal'
 import { parseProposals } from './proposalParser'
 import { validateProposal } from './proposalPolicy'
+import { centralPrompt } from './centralPrompt'
 
 const goalInput = {
   projectId: 'p1', statement: 'Ship the slice',
@@ -38,6 +39,26 @@ describe('proposalParser', () => {
   it('rejects non-object input', () => {
     expect(parseProposals('<webterm-proposal>{"tool":"goal.propose","input":[]}</webterm-proposal>')).toEqual([])
     expect(parseProposals('<webterm-proposal>{"tool":"goal.propose","input":null}</webterm-proposal>')).toEqual([])
+  })
+})
+
+describe('centralPrompt', () => {
+  it('includes exact proposal schemas only when enabled', () => {
+    const f = fixture()
+    const enabled = centralPrompt(f.db, 'make a plan', true)
+    expect(enabled).toContain('goal.propose {"projectId":"<id>"')
+    expect(enabled).toContain('successCriteria entries MUST be objects')
+    expect(enabled).toContain('plan.propose {"projectId":"<id>"')
+    expect(enabled).toContain('task.assign {"projectId":"<id>"')
+    expect(centralPrompt(f.db, 'make a plan', false)).not.toContain('goal.propose')
+    f.close()
+  })
+  it('includes pending plan items but excludes non-pending items', () => {
+    const f = fixture()
+    const prompt = centralPrompt(f.db, 'assign work', true)
+    expect(prompt).toContain('"itemId":"i1"')
+    expect(prompt).not.toContain('"itemId":"i2"')
+    f.close()
   })
 })
 
