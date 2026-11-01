@@ -3,6 +3,7 @@
 // index.ts so startup stays one readable block and both routes can be exercised without a port.
 //
 // Enabled only when ALL of these hold; otherwise no route is installed at all:
+//   WEBTERM_CHANNELS is unset or `on` (master kill switch; see channelsMasterState)
 //   WEBTERM_TELEGRAM=on
 //   WEBTERM_TELEGRAM_WEBHOOK_SECRET or _SECRET_FILE (Telegram `secret_token`, >= 32 [A-Za-z0-9_-])
 //   WEBTERM_LEDGER=on|shadow (an approval needs the ledger; without it the channel is pointless)
@@ -13,6 +14,7 @@ import { dataDir } from '../config'
 import type { ApprovalStatus } from '../ledger/ledgerApproval'
 import type { Ledger } from '../ledger/ledger'
 import { CHANNEL_STORE_FILE, ChannelStore } from './channelStore'
+import { CHANNELS_MASTER_ENV, CHANNELS_MASTER_VALUES, channelsMasterState } from './channelsMasterGate'
 import {
   readSecretFile,
   resolveWebhookSecret,
@@ -39,6 +41,14 @@ import { webhookPeerKey } from './webhookPeer'
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
 export const TELEGRAM_ENABLED_ENV = 'WEBTERM_TELEGRAM'
+
+// Master kill switch lives in its own module; re-exported here as the single import surface.
+export {
+  CHANNELS_MASTER_ENV,
+  CHANNELS_MASTER_VALUES,
+  channelsMasterState,
+  type ChannelsMasterState,
+} from './channelsMasterGate'
 
 // Secret source and throttle live in their own modules; re-exported so this stays the single
 // import surface for the server and its tests.
@@ -186,7 +196,16 @@ export function startChannelsRuntime(
   options: ChannelsRuntimeOptions = {}
 ): ChannelsRuntime | null {
   const env = options.env ?? process.env
-  // Flag first: with `WEBTERM_TELEGRAM` off there is no route and the secret is never touched.
+  // Master switch first: `off` short-circuits even when Telegram itself is on.
+  const master = channelsMasterState(env)
+  if (master !== 'on') {
+    // Never echo the raw value: it is operator input and this line goes to shared logs.
+    if (master === 'unsupported') {
+      logDisabled(`unsupported ${CHANNELS_MASTER_ENV} value; supported: ${CHANNELS_MASTER_VALUES} (staying off)`)
+    }
+    return null
+  }
+  // Flag next: with `WEBTERM_TELEGRAM` off there is no route and the secret is never touched.
   if (!telegramChannelEnabled(env)) return null
 
   const resolved = resolveWebhookSecret(env, options.readSecret ?? readSecretFile)

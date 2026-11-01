@@ -36,7 +36,7 @@ Environment variables:
 
 Any of these can go in a `.env` file in the working directory instead of the environment. Bun loads that file automatically, for both the dev server and the compiled binary, so every value in it enters `process.env`. Keep the file at mode `600`, and leave `WEBTERM_TOKEN` out of it unless you accept that inheritance.
 
-`WEBTERM_CHANNELS` and the documented `off|readonly|control` Telegram modes are still planned, not implemented. Only `WEBTERM_TELEGRAM=on` is read today.
+`WEBTERM_CHANNELS` is the master kill switch for the whole channel runtime (webhook, binding API, reply sender). Only `on|off` is implemented: unset or `on` keeps the current behavior, `off` disables everything even when `WEBTERM_TELEGRAM=on`, and any other value fails closed (channels stay off) with one warning naming the supported values. The `readonly|control` modes remain planned. Channel state lives in a JSON store under the data directory, so enabling channels needs no v4 SQL migration.
 
 Dev is not full browser HMR for every change: Vite HMR covers client edits live, but server edits need a restart.
 
