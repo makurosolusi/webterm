@@ -8,12 +8,6 @@
 // (challenge + list), `approvalHumanRequest.ts` (mint), `approvalHumanReview.ts` (decide/consume).
 export {
   HUMAN_ACTOR,
-  MAX_KIND,
-  MAX_PROJECT_ID,
-  MAX_SECRET,
-  paging,
-  secret,
-  storeFor,
   type Result,
 } from './approvalHumanShared'
 export { challengeRoute, listRoute } from './approvalHumanRead'
