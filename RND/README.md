@@ -102,8 +102,9 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 ## 7. Status singkat
 
 - Riset: 46 worker wave 1-4, 13 worker wave 5 (implementasi), 12 worker wave 6 (omnichannel),
-  6 QC P0, 5 fix P0, 1 fix flake; 3 QC P1 + 5 fix P1.
-- Branch implementasi: `feature/agent-pusat-p0` (selesai), `feature/agent-pusat-p1`.
+  6 QC P0, 5 fix P0, 1 fix flake; 3 QC P1 + 5 fix P1; 2 QC P2 + 2 fix P2.
+- Branch implementasi: `feature/agent-pusat-p0` (selesai), `feature/agent-pusat-p1` (selesai),
+  `feature/agent-pusat-p2` (fondasi selesai).
 - **P0 selesai**: multi-subscriber, outputLog seq, nodeRegistry, replay remount, close/exit,
   B1 save flush, B3 nodeId validation, hook token tidak di argv, API node validation, caps.
 - **P1 selesai**: control API `spawn/prompt/wait/close/nodes`, capability `wcap_*` (verb+resource,
@@ -115,8 +116,13 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   WAL), schema v1 (project/agent/task/event/decision/approval/run/usage/prefix/budget/memory/
   memory_fts), repository task state machine (fence, lease, suspect, evidence) + event atomik.
   Belum di-wire ke startup (`WEBTERM_LEDGER` masih off).
-- Gates P2: 22 bun ledger test, typecheck hijau.
-- Fase berikutnya: wire ledger + usage/run, lalu P3 approval blocking.
+- Gates P2: 45 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
+- **P2 QC fixed**: attempt cap, claimDone lease owner/expiry, FK pragma assertion, depth/project
+  invariants, event reference consistency, per-project idem_key + lookup, index coverage,
+  pagination clamps, workspace-wide delete, migration version validation.
+- Sisa P2.1 (belum): wire ledger ke startup, repository run/usage/budget, reaper sweep,
+  cancel/block writer, backup otomatis sebelum migrasi destruktif, metrics.
+- Fase berikutnya: P2.1 lalu P3 approval blocking.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
 
@@ -147,3 +153,4 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 |---|---|
 | `8655602` | migration runner + schema v1 |
 | `49373c3` | repository project/task/event |
+| `83556ad` | fix invariant ledger pasca-QC |
