@@ -292,7 +292,7 @@ TMPDIR=/tmp/st npx tsc --noEmit
 TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test src/server/orchestrator src/server/inbox \
   src/server/memory src/server/channels src/server/ledger
-TMPDIR=/tmp/st bun test
+TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
 Hijau hanya bila semua lulus pada tree yang sama, tanpa file berubah di tengah run.
