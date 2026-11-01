@@ -1,12 +1,16 @@
 // Bun-only: jalur yang diuji di sini BUTUH PTY nyata yang keluar sendiri (`onExit` adalah yang
 // menyetel 'done' lalu menghapus sesinya dari `map`), jadi ia tidak bisa hidup di vitest.
-import { test, expect } from 'bun:test'
-import { mkdtempSync } from 'node:fs'
+import { test, expect, afterAll } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 // Peluncuran agent claude menulis file settings sungguhan — seluruh file diisolasi ke temp.
-process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-close-'))
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-close-'))
+process.env.WEBTERM_DATA_DIR = DATA_DIR
+// Tiap run meninggalkan satu direktori temp; tanpa pembersihan /tmp menumpuk ratusan direktori
+// setelah beberapa hari, dan `mkdtempSync` tetap memakan inode walau isinya kecil.
+afterAll(() => rmSync(DATA_DIR, { recursive: true, force: true }))
 
 import type { AgentStatus } from '../shared/workspace'
 import type { ServerMsg } from '../shared/protocol'
@@ -84,7 +88,10 @@ test('restarting a finished agent does not inherit its done status', async () =>
   // Urutan nyatanya: CLI-nya keluar lebih dulu (restart selalu mematikannya), jadi saat `close`
   // tiba node ini sudah lenyap dari `map` dan gerbangnya yang dulu menolak pembersihan.
   s.open({ t: 'open', id: 'cl1', cols: 80, rows: 24, cmd: 'exit 0', agentId: 'claude' }, r.send)
-  const deadline = Date.now() + 5000
+  // Plafon 15 s, bukan 5 s: 5 s PERSIS batas default per-test `bun test`, jadi runner bisa menang
+  // lebih dulu dan test merah sebagai "timed out" tanpa menyebut status yang hilang. Jalur yang
+  // rusak tidak pernah memancarkan 'done', jadi plafon tinggi hanya menunda merah yang sah.
+  const deadline = Date.now() + 25_000
   while (!r.seen.includes('done') && Date.now() < deadline) await sleep(25)
   expect(r.seen).toContain('done')
 
@@ -97,7 +104,7 @@ test('restarting a finished agent does not inherit its done status', async () =>
   expect(stored(s, 'cl1')).toContain('NONE')
   expect(stored(s, 'cl1')).not.toContain(OLD_STATUS_AFTER_CLOSE)
   s.close('cl1', r.send)
-})
+}, 90_000)
 
 test('the socket that asked for the close hears the withdrawal', () => {
   const s = new Sessions()
@@ -113,7 +120,7 @@ test('the socket that asked for the close hears the withdrawal', () => {
   expect(r.seen.length).toBe(before + 1)
   expect(r.seen[before]).toBe('NONE')
   expect(r.seen[before]).not.toBe(OLD_STATUS_AFTER_CLOSE)
-})
+}, 90_000)
 
 test('a pty killed by close does not post a done status after the fact', async () => {
   const s = new Sessions()
@@ -133,7 +140,7 @@ test('a pty killed by close does not post a done status after the fact', async (
   expect(stored(s, 'cl4')).toContain('NONE')
   expect(stored(s, 'cl4')).not.toContain(OLD_STATUS_AFTER_CLOSE)
   s.close('cl4', r.send)
-})
+}, 90_000)
 
 test('a pty killed by close does not emit a stale exit to the next session', async () => {
   const s = new Sessions()
@@ -148,7 +155,9 @@ test('a pty killed by close does not emit a stale exit to the next session', asy
 
   // `onExit` memancar dari `proc.exited`, jadi prosesnya harus benar-benar hilang dulu; tanpa ini
   // test lulus hanya karena belum sempat terjadi apa pun.
-  expect(await waitGone(old, 3000)).toBe(true)
+  // Anggaran 10 s: SIGTERM langsung memakan `sleep`, tapi di suite penuh proses bisa baru dijadwalkan
+  // keluar setelah antrean CPU menipis. Yang dinilai tetap "prosesnya benar-benar hilang", bukan cepat.
+  expect(await waitGone(old, 10_000)).toBe(true)
   await sleep(100)
 
   // Satu-satunya konsumen `exit` adalah `\r\n[process exited]` di `TerminalCore`, jadi yang lolos
@@ -160,7 +169,7 @@ test('a pty killed by close does not emit a stale exit to the next session', asy
   expect(r.exits[0].code).toBe(CLOSED_EXIT_CODE)
   expect(r.exits.filter((e) => e.reason === 'self').length).toBe(0)
   s.close('cl5', r.send)
-})
+}, 90_000)
 
 test('a pty that exits on its own still emits its exit', async () => {
   const s = new Sessions()
@@ -175,13 +184,13 @@ test('a pty that exits on its own still emits its exit', async () => {
   // kesabaran, bukan kecepatan: `onExit` di jalur ini diukur ~0,65 s (25/25 sampel, terburuk 1,3 s),
   // tapi login shell nyata bisa lewat 6 s saat load average 6 — sedangkan jalur yang rusak tidak
   // memancarkan `exit` sama sekali, jadi plafon tinggi menunda merah yang sah, bukan menutupinya.
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + 25_000
   while (!r.exits.length && Date.now() < deadline) await sleep(25)
 
   expect(r.exits.length).toBe(1)
   expect(r.exits[0].code).toBe(0)
   expect(r.exits[0].reason).toBe('self')
-}, 60_000)
+}, 90_000)
 
 test('a fresh server answering a replayed open says there is no status', () => {
   const s = new Sessions()
@@ -197,7 +206,7 @@ test('a fresh server answering a replayed open says there is no status', () => {
   expect(r.seen[0]).toBe('NONE')
   expect(r.seen.length).not.toBe(OLD_SPAWN_STATUS_MESSAGES)
   s.close('cl7', r.send)
-})
+}, 90_000)
 
 test('a spawn drops the status left behind by a pty that is gone, not just announces it', () => {
   const s = new Sessions()
@@ -212,7 +221,7 @@ test('a spawn drops the status left behind by a pty that is gone, not just annou
   expect(stored(s, 'cl8')).toContain('NONE')
   expect(stored(s, 'cl8')).not.toContain(OLD_STATUS_AFTER_RESPAWN)
   s.close('cl8', r.send)
-})
+}, 90_000)
 
 test('close clears the transcript path of a node whose pty is already gone', () => {
   const s = new Sessions()

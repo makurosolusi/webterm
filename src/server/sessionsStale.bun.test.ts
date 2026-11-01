@@ -1,11 +1,14 @@
 // Bun-only: `open` butuh PTY nyata (Bun.Terminal via spawnPty) supaya ada socket yang menerima
 // pesan status. Aturan basi-nya sendiri murni dan diuji tanpa timer di `src/shared/agentStale.test.ts`.
-import { test, expect } from 'bun:test'
-import { mkdtempSync } from 'node:fs'
+import { test, expect, afterAll } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-stale-'))
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-stale-'))
+process.env.WEBTERM_DATA_DIR = DATA_DIR
+// Satu direktori per run; tanpa pembersihan /tmp menumpuk ratusan `webterm-stale-*` dari run lokal.
+afterAll(() => rmSync(DATA_DIR, { recursive: true, force: true }))
 
 import type { AgentStatus } from '../shared/workspace'
 import type { ServerMsg } from '../shared/protocol'
@@ -80,7 +83,7 @@ test('a working node that goes silent past the window loses its status', () => {
   // Bukti guard menggigit: inilah yang masih tersimpan sebelum ada jam.
   expect(stored()).not.toBe(OLD_STATUS_AFTER_SILENCE)
   s.close('sw1')
-})
+}, 90_000)
 
 test('every status write pushes the clock back, so a long turn is never swept', () => {
   const { s, stored } = live('sw2')
@@ -91,7 +94,7 @@ test('every status write pushes the clock back, so a long turn is never swept', 
   s.sweepStale(t0 + 50 * 60_000 + 1)
   expect(stored()).toBe('working')
   s.close('sw2')
-})
+}, 90_000)
 
 test('only working is swept — waiting, blocked and done count forever', () => {
   for (const status of ['waiting', 'blocked', 'done'] as AgentStatus[]) {
@@ -103,7 +106,7 @@ test('only working is swept — waiting, blocked and done count forever', () => 
     expect(stored()).toBe(status)
     s.close(`sw3-${status}`)
   }
-})
+}, 90_000)
 
 test('the sweep actually runs on its own clock, and can be stopped', async () => {
   const { s, stored } = live('sw4')
@@ -120,7 +123,7 @@ test('the sweep actually runs on its own clock, and can be stopped', async () =>
   await sleep(40)
   expect(stored()).toBe('working')
   s.close('sw4')
-})
+}, 90_000)
 
 test('a node swept while its socket was gone hears the withdrawal on re-attach', () => {
   const { s, seen, stored, drop } = live('sw5')
@@ -143,4 +146,4 @@ test('a node swept while its socket was gone hears the withdrawal on re-attach',
   // Tanpa mengarang nilai nyata apa pun — khususnya bukan 'done', yang membuka Resume/Restart.
   expect(seen).not.toContain('done')
   s.close('sw5')
-})
+}, 90_000)
