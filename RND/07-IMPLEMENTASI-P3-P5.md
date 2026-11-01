@@ -8,6 +8,11 @@ Update wave 2: 2026-11-01 15:24 (+08:00), `0f12506`..`2f04f77` (13 commit kode +
 `98441a4`/`c85d37e`). Semua angka "12:22" di bawah adalah snapshot lama yang sengaja
 dipertahankan; angka gate terbaru ada di §1 dan §8.
 
+Update wave 3: 2026-11-01 18:47 (+08:00), `9af9047`..`01e33ac` (8 commit). Menutup C2, C3,
+residual binding group saat load, cap body settings/workspaces, throttle proxy, alias nama token
+bot Telegram, dan gate plan terminal; plus cek status Telegram hidup (tanpa webhook/pesan).
+Snapshot wave 1/2 di bawah tidak ditulis ulang.
+
 Label: `[V]` terverifikasi di snapshot · `[W]` ada di working tree, belum commit atau belum
 teruji end-to-end · `[P]` rencana saja, belum ada di kode.
 
@@ -43,6 +48,19 @@ Gate wave 2 (tree `2f04f77`, 2026-11-01 15:24; termasuk fix kontrol dan loop wor
 Flake yang diketahui: `terminalCore` dan `paneSplit` bisa gagal di bawah beban paralel dan
 lulus saat diisolasi. Jangan klaim deterministik 100%.
 
+Gate wave 3 (HEAD `01e33ac`, 2026-11-01 18:47; fokus C2/C3 + residual P5 + cap body + token
+alias + plan terminal):
+
+| Cek | Hasil |
+|---|---|
+| `tsc --noEmit` (strict + unused) | bersih |
+| `vitest run` penuh (`TMPDIR=/tmp`) | 135 file / 1766 test lulus |
+| `bun test` penuh | 29 file / 204 test lulus |
+| Wave-3 terarah (`orchestratorRun`, `orchestratorRunApi`, `channelStore`, `channelsRuntime`, `webhookPeer`, `settingsApi`, `workspacesApi`) | 7 file / 85 test lulus |
+| `ledgerRuntime.bun.test.ts` | 6 test lulus |
+
+Tanpa `TMPDIR=/tmp`, `controlCwd` gagal (lingkungan, lihat §9), bukan regresi kode.
+
 ---
 
 ## 2. P3: orchestrator dan approval
@@ -52,11 +70,11 @@ lulus saat diisolasi. Jangan klaim deterministik 100%.
 | `orchestrator/roles.ts` | `assertCanSpawn`, `assertRoleDepth`, `roleForDepth`, `assertProjectOwnership`, `ownsProject`, `RoleError`; depth maks 2 | `[W]` + test |
 | `orchestrator/caps.ts` | `DEFAULT_CAPS`, `checkCaps`, `assertCaps`, `emptyCapSnapshot`, `CapExceededError` | `[W]` + test |
 | `orchestrator/planModel.ts` | `validateScope`, `ITEM_TRANSITIONS`, tipe `Plan`/`PlanItem` | `[W]` |
-| `orchestrator/plan.ts` | `createPlanStore(db)` → get/create/replace/assign/updateItem, optimistic `version` | `[V]` + test; atomicity C2 residual |
+| `orchestrator/plan.ts` | `createPlanStore(db)` → get/create/replace/assign/updateItem, optimistic `version` | `[V]` + test; atomicity C2 ditutup wave 3 (§2a) |
 | `orchestrator/worktree.ts` | `createWorktreeService({root,exec})` → allocate/release/get/list; branch + path guard | `[V]` + test; dipakai `workerRuntime` |
-| `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[V]`; spawn PTY produksi di `workerRuntime.ts` |
+| `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[V]`; spawn PTY produksi di `workerRuntime.ts`; `recordWorkerResult` atomik bila `ledger.tx` ada |
 | `orchestrator/workerRuntime.ts` (+`Prompt`/`Session`/`Settle`/`Types`) | run satu task: worktree → PTY → prompt satu baris → settle/timeout → record → cleanup; cap prompt 8 KiB, output 64 KiB | `[V]` + test; loop fake-agent terverifikasi, Claude nyata belum |
-| `orchestratorRunApi.ts` | `POST /api/orchestrator/run`, gate `WEBTERM_ORCHESTRATOR_RUN=on`; tolak field client (`repo/cmd/...`), repositori dari `project.path`, root worktree dibuat `0700`, timeout 5 s..15 mnt | `[V]` + test; acceptance loop fake-agent (`2f04f77`) |
+| `orchestratorRunApi.ts` | `POST /api/orchestrator/run`, gate `WEBTERM_ORCHESTRATOR_RUN=on`; tolak field client (`repo/cmd/...`), repositori dari `project.path`, root worktree dibuat `0700`, timeout 5 s..15 mnt | `[V]` + test; acceptance loop fake-agent (`2f04f77`); C3 ditutup wave 3: `project.status` `paused` → 409 `project_paused` sebelum repo/plan/worktree; plan `completed`/`abandoned` → 409 `plan_closed` sebelum assignment/worktree |
 | `orchestratorControlApi.ts` | `POST /api/orchestrator/bootstrap` (project+orchestrator+worker+plan, path harus root git absolut, item wajib `scope` eksplisit) dan `/assign` (task ledger + kunci item, `expectedVersion`, agent id ber-`:` diterima) | `[V]`: acceptance HTTP bootstrap → duplicate 409 → assign → plan/tasks, tanpa worktree/PTY; B1 (`repo` ditolak) + B2 (agent id eksplisit) fixed di `0b63714` |
 | `ledger/ledgerApproval.ts` | request/get/list/decide/consume/expire; digest + nonce + single-use | `[V]` |
 | `ledger/durableAck.ts` | `DurableAckStore` + `durableAckFor(db, scope)`; ack di tabel `request_ack`, `INSERT OR IGNORE` (replay tidak memperpanjang expiry), prune expiry + evict tertua | `[V]` + test |
@@ -76,6 +94,14 @@ Alur review task sekarang (commit `31c0886`):
 
 Ketiga transisi itu sekarang punya test (`approvalHumanApi.test.ts`: verify setelah consume,
 reject mem-fail, stale fence ditolak, verify ulang pada task non-`claimed_done` ditolak).
+
+### 2a. Atomicity `recordWorkerResult` (C2)
+
+`recordWorkerResult` (`orchestratorRun.ts`) sekarang membungkus transisi task
+(`claimSuccess`/`failTask`), `plan.updateItem`, dan `event.appendEvent` dalam `ledger.tx`
+bila port `tx` tersedia. Plan yang basi (`plan_stale`) me-rollback status task, jadi task
+tidak lagi bisa tertinggal `verified` sementara item plan tetap `running`. Tanpa `tx`
+(fake db/port lama), perilaku lama yang non-atomik tetap berlaku.
 
 Pemulihan approved-unconsumed (B4) punya jalur UI: `GET /api/approvals?status=approved`
 memproyeksikan `taskId`/`fence`/`request` dari `request_json`, dan `InboxPanel` menampilkan
@@ -118,27 +144,31 @@ Gap P4 yang masih terbuka:
 |---|---|---|
 | `channels/webhook.ts` | `verifyWebhook` (HMAC+timestamp), `verifyTelegramSecret`, `signWebhook`, `redactSecrets`, `bodyWithinLimit` | `[W]` + test |
 | `channels/identity.ts` | `IdentityRegistry`, `authorizeCommand`, `parseCommand`, `isBareConsent` | `[W]` + test |
-| `channels/channelsRuntime.ts` | `POST /webhooks/telegram`; aktif hanya jika `WEBTERM_TELEGRAM=on` + secret + ledger | `[W]` |
+| `channels/channelsRuntime.ts` | `POST /webhooks/telegram`; aktif hanya jika `WEBTERM_TELEGRAM=on` + secret + ledger; throttle auth-failure per peer, opt-in `WEBTERM_TRUST_PROXY=on` memakai entri pertama `x-forwarded-for` yang valid | `[V]` + test (throttle proxy) |
 | `channels/telegram.ts` | `parseTelegramUpdate`, `sendTelegramMessage`, `telegramBotToken` | `[V]` + test |
 | `channels/outbox.ts` | `Outbox` in-memory, backoff, dead-letter | `[V]` + test |
-| `channels/channelStore.ts` | binding + dedupe persisten, file `0600`, dir `0700` | `[V]` + test |
+| `channels/channelStore.ts` | binding + dedupe persisten, file `0600`, dir `0700`; `parseStoreState` menurunkan `owner`/`approver` group (`chatId` mulai `-`) ke `operator` saat load, file tidak ditulis ulang sampai save berikutnya | `[V]` + test (load + no-rewrite) |
 | `channels/channelBindingsApi.ts` + `Http` | `GET/POST/DELETE /api/channels/telegram/bindings`, root-only; tolak `approver`/`owner` untuk group | `[V]` + test |
-| `channels/channelSenderBoot.ts` + `telegramSend.ts` | sender outbox: retry/backoff, dead-letter, redaksi token; boot hanya bila token ada | `[V]` + test; jaringan nyata belum |
+| `channels/channelSenderBoot.ts` + `telegramSend.ts` | sender outbox: retry/backoff, dead-letter, redaksi token; boot hanya bila token ada | `[V]` + test; boot dengan token asli terverifikasi (status hidup), delivery belum |
 
 Yang **belum** ada:
 
 - `WEBTERM_CHANNELS` belum dibaca kode mana pun. Flag nyata hanya `WEBTERM_TELEGRAM` dan
   nilainya hanya `on` (tidak ada `off|readonly|control`).
 - Binding punya route dan pemanggil produksi; chat yang belum di-bind tetap ditolak.
-- Sender sudah ada, tetapi tidak ada uji jaringan Telegram nyata: semua test memakai
-  fetch/update palsu, dan run dengan token asli belum dilakukan.
-- Throttle webhook masih di-key `req.socket.remoteAddress` (E1): di belakang proxy, 30 secret
-  salah per 60 s memblokir delivery sah sampai jendela habis.
-- `parseBinding` belum menerapkan ulang aturan group saat load, jadi `channels.json` yang
-  diedit tangan bisa memuat group sebagai `owner`.
+- Delivery Telegram nyata belum diuji: semua test tetap memakai fetch/update palsu, webhook
+  publik belum dipasang, dan tidak ada pesan yang dikirim. Yang sudah diverifikasi hanya
+  status hidup boot dengan token asli (lihat di bawah).
 
-Artinya ingress + egress + binding sudah ter-wire, tetapi P5 belum boleh disebut production-ready
-sampai uji jaringan nyata dan dua residual di atas ditutup.
+Status hidup Telegram (manual, 2026-11-01): token divalidasi lewat `getMe` (read-only; username
+bot bukan rahasia), lalu server dijalankan dengan token asli dan wiring boot mencapai
+`telegram channel: on` serta egress aktif (tidak ada warning `telegram egress disabled`).
+Webhook **tidak** di-`setWebhook` dan tidak ada pesan keluar. Jadi ini bukti konfigurasi boot,
+bukan bukti delivery.
+
+Artinya ingress + egress + binding sudah ter-wire, dan residual throttle proxy serta binding
+group saat load sudah ditutup; P5 belum boleh disebut production-ready sampai delivery Telegram
+nyata (webhook publik + satu pesan) diuji.
 
 ---
 
@@ -223,12 +253,9 @@ Masih terbuka:
 - Gate blocking (`requireApproval` → `consumeApproval`) di jalur run belum ada; approval masih
   dipakai untuk review task, bukan sebagai prasyarat aksi worker.
 - Verifikasi independen belum menjadi satu-satunya jalur `verified`.
-- Claude nyata lewat `/api/orchestrator/run` belum terverifikasi: loop penuh lulus dengan agen
-  palsu (PTY, prompt satu baris, SessionEnd, verify, cleanup), model/hook Claude nyata belum.
-- C2: `updateItem` bisa gagal `stale_version` setelah `claimSuccess` menulis `verified`, jadi
-  task bisa `verified` sementara item plan tetap `running` (low-med).
-- C3: `plan.status` (`draft`/`completed`/`abandoned`) dan `project.status === 'paused'` tidak
-  memblokir run (low; mungkin disengaja untuk P4).
+- Claude nyata lewat `/api/orchestrator/run` sedang dicoba dan **belum terbukti**: loop penuh
+  lulus dengan agen palsu (PTY, prompt satu baris, SessionEnd, verify, cleanup), model/hook
+  Claude nyata belum.
 
 Sudah ditutup di wave 2:
 
@@ -241,6 +268,33 @@ Sudah ditutup di wave 2:
   kini dibaca berbatas saat streaming (64/256 KiB). Test baru memin ackKey per node, deps merge
   stabil, consume digest salah, replay lintas restart, fallback ack; split `orchestrator*Api` 103/38.
 
+Sudah ditutup di wave 3 (`9af9047`..`01e33ac`):
+
+- C2: `recordWorkerResult` memakai `ledger.tx` untuk transisi task + `plan.updateItem` + audit
+  event; plan stale me-rollback task. Test rollback sukses dan gagal (`orchestratorRun.test.ts`).
+- C3: `POST /api/orchestrator/run` menjawab 409 `project_paused` untuk project `paused`
+  sebelum repo/plan/worktree disentuh (`4e0517c`; test `orchestratorRunApi.test.ts`).
+- Gate plan terminal: `plan.status` `completed`/`abandoned` menjawab 409 `plan_closed` sebelum
+  assignment dan worktree; `draft`/`active` tetap boleh run (`01e33ac`; test `it.each` di
+  `orchestratorRunApi.test.ts` untuk kedua status terminal dan kedua status yang lolos).
+- Binding group saat load: `parseStoreState` menurunkan `owner`/`approver` group ke `operator`
+  di memori; file baru ditulis ulang pada save berikutnya (`887f174`; test load + no-rewrite).
+- Cap body: `PATCH /api/settings` 64 KiB, `POST /api/workspaces|active` 1 MiB, ditegakkan saat
+  streaming dengan tolak-cepat `Content-Length` (`0061f44`; test `settingsApi`, `workspacesApi`).
+  Pembaca `fs`/`git` sengaja tetap tanpa cap karena isi file boleh besar; cap di sana akan
+  memutus fitur, bukan menutup celah.
+- Throttle proxy: `WEBTERM_TRUST_PROXY=on` membuat bucket auth-failure memakai entri pertama
+  `x-forwarded-for` IPv4/IPv6 yang valid; default tetap alamat socket (`d6ff546`; test
+  `webhookPeer`, `channelsRuntime`). Didokumentasikan di `.env.example` dengan peringatan
+  hanya untuk proxy tepercaya.
+- Telegram status hidup (manual): `getMe` read-only + boot token asli mencapai
+  `telegram channel: on` dan egress aktif; tanpa webhook/pesan. Bukan bukti delivery.
+- Alias token Telegram: egress dan boot menerima `WEBTERM_TELEGRAM_BOT_TOKEN` lebih dulu,
+  fallback legacy `TELEGRAM_BOT_TOKEN`, dengan satu resolver bersama sehingga boot dan send
+  tidak bisa berbeda pendapat (`8b09ff4`; sesuai README).
+- Uji ledger: `ledgerRuntime.bun.test.ts` menyimpan/menghapus `WEBTERM_LEDGER` ambient karena
+  Bun auto-load `.env`, lalu memulihkannya di `finally` (`10e2f8e`).
+
 ---
 
 ## 7. Flag runtime
@@ -250,10 +304,11 @@ Sudah ditutup di wave 2:
 | `WEBTERM_TOKEN` | kosong (loopback token-free) | `[V]`; tidak lagi ditulis di `.env` |
 | `WEBTERM_ALLOW_LOOPBACK_APPROVAL` | `0` (deny) | `[W]` + test |
 | `WEBTERM_LEDGER` | `off` (`off|shadow|on`) | `[V]` |
-| `WEBTERM_TELEGRAM` | `off` (`on` saja) | `[W]` |
+| `WEBTERM_TELEGRAM` | `off` (`on` saja) | `[V]` boot dengan ledger+secret mencapai `telegram channel: on`; delivery belum |
 | `WEBTERM_TELEGRAM_WEBHOOK_SECRET` | kosong | `[W]` |
-| `WEBTERM_TELEGRAM_BOT_TOKEN` | kosong; legacy `TELEGRAM_BOT_TOKEN` | `[W]` |
+| `WEBTERM_TELEGRAM_BOT_TOKEN` | kosong; legacy `TELEGRAM_BOT_TOKEN` | `[V]` boot terverifikasi (`getMe` read-only); pengiriman belum |
 | `WEBTERM_CHANNELS` | — | `[P]`; belum dibaca kode |
+| `WEBTERM_TRUST_PROXY` | `off` | `[V]` + test; `on` memakai hop pertama `x-forwarded-for` untuk throttle webhook |
 | `WEBTERM_ORCHESTRATOR_RUN` | `off` (`on` saja) | `[V]`; gate `/api/orchestrator/run|bootstrap|assign` |
 | `WEBTERM_MEMORY_FILES` | `off` | `[V]`; gate `/api/memory/export|rebuild` |
 | `WEBTERM_MEMORY_DIR` | `<dataDir>/memory`; hanya path absolut | `[V]`; nilai relatif diabaikan |
@@ -263,7 +318,8 @@ Sudah ditutup di wave 2:
 
 Urutan boot yang benar: `WEBTERM_LEDGER=on` dulu (atau `shadow`), lalu `WEBTERM_TELEGRAM=on`
 dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusia butuh
-`WEBTERM_TOKEN` atau opt-in loopback.
+`WEBTERM_TOKEN` atau opt-in loopback. `WEBTERM_TRUST_PROXY` hanya untuk deployment di belakang
+reverse proxy yang menimpa `x-forwarded-for`; jangan aktifkan bila klien bisa mengirim header itu.
 
 ---
 
@@ -271,19 +327,20 @@ dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusi
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck + suite | ✅ | `tsc` bersih; vitest 1697 dan bun 201 lulus pada `2f04f77` |
+| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 1766 dan bun 204 lulus pada `01e33ac` (`TMPDIR=/tmp`) |
 | G1 seam | ✅ | P0 |
 | G2 auth/capability | ⚠️ | capability ✅; family root-only kini dipin test; actor binding belum |
 | G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; migrasi kanal belum (slot v4) |
-| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); gate blocking, C2, Claude nyata belum |
+| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal ✅; gate blocking approval di jalur run, verifikasi independen satu-satunya jalur, Claude nyata E2E belum |
 | G5 memory/inbox | ⚠️ | repo + route baca + file/git truth (P4b) ✅; route claim/promote, soak 2×2 minggu belum |
 | G6 central | ⚠️ | proyeksi + pause/resume/priority ✅; agen pusat otonom belum |
-| G7 omnichannel | ⚠️ | ingress + store + binding + sender ✅; live test, throttle proxy, revalidasi group belum |
+| G7 omnichannel | ⚠️ | ingress + store + binding + sender + throttle proxy + revalidasi group ✅; delivery Telegram nyata (webhook publik + pesan) belum |
 
 **Vonis: jalur P3 (approval + inbox) tertutup end-to-end; loop P4/P5 sekarang ter-wire lewat
 HTTP (bootstrap → assign → run, memory files, central portfolio, Telegram bindings/egress),
-tetapi belum production-ready.** Yang masih menahan: Claude nyata, gate blocking, otoritas
-independen, soak P4b, uji jaringan Telegram, agen pusat otonom, C2/C3, dan E2E node canvas.
+tetapi belum production-ready.** Yang masih menahan: Claude nyata E2E, gate blocking approval
+di jalur run, verifikasi independen sebagai satu-satunya jalur `verified`, soak P4b, delivery
+Telegram nyata, agen pusat otonom, dan E2E node canvas.
 Jangan sebut P3-P5 production-ready sampai itu ditutup.
 
 ---
@@ -296,5 +353,9 @@ TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
-Vitest penuh: 132 file / 1720 test, bun 29 file / 203 test, `tsc` bersih; semua hijau dengan
-`TMPDIR=/tmp` (gate §9). `TMPDIR` di dalam home membuat `controlCwd` gagal (lingkungan, bukan regresi).
+Wave 3 (`01e33ac`): vitest penuh 135 file / 1766 test, bun penuh 29 file / 204 test, `tsc`
+strict + unused bersih; semua hijau dengan `TMPDIR=/tmp` (gate §9).
+`TMPDIR` di dalam home membuat `controlCwd`
+gagal (lingkungan, bukan regresi); run tanpa `TMPDIR=/tmp` juga mengumpulkan jumlah test berbeda
+(1 gagal `controlCwd`), jadi selalu pakai `TMPDIR=/tmp` saat membandingkan angka.
+Terarah wave 3: 7 file / 85 test (vitest) + `ledgerRuntime.bun.test.ts` 6 test.
