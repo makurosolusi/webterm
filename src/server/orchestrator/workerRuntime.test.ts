@@ -64,6 +64,7 @@ interface FakeSessions extends WorkerSessionPort {
   failOpen: boolean
   failInput: boolean
   onInput?: (nodeId: string) => void
+  onStatus?: (nodeId: string) => void
 }
 
 function fakeSessions(): FakeSessions {
@@ -86,7 +87,10 @@ function fakeSessions(): FakeSessions {
       fake.inputs.push({ nodeId, text })
       fake.onInput?.(nodeId)
     },
-    statusOf: (nodeId) => fake.status.get(nodeId),
+    statusOf: (nodeId) => {
+      fake.onStatus?.(nodeId)
+      return fake.status.get(nodeId)
+    },
     getTerminal: (nodeId) => fake.terminal.get(nodeId) ?? '',
     isLive: (nodeId) => fake.live.has(nodeId),
     close(nodeId) {
@@ -271,6 +275,35 @@ describe('failure paths', () => {
     expect(sessions.inputs).toHaveLength(0)
     expect(fixture.worktrees.releases).toEqual(['t1'])
     expect(sessions.closed).toHaveLength(0)
+  })
+
+  it('closes the PTY and releases the worktree when the session port throws after open', async () => {
+    // Regression C1: `statusOf` lives outside the old spawn try. A throw there used to escape
+    // `runTask` with the PTY open and the worktree still held; it must become one recorded
+    // failure plus close + release instead.
+    const fixture = assigned()
+    let recorded = 0
+    const orchestrator: WorkerOrchestratorPort = {
+      startWorker: (input) => fixture.orchestrator.startWorker(input),
+      recordWorkerResult: (input) => {
+        recorded += 1
+        return fixture.orchestrator.recordWorkerResult(input)
+      },
+    }
+    const { runtime, sessions } = harness({ fixture, orchestrator })
+    sessions.onStatus = () => {
+      throw new Error('session port broke after open')
+    }
+    const outcome = await runtime.runTask(runInput())
+    expect(outcome.ok).toBe(false)
+    expect(outcome.error?.code).toBe('spawn_failed')
+    expect(outcome.error?.message).toContain('session port broke after open')
+    // Exactly one failure record, one PTY close of OUR node, one release of OUR worktree.
+    expect(recorded).toBe(1)
+    expect(outcome.task?.status).toBe('failed')
+    expect(sessions.closed).toEqual(['w-t1-1'])
+    expect(fixture.worktrees.releases).toEqual(['t1'])
+    expect(fixture.ledger.events.filter((e) => e.kind === 'orchestrator.result_recorded')).toHaveLength(1)
   })
 
 })

@@ -204,75 +204,94 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
       return fail('spawn_failed', `spawn failed: ${messageOf(err)}`)
     }
 
-    const prompt = buildWorkerPrompt({
-      item,
-      worktree,
-      attempt: task.attempt,
-      maxBytes: maxPromptBytes,
-      extra: input.prompt,
-    })
+    // Semua yang berjalan SETELAH `open` ada di dalam satu try: `statusOf`/`getTerminal`/
+    // `waitForSettle` yang melempar tidak boleh lolos keluar membocorkan PTY hidup + worktree
+    // tertahan. Catch menutup lewat jalur gagal yang sama (record sekali, close, release).
     try {
-      deps.sessions.input(nodeId, `${prompt}\n`)
-    } catch (err) {
-      return fail('spawn_failed', `prompt delivery failed: ${messageOf(err)}`)
-    }
+      const prompt = buildWorkerPrompt({
+        item,
+        worktree,
+        attempt: task.attempt,
+        maxBytes: maxPromptBytes,
+        extra: input.prompt,
+      })
+      try {
+        deps.sessions.input(nodeId, `${prompt}\n`)
+      } catch (err) {
+        return fail('spawn_failed', `prompt delivery failed: ${messageOf(err)}`)
+      }
 
-    const settled = await waitForSettle(deps.sessions, nodeId, {
-      deadline: now() + timeoutMs,
-      leaseDeadline: task.leaseExpires,
-      timeoutMs,
-      pollMs,
-      now,
-      sleep,
-    })
-    const output = capBytes(sanitizeText(deps.sessions.getTerminal(nodeId)), maxOutputBytes)
+      const settled = await waitForSettle(deps.sessions, nodeId, {
+        deadline: now() + timeoutMs,
+        leaseDeadline: task.leaseExpires,
+        timeoutMs,
+        pollMs,
+        now,
+        sleep,
+      })
+      const output = capBytes(sanitizeText(deps.sessions.getTerminal(nodeId)), maxOutputBytes)
 
-    if (settled !== 'done') {
-      const reason =
-        settled === 'timeout'
-          ? `worker timed out after ${timeoutMs}ms`
-          : settled === 'lease_expired'
-            ? `worker lease expired before task ${task.id} completed`
-            : 'worker session exited before reporting done'
-      return fail(settled, reason, true, output)
-    }
+      if (settled !== 'done') {
+        const reason =
+          settled === 'timeout'
+            ? `worker timed out after ${timeoutMs}ms`
+            : settled === 'lease_expired'
+              ? `worker lease expired before task ${task.id} completed`
+              : 'worker session exited before reporting done'
+        return fail(settled, reason, true, output)
+      }
 
-    let verdict: VerifyOutcome
-    try {
-      verdict = await deps.verify({ cwd: worktree.path, scope: item.scope })
-    } catch (err) {
-      return fail('verify_failed', `verifier error: ${messageOf(err)}`, true, output)
-    }
-    const evidence = toModelEvidence(verdict)
-    if (!verdict.ok || !evidenceVerified(evidence)) {
-      const reasons = verdict.reasons.length > 0 ? verdict.reasons : ['no machine evidence']
-      return fail('verify_failed', `verification failed: ${reasons.join('; ')}`, true, output, evidence)
-    }
+      let verdict: VerifyOutcome
+      try {
+        verdict = await deps.verify({ cwd: worktree.path, scope: item.scope })
+      } catch (err) {
+        return fail('verify_failed', `verifier error: ${messageOf(err)}`, true, output)
+      }
+      const evidence = toModelEvidence(verdict)
+      if (!verdict.ok || !evidenceVerified(evidence)) {
+        const reasons = verdict.reasons.length > 0 ? verdict.reasons : ['no machine evidence']
+        return fail('verify_failed', `verification failed: ${reasons.join('; ')}`, true, output, evidence)
+      }
 
-    const applied = await record('success', evidence)
-    if (!applied.ok) {
-      // Fence basi = attempt lain sudah memiliki task; jangan sentuh worktree bersama.
-      const holdOn = applied.code === 'stale_fence'
-      await cleanup(!holdOn)
+      const applied = await record('success', evidence)
+      if (!applied.ok) {
+        // Fence basi = attempt lain sudah memiliki task; jangan sentuh worktree bersama.
+        const holdOn = applied.code === 'stale_fence'
+        await cleanup(!holdOn)
+        return makeOutcome({
+          task,
+          plan: planNow(),
+          nodeId,
+          output,
+          evidence,
+          error: { code: applied.code, message: applied.message },
+          ...(cleanupError ? { cleanupError } : {}),
+        })
+      }
+      await cleanup(true)
       return makeOutcome({
-        task,
-        plan: planNow(),
+        task: applied.value.task,
+        plan: applied.value.plan,
         nodeId,
         output,
         evidence,
-        error: { code: applied.code, message: applied.message },
-        ...(cleanupError ? { cleanupError } : {}),
+        ...(applied.value.releaseError ? { cleanupError: applied.value.releaseError } : {}),
       })
+    } catch (err) {
+      // Hasil sudah tercatat: jangan record dua kali. Cukup cleanup, hasilnya tetap kegagalan
+      // runtime supaya pemanggil tidak mengira kerja ini sukses.
+      if (recorded) {
+        await cleanup(true)
+        return makeOutcome({
+          task,
+          plan: planNow(),
+          nodeId,
+          error: { code: 'spawn_failed', message: boundedReason(`runtime error after record: ${messageOf(err)}`) },
+          ...(cleanupError ? { cleanupError } : {}),
+        })
+      }
+      return fail('spawn_failed', boundedReason(`runtime error after spawn: ${messageOf(err)}`))
     }
-    await cleanup(true)
-    return makeOutcome({
-      task: applied.value.task,
-      plan: applied.value.plan,
-      nodeId,
-      output,
-      evidence,
-      ...(applied.value.releaseError ? { cleanupError: applied.value.releaseError } : {}),
-    })
   }
 
   return { runTask }

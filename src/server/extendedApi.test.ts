@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events'
+import type { IncomingMessage } from 'node:http'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import type { PlanStore } from './orchestrator/plan'
@@ -7,7 +9,7 @@ import {
   extendedApiRoute,
   parseJsonObject,
 } from './extendedApi'
-import { fakeReq, fakeRes, urlOf } from './extendedApi.testutil'
+import { fakeRes, urlOf } from './extendedApi.testutil'
 import { openFixture, seedPortfolio, type Fixture } from './central/centralTestFixture.testutil'
 
 let fixture: Fixture
@@ -20,16 +22,77 @@ beforeEach(() => {
 })
 afterEach(() => fixture.close())
 
+
+interface StreamedReq extends IncomingMessage {
+  resumed: boolean
+}
+
+/** Readable-ish request: emits `chunks` one turn apart, so a reader can abort mid-stream. */
+function streamReq(
+  method: string,
+  path: string,
+  chunks: string[],
+  headers: Record<string, string> = {}
+): StreamedReq {
+  const req = new EventEmitter() as unknown as StreamedReq
+  Object.assign(req, { method, url: path, headers, resumed: false, resume: () => { req.resumed = true } })
+  let index = 0
+  const pump = (): void => {
+    if (index >= chunks.length) {
+      req.emit('end')
+      return
+    }
+    req.emit('data', Buffer.from(chunks[index] ?? ''))
+    index += 1
+    setImmediate(pump)
+  }
+  setImmediate(pump)
+  return req
+}
+
+interface HitResult {
+  handled: boolean
+  status: number
+  json: unknown
+  headers: Record<string, string>
+  req: StreamedReq
+  /** Calls to the compatibility `readBody` parameter: must stay 0 on every extended path. */
+  readBodyCalls: number
+}
+
+async function hitChunks(
+  method: string,
+  path: string,
+  chunks: string[],
+  headers: Record<string, string> = {},
+  deps: ExtendedApiDeps = {},
+  ledger: LedgerRuntime | null = runtime
+): Promise<HitResult> {
+  const { res, state } = fakeRes()
+  const req = streamReq(method, path, chunks, headers)
+  let readBodyCalls = 0
+  const handled = await extendedApiRoute(
+    req,
+    res,
+    urlOf(path),
+    async () => {
+      readBodyCalls += 1
+      return chunks.join('')
+    },
+    ledger,
+    deps
+  )
+  return { handled, status: state.status, json: state.json(), headers: state.headers, req, readBodyCalls }
+}
+
 async function hit(
   method: string,
   path: string,
   body: string,
   deps: ExtendedApiDeps = {},
   ledger: LedgerRuntime | null = runtime
-): Promise<{ handled: boolean; status: number; json: unknown; headers: Record<string, string> }> {
-  const { res, state } = fakeRes()
-  const handled = await extendedApiRoute(fakeReq(method, path), res, urlOf(path), async () => body, ledger, deps)
-  return { handled, status: state.status, json: state.json(), headers: state.headers }
+): Promise<HitResult> {
+  return hitChunks(method, path, body === '' ? [] : [body], {}, deps, ledger)
 }
 
 const json = (value: unknown) => JSON.stringify(value)
@@ -42,7 +105,7 @@ describe('extended API mount', () => {
     }
   })
 
-  it('answers 413 for an oversized body before parsing it', async () => {
+  it('answers 413 for an oversized chunked body without buffering it', async () => {
     const result = await hit(
       'POST',
       '/api/orchestrator/run',
@@ -52,6 +115,39 @@ describe('extended API mount', () => {
     expect(result.handled).toBe(true)
     expect(result.status).toBe(413)
     expect(result.json).toEqual({ error: 'payload_too_large' })
+    expect(result.readBodyCalls).toBe(0)
+  })
+
+  it('stops a chunked 1 MiB upload at MAX+1, drains, and never accumulates the rest', async () => {
+    // 64 KiB chunks of a body with NO content-length: only the streaming cap can refuse this, and
+    // the reader must detach (listenerCount 0) instead of keeping the remaining 1 MiB in memory.
+    const chunk = 'y'.repeat(64 * 1024)
+    const result = await hitChunks('POST', '/api/orchestrator/run', [chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk, chunk], {}, {
+      orchestrator: { enabled: true },
+    })
+    expect(result.status).toBe(413)
+    expect(result.json).toEqual({ error: 'payload_too_large' })
+    expect(result.readBodyCalls).toBe(0)
+    // The overflow path calls resume() and removes its listeners: nothing else is buffered.
+    expect(result.req.resumed).toBe(true)
+    expect(result.req.listenerCount('data')).toBe(0)
+    expect(result.req.listenerCount('end')).toBe(0)
+  })
+
+  it('refuses a declared oversized content-length before reading a single chunk', async () => {
+    const result = await hitChunks(
+      'POST',
+      '/api/memory/rebuild',
+      [],
+      { 'content-length': String(MAX_API_BODY_BYTES + 1) },
+      { memory: { enabled: true } }
+    )
+    expect(result.status).toBe(413)
+    expect(result.json).toEqual({ error: 'payload_too_large' })
+    // Precheck path: the body was never read, and the socket is drained for keep-alive.
+    expect(result.readBodyCalls).toBe(0)
+    expect(result.req.resumed).toBe(true)
+    expect(result.req.listenerCount('data')).toBe(0)
   })
 
   it('answers 400 for non-JSON objects', async () => {

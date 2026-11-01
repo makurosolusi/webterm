@@ -41,6 +41,18 @@ function gate(pathname: string, over: Partial<Parameters<typeof authorizeRequest
   })
 }
 
+/**
+ * Root-only families added in P4. A node token lives on disk in every agent PTY, so any of these
+ * paths reaching `isNodeTokenPath` lets one session pause projects or launch workers.
+ */
+const ROOT_ONLY_PATHS = [
+  '/api/central/portfolio',
+  '/api/orchestrator/run',
+  '/api/memory/export',
+  '/api/memory/rebuild',
+  '/api/channels/telegram/bindings',
+] as const
+
 describe('sameOrigin', () => {
   it('accepts an Origin whose host matches the request Host', () => {
     expect(sameOrigin({ host: SELF, origin: `http://${SELF}` })).toBe(true)
@@ -221,9 +233,43 @@ describe('isNodeTokenPath', () => {
       '/api/context-link/',
       '/api/control',
       '/api',
+      ...ROOT_ONLY_PATHS,
+      // Prefix regressions: each family root and a child must stay outside the allowlist too.
+      '/api/central',
+      '/api/orchestrator',
+      '/api/memory',
+      '/api/channels',
+      '/api/channels/telegram',
     ]) {
       expect(isNodeTokenPath(p)).toBe(false)
     }
+  })
+})
+
+describe('isNodeTokenPath — source guard', () => {
+  // The behavioural tests above only cover the paths someone remembered to list. A future
+  // `pathname.startsWith('/api/central')` addition would still pass every other test, so pin the
+  // shape of the allowlist itself: exactly one prefix arm, and only the control family.
+  const src = fs.readFileSync(path.resolve(__dirname, 'auth.ts'), 'utf8')
+  const start = src.indexOf('export function isNodeTokenPath')
+  const end = src.indexOf('/** Keluarga control API')
+  const body = start === -1 || end === -1 ? '' : src.slice(start, end)
+
+  it('has exactly the three allowlist arms', () => {
+    expect(body).toContain("pathname === '/api/agent-status'")
+    expect(body).toContain("pathname === '/api/context-link'")
+    expect(body).toContain("pathname.startsWith('/api/control/')")
+    // One `startsWith` and no other prefix arms: a `startsWith('/api/central')` regression fails.
+    expect(body.match(/startsWith\(/g)).toHaveLength(1)
+  })
+
+  it('names no privileged family inside the allowlist', () => {
+    expect(body).not.toMatch(/\/api\/(central|orchestrator|memory|channels|projects|settings|workspaces|fs)/)
+  })
+
+  it('never widens the allowlist from index.ts', () => {
+    const index = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    expect(index).not.toMatch(/isNodeTokenPath\(\s*['"]\/api\/(central|orchestrator|memory|channels)/)
   })
 })
 
@@ -283,6 +329,13 @@ describe('authorizeRequest — node token allowlist', () => {
     expect(
       gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'wrong' }, queryToken: NODE })
     ).toBe(false)
+  })
+
+  it.each(ROOT_ONLY_PATHS)('rejects a node token on %s from header and query', (p) => {
+    expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(false)
+    expect(gate(p, { queryToken: NODE })).toBe(false)
+    // The root token must still reach every one of them: these are root-only, not unreachable.
+    expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
   })
 })
 
@@ -385,6 +438,14 @@ describe('authorizeRequest — capability tokens (control API only)', () => {
     expect(gate('/api/settings', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
     expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
     expect(gate('/ws', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(false)
+  })
+
+  it.each(ROOT_ONLY_PATHS)('never accepts a capability on %s', (p) => {
+    // A capability is minted for control verbs; it must not reach a privileged family even with a
+    // same-origin request, and a node token alongside it must not rescue the request.
+    expect(gate(p, { headers: withCap() })).toBe(false)
+    expect(gate(p, { headers: withCap({ [TOKEN_HEADER]: NODE }) })).toBe(false)
+    expect(gate(p, { queryToken: CAP })).toBe(false)
   })
 })
 

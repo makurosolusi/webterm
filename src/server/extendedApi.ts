@@ -5,11 +5,12 @@
 //   POST /api/memory/export|rebuild (memory files)
 // Everything else returns false and keeps falling through the normal route chain.
 //
-// Bodies are capped hard (16 KiB) and must be a JSON object. Nothing from the body or the auth
-// token is ever logged here; sub-handlers return already-compact responses.
+// Bodies are capped hard (16 KiB) *while streaming* and must be a JSON object. Nothing from the
+// body or the auth token is ever logged here; sub-handlers return already-compact responses.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { centralHttpRoute, isCentralPath, type CentralHttpDeps } from './centralHttp'
+import { declaredLength, readCappedBody } from './channels/channelHttp'
 import {
   memoryFileHttpRoute,
   isMemoryFilePath,
@@ -56,7 +57,7 @@ export async function extendedApiRoute(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  readBody: () => Promise<string>,
+  _readBody: () => Promise<string>,
   ledger: LedgerRuntime | null,
   deps: ExtendedApiDeps = {}
 ): Promise<boolean> {
@@ -67,11 +68,25 @@ export async function extendedApiRoute(
   const memory = isMemoryFilePath(path)
   if (!central && !orchestrator && !memory) return false
 
-  // Drain the request even when the answer is 503: an unread body desyncs keep-alive.
-  const raw = method === 'POST' ? await readBody() : ''
-  if (Buffer.byteLength(raw, 'utf8') > MAX_API_BODY_BYTES) {
-    send(res, 413, { error: 'payload_too_large' })
-    return true
+  // Cap BEFORE buffering anything: a declared oversize is refused without reading a byte, and the
+  // streaming reader stops at MAX+1 (then drains), so a chunked multi-GB body is never accumulated.
+  // `_readBody` stays only so existing call sites keep compiling; it buffers without bound.
+  let raw = ''
+  if (method === 'POST') {
+    const declared = declaredLength(req.headers['content-length'])
+    if (declared !== undefined && declared > MAX_API_BODY_BYTES) {
+      req.resume() // drain so keep-alive is not desynced by an unread body
+      send(res, 413, { error: 'payload_too_large' })
+      return true
+    }
+    const read = await readCappedBody(req, MAX_API_BODY_BYTES)
+    if (!read.ok) {
+      // Overflow already dropped the listener and resumed the stream inside the reader.
+      if (read.reason === 'too_large') send(res, 413, { error: 'payload_too_large' })
+      else send(res, 400, { error: 'body_read_failed' })
+      return true
+    }
+    raw = read.body
   }
 
   // Flag gates live here so a disabled surface never depends on a valid body. Sub-handlers
