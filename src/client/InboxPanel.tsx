@@ -12,12 +12,15 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ChevronDown, ChevronRight, RefreshCw, ShieldAlert, X } from 'lucide-react'
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
 import { CONFIRM_PHRASE, InboxApprovalDialog, type ReviewState } from './inboxApprovalDialog'
+import { InboxItemRow } from './inboxItemRow'
 import {
   SECTION_LABEL,
   SECTION_ORDER,
   approvalRequest,
-  formatAge,
+  resumeApprovalFor,
+  resumeReviewState,
   reviewBlockedReason,
+  useApprovedApprovals,
   useInboxCountPublisher,
   useInboxDialogKeys,
   useInboxOpen,
@@ -70,6 +73,15 @@ export default function InboxPanel(props: InboxPanelProps) {
     () => (props.items ?? fetched ?? []).filter((item) => !hidden.has(item.id)),
     [props.items, fetched, hidden]
   )
+
+  // Resume path for approved-but-unconsumed consent. `ready` gates minting on a task row while the
+  // first approved-list read is in flight (a duplicate approval is unrecoverable); a failed read
+  // settles ready so the inbox never blocks.
+  const { approved, ready: approvedReady } = useApprovedApprovals({
+    enabled: open && props.items === undefined,
+    client: clientRef,
+    refreshKey,
+  })
 
   const pending =
     dialog !== null &&
@@ -159,6 +171,19 @@ export default function InboxPanel(props: InboxPanelProps) {
     const item = queue[index]
     // A task without a fence cannot be transitioned after approval; never mint that approval.
     if (!item || reviewBlockedReason(item) !== null) return
+    // An approval for this task already exists: opening the dialog on it is the only safe move.
+    // Minting another would duplicate consent and still leave the task unverified.
+    const resume = resumeApprovalFor(item, approved)
+    if (resume) {
+      seq.current += 1
+      dialogAbort.current?.abort()
+      setClock(nowRef.current())
+      setDialog(resumeReviewState(resume, queue, index))
+      return
+    }
+    // A task review mints its approval on decide, so it must wait for the approved-list read:
+    // minting before we know no unconsumed consent exists is the B4 duplicate-approval bug.
+    if (item.kind === 'task' && !approvedReady) return
     const token = ++seq.current
     dialogAbort.current?.abort()
     const controller = new AbortController()
@@ -412,32 +437,9 @@ export default function InboxPanel(props: InboxPanelProps) {
                   ) : (
                     <ul className="inbox-list">
                       {rows.map((item) => (
-                        <li className="inbox-item" key={item.id}>
-                          <input type="checkbox" className="inbox-check" aria-label={`Select ${item.title}`}
-                            checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)} />
-                          <div className="inbox-item__body">
-                            <div className="inbox-item__top">
-                              <span className={`inbox-state inbox-state--${item.state}`}>{SECTION_LABEL[item.state]}</span>
-                              <span className="inbox-item__title">{item.title}</span>
-                              <span className="inbox-item__age" title={`${item.ageMs} ms ago`}>{formatAge(item.ageMs)} ago</span>
-                            </div>
-                            <div className="inbox-item__meta">
-                              <span className="inbox-item__kind">{item.kind}</span>
-                              <span aria-hidden="true">·</span>
-                              <span className="inbox-item__project">{item.projectId}</span>
-                            </div>
-                            {item.detail && <p className="inbox-item__detail">{item.detail}</p>}
-                            <div className="inbox-item__actions">
-                              <button type="button" className="inbox-btn inbox-btn--ghost"
-                                aria-label={`Review ${item.title}`}
-                                title={reviewBlockedReason(item) ?? undefined}
-                                disabled={reviewBlockedReason(item) !== null}
-                                onClick={() => beginReview([item])}>
-                                Review
-                              </button>
-                            </div>
-                          </div>
-                        </li>
+                        <InboxItemRow key={item.id} item={item} selected={selected.has(item.id)}
+                          resume={resumeApprovalFor(item, approved)} ready={approvedReady}
+                          onToggleSelected={toggleSelected} onOpen={() => beginReview([item])} />
                       ))}
                     </ul>
                   )}

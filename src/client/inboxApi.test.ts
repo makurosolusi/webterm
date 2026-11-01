@@ -8,8 +8,10 @@ import {
   decideApproval,
   inboxErrorMessage,
   isAbortError,
+  listApproved,
   listInbox,
   requestApproval,
+  type ApprovedApproval,
   type InboxItem,
 } from './inboxApi'
 
@@ -330,6 +332,83 @@ describe('approval calls', () => {
   })
 })
 
+describe('listApproved', () => {
+  const approved: ApprovedApproval = {
+    id: 'ap-approved',
+    projectId: 'proj-a',
+    kind: 'task',
+    taskId: 'task-1',
+    fence: 7,
+    digest: 'b'.repeat(64),
+    expiresAt: 1_700_000_900_000,
+  }
+
+  it('GETs the approved, unconsumed page with the token header', async () => {
+    sessionStorage.setItem(TOKEN_KEY, TOKEN)
+    fetchMock.mockResolvedValue(response({ items: [approved], total: 1, limit: 50, offset: 0 }))
+
+    await expect(listApproved()).resolves.toEqual([approved])
+    expect(fetchMock.mock.calls[0][0]).toBe(`${APPROVAL_PATH}?status=approved&limit=50`)
+    expect(initOf(0).method).toBe('GET')
+    expect(headersOf(0)['x-webterm-token']).toBe(TOKEN)
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain(TOKEN)
+  })
+
+  it('accepts a bare array and rows without a task link', async () => {
+    fetchMock.mockResolvedValue(
+      response([
+        { ...approved, taskId: undefined, fence: undefined },
+        { ...approved, id: 'ap-2', taskId: '', fence: 0 },
+      ])
+    )
+
+    const rows = await listApproved()
+    expect(rows.map((row) => row.id)).toEqual(['ap-approved', 'ap-2'])
+    for (const row of rows) {
+      expect(row).not.toHaveProperty('taskId')
+      expect(row).not.toHaveProperty('fence')
+    }
+  })
+
+  it('drops rows that cannot be consumed instead of hiding the valid ones', async () => {
+    fetchMock.mockResolvedValue(
+      response({
+        items: [
+          approved,
+          { ...approved, id: 'no-digest', digest: '' },
+          { ...approved, id: 'no-project', projectId: undefined },
+          { ...approved, id: 'no-kind', kind: 3 },
+          { ...approved, id: 'no-expiry', expiresAt: null },
+          { ...approved, id: 'fractional-fence', fence: 1.5 },
+          'not-an-object',
+        ],
+      })
+    )
+
+    const rows = await listApproved()
+    expect(rows.map((row) => row.id)).toEqual(['ap-approved', 'fractional-fence'])
+    expect(rows[1]).not.toHaveProperty('fence')
+  })
+
+  it('throws bad_response when the body is not a list', async () => {
+    fetchMock.mockResolvedValue(response({ nope: true }))
+    const error = await listApproved().catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(InboxApiError)
+    expect(error).toMatchObject({ status: 502, code: 'bad_response' })
+  })
+
+  it('passes the abort signal and surfaces an abort as AbortError', async () => {
+    const controller = new AbortController()
+    fetchMock.mockImplementation(() =>
+      Promise.reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    )
+
+    const error = await listApproved({ signal: controller.signal }).catch((e: unknown) => e)
+    expect(isAbortError(error)).toBe(true)
+    expect(initOf(0).signal).toBe(controller.signal)
+  })
+})
+
 describe('secret hygiene', () => {
   it('logs nothing on success or failure, and keeps the token out of messages', async () => {
     const spies = [
@@ -345,6 +424,11 @@ describe('secret hygiene', () => {
 
     fetchMock.mockResolvedValueOnce(response({ error: 'forbidden' }, 403))
     const error = await listInbox().catch((e: unknown) => e)
+
+    fetchMock.mockResolvedValueOnce(
+      response({ items: [{ id: 'ap-1', projectId: 'p', kind: 'task', digest: 'd', expiresAt: 1 }] })
+    )
+    await listApproved()
 
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
     expect(String((error as Error).message)).not.toContain(TOKEN)

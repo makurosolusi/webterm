@@ -21,12 +21,17 @@ export interface ApprovalChallengeView {
 export interface ApprovalListView {
   id: string
   projectId: string | null
+  /** `approval.task_id`, or the payload's `taskId` when the row was created from a payload. */
   taskId: string | null
   kind: string
   digest: string
   expiresAt: number | null
   createdAt: number
   approvedAt: number
+  /** Parsed `approval.request_json`; null when absent or not JSON. Never throws. */
+  request: unknown
+  /** Fence the human saw, when the request payload carried a safe non-negative integer. */
+  fence?: number
 }
 
 export interface ApprovalPage {
@@ -45,6 +50,31 @@ const nullableText = (value: unknown): string | null =>
   value === null || value === undefined ? null : String(value)
 const nullableInt = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value)
+
+/** Same bound as the request handler's `MAX_TASK_REF`: a longer id is not a task reference. */
+const MAX_TASK_REF = 200
+
+/** `request_json` is untrusted text: a corrupt row must degrade to "no payload", not throw. */
+function parseRequestJson(value: unknown): unknown {
+  if (typeof value !== 'string' || value === '') return null
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return null
+  }
+}
+
+function payloadOf(request: unknown): Record<string, unknown> | null {
+  return request !== null && typeof request === 'object' && !Array.isArray(request)
+    ? (request as Record<string, unknown>)
+    : null
+}
+
+const taskRef = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() !== '' && value.length <= MAX_TASK_REF ? value : undefined
+
+const fenceRef = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
 
 /** Lazy expiry, mirroring `ledgerApproval.effectiveStatus`: a stale `pending` reads as expired. */
 function effectiveStatus(status: string, expiresAt: number | null, now: number): string {
@@ -114,7 +144,7 @@ export function listApprovedUnconsumed(
   const rows = db
     .query(
       `SELECT a.id, a.project_id, a.task_id, a.kind, a.created_at, a.updated_at, a.expires_at,
-              d.action_digest
+              a.request_json, d.action_digest
        FROM approval a JOIN decision d ON d.id = a.decision_id
        WHERE ${clause}
        ORDER BY a.created_at ASC, a.id ASC LIMIT ? OFFSET ?`
@@ -127,16 +157,26 @@ export function listApprovedUnconsumed(
     )
     .get(...params) as Row | null
   return {
-    items: rows.map((row) => ({
-      id: text(row['id']),
-      projectId: nullableText(row['project_id']),
-      taskId: nullableText(row['task_id']),
-      kind: text(row['kind']),
-      digest: text(row['action_digest']),
-      expiresAt: nullableInt(row['expires_at']),
-      createdAt: Number(row['created_at']),
-      approvedAt: Number(row['updated_at']),
-    })),
+    items: rows.map((row) => {
+      const request = parseRequestJson(row['request_json'])
+      const payload = payloadOf(request)
+      // A payload-only task approval (UI-created) has no `approval.task_id`; the task it can
+      // transition lives in `request_json`, so the resume path needs that derivation here.
+      const taskId = taskRef(row['task_id']) ?? taskRef(payload?.['taskId']) ?? null
+      const fence = fenceRef(payload?.['fence'])
+      return {
+        id: text(row['id']),
+        projectId: nullableText(row['project_id']),
+        taskId,
+        kind: text(row['kind']),
+        digest: text(row['action_digest']),
+        expiresAt: nullableInt(row['expires_at']),
+        createdAt: Number(row['created_at']),
+        approvedAt: Number(row['updated_at']),
+        request,
+        ...(fence === undefined ? {} : { fence }),
+      }
+    }),
     total: Number(countRow?.['n'] ?? 0),
     limit,
     offset,

@@ -272,6 +272,25 @@ describe('approval flow', () => {
     )
   })
 
+  it('mints the task challenge when the approved list has no matching consent', async () => {
+    const client = makeClient({
+      listInbox: vi.fn(async () => [TASK_ITEM]),
+      listApproved: vi.fn(async () => []),
+    })
+    renderPanel(client)
+    const review = await screen.findByRole('button', { name: 'Review Review task' })
+    // The approved-list read gates minting, so wait for it to settle before opening the dialog.
+    await waitFor(() => expect(isDisabled(review)).toBe(false))
+    fireEvent.click(review)
+    const dialog = await screen.findByRole('dialog')
+    expect(screen.queryByRole('button', { name: /Finish approval/ })).toBeNull()
+
+    confirmTypedPhrase()
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Approve$/ }))
+    expect(await within(dialog).findByRole('button', { name: 'Consume approval' })).toBeDefined()
+    expect(client.requestApproval).toHaveBeenCalledTimes(1)
+  })
+
   it('never hides a still-listed task row after consuming its approval', async () => {
     // The server has not transitioned the task (P3 server gap): the row must stay visible
     // instead of being hidden locally by the task id.

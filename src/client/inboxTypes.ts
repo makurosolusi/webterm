@@ -64,6 +64,21 @@ export interface ApprovalConsumeResult {
   id?: string
 }
 
+/**
+ * Approved-but-unconsumed consent (QC B4). When a decide response is lost the row leaves the
+ * inbox (pending-only) but the approval still exists: this is the only read path that can resume
+ * it. `taskId`/`fence` are the server-derived task link, absent for non-task approvals.
+ */
+export interface ApprovedApproval {
+  id: string
+  projectId: string
+  kind: string
+  taskId?: string
+  fence?: number
+  digest: string
+  expiresAt: number
+}
+
 export interface RequestOptions {
   signal?: AbortSignal
 }
@@ -71,6 +86,8 @@ export interface RequestOptions {
 /** The four calls the panel needs. Pass a fake in tests; the default is `inboxApi` below. */
 export interface InboxClient {
   listInbox(opts?: RequestOptions): Promise<InboxItem[]>
+  /** Optional so existing fakes keep compiling: without it the panel simply cannot resume. */
+  listApproved?(opts?: RequestOptions): Promise<ApprovedApproval[]>
   getApprovalChallenge(id: string, opts?: RequestOptions): Promise<ApprovalChallenge>
   requestApproval(input: ApprovalRequestInput, opts?: RequestOptions): Promise<ApprovalChallenge>
   decideApproval(input: ApprovalDecideInput, opts?: RequestOptions): Promise<ApprovalDecision>

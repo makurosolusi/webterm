@@ -1,7 +1,8 @@
 // Small helpers/state for InboxPanel. Dipisah supaya komponen utama tetap di bawah batas file.
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import type { ApprovalRequestInput, InboxItem, InboxState } from './inboxApi'
+import type { ApprovalChallenge, ApprovalRequestInput, ApprovedApproval, InboxClient, InboxItem, InboxState } from './inboxApi'
+import type { ReviewState } from './inboxApprovalDialog'
 import { publishInboxCount } from './inboxDockState'
 
 export const SECTION_ORDER: readonly InboxState[] = ['needs_you', 'review', 'broken']
@@ -48,6 +49,53 @@ export function reviewBlockedReason(item: InboxItem): string | null {
     : null
 }
 
+/** Approved-unconsumed consent for this review row (QC B4); needs the same task and fence. */
+export function resumeApprovalFor(
+  item: InboxItem,
+  approved: readonly ApprovedApproval[]
+): ApprovedApproval | null {
+  if (item.kind !== 'task') return null
+  for (const cand of approved) {
+    if (cand.projectId !== item.projectId || cand.taskId !== item.id) continue
+    if (cand.fence !== undefined && item.fence !== undefined && cand.fence !== item.fence) continue
+    return cand
+  }
+  return null
+}
+/** Dialog state that resumes existing consent at the explicit Consume step (never auto-consumes). */
+export function resumeReviewState(resume: ApprovedApproval, queue: InboxItem[], index = 0): ReviewState {
+  const challenge: ApprovalChallenge = {
+    id: resume.id,
+    digest: resume.digest,
+    expiresAt: resume.expiresAt,
+    kind: 'approval',
+    projectId: resume.projectId,
+    nonce: '',
+  }
+  return { queue, index, challenge, deferred: false, phase: 'approved', error: null, checked: false, text: '', approvedDigest: resume.digest }
+}
+/** Approved list for the resume path; `ready` is false until the current open's read settles. */
+export function useApprovedApprovals(
+  opts: { enabled: boolean; client: RefObject<InboxClient>; refreshKey: number }
+): { approved: readonly ApprovedApproval[]; ready: boolean } {
+  const [list, setList] = useState({ approved: [] as readonly ApprovedApproval[], ready: !opts.enabled })
+  // Reopening starts an unanswered read, so re-gate; adjusting state during render (React's
+  // prop-change pattern) leaves no stale frame, and `refreshKey` changes keep readiness.
+  const wasEnabled = useRef(opts.enabled)
+  const reopened = wasEnabled.current !== opts.enabled && opts.enabled
+  wasEnabled.current = opts.enabled
+  if (reopened) setList({ approved: list.approved, ready: false })
+  useEffect(() => {
+    const lister = opts.enabled ? opts.client.current.listApproved : undefined
+    const controller = new AbortController()
+    const settle = (next: readonly ApprovedApproval[]): unknown =>
+      !controller.signal.aborted && setList({ approved: next, ready: true })
+    if (!lister) return void settle([])
+    lister({ signal: controller.signal }).then(settle, () => settle([]))
+    return () => controller.abort()
+  }, [opts.enabled, opts.client, opts.refreshKey])
+  return list
+}
 /**
  * Mirror the open panel's count into the Dock badge. While the panel owns `/api/inbox` it is the
  * only poller; publishing here (instead of a second `fetch` loop) is what keeps the badge correct

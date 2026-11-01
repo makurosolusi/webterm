@@ -291,11 +291,42 @@ describe('approved-but-unconsumed list', () => {
     expect(body.offset).toBe(0)
     expect(body.items).toHaveLength(1)
     expect(body.items[0]).toMatchObject({ id: one.id, digest: one.digest, kind: 'deploy', projectId: 'p1' })
+    // Consent that cannot transition a task names no task and carries no fence.
+    expect(body.items[0]).toMatchObject({ taskId: null, request: { a: 1 } })
+    expect(body.items[0]).not.toHaveProperty('fence')
 
     const consumed = await f.post('/api/approvals/consume', { requestId: 'req-00000006', id: one.id, digest: one.digest })
     expect(consumed.status).toBe(200)
     const after = await f.call(f.deps, '/api/approvals?status=approved')
     expect((after.json as unknown as { total: number }).total).toBe(0)
+  })
+
+  it('derives taskId and fence from request_json for a payload-only task approval', async () => {
+    const f = setup()
+    const task = seedReviewTask(f.runtime)
+    // The UI path sends the task reference inside `request`, so `approval.task_id` stays NULL.
+    const created = await f.request({
+      kind: 'task',
+      request: { itemId: task.taskId, taskId: task.taskId, fence: task.fence, title: 'Review task', detail: null },
+    })
+    expect(created.status).toBe(201)
+    const id = String(created.json['id'])
+    const view = await challenge(f, id)
+    expect((await decide(f, id, view['digest'], view['nonce'])).status).toBe(200)
+
+    const page = await f.call(f.deps, '/api/approvals?status=approved')
+    expect(page.status).toBe(200)
+    const body = page.json as unknown as { items: Array<Record<string, unknown>>; total: number }
+    expect(body.total).toBe(1)
+    expect(body.items[0]).toMatchObject({
+      id,
+      projectId: 'p1',
+      taskId: task.taskId,
+      fence: task.fence,
+      kind: 'task',
+      digest: view['digest'],
+      request: expect.objectContaining({ itemId: task.taskId, taskId: task.taskId, fence: task.fence }),
+    })
   })
 
   it('validates paging and status', async () => {
