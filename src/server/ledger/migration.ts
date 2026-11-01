@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, readdirSync, unlinkSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { MIGRATIONS, type Migration } from './ledgerSchema'
+import { ledgerMetrics } from './ledgerMetrics'
 import { inTransaction } from './ledgerCore'
 import { LedgerError } from './ledgerModel'
 
@@ -165,6 +166,8 @@ export function openLedgerDb(path: string): Database {
   db.exec('PRAGMA busy_timeout = 5000')
   if (path !== MEMORY_DB && path !== '') db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
+  const started = performance.now()
   migrateWithBackup(db, path)
+  ledgerMetrics.observe('migration_ms', performance.now() - started)
   return db
 }

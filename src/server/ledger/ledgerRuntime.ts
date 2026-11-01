@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { dataDir } from '../config'
 import { createLedger, type Ledger } from './ledger'
 import { openLedgerDb } from './migration'
+import { ledgerMetrics } from './ledgerMetrics'
 
 export type LedgerMode = 'off' | 'shadow' | 'on'
 
@@ -65,9 +66,11 @@ export function startLedgerReaper(
   }
 ): () => void {
   const timer = setInterval(() => {
+    ledgerMetrics.inc('reaper_tick')
     try {
       ledger.task.sweepExpiredLeases()
     } catch (err) {
+      ledgerMetrics.inc('reaper_error')
       onError(err)
     }
   }, intervalMs)

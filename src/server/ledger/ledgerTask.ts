@@ -11,6 +11,7 @@ import {
 } from './ledgerModel'
 import { type LedgerContext, execWrite, jsonOf, tx } from './ledgerCore'
 import { FAILABLE, LEASEABLE, REOPENABLE, emit, loadTask, reload } from './ledgerTaskShared'
+import { ledgerMetrics } from './ledgerMetrics'
 
 /**
  * Grants a lease when the task is queueable (pending/reopened/suspect) and has
@@ -129,7 +130,10 @@ export function releaseToSuspect(ctx: LedgerContext, id: string, now?: number): 
 }
 
 function assertFence(task: Task, fence: number): void {
-  if (task.fence !== fence) throw new StaleFenceError(task.id, fence, task.fence)
+  if (task.fence !== fence) {
+    ledgerMetrics.inc('stale_fence')
+    throw new StaleFenceError(task.id, fence, task.fence)
+  }
 }
 
 /**

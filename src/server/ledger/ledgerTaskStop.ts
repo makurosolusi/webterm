@@ -4,6 +4,7 @@ import { type Task, type TaskActorOptions, type TaskStatus, IllegalTransitionErr
 import { type LedgerContext, allRows, execWrite, tx } from './ledgerCore'
 import { releaseToSuspect } from './ledgerTask'
 import { BLOCKABLE, CANCELABLE, emit, reload } from './ledgerTaskShared'
+import { ledgerMetrics } from './ledgerMetrics'
 
 /** Terminal stop requested by a human/scheduler. A live lease is revoked. */
 export function cancelTask(
@@ -76,7 +77,11 @@ export function sweepExpiredLeases(ctx: LedgerContext, limit = 100, now?: number
   const moved: string[] = []
   for (const row of rows) {
     const id = String(row['id'])
-    if (releaseToSuspect(ctx, id, at) !== null) moved.push(id)
+    if (releaseToSuspect(ctx, id, at) !== null) {
+      moved.push(id)
+      ledgerMetrics.inc('lease_expired')
+      ledgerMetrics.inc('suspect')
+    }
   }
   return moved
 }
