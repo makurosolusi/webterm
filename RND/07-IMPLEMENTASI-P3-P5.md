@@ -28,11 +28,10 @@ opt-in. **Tidak** membuktikan soak 2 project × 2 minggu wall-clock, delivery Te
 Claude/node canvas; identitas aktor tetap root/loopback, bukan per-user.
 
 Update wave 6: 2026-11-01 21:36 (+08:00), HEAD `5214ea2`, commit `c8e799f`..`5214ea2` (fix
-deteksi perubahan ter-commit + laporan acceptance). Acceptance HTTP nyata 29/29 PASS dengan agen
+deteksi perubahan ter-commit + laporan acceptance). Acceptance HTTP nyata 30/30 PASS dengan agen
 PTY palsu di port 8830/8831 (`RND/qc/wave5-public-acceptance.md`) — **bukan** Claude nyata.
-Wave 7 (`d805c95`) menutup isolasi project pada gate approval: approval project A tidak bisa
-menjalankan item project B (`409 approval_project_mismatch`, tanpa consume/run); acceptance
-mengulang 29/29 PASS.
+Wave 7-8 (`d805c95`..`d8d78cc`) menutup isolasi approval: project mismatch → 409
+`approval_project_mismatch`, task-bound mismatch → 409 `approval_task_mismatch`; acceptance 30/30.
 
 Label: `[V]` terverifikasi di snapshot · `[W]` ada di working tree, belum commit atau belum
 teruji end-to-end · `[P]` rencana saja, belum ada di kode.
@@ -60,10 +59,10 @@ Gate wave 5-6 (HEAD `5214ea2`, 2026-11-01 21:36; suite di `51dab65`+, acceptance
 | Cek | Hasil |
 |---|---|
 | `tsc --noEmit` (strict + unused) | bersih |
-| `vitest run` penuh (`TMPDIR=/tmp`) | 138 file / 1840 test lulus |
+| `vitest run` penuh (`TMPDIR=/tmp`) | 138 file / 1844 test lulus |
 | `bun test` penuh | 29 file / 204 test lulus |
 | Wave-5 terarah (verifier, orchestratorRun, approvalHumanApi, centralAutonomy) | 4 file / 65 test lulus |
-| Acceptance HTTP publik (agen PTY palsu, port 8830/8831) | 29/29 PASS (`RND/qc/wave5-public-acceptance.md`) |
+| Acceptance HTTP publik (agen PTY palsu, port 8830/8831) | 30/30 PASS (`RND/qc/wave5-public-acceptance.md`) |
 | `bun scripts/soakCentralAutonomy.ts --cycles 10000 --fail-every 17 --pause-every 500` | exit 0, PASS (`RND/qc/soak-harness.md`) |
 
 Angka wave 5-6 adalah gate terbaru. Wave 5 menutup provenance, actor binding, otonomi, soak.
@@ -424,7 +423,7 @@ Sudah ditutup di wave 5-6 (`9e7416d`..`5214ea2`):
 - Central autonomy: scheduler 30 s opt-in `WEBTERM_CENTRAL_AUTONOMY=on`, satu item `assigned`
   per tick, skip paused/terminal, karantina 3 kegagalan, tanpa membuat task/approval dan tanpa
   melewati gate approval (`9e200da`; §4c).
-- Acceptance HTTP nyata dengan agen PTY palsu (bukan Claude) di port 8830/8831: 29/29 PASS —
+- Acceptance HTTP nyata dengan agen PTY palsu (bukan Claude) di port 8830/8831: 30/30 PASS —
   memory claim 201/promote 200, approval request 201/decide 200, run tanpa approval 409 lalu
   dengan approval 200, task `verified`, `verifiedBy=server-verifier`, `changedFiles
   ["src/change.txt"]`, plan `done`, `approved_by=human:root`, satu tick central autonomy
@@ -465,11 +464,11 @@ aktifkan bila klien bisa mengirim header itu.
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 138 file / 1840 test dan bun 29 file / 204 test lulus pada `3fe7231` (`TMPDIR=/tmp`) |
+| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 138 file / 1844 test dan bun 29 file / 204 test lulus pada `d8d78cc` (`TMPDIR=/tmp`) |
 | G1 seam | ✅ | P0 |
 | G2 auth/capability | ⚠️ | capability ✅; family root-only dipin test; aktor approval manusia kini dari transport (`human:root`/`human:loopback`) ✅, tetapi identitas per-user/per-agent dan ikatan ke capability belum |
 | G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; kanal memakai store JSON sehingga **tidak** butuh slot v4 |
-| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal + wajib file berubah + gate approval opt-in ✅; provenance server + deteksi perubahan ter-commit ✅ (`9e7416d`, `c8e799f`); acceptance HTTP 29/29 dengan agen palsu ✅ (`RND/qc/wave5-public-acceptance.md`); approval manusia dan pemanggil in-process tetap bisa `verifyTask` langsung; Claude nyata E2E BLOCKED (login/trust) |
+| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal + wajib file berubah + gate approval opt-in ✅; provenance server + deteksi perubahan ter-commit ✅ (`9e7416d`, `c8e799f`); acceptance HTTP 30/30 dengan agen palsu ✅ (`RND/qc/wave5-public-acceptance.md`); approval manusia dan pemanggil in-process tetap bisa `verifyTask` langsung; Claude nyata E2E BLOCKED (login/trust) |
 | G5 memory/inbox | ⚠️ | repo + route baca + file/git truth (P4b) + route tulis claim/promote ✅ (`e52e767`); soak 2×2 minggu belum, belum ada pemanggil UI/agent untuk claim/promote |
 | G6 central | ⚠️ | proyeksi + pause/resume/priority ✅; scheduler otonom opt-in ✅ (`9e200da`, satu item `assigned`/tick, audit, karantina); otonomi lebih luas (buat/milih task, prioritas) belum; harness soak bukan soak wall-clock |
 | G7 omnichannel | ⚠️ | ingress + store + binding + sender + throttle proxy + revalidasi group + master switch `WEBTERM_CHANNELS` `on|off` ✅; `readonly`/`control` belum; delivery Telegram nyata (webhook publik + pesan) belum |
@@ -494,7 +493,7 @@ TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
-Wave 5-6 (`51dab65`..`5214ea2`): vitest penuh 138 file / 1840 test, bun penuh 29 file / 204 test,
+Wave 5-6 (`51dab65`..`5214ea2`): vitest penuh 138 file / 1844 test, bun penuh 29 file / 204 test,
 `tsc` strict + unused bersih; hijau dengan `TMPDIR=/tmp` (gate §9). Harness soak dan acceptance
-HTTP 29/29 (agen PTY palsu) PASS; `controlCwd` butuh `TMPDIR=/tmp`.
+HTTP 30/30 (agen PTY palsu) PASS; `controlCwd` butuh `TMPDIR=/tmp`.
 Terarah wave 5: 4 file / 65 test (`verifier`, `orchestratorRun`, `approvalHumanApi`, `centralAutonomy`).

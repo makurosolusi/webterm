@@ -8,7 +8,7 @@ the user's.
 
 ## Result
 
-**29/29 checks passed** after two real bugs were found and fixed.
+**30/30 checks passed** after three real bugs were found and fixed.
 
 | Requirement | Observed |
 |---|---|
@@ -22,6 +22,7 @@ the user's.
 | Same run with wrong digest | **409 `approval_digest_mismatch`** |
 | Correct digest retried after wrong digest | **200**, still runs |
 | Approval issued for project A used on project B | **409 `approval_project_mismatch`**, nothing consumed |
+| Task-bound approval for task A used on item B (same project) | **409 `approval_task_mismatch`**, nothing consumed |
 | Worker task result | `verified` |
 | Evidence provenance | `verifiedBy: "server-verifier"` |
 | Changed files | `["src/change.txt"]` |
@@ -52,6 +53,10 @@ checks intact.
 2. An approval for project A was accepted for a run in project B. Fixed in `d805c95`:
    `guardedRun` checks `approval.projectId === request.projectId` before consuming; mismatch is
    409 `approval_project_mismatch` with no consume and no run.
+3. A task-bound approval for task A was accepted for another item B in the same project. Fixed in
+   `d8d78cc`: the route resolves the item task and `guardedRun` rejects `approval.taskId` that does
+   not match it (`409 approval_task_mismatch`, no consume/run); generic approvals with `taskId:null`
+   remain allowed.
 
 ## What this proves / does not prove
 
