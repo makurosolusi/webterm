@@ -131,6 +131,10 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 - **Acceptance nyata**: server dijalankan dengan `WEBTERM_LEDGER=on` + token + mint flag;
   log `ledger on: ...`, mint capability `201`, `GET /api/control/nodes` `200`,
   capability ditolak di `/api/settings` `403`, ledger `user_version=1`, 18 tabel.
+- **Validasi kontrol HTTP**: spawn claude nyata `201` dengan `--session-id` + `--settings`,
+  replay requestId `201`, duplicate `409 node_exists`, malformed JSON `400 invalid_json`,
+  body 70KB `413`, ghost close `closed:false` lalu wait `404 node_not_found`.
+  Budget route tetap: `api.ts` 130, `mount.ts` 136.
 - Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
@@ -168,3 +172,4 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 | `476cda4` | backup otomatis sebelum upgrade migrasi |
 | `9c05bf8` | metrics P2 in-memory |
 | `ac34683` | approval digest/nonce/single-use |
+| `1b3411e` | line-budget split context-link + control IO |
