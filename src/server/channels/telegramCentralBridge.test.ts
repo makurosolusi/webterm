@@ -4,7 +4,7 @@ import { openFixture, seedPortfolio } from '../central/centralTestFixture.testut
 import { TurnService } from '../central/chat/turnService'
 import { StreamHub } from '../central/chat/streamHub'
 import type { CentralRuntime, RuntimeEmit, RuntimeResult, TurnInput } from '../central/runtime/centralRuntime'
-import { createTelegramCentralPort } from './telegramCentralBridge'
+import { centralTelegramEnabled, createTelegramCentralPort } from './telegramCentralBridge'
 
 function makeService(db: Database, runtime: CentralRuntime, now = () => Date.now()): TurnService {
   return new TurnService({ db, runtime, stream: new StreamHub(), now })
@@ -28,6 +28,17 @@ class BlockingRuntime implements CentralRuntime {
 
 describe('telegram central bridge', () => {
   afterEach(() => vi.useRealTimers())
+
+  it.each([
+    ['on', true],
+    ['ON', true],
+    [' on ', true],
+    ['off', false],
+    ['', false],
+    ['garbage', false],
+  ])('gates central Telegram for %j', (raw, expected) => {
+    expect(centralTelegramEnabled(raw)).toBe(expected)
+  })
 
   it('answers mock chat and persists conversation and turn rows', async () => {
     const fixture = openFixture()

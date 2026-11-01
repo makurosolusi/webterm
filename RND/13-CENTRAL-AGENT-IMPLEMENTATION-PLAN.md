@@ -1,5 +1,5 @@
 # 13 — Rencana Implementasi Agen Pusat
-Tanggal: 2026-11-02 (+08:00). Status: **rencana, belum ada kode, belum commit**.
+Tanggal: 2026-11-02 (+08:00). Status: **rencana dengan B2, B3 partial, D, dan E terimplementasi sebagian; belum commit**.
 Induk: `08-CENTRAL-AGENT.md`; detail `09`-`12`. Dokumen ini file-level, test, flag, gate.
 Batasan: state di SQLite, flag default off, schema change wajib migrasi, tanpa root token di env
 agent, central tidak approve/spawn/tulis fact, file budget tetap.
@@ -96,6 +96,10 @@ migrasi gagal total.
 | `src/server/central/runtime/runtimeFlag.ts` (baru) | parse flag; default off | ≤100 |
 | `mockRuntime.test.ts`, `runtimeEvents.test.ts` | urutan, cancel, error | ≤400 |
 ### B2. OpenCode adapter (gate keras)
+**Status 2026-11-02:** adapter dan real-turn gate dasar terverifikasi dengan OpenCode 2.0.26.
+Primary runtime, env scrubbing, permission deny default, cancel, dan `--session` resume path
+terpasang. Real HTTP turn pada port 8831 mengembalikan `OK`. Gate sustained credentialed model,
+MCP call nyata, dan soak belum terpenuhi. Free-model `provider.quota` 429 tidak di-retry.
 | Target | Isi | Budget |
 |---|---|---|
 | `src/server/central/runtime/opencodeRuntime.ts` (baru) | spawn `opencode run --format json`, exit/error, cancel, resume, budget | ≤300 |
@@ -116,6 +120,10 @@ Catatan bukti: CLI 2.0.26 sudah diverifikasi hidup (`09` §3). `step_finish` pen
 dikirim untuk jawaban satu langkah, jadi turn ditutup oleh exit proses. Tidak ada flag
 `--max-turns`/`--max-budget`; budget dihitung dari event dan ditegakkan dengan kill.
 ### B3. Tool registry dan policy
+**Status 2026-11-02:** partial. Typed proposal MVP untuk `goal.propose` dan `plan.propose` sudah
+divalidasi policy, diterapkan dengan dua flag planner/tools, diaudit sebagai `central.proposal`,
+dan diuji applied/rejected/cancelled. `task.assign` dan `task.run` proposal belum ada, sehingga
+B3 tidak boleh ditandai complete dan central belum dapat assign/run.
 | Target | Isi | Budget |
 |---|---|---|
 | `central/mcp/centralMcpServer.ts` (baru) | server MCP **stdio**; validasi capability per call | ≤250 |
@@ -162,6 +170,9 @@ expired/digest salah ditolak; reconnect tanpa event hilang.
 **Manual/human:** review UX keyboard/a11y; setujui aksi irreversible; putuskan queue saat sibuk.
 **Rollback C:** `WEBTERM_CENTRAL_CHAT=off` menyembunyikan route/panel; data tetap.
 ## 5. Phase D — Telegram
+**Status 2026-11-02:** bridge logic partial dan unit-tested. Private bound free text dispatch,
+idempotency, busy/runtime-off/timeout sudah dicakup. Real Telegram delivery/webhook belum
+diverifikasi, jadi D belum complete.
 **Tujuan:** bridge private chat ke conversation service yang sama; group read-only.
 | Target | Isi | Budget |
 |---|---|---|
@@ -180,6 +191,9 @@ approval. `/approve` membuka kartu; bare "yes" hanya private + satu pending + id
 Tanpa webhook publik, phase ini tetap "belum teruji delivery".
 **Rollback D:** flag off + `deleteWebhook`; mapping tetap, ledger tidak dihapus.
 ## 6. Phase E — Memory dan context
+**Status 2026-11-02:** bounded read-only retrieval terimplementasi dan unit-tested dengan mocked
+search. `WEBTERM_CENTRAL_MEMORY=on` hanya memasukkan project facts yang redacted ke prompt;
+global conversation kosong, fail closed, tanpa write/promotion. Production memory E2E belum ada.
 **Tujuan:** retrieval read-only + context builder; bukan penulisan fact.
 | Target | Isi | Budget |
 |---|---|---|

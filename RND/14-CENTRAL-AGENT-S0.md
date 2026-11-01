@@ -3,9 +3,87 @@
 Tanggal: 2026-11-02 (+08:00). Status: **S0 implemented and tested; full central agent not done**.
 Induk: `08-CENTRAL-AGENT.md`, `13-CENTRAL-AGENT-IMPLEMENTATION-PLAN.md` §1.
 
-## 1. Scope S0
+## 1. Status B2/B3/D/E (verified 2026-11-02)
+
+Bagian ini memperbarui status setelah acceptance terbaru. Klaim dibatasi pada evidence yang
+benar-benar dijalankan, bukan pada target desain.
+
+### B2 — OpenCode adapter dan real-turn gate
+
+- OpenCode adalah primary runtime. `opencode --version` menghasilkan `2.0.26`.
+- `opencode run --format json --model opencode/deepseek-v4.1-flash-free "Reply with exactly OK"`
+  menghasilkan `OK`.
+- Real central HTTP turn pada port `8831` dengan `WEBTERM_CENTRAL_RUNTIME=opencode` juga
+  menghasilkan assistant text `OK` dan state `complete`.
+- Pada build ini `step_finish` final dapat tidak dikirim. Karena itu `sessionRef`/`session` dan
+  usage dapat bernilai nol pada turn tersebut. Free model juga dapat mengembalikan `429`
+  `provider.quota`; error ini tidak boleh di-retry.
+- Adapter tidak memakai PTY atau `--auto`. Env allowlist membuang semua `WEBTERM_*` dan
+  `NODETERM_*`; `OPENCODE_PERMISSION` menolak `bash`/`edit`/`webfetch`/`task` secara default;
+  cancel membunuh process; resume memakai `--session`. Model dan binary dikonfigurasi lewat
+  `WEBTERM_CENTRAL_MODEL` dan `WEBTERM_OPENCODE_BIN`.
+
+**Batas B2:** real turn dengan free model sudah terbukti, tetapi sustained turns dengan
+credentialed model belum. MCP tool call nyata, resume lintas proses, dan 2-project soak juga
+belum menjadi evidence di sini.
+
+### B3 — typed proposal MVP
+
+Protocol yang berjalan adalah typed proposal protocol MVP, bukan MCP. Assistant text dapat
+memuat blok `<webterm-proposal>{"tool":"goal.propose"|"plan.propose","input":{...}}</webterm-proposal>`.
+Server memvalidasi dengan `proposalPolicy`: kedua flag `WEBTERM_CENTRAL_PLANNER=on` dan
+`WEBTERM_CENTRAL_TOOLS=write` wajib aktif; actor/status/path dan field terlarang ditolak;
+proposal project-scoped. `goal.propose` membuat goal berstatus `proposed` tanpa efek aktif.
+`plan.propose` membuat atau mengganti plan `draft` dengan `expectedVersion`. Setiap proposal
+menulis satu audit `central.proposal`; proposal ditolak menjadi conversation event
+`entity.updated` dengan payload `proposal.rejected`.
+
+Acceptance HTTP memakai mock runtime pada port `8834`: bootstrap `p1`, proposal block,
+`project.goal_json` menjadi version 1 berstatus `proposed`, plan tetap tidak berubah, dan audit
+`central.proposal` tersedia. Unit turn test mencakup applied/rejected/cancelled.
+
+**B3 masih partial:** belum ada proposal `task.assign` atau `task.run`. Central belum dapat
+assign atau run task.
+
+### D — Telegram central chat bridge
+
+Free text (`parseCommand` menghasilkan `not_a_command`) dari bound private chat dikirim ke
+`central:project:<projectId>` melalui `TurnService`. `updateId` yang sama menghasilkan
+`clientMessageId` yang sama (`telegram:<updateId>`), sehingga idempotent. Batas turn 120 detik
+menghasilkan `central_timeout`; balasan normal adalah assistant text, sedangkan failure menjadi
+`Central agent unavailable (<code>).`. Commands dan approvals tetap unchanged, group chat tetap
+ditolak. Test mencakup dispatch, idempotency, busy, runtime off, dan timeout.
+
+**Batas D:** delivery/webhook Telegram nyata belum diverifikasi. E2E delivery harus dilakukan
+oleh user yang memiliki Telegram bot dan webhook.
+
+### E — memory retrieval
+
+Dengan `WEBTERM_CENTRAL_MEMORY=on`, prompt mendapat bounded project facts dari `searchMemory`.
+Global conversation tidak mendapat memory. Hanya `status=fact` yang dipakai: default 6 item,
+maksimum 10, total 2048 karakter, body tiap item 300 karakter, dan redaction diterapkan.
+Error fail closed menjadi empty. Memory diperlakukan sebagai data, bukan instruksi.
+
+**Batas E:** tidak ada write/promotion. Test memakai mocked search; production memory E2E belum
+ada.
+
+### Gates dan remaining work
+
+- `npx tsc --noEmit`: bersih.
+- Targeted tests: 182 lulus.
+- Full Vitest: 2003 lulus, 1 failure environment-only pada `controlCwd` karena `TMPDIR` shell ini
+  berada di bawah `HOME`; test lulus dengan `TMPDIR=/tmp`.
+- Bun-only: 226/226 lulus.
+- Remaining: C2 UI penuh (proposal/tool cards), B3 assign/run proposals, real Telegram delivery,
+  credentialed model untuk sustained turns, 2-project soak, dan real E2E milik user.
+
+## 2. Scope S0
 
 S0 adalah slice vertikal terkecil dari rencana, bukan agen pusat penuh:
+
+Daftar berikut adalah batas scope S0 saat slice pertama diimplementasikan. Status B2/B3/D/E
+terbaru ada di §1, jadi kalimat "Belum ada di S0" tidak berarti fitur tersebut masih belum ada
+di repository saat ini.
 
 - migrasi ledger v4: `project.goal_json` + `central_conversation`, `central_message`,
   `central_turn`, `central_event`;

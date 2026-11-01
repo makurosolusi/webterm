@@ -3,7 +3,8 @@
 Status: riset, perencanaan, dan implementasi bertahap. **P0-P2 selesai.**
 **P3 tertutup end-to-end; P4/P5 ter-wire lewat HTTP tetapi belum production-ready.**
 Branch aktif `feature/agent-pusat-p3`; commit terakhir `2f04f77` (wave 2 + loop worker).
-Snapshot status: 2026-11-01 15:24 (+08:00).
+Snapshot status: 2026-11-02 (+08:00). Central update: B2 real turn terverifikasi; B3 partial;
+D bridge dan E retrieval teruji pada unit/acceptance terbatas, belum production-ready.
 
 Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 
@@ -110,6 +111,14 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 | `WEBTERM_MEMORY_FILES` | `off` | aktif; gate export/rebuild |
 | `WEBTERM_MEMORY_DIR` | `<dataDir>/memory` (absolut) | aktif |
 | `WEBTERM_CENTRAL` | `off` | aktif; gate `/api/central/*` |
+| `WEBTERM_CENTRAL_RUNTIME` | `off` | aktif; `mock` atau primary `opencode` |
+| `WEBTERM_CENTRAL_MODEL` | `opencode/deepseek-v4.1-flash-free` | aktif; free model dev/demo, quota dapat 429 |
+| `WEBTERM_OPENCODE_BIN` | `opencode` | aktif; binary OpenCode |
+| `WEBTERM_CENTRAL_CHAT` | `off` | aktif; central chat/SSE |
+| `WEBTERM_CENTRAL_TOOLS` | `read` | aktif; `write` membuka typed proposal MVP |
+| `WEBTERM_CENTRAL_PLANNER` | `off` | aktif; wajib `on` bersama tools write untuk proposal |
+| `WEBTERM_CENTRAL_TELEGRAM` | `off` | aktif; private central bridge, delivery nyata belum diverifikasi |
+| `WEBTERM_CENTRAL_MEMORY` | `off` | aktif; bounded read-only project fact retrieval |
 | `WEBTERM_ALLOW_TOKEN_MINT` | `0` | aktif |
 | `WEBTERM_STRICT_HOOK_AUTH` | `0` | aktif |
 
@@ -155,6 +164,10 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 - **Vonis: P3 tertutup end-to-end; loop P4/P5 ter-wire lewat HTTP, belum production-ready.**
   Detail dan gate: `07-IMPLEMENTASI-P3-P5.md` §8; riwayat temuan/fix:
   `qc/p4-wave2-fixes.md`.
+
+Central detail dan evidence terbaru ada di `14-CENTRAL-AGENT-S0.md`: B3 masih partial karena
+proposal `task.assign`/`task.run` belum tersedia; Telegram delivery nyata dan production memory
+E2E juga belum diverifikasi.
 
 ### Yang sudah terverifikasi
 

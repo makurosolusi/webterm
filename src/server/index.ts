@@ -9,7 +9,7 @@ import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
-import { createTelegramCentralPort } from './channels/telegramCentralBridge'
+import { centralTelegramEnabled, createTelegramCentralPort } from './channels/telegramCentralBridge'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { resolveHostPort } from './serverConfig'
@@ -37,7 +37,7 @@ if (ledgerRuntime) {
 // Channel ingress is off by default: `WEBTERM_TELEGRAM=on` + webhook secret + a live ledger.
 // `null` means no route exists at all, not a route that rejects every request.
 const activeRuntime = activeLedgerRuntime()
-const centralChat = process.env.WEBTERM_CENTRAL_CHAT === 'on' && activeRuntime && centralRuntimeKind() !== 'off'
+const centralChat = process.env.WEBTERM_CENTRAL_CHAT === 'on' && centralTelegramEnabled() && activeRuntime && centralRuntimeKind() !== 'off'
   ? createTelegramCentralPort({ db: activeRuntime.db, kind: centralRuntimeKind() })
   : undefined
 const channelsRuntime = startChannelsRuntime(activeRuntime?.ledger, { centralChat })

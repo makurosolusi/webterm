@@ -8,6 +8,11 @@ import type { TelegramCentralPort } from './channelDispatch'
 
 const TIMEOUT_MS = 120_000
 
+// D-phase gate, independent of WEBTERM_CENTRAL_CHAT.
+export function centralTelegramEnabled(raw = process.env.WEBTERM_CENTRAL_TELEGRAM): boolean {
+  return raw?.trim().toLowerCase() === 'on'
+}
+
 export function createTelegramCentralPort(input: {
   db: Database
   kind: RuntimeKind
