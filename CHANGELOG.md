@@ -15,6 +15,7 @@
 - `.env` no longer carries `WEBTERM_TOKEN` and is kept at mode `600`. A root token must be exported explicitly, so it is not inherited by every process that reads the auto-loaded file.
 
 ### Fixed
+- A task whose approval was approved but never consumed could not be finished from the inbox: the approval disappeared from every list, so a lost response left the task stuck. The inbox now shows "Finish approval" on that row, which opens the existing consent at the Consume step instead of minting a second approval, and the approved list now carries the task id, fence, and request so the row can be matched.
 - Task review approvals no longer consume without effect: reject fails or reopens the task, and consume verifies it with the human reviewer and approval id recorded.
 - The canvas minimap follows the dark canvas background instead of rendering as a white block.
 

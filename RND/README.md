@@ -150,7 +150,10 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
   `channelsRuntime` dan `channelDispatch`.
 - File `memory/*` dan `channels/*` berubah selama snapshot (sesi lain). Jalankan ulang
   suite penuh sebelum menyatakan hijau.
-- **Vonis: belum production-ready.** Detail dan gate: `07-IMPLEMENTASI-P3-P5.md`.
+- Ulangan pada `31c0886`: `tsc` bersih, `vitest run` 1526 test lulus; kegagalan di atas milik
+  tree 12:22 dan tidak lagi berlaku.
+- **Vonis: jalur P3 approval + inbox tertutup; P4/P5 belum production-ready.** Detail dan gate:
+  `07-IMPLEMENTASI-P3-P5.md` §8.
 
 ### Yang sudah terverifikasi
 
@@ -169,28 +172,32 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 
 ### Yang belum / masih gap
 
-- Task review: transisi verify/fail sudah ditambahkan, tetapi belum ada test dan belum
-  diverifikasi E2E setelah perubahan.
-- Approved-unconsumed: approval yang sudah `approved` tidak muncul di inbox dan belum ada
-  route list manusia untuk melanjutkannya.
-- `/api/approvals/request` belum idempoten (`requestId` diabaikan).
+- Task review: transisi verify/fail sudah ada dan kini punya test (consume mem-verify,
+  reject mem-fail, stale fence ditolak) di `approvalHumanApi.test.ts`.
+- Approved-unconsumed: **tertutup di `31c0886`.** `GET /api/approvals?status=approved`
+  membawa `taskId`/`fence`/`request`, dan inbox menampilkan "Finish approval" yang membuka
+  consent lama di langkah Consume tanpa mencetak approval baru.
+- `/api/approvals/request` sudah idempoten (`requestId` per ledger runtime); error taxonomy
+  route manusia tidak lagi kolaps ke satu kode.
 - Spawn PTY worker dan gate blocking (`requireApproval` -> `consumeApproval`) belum ada.
 - Verifikasi independen belum menjadi satu-satunya jalur `verified`.
 - Telegram: `ChannelStore.bind` belum dipanggil produksi, outbox tanpa sender, tidak ada
   uji jaringan nyata.
 - `WEBTERM_CHANNELS` dan mode `off|readonly|control` belum ada di kode.
 - P4b dan central agent ditunda.
-- Node canvas interactions belum diuji E2E; panel inbox terpotong di viewport sempit.
-- File budget: `ledgerSchema.ts` > 200 baris; `inboxApi.ts`/`InboxPanel.tsx` mendekati hard cap.
+- Node canvas interactions belum diuji E2E.
+- File budget: `ledgerSchema.ts` 227 baris > 200; `InboxPanel.tsx` 475 baris masih di atas
+  80% hard cap setelah baris dipisah ke `inboxItemRow.tsx`.
 
 ### QC P3
 
 - `qc/p3-security.md`: H1 loopback token-free (fixed), H2 AckStore (fixed), M1 actor
   separation, M2 memory authority, M3 secret Telegram lemah, M4 verifier env, M5 review
   task tanpa semantik (sebagian fixed).
-- `qc/p3-integration.md`: B1 idempotency (fixed), B2 taskId (fixed), B3 requestId manusia,
-  B4 approved-unconsumed, B5 error taxonomy, B6 validasi, B7 body cap.
-- `qc/p3-tests.md`: mutation survive M4/M8/M12b/M14/M15/M16; `approvalHumanApi` tanpa test.
+- `qc/p3-integration.md`: B1 idempotency (fixed), B2 taskId (fixed), B3 requestId manusia
+  (fixed), B4 approved-unconsumed (fixed), B5 error taxonomy (fixed), B6 validasi, B7 body cap.
+- `qc/p3-tests.md`: mutation survive M4/M8/M12b/M14/M15/M16; `approvalHumanApi` tanpa test
+  (sejak `31c0886` sudah ada 20 test modul).
 - `qc/p3-e2e-ui.md`: E2E pada `c7c0eda`; workspace kosong, jadi node canvas tidak teruji.
 
 ---

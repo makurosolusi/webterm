@@ -1,7 +1,7 @@
 # 07: Implementasi P3/P4/P5: Peta, Gap, Gate
 
-Snapshot: 2026-11-01 12:22 (+08:00), branch `feature/agent-pusat-p3`.
-Commit terakhir `c7c0eda`; sebagian perbaikan P3 masih **uncommitted** di working tree.
+Snapshot awal: 2026-11-01 12:22 (+08:00), branch `feature/agent-pusat-p3`.
+Commit terakhir `31c0886` (P3 resume approved-unconsumed); perbaikan P3 sudah commit.
 Dokumen ini peta keadaan, bukan klaim selesai. Verifikasi ulang §9 sebelum menyatakan selesai.
 
 Label: `[V]` terverifikasi di snapshot · `[W]` ada di working tree, belum commit atau belum
@@ -28,6 +28,9 @@ File `src/server/memory/*`, `channels/*` berubah **saat** snapshot ini diambil (
 jadi angka di atas bisa berubah. Jangan klaim hijau sampai suite dijalankan ulang pada tree
 yang sama dan tidak ada perubahan bersamaan.
 
+Ulangan pada `31c0886` (queue bersih): `tsc --noEmit` bersih, `vitest run` **1526 test lulus**
+(111 file, 0 gagal). Kegagalan di atas milik tree 12:22 dan tidak lagi berlaku di commit ini.
+
 ---
 
 ## 2. P3: orchestrator dan approval
@@ -44,18 +47,27 @@ yang sama dan tidak ada perubahan bersamaan.
 | `control/approvalApi.ts` | `handleApproval`, rute request/decide/consume/list lewat capability | `[W]` 17 test; di-mount |
 | `control/approvalMount.ts` | deps memo per ledger port supaya AckStore replay 10 menit hidup | `[W]` fixed |
 | `approvalAuth.ts` | `approvalAuthAllowed`; tolak loopback tanpa token | `[W]` + test |
-| `approvalHumanApi.ts` | `/api/approvals/*`: challenge, request, decide, consume; transisi task saat review | `[W]`, belum ada test modul |
+| `approvalHumanApi.ts` | `/api/approvals/*`: challenge, request, decide, consume, **list approved**; transisi task saat review | `[V]`, 20 test modul |
+| `approvalFailures.ts` | `classifyLedgerError`, `boundedText`, `invalid`; error tidak lagi kolaps ke satu kode | `[V]` + test |
 | `inbox/inbox.ts` | `buildInbox`, `inboxCounts`; item task membawa `fence` | `[W]` |
-| `client/InboxPanel.tsx` | panel inbox + dialog consent `APPROVE`; review task mengirim `taskId`/`fence` | `[W]`; minimap/narrow layout belum beres |
+| `client/InboxPanel.tsx` | panel inbox + dialog consent `APPROVE`; review task mengirim `taskId`/`fence` | `[V]`; narrow layout beres, baris dipisah ke `inboxItemRow.tsx` |
 
-Alur review task sekarang (uncommitted):
+Alur review task sekarang (commit `31c0886`):
 
 1. UI `beginReview` untuk item task memanggil `/api/approvals/request` dengan `taskId` + `fence`.
 2. Reject saat `decide` memanggil `failTask` (dari `claimed_done`) atau `reopenTask`.
 3. Consume yang berhasil memanggil `verifyTask` dengan `reviewedBy: 'human'` + `approvalId`.
 
-Itu menutup temuan QC "consume tidak mengubah task", tetapi belum ada test yang mengunci
-transisinya. Bukti lama (E2E `p3-e2e-ui.md` B1) tetap berlaku untuk commit `c7c0eda`.
+Ketiga transisi itu sekarang punya test (`approvalHumanApi.test.ts`: verify setelah consume,
+reject mem-fail, stale fence ditolak, verify ulang pada task non-`claimed_done` ditolak).
+
+Pemulihan approved-unconsumed (B4) punya jalur UI: `GET /api/approvals?status=approved`
+memproyeksikan `taskId`/`fence`/`request` dari `request_json`, dan `InboxPanel` menampilkan
+**Finish approval** untuk baris task yang punya consent approved-unconsumed yang cocok. Klik
+membuka consent yang ada di langkah Consume, tidak pernah mencetak approval kedua; `ready`
+menggerbang ulang tombol Review sampai daftar approved selesai dibaca, saat panel dibuka dan
+saat ditutup-lalu-dibuka. Terverifikasi nyata (HTTP + ego-browser): Finish approval → Consume →
+task `verified`, baris keluar dari inbox, tidak ada approval kedua.
 
 ---
 
@@ -126,25 +138,36 @@ auto-load `.env`, jadi token hanya masuk bila operator mengekspornya secara eksp
 
 Sumber: `RND/qc/p3-security.md`, `p3-integration.md`, `p3-tests.md`, `p3-e2e-ui.md`.
 
-Sudah ditutup di working tree:
+Sudah ditutup (per `31c0886`):
 
 - H1: loopback tanpa token tidak lagi bisa request/decide/consume (`approvalAuth.ts`).
 - H2/B1: AckStore memakai deps stabil, replay `requestId` hidup lagi.
 - B2: item task membawa `taskId` + `fence`; review task sekarang punya transisi verify/fail.
 - Minimap putih: specificity + custom property React Flow diperbaiki di `styles.css`.
+- B4 approved-unconsumed: lihat §2; daftar `approved` manusia + tombol **Finish approval**,
+  idempoten (tidak mencetak approval baru) dan terverifikasi HTTP + browser.
+- Idempotensi route manusia: `request`/`decide`/`consume` membaca `requestId` lewat ack store
+  per ledger runtime (`approvalHumanRoutes.ts`); diuji replay, key baru, dan retry `decide`.
+- Error taxonomy: `approvalFailures.classifyLedgerError` memetakan digest/nonce/expired/
+  not-pending/stale-fence/not-found ke kode berbeda; `internal_error` tidak membocorkan pesan.
+- Task transition punya test: verify setelah consume, reject mem-fail, stale fence, dan verify
+  ulang pada task non-`claimed_done` (`approvalHumanApi.test.ts`).
+- InboxPanel: baris yang di-hide optimistis sekarang dibuang setiap daftar server dibaca
+  (`setHidden(new Set())`), jadi baris yang masih dilaporkan server kembali tanpa full reload.
+- Narrow viewport: `@media (max-width: 640px)` di `inbox.css` memindahkan panel ke kanan dock
+  (`left: dock + gap`), `min-width: 0`, dialog selebar panel.
+- File budget: `inboxApi.ts` server 66 / klien 200 baris (di batas utility), `InboxPanel.tsx`
+  475 setelah baris dipisah ke `inboxItemRow.tsx`.
 
 Masih terbuka:
 
-- Approved-unconsumed: approval `approved` hilang dari inbox (hanya `pending`), tidak ada route
-  list manusia; decide yang sukses tapi responsnya hilang tidak bisa dilanjutkan.
-- Idempotensi route manusia: `/api/approvals/request` belum membaca `requestId`, jadi dua
-  request identik tetap membuat dua approval.
-- Error taxonomy route manusia masih kolaps ke `approval_decision_failed`.
-- Task transition belum punya test; `InboxPanel` masih menyembunyikan baris secara lokal.
+- `inboxItemRow.tsx` baru 63 baris, tetapi `InboxPanel.tsx` 475 masih ≥80% hard cap 500; pecah
+  lagi bila menambah fitur.
+- `ledgerSchema.ts` 227 baris > batas 200.
 - Node canvas interactions belum diuji E2E (E2E P3 memakai workspace kosong).
-- Narrow viewport masih memotong panel inbox.
 - `DedupeStore` teruji tetapi tidak dipakai produksi.
-- File budget: `ledgerSchema.ts` > 200, `inboxApi.ts`/`InboxPanel.tsx` mendekati hard cap.
+- Spawn PTY worker dan gate blocking (`requireApproval` → `consumeApproval`) belum ada.
+- Verifikasi independen belum menjadi satu-satunya jalur `verified`.
 
 ---
 
@@ -172,8 +195,8 @@ dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusi
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck | ✅ | tsc bersih 12:21 |
-| G0b suite penuh | ⚠️ | 3 test + 1 suite gagal di snapshot; file berubah bersamaan |
+| G0 typecheck | ✅ | `tsc --noEmit` bersih pada `31c0886` |
+| G0b suite penuh | ✅ | 1526 test vitest lulus, 0 gagal |
 | G1 seam | ✅ | P0 |
 | G2 auth/capability | ⚠️ | capability ✅; approval manusia fixed; actor binding belum |
 | G3 data/migrasi | ⚠️ | v1 ✅; v2 plan WIP; v3 kanal belum |
@@ -182,8 +205,11 @@ dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusi
 | G6 central | N/A | ditunda |
 | G7 omnichannel | ⚠️ | ingress + store ✅; binding, sender, v3, live test belum |
 
-**Vonis: belum production-ready.** Jangan sebut P3-P5 selesai sebelum G0b hijau, test transisi
-task ditambahkan, dan approved-unconsumed punya jalur pulih.
+**Vonis: jalur P3 (approval + inbox) sudah tertutup end-to-end, P4/P5 belum production-ready.**
+B4 approved-unconsumed tidak lagi jadi penghalang: pemulihan punya jalur UI yang teruji dan
+gating readiness mencegah approval ganda. Yang masih menahan: P4b (fact file + git gate),
+central agent, binding/sender Telegram dan uji jaringan nyata, spawn PTY produksi + gate
+blocking, serta E2E node canvas. Jangan sebut P3-P5 production-ready sampai itu ditutup.
 
 ---
 
