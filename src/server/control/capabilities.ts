@@ -16,6 +16,10 @@ export type CapabilityVerb =
   | 'node.close'
   | 'node.read'
   | 'plan.read'
+  | 'approval.request'
+  | 'approval.decide'
+  | 'approval.consume'
+  | 'approval.read'
 
 export const CAPABILITY_VERBS: readonly CapabilityVerb[] = [
   'node.spawn',
@@ -24,6 +28,10 @@ export const CAPABILITY_VERBS: readonly CapabilityVerb[] = [
   'node.close',
   'node.read',
   'plan.read',
+  'approval.request',
+  'approval.decide',
+  'approval.consume',
+  'approval.read',
 ]
 
 /**

@@ -211,22 +211,75 @@ test('backup writes a readable copy and keeps the last 3', () => {
   close(db)
 })
 
-test('schema modules list a single v1 migration that matches LATEST_VERSION', () => {
-  expect(MIGRATIONS.length).toBe(1)
-  expect(MIGRATIONS[0]?.version).toBe(LATEST_VERSION)
+test('schema modules list forward-only migrations matching LATEST_VERSION', () => {
+  expect(MIGRATIONS.length).toBe(2)
+  expect(MIGRATIONS[0]?.version).toBe(1)
+  expect(MIGRATIONS[1]?.version).toBe(2)
+  expect(MIGRATIONS[MIGRATIONS.length - 1]?.version).toBe(LATEST_VERSION)
+})
+
+test('v1 ledger upgrades to v2 in place: rows survive, plan tables appear, re-run is a no-op', () => {
+  const db = new Database(':memory:')
+  db.exec('PRAGMA foreign_keys = ON')
+  // Simulate an installed v1 build: only migration 1 has ever run.
+  expect(migrate(db, [MIGRATIONS[0] as Migration])).toBe(1)
+  run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
+  run(db, "INSERT INTO task (id, project_id, spec, created_at, updated_at) VALUES ('t1','p1','spec',1,1)")
+  expect(tables(db)).not.toContain('plan')
+
+  expect(migrate(db)).toBe(2)
+  expect(version(db)).toBe(2)
+  const names = tables(db)
+  expect(names).toContain('plan')
+  expect(names).toContain('plan_item')
+  expect(Number(q(db, 'SELECT count(*) AS c FROM project').get()?.['c'])).toBe(1)
+  expect(Number(q(db, 'SELECT count(*) AS c FROM task').get()?.['c'])).toBe(1)
+
+  // Idempotent: the v2 DDL must not throw or drop data on a second pass.
+  expect(migrate(db)).toBe(2)
+  run(db, "INSERT INTO plan (id, project_id, version, status, created_at, updated_at) VALUES ('pl1','p1',1,'draft',1,1)")
+  run(db, "INSERT INTO plan_item (id, plan_id, seq, title, scope_json, updated_at) VALUES ('i1','pl1',0,'t','[\"src/a.ts\"]',1)")
+  expect(Number(q(db, 'SELECT count(*) AS c FROM plan_item').get()?.['c'])).toBe(1)
+  expectThrow(
+    () => run(db, "INSERT INTO plan_item (id, plan_id, seq, title, scope_json, updated_at) VALUES ('i2','pl1',0,'t','[\"b\"]',1)"),
+    'UNIQUE constraint failed'
+  )
+  expectThrow(
+    () => run(db, "INSERT INTO plan (id, project_id, version, status, created_at, updated_at) VALUES ('pl2','p1',1,'draft',1,1)"),
+    'UNIQUE constraint failed'
+  )
+  close(db)
+})
+
+test('plan_item scope_json rejects non-JSON and one task cannot back two items', () => {
+  const db = openLedgerDb(':memory:')
+  run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
+  run(db, "INSERT INTO plan (id, project_id, version, status, created_at, updated_at) VALUES ('pl1','p1',1,'draft',1,1)")
+  run(db, "INSERT INTO plan_item (id, plan_id, seq, task_id, title, scope_json, status, assignee, updated_at) VALUES ('i1','pl1',0,'t1','t','[\"src/a.ts\"]','assigned','a1',1)")
+  expectThrow(
+    () => run(db, "INSERT INTO plan_item (id, plan_id, seq, task_id, title, scope_json, status, updated_at) VALUES ('i2','pl1',1,'t1','t','[\"b\"]','assigned',1)"),
+    'UNIQUE constraint failed'
+  )
+  expectThrow(
+    () => run(db, "INSERT INTO plan_item (id, plan_id, seq, title, scope_json, updated_at) VALUES ('i3','pl1',2,'t','not-json',1)"),
+    'CHECK constraint failed'
+  )
+  close(db)
 })
 
 test('migrateWithBackup snapshots a file DB before an upgrade, but not for a fresh one', () => {
   const path = join(root, 'upgrade.db')
   const db = new Database(path)
   migrate(db)
-  const v2: Migration = {
-    version: 2,
+  // Append one synthetic step past the shipped schema so a real upgrade (and its
+  // pre-migration backup) is exercised without reusing a version number.
+  const next: Migration = {
+    version: LATEST_VERSION + 1,
     up: (d) => d.exec('CREATE TABLE upgrade_marker (id TEXT PRIMARY KEY)'),
   }
-  const version = migrateWithBackup(db, path, [...MIGRATIONS, v2])
-  expect(version).toBe(2)
-  expect(Number(q(db, 'PRAGMA user_version').get()?.['user_version'])).toBe(2)
+  const version = migrateWithBackup(db, path, [...MIGRATIONS, next])
+  expect(version).toBe(LATEST_VERSION + 1)
+  expect(Number(q(db, 'PRAGMA user_version').get()?.['user_version'])).toBe(LATEST_VERSION + 1)
   const backups = readdirSync(root).filter((f) => f.startsWith('upgrade.db.') && f.endsWith('.bak'))
   expect(backups.length >= 1).toBe(true)
   close(db)

@@ -6,7 +6,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { migrate, preMigrationBackup } from './migration'
+import { LATEST_VERSION, migrate, preMigrationBackup } from './migration'
 import type { Migration } from './ledgerSchema'
 import { DuplicateIdemKeyError, LedgerError, LedgerNotFoundError, createLedger, type Ledger } from './ledger'
 
@@ -362,7 +362,7 @@ test('crash mid-transaction leaves no half-written ledger rows', async () => {
   const check = new Database(file)
   try {
     expect(count(check, 'project')).toBe(0)
-    expect(pragma(check, 'user_version')).toBe(1)
+    expect(pragma(check, 'user_version')).toBe(LATEST_VERSION)
   } finally {
     close(check)
     rmSync(dir, { recursive: true, force: true })

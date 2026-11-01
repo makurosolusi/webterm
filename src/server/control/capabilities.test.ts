@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CAPABILITY_VERBS,
   CapabilityStore,
   MAX_TTL_MS,
   DEFAULT_TTL_MS,
@@ -252,5 +253,32 @@ describe('isValidResource', () => {
     expect(isValidResource('node')).toBe(false)
     expect(isValidResource('')).toBe(false)
     expect(isValidResource('agent:ag1')).toBe(false)
+  })
+})
+
+describe('approval verbs', () => {
+  it('are listed and mintable for project resources', () => {
+    const store = new CapabilityStore()
+    const verbs = [
+      'approval.request',
+      'approval.decide',
+      'approval.consume',
+      'approval.read',
+    ] as const
+    for (const verb of verbs) {
+      expect(CAPABILITY_VERBS).toContain(verb)
+      const token = store.mint({ verb, resource: 'project:p1' }, T0)
+      expect(store.verify(token, T0)).toMatchObject({ verb, resource: 'project:p1' })
+      expect(allows(store.verify(token, T0)!, verb, 'project:p1')).toBe(true)
+      expect(allows(store.verify(token, T0)!, verb, 'project:p2')).toBe(false)
+    }
+  })
+
+  it('leave node verb semantics unchanged and reject "*"', () => {
+    const store = new CapabilityStore()
+    expect(() => store.mint({ verb: 'approval.decide', resource: '*' }, T0)).toThrow(/\*.*node\.read/)
+    const node = store.mint({ verb: 'node.prompt', resource: 'node:a' }, T0)
+    expect(allows(store.verify(node, T0)!, 'node.prompt', 'node:a')).toBe(true)
+    expect(allows(store.verify(node, T0)!, 'approval.decide', 'node:a')).toBe(false)
   })
 })
