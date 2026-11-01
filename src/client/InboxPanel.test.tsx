@@ -222,7 +222,8 @@ describe('approval flow', () => {
     expect(await screen.findByText('Rejected. The action will not run.')).toBeDefined()
     expect(client.decideApproval).toHaveBeenCalledWith(expect.objectContaining({ approve: false }))
     expect(screen.queryByRole('button', { name: 'Consume approval' })).toBeNull()
-    expect(client.listInbox).toHaveBeenCalledTimes(2)
+    // The refresh is a refreshKey bump, so the second list read lands on the next render.
+    await waitFor(() => expect(client.listInbox).toHaveBeenCalledTimes(2))
     // The cleared row is gone from the list (the dialog still describes what was rejected).
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Review Approve deploy' })).toBeNull())
   })
