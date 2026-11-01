@@ -116,7 +116,7 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   WAL), schema v1 (project/agent/task/event/decision/approval/run/usage/prefix/budget/memory/
   memory_fts), repository task state machine (fence, lease, suspect, evidence) + event atomik.
   Startup sudah wired lewat `WEBTERM_LEDGER` (default off).
-- Gates P2: 59 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
+- Gates P2: 62 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
 - **P2 QC fixed**: attempt cap, claimDone lease owner/expiry, FK pragma assertion, depth/project
   invariants, event reference consistency, per-project idem_key + lookup, index coverage,
   pagination clamps, workspace-wide delete, migration version validation.
@@ -125,7 +125,10 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   run/usage/budget (provider_response_id idempotent, unknown token != 0, hard cap), backup
   otomatis sebelum upgrade file DB, metrics in-memory (migration_ms, lease_expired, suspect,
   stale_fence, reaper_tick/error).
-- Fase berikutnya: P3 approval blocking + project orchestrator.
+- **P3 fondasi approval selesai**: request approval menyimpan digest aksi + nonce + expiry,
+  approve/reject memverifikasi digest+nonce, `consumeApproval` single-use, expiry lazy+sweep.
+  Belum diekspos ke HTTP/Telegram (blocking gate menyusul).
+- Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
 
@@ -161,3 +164,4 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 | `e315c53` | run/usage/budget repository + reaper tick |
 | `476cda4` | backup otomatis sebelum upgrade migrasi |
 | `9c05bf8` | metrics P2 in-memory |
+| `ac34683` | approval digest/nonce/single-use |
