@@ -2,7 +2,7 @@
 
 Status: riset, perencanaan, dan implementasi bertahap. **P0-P2 selesai.**
 **P3 tertutup end-to-end; P4/P5 ter-wire lewat HTTP tetapi belum production-ready.**
-Branch aktif `feature/agent-pusat-p3`; commit terakhir `2f04f77` (wave 2 + loop worker).
+Branch aktif `feature/agent-pusat-p3`; HEAD `a856bdf` (central B2-B3-D-E, commits `afe98d5..a856bdf`).
 Snapshot status: 2026-11-02 (+08:00). Central update: B2 real turn terverifikasi; B3 partial dengan
 `task.assign` selesai;
 D bridge dan E retrieval teruji pada unit/acceptance terbatas, belum production-ready.
@@ -155,7 +155,7 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 
 ## 8. Status singkat
 
-### Snapshot 2026-11-01 15:24 (`2f04f77`)
+### Snapshot historis 2026-11-01 15:24 (`2f04f77`)
 
 - `tsc --noEmit`: **bersih**.
 - `vitest run` penuh: **127 file / 1697 test lulus**.

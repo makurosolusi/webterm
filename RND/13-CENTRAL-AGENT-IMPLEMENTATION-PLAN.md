@@ -1,5 +1,5 @@
 # 13 — Rencana Implementasi Agen Pusat
-Tanggal: 2026-11-02 (+08:00). Status: **rencana dengan B2, B3 partial, D, dan E terimplementasi sebagian; belum commit**.
+Tanggal: 2026-11-02 (+08:00). Status: **rencana dengan B2, B3 partial, D, dan E terimplementasi sebagian; tercermin hingga HEAD `a856bdf`**.
 Induk: `08-CENTRAL-AGENT.md`; detail `09`-`12`. Dokumen ini file-level, test, flag, gate.
 Batasan: state di SQLite, flag default off, schema change wajib migrasi, tanpa root token di env
 agent, central tidak approve/spawn/tulis fact, file budget tetap.
@@ -292,4 +292,5 @@ Jangan tambah dependency runtime sebelum gate B2; jangan `TOOLS=write` sebelum a
 - Update `07-IMPLEMENTASI-P3-P5.md` (`[V]/[W]/[P]`) dan `RND/README.md` bila flag baru; `08` bila
   keputusan berubah.
 - Jangan menulis "selesai" untuk OpenCode nyata, tool tulis, Telegram delivery, atau soak tanpa bukti.
-- Tidak ada commit/push dalam pekerjaan dokumen ini; implementasi menunggu perintah.
+- Dokumentasi ini mencerminkan implementasi pada branch `feature/agent-pusat-p3` hingga HEAD
+  `a856bdf`; tidak ada commit atau push dilakukan dalam pekerjaan dokumentasi ini.
