@@ -8,7 +8,7 @@ the user's.
 
 ## Result
 
-**17/17 checks passed** after one real bug was found and fixed.
+**28/28 checks passed** after one real bug was found and fixed.
 
 | Requirement | Observed |
 |---|---|
@@ -19,13 +19,22 @@ the user's.
 | `POST /api/approvals/decide` approve | 200, status `approved` |
 | `POST /api/orchestrator/run` without approval (`WEBTERM_RUN_REQUIRE_APPROVAL=on`) | **409 `approval_required`**, no worktree/PTY |
 | Same run with `approvalId`+`approvalDigest` | **200**, approval consumed once |
+| Same run with wrong digest | **409 `approval_digest_mismatch`** |
+| Correct digest retried after wrong digest | **200**, still runs |
 | Worker task result | `verified` |
 | Evidence provenance | `verifiedBy: "server-verifier"` |
 | Changed files | `["src/change.txt"]` |
 | Plan item | `done` |
 | `POST /api/memory/claim` | 201, status `claim` |
 | `POST /api/memory/promote` with machine evidence | 200, status `fact` |
+| Duplicate memory claim | **409 `memory_conflict`** |
+| Promote with `exitCode:1` | **400 `invalid_memory`** |
+| Memory body >64 KiB | **413** |
+| Settings body >64 KiB | **413** |
+| Workspaces body >1 MiB | **413** |
 | Approval audit actor (root token) | `approved_by = "human:root"` |
+| Loopback approval opt-in (no token) | `approved_by = "human:loopback"` |
+| `WEBTERM_CHANNELS=off` + Telegram on | webhook **404**, binding API **404** |
 | `WEBTERM_CENTRAL_AUTONOMY=on` + one assigned item | scheduler tick ran and task became `verified` |
 
 ## Bug found by this acceptance
