@@ -4,8 +4,10 @@
 // under someone else's name (QC M1).
 import { boundedText, classifyLedgerError, failure, invalid, type RouteFailure } from './approvalFailures'
 import { MAX_LIST_LIMIT, listApprovedUnconsumed, projectExists, readChallenge } from './approvalQuery'
+import type { ApprovalAcks } from './control/approvalApi'
 import { AckStore, isValidRequestId } from './control/controlTypes'
 import { approvalDigest, type Approval } from './ledger/ledgerApproval'
+import { durableAckFor } from './ledger/durableAck'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 
 /** The only actor the human route records; the body cannot override it. */
@@ -17,12 +19,16 @@ const MAX_SECRET = 256
 export type Result = { status: number; body?: unknown }
 
 /**
- * One ack store per ledger runtime, so a retried requestId replays the original response instead
- * of minting a second consent challenge. Keyed by the runtime object (not by a per-request literal,
- * which is how the control plane's replay window was silently disabled in production).
+ * The durable journal is preferred so a retried requestId replays the original response even after
+ * a restart. Fakes without a SQLite `query` fall back to one in-memory store per runtime object
+ * (never a per-request literal, which is how the control plane's replay window once vanished).
  */
 const ackStores = new WeakMap<object, AckStore>()
-function storeFor(runtime: LedgerRuntime): AckStore {
+function storeFor(runtime: LedgerRuntime): ApprovalAcks {
+  // A real ledger db persists the window across restarts; fakes without `query` keep the
+  // per-runtime in-memory store so node-env tests need no schema.
+  const durable = durableAckFor(runtime.db, 'human')
+  if (durable) return durable
   let store = ackStores.get(runtime)
   if (!store) ackStores.set(runtime, (store = new AckStore()))
   return store

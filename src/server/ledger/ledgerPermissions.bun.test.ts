@@ -5,7 +5,7 @@ import { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { migrateWithBackup, openLedgerDb } from './migration'
+import { LATEST_VERSION, migrateWithBackup, openLedgerDb } from './migration'
 import { MIGRATIONS, type Migration } from './ledgerSchema'
 
 type Row = Record<string, unknown>
@@ -85,7 +85,7 @@ test('preMigrationBackup leaves a 0600 copy before a pending upgrade', () => {
   const db = new Database(path)
   let backups: string[] = []
   try {
-    expect(migrateWithBackup(db, path)).toBe(2)
+    expect(migrateWithBackup(db, path)).toBe(LATEST_VERSION)
     backups = readdirSync(dir).filter((f) => f.startsWith('ledger.db.') && f.endsWith('.bak'))
   } finally {
     close(db)

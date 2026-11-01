@@ -4,7 +4,7 @@
 // Ledger mati = 503 `ledger_off` untuk SEMUA path approval (termasuk GET list), bukan 404, supaya
 // klien bisa membedakan "fitur dimatikan" dari "route tidak ada". Auth capability tetap milik
 // `handleApproval`: seam ini tidak membaca `x-webterm-token` sama sekali.
-import type { ApprovalLedgerPort } from './approvalApi'
+import type { ApprovalAcks, ApprovalLedgerPort } from './approvalApi'
 import { APPROVAL_PREFIX, handleApproval } from './approvalApi'
 import { AckStore, type ControlCapabilities, type ControlRequest, type ControlResult } from './controlTypes'
 
@@ -14,6 +14,8 @@ export interface ApprovalDispatchDeps {
   capabilities: ControlCapabilities
   /** `activeLedgerRuntime()?.ledger.approval`, atau undefined saat flag ledger mati. */
   approval: ApprovalLedgerPort | undefined
+  /** Durable store derived from the active ledger db; absent = per-port in-memory `AckStore`. */
+  acks?: ApprovalAcks
   now?: () => number
 }
 
@@ -41,7 +43,7 @@ export async function approvalRoute(
   return handleApproval(req, {
     capabilities: deps.capabilities,
     approval: deps.approval,
-    acks: acksFor(deps.approval),
+    acks: deps.acks ?? acksFor(deps.approval),
     ...(deps.now ? { now: deps.now } : {}),
   })
 }

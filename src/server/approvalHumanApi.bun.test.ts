@@ -2,8 +2,11 @@
 // `openLedgerDb` + `createLedger`. Covers the P3 gap this change owns: a task approval must name a
 // resolvable task+fence (otherwise its consent can never transition the task), plus the full
 // approve/consume/reject transitions and one-shot consumption.
-import { expect, test } from 'bun:test'
+import { afterAll, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { approvalHumanRoute, type HumanApprovalDeps } from './approvalHumanApi'
 import { createLedger } from './ledger/ledger'
@@ -13,23 +16,38 @@ import { openLedgerDb } from './ledger/migration'
 const T0 = 1_700_000_000_000
 const PROJECT_ID = 'p1'
 
+const restartRoot = mkdtempSync(join(tmpdir(), 'approval-restart-'))
+afterAll(() => rmSync(restartRoot, { recursive: true, force: true }))
+
 interface Fixture {
   runtime: LedgerRuntime
   clock: { at: number }
   deps: HumanApprovalDeps
 }
 
-function fixture(): Fixture {
-  const db = openLedgerDb(':memory:')
-  const clock = { at: T0 }
+function fixture(
+  path = ':memory:',
+  existingClock?: { at: number },
+  seed = true
+): Fixture {
+  const db = openLedgerDb(path)
+  const clock = existingClock ?? { at: T0 }
   const ledger = createLedger(db, { now: () => clock.at })
-  ledger.project.createProject({
-    id: PROJECT_ID,
-    workspaceId: 'w1',
-    name: PROJECT_ID,
-    path: `/tmp/${PROJECT_ID}`,
-  })
-  const runtime: LedgerRuntime = { mode: 'on', path: ':memory:', db, ledger, close() {} }
+  if (seed) {
+    ledger.project.createProject({
+      id: PROJECT_ID,
+      workspaceId: 'w1',
+      name: PROJECT_ID,
+      path: `/tmp/${PROJECT_ID}`,
+    })
+  }
+  const runtime: LedgerRuntime = {
+    mode: 'on',
+    path,
+    db,
+    ledger,
+    close: () => (db as unknown as { close(): void }).close(),
+  }
   return {
     runtime,
     clock,
@@ -233,4 +251,70 @@ test('reject fails claimed work instead of verifying it', async () => {
   })
   expect(consumed.status).toBe(409)
   expect(f.runtime.ledger.task.getTask(task.taskId)?.status).toBe('failed')
+})
+
+test('a requestId replays the original approval after a ledger restart', async () => {
+  const path = join(restartRoot, 'request-restart.db')
+  const clock = { at: T0 }
+  const first = fixture(path, clock)
+  const body = {
+    projectId: PROJECT_ID,
+    kind: 'deploy',
+    request: { a: 1 },
+    requestId: 'req-00000301',
+  }
+  const created = await post(first, '/api/approvals/request', body)
+  expect(created.status).toBe(201)
+  expect(approvalCount(first)).toBe(1)
+  first.runtime.close()
+
+  const second = fixture(path, clock, false)
+  try {
+    const replay = await post(second, '/api/approvals/request', body)
+    expectJson(replay, created)
+    expect(approvalCount(second)).toBe(1)
+  } finally {
+    second.runtime.close()
+  }
+})
+
+test('decide and consume requestIds replay after a restart without a second transition', async () => {
+  const path = join(restartRoot, 'mutation-restart.db')
+  const clock = { at: T0 }
+  const first = fixture(path, clock)
+  const task = seedClaimedTask(first)
+  const created = await post(first, '/api/approvals/request', {
+    projectId: PROJECT_ID,
+    kind: 'task',
+    request: { itemId: task.taskId, taskId: task.taskId, fence: task.fence },
+    requestId: 'req-00000311',
+  })
+  const id = String(created.json['id'])
+  const view = await challenge(first, id)
+
+  const decideBody = {
+    id,
+    digest: view['digest'],
+    nonce: view['nonce'],
+    approve: true,
+    requestId: 'req-00000312',
+  }
+  const decided = await post(first, '/api/approvals/decide', decideBody)
+  expect(decided.status).toBe(200)
+
+  const consumeBody = { id, digest: view['digest'], requestId: 'req-00000313' }
+  const consumed = await post(first, '/api/approvals/consume', consumeBody)
+  expect(consumed.status).toBe(200)
+  expect(consumed.json['taskStatus']).toBe('verified')
+  first.runtime.close()
+
+  const second = fixture(path, clock, false)
+  try {
+    // Without the durable journal both replays would be 409 (already decided / already consumed).
+    expectJson(await post(second, '/api/approvals/decide', decideBody), decided)
+    expectJson(await post(second, '/api/approvals/consume', consumeBody), consumed)
+    expect(second.runtime.ledger.task.getTask(task.taskId)?.status).toBe('verified')
+  } finally {
+    second.runtime.close()
+  }
 })

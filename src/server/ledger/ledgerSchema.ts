@@ -221,7 +221,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_plan_item_task ON plan_item(plan_id, task_i
 CREATE INDEX IF NOT EXISTS idx_plan_item_plan_status ON plan_item(plan_id, status);
 `
 
+/**
+ * P3 idempotency journal (v3). Approval mutation acks live in the ledger file so a replay of the
+ * same requestId after a restart returns the original response instead of creating a second
+ * approval/decision/consume. `response_json` is JSON because the response shape differs per route.
+ */
+const V3 = `
+CREATE TABLE IF NOT EXISTS request_ack (
+  key TEXT PRIMARY KEY,
+  response_json TEXT NOT NULL CHECK (json_valid(response_json)),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_ack_expires ON request_ack(expires_at);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, up: (db) => db.exec(V1) },
   { version: 2, up: (db) => db.exec(V2) },
+  { version: 3, up: (db) => db.exec(V3) },
 ]

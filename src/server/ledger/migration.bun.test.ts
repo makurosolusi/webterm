@@ -212,13 +212,14 @@ test('backup writes a readable copy and keeps the last 3', () => {
 })
 
 test('schema modules list forward-only migrations matching LATEST_VERSION', () => {
-  expect(MIGRATIONS.length).toBe(2)
+  expect(MIGRATIONS.length).toBe(3)
   expect(MIGRATIONS[0]?.version).toBe(1)
   expect(MIGRATIONS[1]?.version).toBe(2)
+  expect(MIGRATIONS[2]?.version).toBe(3)
   expect(MIGRATIONS[MIGRATIONS.length - 1]?.version).toBe(LATEST_VERSION)
 })
 
-test('v1 ledger upgrades to v2 in place: rows survive, plan tables appear, re-run is a no-op', () => {
+test('v1 ledger upgrades to latest in place: rows survive, new tables appear, re-run is a no-op', () => {
   const db = new Database(':memory:')
   db.exec('PRAGMA foreign_keys = ON')
   // Simulate an installed v1 build: only migration 1 has ever run.
@@ -227,16 +228,17 @@ test('v1 ledger upgrades to v2 in place: rows survive, plan tables appear, re-ru
   run(db, "INSERT INTO task (id, project_id, spec, created_at, updated_at) VALUES ('t1','p1','spec',1,1)")
   expect(tables(db)).not.toContain('plan')
 
-  expect(migrate(db)).toBe(2)
-  expect(version(db)).toBe(2)
+  expect(migrate(db)).toBe(LATEST_VERSION)
+  expect(version(db)).toBe(LATEST_VERSION)
   const names = tables(db)
   expect(names).toContain('plan')
   expect(names).toContain('plan_item')
+  expect(names).toContain('request_ack')
   expect(Number(q(db, 'SELECT count(*) AS c FROM project').get()?.['c'])).toBe(1)
   expect(Number(q(db, 'SELECT count(*) AS c FROM task').get()?.['c'])).toBe(1)
 
-  // Idempotent: the v2 DDL must not throw or drop data on a second pass.
-  expect(migrate(db)).toBe(2)
+  // Idempotent: the later DDL must not throw or drop data on a second pass.
+  expect(migrate(db)).toBe(LATEST_VERSION)
   run(db, "INSERT INTO plan (id, project_id, version, status, created_at, updated_at) VALUES ('pl1','p1',1,'draft',1,1)")
   run(db, "INSERT INTO plan_item (id, plan_id, seq, title, scope_json, updated_at) VALUES ('i1','pl1',0,'t','[\"src/a.ts\"]',1)")
   expect(Number(q(db, 'SELECT count(*) AS c FROM plan_item').get()?.['c'])).toBe(1)
