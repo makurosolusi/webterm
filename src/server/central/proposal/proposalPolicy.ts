@@ -1,0 +1,33 @@
+import type { Database } from 'bun:sqlite'
+import { getRow } from '../../ledger/ledgerCore'
+import type { ProposalBlock } from './proposalParser'
+
+export type ProposalCode = 'planner_off' | 'tools_read_only' | 'forbidden_key' | 'unknown_tool' | 'project_required' | 'project_not_found' | 'conversation_project_mismatch' | 'invalid_shape'
+export interface PolicyInput { planner: boolean; toolsWrite: boolean; conversationId: string; db: Database }
+export interface ValidProposal extends ProposalBlock { projectId: string }
+export interface PolicyResult { ok: boolean; code?: ProposalCode; proposal?: ValidProposal }
+const ALLOWED = new Set(['goal.propose', 'plan.propose'])
+const FORBIDDEN = new Set(['actor', 'authority', 'status', 'role', 'path', 'repo', 'command', 'cmd', 'cwd', 'capability', 'token'])
+
+function containsForbidden(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.some(containsForbidden)
+  return Object.entries(value).some(([key, child]) => FORBIDDEN.has(key) || containsForbidden(child))
+}
+function shape(tool: string, input: Record<string, unknown>): boolean {
+  if (tool === 'goal.propose') return typeof input.statement === 'string' && Array.isArray(input.successCriteria) && typeof input.owner === 'string' && typeof input.horizon === 'string' && !!input.envelope && typeof input.envelope === 'object'
+  if (tool === 'plan.propose') return Array.isArray(input.items) && input.items.every((item) => item && typeof item === 'object' && typeof item.title === 'string' && Array.isArray(item.scope))
+  return false
+}
+export function validateProposal(block: ProposalBlock, policy: PolicyInput): PolicyResult {
+  if (!policy.planner) return { ok: false, code: 'planner_off' }
+  if (!policy.toolsWrite) return { ok: false, code: 'tools_read_only' }
+  if (!ALLOWED.has(block.tool)) return { ok: false, code: 'unknown_tool' }
+  if (containsForbidden(block.input)) return { ok: false, code: 'forbidden_key' }
+  const projectId = typeof block.input.projectId === 'string' ? block.input.projectId.trim() : ''
+  if (!projectId) return { ok: false, code: 'project_required' }
+  if (getRow(policy.db, 'SELECT 1 AS one FROM project WHERE id = ?', projectId) === null) return { ok: false, code: 'project_not_found' }
+  if (policy.conversationId.startsWith('central:project:') && policy.conversationId.slice('central:project:'.length) !== projectId) return { ok: false, code: 'conversation_project_mismatch' }
+  if (!shape(block.tool, block.input)) return { ok: false, code: 'invalid_shape' }
+  return { ok: true, proposal: { ...block, projectId } }
+}

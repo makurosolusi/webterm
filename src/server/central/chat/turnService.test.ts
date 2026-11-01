@@ -6,6 +6,7 @@ import { MockRuntime } from '../runtime/mockRuntime'
 import { StreamHub, type StreamFrame } from './streamHub'
 import { createPortfolioReadExecutor } from './toolExecutors'
 import { CentralChatError, TurnService, listMessages } from './turnService'
+import { getGoal } from '../goalStore'
 
 const NOW = 1_700_000_000_000
 
@@ -128,6 +129,59 @@ describe('turn lifecycle', () => {
     expect(error?.code).toBe('central_runtime_off')
     expect(error?.status).toBe(503)
     expect(count('central_message')).toBe(0)
+  })
+
+  it('applies a valid proposal only after a successful turn', async () => {
+    const previousPlanner = process.env.WEBTERM_CENTRAL_PLANNER
+    const previousTools = process.env.WEBTERM_CENTRAL_TOOLS
+    process.env.WEBTERM_CENTRAL_PLANNER = 'on'
+    process.env.WEBTERM_CENTRAL_TOOLS = 'write'
+    try {
+      const proposal = '<webterm-proposal>{"tool":"goal.propose","input":{"projectId":"p1","statement":"Ship it","successCriteria":[{"kind":"review","by":"human"}],"owner":"human:root","horizon":"2026-11-30","envelope":{"maxCostMicros":1000,"maxWallMs":1000,"maxItems":1}}}</webterm-proposal>'
+      const svc = service('success', 0, [proposal])
+      const submitted = svc.submit({ conversationId: 'central:global', clientMessageId: 'proposal', text: 'plan' })
+      expect((await submitted.done).status).toBe('succeeded')
+      expect(getGoal(fixture.db, 'p1')).toMatchObject({ version: 1, status: 'proposed', statement: 'Ship it' })
+    } finally {
+      if (previousPlanner === undefined) delete process.env.WEBTERM_CENTRAL_PLANNER
+      else process.env.WEBTERM_CENTRAL_PLANNER = previousPlanner
+      if (previousTools === undefined) delete process.env.WEBTERM_CENTRAL_TOOLS
+      else process.env.WEBTERM_CENTRAL_TOOLS = previousTools
+    }
+  })
+
+  it('rejects a disabled proposal without creating a goal and still succeeds', async () => {
+    const previousPlanner = process.env.WEBTERM_CENTRAL_PLANNER
+    delete process.env.WEBTERM_CENTRAL_PLANNER
+    try {
+      const proposal = '<webterm-proposal>{"tool":"goal.propose","input":{"projectId":"p1","statement":"Nope","successCriteria":[],"owner":"human:root","horizon":"2026-11-30","envelope":{}}}</webterm-proposal>'
+      const svc = service('success', 0, [proposal])
+      const submitted = svc.submit({ conversationId: 'central:global', clientMessageId: 'rejected', text: 'plan' })
+      expect((await submitted.done).status).toBe('succeeded')
+      expect(getGoal(fixture.db, 'p1')).toBeNull()
+    } finally {
+      if (previousPlanner === undefined) delete process.env.WEBTERM_CENTRAL_PLANNER
+      else process.env.WEBTERM_CENTRAL_PLANNER = previousPlanner
+    }
+  })
+
+  it('does not apply proposal text from a cancelled turn', async () => {
+    const previousPlanner = process.env.WEBTERM_CENTRAL_PLANNER
+    const previousTools = process.env.WEBTERM_CENTRAL_TOOLS
+    process.env.WEBTERM_CENTRAL_PLANNER = 'on'
+    process.env.WEBTERM_CENTRAL_TOOLS = 'write'
+    try {
+      const proposal = '<webterm-proposal>{"tool":"goal.propose","input":{"projectId":"p1","statement":"Cancelled","successCriteria":[{"kind":"review","by":"human"}],"owner":"human:root","horizon":"2026-11-30","envelope":{}}}</webterm-proposal>'
+      const svc = service('cancel', 0, [proposal])
+      const submitted = svc.submit({ conversationId: 'central:global', clientMessageId: 'cancel-proposal', text: 'plan' })
+      expect((await submitted.done).status).toBe('cancelled')
+      expect(getGoal(fixture.db, 'p1')).toBeNull()
+    } finally {
+      if (previousPlanner === undefined) delete process.env.WEBTERM_CENTRAL_PLANNER
+      else process.env.WEBTERM_CENTRAL_PLANNER = previousPlanner
+      if (previousTools === undefined) delete process.env.WEBTERM_CENTRAL_TOOLS
+      else process.env.WEBTERM_CENTRAL_TOOLS = previousTools
+    }
   })
 })
 

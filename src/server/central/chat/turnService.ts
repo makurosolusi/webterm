@@ -20,6 +20,10 @@ import {
   resolveOrCreateConversation, type StoredMessage,
 } from './turnPersistence'
 import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents'
+import { parseProposals } from '../proposal/proposalParser'
+import { validateProposal } from '../proposal/proposalPolicy'
+import { applyProposal } from '../proposal/applyProposal'
+import { centralPrompt } from '../proposal/centralPrompt'
 
 export { CentralChatError, chatErrorStatus }
 export type { ChatErrorCode } from './chatErrors'
@@ -164,13 +168,17 @@ export class TurnService {
       const projected = projectRuntimeEvent(state, assistant.id, event)
       if (projected) this.record(conversation.id, projected.type, projected.payload, event.turnId, assistant.id)
     }
+    const planner = process.env.WEBTERM_CENTRAL_PLANNER === 'on'
+    const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
     const input: TurnInput = {
-      conversationId: conversation.id, turnId: turn.id, text, history,
+      conversationId: conversation.id, turnId: turn.id,
+      text: centralPrompt(this.db, text, planner && toolsWrite), history,
       tools: [...DEFAULT_CENTRAL_TOOLS], limits: {},
       ...(turn.sessionRef === null ? {} : { sessionRef: turn.sessionRef }),
     }
     try {
       const result = await runtime.turn(input, emit)
+      if (result.outcome === 'success') this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite)
       return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
     } catch (err) {
       const result: RuntimeResult = {
@@ -184,6 +192,23 @@ export class TurnService {
       return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
     } finally {
       this.states.delete(turn.id)
+    }
+  }
+
+  private handleProposals(
+    conversationId: string, turnId: string, messageId: string, text: string, planner: boolean, toolsWrite: boolean
+  ): void {
+    for (const block of parseProposals(text)) {
+      const checked = validateProposal(block, { db: this.db, conversationId, planner, toolsWrite })
+      if (!checked.ok) {
+        this.record(conversationId, 'entity.updated', { eventType: 'proposal.rejected', tool: block.tool, code: checked.code }, turnId, messageId)
+        continue
+      }
+      const result = applyProposal(this.db, checked.proposal!)
+      this.record(conversationId, 'entity.updated', {
+        eventType: result.ok ? 'proposal.applied' : 'proposal.rejected', tool: result.tool,
+        ...(result.ok ? { projectId: result.projectId, goalVersion: result.goalVersion, planVersion: result.planVersion } : { code: result.code }),
+      }, turnId, messageId)
     }
   }
 
