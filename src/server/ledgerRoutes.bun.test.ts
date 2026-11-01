@@ -95,20 +95,18 @@ test('read routes and approval dispatch run against the real ledger runtime', as
     ledger.agent.createAgent({ id: 'ag1', projectId: 'p1', role: 'orchestrator', depth: 0 })
     createPlanStore(runtime!.db).create({ projectId: 'p1', items: [{ title: 'ship it', scope: ['src/server'] }] })
 
-    const claim = claimMemory(runtime!.db, {
+    // Authority is server-derived (QC M2); the test acts as the worker.
+    const claim = claimMemory(runtime!.db, { kind: 'worker', id: 'worker-1' }, {
       projectId: 'p1',
       key: 'deploy',
       title: 'Deploy',
       body: 'deploy uses bun',
       sourceKind: 'file',
       sourceRef: 'README.md',
-      actor: 'worker-1',
       now: NOW,
     })
-    promoteMemory(runtime!.db, {
+    promoteMemory(runtime!.db, { kind: 'orchestrator', id: 'orchestrator-1' }, {
       id: claim.id,
-      actor: 'orchestrator-1',
-      actorKind: 'orchestrator',
       evidence: { command: 'bun test src/server/memory', exitCode: 0, observedAt: NOW },
       now: NOW,
     })

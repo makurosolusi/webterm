@@ -134,6 +134,40 @@ describe('approval dispatch through the control mount', () => {
     expect(missing.json).toEqual({ error: 'missing_project_id' })
   })
 
+  it('replays a requestId across HTTP calls (stable deps identity)', async () => {
+    // Production builds the dispatch deps per request. Before the fix that gave every request a
+    // fresh AckStore, so the 10-minute window never existed (QC H2/B1).
+    let created = 0
+    const port: ApprovalLedgerPort = {
+      requestApproval: () => {
+        created += 1
+        return { id: `ap-${created}`, digest: 'd', nonce: `n-${created}`, expiresAt: 1 }
+      },
+      getApproval: () => null,
+      decideApproval() {
+        throw new Error('not used')
+      },
+      consumeApproval: () => false,
+      listApprovals: () => [],
+    }
+    setActiveLedgerRuntime(fakeRuntime(port))
+    const token = capabilityStore.mint({ verb: 'approval.request', resource: 'project:p1' })
+    const body = JSON.stringify({
+      requestId: REQ,
+      projectId: 'p1',
+      kind: 'git.push',
+      request: { branch: 'main' },
+    })
+    const first = await call('POST', '/api/control/approval/request', body, {
+      'x-webterm-capability': token,
+    })
+    const second = await call('POST', '/api/control/approval/request', body, {
+      'x-webterm-capability': token,
+    })
+    expect(created).toBe(1)
+    expect(second.json).toEqual(first.json)
+  })
+
   it('leaves non-approval control routes to the existing router', async () => {
     setActiveLedgerRuntime(fakeRuntime())
     // No root token configured in these deps: the token route is absent (404), not 503.

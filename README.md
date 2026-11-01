@@ -25,11 +25,18 @@ Environment variables:
 
 - `PORT` — listen port (default `8700`).
 - `HOST` — bind address (default `127.0.0.1`); `WEBTERM_HOST` is an accepted fallback.
-- `WEBTERM_TOKEN` — shared secret required on `/api` and the `/ws` upgrade. Optional on a loopback bind; **mandatory** when `WEBTERM_HOST` is reachable from other machines — the server refuses to start without it rather than expose an unauthenticated shell.
+- `WEBTERM_TOKEN` — shared secret required on `/api` and the `/ws` upgrade. Optional on a loopback bind; **mandatory** when `WEBTERM_HOST` is reachable from other machines. The server refuses to start without it rather than expose an unauthenticated shell. The repo does not ship a token in `.env`. Export it explicitly.
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`.
+- `WEBTERM_LEDGER` — `off` (default), `shadow`, or `on`. Turns on the SQLite ledger that backs inbox, approvals, and the channel webhook.
+- `WEBTERM_ALLOW_LOOPBACK_APPROVAL` — default `0`. Human approvals (`/api/approvals/*`) refuse token-free loopback, because an agent shell on the same machine can also reach it. Set `1` only for a disposable local demo. With a root token configured, the normal token gate applies.
+- `WEBTERM_TELEGRAM` — `off` (default) or `on`. Installs `POST /webhooks/telegram` when `WEBTERM_TELEGRAM_WEBHOOK_SECRET` is set and the ledger is on.
+- `WEBTERM_TELEGRAM_WEBHOOK_SECRET` — Telegram `secret_token` for the webhook. Keep it in the environment, not in a committed file.
+- `WEBTERM_TELEGRAM_BOT_TOKEN` — bot token used for replies. The legacy `TELEGRAM_BOT_TOKEN` name is also accepted.
 
-Any of these can go in a `.env` file in the working directory instead of the environment — Bun loads it automatically, for both the dev server and the compiled binary.
+Any of these can go in a `.env` file in the working directory instead of the environment. Bun loads that file automatically, for both the dev server and the compiled binary, so every value in it enters `process.env`. Keep the file at mode `600`, and leave `WEBTERM_TOKEN` out of it unless you accept that inheritance.
+
+`WEBTERM_CHANNELS` and the documented `off|readonly|control` Telegram modes are still planned, not implemented. Only `WEBTERM_TELEGRAM=on` is read today.
 
 Dev is not full browser HMR for every change: Vite HMR covers client edits live, but server edits need a restart.
 
@@ -66,5 +73,7 @@ The vitest run now also covers `src/shared` (assembleCmd / agent config).
 Workspaces + layout are persisted in `bun:sqlite` (`src/server/db.ts`) as the source of truth, served over a small REST API under `/api` (`src/server/api.ts`); a node may be a terminal or an agent — an agent node spawns a CLI command via the login shell (`cmd` on the open message) instead of an interactive shell. PTYs remain in-memory, so a server restart reloads workspace + node definitions from the DB and respawns fresh PTYs.
 
 Live agent status comes from Claude hooks, delivered as a settings file (`claude --settings <path>`) rather than an inline blob, that POST each lifecycle event to `/api/agent-status`; the server maps those events to working/waiting/blocked/done and broadcasts them over the WebSocket as a `StatusMsg`. A pre-set session UUID (`--session-id`) lets a finished Claude session be continued with `--resume`. The Board is a read-only client overlay over the same node data, and the folder picker is served by `GET /api/fs`.
+
+With `WEBTERM_LEDGER` on, the server also exposes read-only inbox, memory, and orchestrator projections, plus a human approval surface under `/api/approvals/*`. That surface is not capability-authorized. It needs the root token, or an explicit loopback opt-in, and it never lets an agent approve its own action. The P3-P5 work behind these routes is still partial. See `RND/07-IMPLEMENTASI-P3-P5.md` for what is verified versus planned.
 
 Agent nodes can be linked with context-link edges (persisted as workspace bridges); a linked node reads a bridged peer read-only over `GET /api/context-link` (verbs `list` / `summary` / `transcript` / `terminal`), fed by a POSIX-sh shim the server installs under the data dir. The sparkle button calls `GET /api/generate-name`, which spawns the `claude` CLI in print mode on a node's terminal buffer and returns a short Title-Case title. Live-view broadcast is intentionally absent — webterm's single-user loopback has no viewer or relay, mirroring nodeterm's Server Edition.

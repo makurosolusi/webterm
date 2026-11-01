@@ -1,10 +1,24 @@
 // Verifikasi independen P3 (RND/03-RENCANA.md §8, 07-IMPLEMENTASI-P3-P5.md P3-5): server yang
 // menjalankan git/test, bukan payload worker. Command hanya lewat allowlist argv (tanpa shell),
 // cwd wajib di dalam root worktree, ada timeout + output cap, dan yang disimpan hanya digest.
-// Runner proses + helper hasil worker ada di `verifier.ts` agar tiap modul tetap < 300 baris.
+// Runner proses + helper hasil worker ada di `verifier.ts`; tabel command server-owned ada di
+// `verifyCommands.ts`. Tiap modul tetap < 300 baris.
 import { isAbsolute, resolve } from 'node:path'
+import { realPathInsideRoot } from './safePath'
 import { isInsideRoot } from './worktree'
+import {
+  type CheckId,
+  type CommandResolution,
+  type ConfiguredCommand,
+  DEFAULT_EXECUTABLES,
+  GIT_COMMANDS,
+  resolveCommand,
+} from './verifyCommands'
 import { type RawRun, parseChangedFiles, parseNameOnly, parseTestCounts, runCommand } from './verifier'
+
+// `CheckId`/`ConfiguredCommand` are part of this module's public surface; the tables live in
+// `verifyCommands.ts` so this file stays under the line budget.
+export type { CheckId, ConfiguredCommand } from './verifyCommands'
 
 export type VerifyErrorCode =
   | 'invalid_root'
@@ -53,20 +67,16 @@ export interface VerificationEvidence {
   summary: string
 }
 
-export type CheckId = 'test' | 'typecheck' | 'lint'
-
-export interface ConfiguredCommand {
-  file: string
-  args: string[]
-}
-
 export interface VerifyOptions {
   /** Root worktree (absolut). Semua cwd harus di dalamnya. */
   root: string
   exec: VerifyExec
   timeoutMs?: number
   maxOutputBytes?: number
-  /** Command test/typecheck/lint; default `npm test` / `npm run typecheck|lint`. */
+  /**
+   * Command test/typecheck/lint. SERVER CONFIG ONLY: never populated from a worker payload
+   * (`VerifyInput` cannot carry commands, and `verify.ts` rejects such keys outright).
+   */
   commands?: Partial<Record<CheckId, ConfiguredCommand>>
   /** Executable yang boleh dipakai command terkonfigurasi. */
   allowedExecutables?: readonly string[]
@@ -83,6 +93,28 @@ export interface VerifyInput {
   checks?: Partial<Record<CheckId, boolean>>
 }
 
+const DEFAULT_TIMEOUT_MS = 120_000
+const MAX_TIMEOUT_MS = 30 * 60_000
+const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024
+const MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+const DIFF_STAT_LIMIT = 4096
+
+export interface VerifyInput {
+  /** Absolute, atau relatif terhadap `options.root`. */
+  cwd: string
+  /** Scope path relatif dari plan item; kosong berarti tidak ada batas file. */
+  scope?: readonly string[]
+  /** Default: test + typecheck aktif, lint opt-in. */
+  checks?: Partial<Record<CheckId, boolean>>
+}
+
+/**
+ * Fields a worker payload is allowed to influence. `commands`, `args`, `env` and friends are NOT
+ * part of `VerifyInput`; this list makes a hand-rolled or forward-compatible payload fail loudly
+ * instead of being silently ignored (RND/qc/p3-security.md M4).
+ */
+const WORKER_CONTROLLED_KEYS = ['commands', 'command', 'args', 'argv', 'exec', 'env', 'shell'] as const
+
 export interface VerifyOutcome {
   ok: boolean
   reasons: string[]
@@ -93,26 +125,6 @@ export interface VerifyOutcome {
   tests?: { passed: number; failed: number; command: string }
   typecheck?: { ok: boolean; command: string }
 }
-
-const DEFAULT_TIMEOUT_MS = 120_000
-const MAX_TIMEOUT_MS = 30 * 60_000
-const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024
-const MAX_OUTPUT_BYTES = 8 * 1024 * 1024
-const MAX_ARGS = 64
-const MAX_ARG_LENGTH = 500
-const DIFF_STAT_LIMIT = 4096
-const DEFAULT_EXECUTABLES = ['npm', 'pnpm', 'yarn', 'bun', 'npx', 'node'] as const
-const DEFAULT_COMMANDS: Record<CheckId, ConfiguredCommand> = {
-  test: { file: 'npm', args: ['test'] },
-  typecheck: { file: 'npm', args: ['run', 'typecheck'] },
-  lint: { file: 'npm', args: ['run', 'lint'] },
-}
-/** Argv tetap, tidak pernah diambil dari task/plan, jadi tidak ada interpolasi data task. */
-const GIT_COMMANDS = {
-  status: ['status', '--porcelain'],
-  names: ['diff', '--name-only'],
-  diffStat: ['diff', '--stat'],
-} as const
 
 function requireText(value: unknown, code: VerifyErrorCode, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -136,6 +148,13 @@ export function resolveVerifyCwd(root: string, cwd: string): string {
   const resolved = resolve(resolve(base), requireText(cwd, 'invalid_cwd', 'cwd'))
   if (!isInsideRoot(resolve(base), resolved)) {
     throw new VerifyError('invalid_cwd', `cwd ${resolved} is outside worktree root ${resolve(base)}`)
+  }
+  // Lexical containment is not enough: a symlinked subdirectory can point anywhere.
+  if (!realPathInsideRoot(resolve(base), resolved)) {
+    throw new VerifyError(
+      'invalid_cwd',
+      `cwd ${resolved} escapes worktree root ${resolve(base)} through a symlink`
+    )
   }
   return resolved
 }
@@ -179,22 +198,9 @@ function commandOf(
   configured: ConfiguredCommand | undefined,
   allowed: readonly string[]
 ): ConfiguredCommand {
-  const command = configured ?? DEFAULT_COMMANDS[id]
-  if (!command || typeof command.file !== 'string' || !allowed.includes(command.file)) {
-    throw new VerifyError(
-      'invalid_command',
-      `${id} command rejected: executable ${JSON.stringify(command?.file)} is not allowlisted`
-    )
-  }
-  if (!Array.isArray(command.args) || command.args.length > MAX_ARGS) {
-    throw new VerifyError('invalid_command', `${id} command rejected: unsupported argument list`)
-  }
-  for (const arg of command.args) {
-    if (typeof arg !== 'string' || arg.length > MAX_ARG_LENGTH || /[\u0000-\u001f]/.test(arg)) {
-      throw new VerifyError('invalid_command', `${id} command rejected: invalid argument`)
-    }
-  }
-  return { file: command.file, args: [...command.args] }
+  const resolved: CommandResolution = resolveCommand(id, configured, allowed)
+  if (!resolved.ok) throw new VerifyError('invalid_command', resolved.message)
+  return resolved.command
 }
 
 /**
@@ -204,6 +210,14 @@ function commandOf(
 export async function verifyWorktree(options: VerifyOptions, input: VerifyInput): Promise<VerifyOutcome> {
   if (!options || typeof options.exec !== 'function') {
     throw new VerifyError('invalid_input', 'verify options.exec is required')
+  }
+  for (const key of WORKER_CONTROLLED_KEYS) {
+    if (key in (input as unknown as Record<string, unknown>)) {
+      throw new VerifyError(
+        'invalid_input',
+        `verify input must not carry "${key}": commands come from server config only`
+      )
+    }
   }
   const cwd = resolveVerifyCwd(options.root, input.cwd)
   const scope = normalizeScope(input.scope)

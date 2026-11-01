@@ -114,6 +114,36 @@ describe('listInbox', () => {
     expect(rows[1]?.ageMs).toBe(0)
   })
 
+  it('preserves a positive integer fence on a task row', async () => {
+    fetchMock.mockResolvedValue(
+      response({
+        items: [{ ...item, id: 't-1', kind: 'task', fence: 7 }],
+      })
+    )
+
+    const [row] = await listInbox()
+    expect(row).toEqual({ ...item, id: 't-1', kind: 'task', fence: 7 })
+  })
+
+  it('omits a fence that is not a positive integer', async () => {
+    fetchMock.mockResolvedValue(
+      response({
+        items: [
+          { ...item, id: 'str', fence: '7' },
+          { ...item, id: 'neg', fence: -1 },
+          { ...item, id: 'zero', fence: 0 },
+          { ...item, id: 'frac', fence: 1.5 },
+          { ...item, id: 'nan', fence: Number.NaN },
+          { ...item, id: 'null', fence: null },
+        ],
+      })
+    )
+
+    const rows = await listInbox()
+    expect(rows.map((row) => row.id)).toEqual(['str', 'neg', 'zero', 'frac', 'nan', 'null'])
+    for (const row of rows) expect(row).not.toHaveProperty('fence')
+  })
+
   it('throws a typed error carrying the server code and status', async () => {
     fetchMock.mockResolvedValue(response({ error: 'forbidden' }, 403))
 
@@ -198,6 +228,22 @@ describe('approval calls', () => {
       expiresAt: 123,
       kind: 'deploy',
       projectId: 'proj-a',
+    })
+  })
+
+  it('sends the task identity and fence verbatim for a task review', async () => {
+    fetchMock.mockResolvedValue(response({ ...challenge, kind: 'task', projectId: 'proj-a' }))
+
+    await requestApproval({
+      kind: 'task',
+      projectId: 'proj-a',
+      request: { itemId: 't-1', taskId: 't-1', fence: 7, title: 'Review task', detail: null },
+    })
+
+    expect(JSON.parse(String(initOf(0).body))).toMatchObject({
+      kind: 'task',
+      projectId: 'proj-a',
+      request: { itemId: 't-1', taskId: 't-1', fence: 7, title: 'Review task', detail: null },
     })
   })
 

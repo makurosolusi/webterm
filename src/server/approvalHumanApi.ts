@@ -1,144 +1,139 @@
-// Human approval surface. Unlike /api/control/approval/*, this route is authorized by the
-// transport token (root/loopback), never by an agent capability: an agent must not approve its
-// own irreversible action. It only reads/decides existing approvals; requesting one remains a
-// control-plane action.
+// HTTP seam for the human approval surface. Unlike /api/control/approval/*, this route is
+// authorized by the transport token (root/loopback), never by an agent capability: an agent must
+// not approve its own irreversible action.
+//
+// Handlers live in `approvalHumanRoutes.ts`, the read-only SQL in `approvalQuery.ts`, the failure
+// taxonomy in `approvalFailures.ts`, and the byte-capped body reader in `approvalHttp.ts`.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { activeLedgerRuntime } from './ledger/ledgerRuntime'
-import { LedgerError } from './ledger/ledgerModel'
+import { approvalAuthAllowed } from './approvalAuth'
+import { APPROVAL_MAX_BODY_BYTES, readCappedBody, sendJson } from './approvalHttp'
+import {
+  challengeRoute,
+  consumeRoute,
+  decideRoute,
+  listRoute,
+  requestRoute,
+} from './approvalHumanRoutes'
+import { asObject } from './control/controlTypes'
+import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.statusCode = status
-  res.setHeader('Content-Type', 'application/json')
-  res.end(JSON.stringify(body))
+export interface HumanApprovalDeps {
+  /** Test seam; production uses the process runtime. */
+  runtime?: LedgerRuntime | null
+  now?: () => number
+  /** Test seam; production uses the transport policy in `approvalAuth.ts`. */
+  authAllowed?: () => boolean
 }
 
-function readBody(req: IncomingMessage, max = 8 * 1024): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', (chunk) => {
-      data += chunk
-      if (data.length > max) reject(new Error('body_too_large'))
-    })
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
+/** Exact family match: `/api/approvalsXYZ` is NOT ours and must fall through to 404. */
+const isApprovalPath = (pathname: string): boolean =>
+  pathname === '/api/approvals' || pathname.startsWith('/api/approvals/')
+
+const POST_ROUTES = ['request', 'decide', 'consume'] as const
+const MAX_TASK_REF = 200
+
+const isTaskKind = (kind: unknown): boolean =>
+  typeof kind === 'string' && (kind === 'task' || kind.startsWith('task.'))
+
+/** Non-empty bounded string, matching the handler's `boundedText` task id rule. */
+const isTaskRef = (value: unknown): boolean =>
+  typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_TASK_REF
+
+const isFence = (value: unknown): boolean =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+
+/**
+ * A task-flavoured approval without a resolvable task+fence is consent that can never transition
+ * the task (consume has no fence to verify against), so it must be rejected before any row exists.
+ * `requestRoute` gives top-level `taskId`/`fence` precedence and folds them into the payload, so
+ * both spellings satisfy the guard.
+ */
+function missingTaskRef(body: Record<string, unknown>): boolean {
+  if (!isTaskKind(body.kind)) return false
+  const payload =
+    typeof body.request === 'object' && body.request !== null && !Array.isArray(body.request)
+      ? (body.request as Record<string, unknown>)
+      : undefined
+  const taskId = body.taskId !== undefined ? body.taskId : payload?.taskId
+  const fence = body.fence !== undefined ? body.fence : payload?.fence
+  return !isTaskRef(taskId) || !isFence(fence)
 }
 
-interface Body {
-  id?: unknown
-  digest?: unknown
-  nonce?: unknown
-  approve?: unknown
-  actor?: unknown
-  kind?: unknown
-  projectId?: unknown
-  request?: unknown
-  ttlMs?: unknown
-}
-
-function required(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.trim() === '' || value.length > 256) {
-    throw new LedgerError(`invalid_${field}`)
+/** `null` = not an approval path; `'method_not_allowed'` = known path, wrong verb. */
+function routeOf(pathname: string, method: string): string | null {
+  if (method === 'GET') {
+    if (pathname === '/api/approvals') return 'list'
+    if (pathname === '/api/approvals/challenge') return 'challenge'
+    return null
   }
-  return value
-}
-
-function challenge(id: string): { id: string; digest: string; nonce: string; expiresAt: number | null; kind: string; projectId: string | null; status: string } | null {
-  const rt = activeLedgerRuntime()
-  if (!rt) return null
-  const row = rt.db
-    .query(
-      `SELECT a.id, a.kind, a.project_id, a.status, a.expires_at, d.action_digest, d.nonce
-       FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?`
-    )
-    .get(id) as Record<string, unknown> | null
-  if (!row) return null
-  return {
-    id: String(row['id']),
-    digest: String(row['action_digest']),
-    nonce: String(row['nonce']),
-    expiresAt: row['expires_at'] === null ? null : Number(row['expires_at']),
-    kind: String(row['kind']),
-    projectId: row['project_id'] === null ? null : String(row['project_id']),
-    status: String(row['status']),
-  }
+  const name = pathname.startsWith('/api/approvals/')
+    ? pathname.slice('/api/approvals/'.length)
+    : undefined
+  const known = name !== undefined && (POST_ROUTES as readonly string[]).includes(name)
+  if (!known) return null
+  return method === 'POST' ? name : 'method_not_allowed'
 }
 
 /** Returns true when it handled the request; false lets api.ts continue to 404. */
 export async function approvalHumanRoute(
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL
+  url: URL,
+  deps: HumanApprovalDeps = {}
 ): Promise<boolean> {
-  if (!url.pathname.startsWith('/api/approvals')) return false
-  const rt = activeLedgerRuntime()
-  if (!rt) {
+  if (!isApprovalPath(url.pathname)) return false
+  // Consent is never token-free by default: a same-uid agent shell can also curl loopback.
+  // Operators may opt in explicitly for a disposable local demo.
+  if (!(deps.authAllowed ?? approvalAuthAllowed)()) {
+    sendJson(res, 403, { error: 'approval_requires_token' })
+    return true
+  }
+  const runtime = deps.runtime === undefined ? activeLedgerRuntime() : deps.runtime
+  if (!runtime) {
     sendJson(res, 503, { error: 'ledger_off' })
     return true
   }
+  const now = (deps.now ?? Date.now)()
   const method = (req.method || 'GET').toUpperCase()
-  if (method === 'GET' && url.pathname === '/api/approvals/challenge') {
-    const id = url.searchParams.get('id') ?? ''
-    const result = challenge(id)
-    if (!result) {
-      sendJson(res, 404, { error: 'approval_not_found' })
-      return true
-    }
-    sendJson(res, 200, result)
+  const route = routeOf(url.pathname, method)
+  if (route === null) {
+    sendJson(res, 404, { error: 'not_found' })
     return true
   }
-  if (method !== 'POST') {
+  if (route === 'method_not_allowed') {
     sendJson(res, 405, { error: 'method_not_allowed' })
     return true
   }
-  let body: Body
+  if (method === 'GET') {
+    const result = route === 'list' ? listRoute(runtime, url, now) : challengeRoute(runtime, url, now)
+    sendJson(res, result.status, result.body)
+    return true
+  }
+  const read = await readCappedBody(req, APPROVAL_MAX_BODY_BYTES)
+  if (!read.ok) {
+    sendJson(
+      res,
+      read.status,
+      read.status === 413
+        ? { error: read.error, max: APPROVAL_MAX_BODY_BYTES }
+        : { error: read.error }
+    )
+    return true
+  }
+  let body: Record<string, unknown>
   try {
-    body = JSON.parse(await readBody(req)) as Body
+    body = asObject(JSON.parse(read.raw) as unknown)
   } catch {
     sendJson(res, 400, { error: 'invalid_json' })
     return true
   }
-  try {
-    if (url.pathname === '/api/approvals/request') {
-      const projectId = required(body.projectId, 'projectId')
-      const kind = required(body.kind, 'kind')
-      const ttl = typeof body.ttlMs === 'number' ? body.ttlMs : undefined
-      const created = rt.ledger.approval.requestApproval({
-        projectId,
-        kind,
-        request: body.request ?? null,
-        ...(ttl === undefined ? {} : { ttlMs: ttl }),
-      })
-      sendJson(res, 201, created)
-      return true
-    }
-    const id = required(body.id, 'id')
-    if (url.pathname === '/api/approvals/decide') {
-      const digest = required(body.digest, 'digest')
-      const nonce = required(body.nonce, 'nonce')
-      if (typeof body.approve !== 'boolean') throw new LedgerError('invalid_approve')
-      const actor = body.actor === undefined ? 'human' : required(body.actor, 'actor')
-      const decision = rt.ledger.approval.decideApproval(id, {
-        actor,
-        approve: body.approve,
-        digest,
-        nonce,
-      })
-      sendJson(res, 200, { id: decision.id, status: decision.status })
-      return true
-    }
-    if (url.pathname === '/api/approvals/consume') {
-      const digest = required(body.digest, 'digest')
-      const ok = rt.ledger.approval.consumeApproval(id, { digest })
-      sendJson(res, ok ? 200 : 409, { ok, id })
-      return true
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    const code = message.startsWith('invalid_') ? message : 'approval_decision_failed'
-    sendJson(res, code === 'approval_decision_failed' ? 409 : 400, { error: code })
+  if (route === 'request' && missingTaskRef(body)) {
+    sendJson(res, 400, { error: 'invalid_task_ref' })
     return true
   }
-  sendJson(res, 404, { error: 'not_found' })
+  const handler = route === 'request' ? requestRoute : route === 'decide' ? decideRoute : consumeRoute
+  const result = handler(runtime, body, now)
+  sendJson(res, result.status, result.body)
   return true
 }

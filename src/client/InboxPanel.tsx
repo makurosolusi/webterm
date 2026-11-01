@@ -13,10 +13,13 @@ import { AlertTriangle, ChevronDown, ChevronRight, RefreshCw, ShieldAlert, X } f
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
 import { CONFIRM_PHRASE, InboxApprovalDialog, type ReviewState } from './inboxApprovalDialog'
 import {
-  FOCUSABLE,
   SECTION_LABEL,
   SECTION_ORDER,
+  approvalRequest,
   formatAge,
+  reviewBlockedReason,
+  useInboxCountPublisher,
+  useInboxDialogKeys,
   useInboxOpen,
 } from './inboxPanelModel'
 import './inbox.css'
@@ -71,8 +74,9 @@ export default function InboxPanel(props: InboxPanelProps) {
   const pending =
     dialog !== null &&
     (dialog.phase === 'requesting' || dialog.phase === 'deciding' || dialog.phase === 'consuming')
-  const pendingRef = useRef(pending)
-  pendingRef.current = pending
+
+  /** Re-read the queue from the server: after a decision the server's list is what counts. */
+  const refresh = useCallback(() => setRefreshKey((key) => key + 1), [])
 
   const closeDialog = useCallback(() => {
     seq.current += 1
@@ -89,7 +93,12 @@ export default function InboxPanel(props: InboxPanelProps) {
     clientRef.current
       .listInbox({ signal: controller.signal })
       .then((next) => {
-        if (!controller.signal.aborted) setFetched(next)
+        if (controller.signal.aborted) return
+        setFetched(next)
+        // The server list is the source of truth: drop optimistic hides so a row the server
+        // still reports (e.g. a task whose approval was consumed) comes back instead of
+        // staying invisible until a full reload.
+        setHidden(new Set())
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || isAbortError(error)) return
@@ -107,6 +116,10 @@ export default function InboxPanel(props: InboxPanelProps) {
     const id = setInterval(() => setRefreshKey((key) => key + 1), ms)
     return () => clearInterval(id)
   }, [open, props.items, props.pollMs])
+
+  // Keep the Dock badge truthful while this panel owns `/api/inbox` (see `inboxPanelModel`).
+  useInboxCountPublisher(open, props.items === undefined && fetched === null ? null : items)
+
   // Abort an in-flight challenge when the panel itself unmounts.
   useEffect(() => () => dialogAbort.current?.abort(), [])
 
@@ -129,44 +142,7 @@ export default function InboxPanel(props: InboxPanelProps) {
     return () => clearInterval(id)
   }, [dialogOpen])
   // ---- focus trap + Escape ----------------------------------------------------------------
-  useEffect(() => {
-    if (!dialogOpen) return
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const node = dialogRef.current
-    const focusables = (): HTMLElement[] =>
-      node ? Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)) : []
-    focusables()[0]?.focus()
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        event.stopPropagation()
-        if (!pendingRef.current) closeDialog()
-        return
-      }
-      if (event.key !== 'Tab' || !node) return
-      const list = focusables()
-      if (list.length === 0) {
-        event.preventDefault()
-        return
-      }
-      const first = list[0]
-      const last = list[list.length - 1]
-      const active = document.activeElement
-      const outside = !node.contains(active)
-      if (event.shiftKey && (active === first || outside)) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && (active === last || outside)) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => {
-      document.removeEventListener('keydown', onKey, true)
-      if (previous?.isConnected) previous.focus()
-    }
-  }, [dialogOpen, closeDialog])
+  useInboxDialogKeys({ open: dialogOpen, dialogRef, pending, onClose: closeDialog })
   // Panel-level Escape (only when no dialog owns the key).
   useEffect(() => {
     if (!open || !props.onClose) return
@@ -181,25 +157,32 @@ export default function InboxPanel(props: InboxPanelProps) {
   // ---- review flow ------------------------------------------------------------------------
   const beginReview = (queue: InboxItem[], index = 0): void => {
     const item = queue[index]
-    if (!item) return
+    // A task without a fence cannot be transitioned after approval; never mint that approval.
+    if (!item || reviewBlockedReason(item) !== null) return
     const token = ++seq.current
     dialogAbort.current?.abort()
     const controller = new AbortController()
     dialogAbort.current = controller
     setClock(nowRef.current())
-    setDialog({ queue, index, challenge: null, phase: 'requesting', error: null, checked: false, text: '', approvedDigest: null })
-    const load =
-      item.kind === 'approval'
-        ? clientRef.current.getApprovalChallenge(item.id, { signal: controller.signal })
-        : clientRef.current.requestApproval(
-            {
-              kind: item.kind,
-              projectId: item.projectId,
-              request: { itemId: item.id, title: item.title, detail: item.detail ?? null },
-            },
-            { signal: controller.signal }
-          )
-    load
+    // A task review has no server approval yet. Minting one here would leave a `pending` row in
+    // `needs_you` for the whole TTL every time an operator merely opens and closes the dialog, so
+    // the challenge is created when a decision is actually pressed (`decide`). Only an existing
+    // approval is fetched on open, which never creates anything.
+    const deferred = item.kind !== 'approval'
+    setDialog({
+      queue,
+      index,
+      challenge: null,
+      deferred,
+      phase: deferred ? 'ready' : 'requesting',
+      error: null,
+      checked: false,
+      text: '',
+      approvedDigest: null,
+    })
+    if (deferred) return
+    clientRef.current
+      .getApprovalChallenge(item.id, { signal: controller.signal })
       .then((challenge) => {
         if (seq.current !== token) return
         setDialog((current) => (current ? { ...current, challenge, phase: 'ready' } : current))
@@ -219,11 +202,21 @@ export default function InboxPanel(props: InboxPanelProps) {
 
   const decide = async (approve: boolean): Promise<void> => {
     const current = dialog
-    const challenge = current?.challenge
-    if (!current || !challenge) return
+    const item = current?.queue[current.index]
+    if (!current || !item) return
     const token = seq.current
     setDialog((state) => (state ? { ...state, phase: 'deciding', error: null } : state))
     try {
+      let challenge = current.challenge
+      if (!challenge) {
+        const controller = new AbortController()
+        dialogAbort.current = controller
+        challenge = await clientRef.current.requestApproval(approvalRequest(item), {
+          signal: controller.signal,
+        })
+        if (seq.current !== token) return
+        setDialog((state) => (state ? { ...state, challenge, deferred: false } : state))
+      }
       const result = await clientRef.current.decideApproval({
         id: challenge.id,
         digest: challenge.digest,
@@ -232,6 +225,9 @@ export default function InboxPanel(props: InboxPanelProps) {
         ...(props.actor === undefined ? {} : { actor: props.actor }),
       })
       if (seq.current !== token) return
+      // Either decision changes what the server lists (a rejected row leaves the queue; an
+      // approved one may still be pending consume), so never trust the local copy after it.
+      refresh()
       if (!approve) {
         setDialog((state) => (state ? { ...state, phase: 'rejected', error: null } : state))
         return
@@ -260,12 +256,16 @@ export default function InboxPanel(props: InboxPanelProps) {
     const digest = current?.approvedDigest
     if (!current || !challenge || !digest) return
     const token = seq.current
-    const itemId = current.queue[current.index]?.id
+    const item = current.queue[current.index]
     setDialog((state) => (state ? { ...state, phase: 'consuming', error: null } : state))
     try {
       await clientRef.current.consumeApproval({ id: challenge.id, digest })
       if (seq.current !== token) return
-      if (itemId) setHidden((prev) => new Set(prev).add(itemId))
+      // Only an approval row is identified by the approval id that was just spent. A task row's
+      // id is the task id: hiding it would make the still-listed task vanish locally, then
+      // reappear on reload. Its own lifecycle (server side) decides when it leaves the queue.
+      if (item && item.kind === 'approval') setHidden((prev) => new Set(prev).add(item.id))
+      refresh()
       setDialog((state) => (state ? { ...state, phase: 'consumed', error: null } : state))
     } catch (error) {
       if (seq.current !== token || isAbortError(error)) return
@@ -353,7 +353,8 @@ export default function InboxPanel(props: InboxPanelProps) {
       {selectedItems.length > 0 && (
         <div className="inbox-bulk" role="toolbar" aria-label="Group actions">
           <span aria-live="polite">{selectedItems.length} selected</span>
-          <button type="button" className="inbox-btn inbox-btn--ghost" onClick={() => beginReview(selectedItems)}>
+          <button type="button" className="inbox-btn inbox-btn--ghost"
+            onClick={() => beginReview(selectedItems.filter((item) => reviewBlockedReason(item) === null))}>
             Review selected
           </button>
           <button type="button" className="inbox-btn inbox-btn--ghost" onClick={() => setSelected(new Set())}>
@@ -428,7 +429,10 @@ export default function InboxPanel(props: InboxPanelProps) {
                             {item.detail && <p className="inbox-item__detail">{item.detail}</p>}
                             <div className="inbox-item__actions">
                               <button type="button" className="inbox-btn inbox-btn--ghost"
-                                aria-label={`Review ${item.title}`} onClick={() => beginReview([item])}>
+                                aria-label={`Review ${item.title}`}
+                                title={reviewBlockedReason(item) ?? undefined}
+                                disabled={reviewBlockedReason(item) !== null}
+                                onClick={() => beginReview([item])}>
                                 Review
                               </button>
                             </div>
@@ -448,6 +452,7 @@ export default function InboxPanel(props: InboxPanelProps) {
         <InboxApprovalDialog
           state={dialog}
           challenge={challenge}
+          deferred={dialog.deferred}
           remainingMs={remaining}
           expired={expired}
           pending={pending}

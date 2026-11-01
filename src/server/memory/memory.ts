@@ -3,11 +3,15 @@
  * here only; the split modules are implementation detail.
  *
  * Integration contract:
- * - `claimMemory(db, {...})` — worker only; `actorKind` defaults to `worker`.
- * - `promoteMemory(db, {...})` — `actorKind: 'orchestrator' | 'human'`; core
- *   scope additionally requires `'human'`.
+ * - `claimMemory(db, authority, {...})` — a worker may only claim (never `fact`).
+ * - `promoteMemory(db, authority, {...})` — `authority.kind` must be
+ *   `'orchestrator' | 'human'`; core scope additionally requires `'human'`.
  * - `supersedeMemory` keeps the old row as `superseded` with `superseded_at`.
  * - `searchMemory(db, projectId, query, limit)` — facts only, bm25 order.
+ *
+ * SECURITY: `authority` (`{ kind, id }`) is never read from a request payload. It must be
+ * derived by the caller from the authenticated principal, so a worker cannot declare itself a
+ * human or an orchestrator (RND/qc/p3-security.md M2). There is no default kind.
  *
  * Every function is synchronous over an open `bun:sqlite` Database and throws
  * `MemoryError` subclasses (`MemoryEvidenceError`, `MemoryAuthorityError`,
@@ -16,6 +20,7 @@
 export {
   EVIDENCE_FUTURE_SKEW_MS,
   EVIDENCE_PAST_SKEW_MS,
+  MEMORY_ACTOR_KINDS,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
   MemoryAuthorityError,
@@ -30,6 +35,7 @@ export type {
   MachineEvidence,
   Memory,
   MemoryActorKind,
+  MemoryAuthority,
   MemoryEvent,
   MemoryEventsOptions,
   MemoryScope,

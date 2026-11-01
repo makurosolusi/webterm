@@ -2,18 +2,22 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   MAX_WEBHOOK_BODY_BYTES,
+  MIN_TELEGRAM_SECRET_LENGTH,
   SECRET_ENV_NAMES,
   SIGNATURE_HEADER,
   TELEGRAM_SECRET_HEADER,
   TIMESTAMP_HEADER,
+  AttemptThrottle,
   redactSecrets,
   signWebhook,
+  telegramSecretProblem,
   verifyTelegramSecret,
   verifyWebhook,
   webhookResponse,
 } from './webhook'
 
 const SECRET = 'hmac-secret-for-tests'
+const TG_SECRET = 'tg-secret-token-0123456789-abcdefghij'
 const NOW = 1_700_000_000
 const BODY = JSON.stringify({ hello: 'world' })
 
@@ -112,15 +116,76 @@ describe('verifyWebhook', () => {
 
 describe('verifyTelegramSecret', () => {
   it('accepts the configured secret token', () => {
-    const headers = { [TELEGRAM_SECRET_HEADER]: 'tg-secret-token' }
-    const result = verifyTelegramSecret(headers, 'tg-secret-token')
+    const headers = { [TELEGRAM_SECRET_HEADER]: TG_SECRET }
+    const result = verifyTelegramSecret(headers, TG_SECRET, { throttle: new AttemptThrottle() })
     expect(result.ok).toBe(true)
   })
 
   it('rejects a wrong or missing token and fails closed without configuration', () => {
-    expect(verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: 'wrong' }, 'right').ok).toBe(false)
-    expect(verifyTelegramSecret({}, 'right').ok).toBe(false)
-    expect(verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: 'right' }, undefined).ok).toBe(false)
+    const throttle = new AttemptThrottle()
+    const wrong = verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: `${TG_SECRET}x` }, TG_SECRET, {
+      throttle,
+    })
+    expect(wrong).toMatchObject({ ok: false, status: 401, reason: 'bad_secret_token' })
+    expect(verifyTelegramSecret({}, TG_SECRET, { throttle })).toMatchObject({
+      ok: false,
+      reason: 'missing_secret_token',
+    })
+    expect(verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: TG_SECRET }, undefined)).toEqual({
+      ok: false,
+      status: 401,
+      reason: 'secret_not_configured',
+    })
+  })
+
+  it('M3: refuses a configured secret shorter than the minimum, even when it matches', () => {
+    const short = 'short-secret'
+    expect(short.length).toBeLessThan(MIN_TELEGRAM_SECRET_LENGTH)
+    expect(telegramSecretProblem(short)).toContain('at least')
+    expect(verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: short }, short)).toMatchObject({
+      ok: false,
+      status: 401,
+      reason: 'secret_too_weak',
+    })
+    expect(telegramSecretProblem('a'.repeat(33))).toBeNull()
+    expect(telegramSecretProblem(`${'a'.repeat(32)}$`)).toContain('shape')
+  })
+
+  it('M3: throttles repeated failures per key and clears on success', () => {
+    let now = 1_000
+    const throttle = new AttemptThrottle({ limit: 3, windowMs: 1_000, now: () => now })
+    const bad = { [TELEGRAM_SECRET_HEADER]: 'not-the-secret-at-all-000000000000' }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect(verifyTelegramSecret(bad, TG_SECRET, { throttle, clientKey: 'peer-a' })).toMatchObject({
+        ok: false,
+        reason: 'bad_secret_token',
+      })
+    }
+    // Budget exhausted: even the correct secret is refused for this key.
+    expect(
+      verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: TG_SECRET }, TG_SECRET, {
+        throttle,
+        clientKey: 'peer-a',
+      })
+    ).toMatchObject({ ok: false, reason: 'too_many_attempts' })
+    // Another peer is unaffected (a guess flood cannot lock out the whole webhook).
+    expect(
+      verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: TG_SECRET }, TG_SECRET, {
+        throttle,
+        clientKey: 'peer-b',
+      }).ok
+    ).toBe(true)
+
+    now += 1_001
+    expect(
+      verifyTelegramSecret({ [TELEGRAM_SECRET_HEADER]: TG_SECRET }, TG_SECRET, {
+        throttle,
+        clientKey: 'peer-a',
+      }).ok
+    ).toBe(true)
+    // A success resets the budget immediately, so both peers hold no failure state.
+    expect(throttle.allow('peer-a')).toBe(true)
+    expect(throttle.size()).toBe(0)
   })
 })
 

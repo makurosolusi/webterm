@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   type VerifyExec,
@@ -214,6 +217,43 @@ describe('verifyWorktree', () => {
     expect(outcome.ok).toBe(false)
     expect(outcome.reasons).toEqual(['git status --porcelain exited 128'])
     expect(calls.map((call) => call.file)).toEqual(['git', 'git', 'git'])
+  })
+
+  it('M4: rejects commands smuggled in through the worker input', async () => {
+    const { exec, calls } = fakeExec(baseScript())
+    for (const key of ['commands', 'args', 'exec', 'env', 'shell']) {
+      await expect(
+        verifyWorktree(
+          { root: ROOT, exec },
+          { cwd: ROOT, [key]: { test: { file: 'curl', args: ['http://evil.test'] } } } as never
+        )
+      ).rejects.toMatchObject({ code: 'invalid_input' })
+    }
+    // Nothing ran: the guard fires before git, let alone a worker-chosen executable.
+    expect(calls).toEqual([])
+  })
+
+  it('M4: refuses a cwd that escapes the root through a symlink', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'webterm-verify-root-'))
+    const outside = mkdtempSync(join(tmpdir(), 'webterm-verify-outside-'))
+    try {
+      mkdirSync(join(root, 'task-1'), { recursive: true })
+      symlinkSync(outside, join(root, 'task-1', 'escape'))
+      const { exec } = fakeExec(baseScript())
+      await expect(
+        verifyWorktree({ root: join(root, 'task-1'), exec }, { cwd: 'escape' })
+      ).rejects.toMatchObject({ code: 'invalid_cwd' })
+      // A real nested directory still works.
+      mkdirSync(join(root, 'task-1', 'packages'))
+      const outcome = await verifyWorktree(
+        { root: join(root, 'task-1'), exec },
+        { cwd: 'packages', scope: ['src/api.ts', 'src/api.test.ts'] }
+      )
+      expect(outcome.ok).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 
   it('rejects scope entries that escape the worktree', async () => {

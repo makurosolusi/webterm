@@ -4,9 +4,9 @@
 // Jembatan Dock → Inbox. Yang dijaga di sini adalah hal-hal yang tidak terlihat dari tsc:
 //   1. Badge hanya ANGKA dari `GET /api/inbox`; dock tidak pernah menyetujui apa pun dan tidak
 //      pernah memanggil `fetch` sendiri.
-//   2. Hanya SATU poller pada satu waktu: hook badge diam selama panel terbuka (panel yang
-//      memuat) dan mengambil alih saat panel tertutup. Tanpa ini kedua sisi menembak endpoint
-//      yang sama tiap 30 detik.
+//   2. Hanya SATU poller pada satu waktu: badge menyemai angkanya sekali saat mount (termasuk
+//      saat panel terbuka, supaya badge ada sejak boot) lalu hanya polling saat panel tertutup.
+//      Selama panel terbuka, panel yang mempublikasikan angkanya lewat `publishInboxCount`.
 //   3. Panel yang tertutup tidak memuat apa pun.
 //   4. `i` membuka inbox, tapi bukan saat fokus ada di kolom teks/terminal.
 import { readFileSync } from 'node:fs'
@@ -20,6 +20,7 @@ import {
   formatInboxBadge,
   inboxUnread,
   isTypingTarget,
+  publishInboxCount,
   useInboxBadge,
   useInboxHotkey,
   type InboxBadgeOptions,
@@ -50,6 +51,15 @@ function BadgeProbe(props: InboxBadgeOptions) {
 function HotkeyProbe({ onToggle, enabled }: { onToggle: () => void; enabled?: boolean }) {
   useInboxHotkey(onToggle, enabled)
   return <input data-testid="field" />
+}
+
+function PanelAndBadge({ client }: { client: InboxClient }) {
+  return (
+    <>
+      <InboxPanel open client={client} />
+      <BadgeProbe panelOpen client={client} />
+    </>
+  )
 }
 
 function dockProps(over: Partial<DockProps> = {}): DockProps {
@@ -94,6 +104,7 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  publishInboxCount(null)
 })
 
 describe('pure helpers', () => {
@@ -143,12 +154,46 @@ describe('badge hook', () => {
     expect(client.listInbox).toHaveBeenCalledTimes(3)
   })
 
-  it('stays silent while the panel owns the endpoint', async () => {
+  it('seeds the count on boot while the panel is open, then never polls', async () => {
+    vi.useFakeTimers()
     const client = fakeClient()
     render(<BadgeProbe panelOpen client={client} />)
     await flush()
-    expect(client.listInbox).not.toHaveBeenCalled()
-    expect(screen.getByTestId('badge').textContent).toBe('0')
+    expect(client.listInbox).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('badge').textContent).toBe('4')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INBOX_POLL_MS * 3)
+    })
+    expect(client.listInbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows the count published by the open panel without a second fetch', async () => {
+    const client = fakeClient()
+    render(<BadgeProbe panelOpen client={client} />)
+    await flush()
+    expect(screen.getByTestId('badge').textContent).toBe('4')
+
+    act(() => publishInboxCount(2))
+    expect(screen.getByTestId('badge').textContent).toBe('2')
+
+    // A closed panel publishes null; the badge falls back to its own last count.
+    act(() => publishInboxCount(null))
+    expect(screen.getByTestId('badge').textContent).toBe('4')
+    expect(client.listInbox).toHaveBeenCalledTimes(1)
+  })
+
+  it('feeds the badge from the open panel across a refresh', async () => {
+    let items = ITEMS
+    const client = fakeClient(vi.fn(async () => items))
+    render(<PanelAndBadge client={client} />)
+    await flush()
+    expect(screen.getByTestId('badge').textContent).toBe('4')
+
+    items = []
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh inbox' }))
+    await waitFor(() => expect(screen.getByTestId('badge').textContent).toBe('0'))
+    expect(screen.getByText('Inbox is clear.')).toBeDefined()
   })
 
   it('does not overlap its own requests', async () => {

@@ -405,12 +405,19 @@
 .inbox-dialog__actions .inbox-btn { padding: 6px 12px; }
 
 /* ---- narrow screens ---------------------------------------------------------------------- */
+/* The Dock is a fixed 38px column anchored at the LEFT edge and grows upward. A panel spanning
+   `left: gap` therefore sits underneath it (clipped header, unreachable `All` chip) instead of
+   beside it. Starting after `--dock-w + gap` keeps both surfaces usable at 620px without moving
+   the Dock, and `min-width: 0` stops the nowrap row titles from forcing the panel wider than the
+   viewport (an absolutely positioned box with `right` only shrinks-to-fit, and its min-content
+   width can exceed the screen). */
 @media (max-width: 640px) {
   .inbox-panel {
     top: calc(var(--tabbar-h, 46px) + var(--float-gap, 22px));
-    left: var(--float-gap, 22px);
+    left: calc(var(--dock-w, 54px) + 2 * var(--float-gap, 22px));
     right: var(--float-gap, 22px);
     width: auto;
+    min-width: 0;
     max-width: none;
     max-height: calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px) - 26px);
   }

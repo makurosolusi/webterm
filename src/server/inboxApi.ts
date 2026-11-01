@@ -2,6 +2,7 @@
 // merender inbox tidak pernah approve/retry/bertindak. Otorisasi transport (token root/loopback)
 // sudah dilakukan `index.ts` sebelum `handleApi`, jadi modul ini hanya membaca query.
 import { buildInbox, inboxCounts } from './inbox'
+import { ensureInboxIndexes } from './inbox/inboxIndexes'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 
 export type RouteResult = { status: number; body: unknown }
@@ -42,6 +43,9 @@ export function inboxRoute(
 ): RouteResult | null {
   if (path !== INBOX_PATH || method !== 'GET') return null
   if (!runtime) return LEDGER_OFF
+  // Badge counts must not depend on the page size, so the supporting indexes are ensured here
+  // (idempotent DDL, once per connection) instead of inside the pure projection.
+  ensureInboxIndexes(runtime.db)
   const projectId = projectParam(params)
   if (projectId === null) return { status: 400, body: { error: 'invalid_project_id' } }
   const limit = boundedInteger(params.get('limit'), 1, MAX_LIMIT)
@@ -53,8 +57,10 @@ export function inboxRoute(
     ...(offset === undefined ? {} : { offset }),
   }
   const page = buildInbox(runtime.db, projectId, options)
+  // Counts are the full projection, never the page: `options` (limit/offset) is deliberately not
+  // forwarded, so a badge stays truthful past the first page.
   return {
     status: 200,
-    body: { ...page, counts: inboxCounts(runtime.db, projectId, options) },
+    body: { ...page, counts: inboxCounts(runtime.db, projectId) },
   }
 }

@@ -127,6 +127,13 @@ body {
   border-radius: var(--radius);
 }
 
+/* React Flow's own `.react-flow__minimap` sets a white fallback later in the cascade; raise
+   specificity and set its documented custom property so the dark theme wins. */
+.react-flow__minimap.minimap-dock {
+  --xy-minimap-background-color-props: var(--canvas-bg);
+  background: var(--canvas-bg);
+}
+
 /* ---- Rangka app: header bar yang memakan tinggi + sisanya untuk canvas ---- */
 .app-shell {
   display: flex;

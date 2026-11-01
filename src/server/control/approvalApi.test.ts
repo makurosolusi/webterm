@@ -189,6 +189,26 @@ describe('approval.request', () => {
     expect(f.ledger.listApprovals({ projectId: 'p1' })).toHaveLength(1)
   })
 
+  it('forwards taskId so a review can be linked to its task', async () => {
+    const f = fixture()
+    const token = f.mint('approval.request', 'project:p1')
+    const res = await call(f.deps, 'POST', APPROVAL_ROUTES.request, {
+      requestId: REQ, projectId: 'p1', kind: 'task', taskId: 't1', request: { itemId: 't1' },
+    }, token)
+    expect(res?.status).toBe(201)
+    expect(f.ledger.getApproval(String(bodyOf(res).id))?.taskId).toBe('t1')
+  })
+
+  it('rejects a malformed taskId', async () => {
+    const f = fixture()
+    const token = f.mint('approval.request', 'project:p1')
+    const res = await call(f.deps, 'POST', APPROVAL_ROUTES.request, {
+      requestId: REQ, projectId: 'p1', kind: 'task', taskId: '', request: {},
+    }, token)
+    expect(res?.status).toBe(400)
+    expect(bodyOf(res).error).toBe('invalid_task_id')
+  })
+
   it('validates requestId, kind, request and ttl', async () => {
     const f = fixture()
     const token = f.mint('approval.request', 'project:p1')

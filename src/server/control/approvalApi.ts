@@ -10,6 +10,15 @@ import {
   type RequestApprovalInput,
 } from '../ledger/ledgerApproval'
 import { badRequest, forbidden } from './controlAuth'
+import {
+  MAX_ACTOR,
+  MAX_KIND,
+  MAX_PROJECT_ID,
+  MAX_TASK_ID,
+  decisionFailure,
+  secretField,
+  textField,
+} from './approvalFields'
 import type { CapabilityRecord, CapabilityVerb } from './capabilities'
 import {
   AckStore,
@@ -53,10 +62,6 @@ export interface ApprovalDeps {
   now?: () => number
 }
 
-const MAX_PROJECT_ID = 200
-const MAX_KIND = 128
-const MAX_ACTOR = 128
-const MAX_SECRET_FIELD = 256
 const MAX_LIST_LIMIT = 500
 const STATUSES: readonly ApprovalStatus[] = ['pending', 'approved', 'rejected', 'expired']
 const unauthorized: NonNullable<ControlResult> = { status: 401, body: { error: 'unauthorized' } }
@@ -92,14 +97,6 @@ function authorize(
   return auth
 }
 
-/** Non-empty string bounded by `max`; whitespace-only is rejected, values are not trimmed. */
-const textField = (value: unknown, max: number): string | undefined =>
-  typeof value === 'string' && value.trim().length > 0 && value.length <= max ? value : undefined
-const secretField = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.length > 0 && value.length <= MAX_SECRET_FIELD
-    ? value
-    : undefined
-
 /** `pathname?query` -> parts. Mount normally strips the query, so the list route also accepts it. */
 function splitPath(path: string): { pathname: string; query: URLSearchParams } {
   const at = path.indexOf('?')
@@ -128,9 +125,21 @@ function requestRoute(req: ControlRequest, deps: ApprovalDeps, acks: ApprovalAck
     }
     ttlMs = body.ttlMs
   }
+  // Without this the approval can never be linked to a task, so review can never resolve (QC B2).
+  let taskId: string | undefined
+  if (body.taskId !== undefined) {
+    taskId = textField(body.taskId, MAX_TASK_ID)
+    if (!taskId) return badRequest('invalid_task_id')
+  }
   let challenge: ApprovalChallenge
   try {
-    challenge = deps.approval.requestApproval({ projectId, kind, request: body.request, ttlMs })
+    challenge = deps.approval.requestApproval({
+      projectId,
+      kind,
+      request: body.request,
+      ...(taskId === undefined ? {} : { taskId }),
+      ttlMs,
+    })
   } catch {
     // Ledger rejects non-JSON request payloads; nothing sensitive is echoed back.
     return badRequest('invalid_request')
@@ -165,15 +174,6 @@ function scopedApproval(
     return { failure: forbidden.failure }
   }
   return { approval }
-}
-
-function decisionFailure(err: unknown): NonNullable<ControlResult> {
-  const message = err instanceof Error ? err.message : ''
-  if (/nonce mismatch/i.test(message)) return { status: 403, body: { error: 'nonce_mismatch' } }
-  if (/digest mismatch/i.test(message)) return { status: 403, body: { error: 'digest_mismatch' } }
-  if (/expired/i.test(message)) return { status: 409, body: { error: 'approval_expired' } }
-  if (/already/i.test(message)) return { status: 409, body: { error: 'approval_not_pending' } }
-  return { status: 400, body: { error: 'decision_failed' } }
 }
 
 function decideRoute(req: ControlRequest, deps: ApprovalDeps, acks: ApprovalAcks, now: number): ControlResult {

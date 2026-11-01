@@ -23,6 +23,8 @@ export interface ReviewState {
   queue: import('./inboxApi').InboxItem[]
   index: number
   challenge: ApprovalChallenge | null
+  /** No server approval exists yet: it is minted when Approve/Reject is pressed. */
+  deferred: boolean
   phase: ReviewPhase
   error: string | null
   checked: boolean
@@ -33,6 +35,8 @@ export interface ReviewState {
 export interface InboxApprovalDialogProps {
   state: ReviewState
   challenge: ApprovalChallenge | null
+  /** True for a task review whose challenge is created on the first decision. */
+  deferred: boolean
   remainingMs: number
   expired: boolean
   pending: boolean
@@ -61,10 +65,13 @@ export function shortDigest(digest: string): string {
 }
 
 export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.Element {
-  const { state, challenge, remainingMs, expired, pending, canApprove, uid } = props
+  const { state, challenge, deferred, remainingMs, expired, pending, canApprove, uid } = props
   const item = state.queue[state.index]
   const approved = state.phase === 'approved' || state.phase === 'consumed'
   const title = approved ? 'Approved action' : state.phase === 'rejected' ? 'Rejected action' : 'Approve action'
+  // A deferred review has no digest/expiry yet; project and kind still describe the action so the
+  // operator knows what they are consenting to before the server mints the challenge.
+  const showConsent = state.phase === 'ready' && !expired && (deferred || challenge !== null)
 
   return (
     <div
@@ -96,26 +103,30 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
           )}
         </p>
 
-        {challenge && (
+        {(challenge || deferred) && (
           <dl className="inbox-dialog__facts">
             <div>
               <dt>Project</dt>
-              <dd>{challenge.projectId}</dd>
+              <dd>{challenge?.projectId || item?.projectId}</dd>
             </div>
             <div>
               <dt>Kind</dt>
-              <dd>{challenge.kind}</dd>
+              <dd>{challenge?.kind || item?.kind}</dd>
             </div>
-            <div>
-              <dt>Digest</dt>
-              <dd><code title={challenge.digest}>{shortDigest(challenge.digest)}</code></dd>
-            </div>
-            <div>
-              <dt>Expiry</dt>
-              <dd className={expired ? 'inbox-expired' : undefined} aria-live="polite">
-                {countdownLabel(remainingMs)}
-              </dd>
-            </div>
+            {challenge && (
+              <>
+                <div>
+                  <dt>Digest</dt>
+                  <dd><code title={challenge.digest}>{shortDigest(challenge.digest)}</code></dd>
+                </div>
+                <div>
+                  <dt>Expiry</dt>
+                  <dd className={expired ? 'inbox-expired' : undefined} aria-live="polite">
+                    {countdownLabel(remainingMs)}
+                  </dd>
+                </div>
+              </>
+            )}
           </dl>
         )}
 
@@ -127,7 +138,7 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
 
         {state.phase === 'requesting' && <p className="inbox-status" role="status">Preparing challenge…</p>}
 
-        {state.phase === 'ready' && challenge && !expired && (
+        {showConsent && (
           <>
             <label className="inbox-consent">
               <input type="checkbox" checked={state.checked}
@@ -197,7 +208,7 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
           </>
         )}
 
-        {state.phase === 'ready' && (!challenge || expired) && (
+        {state.phase === 'ready' && !deferred && (!challenge || expired) && (
           <div className="inbox-dialog__actions">
             <button type="button" className="inbox-btn inbox-btn--ghost" onClick={props.onRetry}>
               Request new challenge

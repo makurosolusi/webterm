@@ -6,7 +6,7 @@
 // `handleApproval`: seam ini tidak membaca `x-webterm-token` sama sekali.
 import type { ApprovalLedgerPort } from './approvalApi'
 import { APPROVAL_PREFIX, handleApproval } from './approvalApi'
-import type { ControlCapabilities, ControlRequest, ControlResult } from './controlTypes'
+import { AckStore, type ControlCapabilities, type ControlRequest, type ControlResult } from './controlTypes'
 
 export const LEDGER_OFF = { status: 503, body: { error: 'ledger_off' } } as const
 
@@ -15,6 +15,19 @@ export interface ApprovalDispatchDeps {
   /** `activeLedgerRuntime()?.ledger.approval`, atau undefined saat flag ledger mati. */
   approval: ApprovalLedgerPort | undefined
   now?: () => number
+}
+
+/**
+ * Ack store per ledger port, passed explicitly. `handleApproval` otherwise keys its WeakMap on the
+ * deps object, and production builds that object per request, so the 10-minute replay window never
+ * existed (QC H2/B1). Keying on the port makes the window independent of how many deps objects the
+ * caller allocates.
+ */
+const acksByPort = new WeakMap<ApprovalLedgerPort, AckStore>()
+function acksFor(port: ApprovalLedgerPort): AckStore {
+  let store = acksByPort.get(port)
+  if (!store) acksByPort.set(port, (store = new AckStore()))
+  return store
 }
 
 /** `null` = bukan route approval; pemanggil melanjutkan ke router control biasa. */
@@ -28,6 +41,7 @@ export async function approvalRoute(
   return handleApproval(req, {
     capabilities: deps.capabilities,
     approval: deps.approval,
+    acks: acksFor(deps.approval),
     ...(deps.now ? { now: deps.now } : {}),
   })
 }

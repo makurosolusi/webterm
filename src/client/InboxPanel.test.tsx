@@ -23,6 +23,27 @@ const ITEMS: InboxItem[] = [
   { id: 'i4', kind: 'ci', state: 'broken', projectId: 'proj-b', title: 'CI failed', ageMs: 90_000 },
 ]
 
+/** `kind: "approval"`: the server already minted the challenge; opening only fetches it. */
+const APPROVAL_ITEM: InboxItem = {
+  id: CHALLENGE.id,
+  kind: 'approval',
+  state: 'needs_you',
+  projectId: 'proj-a',
+  title: 'Approve deploy',
+  ageMs: 60_000,
+}
+
+/** A task review: no approval exists until the operator presses Approve/Reject. */
+const TASK_ITEM: InboxItem = {
+  id: 't-review',
+  kind: 'task',
+  state: 'review',
+  projectId: 'proj-a',
+  title: 'Review task',
+  ageMs: 60_000,
+  fence: 7,
+}
+
 function makeClient(overrides: Partial<InboxClient> = {}): InboxClient {
   return {
     listInbox: vi.fn(async () => ITEMS),
@@ -132,8 +153,9 @@ describe('approval flow', () => {
     renderPanel(client)
     const dialog = await openReview()
 
-    expect(within(dialog).getByText(/abcdef123456…/)).toBeDefined()
-    expect(within(dialog).getByText('expires in 2:00')).toBeDefined()
+    // Deferred review: the facts describe the action, but no challenge exists yet.
+    expect(within(dialog).getByText('proj-a')).toBeDefined()
+    expect(client.requestApproval).not.toHaveBeenCalled()
     expect(isDisabled(approveButton())).toBe(true)
 
     fireEvent.click(screen.getByRole('checkbox', { name: /I understand/ }))
@@ -152,9 +174,16 @@ describe('approval flow', () => {
   })
 
   it('decides, then offers Consume only after approval, and consumes with the digest', async () => {
-    const client = makeClient()
+    let items: InboxItem[] = [APPROVAL_ITEM]
+    const client = makeClient({
+      listInbox: vi.fn(async () => [...items]),
+      consumeApproval: vi.fn(async () => {
+        items = []
+        return { ok: true }
+      }),
+    })
     renderPanel(client)
-    await openReview()
+    await openReview('Approve deploy')
     confirmTypedPhrase()
 
     expect(screen.queryByRole('button', { name: 'Consume approval' })).toBeNull()
@@ -168,21 +197,96 @@ describe('approval flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Consume approval' }))
     expect(await screen.findByText('Consumed. The action is approved.')).toBeDefined()
     expect(client.consumeApproval).toHaveBeenCalledWith({ id: CHALLENGE.id, digest: CHALLENGE.digest })
+    // The panel re-reads the server list after the decision and after consuming instead of
+    // trusting local state.
+    await waitFor(() => expect(client.listInbox).toHaveBeenCalledTimes(3))
 
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(screen.queryByText('Deploy main')).toBeNull()
+    expect(screen.queryByText('Approve deploy')).toBeNull()
   })
 
-  it('rejects without any consume step', async () => {
-    const client = makeClient()
+  it('rejects without any consume step and refreshes the list immediately', async () => {
+    let items: InboxItem[] = [APPROVAL_ITEM]
+    const client = makeClient({
+      listInbox: vi.fn(async () => [...items]),
+      decideApproval: vi.fn(async () => {
+        items = []
+        return { id: CHALLENGE.id, status: 'rejected' as const }
+      }),
+    })
     renderPanel(client)
-    await openReview()
+    await openReview('Approve deploy')
 
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
     expect(await screen.findByText('Rejected. The action will not run.')).toBeDefined()
     expect(client.decideApproval).toHaveBeenCalledWith(expect.objectContaining({ approve: false }))
     expect(screen.queryByRole('button', { name: 'Consume approval' })).toBeNull()
+    expect(client.listInbox).toHaveBeenCalledTimes(2)
+    // The cleared row is gone from the list (the dialog still describes what was rejected).
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Review Approve deploy' })).toBeNull())
+  })
+
+  it('only fetches the existing challenge for an approval item', async () => {
+    const client = makeClient({ listInbox: vi.fn(async () => [APPROVAL_ITEM]) })
+    renderPanel(client)
+    const dialog = await openReview('Approve deploy')
+
+    expect(client.getApprovalChallenge).toHaveBeenCalledWith('ap-1', expect.anything())
+    expect(client.requestApproval).not.toHaveBeenCalled()
+    expect(within(dialog).getByText(/abcdef123456…/)).toBeDefined()
+    expect(within(dialog).getByText('expires in 2:00')).toBeDefined()
+  })
+
+  it('creates no server approval on open and leaves the queue untouched on Escape', async () => {
+    const client = makeClient()
+    renderPanel(client)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Deploy main' }))
+    await screen.findByRole('dialog')
+
+    expect(client.requestApproval).not.toHaveBeenCalled()
+    expect(client.getApprovalChallenge).not.toHaveBeenCalled()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(client.requestApproval).not.toHaveBeenCalled()
+    expect(client.decideApproval).not.toHaveBeenCalled()
+  })
+
+  it('mints a task challenge with the task identity only when a decision is pressed', async () => {
+    const client = makeClient({ listInbox: vi.fn(async () => [TASK_ITEM]) })
+    renderPanel(client)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Review task' }))
+    const dialog = await screen.findByRole('dialog')
+
+    expect(client.requestApproval).not.toHaveBeenCalled()
+    confirmTypedPhrase()
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Approve$/ }))
+    expect(await within(dialog).findByRole('button', { name: 'Consume approval' })).toBeDefined()
+    expect(client.requestApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'task',
+        projectId: 'proj-a',
+        request: expect.objectContaining({ itemId: 't-review', taskId: 't-review', fence: 7 }),
+      }),
+      expect.anything()
+    )
+  })
+
+  it('never hides a still-listed task row after consuming its approval', async () => {
+    // The server has not transitioned the task (P3 server gap): the row must stay visible
+    // instead of being hidden locally by the task id.
+    const client = makeClient({ listInbox: vi.fn(async () => [TASK_ITEM]) })
+    renderPanel(client)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Review task' }))
+    const dialog = await screen.findByRole('dialog')
+    confirmTypedPhrase()
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Approve$/ }))
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Consume approval' }))
+    await within(dialog).findByText('Consumed. The action is approved.')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByText('Review task')).toBeDefined()
   })
 
   it('surfaces a digest/nonce mismatch, clears consent and never offers Consume', async () => {
@@ -250,13 +354,17 @@ describe('approval flow', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Step 1 of 2')).toBeDefined()
+    // A group review is deferred too: opening the first row mints nothing.
+    expect(client.requestApproval).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }))
     expect(client.requestApproval).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: 'deploy', projectId: 'proj-a' }),
       expect.anything()
     )
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }))
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Next' }))
+    await within(dialog).findByText('Step 2 of 2')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }))
     await waitFor(() =>
       expect(client.requestApproval).toHaveBeenLastCalledWith(
         expect.objectContaining({ kind: 'rotate', projectId: 'proj-a' }),
@@ -270,11 +378,11 @@ describe('expiry countdown', () => {
   it('ticks down and expires the challenge', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)
-    const client = makeClient()
+    const client = makeClient({ listInbox: vi.fn(async () => [APPROVAL_ITEM]) })
     renderPanel(client, { now: Date.now })
 
     await act(async () => { await Promise.resolve() })
-    fireEvent.click(screen.getByRole('button', { name: 'Review Deploy main' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review Approve deploy' }))
     await act(async () => { await Promise.resolve() })
     expect(screen.getByRole('dialog')).toBeDefined()
     expect(screen.getByText('expires in 2:00')).toBeDefined()
@@ -290,18 +398,19 @@ describe('expiry countdown', () => {
   })
 
   it('flushes the dialog abort when the panel unmounts mid-challenge', async () => {
-    const requestApproval = vi.fn<InboxClient['requestApproval']>(
-      (_input, opts) =>
+    const getApprovalChallenge = vi.fn<InboxClient['getApprovalChallenge']>(
+      (_id, opts) =>
         new Promise<ApprovalChallenge>((_resolve, reject) => {
           opts?.signal?.addEventListener('abort', () =>
             reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
           )
         })
     )
-    const { unmount } = renderPanel(makeClient({ requestApproval }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Review Deploy main' }))
-    await waitFor(() => expect(requestApproval).toHaveBeenCalled())
-    const signal = requestApproval.mock.calls[0]?.[1]?.signal
+    const client = makeClient({ listInbox: vi.fn(async () => [APPROVAL_ITEM]), getApprovalChallenge })
+    const { unmount } = renderPanel(client)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Approve deploy' }))
+    await waitFor(() => expect(getApprovalChallenge).toHaveBeenCalled())
+    const signal = getApprovalChallenge.mock.calls[0]?.[1]?.signal
     unmount()
     expect(signal?.aborted).toBe(true)
   })
@@ -314,5 +423,18 @@ describe('stylesheet scope', () => {
     expect(css).not.toMatch(/^\s*\*/m)
     expect(css).not.toMatch(/^\s*(html|body)\b/m)
     expect(css).toMatch(/@media \(max-width: 640px\)/)
+  })
+
+  it('starts the narrow panel beside the dock instead of underneath it', () => {
+    const css = readFileSync('src/client/inbox.css', 'utf8')
+    const media = /@media \(max-width: 640px\)\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    const panel = /\.inbox-panel\s*\{([^}]*)\}/.exec(media)?.[1] ?? ''
+    // The Dock occupies the left edge (--dock-w) plus its gap; the panel must clear it, not
+    // overlap it (that overlap is what clipped the header and hid the `All` chip at 620px).
+    expect(panel).toContain('left: calc(var(--dock-w')
+    expect(panel).toContain('2 * var(--float-gap')
+    expect(panel).toContain('right: var(--float-gap')
+    // Shrink-to-fit with only `right` set lets nowrap titles push the box past the viewport.
+    expect(panel).toContain('min-width: 0')
   })
 })

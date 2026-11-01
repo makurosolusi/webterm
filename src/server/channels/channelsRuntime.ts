@@ -4,7 +4,7 @@
 //
 // Enabled only when ALL of these hold; otherwise no route is installed at all:
 //   WEBTERM_TELEGRAM=on
-//   WEBTERM_TELEGRAM_WEBHOOK_SECRET set (Telegram `secret_token`, 1-256 [A-Za-z0-9_-])
+//   WEBTERM_TELEGRAM_WEBHOOK_SECRET or _SECRET_FILE (Telegram `secret_token`, >= 32 [A-Za-z0-9_-])
 //   WEBTERM_LEDGER=on|shadow (an approval needs the ledger; without it the channel is pointless)
 // A corrupt channel store disables the channel too; it is never reset to defaults.
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -13,6 +13,12 @@ import { dataDir } from '../config'
 import type { ApprovalStatus } from '../ledger/ledgerApproval'
 import type { Ledger } from '../ledger/ledger'
 import { CHANNEL_STORE_FILE, ChannelStore } from './channelStore'
+import {
+  readSecretFile,
+  resolveWebhookSecret,
+  type SecretFileRead,
+} from './channelSecret'
+import { FailureThrottle } from './channelThrottle'
 import {
   dispatchTelegramUpdate,
   type ChannelApprovalPort,
@@ -23,12 +29,22 @@ import { MAX_WEBHOOK_BODY_BYTES, redactSecrets, verifyTelegramSecret } from './w
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
 export const TELEGRAM_ENABLED_ENV = 'WEBTERM_TELEGRAM'
-export const TELEGRAM_WEBHOOK_SECRET_ENV = 'WEBTERM_TELEGRAM_WEBHOOK_SECRET'
-const SECRET_SHAPE = /^[A-Za-z0-9_-]{1,256}$/
 
-export type WebhookBodyResult =
-  | { ok: true; body: string }
-  | { ok: false; reason: 'too_large' | 'read_failed' }
+// Secret source and throttle live in their own modules; re-exported so this stays the single
+// import surface for the server and its tests.
+export {
+  MAX_WEBHOOK_SECRET_CHARS,
+  MIN_WEBHOOK_SECRET_CHARS,
+  TELEGRAM_WEBHOOK_SECRET_ENV,
+  TELEGRAM_WEBHOOK_SECRET_FILE_ENV,
+  readSecretFile,
+  resolveWebhookSecret,
+  type SecretFileRead,
+  type SecretResolution,
+} from './channelSecret'
+export { WEBHOOK_FAILURE_LIMIT, WEBHOOK_FAILURE_WINDOW_MS } from './channelThrottle'
+
+export type WebhookBodyResult = { ok: true; body: string } | { ok: false; reason: 'too_large' | 'read_failed' }
 
 export interface ChannelWebhookRequest {
   method?: string
@@ -72,7 +88,10 @@ export async function handleTelegramWebhook(
   if (!verified.ok) return fail(401, verified.reason)
 
   const body = await request.readBody()
-  if (!body.ok) return fail(body.reason === 'too_large' ? 413 : 500, body.reason)
+  // One code for both size paths (declared header and streamed overflow); "too_large" stays internal.
+  if (!body.ok) {
+    return body.reason === 'too_large' ? fail(413, 'body_too_large') : fail(500, 'read_failed')
+  }
 
   let update: unknown
   try {
@@ -131,6 +150,8 @@ export interface ChannelsRuntimeOptions {
   env?: NodeJS.ProcessEnv
   storePath?: string
   now?: () => number
+  /** Injection seam for tests; production reads the real filesystem. */
+  readSecret?: (path: string) => SecretFileRead
 }
 
 /**
@@ -142,11 +163,12 @@ export function startChannelsRuntime(
   options: ChannelsRuntimeOptions = {}
 ): ChannelsRuntime | null {
   const env = options.env ?? process.env
+  // Flag first: with `WEBTERM_TELEGRAM` off there is no route and the secret is never touched.
   if (!telegramChannelEnabled(env)) return null
 
-  const secret = (env[TELEGRAM_WEBHOOK_SECRET_ENV] ?? '').trim()
-  if (!secret) return logDisabledAndNull(`${TELEGRAM_WEBHOOK_SECRET_ENV} is not set`)
-  if (!SECRET_SHAPE.test(secret)) return logDisabledAndNull(`${TELEGRAM_WEBHOOK_SECRET_ENV} has an invalid shape`)
+  const resolved = resolveWebhookSecret(env, options.readSecret ?? readSecretFile)
+  if (!resolved.ok) return logDisabledAndNull(resolved.reason)
+  const secret = resolved.secret
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')
 
   let store: ChannelStore
@@ -171,13 +193,14 @@ export function startChannelsRuntime(
     secret,
     dispatch: (update) => dispatchTelegramUpdate(update, { store, approval, audit }),
   }
+  const throttle = new FailureThrottle(undefined, undefined, options.now ?? Date.now)
 
   return {
     store,
     handle(req, res) {
       const path = new URL(req.url || '/', 'http://x').pathname
       if (path !== TELEGRAM_WEBHOOK_PATH) return false
-      void respondToWebhook(req, res, runtime)
+      void respondToWebhook(req, res, runtime, throttle)
       return true
     },
   }
@@ -191,8 +214,15 @@ function logDisabledAndNull(reason: string): null {
 async function respondToWebhook(
   req: IncomingMessage,
   res: ServerResponse,
-  runtime: ChannelWebhookRuntime
+  runtime: ChannelWebhookRuntime,
+  throttle: FailureThrottle
 ): Promise<void> {
+  const peer = req.socket?.remoteAddress ?? 'unknown'
+  const blockedFor = throttle.retryAfterSeconds(peer)
+  if (blockedFor !== null) {
+    writeJson(res, 429, { ok: false, error: 'too_many_requests' }, { 'Retry-After': String(blockedFor) })
+    return
+  }
   let result: ChannelWebhookResponse
   try {
     result = await handleTelegramWebhook(
@@ -207,11 +237,22 @@ async function respondToWebhook(
   } catch {
     result = fail(500, 'internal_error')
   }
+  if (result.status === 401) throttle.recordFailure(peer)
+  writeJson(res, result.status, result.body)
+}
+
+function writeJson(
+  res: ServerResponse,
+  status: number,
+  body: ChannelWebhookResponseBody,
+  extraHeaders: Record<string, string> = {}
+): void {
   if (res.headersSent) return
-  res.statusCode = result.status
+  res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
-  res.end(JSON.stringify(result.body))
+  for (const [name, value] of Object.entries(extraHeaders)) res.setHeader(name, value)
+  res.end(JSON.stringify(body))
 }
 
 function declaredLength(raw: string | string[] | undefined): number | undefined {
@@ -220,10 +261,8 @@ function declaredLength(raw: string | string[] | undefined): number | undefined 
   return Number(value)
 }
 
-/**
- * Read with a hard byte cap. The overflow path drops the listener and drains, so the 413 can be
- * written without buffering an unbounded body (a declared length is not trusted).
- */
+/** Read with a hard byte cap. The overflow path drops the listener and drains, so the 413 can be
+ *  written without buffering an unbounded body (a declared length is not trusted). */
 function readCappedBody(req: IncomingMessage): Promise<WebhookBodyResult> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = []

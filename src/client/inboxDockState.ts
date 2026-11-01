@@ -1,9 +1,10 @@
 // Badge state for the Dock's Inbox button, split out of App/Dock so both stay small.
 //
-// WHO FETCHES WHAT: `InboxPanel` owns the list while it is open (and honours its own `pollMs`).
-// The badge hook therefore stays SILENT while the panel is open and takes over once it closes.
-// Two pollers on the same endpoint would double every request for no extra information — the
-// "no fetch storm" rule — so exactly one of them is ever ticking.
+// WHO FETCHES WHAT: exactly one POLLER at a time. `InboxPanel` owns the list while it is open and
+// polls it; the badge then takes its number from `publishInboxCount` instead of polling the same
+// endpoint again (the "no fetch storm" rule). The badge still seeds its own count once on
+// mount/open, because on boot the panel may already be open and a badge that only appears after
+// the first close is simply wrong.
 //
 // Failure is not surfaced here: the badge is advisory, and a stale count is better than a Dock
 // that turns red because the operator was offline for a minute. The panel itself reports errors.
@@ -15,6 +16,33 @@ export const INBOX_POLL_MS = 30_000
 
 /** Three digits do not fit the dock button; beyond this the badge stops growing. */
 export const INBOX_BADGE_MAX = 99
+
+// ---- shared count between the open panel and the Dock badge --------------------------------
+// `null` means "the panel is not publishing" (closed, or no data yet). Module scope is enough:
+// there is one panel and one dock per document, and it must survive the panel unmounting.
+let sharedCount: number | null = null
+const countListeners = new Set<(count: number | null) => void>()
+
+/** Publish the open panel's count so the badge follows consume/reject immediately. */
+export function publishInboxCount(count: number | null): void {
+  if (sharedCount === count) return
+  sharedCount = count
+  for (const listener of countListeners) listener(count)
+}
+
+/** The count published by the open panel, or null while it is not publishing. */
+export function usePublishedInboxCount(): number | null {
+  const [count, setCount] = useState(sharedCount)
+  useEffect(() => {
+    const listener = (next: number | null): void => setCount(next)
+    countListeners.add(listener)
+    setCount(sharedCount)
+    return () => {
+      countListeners.delete(listener)
+    }
+  }, [])
+  return count
+}
 
 /** Items the server lists are exactly the ones still waiting for the operator. */
 export function inboxUnread(items: readonly InboxItem[]): number {
@@ -63,7 +91,7 @@ export function useInboxHotkey(onToggle: () => void, enabled = true): void {
 }
 
 export interface InboxBadgeOptions {
-  /** The panel is on screen: it is already fetching, so the badge does not. */
+  /** The panel is on screen: the badge reads its published count and does not poll. */
   panelOpen: boolean
   /** False before boot hydration and on the Welcome screen: nothing to badge yet. */
   enabled?: boolean
@@ -73,19 +101,21 @@ export interface InboxBadgeOptions {
 }
 
 /**
- * Unread count for the Dock button. Refreshes on mount / when the panel closes, then every
- * `pollMs` while the tab is visible. Never overlaps its own requests, never runs while the
- * panel owns the endpoint, and keeps the last count on failure.
+ * Unread count for the Dock button. Seeds once on mount (panel open or not, so a boot with the
+ * panel visible still badges), then polls every `pollMs` ONLY while the panel is closed. While
+ * the panel is open, `useInboxCountPublisher` supplies the number, so consume/reject update the
+ * badge without a second poller. Never overlaps its own requests; keeps the last count on failure.
  */
 export function useInboxBadge(options: InboxBadgeOptions): number {
   const { panelOpen, enabled = true, pollMs = INBOX_POLL_MS, client = inboxApi } = options
   const [count, setCount] = useState(0)
+  const published = usePublishedInboxCount()
   // Refs, not deps: an inline client must not restart the poll loop (same rule as InboxPanel).
   const clientRef = useRef<InboxClient>(client)
   clientRef.current = client
 
   useEffect(() => {
-    if (!enabled || panelOpen) return
+    if (!enabled) return
     let disposed = false
     let inFlight = false
     const controller = new AbortController()
@@ -108,8 +138,9 @@ export function useInboxBadge(options: InboxBadgeOptions): number {
         })
     }
 
+    // One seed per mount/open. Polling is the panel-closed case only.
     load()
-    const timer = pollMs > 0 ? setInterval(load, pollMs) : null
+    const timer = !panelOpen && pollMs > 0 ? setInterval(load, pollMs) : null
     const onVisibility = (): void => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') load()
     }
@@ -123,5 +154,5 @@ export function useInboxBadge(options: InboxBadgeOptions): number {
     }
   }, [enabled, panelOpen, pollMs])
 
-  return count
+  return panelOpen && published !== null ? published : count
 }

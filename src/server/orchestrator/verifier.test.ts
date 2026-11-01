@@ -1,7 +1,16 @@
+import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { OrchestratorTask, VerificationEvidence as ModelEvidence } from './orchestratorModel'
 import type { VerifyInput, VerifyOutcome } from './verify'
-import { parseChangedFiles, parseNameOnly, verifyWorkerResult } from './verifier'
+import {
+  cleanEnv,
+  parseChangedFiles,
+  parseNameOnly,
+  verifyHomeDir,
+  verifyWorkerResult,
+} from './verifier'
 
 const PROJECT = 'p1'
 
@@ -192,5 +201,39 @@ describe('verifyWorkerResult', () => {
     const ctx = fixture(task(), new Error('exec unavailable'))
     await expect(verifyWorkerResult(ctx.deps, request)).rejects.toThrow('exec unavailable')
     expect(ctx.verifiedWith).toHaveLength(0)
+  })
+})
+
+describe('cleanEnv (M4)', () => {
+  it('never inherits HOME or credential variables from the server process', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'webterm-verify-home-'))
+    const env = cleanEnv(
+      {
+        PATH: '/usr/bin',
+        LANG: 'en_US.UTF-8',
+        HOME: '/home/operator',
+        TMPDIR: '/tmp/operator',
+        AWS_SECRET_ACCESS_KEY: 'aws-secret',
+        GITHUB_TOKEN: 'gh-token',
+        NPM_TOKEN: 'npm-token',
+        NODE_OPTIONS: '--require /tmp/evil.js',
+      },
+      { home: dir }
+    )
+    expect(env.HOME).toBe(dir)
+    expect(env.TMPDIR).toBe(dir)
+    expect(env.PATH).toBe('/usr/bin')
+    expect(env.LANG).toBe('en_US.UTF-8')
+    for (const leaked of ['/home/operator', '/tmp/operator', 'aws-secret', 'gh-token', 'npm-token', 'evil.js']) {
+      expect(JSON.stringify(env)).not.toContain(leaked)
+    }
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('uses a private 0700 scratch home by default', () => {
+    const home = verifyHomeDir()
+    expect(home).toBe(join(tmpdir(), 'webterm-verify-home'))
+    expect(statSync(home).mode & 0o077).toBe(0)
+    expect(cleanEnv({ PATH: '/usr/bin' }).HOME).toBe(home)
   })
 })

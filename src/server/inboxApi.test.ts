@@ -13,7 +13,7 @@ CREATE TABLE approval (
 );
 CREATE TABLE task (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, spec TEXT NOT NULL, evidence_json TEXT,
-  status TEXT NOT NULL, created_at INTEGER NOT NULL, lease_expires INTEGER
+  status TEXT NOT NULL, created_at INTEGER NOT NULL, lease_expires INTEGER, fence INTEGER NOT NULL DEFAULT 0
 );`
 
 interface Item {
@@ -78,6 +78,13 @@ describe('inbox route', () => {
     expect(page.limit).toBe(1)
     expect(page.offset).toBe(1)
     expect(page.total).toBe(4)
+  })
+
+  it('keeps badge counts independent of the page limit', () => {
+    const page = ok('limit=1&offset=0').body as InboxBody
+    expect(page.items).toHaveLength(1)
+    expect(page.total).toBe(4)
+    expect(page.counts).toEqual({ needsYou: 2, review: 1, broken: 1, total: 4 })
   })
 
   it('rejects malformed paging and project ids', () => {

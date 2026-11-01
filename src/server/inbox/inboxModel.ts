@@ -33,6 +33,8 @@ export interface InboxItem {
   status: string
   /** Compact evidence/request summary; null when the row has none. */
   evidenceSummary: string | null
+  /** Task fence for review actions; absent on approvals. */
+  fence?: number
 }
 
 export interface InboxResult {

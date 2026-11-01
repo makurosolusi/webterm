@@ -1,7 +1,12 @@
 // Alokasi worktree git per task (RND/03-RENCANA.md §8): satu owner per branch,
 // branch/task/repo divalidasi sebelum menyentuh git, dan cleanup menolak path di luar root.
 // Exec di-inject supaya test tidak pernah menjalankan git nyata.
-import { isAbsolute, join, resolve, sep } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
+import { isInsideRoot } from './safePath'
+import { symlinkProblem, worktreeTargetProblem } from './worktreeTarget'
+
+// `isInsideRoot` is part of this module's public surface (verifier imports it from here).
+export { isInsideRoot } from './safePath'
 
 export interface ExecResult {
   code: number
@@ -46,6 +51,7 @@ export type WorktreeDenyCode =
   | 'branch_in_use'
   | 'task_in_use'
   | 'outside_root'
+  | 'unsafe_target'
   | 'git_failed'
   | 'not_found'
 
@@ -127,13 +133,6 @@ export function assertValidTaskId(taskId: string): string {
   return taskId
 }
 
-/** True bila `target` berada di dalam `root` (root itu sendiri dihitung di dalam). */
-export function isInsideRoot(root: string, target: string): boolean {
-  const base = resolve(root)
-  const path = resolve(target)
-  return path === base || path.startsWith(base.endsWith(sep) ? base : base + sep)
-}
-
 export function assertInsideRoot(root: string, target: string): string {
   if (!isAbsolute(root)) throw new WorktreeError('invalid_root', `root must be absolute: ${root}`)
   if (typeof target !== 'string' || target.trim() === '' || hasControlChars(target)) {
@@ -149,6 +148,17 @@ export function assertInsideRoot(root: string, target: string): string {
   if (path === resolve(root)) {
     throw new WorktreeError('outside_root', `refusing to remove the worktree root itself: ${path}`)
   }
+  return path
+}
+
+/**
+ * Allocation target: not a symlink, a real directory if it exists, and its REAL path inside root.
+ * Problems come back from `worktreeTarget.ts` as data so this module owns the error type.
+ */
+export function assertSafeWorktreeTarget(root: string, target: string): string {
+  const path = assertInsideRoot(root, target)
+  const problem = worktreeTargetProblem(resolve(root), path)
+  if (problem !== null) throw new WorktreeError(problem.code, problem.message)
   return path
 }
 
@@ -204,7 +214,7 @@ export function createWorktreeService(options: WorktreeOptions): WorktreeService
     if (holder !== undefined) {
       throw new WorktreeError('branch_in_use', `branch ${branch} is already owned by task ${holder}`)
     }
-    const path = assertInsideRoot(root, join(root, `task-${taskId}`))
+    const path = assertSafeWorktreeTarget(root, join(root, `task-${taskId}`))
     const result = await exec('git', ['-C', repo, 'worktree', 'add', '-b', branch, path, baseRef])
     if (result.code !== 0) {
       throw new WorktreeError('git_failed', `git worktree add failed: ${detail(result)}`)
@@ -234,6 +244,8 @@ export function createWorktreeService(options: WorktreeOptions): WorktreeService
     }
     // Root bisa berubah antar test/wiring; path tersimpan tetap divalidasi ulang.
     const path = assertInsideRoot(root, allocation.path)
+    const stale = symlinkProblem(path)
+    if (stale !== null) throw new WorktreeError(stale.code, stale.message)
     const result = await exec('git', [
       '-C',
       allocation.repo,

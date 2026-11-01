@@ -24,6 +24,7 @@ import {
   type ChannelApprovalPort,
 } from './channelApprovals'
 import { TELEGRAM_MAX_TEXT, parseTelegramUpdate, type NormalizedMessage } from './telegram'
+import { redactSecrets } from './webhook'
 
 export type { ApprovalSummary, ChannelApprovalPort } from './channelApprovals'
 export { extractRejectChallenge } from './channelApprovals'
@@ -97,18 +98,32 @@ async function replyTo(
     ...(message.threadId === undefined ? {} : { threadId: message.threadId }),
     dedupeKey: `${TELEGRAM_CHANNEL}:${message.chatId}:${message.updateId}`,
   }
-  if (deps.enqueue) {
-    await deps.enqueue(reply)
-    return clipped
+  try {
+    if (deps.enqueue) {
+      await deps.enqueue(reply)
+      return clipped
+    }
+    const outcome = deps.store.enqueueReply({
+      key: reply.dedupeKey,
+      channel: reply.channel,
+      chatId: reply.chatId,
+      text: reply.text,
+      ...(reply.threadId === undefined ? {} : { threadId: reply.threadId }),
+    })
+    return outcome === 'full' ? null : clipped
+  } catch (err) {
+    // The reply is already an after-effect: by the time we enqueue, the command (including a ledger
+    // decision) has been applied. A disk-full outbox must therefore not fail the dispatch — that
+    // would release the update claim and let the provider retry re-run the whole command.
+    console.warn(`telegram reply enqueue failed: ${safeReplyError(err)}`)
+    return null
   }
-  const outcome = deps.store.enqueueReply({
-    key: reply.dedupeKey,
-    channel: reply.channel,
-    chatId: reply.chatId,
-    text: reply.text,
-    ...(reply.threadId === undefined ? {} : { threadId: reply.threadId }),
-  })
-  return outcome === 'full' ? null : clipped
+}
+
+/** Channel errors can embed a bot token from a URL; scrub before any log line. */
+function safeReplyError(err: unknown): string {
+  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : 'outbox unavailable'
+  return redactSecrets(text).slice(0, 200)
 }
 
 async function renderApprovals(

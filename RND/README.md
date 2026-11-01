@@ -1,15 +1,15 @@
 # RND — Agent Pusat webterm
 
-Status: riset, perencanaan, dan implementasi bertahap. **P0 + P1 sudah diimplementasi**
-(branch `feature/agent-pusat-p0`, `feature/agent-pusat-p1`; belum di-merge).
-Tanggal: 2026-10-31.
-Semua dokumen di folder ini adalah bahan keputusan sebelum implementasi.
+Status: riset, perencanaan, dan implementasi bertahap. **P0-P2 selesai.**
+**P3-P5 sebagian ada di working tree dan belum production-ready.**
+Branch aktif `feature/agent-pusat-p3`; commit terakhir `c7c0eda` + perubahan uncommitted.
+Snapshot status: 2026-11-01 12:22 (+08:00).
+
+Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 
 ---
 
 ## 1. Mulai dari sini
-
-Urutan baca untuk agent berikutnya:
 
 1. `00-RINGKASAN.md` — vonis, prinsip, keputusan inti.
 2. `01-TEMUAN.md` — temuan project dan riset.
@@ -19,8 +19,9 @@ Urutan baca untuk agent berikutnya:
 6. `05-TRACEABILITY.md` — coverage dan gap.
 7. `06-BUG-RISK.md` — bug B1-B12 dan deteksi dini.
 8. `07-IMPLEMENTASI-P3-P5.md` — peta kode P3/P4/P5, gap, acceptance, gate.
-9. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
-10. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
+9. `qc/` — review P0-P3: security, integration, tests, E2E UI.
+10. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
+11. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
 
 ---
 
@@ -37,6 +38,8 @@ RND/
   05-TRACEABILITY.md
   06-BUG-RISK.md
   07-IMPLEMENTASI-P3-P5.md
+  qc/
+    p1-*.md p2-*.md p3-*.md p3-e2e-ui-assets/
   90-REFERENSI/
     AGENT_PUSAT.md
     BUKTI.md
@@ -56,10 +59,12 @@ RND/
 | Context | Budget per peran, compaction 80/95, summary schema, cross-agent ledger |
 | Tool | Catalog + deferred search, output spill, policy, untrusted result |
 | Security | Principal, scoped token, blocking approval digest, blast-radius gate |
+| Approval manusia | Root token wajib, atau `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` untuk demo lokal |
+| Self-approval | Agen tidak boleh approve/consume aksinya sendiri; node token tidak membuka route manusia |
 | Omnichannel | Adapter ingress, bukan control plane; Telegram P5, flag off |
 | Framework | Kernel sendiri; OpenAI Agents SDK JS hanya jika adopsi |
 | Durability | Tanpa engine sampai ambang multi-host/HA/>1.000 run |
-| Docs | RND adalah sumber perencanaan; kode belum disentuh |
+| Docs | RND sumber perencanaan; kode P3-P5 belum boleh disebut selesai |
 
 ---
 
@@ -74,23 +79,55 @@ P0 Observation seam
  -> P5 Omnichannel (Telegram + webhook)
 ```
 
+| Fase | Status | Catatan |
+|---|---|---|
+| P0 | ✅ selesai | seam, replay, close/exit, tombstone |
+| P1 | ✅ selesai | control API, capability `wcap_*`, node token |
+| P2 | ✅ selesai | ledger v1, migration runner, lease/fence, reaper |
+| P3 | ⚠️ WIP | approval + inbox ter-wire; spawn PTY, gate blocking, review test belum |
+| P4 | ⚠️ WIP | memory + inbox baca; authority, route tulis, P4b belum |
+| P5 | ⚠️ WIP | ingress Telegram + store; binding, sender, v3, live test belum |
+| Central | `[P]` | ditunda, gate 2 project × 2 minggu |
+
 Gate: G1 seam, G2 auth, G3 data, G4 orchestrator, G5 memory, G6 central, G7 omnichannel.
-Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
+Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 
 ---
 
-## 5. Cara melanjutkan
+## 5. Flag dan `.env`
 
-1. Baca `00-RINGKASAN.md` dan `03-RENCANA.md`.
-2. Pilih fase yang belum selesai; jangan lompat.
-3. Branch baru per concern (`feature/`, `fix/`, `chore/`).
-4. Sebelum kode: cek `02-KEBUTUHAN.md` untuk ID requirement dan `05-TRACEABILITY.md` untuk gap.
-5. Sebelum merge: jalankan gate di `03-RENCANA.md`, Update CHANGELOG jika perilaku publik berubah.
+| Flag | Default | Status |
+|---|---|---|
+| `WEBTERM_TOKEN` | kosong (loopback token-free) | aktif; tidak disimpan di `.env` |
+| `WEBTERM_ALLOW_LOOPBACK_APPROVAL` | `0` (deny) | aktif; opt-in demo lokal |
+| `WEBTERM_LEDGER` | `off` (`off|shadow|on`) | aktif |
+| `WEBTERM_TELEGRAM` | `off` (`on` saja) | aktif |
+| `WEBTERM_TELEGRAM_WEBHOOK_SECRET` | kosong | aktif |
+| `WEBTERM_TELEGRAM_BOT_TOKEN` | kosong; legacy `TELEGRAM_BOT_TOKEN` | aktif |
+| `WEBTERM_CHANNELS` | — | `[P]`; belum dibaca kode |
+| `WEBTERM_ALLOW_TOKEN_MINT` | `0` | aktif |
+| `WEBTERM_STRICT_HOOK_AUTH` | `0` | aktif |
+
+- `.env` lokal mode `600`, hanya `HOST`/`PORT`. `WEBTERM_TOKEN` tidak lagi disimpan di sana.
+- Bun auto-load `.env` untuk dev server dan binary. Apa pun di `.env` masuk `process.env`;
+  jangan taruh secret yang tidak ingin diwarisi.
+- Token root harus diekspor eksplisit. Tanpa token, approval manusia menolak loopback.
+- `.gitignore` menutup `.env`, `.env.*` (kecuali `.env.example`). Tidak ada secret di dokumen.
+
+---
+
+## 6. Cara melanjutkan
+
+1. Baca `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`; jangan lompat fase.
+2. Pilih gap yang belum selesai; branch baru per concern.
+3. Sebelum kode: cek `02-KEBUTUHAN.md` dan `05-TRACEABILITY.md`.
+4. Setelah kode: jalankan typecheck, vitest, bun test pada tree yang sama.
+5. Update CHANGELOG bila perilaku publik berubah.
 6. Jangan push/deploy/merge tanpa perintah eksplisit.
 
 ---
 
-## 6. Aturan dokumen
+## 7. Aturan dokumen
 
 - Satu dokumen satu tanggung jawab.
 - Jangan menduplikasi tabel besar; tautkan file.
@@ -101,99 +138,85 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 
 ---
 
-## 7. Status singkat
+## 8. Status singkat
 
-- **Snapshot 2026-11-01 11:36** (commit `9933afe`): P0-P2 terverifikasi (tsc bersih, 1201 vitest,
-  ledger bun lulus). P3-P5 masih **WIP untracked** di working tree: approval API + 17 test,
-  roles/caps/plan/worktree/orchestrator, memory + FTS, inbox projection, klien inbox, channels
-  webhook/dedupe/identity/telegram/outbox + 33 test. Working tree typecheck bersih 11:34; suite
-  WIP 1348/1349 dengan 1 flake `terminalCore.test.tsx` (0x0 open, ulang lulus). Belum ada spawn
-  PTY, verifikasi independen, route task/plan/agent, migrasi v3 kanal, secret file, atau mount UI.
-  Detail: `07-IMPLEMENTASI-P3-P5.md`; **jangan klaim P3-P5 selesai** sebelum gate §9 hijau.
+### Snapshot 2026-11-01 12:22
 
-- Riset: 46 worker wave 1-4, 13 worker wave 5 (implementasi), 12 worker wave 6 (omnichannel),
-  6 QC P0, 5 fix P0, 1 fix flake; 3 QC P1 + 5 fix P1; 2 QC P2 + 2 fix P2.
-- Branch implementasi: `feature/agent-pusat-p0` (selesai), `feature/agent-pusat-p1` (selesai),
-  `feature/agent-pusat-p2` (fondasi selesai).
-- **P0 selesai**: multi-subscriber, outputLog seq, nodeRegistry, replay remount, close/exit,
-  B1 save flush, B3 nodeId validation, hook token tidak di argv, API node validation, caps.
-- **P1 selesai**: control API `spawn/prompt/wait/close/nodes`, capability `wcap_*` (verb+resource,
-  TTL 15m/60m, sha256-at-rest, idempotent requestId), transport token per node (root tidak diwarisi
-  PTY), hook claude lewat file header 0600, strict hook auth opt-in, transcript read hardened,
-  spawn cwd dikurung ke home/data dir, output node tetap terbaca setelah exit.
-- Gates P1: typecheck, 1199 vitest, 84 bun test, semuanya hijau.
-- **P2 fondasi selesai**: migration runner (BEGIN IMMEDIATE, user_version, backup VACUUM INTO,
-  WAL), schema v1 (project/agent/task/event/decision/approval/run/usage/prefix/budget/memory/
-  memory_fts), repository task state machine (fence, lease, suspect, evidence) + event atomik.
-  Startup sudah wired lewat `WEBTERM_LEDGER` (default off).
-- Gates P2: 62 bun ledger test, typecheck hijau, crash-injection & cascade workspace lulus.
-- **P2 QC fixed**: attempt cap, claimDone lease owner/expiry, FK pragma assertion, depth/project
-  invariants, event reference consistency, per-project idem_key + lookup, index coverage,
-  pagination clamps, workspace-wide delete, migration version validation.
-- **P2.1 selesai**: runtime flag
-  `WEBTERM_LEDGER=off|shadow|on`, reaper tick 30s, `cancelTask`/`blockTask`, repository
-  run/usage/budget (provider_response_id idempotent, unknown token != 0, hard cap), backup
-  otomatis sebelum upgrade file DB, metrics in-memory (migration_ms, lease_expired, suspect,
-  stale_fence, reaper_tick/error).
-- **P3 fondasi approval selesai**: request approval menyimpan digest aksi + nonce + expiry,
-  approve/reject memverifikasi digest+nonce, `consumeApproval` single-use, expiry lazy+sweep.
-  Belum diekspos ke HTTP/Telegram (blocking gate menyusul).
-- **Acceptance nyata**: server dijalankan dengan `WEBTERM_LEDGER=on` + token + mint flag;
-  log `ledger on: ...`, mint capability `201`, `GET /api/control/nodes` `200`,
-  capability ditolak di `/api/settings` `403`, ledger `user_version=1`, 18 tabel.
-- **Validasi kontrol HTTP**: spawn claude nyata `201` dengan `--session-id` + `--settings`,
-  replay requestId `201`, duplicate `409 node_exists`, malformed JSON `400 invalid_json`,
-  body 70KB `413`, ghost close `closed:false` lalu wait `404 node_not_found`.
-  Budget route tetap: `api.ts` 130, `mount.ts` 136.
-- **Validasi tambahan**: requestId sama dipakai lintas route tetap menjalankan close (bukan replay
-  spawn); `sessionId` client tidak aman `400 invalid_session_id`; root token salah `403`;
-  token node tidak bisa mint (`403`) atau baca settings (`403`), dan control nodes `401` karena
-  capability hilang; body chunked 70KB tetap `413`.
-- **Batas presisi**: `sessionId` UUID dari client diterima dan benar-benar muncul di proses claude;
-  body tepat 65.536 byte `201`, 65.537 byte `413` (`max: 65536`).
-- **Mutation check** (scratch worktree, repo tidak diubah): deps fresh per request → test replay B2
-  gagal; sessionId mint dihapus → 2 test B4 gagal; cap body dinaikkan → 2 test cap gagal;
-  guard ghost close dihapus → 2 test close gagal; `tokensMatch` root dihapus → test 403 gagal.
-  Test suite memang menangkap regresi pada kelima invariant ini.
-- **Loopback tanpa token** (dijalankan dari cwd tanpa `.env`): settings `200`, control nodes tanpa
-  capability tetap `401`, mint `404`, body JSON non-object (`[]`/`null`) `400 invalid_request_id`.
-  Token node/root tidak pernah menjadi satu-satunya gerbang untuk control API.
-- **Batas session id**: 256 karakter diterima `201`, 257 karakter `400 invalid_session_id`.
-- Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
-- Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
-  context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
+- `tsc --noEmit` working tree: **bersih**.
+- `vitest` terarah 5 file / 46 test: **lulus**.
+- `vitest run` penuh: 1442/1445 lulus, 3 gagal + 1 suite gagal transform
+  (`memoryCore.ts` redeclare `evidence`).
+- `bun test` orchestrator+inbox+memory+channels+ledger: 255/258 lulus, 3 gagal di
+  `channelsRuntime` dan `channelDispatch`.
+- File `memory/*` dan `channels/*` berubah selama snapshot (sesi lain). Jalankan ulang
+  suite penuh sebelum menyatakan hijau.
+- **Vonis: belum production-ready.** Detail dan gate: `07-IMPLEMENTASI-P3-P5.md`.
+
+### Yang sudah terverifikasi
+
+- **P0**: multi-subscriber, `outputLog` seq, nodeRegistry, replay remount, close/exit,
+  B1 save flush, B3 nodeId validation, hook token bukan argv.
+- **P1**: control API `spawn/prompt/wait/close/nodes`, capability `wcap_*` (TTL, sha256-at-rest,
+  idempotent `requestId`), transport token per node, hook lewat file `0600`, `cwd` dikurung.
+- **P2**: migration runner, schema v1, task state machine + fence + lease + evidence,
+  `WEBTERM_LEDGER=off|shadow|on`, reaper, metrics, approval digest/nonce/single-use.
+- **P3 approval**: `approvalAuth` menolak loopback tanpa token; `approvalMount` memakai deps
+  stabil sehingga replay `requestId` hidup; `InboxPanel` consent `APPROVE`.
+- **P4**: memory claim/promote/FTS, proyeksi inbox + `fence`, route baca `/api/inbox`,
+  `/api/memory`, `/api/orchestrator/*`.
+- **P5**: verifikasi webhook HMAC/secret Telegram, dedupe store `0600`, identity/grammar,
+  parse/send Telegram, outbox in-memory.
+
+### Yang belum / masih gap
+
+- Task review: transisi verify/fail sudah ditambahkan, tetapi belum ada test dan belum
+  diverifikasi E2E setelah perubahan.
+- Approved-unconsumed: approval yang sudah `approved` tidak muncul di inbox dan belum ada
+  route list manusia untuk melanjutkannya.
+- `/api/approvals/request` belum idempoten (`requestId` diabaikan).
+- Spawn PTY worker dan gate blocking (`requireApproval` -> `consumeApproval`) belum ada.
+- Verifikasi independen belum menjadi satu-satunya jalur `verified`.
+- Telegram: `ChannelStore.bind` belum dipanggil produksi, outbox tanpa sender, tidak ada
+  uji jaringan nyata.
+- `WEBTERM_CHANNELS` dan mode `off|readonly|control` belum ada di kode.
+- P4b dan central agent ditunda.
+- Node canvas interactions belum diuji E2E; panel inbox terpotong di viewport sempit.
+- File budget: `ledgerSchema.ts` > 200 baris; `inboxApi.ts`/`InboxPanel.tsx` mendekati hard cap.
+
+### QC P3
+
+- `qc/p3-security.md`: H1 loopback token-free (fixed), H2 AckStore (fixed), M1 actor
+  separation, M2 memory authority, M3 secret Telegram lemah, M4 verifier env, M5 review
+  task tanpa semantik (sebagian fixed).
+- `qc/p3-integration.md`: B1 idempotency (fixed), B2 taskId (fixed), B3 requestId manusia,
+  B4 approved-unconsumed, B5 error taxonomy, B6 validasi, B7 body cap.
+- `qc/p3-tests.md`: mutation survive M4/M8/M12b/M14/M15/M16; `approvalHumanApi` tanpa test.
+- `qc/p3-e2e-ui.md`: E2E pada `c7c0eda`; workspace kosong, jadi node canvas tidak teruji.
 
 ---
 
-## 8. Riwayat P0
+## 9. Riwayat
 
 | Commit | Isi |
 |---|---|
 | `b274834` | RND baseline |
 | `b4e7f01` | P0 observation seam |
 | `509a61f` | test regresi P0 |
-| `b46a06a` / `65c696f` | laporan QC |
-| `2c276a0` | fix blocker QC |
+| `b46a06a` / `65c696f` | laporan QC P0 |
+| `2c276a0` | fix blocker QC P0 |
 | `7effdd2` | hardening test PTY |
-
-## 9. Riwayat P1
-
-| Commit | Isi |
-|---|---|
 | `999a920` | capability-scoped headless API |
 | `2872190` | transport token per node + env scrub |
-| `30d02a7` | fix blocker QC P1 (capability gate, idempotency, exit output, spawn session, identity) |
-
-## 10. Riwayat P2
-
-| Commit | Isi |
-|---|---|
+| `30d02a7` | fix blocker QC P1 |
 | `8655602` | migration runner + schema v1 |
 | `49373c3` | repository project/task/event |
 | `83556ad` | fix invariant ledger pasca-QC |
-| `b55540a` | runtime flag + reaper sweep + stop transition |
-| `e315c53` | run/usage/budget repository + reaper tick |
-| `476cda4` | backup otomatis sebelum upgrade migrasi |
+| `b55540a` | runtime flag + reaper sweep |
+| `e315c53` | run/usage/budget + reaper tick |
+| `476cda4` | backup otomatis sebelum migrasi |
 | `9c05bf8` | metrics P2 in-memory |
 | `ac34683` | approval digest/nonce/single-use |
 | `1b3411e` | line-budget split context-link + control IO |
+| `11f1f07` | P3/P4/P5 foundations |
+| `9bcf8f5` | wire approval, inbox, memory, orchestrator APIs |
+| `c7c0eda` | human approval surface + inbox decisions |

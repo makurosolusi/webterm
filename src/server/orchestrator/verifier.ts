@@ -3,6 +3,7 @@
 // worker: `claimed_done` hanya naik ke `verified` lewat `verifyWorkerResult`.
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { cleanEnv } from './verifyEnv'
 import {
   type ConfiguredCommand,
   type VerificationEvidence,
@@ -126,17 +127,8 @@ export function parseTestCounts(output: string): { passed: number; failed: numbe
   return { passed: Number(passed[1]), failed: failed ? Number(failed[1]) : 0 }
 }
 
-/** Environment minimal: tanpa secret/credential dari proses induk. */
-export function cleanEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const key of ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL']) {
-    const value = source[key]
-    if (value !== undefined) env[key] = value
-  }
-  env.CI = '1'
-  env.NO_COLOR = '1'
-  return env
-}
+// Child env hardening lives in `verifyEnv.ts`; re-exported so callers keep one import site.
+export { cleanEnv, verifyHomeDir } from './verifyEnv'
 
 /** Exec produksi: `execFile` (shell: false), timeout + maxBuffer, env bersih. */
 export function createProcessExec(source: NodeJS.ProcessEnv = process.env): VerifyExec {

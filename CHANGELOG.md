@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- Human approval surface under `/api/approvals/*`, separate from the capability-gated control plane. It can read a challenge, request, decide, and consume an approval, and a successful task review now moves the task to verified or failed instead of leaving it in `claimed_done`.
+- Inbox panel with Needs you / Review / Broken filters, a consent dialog that requires the checkbox and the literal `APPROVE`, and an unread count on the dock. Task rows carry their fence so a review decision can target the right task version.
+- Read-only ledger projections for the UI: `GET /api/inbox`, `GET /api/memory`, `GET /api/memory/search`, and `/api/orchestrator/*`.
+- `WEBTERM_LEDGER` modes `off`, `shadow`, and `on`, plus the P3/P4/P5 foundations behind them: orchestrator roles, caps, plan store, worktree service, memory claim/promote with FTS5, and Telegram webhook verification, identity, and outbox.
+- `WEBTERM_ALLOW_LOOPBACK_APPROVAL`, default `0`, as the explicit opt-in for token-free local approval demos.
+- `WEBTERM_TELEGRAM`, `WEBTERM_TELEGRAM_WEBHOOK_SECRET`, and `WEBTERM_TELEGRAM_BOT_TOKEN` for the Telegram ingress. The legacy `TELEGRAM_BOT_TOKEN` name is still accepted.
+- `.env.example` now documents the approval, ledger, and Telegram flags, plus the fact that Bun auto-loads `.env`.
+
+### Changed
+- Approval dispatch reuses one deps object per ledger port, so the documented ten-minute `requestId` replay window works in production instead of allocating a fresh ack store per request.
+- `.env` no longer carries `WEBTERM_TOKEN` and is kept at mode `600`. A root token must be exported explicitly, so it is not inherited by every process that reads the auto-loaded file.
+
+### Fixed
+- Task review approvals no longer consume without effect: reject fails or reopens the task, and consume verifies it with the human reviewer and approval id recorded.
+- The canvas minimap follows the dark canvas background instead of rendering as a white block.
+
+### Security
+- Human approvals refuse token-free loopback by default. An agent shell on the same machine could otherwise request, read the nonce, approve, and consume its own action. A configured root token, or `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` for a disposable demo, is required.
+- Node tokens and capabilities do not open the human approval route, so an agent cannot approve its own irreversible action.
+
 ## [0.7.0] - 2026-10-29
 ### Added
 - A single-file standalone binary. `bun run build:binary` builds the web assets, embeds every one of them into the server, and compiles the whole thing to one executable `webterm`. It runs as `./webterm` from any directory with no `dist/` beside it — the assets travel inside the binary, not on disk.

@@ -151,3 +151,45 @@ test('pagination is stable and project is a facet, not a tab', () => {
   expect(buildInbox(db, 'p2', { now: T0 + 200 }).total).toBe(1)
   expect(buildInbox(db, undefined, { now: T0 + 200 }).total).toBe(6)
 })
+
+test('approval decisions and task verdicts are reflected in counts and status', () => {
+  const { db, ledger } = fixture()
+  const at = T0 + 1000
+  // [needsYou, review, broken, total] — bun:test's matcher types have no toMatchObject.
+  const counts = () => {
+    const n = inboxCounts(db, 'p1', { now: at })
+    return [n.needsYou, n.review, n.broken, n.total]
+  }
+  const link = (task: { id: string }) => {
+    const fence = ledger.task.getTask(task.id)!.fence
+    const challenge = ledger.approval.requestApproval({
+      projectId: 'p1', kind: 'task', taskId: task.id,
+      request: { taskId: task.id, fence }, ttlMs: 60_000,
+    })
+    return { fence, challenge }
+  }
+
+  const approved = claimed(ledger, 'p1', T0 + 1)
+  expect(counts().join(',')).toBe('0,1,0,1')
+  const first = link(approved)
+  expect(counts().join(',')).toBe('1,1,0,2')
+
+  ledger.approval.decideApproval(first.challenge.id, {
+    actor: 'human', approve: true, digest: first.challenge.digest, nonce: first.challenge.nonce,
+  })
+  // Approved-but-unconsumed consent leaves "needs you"; the task still awaits its verdict.
+  expect(counts().join(',')).toBe('0,1,0,1')
+
+  expect(ledger.approval.consumeApproval(first.challenge.id, { digest: first.challenge.digest })).toBe(true)
+  ledger.task.verifyTask(approved.id, first.fence, null, { actor: 'human' })
+  expect(counts().join(',')).toBe('0,0,0,0')
+  expect(ledger.task.getTask(approved.id)?.status).toBe('verified')
+
+  const rejected = claimed(ledger, 'p1', T0 + 2)
+  const second = link(rejected)
+  ledger.approval.decideApproval(second.challenge.id, {
+    actor: 'human', approve: false, digest: second.challenge.digest, nonce: second.challenge.nonce,
+  })
+  ledger.task.failTask(rejected.id, second.fence, 'rejected by human review', { actor: 'human' })
+  expect(counts().join(',')).toBe('0,0,1,1')
+})

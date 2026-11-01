@@ -79,6 +79,7 @@ interface ItemRow {
   payload: string | null
   status: string
   created_at: number
+  fence: number | null
 }
 
 /**
@@ -97,35 +98,35 @@ function unionSql(now: number, projectId: string | undefined): { sql: string; pa
       sql: `SELECT 'needs_you' AS category, 'approval' AS kind, a.id AS id,
               a.project_id AS project_id, p.name AS project_name, a.kind AS label,
               NULL AS spec, a.request_json AS payload, a.status AS status,
-              a.created_at AS created_at
+              a.created_at AS created_at, NULL AS fence
             FROM approval a LEFT JOIN project p ON p.id = a.project_id
             WHERE a.status = 'pending' AND (a.expires_at IS NULL OR a.expires_at > ?)${filter('a')}`,
     },
     {
       params: extra,
       sql: `SELECT 'needs_you', 'task', t.id, t.project_id, p.name, NULL, t.spec,
-              t.evidence_json, t.status, t.created_at
+              t.evidence_json, t.status, t.created_at, t.fence
             FROM task t LEFT JOIN project p ON p.id = t.project_id
             WHERE t.status = 'blocked'${filter('t')}`,
     },
     {
       params: extra,
       sql: `SELECT 'review', 'task', t.id, t.project_id, p.name, NULL, t.spec,
-              t.evidence_json, t.status, t.created_at
+              t.evidence_json, t.status, t.created_at, t.fence
             FROM task t LEFT JOIN project p ON p.id = t.project_id
             WHERE t.status IN ('claimed_done', 'suspect')${filter('t')}`,
     },
     {
       params: extra,
       sql: `SELECT 'broken', 'task', t.id, t.project_id, p.name, NULL, t.spec,
-              t.evidence_json, t.status, t.created_at
+              t.evidence_json, t.status, t.created_at, t.fence
             FROM task t LEFT JOIN project p ON p.id = t.project_id
             WHERE t.status IN ('failed', 'cancelled')${filter('t')}`,
     },
     {
       params: [now, ...extra],
       sql: `SELECT 'broken', 'lease', t.id, t.project_id, p.name, NULL, t.spec,
-              t.evidence_json, t.status, t.created_at
+              t.evidence_json, t.status, t.created_at, t.fence
             FROM task t LEFT JOIN project p ON p.id = t.project_id
             WHERE t.status = 'leased' AND t.lease_expires IS NOT NULL
               AND t.lease_expires <= ?${filter('t')}`,
@@ -155,6 +156,7 @@ function toItem(row: ItemRow, now: number): InboxItem {
     createdAt: created,
     status: String(row.status),
     evidenceSummary: summarize(row.payload) ?? (isApproval ? null : 'no evidence'),
+    ...(row.fence === null || row.fence === undefined ? {} : { fence: Number(row.fence) }),
   }
 }
 

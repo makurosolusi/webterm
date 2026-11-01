@@ -7,19 +7,20 @@ import type { Database } from 'bun:sqlite'
 import { execInsert, execWrite, newId, requireText, tx } from '../ledger/ledgerCore'
 import {
   assertCanPromote,
-  actorKindOf,
   appendMemoryEvent,
   findMemoryByKey,
   loadMemory,
   memoryContext,
   parseScope,
+  requireAuthority,
   validateEvidence,
 } from './memoryCore'
 import {
   type ClaimMemoryInput,
+  MemoryAuthorityError,
   MemoryConflictError,
-  MemoryEvidenceError,
   type Memory,
+  type MemoryAuthority,
   type PromoteMemoryInput,
   type QuarantineMemoryInput,
   type SupersedeMemoryInput,
@@ -75,19 +76,24 @@ function insertMemory(ctx: ReturnType<typeof memoryContext>, row: InsertRow): vo
  * Worker-side queue entry. A claim without `sourceKind`/`sourceRef` is rejected:
  * provenance is what lets the orchestrator check the claim before promotion.
  * Claims never touch the fact store and never auto-promote.
+ *
+ * `authority` is server-derived (see `MemoryAuthority`); the payload cannot declare it.
  */
-export function claimMemory(db: Database, input: ClaimMemoryInput): Memory {
+export function claimMemory(
+  db: Database,
+  authorityValue: MemoryAuthority,
+  input: ClaimMemoryInput
+): Memory {
+  const authority = requireAuthority(authorityValue)
   const projectId = requireText(input.projectId, 'claimMemory.projectId')
   const key = requireText(input.key, 'claimMemory.key')
   const title = requireText(input.title, 'claimMemory.title')
   const body = requireText(input.body, 'claimMemory.body')
   const sourceKind = requireText(input.sourceKind, 'claimMemory.sourceKind')
   const sourceRef = requireText(input.sourceRef, 'claimMemory.sourceRef')
-  const actor = requireText(input.actor, 'claimMemory.actor')
-  const actorKind = actorKindOf(input.actorKind)
   const scope = parseScope(input.scope)
-  if (scope === 'core' && actorKind !== 'human') {
-    throw new MemoryEvidenceError('claimMemory: scope core is human-only')
+  if (scope === 'core' && authority.kind !== 'human') {
+    throw new MemoryAuthorityError('claimMemory: scope core is human-only')
   }
   const ctx = memoryContext(db, input.now)
   const at = ctx.now()
@@ -102,7 +108,14 @@ export function claimMemory(db: Database, input: ClaimMemoryInput): Memory {
       id, projectId, scope, key, title, body, status: 'claim',
       sourceKind, sourceRef, supersedes: null, now: at,
     })
-    appendMemoryEvent(ctx, id, actor, 'memory.claim', { actorKind, sourceKind, sourceRef }, at)
+    appendMemoryEvent(
+      ctx,
+      id,
+      authority.id,
+      'memory.claim',
+      { actorKind: authority.kind, sourceKind, sourceRef },
+      at
+    )
     return loadMemory(ctx, id)
   })
 }
@@ -112,10 +125,13 @@ export function claimMemory(db: Database, input: ClaimMemoryInput): Memory {
  * (`command`, exit 0, `observedAt`) and a non-worker actor. Workers are rejected
  * here even when they somehow hold a claim.
  */
-export function promoteMemory(db: Database, input: PromoteMemoryInput): Memory {
+export function promoteMemory(
+  db: Database,
+  authorityValue: MemoryAuthority,
+  input: PromoteMemoryInput
+): Memory {
+  const authority = requireAuthority(authorityValue)
   const id = requireText(input.id, 'promoteMemory.id')
-  const actor = requireText(input.actor, 'promoteMemory.actor')
-  const actorKind = actorKindOf(input.actorKind)
   const ctx = memoryContext(db, input.now)
   const at = ctx.now()
   return tx(ctx, () => {
@@ -123,7 +139,7 @@ export function promoteMemory(db: Database, input: PromoteMemoryInput): Memory {
     if (memory.status !== 'claim') {
       throw new MemoryConflictError(`promoteMemory: ${id} is ${memory.status}, expected claim`)
     }
-    assertCanPromote(actorKind, memory.scope, 'promoteMemory')
+    assertCanPromote(authority.kind, memory.scope, 'promoteMemory')
     const evidence = validateEvidence(input.evidence, at, memory.createdAt, 'promoteMemory')
     // The memory_au trigger reindexes memory_fts, so sqlite3_changes() reports the
     // trigger's statement, not this UPDATE. Verify the resulting row instead.
@@ -136,7 +152,14 @@ export function promoteMemory(db: Database, input: PromoteMemoryInput): Memory {
     if (loadMemory(ctx, id).status !== 'fact') {
       throw new MemoryConflictError(`promoteMemory: concurrent change for ${id}`)
     }
-    appendMemoryEvent(ctx, id, actor, 'memory.promote', { actorKind, evidence }, at)
+    appendMemoryEvent(
+      ctx,
+      id,
+      authority.id,
+      'memory.promote',
+      { actorKind: authority.kind, evidence },
+      at
+    )
     return loadMemory(ctx, id)
   })
 }
@@ -147,14 +170,17 @@ export function promoteMemory(db: Database, input: PromoteMemoryInput): Memory {
  * `(project, scope, key)` unique index frees up for the replacement. Nothing is
  * ever deleted and the old content stays readable via `listMemory`.
  */
-export function supersedeMemory(db: Database, input: SupersedeMemoryInput): Memory {
+export function supersedeMemory(
+  db: Database,
+  authorityValue: MemoryAuthority,
+  input: SupersedeMemoryInput
+): Memory {
+  const authority = requireAuthority(authorityValue)
   const id = requireText(input.id, 'supersedeMemory.id')
   const title = requireText(input.title, 'supersedeMemory.title')
   const body = requireText(input.body, 'supersedeMemory.body')
   const sourceKind = requireText(input.sourceKind, 'supersedeMemory.sourceKind')
   const sourceRef = requireText(input.sourceRef, 'supersedeMemory.sourceRef')
-  const actor = requireText(input.actor, 'supersedeMemory.actor')
-  const actorKind = actorKindOf(input.actorKind)
   const ctx = memoryContext(db, input.now)
   const at = ctx.now()
   return tx(ctx, () => {
@@ -170,7 +196,7 @@ export function supersedeMemory(db: Database, input: SupersedeMemoryInput): Memo
     const nextStatus = old.status === 'fact' ? 'fact' : 'claim'
     let evidence = null
     if (nextStatus === 'fact') {
-      assertCanPromote(actorKind, old.scope, 'supersedeMemory')
+      assertCanPromote(authority.kind, old.scope, 'supersedeMemory')
       evidence = validateEvidence(input.evidence, at, old.createdAt, 'supersedeMemory')
     }
     const alias = `${old.key}#superseded:${old.id}`
@@ -203,13 +229,13 @@ export function supersedeMemory(db: Database, input: SupersedeMemoryInput): Memo
       supersedes: old.id,
       now: at,
     })
-    appendMemoryEvent(ctx, old.id, actor, 'memory.superseded', { by: nextId }, at)
+    appendMemoryEvent(ctx, old.id, authority.id, 'memory.superseded', { by: nextId }, at)
     appendMemoryEvent(
       ctx,
       nextId,
-      actor,
+      authority.id,
       nextStatus === 'fact' ? 'memory.promote' : 'memory.claim',
-      { actorKind, supersedes: old.id, evidence },
+      { actorKind: authority.kind, supersedes: old.id, evidence },
       at
     )
     return loadMemory(ctx, nextId)
@@ -217,11 +243,14 @@ export function supersedeMemory(db: Database, input: SupersedeMemoryInput): Memo
 }
 
 /** Takes a claim/fact out of circulation without deleting its history. */
-export function quarantineMemory(db: Database, input: QuarantineMemoryInput): Memory {
+export function quarantineMemory(
+  db: Database,
+  authorityValue: MemoryAuthority,
+  input: QuarantineMemoryInput
+): Memory {
+  const authority = requireAuthority(authorityValue)
   const id = requireText(input.id, 'quarantineMemory.id')
   const reason = requireText(input.reason, 'quarantineMemory.reason')
-  const actor = requireText(input.actor, 'quarantineMemory.actor')
-  const actorKind = actorKindOf(input.actorKind)
   const ctx = memoryContext(db, input.now)
   const at = ctx.now()
   return tx(ctx, () => {
@@ -242,7 +271,14 @@ export function quarantineMemory(db: Database, input: QuarantineMemoryInput): Me
     if (loadMemory(ctx, id).status !== 'quarantine') {
       throw new MemoryConflictError(`quarantineMemory: concurrent change for ${id}`)
     }
-    appendMemoryEvent(ctx, id, actor, 'memory.quarantine', { actorKind, reason, from: memory.status }, at)
+    appendMemoryEvent(
+      ctx,
+      id,
+      authority.id,
+      'memory.quarantine',
+      { actorKind: authority.kind, reason, from: memory.status },
+      at
+    )
     return loadMemory(ctx, id)
   })
 }

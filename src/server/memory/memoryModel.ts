@@ -23,6 +23,18 @@ export const MEMORY_SCOPES = ['project', 'scratch', 'core'] as const
 export type MemoryScope = (typeof MEMORY_SCOPES)[number]
 
 export type MemoryActorKind = 'human' | 'orchestrator' | 'worker'
+export const MEMORY_ACTOR_KINDS: readonly MemoryActorKind[] = ['human', 'orchestrator', 'worker']
+
+/**
+ * Who is performing the write, derived by the server from the authenticated caller.
+ * It is deliberately NOT part of any `*MemoryInput`: a worker-controlled request body
+ * must never be able to declare itself a human (M2 in RND/qc/p3-security.md).
+ */
+export interface MemoryAuthority {
+  kind: MemoryActorKind
+  /** Authenticated principal id; used only for audit rows, never for authorization. */
+  id: string
+}
 
 export interface Memory {
   id: string
@@ -66,6 +78,12 @@ export interface MachineEvidence {
   exitCode: number
   /** Epoch-ms when the command finished; future timestamps are forged. */
   observedAt: number
+  /**
+   * Optional sha256 of the capped command output, as issued by the server-side verifier
+   * (`verify.ts` `VerificationEvidence.outputDigest`). When present it is validated, so a
+   * forged digest cannot be smuggled into the audit trail.
+   */
+  digest?: string
 }
 
 export interface ClaimMemoryInput {
@@ -77,17 +95,12 @@ export interface ClaimMemoryInput {
   body: string
   sourceKind: string
   sourceRef: string
-  actor: string
-  /** Defaults to `worker`: claims are the only write a worker may perform. */
-  actorKind?: MemoryActorKind
   now?: number
 }
 
 export interface PromoteMemoryInput {
   id: string
   evidence: MachineEvidence
-  actor: string
-  actorKind?: MemoryActorKind
   now?: number
 }
 
@@ -100,16 +113,12 @@ export interface SupersedeMemoryInput {
   sourceRef: string
   /** Required when the replaced row is already a `fact`. */
   evidence?: MachineEvidence
-  actor: string
-  actorKind?: MemoryActorKind
   now?: number
 }
 
 export interface QuarantineMemoryInput {
   id: string
   reason: string
-  actor: string
-  actorKind?: MemoryActorKind
   now?: number
 }
 

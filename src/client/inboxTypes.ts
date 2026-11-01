@@ -10,6 +10,8 @@ export interface InboxItem {
   title: string
   ageMs: number
   detail?: string
+  /** Task fence for review; absent on approval items. */
+  fence?: number
 }
 
 export interface ApprovalChallenge {

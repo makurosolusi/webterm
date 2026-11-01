@@ -281,23 +281,30 @@ describe('telegram dispatch idempotency and scrubbing', () => {
     expect(outcomes.filter((row) => row.status === 'duplicate')).toHaveLength(24)
   })
 
-  it('releases the claim when a reply cannot be queued, so the provider retry can succeed', async () => {
+  it('keeps an already-applied decision when the outbox fails, and does not re-run it', async () => {
     const store = boundStore()
     const approval = fakeApproval([{ id: 'ap1', projectId: 'p1', status: 'pending' }])
     const payload = update(17, 100, 7, `/approve ap1 ${DIGEST} ${NONCE}`)
-    let fail = true
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const deps = {
       store,
       approval: approval.port,
       enqueue: (): void => {
-        if (fail) throw new Error('outbox unavailable')
+        throw new Error('outbox unavailable for https://api.telegram.org/bot123456:SECRET-TOKEN-VALUE/sendMessage')
       },
     }
-    await expect(dispatchTelegramUpdate(payload, deps)).rejects.toThrow('outbox unavailable')
-    fail = false
-    const retried = await dispatchTelegramUpdate(payload, deps)
-    expect(retried.status).toBe('handled')
+    // The ledger decision is the effect; a dead outbox is reported by a missing reply, never by
+    // undoing the claim (a release would let the provider retry re-apply the command).
+    const first = await dispatchTelegramUpdate(payload, deps)
+    expect(first).toMatchObject({ status: 'handled', reply: null })
     expect(approval.decide).toHaveBeenCalledTimes(1)
+    const retried = await dispatchTelegramUpdate(payload, deps)
+    expect(retried.status).toBe('duplicate')
+    expect(approval.decide).toHaveBeenCalledTimes(1)
+    const logged = warn.mock.calls.map((call) => String(call[0])).join('\n')
+    expect(logged).toContain('reply enqueue failed')
+    expect(logged).not.toContain('SECRET-TOKEN-VALUE')
+    warn.mockRestore()
   })
 
   it('extracts a challenge only from a 64-hex digest plus nonce prefix', () => {

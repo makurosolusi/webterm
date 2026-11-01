@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import {
   WorktreeError,
   assertInsideRoot,
@@ -223,5 +225,102 @@ describe('branchProblem', () => {
     expect(branchProblem('a..b')).toContain('..')
     expect(branchProblem('a@{1}')).toContain('@{')
     expect(branchProblem('a//b')).toContain('//')
+  })
+})
+
+describe('symlink confinement (L1)', () => {
+  function realService(root: string) {
+    const calls: string[][] = []
+    const exec: Exec = async (file, args) => {
+      calls.push([file, ...args])
+      return { code: 0 }
+    }
+    return { calls, service: createWorktreeService({ root, exec, now: () => 42 }) }
+  }
+
+  it('refuses to allocate when the target path is a symlink', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'webterm-wt-root-'))
+    const outside = mkdtempSync(join(tmpdir(), 'webterm-wt-outside-'))
+    try {
+      mkdirSync(root, { recursive: true })
+      symlinkSync(outside, join(root, 'task-t1'))
+      const { calls, service: worktrees } = realService(root)
+      await expectCode(
+        worktrees.allocate({ taskId: 't1', branch: 'agent/t1', repo: REPO, owner: 'w1' }),
+        'unsafe_target'
+      )
+      expect(calls).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a target that exists as a regular file', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'webterm-wt-root-'))
+    try {
+      writeFileSync(join(root, 'task-t1'), 'not a directory')
+      const { service: worktrees } = realService(root)
+      await expectCode(
+        worktrees.allocate({ taskId: 't1', branch: 'agent/t1', repo: REPO, owner: 'w1' }),
+        'unsafe_target'
+      )
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a symlinked subpath that resolves outside the root', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'webterm-wt-base-'))
+    const outside = mkdtempSync(join(tmpdir(), 'webterm-wt-outside-'))
+    try {
+      // root is a symlink to a directory: the REAL root inside it is what confines allocations.
+      const realRoot = join(base, 'real-root')
+      mkdirSync(realRoot)
+      symlinkSync(realRoot, join(base, 'link-root'))
+      symlinkSync(outside, join(realRoot, 'task-t1'))
+      const { calls, service: worktrees } = realService(join(base, 'link-root'))
+      await expectCode(
+        worktrees.allocate({ taskId: 't1', branch: 'agent/t1', repo: REPO, owner: 'w1' }),
+        'unsafe_target'
+      )
+      expect(calls).toEqual([])
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('still allocates a fresh directory inside a real root', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'webterm-wt-root-'))
+    try {
+      const { calls, service: worktrees } = realService(root)
+      const allocation = await worktrees.allocate({
+        taskId: 't1',
+        branch: 'agent/t1',
+        repo: REPO,
+        owner: 'w1',
+      })
+      expect(allocation.path).toBe(join(root, 'task-t1'))
+      expect(calls).toEqual([
+        ['git', '-C', REPO, 'worktree', 'add', '-b', 'agent/t1', join(root, 'task-t1'), 'HEAD'],
+      ])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to release through a symlink swapped in after allocation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'webterm-wt-root-'))
+    const outside = mkdtempSync(join(tmpdir(), 'webterm-wt-outside-'))
+    try {
+      const { service: worktrees } = realService(root)
+      await worktrees.allocate({ taskId: 't1', branch: 'agent/t1', repo: REPO, owner: 'w1' })
+      symlinkSync(outside, join(root, 'task-t1'))
+      await expectCode(worktrees.release({ taskId: 't1' }), 'unsafe_target')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 })

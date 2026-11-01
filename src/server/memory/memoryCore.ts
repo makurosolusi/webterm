@@ -13,8 +13,10 @@ import {
 import {
   EVIDENCE_FUTURE_SKEW_MS,
   EVIDENCE_PAST_SKEW_MS,
+  MEMORY_ACTOR_KINDS,
   MEMORY_SCOPES,
   type MachineEvidence,
+  type MemoryAuthority,
   MemoryAuthorityError,
   MemoryEvidenceError,
   MemoryNotFoundError,
@@ -90,9 +92,27 @@ export function parseScope(value: unknown): MemoryScope {
   return scope
 }
 
-export function actorKindOf(value: MemoryActorKind | undefined): MemoryActorKind {
-  return value ?? 'worker'
+/**
+ * Validates the server-derived authority. There is deliberately no default: a caller that
+ * forgets to pass who is acting must fail, not silently act as a worker (or worse, as a human).
+ */
+export function requireAuthority(value: MemoryAuthority | undefined): MemoryAuthority {
+  if (value === undefined || value === null || typeof value !== 'object') {
+    throw new MemoryAuthorityError('memory authority is required (server-derived, not from the payload)')
+  }
+  const kind = value.kind
+  if (typeof kind !== 'string' || !MEMORY_ACTOR_KINDS.includes(kind as MemoryActorKind)) {
+    throw new MemoryAuthorityError(
+      `memory authority kind must be one of ${MEMORY_ACTOR_KINDS.join(', ')}, got ${String(kind)}`
+    )
+  }
+  const id = typeof value.id === 'string' ? value.id.trim() : ''
+  if (id === '') throw new MemoryAuthorityError('memory authority id must be a non-empty string')
+  return { kind: kind as MemoryActorKind, id }
 }
+
+/** Server-side evidence digests are sha256 hex; anything else is not verifier output. */
+const EVIDENCE_DIGEST = /^[0-9a-f]{64}$/
 
 /** Workers may never create facts; `core` is human-only even for orchestrators. */
 export function assertCanPromote(
@@ -148,7 +168,15 @@ export function validateEvidence(
       `${label}: evidence.observedAt predates the claim it is meant to support`
     )
   }
-  return { command, exitCode: 0, observedAt }
+  const verified: MachineEvidence = { command, exitCode: 0, observedAt }
+  const digest = evidence.digest
+  if (digest !== undefined) {
+    if (typeof digest !== 'string' || !EVIDENCE_DIGEST.test(digest)) {
+      throw new MemoryEvidenceError(`${label}: evidence.digest must be a sha256 hex digest`)
+    }
+    verified.digest = digest.toLowerCase()
+  }
+  return verified
 }
 
 /** Appends an audit row; callers must already hold the write transaction. */
