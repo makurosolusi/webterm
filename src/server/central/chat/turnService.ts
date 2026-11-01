@@ -181,7 +181,7 @@ export class TurnService {
     }
     try {
       const result = await runtime.turn(input, emit)
-      if (result.outcome === 'success') this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite)
+      if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite)
       return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
     } catch (err) {
       const result: RuntimeResult = {
@@ -198,16 +198,16 @@ export class TurnService {
     }
   }
 
-  private handleProposals(
+  private async handleProposals(
     conversationId: string, turnId: string, messageId: string, text: string, planner: boolean, toolsWrite: boolean
-  ): void {
+  ): Promise<void> {
     for (const block of parseProposals(text)) {
       const checked = validateProposal(block, { db: this.db, conversationId, planner, toolsWrite })
       if (!checked.ok) {
         this.record(conversationId, 'entity.updated', { eventType: 'proposal.rejected', tool: block.tool, code: checked.code }, turnId, messageId)
         continue
       }
-      const result = applyProposal(this.db, checked.proposal!)
+      const result = await applyProposal(this.db, checked.proposal!)
       this.record(conversationId, 'entity.updated', {
         eventType: result.ok ? 'proposal.applied' : 'proposal.rejected', tool: result.tool,
         ...(result.ok ? { projectId: result.projectId, goalVersion: result.goalVersion, planVersion: result.planVersion } : { code: result.code }),

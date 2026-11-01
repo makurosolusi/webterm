@@ -68,18 +68,28 @@ describe('proposalPolicy', () => {
     expect(validateProposal({ tool: 'plan.propose', input: planInput }, { ...policy, conversationId: 'central:project:p3' }).ok).toBe(true)
     f.close()
   })
+  it('accepts task.assign and rejects invalid version, item, and actor', () => {
+    const f = fixture()
+    const base = { db: f.db, conversationId: 'central:project:p1', planner: true, toolsWrite: true }
+    const valid = { projectId: 'p1', itemId: 'item-1', expectedVersion: 1, assignee: 'worker:p1' }
+    expect(validateProposal({ tool: 'task.assign', input: valid }, base).ok).toBe(true)
+    expect(validateProposal({ tool: 'task.assign', input: { ...valid, expectedVersion: 0 } }, base).code).toBe('invalid_shape')
+    expect(validateProposal({ tool: 'task.assign', input: { ...valid, itemId: '' } }, base).code).toBe('invalid_shape')
+    expect(validateProposal({ tool: 'task.assign', input: { ...valid, actor: 'central' } }, base).code).toBe('forbidden_key')
+    f.close()
+  })
 })
 
 describe('applyProposal', () => {
-  it('creates goal and draft plan, and audits success and stale failure', () => {
+  it('creates goal and draft plan, and audits success and stale failure', async () => {
     const f = fixture()
     const goalInputForApply = { ...goalInput, projectId: 'p3' }
-    const goal = applyProposal(f.db, { tool: 'goal.propose', input: goalInputForApply, projectId: 'p3' })
+    const goal = await applyProposal(f.db, { tool: 'goal.propose', input: goalInputForApply, projectId: 'p3' })
     expect(goal).toMatchObject({ ok: true, goalVersion: 1 })
     expect(allRows(f.db, 'SELECT * FROM plan WHERE project_id = ?', 'p3')).toHaveLength(0)
-    const plan = applyProposal(f.db, { tool: 'plan.propose', input: planInput, projectId: 'p3' })
+    const plan = await applyProposal(f.db, { tool: 'plan.propose', input: planInput, projectId: 'p3' })
     expect(plan).toMatchObject({ ok: true, planVersion: 1 })
-    const stale = applyProposal(f.db, { tool: 'plan.propose', input: { ...planInput, expectedVersion: 9 }, projectId: 'p3' })
+    const stale = await applyProposal(f.db, { tool: 'plan.propose', input: { ...planInput, expectedVersion: 9 }, projectId: 'p3' })
     expect(stale.ok).toBe(false)
     expect(allRows(f.db, 'SELECT version, status FROM plan WHERE project_id = ?', 'p3')[0]).toMatchObject({ version: 1, status: 'draft' })
     expect(allRows(f.db, "SELECT * FROM event WHERE kind = 'central.proposal'")).toHaveLength(3)

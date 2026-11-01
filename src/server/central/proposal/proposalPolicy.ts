@@ -6,7 +6,7 @@ export type ProposalCode = 'planner_off' | 'tools_read_only' | 'forbidden_key' |
 export interface PolicyInput { planner: boolean; toolsWrite: boolean; conversationId: string; db: Database }
 export interface ValidProposal extends ProposalBlock { projectId: string }
 export interface PolicyResult { ok: boolean; code?: ProposalCode; proposal?: ValidProposal }
-const ALLOWED = new Set(['goal.propose', 'plan.propose'])
+const ALLOWED = new Set(['goal.propose', 'plan.propose', 'task.assign'])
 const FORBIDDEN = new Set(['actor', 'authority', 'status', 'role', 'path', 'repo', 'command', 'cmd', 'cwd', 'capability', 'token'])
 
 function containsForbidden(value: unknown): boolean {
@@ -17,6 +17,7 @@ function containsForbidden(value: unknown): boolean {
 function shape(tool: string, input: Record<string, unknown>): boolean {
   if (tool === 'goal.propose') return typeof input.statement === 'string' && Array.isArray(input.successCriteria) && typeof input.owner === 'string' && typeof input.horizon === 'string' && !!input.envelope && typeof input.envelope === 'object'
   if (tool === 'plan.propose') return Array.isArray(input.items) && input.items.every((item) => item && typeof item === 'object' && typeof item.title === 'string' && Array.isArray(item.scope))
+  if (tool === 'task.assign') return typeof input.itemId === 'string' && input.itemId.trim().length > 0 && Number.isSafeInteger(input.expectedVersion) && (input.expectedVersion as number) >= 1 && (input.assignee === undefined || (typeof input.assignee === 'string' && input.assignee.length <= 200 && !/[\s\p{Cc}]/u.test(input.assignee)))
   return false
 }
 export function validateProposal(block: ProposalBlock, policy: PolicyInput): PolicyResult {
