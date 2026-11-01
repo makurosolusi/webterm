@@ -497,5 +497,4 @@ TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 Wave 5-6 (`51dab65`..`5214ea2`): vitest penuh 138 file / 1840 test, bun penuh 29 file / 204 test,
 `tsc` strict + unused bersih; hijau dengan `TMPDIR=/tmp` (gate §9). Harness soak dan acceptance
 HTTP 29/29 (agen PTY palsu) PASS; `controlCwd` butuh `TMPDIR=/tmp`.
-Terarah wave 5: 4 file / 65 test (`verifier`, `orchestratorRun`, `approvalHumanApi`,
-`centralAutonomy`).
+Terarah wave 5: 4 file / 65 test (`verifier`, `orchestratorRun`, `approvalHumanApi`, `centralAutonomy`).
