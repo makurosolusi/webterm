@@ -8,7 +8,7 @@ the user's.
 
 ## Result
 
-**28/28 checks passed** after one real bug was found and fixed.
+**29/29 checks passed** after two real bugs were found and fixed.
 
 | Requirement | Observed |
 |---|---|
@@ -21,6 +21,7 @@ the user's.
 | Same run with `approvalId`+`approvalDigest` | **200**, approval consumed once |
 | Same run with wrong digest | **409 `approval_digest_mismatch`** |
 | Correct digest retried after wrong digest | **200**, still runs |
+| Approval issued for project A used on project B | **409 `approval_project_mismatch`**, nothing consumed |
 | Worker task result | `verified` |
 | Evidence provenance | `verifiedBy: "server-verifier"` |
 | Changed files | `["src/change.txt"]` |
@@ -39,12 +40,18 @@ the user's.
 
 ## Bug found by this acceptance
 
-The first run returned `verify_failed: no files changed` even though the fake agent committed
+Two bugs were found:
+
+1. The first run returned `verify_failed: no files changed` even though the fake agent committed
 `src/change.txt`. Cause: the verifier only inspected the **working tree**; a committed change leaves
 the worktree clean. That would also fail real Claude, which is instructed to commit. Fixed in
 `c8e799f`: verification now diffs the branch against a server-validated base ref (fallback `HEAD^`)
 and merges committed + uncommitted file lists. The run then passed with the file list and scope
 checks intact.
+
+2. An approval for project A was accepted for a run in project B. Fixed in `d805c95`:
+   `guardedRun` checks `approval.projectId === request.projectId` before consuming; mismatch is
+   409 `approval_project_mismatch` with no consume and no run.
 
 ## What this proves / does not prove
 
