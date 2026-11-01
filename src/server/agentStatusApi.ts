@@ -14,6 +14,7 @@ import { TOKEN_HEADER } from './auth'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
 import { transcriptPathAllowed } from './transcriptPath'
+import { readCappedBody } from './channels/channelHttp'
 
 export { transcriptPathAllowed } from './transcriptPath'
 
@@ -21,6 +22,10 @@ export { transcriptPathAllowed } from './transcriptPath'
  *  registry dari nilai raksasa yang di-post berulang; 4096 cukup untuk path absolut terpanjang
  *  di mesin nyata (PATH_MAX 1024 di Linux, 1024 di macOS). */
 export const TRANSCRIPT_PATH_MAX = 4096
+
+/** Batas body hook. Hook agent mengirim JSON kecil; 256 KiB lega tanpa menampung payload raksasa
+ *  dari sembarang sesi agent yang memegang token nodenya. */
+export const MAX_HOOK_BODY_BYTES = 256 * 1024
 
 /**
  * Gerbang identitas hook, dibaca SEKALI saat modul dimuat. Default MATI: perilaku lama fail-open
@@ -47,15 +52,6 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(body))
-}
-
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolvePromise, reject) => {
-    let data = ''
-    req.on('data', (chunk) => { data += chunk })
-    req.on('end', () => resolvePromise(data))
-    req.on('error', reject)
-  })
 }
 
 /** Header token node, apa adanya dari request (Node menurunkan nama header ke lowercase). */
@@ -131,8 +127,14 @@ export async function agentStatusRoute(
   }
   // `HookStatusBody` dipakai apa adanya, bukan disalin ulang: field mana yang menentukan status
   // adalah milik `hookStatus`, dan dua daftar yang harus berubah bersamaan pasti akan menyimpang.
+  // Body dibaca BERBATAS: overflow ditolak sebelum `setStatus`/`setTranscript` mana pun.
+  const read = await readCappedBody(req, MAX_HOOK_BODY_BYTES)
+  if (!read.ok && read.reason === 'too_large') {
+    json(res, 413, { error: 'payload_too_large' })
+    return true
+  }
   let body: HookStatusBody & { message?: string; transcript_path?: string }
-  try { body = JSON.parse(await readBody(req)) } catch { body = {} }
+  try { body = JSON.parse(read.ok ? read.body : '') } catch { body = {} }
 
   // Gerbang strict: keduanya diperiksa SEBELUM apa pun ditulis, jadi permintaan yang ditolak
   // tidak meninggalkan jejak status/transcript. Saat mati (default), tidak ada satu pun cabang

@@ -65,6 +65,29 @@ test('approve with nonce+digest, then consume exactly once', () => {
   expect(ledger.approval.consumeApproval(challenge.id, { digest: challenge.digest })).toBe(false)
 })
 
+test('consume rejects a wrong digest without spending the one-shot consent', () => {
+  const { ledger } = fixture()
+  const action = { kind: 'git.push', branch: 'main', sha: 'abc' }
+  const challenge = ledger.approval.requestApproval({
+    projectId: 'p1',
+    kind: 'push',
+    request: action,
+    ttlMs: 60_000,
+  })
+  ledger.approval.decideApproval(challenge.id, {
+    actor: 'human',
+    approve: true,
+    digest: challenge.digest,
+    nonce: challenge.nonce,
+  })
+
+  // Consent binds to the exact action: a different digest must not spend `single_use`.
+  expect(ledger.approval.consumeApproval(challenge.id, { digest: 'x'.repeat(64) })).toBe(false)
+  // The approval is still consumable with the digest the human actually approved.
+  expect(ledger.approval.consumeApproval(challenge.id, { digest: challenge.digest })).toBe(true)
+  expect(ledger.approval.consumeApproval(challenge.id, { digest: challenge.digest })).toBe(false)
+})
+
 test('reject, expiry, and list filters behave', () => {
   const { ledger, clock } = fixture()
   const rejected = ledger.approval.requestApproval({

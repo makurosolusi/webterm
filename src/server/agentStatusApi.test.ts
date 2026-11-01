@@ -20,22 +20,28 @@ import { forgetNodeToken, nodeToken, NODE_TOKEN_HEADER } from './hooks'
 import { TOKEN_HEADER } from './auth'
 import {
   agentStatusRoute,
+  MAX_HOOK_BODY_BYTES,
   transcriptPathAllowed,
   TRANSCRIPT_PATH_MAX,
   type AgentStatusDeps,
 } from './agentStatusApi'
 
-/** Request minimal: `readBody` hanya butuh emitter 'data'/'end', route butuh method + headers. */
-function mockReq(body: unknown, headers: Record<string, string> = {}): IncomingMessage {
+/** Request minimal: `readCappedBody` hanya butuh emitter 'data'/'end' + `resume`, route butuh
+ *  method + headers. Body dikirim sebagai chunk Buffer, persis seperti stream node:http. */
+function mockChunkedReq(chunks: string[], headers: Record<string, string> = {}): IncomingMessage {
   const req = new EventEmitter() as unknown as IncomingMessage
   ;(req as unknown as { method: string }).method = 'POST'
   ;(req as unknown as { headers: Record<string, string> }).headers = headers
-  const raw = typeof body === 'string' ? body : JSON.stringify(body)
+  ;(req as unknown as { resume: () => void }).resume = () => {}
   process.nextTick(() => {
-    req.emit('data', raw)
+    for (const chunk of chunks) req.emit('data', Buffer.from(chunk))
     req.emit('end')
   })
   return req
+}
+
+function mockReq(body: unknown, headers: Record<string, string> = {}): IncomingMessage {
+  return mockChunkedReq([typeof body === 'string' ? body : JSON.stringify(body)], headers)
 }
 
 interface MockRes extends ServerResponse {
@@ -348,6 +354,36 @@ describe('ikatan token→node — tanpa syarat, juga saat strict MATI', () => {
     )
     expect(foreign.statusCode).toBe(403)
     expect(foreignDeps.writes).toEqual({ status: [], transcript: [] })
+  })
+})
+
+// Route ini bisa dijangkau token node mana pun, jadi body-nya harus berbatas: dulu body utuh
+// ditampung lebih dulu baru diparse, sehingga satu POST raksasa cukup untuk menekan server.
+describe('batas body hook', () => {
+  it('menolak body chunked di atas cap dengan 413 dan tidak menulis status/transcript', async () => {
+    const res = mockRes()
+    const d = deps()
+    const half = 'x'.repeat(MAX_HOOK_BODY_BYTES / 2)
+    const handled = await agentStatusRoute(
+      // Dua potongan yang masing-masing masih di bawah cap: hanya akumulasi yang menembusnya.
+      mockChunkedReq([half, half, 'x'.repeat(1024)]),
+      res,
+      URL_FOR(NODE),
+      { strictAuth: false, deps: d }
+    )
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(413)
+    expect(JSON.parse(res.body)).toEqual({ error: 'payload_too_large' })
+    expect(d.writes).toEqual({ status: [], transcript: [] })
+  })
+
+  it('menerima body tepat di bawah cap seperti biasa', async () => {
+    const res = mockRes()
+    const d = deps()
+    const body = JSON.stringify({ hook_event_name: 'Stop', pad: 'x'.repeat(MAX_HOOK_BODY_BYTES / 2) })
+    await agentStatusRoute(mockReq(body), res, URL_FOR(NODE), { strictAuth: false, deps: d })
+    expect(res.statusCode).toBe(204)
+    expect(d.writes.status).toEqual([{ node: NODE, status: 'waiting' }])
   })
 })
 

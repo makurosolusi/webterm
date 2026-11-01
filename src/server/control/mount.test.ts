@@ -2,6 +2,7 @@
 // capability memakai store NYATA dari mount.ts agar jalur mint -> verify ikut teruji.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { mergeSettings } from '../../shared/settings'
 import type { OpenMsg } from '../../shared/protocol'
@@ -62,8 +63,26 @@ function fakeRes(): FakeRes {
   }
 }
 
-const fakeReq = (method: string, headers: Record<string, string> = {}) =>
-  ({ method, headers }) as unknown as IncomingMessage
+/**
+ * Request yang benar-benar streaming: mount membaca body lewat `readCappedBody`, jadi 'data'/'end'
+ * harus datang dari req sendiri (reader yang disuntik hanya dipakai fake request non-stream).
+ */
+const streamReq = (
+  method: string,
+  headers: Record<string, string> = {},
+  chunks: string[] = []
+): IncomingMessage => {
+  const req = new EventEmitter() as unknown as IncomingMessage
+  Object.assign(req, { method, headers, resume() {} })
+  process.nextTick(() => {
+    for (const chunk of chunks) req.emit('data', Buffer.from(chunk))
+    req.emit('end')
+  })
+  return req
+}
+
+const fakeReq = (method: string, headers: Record<string, string> = {}, body = '') =>
+  streamReq(method, headers, body ? [body] : [])
 
 function harness(overrides: Partial<ControlDeps> = {}) {
   const nodes = new Map<string, { status?: 'done'; exit?: ControlExit; output: string }>()
@@ -105,7 +124,7 @@ function harness(overrides: Partial<ControlDeps> = {}) {
   ) => {
     const res = opts.res ?? fakeRes()
     const handled = await handleControlHttp(
-      fakeReq(method, opts.headers),
+      fakeReq(method, opts.headers, opts.body),
       res as unknown as ServerResponse,
       new URL(path, 'http://x'),
       async () => opts.body ?? '',
@@ -163,22 +182,19 @@ describe('control HTTP mount', () => {
 
   it('rejects an oversized Content-Length before reading the body', async () => {
     const h = harness()
-    let read = false
+    const readBody = vi.fn(async () => '')
     const res = fakeRes()
     const handled = await handleControlHttp(
       fakeReq('POST', { 'content-length': String(64 * 1024 + 1) }),
       res as unknown as ServerResponse,
       new URL('/api/control/spawn', 'http://x'),
-      async () => {
-        read = true
-        return ''
-      },
+      readBody,
       h.deps
     )
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(413)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'payload_too_large' })
-    expect(read).toBe(false)
+    expect(readBody).not.toHaveBeenCalled()
   })
 
   it('rejects an accumulated body over 64 KiB even without Content-Length', async () => {
@@ -189,6 +205,24 @@ describe('control HTTP mount', () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: 'payload_too_large' })
   })
 
+  it('rejects a chunked body over the cap while streaming, without the unbounded reader', async () => {
+    const h = harness()
+    const readBody = vi.fn(async () => '')
+    const res = fakeRes()
+    const handled = await handleControlHttp(
+      // Dua potongan yang masing-masing < 64 KiB: hanya akumulasi byte yang menembus batas.
+      streamReq('POST', {}, ['x'.repeat(40 * 1024), 'x'.repeat(40 * 1024)]),
+      res as unknown as ServerResponse,
+      new URL('/api/control/spawn', 'http://x'),
+      readBody,
+      h.deps
+    )
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(413)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'payload_too_large' })
+    expect(readBody).not.toHaveBeenCalled()
+  })
+
   it('replays a spawn on a second call with production deps (stable identity)', async () => {
     const cap = capabilityStore.mint({ verb: 'node.spawn', resource: 'node:node-b' })
     const requestId = 'req-prod-01'
@@ -196,14 +230,14 @@ describe('control HTTP mount', () => {
     const headers = { 'x-webterm-capability': cap }
     const first = fakeRes()
     await handleControlHttp(
-      fakeReq('POST', headers),
+      fakeReq('POST', headers, body),
       first as unknown as ServerResponse,
       new URL('/api/control/spawn', 'http://x'),
       async () => body
     )
     const second = fakeRes()
     await handleControlHttp(
-      fakeReq('POST', headers),
+      fakeReq('POST', headers, body),
       second as unknown as ServerResponse,
       new URL('/api/control/spawn', 'http://x'),
       async () => body
@@ -212,6 +246,47 @@ describe('control HTTP mount', () => {
     expect(second.statusCode).toBe(201)
     expect(second.body).toBe(first.body)
     expect(prod.opened).toHaveLength(1)
+  })
+
+  it('replays with a partial overrides object (merged deps memoised per identity)', async () => {
+    // No `sessions`/`settings` override, so this takes the merge path (not the full-deps fast
+    // path). Both calls receive the SAME overrides object, which must yield the SAME merged deps
+    // object; otherwise the ack store is recreated and the second spawn hits 409 node_exists.
+    const cap = capabilityStore.mint({ verb: 'node.spawn', resource: 'node:node-merge' })
+    const requestId = 'req-merge-01'
+    const body = JSON.stringify({ requestId, nodeId: 'node-merge', agentId: 'codex' })
+    const overrides: Partial<ControlDeps> = {
+      capabilities: {
+        verify: (token, now = Date.now()) => capabilityStore.verify(token, now),
+        allows,
+        mint: (options) => ({
+          token: capabilityStore.mint(options),
+          expiresAt: Date.now() + clampTtl(options.ttlMs),
+        }),
+      },
+    }
+    const headers = { 'x-webterm-capability': cap }
+    const first = fakeRes()
+    await handleControlHttp(
+      fakeReq('POST', headers, body),
+      first as unknown as ServerResponse,
+      new URL('/api/control/spawn', 'http://x'),
+      async () => body,
+      overrides
+    )
+    const second = fakeRes()
+    await handleControlHttp(
+      fakeReq('POST', headers, body),
+      second as unknown as ServerResponse,
+      new URL('/api/control/spawn', 'http://x'),
+      async () => body,
+      overrides
+    )
+
+    expect(first.statusCode).toBe(201)
+    expect(second.statusCode).toBe(201)
+    expect(second.body).toBe(first.body)
+    expect(prod.opened.filter((msg) => msg.id === 'node-merge')).toHaveLength(1)
   })
 
   it('mints a token via the root token and accepts it afterwards', async () => {

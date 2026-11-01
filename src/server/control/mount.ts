@@ -7,9 +7,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { CapabilityStore, allows, clampTtl } from './capabilities'
 import { controlCwdAllowed } from './controlCwd'
 import {
-  declaredTooLarge,
   isParseFailure,
   parseControlBody,
+  readControlBody,
   writeControlJson,
 } from './controlHttpIo'
 import { handleControl } from './controlApi'
@@ -17,7 +17,6 @@ import { approvalRoute } from './approvalMount'
 import { durableAckFor } from '../ledger/durableAck'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import {
-  CONTROL_MAX_BODY_BYTES,
   CONTROL_PREFIX,
   type ControlCapabilities,
   type ControlDeps,
@@ -108,17 +107,18 @@ export async function handleControlHttp(
 
   let body: unknown
   if (withBody) {
-    // Tolak sebelum membaca/menyalin body raksasa. Body yang lolos akan diperiksa lagi di bawah.
-    if (declaredTooLarge(req.headers)) {
-      writeControlJson(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
+    // `readBody` tetap ada demi kompatibilitas call-site, tetapi jalur ini memakai pembaca
+    // berbatas: body chunked raksasa dipotong SAAT streaming, bukan setelah tertampung utuh.
+    const read = await readControlBody(req, readBody)
+    if (!read.ok) {
+      if (read.reason === 'too_large') {
+        writeControlJson(res, 413, { error: 'payload_too_large', max: read.max })
+      } else {
+        writeControlJson(res, 400, { error: 'invalid_json' })
+      }
       return true
     }
-    const raw = await readBody()
-    if (Buffer.byteLength(raw) > CONTROL_MAX_BODY_BYTES) {
-      writeControlJson(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
-      return true
-    }
-    body = parseControlBody(raw)
+    body = parseControlBody(read.raw)
     if (isParseFailure(body)) {
       writeControlJson(res, 400, { error: 'invalid_json' })
       return true
