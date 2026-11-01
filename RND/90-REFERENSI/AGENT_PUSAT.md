@@ -929,3 +929,30 @@ Hanya URL yang tercantum di catatan riset. Item bertanda "(ID)" tidak punya URL 
 - https://www.anthropic.com/research/measuring-agent-autonomy
 - https://github.blog/news-insights/company-news/welcome-home-agents/
 - https://code.claude.com/docs/en/checkpointing
+
+---
+
+## 17. Addendum 2026-10-31 — Omnichannel
+
+Status: tambahan setelah wave 6. Detail: `../04-OMNICHANNEL.md`; requirement O1-O22:
+`../02-KEBUTUHAN.md`; fase P5: `../03-RENCANA.md`.
+
+Kesimpulan:
+
+- Kanal eksternal (Telegram, webhook, Slack, dll.) adalah **adapter ingress tidak tepercaya**,
+  bukan control plane kedua. Semua perintah masuk ke control API dan ledger yang sama.
+- Telegram v1: webhook `secret_token`, dedupe `update_id`, topic per project, satu pesan
+  status editable per task, inline approval, batas 4096 char / 64 byte callback.
+- Approval chat tetap blocking: digest + nonce + expiry + single-use + identitas terikat.
+  Teks "yes" bukan decision; group read-only dan tidak boleh approve.
+- Identity: kode link sekali pakai, allowlist numeric user id, role subset principal.
+  Unknown sender ditolak diam-diam + audit, bukan auto-enroll.
+- Reliability: 200 setelah persist, outbox transaksional, retry/backoff, 429 `retry_after`,
+  dead-letter, ordering per conversation. Channel down tidak memblokir ledger.
+- Security: token bot di Keychain/0600, tidak di env PTY, log, settings JSON, atau URL.
+  Callback opaque + MAC; audit hash chain; redaksi egress.
+- Fase: P5 setelah P3/P4. Gate G7: replay 100x satu aksi, cross-project ditolak,
+  approval blocking, channel down tidak memblokir ledger, token tidak ada di env/log.
+
+Slack, Discord, WhatsApp, SMS, email ditunda. WhatsApp/SMS butuh template/10DLC dan biaya
+per pesan; email lemah untuk approval interaktif. Multi-user RBAC tetap defer.
