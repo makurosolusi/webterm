@@ -128,6 +128,9 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 - **P3 fondasi approval selesai**: request approval menyimpan digest aksi + nonce + expiry,
   approve/reject memverifikasi digest+nonce, `consumeApproval` single-use, expiry lazy+sweep.
   Belum diekspos ke HTTP/Telegram (blocking gate menyusul).
+- **Acceptance nyata**: server dijalankan dengan `WEBTERM_LEDGER=on` + token + mint flag;
+  log `ledger on: ...`, mint capability `201`, `GET /api/control/nodes` `200`,
+  capability ditolak di `/api/settings` `403`, ledger `user_version=1`, 18 tabel.
 - Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
