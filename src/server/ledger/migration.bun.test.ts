@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LATEST_VERSION, migrate, migrateWithBackup, openLedgerDb, preMigrationBackup } from './migration'
 import { MIGRATIONS, type Migration } from './ledgerSchema'
+import { applyV4 } from './ledgerSchemaV4'
 
 type Row = Record<string, unknown>
 interface Stmt {
@@ -59,9 +60,12 @@ test('fresh db migrates to LATEST_VERSION; second migrate is a no-op', () => {
   for (const t of [
     'project', 'agent', 'task', 'event', 'decision', 'approval', 'run', 'usage',
     'prefix', 'budget', 'memory', 'memory_event', 'memory_fts',
+    'central_conversation', 'central_message', 'central_turn', 'central_event',
   ]) {
     expect(names).toContain(t)
   }
+  const projectColumns = q(db, 'PRAGMA table_info(project)').all().map((r) => String(r['name']))
+  expect(projectColumns.join(',')).toContain('goal_json')
   expect(migrate(db)).toBe(LATEST_VERSION)
   expect(version(db)).toBe(LATEST_VERSION)
   expect(String(q(db, 'PRAGMA journal_mode').get()?.['journal_mode'])).toBe('wal')
@@ -212,10 +216,11 @@ test('backup writes a readable copy and keeps the last 3', () => {
 })
 
 test('schema modules list forward-only migrations matching LATEST_VERSION', () => {
-  expect(MIGRATIONS.length).toBe(3)
+  expect(MIGRATIONS.length).toBe(4)
   expect(MIGRATIONS[0]?.version).toBe(1)
   expect(MIGRATIONS[1]?.version).toBe(2)
   expect(MIGRATIONS[2]?.version).toBe(3)
+  expect(MIGRATIONS[3]?.version).toBe(4)
   expect(MIGRATIONS[MIGRATIONS.length - 1]?.version).toBe(LATEST_VERSION)
 })
 
@@ -283,6 +288,87 @@ test('migrateWithBackup snapshots a file DB before an upgrade, but not for a fre
   expect(version).toBe(LATEST_VERSION + 1)
   expect(Number(q(db, 'PRAGMA user_version').get()?.['user_version'])).toBe(LATEST_VERSION + 1)
   const backups = readdirSync(root).filter((f) => f.startsWith('upgrade.db.') && f.endsWith('.bak'))
+  expect(backups.length >= 1).toBe(true)
+  close(db)
+})
+
+test('v3 ledger upgrades to v4 in place: rows survive, goal_json is NULL, central tables appear', () => {
+  const db = new Database(':memory:')
+  db.exec('PRAGMA foreign_keys = ON')
+  // Simulate an installed v3 build: only migrations 1-3 have ever run.
+  expect(migrate(db, MIGRATIONS.slice(0, 3))).toBe(3)
+  run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
+  run(db, "INSERT INTO task (id, project_id, spec, created_at, updated_at) VALUES ('t1','p1','spec',1,1)")
+  expect(tables(db)).not.toContain('central_conversation')
+  const before = q(db, 'PRAGMA table_info(project)').all().map((r) => String(r['name']))
+  expect(before.join(',')).not.toContain('goal_json')
+
+  expect(migrate(db)).toBe(4)
+  const names = tables(db)
+  for (const t of ['central_conversation', 'central_message', 'central_turn', 'central_event']) {
+    expect(names).toContain(t)
+  }
+  expect(Number(q(db, 'SELECT count(*) AS c FROM project').get()?.['c'])).toBe(1)
+  expect(Number(q(db, 'SELECT count(*) AS c FROM task').get()?.['c'])).toBe(1)
+  expect(q(db, "SELECT goal_json FROM project WHERE id = 'p1'").get()?.['goal_json']).toBe(null)
+  // Nothing pending on a second pass: v4 must not re-run the ALTER.
+  expect(migrate(db)).toBe(4)
+  close(db)
+})
+
+test('applyV4 re-run is a no-op even after the version bump (restored/partial DB)', () => {
+  const db = openLedgerDb(':memory:')
+  run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
+  applyV4(db)
+  applyV4(db)
+  expect(version(db)).toBe(LATEST_VERSION)
+  const columns = q(db, 'PRAGMA table_info(project)').all().map((r) => String(r['name']))
+  expect(columns.filter((c) => c === 'goal_json').length).toBe(1)
+  expect(Number(q(db, 'SELECT count(*) AS c FROM project').get()?.['c'])).toBe(1)
+  close(db)
+})
+
+test('project.goal_json accepts valid JSON and rejects garbage', () => {
+  const db = openLedgerDb(':memory:')
+  run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
+  run(db, `UPDATE project SET goal_json = '{"version":1,"status":"proposed"}' WHERE id = 'p1'`)
+  expect(String(q(db, "SELECT goal_json FROM project WHERE id = 'p1'").get()?.['goal_json'])).toContain('proposed')
+  expectThrow(
+    () => run(db, "UPDATE project SET goal_json = 'not-json' WHERE id = 'p1'"),
+    'CHECK constraint failed'
+  )
+  close(db)
+})
+
+test('central_message enforces role, seq, and clientMessageId uniqueness; NULL clients repeat', () => {
+  const db = openLedgerDb(':memory:')
+  run(db, "INSERT INTO central_conversation (id, scope, project_id, created_at, updated_at) VALUES ('central:global','global',NULL,1,1)")
+  const insert = (id: string, seq: number, role: string, client: string | null) =>
+    run(db, `INSERT INTO central_message (id, conversation_id, seq, role, parts_json, client_message_id, created_at)
+             VALUES (?, 'central:global', ?, ?, '[]', ?, 1)`, id, seq, role, client)
+  for (const [i, role] of ['human', 'assistant', 'tool', 'system'].entries()) insert(`m${i}`, i + 1, role, null)
+  // Two NULL client ids do not collide (SQLite UNIQUE treats NULLs as distinct).
+  expect(Number(q(db, 'SELECT count(*) AS c FROM central_message').get()?.['c'])).toBe(4)
+  insert('m9', 5, 'human', 'c1')
+  expectThrow(() => insert('m10', 6, 'human', 'c1'), 'UNIQUE constraint failed')
+  expectThrow(() => insert('m11', 5, 'human', null), 'UNIQUE constraint failed')
+  expectThrow(() => insert('m12', 7, 'robot', null), 'CHECK constraint failed')
+  expectThrow(
+    () => run(db, "INSERT INTO central_message (id, conversation_id, seq, role, parts_json, created_at) VALUES ('bad','central:global',8,'human','nope',1)"),
+    'CHECK constraint failed'
+  )
+  close(db)
+})
+
+test('migrateWithBackup snapshots a v3 file before applying v4', () => {
+  const path = join(root, 'v3-upgrade.db')
+  const db = new Database(path)
+  expect(migrate(db, MIGRATIONS.slice(0, 3))).toBe(3)
+  run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
+  expect(migrateWithBackup(db, path)).toBe(4)
+  expect(version(db)).toBe(4)
+  expect(Number(q(db, 'SELECT count(*) AS c FROM project').get()?.['c'])).toBe(1)
+  const backups = readdirSync(root).filter((f) => f.startsWith('v3-upgrade.db.') && f.endsWith('.bak'))
   expect(backups.length >= 1).toBe(true)
   close(db)
 })
