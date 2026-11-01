@@ -237,6 +237,9 @@ Sudah ditutup di wave 2:
 - `ledgerSchema.ts` dipecah (`0f12506`): 20 baris, migrasi v1/v2/v3 masing-masing ≤179 baris.
 - Spawn PTY worker produksi ada di `workerRuntime.ts`; PTY ditutup dan worktree dilepas pada
   throw setelah open (`2176c98`). Binding Telegram + sender outbox ter-wire (§4).
+- Revalidasi P1 (`fb08982`): cap body control/agent-status dulu diperiksa setelah buffering,
+  kini dibaca berbatas saat streaming (64/256 KiB). Test baru memin ackKey per node, deps merge
+  stabil, consume digest salah, replay lintas restart, fallback ack; split `orchestrator*Api` 103/38.
 
 ---
 
@@ -290,11 +293,8 @@ Jangan sebut P3-P5 production-ready sampai itu ditutup.
 ```sh
 TMPDIR=/tmp/st npx tsc --noEmit
 TMPDIR=/tmp/st npx vitest run
-TMPDIR=/tmp/st bun test src/server/orchestrator src/server/inbox \
-  src/server/memory src/server/channels src/server/ledger
 TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
-Hijau hanya bila semua lulus pada tree yang sama, tanpa file berubah di tengah run.
-Vitest penuh: 127 file / 1697 test. Bun penuh: 28 file / 201 test. Flake `terminalCore` /
-`paneSplit` di bawah beban paralel bukan bukti regresi; ulangi terisolasi sebelum menyimpulkan.
+Vitest penuh: 132 file / 1720 test, bun 29 file / 203 test, `tsc` bersih; semua hijau dengan
+`TMPDIR=/tmp` (gate §9). `TMPDIR` di dalam home membuat `controlCwd` gagal (lingkungan, bukan regresi).
