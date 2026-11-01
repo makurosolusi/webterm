@@ -1,0 +1,81 @@
+// Focused tests for the pure payload model split out of orchestratorRunApi.
+// Route-level behavior stays covered by orchestratorRunApi.test.ts.
+import { describe, expect, it } from 'vitest'
+import {
+  ORCHESTRATOR_RUN_FLAG,
+  ORCHESTRATOR_RUN_PATH,
+  parseRunBody,
+  orchestratorRunEnabled,
+} from './orchestratorRunModel'
+import {
+  parseRunBody as parseViaApi,
+  orchestratorRunEnabled as enabledViaApi,
+  ORCHESTRATOR_RUN_FLAG as flagViaApi,
+  ORCHESTRATOR_RUN_PATH as pathViaApi,
+} from './orchestratorRunApi'
+
+const valid = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
+
+describe('orchestratorRunModel', () => {
+  it('is re-exported verbatim by orchestratorRunApi so importers keep working', () => {
+    expect(parseViaApi).toBe(parseRunBody)
+    expect(enabledViaApi).toBe(orchestratorRunEnabled)
+    expect(flagViaApi).toBe(ORCHESTRATOR_RUN_FLAG)
+    expect(pathViaApi).toBe(ORCHESTRATOR_RUN_PATH)
+    expect(ORCHESTRATOR_RUN_FLAG).toBe('WEBTERM_ORCHESTRATOR_RUN')
+    expect(ORCHESTRATOR_RUN_PATH).toBe('/api/orchestrator/run')
+  })
+
+  it('gates on the exact flag value "on"', () => {
+    expect(orchestratorRunEnabled({})).toBe(false)
+    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: '1' })).toBe(false)
+    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'on' })).toBe(true)
+  })
+
+  it('explains why server-resolved fields are refused', () => {
+    const parsed = parseRunBody({ ...valid, repo: '/tmp/evil' })
+    expect(parsed.ok).toBe(false)
+    if (!parsed.ok) {
+      expect(parsed.result).toEqual({
+        status: 400,
+        body: {
+          error: 'client_controlled_field',
+          message: 'repo is resolved server-side and must not be sent',
+        },
+      })
+    }
+  })
+
+  it('rejects non-object bodies, arrays and unknown git-hostile baseRefs', () => {
+    for (const body of [null, 'x', 1, [valid]]) {
+      const parsed = parseRunBody(body)
+      expect(parsed.ok).toBe(false)
+      if (!parsed.ok) expect(parsed.result).toMatchObject({ status: 400, body: { error: expect.any(String) } })
+    }
+    for (const baseRef of ['a b', 'a..b', 'a~1', 'a^', 'a:b', 'a?b', 'a*b', 'a[b', 'a\\b']) {
+      const parsed = parseRunBody({ ...valid, baseRef })
+      expect(parsed.ok).toBe(false)
+      if (!parsed.ok) expect(parsed.result.body).toMatchObject({ error: 'invalid_base_ref' })
+    }
+  })
+
+  it('keeps the prompt byte-for-byte and ignores unknown optional fields', () => {
+    const parsed = parseRunBody({ ...valid, prompt: '  spaced  ', extra: true })
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) expect(parsed.value.prompt).toBe('  spaced  ')
+  })
+
+  it('trims and bounds baseRef', () => {
+    const trimmed = parseRunBody({ ...valid, baseRef: '  main  ' })
+    expect(trimmed.ok && trimmed.value.baseRef).toBe('main')
+    expect(parseRunBody({ ...valid, baseRef: 'x'.repeat(201) }).ok).toBe(false)
+  })
+
+  it('rejects non-finite and non-numeric timeouts', () => {
+    for (const timeoutMs of [Number.NaN, Number.POSITIVE_INFINITY, '5000', null]) {
+      const parsed = parseRunBody({ ...valid, timeoutMs })
+      expect(parsed.ok).toBe(false)
+      if (!parsed.ok) expect(parsed.result.body).toMatchObject({ error: 'invalid_timeout' })
+    }
+  })
+})
