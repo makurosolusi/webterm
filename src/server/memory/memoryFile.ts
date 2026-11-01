@@ -5,48 +5,18 @@
  *   fixed argv (no shell). Same authority rules as `promoteMemory`.
  * - `rebuildMemoryIndex` (only import, files-win): upserts facts, quarantines conflicts.
  * - Flag off: both inert, no filesystem, git, or SQL writes.
+ * Path/port helpers live in `memoryFilePath`, render/parse in `memoryFileRender`; the public
+ * names are re-exported here so callers keep importing `memoryFile`.
  */
 import { createHash } from 'node:crypto'
-import { mkdir, open, readdir, readFile, realpath, rename, rm } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import type { Database } from 'bun:sqlite'
-import { redactSecrets } from '../channels/webhook'
 import { type Row, requireText } from '../ledger/ledgerCore'
 import { assertCanPromote, requireAuthority, toMemory } from './memoryCore'
-import { type Memory, type MemoryAuthority, MemoryAuthorityError, MemoryConflictError, MemoryError } from './memoryModel'
-
-declare const Bun: {
-  spawn(options: { cmd: string[]; cwd: string; env: Record<string, string>
-    stdin: 'ignore'; stdout: 'pipe'; stderr: 'pipe' }): { exited: Promise<number>
-    stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array> }
-}
-
-export const MEMORY_FILES_FLAG = 'WEBTERM_MEMORY_FILES'
-const DIGEST = /^(?:sha256:)?([0-9a-f]{64})$/i
-const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
-const MAX_SEGMENT = 96
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
-
-export function memoryFilesEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env[MEMORY_FILES_FLAG] === 'on'
-}
-
-export class MemoryFileError extends MemoryError {}
-
-export interface MemoryFileExecResult { code: number; stdout: string; stderr: string }
-export type MemoryFileSpawn = (file: string, args: string[], cwd: string) => Promise<MemoryFileExecResult>
-
-/** Injectable file + git surface (real impl below; tests inject temp dirs/fakes). */
-export interface MemoryFilePort {
-  readonly root: string
-  read(relPath: string): Promise<string | null>
-  write(relPath: string, content: string): Promise<void>
-  /** Regular files under `relDir`, sorted, posix separators. */
-  list(relDir?: string): Promise<string[]>
-  /** Runs a program via argv (no shell) and collects its output. */
-  exec(file: string, args: string[], cwd: string): Promise<MemoryFileExecResult>
-}
-
+import { type Memory, type MemoryAuthority, MemoryConflictError } from './memoryModel'
+import { MemoryFileError, assertConfined, memoryFileRelPath, memoryFilesEnabled } from './memoryFilePath'
+import type { MemoryFilePort } from './memoryFilePath'
+import { DIGEST_PATTERN, oneLine, parseMemoryFile, renderMemoryFile } from './memoryFileRender'
+import type { MemoryFileRecord } from './memoryFileRender'
 
 export interface MemorySqlDb {
   all(sql: string, ...params: unknown[]): Row[]
@@ -60,154 +30,6 @@ export function memorySqlDb(source: Database | MemorySqlDb): MemorySqlDb {
   if (typeof (source as { query?: unknown }).query !== 'function') return source as MemorySqlDb
   const db = source as unknown as { query(s: string): BunStatement }
   return { all: (s, ...p) => db.query(s).all(...p), run: (s, ...p) => db.query(s).run(...p) }
-}
-
-export function safeSegment(value: string): string {
-  const text = requireText(value, 'memoryFile.segment')
-  if (SAFE_SEGMENT.test(text) && !text.includes('..') && text.length <= MAX_SEGMENT) return text
-  const slug = text.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 48)
-  const digest = createHash('sha256').update(text).digest('hex').slice(0, 10)
-  return `${slug === '' ? 'fact' : slug}-${digest}`
-}
-
-export function memoryFileRelPath(projectId: string, key: string): string {
-  return `${safeSegment(projectId)}/${safeSegment(key)}.md`
-}
-
-/** Resolves `relPath` under `root`, refusing absolute and `..` escapes. */
-export function resolveInside(root: string, relPath: string): string {
-  if (typeof relPath !== 'string' || relPath.includes('\0') || isAbsolute(relPath)) {
-    throw new MemoryFileError(`memory file path must be relative: ${String(relPath)}`)
-  }
-  const rootPath = resolve(root)
-  const full = relPath.trim() === '' ? rootPath : resolve(rootPath, relPath)
-  if (full !== rootPath && !full.startsWith(rootPath + sep)) {
-    throw new MemoryFileError(`memory file path escapes root: ${relPath}`)
-  }
-  return full
-}
-
-async function realpathOrNull(path: string): Promise<string | null> {
-  try {
-    return await realpath(path)
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw err
-  }
-}
-
-/** No symlink in the path may escape `root`. */
-export async function assertConfined(root: string, relPath: string): Promise<void> {
-  const rootReal = await realpathOrNull(resolve(root))
-  if (rootReal === null) throw new MemoryFileError(`memory file root does not exist: ${root}`)
-  const full = resolveInside(rootReal, relPath)
-  const candidates = [full]
-  for (let dir = dirname(full); dir !== rootReal && dir.startsWith(rootReal + sep); dir = dirname(dir)) {
-    candidates.push(dir)
-  }
-  for (const candidate of [...candidates, rootReal]) {
-    const real = await realpathOrNull(candidate)
-    if (real !== null && real !== rootReal && !real.startsWith(rootReal + sep)) {
-      throw new MemoryFileError(`memory file path escapes root via symlink: ${relPath}`)
-    }
-  }
-}
-
-function oneLine(value: string, max = 300): string {
-  return value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
-}
-
-function redacted(value: string, max: number): string {
-  return redactSecrets(oneLine(value, max))
-}
-
-function evidenceField(digest: string | null | undefined): string | null {
-  if (digest === null || digest === undefined) return null
-  const match = DIGEST.exec(digest.trim())
-  if (match === null) throw new MemoryFileError('memory file evidence must be a sha256 digest')
-  return `sha256:${match[1].toLowerCase()}`
-}
-
-/** Deterministic Markdown with ordered JSON frontmatter. */
-export function renderMemoryFile(memory: Memory, evidenceDigest?: string | null): string {
-  if (memory.projectId === null) throw new MemoryFileError('memory file requires a project')
-  if (memory.status !== 'fact') throw new MemoryConflictError(`memory file requires status fact, got ${memory.status}`)
-  if (memory.scope === 'core') throw new MemoryAuthorityError('memory file: scope core is human-only, never exported')
-  const frontmatter = {
-    id: memory.id,
-    projectId: memory.projectId,
-    scope: memory.scope,
-    key: memory.key,
-    title: oneLine(memory.title),
-    sourceKind: memory.sourceKind === null ? null : redacted(memory.sourceKind, 120),
-    sourceRef: memory.sourceRef === null ? null : redacted(memory.sourceRef, 500),
-    status: 'fact',
-    evidence: evidenceField(evidenceDigest),
-    updatedAt: memory.updatedAt,
-  }
-  const body = redactSecrets(memory.body).replace(/\s+$/, '')
-  return `---\n${JSON.stringify(frontmatter, null, 2)}\n---\n\n# ${frontmatter.title}\n\n${body}\n`
-}
-
-export interface MemoryFileRecord {
-  id: string; projectId: string; scope: 'project' | 'scratch'; key: string; title: string
-  sourceKind: string | null; sourceRef: string | null; status: 'fact'
-  evidence: string | null; updatedAt: number; body: string
-}
-
-function textField(fm: Record<string, unknown>, name: string, label: string, required: boolean): string | null {
-  const value = fm[name]
-  if (value === null || value === undefined) {
-    if (required) throw new MemoryFileError(`${label}: frontmatter.${name} must be a non-empty string`)
-    return null
-  }
-  if (typeof value !== 'string' || (required && value.trim() === '')) {
-    throw new MemoryFileError(`${label}: frontmatter.${name} must be a string`)
-  }
-  return value
-}
-
-/** Parses one file; `core` is rejected because it is never file-backed. */
-export function parseMemoryFile(text: string, label = 'memory file'): MemoryFileRecord {
-  const match = FRONTMATTER.exec(text)
-  if (match === null) throw new MemoryFileError(`${label}: missing JSON frontmatter`)
-  let raw: unknown
-  try {
-    raw = JSON.parse(match[1])
-  } catch (err) {
-    throw new MemoryFileError(`${label}: frontmatter is not valid JSON`, { cause: err })
-  }
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new MemoryFileError(`${label}: frontmatter must be a JSON object`)
-  }
-  const fm = raw as Record<string, unknown>
-  if (fm['scope'] === 'core') {
-    throw new MemoryFileError(`${label}: scope core is human-only and never rebuilt from files`)
-  }
-  if (fm['scope'] !== 'project' && fm['scope'] !== 'scratch') {
-    throw new MemoryFileError(`${label}: frontmatter.scope must be project or scratch`)
-  }
-  if (fm['status'] !== 'fact') throw new MemoryFileError(`${label}: frontmatter.status must be fact`)
-  const updatedAt = fm['updatedAt']
-  if (typeof updatedAt !== 'number' || !Number.isFinite(updatedAt)) {
-    throw new MemoryFileError(`${label}: frontmatter.updatedAt must be epoch-ms`)
-  }
-  const rest = text.slice(match[0].length)
-  const heading = /^\s*#\s+[^\n]*\n/.exec(rest)
-  const evidence = textField(fm, 'evidence', label, false)
-  return {
-    id: textField(fm, 'id', label, true)!,
-    projectId: textField(fm, 'projectId', label, true)!,
-    scope: fm['scope'],
-    key: textField(fm, 'key', label, true)!,
-    title: textField(fm, 'title', label, true)!,
-    sourceKind: textField(fm, 'sourceKind', label, false),
-    sourceRef: textField(fm, 'sourceRef', label, false),
-    status: 'fact',
-    evidence: evidence === null ? null : evidenceField(evidence),
-    updatedAt,
-    body: (heading === null ? rest : rest.slice(heading[0].length)).replace(/^\s+|\s+$/g, ''),
-  }
 }
 
 export interface WriteMemoryFileResult { status: 'written' | 'unchanged' | 'disabled'; relPath?: string; commit?: string | null }
@@ -225,7 +47,7 @@ function evidenceDigestOf(sql: MemorySqlDb, id: string): string | null {
   if (typeof payload !== 'string') return null
   try {
     const digest = (JSON.parse(payload) as { evidence?: { digest?: unknown } }).evidence?.digest
-    return typeof digest === 'string' && DIGEST.test(digest) ? digest : null
+    return typeof digest === 'string' && DIGEST_PATTERN.test(digest) ? digest : null
   } catch {
     return null
   }
@@ -373,65 +195,20 @@ export async function rebuildMemoryIndex(
   return report
 }
 
-function bunSpawn(file: string, args: string[], cwd: string): Promise<MemoryFileExecResult> {
-  if (typeof Bun === 'undefined') {
-    return Promise.reject(new MemoryFileError('git exec requires Bun.spawn or an injected spawn'))
-  }
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
-  env.GIT_TERMINAL_PROMPT = '0'
-  const proc = Bun.spawn({ cmd: [file, ...args], cwd, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
-  return Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-    .then(([stdout, stderr, code]) => ({ code, stdout, stderr }))
-}
-
-export function createMemoryFilePort(root: string, spawn?: MemoryFileSpawn): MemoryFilePort {
-  const rootPath = resolve(root)
-  return {
-    root: rootPath,
-    async read(relPath) {
-      try {
-        return await readFile(resolveInside(rootPath, relPath), 'utf8')
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code
-        return code === 'ENOENT' || code === 'EISDIR' ? null : Promise.reject(err)
-      }
-    },
-    async write(relPath, content) {
-      const full = resolveInside(rootPath, relPath)
-      const dir = dirname(full)
-      await mkdir(dir, { recursive: true, mode: 0o700 })
-      const tmp = join(dir, `.${basename(full)}.${process.pid}.${Math.random().toString(16).slice(2, 10)}.tmp`)
-      const handle = await open(tmp, 'wx', 0o600)
-      try {
-        await handle.writeFile(content, 'utf8')
-        await handle.sync()
-        await handle.chmod(0o600)
-      } finally {
-        await handle.close()
-      }
-      try {
-        await rename(tmp, full)
-      } catch (err) {
-        await rm(tmp, { force: true })
-        throw err
-      }
-    },
-    async list(relDir = '') {
-      const out: string[] = []
-      const walk = async (dir: string, prefix: string): Promise<void> => {
-        for (const entry of await readdir(dir, { withFileTypes: true })) {
-          if (entry.name === '.git' || entry.name === 'node_modules' || entry.name.endsWith('.tmp')) continue
-          const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`
-          if (entry.isDirectory()) await walk(join(dir, entry.name), rel)
-          else if (entry.isFile()) out.push(rel)
-        }
-      }
-      await walk(resolveInside(rootPath, relDir), relDir)
-      return out.sort()
-    },
-    exec(file, args, cwd) {
-      return (spawn ?? bunSpawn)(file, args, cwd)
-    },
-  }
-}
+export {
+  MEMORY_FILES_FLAG,
+  MemoryFileError,
+  assertConfined,
+  createMemoryFilePort,
+  memoryFileRelPath,
+  memoryFilesEnabled,
+  resolveInside,
+  safeSegment,
+} from './memoryFilePath'
+export type {
+  MemoryFileExecResult,
+  MemoryFilePort,
+  MemoryFileSpawn,
+} from './memoryFilePath'
+export { parseMemoryFile, renderMemoryFile } from './memoryFileRender'
+export type { MemoryFileRecord } from './memoryFileRender'

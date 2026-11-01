@@ -3,24 +3,38 @@
 // `WorkerSessionPort`, verifikasi lewat closure server-owned, dan orkestrator lewat port sempit.
 // Alurnya: startWorker (cap/worktree/lease/plan) -> spawn agent di worktree -> kirim prompt
 // terbatas -> tunggu done/exit/lease/timeout -> verifikasi server -> recordWorkerResult sekali.
-import type { OpenMsg, ServerMsg } from '../../shared/protocol'
-import type { AgentStatus } from '../../shared/workspace'
+// Port sesi + helper prompt ada di `workerRuntimeSession`/`workerRuntimePrompt`, kontrak di
+// `workerRuntimeTypes`; nama publik tetap diekspor ulang dari sini.
 import { isSafeNodeId } from '../../shared/workspace'
-import type {
-  OrchestratorDenyCode,
-  OrchestratorResult,
-  OrchestratorTask,
-  RecordWorkerResultInput,
-  RecordWorkerResultValue,
-  StartWorkerInput,
-  StartWorkerValue,
-  VerificationEvidence,
-} from './orchestratorModel'
+import type { VerificationEvidence } from './orchestratorModel'
 import { evidenceVerified } from './orchestratorModel'
-import type { Plan, PlanItem, PlanStore } from './plan'
-import type { VerifyInput, VerifyOutcome } from './verify'
-import type { WorktreeService } from './worktree'
+import type { Plan } from './plan'
+import type { VerifyOutcome } from './verify'
 import { toModelEvidence } from './verifier'
+import { buildWorkerPrompt, capBytes, deriveNodeId, sanitizeText } from './workerRuntimePrompt'
+import { waitForSettle } from './workerRuntimeSettle'
+import type {
+  WorkerRunErrorCode,
+  WorkerRunInput,
+  WorkerRunOutcome,
+  WorkerRuntime,
+  WorkerRuntimeDeps,
+} from './workerRuntimeTypes'
+
+export {
+  createSessionsPort,
+  type SessionsLike,
+  type WorkerSessionPort,
+} from './workerRuntimeSession'
+export { buildWorkerPrompt, deriveNodeId, sanitizeText } from './workerRuntimePrompt'
+export type {
+  WorkerOrchestratorPort,
+  WorkerRunErrorCode,
+  WorkerRunInput,
+  WorkerRunOutcome,
+  WorkerRuntime,
+  WorkerRuntimeDeps,
+} from './workerRuntimeTypes'
 
 const DEFAULT_TIMEOUT_MS = 300_000
 const DEFAULT_POLL_MS = 250
@@ -28,197 +42,6 @@ const MIN_POLL_MS = 5
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
 const DEFAULT_MAX_PROMPT_BYTES = 8 * 1024
 const MAX_REASON_CHARS = 500
-
-/** Port sesi yang dibutuhkan runtime; `sessions` asli memenuhi bentuk ini lewat adapter. */
-export interface WorkerSessionPort {
-  open(input: {
-    nodeId: string
-    cwd: string
-    cmd?: string
-    agentId?: string
-    cols?: number
-    rows?: number
-  }): void | Promise<void>
-  input(nodeId: string, text: string): void
-  statusOf(nodeId: string): AgentStatus | undefined
-  getTerminal(nodeId: string): string
-  isLive(nodeId: string): boolean
-  close(nodeId: string): void
-}
-
-/** Subset struktural `Sessions`; sengaja tanpa import runtime supaya test bebas PTY. */
-export interface SessionsLike {
-  open(msg: OpenMsg, send: (m: ServerMsg) => void): void
-  input(id: string, data: string): void
-  statusOf(id: string): AgentStatus | undefined
-  getTerminal(id: string): string
-  isLive(id: string): boolean
-  close(id: string): void
-}
-
-export function createSessionsPort(source: SessionsLike): WorkerSessionPort {
-  const noop = (): void => {}
-  return {
-    open: (input) =>
-      source.open(
-        {
-          t: 'open',
-          id: input.nodeId,
-          cols: input.cols ?? 120,
-          rows: input.rows ?? 40,
-          cwd: input.cwd,
-          ...(input.cmd ? { cmd: input.cmd } : {}),
-          ...(input.agentId ? { agentId: input.agentId } : {}),
-        },
-        noop
-      ),
-    input: (nodeId, text) => source.input(nodeId, text),
-    statusOf: (nodeId) => source.statusOf(nodeId),
-    getTerminal: (nodeId) => source.getTerminal(nodeId),
-    isLive: (nodeId) => source.isLive(nodeId),
-    close: (nodeId) => source.close(nodeId),
-  }
-}
-
-export type WorkerRunErrorCode =
-  | OrchestratorDenyCode
-  | 'spawn_failed'
-  | 'timeout'
-  | 'lease_expired'
-  | 'session_exited'
-  | 'verify_failed'
-
-export interface WorkerRunOutcome {
-  ok: boolean
-  task: OrchestratorTask | null
-  plan: Plan | null
-  nodeId: string | null
-  /** Output terminal ter-sanitasi + dipotong `maxOutputBytes`; tidak pernah di-log mentah. */
-  output: string
-  evidence?: VerificationEvidence
-  error?: { code: WorkerRunErrorCode; message: string }
-  /** Kegagalan best-effort saat close/release; tidak mengubah hasil ledger. */
-  cleanupError?: string
-}
-
-export interface WorkerRunInput {
-  projectId: string
-  itemId: string
-  expectedVersion: number
-  repo: string
-  baseRef?: string
-  /** Instruksi tambahan; digabung ke prompt lalu dipotong `maxPromptBytes`. */
-  prompt?: string
-  timeoutMs?: number
-  leaseMs?: number
-}
-
-export interface WorkerOrchestratorPort {
-  startWorker(input: StartWorkerInput): Promise<OrchestratorResult<StartWorkerValue>>
-  recordWorkerResult(
-    input: RecordWorkerResultInput
-  ): Promise<OrchestratorResult<RecordWorkerResultValue>>
-}
-
-export interface WorkerRuntimeDeps {
-  orchestrator: WorkerOrchestratorPort
-  /** Opsional: hanya dipakai untuk membaca plan ketika record ditolak. */
-  plan?: PlanStore
-  sessions: WorkerSessionPort
-  /** Closure server-owned: root/exec/commands diikat pemanggil, bukan payload worker. */
-  verify: (input: VerifyInput) => Promise<VerifyOutcome>
-  /** Opsional: cleanup manual bila `recordWorkerResult` ditolak sebelum sempat release. */
-  worktrees?: WorktreeService
-  cmd?: string
-  agentId?: string
-  cols?: number
-  rows?: number
-  now?: () => number
-  sleep?: (ms: number) => Promise<void>
-  pollMs?: number
-  timeoutMs?: number
-  maxOutputBytes?: number
-  maxPromptBytes?: number
-}
-
-export interface WorkerRuntime {
-  runTask(input: WorkerRunInput): Promise<WorkerRunOutcome>
-}
-
-// ANSI CSI/OSC dan karakter kontrol (newline/tab dipertahankan) supaya teks yang dikembalikan
-// bersih dari escape terminal sebelum dipotong dan disimpan.
-const ANSI_PATTERN = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g
-const CONTROL_PATTERN = /[\u0000-\u0008\u000b-\u001f\u007f]/g
-
-export function sanitizeText(text: string): string {
-  return text.replace(ANSI_PATTERN, '').replace(CONTROL_PATTERN, '')
-}
-
-function capBytes(text: string, maxBytes: number): string {
-  const buffer = Buffer.from(text, 'utf8')
-  if (buffer.length <= maxBytes) return text
-  return buffer.subarray(0, maxBytes).toString('utf8')
-}
-
-/** Node id deterministik dari task+fence, selalu lolos `isSafeNodeId` (prefix `w-`). */
-export function deriveNodeId(taskId: string, fence: number): string {
-  return `w-${taskId}-${fence}`.replace(/[^A-Za-z0-9:_-]/g, '-').slice(0, 64)
-}
-
-export function buildWorkerPrompt(args: {
-  item: Pick<PlanItem, 'id' | 'title' | 'scope'>
-  worktree: { path: string; branch: string }
-  attempt: number
-  maxBytes: number
-  extra?: string
-}): string {
-  const scope = args.item.scope.map((entry) => `- ${entry}`).join('\n')
-  const extra = args.extra === undefined || args.extra.trim() === '' ? '' : `\n\n${args.extra.trim()}`
-  const prompt = [
-    'You are a leaf worker agent in webterm. Work only inside the worktree below.',
-    `Task: ${args.item.title}`,
-    `Scope (touch only these paths):\n${scope}`,
-    `Worktree: ${args.worktree.path}`,
-    `Branch: ${args.worktree.branch}`,
-    `Item: ${args.item.id} · attempt ${args.attempt}`,
-    'Steps: implement the task, run the repo tests/typecheck, then commit locally with git.',
-    'Do not push. Reply with a short summary; the orchestrator verifies independently.',
-    extra,
-  ]
-    .join('\n')
-    .trim()
-  return capBytes(sanitizeText(prompt), args.maxBytes)
-}
-
-type Settle = 'done' | 'timeout' | 'lease_expired' | 'session_exited'
-
-interface WaitLimits {
-  deadline: number
-  leaseDeadline: number | null
-  timeoutMs: number
-  pollMs: number
-  now: () => number
-  sleep: (ms: number) => Promise<void>
-}
-
-/** Poll status sampai done/exit; jam dan tidur di-inject supaya test deterministik. */
-async function waitForSettle(
-  sessions: WorkerSessionPort,
-  nodeId: string,
-  limits: WaitLimits
-): Promise<Settle> {
-  const maxPolls = Math.max(1, Math.ceil(limits.timeoutMs / limits.pollMs) + 2)
-  for (let poll = 0; poll < maxPolls; poll += 1) {
-    if (sessions.statusOf(nodeId) === 'done') return 'done'
-    if (!sessions.isLive(nodeId)) return 'session_exited'
-    const at = limits.now()
-    if (limits.leaseDeadline !== null && at >= limits.leaseDeadline) return 'lease_expired'
-    if (at >= limits.deadline) return 'timeout'
-    await limits.sleep(limits.pollMs)
-  }
-  // Jam yang tidak maju tidak boleh membuat loop abadi: batas poll = batas waktu.
-  return 'timeout'
-}
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -230,7 +53,7 @@ function boundedReason(reason: string): string {
 }
 
 function makeOutcome(args: {
-  task: OrchestratorTask | null
+  task: WorkerRunOutcome['task']
   plan: Plan | null
   nodeId: string | null
   output?: string
@@ -299,7 +122,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
       outcome: 'success' | 'failure',
       evidence: VerificationEvidence | undefined,
       reason?: string
-    ): Promise<OrchestratorResult<RecordWorkerResultValue>> => {
+    ) => {
       if (recorded) throw new Error(`worker runtime: result already recorded for ${task.id}`)
       recorded = true
       try {
@@ -315,7 +138,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
           ...(reason ? { reason: boundedReason(reason) } : {}),
         })
       } catch (err) {
-        return { ok: false, code: 'lease_denied', message: messageOf(err) }
+        return { ok: false as const, code: 'lease_denied' as const, message: messageOf(err) }
       }
     }
 
