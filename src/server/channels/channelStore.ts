@@ -217,8 +217,8 @@ export class ChannelStore {
     }
     if (this.state.outbox.some((row) => row.key === input.key)) return 'duplicate'
     if (this.state.outbox.length >= this.outboxLimit) {
-      // Sent rows are reclaimable; pending rows are never silently dropped.
-      this.state.outbox = this.state.outbox.filter((row) => row.state !== 'sent')
+      // Sent and dead rows are reclaimable; pending rows are never silently dropped.
+      this.state.outbox = this.state.outbox.filter((row) => row.state === 'pending')
       if (this.state.outbox.length >= this.outboxLimit) return 'full'
     }
     this.state.outbox.push({
@@ -229,6 +229,7 @@ export class ChannelStore {
       ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
       createdAt: this.clock(),
       attempts: 0,
+      nextAt: this.clock(),
       state: 'pending',
     })
     this.save()
@@ -243,8 +244,42 @@ export class ChannelStore {
     const row = this.state.outbox.find((entry) => entry.key === key)
     if (!row || row.state === 'sent') return false
     row.state = 'sent'
+    row.nextAt = this.clock()
+    row.lastError = undefined
     this.save()
     return true
+  }
+
+  /**
+   * Record one send failure. Attempts and nextAt are persisted so a restart keeps its backoff
+   * promise; `dead` stops the sender from retrying a permanently rejected reply. The caller owns
+   * the (already scrubbed) error text.
+   */
+  markReplyFailed(
+    key: string,
+    change: { nextAt: number; error?: string; dead?: boolean }
+  ): boolean {
+    const row = this.state.outbox.find((entry) => entry.key === key)
+    if (!row || row.state === 'sent') return false
+    row.attempts += 1
+    row.nextAt = Number.isFinite(change.nextAt) ? change.nextAt : this.clock()
+    row.state = change.dead ? 'dead' : 'pending'
+    row.lastError = change.error ? change.error.slice(0, 300) : undefined
+    this.save()
+    return true
+  }
+
+  /** Explicit bindings for the human API, in insertion order. Absence is still "unknown chat". */
+  listBindings(channel?: string): Array<{ channel: string; chatId: string; binding: ChannelBinding }> {
+    const out: Array<{ channel: string; chatId: string; binding: ChannelBinding }> = []
+    for (const [key, binding] of Object.entries(this.state.bindings)) {
+      const at = key.indexOf(':')
+      if (at <= 0) continue
+      const keyChannel = key.slice(0, at)
+      if (channel !== undefined && keyChannel !== channel) continue
+      out.push({ channel: keyChannel, chatId: key.slice(at + 1), binding: { ...binding } })
+    }
+    return out
   }
 
   /** Drop dedupe keys past TTL, oldest first, then enforce the hard bound. */

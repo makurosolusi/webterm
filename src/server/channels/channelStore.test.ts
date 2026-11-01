@@ -91,6 +91,22 @@ describe('ChannelStore persistence', () => {
     expect(store.enqueueReply({ key: 'k3', channel: 'telegram', chatId: '1', text: 'c' })).toBe('queued')
     expect(store.pendingReplies().map((row) => row.key)).toEqual(['k2', 'k3'])
   })
+
+  it('persists retry backoff and a dead letter, and reloads both', () => {
+    const path = tempStorePath()
+    const store = new ChannelStore(path)
+    store.enqueueReply({ key: 'retry', channel: 'telegram', chatId: '1', text: 'a' })
+    expect(store.markReplyFailed('retry', { nextAt: 9_000, error: 'http_500' })).toBe(true)
+    expect(store.markReplyFailed('retry', { nextAt: 9_000, error: 'http_500', dead: true })).toBe(true)
+
+    const reloaded = new ChannelStore(path)
+    const row = reloaded.snapshot().outbox[0]
+    expect(row?.attempts).toBe(2)
+    expect(row?.state).toBe('dead')
+    expect(row?.nextAt).toBe(9_000)
+    expect(row?.lastError).toBe('http_500')
+    expect(reloaded.pendingReplies()).toEqual([])
+  })
 })
 
 describe('ChannelStore fails closed', () => {

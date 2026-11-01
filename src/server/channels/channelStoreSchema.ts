@@ -17,7 +17,11 @@ export interface StoredReply {
   threadId?: number
   createdAt: number
   attempts: number
-  state: 'pending' | 'sent'
+  /** Epoch ms before which the sender must not retry. Absent in v1 rows; normalized to createdAt. */
+  nextAt: number
+  state: 'pending' | 'sent' | 'dead'
+  /** Last scrubbed provider error, for operator diagnosis. Never contains a token. */
+  lastError?: string
 }
 
 export interface ChannelStoreState {
@@ -70,6 +74,8 @@ function parseReply(value: unknown): StoredReply | null {
   const attempts = value['attempts']
   const state = value['state']
   const threadId = value['threadId']
+  const nextAt = value['nextAt']
+  const lastError = value['lastError']
   const bad =
     typeof key !== 'string' || !key ||
     typeof channel !== 'string' || !channel ||
@@ -77,10 +83,25 @@ function parseReply(value: unknown): StoredReply | null {
     typeof text !== 'string' ||
     typeof createdAt !== 'number' || !Number.isFinite(createdAt) ||
     typeof attempts !== 'number' || !Number.isInteger(attempts) || attempts < 0 ||
-    (state !== 'pending' && state !== 'sent') ||
-    (threadId !== undefined && (typeof threadId !== 'number' || !Number.isInteger(threadId)))
+    (state !== 'pending' && state !== 'sent' && state !== 'dead') ||
+    (threadId !== undefined && (typeof threadId !== 'number' || !Number.isInteger(threadId))) ||
+    (nextAt !== undefined && (typeof nextAt !== 'number' || !Number.isFinite(nextAt))) ||
+    (lastError !== undefined && typeof lastError !== 'string')
   if (bad) return null
-  return { key, channel, chatId, text, createdAt, attempts, state, ...(threadId === undefined ? {} : { threadId }) }
+  // A v1 row written before the sender existed has no nextAt; it is immediately due. This is the
+  // only in-memory migration, and every other field still passes the strict shape check.
+  return {
+    key,
+    channel,
+    chatId,
+    text,
+    createdAt,
+    attempts,
+    nextAt: nextAt === undefined ? createdAt : nextAt,
+    state,
+    ...(threadId === undefined ? {} : { threadId }),
+    ...(lastError === undefined ? {} : { lastError }),
+  }
 }
 
 /** Strict load: any shape drift is `corrupt`, never a partial accept with defaults merged in. */
