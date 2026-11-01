@@ -11,6 +11,7 @@ import { handleControlHttp } from './control/mount'
 import { inboxRoute } from './inboxApi'
 import { memoryRoute } from './memoryApi'
 import { orchestratorRoute } from './orchestratorApi'
+import { approvalHumanRoute } from './approvalHumanApi'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { contextLinkRoute } from './contextLinkApi'
 import { fsApiRoute } from './fsApi'
@@ -111,6 +112,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Read-only ledger projections for the UI (inbox/memory/orchestrator). Ledger off answers 503
   // `ledger_off` instead of an empty list; null from a family = keep falling through to 404.
   const ledger = activeLedgerRuntime()
+  if (await approvalHumanRoute(req, res, url)) return
   for (const family of [inboxRoute, memoryRoute, orchestratorRoute]) {
     const result = family(path, method, url.searchParams, ledger)
     if (result) return json(res, result.status, result.body)

@@ -122,6 +122,7 @@ body {
   right: var(--float-gap);
   bottom: var(--float-gap);
   overflow: hidden;
+  background: var(--canvas-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }

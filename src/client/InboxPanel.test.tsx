@@ -26,6 +26,7 @@ const ITEMS: InboxItem[] = [
 function makeClient(overrides: Partial<InboxClient> = {}): InboxClient {
   return {
     listInbox: vi.fn(async () => ITEMS),
+    getApprovalChallenge: vi.fn(async () => CHALLENGE),
     requestApproval: vi.fn(async () => CHALLENGE),
     decideApproval: vi.fn(async () => ({ id: CHALLENGE.id, status: 'approved' as const })),
     consumeApproval: vi.fn(async () => ({ ok: true })),

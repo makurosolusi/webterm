@@ -33,7 +33,8 @@ import { InboxApiError } from './inboxTypes'
 export * from './inboxTypes'
 
 export const INBOX_PATH = '/api/inbox'
-export const APPROVAL_PATH = '/api/control/approval'
+/** Human approval surface: transport-token/loopback auth, never an agent capability. */
+export const APPROVAL_PATH = '/api/approvals'
 
 /** Must match TOKEN_PARAM / TOKEN_KEY in `./api`. Duplicated on purpose: importing `./api` for
  *  the values would also run its module-level URL cleanup, and this module must be usable in a
@@ -226,6 +227,20 @@ export async function requestApproval(
   return toChallenge(body, { kind: input.kind, projectId: input.projectId })
 }
 
+/** Fetch the existing challenge for an inbox approval item (does not create a new approval). */
+export async function getApprovalChallenge(
+  id: string,
+  opts: RequestOptions = {}
+): Promise<ApprovalChallenge> {
+  if (typeof id !== 'string' || id === '') throw new InboxApiError('invalid_approval_id', 400, 'invalid_id')
+  const body = await request<unknown>(`${APPROVAL_PATH}/challenge?id=${encodeURIComponent(id)}`, {
+    ...opts,
+  })
+  const challenge = toChallenge(body, { kind: 'approval', projectId: '' })
+  if (!challenge) throw new InboxApiError('bad_response', 502, 'bad_response')
+  return challenge
+}
+
 /** Record a decision. Both digest and nonce must be echoed exactly; a changed or stale
  *  challenge is rejected by the server with a typed error the panel surfaces. */
 export async function decideApproval(
@@ -290,6 +305,7 @@ export async function consumeApproval(
 /** Default client, and the shape tests/fakes implement. */
 export const inboxApi: InboxClient = {
   listInbox,
+  getApprovalChallenge,
   requestApproval,
   decideApproval,
   consumeApproval,

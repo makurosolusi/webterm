@@ -69,6 +69,7 @@ export interface RequestOptions {
 /** The four calls the panel needs. Pass a fake in tests; the default is `inboxApi` below. */
 export interface InboxClient {
   listInbox(opts?: RequestOptions): Promise<InboxItem[]>
+  getApprovalChallenge(id: string, opts?: RequestOptions): Promise<ApprovalChallenge>
   requestApproval(input: ApprovalRequestInput, opts?: RequestOptions): Promise<ApprovalChallenge>
   decideApproval(input: ApprovalDecideInput, opts?: RequestOptions): Promise<ApprovalDecision>
   consumeApproval(input: ApprovalConsumeInput, opts?: RequestOptions): Promise<ApprovalConsumeResult>

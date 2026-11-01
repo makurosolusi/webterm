@@ -188,15 +188,18 @@ export default function InboxPanel(props: InboxPanelProps) {
     dialogAbort.current = controller
     setClock(nowRef.current())
     setDialog({ queue, index, challenge: null, phase: 'requesting', error: null, checked: false, text: '', approvedDigest: null })
-    clientRef.current
-      .requestApproval(
-        {
-          kind: item.kind,
-          projectId: item.projectId,
-          request: { itemId: item.id, title: item.title, detail: item.detail ?? null },
-        },
-        { signal: controller.signal }
-      )
+    const load =
+      item.kind === 'approval'
+        ? clientRef.current.getApprovalChallenge(item.id, { signal: controller.signal })
+        : clientRef.current.requestApproval(
+            {
+              kind: item.kind,
+              projectId: item.projectId,
+              request: { itemId: item.id, title: item.title, detail: item.detail ?? null },
+            },
+            { signal: controller.signal }
+          )
+    load
       .then((challenge) => {
         if (seq.current !== token) return
         setDialog((current) => (current ? { ...current, challenge, phase: 'ready' } : current))

@@ -36,6 +36,7 @@ const ITEMS: InboxItem[] = [
 function fakeClient(listInbox: InboxClient['listInbox'] = vi.fn(async () => ITEMS)): InboxClient {
   return {
     listInbox,
+    getApprovalChallenge: vi.fn(),
     requestApproval: vi.fn(),
     decideApproval: vi.fn(),
     consumeApproval: vi.fn(),
