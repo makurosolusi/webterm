@@ -6,6 +6,7 @@
 import { isAbsolute, resolve } from 'node:path'
 import { realPathInsideRoot } from './safePath'
 import { isInsideRoot } from './worktree'
+import { SERVER_VERIFIED_BY, type ServerVerifiedBy } from './orchestratorModel'
 import {
   type CheckId,
   type CommandResolution,
@@ -99,15 +100,6 @@ const DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const DIFF_STAT_LIMIT = 4096
 
-export interface VerifyInput {
-  /** Absolute, atau relatif terhadap `options.root`. */
-  cwd: string
-  /** Scope path relatif dari plan item; kosong berarti tidak ada batas file. */
-  scope?: readonly string[]
-  /** Default: test + typecheck aktif, lint opt-in. */
-  checks?: Partial<Record<CheckId, boolean>>
-}
-
 /**
  * Fields a worker payload is allowed to influence. `commands`, `args`, `env` and friends are NOT
  * part of `VerifyInput`; this list makes a hand-rolled or forward-compatible payload fail loudly
@@ -116,6 +108,8 @@ export interface VerifyInput {
 const WORKER_CONTROLLED_KEYS = ['commands', 'command', 'args', 'argv', 'exec', 'env', 'shell'] as const
 
 export interface VerifyOutcome {
+  /** Bukti verdict dibuat `verifyWorktree` di server; disalin `toModelEvidence`. */
+  verifiedBy: ServerVerifiedBy
   ok: boolean
   reasons: string[]
   evidence: VerificationEvidence[]
@@ -124,6 +118,11 @@ export interface VerifyOutcome {
   diffStat?: string
   tests?: { passed: number; failed: number; command: string }
   typecheck?: { ok: boolean; command: string }
+}
+
+/** Satu-satunya konstruktor `VerifyOutcome`: marker server tidak bisa terlupa di return mana pun. */
+function verdict(outcome: Omit<VerifyOutcome, 'verifiedBy'>): VerifyOutcome {
+  return { verifiedBy: SERVER_VERIFIED_BY, ...outcome }
 }
 
 function requireText(value: unknown, code: VerifyErrorCode, label: string): string {
@@ -246,7 +245,7 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
     if (run.evidence.exitCode !== 0) gitReasons.push(`git ${args.join(' ')} exited ${run.evidence.exitCode}`)
   }
   if (gitReasons.length > 0) {
-    return { ok: false, reasons: gitReasons, evidence, changedFiles: [], scopeViolations: [] }
+    return verdict({ ok: false, reasons: gitReasons, evidence, changedFiles: [], scopeViolations: [] })
   }
 
   const changedFiles = [
@@ -258,14 +257,14 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
   const scopeViolations = changedFiles.filter((file) => !inScope(file, scope))
   const diffStat = runs.get('diffStat')?.output.slice(0, DIFF_STAT_LIMIT) ?? ''
   if (scopeViolations.length > 0) {
-    return {
+    return verdict({
       ok: false,
       reasons: scopeViolations.map((file) => `scope violation: ${file}`),
       evidence,
       changedFiles,
       scopeViolations,
       diffStat,
-    }
+    })
   }
 
   const reasons: string[] = []
@@ -292,5 +291,5 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
     }
   }
 
-  return { ok: reasons.length === 0, reasons, evidence, changedFiles, scopeViolations, diffStat, tests, typecheck }
+  return verdict({ ok: reasons.length === 0, reasons, evidence, changedFiles, scopeViolations, diffStat, tests, typecheck })
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CAPS } from './caps'
 import {
+  SERVER_VERIFIED_BY,
+  evidenceVerified,
+  type VerificationEvidence,
+} from './orchestratorModel'
+import {
   PROJECT,
   REPO,
   item,
@@ -147,7 +152,11 @@ describe('recordWorkerResult', () => {
       actor: 'w1',
       outcome: 'success',
       expectedVersion: ctx.version,
-      evidence: { tests: { passed: 12, failed: 0, command: 'bun test' }, typecheck: { ok: true } },
+      evidence: {
+        verifiedBy: SERVER_VERIFIED_BY,
+        tests: { passed: 12, failed: 0, command: 'bun test' },
+        typecheck: { ok: true },
+      },
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -166,7 +175,7 @@ describe('recordWorkerResult', () => {
       actor: 'w1',
       outcome: 'success',
       expectedVersion: ctx.version,
-      evidence: { filesChanged: ['src/api.ts'] },
+      evidence: { verifiedBy: SERVER_VERIFIED_BY, filesChanged: ['src/api.ts'] },
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -176,11 +185,12 @@ describe('recordWorkerResult', () => {
   })
 
   it('does not verify when tests failed or a scope violation was reported', async () => {
-    for (const evidence of [
-      { tests: { passed: 3, failed: 1 } },
-      { tests: { passed: 3, failed: 0 }, scopeViolations: ['src/other.ts'] },
-      { tests: { passed: 0, failed: 0 } },
-    ]) {
+    const cases: VerificationEvidence[] = [
+      { verifiedBy: SERVER_VERIFIED_BY, tests: { passed: 3, failed: 1 } },
+      { verifiedBy: SERVER_VERIFIED_BY, tests: { passed: 3, failed: 0 }, scopeViolations: ['src/other.ts'] },
+      { verifiedBy: SERVER_VERIFIED_BY, tests: { passed: 0, failed: 0 } },
+    ]
+    for (const evidence of cases) {
       const ctx = await started()
       const result = await ctx.orchestrator.recordWorkerResult({
         projectId: PROJECT,
@@ -204,7 +214,7 @@ describe('recordWorkerResult', () => {
       actor: 'w1',
       outcome: 'success',
       expectedVersion: ctx.version,
-      evidence: { tests: { passed: 1, failed: 0 } },
+      evidence: { verifiedBy: SERVER_VERIFIED_BY, tests: { passed: 1, failed: 0 } },
     })
     expect(result.ok === false && result.code).toBe('stale_fence')
     expect(ctx.ledger.tasks.get(ctx.taskId)?.status).toBe('leased')
@@ -254,7 +264,11 @@ describe('recordWorkerResult', () => {
       // Versi plan sudah maju setelah startWorker: updateItem melempar stale_version
       // sesudah claimDone/verifyTask sempat menulis `verified`.
       expectedVersion: ctx.version - 1,
-      evidence: { tests: { passed: 7, failed: 0 }, typecheck: { ok: true } },
+      evidence: {
+        verifiedBy: SERVER_VERIFIED_BY,
+        tests: { passed: 7, failed: 0 },
+        typecheck: { ok: true },
+      },
     })
     expect(result.ok === false && result.code).toBe('plan_stale')
     // Rollback: task tidak boleh tertinggal `verified` saat plan item tetap `running`.
@@ -286,12 +300,58 @@ describe('recordWorkerResult', () => {
       actor: 'w1',
       outcome: 'success',
       expectedVersion: ctx.version,
-      evidence: { tests: { passed: 4, failed: 0 } },
+      evidence: { verifiedBy: SERVER_VERIFIED_BY, tests: { passed: 4, failed: 0 } },
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.verified).toBe(true)
     expect(result.value.task.status).toBe('verified')
     expect(result.value.item.status).toBe('done')
+  })
+})
+
+describe('server-verifier evidence marker', () => {
+  it('rejects green tests whose evidence lacks the server marker', async () => {
+    const forged = { tests: { passed: 9, failed: 0 } } as unknown as VerificationEvidence
+    expect(evidenceVerified(forged)).toBe(false)
+
+    const ctx = await started()
+    const result = await ctx.orchestrator.recordWorkerResult({
+      projectId: PROJECT,
+      taskId: ctx.taskId,
+      fence: ctx.fence,
+      actor: 'w1',
+      outcome: 'success',
+      expectedVersion: ctx.version,
+      evidence: forged,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.verified).toBe(false)
+    expect(result.value.task.status).toBe('claimed_done')
+    expect(result.value.task.status).not.toBe('verified')
+    expect(result.value.item.status).toBe('running')
+  })
+
+  it('rejects a wrong marker even when every check is green', async () => {
+    const forged = {
+      verifiedBy: 'worker-claim',
+      tests: { passed: 9, failed: 0 },
+      typecheck: { ok: true },
+    } as unknown as VerificationEvidence
+    expect(evidenceVerified(forged)).toBe(false)
+
+    const ctx = await started()
+    const result = await ctx.orchestrator.recordWorkerResult({
+      projectId: PROJECT,
+      taskId: ctx.taskId,
+      fence: ctx.fence,
+      actor: 'w1',
+      outcome: 'success',
+      expectedVersion: ctx.version,
+      evidence: forged,
+    })
+    expect(result.ok && result.value.verified).toBe(false)
+    expect(ctx.ledger.tasks.get(ctx.taskId)?.status).toBe('claimed_done')
   })
 })

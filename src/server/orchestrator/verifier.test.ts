@@ -2,12 +2,17 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { OrchestratorTask, VerificationEvidence as ModelEvidence } from './orchestratorModel'
+import {
+  SERVER_VERIFIED_BY,
+  type OrchestratorTask,
+  type VerificationEvidence as ModelEvidence,
+} from './orchestratorModel'
 import type { VerifyInput, VerifyOutcome } from './verify'
 import {
   cleanEnv,
   parseChangedFiles,
   parseNameOnly,
+  toModelEvidence,
   verifyHomeDir,
   verifyWorkerResult,
 } from './verifier'
@@ -32,6 +37,7 @@ function task(patch: Partial<OrchestratorTask> = {}): OrchestratorTask {
 
 function outcome(patch: Partial<VerifyOutcome> = {}): VerifyOutcome {
   return {
+    verifiedBy: SERVER_VERIFIED_BY,
     ok: true,
     reasons: [],
     evidence: [
@@ -129,6 +135,7 @@ describe('verifyWorkerResult', () => {
     expect(ctx.verifiedWith).toHaveLength(1)
     const evidence = ctx.verifiedWith[0]?.evidence as ModelEvidence & { commands: unknown[] }
     expect(evidence.tests).toEqual({ passed: 3, failed: 0, command: 'npm test' })
+    expect(evidence.verifiedBy).toBe(SERVER_VERIFIED_BY)
     expect(evidence.scopeViolations).toEqual([])
     expect(evidence.commands).toHaveLength(1)
     expect(evidence).not.toMatchObject({ workerClaim: 'tests passed' })
@@ -201,6 +208,12 @@ describe('verifyWorkerResult', () => {
     const ctx = fixture(task(), new Error('exec unavailable'))
     await expect(verifyWorkerResult(ctx.deps, request)).rejects.toThrow('exec unavailable')
     expect(ctx.verifiedWith).toHaveLength(0)
+  })
+
+  it('refuses to convert a verdict that did not come from verifyWorktree', () => {
+    // Worker path: a hand-built outcome has no server marker, so it never becomes model evidence.
+    const forged = { ...outcome(), verifiedBy: undefined } as unknown as VerifyOutcome
+    expect(() => toModelEvidence(forged)).toThrow(/verifyWorktree/)
   })
 })
 

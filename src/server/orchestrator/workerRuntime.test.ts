@@ -6,7 +6,11 @@ import type { AgentStatus } from '../../shared/workspace'
 import type { OpenMsg, ServerMsg } from '../../shared/protocol'
 import { PROJECT, REPO, item, planOf, setup } from './orchestrator.fake.testutil'
 import type { VerifyOutcome } from './verify'
-import type { OrchestratorResult, StartWorkerValue } from './orchestratorModel'
+import {
+  SERVER_VERIFIED_BY,
+  type OrchestratorResult,
+  type StartWorkerValue,
+} from './orchestratorModel'
 import {
   createSessionsPort,
   createWorkerRuntime,
@@ -35,6 +39,7 @@ function assigned() {
 
 function verdict(patch: Partial<VerifyOutcome> = {}): VerifyOutcome {
   return {
+    verifiedBy: SERVER_VERIFIED_BY,
     ok: true,
     reasons: [],
     evidence: [
@@ -192,6 +197,7 @@ describe('runTask success path', () => {
     expect(prompt.endsWith('\n')).toBe(true)
     expect(verifyInputs).toEqual([{ cwd: '/tmp/wt/t1', scope: ['src/api.ts'] }])
     expect(outcome.evidence?.tests).toMatchObject({ passed: 3, failed: 0 })
+    expect(outcome.evidence?.verifiedBy).toBe(SERVER_VERIFIED_BY)
     expect(fixture.worktrees.releases).toEqual(['t1'])
     expectClosed(sessions, outcome)
     expect(fixture.ledger.events.filter((e) => e.kind === 'orchestrator.result_recorded')).toHaveLength(1)

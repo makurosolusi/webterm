@@ -12,6 +12,7 @@ import {
   type VerifyOutcome,
 } from './verify'
 import {
+  SERVER_VERIFIED_BY,
   type OrchestratorLedger,
   type OrchestratorResult,
   type OrchestratorTask,
@@ -169,9 +170,17 @@ export function createProcessExec(source: NodeJS.ProcessEnv = process.env): Veri
 
 export type VerifyModelEvidence = ModelEvidence & { commands: VerificationEvidence[] }
 
-/** Bukti server (bukan klaim worker) dalam bentuk yang dipahami `evidenceVerified`. */
+/**
+ * Bukti server (bukan klaim worker) dalam bentuk yang dipahami `evidenceVerified`. Hanya verdict
+ * `verifyWorktree` yang boleh lewat: `verifiedBy` disalin dari outcome, jadi objek rakitan worker
+ * yang tidak membawa marker server tetap berhenti di `claimed_done`.
+ */
 export function toModelEvidence(outcome: VerifyOutcome): VerifyModelEvidence {
+  if (outcome.verifiedBy !== SERVER_VERIFIED_BY) {
+    throw new Error('toModelEvidence requires a verdict produced by verifyWorktree')
+  }
   return {
+    verifiedBy: SERVER_VERIFIED_BY,
     diffStat: outcome.diffStat,
     filesChanged: outcome.changedFiles,
     scopeViolations: outcome.scopeViolations,

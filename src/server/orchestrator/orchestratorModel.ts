@@ -99,8 +99,21 @@ export interface OrchestratorDeny {
 
 export type OrchestratorResult<T> = { ok: true; value: T } | OrchestratorDeny
 
-/** Bukti yang diklaim worker. `verified` hanya bila test lulus dan typecheck hijau. */
+/**
+ * Satu-satunya nilai `verifiedBy` yang dianggap bukti server. Konstanta ini menandai evidence
+ * yang dibuat oleh `verifyWorktree`/`toModelEvidence`, bukan objek yang dirakit worker.
+ */
+export const SERVER_VERIFIED_BY = 'server-verifier'
+export type ServerVerifiedBy = typeof SERVER_VERIFIED_BY
+
+/**
+ * Bukti hasil verifikasi. `verifiedBy` wajib dan hanya diisi oleh jalur verifier server
+ * (`toModelEvidence`): objek evidence buatan worker tanpa marker ini tidak pernah `verified`.
+ * Pengecualian eksplisit: approval manusia (`approvalHumanReview`) memanggil
+ * `ledger.task.verifyTask` langsung dengan evidence `null`, jadi tidak lewat gerbang ini.
+ */
 export interface VerificationEvidence {
+  verifiedBy: ServerVerifiedBy
   diffStat?: string
   filesChanged?: string[]
   scopeViolations?: string[]
@@ -109,11 +122,13 @@ export interface VerificationEvidence {
 }
 
 /**
- * Verifikasi independen minimal (RND §8): evidence tanpa test bukan `verified`, test
- * yang gagal atau typecheck merah juga tidak. Scope violation selalu memblokir.
+ * Verifikasi independen minimal (RND §8): evidence tanpa marker server, tanpa test, test
+ * yang gagal, atau typecheck merah bukan `verified`. Scope violation selalu memblokir.
+ * `verifiedBy` membuat klaim worker berhenti di `claimed_done` meski angka test-nya hijau.
  */
 export function evidenceVerified(evidence: VerificationEvidence | undefined): boolean {
   if (!evidence) return false
+  if (evidence.verifiedBy !== SERVER_VERIFIED_BY) return false
   if (Array.isArray(evidence.scopeViolations) && evidence.scopeViolations.length > 0) return false
   const tests = evidence.tests
   if (!tests || !Number.isFinite(tests.passed) || !Number.isFinite(tests.failed)) return false
