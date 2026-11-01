@@ -47,3 +47,35 @@ export type {
 } from './memoryModel'
 export { claimMemory, promoteMemory, quarantineMemory, supersedeMemory } from './memoryWrite'
 export { listMemory, memoryEvents, searchMemory } from './memorySearch'
+
+/**
+ * P4b file+git truth (flag `WEBTERM_MEMORY_FILES=on`, default off). SQLite stays the
+ * rebuildable index; `writeMemoryFactFile` is the only export path and
+ * `rebuildMemoryIndex` the only import path. Flag off makes both inert.
+ */
+export {
+  MEMORY_FILES_FLAG,
+  MemoryFileError,
+  assertConfined,
+  createMemoryFilePort,
+  memoryCommitMessage,
+  memoryFileRelPath,
+  memoryFilesEnabled,
+  memorySqlDb,
+  parseMemoryFile,
+  rebuildMemoryIndex,
+  renderMemoryFile,
+  resolveInside,
+  safeSegment,
+  writeMemoryFactFile,
+} from './memoryFile'
+export type {
+  MemoryFileExecResult,
+  MemoryFilePort,
+  MemoryFileRecord,
+  MemoryFileSpawn,
+  MemoryRebuildRejection,
+  MemoryRebuildReport,
+  MemorySqlDb,
+  WriteMemoryFileResult,
+} from './memoryFile'
