@@ -8,10 +8,11 @@ Update wave 2: 2026-11-01 15:24 (+08:00), `0f12506`..`2f04f77` (13 commit kode +
 `98441a4`/`c85d37e`). Semua angka "12:22" di bawah adalah snapshot lama yang sengaja
 dipertahankan; angka gate terbaru ada di §1 dan §8.
 
-Update wave 3: 2026-11-01 18:47 (+08:00), `9af9047`..`01e33ac` (8 commit). Menutup C2, C3,
-residual binding group saat load, cap body settings/workspaces, throttle proxy, alias nama token
-bot Telegram, dan gate plan terminal; plus cek status Telegram hidup (tanpa webhook/pesan).
-Snapshot wave 1/2 di bawah tidak ditulis ulang.
+Update wave 3: 2026-11-01 19:03 (+08:00), `9af9047`..`5d466e7` (10 commit, termasuk commit docs
+ini). Menutup C2, C3, residual binding group saat load, cap body settings/workspaces, throttle
+proxy, alias nama token bot Telegram, gate plan terminal, dan dua temuan correctness dari
+percobaan Claude nyata; plus cek status Telegram hidup (tanpa webhook/pesan). Snapshot wave 1/2
+di bawah tidak ditulis ulang.
 
 Label: `[V]` terverifikasi di snapshot · `[W]` ada di working tree, belum commit atau belum
 teruji end-to-end · `[P]` rencana saja, belum ada di kode.
@@ -48,13 +49,13 @@ Gate wave 2 (tree `2f04f77`, 2026-11-01 15:24; termasuk fix kontrol dan loop wor
 Flake yang diketahui: `terminalCore` dan `paneSplit` bisa gagal di bawah beban paralel dan
 lulus saat diisolasi. Jangan klaim deterministik 100%.
 
-Gate wave 3 (HEAD `01e33ac`, 2026-11-01 18:47; fokus C2/C3 + residual P5 + cap body + token
-alias + plan terminal):
+Gate wave 3 (HEAD `5d466e7`, 2026-11-01 19:03; fokus C2/C3 + residual P5 + cap body + token
+alias + plan terminal + correctness worker):
 
 | Cek | Hasil |
 |---|---|
 | `tsc --noEmit` (strict + unused) | bersih |
-| `vitest run` penuh (`TMPDIR=/tmp`) | 135 file / 1766 test lulus |
+| `vitest run` penuh (`TMPDIR=/tmp`) | 135 file / 1768 test lulus |
 | `bun test` penuh | 29 file / 204 test lulus |
 | Wave-3 terarah (`orchestratorRun`, `orchestratorRunApi`, `channelStore`, `channelsRuntime`, `webhookPeer`, `settingsApi`, `workspacesApi`) | 7 file / 85 test lulus |
 | `ledgerRuntime.bun.test.ts` | 6 test lulus |
@@ -73,7 +74,7 @@ Tanpa `TMPDIR=/tmp`, `controlCwd` gagal (lingkungan, lihat §9), bukan regresi k
 | `orchestrator/plan.ts` | `createPlanStore(db)` → get/create/replace/assign/updateItem, optimistic `version` | `[V]` + test; atomicity C2 ditutup wave 3 (§2a) |
 | `orchestrator/worktree.ts` | `createWorktreeService({root,exec})` → allocate/release/get/list; branch + path guard | `[V]` + test; dipakai `workerRuntime` |
 | `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[V]`; spawn PTY produksi di `workerRuntime.ts`; `recordWorkerResult` atomik bila `ledger.tx` ada |
-| `orchestrator/workerRuntime.ts` (+`Prompt`/`Session`/`Settle`/`Types`) | run satu task: worktree → PTY → prompt satu baris → settle/timeout → record → cleanup; cap prompt 8 KiB, output 64 KiB | `[V]` + test; loop fake-agent terverifikasi, Claude nyata belum |
+| `orchestrator/workerRuntime.ts` (+`Prompt`/`Session`/`Settle`/`Types`) | run satu task: worktree → PTY → prompt satu baris → settle/timeout → record → cleanup; cap prompt 8 KiB, output 64 KiB; sessionId baru per run agar Claude memakai `--settings`/hooks; `verified` wajib `changedFiles.length > 0` | `[V]` + test; loop fake-agent terverifikasi, Claude nyata **BLOCKED** (§2b) |
 | `orchestratorRunApi.ts` | `POST /api/orchestrator/run`, gate `WEBTERM_ORCHESTRATOR_RUN=on`; tolak field client (`repo/cmd/...`), repositori dari `project.path`, root worktree dibuat `0700`, timeout 5 s..15 mnt | `[V]` + test; acceptance loop fake-agent (`2f04f77`); C3 ditutup wave 3: `project.status` `paused` → 409 `project_paused` sebelum repo/plan/worktree; plan `completed`/`abandoned` → 409 `plan_closed` sebelum assignment/worktree |
 | `orchestratorControlApi.ts` | `POST /api/orchestrator/bootstrap` (project+orchestrator+worker+plan, path harus root git absolut, item wajib `scope` eksplisit) dan `/assign` (task ledger + kunci item, `expectedVersion`, agent id ber-`:` diterima) | `[V]`: acceptance HTTP bootstrap → duplicate 409 → assign → plan/tasks, tanpa worktree/PTY; B1 (`repo` ditolak) + B2 (agent id eksplisit) fixed di `0b63714` |
 | `ledger/ledgerApproval.ts` | request/get/list/decide/consume/expire; digest + nonce + single-use | `[V]` |
@@ -110,6 +111,28 @@ membuka consent yang ada di langkah Consume, tidak pernah mencetak approval kedu
 menggerbang ulang tombol Review sampai daftar approved selesai dibaca, saat panel dibuka dan
 saat ditutup-lalu-dibuka. Terverifikasi nyata (HTTP + ego-browser): Finish approval → Consume →
 task `verified`, baris keluar dari inbox, tidak ada approval kedua.
+
+### 2b. Percobaan Claude nyata: BLOCKED (bukan verified)
+
+Percobaan 2026-11-01 lewat `/api/orchestrator/run` dengan Claude Code nyata **gagal sebelum
+Claude menjalankan satu turn**:
+
+- Run 1 kena prompt workspace-trust Claude Code lalu keluar.
+- Run 2 (trust diterima) melaporkan `Not logged in · Run /login`.
+
+Tidak ada perubahan source/repo, worktree dilepas, server dihentikan. Jadi Claude nyata tetap
+**belum terverifikasi**; blocker-nya lingkungan (login CLI + workspace trust), bukan bukti kode
+worker benar atau salah.
+
+Dua temuan correctness dari percobaan itu ditutup di `5d466e7`:
+
+- `workerRuntime` mencetak `sessionId` baru per run, sehingga Claude diluncurkan dengan
+  `--settings`/hooks dan completion tidak lagi hanya bergantung pada exit PTY.
+- `verified` sekarang mewajibkan `changedFiles.length > 0`; diff kosong (mis. keluar di prompt
+  trust) menghasilkan `verify_failed: no files changed`, bukan sukses palsu.
+
+Test baru mencakup kedua jalur. Ini menutup false-positive verifikasi, tetapi **tidak** membuktikan
+Claude nyata bekerja.
 
 ---
 
@@ -253,9 +276,10 @@ Masih terbuka:
 - Gate blocking (`requireApproval` → `consumeApproval`) di jalur run belum ada; approval masih
   dipakai untuk review task, bukan sebagai prasyarat aksi worker.
 - Verifikasi independen belum menjadi satu-satunya jalur `verified`.
-- Claude nyata lewat `/api/orchestrator/run` sedang dicoba dan **belum terbukti**: loop penuh
-  lulus dengan agen palsu (PTY, prompt satu baris, SessionEnd, verify, cleanup), model/hook
-  Claude nyata belum.
+- Claude nyata lewat `/api/orchestrator/run` **BLOCKED** (2026-11-01): belum pernah menjalankan
+  satu turn. Run 1 keluar di prompt workspace-trust; Run 2 (trust diterima) `Not logged in ·
+  Run /login`. Loop penuh hanya lulus dengan agen palsu (PTY, prompt satu baris, SessionEnd,
+  verify, cleanup). Lihat §2b.
 
 Sudah ditutup di wave 2:
 
@@ -268,7 +292,7 @@ Sudah ditutup di wave 2:
   kini dibaca berbatas saat streaming (64/256 KiB). Test baru memin ackKey per node, deps merge
   stabil, consume digest salah, replay lintas restart, fallback ack; split `orchestrator*Api` 103/38.
 
-Sudah ditutup di wave 3 (`9af9047`..`01e33ac`):
+Sudah ditutup di wave 3 (`9af9047`..`5d466e7`):
 
 - C2: `recordWorkerResult` memakai `ledger.tx` untuk transisi task + `plan.updateItem` + audit
   event; plan stale me-rollback task. Test rollback sukses dan gagal (`orchestratorRun.test.ts`).
@@ -277,6 +301,10 @@ Sudah ditutup di wave 3 (`9af9047`..`01e33ac`):
 - Gate plan terminal: `plan.status` `completed`/`abandoned` menjawab 409 `plan_closed` sebelum
   assignment dan worktree; `draft`/`active` tetap boleh run (`01e33ac`; test `it.each` di
   `orchestratorRunApi.test.ts` untuk kedua status terminal dan kedua status yang lolos).
+- Correctness worker dari percobaan Claude nyata: sessionId per run (Claude memakai
+  `--settings`/hooks, bukan hanya exit PTY) dan `verified` wajib ada file berubah, diff kosong →
+  `verify_failed: no files changed` (`5d466e7`; test `workerRuntime.test.ts`). False-positive
+  verifikasi tertutup; Claude nyata tetap BLOCKED.
 - Binding group saat load: `parseStoreState` menurunkan `owner`/`approver` group ke `operator`
   di memori; file baru ditulis ulang pada save berikutnya (`887f174`; test load + no-rewrite).
 - Cap body: `PATCH /api/settings` 64 KiB, `POST /api/workspaces|active` 1 MiB, ditegakkan saat
@@ -327,20 +355,21 @@ reverse proxy yang menimpa `x-forwarded-for`; jangan aktifkan bila klien bisa me
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 1766 dan bun 204 lulus pada `01e33ac` (`TMPDIR=/tmp`) |
+| G0 typecheck + suite | ✅ | `tsc` strict + unused bersih; vitest 1768 dan bun 204 lulus pada `5d466e7` (`TMPDIR=/tmp`) |
 | G1 seam | ✅ | P0 |
 | G2 auth/capability | ⚠️ | capability ✅; family root-only kini dipin test; actor binding belum |
 | G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; migrasi kanal belum (slot v4) |
-| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal ✅; gate blocking approval di jalur run, verifikasi independen satu-satunya jalur, Claude nyata E2E belum |
+| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); C2/C3 + gate plan terminal + verifikasi wajib ada file berubah ✅; gate blocking approval di jalur run, verifikasi independen satu-satunya jalur, Claude nyata E2E BLOCKED (login/trust) |
 | G5 memory/inbox | ⚠️ | repo + route baca + file/git truth (P4b) ✅; route claim/promote, soak 2×2 minggu belum |
 | G6 central | ⚠️ | proyeksi + pause/resume/priority ✅; agen pusat otonom belum |
 | G7 omnichannel | ⚠️ | ingress + store + binding + sender + throttle proxy + revalidasi group ✅; delivery Telegram nyata (webhook publik + pesan) belum |
 
 **Vonis: jalur P3 (approval + inbox) tertutup end-to-end; loop P4/P5 sekarang ter-wire lewat
 HTTP (bootstrap → assign → run, memory files, central portfolio, Telegram bindings/egress),
-tetapi belum production-ready.** Yang masih menahan: Claude nyata E2E, gate blocking approval
-di jalur run, verifikasi independen sebagai satu-satunya jalur `verified`, soak P4b, delivery
-Telegram nyata, agen pusat otonom, dan E2E node canvas.
+tetapi belum production-ready.** Yang masih menahan: Claude nyata E2E (BLOCKED pada login CLI +
+workspace trust), gate blocking approval di jalur run, verifikasi independen sebagai satu-satunya
+jalur `verified`, soak P4b, route claim/promote memory, delivery Telegram nyata (webhook publik),
+agen pusat otonom, dan E2E node canvas.
 Jangan sebut P3-P5 production-ready sampai itu ditutup.
 
 ---
@@ -353,7 +382,7 @@ TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test $(git ls-files '*.bun.test.ts')
 ```
 
-Wave 3 (`01e33ac`): vitest penuh 135 file / 1766 test, bun penuh 29 file / 204 test, `tsc`
+Wave 3 (`5d466e7`): vitest penuh 135 file / 1768 test, bun penuh 29 file / 204 test, `tsc`
 strict + unused bersih; semua hijau dengan `TMPDIR=/tmp` (gate §9).
 `TMPDIR` di dalam home membuat `controlCwd`
 gagal (lingkungan, bukan regresi); run tanpa `TMPDIR=/tmp` juga mengumpulkan jumlah test berbeda
