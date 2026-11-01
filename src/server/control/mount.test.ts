@@ -182,7 +182,9 @@ describe('control HTTP mount', () => {
 
   it('rejects an oversized Content-Length before reading the body', async () => {
     const h = harness()
-    const readBody = vi.fn(async () => '')
+    // Non-empty on purpose: a mutant that fell back to `readBody` would otherwise hide behind
+    // the 413 and the `not.toHaveBeenCalled()` line below would be unreachable.
+    const readBody = vi.fn(async () => 'x'.repeat(65 * 1024))
     const res = fakeRes()
     const handled = await handleControlHttp(
       fakeReq('POST', { 'content-length': String(64 * 1024 + 1) }),
@@ -207,7 +209,7 @@ describe('control HTTP mount', () => {
 
   it('rejects a chunked body over the cap while streaming, without the unbounded reader', async () => {
     const h = harness()
-    const readBody = vi.fn(async () => '')
+    const readBody = vi.fn(async () => 'x'.repeat(65 * 1024))
     const res = fakeRes()
     const handled = await handleControlHttp(
       // Dua potongan yang masing-masing < 64 KiB: hanya akumulasi byte yang menembus batas.
@@ -220,6 +222,32 @@ describe('control HTTP mount', () => {
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(413)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'payload_too_large' })
+    expect(readBody).not.toHaveBeenCalled()
+  })
+
+  // Outcome-only assertions cannot tell "reject while streaming" from "buffer everything, then
+  // reject". The reader that detaches at overflow has ZERO 'data' listeners left; a buffering
+  // reader keeps exactly one until 'end', so this pins the streaming behaviour itself.
+  it('detaches from the request stream as soon as the cap is exceeded', async () => {
+    const h = harness()
+    const readBody = vi.fn(async () => 'x'.repeat(65 * 1024))
+    const res = fakeRes()
+    const req = new EventEmitter() as unknown as IncomingMessage
+    Object.assign(req, { method: 'POST', headers: {}, resume() {} })
+    const listenersAtOverflow: number[] = []
+    process.nextTick(() => {
+      req.emit('data', Buffer.alloc(70 * 1024)) // one chunk already past the cap
+      listenersAtOverflow.push(req.listenerCount('data'))
+      req.emit('data', Buffer.alloc(1024)) // must never be consumed
+      req.emit('end')
+    })
+    const handled = await handleControlHttp(
+      req, res as unknown as ServerResponse,
+      new URL('/api/control/spawn', 'http://x'), readBody, h.deps
+    )
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(413)
+    expect(listenersAtOverflow).toEqual([0])
     expect(readBody).not.toHaveBeenCalled()
   })
 

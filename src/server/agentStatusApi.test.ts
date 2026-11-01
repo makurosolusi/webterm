@@ -377,6 +377,28 @@ describe('batas body hook', () => {
     expect(d.writes).toEqual({ status: [], transcript: [] })
   })
 
+  // Hanya status yang diperiksa tidak bisa membedakan "tolak SAAT streaming" dari "tampung dulu,
+  // baru tolak". Pembaca berbatas melepas listener 'data' begitu cap terlampaui (0 listener);
+  // pembaca yang menampung tanpa batas menyisakan 1 listener sampai 'end'.
+  it('melepas listener stream begitu cap terlampaui', async () => {
+    const res = mockRes()
+    const d = deps()
+    const req = new EventEmitter() as unknown as IncomingMessage
+    Object.assign(req, { method: 'POST', headers: {}, resume() {} })
+    const listenersAtOverflow: number[] = []
+    process.nextTick(() => {
+      req.emit('data', Buffer.alloc(MAX_HOOK_BODY_BYTES + 1)) // satu chunk sudah di atas cap
+      listenersAtOverflow.push(req.listenerCount('data'))
+      req.emit('data', Buffer.alloc(16))
+      req.emit('end')
+    })
+    const handled = await agentStatusRoute(req, res, URL_FOR(NODE), { strictAuth: false, deps: d })
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(413)
+    expect(listenersAtOverflow).toEqual([0])
+    expect(d.writes).toEqual({ status: [], transcript: [] })
+  })
+
   it('menerima body tepat di bawah cap seperti biasa', async () => {
     const res = mockRes()
     const d = deps()
