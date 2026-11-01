@@ -20,7 +20,8 @@ dan **tidak wajib** (pengguna tanpa langganan Claude; lihat `09` §1).
   (memanggil `portfolio.read`), route `POST /api/central/conversations/:id/messages` + SSE +
   panel minimal.
 - Flag: `WEBTERM_CENTRAL=on`, `WEBTERM_CENTRAL_RUNTIME=mock`, `WEBTERM_CENTRAL_CHAT=on`.
-- Tool tulis (`goal.propose`, `plan.propose`, `task.assign`, `task.run`) **belum** ada.
+- Pada scope S0 awal, tool tulis (`goal.propose`, `plan.propose`, `task.assign`, `task.run`)
+  **belum** ada; status implementasi terbaru ada di Phase B3.
 Acceptance S0:
 1. Kirim pesan → satu `central_message`, satu `central_turn`, event `done`.
 2. Replay `clientMessageId` tidak membuat pesan/turn kedua.
@@ -120,10 +121,17 @@ Catatan bukti: CLI 2.0.26 sudah diverifikasi hidup (`09` §3). `step_finish` pen
 dikirim untuk jawaban satu langkah, jadi turn ditutup oleh exit proses. Tidak ada flag
 `--max-turns`/`--max-budget`; budget dihitung dari event dan ditegakkan dengan kill.
 ### B3. Tool registry dan policy
-**Status 2026-11-02:** partial. Typed proposal MVP untuk `goal.propose` dan `plan.propose` sudah
-divalidasi policy, diterapkan dengan dua flag planner/tools, diaudit sebagai `central.proposal`,
-dan diuji applied/rejected/cancelled. `task.assign` dan `task.run` proposal belum ada, sehingga
-B3 tidak boleh ditandai complete dan central belum dapat assign/run.
+**Status 2026-11-02:** partial. Typed proposal MVP untuk `goal.propose`, `plan.propose`, dan
+`task.assign` sudah divalidasi policy, diaudit sebagai `central.proposal`, dan diuji. `task.assign`
+menerima `{projectId,itemId,expectedVersion,assignee?}`, membutuhkan `WEBTERM_CENTRAL_PLANNER=on`,
+`WEBTERM_CENTRAL_TOOLS=write`, dan `WEBTERM_ORCHESTRATOR_RUN=on`, lalu membuat real ledger task
+dan mengunci pending plan item ke worker. Assign tidak spawn, run, atau approval. Yang masih
+Real OpenCode free-model E2E pada port 8837 membuktikan human request → `goal.propose` → policy
+→ `project.goal_json` proposed + audit. Port 8838 membuktikan `task.assign` memakai pending item
+context → real task `worker:p1` pending + plan item assigned + audit. Prompt menyediakan hingga
+50 pending items `{projectId,planVersion,itemId,title}`, exact schema ketiga tools, dan cap sekitar
+8 KiB. B3 tetap partial untuk `task.run`/approval-request proposals, sustained credentialed-model
+dan soak evidence, serta real `plan.propose` E2E yang belum dijalankan.
 | Target | Isi | Budget |
 |---|---|---|
 | `central/mcp/centralMcpServer.ts` (baru) | server MCP **stdio**; validasi capability per call | ≤250 |
@@ -135,7 +143,8 @@ B3 tidak boleh ditandai complete dan central belum dapat assign/run.
 | `central/tools/pauseRequest.ts` (+approvalRequest) | buat request; tidak pernah decide | ≤150 each |
 | `central/tools/*.test.ts` | allow/deny matrix, idempotensi | ≤400/file |
 Default `WEBTERM_CENTRAL_TOOLS=read` (hanya baca lewat MCP stdio); `write` membuka
-propose/assign/run. `task.run` tetap melewati `WEBTERM_ORCHESTRATOR_RUN` +
+proposal goal/plan/assign. `task.assign` memerlukan `WEBTERM_CENTRAL_PLANNER=on` dan
+`WEBTERM_ORCHESTRATOR_RUN=on`; `task.run` tetap melewati `WEBTERM_ORCHESTRATOR_RUN` +
 `WEBTERM_RUN_REQUIRE_APPROVAL`; central tidak memegang kunci approval. **Flag B:**
 `WEBTERM_CENTRAL_RUNTIME=off|mock|opencode|claude|codex`; `TOOLS=read|write`;
 `WEBTERM_CENTRAL_MODEL`; `WEBTERM_OPENCODE_BIN`; `WEBTERM_OPENCODE_ALLOW_TOOLS` (default off).
@@ -236,7 +245,7 @@ E aman paralel dengan B2/B3; D setelah C2; jangan B3 + C2 pada file yang sama ta
 | `WEBTERM_CENTRAL_CHAT` | off | C | route + panel chat |
 | `WEBTERM_CENTRAL_TELEGRAM` | off | D | bridge Telegram private |
 | `WEBTERM_CENTRAL_MEMORY` | off | E | retrieval + context builder |
-| `WEBTERM_CENTRAL_PLANNER` | off | B3 | propose plan/goal otomatis |
+| `WEBTERM_CENTRAL_PLANNER` | off | B3 | enable typed proposal handling |
 | `WEBTERM_ORCHESTRATOR_RUN` | off | existing | jalur run |
 | `WEBTERM_RUN_REQUIRE_APPROVAL` | off | existing | gate approval R2 |
 Nilai lain = off (fail-closed). Tanpa ledger hidup, runtime/chat/memory `503` dan tidak boot.

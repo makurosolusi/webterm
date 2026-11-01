@@ -3,7 +3,8 @@
 Status: riset, perencanaan, dan implementasi bertahap. **P0-P2 selesai.**
 **P3 tertutup end-to-end; P4/P5 ter-wire lewat HTTP tetapi belum production-ready.**
 Branch aktif `feature/agent-pusat-p3`; commit terakhir `2f04f77` (wave 2 + loop worker).
-Snapshot status: 2026-11-02 (+08:00). Central update: B2 real turn terverifikasi; B3 partial;
+Snapshot status: 2026-11-02 (+08:00). Central update: B2 real turn terverifikasi; B3 partial dengan
+`task.assign` selesai;
 D bridge dan E retrieval teruji pada unit/acceptance terbatas, belum production-ready.
 
 Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
@@ -165,8 +166,9 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
   Detail dan gate: `07-IMPLEMENTASI-P3-P5.md` §8; riwayat temuan/fix:
   `qc/p4-wave2-fixes.md`.
 
-Central detail dan evidence terbaru ada di `14-CENTRAL-AGENT-S0.md`: B3 masih partial karena
-proposal `task.assign`/`task.run` belum tersedia; Telegram delivery nyata dan production memory
+Central detail dan evidence terbaru ada di `14-CENTRAL-AGENT-S0.md`: B3 masih partial hanya untuk
+`task.run`/approval request paths, sustained credentialed-model/soak evidence, dan real
+`plan.propose` E2E; `task.assign` sudah tersedia. Telegram delivery nyata dan production memory
 E2E juga belum diverifikasi.
 
 ### Yang sudah terverifikasi
