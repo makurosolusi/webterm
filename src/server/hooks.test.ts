@@ -390,12 +390,16 @@ describe('buildClaudeFlags', () => {
 // -----------------------------------------------------------------------------------------------
 // Bentuk route `POST /api/agent-status`. Ia butuh `./db` (bun:sqlite) dan sebuah
 // IncomingMessage/ServerResponse nyata, jadi tidak bisa diimpor atau dijalankan di suite node-env
-// ini. Yang bisa: membaca source-nya dan menolak bentuk yang salah — pola yang sama dengan
-// `src/client/workspaceCommit.test.ts`.
+// ini. Yang bisa: membaca source modul route-nya dan menolak bentuk yang salah — pola yang sama
+// dengan `src/client/workspaceCommit.test.ts`. Sejak blok route dipindah ke `agentStatusApi.ts`,
+// yang di-slice adalah badan `agentStatusRoute` di sana; `api.ts` hanya menyisakan satu baris
+// dispatch, dan itu pun diuji (lihat "api.ts hanya men-dispatch").
 const apiSrc = () => readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
+const agentStatusSrc = () =>
+  readFileSync(fileURLToPath(new URL('./agentStatusApi.ts', import.meta.url)), 'utf8')
 
-/** Blok `if (path === '/api/agent-status' ...)` saja, sampai `}` penutupnya di indentasi 2 spasi. */
-const agentStatusBlock = (s: string) => s.split("path === '/api/agent-status'")[1]?.split('\n  }')[0] ?? ''
+/** Badan `agentStatusRoute` saja: mulai dari deklarasinya sampai akhir file modul route. */
+const agentStatusBlock = (s: string) => s.split('export async function agentStatusRoute')[1] ?? ''
 
 /** Blok `if (path === '/api/context-link' ...)` saja, dengan pemotongan yang sama. */
 const contextLinkBlock = (s: string) => s.split("path === '/api/context-link'")[1]?.split('\n  }')[0] ?? ''
@@ -420,7 +424,7 @@ const OLD_ROUTE = `
 
 describe('route POST /api/agent-status', () => {
   it('membalas payload hook, dan masih punya jalur 204 saat tidak ada payload', () => {
-    const b = agentStatusBlock(apiSrc())
+    const b = agentStatusBlock(agentStatusSrc())
     // Dihitung dulu: blok kosong akan meluluskan guard apa pun tanpa menjaga apa-apa.
     expect(b.length).toBeGreaterThan(0)
     expect(repliesWithHookPayload(b)).toBe(true)
@@ -430,13 +434,13 @@ describe('route POST /api/agent-status', () => {
   })
 
   it('menjalankan jalur status/transcript sebelum menghitung pengumuman', () => {
-    expect(statusPathRunsFirst(agentStatusBlock(apiSrc()))).toBe(true)
+    expect(statusPathRunsFirst(agentStatusBlock(agentStatusSrc()))).toBe(true)
   })
 
   it('tidak menduplikasi keputusan event di route — itu milik hookContext', () => {
     // `nextHookContext` sendiri yang memutuskan event mana layak diumumkan. Menyalin daftarnya ke
     // sini berarti dua tempat harus berubah bersamaan, dan yang satu akan tertinggal.
-    const b = agentStatusBlock(apiSrc())
+    const b = agentStatusBlock(agentStatusSrc())
     expect(b).not.toContain('SessionStart')
     expect(b).not.toContain("'UserPromptSubmit'")
   })
@@ -444,6 +448,14 @@ describe('route POST /api/agent-status', () => {
   it('kedua guard menolak bentuk lama route-nya', () => {
     expect(repliesWithHookPayload(OLD_ROUTE)).toBe(false)
     expect(statusPathRunsFirst(OLD_ROUTE)).toBe(false)
+  })
+
+  it('api.ts hanya men-dispatch satu baris ke modul route', () => {
+    const s = apiSrc()
+    expect(s).toContain('await agentStatusRoute(req, res, url)')
+    // Blok lamanya tidak boleh tersisa di api.ts — dua salinan guard/payload akan menyimpang.
+    expect(s).not.toContain('hookSpecificOutput')
+    expect(agentStatusBlock(agentStatusSrc())).toContain('/api/agent-status')
   })
 })
 
@@ -465,7 +477,7 @@ const NO_GUARD_ROUTE = OLD_ROUTE
 
 describe('guard node id di route /api', () => {
   it('agent-status menolak node hilang/tidak aman sebagai no-op 204', () => {
-    const b = agentStatusBlock(apiSrc())
+    const b = agentStatusBlock(agentStatusSrc())
     expect(b.length).toBeGreaterThan(0)
     expect(rejectsUnsafeNode(b)).toBe(true)
     // No-op-nya berstatus 204 dan berhenti SEBELUM body dibaca/ditulis.
@@ -475,7 +487,7 @@ describe('guard node id di route /api', () => {
   })
 
   it('agent-status membatasi panjang transcript_path dan tidak membacanya', () => {
-    const b = agentStatusBlock(apiSrc())
+    const b = agentStatusBlock(agentStatusSrc())
     expect(boundsTranscriptPath(b)).toBe(true)
     expect(boundsTranscriptPath(OLD_ROUTE)).toBe(false)
   })

@@ -6,18 +6,13 @@ import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
 import { workspacesRoute } from './workspacesApi'
+import { agentStatusRoute } from './agentStatusApi'
+import { handleControlHttp } from './control/mount'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
-import { hookStatus, type HookStatusBody } from './hookStatus'
 import { renderForRequester, buildLinkDoc, findWorkspaceFor, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
-import { nextHookContext } from './hookContext'
 import { isSafeNodeId } from '../shared/workspace'
-
-/** `transcript_path` hanya DISIMPAN, tidak pernah dibaca di sini. Batas panjangnya menjaga
- *  registry dari nilai raksasa yang di-post berulang; 4096 cukup untuk path absolut terpanjang
- *  di mesin nyata (PATH_MAX 1024 di Linux, 1024 di macOS). */
-export const TRANSCRIPT_PATH_MAX = 4096
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -82,33 +77,10 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (gitRes) return json(res, gitRes.status, gitRes.body)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
-  if (path === '/api/agent-status' && method === 'POST') {
-    const node = url.searchParams.get('node')
-    // BATAS INPUT: route ini menulis status/transcript untuk id yang SEPENUHNYA berasal dari
-    // query string, jadi ia batas ketiga setelah WebSocket dan registry. Id yang tidak aman
-    // diabaikan sebagai no-op (204, tanpa body) — bukan 400 — karena pemanggilnya adalah hook
-    // curl di dalam agent yang tidak boleh dibuat gagal oleh nilai aneh.
-    if (!isSafeNodeId(node)) { res.statusCode = 204; res.end(); return }
-    // `HookStatusBody` dipakai apa adanya, bukan disalin ulang: field mana yang menentukan status
-    // adalah milik `hookStatus`, dan dua daftar yang harus berubah bersamaan pasti akan menyimpang.
-    let body: HookStatusBody & { message?: string; transcript_path?: string }
-    try { body = JSON.parse(await readBody(req)) } catch { body = {} }
-    const status = hookStatus(body)
-    if (status) sessions.setStatus(node, status)
-    // Hanya DISIMPAN: pembacaan file terjadi di `contextLink`, dan path sepanjang apa pun di sini
-    // akan ditulis ulang oleh setiap hook berikutnya pada node yang sama.
-    if (typeof body.transcript_path === 'string' && body.transcript_path.length > 0
-      && body.transcript_path.length <= TRANSCRIPT_PATH_MAX) {
-      sessions.setTranscript(node, body.transcript_path)
-    }
-    // Balasan hook adalah satu-satunya kanal PUSH ke konteks agent. `nextHookContext` sendiri yang
-    // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
-    // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
-    const ws = findWorkspaceFor(db.list(), node)
-    const ctx = ws ? nextHookContext(node, body.hook_event_name, buildLinkDoc(ws, node)) : null
-    if (ctx) return json(res, 200, { hookSpecificOutput: ctx })
-    res.statusCode = 204; res.end(); return
-  }
+  if (await agentStatusRoute(req, res, url)) return
+
+  // Headless control plane (/api/control/*): false = not this family, keep falling through.
+  if (await handleControlHttp(req, res, url, () => readBody(req))) return
 
   // Read-only context-link: a linked node reads a bridged peer's transcript/terminal.
   if (path === '/api/context-link' && method === 'GET') {
