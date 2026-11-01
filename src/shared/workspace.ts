@@ -267,14 +267,18 @@ export function isSafeSessionId(s: unknown, bounded = false): boolean {
 //
 // Node id datang dari client lewat WebSocket dan DIDARATKAN di dua tempat yang mengeksekusi teks:
 // baris perintah curl hook claude (`claudeHooksSettings`, src/server/hooks.ts) dan kunci PTY/status.
-// Alfabetnya sengaja lebih sempit dari session id: alfanumerik, `_`, `-` — UUID `randomId()`
-// (satu-satunya pemasok id di client) muat, sementara kutip, `$`, `;`, spasi, dan newline tidak.
+// Alfabetnya sengaja lebih sempit dari session id: alfanumerik, `_`, `-`, dan `:` — UUID
+// `randomId()` muat, dan begitu pula id pane split `${nodeId}:p${n}` dari client/paneTree.ts
+// (tanpa `:` setiap pane hasil split ditolak dan tidak pernah mendapat PTY). Karakter pertama WAJIB
+// alfanumerik supaya nilai mirip-flag (`-x`, `--help`) ditolak, bukan diteruskan ke shell. Kutip,
+// `$`, `;`, spasi, newline, `/`, dan `.` tetap tidak muat. Maksimum 64 karakter.
 export const NODE_ID_MAX = 64
-export const SAFE_NODE_ID = /^[A-Za-z0-9_-]{1,64}$/
+export const SAFE_NODE_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$/
 
 /** Apakah `id` node id yang aman dipakai sebagai kunci sesi DAN diinterpolasikan ke perintah shell?
  *  Dipanggil di batas WebSocket (`Sessions.open`) dan lagi di titik interpolasi (hooks.ts), bukan
- *  dipercaya dari tipe. */
+ *  dipercaya dari tipe. Menerima id pane split `${nodeId}:p${n}` selama totalnya <= `NODE_ID_MAX`
+ *  dan karakter pertamanya alfanumerik (jadi `-x`/`--help` ditolak). */
 export const isSafeNodeId = (id: unknown): id is string =>
   typeof id === 'string' && SAFE_NODE_ID.test(id)
 

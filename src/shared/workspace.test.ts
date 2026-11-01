@@ -274,6 +274,25 @@ describe('isSafeNodeId', () => {
     }
   })
 
+  it('menerima id pane split `${nodeId}:p${n}` dari client/paneTree.ts', () => {
+    // Regresi: tanpa `:` di alfabet, SETIAP pane hasil split ditolak di batas WebSocket dan pane
+    // itu tidak pernah mendapat PTY.
+    for (const id of [
+      'node:p2',
+      '3f2a1c00-0000-4000-8000-000000000001:p2',
+      'a:b:c', // bentuk aneh tetap aman bagi shell; bukan urusan validator menilai struktur
+      `${'a'.repeat(60)}:p10`, // 64 karakter total
+    ]) {
+      expect(isSafeNodeId(id), id).toBe(true)
+    }
+  })
+
+  it('menolak nilai mirip-flag (karakter pertama wajib alfanumerik)', () => {
+    for (const bad of ['-x', '--help', '-', '_:p2', ':p2', '_n1']) {
+      expect(isSafeNodeId(bad), String(bad)).toBe(false)
+    }
+  })
+
   it('menolak kutip, $( ), newline, spasi, dan metakarakter shell', () => {
     for (const bad of [
       `n1'`,
@@ -286,7 +305,10 @@ describe('isSafeNodeId', () => {
       'n1&&id',
       'n1|tee',
       'n1&x=1',
+      '../x',
+      'n1:p2 ../x',
       'a'.repeat(65),
+      `${'a'.repeat(62)}:p10`, // 66 karakter: batas 64 tetap berlaku
       '',
       null,
       undefined,

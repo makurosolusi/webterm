@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 process.env.WEBTERM_DATA_DIR = join(tmpdir(), 'webterm-hooks-test')
 
 import type { AgentPermissionMode } from '../shared/workspace'
+import { isSafeNodeId } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
 import {
   CLAUDE_HOOK_EVENTS,
@@ -25,6 +26,7 @@ import {
   nodeToken,
   permissionModeFlag,
   stateVerified,
+  writeClaudeSettings,
 } from './hooks'
 import { nextHookContext } from './hookContext'
 
@@ -33,6 +35,13 @@ import { nextHookContext } from './hookContext'
 function commandFor(nodeId: string): string {
   const hooks = claudeHooksSettings(nodeId, 8700).hooks as Record<string, unknown[]>
   return (hooks['Stop'][0] as { hooks: { command: string }[] }).hooks[0].command
+}
+
+/** Path file header yang ditunjuk `-H @'<path>'` di baris hook. */
+function headersPathOf(cmd: string): string {
+  const m = /-H @'([^']+)'/.exec(cmd)
+  if (!m) throw new Error(`no @header file in command: ${cmd}`)
+  return m[1]
 }
 
 describe('claudeHooksSettings', () => {
@@ -56,23 +65,25 @@ describe('claudeHooksSettings', () => {
   it('leaves the hold timeout above the wait it bounds', () => {
     expect(PERMISSION_REQUEST_HOOK_TIMEOUT_SECS).toBeGreaterThan(PERM_WAIT_SECS_INTERACTIVE)
   })
-  it('sends the node token by env-var REFERENCE, never its value', () => {
+  it('never puts a token value or env reference on the command line', () => {
     const tok = nodeToken('n-ref')
-    const cmd = (
-      (claudeHooksSettings('n-ref', 8700).hooks as Record<string, unknown[]>)['Stop'][0] as {
-        hooks: { command: string }[]
-      }
-    ).hooks[0].command
-    expect(cmd).toContain(`${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}`)
+    const cmd = commandFor('n-ref')
+    // `-H @file`: nilainya dibaca curl dari file 0600, tidak pernah menjadi argv.
+    expect(cmd).toContain(`-H @'`)
+    expect(cmd).toContain('.headers')
     expect(cmd).not.toContain(tok)
+    // Referensi env var pun sudah tidak ada lagi — shell meng-expand-nya SEBELUM exec, jadi token
+    // aslinya tetap mendarat di argv.
+    expect(cmd).not.toContain(`$${NODE_TOKEN_ENV}`)
+    expect(cmd).not.toContain('$WEBTERM_TOKEN')
   })
-  it('sends the transport token too, also by reference, without dropping the node token', () => {
+  it('points at a single header file that carries both headers', () => {
     // Seluruh `/api/` digerbangi `authorize()` lewat `x-webterm-token`, jadi hook butuh KEDUA
-    // header. Nama env var ditulis literal di sini, bukan di-import: justru itu yang membuat
-    // test ini gagal kalau ejaan di hooks.ts berubah.
+    // header. Keduanya hidup di file yang sama; nama env var ditulis literal di test supaya ejaan
+    // yang berubah di hooks.ts menggagalkan test ini.
     const cmd = commandFor('n-transport')
-    expect(cmd).toContain(`${TOKEN_HEADER}: $WEBTERM_TOKEN`)
-    expect(cmd).toContain(`${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}`)
+    expect(headersPathOf(cmd)).toMatch(/\.headers$/)
+    expect(cmd.match(/-H /g)).toHaveLength(1)
   })
   it('builds a line sh can parse', () => {
     execFileSync('sh', ['-n'], { input: commandFor('n-syntax') })
@@ -124,8 +135,7 @@ describe('redirect baris hook', () => {
 })
 
 // -----------------------------------------------------------------------------------------------
-// Apa yang BENAR-BENAR diterima curl. Bentuk string saja tidak membuktikan apa pun: ekspansi tak
-// terkutip akan tetap "memuat" header-nya sambil memecahnya jadi beberapa argumen. Jadi `curl`
+// Apa yang BENAR-BENAR diterima curl. Bentuk string saja tidak membuktikan apa pun, jadi `curl`
 // di-stub lewat shim di PATH yang mencatat argv-nya, lalu barisnya dijalankan `sh` sungguhan.
 
 /** Token palsu yang sengaja memuat spasi, `$`, dan kutip tunggal — tiga hal yang hancur duluan
@@ -156,33 +166,85 @@ function curlArgv(cmd: string, env: Record<string, string>): string[] {
 }
 
 describe('the argv curl actually receives', () => {
-  it('passes each token as ONE argument, special characters intact', () => {
+  it('never carries a token value, only the path to the header file', () => {
     const argv = curlArgv(commandFor('n-argv'), {
       WEBTERM_TOKEN: FAKE_TRANSPORT_TOKEN,
       [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN,
     })
-    // Elemen utuh, bukan `toContain` pada string gabungan: inilah yang membedakan satu argumen
-    // dari tiga pecahan hasil word splitting.
-    expect(argv).toContain(`${TOKEN_HEADER}: ${FAKE_TRANSPORT_TOKEN}`)
-    expect(argv).toContain(`${NODE_TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`)
-    // Tiap nilai header didahului `-H`-nya sendiri.
-    expect(argv[argv.indexOf(`${TOKEN_HEADER}: ${FAKE_TRANSPORT_TOKEN}`) - 1]).toBe('-H')
-    expect(argv[argv.indexOf(`${NODE_TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`) - 1]).toBe('-H')
-    // Tidak ada pecahan nyasar: token ber-spasi yang ter-split akan memunculkan `ke$it's` sendirian.
-    expect(argv).not.toContain(`ke$it's`)
-    expect(argv).not.toContain(TOKEN_HEADER + ':')
+    // Inilah gunanya file header: `ps` hanya melihat path-nya, bukan nilai token.
+    const joined = argv.join('\n')
+    expect(joined).not.toContain(FAKE_TRANSPORT_TOKEN)
+    expect(joined).not.toContain(FAKE_NODE_TOKEN)
+    expect(joined).not.toContain(TOKEN_HEADER)
+    expect(joined).not.toContain(NODE_TOKEN_HEADER)
+    // Dan path itu memang datang sebagai argumen `-H`.
+    const headerArg = argv[argv.indexOf('-H') + 1]
+    expect(headerArg.startsWith('@')).toBe(true)
+    expect(headerArg.endsWith('.headers')).toBe(true)
   })
-  it('stays well-formed when no token is configured', () => {
-    // Tanpa `WEBTERM_TOKEN` barisnya tetap mengemit header bernilai kosong sebagai DUA argumen
-    // (`-H`, lalu nilai kosongnya) — curl sendiri yang membuangnya, dan server di keadaan ini tidak
-    // menegakkan token apa pun. Yang dijaga di sini: barisnya tidak berantakan.
+  it('stays well-formed with exactly one -H, even when no transport token is configured', () => {
     const argv = curlArgv(commandFor('n-argv-empty'), { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
-    expect(argv).toContain(`${TOKEN_HEADER}: `)
-    expect(argv[argv.indexOf(`${TOKEN_HEADER}: `) - 1]).toBe('-H')
-    // Node token tetap lewat: token transport yang absen tidak boleh menggeser argumen lain.
-    expect(argv).toContain(`${NODE_TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`)
     expect(argv).toContain('--data-binary')
-    expect(argv.filter((a) => a === '-H')).toHaveLength(2)
+    expect(argv.filter((a) => a === '-H')).toHaveLength(1)
+    expect(argv[argv.indexOf('-H') + 1]).toMatch(/^@.*\.headers$/)
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// File header. Ini yang sekarang memikul token, jadi izin dan siklus hidupnya ikut diuji.
+
+describe('hook header file', () => {
+  it('is 0600, carries both tokens, and is what the command points at', () => {
+    const prev = process.env.WEBTERM_TOKEN
+    process.env.WEBTERM_TOKEN = FAKE_TRANSPORT_TOKEN
+    try {
+      const settingsPath = writeClaudeSettings('n-headers', 8700)
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
+        hooks: Record<string, { hooks: { command: string }[] }[]>
+      }
+      const cmd = settings.hooks.Stop[0].hooks[0].command
+      const headersPath = headersPathOf(cmd)
+
+      expect(statSync(headersPath).mode & 0o777).toBe(0o600)
+      const content = readFileSync(headersPath, 'utf8')
+      expect(content).toContain(`${NODE_TOKEN_HEADER}: ${nodeToken('n-headers')}`)
+      // Token ber-spasi/kutip tetap utuh: file dibaca curl apa adanya, tanpa lapisan shell.
+      expect(content).toContain(`${TOKEN_HEADER}: ${FAKE_TRANSPORT_TOKEN}`)
+
+      // Settings JSON sendiri tidak memuat nilai token apa pun.
+      const raw = readFileSync(settingsPath, 'utf8')
+      expect(raw).not.toContain(nodeToken('n-headers'))
+      expect(raw).not.toContain(FAKE_TRANSPORT_TOKEN)
+    } finally {
+      if (prev === undefined) delete process.env.WEBTERM_TOKEN
+      else process.env.WEBTERM_TOKEN = prev
+    }
+  })
+
+  it('omits the transport header when WEBTERM_TOKEN is absent', () => {
+    const prev = process.env.WEBTERM_TOKEN
+    delete process.env.WEBTERM_TOKEN
+    try {
+      const cmd = commandFor('n-headers-notransport')
+      writeClaudeSettings('n-headers-notransport', 8700)
+      const content = readFileSync(headersPathOf(cmd), 'utf8')
+      expect(content).toContain(`${NODE_TOKEN_HEADER}: ${nodeToken('n-headers-notransport')}`)
+      expect(content).not.toContain(TOKEN_HEADER)
+      expect(content.trim().split('\n')).toHaveLength(1)
+    } finally {
+      if (prev !== undefined) process.env.WEBTERM_TOKEN = prev
+    }
+  })
+
+  it('is deleted with the node, alongside the settings file', () => {
+    const settingsPath = writeClaudeSettings('n-headers-gone', 8700)
+    const headersPath = headersPathOf(commandFor('n-headers-gone'))
+    expect(statSync(headersPath).isFile()).toBe(true)
+
+    forgetNodeToken('n-headers-gone')
+
+    expect(() => statSync(headersPath)).toThrow()
+    expect(() => statSync(settingsPath)).toThrow()
   })
 })
 
@@ -335,6 +397,9 @@ const apiSrc = () => readFileSync(fileURLToPath(new URL('./api.ts', import.meta.
 /** Blok `if (path === '/api/agent-status' ...)` saja, sampai `}` penutupnya di indentasi 2 spasi. */
 const agentStatusBlock = (s: string) => s.split("path === '/api/agent-status'")[1]?.split('\n  }')[0] ?? ''
 
+/** Blok `if (path === '/api/context-link' ...)` saja, dengan pemotongan yang sama. */
+const contextLinkBlock = (s: string) => s.split("path === '/api/context-link'")[1]?.split('\n  }')[0] ?? ''
+
 /** Route-nya MEMBALAS payload hook, dan tetap punya jalur 204 untuk `null`. */
 const repliesWithHookPayload = (b: string) =>
   /nextHookContext\(/.test(b) && /hookSpecificOutput/.test(b) && /res\.statusCode = 204/.test(b)
@@ -379,5 +444,59 @@ describe('route POST /api/agent-status', () => {
   it('kedua guard menolak bentuk lama route-nya', () => {
     expect(repliesWithHookPayload(OLD_ROUTE)).toBe(false)
     expect(statusPathRunsFirst(OLD_ROUTE)).toBe(false)
+  })
+})
+
+// -----------------------------------------------------------------------------------------------
+// B2 (security QC): route ini menulis status/transcript untuk `node` yang datang dari query string,
+// jadi ia batas input ketiga setelah WebSocket. Karena `api.ts` tidak bisa dijalankan di suite
+// node-env ini (butuh bun:sqlite + IncomingMessage nyata), guard-nya dibaca dari source — pola yang
+// sama dengan blok di atas — sementara domain inputnya diuji langsung lewat `isSafeNodeId`.
+
+/** Guard id ada di blok, dan dijalankan SEBELUM apa pun yang menulis state. */
+const rejectsUnsafeNode = (b: string) =>
+  /isSafeNodeId\(\s*node\s*\)/.test(b) && b.indexOf('isSafeNodeId') < b.indexOf('setStatus')
+
+/** `transcript_path` hanya disimpan kalau panjangnya di bawah batas, dan tidak pernah dibaca. */
+const boundsTranscriptPath = (b: string) =>
+  /transcript_path\.length/.test(b) && /TRANSCRIPT_PATH_MAX/.test(b) && !/readFileSync/.test(b)
+
+const NO_GUARD_ROUTE = OLD_ROUTE
+
+describe('guard node id di route /api', () => {
+  it('agent-status menolak node hilang/tidak aman sebagai no-op 204', () => {
+    const b = agentStatusBlock(apiSrc())
+    expect(b.length).toBeGreaterThan(0)
+    expect(rejectsUnsafeNode(b)).toBe(true)
+    // No-op-nya berstatus 204 dan berhenti SEBELUM body dibaca/ditulis.
+    expect(b).toMatch(/isSafeNodeId\(node\)\)\s*\{[^}]*res\.statusCode = 204; res\.end\(\); return/)
+    // Bentuk lama (tanpa guard) harus DITOLAK oleh predikat yang sama.
+    expect(rejectsUnsafeNode(NO_GUARD_ROUTE)).toBe(false)
+  })
+
+  it('agent-status membatasi panjang transcript_path dan tidak membacanya', () => {
+    const b = agentStatusBlock(apiSrc())
+    expect(boundsTranscriptPath(b)).toBe(true)
+    expect(boundsTranscriptPath(OLD_ROUTE)).toBe(false)
+  })
+
+  it('domain guard-nya benar-benar menolak nilai yang dipakai penyerang', () => {
+    // Contoh dari laporan QC: traversal path dan id raksasa.
+    expect(isSafeNodeId('../../etc/passwd')).toBe(false)
+    expect(isSafeNodeId('a'.repeat(10_000))).toBe(false)
+    expect(isSafeNodeId('node with space')).toBe(false)
+    expect(isSafeNodeId('')).toBe(false)
+    expect(isSafeNodeId(null)).toBe(false)
+    // …dan tidak menolak id sah, supaya guard-nya bukan yang selalu merah.
+    expect(isSafeNodeId('a1b2c3d4-0000-4000-8000-000000000000')).toBe(true)
+  })
+
+  it('context-link menolak node tidak aman dengan 400 sebelum render', () => {
+    const b = contextLinkBlock(apiSrc())
+    expect(b.length).toBeGreaterThan(0)
+    expect(/isSafeNodeId\(\s*nodeParam\s*\)/.test(b)).toBe(true)
+    expect(b).toContain('json(res, 400')
+    // Dibandingkan dengan PEMANGGILAN-nya, bukan kata di komentar penjelas.
+    expect(b.indexOf('isSafeNodeId')).toBeLessThan(b.indexOf('await renderForRequester('))
   })
 })

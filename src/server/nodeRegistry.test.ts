@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { WORKING_STALE_MS } from '../shared/agentStale'
-import { EXIT_TOMBSTONE_LIMIT, NodeRegistry } from './nodeRegistry'
+import { EXIT_TOMBSTONE_LIMIT, MAX_NODE_STATE, NodeRegistry } from './nodeRegistry'
 
 const T0 = 1_000_000
 
@@ -153,5 +153,45 @@ describe('NodeRegistry forget', () => {
     expect(reg.getStatus('n2')?.status).toBe('working')
     expect(reg.getTranscript('n2')).toBe('/tmp/b.jsonl')
     expect(reg.getExit('n2')?.reason).toBe('self')
+  })
+})
+
+// Status dan transcript bisa ditulis oleh id yang datang dari hook HTTP, bukan hanya dari sesi
+// yang benar-benar dibuka — jadi keduanya butuh batas yang sama seperti tombstone exit.
+describe('NodeRegistry state caps', () => {
+  it('bounds statuses to MAX_NODE_STATE, evicting the oldest insertion', () => {
+    const reg = new NodeRegistry()
+    const total = MAX_NODE_STATE + 1
+    for (let i = 0; i < total; i++) reg.setStatus(`s${i}`, 'working', T0 + i)
+
+    // Yang tertua dibuang, yang terbaru tetap ada.
+    expect(reg.getStatus('s0')).toBeUndefined()
+    expect(reg.getStatus(`s${total - 1}`)).toEqual({ status: 'working', updatedAt: T0 + total - 1 })
+
+    let alive = 0
+    for (let i = 0; i < total; i++) if (reg.getStatus(`s${i}`)) alive++
+    expect(alive).toBe(MAX_NODE_STATE)
+  })
+
+  it('bounds transcripts to MAX_NODE_STATE, evicting the oldest insertion', () => {
+    const reg = new NodeRegistry()
+    const total = MAX_NODE_STATE + 1
+    for (let i = 0; i < total; i++) reg.setTranscript(`s${i}`, `/tmp/t${i}.jsonl`)
+
+    expect(reg.getTranscript('s0')).toBeUndefined()
+    expect(reg.getTranscript(`s${total - 1}`)).toBe(`/tmp/t${total - 1}.jsonl`)
+
+    let alive = 0
+    for (let i = 0; i < total; i++) if (reg.getTranscript(`s${i}`)) alive++
+    expect(alive).toBe(MAX_NODE_STATE)
+  })
+
+  it('re-writing an existing id does not grow the map or duplicate an entry', () => {
+    const reg = new NodeRegistry()
+    for (let i = 0; i < MAX_NODE_STATE; i++) reg.setStatus(`s${i}`, 'working', T0)
+    // Penulisan ulang id yang sudah ada: ukuran tetap, tidak ada id baru yang tergusur.
+    reg.setStatus('s0', 'blocked', T0 + 1)
+    expect(reg.getStatus('s0')).toEqual({ status: 'blocked', updatedAt: T0 + 1 })
+    expect(reg.getStatus('s1')).toBeDefined()
   })
 })

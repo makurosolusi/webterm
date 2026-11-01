@@ -23,6 +23,23 @@ export interface NodeExit {
  *  berumur panjang, jadi yang tertua (urutan insert) dibuang lebih dulu. */
 export const EXIT_TOMBSTONE_LIMIT = 256
 
+/** Batas jumlah status DAN transcript yang disimpan. Sama alasannya dengan tombstone exit: proses
+ *  ini berumur panjang, dan status/transcript hanya dibersihkan oleh `open`/`close` id yang PERSIS
+ *  sama — sedangkan id baru bisa datang dari mana saja (hook HTTP). Yang tertua (urutan insert)
+ *  dibuang lebih dulu. */
+export const MAX_NODE_STATE = 1024
+
+/** Buang entri tertua (urutan insert) sampai `map` muat. Penulisan ulang key yang SUDAH ada tidak
+ *  mengubah urutan insert, jadi node yang rajin menulis status pun bisa tergusur oleh 1024 id baru
+ *  — konsekuensi yang sama dengan tombstone exit, dan lebih baik daripada tumbuh tanpa batas. */
+function evictInsertionOrder<V>(map: Map<string, V>, limit: number): void {
+  while (map.size > limit) {
+    const oldest = map.keys().next().value
+    if (oldest === undefined) break
+    map.delete(oldest)
+  }
+}
+
 /**
  * Ingatan per-node yang hidup LEBIH LAMA dari PTY-nya: status, path transcript, dan tombstone exit.
  *
@@ -40,6 +57,7 @@ export class NodeRegistry {
     // Jamnya dimundurkan pada SETIAP penulisan, termasuk `working` berulang — itulah yang membuat
     // turn panjang yang sah tidak pernah tersapu: tiap tool call menulis ulang `working`.
     this.statuses.set(id, { status, updatedAt: now })
+    evictInsertionOrder(this.statuses, MAX_NODE_STATE)
   }
 
   getStatus(id: string): NodeStatusEntry | undefined {
@@ -68,7 +86,10 @@ export class NodeRegistry {
     return swept
   }
 
-  setTranscript(id: string, path: string): void { this.transcripts.set(id, path) }
+  setTranscript(id: string, path: string): void {
+    this.transcripts.set(id, path)
+    evictInsertionOrder(this.transcripts, MAX_NODE_STATE)
+  }
   getTranscript(id: string): string | undefined { return this.transcripts.get(id) }
   deleteTranscript(id: string): void { this.transcripts.delete(id) }
 
@@ -86,11 +107,7 @@ export class NodeRegistry {
       return
     }
     this.exits.set(id, { ...exit })
-    while (this.exits.size > EXIT_TOMBSTONE_LIMIT) {
-      const oldest = this.exits.keys().next().value
-      if (oldest === undefined) break
-      this.exits.delete(oldest)
-    }
+    evictInsertionOrder(this.exits, EXIT_TOMBSTONE_LIMIT)
   }
 
   getExit(id: string): NodeExit | undefined {

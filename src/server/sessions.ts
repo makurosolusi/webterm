@@ -74,6 +74,10 @@ export class Sessions {
   /** Tulis status lalu pancarkan ke SEMUA pelanggan sesi. Sesi tanpa pelanggan tetap menyimpan
    *  statusnya: re-attach berikutnya memutar ulang status itu sebagai snapshot. */
   setStatus(id: string, status: AgentStatus, now: number = this.now()): void {
+    // Node yang sudah punya tombstone exit adalah node MATI. Hook yang telat (mis. `Stop` claude
+    // mendarat sesudah shell-nya keluar) tidak boleh menghidupkan lagi statusnya — client akan
+    // merender node mati itu sebagai aktif dan menawarkan Resume.
+    if (this.registry.getExit(id)) return
     this.registry.setStatus(id, status, now)
     this.map.get(id)?.subs.send({ t: 'status', id, status })
   }
@@ -131,19 +135,17 @@ export class Sessions {
    * pintu masuk membuat keduanya tidak pernah melihat nilai berbahaya (`hooks.ts` mengutip sendiri
    * sebagai lapis kedua).
    *
-   * Pelanggan yang SUDAH terdaftar tidak menerima replay lagi: mount berulang di socket yang sama
-   * hanya butuh snapshot status, bukan scrollback yang sudah ia miliki. Pelanggan baru (socket
-   * re-attach) menerima seluruh scrollback sekali, lalu snapshot status.
+   * SEMUA pelanggan menerima seluruh scrollback lalu snapshot status, termasuk `send` yang sudah
+   * terdaftar. Alasannya: remount meng-dispose dan membuat ulang xterm-nya, jadi buffer di sisi
+   * client hilang — tanpa replay layar itu kosong. `add` idempoten, jadi tidak ada langganan ganda;
+   * replay hanya dikirim ke `send`, bukan di-broadcast ke pelanggan lain.
    */
   open(msg: OpenMsg, send: (m: ServerMsg) => void): void {
     if (!isSafeNodeId(msg.id)) return
     const existing = this.map.get(msg.id)
     if (existing) {
       const status = this.registry.getStatus(msg.id)?.status
-      if (!existing.subs.add(send)) {
-        send({ t: 'status', id: msg.id, status })
-        return
-      }
+      existing.subs.add(send)
       for (const chunk of existing.log.since(0)) {
         send({ t: 'output', id: msg.id, data: chunk.data, seq: chunk.seq })
       }
@@ -262,6 +264,10 @@ export class Sessions {
 
   /** Tambah `data` ke log (dengan cap byte) lalu pancarkan ke semua pelanggan, bernomor urut. */
   private emit(session: Session, data: string): void {
+    // PTY sesekali memanggil onData dengan string kosong. OutputLog tidak memberinya seq (ia
+    // mengembalikan seq terakhir), jadi memancarkannya berarti pelanggan menerima `output` dengan
+    // nomor urut duplikat — no-op, tapi membingungkan deteksi gap di client.
+    if (data === '') return
     const seq = session.log.append(data, this.scrollbackBytes)
     session.subs.send({ t: 'output', id: session.id, data, seq })
   }
@@ -271,9 +277,11 @@ export class Sessions {
     if (this.map.get(session.id) !== session || session.exited) return
     session.exited = true
     const at = this.now()
+    // `done` DULU, tombstone exit sesudahnya: `setStatus` mengabaikan node yang sudah punya
+    // tombstone (lihat guard di sana), jadi urutan sebaliknya membuat `done` hilang.
+    this.setStatus(session.id, 'done', at)
     this.registry.setExit(session.id, { code, reason: 'self', at })
     session.subs.send({ t: 'exit', id: session.id, code, reason: 'self' })
-    this.setStatus(session.id, 'done', at)
     session.subs.clear()
     this.map.delete(session.id)
   }

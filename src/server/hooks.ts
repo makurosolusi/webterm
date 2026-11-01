@@ -1,5 +1,5 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isPermissionMode, type AgentPermissionMode } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
@@ -85,7 +85,7 @@ export function nodeToken(nodeId: string): string {
   return t
 }
 
-/** Lupakan segala jejak sebuah node: token DAN file settings-nya (node dihapus / sesi ditutup). */
+/** Lupakan segala jejak sebuah node: token DAN file settings/header-nya (node dihapus / sesi ditutup). */
 export function forgetNodeToken(nodeId: string): void {
   tokens.delete(nodeId)
   // Memo pengumuman roster hidup per node di memori: tanpa disapu di sini Map-nya tumbuh selamanya,
@@ -95,6 +95,11 @@ export function forgetNodeToken(nodeId: string): void {
   // menggagalkan penutupan sesi.
   try {
     rmSync(claudeSettingsPath(nodeId), { force: true })
+  } catch {
+    /* ignore */
+  }
+  try {
+    rmSync(claudeHeadersPath(nodeId), { force: true })
   } catch {
     /* ignore */
   }
@@ -137,24 +142,23 @@ const encodeQueryValue = (v: string): string =>
  * agent-status kita dengan key node id. Dikembalikan sebagai OBJEK supaya test bisa meng-assert
  * strukturnya tanpa mem-parse quoting shell.
  *
- * Token node dikirim lewat `$NODETERM_NODE_TOKEN` — REFERENSI env var, bukan nilainya. Nilainya
- * tidak boleh mendarat di baris perintah: di sana ia terbaca semua proses pengguna lewat `ps`.
- * Tanda `$` bertahan melewati single-quote baris peluncuran dan di-expand oleh shell yang
- * menjalankan hook, yang mewarisi env sesi agent (lihat `hookEnv`).
+ * Token TIDAK PERNAH muncul di baris perintah, tidak sebagai nilai dan tidak sebagai ekspansi.
+ * `curl` menerima `-H @<file>`: header (dan nilainya) dibaca dari sebuah file 0600 milik pengguna
+ * (`claudeHeadersPath`), yang ditulis `writeClaudeSettings` tepat sebelum sesi diluncurkan. Dulu
+ * baris ini berbunyi `-H "x-nodeterm-node-token: $NODETERM_NODE_TOKEN"`; shell meng-expand kedua
+ * variabel SEBELUM `exec`, jadi token aslinya tetap mendarat di argv curl dan terbaca semua proses
+ * pengguna lewat `ps`. Referensi env var hanya menyembunyikan nilainya dari teks settings, bukan
+ * dari argv proses yang benar-benar berjalan.
  *
  * DUA header, bukan satu. `x-nodeterm-node-token` adalah identitas per-node (fail-open, dibaca
  * `stateVerified`); `x-webterm-token` adalah token TRANSPORT yang menggerbangi seluruh `/api/`
  * (`authorize` di index.ts) — tanpanya setiap POST hook dibalas 403 begitu `WEBTERM_TOKEN` diset,
  * yang mematikan badge status DAN registrasi transcript (sumber data context-link).
  *
- * `$WEBTERM_TOKEN` juga REFERENSI, pola yang sama, dengan dua konsekuensi yang disengaja:
- * tidak ada perhitungan token kedua yang bisa menyimpang dari `resolveToken` (index.ts membaca env
- * var yang sama persis, dan `cleanEnv` di pty.ts menurunkannya ke tiap anak PTY), dan nilainya
- * tidak pernah muncul di `ps`. Diemit TANPA SYARAT: saat var itu kosong/absen ekspansinya jadi
- * `-H "x-webterm-token: "` dan curl membuang header bernilai kosong (diverifikasi pada curl 8.7.1),
- * sementara server di keadaan itu memang tidak menegakkan token apa pun. Emit kondisional
- * (`${VAR:+-H "..."}`) justru SALAH di sini: hasil ekspansinya tak terkutip, jadi tunduk pada word
- * splitting dan merusak token ber-spasi.
+ * Keduanya ditulis ke file header yang sama. Header transport hanya ikut ditulis bila
+ * `process.env.WEBTERM_TOKEN` ada — nilainya dibaca dari env proses, jadi tetap tidak ada
+ * perhitungan token kedua yang bisa menyimpang dari `resolveToken` (index.ts membaca env var yang
+ * sama persis, dan `cleanEnv` di pty.ts menurunkannya ke tiap anak PTY).
  *
  * STDOUT DIBIARKAN HIDUP (`>/dev/null` dilepas): stdout hook adalah satu-satunya kanal yang Claude
  * Code sendiri buka untuk MENDORONG teks ke konteks agent (`hookSpecificOutput.additionalContext`
@@ -175,8 +179,7 @@ export function claudeHooksSettings(nodeId: string, port: number): Record<string
   // karena fungsi ini juga dipanggil dari test dan jalur lain.
   const url = `http://127.0.0.1:${port}/api/agent-status?node=${encodeQueryValue(nodeId)}`
   const cmd =
-    `curl -s ${shq(url)} ` +
-    `-H "${NODE_TOKEN_HEADER}: $${NODE_TOKEN_ENV}" -H "${TOKEN_HEADER}: $WEBTERM_TOKEN" ` +
+    `curl -s ${shq(url)} -H @${shq(claudeHeadersPath(nodeId))} ` +
     `--data-binary @- 2>/dev/null || true`
   const hooks: Record<string, unknown[]> = {}
   for (const e of CLAUDE_HOOK_EVENTS) {
@@ -205,14 +208,51 @@ function claudeSettingsPath(nodeId: string): string {
  * `http://127.0.0.1:...` di dalam blob terbaca sebagai referensi `slug:path` miliknya, yang membuat
  * peluncuran mati sebelum claude jalan. Sebuah path tidak memuat `:` sama sekali.
  *
- * Mode 0600: isinya tidak rahasia (token masuk sebagai nama env var), tapi file ini mengarahkan ke
- * mana sebuah sesi agent mem-POST — bukan sesuatu yang perlu bisa ditulis pengguna lain.
+ * Mode 0600: isinya tidak lagi memuat token (header dibaca curl dari file terpisah), tapi file ini
+ * mengarahkan ke mana sebuah sesi agent mem-POST — bukan sesuatu yang perlu bisa ditulis pengguna
+ * lain.
  */
 export function writeClaudeSettings(nodeId: string, port: number): string {
   const path = claudeSettingsPath(nodeId)
-  mkdirSync(join(dataDir(), 'node-settings'), { recursive: true })
+  ensureNodeSettingsDir()
+  // Ditulis SEBELUM settings dikembalikan: baris hook menunjuk ke file ini, dan sesi agent bisa
+  // langsung menjalankan hook pertamanya begitu claude hidup.
+  writeClaudeHeaders(nodeId)
   writeFileSync(path, JSON.stringify(claudeHooksSettings(nodeId, port)), { mode: 0o600 })
   return path
+}
+
+/** Direktori bersama file settings + file header. 0700: ia kini memuat token hidup. */
+function ensureNodeSettingsDir(): string {
+  const dir = join(dataDir(), 'node-settings')
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  // `recursive` tidak menyempitkan direktori yang sudah ada dari versi sebelumnya, jadi mode-nya
+  // dipersempit eksplisit. Dilewati di Windows, yang tidak punya mode POSIX.
+  if (process.platform !== 'win32') chmodSync(dir, 0o700)
+  return dir
+}
+
+/**
+ * File header yang dibaca `curl -H @file` (0600). Nilai token hidup DI SINI, bukan di argv.
+ *
+ * Ditulis ulang setiap peluncuran supaya token node yang baru (proses restarted) dan
+ * `WEBTERM_TOKEN` yang berubah sama-sama ikut. Setelah ada, file ini hanya bisa dibaca pemiliknya.
+ */
+function writeClaudeHeaders(nodeId: string): string {
+  const path = claudeHeadersPath(nodeId)
+  const lines = [`${NODE_TOKEN_HEADER}: ${nodeToken(nodeId)}`]
+  const transport = process.env.WEBTERM_TOKEN
+  if (transport) lines.push(`${TOKEN_HEADER}: ${transport}`)
+  // `mode` 0600 berlaku saat file dibuat; berkas ini tidak pernah ada sebelum perubahan ini, dan
+  // penulisan ulang mempertahankan modenya.
+  writeFileSync(path, `${lines.join('\n')}\n`, { mode: 0o600 })
+  return path
+}
+
+/** Nama file di-hash dengan alasan yang sama seperti `claudeSettingsPath`. */
+function claudeHeadersPath(nodeId: string): string {
+  const name = createHash('sha256').update(nodeId).digest('hex').slice(0, 16)
+  return join(dataDir(), 'node-settings', `${name}.headers`)
 }
 
 /** Single-quote sebuah string untuk shell POSIX (tutup-escape-buka untuk quote di dalamnya). */

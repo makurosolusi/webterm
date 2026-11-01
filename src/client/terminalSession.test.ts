@@ -16,6 +16,11 @@ describe('exitMessage', () => {
     expect(exitMessage(0, 'closed')).toBe('')
     expect(exitMessage(137, 'closed')).toBe('')
   })
+  it('prints a neutral notice when another client closed the session', () => {
+    // Server hanya tahu "ada yang menutup"; kalau bukan kita, terminal ini tidak boleh diam saja.
+    expect(exitMessage(-1, 'peer-closed')).toBe('\r\n[session closed]')
+    expect(exitMessage(0, 'peer-closed')).toBe('\r\n[session closed]')
+  })
   it('still prints for a process that exited on its own', () => {
     expect(exitMessage(0, 'self')).toBe('\r\n[process exited with code 0]')
     expect(exitMessage(1, 'self')).toBe('\r\n[process exited with code 1]')
