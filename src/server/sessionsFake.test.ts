@@ -105,6 +105,21 @@ describe('output fan-out dan replay', () => {
     expect(a.text()).toBe('x')
   })
 
+  test('P0: opening the same subscriber again after many chunks never duplicates scrollback', () => {
+    const { sessions, ptys } = harness()
+    const a = recorder()
+    sessions.open(open('n1'), a.send)
+    for (const chunk of ['a', 'b', 'c']) ptys[0].emitData(chunk)
+    expect(a.outputs().map((m) => m.seq)).toEqual([1, 2, 3])
+
+    sessions.open(open('n1'), a.send) // mount berulang pada socket yang sama
+    sessions.open(open('n1'), a.send)
+    expect(a.outputs().map((m) => m.seq)).toEqual([1, 2, 3])
+    expect(a.text()).toBe('abc')
+    // Hanya snapshot status yang ditambahkan, sekali per open.
+    expect(a.statuses()).toHaveLength(3)
+  })
+
   test('detach(a) leaves b subscribed', () => {
     const { sessions, ptys } = harness()
     const a = recorder()
@@ -117,6 +132,31 @@ describe('output fan-out dan replay', () => {
 
     expect(a.text()).toBe('1')
     expect(b.text()).toBe('12')
+  })
+
+  test('P0: a subscriber that detaches its peer mid-delivery does not starve it', () => {
+    const { sessions, ptys } = harness()
+    const b = recorder()
+    let detached = false
+    const a = recorder()
+    const aSend = (m: ServerMsg): void => {
+      aSend_inner(m)
+      // Sekali saja, saat output pertama mendarat: hapus b dari dalam callback a. Status `open`
+      // datang lebih dulu, jadi gerbangnya pesan `output`, bukan sembarang pesan.
+      if (m.t === 'output' && !detached) { detached = true; sessions.detach(b.send) }
+    }
+    const aSend_inner = a.send
+    sessions.open(open('n1'), aSend)
+    sessions.open(open('n1'), b.send)
+    ptys[0].emitData('first')
+
+    // Snapshot broadcast: b masih menerima pesan yang sedang dikirim, lalu keluar dari set.
+    expect(a.text()).toBe('first')
+    expect(b.text()).toBe('first')
+
+    ptys[0].emitData('second')
+    expect(a.text()).toBe('firstsecond')
+    expect(b.text()).toBe('first')
   })
 
   test('getTerminal returns the capped log text', () => {
@@ -202,6 +242,25 @@ describe('self exit', () => {
     expect(a.exits()).toHaveLength(1)
     expect(sessions.getExit('n1')).toEqual({ code: 0, reason: 'self', at: T0 })
   })
+
+  test('P0: close after self exit keeps reason self for callers and peers, with no second exit', () => {
+    const { sessions, ptys } = harness()
+    const peer = recorder()
+    sessions.open(open('n1'), peer.send)
+    ptys[0].emitExit(7)
+    expect(peer.exits()).toEqual([{ t: 'exit', id: 'n1', code: 7, reason: 'self' }])
+
+    // Pemanggil close yang BUKAN pelanggan (socket lain / restart) tetap harus mendengar pencabutan
+    // status, tetapi tidak boleh menerima `exit` kedua maupun menimpa tombstone `self`.
+    const caller = recorder()
+    sessions.close('n1', caller.send)
+
+    expect(caller.statuses()).toEqual([{ t: 'status', id: 'n1' }])
+    expect(caller.exits()).toEqual([])
+    expect(peer.exits()).toHaveLength(1)
+    expect(sessions.getExit('n1')).toEqual({ code: 7, reason: 'self', at: T0 })
+    expect(ptys[0].killed).toBe(0) // PTY sudah mati sendiri; close tidak memanggil kill lagi
+  })
 })
 
 describe('registry queries dan tombstone', () => {
@@ -264,5 +323,50 @@ describe('registry queries dan tombstone', () => {
     }
     expect(sessions.getExit('t0')).toBeUndefined()
     expect(sessions.getExit(`t${total - 1}`)).toEqual({ code: -1, reason: 'closed', at: T0 })
+  })
+
+  test('P0: resubscribe after close spawns a fresh session instead of replaying the tombstone', () => {
+    const { sessions, ptys } = harness()
+    const first = recorder()
+    sessions.open(open('n1'), first.send)
+    ptys[0].emitData('old')
+    ptys[0].emitExit(0)
+    expect(sessions.getExit('n1')?.reason).toBe('self')
+
+    const retry = recorder()
+    sessions.open(open('n1'), retry.send)
+
+    // Sesi baru, PTY baru: bukan re-attach ke PTY mati dan bukan tombstone lama.
+    expect(ptys).toHaveLength(2)
+    expect(sessions.isLive('n1')).toBe(true)
+    expect(sessions.pidOf('n1')).toBe(1001)
+    expect(sessions.getExit('n1')).toBeUndefined()
+    expect(sessions.statusOf('n1')).toBeUndefined()
+    expect(retry.text()).toBe('') // scrollback lama TIDAK diputar ulang
+    expect(retry.outputs()).toEqual([])
+    expect(retry.statuses()).toEqual([{ t: 'status', id: 'n1' }])
+
+    ptys[1].emitData('new')
+    expect(retry.text()).toBe('new')
+    expect(first.text()).toBe('old') // socket lama tidak ikut menerima output sesi baru
+  })
+})
+
+describe('P0: id node tidak sah', () => {
+  test('open with an unsafe id is ignored: no spawn, no list entry, no status', () => {
+    const { sessions, ptys } = harness()
+    const a = recorder()
+    for (const id of ['', 'has space', '-x; rm -rf /', 'a'.repeat(65), 'ünïcode']) {
+      sessions.open({ t: 'open', id, cols: 80, rows: 24 }, a.send)
+    }
+
+    expect(ptys).toHaveLength(0)
+    expect(sessions.list()).toEqual([])
+    expect(a.messages).toEqual([])
+    for (const id of ['', 'has space', '-x; rm -rf /', 'a'.repeat(65)]) {
+      expect(sessions.isLive(id)).toBe(false)
+      expect(sessions.getExit(id)).toBeUndefined()
+      expect(sessions.statusOf(id)).toBeUndefined()
+    }
   })
 })

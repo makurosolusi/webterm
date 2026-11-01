@@ -121,6 +121,17 @@ describe('NodeRegistry exit tombstones', () => {
     expect(reg.getExit('n1')).toBeUndefined()
     expect(reg.getExit('n2')).toBeDefined()
   })
+
+  it('P0: a cleared tombstone does not block a fresh exit record for the same id', () => {
+    const reg = new NodeRegistry()
+    reg.setExit('n1', { code: 7, reason: 'self', at: T0 })
+    reg.clearExit('n1')
+    expect(reg.getExit('n1')).toBeUndefined()
+
+    // Sesi baru dengan id yang sama menulis tombstone barunya sendiri, bukan warisan lama.
+    reg.setExit('n1', { code: 0, reason: 'self', at: T0 + 99 })
+    expect(reg.getExit('n1')).toEqual({ code: 0, reason: 'self', at: T0 + 99 })
+  })
 })
 
 describe('NodeRegistry forget', () => {

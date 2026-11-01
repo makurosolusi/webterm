@@ -69,6 +69,27 @@ describe('SubscriberSet', () => {
     expect(latecomer).toHaveBeenCalledWith('second')
   })
 
+  it('P0: a peer that clears the whole set mid-broadcast still delivers to everyone present', () => {
+    const set = new SubscriberSet<string>()
+    const removed = vi.fn()
+    const clearer = vi.fn(() => {
+      set.clear()
+    })
+    set.add(clearer)
+    set.add(removed)
+
+    set.send('first')
+
+    // Snapshot semantics: clear() selama iterasi tidak memotong pesan yang sedang dikirim.
+    expect(clearer).toHaveBeenCalledWith('first')
+    expect(removed).toHaveBeenCalledWith('first')
+    expect(set.size()).toBe(0)
+
+    set.send('second')
+    expect(clearer).toHaveBeenCalledTimes(1)
+    expect(removed).toHaveBeenCalledTimes(1)
+  })
+
   it('does not let a throwing subscriber starve its peers', () => {
     const set = new SubscriberSet<string>()
     const boom = new Error('boom')

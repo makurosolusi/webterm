@@ -255,3 +255,29 @@ test('an exit forwards its reason, so a user-close can print no notice', async (
   sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 0 }) })
   expect(onExit).toHaveBeenLastCalledWith(0, undefined)
 })
+
+// P0: exit TIDAK boleh menutup id di client. Sesi yang lahir ulang dengan id sama (spawn ulang
+// setelah close) harus bisa membuka lagi dan menerima output-nya — tombstone hanya milik server.
+test('P0: an id can be re-opened after its exit and receives the fresh session output', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-reopen'
+  const onExit = vi.fn()
+  const onOutput = vi.fn()
+  subscribe(id, onOutput, onExit)
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id, code: -1, reason: 'closed' }) })
+  expect(onExit).toHaveBeenCalledTimes(1)
+
+  sock.sent.length = 0
+  send({ t: 'open', id, cols: 100, rows: 30 }) // sesi baru, id yang sama
+  expect(sock.sent).toHaveLength(1)
+  expect(JSON.parse(sock.sent[0])).toMatchObject({ t: 'open', id, cols: 100, rows: 30 })
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'output', id, data: 'fresh', seq: 1 }) })
+  expect(onOutput).toHaveBeenCalledWith('fresh')
+  expect(onExit).toHaveBeenCalledTimes(1) // exit lama tidak diputar ulang ke sesi baru
+})

@@ -112,5 +112,27 @@ describe('OutputLog', () => {
       log.append('b', 1024)
       expect(log.floorSeq()).toBe(1)
     })
+
+    it('P0: since(old) starts AFTER the gap while floorSeq advertises it', () => {
+      // Tiga potongan 4 byte dengan cap 8: hanya #2 dan #3 yang tinggal.
+      log.append('aaaa', 8)
+      log.append('bbbb', 8)
+      log.append('cccc', 8)
+      expect(log.floorSeq()).toBe(2)
+      expect(log.lastSeq()).toBe(3)
+
+      // Klien yang belum pernah menerima apa pun (held 0) tidak boleh menganggap dirinya
+      // tersambung: floorSeq() > held+1.
+      const held = 0
+      expect(log.floorSeq()).toBeGreaterThan(held + 1)
+      const replay = log.since(held)
+      expect(replay.map((c) => c.seq)).toEqual([2, 3])
+      expect(replay[0].seq).toBeGreaterThan(held + 1) // gap terlihat, bukan cuma "tidak ada yang baru"
+      expect(replay.map((c) => c.data).join('')).toBe('bbbbcccc')
+
+      // Klien yang sudah di floor tetap tersambung tanpa gap semu.
+      expect(log.since(log.floorSeq() - 1).map((c) => c.seq)).toEqual([2, 3])
+      expect(log.since(3)).toEqual([]) // caught up: array kosong berarti "tidak ada yang baru"
+    })
   })
 })

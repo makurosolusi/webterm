@@ -209,6 +209,27 @@ describe('save yang tertunda saat board berpindah', () => {
     expect(saved?.ws.nodes[0].kind).toBe('terminal')
     expect(saved?.ws.viewport).toEqual(renderedViewport())
   })
+
+  it('P0: pindah tab menulis board lama TEPAT sekali, membawa node dan viewport-nya', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsBWithNode] })
+    await addTerminalToActive()
+    // Pindah di tengah debounce: `flushSave` menulis SEKARANG, lalu timer debounce dibatalkan.
+    fireEvent.click(tab('bravo'))
+    await waitFor(() => expect(renderedViewport()).toEqual(VP_B))
+    // Lewati jauh melewati debounce: timer lama tidak boleh menembak PUT kedua.
+    await act(() => new Promise<void>((r) => setTimeout(r, 800)))
+
+    const savedA = putBoards().filter((p) => p.id === HARNESS_WS_ID)
+    expect(savedA, 'board A harus ditulis sekali saat flush pindah tab').toHaveLength(1)
+    expect(savedA[0].ws.nodes).toHaveLength(1)
+    expect(savedA[0].ws.nodes[0].kind).toBe('terminal')
+    expect(savedA[0].ws.viewport).toEqual(VP_A)
+    // Dan tidak ada tulisan susulan yang mencampur board B ke id A.
+    for (const { ws } of savedA) {
+      expect(ws.nodes.map((n) => n.id)).not.toContain(B_NODE_ID)
+      expect(ws.viewport).not.toEqual(VP_B)
+    }
+  })
 })
 
 describe('gerbang hidrasi', () => {
