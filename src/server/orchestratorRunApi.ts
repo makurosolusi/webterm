@@ -5,10 +5,11 @@
 //
 // The route does not create tasks/agents/plans. An item must already be `assigned` by the
 // orchestrator (assign flow); otherwise this answers 409 `not_assigned` and touches nothing.
+// A paused project or a terminal plan (`completed`/`abandoned`) answers 409 before any work.
 //
 // This module is the route seam only: payload parsing lives in `orchestratorRunModel` and
 // production composition (repo/agent/worktree/runtime) in `orchestratorRunProduction`.
-import { createPlanStore } from './orchestrator/plan'
+import { createPlanStore, type Plan } from './orchestrator/plan'
 import type { WorkerRunInput, WorkerRunOutcome } from './orchestrator/workerRuntime'
 import {
   ORCHESTRATOR_RUN_FLAG,
@@ -82,6 +83,26 @@ export async function orchestratorRunRoute(
   }
 
   const plan = deps.planStore ?? createPlanStore(ledger.db)
+
+  // A terminal plan must not start new work. The read is best-effort here: `assignmentProblem`
+  // still owns every `not_assigned` answer (missing plan, unreadable store, unassigned item),
+  // so a failure above only skips this gate instead of changing those responses.
+  let stored: Plan | null = null
+  try {
+    stored = plan.get(request.projectId)
+  } catch {
+    stored = null
+  }
+  if (stored !== null && (stored.status === 'completed' || stored.status === 'abandoned')) {
+    return {
+      status: 409,
+      body: {
+        error: 'plan_closed',
+        message: `plan ${stored.id} is ${stored.status}; no new runs`,
+      },
+    }
+  }
+
   const problem = assignmentProblem(plan, request.projectId, request.itemId)
   if (problem !== null) return { status: 409, body: { error: 'not_assigned', message: problem } }
 

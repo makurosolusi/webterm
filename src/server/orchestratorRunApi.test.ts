@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import type { PlanStore } from './orchestrator/plan'
-import type { PlanItem } from './orchestrator/planModel'
+import type { PlanItem, PlanStatus } from './orchestrator/planModel'
 import type { WorktreeService } from './orchestrator/worktree'
 import type { WorkerRunInput, WorkerRunOutcome } from './orchestrator/workerRuntime'
 import {
@@ -53,7 +53,7 @@ function item(patch: Partial<PlanItem> = {}): PlanItem {
   }
 }
 
-function planStore(entry: PlanItem | null): Pick<PlanStore, 'get'> {
+function planStore(entry: PlanItem | null, status: PlanStatus = 'active'): Pick<PlanStore, 'get'> {
   return {
     get: () =>
       entry === null
@@ -62,7 +62,7 @@ function planStore(entry: PlanItem | null): Pick<PlanStore, 'get'> {
             id: 'pl1',
             projectId: 'p1',
             version: 1,
-            status: 'active',
+            status,
             items: [entry],
             createdAt: 1,
             updatedAt: 1,
@@ -218,6 +218,33 @@ describe('orchestrator run route', () => {
 
   it('still runs an active project unchanged', async () => {
     const run = deps(async () => outcome(), { ledger: runtime(REPO, 'active') })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ ok: true })
+    expect(run.captured.calls).toBe(1)
+  })
+
+  it.each(['completed', 'abandoned'] as const)(
+    'answers 409 plan_closed for a %s plan and touches nothing',
+    async (status) => {
+      const dataDir = tempDataDir()
+      const run = deps(async () => outcome(), {
+        planStore: planStore(item(), status),
+        dataDir: () => dataDir,
+      })
+      const result = await orchestratorRunRoute(valid, run.deps)
+      expect(result).toEqual({
+        status: 409,
+        body: { error: 'plan_closed', message: `plan pl1 is ${status}; no new runs` },
+      })
+      expect(run.captured.calls).toBe(0)
+      expect(run.captured.compose).toBeUndefined()
+      expect(existsSync(join(dataDir, 'worktrees'))).toBe(false)
+    }
+  )
+
+  it.each(['draft', 'active'] as const)('still runs a %s plan', async (status) => {
+    const run = deps(async () => outcome(), { planStore: planStore(item(), status) })
     const result = await orchestratorRunRoute(valid, run.deps)
     expect(result.status).toBe(200)
     expect(result.body).toMatchObject({ ok: true })
