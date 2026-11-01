@@ -1,0 +1,208 @@
+import { describe, expect, it } from 'vitest'
+import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import type { PlanStore } from './orchestrator/plan'
+import type { PlanItem } from './orchestrator/planModel'
+import type { WorktreeService } from './orchestrator/worktree'
+import type { WorkerRunInput, WorkerRunOutcome } from './orchestrator/workerRuntime'
+import {
+  type OrchestratorRunDeps,
+  type RuntimeCompose,
+  orchestratorRunRoute,
+  parseRunBody,
+} from './orchestratorRunApi'
+
+const REPO = '/srv/repos/project-one'
+
+function runtime(projectPath: string | null = REPO): LedgerRuntime {
+  const db = {
+    query: () => ({
+      get: () => (projectPath === null ? null : { path: projectPath }),
+    }),
+  }
+  return { db, mode: 'on', path: ':memory:', ledger: {} } as unknown as LedgerRuntime
+}
+
+function item(patch: Partial<PlanItem> = {}): PlanItem {
+  return {
+    id: 'i1',
+    planId: 'pl1',
+    seq: 0,
+    taskId: 't1',
+    title: 'build API',
+    scope: ['src/server'],
+    status: 'assigned',
+    assignee: 'ag1',
+    assignedAt: 1,
+    updatedAt: 1,
+    ...patch,
+  }
+}
+
+function planStore(entry: PlanItem | null): Pick<PlanStore, 'get'> {
+  return {
+    get: () =>
+      entry === null
+        ? null
+        : {
+            id: 'pl1',
+            projectId: 'p1',
+            version: 1,
+            status: 'active',
+            items: [entry],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+  }
+}
+
+function outcome(patch: Partial<WorkerRunOutcome> = {}): WorkerRunOutcome {
+  return { ok: true, task: null, plan: null, nodeId: 'w-t1-1', output: 'done', ...patch }
+}
+
+interface Captured {
+  input?: WorkerRunInput
+  compose?: RuntimeCompose
+  calls: number
+}
+
+function deps(
+  run: (input: WorkerRunInput) => Promise<WorkerRunOutcome>,
+  overrides: Partial<OrchestratorRunDeps> = {}
+): { deps: OrchestratorRunDeps; captured: Captured } {
+  const captured: Captured = { calls: 0 }
+  return {
+    captured,
+    deps: {
+      ledger: runtime(),
+      enabled: true,
+      planStore: planStore(item()),
+      dataDir: () => '/tmp/webterm-data',
+      settings: () => ({ agentLaunchCommands: {} }),
+      createRuntime: (compose) => {
+        captured.compose = compose
+        return {
+          runTask: (input) => {
+            captured.calls += 1
+            captured.input = input
+            return run(input)
+          },
+        }
+      },
+      ...overrides,
+    },
+  }
+}
+
+const valid = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
+
+describe('orchestrator run validation', () => {
+  it('rejects a client-supplied repo or command: those are server-resolved', () => {
+    for (const field of ['repo', 'cmd', 'path', 'agent', 'exec'] as const) {
+      const parsed = parseRunBody({ ...valid, [field]: '/tmp/evil' })
+      expect(parsed.ok).toBe(false)
+      if (!parsed.ok) {
+        expect(parsed.result.status).toBe(400)
+        expect(parsed.result.body).toMatchObject({ error: 'client_controlled_field' })
+      }
+    }
+  })
+
+  it('bounds ids, prompt, version and baseRef', () => {
+    expect(parseRunBody(null).ok).toBe(false)
+    expect(parseRunBody({ ...valid, projectId: '  ' }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, itemId: 'x'.repeat(201) }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, expectedVersion: -1 }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, expectedVersion: 1.5 }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, prompt: 'x'.repeat(2001) }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, baseRef: '-bad' }).ok).toBe(false)
+    expect(parseRunBody({ ...valid, timeoutMs: 'soon' }).ok).toBe(false)
+  })
+
+  it('clamps timeoutMs to 5s..15min', () => {
+    const low = parseRunBody({ ...valid, timeoutMs: 1 })
+    const high = parseRunBody({ ...valid, timeoutMs: 60 * 60_000 })
+    expect(low.ok && low.value.timeoutMs).toBe(5_000)
+    expect(high.ok && high.value.timeoutMs).toBe(900_000)
+  })
+})
+
+describe('orchestrator run route', () => {
+  it('answers 503 when the flag or ledger is off', async () => {
+    const flagOff = await orchestratorRunRoute(valid, { ledger: runtime(), enabled: false })
+    expect(flagOff).toEqual({ status: 503, body: { error: 'orchestrator_off' } })
+    const ledgerOff = await orchestratorRunRoute(valid, { ledger: null, enabled: true })
+    expect(ledgerOff).toEqual({ status: 503, body: { error: 'ledger_off' } })
+  })
+
+  it('refuses to run without an assigned plan item and never builds a runtime', async () => {
+    const pending = deps(async () => outcome(), { planStore: planStore(item({ status: 'pending', taskId: null, assignee: null })) })
+    const result = await orchestratorRunRoute(valid, pending.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'not_assigned' })
+    expect(pending.captured.calls).toBe(0)
+
+    const noPlan = deps(async () => outcome(), { planStore: planStore(null) })
+    expect((await orchestratorRunRoute(valid, noPlan.deps)).status).toBe(409)
+  })
+
+  it('uses the ledger project path as repo and the settings launcher as cmd', async () => {
+    const run = deps(async () => outcome(), {
+      settings: () => ({ agentLaunchCommands: { claude: 'claude-work' } }),
+    })
+    const result = await orchestratorRunRoute(
+      { ...valid, prompt: 'focus on tests', baseRef: 'main' },
+      run.deps
+    )
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({ ok: true })
+    expect(run.captured.compose?.repo).toBe(REPO)
+    expect(run.captured.compose?.cmd).toBe('claude-work')
+    expect(run.captured.input).toMatchObject({
+      projectId: 'p1',
+      itemId: 'i1',
+      expectedVersion: 1,
+      repo: REPO,
+      prompt: 'focus on tests',
+      baseRef: 'main',
+    })
+  })
+
+  it('maps a worker denial to 409 and an unexpected throw to 500', async () => {
+    const denied = deps(async () =>
+      outcome({ ok: false, error: { code: 'cap_denied', message: 'caps blocked worker start' } })
+    )
+    const result = await orchestratorRunRoute(valid, denied.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ ok: false, error: { code: 'cap_denied' } })
+
+    const broken = deps(async () => {
+      throw new Error(`secret path ${REPO}`)
+    })
+    const failed = await orchestratorRunRoute(valid, broken.deps)
+    expect(failed.status).toBe(500)
+    expect(JSON.stringify(failed.body)).not.toContain(REPO)
+  })
+
+  it('treats a project without a repo path as not runnable', async () => {
+    const run = deps(async () => outcome(), { ledger: runtime(null) })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'not_assigned' })
+  })
+
+  it('passes an injected worktree service through instead of creating one', async () => {
+    const worktrees = {
+      allocate: async () => {
+        throw new Error('unused')
+      },
+      release: async () => {
+        throw new Error('unused')
+      },
+      get: () => undefined,
+      list: () => [],
+    } as WorktreeService
+    const run = deps(async () => outcome(), { worktrees })
+    await orchestratorRunRoute(valid, run.deps)
+    expect(run.captured.compose?.worktrees).toBe(worktrees)
+  })
+})

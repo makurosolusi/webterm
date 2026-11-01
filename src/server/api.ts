@@ -17,6 +17,7 @@ import { contextLinkRoute } from './contextLinkApi'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
+import { extendedApiRoute } from './extendedApi'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -112,6 +113,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Read-only ledger projections for the UI (inbox/memory/orchestrator). Ledger off answers 503
   // `ledger_off` instead of an empty list; null from a family = keep falling through to 404.
   const ledger = activeLedgerRuntime()
+  if (await extendedApiRoute(req, res, url, () => readBody(req), ledger)) return
   if (await approvalHumanRoute(req, res, url)) return
   for (const family of [inboxRoute, memoryRoute, orchestratorRoute]) {
     const result = family(path, method, url.searchParams, ledger)
