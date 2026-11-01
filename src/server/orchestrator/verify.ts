@@ -13,6 +13,8 @@ import {
   type ConfiguredCommand,
   DEFAULT_EXECUTABLES,
   GIT_COMMANDS,
+  baseDiffCommands,
+  resolveBaseRef,
   resolveCommand,
 } from './verifyCommands'
 import { type RawRun, parseChangedFiles, parseNameOnly, parseTestCounts, runCommand } from './verifier'
@@ -92,6 +94,11 @@ export interface VerifyInput {
   scope?: readonly string[]
   /** Default: test + typecheck aktif, lint opt-in. */
   checks?: Partial<Record<CheckId, boolean>>
+  /**
+   * Base ref worktree (server-validated oleh `parseRunBody`, bukan perintah worker). Dipakai untuk
+   * melihat perubahan yang sudah di-commit; `HEAD`/kosong jatuh ke `HEAD^`.
+   */
+  baseRef?: string
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000
@@ -220,6 +227,9 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
   }
   const cwd = resolveVerifyCwd(options.root, input.cwd)
   const scope = normalizeScope(input.scope)
+  // Divalidasi sebelum command apa pun: ref buruk ditolak, bukan diteruskan ke git.
+  const base = resolveBaseRef(input.baseRef)
+  if (!base.ok) throw new VerifyError('invalid_input', base.message)
   const timeoutMs = positiveInt(options.timeoutMs, DEFAULT_TIMEOUT_MS, 'timeoutMs', MAX_TIMEOUT_MS)
   const maxOutputBytes = positiveInt(
     options.maxOutputBytes,
@@ -248,14 +258,30 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
     return verdict({ ok: false, reasons: gitReasons, evidence, changedFiles: [], scopeViolations: [] })
   }
 
-  const changedFiles = [
-    ...new Set([
+  /*
+   * A worker that committed its work leaves a clean worktree, so `git status`/`git diff` see
+   * nothing. Compare against the base ref too (argv only, never a worker command). A missing
+   * parent (root commit) or unknown ref is NOT fatal: the base diff is simply empty.
+   */
+  for (const [id, args] of Object.entries(baseDiffCommands(base.ref))) {
+    const run = await runCommand({ file: 'git', args: [...args] }, cwd, options.exec, limits, now)
+    runs.set(id, run)
+    evidence.push(run.evidence)
+  }
+
+  const baseNames = runs.get('baseNames')
+  const committedFiles = baseNames?.evidence.exitCode === 0 ? parseNameOnly(baseNames.output) : []
+  const baseStat = runs.get('baseStat')
+  const committedStat = baseStat?.evidence.exitCode === 0 ? baseStat.output : ''
+  const changedFiles = Array.from(
+    new Set([
       ...parseChangedFiles(runs.get('status')?.output ?? ''),
       ...parseNameOnly(runs.get('names')?.output ?? ''),
-    ]),
-  ].sort()
+      ...committedFiles,
+    ])
+  ).sort()
   const scopeViolations = changedFiles.filter((file) => !inScope(file, scope))
-  const diffStat = runs.get('diffStat')?.output.slice(0, DIFF_STAT_LIMIT) ?? ''
+  const diffStat = `${runs.get('diffStat')?.output ?? ''}${committedStat}`.slice(0, DIFF_STAT_LIMIT)
   if (scopeViolations.length > 0) {
     return verdict({
       ok: false,

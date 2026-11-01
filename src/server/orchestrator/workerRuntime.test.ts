@@ -202,6 +202,17 @@ describe('runTask success path', () => {
     expectClosed(sessions, outcome)
     expect(fixture.ledger.events.filter((e) => e.kind === 'orchestrator.result_recorded')).toHaveLength(1)
   })
+
+  it('passes the base ref through to verification so committed work is visible', async () => {
+    const fixture = assigned()
+    const { runtime, sessions, verifyInputs } = harness({ fixture })
+    sessions.onInput = (nodeId) => sessions.status.set(nodeId, 'done')
+
+    const outcome = await runtime.runTask({ ...runInput(), baseRef: 'main' })
+
+    expect(outcome.ok).toBe(true)
+    expect(verifyInputs).toEqual([{ cwd: '/tmp/wt/t1', scope: ['src/api.ts'], baseRef: 'main' }])
+  })
 })
 
 describe('failure paths', () => {

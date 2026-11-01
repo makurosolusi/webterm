@@ -242,7 +242,13 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
 
       let verdict: VerifyOutcome
       try {
-        verdict = await deps.verify({ cwd: worktree.path, scope: item.scope })
+        // `baseRef` ikut ke verifier supaya commit worker (worktree bersih) tetap terlihat;
+        // nilainya sudah divalidasi server di `parseRunBody`, bukan perintah dari worker.
+        verdict = await deps.verify({
+          cwd: worktree.path,
+          scope: item.scope,
+          ...(input.baseRef !== undefined ? { baseRef: input.baseRef } : {}),
+        })
       } catch (err) {
         return fail('verify_failed', `verifier error: ${messageOf(err)}`, true, output)
       }

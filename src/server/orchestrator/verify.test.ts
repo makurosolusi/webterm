@@ -13,6 +13,8 @@ import {
 import { createProcessExec } from './verifier'
 
 const ROOT = '/tmp/wt/task-1'
+const BASE_NAMES = 'git diff --name-only HEAD^...HEAD --'
+const BASE_STAT = 'git diff --stat HEAD^...HEAD --'
 
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex')
@@ -37,6 +39,8 @@ function baseScript(): Script {
     'git status --porcelain': { stdout: ' M src/api.ts\n?? src/api.test.ts\n' },
     'git diff --name-only': { stdout: 'src/api.ts\n' },
     'git diff --stat': { stdout: ' src/api.ts | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)\n' },
+    [BASE_NAMES]: { stdout: '' },
+    [BASE_STAT]: { stdout: '' },
     'npm test': { stdout: 'Tests 12 passed (12)\n' },
     'npm run typecheck': { stdout: '' },
   }
@@ -61,6 +65,8 @@ describe('verifyWorktree', () => {
       'git status --porcelain',
       'git diff --name-only',
       'git diff --stat',
+      'git diff --name-only HEAD^...HEAD --',
+      'git diff --stat HEAD^...HEAD --',
       'npm test',
       'npm run typecheck',
     ])
@@ -87,7 +93,7 @@ describe('verifyWorktree', () => {
     expect(outcome.scopeViolations).toEqual(['src/secret.ts'])
     expect(outcome.reasons).toEqual(['scope violation: src/secret.ts'])
     expect(outcome.tests).toBeUndefined()
-    expect(calls.map((call) => call.file)).toEqual(['git', 'git', 'git'])
+    expect(calls.map((call) => call.file)).toEqual(['git', 'git', 'git', 'git', 'git'])
   })
 
   it('rejects a configured command whose executable is not allowlisted', async () => {
@@ -280,7 +286,116 @@ describe('createProcessExec', () => {
       'git status --porcelain',
       'git diff --name-only',
       'git diff --stat',
+      'git diff --name-only HEAD^...HEAD --',
+      'git diff --stat HEAD^...HEAD --',
     ])
     expect(outcome.ok).toBe(true)
+  })
+})
+
+describe('committed changes (worktree clean)', () => {
+  /** Worktree bersih: worker sudah commit, jadi hanya diff baseRef...HEAD yang terlihat. */
+  function committedScript(files: string, stat = ' src/change.txt | 1 +\n 1 file changed, 1 insertion(+)\n'): Script {
+    const script = baseScript()
+    script['git status --porcelain'] = { stdout: '' }
+    script['git diff --name-only'] = { stdout: '' }
+    script['git diff --stat'] = { stdout: '' }
+    script[BASE_NAMES] = { stdout: files }
+    script[BASE_STAT] = { stdout: stat }
+    return script
+  }
+
+  it('counts a committed file as changed and passes the verdict', async () => {
+    const { exec } = fakeExec(committedScript('src/change.txt\n'))
+    const outcome = await verifyWorktree(
+      { root: ROOT, exec },
+      { cwd: ROOT, scope: ['src/change.txt'], checks: { typecheck: false } }
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.changedFiles).toEqual(['src/change.txt'])
+    expect(outcome.scopeViolations).toEqual([])
+    expect(outcome.diffStat).toContain('src/change.txt')
+  })
+
+  it('merges committed and uncommitted files without duplicates', async () => {
+    const script = committedScript('src/api.ts\nsrc/committed.ts\n', ' src/api.ts | 1 +\n src/committed.ts | 1 +\n')
+    script['git status --porcelain'] = { stdout: ' M src/api.ts\n?? src/new.ts\n' }
+    script['git diff --name-only'] = { stdout: 'src/api.ts\n' }
+    const { exec } = fakeExec(script)
+    const outcome = await verifyWorktree(
+      { root: ROOT, exec },
+      { cwd: ROOT, checks: { typecheck: false } }
+    )
+    expect(outcome.changedFiles).toEqual(['src/api.ts', 'src/committed.ts', 'src/new.ts'])
+    expect(outcome.diffStat).toContain('src/committed.ts')
+    expect(outcome.diffStat).toContain('src/api.ts')
+  })
+
+  it('treats a missing HEAD^ as an empty base diff instead of failing', async () => {
+    const script = baseScript()
+    script['git status --porcelain'] = { stdout: ' M src/api.ts\n' }
+    script[BASE_NAMES] = { code: 128, stderr: "fatal: ambiguous argument 'HEAD^'" }
+    script[BASE_STAT] = { code: 128, stderr: "fatal: ambiguous argument 'HEAD^'" }
+    const { exec } = fakeExec(script)
+    const outcome = await verifyWorktree(
+      { root: ROOT, exec },
+      { cwd: ROOT, checks: { typecheck: false } }
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.changedFiles).toEqual(['src/api.ts'])
+  })
+
+  it('reports a committed file outside the scope as a violation', async () => {
+    const { exec, calls } = fakeExec(committedScript('src/secret.ts\n'))
+    const outcome = await verifyWorktree(
+      { root: ROOT, exec },
+      { cwd: ROOT, scope: ['src/api.ts'] }
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.scopeViolations).toEqual(['src/secret.ts'])
+    expect(calls.some((call) => call.file === 'npm')).toBe(false)
+  })
+
+  it('still reports zero changed files when worktree and base diff are both empty', async () => {
+    const script = committedScript('', '')
+    const { exec } = fakeExec(script)
+    const outcome = await verifyWorktree(
+      { root: ROOT, exec },
+      { cwd: ROOT, checks: { typecheck: false } }
+    )
+    // Verdict itself is green; the no-work guard lives in the worker runtime.
+    expect(outcome.ok).toBe(true)
+    expect(outcome.changedFiles).toEqual([])
+  })
+
+  it('passes an explicit base ref as git argv and falls back to HEAD^ for HEAD', async () => {
+    const script = baseScript()
+    script['git diff --name-only main...HEAD --'] = { stdout: 'src/change.txt\n' }
+    script['git diff --stat main...HEAD --'] = { stdout: ' src/change.txt | 1 +\n' }
+    const { exec, calls } = fakeExec(script)
+    const outcome = await verifyWorktree(
+      { root: ROOT, exec },
+      { cwd: ROOT, baseRef: 'main', checks: { typecheck: false } }
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.changedFiles).toContain('src/change.txt')
+    expect(calls.map((call) => call.args.join(' '))).toContain('diff --name-only main...HEAD --')
+
+    const headOnly = fakeExec(baseScript())
+    await verifyWorktree(
+      { root: ROOT, exec: headOnly.exec },
+      { cwd: ROOT, baseRef: 'HEAD', checks: { typecheck: false } }
+    )
+    expect(headOnly.calls.map((call) => call.args.join(' '))).toContain('diff --name-only HEAD^...HEAD --')
+  })
+
+  it('rejects a base ref that could be parsed as an option', async () => {
+    const { exec, calls } = fakeExec(baseScript())
+    for (const baseRef of ['-D', 'main..other', 'ma in', 'main~2']) {
+      await expect(
+        verifyWorktree({ root: ROOT, exec }, { cwd: ROOT, baseRef })
+      ).rejects.toMatchObject({ code: 'invalid_input' })
+    }
+    expect(calls).toEqual([])
   })
 })
