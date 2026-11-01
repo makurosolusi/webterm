@@ -281,6 +281,74 @@ describe('guardedRun', () => {
     expect(calls).toEqual([])
   })
 
+  it('rejects an approval issued for another project without consuming or running', async () => {
+    // Same request/digest as the run, but the approval belongs to `p2`: even a matching digest
+    // must not authorize work in another project.
+    const ledger = approvalLedger(record({ projectId: 'p2' }))
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port })
+    expect(result).toEqual({
+      status: 409,
+      body: {
+        error: 'approval_rejected',
+        code: 'approval_project_mismatch',
+        message: 'approval does not belong to the requested project',
+      },
+    })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+    expect(ledger.seen).toEqual(['get:ap1'])
+    const body = JSON.stringify(result.body)
+    expect(body).not.toContain('ap1')
+    expect(body).not.toContain(DIGEST)
+  })
+
+  it('treats an unassigned (null) approval project as a mismatch', async () => {
+    const ledger = approvalLedger(record({ projectId: null }))
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port })
+    expect(result).toMatchObject({
+      status: 409,
+      body: { error: 'approval_rejected', code: 'approval_project_mismatch' },
+    })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+  })
+
+  it('still consumes and runs when the approval belongs to the requested project', async () => {
+    const ledger = approvalLedger(record({ projectId: 'p1' }))
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port })
+    expect(result).toEqual(OK)
+    expect(calls).toEqual(['run'])
+    expect(ledger.consumes()).toBe(1)
+    expect(ledger.seen).toEqual(['get:ap1', `consume:${DIGEST}`])
+  })
+
+  it('keeps approval_not_found for an unknown id and never runs', async () => {
+    const ledger = approvalLedger()
+    const { result, calls } = await gate(
+      { ...RUN, approvalId: 'missing' },
+      { ledger: null, approval: ledger.port }
+    )
+    expect(result).toMatchObject({ status: 409, body: { code: 'approval_not_found' } })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+  })
+
+  it('answers a sanitized 500 when reading the approval throws', async () => {
+    const port: ApprovalPort = {
+      getApproval: () => {
+        throw new Error(`db gone for ${DIGEST}`)
+      },
+      consumeApproval: () => true,
+    }
+    const { result, calls } = await gate(RUN, { ledger: null, approval: port })
+    expect(result).toEqual({
+      status: 500,
+      body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },
+    })
+    expect(calls).toEqual([])
+    expect(JSON.stringify(result.body)).not.toContain(DIGEST)
+  })
+
   it('consumes before the action, so a failing action still burns the approval', async () => {
     const ledger = approvalLedger()
     const result = await guardedRun({ ledger: null, approval: ledger.port }, RUN, async () => {
@@ -294,4 +362,3 @@ describe('guardedRun', () => {
     expect(JSON.stringify(result.body)).not.toContain('boom')
   })
 })
-

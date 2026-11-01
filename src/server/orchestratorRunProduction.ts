@@ -145,6 +145,19 @@ const INTERNAL_RUN_FAILURE: RouteResult = {
   body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },
 }
 
+/**
+ * 409 `approval_project_mismatch`: the named approval was issued for another project. Nothing is
+ * consumed and nothing runs; the message never echoes the approval id or digest.
+ */
+const APPROVAL_PROJECT_MISMATCH: RouteResult = {
+  status: 409,
+  body: {
+    error: 'approval_rejected',
+    code: 'approval_project_mismatch',
+    message: 'approval does not belong to the requested project',
+  },
+}
+
 /** Production uses the ledger facade's approval slice; tests may inject a narrow port. */
 export function approvalPortOf(deps: OrchestratorRunDeps): ApprovalPort | null {
   if (deps.approval) return deps.approval
@@ -195,7 +208,22 @@ export async function guardedRun(
       ? { approvalId, digest: approvalDigest }
       : { approvalId, digest: approvalDigest, now }
   try {
-    return await runApproved({ approval: port }, gateRequest, action)
+    // Project isolation: an approval only authorizes work in the project it was requested for.
+    // Reading it here (before the gate consumes) keeps the check off the consume path, and the
+    // same snapshot is handed to `runApproved` so a status/digest flip between the two reads
+    // cannot slip through. A missing record stays `approval_not_found` inside the gate.
+    const approval = port.getApproval(approvalId)
+    if (approval !== null && approval.projectId !== request.projectId) {
+      return APPROVAL_PROJECT_MISMATCH
+    }
+    const gatePort: ApprovalPort =
+      approval === null
+        ? port
+        : {
+            getApproval: () => approval,
+            consumeApproval: (id, input) => port.consumeApproval(id, input),
+          }
+    return await runApproved({ approval: gatePort }, gateRequest, action)
   } catch (error) {
     // A failed action still burns its approval (the gate has no catch), as designed.
     if (error instanceof ApprovalRequiredError) {
