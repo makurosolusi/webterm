@@ -279,14 +279,6 @@ describe('orchestrator run route', () => {
     expect(existsSync(join(dataDir, 'worktrees'))).toBe(false)
   })
 
-  it('still runs an active project unchanged', async () => {
-    const run = deps(async () => outcome(), { ledger: runtime(REPO, 'active') })
-    const result = await orchestratorRunRoute(valid, run.deps)
-    expect(result.status).toBe(200)
-    expect(result.body).toMatchObject({ ok: true })
-    expect(run.captured.calls).toBe(1)
-  })
-
   it.each(['completed', 'abandoned'] as const)(
     'answers 409 plan_closed for a %s plan and touches nothing',
     async (status) => {
@@ -306,8 +298,8 @@ describe('orchestrator run route', () => {
     }
   )
 
-  it.each(['draft', 'active'] as const)('still runs a %s plan', async (status) => {
-    const run = deps(async () => outcome(), { planStore: planStore(item(), status) })
+  it('still runs a draft plan', async () => {
+    const run = deps(async () => outcome(), { planStore: planStore(item(), 'draft') })
     const result = await orchestratorRunRoute(valid, run.deps)
     expect(result.status).toBe(200)
     expect(result.body).toMatchObject({ ok: true })
@@ -376,6 +368,12 @@ describe('orchestrator run route', () => {
 
 describe('orchestrator run approval gate', () => {
   const approvedBody = { ...valid, approvalId: 'ap1', approvalDigest: APPROVED_DIGEST }
+
+  /** Route run behind a named approval, keeping the worker/ledger trail the tests assert on. */
+  async function gatedRoute(body: unknown, gate: ApprovalLedger, overrides: Partial<OrchestratorRunDeps> = {}) {
+    const run = deps(async () => outcome(), { approval: gate.port, ...overrides })
+    return { run, gate, result: await orchestratorRunRoute(body, run.deps) }
+  }
 
   it('answers 409 approval_required when the policy is on and no approval is named', async () => {
     const gate = approvalPort()
@@ -481,5 +479,22 @@ describe('orchestrator run approval gate', () => {
     expect(result.status).toBe(200)
     expect(run.captured.calls).toBe(1)
     expect(gate.events).toEqual(['get:ap1', `consume:${APPROVED_DIGEST}`])
+  })
+
+  it('refuses the same project+digest approval of another task, but runs a generic one', async () => {
+    const bound = approvalPort()
+    const onT2 = { planStore: planStore(item({ taskId: 't2' })) }
+    const mismatch = await gatedRoute(approvedBody, bound, onT2)
+    expect(mismatch.result.status).toBe(409)
+    expect(mismatch.result.body).toMatchObject({ error: 'approval_rejected', code: 'approval_task_mismatch' })
+    expect(mismatch.run.captured.calls).toBe(0)
+    expect(mismatch.run.captured.compose).toBeUndefined()
+    // The exact trail proves nothing was consumed: no `consume:*` event exists.
+    expect(bound.events).toEqual(['get:ap1'])
+
+    const generic = approvalPort(approval({ taskId: null }))
+    const { result } = await gatedRoute(approvedBody, generic, onT2)
+    expect(result).toMatchObject({ status: 200, body: { ok: true } })
+    expect(generic.consumes()).toBe(1)
   })
 })

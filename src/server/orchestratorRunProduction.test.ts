@@ -17,6 +17,7 @@ import {
   projectPaused,
   projectRepo,
   resolveWorktrees,
+  runItemTaskId,
   worktreeRoot,
 } from './orchestratorRunProduction'
 import type { RawRun } from './orchestratorRunModel'
@@ -96,6 +97,19 @@ describe('orchestratorRunProduction', () => {
       },
     }
     expect(assignmentProblem(broken, 'p1', 'i1')).toBe('plan store unavailable for project p1')
+  })
+
+  it('reads the run item task and fails closed when it cannot be resolved', () => {
+    expect(runItemTaskId(planStore(item()), 'p1', 'i1')).toBe('t1')
+    expect(runItemTaskId(planStore(item({ taskId: null })), 'p1', 'i1')).toBeNull()
+    expect(runItemTaskId(planStore(item()), 'p1', 'nope')).toBeNull()
+    expect(runItemTaskId(planStore(null), 'p1', 'i1')).toBeNull()
+    const broken = {
+      get: () => {
+        throw new Error('db gone')
+      },
+    }
+    expect(runItemTaskId(broken, 'p1', 'i1')).toBeNull()
   })
 
   it('puts the worktree root under the data dir', () => {
@@ -205,12 +219,16 @@ describe('orchestratorRunProduction approval port', () => {
 })
 
 describe('guardedRun', () => {
-  async function gate(request: RawRun, deps: Parameters<typeof guardedRun>[0]) {
+  async function gate(
+    request: RawRun,
+    deps: Parameters<typeof guardedRun>[0],
+    expectedTaskId: string | null = 't1'
+  ) {
     const calls: string[] = []
     const result = await guardedRun(deps, request, async () => {
       calls.push('run')
       return OK
-    })
+    }, expectedTaskId)
     return { result, calls }
   }
 
@@ -322,6 +340,52 @@ describe('guardedRun', () => {
     expect(ledger.seen).toEqual(['get:ap1', `consume:${DIGEST}`])
   })
 
+  it('rejects a task-bound approval for another task without consuming or running', async () => {
+    // Same project, same digest, but the approval was decided for task `t2` while the run item
+    // is task `t1`: task isolation must refuse it before the gate consumes anything.
+    const ledger = approvalLedger(record({ taskId: 't2' }))
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port }, 't1')
+    expect(result).toEqual({
+      status: 409,
+      body: {
+        error: 'approval_rejected',
+        code: 'approval_task_mismatch',
+        message: 'approval does not belong to the task bound to this plan item',
+      },
+    })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+    expect(ledger.seen).toEqual(['get:ap1'])
+    const body = JSON.stringify(result.body)
+    expect(body).not.toContain('ap1')
+    expect(body).not.toContain(DIGEST)
+  })
+
+  it('fails closed when the run item task cannot be resolved', async () => {
+    const ledger = approvalLedger()
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port }, null)
+    expect(result).toMatchObject({ status: 409, body: { code: 'approval_task_mismatch' } })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+  })
+
+  it('still runs a generic (taskId=null) approval on any task', async () => {
+    const ledger = approvalLedger(record({ taskId: null }))
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port }, 't1')
+    expect(result).toEqual(OK)
+    expect(calls).toEqual(['run'])
+    expect(ledger.consumes()).toBe(1)
+    expect(ledger.seen).toEqual(['get:ap1', `consume:${DIGEST}`])
+  })
+
+  it('checks project isolation before task isolation', async () => {
+    const ledger = approvalLedger(record({ projectId: 'p2', taskId: 't2' }))
+    const { result, calls } = await gate(RUN, { ledger: null, approval: ledger.port }, 't1')
+    expect(result).toMatchObject({ status: 409, body: { code: 'approval_project_mismatch' } })
+    expect(calls).toEqual([])
+    expect(ledger.consumes()).toBe(0)
+  })
+
   it('keeps approval_not_found for an unknown id and never runs', async () => {
     const ledger = approvalLedger()
     const { result, calls } = await gate(
@@ -353,7 +417,7 @@ describe('guardedRun', () => {
     const ledger = approvalLedger()
     const result = await guardedRun({ ledger: null, approval: ledger.port }, RUN, async () => {
       throw new Error('boom')
-    })
+    }, 't1')
     expect(result).toEqual({
       status: 500,
       body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },

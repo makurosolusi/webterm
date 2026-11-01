@@ -27,6 +27,7 @@ import {
   projectPaused,
   projectRepo,
   resolveWorktrees,
+  runItemTaskId,
   workerInput,
   worktreeRoot,
   type OrchestratorRunDeps,
@@ -111,6 +112,10 @@ export async function orchestratorRunRoute(
   const problem = assignmentProblem(plan, request.projectId, request.itemId)
   if (problem !== null) return { status: 409, body: { error: 'not_assigned', message: problem } }
 
+  // The item's own task, resolved before the gate so a task-bound approval for the same project
+  // but another item is refused (409 approval_task_mismatch) instead of running the wrong item.
+  const expectedTaskId = runItemTaskId(plan, request.projectId, request.itemId)
+
   // Everything that could refuse the request has answered by now, so the approval gate below is
   // the first thing that can consume a decision. It also wraps worktree allocation and runtime
   // creation, so a rejected approval leaves no root dir, no git exec and no PTY.
@@ -144,5 +149,5 @@ export async function orchestratorRunRoute(
       }
     }
   }
-  return await guardedRun(deps, request, startRun)
+  return await guardedRun(deps, request, startRun, expectedTaskId)
 }

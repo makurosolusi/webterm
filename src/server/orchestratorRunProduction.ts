@@ -100,6 +100,26 @@ export function assignmentProblem(
   return null
 }
 
+/**
+ * Task bound to the plan item this run targets, or `null` when the plan/item cannot be read.
+ * The route resolves it BEFORE the approval gate so a task-bound approval cannot authorize a
+ * different item's task in the same project. `null` fails closed: it never matches a
+ * task-bound approval (only `approval.taskId === null`, a generic approval, ignores it).
+ */
+export function runItemTaskId(
+  plan: Pick<PlanStore, 'get'>,
+  projectId: string,
+  itemId: string
+): string | null {
+  let stored
+  try {
+    stored = plan.get(projectId)
+  } catch {
+    return null
+  }
+  return stored?.items.find((candidate) => candidate.id === itemId)?.taskId ?? null
+}
+
 export async function agentCommand(deps: OrchestratorRunDeps): Promise<string> {
   try {
     const settings = deps.settings ? deps.settings() : (await import('./db')).db.getSettings()
@@ -158,6 +178,19 @@ const APPROVAL_PROJECT_MISMATCH: RouteResult = {
   },
 }
 
+/**
+ * 409 `approval_task_mismatch`: the named approval was issued for another task in the same
+ * project. Nothing is consumed and nothing runs; the message never echoes ids or the digest.
+ */
+const APPROVAL_TASK_MISMATCH: RouteResult = {
+  status: 409,
+  body: {
+    error: 'approval_rejected',
+    code: 'approval_task_mismatch',
+    message: 'approval does not belong to the task bound to this plan item',
+  },
+}
+
 /** Production uses the ledger facade's approval slice; tests may inject a narrow port. */
 export function approvalPortOf(deps: OrchestratorRunDeps): ApprovalPort | null {
   if (deps.approval) return deps.approval
@@ -179,13 +212,18 @@ export function approvalMissing(deps: OrchestratorRunDeps, request: RawRun): boo
  * once BEFORE any spawn or worktree allocation. A rejection returns 409 and never reaches
  * `action`; the message may name the approval id but never echoes the digest.
  *
+ * `expectedTaskId` is the plan item's own task (resolved by the caller). A task-bound approval
+ * (`taskId !== null`) only authorizes that task; a generic one (`taskId === null`) is not
+ * task-scoped. A `null` expected id fails closed against every task-bound approval.
+ *
  * Field presence is decided here, after body/project/plan validation, so an invalid request
  * never burns an approval and a missing one is reported as policy (409), not malformed (400).
  */
 export async function guardedRun(
   deps: OrchestratorRunDeps,
   request: RawRun,
-  action: () => Promise<RouteResult>
+  action: () => Promise<RouteResult>,
+  expectedTaskId: string | null
 ): Promise<RouteResult> {
   const { approvalId, approvalDigest } = request
   if (approvalId === undefined || approvalDigest === undefined) {
@@ -213,8 +251,14 @@ export async function guardedRun(
     // same snapshot is handed to `runApproved` so a status/digest flip between the two reads
     // cannot slip through. A missing record stays `approval_not_found` inside the gate.
     const approval = port.getApproval(approvalId)
-    if (approval !== null && approval.projectId !== request.projectId) {
-      return APPROVAL_PROJECT_MISMATCH
+    if (approval !== null) {
+      // Project isolation first: an approval never authorizes work in another project.
+      if (approval.projectId !== request.projectId) return APPROVAL_PROJECT_MISMATCH
+      // Task isolation: a task-bound approval only authorizes the run item's own task. A generic
+      // approval (`taskId === null`) is not task-scoped, so only the project check applies.
+      if (approval.taskId !== null && approval.taskId !== expectedTaskId) {
+        return APPROVAL_TASK_MISMATCH
+      }
     }
     const gatePort: ApprovalPort =
       approval === null
