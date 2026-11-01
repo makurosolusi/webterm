@@ -8,7 +8,7 @@ the user's.
 
 ## Result
 
-**33/33 checks passed** after three real bugs were found and fixed.
+**36/36 checks passed** after three real bugs were found and fixed.
 
 | Requirement | Observed |
 |---|---|
@@ -26,6 +26,9 @@ the user's.
 | Task-bound approval used on its own task | **200**, task verified |
 | Consumed approval reused on a second assigned item | **409 `approval_already_consumed`** |
 | Approval request body >cap | **413** |
+| Pending approval used for a run | **409 `approval_pending`** |
+| Rejected approval used for a run | **409 `approval_rejected`** |
+| Expired approval used for a run | **409 `approval_expired`** |
 | Worker task result | `verified` |
 | Evidence provenance | `verifiedBy: "server-verifier"` |
 | Changed files | `["src/change.txt"]` |
