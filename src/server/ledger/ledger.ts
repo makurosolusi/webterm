@@ -41,6 +41,25 @@ import {
 } from './ledgerTask'
 import { createTask, getTask, listTasks } from './ledgerTaskCreate'
 import { blockTask, cancelTask, sweepExpiredLeases } from './ledgerTaskStop'
+import {
+  type Budget,
+  type BudgetCheck,
+  type FinishRunInput,
+  type RecordUsageInput,
+  type Run,
+  type StartRunInput,
+  type UsageRecord,
+  checkBudget,
+  finishRun,
+  getBudget,
+  getRun,
+  getUsage,
+  listRuns,
+  recordUsage,
+  setBudget,
+  startRun,
+  sumUsage,
+} from './ledgerUsage'
 
 export * from './ledgerModel'
 
@@ -80,6 +99,37 @@ export interface Ledger {
   event: {
     appendEvent(input: AppendEventInput): LedgerEvent
     listEvents(input?: ListEventsInput): LedgerEvent[]
+  }
+  run: {
+    startRun(input: StartRunInput): Run
+    finishRun(id: string, input: FinishRunInput): Run
+    getRun(id: string): Run | null
+    listRuns(projectId: string, opts?: { limit?: number; offset?: number }): Run[]
+  }
+  usage: {
+    recordUsage(input: RecordUsageInput): UsageRecord
+    getUsage(runId: string): UsageRecord[]
+    sumUsage(
+      projectId: string,
+      opts?: { since?: number }
+    ): { costMicros: number; inputTokens: number; outputTokens: number; unpricedRecords: number }
+    checkBudget(input: {
+      projectId: string
+      estimateMicros?: number
+      scope?: string
+      period?: string
+    }): BudgetCheck
+  }
+  budget: {
+    setBudget(input: {
+      projectId: string
+      limitMicros: number
+      scope?: string
+      period?: string
+      hardCap?: boolean
+      spentMicros?: number
+    }): Budget
+    getBudget(projectId: string, scope?: string, period?: string): Budget | null
   }
   /** Deletes one project; FK cascades remove agents/tasks/runs/events/usage/budget/prefix. */
   deleteProject(id: string): boolean
@@ -130,6 +180,22 @@ export function createLedger(db: Database, options: LedgerOptions = {}): Ledger 
     event: {
       appendEvent: (input) => appendEvent(ctx, input),
       listEvents: (input) => listEvents(ctx, input ?? {}),
+    },
+    run: {
+      startRun: (input) => startRun(ctx, input),
+      finishRun: (id, input) => finishRun(ctx, id, input),
+      getRun: (id) => getRun(ctx, id),
+      listRuns: (projectId, opts) => listRuns(ctx, projectId, opts),
+    },
+    usage: {
+      recordUsage: (input) => recordUsage(ctx, input),
+      getUsage: (runId) => getUsage(ctx, runId),
+      sumUsage: (projectId, opts) => sumUsage(ctx, projectId, opts),
+      checkBudget: (input) => checkBudget(ctx, input),
+    },
+    budget: {
+      setBudget: (input) => setBudget(ctx, input),
+      getBudget: (projectId, scope, period) => getBudget(ctx, projectId, scope, period),
     },
     deleteProject(id) {
       return tx(ctx, () => {

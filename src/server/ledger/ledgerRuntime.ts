@@ -51,3 +51,26 @@ export function startLedgerRuntime(opts: {
     return null
   }
 }
+
+/**
+ * Periodic reaper. Unref'd so a ledger sweep never keeps the process alive; errors are reported
+ * and swallowed because one bad tick must not kill the timer.
+ */
+export function startLedgerReaper(
+  ledger: { task: { sweepExpiredLeases(limit?: number, now?: number): unknown } },
+  intervalMs = 30_000,
+  onError: (err: unknown) => void = (err) => {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.error(`ledger reaper tick failed: ${reason}`)
+  }
+): () => void {
+  const timer = setInterval(() => {
+    try {
+      ledger.task.sweepExpiredLeases()
+    } catch (err) {
+      onError(err)
+    }
+  }, intervalMs)
+  ;(timer as unknown as { unref?: () => void }).unref?.()
+  return () => clearInterval(timer)
+}

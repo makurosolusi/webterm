@@ -7,7 +7,7 @@ import { installContextLink } from './contextLink'
 import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
 import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
-import { startLedgerRuntime } from './ledger/ledgerRuntime'
+import { startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -25,7 +25,10 @@ const dev = process.env.NODE_ENV !== 'production'
 
 // Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
 const ledgerRuntime = startLedgerRuntime()
-if (ledgerRuntime) console.log(`ledger ${ledgerRuntime.mode}: ${ledgerRuntime.path}`)
+if (ledgerRuntime) {
+  console.log(`ledger ${ledgerRuntime.mode}: ${ledgerRuntime.path}`)
+  startLedgerReaper(ledgerRuntime.ledger)
+}
 
 const API_PREFIX = '/api/'
 
