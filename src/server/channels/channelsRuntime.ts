@@ -35,6 +35,7 @@ import {
 } from './channelSenderBoot'
 import type { FlushResult } from './telegramSender'
 import { MAX_WEBHOOK_BODY_BYTES, redactSecrets, verifyTelegramSecret } from './webhook'
+import { webhookPeerKey } from './webhookPeer'
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
 export const TELEGRAM_ENABLED_ENV = 'WEBTERM_TELEGRAM'
@@ -52,6 +53,9 @@ export {
   type SecretResolution,
 } from './channelSecret'
 export { WEBHOOK_FAILURE_LIMIT, WEBHOOK_FAILURE_WINDOW_MS } from './channelThrottle'
+// Peer identity for the throttle: socket by default, first `x-forwarded-for` only behind an
+// explicit `WEBTERM_TRUST_PROXY=on`.
+export { TRUST_PROXY_ENV, UNKNOWN_PEER, trustProxyEnabled, webhookPeerKey } from './webhookPeer'
 
 export type WebhookBodyResult = BodyReadResult
 
@@ -224,7 +228,7 @@ export function startChannelsRuntime(
     handle(req, res) {
       const path = new URL(req.url || '/', 'http://x').pathname
       if (path !== TELEGRAM_WEBHOOK_PATH) return false
-      void respondToWebhook(req, res, runtime, throttle)
+      void respondToWebhook(req, res, runtime, throttle, env)
       return true
     },
     handleApi(req, res) {
@@ -247,9 +251,10 @@ async function respondToWebhook(
   req: IncomingMessage,
   res: ServerResponse,
   runtime: ChannelWebhookRuntime,
-  throttle: FailureThrottle
+  throttle: FailureThrottle,
+  env: NodeJS.ProcessEnv
 ): Promise<void> {
-  const peer = req.socket?.remoteAddress ?? 'unknown'
+  const peer = webhookPeerKey(req, env)
   const blockedFor = throttle.retryAfterSeconds(peer)
   if (blockedFor !== null) {
     writeJson(res, 429, { ok: false, error: 'too_many_requests' }, { 'Retry-After': String(blockedFor) })

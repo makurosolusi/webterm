@@ -435,4 +435,57 @@ describe('channel route surface', () => {
     // A correct secret from the same peer is also paused: the throttle is on the peer, not the value.
     expect((await postWebhook(channels, UPDATE)).status).toBe(429)
   })
+
+  // The P5 residual: a reverse proxy makes every delivery share one socket address, so the
+  // throttle key must be the forwarded client only when the operator opted in.
+  describe('throttle peer key behind a proxy', () => {
+    const WRONG = { [TELEGRAM_SECRET_HEADER]: 'wrong-secret-value' }
+    function proxyRuntime(trustProxy: boolean): ChannelsRuntime {
+      const channels = startChannelsRuntime(fakeLedger().ledger, {
+        env: {
+          WEBTERM_TELEGRAM: 'on',
+          WEBTERM_TELEGRAM_WEBHOOK_SECRET: SECRET,
+          ...(trustProxy ? { WEBTERM_TRUST_PROXY: 'on' } : {}),
+        } as NodeJS.ProcessEnv,
+        storePath: tempStorePath(),
+        now: () => 1_700_000_000_000,
+      })
+      if (!channels) throw new Error('channel runtime did not start')
+      return channels
+    }
+    async function exhaust(channels: ChannelsRuntime, forwarded: string | undefined): Promise<void> {
+      const headers = { ...WRONG, ...(forwarded === undefined ? {} : { 'x-forwarded-for': forwarded }) }
+      for (let i = 0; i < 30; i += 1) {
+        expect((await postWebhook(channels, UPDATE, headers)).status).toBe(401)
+      }
+    }
+
+    it('ignores a rotating x-forwarded-for unless the flag is on', async () => {
+      const channels = proxyRuntime(false)
+      for (let i = 0; i < 30; i += 1) {
+        expect((await postWebhook(channels, UPDATE, { ...WRONG, 'x-forwarded-for': `198.51.100.${i}` })).status).toBe(401)
+      }
+      expect((await postWebhook(channels, UPDATE, { ...WRONG, 'x-forwarded-for': '198.51.100.200' })).status).toBe(429)
+    })
+
+    it('keeps a separate bucket per forwarded client when the flag is on', async () => {
+      const channels = proxyRuntime(true)
+      await exhaust(channels, '198.51.100.1')
+      expect((await postWebhook(channels, UPDATE, { ...WRONG, 'x-forwarded-for': '198.51.100.1' })).status).toBe(429)
+      expect((await postWebhook(channels, UPDATE, { ...WRONG, 'x-forwarded-for': '198.51.100.2' })).status).toBe(401)
+      // A legitimate delivery from another client is not blocked by the attacker's bucket.
+      expect(
+        (await postWebhook(channels, UPDATE, { [TELEGRAM_SECRET_HEADER]: SECRET, 'x-forwarded-for': '198.51.100.2' }))
+          .status
+      ).toBe(200)
+    })
+
+    it('falls back to the socket bucket for a malformed or empty forwarded value', async () => {
+      const channels = proxyRuntime(true)
+      await exhaust(channels, 'not-an-ip')
+      expect((await postWebhook(channels, UPDATE, { ...WRONG, 'x-forwarded-for': 'not-an-ip' })).status).toBe(429)
+      expect((await postWebhook(channels, UPDATE, WRONG)).status).toBe(429)
+      expect((await postWebhook(channels, UPDATE, { ...WRONG, 'x-forwarded-for': '198.51.100.3' })).status).toBe(401)
+    })
+  })
 })
