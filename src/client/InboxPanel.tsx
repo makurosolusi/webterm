@@ -22,14 +22,13 @@ import {
   useApprovedApprovals,
   useInboxCountPublisher,
   useInboxDialogKeys,
-  useInboxOpen,
 } from './inboxPanelModel'
 import './inbox.css'
 
 export { CONFIRM_PHRASE }
 
 export interface InboxPanelProps {
-  /** Default true. The Dock toggle owns this in `useInboxOpen` below. */
+  /** Default true. The Dock toggle owns this via `useInboxOpen` in App.tsx. */
   open?: boolean
   onClose?: () => void
   /** Preloaded list. When present the panel never fetches; the integrator is the source. */
