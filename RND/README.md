@@ -1,6 +1,7 @@
 # RND — Agent Pusat webterm
 
-Status: riset dan perencanaan. **Belum ada kode implementasi.**
+Status: riset, perencanaan, dan implementasi bertahap. **P0 + P1 sudah diimplementasi**
+(branch `feature/agent-pusat-p0`, `feature/agent-pusat-p1`; belum di-merge).
 Tanggal: 2026-10-31.
 Semua dokumen di folder ini adalah bahan keputusan sebelum implementasi.
 
@@ -101,13 +102,18 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 ## 7. Status singkat
 
 - Riset: 46 worker wave 1-4, 13 worker wave 5 (implementasi), 12 worker wave 6 (omnichannel),
-  6 QC P0, 5 fix P0, 1 fix flake.
-- Branch implementasi: `feature/agent-pusat-p0`.
+  6 QC P0, 5 fix P0, 1 fix flake; 3 QC P1 + 5 fix P1.
+- Branch implementasi: `feature/agent-pusat-p0` (selesai), `feature/agent-pusat-p1`.
 - **P0 selesai**: multi-subscriber, outputLog seq, nodeRegistry, replay remount, close/exit,
   B1 save flush, B3 nodeId validation, hook token tidak di argv, API node validation, caps.
-- Gates: typecheck, 1063 vitest, 84 bun test, semuanya hijau.
-- Fase berikutnya: P1 headless control + scoped auth. Belum dimulai.
-- Risiko tersisa: B4 token inheritance/status fail-open, approval belum blocking, P1-P5.
+- **P1 selesai**: control API `spawn/prompt/wait/close/nodes`, capability `wcap_*` (verb+resource,
+  TTL 15m/60m, sha256-at-rest, idempotent requestId), transport token per node (root tidak diwarisi
+  PTY), hook claude lewat file header 0600, strict hook auth opt-in, transcript read hardened,
+  spawn cwd dikurung ke home/data dir, output node tetap terbaca setelah exit.
+- Gates P1: typecheck, 1199 vitest, 84 bun test, semuanya hijau.
+- Fase berikutnya: P2 memory/evidence + P3 approval blocking. Belum dimulai.
+- Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
+  context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
 
 ---
 
@@ -121,3 +127,11 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
 | `b46a06a` / `65c696f` | laporan QC |
 | `2c276a0` | fix blocker QC |
 | `7effdd2` | hardening test PTY |
+
+## 9. Riwayat P1
+
+| Commit | Isi |
+|---|---|
+| `999a920` | capability-scoped headless API |
+| `2872190` | transport token per node + env scrub |
+| `30d02a7` | fix blocker QC P1 (capability gate, idempotency, exit output, spawn session, identity) |
