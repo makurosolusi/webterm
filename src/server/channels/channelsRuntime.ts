@@ -27,6 +27,7 @@ import {
   type ChannelAuditEvent,
   type DispatchOutcome,
 } from './channelDispatch'
+import type { TelegramCentralPort } from './channelDispatch'
 import { handleChannelBindingsApi } from './channelBindingsHttp'
 import { declaredLength, readCappedBody, writeJson, type BodyReadResult } from './channelHttp'
 import {
@@ -185,6 +186,7 @@ export interface ChannelsRuntimeOptions {
   readSecret?: (path: string) => SecretFileRead
   /** Egress pacing and transport seam; omitted in production (5s interval, global fetch). */
   sender?: SenderBootOptions
+  centralChat?: TelegramCentralPort
 }
 
 /**
@@ -233,7 +235,7 @@ export function startChannelsRuntime(
   }
   const runtime: ChannelWebhookRuntime = {
     secret,
-    dispatch: (update) => dispatchTelegramUpdate(update, { store, approval, audit }),
+    dispatch: (update) => dispatchTelegramUpdate(update, { store, approval, audit, centralChat: options.centralChat }),
   }
   const throttle = new FailureThrottle(undefined, undefined, options.now ?? Date.now)
   // A missing bot token only disables egress; ingress and the binding API stay available.

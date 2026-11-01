@@ -316,4 +316,20 @@ describe('telegram dispatch idempotency and scrubbing', () => {
     expect(extractRejectChallenge('because')).toBeNull()
     expect(extractRejectChallenge(`abc ${NONCE}`)).toBeNull()
   })
+
+  it('routes bound free text to central chat and preserves idempotency', async () => {
+    const store = boundStore('viewer')
+    const ask = vi.fn(async (input: { projectId: string; text: string; updateId: number }) => {
+      expect(input).toEqual({ projectId: 'p1', text: 'hello central', updateId: 18 })
+      return { ok: true as const, text: 'assistant answer' }
+    })
+    const replies: ChannelReply[] = []
+    const deps = { store, centralChat: { ask }, enqueue: (reply: ChannelReply): void => { replies.push(reply) } }
+    const first = await dispatchTelegramUpdate(update(18, 100, 7, 'hello central'), deps)
+    const second = await dispatchTelegramUpdate(update(18, 100, 7, 'hello central'), deps)
+    expect(first).toMatchObject({ status: 'handled', command: 'free_text', reply: 'assistant answer' })
+    expect(second.status).toBe('duplicate')
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(replies[0]?.text).toBe('assistant answer')
+  })
 })

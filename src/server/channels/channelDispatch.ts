@@ -53,6 +53,12 @@ export interface ChannelStorePort {
   }): 'queued' | 'duplicate' | 'full'
 }
 
+export interface TelegramCentralPort {
+  ask(input: { projectId: string; text: string; updateId: number }): Promise<
+    { ok: true; text: string } | { ok: false; code: string }
+  >
+}
+
 export interface ChannelAuditEvent {
   kind: 'channel.telegram.command'
   outcome: 'handled' | 'denied' | 'replied' | 'duplicate' | 'error'
@@ -71,6 +77,7 @@ export interface TelegramDispatchDeps {
   /** See `ApprovalDeps.consumeOnApprove`: off unless the channel is the executor. */
   consumeOnApprove?: boolean
   audit?: (event: ChannelAuditEvent) => void
+  centralChat?: TelegramCentralPort
 }
 
 export type DispatchOutcome =
@@ -192,6 +199,13 @@ async function handleClaimed(
 
   const parsed = parseCommand(message.text)
   if (!parsed.ok) {
+    if (parsed.code === 'not_a_command' && deps.centralChat) {
+      const result = await deps.centralChat.ask({ projectId: binding.projectId, text: message.text, updateId: message.updateId })
+      const text = result.ok ? result.text : `Central agent unavailable (${result.code}).`
+      const reply = await replyTo(deps, message, text)
+      audit('handled', { command: 'free_text', projectId: binding.projectId })
+      return { status: 'handled', command: 'free_text', reply }
+    }
     const text = parsed.code === 'empty' ? COMMAND_USAGE : parsed.message
     const reply = await replyTo(deps, message, text)
     audit('replied', { reason: parsed.code })

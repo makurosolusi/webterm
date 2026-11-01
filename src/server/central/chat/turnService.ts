@@ -24,6 +24,7 @@ import { parseProposals } from '../proposal/proposalParser'
 import { validateProposal } from '../proposal/proposalPolicy'
 import { applyProposal } from '../proposal/applyProposal'
 import { centralPrompt } from '../proposal/centralPrompt'
+import { buildMemoryContext } from '../memory/contextBuilder'
 
 export { CentralChatError, chatErrorStatus }
 export type { ChatErrorCode } from './chatErrors'
@@ -170,9 +171,11 @@ export class TurnService {
     }
     const planner = process.env.WEBTERM_CENTRAL_PLANNER === 'on'
     const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
+    const memoryEnabled = process.env.WEBTERM_CENTRAL_MEMORY === 'on'
+    const memory = memoryEnabled ? buildMemoryContext(this.db, conversation.id, text, { now: this.now }) : ''
     const input: TurnInput = {
       conversationId: conversation.id, turnId: turn.id,
-      text: centralPrompt(this.db, text, planner && toolsWrite), history,
+      text: centralPrompt(this.db, text, planner && toolsWrite, memory), history,
       tools: [...DEFAULT_CENTRAL_TOOLS], limits: {},
       ...(turn.sessionRef === null ? {} : { sessionRef: turn.sessionRef }),
     }
