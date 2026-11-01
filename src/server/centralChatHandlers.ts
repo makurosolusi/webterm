@@ -7,6 +7,7 @@ import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { listConversationEvents } from './central/conversationStore'
 import { ConversationError } from './central/conversationModel'
 import { MockRuntime } from './central/runtime/mockRuntime'
+import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import { createPortfolioReadExecutor } from './central/chat/toolExecutors'
 import { StreamHub } from './central/chat/streamHub'
@@ -50,7 +51,9 @@ function buildService(db: Database, kind: RuntimeKind, now?: () => number): Chat
   })
   const runtime = kind === 'mock'
     ? new MockRuntime({ toolExecutor: createPortfolioReadExecutor(db, { now }), stepDelayMs: 5 })
-    : null
+    : kind === 'opencode'
+      ? new OpenCodeRuntime()
+      : null
   return { service: new TurnService({ db, runtime, stream, now }), stream, db }
 }
 

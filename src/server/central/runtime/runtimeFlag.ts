@@ -6,7 +6,7 @@ import type { RuntimeKind } from './centralRuntime'
 export const CENTRAL_RUNTIME_FLAG = 'WEBTERM_CENTRAL_RUNTIME'
 export const DEFAULT_RUNTIME_KIND: RuntimeKind = 'off'
 
-const SUPPORTED: ReadonlySet<string> = new Set(['off', 'claude', 'codex', 'mock'])
+const SUPPORTED: ReadonlySet<string> = new Set(['off', 'claude', 'codex', 'opencode', 'mock'])
 
 /** Case-insensitive, trimmed; anything unsupported becomes `off`. */
 export function parseRuntimeKind(raw: string | null | undefined): RuntimeKind {

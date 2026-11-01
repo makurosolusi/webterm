@@ -3,7 +3,7 @@
 // Pure types and cancellation primitives: no network, PTY, SDK, or database.
 
 /** Flag-visible runtime selector. `off` means no adapter may be constructed. */
-export type RuntimeKind = 'off' | 'claude' | 'codex' | 'mock'
+export type RuntimeKind = 'off' | 'claude' | 'codex' | 'opencode' | 'mock'
 
 /** A runtime that can actually run turns (everything except `off`). */
 export type AdapterRuntimeKind = Exclude<RuntimeKind, 'off'>
