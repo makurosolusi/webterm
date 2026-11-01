@@ -2,19 +2,30 @@
 // **/*.bun.test.ts. Memakai hanya toBe/toContain, matcher yang dideklarasikan di
 // src/server/bun-test.d.ts.
 import { test, expect } from 'bun:test'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { spawnPty } from './pty'
+
+/** HOME kosong khusus file ini, dipakai setiap `spawnPty` di bawah. Yang diuji di sini adalah sinyal
+ *  line discipline dan sapuan keturunan, BUKAN shell rc milik user: `bash -l` membaca
+ *  `~/.bash_profile`, dan profil yang berat (brew/pyenv/nvm/rvm/conda) hanya menambah latensi start
+ *  yang tidak berhubungan dengan jalur yang diuji — diukur 0,65 s idle dan >4 s median saat 24 shell
+ *  start bersamaan. Dengan HOME ini `bash -l` hanya membaca `/etc/profile`. */
+const PTY_HOME = mkdtempSync(join(tmpdir(), 'webterm-pty-home-'))
 
 /** Batas per-test. Default `bun test` 5 s terlalu sempit untuk jalur ini: tiap test di sini
  *  men-spawn login shell NYATA (`bash -l`, baca rc) lalu menunggu beberapa putaran polling. Tanpa
  *  batas eksplisit, test merah karena timeout runner saat suite penuh sedang sibuk — merah yang
  *  tidak bercerita apa-apa tentang apa yang salah. */
-const PTY_TEST_TIMEOUT_MS = 60_000
+const PTY_TEST_TIMEOUT_MS = 90_000
 
 /** Kesabaran menunggu login shell mencetak baris pertamanya. Bukan batas kecepatan: shell yang
- *  biasanya siap dalam ~0,7 s diukur bisa lewat 6 s saat mesin sibuk (load average 6), sedangkan
- *  jalur yang benar-benar rusak tidak pernah mencetak apa pun — jadi plafon tinggi menunda merah
- *  yang sah, tidak menyembunyikannya. */
-const START_BUDGET_MS = 15_000
+ *  biasanya siap dalam ~0,7 s diukur bisa lewat 6 s saat mesin sibuk (load average 6), dan plafon
+ *  15 s pun masih kalah saat seluruh `bun test` berjalan paralel — karena itu 30 s. Sedangkan jalur
+ *  yang benar-benar rusak tidak pernah mencetak apa pun — jadi plafon tinggi menunda merah yang
+ *  sah, tidak menyembunyikannya. */
+const START_BUDGET_MS = 30_000
 
 /** Kesabaran menunggu sebuah pid hilang. Dipisah dari `START_BUDGET_MS` dan sengaja JAUH lebih
  *  pendek: inilah predikat perilaku yang diuji (SIGINT dari line discipline, lalu grace
@@ -64,7 +75,13 @@ const FOREGROUND_SLEEPER = `bash -c 'echo FG=$$; sleep 47' ; :`
 
 test('Ctrl+C membunuh proses foreground di dalam PTY', async () => {
   let out = ''
-  const pty = spawnPty({ cols: 80, rows: 24, cwd: '/tmp', cmd: FOREGROUND_SLEEPER })
+  const pty = spawnPty({
+    cols: 80,
+    rows: 24,
+    cwd: '/tmp',
+    cmd: FOREGROUND_SLEEPER,
+    env: { HOME: PTY_HOME },
+  })
   pty.onData((d) => {
     out += d
   })
@@ -98,6 +115,7 @@ test('kill() menyapu cucu yang sudah lepas dari SIGHUP, bukan hanya pid anak', a
     rows: 24,
     cwd: '/tmp',
     cmd: 'sleep 47 & echo GRANDCHILD=$!; sleep 45',
+    env: { HOME: PTY_HOME },
   })
   pty.onData((d) => {
     out += d

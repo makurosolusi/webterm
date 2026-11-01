@@ -7,8 +7,16 @@ import { join } from 'node:path'
 
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-stale-'))
 process.env.WEBTERM_DATA_DIR = DATA_DIR
+// HOME diisolasi: test ini menguji perilaku sesi/PTY, bukan shell rc milik user — `bash -l` yang
+// membaca rc berat (brew/pyenv/nvm/rvm/conda) hanya menambah latensi start yang tak berhubungan.
+const ORIGINAL_HOME = process.env.HOME
+process.env.HOME = DATA_DIR
 // Satu direktori per run; tanpa pembersihan /tmp menumpuk ratusan `webterm-stale-*` dari run lokal.
-afterAll(() => rmSync(DATA_DIR, { recursive: true, force: true }))
+// HOME dikembalikan karena seluruh file test berbagi satu proses: `ptySpawn.bun.test.ts` membacanya.
+afterAll(() => {
+  process.env.HOME = ORIGINAL_HOME
+  rmSync(DATA_DIR, { recursive: true, force: true })
+})
 
 import type { AgentStatus } from '../shared/workspace'
 import type { ServerMsg } from '../shared/protocol'

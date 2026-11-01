@@ -9,9 +9,17 @@ import { join } from 'node:path'
 // test tidak pernah menyentuh data dir pengguna.
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-sessions-'))
 process.env.WEBTERM_DATA_DIR = DATA_DIR
+// HOME diisolasi: test ini menguji perilaku sesi/PTY, bukan shell rc milik user — `bash -l` yang
+// membaca rc berat (brew/pyenv/nvm/rvm/conda) hanya menambah latensi start yang tak berhubungan.
+const ORIGINAL_HOME = process.env.HOME
+process.env.HOME = DATA_DIR
 // Tiap run membuat satu direktori temp baru; tanpa pembersihan, /tmp menumpuk ratusan direktori
-// `webterm-sessions-*` setelah beberapa hari CI lokal.
-afterAll(() => rmSync(DATA_DIR, { recursive: true, force: true }))
+// `webterm-sessions-*` setelah beberapa hari CI lokal. HOME dikembalikan karena seluruh file test
+// berbagi satu proses: `ptySpawn.bun.test.ts` membaca `process.env.HOME`.
+afterAll(() => {
+  process.env.HOME = ORIGINAL_HOME
+  rmSync(DATA_DIR, { recursive: true, force: true })
+})
 
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'

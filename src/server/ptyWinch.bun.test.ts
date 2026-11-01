@@ -5,7 +5,18 @@
 // dideklarasikan di src/server/bun-test.d.ts.
 import { test, expect } from 'bun:test'
 import { execFileSync } from 'node:child_process'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { spawnPty } from './pty'
+
+/** HOME kosong khusus file ini, dipakai setiap `spawnPty` di bawah. Yang diuji di sini adalah
+ *  penyampaian SIGWINCH/winsize ke pemegang layar turunan, BUKAN shell rc milik user: `bash -l`
+ *  membaca `~/.bash_profile`, dan profil yang berat (brew/pyenv/nvm/rvm/conda) hanya menambah
+ *  latensi start yang tidak berhubungan dengan jalur WINCH — diukur 0,65 s idle dan >4 s median saat
+ *  24 shell start bersamaan. Dengan HOME ini `bash -l` hanya membaca `/etc/profile`, jadi anggaran
+ *  `READ_BUDGET_MS` benar-benar mengukur jalur yang diuji, bukan kecepatan rc user. */
+const PTY_HOME = mkdtempSync(join(tmpdir(), 'webterm-pty-home-'))
 
 // Perilaku LAMA: `Bun.spawn` diberi objek `new Bun.Terminal(...)` yang sudah jadi. Winsize termios
 // MEMANG ikut diperbarui — `stty size` di dalam PTY berubah — tapi bentuk objek itu tidak memanggil
@@ -82,20 +93,29 @@ const DUPLICATE_RESIZES = 2
  *  putaran menunggu login shell NYATA (`bash -l`, baca rc) lalu satu trap bash. Angka 6 s yang
  *  dipakai sebelumnya membuat mesin yang sedang sibuk terbaca sebagai jalur yang rusak — diukur:
  *  shell yang biasanya mencetak baris pertamanya dalam ~0,7 s bisa lewat 6 s saat load average 6.
- *  Jalur yang benar-benar rusak tidak pernah mencetak apa pun, jadi menaikkan plafon hanya menunda
- *  merah yang sah, tidak menyembunyikannya. */
-const READ_BUDGET_MS = 15_000
+ *  Plafon 15 s pun ternyata masih kalah saat seluruh `bun test` berjalan paralel, jadi dinaikkan ke
+ *  30 s. Jalur yang benar-benar rusak tidak pernah mencetak apa pun, jadi menaikkan plafon hanya
+ *  menunda merah yang sah, tidak menyembunyikannya. */
+const READ_BUDGET_MS = 30_000
 
 /** Batas per-test. Anggaran polling di dalam kedua test ini sejak awal melebihi batas default
  *  `bun test` yang 5 s, jadi keduanya hanya hijau selama login shell nyata kebetulan start cepat —
  *  di suite penuh yang sibuk ia merah sebagai timeout runner, merah yang tidak menyebut apa pun
- *  tentang apa yang salah. Nilainya harus melampaui jumlah seluruh anggaran di dalam test terpanjang
- *  (tiga putaran `READ_BUDGET_MS` plus jeda duplikat). Lihat catatan yang sama di `pty.bun.test.ts`. */
-const PTY_TEST_TIMEOUT_MS = 60_000
+ *  tentang apa yang salah. Nilainya menutup seluruh anggaran di test terpanjang: tiga putaran
+ *  `READ_BUDGET_MS` (3 x 30 s) plus jeda duplikat 320 ms, dengan sisa ruang untuk mesin yang sedang
+ *  sibuk. Jalur yang benar-benar rusak tetap gagal pada putaran PERTAMA (~30 s), jadi plafon ini
+ *  hanya menyerap kelambatan, bukan menutupi kerusakan. Lihat catatan yang sama di `pty.bun.test.ts`. */
+const PTY_TEST_TIMEOUT_MS = 120_000
 
 test('resize memberi tahu pemegang layar yang merupakan keturunan, bukan hanya pid anak', async () => {
   let out = ''
-  const pty = spawnPty({ cols: START_COLS, rows: START_ROWS, cwd: '/tmp', cmd: WINCH_REPORTER })
+  const pty = spawnPty({
+    cols: START_COLS,
+    rows: START_ROWS,
+    cwd: '/tmp',
+    cmd: WINCH_REPORTER,
+    env: { HOME: PTY_HOME },
+  })
   pty.onData((d) => {
     out += d
   })
@@ -131,7 +151,13 @@ test('resize memberi tahu pemegang layar yang merupakan keturunan, bukan hanya p
 
 test('resize ke ukuran yang sama tidak menyinyal lagi, ukuran baru tetap lewat', async () => {
   let out = ''
-  const pty = spawnPty({ cols: START_COLS, rows: START_ROWS, cwd: '/tmp', cmd: WINCH_REPORTER })
+  const pty = spawnPty({
+    cols: START_COLS,
+    rows: START_ROWS,
+    cwd: '/tmp',
+    cmd: WINCH_REPORTER,
+    env: { HOME: PTY_HOME },
+  })
   pty.onData((d) => {
     out += d
   })
