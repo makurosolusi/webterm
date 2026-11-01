@@ -6,6 +6,8 @@ import type { PlanItem } from './plan'
 // bersih dari escape terminal sebelum dipotong dan disimpan.
 const ANSI_PATTERN = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g
 const CONTROL_PATTERN = /[\u0000-\u0008\u000b-\u001f\u007f]/g
+/** Pemisah instruksi untuk prompt satu baris: newline akan men-submit prompt lebih awal. */
+const SEPARATOR = ' · '
 
 export function sanitizeText(text: string): string {
   return text.replace(ANSI_PATTERN, '').replace(CONTROL_PATTERN, '')
@@ -29,12 +31,12 @@ export function buildWorkerPrompt(args: {
   maxBytes: number
   extra?: string
 }): string {
-  const scope = args.item.scope.map((entry) => `- ${entry}`).join('\n')
-  const extra = args.extra === undefined || args.extra.trim() === '' ? '' : `\n\n${args.extra.trim()}`
+  const scope = args.item.scope.map((entry) => `- ${entry}`).join(SEPARATOR)
+  const extra = args.extra === undefined || args.extra.trim() === '' ? '' : args.extra.trim()
   const prompt = [
     'You are a leaf worker agent in webterm. Work only inside the worktree below.',
     `Task: ${args.item.title}`,
-    `Scope (touch only these paths):\n${scope}`,
+    `Scope (touch only these paths): ${scope}`,
     `Worktree: ${args.worktree.path}`,
     `Branch: ${args.worktree.branch}`,
     `Item: ${args.item.id} · attempt ${args.attempt}`,
@@ -42,7 +44,10 @@ export function buildWorkerPrompt(args: {
     'Do not push. Reply with a short summary; the orchestrator verifies independently.',
     extra,
   ]
-    .join('\n')
+    .join(SEPARATOR)
     .trim()
-  return capBytes(sanitizeText(prompt), args.maxBytes)
+  // Satu baris saja: agent REPL meng-submit pada Enter pertama, jadi prompt multi-baris hanya
+  // mengeksekusi baris pertamanya. Pemisah ` · ` menjaga semua instruksi tetap terkirim.
+  const oneLine = sanitizeText(prompt).replace(/[\r\n]+/g, SEPARATOR).replace(/\s+/g, ' ')
+  return capBytes(oneLine, args.maxBytes)
 }

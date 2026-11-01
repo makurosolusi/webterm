@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import type { PlanStore } from './orchestrator/plan'
 import type { PlanItem } from './orchestrator/planModel'
@@ -12,6 +15,17 @@ import {
 } from './orchestratorRunApi'
 
 const REPO = '/srv/repos/project-one'
+
+// Routes now mkdir `<data>/worktrees`, so tests get throwaway data dirs instead of /tmp litter.
+const tempDirs: string[] = []
+function tempDataDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'webterm-data-'))
+  tempDirs.push(dir)
+  return dir
+}
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
 
 function runtime(projectPath: string | null = REPO): LedgerRuntime {
   const db = {
@@ -70,13 +84,14 @@ function deps(
   overrides: Partial<OrchestratorRunDeps> = {}
 ): { deps: OrchestratorRunDeps; captured: Captured } {
   const captured: Captured = { calls: 0 }
+  const dataDir = tempDataDir()
   return {
     captured,
     deps: {
       ledger: runtime(),
       enabled: true,
       planStore: planStore(item()),
-      dataDir: () => '/tmp/webterm-data',
+      dataDir: () => dataDir,
       settings: () => ({ agentLaunchCommands: {} }),
       createRuntime: (compose) => {
         captured.compose = compose
@@ -204,5 +219,41 @@ describe('orchestrator run route', () => {
     const run = deps(async () => outcome(), { worktrees })
     await orchestratorRunRoute(valid, run.deps)
     expect(run.captured.compose?.worktrees).toBe(worktrees)
+  })
+
+  it('creates the missing <data>/worktrees root before building the service', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'webterm-root-'))
+    try {
+      const run = deps(async () => outcome(), { dataDir: () => dir })
+      const result = await orchestratorRunRoute(valid, run.deps)
+      expect(result.status).toBe(200)
+      const root = join(dir, 'worktrees')
+      expect(run.captured.compose?.root).toBe(root)
+      expect(statSync(root).isDirectory()).toBe(true)
+      expect(statSync(root).mode & 0o777).toBe(0o700)
+      expect(run.captured.calls).toBe(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('answers a sanitized 500 without spawning when the root cannot be created', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'webterm-root-'))
+    const blocker = join(dir, 'not-a-dir')
+    writeFileSync(blocker, 'x')
+    try {
+      const run = deps(async () => outcome(), { dataDir: () => blocker })
+      const result = await orchestratorRunRoute(valid, run.deps)
+      expect(result.status).toBe(500)
+      expect(result.body).toMatchObject({
+        ok: false,
+        error: { code: 'worktree_root_failed' },
+      })
+      expect(JSON.stringify(result.body)).not.toContain(dir)
+      expect(run.captured.calls).toBe(0)
+      expect(run.captured.compose).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

@@ -6,6 +6,7 @@
 // The route does not create tasks/agents/plans. An item must already be `assigned` by the
 // orchestrator (assign flow); otherwise this answers 409 `not_assigned` and touches nothing.
 import { join } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { createPlanStore, type PlanStore } from './orchestrator/plan'
@@ -41,18 +42,7 @@ const GIT_OUTPUT_BYTES = 256 * 1024
 
 /** Fields that would let a client choose WHAT runs or WHERE. Rejected outright. */
 const CLIENT_CONTROLLED_FIELDS = [
-  'repo',
-  'path',
-  'cwd',
-  'cmd',
-  'command',
-  'args',
-  'argv',
-  'exec',
-  'env',
-  'shell',
-  'agent',
-  'agentId',
+  'repo', 'path', 'cwd', 'cmd', 'command', 'args', 'argv', 'exec', 'env', 'shell', 'agent', 'agentId',
 ] as const
 
 export interface RuntimeCompose {
@@ -254,10 +244,8 @@ export async function orchestratorRunRoute(
     return { status: 500, body: { error: 'internal' } }
   }
   if (repo === null) {
-    return {
-      status: 409,
-      body: { error: 'not_assigned', message: `project ${request.projectId} has no repo path` },
-    }
+    const message = `project ${request.projectId} has no repo path`
+    return { status: 409, body: { error: 'not_assigned', message } }
   }
 
   const plan = deps.planStore ?? createPlanStore(ledger.db)
@@ -265,8 +253,20 @@ export async function orchestratorRunRoute(
   if (problem !== null) return { status: 409, body: { error: 'not_assigned', message: problem } }
 
   const root = join(deps.dataDir ? deps.dataDir() : dataDir(), 'worktrees')
-  const worktrees =
-    deps.worktrees ?? createWorktreeService({ root, exec: gitExecFor(deps, root) })
+  let worktrees: WorktreeService
+  if (deps.worktrees) {
+    worktrees = deps.worktrees
+  } else {
+    // config.ts only creates the data dir, so `<data>/worktrees` is missing on a fresh install.
+    // Every git exec runs with `cwd: root`; spawning there without the dir makes the first run
+    // fail 409 worktree_failed. Create it (private mode) before the service or git touches it.
+    try {
+      mkdirSync(root, { recursive: true, mode: 0o700 })
+    } catch {
+      return { status: 500, body: { ok: false, error: { code: 'worktree_root_failed', message: 'worktree root is unavailable' } } }
+    }
+    worktrees = createWorktreeService({ root, exec: gitExecFor(deps, root) })
+  }
 
   try {
     const compose: RuntimeCompose = { root, repo, cmd: await agentCommand(deps), plan, worktrees }
