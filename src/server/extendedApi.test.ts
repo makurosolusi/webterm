@@ -283,6 +283,16 @@ describe('extended API mount', () => {
     expect(bootstrap.status).toBe(400)
     expect(bootstrap.json).toEqual({ error: 'invalid_project_id' })
 
+    // Regression B1: bootstrap shares assign's reject list, so `repo` is a 400, not a 200.
+    const repo = await hit(
+      'POST',
+      '/api/orchestrator/bootstrap',
+      json({ projectId: 'p1', name: 'x', path: '/tmp', items: [], repo: 'https://example.test/x' }),
+      { orchestrator: { enabled: true } }
+    )
+    expect(repo.status).toBe(400)
+    expect(repo.json).toEqual({ error: 'client_controlled_field' })
+
     const assign = await hit(
       'POST',
       '/api/orchestrator/assign',

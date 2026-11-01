@@ -26,9 +26,11 @@ const MAX_ITEM_TITLE = 200
 const MAX_ITEM_SCOPE = 20
 const MAX_BRANCH_BASE = 200
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+/** Agent ids are namespaced (`orch:<project>`, `worker:<project>`), so `:` is allowed. */
+const AGENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
-/** Fields that name a command; a control body has no business carrying them. */
-const COMMAND_FIELDS = ['cmd', 'command', 'args', 'argv', 'exec', 'shell'] as const
+/** Everything a control body must not carry; `path` is bootstrap's own field, checked per route. */
+const CLIENT_FIELDS = ['cmd', 'command', 'args', 'argv', 'exec', 'shell', 'repo', 'path', 'cwd', 'agent', 'agentId'] as const
 
 /** Narrow slice of the real ledger this route needs; the facade satisfies it structurally. */
 export interface ControlLedger extends OrchestratorLedger {
@@ -74,6 +76,11 @@ function id(value: unknown): string | null {
   return parsed !== null && ID_PATTERN.test(parsed) ? parsed : null
 }
 
+function agentId(value: unknown): string | null {
+  const parsed = text(value, MAX_ID_CHARS)
+  return parsed !== null && AGENT_ID_PATTERN.test(parsed) ? parsed : null
+}
+
 function invalid(error: string): { ok: false; result: RouteResult } {
   return { ok: false, result: { status: 400, body: { error } } }
 }
@@ -117,7 +124,7 @@ export function parseBootstrapBody(
 ): { ok: true; value: BootstrapInput } | { ok: false; result: RouteResult } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return invalid('invalid_body')
   const raw = body as Record<string, unknown>
-  for (const field of COMMAND_FIELDS) if (field in raw) return invalid('client_controlled_field')
+  for (const field of CLIENT_FIELDS) if (field !== 'path' && field in raw) return invalid('client_controlled_field')
   const projectId = id(raw['projectId'])
   if (projectId === null) return invalid('invalid_project_id')
   const name = text(raw['name'], MAX_NAME_CHARS)
@@ -152,8 +159,7 @@ export function parseAssignBody(
 ): { ok: true; value: AssignInput } | { ok: false; result: RouteResult } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return invalid('invalid_body')
   const raw = body as Record<string, unknown>
-  const rejected = [...COMMAND_FIELDS, 'repo', 'path', 'cwd', 'agent', 'agentId'] as const
-  for (const field of rejected) if (field in raw) return invalid('client_controlled_field')
+  for (const field of CLIENT_FIELDS) if (field in raw) return invalid('client_controlled_field')
   const projectId = id(raw['projectId'])
   if (projectId === null) return invalid('invalid_project_id')
   const itemId = id(raw['itemId'])
@@ -162,7 +168,7 @@ export function parseAssignBody(
   if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) {
     return invalid('invalid_expected_version')
   }
-  const assignee = raw['assignee'] === undefined ? `worker:${projectId}` : id(raw['assignee'])
+  const assignee = raw['assignee'] === undefined ? `worker:${projectId}` : agentId(raw['assignee'])
   if (assignee === null) return invalid('invalid_assignee')
   return { ok: true, value: { projectId, itemId, expectedVersion: version, assignee } }
 }

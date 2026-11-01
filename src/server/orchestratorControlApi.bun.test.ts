@@ -174,6 +174,8 @@ test('bootstrap validates path and items before touching the ledger', async () =
     [{ items: [{ title: 'x', scope: [] }] }, 'invalid_scope'],
     [{ items: [{ title: 'x', scope: ['/etc'] }] }, 'invalid_scope'],
     [{ items: [{ title: 'x', scope: ['..'] }] }, 'invalid_scope'],
+    // B1: the shared reject list means bootstrap refuses `repo` exactly like assign does.
+    [{ repo: 'https://example.test/x.git' }, 'client_controlled_field'],
   ]
   for (const [patch, code] of cases) {
     const result = await orchestratorBootstrapRoute(bootstrapBody(patch), { ledger: rt, enabled: true })
@@ -189,6 +191,39 @@ test('a `.git` file (linked worktree pointer) also marks a valid root', () => {
   mkdirSync(linked, { recursive: true })
   writeFileSync(join(linked, '.git'), 'gitdir: /elsewhere\n')
   expect(parseBootstrapBody({ ...bootstrapBody(), path: linked }).ok).toBe(true)
+})
+
+test('assign accepts real colon-bearing agent ids and types the rejections', async () => {
+  const rt = runtime()
+  const boot = await orchestratorBootstrapRoute(bootstrapBody(), { ledger: rt, enabled: true })
+  const [first, second] = items(boot)
+  const base = { projectId: 'p1', itemId: first!.id, expectedVersion: 1 }
+
+  // B2: a real orchestrator id now parses and reaches assignTask's typed `wrong_role`.
+  const orchestrator = await orchestratorAssignRoute(
+    { ...base, assignee: 'orch:p1' },
+    { ledger: rt, enabled: true }
+  )
+  expect(orchestrator.status).toBe(400)
+  expect(body(orchestrator)['error']).toBe('wrong_role')
+
+  // A colon-bearing ghost id reaches the ledger lookup instead of `invalid_assignee`.
+  const ghost = await orchestratorAssignRoute(
+    { ...base, assignee: 'worker:ghost' },
+    { ledger: rt, enabled: true }
+  )
+  expect(ghost.status).toBe(400)
+  expect(body(ghost)['error']).toBe('agent_not_found')
+  expect(count(rt.db, 'task')).toBe(0)
+
+  // An explicit real worker id is accepted, same as the default.
+  const explicit = await orchestratorAssignRoute(
+    { projectId: 'p1', itemId: second!.id, expectedVersion: 1, assignee: 'worker:p1' },
+    { ledger: rt, enabled: true }
+  )
+  expect(explicit.status).toBe(200)
+  expect(body(explicit)['planVersion']).toBe(2)
+  expect(count(rt.db, 'task')).toBe(1)
 })
 
 test('a plan failure rolls back the project and both agents', async () => {

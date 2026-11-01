@@ -80,9 +80,13 @@ describe('bootstrap payload validation', () => {
   })
 
   it('refuses client command fields and unsafe branch bases', () => {
-    for (const field of ['cmd', 'command', 'exec', 'shell']) {
+    // Same reject list as assign: `repo`/`cwd`/`agent`/`agentId` are not bootstrap inputs.
+    for (const field of ['cmd', 'command', 'exec', 'shell', 'repo', 'cwd', 'agent', 'agentId']) {
       expect(parseBootstrapBody(body({ [field]: 'rm -rf /' }), anyRoot).ok).toBe(false)
     }
+    expect(parseBootstrapBody(body({ repo: 'https://example.test/x.git' }), anyRoot).ok).toBe(false)
+    // `path` is bootstrap's own field and stays accepted.
+    expect(parseBootstrapBody(body(), anyRoot).ok).toBe(true)
     for (const branchBase of ['-bad', 'a..b', 'has space']) {
       expect(parseBootstrapBody(body({ branchBase }), anyRoot).ok).toBe(false)
     }
@@ -95,6 +99,19 @@ describe('assign payload validation', () => {
     const parsed = parseAssignBody({ projectId: 'p1', itemId: 'i1', expectedVersion: 1 })
     expect(parsed.ok).toBe(true)
     if (parsed.ok) expect(parsed.value.assignee).toBe('worker:p1')
+  })
+
+  it('accepts colon-bearing agent ids and rejects path-like ones', () => {
+    for (const assignee of ['worker:p1', 'orch:p1', 'worker:ghost']) {
+      const parsed = parseAssignBody({ projectId: 'p1', itemId: 'i1', expectedVersion: 1, assignee })
+      expect(parsed.ok).toBe(true)
+      if (parsed.ok) expect(parsed.value.assignee).toBe(assignee)
+    }
+    for (const assignee of ['a/b', 'a\\b', 'has space', '', ':leading']) {
+      const parsed = parseAssignBody({ projectId: 'p1', itemId: 'i1', expectedVersion: 1, assignee })
+      expect(parsed.ok).toBe(false)
+      if (!parsed.ok) expect(parsed.result.body).toEqual({ error: 'invalid_assignee' })
+    }
   })
 
   it('rejects path/cmd/agent fields and non-positive versions', () => {
@@ -237,17 +254,25 @@ describe('assign routing', () => {
     expect(result.body).toMatchObject({ error: 'plan_missing' })
   })
 
-  it('maps wrong-role and missing-agent denials to 400', async () => {
-    for (const agent of [
-      { ...worker, role: 'orchestrator', depth: 1 },
-      null,
-    ]) {
-      const result = await orchestratorAssignRoute(
-        { projectId: 'p1', itemId: 'i1', expectedVersion: 1 },
-        deps({ ledgerPort: fakePort(agent) })
-      )
-      expect(result.status).toBe(400)
-      expect(result.body).toMatchObject({ ok: false })
-    }
+  it('accepts an explicit worker id and types the wrong-role/ghost rejections', async () => {
+    const explicit = await orchestratorAssignRoute(
+      { projectId: 'p1', itemId: 'i1', expectedVersion: 1, assignee: 'worker:p1' },
+      deps()
+    )
+    expect(explicit.status).toBe(200)
+
+    const orchestrator = await orchestratorAssignRoute(
+      { projectId: 'p1', itemId: 'i1', expectedVersion: 1, assignee: 'orch:p1' },
+      deps({ ledgerPort: fakePort({ ...worker, role: 'orchestrator', depth: 1 }) })
+    )
+    expect(orchestrator.status).toBe(400)
+    expect(orchestrator.body).toMatchObject({ ok: false, error: 'wrong_role' })
+
+    const ghost = await orchestratorAssignRoute(
+      { projectId: 'p1', itemId: 'i1', expectedVersion: 1, assignee: 'worker:ghost' },
+      deps({ ledgerPort: fakePort(null) })
+    )
+    expect(ghost.status).toBe(400)
+    expect(ghost.body).toMatchObject({ ok: false, error: 'agent_not_found' })
   })
 })
