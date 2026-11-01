@@ -187,6 +187,17 @@ describe('allows: qualifier', () => {
   it('ignores qualifiers when the record has none', () => {
     expect(allows(record(), 'node.prompt', 'node:a', { agentId: 'who', cwd: '/' })).toBe(true)
   })
+
+  it('applies qualifiers to a "*" grant instead of skipping them', () => {
+    const star = record({
+      verb: 'node.read',
+      resource: '*',
+      qualifier: { agentIds: ['ag1'], cwdPrefix: '/repo' },
+    })
+    expect(allows(star, 'node.read', 'node:a', { agentId: 'ag1', cwd: '/repo/x' })).toBe(true)
+    expect(allows(star, 'node.read', 'node:a', { agentId: 'ag2', cwd: '/repo/x' })).toBe(false)
+    expect(allows(star, 'node.read', 'node:a', {})).toBe(false)
+  })
 })
 
 describe('revoke / sweep / clear', () => {

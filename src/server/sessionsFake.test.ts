@@ -7,6 +7,7 @@ import type { ServerMsg } from '../shared/protocol'
 import { Sessions, type SessionsOptions } from './sessions'
 import { NODE_TOKEN_ENV, nodeToken } from './hooks'
 import { PORT } from './launchLine'
+import { EXIT_OUTPUT_LIMIT } from './nodeRegistry'
 import { ptyEnv } from './ptyShell'
 import { FakePty } from './fakePty.testutil'
 
@@ -264,6 +265,23 @@ describe('close', () => {
     expect(caller.exits()).toEqual([{ t: 'exit', id: 'ghost', code: -1, reason: 'closed' }])
     expect(sessions.isLive('ghost')).toBe(false)
   })
+
+  // Node ditutup, tapi alasannya (baris terakhir output) harus tetap terbaca: `wait until:exit`
+  // dan `observe` membaca lewat `getTerminal` SESUDAH sesi hilang dari `map`.
+  test('output captured on close stays readable via getTerminal without resurrecting', () => {
+    const { sessions, ptys } = harness()
+    sessions.open(open('n1'), recorder().send)
+    ptys[0].emitData('first line\n')
+    ptys[0].emitData('bye\n')
+
+    sessions.close('n1')
+
+    expect(sessions.isLive('n1')).toBe(false)
+    expect(sessions.pidOf('n1')).toBeUndefined()
+    expect(sessions.list()).toEqual([])
+    expect(sessions.getExit('n1')?.output).toBe('first line\nbye\n')
+    expect(sessions.getTerminal('n1')).toBe('first line\nbye\n')
+  })
 })
 
 describe('self exit', () => {
@@ -278,6 +296,26 @@ describe('self exit', () => {
     expect(sessions.getExit('n1')).toEqual({ code: 3, reason: 'self', at: T0 })
     expect(sessions.isLive('n1')).toBe(false)
     expect(sessions.getTerminal('n1')).toBe('')
+  })
+
+  test('self exit keeps the final output in the tombstone', () => {
+    const { sessions, ptys } = harness()
+    sessions.open(open('n1'), recorder().send)
+    ptys[0].emitData('building...\n')
+    ptys[0].emitData('error: nope\n')
+
+    ptys[0].emitExit(2)
+
+    expect(sessions.isLive('n1')).toBe(false)
+    expect(sessions.getExit('n1')).toEqual({
+      code: 2,
+      reason: 'self',
+      at: T0,
+      output: 'building...\nerror: nope\n',
+    })
+    expect(sessions.getTerminal('n1')).toBe('building...\nerror: nope\n')
+    // Masih tombstone, bukan sesi hidup: status `done` tidak berubah jadi aktif.
+    expect(sessions.statusOf('n1')).toBe('done')
   })
 
   test('a later close does not overwrite self or emit a second exit', () => {
@@ -391,6 +429,8 @@ describe('registry queries dan tombstone', () => {
     expect(sessions.getExit('n1')).toBeUndefined()
     expect(sessions.statusOf('n1')).toBeUndefined()
     expect(sessions.isLive('n1')).toBe(true)
+    // Output lama tidak ikut diwarisi: sesi baru mulai dari layar kosong.
+    expect(sessions.getTerminal('n1')).toBe('')
   })
 
   test('exit tombstones stay bounded', () => {
@@ -402,6 +442,21 @@ describe('registry queries dan tombstone', () => {
     }
     expect(sessions.getExit('t0')).toBeUndefined()
     expect(sessions.getExit(`t${total - 1}`)).toEqual({ code: -1, reason: 'closed', at: T0 })
+  })
+
+  test('evicting the oldest tombstone also drops its captured output', () => {
+    const { sessions, ptys } = harness()
+    const total = 300
+    for (let i = 0; i < total; i++) {
+      sessions.open(open(`t${i}`), recorder().send)
+      ptys[i].emitData(`out${i}`)
+      sessions.close(`t${i}`)
+    }
+
+    // Node tertua sudah di-forget, jadi tidak ada output yatim yang tertinggal di memori.
+    expect(sessions.getExit('t0')).toBeUndefined()
+    expect(sessions.getTerminal('t0')).toBe('')
+    expect(sessions.getTerminal(`t${total - 1}`)).toBe(`out${total - 1}`)
   })
 
   test('P0: resubscribe after close spawns a fresh session instead of replaying the tombstone', () => {
@@ -428,6 +483,37 @@ describe('registry queries dan tombstone', () => {
     ptys[1].emitData('new')
     expect(retry.text()).toBe('new')
     expect(first.text()).toBe('old') // socket lama tidak ikut menerima output sesi baru
+  })
+})
+
+describe('exit output cap', () => {
+  test('keeps only the newest EXIT_OUTPUT_LIMIT bytes of a large exit', () => {
+    const { sessions, ptys } = harness()
+    sessions.open(open('n1'), recorder().send)
+    // 80 KiB > cap 64 KiB, tiap chunk berbeda supaya urutan byte yang tersisa bisa dibuktikan.
+    const chunks = Array.from({ length: 80 }, (_, i) =>
+      String.fromCharCode(65 + (i % 26)).repeat(1024))
+    for (const chunk of chunks) ptys[0].emitData(chunk)
+    const full = chunks.join('')
+
+    ptys[0].emitExit(0)
+
+    const kept = sessions.getTerminal('n1')
+    expect(kept).toHaveLength(EXIT_OUTPUT_LIMIT)
+    expect(kept).toBe(full.slice(full.length - EXIT_OUTPUT_LIMIT))
+  })
+
+  test('truncation never splits a multi-byte UTF-8 character', () => {
+    const { sessions, ptys } = harness()
+    sessions.open(open('n1'), recorder().send)
+    // 'é' = 2 byte; 80 KiB total, cap 64 KiB = 32768 karakter utuh.
+    ptys[0].emitData('é'.repeat(40 * 1024))
+
+    ptys[0].emitExit(0)
+
+    const kept = sessions.getTerminal('n1')
+    expect(kept).toBe('é'.repeat(EXIT_OUTPUT_LIMIT / 2))
+    expect(kept.includes('\uFFFD')).toBe(false)
   })
 })
 

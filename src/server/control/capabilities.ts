@@ -143,7 +143,11 @@ export function allows(
   if (record.verb !== verb) return false
   if (!isValidResource(resource)) return false
   if (record.resource === '*') {
-    return verb === 'node.read' && isValidResource(resource)
+    return (
+      verb === 'node.read' &&
+      isValidResource(resource) &&
+      qualifierMatches(record.qualifier, context)
+    )
   }
   if (!resourceMatches(record.resource, resource)) return false
   return qualifierMatches(record.qualifier, context)

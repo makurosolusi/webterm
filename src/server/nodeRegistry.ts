@@ -17,11 +17,47 @@ export interface NodeExit {
   code: number
   reason: NodeExitReason
   at: number
+  /** Ekor output terakhir sesi (maks `EXIT_OUTPUT_LIMIT` byte). Disimpan di tombstone karena
+   *  `OutputLog` ikut hilang bersama PTY-nya, sedangkan pemanggil `wait until:exit` justru butuh
+   *  output itu sebagai alasan ia menunggu. */
+  output?: string
 }
 
 /** Batas tombstone exit. Node yang sudah di-forget tidak boleh tumbuh tanpa batas di proses yang
  *  berumur panjang, jadi yang tertua (urutan insert) dibuang lebih dulu. */
 export const EXIT_TOMBSTONE_LIMIT = 256
+
+/** Batas byte output yang ikut tombstone. Total memori tetap terbatas oleh
+ *  `EXIT_TOMBSTONE_LIMIT * EXIT_OUTPUT_LIMIT` (256 * 64 KiB = 16 MiB) walau proses berumur panjang. */
+export const EXIT_OUTPUT_LIMIT = 64 * 1024
+
+const encoder = new TextEncoder()
+
+/**
+ * Ambil `limit` byte TERAKHIR dari `text` tanpa memotong di tengah karakter UTF-8.
+ *
+ * Kenapa dihitung per code point dari belakang, bukan `encode().slice()`: potongan byte mentah bisa
+ * membelah karakter multi-byte dan menghasilkan karakter pengganti di awal output. Batas dihitung
+ * dalam byte karena itulah batas memori sesungguhnya (emoji/CJK 3-4 byte per karakter).
+ */
+export function tailOutputBytes(text: string, limit: number = EXIT_OUTPUT_LIMIT): string {
+  if (limit <= 0) return ''
+  if (encoder.encode(text).length <= limit) return text
+  let bytes = 0
+  let i = text.length
+  while (i > 0) {
+    const lo = text.charCodeAt(i - 1)
+    // Pasangan surrogate: mundur dua code unit supaya emoji tidak terbelah.
+    const pair = lo >= 0xdc00 && lo <= 0xdfff && i >= 2 &&
+      text.charCodeAt(i - 2) >= 0xd800 && text.charCodeAt(i - 2) <= 0xdbff
+    const cp = pair ? text.codePointAt(i - 2)! : lo
+    const size = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4
+    if (bytes + size > limit) break
+    bytes += size
+    i -= pair ? 2 : 1
+  }
+  return text.slice(i)
+}
 
 /** Batas jumlah status DAN transcript yang disimpan. Sama alasannya dengan tombstone exit: proses
  *  ini berumur panjang, dan status/transcript hanya dibersihkan oleh `open`/`close` id yang PERSIS

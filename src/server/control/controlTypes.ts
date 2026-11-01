@@ -87,6 +87,8 @@ export const ACK_TTL_MS = 10 * 60 * 1000
 export const ACK_LIMIT = 1000
 
 export const MAX_PROMPT_CHARS = 32_768
+/** Batas body request control (byte, bukan karakter) — diperiksa SEBELUM `JSON.parse`. */
+export const CONTROL_MAX_BODY_BYTES = 64 * 1024
 export const WAIT_MAX_MS = 25_000
 export const WAIT_POLL_MS = 100
 export const DEFAULT_COLS = 80
@@ -125,23 +127,32 @@ export function positiveInt(value: unknown, max: number): number | undefined {
   return n >= 1 && n <= max ? n : undefined
 }
 
-/** Acknowledgment idempoten per requestId. Di-key oleh `deps` lewat WeakMap di router. */
+/**
+ * Kunci ack: verb + resource node + requestId. requestId yang dipakai ulang di route lain TIDAK
+ * boleh memutar ulang ack milik route sebelumnya (mis. spawn R lalu close R bukan replay spawn).
+ * `nodeId` sudah aman (`isSafeNodeId`), jadi ia tidak bisa memalsukan pemisah kunci.
+ */
+export function ackKey(verb: CapabilityVerb, nodeId: string, requestId: string): string {
+  return `${verb}|node:${nodeId}|${requestId}`
+}
+
+/** Acknowledgment idempoten per kunci ack. Di-key oleh `deps` lewat WeakMap di router. */
 export class AckStore {
   private acks = new Map<string, { at: number; result: { status: number; body?: unknown } }>()
 
   constructor(private readonly limit: number = ACK_LIMIT) {}
 
-  get(requestId: string, now: number): { status: number; body?: unknown } | undefined {
-    const entry = this.acks.get(requestId)
+  get(key: string, now: number): { status: number; body?: unknown } | undefined {
+    const entry = this.acks.get(key)
     if (!entry) return undefined
     if (now - entry.at >= ACK_TTL_MS) {
-      this.acks.delete(requestId)
+      this.acks.delete(key)
       return undefined
     }
     return entry.result
   }
 
-  set(requestId: string, result: { status: number; body?: unknown }, now: number): void {
+  set(key: string, result: { status: number; body?: unknown }, now: number): void {
     // Penulisan ulang key yang sudah ada tidak mengubah urutan insert, jadi replay lama tidak
     // memperpanjang umurnya — sama seperti eviction registry node.
     while (this.acks.size >= this.limit) {
@@ -149,6 +160,6 @@ export class AckStore {
       if (oldest === undefined) break
       this.acks.delete(oldest)
     }
-    this.acks.set(requestId, { at: now, result })
+    this.acks.set(key, { at: now, result })
   }
 }

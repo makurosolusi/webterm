@@ -8,7 +8,7 @@ import { forgetNodeToken, hookEnv, nodeToken } from './hooks'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { OutputLog } from './outputLog'
 import { SubscriberSet } from './subscribers'
-import { NodeRegistry, type NodeExit } from './nodeRegistry'
+import { NodeRegistry, tailOutputBytes, type NodeExit } from './nodeRegistry'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -50,6 +50,13 @@ export interface SessionsOptions {
   spawn?: typeof spawnPty
   /** Sumber waktu untuk tombstone exit. Di-inject supaya test tidak bergantung jam dinding. */
   now?: () => number
+}
+
+/** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
+ *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
+function exitOutput(log: OutputLog | undefined): string | undefined {
+  const text = log?.text() ?? ''
+  return text === '' ? undefined : tailOutputBytes(text)
 }
 
 export class Sessions {
@@ -102,7 +109,17 @@ export class Sessions {
 
   setTranscript(id: string, path: string): void { this.registry.setTranscript(id, path) }
   getTranscript(id: string): string | undefined { return this.registry.getTranscript(id) }
-  getTerminal(id: string): string { return this.map.get(id)?.log.text() ?? '' }
+  /**
+   * Teks terminal: log HIDUP bila sesinya masih ada, kalau tidak ekor output yang tersimpan di
+   * tombstone exit. Tanpa fallback ini, `wait until:exit` selalu menjawab `output: ''` — sesi
+   * dihapus tepat saat keluar, jadi pemanggil kehilangan seluruh alasan ia menunggu. Tombstone
+   * dibaca, bukan dihidupkan lagi: tidak ada PTY atau `Session` yang dibuat ulang di sini.
+   */
+  getTerminal(id: string): string {
+    const live = this.map.get(id)
+    if (live) return live.log.text()
+    return this.registry.getExit(id)?.output ?? ''
+  }
   statusOf(id: string): AgentStatus | undefined { return this.registry.getStatus(id)?.status }
   isLive(id: string): boolean { return this.map.has(id) }
   getExit(id: string): NodeExit | undefined { return this.registry.getExit(id) }
@@ -239,7 +256,16 @@ export class Sessions {
     // `self` menang: proses yang terbukti keluar sendiri tidak boleh ditimpa `closed`. `closed` hanya
     // mengisi slot kosong — tombol Close pada node yang sudah keluar tidak memancarkan `exit` kedua.
     const firstClose = !this.registry.getExit(id)
-    if (firstClose) this.registry.setExit(id, { code: -1, reason: 'closed', at: this.now() })
+    // Output diambil SEBELUM `map.delete`: `OutputLog` hidup di dalam `Session`, dan tombstoneyalah
+    // satu-satunya tempat ia bertahan sesudah sesi dibuang.
+    if (firstClose) {
+      this.registry.setExit(id, {
+        code: -1,
+        reason: 'closed',
+        at: this.now(),
+        output: exitOutput(session?.log),
+      })
+    }
     const status: ServerMsg = { t: 'status', id }
     const exit: ServerMsg = { t: 'exit', id, code: -1, reason: 'closed' }
     session?.subs.send(status)
@@ -285,7 +311,12 @@ export class Sessions {
     // `done` DULU, tombstone exit sesudahnya: `setStatus` mengabaikan node yang sudah punya
     // tombstone (lihat guard di sana), jadi urutan sebaliknya membuat `done` hilang.
     this.setStatus(session.id, 'done', at)
-    this.registry.setExit(session.id, { code, reason: 'self', at })
+    this.registry.setExit(session.id, {
+      code,
+      reason: 'self',
+      at,
+      output: exitOutput(session.log),
+    })
     session.subs.send({ t: 'exit', id: session.id, code, reason: 'self' })
     session.subs.clear()
     this.map.delete(session.id)

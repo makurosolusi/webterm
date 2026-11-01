@@ -16,7 +16,8 @@ process.env.WEBTERM_DATA_DIR = join(SANDBOX, 'data')
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AgentStatus, Workspace } from '../shared/workspace'
-import { nodeToken, NODE_TOKEN_HEADER } from './hooks'
+import { forgetNodeToken, nodeToken, NODE_TOKEN_HEADER } from './hooks'
+import { TOKEN_HEADER } from './auth'
 import {
   agentStatusRoute,
   transcriptPathAllowed,
@@ -232,6 +233,121 @@ describe('strict auth NYALA — transcript_path harus di dalam root yang diizink
       res, URL_FOR(NODE), { strictAuth: true, deps: d }
     )
     expect(res.statusCode).toBe(204)
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// IKATAN TOKEN→NODE. Sebelum ini sebuah token node yang SAH bisa dipakai untuk node mana pun:
+// `?node=` sepenuhnya dari query string, dan yang diperiksa hanya "token ini pernah dicetak?".
+describe('ikatan token→node — tanpa syarat, juga saat strict MATI', () => {
+  const VICTIM = 'node-victim-1'
+  const VICTIM_URL = URL_FOR(VICTIM)
+  const victimToken = nodeToken(VICTIM)
+
+  it('token sendiri + node sendiri menulis status seperti biasa', async () => {
+    const res = mockRes()
+    const d = deps()
+    await agentStatusRoute(
+      mockReq({ hook_event_name: 'Stop' }, { [TOKEN_HEADER]: TOKEN }),
+      res, URL_FOR(NODE), { strictAuth: false, deps: d }
+    )
+    expect(res.statusCode).toBe(204)
+    expect(d.writes.status).toEqual([{ node: NODE, status: 'waiting' }])
+  })
+
+  it('token sendiri + node korban ditolak 403 dan TIDAK menulis apa pun', async () => {
+    for (const header of [TOKEN_HEADER, NODE_TOKEN_HEADER]) {
+      const res = mockRes()
+      const d = deps()
+      await agentStatusRoute(
+        mockReq(
+          { hook_event_name: 'Stop', transcript_path: '/tmp/x.jsonl' },
+          { [header]: TOKEN }
+        ),
+        res, VICTIM_URL, { strictAuth: false, deps: d }
+      )
+      expect(res.statusCode).toBe(403)
+      expect(JSON.parse(res.body)).toEqual({ error: 'node token does not match node' })
+      expect(d.writes).toEqual({ status: [], transcript: [] })
+    }
+  })
+
+  it('token node korban sendiri tetap boleh menulis node korban (bukan yang dilarang)', async () => {
+    const res = mockRes()
+    const d = deps()
+    await agentStatusRoute(
+      mockReq({ hook_event_name: 'Stop' }, { [TOKEN_HEADER]: victimToken }),
+      res, VICTIM_URL, { strictAuth: false, deps: d }
+    )
+    expect(res.statusCode).toBe(204)
+    expect(d.writes.status).toEqual([{ node: VICTIM, status: 'waiting' }])
+  })
+
+  it('root token boleh bertindak untuk node mana pun', async () => {
+    for (const url of [URL_FOR(NODE), VICTIM_URL]) {
+      const res = mockRes()
+      const d = deps()
+      await agentStatusRoute(
+        mockReq({ hook_event_name: 'Stop' }, { [TOKEN_HEADER]: 'root-transport-token' }),
+        res, url, { strictAuth: false, deps: d }
+      )
+      expect(res.statusCode).toBe(204)
+      expect(d.writes.status).toHaveLength(1)
+    }
+  })
+
+  it('tanpa token / token asing: perilaku lama tidak berubah (fail-open)', async () => {
+    const cases: Record<string, string>[] = [{}, { [TOKEN_HEADER]: 'unknown' }]
+    for (const headers of cases) {
+      const res = mockRes()
+      const d = deps()
+      await agentStatusRoute(
+        mockReq({ hook_event_name: 'Stop' }, headers),
+        res, VICTIM_URL, { strictAuth: false, deps: d }
+      )
+      expect(res.statusCode).toBe(204)
+      expect(d.writes.status).toEqual([{ node: VICTIM, status: 'waiting' }])
+    }
+  })
+
+  it('token yang sudah di-revoke tidak lagi mengikat ke node mana pun', async () => {
+    const revoked = nodeToken('node-revoked-1')
+    forgetNodeToken('node-revoked-1')
+    const res = mockRes()
+    const d = deps()
+    await agentStatusRoute(
+      mockReq({ hook_event_name: 'Stop' }, { [TOKEN_HEADER]: revoked }),
+      res, VICTIM_URL, { strictAuth: false, deps: d }
+    )
+    // Bukan lagi identitas node: jatuh ke jalur "token asing" yang fail-open.
+    expect(res.statusCode).toBe(204)
+    expect(d.writes.status).toEqual([{ node: VICTIM, status: 'waiting' }])
+  })
+
+  it('strict auth tetap bekerja: token sendiri lolos, token node lain untuk node ini 403', async () => {
+    const own = mockRes()
+    const ownDeps = deps()
+    await agentStatusRoute(
+      mockReq(
+        { hook_event_name: 'Stop' },
+        { [TOKEN_HEADER]: TOKEN, [NODE_TOKEN_HEADER]: TOKEN }
+      ),
+      own, URL_FOR(NODE), { strictAuth: true, deps: ownDeps }
+    )
+    expect(own.statusCode).toBe(204)
+    expect(ownDeps.writes.status).toEqual([{ node: NODE, status: 'waiting' }])
+
+    const foreign = mockRes()
+    const foreignDeps = deps()
+    await agentStatusRoute(
+      mockReq(
+        { hook_event_name: 'Stop' },
+        { [TOKEN_HEADER]: victimToken, [NODE_TOKEN_HEADER]: victimToken }
+      ),
+      foreign, URL_FOR(NODE), { strictAuth: true, deps: foreignDeps }
+    )
+    expect(foreign.statusCode).toBe(403)
+    expect(foreignDeps.writes).toEqual({ status: [], transcript: [] })
   })
 })
 

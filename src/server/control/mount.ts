@@ -4,10 +4,17 @@
 // membaca body JSON, lalu menulis hasilnya dengan bentuk respons yang sama seperti `api.ts`.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import npath from 'node:path'
 import { CapabilityStore, allows, clampTtl } from './capabilities'
+import { controlCwdAllowed } from './controlCwd'
 import { handleControl } from './controlApi'
-import { CONTROL_PREFIX, type ControlCapabilities, type ControlDeps, type ControlRequest } from './controlTypes'
+import {
+  CONTROL_MAX_BODY_BYTES,
+  CONTROL_PREFIX,
+  headerValue,
+  type ControlCapabilities,
+  type ControlDeps,
+  type ControlRequest,
+} from './controlTypes'
 
 /** Token kapabilitas proses ini. Diekspor supaya test/integrator bisa mem-mint langsung. */
 export const capabilityStore = new CapabilityStore()
@@ -31,6 +38,10 @@ let defaultDeps: Promise<ControlDeps> | undefined
 /**
  * Deps produksi dimuat malas: `db`/`sessions` menyentuh `bun:sqlite` dan PTY, jadi test node-env
  * yang menyuntik deps sendiri tidak boleh memuatnya hanya karena mengimpor file ini.
+ *
+ * PENTING: hasilnya di-cache di level modul. Router menyimpan AckStore di WeakMap yang di-key oleh
+ * objek `deps`; kalau tiap request membuat objek deps baru, jendela replay 10 menit tidak pernah
+ * berlaku di produksi (B2).
  */
 function resolveDefaultDeps(): Promise<ControlDeps> {
   defaultDeps ??= (async () => {
@@ -42,20 +53,51 @@ function resolveDefaultDeps(): Promise<ControlDeps> {
       // Token root manusia; absen = route mint tidak ada (404), bukan 401.
       rootToken: process.env.WEBTERM_TOKEN,
       allowTokenMint: process.env.WEBTERM_ALLOW_TOKEN_MINT === '1',
-      // P1 masih permisif; P1b mempersempit ke workspace root.
-      cwdAllowed: (cwd) => npath.isAbsolute(cwd),
+      cwdAllowed: controlCwdAllowed,
     }
   })()
   return defaultDeps
 }
 
-/** Body hanya untuk method yang memang punya body; JSON rusak diperlakukan sebagai `{}`. */
+const mergedDeps = new WeakMap<Partial<ControlDeps>, Promise<ControlDeps>>()
+
+/**
+ * Overrides test digabung SEKALI per identitas objek overrides, lalu hasil gabungannya dipakai
+ * ulang. Tanpa memo ini, `{ ...default, ...overrides }` per panggilan tetap menghasilkan objek baru
+ * sehingga AckStore ikut baru. Identitas berarti test yang mengubah isi objek overrides di antara
+ * panggilan tidak otomatis terlihat; buat objek baru bila ingin deps baru.
+ */
+function depsFor(overrides?: Partial<ControlDeps>): Promise<ControlDeps> {
+  if (!overrides) return resolveDefaultDeps()
+  // Test yang menyuntik ketiga dep wajib tidak memicu impor `bun:sqlite`/PTY sama sekali.
+  if (overrides.sessions && overrides.capabilities && overrides.settings) {
+    return Promise.resolve(overrides as ControlDeps)
+  }
+  let merged = mergedDeps.get(overrides)
+  if (!merged) {
+    merged = resolveDefaultDeps().then((base) => ({ ...base, ...overrides }))
+    mergedDeps.set(overrides, merged)
+  }
+  return merged
+}
+
+const PARSE_FAILED = Symbol('control-json-failed')
+
+/** Body JSON; `PARSE_FAILED` dibedakan dari `{}` agar route bisa menjawab `invalid_json`. */
 function parseBody(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown
   } catch {
-    return {}
+    return PARSE_FAILED
   }
+}
+
+/** `Content-Length` hanya dipakai sebagai tolak-cepat; akumulasi byte tetap diperiksa setelah baca. */
+function declaredTooLarge(headers: IncomingMessage['headers']): boolean {
+  const raw = headerValue(headers, 'content-length')
+  if (raw === undefined) return false
+  const n = Number(raw)
+  return Number.isFinite(n) && n > CONTROL_MAX_BODY_BYTES
 }
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
@@ -81,18 +123,33 @@ export async function handleControlHttp(
   if (path !== CONTROL_PREFIX && !path.startsWith(`${CONTROL_PREFIX}/`)) return false
   const method = (req.method || 'GET').toUpperCase()
   const withBody = method === 'POST' || method === 'PUT'
+
+  let body: unknown
+  if (withBody) {
+    // Tolak sebelum membaca/menyalin body raksasa. Body yang lolos akan diperiksa lagi di bawah.
+    if (declaredTooLarge(req.headers)) {
+      json(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
+      return true
+    }
+    const raw = await readBody()
+    if (Buffer.byteLength(raw) > CONTROL_MAX_BODY_BYTES) {
+      json(res, 413, { error: 'payload_too_large', max: CONTROL_MAX_BODY_BYTES })
+      return true
+    }
+    body = parseBody(raw)
+    if (body === PARSE_FAILED) {
+      json(res, 400, { error: 'invalid_json' })
+      return true
+    }
+  }
+
   const request: ControlRequest = {
     method,
     path,
     headers: req.headers,
-    ...(withBody ? { body: parseBody(await readBody()) } : {}),
+    ...(withBody ? { body } : {}),
   }
-
-  // Test yang menyuntik ketiga dep wajib tidak memicu impor `bun:sqlite`/PTY sama sekali.
-  const injected = overrides?.sessions && overrides.capabilities && overrides.settings
-  const deps: ControlDeps = injected
-    ? (overrides as ControlDeps)
-    : { ...(await resolveDefaultDeps()), ...overrides }
+  const deps = await depsFor(overrides)
   const result = await handleControl(request, deps)
   if (!result) return false
   json(res, result.status, result.body)

@@ -18,6 +18,9 @@ export const TOKEN_HEADER = 'x-webterm-token'
 /** Query parameter carrying the token on the initial page load and on the WS URL (a browser
  *  cannot set headers on `new WebSocket`, so the WS handshake has no other place to put it). */
 export const TOKEN_PARAM = 'token'
+/** Header that carries a per-node capability token (`wcap_*`) to the control API. Root and
+ *  node tokens never travel in this header, and it is never read from the query string. */
+export const CAPABILITY_HEADER = 'x-webterm-capability'
 
 export const DEFAULT_HOST = '127.0.0.1'
 
@@ -130,6 +133,12 @@ export function isNodeTokenPath(pathname: string): boolean {
   )
 }
 
+/** Keluarga control API, satu-satunya jalur yang boleh menerima capability token. Sengaja
+ *  memakai prefix ber-trailing-slash supaya `/api/control` sendiri bukan anggota keluarga. */
+export function isControlPath(pathname: string): boolean {
+  return pathname.startsWith('/api/control/')
+}
+
 /**
  * Gerbang lengkap satu request: token root dulu, dan hanya bila itu gagal, token node untuk
  * `isNodeTokenPath` — dengan syarat origin tetap lolos. Urutan ini penting supaya perilaku
@@ -142,11 +151,21 @@ export function authorizeRequest(args: {
   pathname: string
   /** Validator token node (disuntikkan supaya modul ini tetap bebas state server). */
   isNodeToken: (token: string) => boolean
+  /** Validator capability token (`wcap_*`). Tidak wajib: tanpa ini control API tetap
+   *  root/node-only, yang merupakan perilaku aman bawaan. */
+  isCapabilityToken?: (token: string) => boolean
 }): boolean {
   if (authorize(args)) return true
-  if (!isNodeTokenPath(args.pathname)) return false
   if (!sameOrigin(args.headers)) return false
-  const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
-  if (typeof candidate !== 'string' || candidate === '') return false
-  return args.isNodeToken(candidate)
+  if (isNodeTokenPath(args.pathname)) {
+    const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
+    if (typeof candidate === 'string' && candidate !== '' && args.isNodeToken(candidate)) return true
+  }
+  // Capability: HANYA untuk keluarga control API, HANYA dari header. Query string tidak pernah
+  // diperiksa — capability yang bocor ke URL akan tercatat di log/riwayat, dan gate ini tidak
+  // boleh jadi jalan masuknya. Jalur lain (settings/workspaces/fs//ws) tetap root-only.
+  if (!isControlPath(args.pathname) || args.isCapabilityToken === undefined) return false
+  const capability = first(args.headers[CAPABILITY_HEADER])
+  if (typeof capability !== 'string' || capability === '') return false
+  return args.isCapabilityToken(capability)
 }

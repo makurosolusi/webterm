@@ -75,18 +75,33 @@ export const NODE_TOKEN_ENV = 'NODETERM_NODE_TOKEN'
 
 const tokens = new Map<string, string>()
 
+/**
+ * Kebalikan `tokens`: token → node id.
+ *
+ * Dipakai jalur transport untuk menjawab "token ini milik node MANA" dalam O(1). Sebelumnya satu-
+ * satunya cara adalah memindai `tokens.values()`, yang hanya bisa menjawab "sah atau tidak" — dan
+ * jawaban itulah lubangnya: token node A yang sah bisa dipakai untuk menulis status node B hanya
+ * dengan mengganti `?node=`.
+ */
+const tokenOwners = new Map<string, string>()
+
 /** Token node, dicetak saat pertama diminta. Satu token per node, stabil selama proses berjalan. */
 export function nodeToken(nodeId: string): string {
   let t = tokens.get(nodeId)
   if (!t) {
     t = randomUUID()
     tokens.set(nodeId, t)
+    tokenOwners.set(t, nodeId)
   }
   return t
 }
 
 /** Lupakan segala jejak sebuah node: token DAN file settings/header-nya (node dihapus / sesi ditutup). */
 export function forgetNodeToken(nodeId: string): void {
+  const t = tokens.get(nodeId)
+  // Ikatan token→node dibuang SEBELUM tokennya: token yang sudah dilupakan tidak boleh lagi
+  // membuktikan identitas node mana pun (kalau tidak, ia jadi kunci bebas ke seluruh registry).
+  if (t !== undefined) tokenOwners.delete(t)
   tokens.delete(nodeId)
   // Memo pengumuman roster hidup per node di memori: tanpa disapu di sini Map-nya tumbuh selamanya,
   // dan id yang dipakai ulang mewarisi dedup milik node yang sudah mati.
@@ -115,9 +130,19 @@ export function forgetNodeToken(nodeId: string): void {
  * rahasia yang bisa ditebak bertahap).
  */
 export function isValidNodeToken(token: string): boolean {
-  if (typeof token !== 'string' || token === '') return false
-  for (const known of tokens.values()) if (known === token) return true
-  return false
+  return nodeIdForToken(token) !== undefined
+}
+
+/**
+ * Node pemilik sebuah token node, atau `undefined` bila token itu bukan token node yang pernah
+ * dicetak proses ini (root token, token asing, string kosong).
+ *
+ * Ini jawaban yang dibutuhkan otorisasi per-node: `isValidNodeToken` hanya bilang "sah", padahal
+ * yang menentukan boleh-tidaknya sebuah request menulis node tertentu adalah "sah UNTUK node mana".
+ */
+export function nodeIdForToken(token: string): string | undefined {
+  if (typeof token !== 'string' || token === '') return undefined
+  return tokenOwners.get(token)
 }
 
 /**

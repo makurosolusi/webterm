@@ -6,7 +6,7 @@ import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
 import { workspacesRoute } from './workspacesApi'
-import { agentStatusRoute } from './agentStatusApi'
+import { agentStatusRoute, nodeTokenMismatch, requesterNodeId } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
@@ -93,6 +93,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return json(res, 400, { error: 'invalid node' })
     }
     const requester = nodeParam || ''
+    // IKATAN TOKEN→NODE, sama seperti `/api/agent-status`: token node hanya boleh membaca konteks
+    // untuk node-nya sendiri. Tanpa ini, sesi agent bisa mengganti `?node=` ke node tetangga dan
+    // membaca graf tautan/transcript-nya. Root token, tanpa token, dan token asing tetap `undefined`
+    // → perilaku lama (render apa adanya) dipertahankan. Ditolak SEBELUM render.
+    if (nodeTokenMismatch(requesterNodeId(req), requester)) {
+      return json(res, 403, { error: 'node token does not match node' })
+    }
     const raw = url.searchParams.get('verb') || 'list'
     const verb = (CONTEXT_LINK_VERBS as string[]).includes(raw) ? (raw as ContextLinkVerb) : 'list'
     const want = url.searchParams.get('want') || undefined

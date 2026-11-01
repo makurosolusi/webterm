@@ -2,10 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  CAPABILITY_HEADER,
   DEFAULT_HOST,
   TOKEN_HEADER,
   authorize,
   authorizeRequest,
+  isControlPath,
   isLoopbackHost,
   isNodeTokenPath,
   requiresToken,
@@ -14,13 +16,18 @@ import {
   tokensMatch,
   writeTokenToEnv,
 } from './auth'
+import { CapabilityStore } from './control/capabilities'
 
 const SELF = 'webterm.test:8700'
 const ROOT = 'root-s3cret'
 const NODE = 'node-token-aaaa'
+const CAP = 'wcap_header-only-token'
 const ORIGIN_HEADERS = { host: SELF, origin: `http://${SELF}` }
 /** Stand-in for hooks.ts `isValidNodeToken`: only NODE is a live node token. */
 const isNodeToken = (t: string) => t === NODE
+
+/** Stand-in for `capabilityStore.verify(...) !== undefined`: only CAP is live. */
+const isCapabilityToken = (t: string) => t === CAP
 
 /** One request through the composed gate, defaults to the same-origin headers. */
 function gate(pathname: string, over: Partial<Parameters<typeof authorizeRequest>[0]> = {}): boolean {
@@ -29,6 +36,7 @@ function gate(pathname: string, over: Partial<Parameters<typeof authorizeRequest
     expectedToken: ROOT,
     pathname,
     isNodeToken,
+    isCapabilityToken,
     ...over,
   })
 }
@@ -278,7 +286,115 @@ describe('authorizeRequest — node token allowlist', () => {
   })
 })
 
+describe('isControlPath', () => {
+  it('is exactly the /api/control/ family', () => {
+    expect(isControlPath('/api/control/spawn')).toBe(true)
+    expect(isControlPath('/api/control/nodes')).toBe(true)
+    expect(isControlPath('/api/control/')).toBe(true)
+    for (const p of ['/api/control', '/api/settings', '/api/workspaces', '/api/agent-status', '/ws', '/']) {
+      expect(isControlPath(p)).toBe(false)
+    }
+  })
+})
+
+describe('authorizeRequest — capability tokens (control API only)', () => {
+  const withCap = (extra: Record<string, string> = {}) => ({
+    ...ORIGIN_HEADERS,
+    [CAPABILITY_HEADER]: CAP,
+    ...extra,
+  })
+
+  it('accepts a valid capability on the control family', () => {
+    expect(gate('/api/control/spawn', { headers: withCap() })).toBe(true)
+    expect(gate('/api/control/nodes', { headers: withCap() })).toBe(true)
+    expect(gate('/api/control/wait', { headers: withCap() })).toBe(true)
+  })
+
+  it('never accepts a capability outside the control family', () => {
+    for (const p of [
+      '/api/settings',
+      '/api/workspaces',
+      '/api/workspaces/abc/files',
+      '/api/fs/read',
+      '/api/generate-name',
+      '/api/agent-status',
+      '/api/context-link',
+      '/api/control',
+      '/ws',
+    ]) {
+      expect(gate(p, { headers: withCap() })).toBe(false)
+    }
+  })
+
+  it('requires same-origin for a capability, even on the control family', () => {
+    expect(gate('/api/control/spawn', { headers: { ...withCap(), origin: 'https://evil.example' } })).toBe(false)
+    // `Sec-Fetch-Site` is only consulted when Origin is absent (see sameOrigin).
+    expect(
+      gate('/api/control/spawn', {
+        headers: { host: SELF, 'sec-fetch-site': 'cross-site', [CAPABILITY_HEADER]: CAP },
+      })
+    ).toBe(false)
+    expect(gate('/api/control/nodes', { headers: { ...ORIGIN_HEADERS, origin: 'null', [CAPABILITY_HEADER]: CAP } })).toBe(
+      false
+    )
+  })
+
+  it('rejects an unknown wcap and a minted-but-expired wcap', () => {
+    expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [CAPABILITY_HEADER]: 'wcap_nope' } })).toBe(false)
+
+    const store = new CapabilityStore()
+    const live = store.mint({ verb: 'node.read', resource: '*' }, 0)
+    const expired = store.mint({ verb: 'node.read', resource: '*', ttlMs: 1 }, 0)
+    const usingStore = (t: string) => store.verify(t, 10_000) !== undefined
+    expect(gate('/api/control/nodes', { headers: { ...ORIGIN_HEADERS, [CAPABILITY_HEADER]: live }, isCapabilityToken: usingStore })).toBe(true)
+    expect(
+      gate('/api/control/nodes', { headers: { ...ORIGIN_HEADERS, [CAPABILITY_HEADER]: expired }, isCapabilityToken: usingStore })
+    ).toBe(false)
+  })
+
+  it('accepts nothing on the control family without a header (root token still required)', () => {
+    expect(gate('/api/control/spawn')).toBe(false)
+    expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [CAPABILITY_HEADER]: '' } })).toBe(false)
+  })
+
+  it('does not read a capability from the query string', () => {
+    expect(gate('/api/control/spawn', { queryToken: CAP })).toBe(false)
+    // Even a same-origin request cannot smuggle one in via ?capability= / ?token=.
+    const url = new URL(`http://${SELF}/api/control/spawn?capability=${CAP}`)
+    expect(
+      gate(url.pathname, { queryToken: url.searchParams.get('token') ?? url.searchParams.get('capability') })
+    ).toBe(false)
+    expect(
+      gate('/api/control/spawn', { queryToken: CAP, headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'wrong' } })
+    ).toBe(false)
+  })
+
+  it('does not accept a capability sent in x-webterm-token', () => {
+    expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: CAP } })).toBe(false)
+  })
+
+  it('keeps root and node tokens working on the control family', () => {
+    expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
+    expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+    expect(gate('/api/control/spawn', { queryToken: NODE })).toBe(true)
+  })
+
+  it('keeps root and node behavior byte-identical when no capability validator is injected', () => {
+    const nodeOnly = (pathname: string) => gate(pathname, { isCapabilityToken: undefined, headers: withCap() })
+    expect(nodeOnly('/api/control/spawn')).toBe(false) // capability not honoured without a validator
+    expect(gate('/api/settings', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
+    expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+    expect(gate('/ws', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(false)
+  })
+})
+
 describe('index.ts wiring', () => {
+  it('passes a capability validator built on capabilityStore.verify', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    expect(src).toMatch(/import \{ capabilityStore \} from '\.\/control\/mount'/)
+    expect(src).toMatch(/isCapabilityToken:\s*\(t\)\s*=>\s*capabilityStore\.verify\(t\)\s*!==\s*undefined/)
+  })
+
   it('routes the gate through authorizeRequest + isValidNodeToken for both /api and /ws', () => {
     // index.ts binds a port on import, so assert the wiring from its source (same pattern as the
     // writeTokenToEnv test above).

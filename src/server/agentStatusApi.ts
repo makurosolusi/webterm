@@ -6,16 +6,16 @@
 // sesekali MEMBALAS dengan satu potong konteks untuk agent pemanggil. Tidak ada jalur balik ke
 // client lain di sini.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { realpathSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve, dirname, basename, sep } from 'node:path'
 import type { AgentStatus, Workspace } from '../shared/workspace'
 import { isSafeNodeId } from '../shared/workspace'
 import { hookStatus, type HookStatusBody } from './hookStatus'
-import { stateVerified } from './hooks'
-import { claudeProjectsRoot } from './transcriptPresence'
-import { dataDir } from './config'
+import { nodeIdForToken, stateVerified, NODE_TOKEN_HEADER } from './hooks'
+import { TOKEN_HEADER } from './auth'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
+import { transcriptPathAllowed } from './transcriptPath'
+
+export { transcriptPathAllowed } from './transcriptPath'
 
 /** `transcript_path` hanya DISIMPAN, tidak pernah dibaca di sini. Batas panjangnya menjaga
  *  registry dari nilai raksasa yang di-post berulang; 4096 cukup untuk path absolut terpanjang
@@ -63,60 +63,27 @@ const nodeTokenHeader = (req: IncomingMessage): string | string[] | undefined =>
   req.headers['x-nodeterm-node-token']
 
 /**
- * Root yang boleh memuat sebuah `transcript_path`. `claudeProjectsRoot()` sudah menghormati
- * `CLAUDE_CONFIG_DIR`; `dataDir()` adalah root data webterm sendiri.
+ * Node yang DIBUKTIKAN oleh token transport request ini, atau `undefined` bila tokennya bukan token
+ * node (root token, tanpa token, atau token asing).
+ *
+ * `x-webterm-token` dulu: itu header transport yang membawa token node di baris hook, dan jalur
+ * `authorizeRequest` sudah menerimanya. `x-nodeterm-node-token` tetap dibaca sebagai cadangan —
+ * sesi agent lama hanya mengirim header protokol itu.
  */
-function transcriptRoots(): string[] {
-  return [claudeProjectsRoot(), dataDir()]
-}
-
-/** Apakah `candidate` benar-benar (bukan hanya secara leksikal) berada di bawah `root`? */
-function isInside(root: string, candidate: string): boolean {
-  const rel = relative(root, candidate)
-  // `..foo` adalah nama file biasa di dalam root; hanya `..` tersendiri yang keluar.
-  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
-}
-
-/**
- * `realpath` yang tidak melempar untuk leaf yang belum ada: bagian yang hilang disusun kembali di
- * atas realpath ancestor terdekat. Dengan begitu symlink di tengah path tetap diikuti (escape
- * lewat symlink tertangkap), sementara hook yang melaporkan file yang baru akan dibuat tetap sah.
- */
-function realpathLoose(path: string): string | null {
-  let cursor = resolve(path)
-  const missing: string[] = []
-  for (;;) {
-    try {
-      const real = realpathSync(cursor)
-      return missing.length === 0 ? real : join(real, ...missing.slice().reverse())
-    } catch {
-      const parent = dirname(cursor)
-      if (parent === cursor) return null
-      missing.push(basename(cursor))
-      cursor = parent
-    }
-  }
+export function requesterNodeId(req: IncomingMessage): string | undefined {
+  const raw = req.headers[TOKEN_HEADER] ?? req.headers[NODE_TOKEN_HEADER]
+  const token = Array.isArray(raw) ? raw[0] : raw
+  return typeof token === 'string' ? nodeIdForToken(token) : undefined
 }
 
 /**
- * Validasi path transcript untuk mode strict. Ditolak bila path bukan absolut, mengandung segmen
- * `..`, atau setelah `realpath` keluar dari root yang diizinkan (termasuk lewat symlink).
- * Fungsi murni terhadap filesystem, tanpa membaca isi file.
+ * Apakah token transport ini milik node LAIN dari node yang dituju?
+ *
+ * `requester === undefined` (root/no/unknown token) selalu `false`: perilaku lama untuk pemanggil
+ * tanpa identitas node tidak berubah. Hanya token node yang sah yang TERIKAT pada node-nya.
  */
-export function transcriptPathAllowed(
-  path: string,
-  roots: string[] = transcriptRoots()
-): boolean {
-  if (path.includes('\0')) return false
-  if (!isAbsolute(path)) return false
-  if (path.split(/[\\/]+/).includes('..')) return false
-  const target = realpathLoose(path)
-  if (!target) return false
-  for (const root of roots) {
-    const realRoot = realpathLoose(root) ?? resolve(root)
-    if (isInside(realRoot, target)) return true
-  }
-  return false
+export function nodeTokenMismatch(requester: string | undefined, node: string): boolean {
+  return requester !== undefined && requester !== node
 }
 
 /**
@@ -153,6 +120,15 @@ export async function agentStatusRoute(
   // diabaikan sebagai no-op (204, tanpa body) — bukan 400 — karena pemanggilnya adalah hook
   // curl di dalam agent yang tidak boleh dibuat gagal oleh nilai aneh.
   if (!isSafeNodeId(node)) { res.statusCode = 204; res.end(); return true }
+  // IKATAN TOKEN→NODE, TANPA SYARAT (tidak digerbangi strict auth). Sebuah token node hanya boleh
+  // bertindak untuk node-nya sendiri; tanpa pemeriksaan ini sesi agent mana pun bisa menulis
+  // status/transcript node tetangganya cukup dengan mengganti `?node=`. Ditolak SEBELUM body
+  // dibaca dan sebelum `setStatus`/`setTranscript`, jadi permintaan yang ditolak tidak menulis apa
+  // pun. Root token / tanpa token / token asing tetap `undefined` → fail-open lama dipertahankan.
+  if (nodeTokenMismatch(requesterNodeId(req), node)) {
+    json(res, 403, { error: 'node token does not match node' })
+    return true
+  }
   // `HookStatusBody` dipakai apa adanya, bukan disalin ulang: field mana yang menentukan status
   // adalah milik `hookStatus`, dan dua daftar yang harus berubah bersamaan pasti akan menyimpang.
   let body: HookStatusBody & { message?: string; transcript_path?: string }

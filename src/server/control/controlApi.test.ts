@@ -3,88 +3,8 @@
 // hanya PTY dan waktu yang dipalsukan.
 
 import { describe, expect, it } from 'vitest'
-import type { OpenMsg } from '../../shared/protocol'
-import { mergeSettings } from '../../shared/settings'
-import type { AgentStatus } from '../../shared/workspace'
-import { CapabilityStore, allows, clampTtl, type CapabilityVerb } from './capabilities'
 import { handleControl } from './controlApi'
-import type { ControlDeps, ControlExit, ControlSessionInfo } from './controlTypes'
-
-interface FakeNode {
-  status?: AgentStatus
-  exit?: ControlExit
-  output: string
-}
-
-function harness(overrides: Partial<ControlDeps> = {}) {
-  const clock = { t: 1_000_000 }
-  const live = new Map<string, FakeNode>()
-  const opened: OpenMsg[] = []
-  const inputs: { id: string; data: string }[] = []
-  const closed: string[] = []
-  const store = new CapabilityStore()
-
-  const deps: ControlDeps = {
-    sessions: {
-      open(msg) {
-        opened.push(msg)
-        live.set(msg.id, { output: '' })
-      },
-      input(id, data) {
-        inputs.push({ id, data })
-      },
-      close(id) {
-        closed.push(id)
-        live.delete(id)
-      },
-      list(): ControlSessionInfo[] {
-        return [...live.entries()].map(([id, node], i) => ({ id, pid: i + 1, status: node.status }))
-      },
-      statusOf(id) {
-        return live.get(id)?.status
-      },
-      getExit(id) {
-        return live.get(id)?.exit
-      },
-      getTerminal(id) {
-        return live.get(id)?.output ?? ''
-      },
-      isLive(id) {
-        return live.has(id)
-      },
-    },
-    capabilities: {
-      verify: (token, now = clock.t) => store.verify(token, now),
-      allows,
-      mint: (opts) => ({
-        token: store.mint(opts, clock.t),
-        expiresAt: clock.t + clampTtl(opts.ttlMs),
-      }),
-    },
-    settings: () => mergeSettings({ agentLaunchCommands: { claude: 'claude-work' } }),
-    now: () => clock.t,
-    sleep: async (ms) => {
-      clock.t += ms
-    },
-    ...overrides,
-  }
-
-  const token = (verb: CapabilityVerb, resource: string, ttlMs?: number) =>
-    store.mint({ verb, resource, ...(ttlMs === undefined ? {} : { ttlMs }) }, clock.t)
-  const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) =>
-    handleControl(
-      { method, path: `/api/control/${path}`, headers, ...(body === undefined ? {} : { body }) },
-      deps
-    )
-
-  return { deps, live, opened, inputs, closed, clock, token, call }
-}
-
-const spawnBody = (requestId = 'req-0001', nodeId = 'node-a') => ({
-  requestId,
-  nodeId,
-  agentId: 'claude',
-})
+import { harness, spawnBody } from './fakeControlDeps'
 
 describe('control auth', () => {
   it('rejects missing, unknown, and expired capabilities with 401', async () => {
@@ -194,6 +114,63 @@ describe('spawn', () => {
     expect(res).toEqual({ status: 403, body: { error: 'cwd_not_allowed' } })
     expect(h.opened).toHaveLength(0)
   })
+
+  it('mints a UUID session id for claude so the launch line carries hooks', async () => {
+    const h = harness()
+    const cap = h.token('node.spawn', 'node:node-a')
+    const res = await h.call('POST', 'spawn', spawnBody('req-sid-001'), {
+      'x-webterm-capability': cap,
+    })
+    expect(res?.status).toBe(201)
+    expect(h.opened[0]?.sessionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    )
+  })
+
+  it('does not invent a session id for agents that take no such flag', async () => {
+    const h = harness()
+    const cap = h.token('node.spawn', 'node:node-a')
+    const res = await h.call('POST', 'spawn', { ...spawnBody('req-sid-002'), agentId: 'codex' }, {
+      'x-webterm-capability': cap,
+    })
+    expect(res?.status).toBe(201)
+    expect(h.opened[0]?.sessionId).toBeUndefined()
+  })
+
+  it('validates a client-supplied session id instead of trusting it', async () => {
+    const h = harness()
+    const cap = h.token('node.spawn', 'node:node-a')
+    const headers = { 'x-webterm-capability': cap }
+    const bad = await h.call(
+      'POST',
+      'spawn',
+      { ...spawnBody('req-sid-003'), sessionId: '-x; rm -rf /' },
+      headers
+    )
+    expect(bad).toEqual({ status: 400, body: { error: 'invalid_session_id' } })
+    expect(h.opened).toHaveLength(0)
+
+    const sid = '11111111-1111-4111-8111-111111111111'
+    const good = await h.call('POST', 'spawn', { ...spawnBody('req-sid-004'), sessionId: sid }, headers)
+    expect(good?.status).toBe(201)
+    expect(h.opened[0]?.sessionId).toBe(sid)
+  })
+
+  it('does not replay a spawn ack for a different route with the same requestId', async () => {
+    const h = harness()
+    const requestId = 'req-cross1'
+    const spawned = await h.call('POST', 'spawn', spawnBody(requestId), {
+      'x-webterm-capability': h.token('node.spawn', 'node:node-a'),
+    })
+    expect(spawned?.status).toBe(201)
+    const closed = await h.call('POST', 'close', { requestId, nodeId: 'node-a' }, {
+      'x-webterm-capability': h.token('node.close', 'node:node-a'),
+    })
+    expect(closed).toEqual({
+      status: 200,
+      body: { ok: true, requestId, nodeId: 'node-a', closed: true },
+    })
+  })
 })
 describe('prompt', () => {
   const prompt = (requestId = 'req-0002', extra: Record<string, unknown> = {}) => ({
@@ -251,7 +228,26 @@ describe('close', () => {
     expect(replay).toEqual(first)
     const second = await h.call('POST', 'close', { requestId: 'req-0007', nodeId: 'node-a' }, headers)
     expect((second?.body as { closed: boolean }).closed).toBe(false)
-    expect(h.closed).toEqual(['node-a', 'node-a'])
+    // Node sudah tidak ada dan tidak punya tombstone: close() TIDAK dipanggil (tidak ada tombstone
+    // baru yang dibuat).
+    expect(h.closed).toEqual(['node-a'])
+  })
+
+  it('closing a never-existing node leaves no tombstone, so wait stays 404', async () => {
+    const h = harness()
+    const requestId = 'req-ghost1'
+    const closed = await h.call('POST', 'close', { requestId, nodeId: 'node-a' }, {
+      'x-webterm-capability': h.token('node.close', 'node:node-a'),
+    })
+    expect(closed).toEqual({
+      status: 200,
+      body: { ok: true, requestId, nodeId: 'node-a', closed: false },
+    })
+    expect(h.closed).toEqual([])
+    const waited = await h.call('POST', 'wait', { nodeId: 'node-a', timeoutMs: 0 }, {
+      'x-webterm-capability': h.token('node.wait', 'node:node-a'),
+    })
+    expect(waited).toEqual({ status: 404, body: { error: 'node_not_found' } })
   })
 })
 

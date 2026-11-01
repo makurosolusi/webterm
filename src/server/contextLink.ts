@@ -5,7 +5,9 @@
 import type { Workspace } from '../shared/workspace'
 import { dataDir } from './config'
 import { TOKEN_HEADER } from './auth'
-import { readFileSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs'
+import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs'
+import { transcriptPathAllowed } from './transcriptPath'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -17,6 +19,38 @@ export interface LinkDoc { links: LinkDocEntry[] }
 const SUMMARY_DEFAULT_LINES = 15
 const TOOL_ARG_MAX = 200
 const TOOL_RESULT_MAX = 500
+/** Transcript bisa tumbuh tanpa batas; context-link hanya perlu ekor percakapan terbaru. */
+const TRANSCRIPT_READ_MAX = 4 * 1024 * 1024
+
+/**
+ * Baca transcript dengan pertahanan terhadap swap symlink: path divalidasi saat hook menulis,
+ * tapi file itu dimiliki agent yang sama dan bisa diganti sebelum kita membacanya. Karena itu
+ * `lstat` menolak symlink/FIFO/device, `realpath` memastikan target masih di dalam root yang
+ * diizinkan, dan `O_NOFOLLOW` menutup celah antara dua syscall itu. Ukuran dibatasi supaya
+ * `/dev/zero` atau file raksasa tidak memblokir event loop.
+ */
+export function readTranscriptFile(path: string): string | null {
+  try {
+    if (!lstatSync(path).isFile()) return null
+    const real = realpathSync(path)
+    if (!transcriptPathAllowed(real)) return null
+    const fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW)
+    try {
+      const stat = fstatSync(fd)
+      if (!stat.isFile()) return null
+      const start = Math.max(0, stat.size - TRANSCRIPT_READ_MAX)
+      const length = stat.size - start
+      if (length <= 0) return ''
+      const buf = Buffer.alloc(length)
+      readSync(fd, buf, 0, length, start)
+      return buf.toString('utf8')
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    return null
+  }
+}
 
 // --- claude transcript parser (ported verbatim from nodeterm-web) ---
 
@@ -164,8 +198,7 @@ export async function renderForRequester(
   if (verb === 'terminal') return renderTerminal(node, stripAnsi(sessions.getTerminal(node.id)))
   // summary | transcript — claude jsonl transcript fed by the hook
   const path = sessions.getTranscript(node.id)
-  let buf: string | null = null
-  if (path) { try { buf = readFileSync(path, 'utf8') } catch { buf = null } }
+  const buf = path ? readTranscriptFile(path) : null
   if (buf == null) return `"${node.title}" has no conversation transcript yet.`
   const lines = renderTranscriptLines(buf)
   return verb === 'summary' ? renderSummary(node, lines, parseSummaryCount(args.n)) : renderFullTranscript(node, lines)
@@ -173,21 +206,19 @@ export async function renderForRequester(
 
 // --- shim + skill builders (pure strings; the installer below is the only fs part) ---
 
-/** POSIX single-quote escape, so a token containing `'` cannot break out of the shim's quoting. */
-function shQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`
-}
-
 /**
  * The POSIX-sh thin client the skill tells an agent to run. The server does all the reading and
  * rendering; this only forwards the caller's own node id.
  *
- * `token` is the transport token this process enforces (`resolveToken`). When one is in force the
- * shim MUST present it in `TOKEN_HEADER` or `/api` answers 403 — the loopback default has none,
- * and then no header is emitted at all rather than an empty one.
+ * The shim carries NO token value. It is written to `<dataDir>/context-links/context.sh` (0700)
+ * but is readable, and runnable, by every same-UID PTY child; embedding the root transport token
+ * there would hand a full-access credential to every agent session. Instead the shim expands the
+ * node token from the CHILD's env at the moment curl runs: `WEBTERM_TOKEN` is injected per agent
+ * session as that node's own token (`sessions.ts`), with `NODETERM_NODE_TOKEN` (the hook env) as
+ * the fallback. Both are UUIDs, so the value cannot introduce shell metacharacters; the expansion
+ * sits inside double quotes so it is never re-parsed by sh as syntax.
  */
-export function buildContextShim(token?: string): string {
-  const auth = token ? `  -H ${shQuote(`${TOKEN_HEADER}: ${token}`)} \\\n` : ''
+export function buildContextShim(): string {
   return `#!/bin/sh
 # webterm context-link shim (generated — do not edit). Thin client: the server reads & renders.
 if [ -z "$NODETERM_NODE_ID" ]; then
@@ -205,7 +236,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 curl -s --get \\
-${auth}  --data-urlencode "node=\${NODETERM_NODE_ID}" \\
+  -H "${TOKEN_HEADER}: \${WEBTERM_TOKEN:-$NODETERM_NODE_TOKEN}" \\
+  --data-urlencode "node=\${NODETERM_NODE_ID}" \\
   --data-urlencode "verb=\${verb}" \\
   --data-urlencode "want=\${want}" \\
   --data-urlencode "n=\${n}" \\
@@ -276,12 +308,13 @@ export function contextShimPath(): string {
  * The skill is the ONLY thing webterm writes outside WEBTERM_DATA_DIR, and it stays inside one
  * directory of its own so a hand-installed `get-linked-context` is never clobbered.
  */
-export function installContextLink(token?: string): void {
+export function installContextLink(_token?: string): void {
   const file = contextShimPath()
   mkdirSync(join(dataDir(), 'context-links'), { recursive: true })
-  writeFileSync(file, buildContextShim(token))
-  // 0700, not 0755: with a token in force the shim carries a credential, and only this same
-  // user's own agent sessions ever run it.
+  writeFileSync(file, buildContextShim())
+  // 0700, not 0755: only this user's own agent sessions ever run the shim. It is NOT a credential
+  // file — the token is expanded from the child env at runtime — but no other user needs to read
+  // or execute a path inside our data dir either.
   chmodSync(file, 0o700)
 
   const skillDir = join(homedir(), '.claude', 'skills', SKILL_NAME)

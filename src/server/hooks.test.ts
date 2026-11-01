@@ -24,6 +24,7 @@ import {
   hookEnv,
   hookEventName,
   isValidNodeToken,
+  nodeIdForToken,
   nodeToken,
   permissionModeFlag,
   stateVerified,
@@ -504,6 +505,26 @@ describe('guard node id di route /api', () => {
     // Dibandingkan dengan PEMANGGILAN-nya, bukan kata di komentar penjelas.
     expect(b.indexOf('isSafeNodeId')).toBeLessThan(b.indexOf('await renderForRequester('))
   })
+
+  // HIGH: token node tadinya tidak terikat ke node mana pun — `?node=` bebas diganti.
+  it('agent-status mengikat token node ke `?node` sebelum menulis state', () => {
+    const b = agentStatusBlock(agentStatusSrc())
+    expect(b.length).toBeGreaterThan(0)
+    expect(b).toContain('nodeTokenMismatch(requesterNodeId(req), node)')
+    expect(b).toContain('json(res, 403')
+    // Ditolak sebelum ada satu pun penulisan registry (dibandingkan dengan PEMANGGILAN-nya, bukan
+    // kata `setStatus` di komentar penjelas).
+    expect(b.indexOf('nodeTokenMismatch')).toBeLessThan(b.indexOf('deps.setStatus'))
+    expect(b.indexOf('nodeTokenMismatch')).toBeLessThan(b.indexOf('deps.setTranscript'))
+  })
+
+  it('context-link mengikat token node ke `?node` sebelum render', () => {
+    const b = contextLinkBlock(apiSrc())
+    expect(b.length).toBeGreaterThan(0)
+    expect(b).toContain('nodeTokenMismatch(requesterNodeId(req), requester)')
+    expect(b).toContain('json(res, 403')
+    expect(b.indexOf('nodeTokenMismatch')).toBeLessThan(b.indexOf('await renderForRequester('))
+  })
 })
 
 describe('isValidNodeToken', () => {
@@ -519,5 +540,34 @@ describe('isValidNodeToken', () => {
     expect(isValidNodeToken(tok)).toBe(true)
     forgetNodeToken('n-transport-gone')
     expect(isValidNodeToken(tok)).toBe(false)
+  })
+})
+
+describe('nodeIdForToken', () => {
+  it('maps a minted token back to its own node', () => {
+    const a = nodeToken('n-owner-a')
+    const b = nodeToken('n-owner-b')
+    expect(nodeIdForToken(a)).toBe('n-owner-a')
+    expect(nodeIdForToken(b)).toBe('n-owner-b')
+    expect(a).not.toBe(b)
+  })
+  it('answers undefined for unknown/empty values, so a root token is not a node identity', () => {
+    expect(nodeIdForToken('root-or-foreign-token')).toBeUndefined()
+    expect(nodeIdForToken('')).toBeUndefined()
+  })
+  it('drops the reverse binding when the node is forgotten', () => {
+    const tok = nodeToken('n-owner-gone')
+    expect(nodeIdForToken(tok)).toBe('n-owner-gone')
+    forgetNodeToken('n-owner-gone')
+    expect(nodeIdForToken(tok)).toBeUndefined()
+    expect(isValidNodeToken(tok)).toBe(false)
+  })
+  it('re-mints a fresh binding after a reused node id', () => {
+    const first = nodeToken('n-owner-reuse')
+    forgetNodeToken('n-owner-reuse')
+    const second = nodeToken('n-owner-reuse')
+    expect(second).not.toBe(first)
+    expect(nodeIdForToken(first)).toBeUndefined()
+    expect(nodeIdForToken(second)).toBe('n-owner-reuse')
   })
 })

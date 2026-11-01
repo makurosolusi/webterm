@@ -5,6 +5,7 @@ import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
 import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
+import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
@@ -45,6 +46,9 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
     queryToken: url.searchParams.get(TOKEN_PARAM),
     pathname: url.pathname,
     isNodeToken: isValidNodeToken,
+    // Capability (wcap_*) hanya diterima authorizeRequest pada keluarga /api/control/*.
+    // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
+    isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
   })
 }
 
@@ -55,9 +59,10 @@ function refuse(res: http.ServerResponse): void {
   res.end('forbidden')
 }
 
-// Write the context-link sh shim AND the skill that points an agent at it. Takes TOKEN because a
-// shim that cannot authenticate is a shim that 403s the moment WEBTERM_TOKEN is set.
-installContextLink(TOKEN)
+// Write the context-link sh shim AND the skill that points an agent at it. Tanpa argumen: shim
+// membaca token node dari env anak saat runtime, jadi root token tidak pernah ditulis ke disk
+// (file itu terbaca semua proses dengan uid yang sama).
+installContextLink()
 applyPtyOptions()
 
 const server = http.createServer()
