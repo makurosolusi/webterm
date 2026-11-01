@@ -98,7 +98,7 @@ export interface FakeLedger extends OrchestratorLedger {
   created: number
 }
 
-function fakeLedger(agents: OrchestratorAgent[]): FakeLedger {
+function fakeLedger(agents: OrchestratorAgent[], withTx = true): FakeLedger {
   const tasks = new Map<string, OrchestratorTask>()
   let seq = 0
   const requireTask = (id: string): OrchestratorTask => {
@@ -106,12 +106,26 @@ function fakeLedger(agents: OrchestratorAgent[]): FakeLedger {
     if (!task) throw new Error(`fake ledger: no task ${id}`)
     return task
   }
+  /** Snapshot/restore minimal untuk meniru ROLLBACK saat fn melempar. */
+  const runInTx = <T>(fn: () => T): T => {
+    const taskSnapshot = new Map([...tasks].map(([id, task]) => [id, clone(task)]))
+    const eventCount = ledger.events.length
+    try {
+      return fn()
+    } catch (err) {
+      tasks.clear()
+      for (const [id, task] of taskSnapshot) tasks.set(id, task)
+      ledger.events.splice(eventCount)
+      throw err
+    }
+  }
   const ledger: FakeLedger = {
     tasks,
     agents: new Map(agents.map((agent) => [agent.id, agent])),
     events: [],
     leaseFails: false,
     created: 0,
+    ...(withTx ? { tx: runInTx } : {}),
     agent: { getAgent: (id) => ledger.agents.get(id) ?? null },
     task: {
       createTask(input) {
@@ -225,7 +239,20 @@ export interface Fixture {
 }
 
 export function setup(initial: Plan, agents: OrchestratorAgent[] = [worker()]): Fixture {
-  const ledger = fakeLedger(agents)
+  return setupWith(initial, agents, {})
+}
+
+export interface SetupOptions {
+  /** Default true: fake ledger menyediakan `tx` dengan rollback snapshot. */
+  tx?: boolean
+}
+
+export function setupWith(
+  initial: Plan,
+  agents: OrchestratorAgent[] = [worker()],
+  options: SetupOptions = {}
+): Fixture {
+  const ledger = fakeLedger(agents, options.tx ?? true)
   const worktrees = fakeWorktrees()
   const orchestrator = createOrchestrator({
     ledger,

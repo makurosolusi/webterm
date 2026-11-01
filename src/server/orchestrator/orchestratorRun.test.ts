@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CAPS } from './caps'
-import { PROJECT, REPO, item, planOf, setup, worker } from './orchestrator.fake.testutil'
+import {
+  PROJECT,
+  REPO,
+  item,
+  planOf,
+  setup,
+  setupWith,
+  worker,
+  type SetupOptions,
+} from './orchestrator.fake.testutil'
 
-async function assigned() {
-  const ctx = setup(planOf([item()]))
+async function assigned(options: SetupOptions = {}) {
+  const ctx =
+    options.tx === undefined
+      ? setup(planOf([item()]))
+      : setupWith(planOf([item()]), [worker()], options)
   const assignedPlan = ctx.orchestrator.assignTask({
     projectId: PROJECT,
     itemId: 'i1',
@@ -14,8 +26,8 @@ async function assigned() {
   return { ...ctx, version: assignedPlan.value.plan.version, taskId: assignedPlan.value.task.id }
 }
 
-async function started() {
-  const ctx = await assigned()
+async function started(options: SetupOptions = {}) {
+  const ctx = await assigned(options)
   const s = await ctx.orchestrator.startWorker({
     projectId: PROJECT,
     itemId: 'i1',
@@ -228,5 +240,58 @@ describe('recordWorkerResult', () => {
     expect(result.value.task.status).toBe('failed')
     expect(result.value.item.status).toBe('failed')
     expect(result.value.verified).toBe(false)
+  })
+
+  it('rolls the verified task back when the plan write goes stale', async () => {
+    const ctx = await started()
+    const eventsBefore = ctx.ledger.events.length
+    const result = await ctx.orchestrator.recordWorkerResult({
+      projectId: PROJECT,
+      taskId: ctx.taskId,
+      fence: ctx.fence,
+      actor: 'w1',
+      outcome: 'success',
+      // Versi plan sudah maju setelah startWorker: updateItem melempar stale_version
+      // sesudah claimDone/verifyTask sempat menulis `verified`.
+      expectedVersion: ctx.version - 1,
+      evidence: { tests: { passed: 7, failed: 0 }, typecheck: { ok: true } },
+    })
+    expect(result.ok === false && result.code).toBe('plan_stale')
+    // Rollback: task tidak boleh tertinggal `verified` saat plan item tetap `running`.
+    expect(ctx.ledger.tasks.get(ctx.taskId)?.status).toBe('leased')
+    expect(ctx.ledger.events.length).toBe(eventsBefore)
+  })
+
+  it('rolls a failure transition back when the plan write goes stale', async () => {
+    const ctx = await started()
+    const result = await ctx.orchestrator.recordWorkerResult({
+      projectId: PROJECT,
+      taskId: ctx.taskId,
+      fence: ctx.fence,
+      actor: 'w1',
+      outcome: 'failure',
+      reason: 'tests still red',
+      expectedVersion: ctx.version - 1,
+    })
+    expect(result.ok === false && result.code).toBe('plan_stale')
+    expect(ctx.ledger.tasks.get(ctx.taskId)?.status).toBe('leased')
+  })
+
+  it('still records a verified result when the ledger has no tx port', async () => {
+    const ctx = await started({ tx: false })
+    const result = await ctx.orchestrator.recordWorkerResult({
+      projectId: PROJECT,
+      taskId: ctx.taskId,
+      fence: ctx.fence,
+      actor: 'w1',
+      outcome: 'success',
+      expectedVersion: ctx.version,
+      evidence: { tests: { passed: 4, failed: 0 } },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.verified).toBe(true)
+    expect(result.value.task.status).toBe('verified')
+    expect(result.value.item.status).toBe('done')
   })
 })

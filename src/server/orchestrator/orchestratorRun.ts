@@ -21,6 +21,7 @@ import {
   requireWorker,
   worktreeDeny,
 } from './orchestratorSupport'
+import type { Plan, PlanItem } from './plan'
 
 export async function startWorker(
   ctx: OrchestratorContext,
@@ -125,6 +126,61 @@ function claimSuccess(
   return { task: ctx.deps.ledger.task.verifyTask(taskId, fence, evidence), verified: true }
 }
 
+interface ResultTransition {
+  outcome: OrchestratorTaskOutcome
+  updated: Plan
+}
+
+/**
+ * Transisi task + update plan + audit event sebagai satu unit. Dipanggil di dalam
+ * `ledger.tx` bila port tersedia, sehingga plan yang stale me-rollback status task
+ * (tanpa tx: task bisa tertinggal `verified` saat plan gagal ditulis).
+ */
+function applyResult(
+  ctx: OrchestratorContext,
+  input: RecordWorkerResultInput,
+  plan: Plan,
+  item: PlanItem,
+  releaseError: string | undefined
+): ResultTransition {
+  const outcome: OrchestratorTaskOutcome =
+    input.outcome === 'success'
+      ? claimSuccess(ctx, input.taskId, input.fence, input.evidence)
+      : {
+          task: ctx.deps.ledger.task.failTask(
+            input.taskId,
+            input.fence,
+            input.reason ?? 'worker reported failure'
+          ),
+          verified: false,
+        }
+  // Success tanpa evidence terverifikasi: item tetap `running`, hanya task yang pindah.
+  const nextStatus = outcome.verified ? 'done' : input.outcome === 'success' ? null : 'failed'
+  const updated =
+    nextStatus === null
+      ? plan
+      : ctx.deps.plan.updateItem({
+          projectId: input.projectId,
+          itemId: item.id,
+          expectedVersion: input.expectedVersion,
+          actor: input.actor,
+          status: nextStatus,
+        })
+  ctx.deps.ledger.event.appendEvent({
+    projectId: input.projectId,
+    taskId: input.taskId,
+    actor: input.actor,
+    kind: 'orchestrator.result_recorded',
+    payload: {
+      outcome: input.outcome,
+      status: outcome.task.status,
+      verified: outcome.verified,
+      releaseError,
+    },
+  })
+  return { outcome, updated }
+}
+
 export async function recordWorkerResult(
   ctx: OrchestratorContext,
   input: RecordWorkerResultInput
@@ -158,59 +214,26 @@ export async function recordWorkerResult(
     )
   }
 
-  let outcome: OrchestratorTaskOutcome
+  // Release worktree async di luar transaksi; kegagalannya hanya dicatat di event.
+  const releaseError = await releaseQuietly(ctx, task.id)
+  let transition: ResultTransition
   try {
-    outcome =
-      input.outcome === 'success'
-        ? claimSuccess(ctx, task.id, input.fence, input.evidence)
-        : {
-            task: ctx.deps.ledger.task.failTask(
-              task.id,
-              input.fence,
-              input.reason ?? 'worker reported failure'
-            ),
-            verified: false,
-          }
+    const ledger = ctx.deps.ledger
+    transition = ledger.tx
+      ? ledger.tx(() => applyResult(ctx, input, plan, item, releaseError))
+      : applyResult(ctx, input, plan, item, releaseError)
   } catch (err) {
     return planDeny(err)
   }
-
-  const releaseError = await releaseQuietly(ctx, task.id)
-  try {
-    const nextStatus = outcome.verified ? 'done' : input.outcome === 'success' ? null : 'failed'
-    const updated =
-      nextStatus === null
-        ? plan
-        : ctx.deps.plan.updateItem({
-            projectId: input.projectId,
-            itemId: item.id,
-            expectedVersion: input.expectedVersion,
-            actor: input.actor,
-            status: nextStatus,
-          })
-    ctx.deps.ledger.event.appendEvent({
-      projectId: input.projectId,
-      taskId: task.id,
-      actor: input.actor,
-      kind: 'orchestrator.result_recorded',
-      payload: {
-        outcome: input.outcome,
-        status: outcome.task.status,
-        verified: outcome.verified,
-        releaseError,
-      },
-    })
-    return {
-      ok: true,
-      value: {
-        task: outcome.task,
-        item: updated.items.find((candidate) => candidate.id === item.id) ?? item,
-        plan: updated,
-        verified: outcome.verified,
-        ...(releaseError ? { releaseError } : {}),
-      },
-    }
-  } catch (err) {
-    return planDeny(err)
+  const { outcome, updated } = transition
+  return {
+    ok: true,
+    value: {
+      task: outcome.task,
+      item: updated.items.find((candidate) => candidate.id === item.id) ?? item,
+      plan: updated,
+      verified: outcome.verified,
+      ...(releaseError ? { releaseError } : {}),
+    },
   }
 }
