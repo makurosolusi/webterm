@@ -1,9 +1,9 @@
 # RND — Agent Pusat webterm
 
 Status: riset, perencanaan, dan implementasi bertahap. **P0-P2 selesai.**
-**P3-P5 sebagian ada di working tree dan belum production-ready.**
-Branch aktif `feature/agent-pusat-p3`; commit terakhir `c7c0eda` + perubahan uncommitted.
-Snapshot status: 2026-11-01 12:22 (+08:00).
+**P3 tertutup end-to-end; P4/P5 ter-wire lewat HTTP tetapi belum production-ready.**
+Branch aktif `feature/agent-pusat-p3`; commit terakhir `2f04f77` (wave 2 + loop worker).
+Snapshot status: 2026-11-01 15:24 (+08:00).
 
 Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 
@@ -19,7 +19,8 @@ Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 6. `05-TRACEABILITY.md` — coverage dan gap.
 7. `06-BUG-RISK.md` — bug B1-B12 dan deteksi dini.
 8. `07-IMPLEMENTASI-P3-P5.md` — peta kode P3/P4/P5, gap, acceptance, gate.
-9. `qc/` — review P0-P3: security, integration, tests, E2E UI.
+9. `qc/` — review P0-P4: security, integration, tests, E2E UI, acceptance wave 2 dan
+   `p4-wave2-fixes.md` (temuan → fix → bukti, residual).
 10. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
 11. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
 
@@ -84,10 +85,10 @@ P0 Observation seam
 | P0 | ✅ selesai | seam, replay, close/exit, tombstone |
 | P1 | ✅ selesai | control API, capability `wcap_*`, node token |
 | P2 | ✅ selesai | ledger v1, migration runner, lease/fence, reaper |
-| P3 | ⚠️ WIP | approval + inbox ter-wire; spawn PTY, gate blocking, review test belum |
-| P4 | ⚠️ WIP | memory + inbox baca; authority, route tulis, P4b belum |
-| P5 | ⚠️ WIP | ingress Telegram + store; binding, sender, v3, live test belum |
-| Central | `[P]` | ditunda, gate 2 project × 2 minggu |
+| P3 | ✅ | approval + inbox + review verify/fail; gate blocking di jalur run belum |
+| P4 | ⚠️ WIP | memory + inbox baca; file/git truth (P4b) di balik flag; soak 2×2 minggu belum |
+| P5 | ⚠️ WIP | ingress + store + binding + sender; uji jaringan nyata belum |
+| Central | ⚠️ | proyeksi portfolio + pause/resume/priority; agen otonom belum |
 
 Gate: G1 seam, G2 auth, G3 data, G4 orchestrator, G5 memory, G6 central, G7 omnichannel.
 Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
@@ -105,6 +106,10 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 | `WEBTERM_TELEGRAM_WEBHOOK_SECRET` | kosong | aktif |
 | `WEBTERM_TELEGRAM_BOT_TOKEN` | kosong; legacy `TELEGRAM_BOT_TOKEN` | aktif |
 | `WEBTERM_CHANNELS` | — | `[P]`; belum dibaca kode |
+| `WEBTERM_ORCHESTRATOR_RUN` | `off` | aktif; gate run/bootstrap/assign |
+| `WEBTERM_MEMORY_FILES` | `off` | aktif; gate export/rebuild |
+| `WEBTERM_MEMORY_DIR` | `<dataDir>/memory` (absolut) | aktif |
+| `WEBTERM_CENTRAL` | `off` | aktif; gate `/api/central/*` |
 | `WEBTERM_ALLOW_TOKEN_MINT` | `0` | aktif |
 | `WEBTERM_STRICT_HOOK_AUTH` | `0` | aktif |
 
@@ -140,20 +145,16 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 
 ## 8. Status singkat
 
-### Snapshot 2026-11-01 12:22
+### Snapshot 2026-11-01 15:24 (`2f04f77`)
 
-- `tsc --noEmit` working tree: **bersih**.
-- `vitest` terarah 5 file / 46 test: **lulus**.
-- `vitest run` penuh: 1442/1445 lulus, 3 gagal + 1 suite gagal transform
-  (`memoryCore.ts` redeclare `evidence`).
-- `bun test` orchestrator+inbox+memory+channels+ledger: 255/258 lulus, 3 gagal di
-  `channelsRuntime` dan `channelDispatch`.
-- File `memory/*` dan `channels/*` berubah selama snapshot (sesi lain). Jalankan ulang
-  suite penuh sebelum menyatakan hijau.
-- Ulangan pada `31c0886`: `tsc` bersih, `vitest run` 1526 test lulus; kegagalan di atas milik
-  tree 12:22 dan tidak lagi berlaku.
-- **Vonis: jalur P3 approval + inbox tertutup; P4/P5 belum production-ready.** Detail dan gate:
-  `07-IMPLEMENTASI-P3-P5.md` §8.
+- `tsc --noEmit`: **bersih**.
+- `vitest run` penuh: **127 file / 1697 test lulus**.
+- `bun test` penuh: **28 file / 201 test lulus**.
+- Flake diketahui: `terminalCore` / `paneSplit` di bawah beban paralel, lulus terisolasi.
+  Jangan klaim deterministik 100%.
+- **Vonis: P3 tertutup end-to-end; loop P4/P5 ter-wire lewat HTTP, belum production-ready.**
+  Detail dan gate: `07-IMPLEMENTASI-P3-P5.md` §8; riwayat temuan/fix:
+  `qc/p4-wave2-fixes.md`.
 
 ### Yang sudah terverifikasi
 
@@ -166,9 +167,14 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 - **P3 approval**: `approvalAuth` menolak loopback tanpa token; `approvalMount` memakai deps
   stabil sehingga replay `requestId` hidup; `InboxPanel` consent `APPROVE`.
 - **P4**: memory claim/promote/FTS, proyeksi inbox + `fence`, route baca `/api/inbox`,
-  `/api/memory`, `/api/orchestrator/*`.
+  `/api/memory`, `/api/orchestrator/*`; file+git truth (`export`/`rebuild`) di balik flag,
+  root `0700` + `git init` otomatis, path per `(project, scope, key)`, rebuild tidak
+  me-rollback supersede.
 - **P5**: verifikasi webhook HMAC/secret Telegram, dedupe store `0600`, identity/grammar,
-  parse/send Telegram, outbox in-memory.
+  parse/send Telegram, outbox in-memory; binding API + sender outbox ter-wire.
+- **Loop**: `bootstrap` → `assign` → `run` lewat HTTP; central portfolio + pause/resume/
+  priority. Loop penuh lulus dengan **agen palsu** (worktree, PTY, prompt satu baris,
+  SessionEnd, verify, cleanup); Claude nyata belum.
 
 ### Yang belum / masih gap
 
@@ -179,15 +185,15 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
   consent lama di langkah Consume tanpa mencetak approval baru.
 - `/api/approvals/request` sudah idempoten (`requestId` per ledger runtime); error taxonomy
   route manusia tidak lagi kolaps ke satu kode.
-- Spawn PTY worker dan gate blocking (`requireApproval` -> `consumeApproval`) belum ada.
+- Gate blocking (`requireApproval` -> `consumeApproval`) di jalur run belum ada.
 - Verifikasi independen belum menjadi satu-satunya jalur `verified`.
-- Telegram: `ChannelStore.bind` belum dipanggil produksi, outbox tanpa sender, tidak ada
-  uji jaringan nyata.
+- Telegram: binding dan sender sudah ada, tetapi tidak ada uji jaringan nyata; throttle
+  webhook masih di-key alamat proxy (E1), dan group role tidak divalidasi ulang saat load.
 - `WEBTERM_CHANNELS` dan mode `off|readonly|control` belum ada di kode.
-- P4b dan central agent ditunda.
+- Claude nyata, soak P4b 2 project × 2 minggu, dan agen pusat otonom belum.
 - Node canvas interactions belum diuji E2E.
-- File budget: `ledgerSchema.ts` 227 baris > 200; `InboxPanel.tsx` 475 baris masih di atas
-  80% hard cap setelah baris dipisah ke `inboxItemRow.tsx`.
+- Residual C2 (task `verified` vs item `running` pada plan stale) dan C3 (`plan.status`/
+  `project paused` tidak memblokir run).
 
 ### QC P3
 
@@ -227,3 +233,17 @@ Detail `03-RENCANA.md` dan `07-IMPLEMENTASI-P3-P5.md`.
 | `11f1f07` | P3/P4/P5 foundations |
 | `9bcf8f5` | wire approval, inbox, memory, orchestrator APIs |
 | `c7c0eda` | human approval surface + inbox decisions |
+| `31c0886` / `5cd492a` | resume approved-unconsumed + ack approval persisten |
+| `984cef2`..`a65d67f` | P3 hardening (backup, files, ack journal) |
+| `0f12506` | pecah migrasi ledger + panel inbox |
+| `4c5110c` / `d3d4c47` | worker runtime produksi + pecah modul |
+| `56eeef1` | memory file + git truth di balik flag |
+| `26ac251` / `f04dd5d` | sender Telegram + binding API |
+| `f82342e` | central portfolio + kontrol |
+| `59b9523` | run/central/memory HTTP |
+| `ab2fb6e` | fix memory: scope path, rebuild stale, cold root |
+| `2176c98` | fix body cap + cleanup run gagal + test auth |
+| `4765230` | bootstrap/assign control plane |
+| `0b63714` | fix kontrol: tolak field klien konsisten + agent id ber-`:` |
+| `2f04f77` | fix loop: root worktree `0700` + prompt satu baris |
+| `98441a4` / `c85d37e` | QC wave 2: acceptance, security, cold root |

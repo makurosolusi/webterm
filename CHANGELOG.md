@@ -8,7 +8,12 @@
 - `WEBTERM_LEDGER` modes `off`, `shadow`, and `on`, plus the P3/P4/P5 foundations behind them: orchestrator roles, caps, plan store, worktree service, memory claim/promote with FTS5, and Telegram webhook verification, identity, and outbox.
 - `WEBTERM_ALLOW_LOOPBACK_APPROVAL`, default `0`, as the explicit opt-in for token-free local approval demos.
 - `WEBTERM_TELEGRAM`, `WEBTERM_TELEGRAM_WEBHOOK_SECRET`, and `WEBTERM_TELEGRAM_BOT_TOKEN` for the Telegram ingress. The legacy `TELEGRAM_BOT_TOKEN` name is still accepted.
-- `.env.example` now documents the approval, ledger, and Telegram flags, plus the fact that Bun auto-loads `.env`.
+- `.env.example` now documents the approval, ledger, Telegram, orchestrator, memory-file, and central flags, plus the fact that Bun auto-loads `.env`.
+- A root-only orchestrator control plane: `POST /api/orchestrator/bootstrap` creates the project, orchestrator agent, worker agent, and plan in one transaction, and `POST /api/orchestrator/assign` creates the ledger task and locks the plan item to it. Every plan item needs an explicit, non-empty scope, and bootstrap refuses a path that is not an absolute, existing git root. `/api/orchestrator/run` needs an assigned item, and until now only a throwaway script could produce one.
+- A production worker run behind `WEBTERM_ORCHESTRATOR_RUN=on`: it allocates a worktree, opens a real agent PTY, sends the task prompt, waits for the turn with a timeout, records the result, and closes the PTY and releases the worktree. A configured agent CLI is still required for the run to do work.
+- Memory files behind `WEBTERM_MEMORY_FILES=on` and `WEBTERM_MEMORY_DIR`: `POST /api/memory/export` writes one fact to one Markdown file with JSON frontmatter and commits it, and `POST /api/memory/rebuild` treats the files as truth and reconstructs the SQLite index. Each `(project, scope, key)` gets its own path, the root is created `0700` and `git init`-ed on first use, files are `0600`, and the commit identity belongs to the server rather than to your host git config.
+- Telegram egress and bindings: the bot sender drains the outbox with retry and backoff, sends only when a bot token is configured, and scrubs the token from every error. `GET`, `POST`, and `DELETE /api/channels/telegram/bindings` are root-only, and a group chat is refused the `approver` and `owner` roles.
+- A central thin layer behind `WEBTERM_CENTRAL=on`: `GET /api/central/portfolio`, a per-project projection with plan, task, approval, and budget usage, plus pause, resume, and priority actions written to the audit log. It is a projection and control surface, not an autonomous agent.
 
 ### Changed
 - Approval dispatch reuses one deps object per ledger port, so the documented ten-minute `requestId` replay window works in production instead of allocating a fresh ack store per request.
@@ -20,6 +25,13 @@
 - Task review approvals no longer consume without effect: reject fails or reopens the task, and consume verifies it with the human reviewer and approval id recorded.
 - The canvas minimap follows the dark canvas background instead of rendering as a white block.
 - Ledger upgrade backups and the ledger database files created on first run are now readable only by their owner (mode `0600`), so other local users on a shared machine cannot read the audit trail or the backups taken before a schema upgrade.
+- Memory file exports that differed only by scope shared one file: `project:deploy` and `scratch:deploy` both wrote `p1/deploy.md`, so the second overwrote the first and a rebuild could restore only one of them. A fact's path now includes its scope, `p1/<scope>/deploy.md`.
+- A rebuild could silently revert a newer fact: the stale file left from before a supersede matched on project, scope, and key, and its old body overwrote the live row. Rebuild now skips a record older than the row it matched, and the newer body survives.
+- The advertised 16 KiB cap on the new write routes was checked only after the whole request body had been buffered, so a large upload held all of it in memory before the `413`. The cap is enforced from `content-length` and by a streaming reader now, so an oversized body is refused before it is buffered.
+- A worker run that threw after its PTY had opened, for example from a status or read error, left the PTY alive and the worktree held until the reaper. The rest of the run now runs inside the cleanup path: the PTY is closed and the worktree released before the failure is recorded.
+- The first orchestrator run on a fresh install failed with `worktree_failed`, because `<data>/worktrees` was handed to git before anything had created it. The directory is created owner-only (`0700`) first, and a creation failure is reported as `worktree_root_failed` instead of a generic git error.
+- A worker agent could receive only the first line of its task, because the prompt was multi-line and an agent that reads one line at a time saw a fragment. The prompt is collapsed to a single line before it is sent.
+- The root-only route families added in this wave are now pinned in the node-token and capability negative tests, so adding one of them to the node allowlist fails the suite instead of passing it.
 
 ### Security
 - Human approvals refuse token-free loopback by default. An agent shell on the same machine could otherwise request, read the nonce, approve, and consume its own action. A configured root token, or `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` for a disposable demo, is required.

@@ -4,6 +4,10 @@ Snapshot awal: 2026-11-01 12:22 (+08:00), branch `feature/agent-pusat-p3`.
 Commit terakhir `31c0886` (P3 resume approved-unconsumed); perbaikan P3 sudah commit.
 Dokumen ini peta keadaan, bukan klaim selesai. Verifikasi ulang §9 sebelum menyatakan selesai.
 
+Update wave 2: 2026-11-01 15:24 (+08:00), `0f12506`..`2f04f77` (13 commit kode + QC
+`98441a4`/`c85d37e`). Semua angka "12:22" di bawah adalah snapshot lama yang sengaja
+dipertahankan; angka gate terbaru ada di §1 dan §8.
+
 Label: `[V]` terverifikasi di snapshot · `[W]` ada di working tree, belum commit atau belum
 teruji end-to-end · `[P]` rencana saja, belum ada di kode.
 
@@ -18,22 +22,26 @@ teruji end-to-end · `[P]` rencana saja, belum ada di kode.
 | `vitest run` penuh | 104 file lulus, 2 gagal; 1442/1445 test lulus | 12:21 |
 | `bun test` orchestrator+inbox+memory+channels+ledger | 30 file, 255/258 test lulus | 12:21 |
 
-Kegagalan snapshot, jangan disembunyikan:
+Kegagalan snapshot 12:22 (`memoryCore` redeclare, `channelsRuntime` 2, `channelDispatch` 1)
+sudah tidak berlaku di `31c0886`; ulangan di bawah adalah angka yang dipakai.
 
-- `memoryApi.test.ts` gagal transform: `memoryCore.ts:139` mendeklarasikan `evidence` dua kali.
-- `channelsRuntime.test.ts` 2 gagal (store korup tidak terdeteksi; route tidak terpasang).
-- `channelDispatch.test.ts` 1 gagal (claim tidak dilepas saat reply gagal di-enqueue).
+File `memory/*`, `channels/*` berubah saat snapshot diambil, jadi angka 12:22 bisa berubah;
+jangan klaim hijau tanpa suite ulang pada tree yang sama.
 
-File `src/server/memory/*`, `channels/*` berubah **saat** snapshot ini diambil (sesi lain),
-jadi angka di atas bisa berubah. Jangan klaim hijau sampai suite dijalankan ulang pada tree
-yang sama dan tidak ada perubahan bersamaan.
+Histori: `31c0886` vitest 1526 lulus (111 file); `5cd492a` bun 192 lulus, vitest 1526 lulus
+(satu flake `terminalCore` saat paralel, lulus terisolasi).
 
-Ulangan pada `31c0886` (queue bersih): `tsc --noEmit` bersih, `vitest run` **1526 test lulus**
-(111 file, 0 gagal). Kegagalan di atas milik tree 12:22 dan tidak lagi berlaku di commit ini.
+Gate wave 2 (tree `2f04f77`, 2026-11-01 15:24; termasuk fix kontrol dan loop worker):
 
-Ulangan pada `5cd492a` (ack persisten): `tsc --noEmit` bersih, `bun test` ledger+approval 80 lulus,
-`bun test` penuh 192 lulus, `vitest run` penuh 1526 lulus (satu flake `terminalCore` di bawah beban
-paralel, lulus saat diisolasi).
+| Cek | Hasil |
+|---|---|
+| `tsc --noEmit` | bersih |
+| `vitest run` penuh | 127 file / 1697 test lulus |
+| `bun test` penuh | 28 file / 201 test lulus |
+| Wave-2 terarah (`auth`, `extendedApi`, `workerRuntime`, `memoryFile`, `memoryFileEnsure`, `orchestratorControlApi`, `orchestratorRunApi`, gate awal) | 7 file / 137 test lulus |
+
+Flake yang diketahui: `terminalCore` dan `paneSplit` bisa gagal di bawah beban paralel dan
+lulus saat diisolasi. Jangan klaim deterministik 100%.
 
 ---
 
@@ -44,9 +52,12 @@ paralel, lulus saat diisolasi).
 | `orchestrator/roles.ts` | `assertCanSpawn`, `assertRoleDepth`, `roleForDepth`, `assertProjectOwnership`, `ownsProject`, `RoleError`; depth maks 2 | `[W]` + test |
 | `orchestrator/caps.ts` | `DEFAULT_CAPS`, `checkCaps`, `assertCaps`, `emptyCapSnapshot`, `CapExceededError` | `[W]` + test |
 | `orchestrator/planModel.ts` | `validateScope`, `ITEM_TRANSITIONS`, tipe `Plan`/`PlanItem` | `[W]` |
-| `orchestrator/plan.ts` | `createPlanStore(db)` → get/create/replace/assign/updateItem, optimistic `version` | `[W]` |
-| `orchestrator/worktree.ts` | `createWorktreeService({root,exec})` → allocate/release/get/list; branch + path guard | `[W]` + test; exec produksi belum |
-| `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[W]`; spawn PTY produksi belum |
+| `orchestrator/plan.ts` | `createPlanStore(db)` → get/create/replace/assign/updateItem, optimistic `version` | `[V]` + test; atomicity C2 residual |
+| `orchestrator/worktree.ts` | `createWorktreeService({root,exec})` → allocate/release/get/list; branch + path guard | `[V]` + test; dipakai `workerRuntime` |
+| `orchestrator/orchestrator*.ts` | `createOrchestrator` → assignTask/startWorker/recordWorkerResult/canSpawn | `[V]`; spawn PTY produksi di `workerRuntime.ts` |
+| `orchestrator/workerRuntime.ts` (+`Prompt`/`Session`/`Settle`/`Types`) | run satu task: worktree → PTY → prompt satu baris → settle/timeout → record → cleanup; cap prompt 8 KiB, output 64 KiB | `[V]` + test; loop fake-agent terverifikasi, Claude nyata belum |
+| `orchestratorRunApi.ts` | `POST /api/orchestrator/run`, gate `WEBTERM_ORCHESTRATOR_RUN=on`; tolak field client (`repo/cmd/...`), repositori dari `project.path`, root worktree dibuat `0700`, timeout 5 s..15 mnt | `[V]` + test; acceptance loop fake-agent (`2f04f77`) |
+| `orchestratorControlApi.ts` | `POST /api/orchestrator/bootstrap` (project+orchestrator+worker+plan, path harus root git absolut, item wajib `scope` eksplisit) dan `/assign` (task ledger + kunci item, `expectedVersion`, agent id ber-`:` diterima) | `[V]`: acceptance HTTP bootstrap → duplicate 409 → assign → plan/tasks, tanpa worktree/PTY; B1 (`repo` ditolak) + B2 (agent id eksplisit) fixed di `0b63714` |
 | `ledger/ledgerApproval.ts` | request/get/list/decide/consume/expire; digest + nonce + single-use | `[V]` |
 | `ledger/durableAck.ts` | `DurableAckStore` + `durableAckFor(db, scope)`; ack di tabel `request_ack`, `INSERT OR IGNORE` (replay tidak memperpanjang expiry), prune expiry + evict tertua | `[V]` + test |
 | `control/approvalApi.ts` | `handleApproval`, rute request/decide/consume/list lewat capability | `[W]` 17 test; di-mount |
@@ -82,17 +93,22 @@ task `verified`, baris keluar dari inbox, tidak ada approval kedua.
 |---|---|---|
 | `memory/memoryWrite.ts` | `claimMemory`, `promoteMemory`, `supersedeMemory`, `quarantineMemory` | `[W]` |
 | `memory/memorySearch.ts` | `searchMemory` (FTS5 + bm25), `listMemory`, `memoryEvents` | `[W]` |
-| `memory/memoryCore.ts` | `toFtsQuery`, `validateEvidence`, `assertCanPromote` | `[W]`; snapshot gagal parse |
-| `memoryApi.ts` | `GET /api/memory`, `GET /api/memory/search` (read-only) | `[W]`, ter-mount |
+| `memory/memoryCore.ts` | `toFtsQuery`, `validateEvidence`, `assertCanPromote` | `[V]`; redeclare `evidence` snapshot sudah hilang |
+| `memory/memoryFile.ts` (+`FilePath`/`Render`/`Ensure`) | export fact → Markdown+JSON frontmatter, commit git, rebuild files-win; root `0700` + `git init` otomatis, identitas git milik server | `[V]` + test |
+| `memoryFileHttp.ts` (+`Response`) | `POST /api/memory/export`, `POST /api/memory/rebuild`, gate `WEBTERM_MEMORY_FILES=on`; error di-redaksi | `[V]` + test |
+| `central/*` | portfolio + project projection, pause/resume/priority (lihat §4b) | `[V]` + test |
+| `memoryApi.ts` | `GET /api/memory`, `GET /api/memory/search` (read-only) | `[V]`, ter-mount |
 | `inboxApi.ts` | `GET /api/inbox` + counts; pagination + validasi | `[W]`, ter-mount |
 | `client/inboxApi.ts` + `InboxPanel` | klien inbox, consent dialog, badge dock | `[W]` |
 
 Gap P4 yang masih terbuka:
 
-- Otoritas memory masih dari payload (`actorKind`), bukan principal server. Belum ada route
-  tulis, jadi ini laten sampai route claim/promote ditambahkan.
-- P4b (fact file + git truth, CORE human-only) tetap `[P]`, digate 2 project × 2 minggu.
-- Central agent tetap `[P]`, belum ada kode.
+- Otoritas tulis file telah dipin ke `{kind:'human', id:'root'}` dan scope `core` ditolak
+  (`memoryFileRender`), jadi body tidak bisa mengklaim otoritas. Route claim/promote tetap
+  belum ada; authority dari payload masih laten di sana.
+- P4b (fact file + git truth) sekarang `[V]` di balik flag, dengan acceptance cold root nyata
+  (`qc/p4-memory-fix-acceptance.md`). Soak 2 project × 2 minggu belum dijalankan.
+- Central agent otonom tetap `[P]`; yang ada hanya proyeksi portfolio + kontrol (§4b).
 
 ---
 
@@ -103,19 +119,47 @@ Gap P4 yang masih terbuka:
 | `channels/webhook.ts` | `verifyWebhook` (HMAC+timestamp), `verifyTelegramSecret`, `signWebhook`, `redactSecrets`, `bodyWithinLimit` | `[W]` + test |
 | `channels/identity.ts` | `IdentityRegistry`, `authorizeCommand`, `parseCommand`, `isBareConsent` | `[W]` + test |
 | `channels/channelsRuntime.ts` | `POST /webhooks/telegram`; aktif hanya jika `WEBTERM_TELEGRAM=on` + secret + ledger | `[W]` |
-| `channels/telegram.ts` | `parseTelegramUpdate`, `sendTelegramMessage`, `telegramBotToken` | `[W]` + test |
-| `channels/outbox.ts` | `Outbox` in-memory, backoff, dead-letter | `[W]` |
-| `channels/channelStore.ts` | binding + dedupe persisten, file `0600`, dir `0700` | `[W]` + test |
+| `channels/telegram.ts` | `parseTelegramUpdate`, `sendTelegramMessage`, `telegramBotToken` | `[V]` + test |
+| `channels/outbox.ts` | `Outbox` in-memory, backoff, dead-letter | `[V]` + test |
+| `channels/channelStore.ts` | binding + dedupe persisten, file `0600`, dir `0700` | `[V]` + test |
+| `channels/channelBindingsApi.ts` + `Http` | `GET/POST/DELETE /api/channels/telegram/bindings`, root-only; tolak `approver`/`owner` untuk group | `[V]` + test |
+| `channels/channelSenderBoot.ts` + `telegramSend.ts` | sender outbox: retry/backoff, dead-letter, redaksi token; boot hanya bila token ada | `[V]` + test; jaringan nyata belum |
 
 Yang **belum** ada:
 
 - `WEBTERM_CHANNELS` belum dibaca kode mana pun. Flag nyata hanya `WEBTERM_TELEGRAM` dan
   nilainya hanya `on` (tidak ada `off|readonly|control`).
-- `ChannelStore.bind` belum punya pemanggil produksi; chat nyata selalu unbound.
-- Outbox belum punya pengirim; balasan tidak pernah terkirim.
-- Tidak ada uji jaringan Telegram nyata (semua test memakai fetch/update palsu).
+- Binding punya route dan pemanggil produksi; chat yang belum di-bind tetap ditolak.
+- Sender sudah ada, tetapi tidak ada uji jaringan Telegram nyata: semua test memakai
+  fetch/update palsu, dan run dengan token asli belum dilakukan.
+- Throttle webhook masih di-key `req.socket.remoteAddress` (E1): di belakang proxy, 30 secret
+  salah per 60 s memblokir delivery sah sampai jendela habis.
+- `parseBinding` belum menerapkan ulang aturan group saat load, jadi `channels.json` yang
+  diedit tangan bisa memuat group sebagai `owner`.
 
-Artinya P5 masih ingress yang tertutup dan belum bisa dipakai sebagai control plane.
+Artinya ingress + egress + binding sudah ter-wire, tetapi P5 belum boleh disebut production-ready
+sampai uji jaringan nyata dan dua residual di atas ditutup.
+
+---
+
+## 4b. Central thin layer dan loop control plane
+
+Central adalah proyeksi + kontrol, bukan agen otonom:
+
+| Permukaan | Perilaku | Status |
+|---|---|---|
+| `GET /api/central/portfolio` | daftar project + agregat plan/task/approval/usage, paginasi `limit`/`offset` | `[V]`; acceptance HTTP |
+| `GET /api/central/projects/:id` | proyeksi satu project; 404 `project_not_found` | `[V]`; acceptance HTTP |
+| `POST .../pause`, `/resume`, `/priority` | ubah status/prioritas, tulis event audit `actorKind:'human'` | `[V]`; acceptance HTTP |
+| Gate | `WEBTERM_CENTRAL=on`; tanpa flag → 503 `central_off` | `[V]`; acceptance HTTP |
+
+Loop yang sekarang bisa dilalui lewat HTTP: `bootstrap` → `assign` → `run` → hasil task.
+`bootstrap`/`assign` hanya metadata (tanpa cmd/worktree/spawn), otoritas root, dan `run` tetap
+menolak field yang dikendalikan klien. Acceptance HTTP: `p4-control-plane-acceptance.md`
+(bootstrap → 409 duplikat → assign → plan/tasks, nol worktree/PTY, B1/B2 fixed `0b63714`) dan
+`p4-worker-loop-acceptance.md` (fresh data dir: run → worktree → PTY → prompt satu baris →
+SessionEnd → verify independen → `verified` → cleanup; **agen palsu, bukan Claude**).
+Agen pusat otonom (memilih task sendiri, menjalankan portfolio tanpa manusia) belum dibangun.
 
 ---
 
@@ -174,14 +218,25 @@ Sudah ditutup (per `5cd492a`):
 
 Masih terbuka:
 
-- `inboxItemRow.tsx` baru 63 baris, tetapi `InboxPanel.tsx` 475 masih ≥80% hard cap 500; pecah
-  lagi bila menambah fitur.
-- `ledgerSchema.ts` 244 baris (naik dari 227 karena migrasi v3 `request_ack`) > batas 200;
-  pisahkan SQL migrasi per file sebelum menambah tabel berikutnya.
 - Node canvas interactions belum diuji E2E (E2E P3 memakai workspace kosong).
 - `DedupeStore` teruji tetapi tidak dipakai produksi.
-- Spawn PTY worker dan gate blocking (`requireApproval` → `consumeApproval`) belum ada.
+- Gate blocking (`requireApproval` → `consumeApproval`) di jalur run belum ada; approval masih
+  dipakai untuk review task, bukan sebagai prasyarat aksi worker.
 - Verifikasi independen belum menjadi satu-satunya jalur `verified`.
+- Claude nyata lewat `/api/orchestrator/run` belum terverifikasi: loop penuh lulus dengan agen
+  palsu (PTY, prompt satu baris, SessionEnd, verify, cleanup), model/hook Claude nyata belum.
+- C2: `updateItem` bisa gagal `stale_version` setelah `claimSuccess` menulis `verified`, jadi
+  task bisa `verified` sementara item plan tetap `running` (low-med).
+- C3: `plan.status` (`draft`/`completed`/`abandoned`) dan `project.status === 'paused'` tidak
+  memblokir run (low; mungkin disengaja untuk P4).
+
+Sudah ditutup di wave 2:
+
+- `InboxPanel.tsx` 369 baris dan `inboxItemRow.tsx` 63 baris, jadi tidak lagi di atas 80%
+  hard cap.
+- `ledgerSchema.ts` dipecah (`0f12506`): 20 baris, migrasi v1/v2/v3 masing-masing ≤179 baris.
+- Spawn PTY worker produksi ada di `workerRuntime.ts`; PTY ditutup dan worktree dilepas pada
+  throw setelah open (`2176c98`). Binding Telegram + sender outbox ter-wire (§4).
 
 ---
 
@@ -196,6 +251,10 @@ Masih terbuka:
 | `WEBTERM_TELEGRAM_WEBHOOK_SECRET` | kosong | `[W]` |
 | `WEBTERM_TELEGRAM_BOT_TOKEN` | kosong; legacy `TELEGRAM_BOT_TOKEN` | `[W]` |
 | `WEBTERM_CHANNELS` | — | `[P]`; belum dibaca kode |
+| `WEBTERM_ORCHESTRATOR_RUN` | `off` (`on` saja) | `[V]`; gate `/api/orchestrator/run|bootstrap|assign` |
+| `WEBTERM_MEMORY_FILES` | `off` | `[V]`; gate `/api/memory/export|rebuild` |
+| `WEBTERM_MEMORY_DIR` | `<dataDir>/memory`; hanya path absolut | `[V]`; nilai relatif diabaikan |
+| `WEBTERM_CENTRAL` | `off` | `[V]`; gate `/api/central/*` |
 | `WEBTERM_ALLOW_TOKEN_MINT` | `0` | `[V]` |
 | `WEBTERM_STRICT_HOOK_AUTH` | `0` | `[V]` |
 
@@ -209,21 +268,20 @@ dengan secret. Tanpa ledger, channel tidak dipasang sama sekali. Approval manusi
 
 | Gate | Status | Alasan |
 |---|---|---|
-| G0 typecheck | ✅ | `tsc --noEmit` bersih pada `31c0886` |
-| G0b suite penuh | ✅ | 1526 test vitest lulus, 0 gagal |
+| G0 typecheck + suite | ✅ | `tsc` bersih; vitest 1697 dan bun 201 lulus pada `2f04f77` |
 | G1 seam | ✅ | P0 |
-| G2 auth/capability | ⚠️ | capability ✅; approval manusia fixed; actor binding belum |
-| G3 data/migrasi | ⚠️ | v1 ✅; v3 `request_ack` ✅; v2 plan WIP; migrasi kanal belum (slot berikutnya v4) |
-| G4 orchestrator | ⚠️ | plan/worktree/verify ada; spawn PTY produksi + gate blocking belum |
-| G5 memory/inbox | ⚠️ | repo + route baca ✅; authority + P4b belum |
-| G6 central | N/A | ditunda |
-| G7 omnichannel | ⚠️ | ingress + store ✅; binding, sender, migrasi kanal (v4), live test belum |
+| G2 auth/capability | ⚠️ | capability ✅; family root-only kini dipin test; actor binding belum |
+| G3 data/migrasi | ⚠️ | v1 ✅; v2 plan ✅; v3 `request_ack` ✅; schema dipecah; migrasi kanal belum (slot v4) |
+| G4 orchestrator | ⚠️ | loop penuh + bootstrap/assign + verify ✅ (fake agent); gate blocking, C2, Claude nyata belum |
+| G5 memory/inbox | ⚠️ | repo + route baca + file/git truth (P4b) ✅; route claim/promote, soak 2×2 minggu belum |
+| G6 central | ⚠️ | proyeksi + pause/resume/priority ✅; agen pusat otonom belum |
+| G7 omnichannel | ⚠️ | ingress + store + binding + sender ✅; live test, throttle proxy, revalidasi group belum |
 
-**Vonis: jalur P3 (approval + inbox) sudah tertutup end-to-end, P4/P5 belum production-ready.**
-B4 approved-unconsumed tidak lagi jadi penghalang: pemulihan punya jalur UI yang teruji dan
-gating readiness mencegah approval ganda. Yang masih menahan: P4b (fact file + git gate),
-central agent, binding/sender Telegram dan uji jaringan nyata, spawn PTY produksi + gate
-blocking, serta E2E node canvas. Jangan sebut P3-P5 production-ready sampai itu ditutup.
+**Vonis: jalur P3 (approval + inbox) tertutup end-to-end; loop P4/P5 sekarang ter-wire lewat
+HTTP (bootstrap → assign → run, memory files, central portfolio, Telegram bindings/egress),
+tetapi belum production-ready.** Yang masih menahan: Claude nyata, gate blocking, otoritas
+independen, soak P4b, uji jaringan Telegram, agen pusat otonom, C2/C3, dan E2E node canvas.
+Jangan sebut P3-P5 production-ready sampai itu ditutup.
 
 ---
 
@@ -234,6 +292,9 @@ TMPDIR=/tmp/st npx tsc --noEmit
 TMPDIR=/tmp/st npx vitest run
 TMPDIR=/tmp/st bun test src/server/orchestrator src/server/inbox \
   src/server/memory src/server/channels src/server/ledger
+TMPDIR=/tmp/st bun test
 ```
 
 Hijau hanya bila semua lulus pada tree yang sama, tanpa file berubah di tengah run.
+Vitest penuh: 127 file / 1697 test. Bun penuh: 28 file / 201 test. Flake `terminalCore` /
+`paneSplit` di bawah beban paralel bukan bukti regresi; ulangi terisolasi sebelum menyimpulkan.
