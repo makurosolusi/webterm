@@ -101,7 +101,7 @@ ada.
 
 - `npx tsc --noEmit`: bersih.
 - Targeted tests: 73 lulus (proposal + chat + client); Bun assign tests: 2 lulus.
-- Full Vitest: 2014 lulus, 1 failure environment-only pada `controlCwd` karena `TMPDIR` shell ini
+- Full Vitest: 2017 lulus / 2018 total, 1 failure environment-only pada `controlCwd` karena `TMPDIR` shell ini
   berada di bawah `HOME`; test lulus dengan `TMPDIR=/tmp`.
 - Bun-only: 228/228 lulus.
 - Remaining: B3 `task.run`/`approval.decide`, sustained credentialed-model/soak evidence, real
