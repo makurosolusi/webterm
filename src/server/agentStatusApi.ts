@@ -6,17 +6,42 @@
 // sesekali MEMBALAS dengan satu potong konteks untuk agent pemanggil. Tidak ada jalur balik ke
 // client lain di sini.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { db } from './db'
-import { sessions } from './sessions'
+import { realpathSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve, dirname, basename, sep } from 'node:path'
+import type { AgentStatus, Workspace } from '../shared/workspace'
+import { isSafeNodeId } from '../shared/workspace'
 import { hookStatus, type HookStatusBody } from './hookStatus'
+import { stateVerified } from './hooks'
+import { claudeProjectsRoot } from './transcriptPresence'
+import { dataDir } from './config'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
-import { isSafeNodeId } from '../shared/workspace'
 
 /** `transcript_path` hanya DISIMPAN, tidak pernah dibaca di sini. Batas panjangnya menjaga
  *  registry dari nilai raksasa yang di-post berulang; 4096 cukup untuk path absolut terpanjang
  *  di mesin nyata (PATH_MAX 1024 di Linux, 1024 di macOS). */
 export const TRANSCRIPT_PATH_MAX = 4096
+
+/**
+ * Gerbang identitas hook, dibaca SEKALI saat modul dimuat. Default MATI: perilaku lama fail-open
+ * (hook tanpa token tetap memperbarui status) dipertahankan persis. `WEBTERM_STRICT_HOOK_AUTH=1`
+ * membalik endpoint menjadi tertutup: token node wajib, dan `transcript_path` wajib berada di
+ * bawah root transcript claude / data dir webterm.
+ */
+export const STRICT_HOOK_AUTH = process.env.WEBTERM_STRICT_HOOK_AUTH === '1'
+
+/** Sisi tulis route, di-inject supaya route bisa diuji tanpa `bun:sqlite`/PTY. */
+export interface AgentStatusDeps {
+  setStatus(nodeId: string, status: AgentStatus): void
+  setTranscript(nodeId: string, path: string): void
+  workspaceFor(nodeId: string): Workspace | null | undefined
+}
+
+/** Opsi test: override gerbang + dependency. Produksi memanggil route tanpa argumen keempat. */
+export interface AgentStatusOptions {
+  strictAuth?: boolean
+  deps?: AgentStatusDeps
+}
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
@@ -25,12 +50,87 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolvePromise, reject) => {
     let data = ''
     req.on('data', (chunk) => { data += chunk })
-    req.on('end', () => resolve(data))
+    req.on('end', () => resolvePromise(data))
     req.on('error', reject)
   })
+}
+
+/** Header token node, apa adanya dari request (Node menurunkan nama header ke lowercase). */
+const nodeTokenHeader = (req: IncomingMessage): string | string[] | undefined =>
+  req.headers['x-nodeterm-node-token']
+
+/**
+ * Root yang boleh memuat sebuah `transcript_path`. `claudeProjectsRoot()` sudah menghormati
+ * `CLAUDE_CONFIG_DIR`; `dataDir()` adalah root data webterm sendiri.
+ */
+function transcriptRoots(): string[] {
+  return [claudeProjectsRoot(), dataDir()]
+}
+
+/** Apakah `candidate` benar-benar (bukan hanya secara leksikal) berada di bawah `root`? */
+function isInside(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  // `..foo` adalah nama file biasa di dalam root; hanya `..` tersendiri yang keluar.
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+/**
+ * `realpath` yang tidak melempar untuk leaf yang belum ada: bagian yang hilang disusun kembali di
+ * atas realpath ancestor terdekat. Dengan begitu symlink di tengah path tetap diikuti (escape
+ * lewat symlink tertangkap), sementara hook yang melaporkan file yang baru akan dibuat tetap sah.
+ */
+function realpathLoose(path: string): string | null {
+  let cursor = resolve(path)
+  const missing: string[] = []
+  for (;;) {
+    try {
+      const real = realpathSync(cursor)
+      return missing.length === 0 ? real : join(real, ...missing.slice().reverse())
+    } catch {
+      const parent = dirname(cursor)
+      if (parent === cursor) return null
+      missing.push(basename(cursor))
+      cursor = parent
+    }
+  }
+}
+
+/**
+ * Validasi path transcript untuk mode strict. Ditolak bila path bukan absolut, mengandung segmen
+ * `..`, atau setelah `realpath` keluar dari root yang diizinkan (termasuk lewat symlink).
+ * Fungsi murni terhadap filesystem, tanpa membaca isi file.
+ */
+export function transcriptPathAllowed(
+  path: string,
+  roots: string[] = transcriptRoots()
+): boolean {
+  if (path.includes('\0')) return false
+  if (!isAbsolute(path)) return false
+  if (path.split(/[\\/]+/).includes('..')) return false
+  const target = realpathLoose(path)
+  if (!target) return false
+  for (const root of roots) {
+    const realRoot = realpathLoose(root) ?? resolve(root)
+    if (isInside(realRoot, target)) return true
+  }
+  return false
+}
+
+/**
+ * Dependency default. Diimpor DINAMIS: `db`/`sessions` menarik `bun:sqlite` dan PTY, jadi impor
+ * statis akan membuat modul route ini tidak bisa dimuat test node-env (yang menguji gerbang auth
+ * dengan dependency palsu).
+ */
+async function defaultDeps(): Promise<AgentStatusDeps> {
+  const [{ db }, { sessions }] = await Promise.all([import('./db'), import('./sessions')])
+  return {
+    setStatus: (nodeId, status) => sessions.setStatus(nodeId, status),
+    setTranscript: (nodeId, path) => sessions.setTranscript(nodeId, path),
+    workspaceFor: (nodeId) => findWorkspaceFor(db.list(), nodeId),
+  }
 }
 
 /**
@@ -43,7 +143,8 @@ function readBody(req: IncomingMessage): Promise<string> {
 export async function agentStatusRoute(
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL
+  url: URL,
+  opts?: AgentStatusOptions
 ): Promise<boolean> {
   if (url.pathname !== '/api/agent-status' || req.method !== 'POST') return false
   const node = url.searchParams.get('node')
@@ -56,18 +157,36 @@ export async function agentStatusRoute(
   // adalah milik `hookStatus`, dan dua daftar yang harus berubah bersamaan pasti akan menyimpang.
   let body: HookStatusBody & { message?: string; transcript_path?: string }
   try { body = JSON.parse(await readBody(req)) } catch { body = {} }
+
+  // Gerbang strict: keduanya diperiksa SEBELUM apa pun ditulis, jadi permintaan yang ditolak
+  // tidak meninggalkan jejak status/transcript. Saat mati (default), tidak ada satu pun cabang
+  // di bawah ini yang berjalan — perilaku fail-open lama dipertahankan huruf per huruf.
+  if (opts?.strictAuth ?? STRICT_HOOK_AUTH) {
+    if (!stateVerified(node, nodeTokenHeader(req))) {
+      json(res, 403, { error: 'invalid node token' })
+      return true
+    }
+    const raw = body.transcript_path
+    if (typeof raw === 'string' && raw.length > 0
+      && (raw.length > TRANSCRIPT_PATH_MAX || !transcriptPathAllowed(raw))) {
+      json(res, 403, { error: 'transcript path outside allowed roots' })
+      return true
+    }
+  }
+
+  const deps = opts?.deps ?? (await defaultDeps())
   const status = hookStatus(body)
-  if (status) sessions.setStatus(node, status)
+  if (status) deps.setStatus(node, status)
   // Hanya DISIMPAN: pembacaan file terjadi di `contextLink`, dan path sepanjang apa pun di sini
   // akan ditulis ulang oleh setiap hook berikutnya pada node yang sama.
   if (typeof body.transcript_path === 'string' && body.transcript_path.length > 0
     && body.transcript_path.length <= TRANSCRIPT_PATH_MAX) {
-    sessions.setTranscript(node, body.transcript_path)
+    deps.setTranscript(node, body.transcript_path)
   }
   // Balasan hook adalah satu-satunya kanal PUSH ke konteks agent. `nextHookContext` sendiri yang
   // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
   // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
-  const ws = findWorkspaceFor(db.list(), node)
+  const ws = deps.workspaceFor(node)
   const ctx = ws ? nextHookContext(node, body.hook_event_name, buildLinkDoc(ws, node)) : null
   if (ctx) {
     json(res, 200, { hookSpecificOutput: ctx })

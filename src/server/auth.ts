@@ -113,3 +113,40 @@ export function authorize(args: {
   const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
   return tokensMatch(args.expectedToken, candidate)
 }
+
+/**
+ * Path yang boleh dilayani dengan token NODE (per sesi agent) alih-alih token root.
+ *
+ * Sengaja sempit: hanya jalur yang memang dipanggil hook dari dalam sesi agent — status hook,
+ * context-link, dan control API. Semua yang menyentuh setelan, workspace, filesystem, generator
+ * nama, atau shell (`/ws`) TETAP butuh token root: token node bocor ke disk sesi agent mana pun,
+ * dan satu sesi tidak boleh bisa menyetel ulang server atau membuka PTY milik sesi lain.
+ */
+export function isNodeTokenPath(pathname: string): boolean {
+  return (
+    pathname === '/api/agent-status' ||
+    pathname === '/api/context-link' ||
+    pathname.startsWith('/api/control/')
+  )
+}
+
+/**
+ * Gerbang lengkap satu request: token root dulu, dan hanya bila itu gagal, token node untuk
+ * `isNodeTokenPath` — dengan syarat origin tetap lolos. Urutan ini penting supaya perilaku
+ * root tidak berubah sama sekali (loopback tanpa token tetap terbuka; token root tetap menang).
+ */
+export function authorizeRequest(args: {
+  headers: Headers
+  expectedToken: string | undefined
+  queryToken?: string | null
+  pathname: string
+  /** Validator token node (disuntikkan supaya modul ini tetap bebas state server). */
+  isNodeToken: (token: string) => boolean
+}): boolean {
+  if (authorize(args)) return true
+  if (!isNodeTokenPath(args.pathname)) return false
+  if (!sameOrigin(args.headers)) return false
+  const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
+  if (typeof candidate !== 'string' || candidate === '') return false
+  return args.isNodeToken(candidate)
+}

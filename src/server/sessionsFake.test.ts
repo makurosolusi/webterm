@@ -4,7 +4,10 @@
 
 import { describe, expect, test } from 'vitest'
 import type { ServerMsg } from '../shared/protocol'
-import { Sessions } from './sessions'
+import { Sessions, type SessionsOptions } from './sessions'
+import { NODE_TOKEN_ENV, nodeToken } from './hooks'
+import { PORT } from './launchLine'
+import { ptyEnv } from './ptyShell'
 import { FakePty } from './fakePty.testutil'
 
 const T0 = 1_700_000_000_000
@@ -29,17 +32,29 @@ function recorder() {
   }
 }
 
+type SpawnOpts = Parameters<NonNullable<SessionsOptions['spawn']>>[0]
+
+/** Satu peluncuran: opsi mentah dari `Sessions` DAN env efektif yang benar-benar dilihat anak.
+ *  Env efektif dirakit persis seperti `spawnPty`: filter `ptyEnv(process.env)` lalu injeksi sesi
+ *  menimpanya — jadi test bisa membuktikan token root tidak bocor DAN injeksi tetap menang. */
+interface SpawnRecord {
+  opts: SpawnOpts
+  env: Record<string, string>
+}
+
 function harness(now: () => number = () => T0) {
   const ptys: FakePty[] = []
+  const spawns: SpawnRecord[] = []
   const sessions = new Sessions({
-    spawn: () => {
+    spawn: (opts) => {
+      spawns.push({ opts, env: { ...ptyEnv(process.env, { interactive: !opts.cmd }), ...(opts.env ?? {}) } })
       const pty = new FakePty(1000 + ptys.length)
       ptys.push(pty)
       return pty
     },
     now,
   })
-  return { sessions, ptys }
+  return { sessions, ptys, spawns }
 }
 
 const open = (id: string) => ({ t: 'open' as const, id, cols: 80, rows: 24 })
@@ -444,5 +459,81 @@ describe('P0: pane split ids', () => {
     expect(sessions.isLive('3f2a1c00-0000-4000-8000-000000000001:p2')).toBe(true)
     ptys[0].emitData('pane')
     expect(pane.text()).toBe('pane')
+  })
+})
+
+// Token root (`WEBTERM_TOKEN` proses server) adalah kunci penuh API manusia. Anak PTY tidak boleh
+// mewarisinya: agent menerima token NODE-nya sendiri, terminal biasa tidak menerima kunci apa pun.
+describe('P0: env anak tidak mewarisi token root', () => {
+  const ROOT = 'root-token-must-not-leak'
+  const INHERITED = {
+    WEBTERM_TOKEN: ROOT,
+    WEBTERM_ALLOW_TOKEN_MINT: '1',
+    NODETERM_NODE_ID: 'inherited-node',
+    NODETERM_PORT: '1234',
+    NODETERM_PERM_WAIT_SECS: '999',
+  }
+
+  /** Pasang env warisan server, jalankan test, lalu kembalikan persis seperti semula. */
+  function withInheritedEnv(fn: () => void): void {
+    const saved = new Map<string, string | undefined>()
+    for (const k of Object.keys(INHERITED)) {
+      saved.set(k, process.env[k])
+      process.env[k] = INHERITED[k as keyof typeof INHERITED]
+    }
+    try {
+      fn()
+    } finally {
+      for (const [k, v] of saved) {
+        if (v === undefined) delete process.env[k]
+        else process.env[k] = v
+      }
+    }
+  }
+
+  test('agent node gets its own node token and node identity, never the root token', () => {
+    withInheritedEnv(() => {
+      const { sessions, spawns } = harness()
+      sessions.open({ ...open('agent-1'), agentId: 'claude' }, recorder().send)
+
+      const env = spawns[0].env
+      expect(env.WEBTERM_TOKEN).toBe(nodeToken('agent-1'))
+      expect(env.WEBTERM_TOKEN).not.toBe(ROOT)
+      expect(env.NODETERM_NODE_ID).toBe('agent-1')
+      expect(env.NODETERM_PORT).toBe(String(PORT))
+      // Token jalur curl `--settings` tetap ada dan menunjuk node yang sama.
+      expect(env[NODE_TOKEN_ENV]).toBe(nodeToken('agent-1'))
+    })
+  })
+
+  test('plain terminal gets no WEBTERM token and no NODETERM identity', () => {
+    withInheritedEnv(() => {
+      const { sessions, spawns } = harness()
+      sessions.open(open('shell-1'), recorder().send)
+
+      const { opts, env } = spawns[0]
+      expect('WEBTERM_TOKEN' in env).toBe(false)
+      expect(Object.keys(env).filter((k) => k.startsWith('NODETERM_'))).toEqual([])
+      // Tidak ada injeksi sama sekali untuk terminal biasa.
+      expect(opts.env).toBeUndefined()
+    })
+  })
+
+  test('inherited WEBTERM_*/NODETERM_* are stripped before injection', () => {
+    withInheritedEnv(() => {
+      const { sessions, spawns } = harness()
+      sessions.open({ ...open('agent-2'), agentId: 'claude' }, recorder().send)
+      sessions.open(open('shell-2'), recorder().send)
+
+      for (const { env } of spawns) {
+        // Variabel root yang TIDAK di-inject sesi tidak boleh lolos lewat warisan.
+        expect('WEBTERM_ALLOW_TOKEN_MINT' in env).toBe(false)
+        // Nilai warisan tidak boleh bertahan: yang ada hanya injeksi milik node ini.
+        expect(env.WEBTERM_TOKEN).not.toBe(ROOT)
+        expect(env.NODETERM_NODE_ID).not.toBe('inherited-node')
+        expect(env.NODETERM_PORT).not.toBe('1234')
+        expect('NODETERM_PERM_WAIT_SECS' in env).toBe(false)
+      }
+    })
   })
 })

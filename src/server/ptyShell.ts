@@ -64,8 +64,14 @@ export function resolveCwd(
 }
 
 /** Variabel proses server tanpa konsumen di dalam PTY. `BUN_INSTALL` dikecualikan: rc user sering
- *  merujuknya untuk PATH. `WEBTERM_*` dan `NODETERM_*` sengaja tetap (hooks + shim context-link). */
-const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*)$/
+ *  merujuknya untuk PATH.
+ *
+ *  `WEBTERM_*` dan `NODETERM_*` ikut DIBUANG, bukan diteruskan apa adanya: `WEBTERM_TOKEN` di proses
+ *  server adalah token ROOT (satu-satunya pembuka API manusia), dan mewariskannya ke shell/agent mana
+ *  pun membuat setiap anak memegang kunci penuh. Nilai yang memang dibutuhkan sebuah node di-inject
+ *  eksplisit oleh pemanggil sesudah filter ini (lihat env `open` di `sessions.ts`): token node untuk
+ *  agent, `NODETERM_NODE_ID`/`NODETERM_PORT` untuk sesi context-capable. */
+const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*|WEBTERM_.*|NODETERM_.*)$/
 
 /** Env anak. `TERM` LOAD-BEARING: bentuk inline `terminal` tidak menerima `name`, jadi env inilah
  *  satu-satunya yang memberi tahu program di dalam PTY tipe terminalnya (tanpa itu `dumb`).

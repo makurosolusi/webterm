@@ -5,7 +5,9 @@ import {
   DEFAULT_HOST,
   TOKEN_HEADER,
   authorize,
+  authorizeRequest,
   isLoopbackHost,
+  isNodeTokenPath,
   requiresToken,
   resolveToken,
   sameOrigin,
@@ -14,6 +16,22 @@ import {
 } from './auth'
 
 const SELF = 'webterm.test:8700'
+const ROOT = 'root-s3cret'
+const NODE = 'node-token-aaaa'
+const ORIGIN_HEADERS = { host: SELF, origin: `http://${SELF}` }
+/** Stand-in for hooks.ts `isValidNodeToken`: only NODE is a live node token. */
+const isNodeToken = (t: string) => t === NODE
+
+/** One request through the composed gate, defaults to the same-origin headers. */
+function gate(pathname: string, over: Partial<Parameters<typeof authorizeRequest>[0]> = {}): boolean {
+  return authorizeRequest({
+    headers: ORIGIN_HEADERS,
+    expectedToken: ROOT,
+    pathname,
+    isNodeToken,
+    ...over,
+  })
+}
 
 describe('sameOrigin', () => {
   it('accepts an Origin whose host matches the request Host', () => {
@@ -174,5 +192,102 @@ describe('authorize', () => {
     expect(
       authorize({ headers: { ...headers, [TOKEN_HEADER]: 's3cret' }, expectedToken: 's3cret', queryToken: 'nope' })
     ).toBe(true)
+  })
+})
+
+describe('isNodeTokenPath', () => {
+  it('allows exactly the three hook-facing paths', () => {
+    expect(isNodeTokenPath('/api/agent-status')).toBe(true)
+    expect(isNodeTokenPath('/api/context-link')).toBe(true)
+    expect(isNodeTokenPath('/api/control/approve')).toBe(true)
+  })
+  it('does not allow anything that reaches settings, workspaces, fs, name-gen or the shell', () => {
+    for (const p of [
+      '/api/settings',
+      '/api/workspaces',
+      '/api/workspaces/abc/files',
+      '/api/fs/read',
+      '/api/generate-name',
+      '/ws',
+      '/api/agent-status/extra',
+      '/api/context-link/',
+      '/api/control',
+      '/api',
+    ]) {
+      expect(isNodeTokenPath(p)).toBe(false)
+    }
+  })
+})
+
+describe('authorizeRequest — node token allowlist', () => {
+  it('accepts a node token on the allowed paths, from the header', () => {
+    expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+    expect(gate('/api/context-link', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+    expect(gate('/api/control/approve', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+  })
+  it('accepts a node token on the allowed paths from the query', () => {
+    expect(gate('/api/agent-status', { queryToken: NODE })).toBe(true)
+    expect(gate('/api/control/deny', { queryToken: NODE })).toBe(true)
+  })
+  it('still accepts the root token everywhere it did before', () => {
+    for (const p of ['/api/agent-status', '/api/context-link', '/api/settings', '/api/workspaces', '/api/fs/read', '/ws']) {
+      expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
+    }
+    expect(gate('/api/settings', { queryToken: ROOT })).toBe(true)
+  })
+  it('rejects a node token on settings, workspaces, fs, generate-name and /ws', () => {
+    for (const p of [
+      '/api/settings',
+      '/api/workspaces',
+      '/api/workspaces/abc/files',
+      '/api/fs/read',
+      '/api/generate-name',
+      '/ws',
+    ]) {
+      expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(false)
+      expect(gate(p, { queryToken: NODE })).toBe(false)
+    }
+  })
+  it('rejects an unknown token even on the allowed paths', () => {
+    expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'not-a-node-token' } })).toBe(false)
+    expect(gate('/api/agent-status', { queryToken: 'not-a-node-token' })).toBe(false)
+    expect(gate('/api/agent-status')).toBe(false)
+    expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: '' } })).toBe(false)
+  })
+  it('applies the origin check to the node-token path too', () => {
+    const hostile = { host: SELF, origin: 'https://evil.example', [TOKEN_HEADER]: NODE }
+    expect(gate('/api/agent-status', { headers: hostile })).toBe(false)
+    expect(gate('/api/context-link', { headers: { host: SELF, origin: 'https://evil.example' }, queryToken: NODE })).toBe(
+      false
+    )
+    expect(gate('/api/control/x', { headers: { host: SELF, 'sec-fetch-site': 'cross-site' }, queryToken: NODE })).toBe(
+      false
+    )
+  })
+  it('keeps the loopback no-token default working for every path', () => {
+    // expectedToken undefined === token-free loopback: nothing to prove, unchanged by this gate.
+    expect(gate('/api/settings', { expectedToken: undefined })).toBe(true)
+    expect(gate('/ws', { expectedToken: undefined })).toBe(true)
+  })
+  it('prefers the header over the query, so a stale query cannot open a path', () => {
+    // A wrong header must not be rescued by a node token in the query: the header is what the
+    // request actually proves.
+    expect(
+      gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'wrong' }, queryToken: NODE })
+    ).toBe(false)
+  })
+})
+
+describe('index.ts wiring', () => {
+  it('routes the gate through authorizeRequest + isValidNodeToken for both /api and /ws', () => {
+    // index.ts binds a port on import, so assert the wiring from its source (same pattern as the
+    // writeTokenToEnv test above).
+    const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    expect(src).toMatch(/authorizeRequest\(\{/)
+    expect(src).toMatch(/isNodeToken:\s*isValidNodeToken/)
+    expect(src).toMatch(/pathname:\s*url\.pathname/)
+    // The /ws upgrade shares `allowed`, so it inherits the node path allowlist — and `/ws` is not
+    // on that list, which is what the rejection test above pins down.
+    expect(src).toMatch(/if \(!allowed\(req, url\)\)/)
   })
 })

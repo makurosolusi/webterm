@@ -4,7 +4,7 @@ import { hasClaudeHookSettings, isContextCapable, isSafeNodeId } from '../shared
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { STALE_SWEEP_MS } from '../shared/agentStale'
 import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
-import { forgetNodeToken, hookEnv } from './hooks'
+import { forgetNodeToken, hookEnv, nodeToken } from './hooks'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { OutputLog } from './outputLog'
 import { SubscriberSet } from './subscribers'
@@ -171,10 +171,15 @@ export class Sessions {
         notices.push(wrapperMissingNotice(unwrapped.missing))
       }
     }
-    // Dua set env var yang digerbangi TERPISAH: yang pertama dibaca skill konteks-tertaut di dalam
-    // sesi agent, yang kedua dibaca perintah curl yang kita tanam lewat `--settings` (token node +
-    // batas tahan hook permission). Node tanpa keduanya mewarisi env apa adanya.
+    // Tiga set env var yang digerbangi TERPISAH:
+    //  - `WEBTERM_TOKEN` = token NODE (bukan token root server), untuk SEMUA sesi agent. Hook yang
+    //    kita tanam membaca `$WEBTERM_TOKEN` dari env anak, jadi tanpa ini hook agent tak bisa
+    //    mengautentikasi begitu token root tidak lagi diwarisi (`ptyShell.ts` membuang `WEBTERM_*`).
+    //  - `NODETERM_NODE_ID`/`NODETERM_PORT` dibaca skill konteks-tertaut di dalam sesi agent.
+    //  - `hookEnv` membawa token node untuk jalur curl `--settings` + batas tahan hook permission.
+    // Terminal biasa (tanpa `agentId`) tidak mendapat satu pun: ia tidak butuh kunci apa pun.
     const env: Record<string, string> = {
+      ...(msg.agentId ? { WEBTERM_TOKEN: nodeToken(msg.id) } : {}),
       ...(isContextCapable(msg.agentId)
         ? { NODETERM_NODE_ID: msg.id, NODETERM_PORT: String(PORT) }
         : {}),

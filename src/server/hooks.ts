@@ -106,6 +106,21 @@ export function forgetNodeToken(nodeId: string): void {
 }
 
 /**
+ * Apakah sebuah nilai adalah token node yang PERNAH dicetak proses ini?
+ *
+ * Dipakai jalur transport (lihat `authorizeRequest` di auth.ts): anak PTY hanya membawa token
+ * node-nya sendiri, bukan root `WEBTERM_TOKEN`, jadi permintaan hook bisa tetap lolos gerbang
+ * `/api/` tanpa membagikan token root ke setiap sesi agent. Nilai token adalah UUID acak, jadi
+ * pencarian map biasa cukup — perbandingan waktu-konstan tidak diperlukan (tidak ada prefix
+ * rahasia yang bisa ditebak bertahap).
+ */
+export function isValidNodeToken(token: string): boolean {
+  if (typeof token !== 'string' || token === '') return false
+  for (const known of tokens.values()) if (known === token) return true
+  return false
+}
+
+/**
  * Apakah request hook ini membuktikan identitasnya? Endpoint hook sengaja FAIL-OPEN — sebuah hook
  * tanpa token tetap memperbarui status, karena sesi yang diluncurkan sebelum token ada (atau oleh
  * jalur lain) tidak boleh kehilangan badge-nya. Yang dibawa nilai balik ini adalah apakah status
@@ -150,15 +165,14 @@ const encodeQueryValue = (v: string): string =>
  * pengguna lewat `ps`. Referensi env var hanya menyembunyikan nilainya dari teks settings, bukan
  * dari argv proses yang benar-benar berjalan.
  *
- * DUA header, bukan satu. `x-nodeterm-node-token` adalah identitas per-node (fail-open, dibaca
+ * DUA header, bukan satu. `x-nodeterm-node-token` adalah identitas per-node (dibaca
  * `stateVerified`); `x-webterm-token` adalah token TRANSPORT yang menggerbangi seluruh `/api/`
- * (`authorize` di index.ts) — tanpanya setiap POST hook dibalas 403 begitu `WEBTERM_TOKEN` diset,
+ * (`authorizeRequest` di auth.ts) — tanpanya setiap POST hook dibalas 403 begitu token diset,
  * yang mematikan badge status DAN registrasi transcript (sumber data context-link).
  *
- * Keduanya ditulis ke file header yang sama. Header transport hanya ikut ditulis bila
- * `process.env.WEBTERM_TOKEN` ada — nilainya dibaca dari env proses, jadi tetap tidak ada
- * perhitungan token kedua yang bisa menyimpang dari `resolveToken` (index.ts membaca env var yang
- * sama persis, dan `cleanEnv` di pty.ts menurunkannya ke tiap anak PTY).
+ * Keduanya memakai token NODE, bukan root `WEBTERM_TOKEN`. Node token hanya membuka
+ * `/api/agent-status`, `/api/context-link`, dan `/api/control/*`, jadi bocornya file header tidak
+ * memberi akses ke settings/workspace. Root token tidak pernah menyentuh disk.
  *
  * STDOUT DIBIARKAN HIDUP (`>/dev/null` dilepas): stdout hook adalah satu-satunya kanal yang Claude
  * Code sendiri buka untuk MENDORONG teks ke konteks agent (`hookSpecificOutput.additionalContext`
@@ -235,14 +249,13 @@ function ensureNodeSettingsDir(): string {
 /**
  * File header yang dibaca `curl -H @file` (0600). Nilai token hidup DI SINI, bukan di argv.
  *
- * Ditulis ulang setiap peluncuran supaya token node yang baru (proses restarted) dan
- * `WEBTERM_TOKEN` yang berubah sama-sama ikut. Setelah ada, file ini hanya bisa dibaca pemiliknya.
+ * Ditulis ulang setiap peluncuran supaya token node yang baru (proses restarted) ikut. Setelah
+ * ada, file ini hanya bisa dibaca pemiliknya.
  */
 function writeClaudeHeaders(nodeId: string): string {
   const path = claudeHeadersPath(nodeId)
-  const lines = [`${NODE_TOKEN_HEADER}: ${nodeToken(nodeId)}`]
-  const transport = process.env.WEBTERM_TOKEN
-  if (transport) lines.push(`${TOKEN_HEADER}: ${transport}`)
+  const token = nodeToken(nodeId)
+  const lines = [`${NODE_TOKEN_HEADER}: ${token}`, `${TOKEN_HEADER}: ${token}`]
   // `mode` 0600 berlaku saat file dibuat; berkas ini tidak pernah ada sebelum perubahan ini, dan
   // penulisan ulang mempertahankan modenya.
   writeFileSync(path, `${lines.join('\n')}\n`, { mode: 0o600 })

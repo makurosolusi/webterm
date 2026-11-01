@@ -23,6 +23,7 @@ import {
   forgetNodeToken,
   hookEnv,
   hookEventName,
+  isValidNodeToken,
   nodeToken,
   permissionModeFlag,
   stateVerified,
@@ -194,45 +195,37 @@ describe('the argv curl actually receives', () => {
 // File header. Ini yang sekarang memikul token, jadi izin dan siklus hidupnya ikut diuji.
 
 describe('hook header file', () => {
-  it('is 0600, carries both tokens, and is what the command points at', () => {
+  it('is 0600, carries the node token for both headers, and is what the command points at', () => {
+    const settingsPath = writeClaudeSettings('n-headers', 8700)
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
+      hooks: Record<string, { hooks: { command: string }[] }[]>
+    }
+    const cmd = settings.hooks.Stop[0].hooks[0].command
+    const headersPath = headersPathOf(cmd)
+    const token = nodeToken('n-headers')
+
+    expect(statSync(headersPath).mode & 0o777).toBe(0o600)
+    const content = readFileSync(headersPath, 'utf8')
+    expect(content).toContain(`${NODE_TOKEN_HEADER}: ${token}`)
+    expect(content).toContain(`${TOKEN_HEADER}: ${token}`)
+
+    // Settings JSON sendiri tidak memuat nilai token apa pun.
+    const raw = readFileSync(settingsPath, 'utf8')
+    expect(raw).not.toContain(token)
+  })
+
+  it('never writes the root transport token, even when one is configured', () => {
     const prev = process.env.WEBTERM_TOKEN
     process.env.WEBTERM_TOKEN = FAKE_TRANSPORT_TOKEN
     try {
-      const settingsPath = writeClaudeSettings('n-headers', 8700)
-      const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
-        hooks: Record<string, { hooks: { command: string }[] }[]>
-      }
-      const cmd = settings.hooks.Stop[0].hooks[0].command
-      const headersPath = headersPathOf(cmd)
-
-      expect(statSync(headersPath).mode & 0o777).toBe(0o600)
-      const content = readFileSync(headersPath, 'utf8')
-      expect(content).toContain(`${NODE_TOKEN_HEADER}: ${nodeToken('n-headers')}`)
-      // Token ber-spasi/kutip tetap utuh: file dibaca curl apa adanya, tanpa lapisan shell.
-      expect(content).toContain(`${TOKEN_HEADER}: ${FAKE_TRANSPORT_TOKEN}`)
-
-      // Settings JSON sendiri tidak memuat nilai token apa pun.
-      const raw = readFileSync(settingsPath, 'utf8')
-      expect(raw).not.toContain(nodeToken('n-headers'))
-      expect(raw).not.toContain(FAKE_TRANSPORT_TOKEN)
+      const cmd = commandFor('n-headers-root')
+      writeClaudeSettings('n-headers-root', 8700)
+      const content = readFileSync(headersPathOf(cmd), 'utf8')
+      expect(content).not.toContain(FAKE_TRANSPORT_TOKEN)
+      expect(content).toContain(`${TOKEN_HEADER}: ${nodeToken('n-headers-root')}`)
     } finally {
       if (prev === undefined) delete process.env.WEBTERM_TOKEN
       else process.env.WEBTERM_TOKEN = prev
-    }
-  })
-
-  it('omits the transport header when WEBTERM_TOKEN is absent', () => {
-    const prev = process.env.WEBTERM_TOKEN
-    delete process.env.WEBTERM_TOKEN
-    try {
-      const cmd = commandFor('n-headers-notransport')
-      writeClaudeSettings('n-headers-notransport', 8700)
-      const content = readFileSync(headersPathOf(cmd), 'utf8')
-      expect(content).toContain(`${NODE_TOKEN_HEADER}: ${nodeToken('n-headers-notransport')}`)
-      expect(content).not.toContain(TOKEN_HEADER)
-      expect(content.trim().split('\n')).toHaveLength(1)
-    } finally {
-      if (prev !== undefined) process.env.WEBTERM_TOKEN = prev
     }
   })
 
@@ -510,5 +503,21 @@ describe('guard node id di route /api', () => {
     expect(b).toContain('json(res, 400')
     // Dibandingkan dengan PEMANGGILAN-nya, bukan kata di komentar penjelas.
     expect(b.indexOf('isSafeNodeId')).toBeLessThan(b.indexOf('await renderForRequester('))
+  })
+})
+
+describe('isValidNodeToken', () => {
+  it('accepts a minted node token and rejects everything else', () => {
+    const tok = nodeToken('n-transport')
+    expect(isValidNodeToken(tok)).toBe(true)
+    expect(isValidNodeToken('nope')).toBe(false)
+    expect(isValidNodeToken('')).toBe(false)
+    expect(isValidNodeToken(tok.slice(0, -1))).toBe(false)
+  })
+  it('stops accepting a token once the node is forgotten', () => {
+    const tok = nodeToken('n-transport-gone')
+    expect(isValidNodeToken(tok)).toBe(true)
+    forgetNodeToken('n-transport-gone')
+    expect(isValidNodeToken(tok)).toBe(false)
   })
 })

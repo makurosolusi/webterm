@@ -4,7 +4,8 @@ import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
+import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
+import { isValidNodeToken } from './hooks'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -30,10 +31,24 @@ function reqUrl(req: http.IncomingMessage): URL {
  * Gate for the two surfaces that act on the machine: /api (filesystem, workspaces) and the
  * /ws upgrade (PTYs). Static assets are deliberately NOT gated — the app bundle is not a
  * privilege, and gating it would break every sub-resource request, which carries no token.
+ *
+ * Root token first, unchanged. Only when that fails does a per-node token open the narrow
+ * allowlist in `isNodeTokenPath` (hook status / context-link / control API) — so a PTY child
+ * never needs the root token, and everything else (settings, workspaces, fs, /ws) stays
+ * root-only. Re-exported for tests; the gate itself lives in auth.ts because importing this
+ * module starts a server.
  */
 function allowed(req: http.IncomingMessage, url: URL): boolean {
-  return authorize({ headers: req.headers, expectedToken: TOKEN, queryToken: url.searchParams.get(TOKEN_PARAM) })
+  return authorizeRequest({
+    headers: req.headers,
+    expectedToken: TOKEN,
+    queryToken: url.searchParams.get(TOKEN_PARAM),
+    pathname: url.pathname,
+    isNodeToken: isValidNodeToken,
+  })
 }
+
+export { isNodeTokenPath }
 
 function refuse(res: http.ServerResponse): void {
   res.statusCode = 403
