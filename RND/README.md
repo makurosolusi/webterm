@@ -139,6 +139,8 @@ Detail di `03-RENCANA.md` dan `06-BUG-RISK.md`.
   spawn); `sessionId` client tidak aman `400 invalid_session_id`; root token salah `403`;
   token node tidak bisa mint (`403`) atau baca settings (`403`), dan control nodes `401` karena
   capability hilang; body chunked 70KB tetap `413`.
+- **Batas presisi**: `sessionId` UUID dari client diterima dan benar-benar muncul di proses claude;
+  body tepat 65.536 byte `201`, 65.537 byte `413` (`max: 65536`).
 - Fase berikutnya: P3 gate approval di action berisiko + project orchestrator.
 - Risiko tersisa: qualifier capability belum ditegakkan di route, `until:idle` masih heuristik,
   context-link untuk node control-spawn belum punya workspace, SQLite WAL bug di Bun 3.43.
