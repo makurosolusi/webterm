@@ -4,6 +4,9 @@
 // Credential: the transport token in `x-webterm-token`, same as `../api` and `../inboxTransport`.
 // Never a node capability, never `actor`, never a digest/nonce: web chat cannot approve.
 import { TOKEN_HEADER } from '../api'
+import { isAbortError, peekToken } from '../transportToken'
+
+export { isAbortError }
 
 export const CHAT_PATH = '/api/central'
 /** Mirrors `CENTRAL_EVENT_TYPES` in `src/server/central/conversationModel.ts`. */
@@ -11,9 +14,6 @@ export const CHAT_EVENT_TYPES = [
   'message.created', 'part.delta', 'part.completed', 'tool.requested', 'tool.completed',
   'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done',
 ] as const
-
-const TOKEN_PARAM = 'token'
-const TOKEN_KEY = 'webterm.token'
 
 /** Typed API failure. `code` is the server's stable error code; the message is not contract. */
 export class ChatApiError extends Error {
@@ -28,10 +28,6 @@ export class ChatApiError extends Error {
     this.code = code
     this.activeTurnId = activeTurnId
   }
-}
-
-export function isAbortError(error: unknown): boolean {
-  return !!error && typeof error === 'object' && (error as { name?: unknown }).name === 'AbortError'
 }
 
 /** Short human text; never echoes a response body (it could contain server internals). */
@@ -49,23 +45,6 @@ export function chatErrorMessage(error: unknown): string {
   }
   if (error instanceof TypeError) return 'Could not reach the server.'
   return 'Something went wrong. Try again.'
-}
-
-/** Same source order as `../api`: one-time URL token, then sessionStorage. */
-function readToken(): string {
-  try {
-    if (typeof location !== 'undefined' && typeof location.href === 'string') {
-      const fromUrl = new URL(location.href).searchParams.get(TOKEN_PARAM)
-      if (fromUrl !== null && fromUrl !== '') return fromUrl
-    }
-  } catch {
-    // Exotic embedding: fall through to storage.
-  }
-  try {
-    return typeof sessionStorage === 'undefined' ? '' : sessionStorage.getItem(TOKEN_KEY) ?? ''
-  } catch {
-    return ''
-  }
 }
 
 async function readError(res: Response): Promise<{ code: string; activeTurnId: string | null }> {
@@ -90,7 +69,7 @@ export async function requestJson<T>(path: string, init: RequestInit = {}): Prom
     Accept: 'application/json',
     ...(init.headers as Record<string, string> | undefined),
   }
-  const token = readToken()
+  const token = peekToken()
   if (token !== '') headers[TOKEN_HEADER] = token
   const method = (init.method ?? 'GET').toUpperCase()
   const res = await fetch(path, { ...init, headers })

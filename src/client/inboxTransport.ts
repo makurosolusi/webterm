@@ -13,22 +13,13 @@ import type {
   InboxState,
 } from './inboxTypes'
 import { InboxApiError } from './inboxTypes'
+import { isAbortError, peekToken } from './transportToken'
 
 export const INBOX_PATH = '/api/inbox'
 /** Human approval surface: transport-token/loopback auth, never an agent capability. */
 export const APPROVAL_PATH = '/api/approvals'
 
-/** Must match TOKEN_PARAM / TOKEN_KEY in `./api`. Duplicated on purpose: importing `./api` for
- *  the values would also run its module-level URL cleanup, and this module must be usable in a
- *  test that fakes `location` without the side effect. */
-const TOKEN_PARAM = 'token'
-const TOKEN_KEY = 'webterm.token'
-
-/** True for a fetch/AbortController abort. Aborts are cancellations, not failures to display. */
-export function isAbortError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  return (error as { name?: unknown }).name === 'AbortError'
-}
+export { isAbortError }
 
 /**
  * Human-facing message for anything the client can throw. Deliberately short: the dialog shows it
@@ -51,25 +42,6 @@ export function inboxErrorMessage(error: unknown): string {
   return 'Something went wrong. Try again.'
 }
 
-/** Same source order as `./api`: the one-time URL parameter wins, sessionStorage is the fallback. */
-function readToken(): string {
-  try {
-    if (typeof location !== 'undefined' && typeof location.href === 'string') {
-      const fromUrl = new URL(location.href).searchParams.get(TOKEN_PARAM)
-      if (fromUrl !== null && fromUrl !== '') return fromUrl
-    }
-  } catch {
-    // Malformed location in an exotic embedding: fall through to sessionStorage.
-  }
-  try {
-    return typeof sessionStorage === 'undefined' ? '' : sessionStorage.getItem(TOKEN_KEY) ?? ''
-  } catch {
-    // Private mode / blocked site data makes the access itself throw. Token-free loopback still
-    // works; a token-protected server will answer 401 and the panel shows that.
-    return ''
-  }
-}
-
 async function errorCode(res: Response): Promise<string> {
   try {
     const body: unknown = await res.json()
@@ -89,7 +61,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     Accept: 'application/json',
     ...(init.headers as Record<string, string> | undefined),
   }
-  const token = readToken()
+  const token = peekToken()
   if (token !== '') headers[TOKEN_HEADER] = token
 
   // No `credentials` override: this is a same-origin app and the token travels in the header.
