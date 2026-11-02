@@ -1,7 +1,6 @@
-import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
-import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import FindBar from './FindBar'
@@ -167,8 +166,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
     <>
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
-        className={`${termNodeClass({ selected: !!selected, collapsed })} [border-top-color:var(--node-swatch)]!`}
-        style={{ '--node-swatch': swatch } as CSSProperties}
+        className={termNodeClass({ selected: !!selected, collapsed })}
         // Tanpa ini Chrome memunculkan menu bawaannya untuk `<canvas>` — "Copy Image" di atas
         // terminal. React Flow tidak menolong: `Pane` hanya meneruskan contextmenu yang target-nya
         // pane itu sendiri, jadi klik kanan di atas node tidak pernah sampai ke menu canvas.
@@ -193,18 +191,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           micActive={micActive} onToggleMic={onToggleMicProp}
           maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
-          // Lewat `extraHeader` yang sudah ada (jalur yang sama dipakai tombol Resume/Restart node
-          // agent): tombol split tidak perlu satu pun prop baru di NodeChrome/NodeToolbar.
-          extraHeader={
-            <ToolbarContainer className="nodrag pane-split-btns">
-              <ToolbarButton label="Split right" title="Split right" data-title="Split right" onClick={() => split('h', activePane)}>
-                <span className="codicon codicon-split-horizontal" aria-hidden="true" />
-              </ToolbarButton>
-              <ToolbarButton label="Split down" title="Split down" data-title="Split down" onClick={() => split('v', activePane)}>
-                <span className="codicon codicon-split-vertical" aria-hidden="true" />
-              </ToolbarButton>
-            </ToolbarContainer>
-          }
         />
         <div className="node-body">
           <PaneView

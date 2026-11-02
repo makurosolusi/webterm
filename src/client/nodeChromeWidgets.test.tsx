@@ -10,29 +10,35 @@ import UsagePill from './UsagePill'
 afterEach(cleanup)
 
 describe('NodeColorSwatch', () => {
-  it('opens a grid of swatches, marks the current one and closes on pick', () => {
+  // Popover diportal ke body (tidak ter-clip `.term-node`), jadi dicari lewat `document`.
+  const pop = () => document.querySelector('.node-swatch-pop')
+
+  it('opens a popover of swatches, marks the current one and closes on pick', () => {
     const onColor = vi.fn()
     const { container } = render(<NodeColorSwatch color={NODE_COLORS[1]} onColor={onColor} />)
-    expect(container.querySelector('.node-swatch-pop')).toBeNull()
+    expect(pop()).toBeNull()
     fireEvent.click(container.querySelector('[data-title="Color"]') as Element)
-    const swatches = container.querySelectorAll('button.node-swatch')
+    expect(pop()?.getAttribute('data-slot')).toBe('vscode-popover')
+    expect(container.querySelector('.node-swatch-pop')).toBeNull()
+    const swatches = document.querySelectorAll('button.node-swatch')
     expect(swatches).toHaveLength(NODE_COLORS.length)
-    expect(container.querySelectorAll('button.node-swatch[aria-pressed="true"]')).toHaveLength(1)
+    expect(document.querySelectorAll('button.node-swatch[aria-pressed="true"]')).toHaveLength(1)
     expect(swatches[1].getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(swatches[3])
     expect(onColor).toHaveBeenCalledWith(NODE_COLORS[3])
-    expect(container.querySelector('.node-swatch-pop')).toBeNull()
+    expect(pop()).toBeNull()
   })
 
   it('closes on Escape and on a press outside', () => {
     const { container } = render(<NodeColorSwatch color={NODE_COLORS[0]} onColor={() => {}} />)
     const open = () => fireEvent.click(container.querySelector('[data-title="Color"]') as Element)
     open()
+    expect(pop()).not.toBeNull()
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(container.querySelector('.node-swatch-pop')).toBeNull()
+    expect(pop()).toBeNull()
     open()
     fireEvent.pointerDown(document.body)
-    expect(container.querySelector('.node-swatch-pop')).toBeNull()
+    expect(pop()).toBeNull()
   })
 })
 
@@ -81,16 +87,52 @@ describe('NodeToolbar', () => {
     [...c.querySelectorAll('vscode-toolbar-button')].map((b) => b.getAttribute('data-title'))
   const icons = (c: HTMLElement) =>
     [...c.querySelectorAll('vscode-toolbar-button .codicon')].map((i) => i.className.replace('codicon ', ''))
+  const menu = () => document.querySelector('[role="menu"][data-slot="vscode-menu"]')
+  const rows = () => [...(menu()?.querySelectorAll('[role^="menuitem"]') ?? [])].map((r) => r.textContent)
 
   it('uses codicons and swaps Maximize/Restore with the state', () => {
     const a = render(<NodeToolbar {...base} maximized={false} />)
     expect(labels(a.container)).toContain('Maximize')
-    expect(icons(a.container)).toEqual(expect.arrayContaining(['codicon-refresh', 'codicon-search', 'codicon-screen-full', 'codicon-close']))
+    expect(icons(a.container)).toEqual(expect.arrayContaining(['codicon-search', 'codicon-screen-full', 'codicon-ellipsis', 'codicon-close']))
     a.unmount()
     const b = render(<NodeToolbar {...base} maximized />)
     expect(labels(b.container)).toContain('Restore')
     expect(icons(b.container)).toContain('codicon-screen-normal')
     expect(b.container.querySelector('svg')).toBeNull()
+  })
+
+  it('shows only the primary actions in the header; the rest live behind More Actions…', () => {
+    const { container } = render(
+      <NodeToolbar {...base} maximized={false} onToggleMic={() => {}} onAiName={() => {}} onToggleHideLinks={() => {}} />,
+    )
+    expect(labels(container)).toEqual(['Search', 'Maximize', 'More Actions…', 'Close (ends the session)'])
+    expect(menu()).toBeNull()
+    fireEvent.click(container.querySelector('[data-title="More Actions…"]') as Element)
+    expect(rows()).toEqual(['Refresh view', 'Dictate', 'Name with AI', 'Comments', 'Hide links'])
+  })
+
+  it('runs the chosen overflow action, reflects state as checked, and closes the menu', () => {
+    const onRefresh = vi.fn()
+    const onToggleComments = vi.fn()
+    const { container } = render(
+      <NodeToolbar {...base} onRefresh={onRefresh} onToggleComments={onToggleComments} commentsOpen commentCount={2} maximized={false} />,
+    )
+    const open = () => fireEvent.click(container.querySelector('[data-title="More Actions…"]') as Element)
+    open()
+    const comments = [...document.querySelectorAll('[role="menuitemcheckbox"]')].find((r) => r.textContent === 'Comments (2)')
+    expect(comments?.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(comments as Element)
+    expect(onToggleComments).toHaveBeenCalledTimes(1)
+    expect(menu()).toBeNull()
+    open()
+    fireEvent.click([...document.querySelectorAll('[role^="menuitem"]')].find((r) => r.textContent === 'Refresh view') as Element)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer Name with AI / Dictate / links when the node cannot do them', () => {
+    const { container } = render(<NodeToolbar {...base} maximized={false} />)
+    fireEvent.click(container.querySelector('[data-title="More Actions…"]') as Element)
+    expect(rows()).toEqual(['Refresh view', 'Comments'])
   })
 })
 

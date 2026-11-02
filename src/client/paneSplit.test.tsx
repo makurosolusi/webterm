@@ -105,10 +105,17 @@ function savedNodes(): WsNode[] {
   return JSON.parse(String(put[put.length - 1][1]?.body)).nodes as WsNode[]
 }
 
-/** Satu split lewat tombol header, ditunggu sampai pane barunya ada di DOM. */
+/** Satu split lewat menu konteks node (baris Split right/down), ditunggu sampai pane barunya ada di DOM.
+ *  Klik kanan di `.node-body` (bukan di dalam pane) → sasarannya pane aktif, seperti tombol header dulu. */
 async function splitVia(title: 'Split right' | 'Split down'): Promise<void> {
   const before = paneIds().length
-  fireEvent.click(headerBtn(title))
+  const body = document.querySelector('.react-flow__node-terminal .node-body') as HTMLElement
+  fireEvent.contextMenu(body)
+  const row = Array.from(document.querySelectorAll('[role="menu"][data-slot="vscode-menu"] button')).find(
+    (b) => b.textContent === title,
+  )
+  if (!row) throw new Error(`baris menu "${title}" tidak ada`)
+  fireEvent.click(row)
   await waitFor(() => expect(paneIds()).toHaveLength(before + 1))
 }
 

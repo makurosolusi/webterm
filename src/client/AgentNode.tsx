@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react'
 import { agentConfig, canResume, hasUsage, isContextCapable, mintsSessionId } from '../shared/workspace'
@@ -235,8 +235,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     <>
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
-        className={`${termNodeClass({ selected: !!selected, collapsed, status })} [border-top-color:var(--node-swatch)]!`}
-        style={{ '--node-swatch': swatch } as CSSProperties}
+        className={termNodeClass({ selected: !!selected, collapsed, status })}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) }}
       >
         <NodeChrome

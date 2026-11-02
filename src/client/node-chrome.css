@@ -1,20 +1,22 @@
 /* Chrome node: tab-style header, frame, glow status, toolbar, pill, comments.
-   Bentuknya mengikuti tab editor VS Code (Dark/Light Modern): header 35px, border-top 2px
-   berwarna node, border 1px `focusBorder` saat dipilih, bayangan hanya `widget-shadow`.
+   Bentuknya mengikuti editor group + tab VS Code (Dark/Light Modern): header 35px, border 1px
+   netral `editorGroup-border` (warna node hanya titik kecil di header, BUKAN border), `focusBorder`
+   saat dipilih, tanpa bayangan pada frame (shadow hanya untuk widget melayang).
    Nama selector datar (`node-*`); nama ANIMASI dipertahankan (`nt-*`) supaya cocok dengan nodeterm.
 
    Token lokal berprefix `--nc-` (usulan token global ada di laporan worker). Variabel `--vscode-tab-*`
    belum dijembatani `vscode-theme.css`, jadi tiap pemakaian membawa fallback ke token webterm. */
 :root {
   --nc-radius: 3px;
-  --nc-radius-widget: 5px;
+  --nc-radius-widget: 8px;
   --nc-header-h: 35px;
-  --nc-shadow: 0 0 8px 2px var(--vscode-widget-shadow);
+  --nc-shadow: 0 0 12px var(--vscode-widget-shadow);
   --nc-tab-active-bg: var(--vscode-tab-activeBackground, var(--panel));
   --nc-tab-active-fg: var(--vscode-tab-activeForeground, var(--text));
   --nc-tab-inactive-bg: var(--vscode-tab-inactiveBackground, var(--panel-header));
   --nc-tab-inactive-fg: var(--vscode-tab-inactiveForeground, var(--muted));
   --nc-focus: var(--vscode-focusBorder, var(--accent));
+  --nc-border: var(--vscode-editorGroup-border, var(--border));
   --nc-widget-bg: var(--vscode-editorWidget-background, var(--panel));
   --nc-widget-border: var(--vscode-editorWidget-border, var(--border));
 }
@@ -26,18 +28,13 @@
   height: 100%;
   overflow: hidden;
   background: var(--panel);
-  border: 1px solid var(--vscode-editorGroup-border, var(--border));
-  /* Hanya LEBAR-nya di sini: warnanya datang dari `style={{ borderTopColor }}` tiap node, jadi
-     garis atas memang warna node. Meng-hardcode var(--accent) di sini membuat setiap node tampak
-     biru selama satu frame sebelum inline style menimpanya. */
-  border-top-width: 2px;
+  border: 1px solid var(--nc-border);
   border-radius: var(--nc-radius);
-  box-shadow: var(--nc-shadow);
 }
 
-/* Node terpilih = tab aktif: border 1px focusBorder (sisi atas tetap warna node) + header aktif. */
+/* Node terpilih = tab aktif: border 1px focusBorder di semua sisi + header aktif. */
 .term-node--selected {
-  border-color: var(--nc-focus);
+  --nc-border: var(--nc-focus);
 }
 
 /* Working (agent di tengah turn): glow clay lembut — #d97757 yang sama dengan spinner — di
@@ -55,8 +52,7 @@
 .term-node.working {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--state-working) 35%, transparent),
-    0 0 8px 1px color-mix(in srgb, var(--state-working) 22%, transparent),
-    var(--nc-shadow);
+    0 0 8px 1px color-mix(in srgb, var(--state-working) 22%, transparent);
 }
 
 .react-flow__node:has(.term-node.working)::after {
@@ -85,8 +81,7 @@
 .term-node.attention {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--state-attention) 40%, transparent),
-    0 0 8px 1px color-mix(in srgb, var(--state-attention) 25%, transparent),
-    var(--nc-shadow);
+    0 0 8px 1px color-mix(in srgb, var(--state-attention) 25%, transparent);
 }
 
 .react-flow__node:has(.term-node.attention)::after {
@@ -116,8 +111,7 @@
 .term-node.waiting {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--state-warning) 35%, transparent),
-    0 0 6px 1px color-mix(in srgb, var(--state-warning) 16%, transparent),
-    var(--nc-shadow);
+    0 0 6px 1px color-mix(in srgb, var(--state-warning) 16%, transparent);
 }
 
 /* ---- Header (tab) ----
@@ -176,7 +170,7 @@
   --vscode-font-size: 13px;
 }
 
-/* ---- Pemilih warna node: titik di tombol 22px + popover ala widget editor ---- */
+/* ---- Pemilih warna node: titik penanda di tombol 22px + popover (`VscodePopover`, portal ke body) ---- */
 .node-swatch__dot {
   display: block;
   width: 10px;
@@ -184,21 +178,8 @@
   border-radius: 50%;
   background: var(--swatch);
 }
-.node-swatch-pop {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 10;
-  margin-top: 4px;
-  display: grid;
-  grid-template-columns: repeat(4, 16px);
-  gap: 4px;
-  padding: 6px;
-  border-radius: var(--nc-radius-widget);
-  background: var(--nc-widget-bg);
-  border: 1px solid var(--nc-widget-border);
-  box-shadow: var(--nc-shadow);
-}
+.node-swatch-pop { padding: 6px; }
+.node-swatch-grid { display: grid; grid-template-columns: repeat(4, 16px); gap: 4px; }
 .node-swatch {
   width: 16px;
   height: 16px;
@@ -250,8 +231,8 @@
 
 /* ---- Toolbar header ----
    `vscode-toolbar-container` merender flex di dalam shadow DOM; aturan host ini menjaga toolbar
-   tetap terdorong ke kanan dan menempel rapat seperti header nodeterm. Ikon adalah codicon 16px
-   yang di-slot ke tombol (CSS codicon dimuat shell). */
+   tetap terdorong ke kanan dan menempel rapat. Aksi primer saja (Search, Maximize, More Actions…,
+   Close); sisanya di menu. Ikon adalah codicon 16px yang di-slot ke tombol. */
 .node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 
 /* vscode-toolbar-button v2.4.0 tidak punya properti `disabled`; `aria-disabled` di host adalah
@@ -259,13 +240,6 @@
 .node-toolbar vscode-toolbar-button[aria-disabled='true'] {
   opacity: 0.4;
   pointer-events: none;
-}
-
-/* Badge jumlah komentar ditempel di dalam slot toolbar. */
-.node-toolbar__count {
-  margin-left: 1px;
-  font-size: 9px;
-  line-height: 1;
 }
 
 /* ---- Find bar (terminal/agent) ---- */
@@ -298,9 +272,6 @@
 .pane-divider[aria-orientation='vertical'] { width: 6px; cursor: col-resize; }
 .pane-divider[aria-orientation='horizontal'] { height: 6px; cursor: row-resize; }
 .pane-divider:hover { background: var(--vscode-sash-hoverBorder, var(--accent)); }
-.pane-split-btns { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-/* Tombol split menempel di kiri toolbar; hanya satu elemen yang boleh menyerap sisa ruang. */
-.pane-split-btns + .node-toolbar { margin-left: 0; }
 
 /* ---- Model / usage pill (agent node) ----
    Item status bar yang datar: tanpa kapsul/border, teks UI redup, minibar 4px. */
@@ -336,15 +307,15 @@
 .node-comments__empty { color: var(--vscode-descriptionForeground, var(--muted)); text-align: center; padding: 12px 8px; }
 .node-comments__composer { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--nc-widget-border); }
 .node-comments__input {
-  box-sizing: border-box; width: 100%; resize: none; min-height: 26px; max-height: 96px; padding: 4px 6px;
-  border-radius: 2px; border: 1px solid var(--vscode-input-border, var(--border));
+  box-sizing: border-box; width: 100%; resize: none; min-height: 25px; max-height: 96px; padding: 4px 6px;
+  border-radius: 4px; border: 1px solid var(--vscode-input-border, var(--border));
   background: var(--vscode-input-background, var(--sunken)); color: var(--text);
   font-family: inherit; font-size: 13px;
 }
 .node-comments__input::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted)); }
 .node-comments__input:focus { outline: 1px solid var(--nc-focus); outline-offset: -1px; }
 .node-comments__submit {
-  height: 24px; padding: 0 11px; border: 1px solid var(--vscode-button-border, transparent); border-radius: 2px;
+  height: 26px; padding: 4px 8px; border: 1px solid var(--vscode-button-border, transparent); border-radius: 4px;
   background: var(--vscode-button-background); color: var(--vscode-button-foreground);
   font-family: inherit; font-size: 13px; cursor: default;
 }
