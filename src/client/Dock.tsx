@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import {
-  Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan,
-  Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus, Inbox,
-  MessageSquare, LayoutGrid,
-} from 'lucide-react'
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
@@ -71,8 +66,8 @@ export interface DockProps {
 /** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
 export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
 
-const ICON = 22
-const STATUS_ICON = 14
+/** Glyph codicon (font ikon VS Code, dimuat di `main.tsx`); ukurannya diatur CSS per wadah. */
+const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden />
 
 /** Id aktivitas yang sedang "terpilih". Activity bar hanya punya satu slot aktif; permukaan
  *  webterm boleh terbuka bersamaan, jadi urutannya dipaku dan sisanya tampil non-aktif. */
@@ -99,39 +94,39 @@ function CanvasStatusBar(props: DockProps) {
 
   const right: VscodeStatusItem[] = [
     {
-      id: 'undo', label: '', icon: <Undo2 size={STATUS_ICON} />, tooltip: 'Undo', ariaLabel: 'Undo',
+      id: 'undo', label: '', icon: codicon('discard'), tooltip: 'Undo', ariaLabel: 'Undo',
       onClick: props.canUndo ? props.onUndo : undefined,
     },
     {
-      id: 'redo', label: '', icon: <Redo2 size={STATUS_ICON} />, tooltip: 'Redo', ariaLabel: 'Redo',
+      id: 'redo', label: '', icon: codicon('redo'), tooltip: 'Redo', ariaLabel: 'Redo',
       onClick: props.canRedo ? props.onRedo : undefined,
     },
     {
-      id: 'back', label: '', icon: <ChevronLeft size={STATUS_ICON} />, tooltip: 'Go back', ariaLabel: 'Go back',
+      id: 'back', label: '', icon: codicon('arrow-left'), tooltip: 'Go back', ariaLabel: 'Go back',
       onClick: props.canBack ? props.onBack : undefined,
     },
     {
-      id: 'forward', label: '', icon: <ChevronRight size={STATUS_ICON} />, tooltip: 'Go forward', ariaLabel: 'Go forward',
+      id: 'forward', label: '', icon: codicon('arrow-right'), tooltip: 'Go forward', ariaLabel: 'Go forward',
       onClick: props.canForward ? props.onForward : undefined,
     },
     ...(props.onSave ? [{
-      id: 'save', label: '', icon: <Save size={STATUS_ICON} />, tooltip: 'Save layout', ariaLabel: 'Save layout',
+      id: 'save', label: '', icon: codicon('save'), tooltip: 'Save layout', ariaLabel: 'Save layout',
       onClick: props.onSave,
     }] : []),
     ...(props.onLayouts ? [{
-      id: 'layouts', label: '', icon: <Layers size={STATUS_ICON} />, tooltip: 'Layouts', ariaLabel: 'Layouts',
+      id: 'layouts', label: '', icon: codicon('layout'), tooltip: 'Layouts', ariaLabel: 'Layouts',
       onClick: props.onLayouts,
     }] : []),
     ...(props.onToggleMic ? [{
-      id: 'mic', label: '', icon: <Mic size={STATUS_ICON} />, tooltip: 'Dictate', ariaLabel: 'Dictate',
+      id: 'mic', label: '', icon: codicon('mic'), tooltip: 'Dictate', ariaLabel: 'Dictate',
       onClick: props.onToggleMic,
     }] : []),
     {
-      id: 'fit', label: '', icon: <Scan size={STATUS_ICON} />, tooltip: 'Fit view', ariaLabel: 'Fit view',
+      id: 'fit', label: '', icon: codicon('screen-normal'), tooltip: 'Fit view', ariaLabel: 'Fit view',
       onClick: props.onFit,
     },
     {
-      id: 'zoom-out', label: '', icon: <Minus size={STATUS_ICON} />, tooltip: 'Zoom out', ariaLabel: 'Zoom out',
+      id: 'zoom-out', label: '', icon: codicon('zoom-out'), tooltip: 'Zoom out', ariaLabel: 'Zoom out',
       onClick: props.onZoomOut,
     },
     {
@@ -139,7 +134,7 @@ function CanvasStatusBar(props: DockProps) {
       onClick: props.onZoomTo ? () => setZoomOpen(true) : undefined,
     },
     {
-      id: 'zoom-in', label: '', icon: <Plus size={STATUS_ICON} />, tooltip: 'Zoom in', ariaLabel: 'Zoom in',
+      id: 'zoom-in', label: '', icon: codicon('zoom-in'), tooltip: 'Zoom in', ariaLabel: 'Zoom in',
       onClick: props.onZoomIn,
     },
   ]
@@ -164,7 +159,7 @@ function CanvasStatusBar(props: DockProps) {
                   className="dock-action-row"
                   onClick={() => { props.onZoomTo?.(p); setZoomOpen(false) }}
                 >
-                  <span className="dock-menu__check">{p === props.zoomPct && <Check size={13} />}</span>{p}%
+                  <span className="dock-menu__check">{p === props.zoomPct && codicon('check')}</span>{p}%
                 </Button>
               ))}
             </div>
@@ -238,16 +233,16 @@ export default function Dock(props: DockProps) {
   }
 
   const items: VscodeActivityBarItem[] = [
-    { id: 'sessions', label: 'Toggle sessions panel', icon: <PanelLeft size={ICON} /> },
+    { id: 'sessions', label: 'Toggle sessions panel', icon: codicon('layout-sidebar-left') },
     {
-      id: 'inbox', label: 'Toggle inbox panel', icon: <Inbox size={ICON} />,
+      id: 'inbox', label: 'Toggle inbox panel', icon: codicon('inbox'),
       badge: props.inboxUnread,
     },
     ...(props.onToggleChat
-      ? [{ id: 'chat', label: 'Toggle chat panel', icon: <MessageSquare size={ICON} /> }]
+      ? [{ id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion') }]
       : []),
-    { id: 'board', label: 'Board', icon: <LayoutGrid size={ICON} /> },
-    { id: 'add', label: 'Add node', icon: <Plus size={ICON} /> },
+    { id: 'board', label: 'Board', icon: codicon('project') },
+    { id: 'add', label: 'Add node', icon: codicon('add') },
   ]
 
   const onActivitySelect = (id: string) => {
@@ -285,21 +280,27 @@ export default function Dock(props: DockProps) {
         {/* Dua toggle MODE: lock pandangan dan clean view. Keduanya butuh `aria-pressed`, yang
             tidak dimiliki item navigasi activity bar. */}
         <div className="dock__modes" data-slot="dock-modes">
-          <Button
-            className="dock-btn"
+          <button
+            type="button"
+            className="vscode-activity-bar__item dock-btn"
             aria-label={props.locked ? 'Unlock view' : 'Lock view'}
             title={props.locked ? 'Unlock view (pan/zoom)' : 'Lock view (pan/zoom); nodes stay movable'}
             aria-pressed={props.locked}
             onClick={props.onToggleLock}
-          >{props.locked ? <Lock size={ICON} /> : <LockOpen size={ICON} />}</Button>
+          >
+            <span className="vscode-activity-bar__icon" aria-hidden>{codicon(props.locked ? 'lock' : 'unlock')}</span>
+          </button>
 
-          <Button
-            className="dock-btn"
+          <button
+            type="button"
+            className="vscode-activity-bar__item dock-btn"
             aria-label="Clean view"
             title="Clean view — hide all chrome (⌘./Ctrl+. to exit)"
             aria-pressed={props.cleanView}
             onClick={props.onToggleCleanView}
-          ><Focus size={ICON} /></Button>
+          >
+            <span className="vscode-activity-bar__icon" aria-hidden>{codicon('eye-closed')}</span>
+          </button>
         </div>
 
         {addOpen && (
@@ -307,13 +308,13 @@ export default function Dock(props: DockProps) {
             <DialogContent className="dock-add-dialog">
               <DialogHeader><DialogTitle>Add node</DialogTitle></DialogHeader>
               <div className="dock-add-list">
-                <Button variant="ghost" className="dock-action-row" onClick={addTerminal}><SquareTerminal size={ICON} /> Terminal</Button>
+                <Button variant="ghost" className="dock-action-row" onClick={addTerminal}>{codicon('terminal')} Terminal</Button>
                 {builtins.map((a) => {
                   const cfg = agentConfig(a)
                   return <Button key={a} variant="ghost" className="dock-action-row" title={cfg?.notice} onClick={() => addBuiltin(a)}><span className="dock-menu__glyph bg-[var(--agent-color)]" style={{ '--agent-color': cfg?.color ?? FALLBACK_AGENT_COLOR } as CSSProperties} />{cfg?.label ?? a}</Button>
                 })}
                 {visibleCustoms.map((c) => <Button key={c.id} variant="ghost" className="dock-action-row" onClick={() => addCustom(c)}><span className="dock-menu__glyph bg-[var(--agent-color)]" style={{ '--agent-color': c.color ?? FALLBACK_AGENT_COLOR } as CSSProperties} />{c.label}</Button>)}
-                <Button variant="ghost" className="dock-action-row" onClick={openWorkspaceForm}><FolderPlus size={ICON} /> Workspace…</Button>
+                <Button variant="ghost" className="dock-action-row" onClick={openWorkspaceForm}>{codicon('new-folder')} Workspace…</Button>
               </div>
             </DialogContent>
           </Dialog>

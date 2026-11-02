@@ -4,35 +4,36 @@
 @import './dock.css';
 
 :root {
-  /* Satu triple yang jadi sumber SEMUA overlay di sheet ini: border, teks, fill hover. Di
+  /* Satu triple yang jadi sumber SEMUA overlay di sheet ini: fill hover, teks redup. Di
      permukaan TERANG semuanya harus menggelapkan, bukan menerangkan — merutekannya lewat satu
-     triple membuat pembalikan tema jadi satu deklarasi, bukan puluhan edit, dan tiap alpha yang
-     sudah dipilih tetap utuh. */
+     triple membuat pembalikan tema jadi satu deklarasi. Warna permukaan/teks/aksen TIDAK
+     ditulis di sini: ia menunjuk variabel resmi Dark/Light Modern di `vscode/vscode-theme.css`,
+     satu-satunya sumber palet. */
   --tint-rgb: 255, 255, 255;
 
   /* surfaces */
-  --canvas-bg: #000000;
-  --bg: #1e1e1e;
-  --panel: #282828;
-  --panel-header: #323232;
-  --sunken: #141416;
-  --raised: #242424;
-  --overlay: #2c2c2e;
+  --canvas-bg: var(--vscode-editor-background);
+  --bg: var(--vscode-editor-background);
+  --panel: var(--vscode-sideBar-background);
+  --panel-header: var(--vscode-titleBar-activeBackground);
+  --sunken: var(--vscode-input-background);
+  --raised: var(--vscode-editorWidget-background);
+  --overlay: var(--vscode-editorWidget-background);
   /* Permukaan mengapung juga ditulis sebagai triple (ide yang sama dengan --tint-rgb): dock dan
-     menu memakai alpha berbeda di atas warna yang sama. */
-  --menu-rgb: 40, 40, 42;
-  --card-rgb: 28, 28, 30;
-  --border: rgba(var(--tint-rgb), 0.1);
+     menu memakai alpha berbeda di atas warna yang sama. Nilai = menu.background / sideBar. */
+  --menu-rgb: 31, 31, 31;
+  --card-rgb: 24, 24, 24;
+  --border: var(--vscode-panel-border);
 
   /* text */
-  --text: rgba(var(--tint-rgb), 0.85);
-  --muted: rgba(var(--tint-rgb), 0.55);
+  --text: var(--vscode-foreground);
+  --muted: var(--vscode-tab-inactiveForeground);
   --muted-2: rgba(var(--tint-rgb), 0.25);
 
   /* accent */
-  --accent: #0a84ff;
-  --accent-hover: #3a9bff;
-  --accent-text: #6cb0ff;
+  --accent: var(--vscode-focusBorder);
+  --accent-hover: var(--vscode-button-hoverBackground);
+  --accent-text: var(--vscode-textLink-foreground);
 
   /* status */
   --state-working: #d97757;
@@ -42,17 +43,17 @@
   --state-queued: #98989d;
   --caution: #ffd60a;
 
-  /* geometry */
-  --radius: 8px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
+  /* geometry: radius VS Code hanya 2/3/5/6px — tidak ada sudut besar */
+  --radius: 5px;
+  --radius-sm: 3px;
+  --radius-lg: 6px;
   --radius-node: 10px;
   /* Pengali berat drop-shadow. Shadow hitam di KEDUA tema; yang berubah seberapa keras ia boleh
      mendarat — 0.4 hitam terbaca sebagai kedalaman di atas bidang gelap dan sebagai lumpur di atas
      bidang putih. Tiap alpha box-shadow dikalikan token ini. */
   --shadow-k: 1;
   --shadow-node: 0 8px 28px rgba(0, 0, 0, calc(0.4 * var(--shadow-k)));
-  --canvas-dot: #303030;
+  --canvas-dot: var(--vscode-editorGroup-border);
   --float-gap: 22px;
   /* Geometri VS Code: title/menu 35px, editor tabs 35px, activity bar 48px, status bar 22px.
      Angka-angka ini juga hidup di `components/vscode/vscode-shell.css` sebagai tinggi
@@ -67,37 +68,18 @@
   /* Lebar LUAR kolom kontrol kiri-bawah: satu tombol plus border 1px di tiap sisi. */
   --controls-w: 30px;
 
-  /* type */
-  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
-  --font-mono: Menlo, Monaco, 'Courier New', monospace;
+  /* type: stack dan ukuran milik jembatan VS Code */
+  --font-ui: var(--vscode-font-family);
+  --font-mono: var(--vscode-editor-font-family);
 }
 
-/* Palet terang: HANGAT, bukan putih. Nilainya diambil apa adanya dari nodeterm
-   `src/renderer/styles.css` (blok `:root[data-theme='light']`) — tiap permukaan punya cast krem dan
-   tak satu pun mencapai 255, dan TINTA-nya near-black hangat, bukan #000. Alpha sekunder
-   dinaikkan karena cokelat di atas krem punya rentang lebih pendek daripada hitam di atas putih. */
+/* Palet terang = Light Modern (nilai di `vscode-theme.css`). Yang tersisa di sini hanya yang
+   bukan palet VS Code: triple alpha, hue status agent, dan berat shadow. */
 :root[data-theme='light'] {
-  --tint-rgb: 58, 48, 38;
-  --border: rgba(var(--tint-rgb), 0.14);
-  --muted: rgba(var(--tint-rgb), 0.7);
+  --tint-rgb: 59, 59, 59;
+  --menu-rgb: 255, 255, 255;
+  --card-rgb: 248, 248, 248;
   --muted-2: rgba(var(--tint-rgb), 0.4);
-
-  --bg: #fbf8f3;
-  --panel: #f3efe7;
-  --panel-header: #eae5db;
-  --sunken: #efeae1;
-  --raised: #fdfbf7;
-  --overlay: #fdfbf7;
-  --menu-rgb: 253, 251, 247;
-  --card-rgb: 253, 251, 247;
-  /* Canvas ada DI BAWAH setiap node, jadi ia satu-satunya permukaan yang harus lebih gelap dari
-     panel — kalau tidak, node melebur ke bidangnya dan layout kehilangan tepi. */
-  --canvas-bg: #f4efe6;
-  --canvas-dot: #eae3d6;
-
-  --accent: #007aff;
-  --accent-hover: #0a6ed1;
-  --accent-text: #0060df;
 
   /* Hue status disetel untuk bidang gelap; di bidang pucat kuning dan oranye jatuh di bawah
      ambang kontras apa pun. Digelapkan di sini, bukan di ~50 call site-nya. */
@@ -117,8 +99,33 @@ body {
   background: var(--canvas-bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--vscode-font-size);
   -webkit-font-smoothing: antialiased;
+  /* Chrome VS Code memakai kursor default; pointer hanya untuk link. */
+  cursor: default;
+}
+
+/* Seleksi teks memakai warna seleksi tema, bukan biru bawaan browser. */
+::selection { background: var(--vscode-selection-background); }
+::placeholder { color: var(--vscode-input-placeholderForeground); opacity: 1; }
+
+/* Fokus keyboard: outline 1px focusBorder, offset -1px, hanya `:focus-visible` (klik mouse tidak
+   menggambar cincin). `:where` menjaga spesifisitas nol supaya aturan komponen tetap menang. */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* Scrollbar VS Code: 10px, tanpa track, thumb persegi dengan tiga status. Properti standar
+   `scrollbar-width` sengaja TIDAK dipasang di Chromium karena ia menonaktifkan ::-webkit-scrollbar. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); }
+::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground); }
+::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--vscode-scrollbarSlider-background) transparent; }
 }
 
 /* Minimap dock */
@@ -192,10 +199,12 @@ body {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  padding: 0 6px 0 8px;
-  background: var(--vscode-titleBar-background, var(--panel-header));
-  border-bottom: 1px solid var(--vscode-titleBar-border, var(--border));
-  color: var(--vscode-titleBar-activeForeground, var(--text));
+  padding: 0 8px 0 0;
+  background: var(--vscode-titleBar-activeBackground);
+  border-bottom: 1px solid var(--vscode-titleBar-border);
+  color: var(--vscode-titleBar-activeForeground);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .brand {
@@ -203,19 +212,17 @@ body {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  /* Ruang napas dari menu bar di sebelah kanannya; menunya sendiri yang memberi padding kiri. */
-  padding-right: 4px;
+  /* Slot ikon app selebar title bar (35px) seperti VS Code; nama di sebelahnya. */
+  padding: 0 4px 0 10px;
   white-space: nowrap;
 }
 .brand__mark {
-  width: 16px;
-  height: 16px;
+  font-size: 16px;
   color: var(--accent);
 }
 .brand__name {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--vscode-titleBar-activeForeground, var(--text));
+  color: var(--vscode-titleBar-activeForeground);
 }
 
 /* Tengah title bar = command center VS Code. Di sini ia memuat identitas workspace aktif, dan
@@ -229,21 +236,37 @@ body {
   min-width: 0;
   padding: 0 8px;
 }
+/* Pil command center: 22px, radius 6px, latar & border dari token commandCenter. */
 .app-titlebar__name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: min(600px, 100%);
+  height: 22px;
+  padding: 0 8px;
   overflow: hidden;
-  color: var(--vscode-descriptionForeground, var(--muted));
+  background: var(--vscode-commandCenter-background);
+  border: 1px solid var(--vscode-commandCenter-border);
+  border-radius: 6px;
+  color: var(--vscode-commandCenter-foreground);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.app-titlebar__name:empty { display: none; }
+.app-titlebar__name:hover {
+  background: var(--vscode-commandCenter-activeBackground);
+  border-color: var(--vscode-commandCenter-activeBorder);
 }
 .app-titlebar__rename {
   width: min(320px, 40vw);
   height: 24px;
   padding: 2px 6px;
-  background: var(--vscode-input-background, var(--sunken));
-  border: 1px solid var(--vscode-focusBorder, var(--border));
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-focusBorder);
   border-radius: 2px;
-  color: var(--vscode-input-foreground, var(--text));
+  color: var(--vscode-input-foreground);
   font-family: inherit;
   font-size: 12px;
   outline: none;
@@ -259,23 +282,18 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  color: var(--muted);
-  cursor: pointer;
+  border-radius: 5px;
+  color: var(--vscode-icon-foreground);
+  font-size: 16px;
+  cursor: default;
 }
-.titlebar__action:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(var(--tint-rgb), 0.1));
-  color: var(--text);
-}
-.titlebar__action svg {
-  width: 16px;
-  height: 16px;
-}
+.titlebar__action:hover { background: var(--vscode-toolbar-hoverBackground); }
+.titlebar__action:active { background: var(--vscode-toolbar-activeBackground); }
 
 /* ---- Editor tabs: SATU strip 35px untuk workspace + aksi baris ---- */
 .app-tabs {
@@ -285,8 +303,10 @@ body {
   display: flex;
   align-items: stretch;
   min-width: 0;
-  background: var(--vscode-editorGroupHeader-tabsBackground, var(--panel-header));
-  border-bottom: 1px solid var(--vscode-editorGroup-border, var(--border));
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder);
+  user-select: none;
+  -webkit-user-select: none;
 }
 /* Primitif membawa `width: 100%`; di sini ia flex item yang boleh menyusut dan menggulung. */
 .app-tabs > .vscode-editor-tabs {
@@ -299,7 +319,7 @@ body {
   display: flex;
   flex: none;
   align-items: stretch;
-  border-left: 1px solid var(--vscode-editorGroup-border, var(--border));
+  border-left: 1px solid var(--vscode-tab-border);
 }
 .app-tabs__action {
   display: inline-flex;
@@ -309,21 +329,15 @@ body {
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--vscode-tab-inactiveForeground, var(--muted));
-  cursor: pointer;
-}
-.app-tabs__action:hover:not(:disabled) {
-  background: var(--vscode-toolbar-hoverBackground, rgba(var(--tint-rgb), 0.1));
-  color: var(--vscode-tab-activeForeground, var(--text));
-}
-.app-tabs__action:disabled {
-  opacity: 0.35;
+  color: var(--vscode-tab-inactiveForeground);
+  font-size: 16px;
   cursor: default;
 }
-.app-tabs__action svg {
-  width: 16px;
-  height: 16px;
+.app-tabs__action:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-tab-activeForeground);
 }
+.app-tabs__action:disabled { opacity: 0.4; }
 
 /* Status bar menempati baris grid terakhir; primitifnya sendiri yang memegang tinggi 22px. */
 .app-statusbar {

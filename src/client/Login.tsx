@@ -27,9 +27,9 @@ export default function Login({ onSubmit }: Props) {
   }
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[var(--canvas-bg)] font-mono text-foreground">
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[var(--vscode-editor-background)] text-foreground">
       <Brand gradientId="login-brand" />
-      <Label htmlFor="login-access-token" className="text-[13px] font-normal text-muted-foreground">
+      <Label htmlFor="login-access-token" className="text-[13px] font-normal text-[var(--vscode-descriptionForeground)]">
         Enter your access token
       </Label>
       <form onSubmit={submit} className="flex flex-col items-center gap-2.5">
@@ -47,7 +47,7 @@ export default function Login({ onSubmit }: Props) {
         <Button type="submit" disabled={pending}>
           Unlock
         </Button>
-        {error && <div className="text-xs text-destructive">Token salah</div>}
+        {error && <div role="alert" className="text-xs text-[var(--vscode-errorForeground)]">Token salah</div>}
       </form>
     </div>
   )

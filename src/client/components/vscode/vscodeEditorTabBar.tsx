@@ -6,7 +6,7 @@ export interface VscodeEditorTab {
   id: string
   label: string
   icon?: ReactNode
-  /** Shows a 7px dot in place of the close affordance until the tab is hovered. */
+  /** Shows a 7px dot in the close slot until the tab is hovered or focused. */
   dirty?: boolean
   /** Defaults to true; pass false for pinned/preview tabs. */
   closable?: boolean
@@ -19,6 +19,8 @@ export interface VscodeEditorTabBarProps {
   activeId: string | null
   onActivate: (id: string) => void
   onClose?: (id: string) => void
+  /** Double-click on a tab (VS Code: pin/keep the preview tab). */
+  onDoubleClick?: (id: string) => void
   className?: string
   ariaLabel?: string
 }
@@ -28,7 +30,7 @@ export interface VscodeEditorTabBarProps {
  * affordance, and a 1px accent top border on the active tab.
  *
  * Focus and selection are separate: Left/Right/Home/End move focus only, Enter/Space
- * (or a click) activates, and Delete or Cmd/Ctrl+W closes the focused tab. The active
+ * (or a click) activates, and Delete, Cmd/Ctrl+W or a middle-click closes a tab. The active
  * tab is scrolled into view when it changes, and vertical wheel deltas scroll the
  * strip horizontally.
  */
@@ -37,6 +39,7 @@ export function VscodeEditorTabBar({
   activeId,
   onActivate,
   onClose,
+  onDoubleClick,
   className,
   ariaLabel = 'Editor tabs',
 }: VscodeEditorTabBarProps) {
@@ -149,6 +152,7 @@ export function VscodeEditorTabBar({
         const active = tab.id === activeId
         const focusable = (focusedId ?? activeId) === tab.id
         const closeable = tab.closable !== false && Boolean(onClose)
+        const dirtyDot = <span className="vscode-editor-tab__dirty" data-slot="vscode-editor-tab-dirty" />
         return (
           <div
             key={tab.id}
@@ -174,6 +178,16 @@ export function VscodeEditorTabBar({
                 setFocusedId(tab.id)
                 onActivate(tab.id)
               }}
+              onDoubleClick={() => onDoubleClick?.(tab.id)}
+              // Middle button: suppress browser autoscroll on press, close on release (VS Code).
+              onMouseDown={(event) => {
+                if (event.button === 1) event.preventDefault()
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) return
+                event.preventDefault()
+                closeTab(tab)
+              }}
               onFocus={() => setFocusedId(tab.id)}
               onKeyDown={(event) => onTabKeyDown(event, tab)}
             >
@@ -183,13 +197,6 @@ export function VscodeEditorTabBar({
                 </span>
               ) : null}
               <span className="vscode-editor-tab__label">{tab.label}</span>
-              {tab.dirty ? (
-                <span
-                  className="vscode-editor-tab__dirty"
-                  data-slot="vscode-editor-tab-dirty"
-                  aria-hidden="true"
-                />
-              ) : null}
             </button>
             {closeable ? (
               <button
@@ -204,16 +211,13 @@ export function VscodeEditorTabBar({
                   closeTab(tab)
                 }}
               >
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-                  <path
-                    d="M4.5 4.5l7 7m0-7l-7 7"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.1"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                {tab.dirty ? dirtyDot : null}
+                <span className="codicon codicon-close" aria-hidden="true" />
               </button>
+            ) : tab.dirty ? (
+              <span className="vscode-editor-tab__close" aria-hidden="true">
+                {dirtyDot}
+              </span>
             ) : null}
           </div>
         )

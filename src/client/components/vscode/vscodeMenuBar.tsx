@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import './vscode-shell.css'
 import './vscode-overlay.css'
+import './vscode-menu.css'
 
 export interface VscodeMenuBarItem {
   type?: 'item'
@@ -222,7 +223,7 @@ function MenuRow({ entry, index, indent, registerRef, onFocus, onActivate, onClo
   }
 
   return (
-    <div role="none" className="vscode-menu__row">
+    <div role="none" className="vscode-menu-bar__row">
       <button
         ref={(element) => {
           buttonRef.current = element
@@ -256,14 +257,12 @@ function MenuRow({ entry, index, indent, registerRef, onFocus, onActivate, onClo
         }}
       >
         <span className="vscode-menu__icon" aria-hidden="true">
-          {entry.icon ?? (entry.checked ? '✓' : null)}
+          {entry.icon ?? (entry.checked ? <span className="codicon codicon-check" /> : null)}
         </span>
         <span className="vscode-menu__label">{entry.label}</span>
         {entry.keybinding ? <span className="vscode-menu__keybinding">{entry.keybinding}</span> : null}
         {hasSubmenu ? (
-          <span className="vscode-menu__submenu-caret" aria-hidden="true">
-            ›
-          </span>
+          <span className="vscode-menu__submenu-caret codicon codicon-chevron-right" aria-hidden="true" />
         ) : null}
       </button>
       {hasSubmenu && submenuOpen ? (
@@ -290,7 +289,8 @@ function MenuRow({ entry, index, indent, registerRef, onFocus, onActivate, onClo
  * Keyboard: ArrowDown/Enter/Space opens, ArrowLeft/ArrowRight move between top-level
  * menus (opening the next one when a menu is open), Escape closes, and inside a menu
  * ArrowUp/ArrowDown/Home/End move, Enter/Space activate, ArrowRight opens a submenu,
- * ArrowLeft closes it or moves to the previous top-level menu.
+ * ArrowLeft closes it or moves to the previous top-level menu. A lone Alt press focuses
+ * the first menu.
  */
 export function VscodeMenuBar({
   menus,
@@ -314,6 +314,30 @@ export function VscodeMenuBar({
     document.addEventListener('mousedown', onPointerDown)
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [openMenu, onOpenChange])
+
+  // VS Code: a lone Alt press (no other key in between) moves focus to the menu bar.
+  // Ignored while typing in a field or terminal (xterm's helper is a textarea) so a
+  // bare Alt never steals focus from them.
+  useEffect(() => {
+    let alone = false
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      alone = event.key === 'Alt' && !event.repeat
+    }
+    const onKeyUp = (event: globalThis.KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const typing = target?.closest('input, textarea, select, [contenteditable]') != null
+      if (event.key === 'Alt' && alone && !typing) {
+        buttonRefs.current.values().next().value?.focus()
+      }
+      alone = false
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keyup', onKeyUp)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keyup', onKeyUp)
+    }
+  }, [])
 
   const switchMenu = (delta: 1 | -1) => {
     if (!openMenu) return

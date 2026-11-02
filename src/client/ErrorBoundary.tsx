@@ -23,16 +23,16 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     return (
       <div
         role="alert"
-        className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-background p-6 text-center font-sans text-foreground"
+        className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-[var(--vscode-editor-background)] p-6 text-center font-sans text-[var(--vscode-foreground)]"
       >
         <h1 className="m-0 text-lg font-semibold">Something broke</h1>
-        <pre className="m-0 max-h-[40vh] max-w-[560px] overflow-auto whitespace-pre-wrap rounded-lg bg-muted px-3.5 py-2.5 font-mono text-[13px] text-destructive">
+        <pre className="m-0 max-h-[40vh] max-w-[560px] overflow-auto whitespace-pre-wrap rounded-[5px] border border-[var(--vscode-editorWidget-border)] bg-[var(--vscode-editorWidget-background)] px-3.5 py-2.5 font-mono text-[13px] text-[var(--vscode-errorForeground)]">
           {error.message}
         </pre>
         <Button
           type="button"
           onClick={() => location.reload()}
-          className="cursor-pointer rounded-lg border border-border bg-card px-4.5 py-2 text-sm text-foreground shadow-none hover:bg-accent"
+          className="h-6 cursor-default rounded-sm border-0 bg-[var(--vscode-button-background)] px-3 py-0 text-[13px] text-[var(--vscode-button-foreground)] shadow-none hover:bg-[var(--vscode-button-hoverBackground)]"
         >
           Reload
         </Button>

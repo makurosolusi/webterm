@@ -236,8 +236,11 @@ describe('VscodeEditorTabBar', () => {
     expect(screen.getByRole('tablist', { name: 'Editor tabs' })).toBeTruthy()
     const one = screen.getByRole('tab', { name: 'one.ts' })
     expect(one.getAttribute('aria-selected')).toBe('true')
-    expect(one.querySelector('[data-slot="vscode-editor-tab-dirty"]')).not.toBeNull()
-    expect(screen.getByRole('button', { name: 'Close one.ts' })).toBeTruthy()
+    // Titik dirty menempati slot close (seperti VS Code), bukan tombol tab.
+    const close = screen.getByRole('button', { name: 'Close one.ts' })
+    expect(one.querySelector('[data-slot="vscode-editor-tab-dirty"]')).toBeNull()
+    expect(close.querySelector('[data-slot="vscode-editor-tab-dirty"]')).not.toBeNull()
+    expect(close.querySelector('.codicon-close')).not.toBeNull()
     expect(screen.queryByRole('button', { name: 'Close pinned.ts' })).toBeNull()
   })
 
@@ -271,6 +274,83 @@ describe('VscodeEditorTabBar', () => {
 
     fireEvent.keyDown(two, { key: 'Delete' })
     expect(onClose).toHaveBeenCalledWith('two')
+  })
+})
+
+describe('VscodeEditorTabBar — VS Code tab gestures', () => {
+  it('closes on middle click and reports double click', () => {
+    const onClose = vi.fn()
+    const onDoubleClick = vi.fn()
+    render(
+      <VscodeEditorTabBar
+        activeId="a"
+        onActivate={() => {}}
+        onClose={onClose}
+        onDoubleClick={onDoubleClick}
+        tabs={[{ id: 'a', label: 'a.ts' }, { id: 'b', label: 'b.ts', closable: false }]}
+      />,
+    )
+    fireEvent(screen.getByRole('tab', { name: 'a.ts' }), new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+    expect(onClose).toHaveBeenCalledWith('a')
+    fireEvent(screen.getByRole('tab', { name: 'b.ts' }), new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    fireEvent.doubleClick(screen.getByRole('tab', { name: 'b.ts' }))
+    expect(onDoubleClick).toHaveBeenCalledWith('b')
+  })
+
+  it('draws the dirty dot in the close slot of a non-closable tab too', () => {
+    render(<VscodeEditorTabBar activeId="p" onActivate={() => {}} tabs={[{ id: 'p', label: 'p.ts', dirty: true, closable: false }]} />)
+    expect(document.querySelector('.vscode-editor-tab__close [data-slot="vscode-editor-tab-dirty"]')).not.toBeNull()
+  })
+})
+
+describe('codicon glyphs and chrome css', () => {
+  it('uses codicons for menu check/caret and breadcrumb separators, not text or inline svg', () => {
+    render(<MenuHarness />)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'View' }))
+    expect(document.querySelector('.codicon-check')).not.toBeNull()
+    cleanup()
+    render(<VscodeBreadcrumbs segments={[{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }]} />)
+    expect(document.querySelector('.vscode-breadcrumbs__separator .codicon-chevron-right')).not.toBeNull()
+    expect(document.querySelector('.vscode-breadcrumbs svg')).toBeNull()
+  })
+
+  it('keeps chrome cursors default and tabs separated by tab.border', () => {
+    expect(css).not.toMatch(/cursor:\s*(pointer|not-allowed)/)
+    expect(css).toContain('border-right: 1px solid var(--vscode-tab-border)')
+    for (const tone of ['remote', 'prominent', 'debugging', 'warning', 'error']) {
+      expect(css).toContain(`[data-tone='${tone}']`)
+    }
+  })
+
+  it('renders every status tone through data-tone', () => {
+    render(<VscodeStatusBar left={[]} right={(['prominent', 'debugging'] as const).map((tone) => ({ id: tone, label: tone, tone }))} />)
+    expect(screen.getByText('debugging').closest('[data-slot]')?.getAttribute('data-tone')).toBe('debugging')
+    expect(screen.getByText('prominent').closest('[data-slot]')?.getAttribute('data-tone')).toBe('prominent')
+  })
+})
+
+describe('VscodeMenuBar — Alt focuses the menu bar', () => {
+  it('focuses the first menu on a lone Alt tap but not when another key was pressed or typing', () => {
+    render(<><input aria-label="field" /><MenuHarness /></>)
+    const file = screen.getByRole('menuitem', { name: 'File' })
+
+    fireEvent.keyDown(document.body, { key: 'Alt' })
+    fireEvent.keyUp(document.body, { key: 'Alt' })
+    expect(document.activeElement).toBe(file)
+
+    file.blur()
+    fireEvent.keyDown(document.body, { key: 'Alt' })
+    fireEvent.keyDown(document.body, { key: 'k' })
+    fireEvent.keyUp(document.body, { key: 'Alt' })
+    expect(document.activeElement).not.toBe(file)
+
+    const field = screen.getByLabelText('field')
+    field.focus()
+    fireEvent.keyDown(field, { key: 'Alt' })
+    fireEvent.keyUp(field, { key: 'Alt' })
+    expect(document.activeElement).toBe(field)
   })
 })
 

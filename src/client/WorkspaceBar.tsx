@@ -1,7 +1,8 @@
 // Title bar + editor tab strip aplikasi, mengikuti chrome VS Code.
 //
-// Baris 1 (35px): brand, `VscodeMenuBar` (File / Workspace / View), identitas workspace aktif di
-// tengah, dan aksi kanan (logout). Rename workspace memakai command center di tengah itu: input
+// Baris 1 (35px): brand, `VscodeMenuBar` (File / Help — urutan & label mengikuti VS Code; menu
+// yang tak punya padanan di webterm tidak dibuat), identitas workspace aktif di tengah, dan aksi
+// kanan (logout). Rename workspace memakai command center di tengah itu: input
 // muncul di tempat yang sudah terlihat, bukan di dalam tab yang bisa tergulung keluar layar.
 //
 // Baris 2 (35px): `VscodeEditorTabBar` memuat satu tab per workspace — status dot sebagai ikon,
@@ -14,12 +15,10 @@
 // bawahnya): tombol `+` adalah jalan masuk yang sama, dan chrome yang baru muncul setelah
 // workspace pertama menggeser canvas tepat saat pengguna menekan tombol.
 import { useMemo, useState } from 'react'
-import { LogOut, MoreVertical, Plus, SquareTerminal } from 'lucide-react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
 import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
 import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
@@ -47,9 +46,9 @@ export interface WorkspaceBarProps {
   onLogout?: () => void
   /** Ada token tersimpan → tampilkan tombol logout. Loopback tanpa token: tak ada yang di-logout. */
   showLogout?: boolean
-  /** Menu View: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
+  /** File > Settings…: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
   onOpenSettings?: () => void
-  /** Menu View: membuka Help. */
+  /** Help > Keyboard Shortcuts Reference: membuka overlay Help. */
   onOpenHelp?: () => void
 }
 
@@ -103,9 +102,13 @@ export default function WorkspaceBar({
     if (window.confirm(deleteWorkspaceMessage(projectName, sessions))) onDeleteWorkspace(projectId)
   }
 
-  const workspaceItems: VscodeMenuEntry[] = []
+  // File: New → Rename/Delete (workspace aktif) → Settings → Logout, seperti File di VS Code
+  // (aksi dokumen, lalu Preferences, lalu keluar). Delete tidak diberi warna bahaya: VS Code tak
+  // mewarnai item menu, dan konfirmasi `window.confirm` sudah menjaga aksinya.
+  const fileItems: VscodeMenuEntry[] = [{ id: 'new-workspace', label: 'New Workspace', onSelect: onNewWorkspace }]
   if (activeGroup) {
-    workspaceItems.push(
+    fileItems.push(
+      { type: 'separator' },
       {
         id: 'rename-workspace',
         label: 'Rename Workspace…',
@@ -114,30 +117,21 @@ export default function WorkspaceBar({
       {
         id: 'delete-workspace',
         label: 'Delete Workspace',
-        danger: true,
         onSelect: () => deleteWorkspace(activeGroup.projectId, activeGroup.projectName, activeGroup.sessions.length),
       },
-      { type: 'separator' },
     )
   }
-  workspaceItems.push({ id: 'new-workspace', label: 'New Workspace', onSelect: onNewWorkspace })
+  if (onOpenSettings) fileItems.push({ type: 'separator' }, { id: 'settings', label: 'Settings…', onSelect: onOpenSettings })
+  if (showLogout && onLogout) fileItems.push({ type: 'separator' }, { id: 'logout', label: 'Logout', onSelect: onLogout })
 
-  const fileItems: VscodeMenuEntry[] = [
-    { id: 'new-workspace', label: 'New Workspace', onSelect: onNewWorkspace },
-  ]
-  if (showLogout && onLogout) {
-    fileItems.push({ type: 'separator' }, { id: 'logout', label: 'Logout', onSelect: onLogout })
+  const menus: VscodeMenu[] = [{ id: 'file', label: 'File', items: fileItems }]
+  if (onOpenHelp) {
+    menus.push({
+      id: 'help',
+      label: 'Help',
+      items: [{ id: 'shortcuts', label: 'Keyboard Shortcuts Reference', onSelect: onOpenHelp }],
+    })
   }
-
-  const viewItems: VscodeMenuEntry[] = []
-  if (onOpenSettings) viewItems.push({ id: 'settings', label: 'Settings…', onSelect: onOpenSettings })
-  if (onOpenHelp) viewItems.push({ id: 'help', label: 'Help', onSelect: onOpenHelp })
-
-  const menus: VscodeMenu[] = [
-    { id: 'file', label: 'File', items: fileItems },
-    { id: 'workspace', label: 'Workspace', items: workspaceItems },
-  ]
-  if (viewItems.length > 0) menus.push({ id: 'view', label: 'View', items: viewItems })
 
   const tabs: VscodeEditorTab[] = groups.map((g) => ({
     id: g.projectId,
@@ -150,7 +144,7 @@ export default function WorkspaceBar({
     <>
       <header className="app-titlebar">
         <div className="brand">
-          <SquareTerminal className="brand__mark" aria-hidden />
+          <span className="brand__mark codicon codicon-terminal" aria-hidden />
           <span className="brand__name">webterm</span>
         </div>
 
@@ -179,15 +173,15 @@ export default function WorkspaceBar({
 
         <div className="app-titlebar__actions">
           {showLogout && (
-            <Button
+            <button
               type="button"
               className="titlebar__action"
               title="Logout"
               aria-label="Logout"
               onClick={onLogout}
             >
-              <LogOut aria-hidden />
-            </Button>
+              <span className="codicon codicon-sign-out" aria-hidden />
+            </button>
           )}
         </div>
       </header>
@@ -200,7 +194,7 @@ export default function WorkspaceBar({
           ariaLabel="Workspaces"
         />
         <div className="app-tabs__actions">
-          <Button
+          <button
             type="button"
             className="app-tabs__action"
             title="Workspace options"
@@ -212,17 +206,17 @@ export default function WorkspaceBar({
               setMenu({ x: r.left, y: r.bottom + MENU_GAP })
             }}
           >
-            <MoreVertical aria-hidden />
-          </Button>
-          <Button
+            <span className="codicon codicon-ellipsis" aria-hidden />
+          </button>
+          <button
             type="button"
             className="app-tabs__action"
             title="New workspace"
             aria-label="New workspace"
             onClick={onNewWorkspace}
           >
-            <Plus aria-hidden />
-          </Button>
+            <span className="codicon codicon-add" aria-hidden />
+          </button>
         </div>
       </div>
 

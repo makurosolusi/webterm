@@ -18,8 +18,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--vscode-activityBar-background, var(--panel-header));
-  border-right: 1px solid var(--vscode-activityBar-border, var(--border));
+  background: var(--vscode-activityBar-background);
+  border-right: 1px solid var(--vscode-activityBar-border);
 }
 
 /* Primitif membawa latar sendiri; di dalam rail ia memakai latar rail supaya satu permukaan. */
@@ -27,6 +27,7 @@
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
+  border-right: 0; /* `.dock` yang memegang garis pemisah */
   background: transparent;
 }
 
@@ -36,40 +37,13 @@
   display: flex;
   flex-direction: column;
   flex: none;
-  padding: 2px 0 4px;
-  border-top: 1px solid var(--vscode-activityBar-border, var(--border));
 }
 
-/* Tinggi 40px, bukan 48px: dua tombol mode tidak boleh bersaing dengan item navigasi utama. */
-.dock-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 40px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-left: 2px solid transparent;
-  color: var(--vscode-activityBar-inactiveForeground, var(--muted));
-  cursor: pointer;
-}
-.dock-btn:hover:not(:disabled) {
-  background: var(--vscode-activityBar-hoverBackground, rgba(var(--tint-rgb), 0.06));
-  color: var(--vscode-activityBar-activeForeground, var(--text));
-}
+/* Dimensi 48x48 + indikator 2px datang dari `.vscode-activity-bar__item` (kelas dipakai bersama);
+   di sini hanya state toggle, karena item biasa memakai `data-active`, bukan `aria-pressed`. */
 .dock-btn[aria-pressed='true'] {
-  border-left-color: var(--vscode-activityBar-activeBorder, var(--accent));
-  color: var(--vscode-activityBar-activeForeground, var(--text));
-}
-.dock-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.dock-btn svg {
-  width: 22px;
-  height: 22px;
+  border-left-color: var(--vscode-activityBar-activeBorder);
+  color: var(--vscode-activityBar-foreground);
 }
 
 /* Titik warna agent di dalam dialog, bukan item rail. */
@@ -107,8 +81,9 @@
   justify-content: center;
   width: 13px;
   flex-shrink: 0;
-  color: var(--accent);
+  color: var(--vscode-foreground);
 }
+.dock-menu__check > .codicon { font-size: 13px; }
 
 /* Form workspace baru: baris input, bukan baris tombol. */
 .dock-menu__form {

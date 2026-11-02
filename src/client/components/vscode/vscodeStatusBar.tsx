@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import './vscode-shell.css'
 
-export type VscodeStatusTone = 'default' | 'remote' | 'warning' | 'error'
+/** Item tones mirror the `statusBarItem.*` color keys (remote, prominent, warning, error) and debugging bar. */
+export type VscodeStatusTone = 'default' | 'remote' | 'prominent' | 'debugging' | 'warning' | 'error'
 
 export interface VscodeStatusItem {
   id: string
