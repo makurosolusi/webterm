@@ -4,6 +4,7 @@ import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { centralEnabled } from '../central/centralModel'
 import { centralRuntimeKind } from '../central/runtime/runtimeFlag'
 import type { RuntimeKind } from '../central/runtime/centralRuntime'
+import { flagOn } from '../envFlag'
 import { recordIngress } from './channelStatus'
 import type { TelegramCentralPort } from './channelDispatch'
 import type { ChannelsRuntime } from './channelsRuntime'
@@ -28,7 +29,7 @@ export function buildTelegramCentralPort(
   env: NodeJS.ProcessEnv = process.env,
   create: typeof createTelegramCentralPort = createTelegramCentralPort
 ): TelegramCentralPort | undefined {
-  if (env[TELEGRAM_CENTRAL_CHAT_ENV] !== 'on' || !runtime) return undefined
+  if (!flagOn(env[TELEGRAM_CENTRAL_CHAT_ENV]) || !runtime) return undefined
   if (!centralTelegramEnabled(env[CENTRAL_TELEGRAM_ENV]) || !centralEnabled(env[CENTRAL_ENV])) return undefined
   const kind: RuntimeKind = centralRuntimeKind(env[CENTRAL_RUNTIME_ENV])
   return kind === 'off' ? undefined : create({ db: runtime.db, kind })

@@ -5,9 +5,10 @@
 import type { Database } from 'bun:sqlite'
 import { allRows, execWrite, getRow } from '../../ledger/ledgerCore'
 import {
-  type CentralEventType, conversationIdForScope, isActiveTurnStatus, redactSecrets,
+  type CentralEventType, conversationIdForScope, isActiveTurnStatus,
   scopeFromConversationId, type MessagePart, type TurnStatus,
 } from '../conversationModel'
+import { PERSIST_LIMITS, redactValue } from '../../redactSecrets'
 import {
   appendConversationEvent, appendMessage, getConversation, getOrCreateConversation, getTurn,
   updateTurn, type Conversation, type Message, type Turn,
@@ -118,7 +119,7 @@ export function finalizeTurn(
   const text = result.text === '' ? state.text : result.text
   execWrite(
     db, 'UPDATE central_message SET parts_json = ?, state = ? WHERE id = ?',
-    JSON.stringify(redactSecrets(assistantParts(state, text))),
+    JSON.stringify(redactValue(assistantParts(state, text), PERSIST_LIMITS)),
     status === 'succeeded' ? 'complete' : status, assistantId
   )
   const turn = updateTurn(db, {

@@ -8,7 +8,7 @@ import {
   TELEGRAM_TOKEN_ENV,
   TELEGRAM_TOKEN_ENV_LEGACY,
 } from './telegram'
-import { redactSecrets } from './webhook'
+import { redactSecrets } from '../redactSecrets'
 
 /** Env names tried in precedence order: preferred first, then the legacy alias. */
 export const TELEGRAM_BOT_TOKEN_ENV_NAMES = [TELEGRAM_TOKEN_ENV, TELEGRAM_TOKEN_ENV_LEGACY] as const

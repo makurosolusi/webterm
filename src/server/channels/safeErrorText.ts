@@ -1,4 +1,4 @@
-import { redactSecrets } from './webhook'
+import { redactSecrets } from '../redactSecrets'
 
 const DEFAULT_MAX_CHARS = 200
 

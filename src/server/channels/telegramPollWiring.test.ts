@@ -24,6 +24,11 @@ describe('buildTelegramCentralPort gate', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
+  it('tolerates case and surrounding whitespace in the chat flag (shared flagOn)', () => {
+    const create = vi.fn(() => ({ ask: vi.fn() }))
+    expect(buildTelegramCentralPort({ db }, { ...central, WEBTERM_CENTRAL_CHAT: ' ON ' }, create)).toBeDefined()
+  })
+
   it('does not create the bridge without a ledger runtime', () => {
     const create = vi.fn(() => ({ ask: vi.fn() }))
     expect(buildTelegramCentralPort(null, central, create)).toBeUndefined()

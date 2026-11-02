@@ -3,8 +3,7 @@
 // Nothing here writes state or calls the network, so the gate is testable without a server.
 //
 // Secrets are read from env at CALL time, never captured at module load, and never included in
-// a returned value or an error string. `redactSecrets` is the single egress scrubber; other
-// channel modules reuse it instead of building their own patterns.
+// a returned value or an error string. `../redactSecrets` is the single egress scrubber.
 //
 // This file is a barrel: the implementation lives in the sibling `webhook*.ts` modules.
 export { MAX_WEBHOOK_BODY_BYTES, SIGNATURE_HEADER, TELEGRAM_SECRET_HEADER, TIMESTAMP_HEADER, bodyWithinLimit, headerValue } from './webhookGate'
@@ -17,6 +16,5 @@ export {
   verifyTelegramSecret,
   type TelegramSecretOptions,
 } from './webhookTelegram'
-export { SECRET_ENV_NAMES, redactSecrets } from './webhookRedact'
 export { webhookResponse, type WebhookHttpResponse } from './webhookResponse'
 export type { WebhookHeaders, WebhookRejectStatus, WebhookVerification } from './webhookTypes'

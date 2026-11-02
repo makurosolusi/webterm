@@ -4,7 +4,7 @@
 // webhook is set, so `deleteWebhook` (keeping pending updates) runs before the first poll.
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './telegramSend'
 import { PollApiError, callBotApi } from './telegramPollApi'
-import { redactSecrets } from './webhook'
+import { redactSecrets } from '../redactSecrets'
 
 export const TELEGRAM_POLL_TIMEOUT_SEC = 25
 /** Extra time over the server-side long-poll timeout before the HTTP request is abandoned. */

@@ -2,7 +2,7 @@
 // URL carries the bot token, so no raw thrown message or response text may leave this module.
 import { DEFAULT_TELEGRAM_API_BASE } from './telegram'
 import type { TelegramSenderFetch } from './telegramSend'
-import { redactSecrets } from './webhook'
+import { redactSecrets } from '../redactSecrets'
 
 /** HTTP statuses that mean the token itself is wrong: polling stops instead of retrying. */
 export const TELEGRAM_FATAL_STATUSES: readonly number[] = [401, 404]

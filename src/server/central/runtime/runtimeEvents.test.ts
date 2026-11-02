@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { RuntimeEvent } from './centralRuntime'
 import {
-  REDACTED,
   assembleText,
   createTurnEmitter,
   normalizeUsage,
-  redactSecrets,
-  redactValue,
 } from './runtimeEvents'
+import { REDACTED } from '../../redactSecrets'
 
 function recorder(): { events: RuntimeEvent[]; emit: (event: RuntimeEvent) => void } {
   const events: RuntimeEvent[] = []
@@ -88,45 +86,6 @@ describe('runtime event ordering', () => {
 })
 
 describe('runtime event redaction', () => {
-  it('redacts obvious credentials in text', () => {
-    const text = [
-      'key sk-abcdefghijklmnopqrstuvwx',
-      'bearer Bearer abcdefghijklmnop',
-      'password=hunter2secret',
-      'github ghp_abcdefghijklmnopqrstuvwx',
-      'slack xoxb-1234567890-abcdef',
-      'aws AKIAABCDEFGHIJKLMNOP',
-      'central wcap_abcdefgh1234',
-    ].join(' | ')
-
-    const redacted = redactSecrets(text)
-    for (const secret of ['sk-abcdefghijklmnopqrstuvwx', 'abcdefghijklmnop', 'hunter2secret', 'ghp_abcdefghijklmnopqrstuvwx', 'xoxb-1234567890-abcdef', 'AKIAABCDEFGHIJKLMNOP', 'wcap_abcdefgh1234']) {
-      expect(redacted).not.toContain(secret)
-    }
-    expect(redacted).toContain(REDACTED)
-  })
-
-  it('redacts private keys', () => {
-    const text = 'before\n-----BEGIN RSA PRIVATE KEY-----\nMIIEsecret\n-----END RSA PRIVATE KEY-----\nafter'
-    expect(redactSecrets(text)).toBe(`before\n${REDACTED}\nafter`)
-  })
-
-  it('deep-redacts objects by sensitive key without mutating the input', () => {
-    const input = {
-      apiKey: 'sk-abcdefghijklmnopqrstuvwx',
-      Authorization: 'Bearer abcdefghijklmnop',
-      nested: { token: 'plain-token-value', note: 'ok' },
-      list: ['ghp_abcdefghijklmnopqrstuvwx', 3],
-    }
-    const redacted = redactValue(input) as Record<string, unknown>
-
-    expect(redacted.apiKey).toBe(REDACTED)
-    expect(redacted.Authorization).toBe(REDACTED)
-    expect(redacted.nested).toEqual({ token: REDACTED, note: 'ok' })
-    expect(redacted.list).toEqual([REDACTED, 3])
-    expect(input.nested.token).toBe('plain-token-value')
-  })
-
   it('redacts text and tool payloads before emitting', () => {
     const { events, emit } = recorder()
     const emitter = createTurnEmitter({ turnId: 't1', emit })

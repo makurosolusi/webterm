@@ -1,7 +1,7 @@
 // Egress observability: one redacted log line + one status record per send outcome. Metadata only
 // (reply key, masked chat, text length, status codes); message text is never logged (PII).
 import { recordEgress } from './channelStatus'
-import { redactSecrets } from './webhookRedact'
+import { redactSecrets } from '../redactSecrets'
 
 /** Keep only the last 4 chars of a chat id so lines correlate without exposing the full id. */
 export function maskChatId(chatId: string): string {

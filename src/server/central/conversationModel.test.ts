@@ -8,7 +8,6 @@ import {
   isActiveTurnStatus,
   normalizeClientMessageId,
   parseScope,
-  redactSecrets,
   scopeFromConversationId,
   validateEventType,
   validateMessageRole,
@@ -125,28 +124,5 @@ describe('event types', () => {
     expect(validateEventType('part.delta')).toBe('part.delta')
     expect(validateEventType('done')).toBe('done')
     expect(code(() => validateEventType('turn.done'))).toBe('invalid_event')
-  })
-})
-
-describe('redactSecrets', () => {
-  it('masks secret-named keys and credential-shaped strings at any depth', () => {
-    const redacted = redactSecrets({
-      text: 'keep me',
-      apiKey: 'sk-live-abcdefghijklmnop',
-      nested: { authorization: 'Bearer abcdefghijkl', list: ['wcap_abcdefgh', 'plain'] },
-      token_value: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc',
-    }) as Record<string, unknown>
-    expect(redacted['text']).toBe('keep me')
-    expect(redacted['apiKey']).toBe('[redacted]')
-    expect(JSON.stringify(redacted)).not.toContain('sk-live')
-    expect(JSON.stringify(redacted)).not.toContain('wcap_')
-    expect(JSON.stringify(redacted)).not.toContain('eyJhbGci')
-    expect((redacted['nested'] as Record<string, unknown>)['list']).toEqual(['[redacted]', 'plain'])
-  })
-
-  it('leaves ordinary payloads and primitives intact', () => {
-    expect(redactSecrets({ taskId: 't1', ok: true, n: 2, nil: null })).toEqual({ taskId: 't1', ok: true, n: 2, nil: null })
-    expect(redactSecrets('plain text')).toBe('plain text')
-    expect(redactSecrets(42)).toBe(42)
   })
 })

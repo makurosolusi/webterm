@@ -5,7 +5,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { DispatchOutcome } from './channelDispatch'
 import { declaredLength, readCappedBody, writeJson, type BodyReadResult } from './channelHttp'
 import type { FailureThrottle } from './channelThrottle'
-import { MAX_WEBHOOK_BODY_BYTES, redactSecrets, verifyTelegramSecret } from './webhook'
+import { MAX_WEBHOOK_BODY_BYTES, verifyTelegramSecret } from './webhook'
+import { safeErrorText } from './safeErrorText'
 import { webhookPeerKey } from './webhookPeer'
 
 export type WebhookBodyResult = BodyReadResult
@@ -79,8 +80,7 @@ export async function handleTelegramWebhook(
 
 /** Scrubbed, truncated error text that is safe to log. */
 export function safeError(err: unknown): string {
-  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error'
-  return redactSecrets(text).slice(0, 200)
+  return safeErrorText(err, 'unknown error')
 }
 
 export async function respondToWebhook(

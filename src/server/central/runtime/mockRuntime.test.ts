@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeEvent, TurnInput } from './centralRuntime'
 import { MockRuntime, MOCK_TOOL_NAME, type MockToolRequest } from './mockRuntime'
-import { REDACTED } from './runtimeEvents'
+import { REDACTED } from '../../redactSecrets'
 
 function input(overrides: Partial<TurnInput> = {}): TurnInput {
   return {

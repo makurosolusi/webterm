@@ -1,14 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   MAX_WEBHOOK_BODY_BYTES,
   MIN_TELEGRAM_SECRET_LENGTH,
-  SECRET_ENV_NAMES,
   SIGNATURE_HEADER,
   TELEGRAM_SECRET_HEADER,
   TIMESTAMP_HEADER,
   AttemptThrottle,
-  redactSecrets,
   signWebhook,
   telegramSecretProblem,
   verifyTelegramSecret,
@@ -186,36 +184,5 @@ describe('verifyTelegramSecret', () => {
     // A success resets the budget immediately, so both peers hold no failure state.
     expect(throttle.allow('peer-a')).toBe(true)
     expect(throttle.size()).toBe(0)
-  })
-})
-
-describe('redactSecrets', () => {
-  const saved = new Map<string, string | undefined>()
-
-  afterEach(() => {
-    for (const [name, value] of saved) {
-      if (value === undefined) delete process.env[name]
-      else process.env[name] = value
-    }
-    saved.clear()
-  })
-
-  it('scrubs explicit secrets and known token patterns', () => {
-    const text = `send failed for ${SECRET} via bot123456:ABCDEFGHIJKLMNOP and Bearer abcdefgh12345678`
-    const redacted = redactSecrets(text, [SECRET])
-    expect(redacted).not.toContain(SECRET)
-    expect(redacted).not.toContain('ABCDEFGHIJKLMNOP')
-    expect(redacted).not.toContain('abcdefgh12345678')
-  })
-
-  it('reads secret env values at call time', () => {
-    const name = SECRET_ENV_NAMES[0]
-    saved.set(name, process.env[name])
-    process.env[name] = 'env-secret-value-123'
-    expect(redactSecrets('token=env-secret-value-123')).not.toContain('env-secret-value-123')
-    process.env[name] = 'rotated-secret-value-456'
-    expect(redactSecrets('token=env-secret-value-123 rotated-secret-value-456')).not.toContain(
-      'rotated-secret-value-456'
-    )
   })
 })

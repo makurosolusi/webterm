@@ -2,7 +2,7 @@
  * P4b render/parse: Markdown with ordered JSON frontmatter <-> `MemoryFileRecord`. Pure
  * functions only; redaction happens before anything is written or compared.
  */
-import { redactSecrets } from '../channels/webhook'
+import { redactSecrets } from '../redactSecrets'
 import { MemoryAuthorityError, MemoryConflictError } from './memoryModel'
 import type { Memory } from './memoryModel'
 import { MemoryFileError } from './memoryFilePath'

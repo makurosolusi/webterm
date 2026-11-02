@@ -178,23 +178,3 @@ export function validateParts(value: unknown): MessagePart[] {
   if (!Array.isArray(value) || value.length > MAX_PARTS) fail('invalid_parts', `parts must be an array of at most ${MAX_PARTS}`)
   return value.map((part, index) => validatePart(part, index))
 }
-const SECRET_KEY = /^(password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|cookie|private[_-]?key|credential)$/i
-const SECRET_VALUE = [
-  /\bsk-[A-Za-z0-9_-]{16,}/,
-  /\bwcap_[A-Za-z0-9_-]{8,}/,
-  /\bBearer\s+[A-Za-z0-9._-]{8,}/i,
-  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./,
-]
-const REDACTED = '[redacted]'
-/** Masks secret-looking keys/credential-shaped strings before persistence or streaming. */
-export function redactSecrets(value: unknown, depth = 0): unknown {
-  if (depth > 20) return REDACTED
-  if (typeof value === 'string') return SECRET_VALUE.some((pattern) => pattern.test(value)) ? REDACTED : value
-  if (Array.isArray(value)) return value.map((item) => redactSecrets(item, depth + 1))
-  if (typeof value !== 'object' || value === null) return value
-  const output: Record<string, unknown> = {}
-  for (const [key, inner] of Object.entries(value)) {
-    output[key] = SECRET_KEY.test(key) ? REDACTED : redactSecrets(inner, depth + 1)
-  }
-  return output
-}

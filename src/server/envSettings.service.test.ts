@@ -4,7 +4,7 @@ import { BOOTSTRAP_ONLY_KEYS } from './envRegistry'
 import { SENTINEL_BOT_TOKEN, SENTINEL_WEBHOOK_SECRET, setupEnv } from './envSettings.testutil'
 import type { EnvEntry } from './envSettings.service'
 import { resolveWebhookSecret } from './channels/channelSecret'
-import { redactSecrets } from './channels/webhookRedact'
+import { redactSecrets } from './redactSecrets'
 
 const ROOT = { root: true }
 const USER = { root: false }

@@ -1,7 +1,7 @@
 // In-memory channel health (egress = Telegram sends, ingress = webhook dispatch). Pure: no I/O,
 // no timers. Error text is redacted and truncated on the way in so a status reader can never see
 // a token, whichever caller recorded it.
-import { redactSecrets } from './webhookRedact'
+import { redactSecrets } from '../redactSecrets'
 
 /** Max stored length of a recorded error message, after redaction. */
 export const CHANNEL_STATUS_MAX_ERROR_CHARS = 300

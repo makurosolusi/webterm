@@ -11,10 +11,11 @@ import {
   type CentralEventType, type ConversationErrorCode, type ConversationScope,
   ConversationError, type MessagePart, type MessageRole, type MessageState,
   type TurnStatus, assertTurnTransition, conversationIdForScope, isActiveTurnStatus,
-  normalizeClientMessageId, parseScope, redactSecrets, scopeFromConversationId,
+  normalizeClientMessageId, parseScope, scopeFromConversationId,
   validateEventType, validateMessageRole, validateMessageState, validateParts,
   validateTurnStatus,
 } from './conversationModel'
+import { PERSIST_LIMITS, redactValue } from '../redactSecrets'
 
 export interface Conversation {
   id: string; scope: string; projectId: string | null; activeTurnId: string | null
@@ -152,7 +153,7 @@ export function appendMessage(db: Database, input: AppendMessageInput): AppendMe
     if (existing) return { message: toMessage(existing), created: false }
     const seq = conversation.lastMessageSeq + 1
     const id = input.id ?? newId()
-    const stored = redactSecrets(parts) as MessagePart[]
+    const stored = redactValue(parts, PERSIST_LIMITS) as MessagePart[]
     try {
       execWrite(
         txDb,
@@ -251,7 +252,7 @@ export function cancelTurn(db: Database, turnId: string, partialText?: string | 
 export function appendConversationEvent(db: Database, input: AppendConversationEventInput): ConversationEvent {
   const conversationId = validateConversationId(input.conversationId)
   const type = validateEventType(input.type)
-  const payload = redactSecrets(input.payload ?? {})
+  const payload = redactValue(input.payload ?? {}, PERSIST_LIMITS)
   const ts = input.now ?? Date.now()
   return writeTx(db, (txDb) => {
     const conversation = requireConversation(txDb, conversationId)

@@ -12,51 +12,7 @@ import {
   type TurnResultEvent,
   zeroUsage,
 } from './centralRuntime'
-
-export const REDACTED = '[redacted]'
-
-const PRIVATE_KEY = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g
-const OPENAI_KEY = /\bsk-[A-Za-z0-9_-]{16,}\b/g
-const GITHUB_TOKEN = /\bgh[pousr]_[A-Za-z0-9]{16,}\b/g
-const SLACK_TOKEN = /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g
-const AWS_KEY = /\bAKIA[0-9A-Z]{16}\b/g
-const CENTRAL_TOKEN = /\bwcap_[A-Za-z0-9]{8,}\b/g
-const BEARER = /\b(Bearer)\s+[A-Za-z0-9._~+/=-]{8,}/gi
-const KEY_VALUE =
-  /\b(api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password|passwd)\b(\s*[:=]\s*)["']?[^\s"',;}]{6,}["']?/gi
-const SECRET_KEY =
-  /^(authorization|api[-_]?key|access[-_]?token|auth[-_]?token|token|secret|password|passwd|private[-_]?key|cookie|credentials?)$/i
-const MAX_DEPTH = 6
-const MAX_ITEMS = 50
-
-/** Replace obvious credential shapes in free text; cheap and conservative. */
-export function redactSecrets(input: string): string {
-  if (!input) return input
-  return input
-    .replace(PRIVATE_KEY, REDACTED)
-    .replace(OPENAI_KEY, REDACTED)
-    .replace(GITHUB_TOKEN, REDACTED)
-    .replace(SLACK_TOKEN, REDACTED)
-    .replace(AWS_KEY, REDACTED)
-    .replace(CENTRAL_TOKEN, REDACTED)
-    .replace(BEARER, `$1 ${REDACTED}`)
-    .replace(KEY_VALUE, `$1$2${REDACTED}`)
-}
-
-/** Deep-redact tool arguments/results without mutating the caller's value. */
-export function redactValue(value: unknown, depth = 0): unknown {
-  if (typeof value === 'string') return redactSecrets(value)
-  if (value === null || typeof value !== 'object') return value
-  if (depth >= MAX_DEPTH) return REDACTED
-  if (Array.isArray(value)) return value.slice(0, MAX_ITEMS).map((item) => redactValue(item, depth + 1))
-  const proto = Object.getPrototypeOf(value)
-  if (proto !== Object.prototype && proto !== null) return value
-  const out: Record<string, unknown> = {}
-  for (const [key, item] of Object.entries(value).slice(0, MAX_ITEMS)) {
-    out[key] = SECRET_KEY.test(key) ? REDACTED : redactValue(item, depth + 1)
-  }
-  return out
-}
+import { redactSecrets, redactValue } from '../../redactSecrets'
 
 function count(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0
