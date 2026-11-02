@@ -80,9 +80,9 @@
 }
 
 /* ---- Canvas & edge (VS Code) ----
-   Latar canvas mengikuti editor; edge = garis netral (warna panah mengikuti `color` marker). */
+   Latar canvas = `--canvas-bg` (lebih dalam dari badan node); edge = garis netral (warna panah mengikuti `color` marker). */
 .react-flow {
-  --xy-background-color: var(--vscode-editor-background, var(--canvas-bg));
+  --xy-background-color: var(--canvas-bg);
 }
 
 .react-flow__marker {
@@ -98,7 +98,7 @@
    di App.tsx (ia masuk inline lewat `--…-props` dan hanya bisa ditimpa dengan important), jadi
    aturan ini menang lewat spesifisitas saja. Warna node dari `miniMapNodeColor` (netral; hanya status agent berwarna). */
 .react-flow .react-flow__minimap.minimap-dock {
-  --xy-minimap-background-color-props: var(--vscode-minimap-background, var(--vscode-editor-background));
+  --xy-minimap-background-color-props: var(--canvas-bg);
   --xy-minimap-mask-background-color-props: var(--vscode-minimapSlider-background);
   --xy-minimap-mask-stroke-color-props: var(--vscode-editorWidget-border);
   border: 1px solid var(--vscode-editorWidget-border);

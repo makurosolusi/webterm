@@ -63,7 +63,7 @@ export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
       data: { ...e.data, anchor: 'horizontal' },
       label: e.selected ? label.selected : label.idle,
       labelStyle: { fill: 'var(--vscode-descriptionForeground, var(--muted))', fontSize: 11 },
-      labelBgStyle: { fill: 'var(--vscode-editor-background, var(--canvas-bg))', fillOpacity: 1 },
+      labelBgStyle: { fill: 'var(--canvas-bg)', fillOpacity: 1 },
       style: {
         stroke: e.selected ? EDGE_STROKE_SELECTED : EDGE_STROKE,
         strokeWidth: e.selected ? EDGE_WIDTH_SELECTED : EDGE_WIDTH,

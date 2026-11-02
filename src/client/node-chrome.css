@@ -16,7 +16,8 @@
   --nc-tab-inactive-bg: var(--vscode-tab-inactiveBackground, var(--panel-header));
   --nc-tab-inactive-fg: var(--vscode-tab-inactiveForeground, var(--muted));
   --nc-focus: var(--vscode-focusBorder, var(--accent));
-  --nc-border: var(--vscode-editorGroup-border, var(--border));
+  /* Dinaikkan 12% ke arah foreground: editorGroup-border polos hilang di atas canvas yang lebih dalam. */
+  --nc-border: color-mix(in srgb, var(--vscode-editorGroup-border, var(--border)), var(--vscode-foreground) 12%);
   --nc-widget-bg: var(--vscode-editorWidget-background, var(--panel));
   --nc-widget-border: var(--vscode-editorWidget-border, var(--border));
 }
