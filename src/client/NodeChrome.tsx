@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
-import { Badge } from '@/components/ui/badge'
 import { Textfield, ToolbarButton } from '@/vscode/register'
 import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
@@ -10,6 +9,10 @@ import NodeComments from './NodeComments'
 
 export interface NodeChromeProps {
   title: string
+  /** Nama codicon untuk ikon tipe node di depan judul (mis. 'terminal', 'hubot'); kosong = tanpa ikon. */
+  icon?: string
+  /** Teks redup setelah judul, seperti deskripsi tab editor (mis. cwd). */
+  description?: string
   onRename: (t: string) => void
   collapsed: boolean; onToggleCollapse: () => void
   color: string; onColor: (c: string) => void
@@ -87,12 +90,6 @@ export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; stat
   )
 }
 
-const IconChevron = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}
-    className={cn('size-3.5', p.className)}><path d="M4 6l4 4 4-4" /></svg>
-)
-
 export default function NodeChrome(props: NodeChromeProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -120,12 +117,15 @@ export default function NodeChrome(props: NodeChromeProps) {
     <div className="node-header relative">
       <ToolbarButton
         label={props.collapsed ? 'Expand' : 'Collapse'}
-        className={cn('nodrag node-chevron', props.collapsed && 'node-chevron--collapsed')}
+        className="nodrag"
         title={props.collapsed ? 'Expand' : 'Collapse'}
+        data-title={props.collapsed ? 'Expand' : 'Collapse'}
         onClick={props.onToggleCollapse}
-      ><IconChevron /></ToolbarButton>
+      ><span className={cn('codicon', props.collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down')} /></ToolbarButton>
 
       <NodeColorSwatch color={props.color} onColor={props.onColor} />
+
+      {props.icon && <span className={cn('node-icon codicon', `codicon-${props.icon}`)} aria-hidden="true" />}
 
       {editing ? (
         <Textfield
@@ -140,14 +140,15 @@ export default function NodeChrome(props: NodeChromeProps) {
         <span className="nodrag node-title" title="Rename" onClick={beginEdit}>{props.title || UNTITLED}</span>
       )}
 
+      {props.description && !editing && (
+        <span className="node-description" title={props.description}>{props.description}</span>
+      )}
+
       {chip && (
-        <Badge
-          className={cn('node-status rounded-none border-0 bg-transparent px-0 py-0', chip.cls)}
-          title={chip.title}
-        >
+        <span className={cn('node-status', chip.cls)} title={chip.title}>
           <span className="node-status-dot" />
           {chip.label}
-        </Badge>
+        </span>
       )}
 
       {props.pill}

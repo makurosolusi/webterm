@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
-import { Button } from '@/components/ui/button'
+import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import FindBar from './FindBar'
@@ -21,14 +21,6 @@ const COLLAPSED_H = 40
  *  bawah. Barisnya tetap HADIR tapi disabled dengan alasan ini: menghilangkannya membuat pengguna
  *  mencari fitur yang tak pernah ada, membiarkannya aktif membuatnya diam-diam gagal. */
 const NO_CLIPBOARD_HINT = 'Paste butuh secure context: buka webterm lewat https atau localhost.'
-
-const SplitIcon = (p: { down?: boolean }) => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="size-3.5">
-    <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
-    <path d={p.down ? 'M2.5 8h11' : 'M8 3v10'} />
-  </svg>
-)
 
 function TerminalNode({ id, data, selected, height }: NodeProps) {
   const d = data as { cwd?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; panes?: Pane }
@@ -191,6 +183,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
       >
         <NodeChrome
           title={d.title ?? ''}
+          icon="terminal" description={d.cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
@@ -203,10 +196,14 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           // Lewat `extraHeader` yang sudah ada (jalur yang sama dipakai tombol Resume/Restart node
           // agent): tombol split tidak perlu satu pun prop baru di NodeChrome/NodeToolbar.
           extraHeader={
-            <div className="nodrag pane-split-btns">
-              <Button variant="ghost" size="icon-xs" title="Split right" onClick={() => split('h', activePane)}><SplitIcon /></Button>
-              <Button variant="ghost" size="icon-xs" title="Split down" onClick={() => split('v', activePane)}><SplitIcon down /></Button>
-            </div>
+            <ToolbarContainer className="nodrag pane-split-btns">
+              <ToolbarButton label="Split right" title="Split right" data-title="Split right" onClick={() => split('h', activePane)}>
+                <span className="codicon codicon-split-horizontal" aria-hidden="true" />
+              </ToolbarButton>
+              <ToolbarButton label="Split down" title="Split down" data-title="Split down" onClick={() => split('v', activePane)}>
+                <span className="codicon codicon-split-vertical" aria-hidden="true" />
+              </ToolbarButton>
+            </ToolbarContainer>
           }
         />
         <div className="node-body">

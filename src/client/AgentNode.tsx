@@ -241,6 +241,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
       >
         <NodeChrome
           title={label}
+          icon="hubot"
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}

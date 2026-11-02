@@ -1,5 +1,4 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 // Fill color by % of context USED. Exported so logic has no bare hex (Rule 15).
@@ -37,13 +36,14 @@ export interface UsagePillProps {
   usedPercent?: number
 }
 
+/** Item datar ala status bar: nama model dan minibar konteks terpakai. */
 export default function UsagePill({ modelLabel, usedPercent }: UsagePillProps): ReactNode {
   const pct = typeof usedPercent === 'number' ? Math.min(100, Math.max(0, usedPercent)) : null
   // Tanpa model DAN tanpa persen tidak ada yang bisa dilaporkan; pill kosong cuma menambah chrome.
   if (!modelLabel && pct === null) return null
   const level = pct === null ? null : contextFillLevel(pct)
   return (
-    <Badge asChild variant="outline"><span className="usage-pill">
+    <span className="usage-pill">
       {modelLabel && <span className="usage-pill__label">{modelLabel}</span>}
       {pct !== null && level !== null && (
         <>
@@ -60,6 +60,6 @@ export default function UsagePill({ modelLabel, usedPercent }: UsagePillProps): 
           <span className="usage-pill__label">{Math.round(pct)}%</span>
         </>
       )}
-    </span></Badge>
+    </span>
   )
 }

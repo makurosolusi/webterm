@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 
 export interface MenuItem {
@@ -7,7 +7,7 @@ export interface MenuItem {
   /** Tooltip. Untuk baris disabled, inilah yang memberitahu pengguna apa yang harus ditunggu. */
   hint?: string
   disabled?: boolean
-  /** Baris destruktif (membuang riwayat, menghapus node) — diwarnai berbeda. */
+  /** Baris destruktif (membuang riwayat, menghapus node) — ditandai `data-danger` (VS Code tidak mewarnai merah). */
   danger?: boolean
   onClick: () => void
 }
@@ -15,21 +15,6 @@ export interface MenuItem {
 export type MenuRow = MenuItem | { type: 'separator' }
 
 const isSeparator = (r: MenuRow): r is { type: 'separator' } => 'type' in r
-
-/** `VscodeMenu` belum punya properti tooltip per baris. Hint baris disabled tetap WAJIB sampai ke
- *  pengguna (baris mati tanpa alasan tak bisa dibedakan dari baris rusak), jadi ia ditempel sebagai
- *  `title` setelah panel ter-mount. `data-index` adalah indeks baris di array yang sama. */
-function attachHints(rows: MenuRow[]): void {
-  const panels = document.querySelectorAll('[data-slot="vscode-menu"][data-level="0"]')
-  const panel = panels[panels.length - 1]
-  if (!panel) return
-  rows.forEach((row, index) => {
-    if (isSeparator(row) || !row.hint) return
-    panel
-      .querySelector(`[data-slot="vscode-menu-row"][data-index="${index}"]`)
-      ?.setAttribute('title', row.hint)
-  })
-}
 
 function toItems(rows: MenuRow[]): VscodeMenuItem[] {
   return rows.map((row, index) =>
@@ -42,6 +27,7 @@ function toItems(rows: MenuRow[]): VscodeMenuItem[] {
           icon: row.icon,
           disabled: row.disabled,
           danger: row.danger,
+          title: row.hint,
           onSelect: row.onClick,
         },
   )
@@ -66,8 +52,6 @@ export default function NodeContextMenu({
   rows: MenuRow[]
   onClose: () => void
 }) {
-  useEffect(() => attachHints(rows), [rows])
-
   return (
     <VscodeMenu
       open
