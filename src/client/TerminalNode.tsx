@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
+import { Button } from '@/components/ui/button'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import FindBar from './FindBar'
@@ -23,7 +24,7 @@ const NO_CLIPBOARD_HINT = 'Paste butuh secure context: buka webterm lewat https 
 
 const SplitIcon = (p: { down?: boolean }) => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="size-3.5">
     <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
     <path d={p.down ? 'M2.5 8h11' : 'M8 3v10'} />
   </svg>
@@ -203,8 +204,8 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           // agent): tombol split tidak perlu satu pun prop baru di NodeChrome/NodeToolbar.
           extraHeader={
             <div className="nodrag pane-split-btns">
-              <button className="icon-btn" title="Split right" onClick={() => split('h', activePane)}><SplitIcon /></button>
-              <button className="icon-btn" title="Split down" onClick={() => split('v', activePane)}><SplitIcon down /></button>
+              <Button variant="ghost" size="icon-xs" className="icon-btn" title="Split right" onClick={() => split('h', activePane)}><SplitIcon /></Button>
+              <Button variant="ghost" size="icon-xs" className="icon-btn" title="Split down" onClick={() => split('v', activePane)}><SplitIcon down /></Button>
             </div>
           }
         />

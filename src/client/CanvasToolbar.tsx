@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bot, CircleQuestionMark, FolderTree, Search, Settings, Terminal } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import './canvas-ui.css'
 
 // Cluster kontrol kanan-atas + command palette ⌘K. Porting dari nodeterm
@@ -126,19 +128,19 @@ export default function CanvasToolbar({
   return (
     <>
       <div className="controls-cluster">
-        <button className="cluster-search" aria-label="Command palette" title="Command palette" onClick={() => setPaletteOpen(true)}>
+        <Button className="cluster-search" aria-label="Command palette" title="Command palette" onClick={() => setPaletteOpen(true)}>
           <Search aria-hidden />
           <span className="kbd">{chip}</span>
-        </button>
-        <button aria-label="Explorer" title="Explorer" onClick={onOpenExplorer}>
+        </Button>
+        <Button aria-label="Explorer" title="Explorer" onClick={onOpenExplorer}>
           <FolderTree aria-hidden />
-        </button>
-        <button aria-label="Settings" title="Settings" onClick={onOpenSettings}>
+        </Button>
+        <Button aria-label="Settings" title="Settings" onClick={onOpenSettings}>
           <Settings aria-hidden />
-        </button>
-        <button aria-label="Help" title="Help" onClick={onOpenHelp}>
+        </Button>
+        <Button aria-label="Help" title="Help" onClick={onOpenHelp}>
           <CircleQuestionMark aria-hidden />
-        </button>
+        </Button>
       </div>
       {paletteOpen && (
         <CommandPalette targets={targets} onPick={onFocusNode} onClose={() => setPaletteOpen(false)} />
@@ -168,7 +170,7 @@ function CommandPalette({ targets, onPick, onClose }: PaletteProps) {
   return createPortal(
     <div className="palette-overlay nodrag nowheel" onClick={onClose}>
       <div className="palette" role="dialog" aria-modal="true" aria-label="Find node" onClick={(e) => e.stopPropagation()}>
-        <input
+        <Input
           className="palette__input"
           aria-label="Find node by name or type"
           autoFocus

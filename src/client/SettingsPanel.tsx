@@ -6,6 +6,7 @@
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
 import {
   TERMINAL_SCROLLBACK_LINES_MAX,
@@ -51,18 +52,19 @@ export function SettingsPanel({
       <nav className="st-sidebar">
         <div className="st-sidebar-head">
           <span className="st-title">Settings</span>
-          <button type="button" className="st-btn" aria-label="Tutup settings" onClick={onClose}>✕</button>
+          <Button type="button" className="st-btn" variant="ghost" size="icon-sm" aria-label="Tutup settings" onClick={onClose}>✕</Button>
         </div>
         {SECTIONS.map((sec) => (
-          <button
+          <Button
             key={sec.id}
             type="button"
             aria-current={active === sec.id}
             className={'st-nav' + (active === sec.id ? ' is-active' : '')}
             onClick={() => setActive(sec.id)}
+            variant="ghost"
           >
             {sec.label}
-          </button>
+          </Button>
         ))}
       </nav>
       <main className="st-main">

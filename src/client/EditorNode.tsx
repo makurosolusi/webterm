@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 // Type-only: terhapus saat compile, jadi tidak membatalkan lazy-load Monaco.
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { loadMonaco } from './lazyMonaco'
@@ -313,25 +315,31 @@ function EditorNode({
           {kind === 'image' && imageDims && <span className="editor-node__dims">{imageDims}</span>}
           {kind === 'text' && !loadError && (
             <>
-              <button
-                className="nodrag editor-node__btn"
+              <Button
+                variant="ghost"
+                size="xs"
+                className={cn('nodrag editor-node__btn')}
                 title="Toggle markdown preview (⌘M)"
                 onClick={togglePreview}
               >
                 {preview ? 'Edit' : 'Preview'}
-              </button>
-              <button
-                className="nodrag editor-node__btn editor-node__btn--save"
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                className={cn('nodrag editor-node__btn editor-node__btn--save')}
                 title="Save (⌘S)"
                 disabled={!dirty}
                 onClick={save}
               >
                 Save
-              </button>
+              </Button>
             </>
           )}
-          <button
-            className="nodrag editor-node__close"
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className={cn('nodrag editor-node__close')}
             title="Close"
             aria-label="Close"
             onClick={() => {
@@ -339,7 +347,7 @@ function EditorNode({
             }}
           >
             <X size={14} />
-          </button>
+          </Button>
         </div>
         <div className={`node-body editor-node__body editor-node__body--${kind}`}>
           {body()}

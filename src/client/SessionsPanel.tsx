@@ -7,6 +7,10 @@
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useEffect, useMemo, useState } from 'react'
 import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, Terminal, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 import SessionRow from './SessionRow'
 import {
   buildSessionList,
@@ -178,35 +182,41 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         <span className="sessions-sidebar__title">{grouping === 'nodes' ? 'Nodes' : 'Sessions'}</span>
         <span className="sessions-sidebar__count">{rowCount}</span>
         <div className="sessions-sidebar__head-actions">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             className="ss-iconbtn"
             aria-label="Hide sessions panel"
             title="Hide"
             onClick={onClose}
           >
             <X aria-hidden />
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="ss-tabs" role="tablist" aria-label="Group sessions by">
         {(['project', 'status', 'nodes'] as const).map((g) => (
-          <button
+          <Button
             key={g}
             type="button"
+            variant="ghost"
+            size="sm"
             role="tab"
             className="ss-tab"
             aria-selected={grouping === g}
             onClick={() => setGrouping(g)}
           >
             {TAB_LABEL[g]}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="sessions-sidebar__search">
-        <input
+        <Input
+          type="text"
+          className={cn('sessions-sidebar__filter-input')}
           value={filter}
           placeholder="Filter sessions…"
           aria-label="Filter sessions"
@@ -219,28 +229,30 @@ export default function SessionsPanel(props: SessionsPanelProps) {
           }}
         />
         {filter !== '' && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             className="ss-iconbtn ss-search__clear"
             aria-label="Clear filter"
             title="Clear filter (Esc)"
             onClick={() => setFilter('')}
           >
             <X aria-hidden />
-          </button>
+          </Button>
         )}
       </div>
 
       {/* nowheel: tanpa itu scroll di sini justru mem-pan canvas di belakangnya. */}
-      <div className="sessions-sidebar__body nowheel">
+      <ScrollArea className="sessions-sidebar__body nowheel">
         {empty === 'no-matches' && (
           <div className="ss-empty">
             <div>
               No {noun} match “{filter.trim()}”.
             </div>
-            <button type="button" onClick={() => setFilter('')}>
+            <Button type="button" variant="outline" size="xs" onClick={() => setFilter('')}>
               Clear filter
-            </button>
+            </Button>
           </div>
         )}
         {empty === 'no-sessions' && <div className="ss-empty">No {noun} yet.</div>}
@@ -450,7 +462,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             )}
           </section>
         )}
-      </div>
+      </ScrollArea>
     </aside>
   )
 }

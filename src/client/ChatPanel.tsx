@@ -7,6 +7,8 @@
 // a tool card shows name/state only.
 import { useEffect, useId, useRef, useState } from 'react'
 import { MessageSquare, RefreshCw, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
@@ -119,23 +121,23 @@ export default function ChatPanel(props: ChatPanelProps) {
         <MessageSquare size={15} aria-hidden="true" />
         <h2 className="chat-title" id={titleId}>Central agent</h2>
         <span className="chat-grow" />
-        <button type="button" className="chat-icon-btn" aria-label="Refresh conversations"
+        <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Refresh conversations"
           title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
           <RefreshCw size={13} />
-        </button>
-        <button type="button" className="chat-icon-btn" aria-label="Close chat panel"
+        </Button>
+        <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Close chat panel"
           title="Close chat" onClick={props.onClose}>
           <X size={14} />
-        </button>
+        </Button>
       </header>
 
       {listError !== null && (
         <div className="chat-error" role="alert">
           <span>{listError}</span>
-          <button type="button" className="chat-icon-btn" aria-label="Dismiss error"
+          <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Dismiss error"
             onClick={() => setListError(null)}>
             <X size={13} />
-          </button>
+          </Button>
         </div>
       )}
 
@@ -149,9 +151,10 @@ export default function ChatPanel(props: ChatPanelProps) {
             <ul className="chat-list">
               {conversations.map((conversation) => (
                 <li key={conversation.id}>
-                  <button
+                  <Button
                     type="button"
-                    className={`chat-list-item${conversation.id === selected ? ' is-active' : ''}`}
+                    variant="ghost"
+                    className={cn('chat-list-item', conversation.id === selected && 'is-active')}
                     aria-current={conversation.id === selected ? 'true' : undefined}
                     onClick={() => setSelected(conversation.id)}
                   >
@@ -159,7 +162,7 @@ export default function ChatPanel(props: ChatPanelProps) {
                     {conversation.activeTurnId !== null && (
                       <span className="chat-list-item__live" title="Turn running" aria-label="Turn running" />
                     )}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

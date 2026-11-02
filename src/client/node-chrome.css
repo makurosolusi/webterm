@@ -306,6 +306,10 @@
   flex: 1; resize: none; min-height: 32px; max-height: 96px; padding: 6px 8px;
   border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--sunken); color: var(--text); font-family: inherit; font-size: 12px;
+  /* Komposer memakai shadcn `Textarea`, yang membawa `field-sizing: content`. Tanpa baris ini
+     kotaknya ikut tumbuh mengikuti isi (perilaku baru), padahal tinggi lamanya tetap 32–96px.
+     `fixed` mengembalikan kontrak itu; browser tanpa dukungan mengabaikannya. */
+  field-sizing: fixed;
 }
 .node-comments__composer textarea:focus { outline: none; border-color: var(--accent); }
 

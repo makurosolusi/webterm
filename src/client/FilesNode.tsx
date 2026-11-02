@@ -10,6 +10,9 @@ import { createPortal } from 'react-dom'
 import type { Node, NodeProps } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
 import { ChevronRight, ClipboardCopy, File, FilePlus, Folder, FolderPlus, TerminalSquare } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import * as fsClient from './fsClient'
@@ -217,13 +220,13 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             {crumbs.map((c, i) => (
               <span key={`${c.path}:${i}`} className="files-crumb-wrap">
                 {i > 0 && <ChevronRight size={11} className="files-crumb-sep" />}
-                <button className="files-crumb" onClick={() => navigate(c.path, cwd)} title={c.path}>{c.name}</button>
+                <Button variant="ghost" size="xs" className={cn('files-crumb')} onClick={() => navigate(c.path, cwd)} title={c.path}>{c.name}</Button>
               </span>
             ))}
           </div>
 
           {filterOpen && (
-            <input
+            <Input
               className="files-filter nodrag field" autoFocus value={query} placeholder="Filter…"
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setFilterOpen(false) }}
@@ -275,21 +278,21 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             const target = menu.entry
             if (!target) return null
             return (
-              <button onClick={() => { setMenu(null); open(target) }}>
+              <Button variant="ghost" size="sm" onClick={() => { setMenu(null); open(target) }}>
                 {target.dir ? <Folder size={13} /> : <File size={13} />} Open
-              </button>
+              </Button>
             )
           })()}
-          <button onClick={() => { setMenu(null); addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
+          <Button variant="ghost" size="sm" onClick={() => { setMenu(null); addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
             <TerminalSquare size={13} /> New terminal here
-          </button>
-          <button onClick={() => { void createEntry(false); setMenu(null) }}><FilePlus size={13} /> New file…</button>
-          <button onClick={() => { void createEntry(true); setMenu(null) }}><FolderPlus size={13} /> New folder…</button>
-          <button onClick={() => {
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { void createEntry(false); setMenu(null) }}><FilePlus size={13} /> New file…</Button>
+          <Button variant="ghost" size="sm" onClick={() => { void createEntry(true); setMenu(null) }}><FolderPlus size={13} /> New folder…</Button>
+          <Button variant="ghost" size="sm" onClick={() => {
             setMenu(null)
             // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
             navigator.clipboard?.writeText(menuTarget).catch(() => setNotice('Could not copy the path.'))
-          }}><ClipboardCopy size={13} /> Copy path</button>
+          }}><ClipboardCopy size={13} /> Copy path</Button>
         </div>,
         document.body
       )}

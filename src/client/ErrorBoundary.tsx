@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
 
 // React catches render/lifecycle errors only in a class boundary — there is no hook equivalent in
 // React 19. Without one, a single thrown error unmounts the whole tree and the page goes blank (the
@@ -37,7 +38,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
         >
           {error.message}
         </pre>
-        <button
+        <Button
+          type="button"
           onClick={() => location.reload()}
           style={{
             padding: '8px 18px', borderRadius: 8, border: '1px solid #3a3f4b',
@@ -45,7 +47,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
           }}
         >
           Reload
-        </button>
+        </Button>
       </div>
     )
   }

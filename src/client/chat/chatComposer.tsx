@@ -5,6 +5,8 @@
 import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Send, Square } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 export interface ChatComposerProps {
   busy: boolean
@@ -35,7 +37,7 @@ export default function ChatComposer(props: ChatComposerProps) {
 
   return (
     <div className="chat-composer">
-      <textarea
+      <Textarea
         className="chat-composer__input"
         aria-label="Message the central agent"
         placeholder={props.busy ? 'Turn running. Stop or wait…' : 'Message the central agent…'}
@@ -47,15 +49,15 @@ export default function ChatComposer(props: ChatComposerProps) {
         style={{ maxHeight: `${MAX_ROWS * 20}px` }}
       />
       {props.busy ? (
-        <button type="button" className="chat-send chat-send--stop" onClick={props.onStop}
+        <Button type="button" variant="outline" className="chat-send chat-send--stop" onClick={props.onStop}
           aria-label="Stop turn" title="Stop turn">
           <Square size={14} /> Stop
-        </button>
+        </Button>
       ) : (
-        <button type="button" className="chat-send" onClick={submit} disabled={!canSend}
+        <Button type="button" className="chat-send" onClick={submit} disabled={!canSend}
           aria-label="Send message" title="Send (Enter)">
           <Send size={14} /> Send
-        </button>
+        </Button>
       )}
     </div>
   )

@@ -20,6 +20,8 @@ import { buildSessionList } from './sessionList'
 import { scrollTopToReveal } from './filesKeys'
 import { canScrollStripBy, tabStripOverflow, workspaceTabDot, workspaceTabTitle, type TabOverflow } from './workspaceTabs'
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -200,7 +202,7 @@ export default function WorkspaceBar({
             >
               <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />
               {editingId === g.projectId ? (
-                <input
+                <Input
                   className="tab__edit"
                   value={draft}
                   autoFocus
@@ -223,7 +225,7 @@ export default function WorkspaceBar({
 
               {editingId !== g.projectId && (
                 <span className="tab__actions">
-                  <button
+                  <Button
                     type="button"
                     className="tab__caret"
                     title="Workspace options"
@@ -242,13 +244,13 @@ export default function WorkspaceBar({
                     }}
                   >
                     <MoreVertical aria-hidden />
-                  </button>
+                  </Button>
                 </span>
               )}
             </div>
           ))}
         </div>
-        <button
+        <Button
           type="button"
           className="tab__add"
           title="New workspace"
@@ -256,11 +258,11 @@ export default function WorkspaceBar({
           onClick={onNewWorkspace}
         >
           <Plus aria-hidden />
-        </button>
+        </Button>
       </div>
 
       {showLogout && (
-        <button
+        <Button
           type="button"
           className="tab__add"
           title="Logout"
@@ -268,7 +270,7 @@ export default function WorkspaceBar({
           onClick={onLogout}
         >
           <LogOut aria-hidden />
-        </button>
+        </Button>
       )}
 
       {menu && menuGroup && (

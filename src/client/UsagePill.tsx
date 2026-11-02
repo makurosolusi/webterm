@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Badge } from '@/components/ui/badge'
 
 // Fill color by % of context USED. Exported so logic has no bare hex (Rule 15).
 export const USAGE_RED = '#ff453a'      // = --state-attention
@@ -22,7 +23,7 @@ export default function UsagePill({ modelLabel, usedPercent }: UsagePillProps): 
   // Tanpa model DAN tanpa persen tidak ada yang bisa dilaporkan; pill kosong cuma menambah chrome.
   if (!modelLabel && pct === null) return null
   return (
-    <span className="usage-pill">
+    <Badge asChild variant="outline"><span className="usage-pill">
       {modelLabel && <span className="usage-pill__label">{modelLabel}</span>}
       {pct !== null && (
         <>
@@ -32,6 +33,6 @@ export default function UsagePill({ modelLabel, usedPercent }: UsagePillProps): 
           <span className="usage-pill__label">{Math.round(pct)}%</span>
         </>
       )}
-    </span>
+    </span></Badge>
   )
 }

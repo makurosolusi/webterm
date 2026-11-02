@@ -1,7 +1,11 @@
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
 type Svg = React.SVGProps<SVGSVGElement>
 const svg = (children: React.ReactNode) => (p: Svg) => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}>{children}</svg>
+    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}
+    className={cn('size-3.5', p.className)}>{children}</svg>
 )
 
 const IconRefresh = svg(<><path d="M13 8a5 5 0 1 1-1.5-3.5" /><path d="M13 3v2.5h-2.5" /></>)
@@ -29,53 +33,60 @@ export interface NodeToolbarProps {
 
 export default function NodeToolbar(props: NodeToolbarProps) {
   const count = props.commentCount ?? 0
+  const btn = (extra?: string) =>
+    cn('icon-btn', extra)
   return (
     // `nodrag` di container: React Flow mencocokkannya lewat `target.closest()`, jadi satu kelas di
     // sini cukup untuk semua tombol — tanpa itu klik tombol ikut menggeser node.
     <div className="nodrag node-toolbar">
-      <button className="icon-btn" title="Refresh view" onClick={props.onRefresh}><IconRefresh /></button>
+      <Button variant="ghost" size="icon-xs" className={btn()} title="Refresh view" onClick={props.onRefresh}><IconRefresh /></Button>
 
-      <button
-        className={`icon-btn${props.searchOpen ? ' icon-btn--active' : ''}`}
+      <Button
+        variant="ghost" size="icon-xs"
+        className={btn(props.searchOpen ? 'icon-btn--active' : undefined)}
         title="Search" onClick={props.onToggleSearch}
-      ><IconSearch /></button>
+      ><IconSearch /></Button>
 
       {props.onToggleMic && (
-        <button
-          className={`icon-btn${props.micActive ? ' icon-btn--active' : ''}`}
+        <Button
+          variant="ghost" size="icon-xs"
+          className={btn(props.micActive ? 'icon-btn--active' : undefined)}
           title="Dictate" onClick={props.onToggleMic}
-        ><IconMic /></button>
+        ><IconMic /></Button>
       )}
 
       {props.onAiName && (
-        <button className="icon-btn" title="Name with AI" onClick={props.onAiName} disabled={props.aiNaming}><IconSparkle /></button>
+        <Button variant="ghost" size="icon-xs" className={btn()} title="Name with AI" onClick={props.onAiName} disabled={props.aiNaming}><IconSparkle /></Button>
       )}
 
-      <button
-        className={`icon-btn${props.commentsOpen ? ' icon-btn--active' : ''}`}
+      <Button
+        variant="ghost" size="icon-xs"
+        className={btn(props.commentsOpen ? 'icon-btn--active' : undefined)}
         title="Comments" onClick={props.onToggleComments}
       >
         <IconComments />
         {count > 0 && <sup style={{ fontSize: 9, marginLeft: 2 }}>{count}</sup>}
-      </button>
+      </Button>
 
       {props.onBroadcast && (
-        <button
-          className={`icon-btn${props.broadcastActive ? ' icon-btn--active' : ''}`}
+        <Button
+          variant="ghost" size="icon-xs"
+          className={btn(props.broadcastActive ? 'icon-btn--active' : undefined)}
           title="Share live view" onClick={props.onBroadcast} disabled={props.broadcastDisabled}
-        ><IconBroadcast /></button>
+        ><IconBroadcast /></Button>
       )}
 
       {props.onToggleHideLinks && (
-        <button
-          className={`icon-btn${props.hideLinks ? ' icon-btn--active' : ''}`}
+        <Button
+          variant="ghost" size="icon-xs"
+          className={btn(props.hideLinks ? 'icon-btn--active' : undefined)}
           title={props.hideLinks ? 'Show links' : 'Hide links'} onClick={props.onToggleHideLinks}
-        >{props.hideLinks ? <IconEyeOff /> : <IconEye />}</button>
+        >{props.hideLinks ? <IconEyeOff /> : <IconEye />}</Button>
       )}
 
-      <button className="icon-btn" title="Maximize" onClick={props.onToggleMaximize} disabled={props.maximizeDisabled}><IconMaximize /></button>
+      <Button variant="ghost" size="icon-xs" className={btn()} title="Maximize" onClick={props.onToggleMaximize} disabled={props.maximizeDisabled}><IconMaximize /></Button>
 
-      <button className="icon-btn icon-btn--danger" title="Close (ends the session)" onClick={props.onClose}><IconClose /></button>
+      <Button variant="ghost" size="icon-xs" className={btn('icon-btn--danger')} title="Close (ends the session)" onClick={props.onClose}><IconClose /></Button>
     </div>
   )
 }

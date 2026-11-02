@@ -4,6 +4,7 @@
 // tokens causes one render, not one per token.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { AlertCircle, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import ChatComposer from './chatComposer'
 import ChatMessages from './chatMessages'
 import type {
@@ -176,10 +177,10 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         <div className="chat-error" role="alert">
           <AlertCircle size={13} aria-hidden="true" />
           <span>{error}</span>
-          <button type="button" className="chat-icon-btn" aria-label="Dismiss error"
+          <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Dismiss error"
             onClick={() => dispatch({ type: 'error', error: null })}>
             <X size={13} />
-          </button>
+          </Button>
         </div>
       )}
 

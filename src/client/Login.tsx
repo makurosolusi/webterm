@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface Props {
   onSubmit: (token: string) => Promise<boolean>
@@ -48,10 +51,13 @@ export default function Login({ onSubmit }: Props) {
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'var(--canvas-bg)', color: 'var(--text)', fontFamily: mono, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
       <Brand />
-      <div style={{ color: 'var(--muted)', fontSize: 13 }}>Enter your access token</div>
+      <Label htmlFor="login-access-token" style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 400 }}>
+        Enter your access token
+      </Label>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-        <input
-          className="field"
+        <Input
+          id="login-access-token"
+          className="field h-auto focus-visible:ring-0"
           type="password"
           aria-label="Access token"
           autoFocus
@@ -61,9 +67,9 @@ export default function Login({ onSubmit }: Props) {
           onChange={(e) => setValue(e.target.value)}
           style={{ fontFamily: mono, textAlign: 'center', width: 260 }}
         />
-        <button className="btn btn--accent" type="submit" disabled={pending}>
+        <Button className="btn btn--accent h-auto" type="submit" disabled={pending}>
           Unlock
-        </button>
+        </Button>
         {error && <div style={{ color: '#ff6b6b', fontSize: 12 }}>Token salah</div>}
       </form>
     </div>

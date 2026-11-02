@@ -2,6 +2,8 @@
 // kerangka panel (tab, filter, grup) tetap terbaca dalam satu layar. Mengikuti nodeterm v0.4.5
 // `src/renderer/components/SessionRow.tsx`.
 import { Bell, Check, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { rowMeta, type SessionRowVM } from './sessionList'
 
 /** Kalimat glyph belum-dibaca, dipakai juga sebagai bagian nama aksesibel barisnya. */
@@ -85,9 +87,11 @@ export default function SessionRow({ row, showProject, onFocusNode, onCloseSessi
           </span>
           {meta.length > 0 && <span className="ss-meta">{meta.join(' · ')}</span>}
         </span>
-        <button
+        <Button
           type="button"
-          className="ss-iconbtn ss-row__close"
+          variant="ghost"
+          size="icon-xs"
+          className={cn('ss-iconbtn ss-row__close')}
           aria-label={`End session ${row.label}`}
           title="End session"
           onClick={(e) => {
@@ -96,7 +100,7 @@ export default function SessionRow({ row, showProject, onFocusNode, onCloseSessi
           }}
         >
           <X aria-hidden />
-        </button>
+        </Button>
       </div>
     </li>
   )

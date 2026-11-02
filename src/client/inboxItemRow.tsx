@@ -7,6 +7,7 @@
 // approved-but-unconsumed one exists is exactly the duplicate-approval bug (QC B4). Approval-kind
 // rows and non-task rows are never gated.
 import type { ApprovedApproval, InboxItem } from './inboxApi'
+import { Button } from '@/components/ui/button'
 import { SECTION_LABEL, formatAge, reviewBlockedReason } from './inboxPanelModel'
 
 export interface InboxItemRowProps {
@@ -42,19 +43,19 @@ export function InboxItemRow(props: InboxItemRowProps): React.JSX.Element {
         {item.detail && <p className="inbox-item__detail">{item.detail}</p>}
         <div className="inbox-item__actions">
           {resume ? (
-            <button type="button" className="inbox-btn inbox-btn--ghost"
+            <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost"
               aria-label={`Finish approval for ${item.title}`}
               onClick={onOpen}>
               Finish approval
-            </button>
+            </Button>
           ) : (
-            <button type="button" className="inbox-btn inbox-btn--ghost"
+            <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost"
               aria-label={`Review ${item.title}`}
               title={checking ? 'Checking existing approvals…' : blocked ?? undefined}
               disabled={checking || blocked !== null}
               onClick={onOpen}>
               Review
-            </button>
+            </Button>
           )}
         </div>
       </div>

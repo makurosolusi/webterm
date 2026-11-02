@@ -2,6 +2,16 @@
 // kontrol yang tipenya cocok; label + deskripsi diambil dari doc-comment kunci di
 // `shared/settings.ts` (di situ alasan defaultnya tertulis, dan user layak tahu).
 import type { ReactNode } from 'react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 export function Field({
   label,
@@ -17,7 +27,7 @@ export function Field({
   return (
     <div className="st-field">
       <div className="st-field-text">
-        <label className="st-label" htmlFor={htmlFor}>{label}</label>
+        <Label className="st-label" htmlFor={htmlFor}>{label}</Label>
         {hint ? <p className="st-hint">{hint}</p> : null}
       </div>
       <div className="st-control">{children}</div>
@@ -52,7 +62,7 @@ export function NumberField({
 }): React.JSX.Element {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <input
+      <Input
         id={id}
         className="st-input st-input-num"
         type="number"
@@ -93,7 +103,7 @@ export function TextField({
 }): React.JSX.Element {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <input
+      <Input
         id={id}
         className={'st-input' + (mono ? ' st-mono' : '')}
         type="text"
@@ -124,11 +134,14 @@ export function SelectField<T extends string>({
 }): React.JSX.Element {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <select id={id} className="st-input st-select" value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <Select value={value} onValueChange={(next) => onChange(next as T)}>
+        <SelectTrigger id={id} className="st-input st-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
     </Field>
   )
 }
@@ -148,17 +161,16 @@ export function ToggleField({
 }): React.JSX.Element {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <button
+      <Switch
         id={id}
         type="button"
         role="switch"
         aria-checked={value}
         aria-label={label}
         className={'st-toggle' + (value ? ' is-on' : '')}
-        onClick={() => onChange(!value)}
-      >
-        <span className="st-toggle-knob" />
-      </button>
+        checked={value}
+        onCheckedChange={onChange}
+      />
     </Field>
   )
 }
@@ -180,8 +192,8 @@ export function ColorField({
 }): React.JSX.Element {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <input id={id} className="st-color" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
-      <input
+      <Input id={id} className="st-color" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input
         className="st-input st-input-hex st-mono"
         type="text"
         aria-label={`${label} hex`}

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { Comment } from '../shared/workspace'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 export interface NodeCommentsProps {
   comments: Comment[]
@@ -42,15 +44,15 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
         )}
       </div>
       <div className="node-comments__composer">
-        <textarea
+        <Textarea
           className="field"
           value={draft}
           placeholder="Add a comment…"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
         />
-        <button className="btn btn--accent" title="Send" onClick={send}>Send</button>
-        <button className="icon-btn" title="Close" onClick={onClose}>×</button>
+        <Button variant="default" size="sm" className="btn btn--accent h-auto" title="Send" onClick={send}>Send</Button>
+        <Button variant="ghost" size="icon-xs" className="icon-btn" title="Close" onClick={onClose}>×</Button>
       </div>
     </div>
   )

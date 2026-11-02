@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
 import NodeComments from './NodeComments'
@@ -86,7 +89,8 @@ export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; stat
 
 const IconChevron = (p: React.SVGProps<SVGSVGElement>) => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M4 6l4 4 4-4" /></svg>
+    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}
+    className={cn('size-3.5', p.className)}><path d="M4 6l4 4 4-4" /></svg>
 )
 
 export default function NodeChrome(props: NodeChromeProps) {
@@ -109,11 +113,12 @@ export default function NodeChrome(props: NodeChromeProps) {
 
   return (
     <div className="node-header" style={{ position: 'relative' }}>
-      <button
-        className={`nodrag icon-btn node-chevron${props.collapsed ? ' node-chevron--collapsed' : ''}`}
+      <Button
+        variant="ghost" size="icon-xs"
+        className={cn('nodrag icon-btn node-chevron', props.collapsed && 'node-chevron--collapsed')}
         title={props.collapsed ? 'Expand' : 'Collapse'}
         onClick={props.onToggleCollapse}
-      ><IconChevron /></button>
+      ><IconChevron /></Button>
 
       <NodeColorSwatch color={props.color} onColor={props.onColor} />
 
@@ -128,10 +133,13 @@ export default function NodeChrome(props: NodeChromeProps) {
       )}
 
       {chip && (
-        <span className={`node-status ${chip.cls}`} title={chip.title}>
+        <Badge
+          className={cn('node-status rounded-none border-0 bg-transparent px-0 py-0', chip.cls)}
+          title={chip.title}
+        >
           <span className="node-status-dot" />
           {chip.label}
-        </span>
+        </Badge>
       )}
 
       {props.pill}

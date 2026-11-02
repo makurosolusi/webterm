@@ -9,6 +9,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { CanvasMenuIcon, CanvasMenuItem } from './canvasMenu.model'
 import { SUBMENU_TOP_PX, submenuLift, submenuSide } from './canvasMenu.geometry'
 import type { SubmenuSide } from './canvasMenu.geometry'
+import { Button } from '@/components/ui/button'
 
 export const ICON_PX = 14
 
@@ -42,7 +43,7 @@ export function CanvasMenuRowButton({
   const Icon = ICONS[item.icon]
   const hasSub = !!item.children?.length
   return (
-    <button
+    <Button
       id={id}
       type="button"
       role="menuitem"
@@ -67,7 +68,7 @@ export function CanvasMenuRowButton({
       </span>
       <span>{item.label}</span>
       {hasSub && <ChevronRight className="node-menu__caret" size={ICON_PX} aria-hidden />}
-    </button>
+    </Button>
   )
 }
 

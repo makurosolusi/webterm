@@ -5,6 +5,7 @@
 // the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
 import { useEffect, useRef, useState } from 'react'
 import { Wrench } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { renderMarkdown } from '../markdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
@@ -154,7 +155,7 @@ export default function ChatMessages(props: ChatMessagesProps) {
         )}
       </div>
       {!atBottom && (
-        <button type="button" className="chat-jump" onClick={jump}>Jump to bottom</button>
+        <Button type="button" variant="outline" size="xs" className="chat-jump" onClick={jump}>Jump to bottom</Button>
       )}
     </div>
   )

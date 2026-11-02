@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { FolderPlus, Folder, GitBranch, Server } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { sessionLabel } from './sessionList'
 import type { ClosedEntry } from './closedHistory'
 
@@ -12,6 +15,9 @@ interface Props {
 
 const CARD_W = 150
 const CARD_GAP = 14
+// Ukuran ikon kartu. Ditulis eksplisit: utility `[&_svg]:size-4` milik Button akan mengecilkan
+// ikon 22px jadi 16px kalau SVG-nya tak punya ukuran inline sendiri.
+const ICON_SIZE = 22
 // Lebar bingkai daftar = sejajar dengan deretan empat kartu di atasnya.
 const LISTS_W = `calc(${4 * CARD_W}px + ${3 * CARD_GAP}px)`
 
@@ -53,11 +59,15 @@ const cardBase: React.CSSProperties = {
   fontSize: 13,
 }
 
-function Card({ icon, label, onClick, disabled }: { icon: React.ReactNode; label: string; onClick?: () => void; disabled?: boolean }) {
+function ActionTile({ icon, label, onClick, disabled }: { icon: React.ReactNode; label: string; onClick?: () => void; disabled?: boolean }) {
   const [hover, setHover] = useState(false)
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      // `disabled:pointer-events-auto`: tooltip "Not available in webterm yet" ada di `title`, dan
+      // `disabled:pointer-events-none` bawaan Button mematikan hover pada kartu yang disabled.
+      className="h-auto p-0 shadow-none disabled:pointer-events-auto"
       disabled={disabled}
       onClick={disabled ? undefined : onClick}
       title={disabled ? 'Not available in webterm yet' : undefined}
@@ -72,7 +82,7 @@ function Card({ icon, label, onClick, disabled }: { icon: React.ReactNode; label
     >
       <span aria-hidden style={{ display: 'flex' }}>{icon}</span>
       <span>{label}</span>
-    </button>
+    </Button>
   )
 }
 
@@ -109,23 +119,26 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
       </div>
 
       <div style={{ display: 'flex', gap: CARD_GAP, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Card icon={<FolderPlus size={22} />} label="New project" onClick={onNewProject} />
-        <Card icon={<Folder size={22} />} label="Open folder…" onClick={onNewProject} />
-        <Card icon={<GitBranch size={22} />} label="Clone repo…" disabled />
-        <Card icon={<Server size={22} />} label="Connect over SSH…" disabled />
+        <ActionTile icon={<FolderPlus size={ICON_SIZE} style={{ width: ICON_SIZE, height: ICON_SIZE }} />} label="New project" onClick={onNewProject} />
+        <ActionTile icon={<Folder size={ICON_SIZE} style={{ width: ICON_SIZE, height: ICON_SIZE }} />} label="Open folder…" onClick={onNewProject} />
+        <ActionTile icon={<GitBranch size={ICON_SIZE} style={{ width: ICON_SIZE, height: ICON_SIZE }} />} label="Clone repo…" disabled />
+        <ActionTile icon={<Server size={ICON_SIZE} style={{ width: ICON_SIZE, height: ICON_SIZE }} />} label="Connect over SSH…" disabled />
       </div>
 
       {/* Satu-satunya jalur buat-tanpa-folder webterm; dibiarkan sebagai baris sekunder tipis. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
-        <span style={{ color: 'var(--muted)', fontSize: 12 }}>or create an empty workspace</span>
-        <input
-          className="field"
+        <Label htmlFor="welcome-workspace-name" style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 400 }}>
+          or create an empty workspace
+        </Label>
+        <Input
+          id="welcome-workspace-name"
+          className="field h-auto focus-visible:ring-0"
           placeholder="workspace name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && createEmpty()}
         />
-        <button className="btn btn--ghost" onClick={createEmpty}>Create empty</button>
+        <Button type="button" variant="ghost" className="btn btn--ghost h-auto" onClick={createEmpty}>Create empty</Button>
       </div>
 
       {closed.length > 0 && (
