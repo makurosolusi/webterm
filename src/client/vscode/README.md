@@ -1,8 +1,9 @@
 # VS Code Elements foundation
 
 Adapter layer over [`@vscode-elements/react-elements`](https://vscode-elements.github.io)
-v2.4.0. Nothing here is wired into a screen yet: this is the import surface and
-theme bridge that migrations will build on.
+v2.4.0. It is the import surface and theme bridge: screens such as `FindBar`,
+`NodeChrome`, `NodeToolbar`, `FilesNode`, `EditorNode`, `SessionRow` and
+`SessionsPanel` already use the wrappers re-exported from `register.ts`.
 
 - `register.ts` imports the package once (registering every `vscode-*` custom
   element) and re-exports the React wrappers under short names.
