@@ -237,7 +237,7 @@ export interface StatusSection {
   rows: SessionRowVM[]
 }
 
-const isSession = (n: WsNode): boolean => SESSION_KINDS.includes(n.kind)
+export const isSession = (n: WsNode): boolean => SESSION_KINDS.includes(n.kind)
 
 function toRow(
   n: WsNode,

@@ -3,6 +3,7 @@ import { FolderPlus, Folder, GitBranch, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import Brand from './Brand'
 import { sessionLabel } from './sessionList'
 import type { ClosedEntry } from './closedHistory'
 
@@ -16,29 +17,6 @@ interface Props {
 // Ukuran ikon kartu. Kelas `size-[22px]` wajib ada: utility `[&_svg:not([class*='size-'])]:size-4`
 // milik Button akan mengecilkan ikon 22px jadi 16px kalau SVG-nya tak membawa kelas ukuran sendiri.
 const ICON_CLASS = 'size-[22px]'
-
-// Brand chevron nodeterm (porting: 40x40, gradien ungu). Tak ada file aset — satu SVG inline lebih
-// murah daripada menambah dependency atau file gambar untuk satu logo.
-function Brand() {
-  return (
-    <div className="flex items-center gap-3">
-      <svg width={40} height={40} viewBox="0 0 48 48" aria-hidden>
-        <defs>
-          <linearGradient id="wt-brand" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#a38dff" />
-            <stop offset="1" stopColor="#622994" />
-          </linearGradient>
-        </defs>
-        <path d="M13 12 L31 24 L13 36" fill="none" stroke="url(#wt-brand)" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={13} cy={12} r={3.6} fill="#a38dff" />
-        <circle cx={13} cy={36} r={3.6} fill="#a38dff" />
-        <circle cx={31} cy={24} r={3.6} fill="#fff" />
-        <rect x={33.5} y={32.5} width={10.5} height={5} rx={2.5} fill="#a38dff" />
-      </svg>
-      <span className="text-[30px] font-extrabold tracking-[-0.5px] text-foreground">webterm</span>
-    </div>
-  )
-}
 
 function ActionTile({ icon, label, onClick, disabled }: { icon: React.ReactNode; label: string; onClick?: () => void; disabled?: boolean }) {
   return (
@@ -71,7 +49,7 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 overflow-auto bg-[var(--canvas-bg)] px-4 py-6 text-foreground">
-      <Brand />
+      <Brand gradientId="wt-brand" labelClassName="text-foreground" />
       <div className="mt-1 mb-7 text-[13px] text-muted-foreground">
         A canvas of terminals. Start a project to begin.
       </div>

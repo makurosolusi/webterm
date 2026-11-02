@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import './vscode-overlay.css'
+import { clamp } from './vscodeClamp'
 
 export type VscodeOverlayPlacement = 'top' | 'bottom' | 'left' | 'right'
 
@@ -21,13 +22,9 @@ function anchorRect(anchor: DOMRect | HTMLElement): DOMRect {
   return anchor as DOMRect
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max))
-}
-
 /**
- * Viewport placement with flip and shift. Shared shape with the menu and tooltip,
- * but each primitive keeps its own copy so these files stay independent.
+ * Viewport placement with flip and shift. Shared shape with the menu and tooltip;
+ * clamp lives in ./vscodeClamp.
  */
 export function placeAnchored(
   anchor: { left: number; top: number; right: number; bottom: number; width: number; height: number },

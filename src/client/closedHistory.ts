@@ -15,7 +15,7 @@
 // di node-env tanpa DOM, jadi yang bisa di-assert harus hidup di luar komponen.
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { getWorkspace, saveWorkspace } from './api'
-import { SESSION_KINDS } from './sessionList'
+import { isSession } from './sessionList'
 import type { Workspace, WsNode } from '../shared/workspace'
 
 /** Sedalam apa riwayatnya. Angka nodeterm (`HISTORY_CAP`), dan batasnya memang harus ada: tanpa
@@ -30,8 +30,6 @@ export interface ClosedEntry {
   workspaceName: string
   closedAt: number
 }
-
-const isSession = (n: WsNode): boolean => SESSION_KINDS.includes(n.kind)
 
 /**
  * Entry untuk node yang baru ditutup. `nodeIds` boleh memuat apa pun yang dihapus canvas —
