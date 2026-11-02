@@ -1,10 +1,9 @@
 // Thin same-origin REST wrappers for the workspace API. JSON in/out; throw on non-2xx.
 import type { Workspace } from '../shared/workspace'
+import { TOKEN_KEY, TOKEN_PARAM } from './transportToken'
 
 /** Must match TOKEN_HEADER / TOKEN_PARAM in src/server/auth.ts. */
 export const TOKEN_HEADER = 'x-webterm-token'
-const TOKEN_PARAM = 'token'
-const TOKEN_KEY = 'webterm.token'
 
 /**
  * The transport token, when the server asked for one (non-loopback bind). It arrives once in

@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import './vscode-overlay.css'
+import { clamp } from './vscodeClamp'
 
 const VIEWPORT_MARGIN = 8
 const SUBMENU_OVERLAP = 4
@@ -68,10 +69,6 @@ function closeAllMenus(): void {
 
 function pointerInsideMenu(target: Node): boolean {
   return menuEntries.some((entry) => entry.root.contains(target))
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max))
 }
 
 function focusableIndices(items: VscodeMenuItem[]): number[] {
