@@ -22,7 +22,8 @@ export function handleChannelBindingsApi(
   req: IncomingMessage,
   res: ServerResponse,
   store: BindingStorePort | undefined,
-  audit?: BindingAudit
+  audit?: BindingAudit,
+  pending?: { remove(chatId: string): boolean }
 ): boolean {
   const url = new URL(req.url || '/', 'http://x')
   if (url.pathname !== TELEGRAM_BINDINGS_PATH) return false
@@ -30,7 +31,7 @@ export function handleChannelBindingsApi(
     writeJson(res, 503, { ok: false, error: 'channel_disabled' })
     return true
   }
-  void respond(req, res, url, store, audit)
+  void respond(req, res, url, store, audit, pending)
   return true
 }
 
@@ -59,7 +60,8 @@ async function respond(
   res: ServerResponse,
   url: URL,
   store: BindingStorePort,
-  audit: BindingAudit | undefined
+  audit: BindingAudit | undefined,
+  pending: { remove(chatId: string): boolean } | undefined
 ): Promise<void> {
   const method = (req.method ?? '').toUpperCase()
   let body = ''
@@ -86,7 +88,8 @@ async function respond(
       url.searchParams,
       async () => body,
       store,
-      audit
+      audit,
+      pending
     )
     if (result === null) {
       writeJson(res, 405, { ok: false, error: 'method_not_allowed' }, { Allow: 'GET, POST, DELETE' })

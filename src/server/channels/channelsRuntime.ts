@@ -29,6 +29,8 @@ import {
 } from './channelDispatch'
 import type { TelegramCentralPort } from './channelDispatch'
 import { handleChannelBindingsApi } from './channelBindingsHttp'
+import { PendingChatStore } from './channelPending'
+import { handleChannelPendingApi } from './channelPendingHttp'
 import { declaredLength, readCappedBody, writeJson, type BodyReadResult } from './channelHttp'
 import {
   flushChannelSender,
@@ -233,9 +235,11 @@ export function startChannelsRuntime(
       console.warn(`telegram audit append failed: ${safeError(err)}`)
     }
   }
+  const pending = new PendingChatStore(options.now === undefined ? {} : { now: options.now })
   const runtime: ChannelWebhookRuntime = {
     secret,
-    dispatch: (update) => dispatchTelegramUpdate(update, { store, approval, audit, centralChat: options.centralChat }),
+    dispatch: (update) =>
+      dispatchTelegramUpdate(update, { store, approval, audit, centralChat: options.centralChat, pending }),
   }
   const throttle = new FailureThrottle(undefined, undefined, options.now ?? Date.now)
   // A missing bot token only disables egress; ingress and the binding API stay available.
@@ -254,7 +258,7 @@ export function startChannelsRuntime(
     },
     handleApi(req, res) {
       // Authorization already happened: index.ts only calls this after `allowed`.
-      return handleChannelBindingsApi(req, res, store)
+      return handleChannelPendingApi(req, res, pending) || handleChannelBindingsApi(req, res, store, undefined, pending)
     },
     flushNow: () => flushChannelSender(sender),
     stop() {

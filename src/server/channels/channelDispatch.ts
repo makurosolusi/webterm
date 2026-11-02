@@ -25,6 +25,7 @@ import {
 } from './channelApprovals'
 import { TELEGRAM_MAX_TEXT, parseTelegramUpdate, type NormalizedMessage } from './telegram'
 import { redactSecrets } from './webhook'
+import type { PendingChatPort } from './channelPending'
 
 export type { ApprovalSummary, ChannelApprovalPort } from './channelApprovals'
 export { extractRejectChallenge } from './channelApprovals'
@@ -78,6 +79,8 @@ export interface TelegramDispatchDeps {
   consumeOnApprove?: boolean
   audit?: (event: ChannelAuditEvent) => void
   centralChat?: TelegramCentralPort
+  /** Where denied unknown private chats are listed for the owner (never replied to). */
+  pending?: PendingChatPort
 }
 
 export type DispatchOutcome =
@@ -131,6 +134,15 @@ async function replyTo(
 function safeReplyError(err: unknown): string {
   const text = err instanceof Error ? err.message : typeof err === 'string' ? err : 'outbox unavailable'
   return redactSecrets(text).slice(0, 200)
+}
+
+/** Best-effort: a pending-list failure must never change the (silent) denial or slow the update. */
+function recordPending(deps: TelegramDispatchDeps, chatId: string): void {
+  try {
+    deps.pending?.record(chatId, 'private') // groups were denied earlier, so only private reaches here
+  } catch (err) {
+    console.warn(`telegram pending record failed: ${safeReplyError(err)}`)
+  }
 }
 
 async function renderApprovals(
@@ -193,6 +205,7 @@ async function handleClaimed(
   }
   const binding = deps.store.binding(identity.channel, identity.chatId)
   if (!binding) {
+    recordPending(deps, identity.chatId)
     audit('denied', { reason: 'unknown_chat' })
     return { status: 'denied', reason: 'unknown_chat' }
   }

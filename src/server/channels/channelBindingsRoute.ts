@@ -5,7 +5,7 @@ import {
   type BindingStorePort,
   type RouteResult,
 } from './channelBindingsTypes'
-import { emit, fail } from './channelBindingsValidation'
+import { cleanId, emit, fail, isRecord } from './channelBindingsValidation'
 import { listTelegramBindings } from './channelBindingsList'
 import { createTelegramBinding, deleteTelegramBinding } from './channelBindingsStore'
 
@@ -21,7 +21,8 @@ export async function channelBindingsRoute(
   params: URLSearchParams,
   readBody: () => Promise<string>,
   store: BindingStorePort,
-  audit?: BindingAudit
+  audit?: BindingAudit,
+  pending?: { remove(chatId: string): boolean }
 ): Promise<RouteResult | null> {
   if (path !== TELEGRAM_BINDINGS_PATH) return null
   if (method === 'GET') return listTelegramBindings(store, audit)
@@ -42,5 +43,9 @@ export async function channelBindingsRoute(
     emit(audit, { kind: 'channel.telegram.binding', action: 'bind', outcome: 'invalid', reason: 'invalid_json' })
     return fail(400, 'invalid_json')
   }
-  return createTelegramBinding(body, store, audit)
+  const result = createTelegramBinding(body, store, audit)
+  // A successful bind resolves the chat's pending entry (the owner just acted on it).
+  const boundId = isRecord(body) ? cleanId(body['chatId']) : null
+  if (result.status < 300 && boundId !== null) pending?.remove(boundId)
+  return result
 }
