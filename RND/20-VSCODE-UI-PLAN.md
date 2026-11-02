@@ -1,10 +1,40 @@
 # VS Code UI/UX parity plan for webterm
 
-**Snapshot:** 2026-11-02, branch `feature/vscode-ui`, HEAD unknown at read time.
-**Scope:** analysis and implementation planning only. No source edit, commit, or push is claimed by this document.
+**Snapshot:** 2026-11-02, branch `feature/vscode-ui`.
+**Scope:** the analysis in sections 0 to 8 was written before implementation and is kept as the design record. The status section below records the implemented and verified state as of 2026-11-02; the planning-only disclaimer applies to the original analysis only.
 **Goal:** make the webterm chrome read and behave like VS Code (dark and light modern themes), use `@vscode-elements/react-elements` where it is a real fit, build the missing VS Code primitives, and keep terminal, xterm, Monaco, React Flow, node geometry, pane splits, persistence, and server contracts untouched.
 
 This is not a claim that webterm becomes VS Code. The target is **100 percent VS Code-like chrome**, measured by layout metrics, color tokens, typography, keyboard behavior, and visual acceptance at 1440 and 1778 wide. The canvas, nodes, terminal, and file editor remain webterm surfaces wrapped in VS Code chrome.
+
+---
+
+## Status — implemented, verified 2026-11-02
+
+The VS Code chrome migration has landed on `feature/vscode-ui`. This section is the current state; the rest of the document remains the design record and is not rewritten to match it.
+
+### Delivered
+
+- **Foundation:** `@vscode-elements/react-elements` 2.4.0 with a `--vscode` theme bridge and 38 registered components.
+- **New primitives:** ActivityBar, StatusBar, MenuBar, EditorTabBar, Breadcrumbs, SplitView, Dialog, Popover, Tooltip, Menu, Notification, QuickPick, Switch, Card.
+- **Shell:** 35px title/menu bar, 35px editor tab strip, 48px activity bar, 22px status bar, docked 300px Sessions sidebar, VS Code Settings view, QuickPick, Inbox/Chat as tabs of one bottom panel, and node/file/editor toolbar, tree, and breadcrumbs.
+- **Design decisions resolved in favor of the plan:** workspace tabs in the editor tab strip, Inbox and Chat as one bottom panel, Settings as an editor-area view, and VS Code Dark Modern / Light Modern tokens.
+
+### Verification
+
+- **Visual:** ego-browser checks at both themes and target widths; screenshots at `/Users/bip/.jcode/scratch/vscode-shell.png`, `vscode-shell-docked.png`, `vscode-settings.png`, `vscode-palette.png`, and `vscode-inbox.png`.
+- **Typecheck:** `tsc --noEmit` clean.
+- **Tests:** Vitest 2113/2113 passing with `--maxWorkers=4 --testTimeout=20000`.
+- **Build:** production build passing.
+
+The default parallel full suite can time out because Lit / VS Code Elements rendering is heavier per worker. That is a test harness limitation, not a UI failure; use the bounded-worker command above for a reliable run.
+
+### Remaining
+
+- Optional: pixel-perfect parity on secondary surfaces and editor-style node tabs.
+- Documentation beyond this status update and the README/CHANGELOG entries.
+- Optional tuning of the default Vitest worker settings for the heavier custom-element suites.
+
+This status does not claim 100 percent pixel parity. Parity should be judged against section 5 with the screenshots above, not from this summary.
 
 ---
 
@@ -1149,7 +1179,7 @@ If any answer is "keep current behavior", that surface becomes a restyle lane, n
 | Verified npm versions | react-elements 2.4.0, elements 2.5.1 |
 | Verified VS Code source constants | title bar 35, activity bar 48, sidebar 300/170, editor tabs 35, status bar 22, panel minimum 77 |
 
-Working tree note: at verification time, `git status` also showed modified `package.json`, `bun.lock`, `src/client/main.tsx`, and an untracked `src/client/vscode/` directory containing `register.ts`, `vscode-theme.css`, and `foundation.test.tsx`. This analysis did not create or edit those files. They appeared during the analysis window and look like a concurrent foundation lane. If that is the intended foundation location, use `src/client/vscode/**` instead of the proposed `src/client/components/vscode/**` in lane 1, and keep one owner for the directory. Do not merge two foundation layouts.
+Historical working tree note (analysis time, before implementation): `git status` also showed modified `package.json`, `bun.lock`, `src/client/main.tsx`, and an untracked `src/client/vscode/` directory containing `register.ts`, `vscode-theme.css`, and `foundation.test.tsx`. Those files belonged to the concurrent foundation lane and are now committed. The foundation and primitives landed under `src/client/vscode/**` and `src/client/components/vscode/**` respectively.
 
 ### 8.2 What this document does not prove
 
