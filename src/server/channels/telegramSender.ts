@@ -2,6 +2,7 @@
 // `telegramSend.ts` (token from env at send time, timeout, response validation, redaction); this
 // file owns queue draining, backoff, and the interval. Sending never throws into the ledger.
 import { backoffDelayMs } from './outbox'
+import { logEgressFailed, logEgressInternal, logEgressSent } from './telegramEgressLog'
 import type { StoredReply } from './channelStoreSchema'
 import {
   TELEGRAM_SEND_TIMEOUT_MS,
@@ -139,9 +140,17 @@ export class TelegramChannelSender {
           }
         )
         result.attempted += 1
+        const fields = {
+          key: row.key,
+          chatId: row.chatId,
+          textLength: row.text.length,
+          attempt: runtime.attempts + 1,
+          status: send.status,
+        }
 
         if (send.ok) {
-          if (this.persist(() => this.store.markReplySent(row.key))) {
+          logEgressSent(fields, this.clock())
+          if (this.persist('mark_sent', () => this.store.markReplySent(row.key))) {
             this.runtime.delete(row.key)
             result.sent += 1
             result.outcomes.push({ key: row.key, status: 'sent' })
@@ -167,7 +176,13 @@ export class TelegramChannelSender {
         )
         runtime.attempts = attempts
         runtime.nextAt = dead ? now : now + Math.min(this.maxDelayMs, delay)
-        const stored = this.persist(() =>
+        logEgressFailed(
+          { ...fields, ...(send.errorCode === undefined ? {} : { errorCode: send.errorCode }) },
+          this.clock(),
+          send.error,
+          dead ? 'dead' : 'retry'
+        )
+        const stored = this.persist('mark_failed', () =>
           this.store.markReplyFailed(row.key, {
             nextAt: runtime.nextAt,
             error: send.error,
@@ -186,8 +201,9 @@ export class TelegramChannelSender {
         }
       }
       return result
-    } catch {
+    } catch (err) {
       // Even a throwing store port must not propagate into the ledger/interval caller.
+      logEgressInternal('flush', err, this.clock())
       result.outcomes.push({ key: '', status: 'store_error' })
       return result
     } finally {
@@ -195,10 +211,13 @@ export class TelegramChannelSender {
     }
   }
 
-  private persist(operation: () => boolean): boolean {
+  private persist(name: string, operation: () => boolean): boolean {
     try {
-      return operation()
-    } catch {
+      const ok = operation()
+      if (!ok) logEgressInternal(name, new Error('store_rejected_update'), this.clock())
+      return ok
+    } catch (err) {
+      logEgressInternal(name, err, this.clock())
       return false
     }
   }
@@ -233,7 +252,7 @@ export function startChannelSender(
     if (stopped || inFlight) return
     inFlight = true
     void flush()
-      .catch(() => undefined)
+      .catch((err: unknown) => logEgressInternal('tick', err, Date.now()))
       .finally(() => {
         inFlight = false
       })

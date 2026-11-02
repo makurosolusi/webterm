@@ -57,6 +57,7 @@ export function startChannelSenderFor(
     options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }
   )
   track(handle)
+  console.info('telegram egress: on (outbox drained every few seconds)')
   return handle
 }
 

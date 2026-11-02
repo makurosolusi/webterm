@@ -73,6 +73,8 @@ export type TelegramSendResult =
       reason: TelegramSendFailureReason
       retryable: boolean
       retryAfterMs?: number
+      /** Bot API `error_code` when the provider returned one (already numeric, no secrets). */
+      errorCode?: number
     }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -99,7 +101,8 @@ function failure(
   error: string,
   reason: TelegramSendFailureReason,
   retryable: boolean,
-  retryAfterMs?: number
+  retryAfterMs?: number,
+  errorCode?: number
 ): TelegramSendResult {
   return {
     ok: false,
@@ -108,6 +111,7 @@ function failure(
     reason,
     retryable,
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+    ...(errorCode === undefined ? {} : { errorCode }),
   }
 }
 
@@ -174,33 +178,39 @@ export async function sendTelegramMessage(
     if (timer !== undefined) clearTimeout(timer)
   }
 
-  if (!response || typeof response.status !== 'number' || response.status < 200 || response.status >= 300) {
-    const status = response?.status ?? 0
-    return failure(
-      status,
-      clean(`http_${status}`, secrets),
-      'rejected',
-      status === 429 || status >= 500
-    )
+  if (!response || typeof response.status !== 'number') {
+    return failure(0, 'invalid_response', 'invalid_response', true)
   }
+  const httpOk = response.status >= 200 && response.status < 300
 
   let payload: Record<string, unknown>
   try {
     payload = asRecord(await response.json())
-  } catch {
-    return failure(response.status, 'invalid_response', 'invalid_response', true)
+  } catch (err) {
+    // A non-2xx body is often not JSON (proxy/HTML); the status alone is still a usable signal.
+    if (!httpOk) {
+      const retryable = response.status === 429 || response.status >= 500
+      return failure(response.status, `http_${response.status}`, 'rejected', retryable)
+    }
+    return failure(response.status, clean(`invalid_response: ${errorText(err)}`, secrets), 'invalid_response', true)
   }
 
-  if (payload['ok'] !== true) {
+  if (!httpOk || payload['ok'] !== true) {
+    // Bot API failures carry `description` (e.g. "chat not found"), `error_code` and
+    // `parameters.retry_after`; surface them so operators can tell a bad token from a bad chat.
     const description = typeof payload['description'] === 'string' ? payload['description'] : ''
     const params = asRecord(payload['parameters'])
     const retryAfter = optionalInt(params['retry_after'])
+    const errorCode = optionalInt(payload['error_code'])
+    const label = httpOk ? '' : `http_${response.status}`
+    const text = [label, description].filter(Boolean).join(': ') || 'provider_rejected'
     return failure(
       response.status,
-      clean(description || 'provider_rejected', secrets),
+      clean(text, secrets),
       'rejected',
-      retryAfter !== undefined || response.status === 429,
-      retryAfter !== undefined && retryAfter >= 0 ? retryAfter * 1000 : undefined
+      retryAfter !== undefined || response.status === 429 || (!httpOk && response.status >= 500),
+      retryAfter !== undefined && retryAfter >= 0 ? retryAfter * 1000 : undefined,
+      errorCode
     )
   }
 
