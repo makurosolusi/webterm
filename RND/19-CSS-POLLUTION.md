@@ -1,5 +1,7 @@
 # CSS pollution audit after the shadcn migration
 
+> ARSIP: digantikan oleh 17-SHADCN-CSS-DEBT.md; dipertahankan untuk riwayat.
+
 **Snapshot:** 2026-11-02, branch `feature/shadcn-ui`, HEAD `20a0ab3`. The working tree changed concurrently while this audit was being written (19 modified files by 06:26 UTC, including `styles.css`). CSS line counts below were re-measured at that point; the class inventory and dead-rule findings were re-checked against the same tree.
 **Scope:** the 12 presentation sheets plus `index.css`, cross-checked against every `src/client/**/*.ts(x)`, including template literals, test files, and the `components/ui` primitives.
 **Status:** analysis only. No source file was edited, deleted, or committed. This document is the only artifact.

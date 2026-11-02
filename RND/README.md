@@ -2,7 +2,8 @@
 
 Status: riset, perencanaan, dan implementasi bertahap. **P0-P2 selesai.**
 **P3 tertutup end-to-end; P4/P5 ter-wire lewat HTTP tetapi belum production-ready.**
-Branch aktif `feature/agent-pusat-p3`; HEAD `a856bdf` (central B2-B3-D-E, commits `afe98d5..a856bdf`).
+Snapshot status berasal dari `feature/agent-pusat-p3` HEAD `a856bdf` (central B2-B3-D-E, commits
+`afe98d5..a856bdf`); riwayat branch terkini ada di `git log`, bukan di dokumen ini.
 Snapshot status: 2026-11-02 (+08:00). Central update: B2 real turn terverifikasi; B3 partial dengan
 `task.assign` selesai;
 D bridge dan E retrieval teruji pada unit/acceptance terbatas, belum production-ready.
@@ -21,10 +22,15 @@ Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 6. `05-TRACEABILITY.md` — coverage dan gap.
 7. `06-BUG-RISK.md` — bug B1-B12 dan deteksi dini.
 8. `07-IMPLEMENTASI-P3-P5.md` — peta kode P3/P4/P5, gap, acceptance, gate.
-9. `qc/` — review P0-P4: security, integration, tests, E2E UI, acceptance wave 2 dan
+9. `08`-`14` — Agen Pusat: arsitektur (`08`), runtime (`09`), planning (`10`), chat (`11`),
+   memory (`12`), rencana implementasi (`13`), slice S0 terimplementasi (`14`).
+10. `15`-`19` — migrasi UI shadcn: inventaris/rencana (`15`, ARSIP), audit konformansi (`16`),
+    ledger utang CSS (`17`), utang inline style (`18`), audit polusi CSS (`19`, ARSIP).
+11. `20-VSCODE-UI-PLAN.md` — rencana dan status migrasi chrome ke gaya VS Code.
+12. `qc/` — review P0-P4: security, integration, tests, E2E UI, acceptance wave 2 dan
    `p4-wave2-fixes.md` (temuan → fix → bukti, residual).
-10. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
-11. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
+13. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
+14. `90-REFERENSI/BUKTI.md` — artefak riset dan clone Jcode.
 
 ---
 
@@ -41,8 +47,21 @@ RND/
   05-TRACEABILITY.md
   06-BUG-RISK.md
   07-IMPLEMENTASI-P3-P5.md
+  08-CENTRAL-AGENT.md
+  09-CENTRAL-AGENT-RUNTIME.md
+  10-CENTRAL-AGENT-PLANNING.md
+  11-CENTRAL-AGENT-CHAT.md
+  12-CENTRAL-AGENT-MEMORY.md
+  13-CENTRAL-AGENT-IMPLEMENTATION-PLAN.md
+  14-CENTRAL-AGENT-S0.md
+  15-SHADCN-UI-MIGRATION.md          (ARSIP -> 16)
+  16-SHADCN-CONFORMANCE-AUDIT.md
+  17-SHADCN-CSS-DEBT.md
+  18-INLINE-STYLE-DEBT.md
+  19-CSS-POLLUTION.md                (ARSIP -> 17)
+  20-VSCODE-UI-PLAN.md
   qc/
-    p1-*.md p2-*.md p3-*.md p3-e2e-ui-assets/
+    p1-*.md p2-*.md p3-*.md p4-*.md wave5-*.md review/hunt/soak notes, p3-e2e-ui-assets/
   90-REFERENSI/
     AGENT_PUSAT.md
     BUKTI.md

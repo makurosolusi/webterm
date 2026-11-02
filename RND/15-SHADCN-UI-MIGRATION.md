@@ -1,5 +1,7 @@
 # shadcn/ui migration inventory and parallel plan
 
+> ARSIP: digantikan oleh 16-SHADCN-CONFORMANCE-AUDIT.md; dipertahankan untuk riwayat.
+
 **Snapshot:** 2026-11-02, branch `feature/shadcn-ui`  
 **Verified state:** shadcn `command` and `popover` are available, with `cmdk` added. The migration covers the documented shell surfaces and default component compositions below. Canvas, xterm, Monaco, React Flow, and geometry-sensitive chrome remain intentionally custom. This is not a full pixel-parity claim.
 
