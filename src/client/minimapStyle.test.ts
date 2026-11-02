@@ -8,12 +8,14 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const css = readFileSync('src/client/styles.css', 'utf8')
+const shell = readFileSync('src/client/styles.css', 'utf8')
+const css = readFileSync('src/client/canvas-ui.css', 'utf8')
+const app = readFileSync('src/client/App.tsx', 'utf8')
 
 /** Body of the first rule whose selector is exactly `selector`. */
-function ruleBody(selector: string): string {
+function ruleBody(source: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)
+  const match = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(source)
   expect(match, `missing rule for ${selector}`).not.toBeNull()
   return match?.[1] ?? ''
 }
@@ -24,25 +26,26 @@ function specificity(selector: string): number {
 }
 
 describe('minimap dark override', () => {
-  it('is more specific than React Flow and sets the variable React Flow reads', () => {
-    const override = '.react-flow__minimap.minimap-dock'
+  const override = '.react-flow .react-flow__minimap.minimap-dock'
+
+  it('is more specific than React Flow and sets the variables React Flow reads', () => {
     expect(specificity(override)).toBeGreaterThan(specificity('.react-flow__minimap'))
 
-    const body = ruleBody(override)
-    expect(body).toContain('--xy-minimap-background-color-props: var(--canvas-bg)')
-    expect(body).toContain('background: var(--canvas-bg)')
+    const body = ruleBody(css, override)
+    expect(body).toContain('--xy-minimap-background-color-props: var(--vscode-minimap-background')
+    expect(body).toContain('--xy-minimap-mask-background-color-props: var(--vscode-minimapSlider-background)')
   })
 
-  it('keeps position and border on the base dock class', () => {
-    const base = ruleBody('.minimap-dock')
+  it('tidak memakai !important dan tidak memasang maskColor inline dari App', () => {
+    expect(css).not.toContain('!important')
+    expect(app).not.toContain('maskColor')
+  })
+
+  it('keeps position on the base dock class, tanpa warna mentah atau background keras', () => {
+    const base = ruleBody(shell, '.minimap-dock')
     expect(base).toContain('position: absolute')
-    expect(base).toContain('border: 1px solid var(--border)')
-    expect(base).toContain('background: var(--canvas-bg)')
-  })
-
-  it('declares the override after the base rule', () => {
-    expect(css.indexOf('.react-flow__minimap.minimap-dock')).toBeGreaterThan(
-      css.indexOf('.minimap-dock {')
-    )
+    expect(base).toContain('margin: 0')
+    expect(base).not.toContain('background')
+    expect(base).not.toContain('border')
   })
 })

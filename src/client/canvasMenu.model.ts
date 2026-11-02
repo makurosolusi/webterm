@@ -19,11 +19,11 @@ export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'select-all' | 'fi
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
-  terminal: 'New terminal',
-  agentGroup: 'New agent',
-  files: 'New file manager',
-  selectAll: 'Select all',
-  fitView: 'Fit view',
+  terminal: 'New Terminal',
+  agentGroup: 'New Agent',
+  files: 'New File Manager',
+  selectAll: 'Select All',
+  fitView: 'Fit View',
 } as const
 
 /**

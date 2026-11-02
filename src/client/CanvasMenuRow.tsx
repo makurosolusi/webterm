@@ -8,7 +8,7 @@ import type { CanvasMenuIcon, CanvasMenuItem, CanvasMenuRow } from './canvasMenu
 
 const ICON_NAMES: Record<CanvasMenuIcon, string> = {
   terminal: 'terminal',
-  agent: 'sparkle',
+  agent: 'hubot',
   files: 'files',
   'select-all': 'selection',
   fit: 'screen-full',

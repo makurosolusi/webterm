@@ -1,56 +1,56 @@
-/* Chrome mengapung di canvas: cluster kontrol kanan-atas. (Rail zoom kiri-bawah sudah tidak ada:
-   isinya dilebur ke kolom dock di `dock.css`.)
-   Angka cluster diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (controls-cluster 5293,
-   tombol cluster 5719) — bukan karangan. Palette ⌘K memakai `VscodeQuickPick`, jadi metriknya
-   tinggal di `components/vscode/vscode-controls.css` (600px, 6px di bawah title bar, baris 22px).
-   Token --menu-rgb/--tint-rgb/--shadow-k/--tabbar-h milik styles.css (wkr-chrome-01);
-   fallback di tiap var() memakai nilai nodeterm supaya tampilan tidak pecah bila namanya beda. */
+/* Chrome mengapung di canvas: cluster kontrol kiri-bawah. Palette ⌘K memakai `VscodeQuickPick`,
+   jadi metriknya tinggal di `components/vscode/vscode-controls.css`. Menu konteks canvas memakai
+   `VscodeMenu` (tanpa CSS di sini). Semua warna lewat token `--vscode-*`. */
 
-/* ---- Cluster kontrol (kanan-atas editor) ----
-   Sekarang hidup DI DALAM `.app-main`, jadi `top` tidak perlu menambahkan tinggi chrome lagi.
-   Metriknya tombol toolbar VS Code: 22px, ikon codicon 16px, radius 5px. Plat = editor widget
-   (border 1px + widget-shadow); hover/active per tombol. */
+/* ---- Cluster kontrol (kiri-bawah editor) ----
+   Hidup DI DALAM `.app-main`. Kiri-bawah dipilih supaya tidak menutupi tombol header node
+   (kanan-atas node) dan tidak bertabrakan dengan minimap di kanan-bawah (G-2). Metriknya
+   tombol toolbar VS Code: 22px, ikon codicon 16px, radius 4px; plat = widget melayang. */
 .controls-cluster {
   position: absolute;
-  top: var(--float-gap);
-  right: var(--float-gap);
+  bottom: var(--float-gap);
+  left: var(--float-gap);
   z-index: 26;
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 2px;
-  /* Widget melayang VS Code: latar editorWidget, border 1px, shadow hanya `widget-shadow`. */
-  background: var(--vscode-editorWidget-background, var(--panel-header));
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-editorGroup-border, var(--border)));
-  border-radius: 5px;
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  /* Widget melayang VS Code: latar editorWidget, border 1px, radius 8px, shadow widget 12px. */
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 8px;
+  box-shadow: var(--wt-shadow-floating);
 }
 
-/* Tombol toolbar VS Code (action-item): 22px, ikon codicon 16px, radius 5px, kursor default. */
+/* Aksi toolbar VS Code: 22px, ikon codicon 16px, radius 4px. `padding`/`min-height`/`background`
+   ditulis eksplisit karena `Button` shadcn memberi padding, tinggi min, dan latar default; CSS ini
+   tak ber-layer sehingga menang atas utilitas Tailwind. */
 .controls-cluster > button {
   width: 22px;
+  min-height: 0;
   height: 22px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 5px;
-  color: var(--vscode-icon-foreground, var(--text));
+  border-radius: 4px;
+  color: var(--vscode-icon-foreground);
   font-size: 13px;
   cursor: default;
 }
 
 .controls-cluster > button:hover {
-  background: var(--vscode-toolbar-hoverBackground, var(--panel-header));
+  background: var(--vscode-toolbar-hoverBackground);
 }
 
 .controls-cluster > button:active {
-  background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground, var(--panel-header)));
+  background: var(--vscode-toolbar-activeBackground);
 }
 
 .controls-cluster > button:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }
 
@@ -58,8 +58,10 @@
   font-size: 16px;
 }
 
-/* Tombol search melebar untuk memuat chip ⌘K, jadi tujuannya terbaca tanpa tooltip. */
-.cluster-search {
+/* Tombol search melebar untuk memuat chip ⌘K. Selector HARUS `.controls-cluster > .cluster-search`
+   (0,2,0): `.controls-cluster > button` (0,1,1) menang atas `.cluster-search` polos (0,1,0) dan
+   menjepit tombol ke 22px sehingga chip menimpa tombol Explorer di sebelahnya (G-1). */
+.controls-cluster > .cluster-search {
   width: auto;
   gap: 6px;
   padding: 0 6px;
@@ -77,72 +79,6 @@
   line-height: 1.4;
 }
 
-/* Menu konteks canvas (`CanvasContextMenu.tsx`). Panel, baris, ikon, dan separator dasarnya
-   dipakai bersama `.node-menu*` di agent.css — menu node dan menu canvas adalah permukaan yang
-   sama di mata pengguna. Yang ditambahkan di sini hanya yang khas canvas: submenu dan caret-nya,
-   titik warna agent, serta state nonaktif/aktif versi aria (menu canvas memakai `aria-disabled`,
-   bukan atribut `disabled` native — lihat alasannya di komentar `Row`). */
-
-.node-menu--canvas {
-  /* Lebih lapang dari menu node: barisnya membawa nama agent panjang plus caret submenu. */
-  min-width: var(--canvas-menu-w, 244px);
-}
-
-/* Jangkar flyout: `position: relative` di sini yang menjadikan baris ini offsetParent flyout-nya,
-   dan `useLayoutEffect` di `Submenu` membaca rect offsetParent itu untuk memilih sisi. */
-.node-menu__row {
-  position: relative;
-}
-
-.node-menu__caret {
-  margin-left: auto;
-  opacity: 0.45;
-}
-
-.node-menu__dot {
-  width: 8px;
-  height: 8px;
-  margin: auto;
-  border-radius: 50%;
-}
-
-/* `--submenu-top` mencerminkan SUBMENU_TOP_PX, dan `--submenu-overlap` mencerminkan
-   SUBMENU_OVERLAP_PX di canvasMenu.geometry.ts — keduanya HARUS sama: JS memakai angka itu untuk
-   memutuskan sisi mana yang muat, CSS memakainya untuk benar-benar menempatkannya. Tumpang-tindih
-   itulah yang membuat kursor tidak pernah menyeberangi celah kosong menuju flyout. */
-.node-menu__sub {
-  --submenu-top: -6px;
-  --submenu-overlap: 4px;
-  position: absolute;
-  top: var(--submenu-top);
-  max-width: min(320px, 70vw);
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.node-menu__sub[data-side='right'] {
-  left: calc(100% - var(--submenu-overlap));
-}
-
-.node-menu__sub[data-side='left'] {
-  right: calc(100% - var(--submenu-overlap));
-}
-
-/* Aturan hover di agent.css memakai `:not(:disabled)`, yang TIDAK menangkap `aria-disabled` —
-   tanpa override ini baris mati tetap menyala saat disinggahi dan terlihat bisa diklik. */
-.node-menu__item[aria-disabled='true'],
-.node-menu__item[aria-disabled='true']:hover {
-  background: transparent;
-  color: var(--muted);
-  cursor: default;
-}
-
-/* Baris aktif keyboard, disorot sama seperti hover supaya panah dan kursor terasa satu hal. */
-.node-menu__item[aria-current='true'] {
-  background: var(--vscode-menu-selectionBackground, rgba(var(--tint-rgb), 0.1));
-  color: var(--vscode-menu-selectionForeground, inherit);
-}
-
 /* ---- Canvas & edge (VS Code) ----
    Latar canvas mengikuti editor; edge = garis netral (warna panah mengikuti `color` marker). */
 .react-flow {
@@ -158,11 +94,13 @@
   color: var(--vscode-focusBorder, var(--accent));
 }
 
-/* Minimap VS Code: latar editor, slider = `minimapSlider`. `maskColor` dari App.tsx masuk inline
-   (`--…-props`), jadi hanya `!important` yang bisa menimpanya tanpa menyentuh App.tsx. */
+/* Minimap VS Code: latar `minimap-background`, slider = `minimapSlider`. `maskColor` TIDAK dipasang
+   di App.tsx (ia masuk inline lewat `--…-props` dan hanya bisa ditimpa dengan important), jadi
+   aturan ini menang lewat spesifisitas saja. Warna node dari `miniMapNodeColor` (netral; hanya status agent berwarna). */
 .react-flow .react-flow__minimap.minimap-dock {
-  --xy-minimap-background-color-props: var(--vscode-minimap-background, var(--vscode-editor-background, var(--canvas-bg)));
-  --xy-minimap-mask-background-color-props: var(--vscode-minimapSlider-background, rgba(121, 121, 121, 0.2)) !important;
-  border: 1px solid var(--vscode-editorWidget-border, var(--border));
+  --xy-minimap-background-color-props: var(--vscode-minimap-background, var(--vscode-editor-background));
+  --xy-minimap-mask-background-color-props: var(--vscode-minimapSlider-background);
+  --xy-minimap-mask-stroke-color-props: var(--vscode-editorWidget-border);
+  border: 1px solid var(--vscode-editorWidget-border);
   border-radius: 0;
 }

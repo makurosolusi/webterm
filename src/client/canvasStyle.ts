@@ -5,20 +5,20 @@ import type { Edge, Node, NodeHandle } from '@xyflow/react'
 import { hiddenEdgeNodeIds, edgeVisible } from './floatingEdge'
 import type { AgentStatus, BridgeLink } from '../shared/workspace'
 
-const ACCENT = '#0a84ff'
+/** Node minimap netral seperti blok kode minimap VS Code; hanya status agent yang berwarna.
+ *  Warna pilihan node (`data.color`) sengaja tidak dipakai: ia hanya penanda kecil di chrome node. */
+export const MINIMAP_NODE_NEUTRAL = 'var(--vscode-editorLineNumber-foreground)'
 const STATUS_COLOR: Record<AgentStatus, string> = {
-  working: '#d97757',
-  waiting: '#ff9f0a',
-  blocked: '#ff453a',
-  done: '#98989d',
+  working: 'var(--state-working)',
+  waiting: 'var(--state-warning)',
+  blocked: 'var(--state-attention)',
+  done: MINIMAP_NODE_NEUTRAL,
 }
 
-/** Warna satu node di MiniMap: status agent menang, lalu warna pilihan node, lalu aksen. */
+/** Warna satu node di MiniMap: status agent berwarna (selesai = netral), selain itu netral. */
 export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>): string {
-  if (n.type === 'terminal') return ACCENT
   const s = statuses[n.id]
-  if (s) return STATUS_COLOR[s]
-  return (n.data as { color?: string }).color ?? ACCENT
+  return s ? STATUS_COLOR[s] : MINIMAP_NODE_NEUTRAL
 }
 
 /** Warna edge VS Code: garis netral (seperti garis nomor/indent), terpilih = `focusBorder`.

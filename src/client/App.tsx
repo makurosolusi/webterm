@@ -382,7 +382,7 @@ export default function App() {
               <Background variant={BackgroundVariant.Dots} gap={settings.gridSize} size={2.5} color="var(--canvas-dot)" />
             )}
             <MiniMap
-              className="minimap-dock" pannable zoomable maskColor="rgba(10,12,18,0.6)" nodeColor={nodeColor}
+              className="minimap-dock" pannable zoomable nodeColor={nodeColor}
               // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.
               // `setCenter` tanpa `zoom` jatuh ke maxZoom, bukan zoom sekarang — klik cuma boleh
               // memindahkan titik pandang, jadi zoom berjalan diteruskan eksplisit.

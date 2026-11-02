@@ -13,7 +13,7 @@
   --color-popover: var(--overlay);
   --color-popover-foreground: var(--text);
   --color-primary: var(--accent);
-  --color-primary-foreground: #fff;
+  --color-primary-foreground: var(--vscode-button-foreground);
   --color-secondary: var(--raised);
   --color-secondary-foreground: var(--text);
   --color-muted: var(--sunken);

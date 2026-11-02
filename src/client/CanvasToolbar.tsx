@@ -4,7 +4,7 @@ import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import './canvas-ui.css'
 
-// Cluster kontrol kanan-atas + command palette ⌘K. Porting dari nodeterm
+// Cluster kontrol kiri-bawah + command palette ⌘K. Porting dari nodeterm
 // `src/renderer/canvas/Canvas.tsx` (.controls-cluster). Palette memakai primitif VS Code
 // (`VscodeQuickPick`) supaya metriknya sama dengan permukaan VS Code lain di webterm.
 
@@ -89,6 +89,10 @@ export function nodeTargets(nodes: CanvasNodeLike[]): PaletteTarget[] {
   })
 }
 
+/** Codicon per tipe node di palette (seragam dengan Add node di Dock); tipe lain = terminal. */
+const KIND_ICONS: Record<string, string> = { agent: 'hubot', files: 'folder', editor: 'edit' }
+export const kindIcon = (kind?: string): string => (kind && KIND_ICONS[kind]) || 'terminal'
+
 export interface CanvasToolbarProps {
   nodes: CanvasNodeLike[]
   /** Dipanggil dengan id node terpilih di palette — pemanggil yang melakukan fitView. */
@@ -117,7 +121,7 @@ export default function CanvasToolbar({
         label: target.label,
         description: target.hint,
         group: 'Nodes',
-        icon: target.hint === 'agent' ? <span className="codicon codicon-hubot" aria-hidden /> : <span className="codicon codicon-terminal" aria-hidden />,
+        icon: <span className={`codicon codicon-${kindIcon(target.hint)}`} aria-hidden />,
       })),
     [nodes],
   )

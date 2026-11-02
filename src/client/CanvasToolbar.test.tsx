@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import CanvasToolbar from './CanvasToolbar'
+import CanvasToolbar, { kindIcon } from './CanvasToolbar'
 import type { CanvasNodeLike } from './CanvasToolbar'
 
 afterEach(cleanup)
@@ -46,6 +46,32 @@ describe('CanvasToolbar chrome', () => {
       'codicon codicon-question',
     ])
     expect(screen.getByRole('button', { name: 'Command palette' }).getAttribute('title')).toBe('Command palette (⌘K)')
+  })
+})
+
+describe('CanvasToolbar palette icons (G-10)', () => {
+  it('kindIcon: agent=hubot, files=folder, editor=edit, lainnya=terminal', () => {
+    expect([kindIcon('agent'), kindIcon('files'), kindIcon('editor'), kindIcon('terminal'), kindIcon('x'), kindIcon()]).toEqual([
+      'hubot', 'folder', 'edit', 'terminal', 'terminal', 'terminal',
+    ])
+  })
+
+  it('tiap baris palette memakai ikon sesuai tipe node', () => {
+    renderToolbar({
+      nodes: [
+        { id: 'a', type: 'agent', data: { kind: 'agent', title: 'Agent one' } },
+        { id: 'f', type: 'files', data: { kind: 'files', title: 'Files one' } },
+        { id: 'e', type: 'editor', data: { kind: 'editor', title: 'Editor one' } },
+        { id: 't', type: 'terminal', data: { kind: 'terminal', title: 'Term one' } },
+      ],
+    })
+    openWithShortcut()
+    const iconOf = (name: string) =>
+      screen.getByRole('option', { name: new RegExp(name) }).querySelector('.codicon')?.className
+    expect(iconOf('Agent one')).toBe('codicon codicon-hubot')
+    expect(iconOf('Files one')).toBe('codicon codicon-folder')
+    expect(iconOf('Editor one')).toBe('codicon codicon-edit')
+    expect(iconOf('Term one')).toBe('codicon codicon-terminal')
   })
 })
 
@@ -152,5 +178,29 @@ describe('canvas-ui.css', () => {
   it('no longer carries the retired cmdk palette rules', () => {
     expect(css).not.toContain('.canvas-command-')
     expect(css).not.toContain('.palette__')
+  })
+
+  it('tidak memuat sisa menu lama (.node-menu*): menu canvas = VscodeMenu', () => {
+    expect(css).not.toContain('.node-menu')
+  })
+
+  it('G-1: tombol search lebih spesifik dari `.controls-cluster > button`, jadi chip tak menimpa Explorer', () => {
+    const rule = (sel: string) => new RegExp(`(?:^|\\n)${sel.replace(/[.>*]/g, '\\$&')} \\{([^}]*)\\}`).exec(css)?.[1] ?? ''
+    const generic = rule('.controls-cluster > button')
+    expect(generic).toContain('width: 22px')
+    // `.x > .y` = 2 kelas (0,2,0) > `.x > button` = 1 kelas + 1 tag (0,1,1).
+    const search = rule('.controls-cluster > .cluster-search')
+    expect(search).toContain('width: auto')
+    expect(search).toContain('padding: 0 6px')
+    expect(css).not.toMatch(/\n\.cluster-search \{/)
+  })
+
+  it('G-2: cluster di kiri-bawah (tidak menutupi tombol header node), shadow widget', () => {
+    const body = /(?:^|\n)\.controls-cluster \{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(body).toContain('bottom: var(--float-gap)')
+    expect(body).toContain('left: var(--float-gap)')
+    expect(body).not.toMatch(/\btop:/)
+    expect(body).toContain('border-radius: 8px')
+    expect(body).toContain('box-shadow: var(--wt-shadow-floating)')
   })
 })

@@ -25,7 +25,6 @@ describe('styles.css — token sheet', () => {
       '--accent: var(--vscode-focusBorder)',
       '--state-working: #d97757',
       '--state-attention: #ff453a',
-      '--radius-node: 10px',
       '--float-gap: 22px',
       // Geometri chrome VS Code. Dipaku: grid `.app-shell` memakai keempatnya, dan primitif
       // `components/vscode/vscode-shell.css` menggambar tinggi yang sama.
@@ -44,10 +43,7 @@ describe('styles.css — token sheet', () => {
     for (const tok of [
       '--tint-rgb: 255, 255, 255',
       '--menu-rgb: 31, 31, 31',
-      '--card-rgb: 24, 24, 24',
       '--shadow-k: 1',
-      '--controls-w: 30px',
-      '--caution: #ffd60a',
     ]) {
       expect(tokens).toContain(tok)
     }
@@ -57,15 +53,36 @@ describe('styles.css — token sheet', () => {
     expect(tokens).toContain('--muted-2: rgba(var(--tint-rgb), 0.25)')
     expect(tokens).toContain('--border: var(--vscode-panel-border)')
     expect(tokens).toContain('--text: var(--vscode-foreground)')
-    expect(tokens).toContain('--shadow-node: 0 8px 28px rgba(0, 0, 0, calc(0.4 * var(--shadow-k)))')
   })
 
   it('ships a light theme that re-points the same tokens', () => {
     expect(tokens).toContain(":root[data-theme='light']")
     const light = tokens.slice(tokens.indexOf(":root[data-theme='light']"))
-    for (const tok of ['--tint-rgb: 59, 59, 59', '--menu-rgb: 255, 255, 255', '--shadow-k: 0.35', '--caution: #806100']) {
+    for (const tok of ['--tint-rgb: 59, 59, 59', '--menu-rgb: 255, 255, 255', '--shadow-k: 0.35']) {
       expect(light).toContain(tok)
     }
+  })
+
+  it('tidak lagi memuat token mati (tak dirujuk satu pun sheet/komponen)', () => {
+    for (const dead of [
+      '--accent-text', '--card-rgb', '--caution', '--controls-w', '--radius:', '--radius-sm',
+      '--radius-lg', '--radius-node', '--shadow-node',
+    ]) {
+      expect(tokens).not.toContain(dead)
+    }
+  })
+
+  it('scrollbar view 8px dengan slider radius 4px (14px hanya milik editor)', () => {
+    expect(tokens).toContain('::-webkit-scrollbar { width: 8px; height: 8px; }')
+    expect(tokens).toMatch(/::-webkit-scrollbar-thumb \{[^}]*border-radius: 4px/)
+  })
+
+  it('command center: 24px, radius 5px, border token commandCenter', () => {
+    const pill = tokens.slice(tokens.indexOf('.app-titlebar__name {'))
+    const body = pill.slice(0, pill.indexOf('}'))
+    expect(body).toContain('height: 24px')
+    expect(body).toContain('border-radius: 5px')
+    expect(body).toContain('border: 1px solid var(--vscode-commandCenter-border)')
   })
 
   it('keeps shared layout and canvas furniture', () => {
@@ -138,11 +155,13 @@ describe('styles.css — token sheet', () => {
 })
 
 describe('node-chrome.css', () => {
-  it('leaves the node border-top COLOR to the inline style of each node', () => {
+  it('draws the node frame as a flat 1px neutral border, never a coloured 2px top line', () => {
     const frame = chrome.slice(chrome.indexOf('.term-node {'), chrome.indexOf('.term-node--selected'))
-    // Tab editor VS Code: garis aktif 2px (`tab.activeBorderTop`), bukan 3px nodeterm.
-    expect(frame).toContain('border-top-width: 2px')
-    expect(frame).not.toContain('border-top-color')
+    expect(frame).toContain('border: 1px solid var(--nc-border)')
+    expect(frame).not.toContain('border-top-width')
+    expect(frame).not.toContain('box-shadow')
+    expect(chrome).toContain('--nc-border: var(--vscode-editorGroup-border')
+    expect(chrome).not.toContain('border-top-color')
   })
 
   it('hangs the status glow outside .term-node, which clips its own ::after', () => {
@@ -178,6 +197,8 @@ describe('node-chrome.css', () => {
     // Judul tidak boleh melar: toolbar yang didorong `margin-left: auto`, bukan judul.
     expect(title).not.toContain('flex: 1')
     expect(chrome).toContain('.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }')
+    expect(chrome).not.toContain('.node-toolbar__count')
+    expect(chrome).not.toContain('.pane-split-btns')
     // Tombol header memakai `vscode-toolbar-button`; kelas status lama dan merah "danger" sudah tidak ada.
     expect(chrome).not.toContain('.icon-btn {')
     expect(chrome).not.toContain('.node-toolbar__danger')
@@ -185,17 +206,17 @@ describe('node-chrome.css', () => {
     expect(chrome).toContain('border-radius: 50%')
   })
 
-  it('has no gradients and no radius above the widget radius (5px)', () => {
+  it('has no gradients and no radius above the widget radius (8px)', () => {
     expect(chrome).not.toContain('gradient')
     expect(chrome).toContain('--nc-radius: 3px')
-    expect(chrome).toContain('--nc-radius-widget: 5px')
+    expect(chrome).toContain('--nc-radius-widget: 8px')
     expect(chrome).not.toContain('--radius-node')
     expect(chrome).not.toContain('--shadow-node')
   })
 
   it('marks the selected node as the active tab with the focus border', () => {
     const decl = (sel: string) => chrome.match(new RegExp(`\\${sel}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
-    expect(decl('.term-node--selected')).toContain('var(--nc-focus)')
+    expect(decl('.term-node--selected')).toContain('--nc-border: var(--nc-focus)')
     expect(chrome).toContain('.term-node--selected .node-header')
     expect(chrome).toContain('--nc-focus: var(--vscode-focusBorder')
   })
@@ -231,9 +252,9 @@ describe('node-chrome.css', () => {
 
   it('defines the rest of the chrome vocabulary', () => {
     for (const cls of [
-      '.pane-host', '.pane--active', '.pane-divider', '.pane-split-btns',
+      '.pane-host', '.pane--active', '.pane-divider',
       '.node-header', '.node-title--edit', '.node-swatch', '.node-swatch-pop',
-      '.node-toolbar__count', '.node-icon', '.node-description',
+      '.node-icon', '.node-description',
       '.node-find__field', '.node-find__actions',
       '.node-body', '.term-node--collapsed',
       '.usage-pill', '.usage-pill__label', '.usage-pill__minibar', '.usage-pill__fill',
@@ -277,7 +298,9 @@ describe('dock.css — activity bar rail', () => {
     // Dimensi 48x48 + indikator 2px datang dari `.vscode-activity-bar__item` (kelas bersama).
     expect(dock).not.toContain('.dock-btn {')
     expect(dock).toContain(".dock-btn[aria-pressed='true']")
-    expect(dock).toContain('--vscode-activityBar-activeBorder')
+    // VS Code: toggle bukan tab — tanpa marker aktif, warna idle seragam dengan item bar.
+    expect(dock).not.toContain('--vscode-activityBar-activeBorder')
+    expect(modes).toContain('color: var(--vscode-activityBar-inactiveForeground)')
   })
 })
 
