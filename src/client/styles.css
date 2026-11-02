@@ -12,7 +12,9 @@
   --tint-rgb: 255, 255, 255;
 
   /* surfaces */
-  --canvas-bg: var(--vscode-editor-background);
+  /* Canvas sengaja LEBIH GELAP dari editor.background: badan node (terminal/editor) memakai
+     editor.background, jadi canvas yang alias-nya akan menyatu dengan node. Diturunkan, bukan hex. */
+  --canvas-bg: color-mix(in srgb, var(--vscode-editor-background) 65%, black);
   --bg: var(--vscode-editor-background);
   --panel: var(--vscode-sideBar-background);
   --panel-header: var(--vscode-titleBar-activeBackground);
@@ -44,7 +46,7 @@
   /* Pengali berat drop-shadow: hitam di KEDUA tema, yang berubah seberapa keras ia boleh mendarat.
      Tiap alpha box-shadow dikalikan token ini. */
   --shadow-k: 1;
-  --canvas-dot: var(--vscode-editorGroup-border);
+  --canvas-dot: color-mix(in srgb, var(--vscode-editorGroup-border), var(--vscode-foreground) 8%);
   --float-gap: 22px;
   /* Geometri VS Code: title/menu 35px, editor tabs 35px, activity bar 48px, status bar 22px.
      Angka-angka ini juga hidup di `components/vscode/vscode-shell.css` sebagai tinggi
@@ -68,6 +70,7 @@
   --tint-rgb: 59, 59, 59;
   --menu-rgb: 255, 255, 255;
   --muted-2: rgba(var(--tint-rgb), 0.4);
+  --canvas-bg: color-mix(in srgb, var(--vscode-editor-background) 93%, black);
 
   /* Hue status disetel untuk bidang gelap; di bidang pucat kuning dan oranye jatuh di bawah
      ambang kontras apa pun. Digelapkan di sini, bukan di ~50 call site-nya. */

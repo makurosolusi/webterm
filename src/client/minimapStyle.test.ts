@@ -32,7 +32,7 @@ describe('minimap dark override', () => {
     expect(specificity(override)).toBeGreaterThan(specificity('.react-flow__minimap'))
 
     const body = ruleBody(css, override)
-    expect(body).toContain('--xy-minimap-background-color-props: var(--vscode-minimap-background')
+    expect(body).toContain('--xy-minimap-background-color-props: var(--canvas-bg)')
     expect(body).toContain('--xy-minimap-mask-background-color-props: var(--vscode-minimapSlider-background)')
   })
 

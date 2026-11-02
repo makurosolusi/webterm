@@ -19,7 +19,6 @@ describe('styles.css — token sheet', () => {
   it('defines core surface/accent/status tokens', () => {
     for (const tok of [
       // Palet = variabel resmi Dark/Light Modern (`vscode-theme.css`); token lama hanya menunjuk ke sana.
-      '--canvas-bg: var(--vscode-editor-background)',
       '--bg: var(--vscode-editor-background)',
       '--panel: var(--vscode-sideBar-background)',
       '--accent: var(--vscode-focusBorder)',
@@ -61,6 +60,33 @@ describe('styles.css — token sheet', () => {
     for (const tok of ['--tint-rgb: 59, 59, 59', '--menu-rgb: 255, 255, 255', '--shadow-k: 0.35']) {
       expect(light).toContain(tok)
     }
+  })
+
+  it('canvas lebih dalam dari badan node (editor.background) dan sideBar di Dark & Light', () => {
+    // Luminansi relatif WCAG dari hex; canvas = color-mix(editor-bg P%, black) dihitung ulang di sini.
+    const lum = (rgb: number[]) => {
+      const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const ratio = (a: number[], b: number[]) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+    const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
+    const rule = (src: string, from: string) => src.slice(src.indexOf(from), src.indexOf('}', src.indexOf(from)))
+    const cases = [
+      { name: 'dark', theme: read('vscode/vscode-theme.dark.css'), block: rule(tokens, ':root {') },
+      { name: 'light', theme: read('vscode/vscode-theme.light.css'), block: rule(tokens, ":root[data-theme='light']") },
+    ]
+    for (const { name, theme, block } of cases) {
+      const pct = Number(/--canvas-bg: color-mix\(in srgb, var\(--vscode-editor-background\) (\d+)%, black\)/.exec(block)?.[1])
+      expect(pct, `${name}: --canvas-bg harus color-mix dari editor-background`).toBeGreaterThan(0)
+      const editor = hex(/--vscode-editor-background: (#[0-9a-f]{6})/.exec(theme)![1])
+      const side = hex(/--vscode-sideBar-background: (#[0-9a-f]{6})/.exec(theme)![1])
+      const canvas = editor.map((v) => Math.round((v * pct) / 100))
+      // Ambang 1.1: canvas == editor (sebelum fix) = 1.0; dark #141414 vs #1f1f1f ~1.1, light #ededed vs #fff ~1.2.
+      expect(ratio(canvas, editor), `${name} canvas vs editor`).toBeGreaterThanOrEqual(1.1)
+      expect(canvas).not.toEqual(side)
+      expect(ratio(canvas, side), `${name} canvas vs sideBar`).toBeGreaterThan(1.03)
+    }
+    expect(tokens).not.toContain('--canvas-bg: var(--vscode-editor-background)')
   })
 
   it('tidak lagi memuat token mati (tak dirujuk satu pun sheet/komponen)', () => {
@@ -160,7 +186,8 @@ describe('node-chrome.css', () => {
     expect(frame).toContain('border: 1px solid var(--nc-border)')
     expect(frame).not.toContain('border-top-width')
     expect(frame).not.toContain('box-shadow')
-    expect(chrome).toContain('--nc-border: var(--vscode-editorGroup-border')
+    // Dinaikkan 12% ke foreground supaya border node terbaca di atas canvas yang lebih dalam.
+    expect(chrome).toMatch(/--nc-border: color-mix\(in srgb, var\(--vscode-editorGroup-border[^;]*var\(--vscode-foreground\) 12%\)/)
     expect(chrome).not.toContain('border-top-color')
   })
 
