@@ -4,6 +4,8 @@
 // injected `run` call, which is the same route a human would hit. The loop is off unless the
 // caller arms it, and consecutive failures quarantine a project instead of retrying forever.
 
+import { flagOn } from '../envFlag'
+
 /** Minimal project row the loop needs; `status` is the ledger project.status. */
 export interface AutonomyProject {
   id: string
@@ -73,7 +75,7 @@ const TERMINAL = ['completed', 'abandoned']
 export function autonomyEnabled(
   raw: string | undefined = process.env.WEBTERM_CENTRAL_AUTONOMY
 ): boolean {
-  return (raw ?? '').trim().toLowerCase() === 'on'
+  return flagOn(raw)
 }
 
 function isTerminal(status: string): boolean {

@@ -2,6 +2,7 @@
 // single-turn lock, `clientMessageId` idempotency, runtime invocation, cancellation.
 // Persistence/finalization lives in `turnPersistence`; event projection in
 // `turnEvents`; portfolio execution in `toolExecutors`. No plan/task/goal writes.
+import { flagOn } from '../../envFlag'
 import type { Database } from 'bun:sqlite'
 import { allRows } from '../../ledger/ledgerCore'
 import {
@@ -169,9 +170,9 @@ export class TurnService {
       const projected = projectRuntimeEvent(state, assistant.id, event)
       if (projected) this.record(conversation.id, projected.type, projected.payload, event.turnId, assistant.id)
     }
-    const planner = process.env.WEBTERM_CENTRAL_PLANNER === 'on'
+    const planner = flagOn(process.env.WEBTERM_CENTRAL_PLANNER)
     const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
-    const memoryEnabled = process.env.WEBTERM_CENTRAL_MEMORY === 'on'
+    const memoryEnabled = flagOn(process.env.WEBTERM_CENTRAL_MEMORY)
     const memory = memoryEnabled ? buildMemoryContext(this.db, conversation.id, text, { now: this.now }) : ''
     const input: TurnInput = {
       conversationId: conversation.id, turnId: turn.id,

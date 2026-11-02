@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite'
+import { flagOn } from '../envFlag'
 import { resolveChatService } from '../centralChatHandlers'
 import { listMessages, type TurnService } from '../central/chat/turnService'
 import { CentralChatError } from '../central/chat/chatErrors'
@@ -10,7 +11,7 @@ const TIMEOUT_MS = 120_000
 
 // D-phase gate, independent of WEBTERM_CENTRAL_CHAT.
 export function centralTelegramEnabled(raw = process.env.WEBTERM_CENTRAL_TELEGRAM): boolean {
-  return raw?.trim().toLowerCase() === 'on'
+  return flagOn(raw)
 }
 
 export function createTelegramCentralPort(input: {

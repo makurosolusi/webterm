@@ -3,6 +3,7 @@
  * Pure path helpers plus one injectable port; rendering/parsing and DB rebuild live elsewhere
  * so a single module stays small and each concern testable on its own.
  */
+import { flagOn } from '../envFlag'
 import { createHash } from 'node:crypto'
 import { access, mkdir, open, readdir, readFile, realpath, rename, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
@@ -20,7 +21,7 @@ const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const MAX_SEGMENT = 96
 
 export function memoryFilesEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env[MEMORY_FILES_FLAG] === 'on'
+  return flagOn(env[MEMORY_FILES_FLAG])
 }
 
 export class MemoryFileError extends MemoryError {}

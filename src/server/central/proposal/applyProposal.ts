@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite'
+import { flagOn } from '../../envFlag'
 import { appendEvent } from '../../ledger/ledgerEvent'
 import { type LedgerContext, getRow } from '../../ledger/ledgerCore'
 import { proposeGoal } from '../goalStore'
@@ -46,7 +47,7 @@ export async function applyProposal(db: Database, proposal: ValidProposal): Prom
     if (proposal.tool === 'task.assign') {
       const { createLedger } = await import('../../ledger/ledger')
       const ledger = createLedger(db, { now: Date.now })
-      const result = await assignControl({ projectId: proposal.projectId, itemId: proposal.input.itemId as string, expectedVersion: proposal.input.expectedVersion as number, ...(proposal.input.assignee ? { assignee: proposal.input.assignee as string } : {}) }, { ledger: { mode: 'on', path: '', db, ledger, close() {} }, enabled: process.env.WEBTERM_ORCHESTRATOR_RUN === 'on' })
+      const result = await assignControl({ projectId: proposal.projectId, itemId: proposal.input.itemId as string, expectedVersion: proposal.input.expectedVersion as number, ...(proposal.input.assignee ? { assignee: proposal.input.assignee as string } : {}) }, { ledger: { mode: 'on', path: '', db, ledger, close() {} }, enabled: flagOn(process.env.WEBTERM_ORCHESTRATOR_RUN) })
       const body = result.body as { taskId?: unknown; planVersion?: unknown; error?: unknown }
       const output: ApplyResult = result.status === 200
         ? { ok: true, tool: proposal.tool, projectId: proposal.projectId, taskId: String(body.taskId), planVersion: Number(body.planVersion) }

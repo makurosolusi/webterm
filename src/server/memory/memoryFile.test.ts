@@ -133,9 +133,11 @@ async function writeProjectFile(root: string, relPath: string, content: string):
 }
 
 describe('flag gating', () => {
-  it('treats anything but the literal on as off', () => {
-    expect(memoryFilesEnabled({ [MEMORY_FILES_FLAG]: 'on' })).toBe(true)
-    for (const value of ['1', 'true', 'ON', 'off', '', undefined]) {
+  it('treats only on (case/whitespace-insensitive) as on, everything else as off', () => {
+    for (const value of ['on', 'ON', ' on ']) {
+      expect(memoryFilesEnabled({ [MEMORY_FILES_FLAG]: value })).toBe(true)
+    }
+    for (const value of ['1', 'true', 'off', '', undefined]) {
       expect(memoryFilesEnabled({ [MEMORY_FILES_FLAG]: value })).toBe(false)
     }
   })
