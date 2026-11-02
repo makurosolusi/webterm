@@ -1,7 +1,6 @@
 // Telegram egress (P3): drains the durable reply outbox through the Bot API. Transport lives in
 // `telegramSend.ts` (token from env at send time, timeout, response validation, redaction); this
 // file owns queue draining, backoff, and the interval. Sending never throws into the ledger.
-import { backoffDelayMs } from './outbox'
 import { logEgressFailed, logEgressInternal, logEgressSent } from './telegramEgressLog'
 import type { StoredReply } from './channelStoreSchema'
 import {
@@ -11,7 +10,6 @@ import {
 } from './telegramSend'
 
 export {
-  TELEGRAM_BOT_TOKEN_ENV,
   TELEGRAM_SEND_TIMEOUT_MS,
   sendTelegramMessage,
   type TelegramSendFailureReason,
@@ -25,6 +23,11 @@ export {
 export const TELEGRAM_SEND_MAX_ATTEMPTS = 5
 export const TELEGRAM_SEND_BASE_DELAY_MS = 1_000
 export const TELEGRAM_SEND_MAX_DELAY_MS = 60_000
+
+/** Exponential backoff with a hard ceiling: attempt 1 = base, 2 = 2x, 3 = 4x, ... */
+function backoffDelayMs(attempt: number, baseMs: number, maxMs: number): number {
+  return Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt - 1))
+}
 
 /** The slice of ChannelStore the sender needs; tests pass a fake. */
 export interface SenderStorePort {

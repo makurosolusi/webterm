@@ -10,8 +10,6 @@ import {
 } from './telegram'
 import { redactSecrets } from './webhook'
 
-/** Legacy env name, kept as an alias for existing imports. Prefer `resolveTelegramBotToken`. */
-export const TELEGRAM_BOT_TOKEN_ENV = TELEGRAM_TOKEN_ENV_LEGACY
 /** Env names tried in precedence order: preferred first, then the legacy alias. */
 export const TELEGRAM_BOT_TOKEN_ENV_NAMES = [TELEGRAM_TOKEN_ENV, TELEGRAM_TOKEN_ENV_LEGACY] as const
 export const TELEGRAM_SEND_TIMEOUT_MS = 10_000

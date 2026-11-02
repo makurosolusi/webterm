@@ -19,6 +19,11 @@ const SECRET_SHAPE = new RegExp(
   `^[A-Za-z0-9_-]{${MIN_WEBHOOK_SECRET_CHARS},${MAX_WEBHOOK_SECRET_CHARS}}$`
 )
 
+/** True when length is within the policy bounds and every char is in `[A-Za-z0-9_-]`. */
+export function isWebhookSecretShape(secret: string): boolean {
+  return SECRET_SHAPE.test(secret)
+}
+
 export type SecretFileRead = { ok: true; text: string } | { ok: false; reason: string }
 
 export type SecretResolution =

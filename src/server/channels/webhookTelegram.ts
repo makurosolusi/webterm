@@ -1,4 +1,5 @@
 // Telegram `secret_token` ingress check (RND/qc/p3-security.md M3).
+import { MAX_WEBHOOK_SECRET_CHARS, MIN_WEBHOOK_SECRET_CHARS, isWebhookSecretShape } from './channelSecret'
 import { TELEGRAM_SECRET_HEADER, headerValue, safeEqual } from './webhookGate'
 import type { AttemptThrottle } from './webhookThrottle'
 import type { WebhookHeaders, WebhookVerification } from './webhookTypes'
@@ -8,9 +9,9 @@ import type { WebhookHeaders, WebhookVerification } from './webhookTypes'
  * guessable secret). 32 chars of `[A-Za-z0-9_-]` is ~190 bits, so online guessing is infeasible
  * (RND/qc/p3-security.md M3). A shorter configured secret fails closed.
  */
-export const MIN_TELEGRAM_SECRET_LENGTH = 32
-export const MAX_TELEGRAM_SECRET_LENGTH = 256
-const TELEGRAM_SECRET_SHAPE = /^[A-Za-z0-9_-]+$/
+// Aliases for the single policy in `channelSecret.ts` (kept because the `webhook` barrel re-exports them).
+export const MIN_TELEGRAM_SECRET_LENGTH = MIN_WEBHOOK_SECRET_CHARS
+export const MAX_TELEGRAM_SECRET_LENGTH = MAX_WEBHOOK_SECRET_CHARS
 
 /**
  * Boot-time check for a configured `secret_token`: shape and minimum length. Returns the problem
@@ -25,7 +26,7 @@ export function telegramSecretProblem(secret: string | undefined): string | null
   if (secret.length > MAX_TELEGRAM_SECRET_LENGTH) {
     return `telegram webhook secret must be at most ${MAX_TELEGRAM_SECRET_LENGTH} characters`
   }
-  if (!TELEGRAM_SECRET_SHAPE.test(secret)) return 'telegram webhook secret has an invalid shape'
+  if (!isWebhookSecretShape(secret)) return 'telegram webhook secret has an invalid shape'
   return null
 }
 
