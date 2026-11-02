@@ -9,8 +9,7 @@ import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
-import { centralTelegramEnabled, createTelegramCentralPort } from './channels/telegramCentralBridge'
-import { centralRuntimeKind } from './central/runtime/runtimeFlag'
+import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
@@ -37,11 +36,18 @@ if (ledgerRuntime) {
 // Channel ingress is off by default: `WEBTERM_TELEGRAM=on` + webhook secret + a live ledger.
 // `null` means no route exists at all, not a route that rejects every request.
 const activeRuntime = activeLedgerRuntime()
-const centralChat = process.env.WEBTERM_CENTRAL_CHAT === 'on' && centralTelegramEnabled() && activeRuntime && centralRuntimeKind() !== 'off'
-  ? createTelegramCentralPort({ db: activeRuntime.db, kind: centralRuntimeKind() })
-  : undefined
+const centralChat = buildTelegramCentralPort(activeRuntime)
 const channelsRuntime = startChannelsRuntime(activeRuntime?.ledger, { centralChat })
-if (channelsRuntime) console.log(`telegram channel: on (POST ${TELEGRAM_WEBHOOK_PATH})`)
+if (channelsRuntime && activeRuntime) {
+  if (resolveTelegramMode() === 'poll') {
+    // Poll mode never exposes a reachable webhook; the route stays mounted but nothing calls it.
+    if (startTelegramInbound({ channels: channelsRuntime, ledger: activeRuntime, centralChat })) {
+      console.log('telegram channel: on (mode=poll)')
+    }
+  } else {
+    console.log(`telegram channel: on (POST ${TELEGRAM_WEBHOOK_PATH})`)
+  }
+}
 
 // Central autonomy (off by default) is a timer over the existing ledger runtime; it never
 // starts a second server. Boot is fail-closed: it logs one line and starts only when
