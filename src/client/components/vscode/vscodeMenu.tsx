@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { portalContainer, useOnFullscreenChange } from './portalContainer'
 import './vscode-menu.css'
 import { clamp } from './vscodeClamp'
 
@@ -99,6 +100,8 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
   const typeaheadTimer = useRef<number | null>(null)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  // Container portal berganti saat fullscreen masuk/keluar; menu terbuka ditutup, bukan dipindah.
+  useOnFullscreenChange(() => closeRef.current())
 
   activeRef.current = active
   submenuRef.current = submenuIndex
@@ -266,7 +269,7 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
       tabIndex={-1}
       data-slot="vscode-menu"
       data-level={level}
-      className="vscode-menu"
+      className="vscode-menu nodrag"
       style={{ top: position.top, left: position.left, minWidth }}
       onKeyDown={onKeyDown}
       onContextMenu={(event) => event.preventDefault()}
@@ -353,7 +356,7 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
         />
       )}
     </div>,
-    document.body,
+    portalContainer(),
   )
 }
 

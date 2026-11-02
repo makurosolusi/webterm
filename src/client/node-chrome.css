@@ -339,3 +339,11 @@
     opacity: 0.8;
   }
 }
+
+/* ---- Full Screen (Fullscreen API) ----
+   Elemen fullscreen = wrapper React Flow; UA `:fullscreen` sudah memaksa position:fixed, inset 0,
+   100% x 100% dan transform:none, jadi pan/zoom canvas tak berpengaruh. Di sini hanya: latar solid
+   (backdrop UA hitam, node tak boleh tembus) dan tepi node dilepas karena sudah memenuhi layar. */
+.react-flow__node:fullscreen { background: var(--panel); }
+.react-flow__node:fullscreen .term-node { border: 0; border-radius: 0; }
+.react-flow__node.react-flow__node.react-flow__node:fullscreen::after { display: none; }

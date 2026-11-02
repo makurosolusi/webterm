@@ -12,6 +12,7 @@ export interface NodeToolbarProps {
   micActive?: boolean; onToggleMic?: () => void      // node dengan input teks saja — omit button if undefined
   commentsOpen: boolean; onToggleComments: () => void; commentCount?: number
   maximized: boolean; onToggleMaximize: () => void; maximizeDisabled?: boolean
+  fullscreen?: boolean; onToggleFullscreen?: () => void; fullscreenDisabled?: boolean  // omit onToggleFullscreen = no button
   onClose: () => void
   onAiName?: () => void; aiNaming?: boolean            // agent only — omit button if undefined
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean  // agent only
@@ -21,7 +22,7 @@ export interface NodeToolbarProps {
 /**
  * Toolbar aksi node di header, memakai `vscode-toolbar-container`/`vscode-toolbar-button`.
  *
- * Seperti title bar editor VS Code, hanya aksi primer yang tampil (Search, Maximize, Close) dan
+ * Seperti title bar editor VS Code, hanya aksi primer yang tampil (Search, Maximize, Full Screen, Close) dan
  * sisanya masuk menu "More Actions…" (`VscodeMenu`; aksi yang punya status tampil sebagai item
  * `checked`). Delapan ikon sejajar sebelumnya menumpuk dan tak berlabel.
  *
@@ -33,6 +34,9 @@ export interface NodeToolbarProps {
  * Kelas `nodrag` di container: React Flow mencocokkannya lewat `target.closest()`, jadi satu kelas di
  * sini cukup untuk semua tombol — tanpa itu klik tombol ikut menggeser node.
  *
+ * Full Screen (Fullscreen API, menutupi seluruh layar) beda dari Maximize (`fitView` di dalam canvas); ikonnya
+ * `chrome-maximize`/`chrome-restore` agar tak kembar dengan `screen-full`. Tombol hilang bila `onToggleFullscreen` kosong.
+ *
  * `maximizeDisabled` memberi `aria-disabled` di host; `vscode-toolbar-button` v2.4.0 tidak punya
  * properti `disabled`, jadi CSS yang mematikan pointer dan penjaga di handler yang menahan aksinya.
  */
@@ -43,6 +47,8 @@ export default function NodeToolbar(props: NodeToolbarProps) {
   const broadcastOff = Boolean(props.broadcastDisabled)
   const maximizeOff = Boolean(props.maximizeDisabled)
   const maxLabel = props.maximized ? 'Restore' : 'Maximize'
+  const fsLabel = props.fullscreen ? 'Exit Full Screen' : 'Full Screen'
+  const fsOff = Boolean(props.fullscreenDisabled)
 
   const moreItems: VscodeMenuItem[] = [
     { type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh },
@@ -75,6 +81,14 @@ export default function NodeToolbar(props: NodeToolbarProps) {
           aria-disabled={maximizeOff || undefined}
           onClick={() => { if (!maximizeOff) props.onToggleMaximize() }}
         ><Codicon name={props.maximized ? 'screen-normal' : 'screen-full'} /></ToolbarButton>
+
+        {props.onToggleFullscreen && (
+          <ToolbarButton
+            label={fsLabel} title={fsLabel} data-title={fsLabel}
+            aria-disabled={fsOff ? 'true' : undefined}
+            onClick={() => { if (!fsOff) props.onToggleFullscreen?.() }}
+          ><Codicon name={props.fullscreen ? 'chrome-restore' : 'chrome-maximize'} /></ToolbarButton>
+        )}
 
         <ToolbarButton
           label="More Actions…" title="More Actions…" data-title="More Actions…"

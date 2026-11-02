@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { usePortalContainer } from './portalContainer'
 import './vscode-notification.css'
 
 export type VscodeNotificationSeverity = 'info' | 'warning' | 'error'
@@ -33,11 +34,12 @@ const InStackContext = createContext(false)
 
 /** Bottom-right toast column (right 3px, above the status bar); newest toast sits lowest. */
 export function VscodeNotificationStack({ children }: { children: ReactNode }) {
+  const container = usePortalContainer()
   return createPortal(
     <div className="vscode-notification-stack" data-slot="vscode-notification-stack">
       <InStackContext.Provider value>{children}</InStackContext.Provider>
     </div>,
-    document.body,
+    container,
   )
 }
 
