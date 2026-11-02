@@ -101,8 +101,8 @@ export interface Settings {
    *  ini paling keras terasa di dalam TUI agent: satu klik nyasar menjatuhkan apa pun yang terakhir
    *  diseleksi ke prompt agent yang sedang hidup. */
   terminalMiddleClickPaste: boolean
-  /** ⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang FOKUS. OFF secara default: di luar macOS
-   *  chord-nya Ctrl+−, yang hari ini diteruskan terminal fokus ke shell (undo readline). */
+  /** ⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang FOKUS. ON secara default. Di luar macOS
+   *  chord-nya Ctrl+= / Ctrl+− / Ctrl+0 — Ctrl+− biasanya undo readline, jadi matikan bila bentrok. */
   terminalFontZoomKeys: boolean
   /** Siapa yang menang selagi terminal memegang fokus keyboard: `app-first` (default) membiarkan
    *  perintah app menyala di atas xterm; `terminal-first` menyimpan setiap chord selain milik
@@ -200,7 +200,7 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalWordSeparator: " ()[]{}',\"",
   copyOnSelect: false,
   terminalMiddleClickPaste: false,
-  terminalFontZoomKeys: false,
+  terminalFontZoomKeys: true,
   terminalShortcutPolicy: 'app-first',
   defaultShell: '',
   // 256 KiB — persis `SCROLLBACK_BYTES` yang berjalan di server hari ini. Lihat doc kuncinya.

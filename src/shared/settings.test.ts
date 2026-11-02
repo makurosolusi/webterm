@@ -13,6 +13,12 @@ describe('DEFAULT_SETTINGS', () => {
     expect(DEFAULT_SETTINGS.scrollbackBytes).toBe(256 * 1024)
   })
 
+  it('zoom font via keyboard ON secara default, dan nilai tersimpan eksplisit tidak tertimpa', () => {
+    expect(DEFAULT_SETTINGS.terminalFontZoomKeys).toBe(true)
+    expect(mergeSettings({}).terminalFontZoomKeys).toBe(true)
+    expect(mergeSettings({ terminalFontZoomKeys: false }).terminalFontZoomKeys).toBe(false)
+  })
+
   it('terminalGpuRendering tidak menawarkan mode "shared" milik nodeterm', () => {
     expect(DEFAULT_SETTINGS.terminalGpuRendering).toBe('auto')
     // Pengaman tipe: nilai 'shared' tidak boleh assignable.

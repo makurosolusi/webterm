@@ -97,7 +97,7 @@ export function InteractionSection({ settings: s, onChange }: P): React.JSX.Elem
         hint="Off berarti tombol tengah sepenuhnya inert di dalam terminal. Defaultnya mati karena paste ini paling keras terasa di dalam TUI agent: satu klik nyasar menjatuhkan apa pun yang terakhir diseleksi ke prompt agent yang sedang hidup."
         onChange={(v) => onChange({ terminalMiddleClickPaste: v })} />
       <ToggleField setting="terminalFontZoomKeys" id="st-fontZoom" label="Zoom font via keyboard" value={s.terminalFontZoomKeys}
-        hint="⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang fokus. Off secara default: di luar macOS chord-nya Ctrl+−, yang hari ini diteruskan terminal fokus ke shell (undo readline)."
+        hint="⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang fokus. On secara default. Di luar macOS chord-nya Ctrl+= / Ctrl+− / Ctrl+0; matikan bila Ctrl+− bentrok dengan undo readline di shell."
         onChange={(v) => onChange({ terminalFontZoomKeys: v })} />
       <SelectField setting="terminalShortcutPolicy" id="st-shortcutPolicy" label="Prioritas shortcut" value={s.terminalShortcutPolicy}
         hint="Siapa yang menang selagi terminal memegang fokus keyboard."

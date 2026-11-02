@@ -12,6 +12,15 @@ vi.mock('./ws', async (importOriginal) => {
   const real = await importOriginal<typeof import('./ws')>()
   return { ...real, send: (m: { t: string; id: string }) => { sent.push(m) } }
 })
+// Rekam instance xterm sungguhan (tanpa mengganti perilakunya) supaya test bisa membaca `options`.
+const { terms } = vi.hoisted(() => ({ terms: [] as { options: { fontSize?: number } }[] }))
+vi.mock('@xterm/xterm', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@xterm/xterm')>()
+  class Recorded extends real.Terminal {
+    constructor(...a: ConstructorParameters<typeof real.Terminal>) { super(...a); terms.push(this) }
+  }
+  return { ...real, Terminal: Recorded }
+})
 // Fallback diperpendek supaya test "tak pernah berukuran" tidak menunggu detik sungguhan.
 // 500ms: tetap singkat, tapi longgar supaya mount di bawah beban tidak memicu fallback sebelum assertion pertama.
 const { FALLBACK_MS } = vi.hoisted(() => ({ FALLBACK_MS: 500 }))
@@ -40,6 +49,7 @@ beforeAll(() => {
 afterEach(() => {
   unmountCanvas()
   sent.length = 0
+  terms.length = 0
   hostSize = 0
 })
 
@@ -73,5 +83,24 @@ describe('TerminalCore', () => {
 
     await waitFor(() => expect(ofType('open')).toHaveLength(1), { timeout: 3000 })
     expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
+  })
+
+  it('⌘+ menaikkan font xterm (settings default), ⌘0 mereset', async () => {
+    hostSize = 400
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    await waitFor(() => expect(ofType('open')).toHaveLength(1))
+    const ta = document.querySelector<HTMLTextAreaElement>('.react-flow__node-terminal .xterm-helper-textarea')
+    expect(ta).not.toBeNull()
+    const size = () => terms[0]?.options.fontSize
+    const base = size()
+    expect(base).toBeTypeOf('number')
+    const press = (init: KeyboardEventInit) =>
+      ta!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+
+    // Chord primer bergantung platform; jsdom bukan mac, jadi pakai Ctrl (di mac: ⌘).
+    press({ key: '=', code: 'Equal', ctrlKey: true })
+    await waitFor(() => expect(size()).toBe(base! + 1))
+    press({ key: '0', code: 'Digit0', ctrlKey: true })
+    await waitFor(() => expect(size()).toBe(base))
   })
 })
