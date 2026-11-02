@@ -53,17 +53,17 @@ export default function NodeToolbar(props: NodeToolbarProps) {
   const maximizeOff = Boolean(props.maximizeDisabled)
   return (
     <ToolbarContainer className="nodrag node-toolbar">
-      <ToolbarButton label="Refresh view" title="Refresh view" onClick={props.onRefresh}><IconRefresh /></ToolbarButton>
+      <ToolbarButton label="Refresh view" title="Refresh view" data-title="Refresh view" onClick={props.onRefresh}><IconRefresh /></ToolbarButton>
 
       <ToolbarButton
-        label="Search" title="Search"
+        label="Search" title="Search" data-title="Search"
         toggleable checked={props.searchOpen}
         onClick={props.onToggleSearch}
       ><IconSearch /></ToolbarButton>
 
       {props.onToggleMic && (
         <ToolbarButton
-          label="Dictate" title="Dictate"
+          label="Dictate" title="Dictate" data-title="Dictate"
           toggleable checked={Boolean(props.micActive)}
           onClick={props.onToggleMic}
         ><IconMic /></ToolbarButton>
@@ -71,14 +71,14 @@ export default function NodeToolbar(props: NodeToolbarProps) {
 
       {props.onAiName && (
         <ToolbarButton
-          label="Name with AI" title="Name with AI"
+          label="Name with AI" title="Name with AI" data-title="Name with AI"
           aria-disabled={aiBusy || undefined}
           onClick={() => { if (!aiBusy) props.onAiName?.() }}
         ><IconSparkle /></ToolbarButton>
       )}
 
       <ToolbarButton
-        label="Comments" title="Comments"
+        label="Comments" title="Comments" data-title="Comments"
         toggleable checked={props.commentsOpen}
         onClick={props.onToggleComments}
       >
@@ -88,7 +88,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
 
       {props.onBroadcast && (
         <ToolbarButton
-          label="Share live view" title="Share live view"
+          label="Share live view" title="Share live view" data-title="Share live view"
           toggleable checked={Boolean(props.broadcastActive)}
           aria-disabled={broadcastOff || undefined}
           onClick={() => { if (!broadcastOff) props.onBroadcast?.() }}
@@ -99,20 +99,21 @@ export default function NodeToolbar(props: NodeToolbarProps) {
         <ToolbarButton
           label={props.hideLinks ? 'Show links' : 'Hide links'}
           title={props.hideLinks ? 'Show links' : 'Hide links'}
+          data-title={props.hideLinks ? 'Show links' : 'Hide links'}
           toggleable checked={Boolean(props.hideLinks)}
           onClick={props.onToggleHideLinks}
         >{props.hideLinks ? <IconEyeOff /> : <IconEye />}</ToolbarButton>
       )}
 
       <ToolbarButton
-        label="Maximize" title="Maximize"
+        label="Maximize" title="Maximize" data-title="Maximize"
         aria-disabled={maximizeOff || undefined}
         onClick={() => { if (!maximizeOff) props.onToggleMaximize() }}
       ><IconMaximize /></ToolbarButton>
 
       <ToolbarButton
         className="node-toolbar__danger"
-        label="Close (ends the session)" title="Close (ends the session)"
+        label="Close (ends the session)" title="Close (ends the session)" data-title="Close (ends the session)"
         onClick={props.onClose}
       ><IconClose /></ToolbarButton>
     </ToolbarContainer>

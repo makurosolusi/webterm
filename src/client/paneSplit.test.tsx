@@ -40,9 +40,10 @@ const paneEl = (id: string): HTMLElement => {
 
 const headerBtn = (title: string): HTMLButtonElement => {
   // Aksi toolbar kini `vscode-toolbar-button` (tombol aslinya di shadow DOM); tombol Split masih
-  // shadcn `Button` di `extraHeader`, jadi kedua bentuk dicari.
+  // shadcn `Button` di `extraHeader`, jadi kedua bentuk dicari. `title` pada custom element tidak
+  // diterapkan di jsdom (lit wrapper node-build), jadi toolbar juga membawa `data-title`.
   const el = document.querySelector(
-    `.react-flow__node-terminal button[title="${title}"], .react-flow__node-terminal vscode-toolbar-button[title="${title}"]`,
+    `.react-flow__node-terminal button[title="${title}"], .react-flow__node-terminal vscode-toolbar-button[data-title="${title}"]`,
   )
   if (!el) throw new Error(`tombol header "${title}" tidak ada`)
   return el as HTMLButtonElement
