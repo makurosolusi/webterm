@@ -1,5 +1,7 @@
+import './vscode/vscode-theme.css'
 import './index.css'
 import './styles.css'
+import './vscode/register'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ErrorBoundary } from './ErrorBoundary'

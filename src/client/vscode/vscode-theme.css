@@ -1,0 +1,150 @@
+/* VS Code Elements theme bridge.
+ *
+ * The components style themselves from VS Code's documented `--vscode-*` custom
+ * properties. Rather than duplicating a palette, every variable is derived from the
+ * webterm tokens in `styles.css`, so dark and light stay in sync automatically.
+ * `color-mix()` carries the alpha values that the components expect on hover,
+ * selection, borders and scrollbars.
+ *
+ * Import order matters: this file must load before `index.css` / `styles.css` so the
+ * token definitions in `styles.css` win when both set the same variable. Variables
+ * here only reference tokens, they never redefine them.
+ *
+ * Light theme needs no separate palette. Only alphas that read differently on a light
+ * surface are overridden in the `[data-theme='light']` block below.
+ */
+:root {
+  /* type */
+  --vscode-font-family: var(--font-ui);
+  --vscode-font-size: 13px;
+  --vscode-font-weight: 400;
+  --vscode-editor-font-family: var(--font-mono);
+  --vscode-editor-font-size: 12px;
+  --vscode-editor-font-weight: 400;
+
+  /* text */
+  --vscode-foreground: var(--text);
+  --vscode-descriptionForeground: var(--muted);
+  --vscode-editor-foreground: var(--text);
+  --vscode-icon-foreground: var(--text);
+  --vscode-sideBarTitle-foreground: var(--text);
+
+  /* surfaces */
+  --vscode-editor-background: var(--bg);
+  --vscode-sideBar-background: var(--panel);
+  --vscode-sideBarSectionHeader-background: var(--panel-header);
+  --vscode-panel-background: var(--bg);
+  --vscode-titleBar-background: var(--panel-header);
+  --vscode-titleBar-activeForeground: var(--text);
+  --vscode-statusBar-background: var(--panel-header);
+  --vscode-statusBar-foreground: var(--text);
+  --vscode-editorWidget-border: var(--border);
+  --vscode-editorGroup-border: var(--border);
+  --vscode-settings-headerBorder: var(--border);
+  --vscode-contrastBorder: transparent;
+
+  /* tabs */
+  --vscode-panelTitle-activeForeground: var(--text);
+  --vscode-panelTitle-inactiveForeground: var(--muted);
+  --vscode-panelTitle-activeBorder: var(--accent);
+
+  /* menu */
+  --vscode-menu-background: color-mix(in srgb, var(--overlay) 98%, transparent);
+  --vscode-menu-foreground: var(--text);
+  --vscode-menu-border: var(--border);
+  --vscode-menu-separatorBackground: color-mix(in srgb, var(--text) 14%, transparent);
+  --vscode-menu-selectionBackground: color-mix(in srgb, var(--accent) 24%, transparent);
+  --vscode-menu-selectionForeground: var(--text);
+  --vscode-menu-selectionBorder: transparent;
+  --vscode-widget-shadow: color-mix(in srgb, #000 36%, transparent);
+
+  /* buttons */
+  --vscode-button-background: var(--accent);
+  --vscode-button-foreground: #fff;
+  --vscode-button-hoverBackground: var(--accent-hover);
+  --vscode-button-border: color-mix(in srgb, var(--accent) 70%, transparent);
+  --vscode-button-separator: color-mix(in srgb, #fff 20%, transparent);
+  --vscode-button-secondaryBackground: var(--raised);
+  --vscode-button-secondaryForeground: var(--text);
+  --vscode-button-secondaryHoverBackground: var(--panel-header);
+  --vscode-toolbar-hoverBackground: color-mix(in srgb, var(--text) 10%, transparent);
+  --vscode-toolbar-activeBackground: color-mix(in srgb, var(--text) 16%, transparent);
+  --vscode-toolbar-hoverOutline: transparent;
+
+  /* inputs */
+  --vscode-settings-textInputBackground: var(--sunken);
+  --vscode-settings-textInputForeground: var(--text);
+  --vscode-settings-textInputBorder: var(--border);
+  --vscode-settings-dropdownBackground: var(--sunken);
+  --vscode-settings-dropdownForeground: var(--text);
+  --vscode-settings-dropdownBorder: var(--border);
+  --vscode-settings-dropdownListBorder: var(--border);
+  --vscode-input-placeholderForeground: var(--muted);
+  --vscode-inputValidation-errorBackground: color-mix(in srgb, var(--state-attention) 18%, transparent);
+  --vscode-inputValidation-errorBorder: var(--state-attention);
+  --vscode-inputOption-activeBackground: color-mix(in srgb, var(--accent) 24%, transparent);
+  --vscode-inputOption-activeForeground: var(--text);
+  --vscode-inputOption-activeBorder: var(--accent);
+
+  /* checkbox / radio */
+  --vscode-checkbox-background: var(--sunken);
+  --vscode-checkbox-foreground: var(--text);
+  --vscode-checkbox-border: color-mix(in srgb, var(--text) 30%, transparent);
+  --vscode-settings-checkboxBackground: var(--sunken);
+  --vscode-settings-checkboxForeground: var(--text);
+  --vscode-settings-checkboxBorder: color-mix(in srgb, var(--text) 30%, transparent);
+
+  /* lists / tree */
+  --vscode-list-hoverBackground: color-mix(in srgb, var(--text) 8%, transparent);
+  --vscode-list-hoverForeground: var(--text);
+  --vscode-list-activeSelectionBackground: color-mix(in srgb, var(--accent) 22%, transparent);
+  --vscode-list-activeSelectionForeground: var(--text);
+  --vscode-list-activeSelectionIconForeground: var(--text);
+  --vscode-list-inactiveSelectionBackground: color-mix(in srgb, var(--text) 12%, transparent);
+  --vscode-list-focusOutline: var(--accent);
+  --vscode-list-focusAndSelectionOutline: var(--accent);
+  --vscode-list-focusHighlightForeground: var(--accent-text);
+  --vscode-list-highlightForeground: var(--accent-text);
+  --vscode-tree-indentGuidesStroke: color-mix(in srgb, var(--text) 24%, transparent);
+  --vscode-tree-inactiveIndentGuidesStroke: color-mix(in srgb, var(--text) 14%, transparent);
+
+  /* badge */
+  --vscode-badge-background: color-mix(in srgb, var(--accent) 26%, transparent);
+  --vscode-badge-foreground: var(--text);
+  --vscode-activityBarBadge-background: var(--accent);
+  --vscode-activityBarBadge-foreground: #fff;
+
+  /* progress */
+  --vscode-progressBar-background: var(--accent);
+
+  /* focus */
+  --vscode-focusBorder: var(--accent);
+  --vscode-sash-hoverBorder: var(--accent);
+
+  /* scrollbar */
+  --vscode-scrollbarSlider-background: color-mix(in srgb, var(--text) 22%, transparent);
+  --vscode-scrollbarSlider-hoverBackground: color-mix(in srgb, var(--text) 34%, transparent);
+  --vscode-scrollbarSlider-activeBackground: color-mix(in srgb, var(--text) 46%, transparent);
+  --vscode-scrollbar-shadow: color-mix(in srgb, #000 30%, transparent);
+
+  /* misc */
+  --vscode-editor-inlineValuesForeground: var(--muted);
+  --vscode-keybindingTable-headerBackground: var(--panel-header);
+  --vscode-keybindingTable-rowsBackground: var(--bg);
+}
+
+/* On a warm light surface the same alpha reads fainter, so selection and scrollbar
+ * affordances are nudged up. Everything else follows the shared tokens. */
+:root[data-theme='light'] {
+  --vscode-menu-background: color-mix(in srgb, var(--overlay) 99%, transparent);
+  --vscode-menu-selectionBackground: color-mix(in srgb, var(--accent) 18%, transparent);
+  --vscode-list-activeSelectionBackground: color-mix(in srgb, var(--accent) 16%, transparent);
+  --vscode-list-inactiveSelectionBackground: color-mix(in srgb, var(--text) 10%, transparent);
+  --vscode-scrollbarSlider-background: color-mix(in srgb, var(--text) 20%, transparent);
+  --vscode-scrollbarSlider-hoverBackground: color-mix(in srgb, var(--text) 32%, transparent);
+  --vscode-scrollbarSlider-activeBackground: color-mix(in srgb, var(--text) 44%, transparent);
+  --vscode-badge-background: color-mix(in srgb, var(--accent) 20%, transparent);
+  --vscode-widget-shadow: color-mix(in srgb, #3a3026 22%, transparent);
+  --vscode-scrollbar-shadow: color-mix(in srgb, #3a3026 18%, transparent);
+  --vscode-button-separator: color-mix(in srgb, #fff 32%, transparent);
+}
