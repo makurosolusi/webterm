@@ -1,0 +1,85 @@
+/* Section Channels di Settings: daftar chat pending/binding dan blok status. Metrik VS Code. */
+.st-ch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.st-ch-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px;
+}
+
+.st-ch-heading {
+  margin: 12px 0 2px;
+  padding: 0 8px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.st-ch-dir {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.st-ch-err {
+  margin: 0;
+  padding: 0 8px;
+  color: var(--vscode-errorForeground, #f48771);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.st-ch-inactive {
+  padding: 8px;
+  border: 1px solid var(--vscode-settings-headerBorder, var(--border));
+  border-radius: 2px;
+}
+
+.st-ch-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-ch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--vscode-settings-headerBorder, var(--border));
+}
+
+.st-ch-meta {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.st-ch-row .st-input {
+  width: 160px;
+}
+
+.st-ch-row .st-chips {
+  gap: 4px;
+}
+
+.st-ch-row .st-button.is-active {
+  background: var(--vscode-button-background, var(--accent));
+  color: var(--vscode-button-foreground, var(--text));
+}
+
+.st-ch-rowerr {
+  flex-basis: 100%;
+}
