@@ -26,6 +26,9 @@
 .welcome__link > .codicon { font-size: 16px; }
 .welcome__path { margin-left: 1em; color: var(--vscode-descriptionForeground); }
 .welcome__empty {
-  display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px;
   color: var(--vscode-descriptionForeground);
 }
+/* Label dan tombol satu baris (tidak menyusut/membungkus); hanya input yang boleh melebar. */
+.welcome__empty > label, .welcome__empty > button { flex: none; white-space: nowrap; }
+.welcome__empty > input { flex: 1 1 160px; min-width: 0; }

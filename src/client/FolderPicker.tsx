@@ -11,6 +11,11 @@ interface Props {
   onClose: () => void
 }
 
+/** Gabung folder + anak tanpa menggandakan `/` (akar `/` dan path ber-trailing slash). */
+export function joinPath(base: string, name: string): string {
+  return base.endsWith('/') ? base + name : `${base}/${name}`
+}
+
 export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
   const [path, setPath] = useState(initialPath ?? '')
   const [parent, setParent] = useState<string | null>(null)
@@ -48,7 +53,7 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
       open
       onOpenChange={(open) => { if (!open) onClose() }}
       title="Choose a folder"
-      width={520}
+      width={480}
       className="folder-picker"
       footer={arrangeDialogButtons([select, cancel], 1)}
     >
@@ -63,14 +68,13 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
         >
           <span className="codicon codicon-arrow-up" aria-hidden />
         </button>
-        {/* `direction: rtl` menahan ekor path tetap terlihat saat terpotong (lihat css). */}
         <span className="fp-path" title={path}>{path}</span>
       </div>
       {error && <div className="fp-error" role="alert">{error}</div>}
       <div className="fp-list" role="list">
         {dirs.length === 0 && <span className="fp-empty">No subfolders</span>}
         {dirs.map((d) => (
-          <button key={d} type="button" className="fp-row" role="listitem" onClick={() => load(path + '/' + d)}>
+          <button key={d} type="button" className="fp-row" role="listitem" onClick={() => load(joinPath(path, d))}>
             <span className="codicon codicon-folder" aria-hidden />
             <span className="fp-row__name">{d}</span>
           </button>

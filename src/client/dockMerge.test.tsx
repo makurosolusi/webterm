@@ -79,8 +79,8 @@ describe('menu dock sesudah pindah ke kolom kiri', () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.click(screen.getByLabelText('Add node'))
 
-    const item = await screen.findByRole('button', { name: 'Terminal' })
-    expect(item.closest('[data-slot="dialog-content"]')).not.toBeNull()
+    const item = await screen.findByRole('option', { name: 'Terminal' })
+    expect(item.closest('[data-slot="vscode-quick-pick"]')).not.toBeNull()
 
     fireEvent.click(item)
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-terminal')).toHaveLength(1))
@@ -89,7 +89,7 @@ describe('menu dock sesudah pindah ke kolom kiri', () => {
   it('menu Add menjangkau form workspace', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.click(screen.getByLabelText('Add node'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Workspace…' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Workspace…' }))
 
     const form = await waitFor(() => {
       const el = document.querySelector('[data-slot="dialog-content"]')
@@ -97,16 +97,42 @@ describe('menu dock sesudah pindah ke kolom kiri', () => {
       return el
     })
     expect(form.querySelector('input[placeholder="name"]')).not.toBeNull()
-    expect(document.querySelector('[data-slot="dropdown-menu-content"]')).toBeNull()
+    expect(document.querySelector('[data-slot="vscode-quick-pick"]')).toBeNull()
+  })
+
+  it('Add node adalah Quick Pick: combobox + listbox, filter, Enter memilih', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.click(screen.getByLabelText('Add node'))
+    const input = await screen.findByRole('combobox')
+    expect(screen.getByRole('listbox')).not.toBeNull()
+    const all = screen.getAllByRole('option').map((o) => o.textContent ?? '')
+    expect(all.length).toBeGreaterThan(2)
+    expect(all.some((t) => t.includes('Terminal'))).toBe(true)
+    expect(all.some((t) => t.includes('Workspace…'))).toBe(true)
+
+    fireEvent.change(input, { target: { value: 'termin' } })
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeLessThan(all.length))
+    expect(screen.getAllByRole('option')[0].textContent).toContain('Terminal')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(document.querySelectorAll('.react-flow__node-terminal')).toHaveLength(1))
+    expect(document.querySelector('[data-slot="vscode-quick-pick"]')).toBeNull()
+  })
+
+  it('Add node tanpa kecocokan menampilkan teks kosong, bukan daftar', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.click(screen.getByLabelText('Add node'))
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'zzzz-tak-ada' } })
+    await waitFor(() => expect(screen.queryAllByRole('option')).toHaveLength(0))
+    expect(screen.getByText('No matching node types')).not.toBeNull()
   })
 
   it('menu Add closes on Escape after opening', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.click(screen.getByLabelText('Add node'))
-    await screen.findByRole('button', { name: 'Terminal' })
+    await screen.findByRole('option', { name: 'Terminal' })
 
     fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull())
+    await waitFor(() => expect(document.querySelector('[data-slot="vscode-quick-pick"]')).toBeNull())
   })
   it('readout zoom membuka daftar preset, dan memilih satu menutupnya', async () => {
     await mountCanvas({ nodes: [], dirs: {} })

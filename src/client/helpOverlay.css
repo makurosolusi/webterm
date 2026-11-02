@@ -32,6 +32,16 @@
   white-space: nowrap;
 }
 
+/* Kolom Command mengisi sisa lebar; kolom Keybinding menyusut ke isinya, jadi teks Command tak
+   perlu patah di tengah kata bertanda hubung ("di-hover"). */
+.help-shortcuts td:first-child {
+  hyphens: none;
+}
+.help-shortcuts th:last-child,
+.help-shortcuts td:last-child {
+  width: 1%;
+}
+
 .help-kbd {
   display: inline-block;
   padding: 1px 6px;

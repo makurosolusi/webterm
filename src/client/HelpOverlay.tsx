@@ -64,7 +64,7 @@ export default function HelpOverlay({ onClose, platform }: { onClose: () => void
         if (!open) onClose()
       }}
       title="Keyboard Shortcuts"
-      width={560}
+      width={720}
       className="help-overlay"
     >
       <table className="help-shortcuts" data-slot="help-shortcuts">

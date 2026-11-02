@@ -31,32 +31,22 @@
   background: transparent;
 }
 
-/* Kelompok mode di bawah rail: lock dan clean view adalah TOGGLE, jadi ia membawa `aria-pressed`
-   yang tidak disediakan item activity bar biasa. */
+/* Kelompok mode di bawah rail: lock dan clean view adalah TOGGLE (`aria-pressed`), bukan tujuan
+   navigasi. Tanpa penanda 2px di kiri: marker itu berarti "panel aktif" di VS Code, jadi toggle
+   hanya mengubah kecerahan ikon. Warna idle ikut inactiveForeground rail, karena grup ini berada
+   di luar `<nav>` activity bar dan kalau tidak akan mewarisi warna teks biasa. */
 .dock__modes {
   display: flex;
   flex-direction: column;
   flex: none;
+  color: var(--vscode-activityBar-inactiveForeground);
 }
 
-/* Dimensi 48x48 + indikator 2px datang dari `.vscode-activity-bar__item` (kelas dipakai bersama);
-   di sini hanya state toggle, karena item biasa memakai `data-active`, bukan `aria-pressed`. */
 .dock-btn[aria-pressed='true'] {
-  border-left-color: var(--vscode-activityBar-activeBorder);
   color: var(--vscode-activityBar-foreground);
 }
 
-/* Titik warna agent di dalam dialog, bukan item rail. */
-.dock-menu__glyph {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* Dialog Add / Workspace / Zoom tetap memakai primitif dialog, dengan baris 22px dan ukuran
-   VS Code (480px). Isinya daftar aksi, bukan menu. */
-.dock-add-list,
+/* Dialog Workspace / Zoom memakai primitif dialog (Add node kini Quick Pick). Isinya daftar aksi. */
 .dock-zoom-list {
   display: flex;
   flex-direction: column;
@@ -71,7 +61,6 @@
   width: 100%;
 }
 
-.dock-add-dialog { min-width: 280px; }
 .dock-zoom-dialog { width: 220px; }
 
 /* Centang preset zoom; lebar tetap supaya label tidak bergeser saat pilihan berubah. */

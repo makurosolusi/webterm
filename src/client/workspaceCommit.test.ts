@@ -167,12 +167,8 @@ const wsBWithNode = harnessWorkspace({
  *  `addFlowNode`), jadi tombol pindah tab berikutnya benar-benar jatuh di dalam debounce 400ms. */
 async function addTerminalToActive(): Promise<void> {
   fireEvent.click(screen.getByLabelText('Add node'))
-  const item = await waitFor(() => {
-    const el = Array.from(document.querySelectorAll('[role="dialog"] button'))
-      .find((b) => b.textContent?.includes('Terminal'))
-    if (!el) throw new Error('item Terminal belum muncul')
-    return el as HTMLElement
-  })
+  // Dialog "Add node" kini VscodeQuickPick: item-nya role="option".
+  const item = await screen.findByRole('option', { name: 'Terminal' })
   fireEvent.click(item)
 }
 

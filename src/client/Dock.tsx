@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
-import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BUILTIN_AGENT_IDS, agentConfig, assembleCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import type { CustomAgent } from '../shared/settings'
 import { VscodeActivityBar } from '@/components/vscode/vscodeActivityBar'
 import type { VscodeActivityBarItem } from '@/components/vscode/vscodeActivityBar'
+import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
+import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import { VscodeStatusBar } from '@/components/vscode/vscodeStatusBar'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { Button } from '@/components/ui/button'
@@ -68,6 +69,12 @@ export interface DockProps {
 
 /** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
 export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
+
+/** Id baris Quick Pick "Add node"; agent builtin/custom diberi prefix + id agent. */
+const ADD_TERMINAL_ID = 'terminal'
+const ADD_WORKSPACE_ID = 'workspace'
+const ADD_BUILTIN_PREFIX = 'builtin:'
+const ADD_CUSTOM_PREFIX = 'custom:'
 
 /** Glyph codicon (font ikon VS Code, dimuat di `main.tsx`); ukurannya diatur CSS per wadah. */
 const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden />
@@ -189,8 +196,10 @@ export default function Dock(props: DockProps) {
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
   const customs = props.customAgents ?? DEFAULT_SETTINGS.customAgents
   const launchCmds = props.agentLaunchCommands ?? DEFAULT_SETTINGS.agentLaunchCommands
-  const builtins = BUILTIN_AGENT_IDS.filter((a) => !disabled.includes(a))
-  const visibleCustoms = customs.filter((c) => !disabled.includes(c.id))
+  // Memo pada identitas props: Quick Pick mengembalikan baris aktif ke atas tiap `items` baru,
+  // jadi daftar tidak boleh berganti identitas pada setiap render induk (mis. tik zoom).
+  const builtins = useMemo(() => BUILTIN_AGENT_IDS.filter((a) => !disabled.includes(a)), [disabled])
+  const visibleCustoms = useMemo(() => customs.filter((c) => !disabled.includes(c.id)), [customs, disabled])
 
   useEffect(() => {
     if (!addOpen && !workspaceOpen) return
@@ -233,6 +242,28 @@ export default function Dock(props: DockProps) {
   const openWorkspaceForm = () => {
     setAddOpen(false)
     setWorkspaceOpen(true)
+  }
+
+  const closeAdd = useCallback(() => setAddOpen(false), [])
+
+  // Satu daftar Quick Pick: id baris = kunci pemilihnya, jadi `onAddSelect` tak perlu menutup
+  // di atas closure per-baris. Ikon seragam codicon; warna agent tidak dibawa (VS Code tidak mewarnai).
+  const addItems = useMemo<VscodeQuickPickItem[]>(() => [
+    { id: ADD_TERMINAL_ID, label: 'Terminal', icon: codicon('terminal') },
+    ...builtins.map((a) => {
+      const cfg = agentConfig(a)
+      return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, detail: cfg?.notice, icon: codicon('hubot') }
+    }),
+    ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
+    { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
+  ], [builtins, visibleCustoms])
+
+  const onAddSelect = (id: string) => {
+    if (id === ADD_TERMINAL_ID) return addTerminal()
+    if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
+    if (id.startsWith(ADD_BUILTIN_PREFIX)) return addBuiltin(id.slice(ADD_BUILTIN_PREFIX.length) as BuiltinAgentId)
+    const custom = visibleCustoms.find((c) => `${ADD_CUSTOM_PREFIX}${c.id}` === id)
+    if (custom) addCustom(custom)
   }
 
   const items: VscodeActivityBarItem[] = [
@@ -312,22 +343,16 @@ export default function Dock(props: DockProps) {
           </button>
         </div>
 
-        {addOpen && (
-          <Dialog open onOpenChange={setAddOpen}>
-            <DialogContent className="dock-add-dialog">
-              <DialogHeader><DialogTitle>Add node</DialogTitle></DialogHeader>
-              <div className="dock-add-list">
-                <Button variant="ghost" className="dock-action-row" onClick={addTerminal}>{codicon('terminal')} Terminal</Button>
-                {builtins.map((a) => {
-                  const cfg = agentConfig(a)
-                  return <Button key={a} variant="ghost" className="dock-action-row" title={cfg?.notice} onClick={() => addBuiltin(a)}><span className="dock-menu__glyph bg-[var(--agent-color)]" style={{ '--agent-color': cfg?.color ?? FALLBACK_AGENT_COLOR } as CSSProperties} />{cfg?.label ?? a}</Button>
-                })}
-                {visibleCustoms.map((c) => <Button key={c.id} variant="ghost" className="dock-action-row" onClick={() => addCustom(c)}><span className="dock-menu__glyph bg-[var(--agent-color)]" style={{ '--agent-color': c.color ?? FALLBACK_AGENT_COLOR } as CSSProperties} />{c.label}</Button>)}
-                <Button variant="ghost" className="dock-action-row" onClick={openWorkspaceForm}>{codicon('new-folder')} Workspace…</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+        <VscodeQuickPick
+          open={addOpen}
+          onClose={closeAdd}
+          ariaLabel="Add node"
+          placeholder="Select a node type to add"
+          emptyText="No matching node types"
+          hint=""
+          items={addItems}
+          onSelect={onAddSelect}
+        />
 
         {workspaceOpen && (
           <Dialog open onOpenChange={setWorkspaceOpen}>

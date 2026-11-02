@@ -184,8 +184,8 @@ describe('dock diam, panel yang minggir', () => {
 
     fireEvent.click(screen.getByLabelText('Add node'))
     const dialog = await waitFor(() => {
-      const el = document.querySelector('[data-slot="dialog-content"].dock-add-dialog')
-      if (!el) throw new Error('dialog belum muncul')
+      const el = document.querySelector('[data-slot="vscode-quick-pick"]')
+      if (!el) throw new Error('quick pick belum muncul')
       return el
     })
     expect(dialog.textContent).toContain('Terminal')

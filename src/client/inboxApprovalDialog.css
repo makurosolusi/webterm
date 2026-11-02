@@ -1,0 +1,238 @@
+/* Approval dialog (isi `InboxApprovalDialog`): skala dialog VS Code (overlays-forms.md section 2) —
+   480px, judul 14px/600, pesan 13px, tombol 26px / 12px / radius 4, jarak tombol 8px. Permukaan
+   luarnya (radius, bayangan, backdrop) milik `ui/alert-dialog`; file ini hanya isinya. */
+.approval-dialog {
+  width: 480px;
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.approval-dialog :focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.approval-dialog__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-dialog__title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.approval-dialog__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  font-size: 16px;
+  cursor: default;
+}
+
+.approval-dialog__close:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.approval-dialog__close:disabled {
+  opacity: 0.4;
+}
+
+.approval-dialog__desc {
+  margin: 0;
+}
+
+.approval-dialog__step {
+  display: block;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.approval-dialog__facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.approval-dialog__facts div {
+  min-width: 0;
+}
+
+.approval-dialog__facts dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+.approval-dialog__facts dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-dialog__facts code {
+  font-family: var(--vscode-editor-font-family, Menlo, Monaco, 'Courier New', monospace);
+  font-size: 12px;
+}
+
+.approval-dialog__expired {
+  color: var(--vscode-errorForeground);
+}
+
+.approval-dialog__error,
+.approval-dialog__hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.approval-dialog__error {
+  color: var(--vscode-errorForeground);
+}
+
+.approval-dialog__hint {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.approval-dialog__error .codicon,
+.approval-dialog__hint .codicon {
+  flex: none;
+  font-size: 16px;
+}
+
+.approval-dialog__consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  cursor: default;
+}
+
+.approval-dialog__consent--type {
+  display: block;
+}
+
+.approval-dialog__consent--type > span {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Checkbox VS Code: 18x18, radius 3, border/background dari token checkbox-*. */
+.approval-dialog__check {
+  appearance: none;
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  border: 1px solid var(--vscode-checkbox-border);
+  border-radius: 3px;
+  background: var(--vscode-checkbox-background);
+  color: var(--vscode-checkbox-foreground);
+  cursor: default;
+}
+
+.approval-dialog__check:checked {
+  background: var(--vscode-checkbox-selectBackground, var(--vscode-checkbox-background));
+}
+
+.approval-dialog__check:checked::before {
+  display: block;
+  content: '\eab2'; /* codicon-check */
+  font-family: codicon;
+  font-size: 16px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.approval-dialog__input {
+  width: 100%;
+  height: 25px;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  outline: none;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+}
+
+.approval-dialog__input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+/* Baris tombol: rata kanan, jarak 8px, 20px di atas tombol seperti dialog VS Code. */
+.approval-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.approval-dialog__btn {
+  height: 26px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: default;
+}
+
+.approval-dialog__btn:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.approval-dialog__btn--secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.approval-dialog__btn--secondary:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.approval-dialog__btn:disabled {
+  opacity: 0.4;
+}
+
+/* Tombol di dalam dialog: fokus = outline 1px offset 1px (tombol), bukan -1 seperti input. */
+.approval-dialog__btn:focus-visible {
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .approval-dialog {
+    width: 100%;
+  }
+
+  .approval-dialog__facts {
+    grid-template-columns: 1fr;
+  }
+}
