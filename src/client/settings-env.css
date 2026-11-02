@@ -1,0 +1,49 @@
+/* Section Environment di Settings: baris variabel env. Daftar/heading memakai kelas .st-ch-*. */
+.st-env {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.st-env-banner {
+  margin: 4px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border));
+  border-radius: 2px;
+  background: var(--vscode-inputValidation-warningBackground, transparent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.st-env-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--vscode-settings-headerBorder, var(--border));
+}
+
+.st-env-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.st-env-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.st-env-ctl .st-input {
+  width: 260px;
+  max-width: 100%;
+}
+
+.st-env-ctl .st-button.is-active {
+  background: var(--vscode-button-background, var(--accent));
+  color: var(--vscode-button-foreground, var(--text));
+}

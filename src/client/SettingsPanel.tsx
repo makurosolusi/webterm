@@ -24,6 +24,7 @@ import {
 import { TERMINAL_THEMES } from './themes'
 import { AgentSettings } from './SettingsAgents'
 import { ChannelsSection } from './ChannelsSection'
+import { EnvSection } from './EnvSection'
 import {
   ColorField,
   Field,
@@ -46,6 +47,7 @@ const SECTIONS = [
   { id: 'canvas', label: 'Canvas' },
   { id: 'preview', label: 'Preview' },
   { id: 'channels', label: 'Channels' },
+  { id: 'env', label: 'Environment' },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
@@ -70,6 +72,7 @@ export function SettingsPanel({
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
     if (id === 'channels') return <ChannelsSection />
+    if (id === 'env') return <EnvSection />
     return <PreviewSection settings={s} onChange={onChange} />
   }
 
