@@ -56,30 +56,7 @@
 .vscode-menu__item[data-danger='true'] .vscode-menu__label {
   color: var(--vscode-errorForeground, var(--state-attention, #f85149));
 }
-.vscode-menu__icon {
-  display: inline-flex; flex: none; align-items: center; justify-content: center;
-  width: 16px; height: 16px;
-}
-.vscode-menu__label { overflow: hidden; flex: 1; text-overflow: ellipsis; }
-.vscode-menu__keybinding {
-  flex: none; margin-left: 24px;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b)); font-size: 12px;
-}
-.vscode-menu__submenu-caret {
-  flex: none; margin-left: 8px;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-}
 .vscode-menu__submenu { position: absolute; top: -6px; left: 100%; z-index: 1001; margin-left: -4px; }
-.vscode-menu__separator {
-  height: 1px; margin: 4px 0;
-  background: var(--vscode-menu-separatorBackground, var(--vscode-editorGroup-border, #454545));
-}
-.vscode-menu__header {
-  overflow: hidden; box-sizing: border-box; height: 22px; padding: 3px 8px;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-  font-size: 11px; letter-spacing: 0.04em; text-overflow: ellipsis;
-  text-transform: uppercase; white-space: nowrap;
-}
 
 /* ---------------------------------------------------------- activity bar */
 .vscode-activity-bar {

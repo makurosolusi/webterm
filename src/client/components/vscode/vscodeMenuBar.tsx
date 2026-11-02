@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import './vscode-shell.css'
+import './vscode-overlay.css'
 
-export interface VscodeMenuItem {
+export interface VscodeMenuBarItem {
   type?: 'item'
   id: string
   label: string
@@ -24,7 +25,7 @@ export interface VscodeMenuHeader {
   label: string
 }
 
-export type VscodeMenuEntry = VscodeMenuItem | VscodeMenuSeparator | VscodeMenuHeader
+export type VscodeMenuEntry = VscodeMenuBarItem | VscodeMenuSeparator | VscodeMenuHeader
 
 export interface VscodeMenu {
   id: string
@@ -43,11 +44,11 @@ export interface VscodeMenuBarProps {
 
 const ITEM_INDENT = 'var(--vscode-menu-item-indent, 8px)'
 
-function isItem(entry: VscodeMenuEntry): entry is VscodeMenuItem {
+function isItem(entry: VscodeMenuEntry): entry is VscodeMenuBarItem {
   return entry.type === undefined || entry.type === 'item'
 }
 
-function itemRole(entry: VscodeMenuItem): string {
+function itemRole(entry: VscodeMenuBarItem): string {
   if (entry.submenu) return 'menuitem'
   if (entry.checked !== undefined) return 'menuitemcheckbox'
   return 'menuitem'
@@ -57,7 +58,7 @@ interface MenuListProps {
   entries: VscodeMenuEntry[]
   ariaLabel: string
   level: number
-  onActivate: (entry: VscodeMenuItem) => void
+  onActivate: (entry: VscodeMenuBarItem) => void
   /** Escape, or ArrowLeft when nested, closes one level. */
   onClose: () => void
   /** ArrowLeft at the top level moves to the previous top-level menu. */
@@ -159,7 +160,7 @@ function MenuList({ entries, ariaLabel, level, onActivate, onClose, onMoveMenu }
     <div className="vscode-menu__list" role="menu" aria-label={ariaLabel} onKeyDown={onKeyDown}>
       {entries.map((entry, index) => {
         if (!entry.type || entry.type === 'item') {
-          const item = entry as VscodeMenuItem
+          const item = entry as VscodeMenuBarItem
           return (
             <MenuRow
               key={`${item.id}-${index}`}
@@ -190,12 +191,12 @@ function MenuList({ entries, ariaLabel, level, onActivate, onClose, onMoveMenu }
 }
 
 interface MenuRowProps {
-  entry: VscodeMenuItem
+  entry: VscodeMenuBarItem
   index: number
   indent: string
   registerRef: (element: HTMLButtonElement | null) => void
   onFocus: () => void
-  onActivate: (entry: VscodeMenuItem) => void
+  onActivate: (entry: VscodeMenuBarItem) => void
   onClose: () => void
   level: number
 }
@@ -321,7 +322,7 @@ export function VscodeMenuBar({
     if (next) onOpenChange(next.id)
   }
 
-  const activate = (entry: VscodeMenuItem) => {
+  const activate = (entry: VscodeMenuBarItem) => {
     if (entry.disabled) return
     entry.onSelect?.()
     onOpenChange(null)
