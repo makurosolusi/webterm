@@ -7,6 +7,12 @@
   position: relative;
 }
 
+/* Breadcrumb di bawah header (tab) seperti VS Code; latar sama dengan editor. */
+.editor-node__crumbs {
+  flex: none;
+  background: var(--vscode-editor-background, var(--bg));
+}
+
 .editor-node__spacer {
   flex: 1;
 }
@@ -53,7 +59,7 @@
   justify-content: center;
   height: 100%;
   padding: 16px;
-  color: var(--muted);
+  color: var(--vscode-descriptionForeground, var(--muted));
   font-size: 12px;
   text-align: center;
 }

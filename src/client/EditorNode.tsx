@@ -7,6 +7,7 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { loadMonaco } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
 import { fileIconClass } from './fileIcon'
+import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
 import { renderMarkdown } from './markdown'
 import {
   IMAGE_MIME,
@@ -296,7 +297,7 @@ function EditorNode({
     <>
       <NodeResizer isVisible={!!selected} minWidth={320} minHeight={180} color={swatch} />
       <div
-        className={`term-node editor-node${selected ? ' term-node--selected' : ''} [border-top-color:var(--node-swatch)]!`}
+        className={`term-node editor-node${selected ? ' term-node--selected' : ''}`}
         style={{ '--node-swatch': swatch } as CSSProperties}
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
@@ -340,6 +341,19 @@ function EditorNode({
             </ToolbarButton>
           </ToolbarContainer>
         </div>
+        {/* Breadcrumb path file seperti di bawah tab editor VS Code: 3 segmen terakhir, statis. */}
+        {filePath && (
+          <VscodeBreadcrumbs
+            className="nodrag editor-node__crumbs"
+            ariaLabel="File path"
+            segments={filePath.split('/').filter(Boolean).slice(-3).map((name, i, all) => ({
+              id: `${i}:${name}`,
+              label: name,
+              title: filePath,
+              icon: i === all.length - 1 ? <span className={`${fileIconClass(name)} editor-node__icon`} aria-hidden="true" /> : undefined,
+            }))}
+          />
+        )}
         <div className={`node-body editor-node__body editor-node__body--${kind}`}>
           {body()}
           {/* Strip DI ATAS body, bukan pengganti body: editor tetap terpasang, isinya tetap

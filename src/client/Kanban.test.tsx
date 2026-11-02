@@ -19,6 +19,15 @@ describe('Kanban render', () => {
     expect(onFocus).toHaveBeenCalledWith('a1')
   })
 
+  it('kolom tanpa kartu menampilkan empty state dan badge persegi (bukan pill)', () => {
+    const { container } = render(<Kanban nodes={nodes} statuses={{ a1: 'working' }} onFocus={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getAllByText('No agents')).toHaveLength(3)
+    const root = container.firstElementChild as HTMLElement
+    expect(root.className).toContain('left-[var(--activity-bar-w,0px)]')
+    expect(root.className).toContain('bottom-[var(--status-bar-h,0px)]')
+    expect(container.innerHTML).not.toContain('rounded-full')
+  })
+
   it('Escape menutup overlay', () => {
     const onClose = vi.fn()
     render(<Kanban nodes={[]} statuses={{}} onFocus={vi.fn()} onClose={onClose} />)

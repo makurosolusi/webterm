@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 // Find widget: kontrak keyboard VS Code (Enter / Shift+Enter / Esc) dan penanda ARIA/ikon.
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
@@ -30,5 +32,13 @@ describe('FindBar', () => {
     fireEvent.keyDown(field, { key: 'Escape' })
     expect(onSearch.mock.calls).toEqual([['', 'next'], ['', 'prev']])
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('css find widget: tinggi 33, radius 8, shadow 12px, input 216', () => {
+    const css = readFileSync(join(__dirname, 'findBar.css'), 'utf8')
+    expect(css).toContain('height: 33px')
+    expect(css).toContain('--vscode-cornerRadius-large, 8px')
+    expect(css).toContain('box-shadow: 0 0 12px')
+    expect(css).toContain('.findbar .node-find__field { width: 216px; }')
   })
 })

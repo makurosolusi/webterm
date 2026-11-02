@@ -284,7 +284,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     <>
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
-        className={`${termNodeClass({ selected: !!selected, collapsed })} [border-top-color:var(--node-swatch)]!`}
+        className={termNodeClass({ selected: !!selected, collapsed })}
         style={{ '--node-swatch': swatch } as CSSProperties}
       >
         <NodeChrome

@@ -55,6 +55,16 @@ describe('EditorNode chrome', () => {
     expect(container.querySelector('.editor-node__name')?.textContent).not.toContain('●')
   })
 
+  it('menampilkan breadcrumb path dan tidak lagi memaksa border atas berwarna swatch', async () => {
+    const { container } = mount()
+    await waitFor(() => expect(fake.state.createdWith).not.toBeNull())
+    const crumbs = container.querySelector('nav.editor-node__crumbs, .editor-node__crumbs')
+    expect(crumbs?.getAttribute('aria-label')).toBe('File path')
+    expect(crumbs?.textContent).toContain('x')
+    expect(crumbs?.textContent).toContain('app.json')
+    expect(container.querySelector('.term-node')?.className).not.toContain('border-top-color')
+  })
+
   it('mengganti tema Monaco saat data-theme berubah', async () => {
     mount()
     await waitFor(() => expect(fake.state.createdWith).not.toBeNull())
