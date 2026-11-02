@@ -115,4 +115,24 @@ Hard rule: waves 1-6 must not edit any `*.test.ts` or `*.test.tsx` files. Preser
 
 ## 9. Not yet migrated ledger
 
-Everything listed in section 3 is **not yet migrated in this snapshot**. The foundation exists, but production consumers still require lane work. In particular, no claim is made for shell, dock, node chrome, terminal/editor/files, sessions/inbox, kanban, chat, settings, welcome/login, overlays, clean view, or CSS retirement. `ContextEdge.tsx`, React Flow internals, xterm internals, Monaco internals, and custom geometry are intentionally ledgered as **keep unchanged**, not migration gaps.
+Status as of 2026-11-02: the foundation and two migration waves are complete. This ledger records migrated chrome and controls without claiming full shell conversion or pixel parity.
+
+### Completed foundation
+
+- Commit `5429526` adds the Tailwind v4 utilities-only foundation, with no preflight, the `@` alias to `src/client`, shadcn primitives under `src/client/components/ui`, and `cn` from `@/lib/utils`.
+- The foundation preserves the existing reset and presentation ownership. The 12 legacy presentation sheets remain intentionally retained alongside `index.css` while custom consumers and geometry-sensitive rules still depend on them.
+
+### Migrated production files
+
+- **Wave 1, commit `b0763d2`, 33 files:** `CanvasMenuRow.tsx`, `CanvasToolbar.tsx`, `ChatPanel.tsx`, `Dock.tsx`, `EditorNode.tsx`, `ErrorBoundary.tsx`, `FilesNode.tsx`, `FindBar.tsx`, `FolderPicker.tsx`, `HelpOverlay.tsx`, `Kanban.tsx`, `Login.tsx`, `NodeChrome.tsx`, `NodeColorSwatch.tsx`, `NodeComments.tsx`, `NodeContextMenu.tsx`, `NodeToolbar.tsx`, `SessionRow.tsx`, `SessionsPanel.tsx`, `SettingsAgents.tsx`, `SettingsFields.tsx`, `SettingsPanel.tsx`, `TerminalNode.tsx`, `UsagePill.tsx`, `Welcome.tsx`, `WorkspaceBar.tsx`, `chat/chatComposer.tsx`, `chat/chatConversation.tsx`, `chat/chatMessages.tsx`, `inboxApprovalDialog.tsx`, `inboxItemRow.tsx`, `inboxPanelChrome.tsx`, and `node-chrome.css`.
+- **Wave 2, commit `1020737`, 8 files:** `CanvasToolbar.tsx`, `Kanban.tsx`, `NodeChrome.tsx`, `NodeContextMenu.tsx`, `SessionsPanel.tsx`, `inboxApprovalDialog.tsx`, `inboxItemRow.tsx`, and `inboxPanelSections.tsx`. This wave completed the remaining raw `Checkbox`/`Input`/`Button` control migration in inbox, approval, sessions, and shell paths.
+- Current raw-control audit: `rg -n '<button|<input|<textarea|<select' src/client --glob '*.tsx' | grep -v components/ui` returns two intentional matches only: the native color-input documentation comment in `SettingsFields.tsx` and a test fixture in `inboxDockState.test.tsx`. No remaining production raw-control markup was found by this audit.
+
+### Remaining structural items
+
+- Sessions, Inbox, and Chat still use custom panel shells rather than `Sheet`.
+- Settings and Inbox approval still use custom `role="dialog"` shells rather than the shadcn dialog primitive.
+- The Canvas command palette remains a custom overlay.
+- Canvas, xterm, Monaco, React Flow internals, and geometry-sensitive drag/resize/viewport behavior remain intentionally custom and were not candidates for replacement.
+- Legacy CSS remains: 12 presentation sheets are retained because shared shell, panel, node, editor/files, chat, settings, inbox, clean-view, and geometry-sensitive consumers still depend on them. CSS retirement is not claimed.
+- No visual screenshot verification was performed. Full pixel parity and full shell migration are not claimed.

@@ -2,6 +2,8 @@
 
 A node-based terminal manager: real shells run as draggable xterm terminals ("nodes") on a pan/zoom React Flow canvas. Terminals are persisted server-side and survive a browser refresh — reload the tab and each node re-attaches its PTY and replays its scrollback, so you never lose a running session by reloading. Terminals and CLI agents live in workspaces (name + working directory + layout) that are persisted in a local SQLite database, so your boards survive a server restart, not just a browser reload. The canvas has a left-edge dock (add nodes, undo/redo, viewport navigation, fit view, zoom, view lock, sessions panel, clean view), a status-colored minimap, and resizable nodes whose size is saved with the workspace. Agent nodes (Claude/Codex/Gemini) can be wired together with context-link edges — a linked node reads a peer's transcript or terminal read-only — and each agent node has an AI "name with AI" button that titles the node from its terminal output.
 
+UI chrome uses Tailwind v4 utilities with shadcn/ui primitives; canvas, xterm, and Monaco internals remain custom.
+
 ## Requirements
 
 - [Bun](https://bun.sh) — runs the dev server and the Bun-native PTY backend.
