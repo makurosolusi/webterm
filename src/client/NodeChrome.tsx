@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
 import NodeComments from './NodeComments'
+import { useNodeFullscreen } from './useNodeFullscreen'
 
 export interface NodeChromeProps {
   title: string
@@ -95,6 +96,8 @@ export default function NodeChrome(props: NodeChromeProps) {
   const [draft, setDraft] = useState('')
   const [commentsOpen, setCommentsOpen] = useState(false)
   const titleRef = useRef<HTMLElement | null>(null)
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  const fs = useNodeFullscreen(headerRef)
 
   const beginEdit = () => { setDraft(props.title); setEditing(true) }
   const commit = () => {
@@ -114,7 +117,7 @@ export default function NodeChrome(props: NodeChromeProps) {
   const chip = statusChip(props.status)
 
   return (
-    <div className="node-header relative">
+    <div ref={headerRef} className="node-header relative">
       <ToolbarButton
         label={props.collapsed ? 'Expand' : 'Collapse'}
         className="nodrag"
@@ -160,6 +163,7 @@ export default function NodeChrome(props: NodeChromeProps) {
         micActive={props.micActive} onToggleMic={props.onToggleMic}
         commentsOpen={commentsOpen} onToggleComments={() => setCommentsOpen((o) => !o)} commentCount={props.comments.length}
         maximized={props.maximized} onToggleMaximize={props.onToggleMaximize}
+        fullscreen={fs.isFullscreen} onToggleFullscreen={fs.toggle} fullscreenDisabled={fs.fullscreenDisabled}
         onClose={props.onClose}
         onAiName={props.onAiName} aiNaming={props.aiNaming}
         onBroadcast={props.onBroadcast} broadcastActive={props.broadcastActive} broadcastDisabled={props.broadcastDisabled}

@@ -101,6 +101,27 @@ describe('NodeToolbar', () => {
     expect(b.container.querySelector('svg')).toBeNull()
   })
 
+  it('puts Full Screen right after Maximize, with its own icon and label swap, only when wired', () => {
+    const onFs = vi.fn()
+    const a = render(<NodeToolbar {...base} maximized={false} onToggleFullscreen={onFs} />)
+    expect(labels(a.container)).toEqual(['Search', 'Maximize', 'Full Screen', 'More Actions…', 'Close (ends the session)'])
+    expect(icons(a.container)).toContain('codicon-chrome-maximize')
+    fireEvent.click(a.container.querySelector('[data-title="Full Screen"]') as Element)
+    expect(onFs).toHaveBeenCalledTimes(1)
+    a.unmount()
+    const b = render(<NodeToolbar {...base} maximized={false} fullscreen onToggleFullscreen={onFs} />)
+    expect(labels(b.container)).toContain('Exit Full Screen')
+    expect(icons(b.container)).toContain('codicon-chrome-restore')
+    expect(icons(b.container)).toContain('codicon-screen-full') // Maximize lama tak berubah
+    b.unmount()
+    const c = render(<NodeToolbar {...base} maximized={false} onToggleFullscreen={onFs} fullscreenDisabled />)
+    onFs.mockClear()
+    const btn = c.container.querySelector('[data-title="Full Screen"]') as Element
+    expect(btn.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(btn)
+    expect(onFs).not.toHaveBeenCalled()
+  })
+
   it('shows only the primary actions in the header; the rest live behind More Actions…', () => {
     const { container } = render(
       <NodeToolbar {...base} maximized={false} onToggleMic={() => {}} onAiName={() => {}} onToggleHideLinks={() => {}} />,

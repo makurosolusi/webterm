@@ -11,6 +11,7 @@ import {
   type Ref,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { portalContainer, useOnFullscreenChange } from './portalContainer'
 import './vscode-overlay.css'
 import { placeAnchored, type VscodeOverlayPlacement } from './vscodePopover'
 
@@ -90,6 +91,7 @@ export function VscodeTooltip({ content, side = 'top', delayMs = 500, children }
   }
 
   useEffect(() => clearTimers, [])
+  useOnFullscreenChange(() => setVisible(false), visible)
 
   useLayoutEffect(() => {
     if (!visible) {
@@ -167,7 +169,7 @@ export function VscodeTooltip({ content, side = 'top', delayMs = 500, children }
           >
             {content}
           </div>,
-          document.body,
+          portalContainer(),
         )}
     </>
   )

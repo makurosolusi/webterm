@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { portalContainer, useOnFullscreenChange } from './portalContainer'
 import './vscode-overlay.css'
 import { clamp } from './vscodeClamp'
 
@@ -104,6 +105,8 @@ export function VscodePopover({
   const anchorRef = useRef(anchor)
   closeRef.current = onOpenChange
   anchorRef.current = anchor
+  // Container portal berganti saat fullscreen masuk/keluar; popover terbuka ditutup, bukan dipindah.
+  useOnFullscreenChange(() => closeRef.current(false), open)
 
   useLayoutEffect(() => {
     if (!open) return
@@ -158,7 +161,7 @@ export function VscodePopover({
       tabIndex={-1}
       data-slot="vscode-popover"
       data-placement={placement}
-      className={['vscode-popover', className].filter(Boolean).join(' ')}
+      className={['vscode-popover', 'nodrag', className].filter(Boolean).join(' ')}
       style={{
         top: position?.top ?? 0,
         left: position?.left ?? 0,
@@ -167,6 +170,6 @@ export function VscodePopover({
     >
       {children}
     </div>,
-    document.body,
+    portalContainer(),
   )
 }
