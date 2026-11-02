@@ -365,8 +365,10 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                       head()
                     }}
                   >
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-xs"
                       className="ss-group__chev"
                       aria-expanded={!isCollapsed}
                       aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${g.projectName}`}
@@ -376,7 +378,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                       }}
                     >
                       {isCollapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
-                    </button>
+                    </Button>
                     <span
                       className="ss-group__monogram"
                       style={g.projectColor ? { background: g.projectColor } : undefined}

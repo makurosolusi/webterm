@@ -8,6 +8,7 @@
 // rows and non-task rows are never gated.
 import type { ApprovedApproval, InboxItem } from './inboxApi'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { SECTION_LABEL, formatAge, reviewBlockedReason } from './inboxPanelModel'
 
 export interface InboxItemRowProps {
@@ -27,8 +28,8 @@ export function InboxItemRow(props: InboxItemRowProps): React.JSX.Element {
   const checking = item.kind === 'task' && !ready
   return (
     <li className="inbox-item">
-      <input type="checkbox" className="inbox-check" aria-label={`Select ${item.title}`}
-        checked={selected} onChange={() => onToggleSelected(item.id)} />
+      <Checkbox className="inbox-check" aria-label={`Select ${item.title}`}
+        checked={selected} onCheckedChange={() => onToggleSelected(item.id)} />
       <div className="inbox-item__body">
         <div className="inbox-item__top">
           <span className={`inbox-state inbox-state--${item.state}`}>{SECTION_LABEL[item.state]}</span>

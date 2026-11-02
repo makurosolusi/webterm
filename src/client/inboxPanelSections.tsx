@@ -3,6 +3,8 @@
 // It owns no state and performs no fetching: the panel passes the visible rows, selection,
 // collapse state, and approved-resume lookup results.
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { ApprovedApproval, InboxItem, InboxState } from './inboxApi'
 import { InboxItemRow } from './inboxItemRow'
 import { SECTION_LABEL, SECTION_ORDER, resumeApprovalFor } from './inboxPanelModel'
@@ -39,18 +41,18 @@ export function InboxPanelSections(props: InboxPanelSectionsProps): React.JSX.El
         return (
           <section className="inbox-section" key={state} aria-labelledby={`${uid}-section-head-${state}`}>
             <header className="inbox-section__head">
-              <input type="checkbox" className="inbox-check"
+              <Checkbox className="inbox-check"
                 aria-label={`Select all in ${SECTION_LABEL[state]}`}
                 checked={allSelected} disabled={rows.length === 0}
-                onChange={(event) => onSelectSection(rows, event.target.checked)} />
-              <button type="button" className="inbox-section__toggle" id={`${uid}-section-head-${state}`}
+                onCheckedChange={(checked) => onSelectSection(rows, checked === true)} />
+              <Button type="button" variant="ghost" className="inbox-section__toggle" id={`${uid}-section-head-${state}`}
                 aria-expanded={!isCollapsed} aria-controls={bodyId} onClick={() => onToggleSection(state)}>
                 {isCollapsed
                   ? <ChevronRight size={13} aria-hidden="true" />
                   : <ChevronDown size={13} aria-hidden="true" />}
                 <span>{SECTION_LABEL[state]}</span>
                 <span className="inbox-count">{rows.length}</span>
-              </button>
+              </Button>
             </header>
             {!isCollapsed && (
               <div id={bodyId}>

@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
@@ -123,7 +124,7 @@ export default function NodeChrome(props: NodeChromeProps) {
       <NodeColorSwatch color={props.color} onColor={props.onColor} />
 
       {editing ? (
-        <input
+        <Input
           className="nodrag node-title--edit" autoFocus value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onTitleKey} onBlur={commit}

@@ -52,13 +52,16 @@ export default function Kanban({ nodes, statuses, onFocus, onClose }: Props) {
               <span style={{ color: 'var(--muted)' }}>{groups[col].length}</span>
             </div>
             {groups[col].map((card) => (
-              <button
+              <Button
                 key={card.id}
+                type="button"
+                variant="ghost"
+                className="kanban-card"
                 onClick={() => onFocus(card.id)}
                 style={{ textAlign: 'left', background: 'var(--raised)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 8px', cursor: 'pointer', fontSize: 12, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
                 {card.label}
-              </button>
+              </Button>
             ))}
           </Card>
         ))}

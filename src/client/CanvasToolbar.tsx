@@ -206,8 +206,10 @@ function CommandPalette({ targets, onPick, onClose }: PaletteProps) {
             <>
               <div className="palette__section">Nodes</div>
               {items.map((t, i) => (
-                <button
+                <Button
                   key={t.id}
+                  type="button"
+                  variant="ghost"
                   className={`palette__item${i === active ? ' active' : ''}`}
                   aria-current={i === active}
                   onMouseEnter={() => setActive(i)}
@@ -218,7 +220,7 @@ function CommandPalette({ targets, onPick, onClose }: PaletteProps) {
                   </span>
                   <span className="palette__label">{t.label}</span>
                   {t.hint && <span className="palette__hint">{t.hint}</span>}
-                </button>
+                </Button>
               ))}
             </>
           )}

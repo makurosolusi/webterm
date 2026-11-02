@@ -6,6 +6,8 @@
 import type { RefObject } from 'react'
 import { Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import type { ApprovalChallenge } from './inboxApi'
 
 /** The exact text the operator must type. Not a regex, not case-folded: consent is literal. */
@@ -142,13 +144,13 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
         {showConsent && (
           <>
             <label className="inbox-consent">
-              <input type="checkbox" checked={state.checked}
-                onChange={(event) => props.onChecked(event.target.checked)} />
+              <Checkbox checked={state.checked}
+                onCheckedChange={(checked) => props.onChecked(checked === true)} />
               <span>I understand this action cannot be undone from here.</span>
             </label>
             <label className="inbox-consent inbox-consent--type">
               <span>Type {CONFIRM_PHRASE} to confirm</span>
-              <input type="text" className="inbox-input" aria-label={`Type ${CONFIRM_PHRASE} to confirm`}
+              <Input type="text" className="inbox-input" aria-label={`Type ${CONFIRM_PHRASE} to confirm`}
                 autoComplete="off" spellCheck={false} value={state.text}
                 onChange={(event) => props.onText(event.target.value)} />
             </label>

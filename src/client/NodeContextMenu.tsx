@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Separator } from '@/components/ui/separator'
+import { Button } from '@/components/ui/button'
 import './agent.css'
 
 export interface MenuItem {
@@ -67,10 +68,11 @@ export default function NodeContextMenu({
         isSeparator(row) ? (
           <Separator key={`sep-${i}`} className="node-menu__sep" />
         ) : (
-          <button
+          <Button
             key={row.label}
             type="button"
             role="menuitem"
+            variant="ghost"
             className={`node-menu__item${row.danger ? ' node-menu__item--danger' : ''}`}
             disabled={row.disabled}
             title={row.hint}
@@ -81,7 +83,7 @@ export default function NodeContextMenu({
           >
             {row.icon && <span className="node-menu__icon">{row.icon}</span>}
             <span>{row.label}</span>
-          </button>
+          </Button>
         )
       )}
     </div>,
