@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 ### Added
-- Tailwind v4 utilities-only and shadcn/ui foundation, with interactive chrome and controls migrated across the shell, dock, canvas, nodes, terminal/editor/files, sessions, inbox/kanban, chat, settings, and overlays. Canvas, xterm, and Monaco internals remain custom, and legacy CSS is retained.
+- Tailwind v4 utilities-only and shadcn/ui foundation, with interactive chrome and controls migrated across the shell, dock, canvas, nodes, terminal/editor/files, sessions, inbox/kanban, chat, settings, and overlays. Canvas, xterm, and Monaco internals remain custom; remaining CSS is limited to layout, tokens, and engine internals after the cleanup.
+- Default component migration for Cards, Tabs, Dialog, AlertDialog, and Command across the verified Sessions, Inbox, Chat, Settings, approval, dock, and command-palette surfaces, with roughly 420 lines of redundant CSS removed. Sessions, Inbox, and Chat are Card + Tabs surfaces with clickable close buttons; Settings is a full-screen Dialog with a translate reset; Add, Zoom, and Workspace creation are controlled Dialogs with verified Escape; and only the workspace topbar tabs, 38px dock rail, and node/xterm/Monaco/React Flow geometry remain custom. The dead `st-toggle-knob`, dock active, and backdrop rules are gone. Gates: 2025/2025 Vitest with `TMPDIR=/tmp`, TypeScript clean, production build passing.
 - OpenCode 2.0.26 as the primary central runtime adapter, with JSON event parsing, env scrubbing, default-deny permissions, cancel, and session resume support.
 - A typed proposal MVP for `goal.propose`, `plan.propose`, `task.assign`, and `approval.request`, including policy validation and `central.proposal` audit records.
 - Central Telegram private-chat dispatch and bounded, read-only project memory retrieval behind their respective flags.

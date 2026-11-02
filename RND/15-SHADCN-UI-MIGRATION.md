@@ -1,7 +1,7 @@
 # shadcn/ui migration inventory and parallel plan
 
 **Snapshot:** 2026-11-02, branch `feature/shadcn-ui`  
-**Observed:** 47 production UI `.tsx` files, 20 foundation/test `.tsx` files under `components/ui`, 13 CSS files (12 presentation sheets plus `index.css`), and 189 test files matched by the repository search, including 50+ client behavior suites. This is an inventory only. No migration is claimed.
+**Verified state:** shadcn `command` and `popover` are available, with `cmdk` added. The migration covers the documented shell surfaces and default component compositions below. Canvas, xterm, Monaco, React Flow, and geometry-sensitive chrome remain intentionally custom. This is not a full pixel-parity claim.
 
 ## 1. Scope and non-goals
 
@@ -11,7 +11,7 @@ Non-goals: new primitives, visual redesign, global reset, token rewrite, replaci
 
 ## 2. Foundation summary
 
-Available in `src/client/components/ui`: `alert-dialog`, `badge`, `button`, `card`, `checkbox`, `dialog`, `dropdown-menu`, `input`, `label`, `progress`, `scroll-area`, `select`, `separator`, `sheet`, `skeleton`, `switch`, `tabs`, `textarea`, and `tooltip`. `shadcn-foundation.test.tsx` is the existing foundation smoke test. `tsconfig.json` maps `@/*` to `src/client/*`; use imports such as `@/components/ui/button`. Existing dependencies include Radix, `class-variance-authority`, `clsx`, and `tailwind-merge`.
+Available in `src/client/components/ui`: `alert-dialog`, `badge`, `button`, `card`, `checkbox`, `command`, `dialog`, `dropdown-menu`, `input`, `label`, `popover`, `progress`, `scroll-area`, `select`, `separator`, `sheet`, `skeleton`, `switch`, `tabs`, `textarea`, and `tooltip`. `shadcn-foundation.test.tsx` is the existing foundation smoke test. `tsconfig.json` maps `@/*` to `src/client/*`; use imports such as `@/components/ui/button`. Existing dependencies include Radix, `class-variance-authority`, `clsx`, and `tailwind-merge`.
 
 `index.css` imports Tailwind v4 theme/utilities and `tw-animate-css`, but deliberately has no preflight. Existing styles own reset and component presentation. Tokens map shadcn names to existing variables (`--bg`, `--text`, `--panel`, `--overlay`, `--accent`, `--border`, etc.). The foundation components import `cn` from `@/lib/utils`; use that existing path and do not add or imply an npm `cn` package. Foundation snapshot is commit `5429526`. No-preflight means every migrated control must retain explicit font, color, border, focus, disabled, and box-sizing behavior where the old sheets supplied it.
 
@@ -130,9 +130,9 @@ Status as of 2026-11-02: the foundation and two migration waves are complete. Th
 
 ### Remaining structural items
 
-- Sessions, Inbox, and Chat still use custom panel shells rather than `Sheet`.
-- Settings and Inbox approval still use custom `role="dialog"` shells rather than the shadcn dialog primitive.
-- The Canvas command palette remains a custom overlay.
+- Sessions, Inbox, and Chat use Card surfaces rather than Sheet; their panel placement remains intentionally custom.
+- Settings uses a controlled full-screen Dialog. Inbox approval uses AlertDialog.
+- The Canvas command palette uses Dialog + Command. Add, Zoom, and Workspace creation use controlled Dialogs.
 - Canvas, xterm, Monaco, React Flow internals, and geometry-sensitive drag/resize/viewport behavior remain intentionally custom and were not candidates for replacement.
-- Legacy CSS remains: 12 presentation sheets are retained because shared shell, panel, node, editor/files, chat, settings, inbox, clean-view, and geometry-sensitive consumers still depend on them. CSS retirement is not claimed.
-- No visual screenshot verification was performed. Full pixel parity and full shell migration are not claimed.
+- Twelve presentation sheets remain intentionally for layout, tokens, xterm, React Flow, Monaco, dynamic states, and custom geometry.
+- Real UI verification was completed with ego-browser. Sessions Card/Tabs, Inbox and Chat placement, full-screen Settings, centered Command palette, Add/Zoom Escape dismissal, readable Help, and no white user-agent tab pills were checked. Full pixel parity and full shell migration are not claimed.
