@@ -157,7 +157,7 @@ describe('styles.css — token sheet', () => {
   it('collapses every chrome row in clean view, not just hides the elements', () => {
     const clean = tokens.slice(tokens.indexOf('body.clean-view .app-shell {'))
     expect(clean).toContain('grid-template-rows: 0 0 minmax(0, 1fr) 0')
-    expect(clean).toContain('grid-template-columns: 0 minmax(0, 1fr)')
+    expect(clean).toContain('grid-template-columns: 0 0 minmax(0, 1fr)')
     for (const selector of ['.app-titlebar', '.app-tabs', '.app-statusbar']) {
       expect(tokens).toContain(`body.clean-view ${selector}`)
     }

@@ -234,3 +234,33 @@ describe('cleanView.css — penjaga teks', () => {
     expect(css).not.toContain(':hover')
   })
 })
+
+// Regresi: clean view membuat canvas runtuh karena aturan grid-nya hanya punya 2 kolom padahal
+// `.app-shell` punya 3 area kolom (activity sidebar main) -> kolom `main` jadi track implisit `auto`.
+describe('Clean view — kontrak grid .app-shell', () => {
+  const styles = read('styles.css')
+  const block = (sel: string) => {
+    const m = styles.match(new RegExp(`(?:^|\\n)${sel.replace(/[.\-]/g, '\\$&')}\\s*\\{([^}]*)\\}`))
+    if (!m) throw new Error(`blok ${sel} tidak ditemukan`)
+    return m[1]
+  }
+  const decl = (b: string, prop: string) => b.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1].trim().replace(/\s+/g, ' ')
+
+  it('jumlah track kolom == jumlah kolom pada grid-template-areas, dan kolom main = minmax(0, 1fr)', () => {
+    const base = block('.app-shell')
+    const rows = [...decl(base, 'grid-template-areas')!.matchAll(/'([^']+)'/g)].map((m) => m[1].trim().split(/\s+/))
+    const areaCols = rows.find((r) => r.includes('main'))!
+    const clean = decl(block('body.clean-view .app-shell'), 'grid-template-columns')!
+    expect(clean).toBe('0 0 minmax(0, 1fr)')
+    // minmax(0, 1fr) dihitung satu track
+    expect(clean.replace(/minmax\([^)]*\)/g, 'M').split(' ')).toHaveLength(areaCols.length)
+    expect(areaCols[areaCols.length - 1]).toBe('main')
+  })
+
+  it('menang atas .app-shell--sidebar tanpa !important (spesifisitas lebih tinggi)', () => {
+    const rule = block('body.clean-view .app-shell')
+    expect(rule).not.toContain('!important')
+    // body.clean-view .app-shell = (0,2,1) > .app-shell--sidebar = (0,1,0), urutan source tak berpengaruh.
+    expect(block('.app-shell--sidebar')).toContain('300px')
+  })
+})

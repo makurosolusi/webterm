@@ -338,8 +338,11 @@ body.clean-view .app-tabs,
 body.clean-view .app-statusbar {
   display: none;
 }
+/* 3 kolom = jumlah kolom `grid-template-areas` `.app-shell` (activity sidebar main). Dengan 2 kolom,
+   `main` jatuh ke track implisit `auto` dan canvas runtuh. Spesifisitas (0,2,1) mengalahkan
+   `.app-shell--sidebar` (0,1,0), jadi sidebar terbuka pun tetap 0. */
 body.clean-view .app-shell {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: 0 0 minmax(0, 1fr);
   grid-template-rows: 0 0 minmax(0, 1fr) 0;
 }
 
