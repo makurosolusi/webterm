@@ -34,6 +34,7 @@ interface TriggerProps {
   onBlur?: (event: unknown) => void
   onKeyDown?: (event: unknown) => void
   'aria-describedby'?: string
+  title?: string
 }
 
 export interface VscodeTooltipProps {
@@ -46,8 +47,8 @@ export interface VscodeTooltipProps {
 }
 
 /**
- * VS Code hover hint: 500ms hover delay, 100ms hide delay, 13px text, max-width
- * 500px, 4px 8px padding, 2px radius. Focus shows it immediately.
+ * VS Code hover hint: 500ms hover delay, 100ms hide delay, 12px text, max-width
+ * 500px, 4px 8px padding, 3px radius, editorHoverWidget colours. Focus shows it immediately.
  *
  * The tooltip is a portal and keeps itself open while hovered, so a user can move
  * the pointer from trigger to hint without it disappearing. `aria-describedby`
@@ -120,6 +121,8 @@ export function VscodeTooltip({ content, side = 'top', delayMs = 500, children }
   const trigger = cloneElement(children as ReactElement<TriggerProps>, {
     ...childProps,
     ref: mergeRefs(triggerRef, childProps.ref),
+    // A native `title` would show a second, OS-styled tooltip over this one.
+    title: undefined,
     'aria-describedby': describedBy || undefined,
     onPointerEnter: (event: ReactPointerEvent<HTMLElement>) => {
       childProps.onPointerEnter?.(event)

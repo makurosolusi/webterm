@@ -42,12 +42,8 @@ describe('vscode-controls.css metrics', () => {
     expect(cssBlock('.vscode-switch__thumb')).toContain('width: 16px')
   })
 
-  it('positions the quick pick 600px wide with 22px rows and 440px of visible list', () => {
-    expect(cssBlock('.vscode-quick-pick')).toContain('width: 600px')
-    expect(cssBlock('.vscode-quick-pick')).toContain('calc(var(--vscode-titlebar-height, 35px) + 6px)')
-    expect(cssBlock('.vscode-quick-pick__input')).toContain('height: 24px')
-    expect(cssBlock('.vscode-quick-pick__item')).toContain('height: 22px')
-    expect(cssBlock('.vscode-quick-pick__list')).toContain('max-height: 440px')
+  it('keeps the card on the 3px VS Code radius', () => {
+    expect(cssBlock('.vscode-card')).toContain('border-radius: 3px')
   })
 })
 

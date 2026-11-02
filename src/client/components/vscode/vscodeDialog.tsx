@@ -60,8 +60,9 @@ export interface VscodeDialogProps {
 }
 
 /**
- * VS Code-style modal: portal to body, 480px default width, 20px padding,
- * 16px semibold title, 13px body.
+ * VS Code-style modal: portal to body, 480px default width, 8px padding with a
+ * 12px content inset, 16px semibold title, 13px body, `x` close button, Esc.
+ * Footer actions are right-aligned; order them with `arrangeDialogButtons`.
  *
  * Focus is trapped inside the dialog and restored to the trigger on close. The
  * document body is deliberately not scroll-locked: the shell owns overflow, and
@@ -180,7 +181,7 @@ export function VscodeDialog({
               aria-label="Close dialog"
               onClick={() => onOpenChange(false)}
             >
-              ×
+              <span className="codicon codicon-close" aria-hidden="true" />
             </button>
           )}
         </div>

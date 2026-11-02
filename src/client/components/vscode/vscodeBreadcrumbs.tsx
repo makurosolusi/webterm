@@ -27,16 +27,7 @@ export interface VscodeBreadcrumbsProps {
 function Chevron() {
   return (
     <span className="vscode-breadcrumbs__separator" aria-hidden="true">
-      <svg viewBox="0 0 16 16" width="12" height="12" focusable="false">
-        <path
-          d="M6 3.5L10.5 8 6 12.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <span className="codicon codicon-chevron-right" />
     </span>
   )
 }

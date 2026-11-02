@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import './vscode-overlay.css'
+import './vscode-menu.css'
 import { clamp } from './vscodeClamp'
 
 const VIEWPORT_MARGIN = 8
@@ -22,8 +22,10 @@ export type VscodeMenuItem =
       icon?: ReactNode
       keybinding?: string
       disabled?: boolean
-      /** Destructive action: error foreground on text and icon, never a fill. */
+      /** Destructive action. VS Code menus have no red items, so this only sets `data-danger` for callers and tests. */
       danger?: boolean
+      /** Native tooltip text for the row (for example the reason an action is disabled). */
+      title?: string
       checked?: boolean
       submenu?: VscodeMenuItem[]
       onSelect?: () => void
@@ -200,6 +202,8 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // The menu owns the keyboard while open: canvas and window shortcuts must not fire.
+    event.stopPropagation()
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault()
@@ -226,7 +230,6 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
       case 'ArrowLeft':
         if (level > 0) {
           event.preventDefault()
-          event.stopPropagation()
           closeRef.current()
         }
         break
@@ -237,7 +240,6 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
         break
       case 'Escape':
         event.preventDefault()
-        event.stopPropagation()
         closeRef.current()
         break
       case 'Tab':
@@ -312,6 +314,7 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
             data-index={index}
             data-active={active === index}
             data-danger={item.danger ? 'true' : undefined}
+            title={item.title}
             className="vscode-menu__row"
             onClick={() => activate(index)}
             onPointerEnter={() => {
@@ -320,7 +323,7 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
             }}
           >
             <span className="vscode-menu__icon" aria-hidden="true">
-              {item.checked ? '✓' : item.icon}
+              {item.checked ? <span className="codicon codicon-check" /> : item.icon}
             </span>
             <span className="vscode-menu__label">{item.label}</span>
             {item.keybinding && (
@@ -329,9 +332,7 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
               </span>
             )}
             {hasSubmenu && (
-              <span className="vscode-menu__submenu-caret" aria-hidden="true">
-                ›
-              </span>
+              <span className="vscode-menu__submenu-caret codicon codicon-chevron-right" aria-hidden="true" />
             )}
           </button>
         )

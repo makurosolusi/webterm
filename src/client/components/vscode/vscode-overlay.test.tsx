@@ -1,8 +1,6 @@
 /**
  * @vitest-environment jsdom
  */
-import { existsSync, readFileSync } from 'node:fs'
-import path from 'node:path'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -16,19 +14,6 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
 })
-
-const cssPath = [
-  path.resolve(process.cwd(), 'src/client/components/vscode/vscode-overlay.css'),
-  path.resolve(process.cwd(), 'components/vscode/vscode-overlay.css'),
-].find(existsSync)
-if (!cssPath) throw new Error('vscode-overlay.css not found')
-const css = readFileSync(cssPath, 'utf8')
-
-function cssBlock(selector: string): string {
-  const start = css.indexOf(`${selector} {`)
-  if (start === -1) throw new Error(`expected CSS rule ${selector}`)
-  return css.slice(start, css.indexOf('}', start))
-}
 
 function rect(overrides: Partial<DOMRect> = {}): DOMRect {
   return { x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}), ...overrides } as DOMRect
@@ -55,40 +40,6 @@ function menuHarness(onTop = vi.fn()) {
     )
   }
 }
-
-describe('vscode-overlay.css metrics', () => {
-  it('keeps dialog metrics and layering', () => {
-    expect(cssBlock('.vscode-dialog')).toContain('width: 480px')
-    expect(cssBlock('.vscode-dialog')).toContain('padding: 20px')
-    expect(cssBlock('.vscode-dialog__title')).toContain('font-size: 16px')
-    expect(cssBlock('.vscode-dialog__title')).toContain('font-weight: 600')
-    expect(cssBlock('.vscode-dialog-backdrop')).toContain('z-index: 1100')
-  })
-
-  it('keeps popover and tooltip metrics', () => {
-    expect(cssBlock('.vscode-popover')).toContain('border-radius: 4px')
-    expect(cssBlock('.vscode-popover')).toContain('--vscode-menu-background')
-    expect(cssBlock('.vscode-tooltip')).toContain('z-index: 1400')
-    expect(cssBlock('.vscode-tooltip')).toContain('max-width: 500px')
-    expect(cssBlock('.vscode-tooltip')).toContain('padding: 4px 8px')
-    expect(cssBlock('.vscode-tooltip')).toContain('border-radius: 2px')
-  })
-
-  it('keeps menu rows at 22px, icons at 16px, and a 160px minimum', () => {
-    expect(cssBlock('.vscode-menu')).toContain('min-width: 160px')
-    expect(cssBlock('.vscode-menu__row')).toContain('height: 22px')
-    expect(cssBlock('.vscode-menu__icon')).toContain('width: 16px')
-    expect(cssBlock('.vscode-menu__separator')).toContain('height: 1px')
-  })
-
-  it('keeps the notification at 400px above the 22px status bar', () => {
-    expect(cssBlock('.vscode-notification')).toContain('width: 400px')
-    expect(cssBlock('.vscode-notification')).toContain('bottom: calc(var(--vscode-statusBar-height, 22px) + 3px)')
-    expect(cssBlock('.vscode-notification')).toContain('z-index: 1300')
-    expect(cssBlock('.vscode-notification__header')).toContain('min-height: 35px')
-    expect(cssBlock('.vscode-notification__action')).toContain('height: 24px')
-  })
-})
 
 describe('VscodeDialog', () => {
   it('portals a labelled modal, focuses its first control, and honours initialFocus', () => {

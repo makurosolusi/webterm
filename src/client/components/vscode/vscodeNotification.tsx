@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import './vscode-overlay.css'
+import './vscode-notification.css'
 
 export type VscodeNotificationSeverity = 'info' | 'warning' | 'error'
 
@@ -17,53 +17,53 @@ export interface VscodeNotificationProps {
   actions?: VscodeNotificationAction[]
   /** Suppresses the automatic 8s dismissal. Warning/error are never auto-dismissed. */
   sticky?: boolean
+  /** 0-100 renders a determinate 2px progress bar, 'infinite' an indeterminate one. */
+  progress?: number | 'infinite'
   onClose: () => void
 }
 
 const INFO_TIMEOUT_MS = 8000
+const SEVERITY_ICON: Record<VscodeNotificationSeverity, string> = {
+  info: 'codicon-info',
+  warning: 'codicon-warning',
+  error: 'codicon-error',
+}
 
-function SeverityIcon({ severity }: { severity: VscodeNotificationSeverity }) {
-  if (severity === 'error') {
-    return (
-      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-        <circle cx="8" cy="8" r="6.5" fill="currentColor" />
-        <path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="var(--vscode-notifications-background, #1f1f1f)" strokeWidth="1.5" />
-      </svg>
-    )
-  }
-  if (severity === 'warning') {
-    return (
-      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-        <path d="M8 1.5l7 12.5H1z" fill="currentColor" />
-        <path d="M8 5.5v4" stroke="var(--vscode-notifications-background, #1f1f1f)" strokeWidth="1.5" />
-        <circle cx="8" cy="11.6" r="0.9" fill="var(--vscode-notifications-background, #1f1f1f)" />
-      </svg>
-    )
-  }
-  return (
-    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-      <circle cx="8" cy="8" r="6.5" fill="currentColor" />
-      <path d="M8 7v4" stroke="var(--vscode-notifications-background, #1f1f1f)" strokeWidth="1.6" />
-      <circle cx="8" cy="4.7" r="0.95" fill="var(--vscode-notifications-background, #1f1f1f)" />
-    </svg>
+const InStackContext = createContext(false)
+
+/** Bottom-right toast column (right 3px, above the status bar); newest toast sits lowest. */
+export function VscodeNotificationStack({ children }: { children: ReactNode }) {
+  return createPortal(
+    <div className="vscode-notification-stack" data-slot="vscode-notification-stack">
+      <InStackContext.Provider value>{children}</InStackContext.Provider>
+    </div>,
+    document.body,
   )
 }
 
 /**
- * VS Code notification toast: bottom-right, 3px above the 22px status bar,
- * max-width 400px, 35px header, 24px actions.
+ * VS Code notification toast: max 450px, codicon severity icon, hover/focus-revealed
+ * close, button actions, optional 2px progress bar.
  *
  * `role="status"` for info and `role="alert"` for warning/error. Info dismisses
  * after 8s; warnings and errors stay until the user closes them, and hovering or
- * focusing pauses the info timer.
+ * focusing pauses the info timer. Rendered outside a `VscodeNotificationStack` it
+ * wraps itself in one.
  */
-export function VscodeNotification({
+export function VscodeNotification(props: VscodeNotificationProps) {
+  const inStack = useContext(InStackContext)
+  const toast = <VscodeNotificationItem {...props} />
+  return inStack ? toast : <VscodeNotificationStack>{toast}</VscodeNotificationStack>
+}
+
+function VscodeNotificationItem({
   id,
   severity,
   title,
   message,
   actions,
   sticky = false,
+  progress,
   onClose,
 }: VscodeNotificationProps) {
   const [paused, setPaused] = useState(false)
@@ -79,8 +79,9 @@ export function VscodeNotification({
   const pause = () => setPaused(true)
   const resume = () => setPaused(false)
   const role = severity === 'info' ? 'status' : 'alert'
+  const hasActions = actions !== undefined && actions.length > 0
 
-  return createPortal(
+  return (
     <div
       id={id}
       role={role}
@@ -93,13 +94,22 @@ export function VscodeNotification({
       onFocus={pause}
       onBlur={resume}
     >
-      <div className="vscode-notification__header" data-slot="vscode-notification-header">
-        <span className="vscode-notification__icon" data-slot="vscode-notification-icon" aria-hidden="true">
-          <SeverityIcon severity={severity} />
-        </span>
-        <span className="vscode-notification__title" data-slot="vscode-notification-title">
-          {title}
-        </span>
+      <div className="vscode-notification__main" data-slot="vscode-notification-header">
+        <span
+          className={`vscode-notification__icon codicon ${SEVERITY_ICON[severity]}`}
+          data-slot="vscode-notification-icon"
+          aria-hidden="true"
+        />
+        <div className="vscode-notification__text">
+          <span className="vscode-notification__title" data-slot="vscode-notification-title">
+            {title}
+          </span>
+          {message && (
+            <p className="vscode-notification__message" data-slot="vscode-notification-message">
+              {message}
+            </p>
+          )}
+        </div>
         <button
           type="button"
           className="vscode-notification__close"
@@ -107,34 +117,41 @@ export function VscodeNotification({
           aria-label="Close notification"
           onClick={onClose}
         >
-          ×
+          <span className="codicon codicon-close" aria-hidden="true" />
         </button>
       </div>
-      {(message || (actions && actions.length > 0)) && (
-        <div className="vscode-notification__body" data-slot="vscode-notification-body">
-          {message && (
-            <p className="vscode-notification__message" data-slot="vscode-notification-message">
-              {message}
-            </p>
-          )}
-          {actions && actions.length > 0 && (
-            <div className="vscode-notification__actions" data-slot="vscode-notification-actions">
-              {actions.map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  className="vscode-notification__action"
-                  data-slot="vscode-notification-action"
-                  onClick={action.onClick}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          )}
+      {hasActions && (
+        <div className="vscode-notification__actions" data-slot="vscode-notification-actions">
+          {actions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              className="vscode-notification__action"
+              data-slot="vscode-notification-action"
+              onClick={action.onClick}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       )}
-    </div>,
-    document.body,
+      {progress !== undefined && (
+        <div
+          className="vscode-notification__progress"
+          data-slot="vscode-notification-progress"
+          data-mode={progress === 'infinite' ? 'infinite' : 'discrete'}
+          role="progressbar"
+          aria-label={title}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress === 'infinite' ? undefined : Math.round(progress)}
+        >
+          <span
+            className="vscode-notification__progress-bit"
+            style={progress === 'infinite' ? undefined : { width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </div>
+      )}
+    </div>
   )
 }

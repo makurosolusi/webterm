@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
-import { rankTargets } from '@/CanvasToolbar'
-import './vscode-controls.css'
+import './vscode-quick-pick.css'
+import { customRank, defaultRank, highlightSegments } from './vscodeQuickPickRanking'
 
 export interface VscodeQuickPickItem {
   id: string
@@ -25,45 +25,28 @@ export interface VscodeQuickPickProps {
   emptyText?: string
   /** Accessible name for the dialog; defaults to the placeholder. */
   ariaLabel?: string
+  /** Footer hint; pass an empty string to hide it. */
+  hint?: string
+  /**
+   * Mode prefix (VS Code uses `>` for commands). A query starting with it is ranked
+   * without the prefix, so typing it keeps the list instead of emptying it.
+   */
+  modePrefix?: string
 }
+
+const DEFAULT_HINT = 'Press Enter to confirm or Escape to cancel'
+/** Rows visible before the list scrolls (max-height 440px / 22px rows). */
+const VISIBLE_ROWS = 20
 
 function firstEnabledIndex(items: VscodeQuickPickItem[]): number {
   return items.findIndex((item) => !item.disabled)
-}
-
-function defaultRank(items: VscodeQuickPickItem[], query: string): VscodeQuickPickItem[] {
-  if (!query.trim()) return items
-  const byId = new Map(items.map((item) => [item.id, item]))
-  const targets = items.map((item) => ({
-    id: item.id,
-    label: item.label,
-    // Description and detail are searchable; the keybinding is not (matching VS Code).
-    hint: [item.description, item.detail].filter(Boolean).join(' '),
-  }))
-  return rankTargets(targets, query, targets.length)
-    .map((target) => byId.get(target.id))
-    .filter((item): item is VscodeQuickPickItem => item !== undefined)
-}
-
-function customRank(
-  items: VscodeQuickPickItem[],
-  query: string,
-  rank: NonNullable<VscodeQuickPickProps['rank']>,
-): VscodeQuickPickItem[] {
-  const scored: { item: VscodeQuickPickItem; score: number; index: number }[] = []
-  items.forEach((item, index) => {
-    const score = rank(item, query)
-    if (score !== null) scored.push({ item, score, index })
-  })
-  scored.sort((a, b) => a.score - b.score || a.index - b.index)
-  return scored.map((entry) => entry.item)
 }
 
 /**
  * VS Code quick pick / command palette.
  *
  * 600px wide, 6px below the title bar, 24px input, 22px rows, max 20 visible rows
- * (440px) before the list scrolls. The input owns focus and points at the active row
+ * (440px) before the list scrolls, matched characters highlighted, PgUp/PgDn paging. The input owns focus and points at the active row
  * through `aria-activedescendant`, so the listbox never needs its own tab stop.
  */
 export function VscodeQuickPick({
@@ -75,6 +58,8 @@ export function VscodeQuickPick({
   rank,
   emptyText = 'No matching commands',
   ariaLabel,
+  hint = DEFAULT_HINT,
+  modePrefix,
 }: VscodeQuickPickProps) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -82,15 +67,21 @@ export function VscodeQuickPick({
   const rootRef = useRef<HTMLDivElement>(null)
   const listId = useId()
 
+  const needle = modePrefix && query.startsWith(modePrefix) ? query.slice(modePrefix.length) : query
   const filtered = useMemo(
-    () => (rank ? customRank(items, query, rank) : defaultRank(items, query)),
-    [items, query, rank],
+    () => (rank ? customRank(items, needle, rank) : defaultRank(items, needle)),
+    [items, needle, rank],
   )
 
   // Reset the active row whenever the visible set changes (new query or new items).
   useEffect(() => {
     setActive(firstEnabledIndex(filtered))
   }, [filtered])
+
+  // Keep the active row visible while arrowing through a scrolled list.
+  useEffect(() => {
+    if (open) rootRef.current?.querySelector('[data-active="true"]')?.scrollIntoView?.({ block: 'nearest' })
+  }, [open, active, filtered])
 
   // Clear the query on close and focus the input on open. Query is kept while open.
   useEffect(() => {
@@ -119,16 +110,17 @@ export function VscodeQuickPick({
 
   const activeItem = filtered[active]
 
-  const move = (direction: 1 | -1) => {
-    let next = active
-    for (let step = 0; step < filtered.length; step += 1) {
-      next += direction
-      if (next < 0 || next >= filtered.length) return
-      if (!filtered[next].disabled) {
-        setActive(next)
-        return
-      }
+  /** Moves `distance` rows, skipping disabled rows ahead first, then falling back toward the current row. */
+  const move = (direction: 1 | -1, distance = 1) => {
+    const target = Math.min(filtered.length - 1, Math.max(0, active + direction * distance))
+    const enabledFrom = (start: number, step: number, stop: number) => {
+      for (let i = start; step > 0 ? i <= stop : i >= stop; i += step) if (!filtered[i].disabled) return i
+      return -1
     }
+    const edge = direction > 0 ? filtered.length - 1 : 0
+    const ahead = enabledFrom(target, direction, edge)
+    const next = ahead >= 0 && ahead !== active ? ahead : enabledFrom(target, -direction, active + direction)
+    if (next >= 0 && next !== active) setActive(next)
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -140,6 +132,14 @@ export function VscodeQuickPick({
       case 'ArrowUp':
         event.preventDefault()
         move(-1)
+        break
+      case 'PageDown':
+        event.preventDefault()
+        move(1, VISIBLE_ROWS - 1)
+        break
+      case 'PageUp':
+        event.preventDefault()
+        move(-1, VISIBLE_ROWS - 1)
         break
       case 'Enter':
         event.preventDefault()
@@ -195,7 +195,15 @@ export function VscodeQuickPick({
           </span>
         ) : null}
         <span className="vscode-quick-pick__label" data-slot="vscode-quick-pick-label">
-          {item.label}
+          {highlightSegments(item.label, needle).map((segment, i) =>
+            segment.match ? (
+              <span key={i} className="vscode-quick-pick__highlight" data-slot="vscode-quick-pick-highlight">
+                {segment.text}
+              </span>
+            ) : (
+              segment.text
+            ),
+          )}
         </span>
         {item.description ? (
           <span
@@ -267,6 +275,11 @@ export function VscodeQuickPick({
           </div>
         )}
       </div>
+      {hint ? (
+        <div role="presentation" data-slot="vscode-quick-pick-hint" className="vscode-quick-pick__hint">
+          {hint}
+        </div>
+      ) : null}
     </div>
   )
 }

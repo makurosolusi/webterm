@@ -1,0 +1,131 @@
+/* VS Code menu (L1). Values follow the monaco-menu stylesheet: 5px radius, 4px
+ * panel padding, 4px row inset with a 4px row radius, 2em label padding, dim
+ * keybinding, 40% opacity when disabled. Every var() keeps a fallback so the
+ * menu renders before the theme bridge loads. Row height stays at 22px (RND/20).
+ */
+.vscode-menu {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  min-width: 160px;
+  padding: 4px 0;
+  overflow: hidden auto;
+  border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #454545));
+  border-radius: 5px;
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background, #252526));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #cccccc));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+  outline: none;
+}
+
+.vscode-menu__row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  height: 22px;
+  margin: 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.vscode-menu__row:hover,
+.vscode-menu__row[data-active='true'] {
+  background: var(
+    --vscode-menu-selectionBackground,
+    var(--vscode-list-activeSelectionBackground, rgba(9, 71, 113, 0.8))
+  );
+  color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground, #ffffff));
+}
+
+.vscode-menu__row:focus-visible {
+  outline: 1px solid var(--vscode-menu-selectionBorder, var(--vscode-focusBorder, #007fd4));
+  outline-offset: -1px;
+}
+
+/* Disabled rows dim to 40% and never take the hover fill (monaco `.disabled`). */
+.vscode-menu__row[aria-disabled='true'] {
+  opacity: 0.4;
+}
+
+.vscode-menu__row[aria-disabled='true']:hover,
+.vscode-menu__row[aria-disabled='true'][data-active='true'] {
+  background: transparent;
+  color: inherit;
+}
+
+/* Leading column: checkmark or item icon, 2em wide like `.menu-item-check`. */
+.vscode-menu__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 16px;
+  font-size: 16px;
+}
+
+.vscode-menu__label {
+  flex: 1;
+  overflow: hidden;
+  padding-right: 2em;
+  text-overflow: ellipsis;
+}
+
+.vscode-menu__keybinding {
+  flex: none;
+  padding-right: 2em;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.vscode-menu__row[data-active='true'] .vscode-menu__keybinding,
+.vscode-menu__row:hover .vscode-menu__keybinding {
+  opacity: 1;
+}
+
+.vscode-menu__submenu-caret {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.vscode-menu__separator {
+  height: 1px;
+  margin: 5px 10px;
+  border: 0;
+  background: var(--vscode-menu-separatorBackground, var(--vscode-editorGroup-border, #454545));
+}
+
+.vscode-menu__header {
+  overflow: hidden;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 3px 1em 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Agent colour dot used where a menu row needs a swatch instead of a codicon. */
+.vscode-menu__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vscode-menu-dot-color, currentColor);
+}

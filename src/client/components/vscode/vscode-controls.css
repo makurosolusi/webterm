@@ -1,4 +1,4 @@
-/* VS Code control primitives (L1): switch, card, quick pick.
+/* VS Code control primitives (L1): switch, card. The quick pick has vscode-quick-pick.css.
  *
  * Tokens live in `vscode-theme.css`. Every var() keeps a fallback so the controls
  * still render if the bridge sheet has not loaded yet (tests, early paint). All
@@ -59,7 +59,7 @@
   box-sizing: border-box;
   padding: 12px;
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(
     --vscode-editorWidget-background,
     var(--vscode-menu-background, var(--vscode-sideBar-background, #252526))
@@ -85,7 +85,7 @@
   margin: -12px -12px 12px;
   padding: 0 12px;
   border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
-  border-radius: 3px 3px 0 0;
+  border-radius: 2px 2px 0 0;
 }
 
 .vscode-card__title {
@@ -107,150 +107,6 @@
   margin: 12px -12px -12px;
   padding: 0 12px;
   border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
-  border-radius: 0 0 3px 3px;
+  border-radius: 0 0 2px 2px;
 }
 
-/* ------------------------------------------------------------- quick pick */
-.vscode-quick-pick {
-  position: fixed;
-  top: calc(var(--vscode-titlebar-height, 35px) + 6px);
-  left: 50%;
-  z-index: 1000;
-  box-sizing: border-box;
-  width: 600px;
-  max-width: calc(100vw - 16px);
-  overflow: hidden;
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
-  border-radius: 4px;
-  background: var(
-    --vscode-quickInput-background,
-    var(--vscode-editorWidget-background, var(--vscode-menu-background, #252526))
-  );
-  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
-  color: var(--vscode-quickInput-foreground, var(--vscode-foreground, #cccccc));
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: 13px;
-  transform: translateX(-50%);
-}
-
-.vscode-quick-pick__input {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  height: 24px;
-  margin: 0;
-  padding: 0 6px;
-  border: 0;
-  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
-  border-radius: 3px 3px 0 0;
-  outline: none;
-  background: var(
-    --vscode-input-background,
-    var(--vscode-settings-textInputBackground, #3c3c3c)
-  );
-  color: var(--vscode-input-foreground, var(--vscode-foreground, #cccccc));
-  font: inherit;
-  font-size: 13px;
-}
-
-.vscode-quick-pick__input::placeholder {
-  color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground, #8b8b8b));
-}
-
-.vscode-quick-pick__input:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder, #007fd4);
-  outline-offset: -1px;
-}
-
-.vscode-quick-pick__list {
-  box-sizing: border-box;
-  max-height: 440px;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.vscode-quick-pick__group {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
-  height: 22px;
-  padding: 0 8px;
-  background: inherit;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.vscode-quick-pick__item {
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
-  height: 22px;
-  gap: 6px;
-  padding: 0 8px;
-  overflow: hidden;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.vscode-quick-pick__item[data-active='true'] {
-  background: var(
-    --vscode-list-activeSelectionBackground,
-    var(--vscode-menu-selectionBackground, rgba(4, 57, 94, 1))
-  );
-  color: var(--vscode-list-activeSelectionForeground, var(--vscode-menu-selectionForeground, #ffffff));
-}
-
-.vscode-quick-pick__item[data-disabled='true'] {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.vscode-quick-pick__icon {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-}
-
-.vscode-quick-pick__label {
-  overflow: hidden;
-  flex: none;
-  max-width: 60%;
-  text-overflow: ellipsis;
-}
-
-.vscode-quick-pick__description {
-  overflow: hidden;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-  text-overflow: ellipsis;
-}
-
-.vscode-quick-pick__detail {
-  overflow: hidden;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-  font-style: italic;
-  text-overflow: ellipsis;
-}
-
-.vscode-quick-pick__keybinding {
-  flex: none;
-  margin-left: auto;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-  font-size: 11px;
-}
-
-.vscode-quick-pick__empty {
-  box-sizing: border-box;
-  padding: 8px;
-  color: var(--vscode-descriptionForeground, var(--vscode-foreground, #8b8b8b));
-  font-size: 13px;
-}
