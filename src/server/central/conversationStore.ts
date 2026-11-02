@@ -5,6 +5,7 @@
  * (replay). Every write runs in one BEGIN IMMEDIATE so allocator + insert agree.
  */
 import type { Database } from 'bun:sqlite'
+import { writeTx } from './writeTx'
 import { allRows, execWrite, getRow, newId, type Row } from '../ledger/ledgerCore'
 import {
   type CentralEventType, type ConversationErrorCode, type ConversationScope,
@@ -87,24 +88,6 @@ function toEvent(r: Row): ConversationEvent {
   }
 }
 
-/** BEGIN IMMEDIATE wrapper with an inTransaction-reporting scoped handle. */
-function writeTx<T>(db: Database, fn: (txDb: Database) => T): T {
-  if ((db as unknown as { inTransaction?: boolean }).inTransaction === true) return fn(db)
-  db.exec('BEGIN IMMEDIATE')
-  const scoped = {
-    inTransaction: true,
-    exec: (sql: string) => db.exec(sql),
-    query: (sql: string) => db.query(sql),
-  } as unknown as Database
-  try {
-    const result = fn(scoped)
-    db.exec('COMMIT')
-    return result
-  } catch (err) {
-    try { db.exec('ROLLBACK') } catch { /* SQLite already rolled back */ }
-    throw err
-  }
-}
 function validateConversationId(raw: unknown): string {
   if (typeof raw !== 'string') fail('invalid_conversation', 'conversationId must be a string')
   return conversationIdForScope(scopeFromConversationId(raw))

@@ -9,7 +9,9 @@ import {
   type BindingAudit,
   type BindingStorePort,
 } from './channelBindingsApi'
-import { declaredLength, readCappedBody, writeJson } from './channelHttp'
+import { readCappedRequestBody } from '../cappedRequestBody'
+import { writeJson } from './channelHttp'
+import { firstHeader } from '../httpHeaders'
 
 export const BINDINGS_BODY_LIMIT_BYTES = 8 * 1024
 const JSON_CONTENT_TYPE = /^application\/(?:[a-z0-9.+-]+\+)?json\b/i
@@ -38,12 +40,7 @@ export function handleChannelBindingsApi(
 type PreparedBody = { ok: true; body: string } | { ok: false; status: 400 | 413; error: string }
 
 async function prepareBody(req: IncomingMessage): Promise<PreparedBody> {
-  const declared = declaredLength(req.headers['content-length'])
-  if (declared !== undefined && declared > BINDINGS_BODY_LIMIT_BYTES) {
-    req.resume()
-    return { ok: false, status: 413, error: 'body_too_large' }
-  }
-  const read = await readCappedBody(req, BINDINGS_BODY_LIMIT_BYTES)
+  const read = await readCappedRequestBody(req, BINDINGS_BODY_LIMIT_BYTES)
   if (read.ok) return { ok: true, body: read.body }
   return read.reason === 'too_large'
     ? { ok: false, status: 413, error: 'body_too_large' }
@@ -51,7 +48,7 @@ async function prepareBody(req: IncomingMessage): Promise<PreparedBody> {
 }
 
 function isJsonContentType(raw: string | string[] | undefined): boolean {
-  const value = Array.isArray(raw) ? raw[0] : raw
+  const value = firstHeader(raw)
   return value !== undefined && JSON_CONTENT_TYPE.test(value.trim())
 }
 

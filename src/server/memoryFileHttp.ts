@@ -17,6 +17,7 @@ import {
 } from './memory/memoryFile'
 import { dataDir } from './config'
 import { type RouteResult, capped, failure } from './memoryFileHttpResponse'
+import { LEDGER_OFF } from './apiShared.types'
 
 export type { RouteResult } from './memoryFileHttpResponse'
 
@@ -127,7 +128,7 @@ export async function memoryFileHttpRoute(
     return { status: 503, body: { error: 'memory_files_off' } }
   }
   const ledger = deps.ledger
-  if (!ledger) return { status: 503, body: { error: 'ledger_off' } }
+  if (!ledger) return LEDGER_OFF
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { status: 400, body: { error: 'invalid_body' } }
   }

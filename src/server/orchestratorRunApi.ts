@@ -9,6 +9,7 @@
 // production composition (repo/agent/worktree/runtime) in `orchestratorRunProduction`.
 // `WEBTERM_RUN_REQUIRE_APPROVAL=on` makes approval mandatory; otherwise a named one is consumed.
 import { createPlanStore, type Plan } from './orchestrator/plan'
+import { LEDGER_OFF } from './apiShared.types'
 import type { WorkerRunOutcome } from './orchestrator/workerRuntime'
 import {
   ORCHESTRATOR_REQUIRE_APPROVAL_FLAG,
@@ -54,7 +55,7 @@ export async function orchestratorRunRoute(
     return { status: 503, body: { error: 'orchestrator_off' } }
   }
   const ledger = deps.ledger
-  if (!ledger) return { status: 503, body: { error: 'ledger_off' } }
+  if (!ledger) return LEDGER_OFF
   const parsed = parseRunBody(body)
   if (!parsed.ok) return parsed.result
   const request = parsed.value

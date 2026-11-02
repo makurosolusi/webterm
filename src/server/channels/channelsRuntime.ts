@@ -9,6 +9,7 @@
 //     >= 32 [A-Za-z0-9_-]). Poll mode (WEBTERM_TELEGRAM_MODE) needs only the bot token.
 //   WEBTERM_LEDGER=on|shadow (an approval needs the ledger; without it the channel is pointless)
 // A corrupt channel store disables the channel too; it is never reset to defaults.
+import { flagOn } from '../envFlag'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { dataDir } from '../config'
@@ -86,7 +87,7 @@ function logDisabled(reason: string): void {
 }
 
 export function telegramChannelEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return (env[TELEGRAM_ENABLED_ENV] ?? '').trim().toLowerCase() === 'on'
+  return flagOn(env[TELEGRAM_ENABLED_ENV])
 }
 
 /** Production approval port: the real ledger, unchanged, behind the dispatcher's narrow slice. */

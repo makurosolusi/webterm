@@ -3,6 +3,7 @@
 // never spawns workers and never writes fact/CORE. Portfolio reads live in
 // centralProjection.ts.
 import type { Database } from 'bun:sqlite'
+import { writeTx } from './writeTx'
 import { appendEvent } from '../ledger/ledgerEvent'
 import { execWrite, getRow, type LedgerContext } from '../ledger/ledgerCore'
 import {
@@ -20,34 +21,6 @@ import {
 
 export * from './centralModel'
 export { portfolio, projectPortfolio } from './centralProjection'
-
-/**
- * Same BEGIN IMMEDIATE semantics as ledgerCore.tx, but the transaction handle also
- * reports `inTransaction` so a nested appendEvent joins instead of opening a second
- * BEGIN. Necessary because node-env tests run the real code against `node:sqlite`,
- * whose adapter has no `inTransaction` getter; bun:sqlite keeps its own flag.
- */
-function writeTx<T>(db: Database, fn: (txDb: Database) => T): T {
-  if ((db as unknown as { inTransaction?: boolean }).inTransaction === true) return fn(db)
-  db.exec('BEGIN IMMEDIATE')
-  const scoped = {
-    inTransaction: true,
-    exec: (sql: string) => db.exec(sql),
-    query: (sql: string) => db.query(sql),
-  } as unknown as Database
-  try {
-    const result = fn(scoped)
-    db.exec('COMMIT')
-    return result
-  } catch (err) {
-    try {
-      db.exec('ROLLBACK')
-    } catch {
-      // SQLite already rolled back; nothing left to undo.
-    }
-    throw err
-  }
-}
 
 function ctxOf(db: Database): LedgerContext {
   return { db, now: () => Date.now() }

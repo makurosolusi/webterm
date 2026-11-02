@@ -3,7 +3,10 @@
 // The request only names a project/item and a plan version. Repo, command, agent and exec are
 // resolved SERVER-SIDE (project.path + settings), never taken from the payload: a run spawns a
 // real PTY, so a client-supplied repo/cmd would be remote command execution.
-export type RouteResult = { status: number; body: unknown }
+import type { RouteResult } from './apiShared.types'
+import { flagOn } from './envFlag'
+
+export type { RouteResult }
 
 export const ORCHESTRATOR_RUN_FLAG = 'WEBTERM_ORCHESTRATOR_RUN'
 /** Opt-in policy gate: when `on`, a run must name an approved, digest-bound ledger approval. */
@@ -28,14 +31,14 @@ export const CLIENT_CONTROLLED_FIELDS = [
 export function orchestratorRunEnabled(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return env[ORCHESTRATOR_RUN_FLAG] === 'on'
+  return flagOn(env[ORCHESTRATOR_RUN_FLAG])
 }
 
 /** Default OFF: approval is optional unless an operator explicitly requires it. */
 export function orchestratorRunRequireApproval(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG] === 'on'
+  return flagOn(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG])
 }
 
 function text(value: unknown, max: number): string | null {

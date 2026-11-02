@@ -3,10 +3,8 @@
 // nonce, expiry and single-use state, and this file only translates a parsed command into it.
 import type { ChannelCommand } from './identity'
 import type { NormalizedMessage } from './telegram'
-import { redactSecrets } from './webhook'
+import { safeErrorText } from './safeErrorText'
 import type { ChannelBinding } from './identity'
-
-const MAX_ERROR_CHARS = 200
 
 /** Minimal approval shape; the real `ledger.approval` is structurally compatible. */
 export interface ApprovalSummary {
@@ -40,11 +38,6 @@ export interface ApprovalDeps {
 
 export function actorFor(userId: string): string {
   return `telegram:${userId}`
-}
-
-export function safeMessage(err: unknown): string {
-  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : 'unexpected error'
-  return redactSecrets(text).slice(0, MAX_ERROR_CHARS)
 }
 
 /** Pull the digest + nonce that the approval card showed; anything else is not a challenge. */
@@ -86,7 +79,7 @@ export function handleApprove(
   try {
     current = approval.getApproval(id)
   } catch (err) {
-    return `Could not read approval ${id}: ${safeMessage(err)}`
+    return `Could not read approval ${id}: ${safeErrorText(err, 'unexpected error')}`
   }
   const refused = checkScope(current, binding, id, 'approve')
   if (refused) return refused
@@ -98,7 +91,7 @@ export function handleApprove(
       nonce: command.nonce,
     })
   } catch (err) {
-    return `Approve failed for ${id}: ${safeMessage(err)}`
+    return `Approve failed for ${id}: ${safeErrorText(err, 'unexpected error')}`
   }
   const digestTag = command.digest.slice(0, 12)
   if (!deps.consumeOnApprove) {
@@ -108,7 +101,7 @@ export function handleApprove(
   try {
     consumed = approval.consumeApproval(id, { digest: command.digest })
   } catch (err) {
-    return `Approved ${id}, but consuming it failed: ${safeMessage(err)}`
+    return `Approved ${id}, but consuming it failed: ${safeErrorText(err, 'unexpected error')}`
   }
   return consumed
     ? `Approved and consumed ${id} (digest ${digestTag}).`
@@ -135,7 +128,7 @@ export function handleReject(
   try {
     current = approval.getApproval(id)
   } catch (err) {
-    return `Could not read approval ${id}: ${safeMessage(err)}`
+    return `Could not read approval ${id}: ${safeErrorText(err, 'unexpected error')}`
   }
   const refused = checkScope(current, binding, id, 'deny')
   if (refused) return refused
@@ -147,7 +140,7 @@ export function handleReject(
       nonce: challenge.nonce,
     })
   } catch (err) {
-    return `Deny failed for ${id}: ${safeMessage(err)}`
+    return `Deny failed for ${id}: ${safeErrorText(err, 'unexpected error')}`
   }
   return `Denied ${id}${challenge.reason ? `: ${challenge.reason}` : ''}. The service wakes with a refusal.`
 }

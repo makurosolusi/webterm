@@ -5,11 +5,12 @@
 //
 // Read-only GET portfolio/project, and POST pause/resume/priority. No body is ever logged,
 // and responses are projections/one-line mutations, never file contents or tokens.
-import { centralRoute, type CentralRouteDeps, type RouteResult } from './central/centralApi'
+import { centralRoute, type CentralRouteDeps } from './central/centralApi'
+import type { RouteResult } from './apiShared.types'
 import type { CentralActor } from './central/centralModel'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 
-export type { RouteResult } from './central/centralApi'
+export type { RouteResult }
 
 export const CENTRAL_PREFIX = '/api/central/'
 export const CENTRAL_PORTFOLIO_PATH = '/api/central/portfolio'

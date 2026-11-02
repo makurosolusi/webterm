@@ -9,9 +9,9 @@ import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import {
   MEMORY_API_AUTHORITY,
   MEMORY_WRITE_BODY_MAX_BYTES,
-  type RouteResult,
   memoryWriteRoute,
 } from './memoryWriteApi'
+import type { RouteResult } from './apiShared.types'
 import { nodeSqlite } from './nodeSqlite.testutil'
 
 const DDL = `

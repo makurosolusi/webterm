@@ -1,9 +1,10 @@
 // Response shaping for the memory-file HTTP surface: compact route results, one redacting
 // failure mapper, and list caps. Kept out of `memoryFileHttp` so the route module stays small.
 import { redactSecrets } from './channels/webhook'
+import type { RouteResult } from './apiShared.types'
 import { MemoryAuthorityError, MemoryConflictError, MemoryError } from './memory/memoryModel'
 
-export type RouteResult = { status: number; body: unknown }
+export type { RouteResult }
 
 const MAX_MESSAGE_CHARS = 300
 const LIST_CAP = 20

@@ -5,10 +5,8 @@ import { allRows, toAgent } from './ledger/ledgerCore'
 import { TASK_STATUSES, type TaskStatus } from './ledger/ledgerModel'
 import { createPlanStore } from './orchestrator/plan'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
-
-export type RouteResult = { status: number; body: unknown }
-
-export const LEDGER_OFF: RouteResult = { status: 503, body: { error: 'ledger_off' } }
+import { projectParam } from './apiShared.params'
+import { LEDGER_OFF, type RouteResult } from './apiShared.types'
 /** Ledger v1 belum punya tabel `plan` (migrasi v2); UI harus bisa membedakannya dari 500. */
 const PLAN_UNAVAILABLE: RouteResult = { status: 503, body: { error: 'plan_unavailable' } }
 
@@ -16,13 +14,7 @@ export const ORCHESTRATOR_PREFIX = '/api/orchestrator'
 const PLAN_PATH = `${ORCHESTRATOR_PREFIX}/plan`
 const TASKS_PATH = `${ORCHESTRATOR_PREFIX}/tasks`
 const AGENTS_PATH = `${ORCHESTRATOR_PREFIX}/agents`
-const MAX_PROJECT_ID = 200
 const AGENT_PAGE = 500
-
-function projectParam(params: URLSearchParams): string | null {
-  const trimmed = (params.get('projectId') ?? '').trim()
-  return trimmed === '' || trimmed.length > MAX_PROJECT_ID ? null : trimmed
-}
 
 function missingPlanTable(err: unknown): boolean {
   return err instanceof Error && /no such table: plan/i.test(err.message)

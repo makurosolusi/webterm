@@ -10,6 +10,7 @@ import { contextOf } from './orchestrator/orchestratorSupport'
 import type { AssignTaskInput, OrchestratorDenyCode, OrchestratorLedger } from './orchestrator/orchestratorModel'
 import type { WorktreeService } from './orchestrator/worktree'
 import { orchestratorRunEnabled, type RouteResult } from './orchestratorRunApi'
+import { LEDGER_OFF } from './apiShared.types'
 import {
   ControlError,
   defaultIsGitRoot,
@@ -46,7 +47,7 @@ const UNUSED_WORKTREES = {
 
 function gate(deps: OrchestratorControlDeps): RouteResult | null {
   if (!(deps.enabled ?? orchestratorRunEnabled())) return { status: 503, body: { error: 'orchestrator_off' } }
-  if (!deps.ledger) return { status: 503, body: { error: 'ledger_off' } }
+  if (!deps.ledger) return LEDGER_OFF
   return null
 }
 

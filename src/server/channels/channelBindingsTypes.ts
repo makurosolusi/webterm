@@ -1,12 +1,13 @@
 // Shared types and constants for the human-facing binding API (P3).
 import type { ChannelBinding, ChannelRole } from './identity'
+import { MAX_PROJECT_ID, type RouteResult } from '../apiShared.types'
 
-export type RouteResult = { status: number; body: unknown }
+export type { RouteResult }
 
 export const TELEGRAM_BINDINGS_PATH = '/api/channels/telegram/bindings'
 export const TELEGRAM_BINDINGS_CHANNEL = 'telegram'
 export const GROUP_ROLES: readonly ChannelRole[] = ['viewer', 'operator']
-export const MAX_PROJECT_ID_CHARS = 200
+export { MAX_PROJECT_ID as MAX_PROJECT_ID_CHARS }
 
 export interface BindingStorePort {
   binding(channel: string, chatId: string): ChannelBinding | undefined

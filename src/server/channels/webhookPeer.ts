@@ -3,7 +3,9 @@
 // anywhere block legitimate deliveries for the whole window. `x-forwarded-for` fixes that, but the
 // header is client-controlled: it is only honored when the operator explicitly opts in, and only
 // its first entry is trusted because every element after it is appended by a hop we do not control.
+import { flagOn } from '../envFlag'
 import { isIP } from 'node:net'
+import { firstHeader } from '../httpHeaders'
 
 /** Opt-in flag; anything but the literal `on` keeps the socket address authoritative. */
 export const TRUST_PROXY_ENV = 'WEBTERM_TRUST_PROXY'
@@ -17,7 +19,7 @@ export interface WebhookPeerRequest {
 
 /** True only for the explicit opt-in value, so a typo leaves the untrusted path unchanged. */
 export function trustProxyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return (env[TRUST_PROXY_ENV] ?? '').trim().toLowerCase() === 'on'
+  return flagOn(env[TRUST_PROXY_ENV])
 }
 
 /**
@@ -26,7 +28,7 @@ export function trustProxyEnabled(env: NodeJS.ProcessEnv = process.env): boolean
  * the trusted proxy prepended. Returns null when there is no usable entry.
  */
 function firstForwardedAddress(raw: string | string[] | undefined): string | null {
-  const text = Array.isArray(raw) ? raw[0] : raw
+  const text = firstHeader(raw)
   if (typeof text !== 'string') return null
   const first = text.split(',')[0]?.trim() ?? ''
   return first === '' ? null : first

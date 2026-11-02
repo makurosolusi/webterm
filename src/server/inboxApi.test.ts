@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { inboxRoute, type RouteResult } from './inboxApi'
+import { inboxRoute } from './inboxApi'
+import type { RouteResult } from './apiShared.types'
 import { nodeSqlite } from './nodeSqlite.testutil'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 

@@ -1,6 +1,7 @@
 // Central chat request handlers (RND/08 §7, RND/13 §4 C1). Owns the service cache,
 // JSON/error envelopes, body intake (64 KiB), and the non-SSE handlers. The route
 // matcher/flag gate stays in `centralChatApi`; the SSE handler in `centralChatSse`.
+import { flagOn } from './envFlag'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
@@ -40,10 +41,6 @@ export interface ChatService {
 
 /** One service/hub per database + runtime kind, so turns and subscribers share state. */
 const cache = new WeakMap<object, Map<string, ChatService>>()
-
-export function chatFlag(raw: string | undefined): boolean {
-  return (raw ?? '').trim().toLowerCase() === 'on'
-}
 
 function buildService(db: Database, kind: RuntimeKind, now?: () => number): ChatService {
   const stream = new StreamHub({

@@ -4,6 +4,8 @@
 // `opencode run --format json` prints JSONL on stdout; we never pass `--auto`, so
 // the CLI cannot run its own mutating tools. Mutating tool families are also
 // denied through `OPENCODE_PERMISSION`.
+import { flagOn } from '../../envFlag'
+
 export const CENTRAL_MODEL_FLAG = 'WEBTERM_CENTRAL_MODEL'
 export const OPENCODE_BIN_FLAG = 'WEBTERM_OPENCODE_BIN'
 export const OPENCODE_ALLOW_TOOLS_FLAG = 'WEBTERM_OPENCODE_ALLOW_TOOLS'
@@ -50,20 +52,20 @@ function clean(raw: string | null | undefined, fallback: string): string {
 }
 
 /** Model id for `--model`; unset or blank falls back to the free default. */
-export function opencodeModel(raw: string | undefined = process.env.WEBTERM_CENTRAL_MODEL): string {
+export function opencodeModel(raw: string | undefined = process.env[CENTRAL_MODEL_FLAG]): string {
   return clean(raw, DEFAULT_OPENCODE_MODEL)
 }
 
 /** Executable name/path; unset or blank falls back to `opencode` on PATH. */
-export function opencodeBin(raw: string | undefined = process.env.WEBTERM_OPENCODE_BIN): string {
+export function opencodeBin(raw: string | undefined = process.env[OPENCODE_BIN_FLAG]): string {
   return clean(raw, DEFAULT_OPENCODE_BIN)
 }
 
 /** Opt-in switch for mutating built-in tools; anything but `on` keeps them denied. */
 export function opencodeToolsAllowed(
-  raw: string | undefined = process.env.WEBTERM_OPENCODE_ALLOW_TOOLS
+  raw: string | undefined = process.env[OPENCODE_ALLOW_TOOLS_FLAG]
 ): boolean {
-  return (raw ?? '').trim().toLowerCase() === 'on'
+  return flagOn(raw)
 }
 
 export interface OpencodeArgvOptions {

@@ -4,23 +4,12 @@
 import { buildInbox, inboxCounts } from './inbox'
 import { ensureInboxIndexes } from './inbox/inboxIndexes'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
-
-export type RouteResult = { status: number; body: unknown }
-
-export const LEDGER_OFF: RouteResult = { status: 503, body: { error: 'ledger_off' } }
+import { boundedInteger } from './apiShared.params'
+import { LEDGER_OFF, MAX_PROJECT_ID, type RouteResult } from './apiShared.types'
 
 const INBOX_PATH = '/api/inbox'
-const MAX_PROJECT_ID = 200
 const MAX_LIMIT = 100
 const MAX_OFFSET = 1_000_000
-
-/** `undefined` = tidak dikirim, `null` = tidak sah. Hanya digit: `1e3`/`-1` bukan halaman. */
-function boundedInteger(raw: string | null, min: number, max: number): number | undefined | null {
-  if (raw === null) return undefined
-  if (!/^\d+$/.test(raw)) return null
-  const value = Number(raw)
-  return Number.isSafeInteger(value) && value >= min && value <= max ? value : null
-}
 
 /** Project id opsional (absen = tampilan lintas project); string kosong/panjang ditolak. */
 function projectParam(params: URLSearchParams): string | undefined | null {

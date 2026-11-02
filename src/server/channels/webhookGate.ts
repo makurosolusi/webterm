@@ -2,7 +2,6 @@
 // Runs before any parse or HMAC work; nothing here allocates unbounded state.
 import { createHash, timingSafeEqual } from 'node:crypto'
 
-import type { WebhookHeaders } from './webhookTypes'
 
 /** Hard cap for a channel webhook body; matches the control API limit (64 KiB). */
 export const MAX_WEBHOOK_BODY_BYTES = 64 * 1024
@@ -11,16 +10,7 @@ export const SIGNATURE_HEADER = 'x-webterm-signature'
 export const TIMESTAMP_HEADER = 'x-webterm-timestamp'
 export const TELEGRAM_SECRET_HEADER = 'x-telegram-bot-api-secret-token'
 
-/** Header lookup is case-insensitive; duplicated (array) headers are rejected, not guessed. */
-export function headerValue(headers: WebhookHeaders | undefined, name: string): string | undefined {
-  if (!headers) return undefined
-  const want = name.toLowerCase()
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() !== want) continue
-    return typeof value === 'string' ? value : undefined
-  }
-  return undefined
-}
+export { headerValue } from '../httpHeaders'
 
 export function bodyBytes(rawBody: string | Uint8Array): Buffer {
   return typeof rawBody === 'string' ? Buffer.from(rawBody, 'utf8') : Buffer.from(rawBody)

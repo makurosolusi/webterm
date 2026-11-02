@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { memoryRoute, type RouteResult } from './memoryApi'
+import { memoryRoute } from './memoryApi'
+import type { RouteResult } from './apiShared.types'
 import { nodeSqlite } from './nodeSqlite.testutil'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 

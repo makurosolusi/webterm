@@ -4,6 +4,8 @@
  * criteria rules live in goalModel.ts; this module only reads/writes and audits.
  */
 import type { Database } from 'bun:sqlite'
+import { writeTx } from './writeTx'
+import { MAX_PROJECT_ID } from '../apiShared.types'
 import { appendEvent } from '../ledger/ledgerEvent'
 import { execWrite, getRow, type LedgerContext } from '../ledger/ledgerCore'
 import {
@@ -52,36 +54,9 @@ function ctxOf(db: Database): LedgerContext {
   return { db, now: () => Date.now() }
 }
 
-/**
- * Local BEGIN IMMEDIATE wrapper. The scoped handle reports `inTransaction` so the
- * nested appendEvent joins instead of starting a second transaction (node:sqlite
- * has no inTransaction getter, so we cannot rely on the real handle alone).
- */
-function writeTx<T>(db: Database, fn: (txDb: Database) => T): T {
-  if ((db as unknown as { inTransaction?: boolean }).inTransaction === true) return fn(db)
-  db.exec('BEGIN IMMEDIATE')
-  const scoped = {
-    inTransaction: true,
-    exec: (sql: string) => db.exec(sql),
-    query: (sql: string) => db.query(sql),
-  } as unknown as Database
-  try {
-    const result = fn(scoped)
-    db.exec('COMMIT')
-    return result
-  } catch (err) {
-    try {
-      db.exec('ROLLBACK')
-    } catch {
-      // SQLite already rolled back.
-    }
-    throw err
-  }
-}
-
 function validateProjectId(value: unknown): string {
   const id = typeof value === 'string' ? value.trim() : ''
-  if (id === '' || id.length > 200 || CONTROL.test(id)) {
+  if (id === '' || id.length > MAX_PROJECT_ID || CONTROL.test(id)) {
     throw new GoalError('project_not_found', 'projectId must be a non-empty id')
   }
   return id

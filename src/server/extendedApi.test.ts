@@ -56,8 +56,6 @@ interface HitResult {
   json: unknown
   headers: Record<string, string>
   req: StreamedReq
-  /** Calls to the compatibility `readBody` parameter: must stay 0 on every extended path. */
-  readBodyCalls: number
 }
 
 async function hitChunks(
@@ -70,19 +68,14 @@ async function hitChunks(
 ): Promise<HitResult> {
   const { res, state } = fakeRes()
   const req = streamReq(method, path, chunks, headers)
-  let readBodyCalls = 0
   const handled = await extendedApiRoute(
     req,
     res,
     urlOf(path),
-    async () => {
-      readBodyCalls += 1
-      return chunks.join('')
-    },
     ledger,
     deps
   )
-  return { handled, status: state.status, json: state.json(), headers: state.headers, req, readBodyCalls }
+  return { handled, status: state.status, json: state.json(), headers: state.headers, req }
 }
 
 async function hit(
@@ -115,7 +108,6 @@ describe('extended API mount', () => {
     expect(result.handled).toBe(true)
     expect(result.status).toBe(413)
     expect(result.json).toEqual({ error: 'payload_too_large' })
-    expect(result.readBodyCalls).toBe(0)
   })
 
   it('stops a chunked 1 MiB upload at MAX+1, drains, and never accumulates the rest', async () => {
@@ -127,7 +119,6 @@ describe('extended API mount', () => {
     })
     expect(result.status).toBe(413)
     expect(result.json).toEqual({ error: 'payload_too_large' })
-    expect(result.readBodyCalls).toBe(0)
     // The overflow path calls resume() and removes its listeners: nothing else is buffered.
     expect(result.req.resumed).toBe(true)
     expect(result.req.listenerCount('data')).toBe(0)
@@ -145,7 +136,6 @@ describe('extended API mount', () => {
     expect(result.status).toBe(413)
     expect(result.json).toEqual({ error: 'payload_too_large' })
     // Precheck path: the body was never read, and the socket is drained for keep-alive.
-    expect(result.readBodyCalls).toBe(0)
     expect(result.req.resumed).toBe(true)
     expect(result.req.listenerCount('data')).toBe(0)
   })

@@ -6,6 +6,7 @@
 // mencapainya. Karena itu aktornya diturunkan server sebagai `human:api-root` — payload TIDAK
 // pernah boleh menyebut `authority`/`actor`/`status`; field itu diabaikan, bukan dipercaya.
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import { LEDGER_OFF, type RouteResult } from './apiShared.types'
 import { BodyReadError } from './cappedRequestBody'
 import {
   MEMORY_SCOPES,
@@ -21,8 +22,6 @@ import {
   promoteMemory,
 } from './memory/memory'
 
-export type RouteResult = { status: number; body: unknown }
-
 /** Body JSON memory: beberapa field teks + evidence. 64 KiB jauh di atas pemakaian wajar. */
 export const MEMORY_WRITE_BODY_MAX_BYTES = 64 * 1024
 
@@ -31,7 +30,6 @@ export const MEMORY_API_AUTHORITY: MemoryAuthority = { kind: 'human', id: 'api-r
 
 const CLAIM_PATH = '/api/memory/claim'
 const PROMOTE_PATH = '/api/memory/promote'
-const LEDGER_OFF: RouteResult = { status: 503, body: { error: 'ledger_off' } }
 
 type Body = Record<string, unknown>
 

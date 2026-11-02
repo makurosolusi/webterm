@@ -2,6 +2,7 @@
 // the shared JSON writer. Kept separate from `approvalHumanApi.ts` so the cap can be tested without
 // a ledger and so the route file stays inside the line budget.
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { firstHeader } from './httpHeaders'
 
 /** Body cap for the human approval family. JSON only; 8 KiB is far above any real request. */
 export const APPROVAL_MAX_BODY_BYTES = 8 * 1024
@@ -19,7 +20,7 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
 /** Declared `content-length` above the cap; `undefined` when absent or unparsable. */
 export function declaredBytes(headers: NodeJS.Dict<string | string[]>): number | undefined {
   const raw = headers['content-length']
-  const value = Array.isArray(raw) ? raw[0] : raw
+  const value = firstHeader(raw)
   if (typeof value !== 'string' || !/^\d+$/.test(value)) return undefined
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) ? parsed : undefined

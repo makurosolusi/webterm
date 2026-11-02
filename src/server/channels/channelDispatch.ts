@@ -24,7 +24,7 @@ import {
   type ChannelApprovalPort,
 } from './channelApprovals'
 import { TELEGRAM_MAX_TEXT, parseTelegramUpdate, type NormalizedMessage } from './telegram'
-import { redactSecrets } from './webhook'
+import { safeErrorText } from './safeErrorText'
 import type { PendingChatPort } from './channelPending'
 
 export type { ApprovalSummary, ChannelApprovalPort } from './channelApprovals'
@@ -125,15 +125,9 @@ async function replyTo(
     // The reply is already an after-effect: by the time we enqueue, the command (including a ledger
     // decision) has been applied. A disk-full outbox must therefore not fail the dispatch — that
     // would release the update claim and let the provider retry re-run the whole command.
-    console.warn(`telegram reply enqueue failed: ${safeReplyError(err)}`)
+    console.warn(`telegram reply enqueue failed: ${safeErrorText(err, 'outbox unavailable')}`)
     return null
   }
-}
-
-/** Channel errors can embed a bot token from a URL; scrub before any log line. */
-function safeReplyError(err: unknown): string {
-  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : 'outbox unavailable'
-  return redactSecrets(text).slice(0, 200)
 }
 
 /** Best-effort: a pending-list failure must never change the (silent) denial or slow the update. */
@@ -141,7 +135,7 @@ function recordPending(deps: TelegramDispatchDeps, chatId: string): void {
   try {
     deps.pending?.record(chatId, 'private') // groups were denied earlier, so only private reaches here
   } catch (err) {
-    console.warn(`telegram pending record failed: ${safeReplyError(err)}`)
+    console.warn(`telegram pending record failed: ${safeErrorText(err, 'outbox unavailable')}`)
   }
 }
 

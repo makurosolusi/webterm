@@ -1,10 +1,12 @@
 // Field validation + failure taxonomy for the capability approval plane. Split out of
 // `approvalApi.ts` so the router stays inside the 300-line budget while the taxonomy lives beside
 // the constants it maps.
+import { MAX_PROJECT_ID } from '../apiShared.types'
+
 const MAX_SECRET_FIELD = 256
 
-export const MAX_PROJECT_ID = 200
 export const MAX_KIND = 128
+export { MAX_PROJECT_ID }
 export const MAX_ACTOR = 128
 export const MAX_TASK_ID = 200
 

@@ -51,7 +51,6 @@ export async function extendedApiRoute(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  _readBody: () => Promise<string>,
   ledger: LedgerRuntime | null,
   deps: ExtendedApiDeps = {}
 ): Promise<boolean> {
@@ -65,8 +64,6 @@ export async function extendedApiRoute(
   const memory = isMemoryFilePath(path)
   if (!central && !orchestrator && !memory) return false
 
-  // `_readBody` stays only so existing call sites keep compiling; it buffers without bound, so the
-  // capped reader is used instead (see `readBoundedBody`).
   const read = await readBoundedBody(req, method)
   if (!read.ok) {
     send(res, read.status, { error: read.error })

@@ -6,6 +6,8 @@ import { AckStore } from './control/controlTypes'
 import { TOKEN_HEADER, TOKEN_PARAM } from './auth'
 import { durableAckFor } from './ledger/durableAck'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import { firstHeader } from './httpHeaders'
+export { MAX_PROJECT_ID } from './apiShared.types'
 
 /**
  * Default actor for direct handler calls (tests, in-process callers) and the historical value
@@ -16,7 +18,6 @@ export const HUMAN_ACTOR = 'human'
 export const ROOT_ACTOR = 'human:root'
 /** Derived actor when the surface was allowed without a token (explicit loopback opt-in). */
 export const LOOPBACK_ACTOR = 'human:loopback'
-export const MAX_PROJECT_ID = 200
 export const MAX_KIND = 128
 export const MAX_SECRET = 256
 
@@ -27,7 +28,7 @@ export const MAX_SECRET = 256
  */
 export function actorForRequest(req: IncomingMessage, url: URL): string {
   const raw = req.headers[TOKEN_HEADER]
-  const header = (Array.isArray(raw) ? raw[0] : raw)?.trim()
+  const header = firstHeader(raw)?.trim()
   const query = url.searchParams.get(TOKEN_PARAM)?.trim()
   return header || query ? ROOT_ACTOR : LOOPBACK_ACTOR
 }

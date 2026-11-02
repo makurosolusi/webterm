@@ -11,8 +11,8 @@ import {
 } from './centralModel'
 import { pauseProject, portfolio, prioritize, projectPortfolio, resumeProject } from './central'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
-
-export type RouteResult = { status: number; body: unknown }
+import { boundedInteger } from '../apiShared.params'
+import { LEDGER_OFF, type RouteResult } from '../apiShared.types'
 
 export interface CentralRouteDeps {
   runtime: LedgerRuntime | null
@@ -26,14 +26,6 @@ const PORTFOLIO_PATH = '/api/central/portfolio'
 const PROJECT_PREFIX = '/api/central/projects/'
 const MAX_LIMIT = 200
 const MAX_OFFSET = 1_000_000
-
-/** `undefined` = absent, `null` = malformed; digits only (`1e3`/`-1` are not pages). */
-function boundedInteger(raw: string | null, min: number, max: number): number | undefined | null {
-  if (raw === null) return undefined
-  if (!/^\d+$/.test(raw)) return null
-  const value = Number(raw)
-  return Number.isSafeInteger(value) && value >= min && value <= max ? value : null
-}
 
 function decodeProjectId(raw: string): string | null {
   try {
@@ -117,7 +109,7 @@ export function centralRoute(
   if (!parsed) return null
   if (!(deps.enabled ?? centralEnabled())) return { status: 503, body: { error: 'central_off' } }
   const runtime = deps.runtime
-  if (!runtime) return { status: 503, body: { error: 'ledger_off' } }
+  if (!runtime) return LEDGER_OFF
   if (parsed.kind === 'portfolio') {
     if (method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' } }
     const limit = boundedInteger(params.get('limit'), 1, MAX_LIMIT)

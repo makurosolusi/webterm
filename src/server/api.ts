@@ -127,7 +127,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Central chat (exact paths only; flags inside). Mounted before the read-only projections
   // and the 404 fallback so its SSE response can stay open; portfolio routes are untouched.
   if (await centralChatRoute(req, res, url, { ledger })) return
-  if (await extendedApiRoute(req, res, url, () => readBody(req), ledger)) return
+  if (await extendedApiRoute(req, res, url, ledger)) return
   if (await approvalHumanRoute(req, res, url)) return
   // Memory writes (claim/promote). Body capped at 64 KiB and read lazily, so the read-only GETs
   // below never touch the stream. Authority is derived here as root human, never from the payload.

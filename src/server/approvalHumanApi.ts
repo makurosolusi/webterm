@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { approvalAuthAllowed } from './approvalAuth'
 import { APPROVAL_MAX_BODY_BYTES, readCappedBody, sendJson } from './approvalHttp'
 import { actorForRequest } from './approvalHumanShared'
+import { LEDGER_OFF } from './apiShared.types'
 import {
   challengeRoute,
   consumeRoute,
@@ -95,7 +96,7 @@ export async function approvalHumanRoute(
   }
   const runtime = deps.runtime === undefined ? activeLedgerRuntime() : deps.runtime
   if (!runtime) {
-    sendJson(res, 503, { error: 'ledger_off' })
+    sendJson(res, LEDGER_OFF.status, LEDGER_OFF.body)
     return true
   }
   const now = (deps.now ?? Date.now)()

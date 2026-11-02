@@ -4,6 +4,7 @@
 import type { IncomingMessage } from 'node:http'
 import { nodeIdForToken, NODE_TOKEN_HEADER } from './hooks'
 import { TOKEN_HEADER } from './auth'
+import { firstHeader } from './httpHeaders'
 
 /**
  * Gerbang identitas hook, dibaca SEKALI saat modul dimuat. Default MATI: perilaku lama fail-open
@@ -27,7 +28,7 @@ export const nodeTokenHeader = (req: IncomingMessage): string | string[] | undef
  */
 export function requesterNodeId(req: IncomingMessage): string | undefined {
   const raw = req.headers[TOKEN_HEADER] ?? req.headers[NODE_TOKEN_HEADER]
-  const token = Array.isArray(raw) ? raw[0] : raw
+  const token = firstHeader(raw)
   return typeof token === 'string' ? nodeIdForToken(token) : undefined
 }
 

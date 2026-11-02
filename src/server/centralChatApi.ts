@@ -5,13 +5,14 @@
 //
 // Flags: `WEBTERM_CENTRAL=on` AND `WEBTERM_CENTRAL_CHAT=on`. Chat off means "not
 // mounted" (404 by the fallback). Runtime off answers 503 `central_runtime_off`.
+import { flagOn } from './envFlag'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Database } from 'bun:sqlite'
 import { centralEnabled } from './central/centralModel'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import {
-  CENTRAL_CHAT_BODY_MAX_BYTES, type CentralChatDeps, chatFlag, decodeSegment, failJson,
+  CENTRAL_CHAT_BODY_MAX_BYTES, type CentralChatDeps, decodeSegment, failJson,
   handleCancel, handleConversations, handleHealth, handleMessagesGet, handleMessagesPost,
   methodNotAllowed, resolveChatService, sendJson,
 } from './centralChatHandlers'
@@ -43,7 +44,7 @@ export async function centralChatRoute(
 ): Promise<boolean> {
   const path = url.pathname
   if (!isCentralChatPath(path)) return false
-  const chatOn = deps.chatEnabled ?? chatFlag(process.env[CENTRAL_CHAT_FLAG])
+  const chatOn = deps.chatEnabled ?? flagOn(process.env[CENTRAL_CHAT_FLAG])
   const centralOn = deps.centralEnabled ?? centralEnabled()
   if (!chatOn || !centralOn) return false
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { centralRoute, type CentralRouteDeps, type RouteResult } from './centralApi'
+import { centralRoute, type CentralRouteDeps } from './centralApi'
+import type { RouteResult } from '../apiShared.types'
 import { centralEnabled, type CentralActor } from './centralModel'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { openFixture, seedPortfolio, type Fixture } from './centralTestFixture.testutil'

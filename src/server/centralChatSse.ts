@@ -6,6 +6,7 @@ import type { Database } from 'bun:sqlite'
 import { getConversation } from './central/conversationStore'
 import { formatSseFrame } from './central/chat/streamHub'
 import { failJson, nonNegativeInteger, type ChatService } from './centralChatHandlers'
+import { firstHeader } from './httpHeaders'
 
 export function handleStream(
   req: IncomingMessage, res: ServerResponse, url: URL, conversationId: string,
@@ -23,7 +24,7 @@ export function handleStream(
     return
   }
   const header = req.headers['last-event-id']
-  const rawCursor = Array.isArray(header) ? header[0] : header
+  const rawCursor = firstHeader(header)
   const cursor = rawCursor === undefined
     ? nonNegativeInteger(url.searchParams.get('after'))
     : nonNegativeInteger(rawCursor)

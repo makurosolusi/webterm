@@ -1,7 +1,9 @@
 // Types, limits, and pure validation for the P4 central thin layer
 // (RND/03-RENCANA.md §7). No SQLite and no I/O here, so role authority and
 // priority clamping can be tested without a database.
+import { flagOn } from '../envFlag'
 import { type TaskStatus } from '../ledger/ledgerModel'
+import { MAX_PROJECT_ID } from '../apiShared.types'
 
 /** Who performs a central mutation. Only humans and the root principal may. */
 export type ActorKind =
@@ -41,7 +43,6 @@ export class CentralError extends Error {
 /** Mutations the central surface exposes; the HTTP guard is called per action. */
 export type CentralAction = 'pause' | 'resume' | 'priority'
 
-export const MAX_PROJECT_ID = 200
 
 /**
  * Priority is a human envelope knob, not an arithmetic input: it never changes
@@ -64,7 +65,7 @@ export const MAX_PORTFOLIO_OFFSET = 1_000_000
 
 /** `WEBTERM_CENTRAL=on` enables the surface; every other value (and unset) is off. */
 export function centralEnabled(raw: string | undefined = process.env.WEBTERM_CENTRAL): boolean {
-  return (raw ?? '').trim().toLowerCase() === 'on'
+  return flagOn(raw)
 }
 
 export function validateProjectId(value: unknown): string {

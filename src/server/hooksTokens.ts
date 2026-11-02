@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { rmSync } from 'node:fs'
 import { forgetHookContext } from './hookContext'
 import { claudeHeadersPath, claudeSettingsPath } from './hooksPaths'
+import { firstHeader } from './httpHeaders'
 
 /**
  * Header yang membawa token node sebuah hook. JANGAN di-rename: ia wire-protocol yang kompatibel
@@ -92,7 +93,7 @@ export function nodeIdForToken(token: string): string | undefined {
  * membedakan — bukan gerbang terima/tolak.
  */
 export function stateVerified(nodeId: string, header: string | string[] | undefined): boolean {
-  const got = Array.isArray(header) ? header[0] : header
+  const got = firstHeader(header)
   const want = tokens.get(nodeId)
   if (!want || typeof got !== 'string') return false
   const a = Buffer.from(got)

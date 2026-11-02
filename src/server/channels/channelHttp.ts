@@ -2,6 +2,7 @@
 // plain node:http handlers that must never buffer an unbounded body, so the byte cap is enforced
 // while streaming and a declared `content-length` is only used as an early hint.
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { firstHeader } from '../httpHeaders'
 
 export type BodyReadResult = { ok: true; body: string } | { ok: false; reason: 'too_large' | 'read_failed' }
 
@@ -20,7 +21,7 @@ export function writeJson(
 }
 
 export function declaredLength(raw: string | string[] | undefined): number | undefined {
-  const value = Array.isArray(raw) ? raw[0] : raw
+  const value = firstHeader(raw)
   if (value === undefined || !/^\d{1,12}$/.test(value)) return undefined
   return Number(value)
 }

@@ -4,7 +4,7 @@
 // Bodies are capped hard (16 KiB) *while streaming* and must be a JSON object. Nothing from the
 // body is ever logged here.
 import type { IncomingMessage } from 'node:http'
-import { declaredLength, readCappedBody } from './channels/channelHttp'
+import { readCappedRequestBody } from './cappedRequestBody'
 
 export const MAX_API_BODY_BYTES = 16 * 1024
 
@@ -37,12 +37,7 @@ export type BoundedBody =
  */
 export async function readBoundedBody(req: IncomingMessage, method: string): Promise<BoundedBody> {
   if (method !== 'POST') return { ok: true, raw: '' }
-  const declared = declaredLength(req.headers['content-length'])
-  if (declared !== undefined && declared > MAX_API_BODY_BYTES) {
-    req.resume() // drain so keep-alive is not desynced by an unread body
-    return { ok: false, status: 413, error: 'payload_too_large' }
-  }
-  const read = await readCappedBody(req, MAX_API_BODY_BYTES)
+  const read = await readCappedRequestBody(req, MAX_API_BODY_BYTES)
   if (!read.ok) {
     return read.reason === 'too_large'
       ? { ok: false, status: 413, error: 'payload_too_large' }

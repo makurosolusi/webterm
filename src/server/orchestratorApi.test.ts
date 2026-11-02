@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { orchestratorRoute, type RouteResult } from './orchestratorApi'
+import { orchestratorRoute } from './orchestratorApi'
+import type { RouteResult } from './apiShared.types'
 import { nodeSqlite } from './nodeSqlite.testutil'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 

@@ -94,16 +94,7 @@ export const WAIT_POLL_MS = 100
 export const DEFAULT_COLS = 80
 export const DEFAULT_ROWS = 24
 
-/** Cari header case-insensitive. Header ganda (array) dianggap tidak ada: nilai tunggal wajib. */
-export function headerValue(headers: ControlHeaders | undefined, name: string): string | undefined {
-  if (!headers) return undefined
-  const want = name.toLowerCase()
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() !== want) continue
-    return typeof value === 'string' ? value : undefined
-  }
-  return undefined
-}
+export { headerValue } from '../httpHeaders'
 
 /** Body non-array/non-null sebagai record; selain itu objek kosong (batas input, bukan trust). */
 export function asObject(value: unknown): Record<string, unknown> {

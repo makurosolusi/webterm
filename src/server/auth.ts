@@ -11,6 +11,7 @@
 //  2. Token. Only needed when we are reachable from outside the machine; loopback-only stays
 //     token-free so the default dev loop is untouched.
 import crypto from 'node:crypto'
+import { firstHeader } from './httpHeaders'
 
 /** Header the client sends the token in on API requests. `webterm`, not `nodeterm`: this is
  *  our own transport token, unrelated to the `x-nodeterm-node-token` agent-session protocol. */
@@ -25,10 +26,6 @@ export const CAPABILITY_HEADER = 'x-webterm-capability'
 export const DEFAULT_HOST = '127.0.0.1'
 
 type Headers = Record<string, string | string[] | undefined>
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
-}
 
 // Deliberately NOT including '0.0.0.0' / '::' — those are wildcards that accept every
 // interface, which is the exact case the token requirement exists for.
@@ -93,16 +90,16 @@ export function tokensMatch(expected: string | undefined, candidate: string | nu
  *    because older browsers omit it.
  */
 export function sameOrigin(headers: Headers): boolean {
-  const origin = first(headers['origin'])
+  const origin = firstHeader(headers['origin'])
   if (typeof origin === 'string' && origin !== '') {
     if (origin === 'null') return false
     try {
-      return new URL(origin).host === first(headers['host'])
+      return new URL(origin).host === firstHeader(headers['host'])
     } catch {
       return false // unparseable Origin: refuse rather than guess
     }
   }
-  const site = first(headers['sec-fetch-site'])
+  const site = firstHeader(headers['sec-fetch-site'])
   return !(site === 'cross-site' || site === 'same-site')
 }
 
@@ -113,7 +110,7 @@ export function authorize(args: {
   queryToken?: string | null
 }): boolean {
   if (!sameOrigin(args.headers)) return false
-  const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
+  const candidate = firstHeader(args.headers[TOKEN_HEADER]) ?? args.queryToken
   return tokensMatch(args.expectedToken, candidate)
 }
 
@@ -158,14 +155,14 @@ export function authorizeRequest(args: {
   if (authorize(args)) return true
   if (!sameOrigin(args.headers)) return false
   if (isNodeTokenPath(args.pathname)) {
-    const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
+    const candidate = firstHeader(args.headers[TOKEN_HEADER]) ?? args.queryToken
     if (typeof candidate === 'string' && candidate !== '' && args.isNodeToken(candidate)) return true
   }
   // Capability: HANYA untuk keluarga control API, HANYA dari header. Query string tidak pernah
   // diperiksa — capability yang bocor ke URL akan tercatat di log/riwayat, dan gate ini tidak
   // boleh jadi jalan masuknya. Jalur lain (settings/workspaces/fs//ws) tetap root-only.
   if (!isControlPath(args.pathname) || args.isCapabilityToken === undefined) return false
-  const capability = first(args.headers[CAPABILITY_HEADER])
+  const capability = firstHeader(args.headers[CAPABILITY_HEADER])
   if (typeof capability !== 'string' || capability === '') return false
   return args.isCapabilityToken(capability)
 }

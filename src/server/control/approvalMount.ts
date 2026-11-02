@@ -4,11 +4,11 @@
 // Ledger mati = 503 `ledger_off` untuk SEMUA path approval (termasuk GET list), bukan 404, supaya
 // klien bisa membedakan "fitur dimatikan" dari "route tidak ada". Auth capability tetap milik
 // `handleApproval`: seam ini tidak membaca `x-webterm-token` sama sekali.
+import { LEDGER_OFF } from '../apiShared.types'
 import type { ApprovalAcks, ApprovalLedgerPort } from './approvalApi'
 import { APPROVAL_PREFIX, handleApproval } from './approvalApi'
 import { AckStore, type ControlCapabilities, type ControlRequest, type ControlResult } from './controlTypes'
 
-export const LEDGER_OFF = { status: 503, body: { error: 'ledger_off' } } as const
 
 export interface ApprovalDispatchDeps {
   capabilities: ControlCapabilities
