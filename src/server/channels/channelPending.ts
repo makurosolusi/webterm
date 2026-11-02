@@ -66,6 +66,12 @@ export class PendingChatStore implements PendingChatPort {
     return { items, total: this.rows.size }
   }
 
+  /** Live (unexpired) entry count. */
+  size(): number {
+    this.expire(this.clock())
+    return this.rows.size
+  }
+
   /** Drop one entry (dismiss, or the chat just got bound). True when it existed. */
   remove(chatId: string): boolean {
     return this.rows.delete(chatId)

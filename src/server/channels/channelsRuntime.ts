@@ -5,7 +5,8 @@
 // Enabled only when ALL of these hold; otherwise no route is installed at all:
 //   WEBTERM_CHANNELS is unset or `on` (master kill switch; see channelsMasterState)
 //   WEBTERM_TELEGRAM=on
-//   WEBTERM_TELEGRAM_WEBHOOK_SECRET or _SECRET_FILE (Telegram `secret_token`, >= 32 [A-Za-z0-9_-])
+//   webhook mode only: WEBTERM_TELEGRAM_WEBHOOK_SECRET or _SECRET_FILE (Telegram `secret_token`,
+//     >= 32 [A-Za-z0-9_-]). Poll mode (WEBTERM_TELEGRAM_MODE) needs only the bot token.
 //   WEBTERM_LEDGER=on|shadow (an approval needs the ledger; without it the channel is pointless)
 // A corrupt channel store disables the channel too; it is never reset to defaults.
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -31,7 +32,7 @@ import type { TelegramCentralPort } from './channelDispatch'
 import { handleChannelBindingsApi } from './channelBindingsHttp'
 import { PendingChatStore } from './channelPending'
 import { handleChannelPendingApi } from './channelPendingHttp'
-import { declaredLength, readCappedBody, writeJson, type BodyReadResult } from './channelHttp'
+import { handleChannelStatusApi } from './channelStatusHttp'
 import {
   flushChannelSender,
   startChannelSenderFor,
@@ -39,8 +40,9 @@ import {
   type SenderBootOptions,
 } from './channelSenderBoot'
 import type { FlushResult } from './telegramSender'
-import { MAX_WEBHOOK_BODY_BYTES, redactSecrets, verifyTelegramSecret } from './webhook'
-import { webhookPeerKey } from './webhookPeer'
+import { resolveTelegramMode, type TelegramMode } from './telegramMode'
+import { resolveTelegramBotToken } from './telegramSend'
+import { respondToWebhook, safeError, type ChannelWebhookRuntime } from './telegramWebhookHandler'
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
 export const TELEGRAM_ENABLED_ENV = 'WEBTERM_TELEGRAM'
@@ -69,80 +71,15 @@ export { WEBHOOK_FAILURE_LIMIT, WEBHOOK_FAILURE_WINDOW_MS } from './channelThrot
 // Peer identity for the throttle: socket by default, first `x-forwarded-for` only behind an
 // explicit `WEBTERM_TRUST_PROXY=on`.
 export { TRUST_PROXY_ENV, UNKNOWN_PEER, trustProxyEnabled, webhookPeerKey } from './webhookPeer'
-
-export type WebhookBodyResult = BodyReadResult
-
-export interface ChannelWebhookRequest {
-  method?: string
-  headers: Record<string, string | string[] | undefined>
-  /** Parsed `content-length`, when the provider sent one. */
-  declaredLength?: number
-  readBody(): Promise<WebhookBodyResult>
-}
-
-export type ChannelWebhookResponseBody = { ok: boolean; error?: string; duplicate?: boolean }
-export interface ChannelWebhookResponse {
-  status: 200 | 400 | 401 | 405 | 413 | 500
-  body: ChannelWebhookResponseBody
-}
-
-export interface ChannelWebhookRuntime {
-  secret: string
-  dispatch(update: unknown): Promise<DispatchOutcome>
-}
-
-function fail(status: ChannelWebhookResponse['status'], error: string): ChannelWebhookResponse {
-  return { status, body: { ok: false, error } }
-}
-
-/**
- * Pure webhook entry point. Order is deliberate: method, then size (declared and actual), then
- * the constant-time `secret_token`, then parse, then the idempotent dispatch. Errors never carry
- * the secret, the body, or a stack.
- */
-export async function handleTelegramWebhook(
-  request: ChannelWebhookRequest,
-  runtime: ChannelWebhookRuntime
-): Promise<ChannelWebhookResponse> {
-  if ((request.method ?? '').toUpperCase() !== 'POST') {
-    return fail(405, 'method_not_allowed')
-  }
-  if (request.declaredLength !== undefined && request.declaredLength > MAX_WEBHOOK_BODY_BYTES) {
-    return fail(413, 'body_too_large')
-  }
-  const verified = verifyTelegramSecret(request.headers, runtime.secret)
-  if (!verified.ok) return fail(401, verified.reason)
-
-  const body = await request.readBody()
-  // One code for both size paths (declared header and streamed overflow); "too_large" stays internal.
-  if (!body.ok) {
-    return body.reason === 'too_large' ? fail(413, 'body_too_large') : fail(500, 'read_failed')
-  }
-
-  let update: unknown
-  try {
-    update = JSON.parse(body.body)
-  } catch {
-    return fail(400, 'invalid_json')
-  }
-  if (typeof update !== 'object' || update === null || Array.isArray(update)) {
-    return fail(400, 'invalid_update')
-  }
-
-  try {
-    const outcome = await runtime.dispatch(update)
-    return { status: 200, body: { ok: true, ...(outcome.status === 'duplicate' ? { duplicate: true } : {}) } }
-  } catch (err) {
-    // The thrown message can only be logged after scrubbing; the client gets a bare 500.
-    console.error(`telegram webhook dispatch failed: ${safeError(err)}`)
-    return fail(500, 'internal_error')
-  }
-}
-
-function safeError(err: unknown): string {
-  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error'
-  return redactSecrets(text).slice(0, 200)
-}
+// Webhook request handling lives in its own module; re-exported for the same reason.
+export {
+  handleTelegramWebhook,
+  type ChannelWebhookRequest,
+  type ChannelWebhookResponse,
+  type ChannelWebhookResponseBody,
+  type ChannelWebhookRuntime,
+  type WebhookBodyResult,
+} from './telegramWebhookHandler'
 
 function logDisabled(reason: string): void {
   console.warn(`telegram channel disabled: ${reason}`)
@@ -169,6 +106,10 @@ export function ledgerApprovalPort(ledger: Ledger): ChannelApprovalPort {
 
 export interface ChannelsRuntime {
   store: ChannelStore
+  /** Ingress mode this runtime was booted in; poll mode installs no webhook route. */
+  readonly mode: TelegramMode
+  /** Same dedupe + dispatch + pending path as the webhook; the poller feeds updates through it. */
+  ingest(update: unknown): Promise<DispatchOutcome>
   /** True when the egress interval is running (a bot token was configured at boot). */
   readonly senderRunning: boolean
   handle(req: IncomingMessage, res: ServerResponse): boolean
@@ -212,9 +153,17 @@ export function startChannelsRuntime(
   // Flag next: with `WEBTERM_TELEGRAM` off there is no route and the secret is never touched.
   if (!telegramChannelEnabled(env)) return null
 
-  const resolved = resolveWebhookSecret(env, options.readSecret ?? readSecretFile)
-  if (!resolved.ok) return logDisabledAndNull(resolved.reason)
-  const secret = resolved.secret
+  const mode = resolveTelegramMode(env, false) // index.ts resolves (and warns) once on the same env
+  const readSecret = options.readSecret ?? readSecretFile
+  // Poll mode never receives a webhook, so the secret is not required (nor read) there.
+  let secret: string | undefined
+  if (mode === 'webhook') {
+    const resolved = resolveWebhookSecret(env, readSecret)
+    if (!resolved.ok) return logDisabledAndNull(resolved.reason)
+    secret = resolved.secret
+  } else if (resolveTelegramBotToken(env) === undefined) {
+    console.warn('telegram on tetapi bot token belum diset (mode poll tidak menerima update tanpa token)')
+  }
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')
 
   let store: ChannelStore
@@ -236,29 +185,33 @@ export function startChannelsRuntime(
     }
   }
   const pending = new PendingChatStore(options.now === undefined ? {} : { now: options.now })
-  const runtime: ChannelWebhookRuntime = {
-    secret,
-    dispatch: (update) =>
-      dispatchTelegramUpdate(update, { store, approval, audit, centralChat: options.centralChat, pending }),
-  }
+  const ingest = (update: unknown): Promise<DispatchOutcome> =>
+    dispatchTelegramUpdate(update, { store, approval, audit, centralChat: options.centralChat, pending })
+  const runtime: ChannelWebhookRuntime | null = secret === undefined ? null : { secret, dispatch: ingest }
   const throttle = new FailureThrottle(undefined, undefined, options.now ?? Date.now)
   // A missing bot token only disables egress; ingress and the binding API stay available.
   const sender = startChannelSenderFor(store, env, options.sender ?? {})
 
   return {
     store,
+    mode,
+    ingest,
     get senderRunning() {
       return sender !== null && sender.running
     },
     handle(req, res) {
       const path = new URL(req.url || '/', 'http://x').pathname
-      if (path !== TELEGRAM_WEBHOOK_PATH) return false
+      if (runtime === null || path !== TELEGRAM_WEBHOOK_PATH) return false
       void respondToWebhook(req, res, runtime, throttle, env)
       return true
     },
     handleApi(req, res) {
       // Authorization already happened: index.ts only calls this after `allowed`.
-      return handleChannelPendingApi(req, res, pending) || handleChannelBindingsApi(req, res, store, undefined, pending)
+      return (
+        handleChannelPendingApi(req, res, pending) ||
+        handleChannelStatusApi(req, res, { mode, env, pendingCount: () => pending.size(), readSecret }) ||
+        handleChannelBindingsApi(req, res, store, undefined, pending)
+      )
     },
     flushNow: () => flushChannelSender(sender),
     stop() {
@@ -272,33 +225,3 @@ function logDisabledAndNull(reason: string): null {
   return null
 }
 
-async function respondToWebhook(
-  req: IncomingMessage,
-  res: ServerResponse,
-  runtime: ChannelWebhookRuntime,
-  throttle: FailureThrottle,
-  env: NodeJS.ProcessEnv
-): Promise<void> {
-  const peer = webhookPeerKey(req, env)
-  const blockedFor = throttle.retryAfterSeconds(peer)
-  if (blockedFor !== null) {
-    writeJson(res, 429, { ok: false, error: 'too_many_requests' }, { 'Retry-After': String(blockedFor) })
-    return
-  }
-  let result: ChannelWebhookResponse
-  try {
-    result = await handleTelegramWebhook(
-      {
-        method: req.method,
-        headers: req.headers,
-        declaredLength: declaredLength(req.headers['content-length']),
-        readBody: () => readCappedBody(req, MAX_WEBHOOK_BODY_BYTES),
-      },
-      runtime
-    )
-  } catch {
-    result = fail(500, 'internal_error')
-  }
-  if (result.status === 401) throttle.recordFailure(peer)
-  writeJson(res, result.status, result.body)
-}
