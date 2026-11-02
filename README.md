@@ -52,6 +52,28 @@ Any of these can go in a `.env` file in the working directory instead of the env
 
 Dev is not full browser HMR for every change: Vite HMR covers client edits live, but server edits need a restart.
 
+## Logs and the Output panel
+
+The server records structured, tagged log entries (PTY and agent lifecycle, workspaces, filesystem, settings, hooks, approvals, channels, ledger, HTTP errors, auth rejections, WebSocket connects) into an in-memory ring buffer, mirrors them to the console, and by default writes them to a daily file. Browser errors (uncaught errors, unhandled rejections, failed API calls) are reported back to the same log as the `client` channel.
+
+Open the **Output** panel from the status bar (the error/warning counters on the right), **View > Output** in the menu bar, the command palette (`View: Toggle Output`, `Output: Clear Output`, `Output: Set Log Level…`), or `Shift+Cmd+U` (macOS) / `Ctrl+Shift+U`. The panel has a channel dropdown, a Log Level selector, a filter box, Clear, auto-scroll lock, Copy All, and Save As.
+
+Levels: `trace`, `debug`, `info` (default), `warn`, `error`. Entries below the active level are dropped, and there is no `off`. Environment variables, read once at boot (restart to change):
+
+- `WEBTERM_LOG_LEVEL` — starting level. The panel can change it at runtime without a restart.
+- `WEBTERM_LOG_BUFFER` — entries kept in memory (100 to 100000, default `5000`).
+- `WEBTERM_LOG_FILE` — `on` (default) or `off`. When on, entries are appended as JSON lines to `<WEBTERM_DATA_DIR>/logs/webterm-YYYY-MM-DD.log`, rotated by day and at 5 MiB, keeping at most 7 files.
+
+Endpoints, all behind the root-token gate (open on loopback without a token, like `/api/settings`; per-node agent tokens are refused):
+
+- `GET /api/logs` — recent entries; filters `level`, `channel`, `q`, `afterSeq`, `limit` (default 1000, max 2000).
+- `GET /api/logs/stream` — Server-Sent Events with replay from `afterSeq` / `Last-Event-ID`.
+- `PUT /api/logs/level` — body `{"level":"warn"}`.
+- `POST /api/logs/client` — browser-reported entries (up to 20 per request, 32 KiB body, 200 entries per minute).
+- `DELETE /api/logs` — clear the buffer (the log file is untouched).
+
+Not logged: terminal input or output, message text (chat, Telegram), env or secret values, URL query strings, request bodies and headers, and personal data such as emails or raw chat ids. Fields whose names look like secrets (password, token, api key, cookie, ...) are masked, and a URL path id is shown as `:id`. Workspace names and full file paths are not recorded either (fs events carry only a basename and a size).
+
 ## Build / production
 
 ```sh

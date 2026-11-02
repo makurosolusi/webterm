@@ -8,6 +8,9 @@ import type { FailureThrottle } from './channelThrottle'
 import { MAX_WEBHOOK_BODY_BYTES, verifyTelegramSecret } from './webhook'
 import { safeErrorText } from './safeErrorText'
 import { webhookPeerKey } from './webhookPeer'
+import { createLogger } from '../logs'
+
+const log = createLogger('channels.telegram')
 
 export type WebhookBodyResult = BodyReadResult
 
@@ -73,7 +76,7 @@ export async function handleTelegramWebhook(
     return { status: 200, body: { ok: true, ...(outcome.status === 'duplicate' ? { duplicate: true } : {}) } }
   } catch (err) {
     // The thrown message can only be logged after scrubbing; the client gets a bare 500.
-    console.error(`telegram webhook dispatch failed: ${safeError(err)}`)
+    log.error('channel.dispatch', `telegram webhook dispatch failed: ${safeError(err)}`)
     return fail(500, 'internal_error')
   }
 }

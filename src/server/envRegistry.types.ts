@@ -58,3 +58,8 @@ export function text(key: string, group: EnvGroup, m: Meta, extra: { def?: strin
 export function secret(key: string, group: EnvGroup, pattern: RegExp, m: Meta): EnvSpec {
   return { ...base(key, group, 'secret', m), pattern }
 }
+
+/** Bilangan dalam [min, max]; `def` = nilai bila env kosong. */
+export function num(key: string, group: EnvGroup, min: number, max: number, def: number, m: Meta): EnvSpec {
+  return { ...base(key, group, 'number', m), min, max, default: String(def) }
+}

@@ -16,6 +16,9 @@ import {
 import { createPlanStore } from './orchestrator/plan'
 import { orchestratorRunRoute } from './orchestratorRunApi'
 import { orchestratorRunEnabled, orchestratorRunRequireApproval } from './orchestratorRunModel'
+import { createLogger } from './logs'
+
+const logger = createLogger('central')
 
 export interface AutonomyBootOptions {
   /** The process ledger runtime; `null` (ledger off / shadow failed) refuses to boot. */
@@ -85,8 +88,8 @@ export function startCentralAutonomyBoot(
   opts: AutonomyBootOptions
 ): CentralAutonomyHandle | null {
   const env = opts.env ?? process.env
-  const log = opts.log ?? console.log
-  const warn = opts.warn ?? console.warn
+  const log = opts.log ?? ((line: string) => logger.info('central.autonomy.start', line))
+  const warn = opts.warn ?? ((line: string) => logger.warn('central.autonomy.skip', line))
   if (!autonomyEnabled(env)) return null
   if (opts.runtime === null) {
     warn('central autonomy: ledger is off; not starting')
@@ -125,8 +128,11 @@ export function startCentralAutonomyBoot(
           },
           now: event.at,
         })
-      } catch {
+      } catch (err) {
         // A full/broken event log must not stop the loop; the tick already happened.
+        logger.warn('central.autonomy.audit_failed', 'central autonomy audit append failed', {
+          reason: err instanceof Error ? err.name : typeof err,
+        })
       }
     },
     intervalMs,

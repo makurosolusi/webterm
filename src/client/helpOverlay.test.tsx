@@ -12,7 +12,7 @@ describe('HelpOverlay', () => {
     render(<HelpOverlay onClose={() => {}} platform="Linux x86_64" />)
     expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).not.toBeNull()
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Command', 'Keybinding'])
-    expect(screen.getAllByRole('row')).toHaveLength(9)
+    expect(screen.getAllByRole('row')).toHaveLength(10)
   })
 
   it('draws Ctrl+K as separate kbd chips on non-mac platforms', () => {

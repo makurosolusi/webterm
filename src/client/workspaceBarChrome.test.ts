@@ -55,13 +55,15 @@ describe('title bar & editor tabs memakai primitif VS Code', () => {
 })
 
 describe('rename & hapus workspace tetap terjangkau', () => {
-  it('menu File/Help memuat New/Rename/Delete/Settings dan Keyboard Shortcuts Reference', () => {
+  it('menu File/View/Help memuat New/Rename/Delete/Settings dan Keyboard Shortcuts Reference', () => {
     expect(bar).toContain("label: 'File'")
     expect(bar).toContain("label: 'Help'")
     expect(bar).toContain("label: 'Keyboard Shortcuts Reference'")
     expect(bar).toContain("label: 'Settings…'")
     expect(bar).not.toContain("label: 'Workspace'")
-    expect(bar).not.toContain("label: 'View'")
+    // View hanya boleh berisi aksi nyata (Output / Clear Output); menu View kosong tetap dilarang.
+    expect(bar).toContain("label: 'View'")
+    expect(bar).toContain("label: 'Clear Output'")
     expect(bar).toContain("label: 'New Workspace'")
     expect(bar).toContain("label: 'Rename Workspace…'")
     expect(bar).toContain("label: 'Delete Workspace'")

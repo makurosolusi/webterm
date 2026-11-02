@@ -45,7 +45,8 @@ beforeEach(() => {
   resetChannelStatus()
   logs = []
   const sink = (...args: unknown[]) => void logs.push(args.join(' '))
-  vi.spyOn(console, 'info').mockImplementation(sink)
+  // The logger mirrors info-level entries through console.log (not console.info).
+  vi.spyOn(console, 'log').mockImplementation(sink)
   vi.spyOn(console, 'warn').mockImplementation(sink)
   vi.spyOn(console, 'error').mockImplementation(sink)
 })
@@ -132,7 +133,7 @@ describe('telegram egress visibility', () => {
     })
     await sender.flushOnce()
     expect(getChannelStatus().egress).toMatchObject({ okCount: 1, errorCount: 0, lastOk: 5 })
-    expect(console.info).toHaveBeenCalledWith(expect.stringContaining('telegram egress sent key=r2'))
+    expect(logs.join('\n')).toContain('telegram egress sent key=r2')
   })
 
   it('logs and records a throwing store instead of swallowing it', async () => {

@@ -1,6 +1,7 @@
 // Telegram ingress mode (poll vs webhook). Its own module so channelsRuntime and the poll wiring
 // can both depend on it without importing each other.
 import { resolveTelegramBotToken } from './telegramSend'
+import { createLogger } from '../logs'
 
 export const TELEGRAM_MODE_ENV = 'WEBTERM_TELEGRAM_MODE'
 export type TelegramMode = 'poll' | 'webhook'
@@ -14,7 +15,10 @@ export function resolveTelegramMode(env: NodeJS.ProcessEnv = process.env, warn =
   const raw = (env[TELEGRAM_MODE_ENV] ?? '').trim().toLowerCase()
   if (raw === 'poll' || raw === 'webhook') return raw
   if (raw !== '' && warn) {
-    console.warn(`telegram channel: unsupported ${TELEGRAM_MODE_ENV} value ignored; supported: poll, webhook`)
+    createLogger('channels.telegram').warn(
+      'telegram.mode.unsupported',
+      `telegram channel: unsupported ${TELEGRAM_MODE_ENV} value ignored; supported: poll, webhook`
+    )
   }
   return resolveTelegramBotToken(env) ? 'poll' : 'webhook'
 }

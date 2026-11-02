@@ -12,6 +12,9 @@ import {
   type TelegramSenderFetch,
 } from './telegramSender'
 import { resolveTelegramBotToken } from './telegramSend'
+import { createLogger } from '../logs'
+
+const log = createLogger('channels.telegram')
 
 export const SENDER_DISABLED_LOG =
   'telegram egress disabled: WEBTERM_TELEGRAM_BOT_TOKEN / TELEGRAM_BOT_TOKEN is not set (ingress stays on)'
@@ -33,6 +36,7 @@ function track(handle: ChannelSenderHandle): void {
   exitHookInstalled = true
   process.once('exit', () => {
     for (const sender of running) sender.stop()
+    if (running.size > 0) log.info('telegram.send.stop', 'telegram egress stopped (process exit)')
     running.clear()
   })
 }
@@ -43,7 +47,7 @@ export function startChannelSenderFor(
   options: SenderBootOptions = {}
 ): ChannelSenderHandle | null {
   if (resolveTelegramBotToken(env) === undefined) {
-    console.warn(SENDER_DISABLED_LOG)
+    log.warn('telegram.send.disabled', SENDER_DISABLED_LOG)
     return null
   }
   const sender = new TelegramChannelSender({
@@ -57,7 +61,7 @@ export function startChannelSenderFor(
     options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }
   )
   track(handle)
-  console.info('telegram egress: on (outbox drained every few seconds)')
+  log.info('telegram.send.start', 'telegram egress: on (outbox drained every few seconds)')
   return handle
 }
 
@@ -79,5 +83,6 @@ export function flushChannelSender(handle: ChannelSenderHandle | null): Promise<
 export function stopChannelSender(handle: ChannelSenderHandle | null): void {
   if (handle === null) return
   handle.stop()
+  log.info('telegram.send.stop', 'telegram egress stopped')
   running.delete(handle)
 }

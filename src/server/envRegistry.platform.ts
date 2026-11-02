@@ -1,5 +1,8 @@
 // Registry env: orchestrator, memory, control. Data murni (lihat envRegistry.types.ts).
-import { flag, text, type EnvSpec } from './envRegistry.types'
+import { LOG_LEVELS } from '../shared/logEntry'
+import { enumOf, flag, num, text, type EnvSpec } from './envRegistry.types'
+import { DEFAULT_LOG_BUFFER, MAX_LOG_BUFFER, MIN_LOG_BUFFER } from './logs/logBus'
+import { DEFAULT_LOG_LEVEL } from './logs/logger'
 
 export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_ORCHESTRATOR_RUN', 'orchestrator', {
@@ -26,4 +29,17 @@ export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Throttle webhook memakai x-forwarded-for. Aktifkan hanya di belakang proxy tepercaya.',
     dangerous: true,
   }),
+  // Logging: dibaca sekali saat boot (configureLogging), jadi perlu restart.
+  enumOf('WEBTERM_LOG_LEVEL', 'control', LOG_LEVELS, DEFAULT_LOG_LEVEL, {
+    label: 'Level log',
+    description: 'Level minimum yang dicatat di panel Output; dapat diubah sementara dari panel tanpa restart.',
+  }),
+  num('WEBTERM_LOG_BUFFER', 'control', MIN_LOG_BUFFER, MAX_LOG_BUFFER, DEFAULT_LOG_BUFFER, {
+    label: 'Buffer log',
+    description: 'Jumlah entri log yang disimpan di memori (ring buffer) untuk panel Output.',
+  }),
+  flag('WEBTERM_LOG_FILE', 'control', {
+    label: 'File log',
+    description: 'Tulis log harian ke <dataDir>/logs/webterm-YYYY-MM-DD.log (rotasi, maks 7 file).',
+  }, 'on'),
 ]

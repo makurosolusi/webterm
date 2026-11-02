@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
+import type { PaletteCommand } from './output/outputCommands'
 import './canvas-ui.css'
 
 // Cluster kontrol kiri-bawah + command palette ⌘K. Porting dari nodeterm
@@ -100,6 +101,8 @@ export interface CanvasToolbarProps {
   onOpenExplorer: () => void
   onOpenSettings: () => void
   onOpenHelp: () => void
+  /** Perintah non-node yang ikut tampil di palette (grup Commands). */
+  commands?: PaletteCommand[]
   /** Hanya untuk tes/override; default dari navigator. */
   platform?: string
 }
@@ -110,29 +113,34 @@ export default function CanvasToolbar({
   onOpenExplorer,
   onOpenSettings,
   onOpenHelp,
+  commands,
   platform,
 }: CanvasToolbarProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const chip = shortcutChip(platform ?? navigator.userAgent)
   const items = useMemo<VscodeQuickPickItem[]>(
-    () =>
-      nodeTargets(nodes).map((target) => ({
+    () => [
+      ...nodeTargets(nodes).map((target) => ({
         id: target.id,
         label: target.label,
         description: target.hint,
         group: 'Nodes',
         icon: <span className={`codicon codicon-${kindIcon(target.hint)}`} aria-hidden />,
       })),
-    [nodes],
+      ...(commands ?? []).map((c) => ({ id: c.id, label: c.label, keybinding: c.keybinding, group: 'Commands' })),
+    ],
+    [nodes, commands],
   )
 
   const closePalette = useCallback(() => setPaletteOpen(false), [])
   const selectNode = useCallback(
     (id: string) => {
-      onFocusNode(id)
       setPaletteOpen(false)
+      const command = commands?.find((c) => c.id === id)
+      if (command) command.run()
+      else onFocusNode(id)
     },
-    [onFocusNode],
+    [onFocusNode, commands],
   )
 
   useEffect(() => {

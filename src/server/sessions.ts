@@ -7,6 +7,7 @@ import { OutputLog } from './outputLog'
 import { SubscriberSet } from './subscribers'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 import { SessionsCore, exitOutput } from './sessionsCore'
+import { ptyLog } from './sessionsLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -41,6 +42,7 @@ export class Sessions extends SessionsCore {
     if (!isSafeNodeId(msg.id)) return
     const existing = this.map.get(msg.id)
     if (existing) {
+      ptyLog.reattached(msg.id, existing.subs.size())
       const status = this.registry.getStatus(msg.id)?.status
       existing.subs.add(send)
       for (const chunk of existing.log.since(0)) {
@@ -99,8 +101,11 @@ export class Sessions extends SessionsCore {
       log: new OutputLog(),
       subs: new SubscriberSet<ServerMsg>(),
       exited: false,
+      startedAt: this.now(),
+      agentId: msg.agentId,
     }
     this.map.set(msg.id, session)
+    ptyLog.spawned(msg, pty.pid, this.options.shell)
     session.subs.add(send)
     pty.onData((data) => this.emit(session, data))
     pty.onExit((code) => this.onExit(session, code))
@@ -120,7 +125,10 @@ export class Sessions extends SessionsCore {
   }
 
   resize(id: string, cols: number, rows: number): void {
-    this.map.get(id)?.pty.resize(cols, rows)
+    const session = this.map.get(id)
+    if (!session) return
+    ptyLog.resized(id, cols, rows)
+    session.pty.resize(cols, rows)
   }
 
   /** `send` = socket PEMANGGIL close, bukan socket sesi. Opsional supaya pemanggil non-socket tetap
@@ -158,12 +166,14 @@ export class Sessions extends SessionsCore {
       if (firstClose) send?.(exit)
     }
     if (session) {
+      ptyLog.exited(id, session.agentId, -1, 'closed', this.now() - session.startedAt)
       session.subs.clear()
       session.exited = true
       this.map.delete(id)
     }
     // Kill SESUDAH map dihapus: `onExit` digerbangi identitas, jadi gema kematian yang kita minta
     // sendiri tidak pernah menjadi `exit` kedua.
+    
     session?.pty.kill()
   }
 

@@ -26,6 +26,10 @@ import {
 import { TELEGRAM_MAX_TEXT, parseTelegramUpdate, type NormalizedMessage } from './telegram'
 import { safeErrorText } from './safeErrorText'
 import type { PendingChatPort } from './channelPending'
+import { maskChatId } from './telegramEgressLog'
+import { createLogger } from '../logs'
+
+const log = createLogger('channels.telegram')
 
 export type { ApprovalSummary, ChannelApprovalPort } from './channelApprovals'
 export { extractRejectChallenge } from './channelApprovals'
@@ -125,7 +129,7 @@ async function replyTo(
     // The reply is already an after-effect: by the time we enqueue, the command (including a ledger
     // decision) has been applied. A disk-full outbox must therefore not fail the dispatch — that
     // would release the update claim and let the provider retry re-run the whole command.
-    console.warn(`telegram reply enqueue failed: ${safeErrorText(err, 'outbox unavailable')}`)
+    log.warn('telegram.send.fail', `telegram reply enqueue failed: ${safeErrorText(err, 'outbox unavailable')}`, { stage: 'enqueue' })
     return null
   }
 }
@@ -135,7 +139,7 @@ function recordPending(deps: TelegramDispatchDeps, chatId: string): void {
   try {
     deps.pending?.record(chatId, 'private') // groups were denied earlier, so only private reaches here
   } catch (err) {
-    console.warn(`telegram pending record failed: ${safeErrorText(err, 'outbox unavailable')}`)
+    log.warn('channel.dispatch', `telegram pending record failed: ${safeErrorText(err, 'outbox unavailable')}`, { stage: 'pending' })
   }
 }
 
@@ -247,8 +251,18 @@ export async function dispatchTelegramUpdate(
   deps: TelegramDispatchDeps
 ): Promise<DispatchOutcome> {
   const message = parseTelegramUpdate(update)
-  if (!message) return { status: 'ignored', reason: 'not_a_message' }
+  if (!message) {
+    log.debug('telegram.update.recv', 'telegram update ignored (not a message)', { type: 'other' })
+    return { status: 'ignored', reason: 'not_a_message' }
+  }
+  log.debug('telegram.update.recv', 'telegram update received', {
+    type: 'message',
+    updateId: message.updateId,
+    chat: maskChatId(message.chatId),
+    isGroup: message.isGroup,
+  })
   if (!deps.store.claimUpdate(message.updateId)) {
+    log.debug('channel.dispatch', 'telegram dispatch duplicate', { updateId: message.updateId, status: 'duplicate' })
     deps.audit?.({
       kind: 'channel.telegram.command',
       outcome: 'duplicate',
@@ -257,8 +271,16 @@ export async function dispatchTelegramUpdate(
     return { status: 'duplicate', updateId: message.updateId }
   }
   try {
-    return await handleClaimed(message, deps)
+    const outcome = await handleClaimed(message, deps)
+    log.info('channel.dispatch', `telegram dispatch ${outcome.status}`, {
+      updateId: message.updateId,
+      status: outcome.status,
+      ...(outcome.status === 'handled' ? { command: outcome.command } : {}),
+      ...(outcome.status === 'denied' ? { reason: outcome.reason } : {}),
+    })
+    return outcome
   } catch (err) {
+    log.error('channel.dispatch', 'telegram dispatch failed', { updateId: message.updateId, error: safeErrorText(err, 'unknown error') })
     deps.store.releaseUpdate(message.updateId)
     deps.audit?.({ kind: 'channel.telegram.command', outcome: 'error', updateId: message.updateId })
     throw err

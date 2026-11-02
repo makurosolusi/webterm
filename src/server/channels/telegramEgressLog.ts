@@ -2,6 +2,7 @@
 // (reply key, masked chat, text length, status codes); message text is never logged (PII).
 import { recordEgress } from './channelStatus'
 import { redactSecrets } from '../redactSecrets'
+import { createLogger } from '../logs'
 
 /** Keep only the last 4 chars of a chat id so lines correlate without exposing the full id. */
 export function maskChatId(chatId: string): string {
@@ -17,9 +18,22 @@ export interface EgressLogFields {
   errorCode?: number
 }
 
+const log = createLogger('channels.telegram')
+
+/** Structured twin of `line`: same masked chat, no text. */
+function egressData(fields: EgressLogFields): Record<string, unknown> {
+  const { chatId, ...rest } = fields
+  return { ...rest, key: maskedKey(fields), chat: maskChatId(chatId) }
+}
+
+/** Reply keys embed the raw chat id (`telegram:<chat>:<update>`); mask it wherever the key is logged. */
+function maskedKey(fields: EgressLogFields): string {
+  return fields.chatId === '' ? fields.key : fields.key.split(fields.chatId).join(maskChatId(fields.chatId))
+}
+
 function line(fields: EgressLogFields): string {
   const parts = [
-    `key=${fields.key}`,
+    `key=${maskedKey(fields)}`,
     `chat=${maskChatId(fields.chatId)}`,
     `len=${fields.textLength}`,
     `attempt=${fields.attempt}`,
@@ -31,7 +45,7 @@ function line(fields: EgressLogFields): string {
 
 /** Log + record a successful send. */
 export function logEgressSent(fields: EgressLogFields, at: number): void {
-  console.info(`telegram egress sent ${line(fields)}`)
+  log.info('telegram.send.ok', `telegram egress sent ${line(fields)}`, egressData(fields))
   recordEgress({ ok: true, at })
 }
 
@@ -43,14 +57,16 @@ export function logEgressFailed(
   outcome: 'retry' | 'dead'
 ): void {
   const safe = redactSecrets(error).slice(0, 300)
-  const log = outcome === 'dead' ? console.error : console.warn
-  log(`telegram egress ${outcome} ${line(fields)} error=${safe}`)
+  const message = `telegram egress ${outcome} ${line(fields)} error=${safe}`
+  const data = { ...egressData(fields), outcome }
+  if (outcome === 'dead') log.error('telegram.send.fail', message, data)
+  else log.warn('telegram.send.fail', message, data)
   recordEgress({ ok: false, at, error: safe })
 }
 
 /** Log + record an unexpected sender-side failure (store port threw, tick rejected). */
 export function logEgressInternal(operation: string, err: unknown, at: number): void {
   const message = redactSecrets(err instanceof Error ? `${err.name}: ${err.message}` : String(err)).slice(0, 300)
-  console.error(`telegram egress ${operation} failed: ${message}`)
+  log.error('telegram.send.fail', `telegram egress ${operation} failed: ${message}`, { operation })
   recordEgress({ ok: false, at, error: `${operation}: ${message}` })
 }

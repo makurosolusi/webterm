@@ -26,6 +26,9 @@ import { validateProposal } from '../proposal/proposalPolicy'
 import { applyProposal } from '../proposal/applyProposal'
 import { centralPrompt } from '../proposal/centralPrompt'
 import { buildMemoryContext } from '../memory/contextBuilder'
+import { createLogger } from '../../logs'
+
+const log = createLogger('central')
 
 export { CentralChatError, chatErrorStatus }
 export type { ChatErrorCode } from './chatErrors'
@@ -106,6 +109,7 @@ export class TurnService {
       throw err
     }
     this.active.set(conversation.id, turn.id)
+    log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
     const done = this.runTurn(conversation, turn, text, history)
     this.runs.set(turn.id, done)
@@ -185,6 +189,8 @@ export class TurnService {
       if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite)
       return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
     } catch (err) {
+      // Name only: runtime error messages can quote the conversation.
+      log.error('central.turn.error', 'central chat runtime failed', { turnId: turn.id, error: err instanceof Error ? err.name : typeof err })
       const result: RuntimeResult = {
         turnId: turn.id, outcome: 'error', text: state.text,
         usage: state.usage, errorCode: 'runtime_error', sessionRef: null,

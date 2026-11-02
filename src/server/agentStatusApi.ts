@@ -17,12 +17,15 @@ import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
+import { createLogger } from './logs'
 import {
   nodeTokenHeader,
   nodeTokenMismatch,
   requesterNodeId,
   STRICT_HOOK_AUTH,
 } from './agentStatusAuth'
+
+const log = createLogger('hooks')
 
 export { transcriptPathAllowed } from './transcriptPath'
 export { nodeTokenMismatch, requesterNodeId, STRICT_HOOK_AUTH } from './agentStatusAuth'
@@ -95,6 +98,7 @@ export async function agentStatusRoute(
   // dibaca dan sebelum `setStatus`/`setTranscript`, jadi permintaan yang ditolak tidak menulis apa
   // pun. Root token / tanpa token / token asing tetap `undefined` → fail-open lama dipertahankan.
   if (nodeTokenMismatch(requesterNodeId(req), node)) {
+    log.warn('hooks.reject', 'Hook rejected: node token does not match node', { ids: { nodeId: node }, status: 403 })
     json(res, 403, { error: 'node token does not match node' })
     return true
   }
@@ -114,12 +118,14 @@ export async function agentStatusRoute(
   // di bawah ini yang berjalan — perilaku fail-open lama dipertahankan huruf per huruf.
   if (opts?.strictAuth ?? STRICT_HOOK_AUTH) {
     if (!stateVerified(node, nodeTokenHeader(req))) {
+      log.warn('hooks.reject', 'Hook rejected: invalid node token', { ids: { nodeId: node }, status: 403 })
       json(res, 403, { error: 'invalid node token' })
       return true
     }
     const raw = body.transcript_path
     if (typeof raw === 'string' && raw.length > 0
       && (raw.length > TRANSCRIPT_PATH_MAX || !transcriptPathAllowed(raw))) {
+      log.warn('hooks.reject', 'Hook rejected: transcript path outside allowed roots', { ids: { nodeId: node }, status: 403 })
       json(res, 403, { error: 'transcript path outside allowed roots' })
       return true
     }
@@ -127,6 +133,7 @@ export async function agentStatusRoute(
 
   const deps = opts?.deps ?? (await defaultDeps())
   const status = hookStatus(body)
+  log.debug('hooks.event', 'Hook received', { ids: { nodeId: node }, event: body.hook_event_name, status })
   if (status) deps.setStatus(node, status)
   // Hanya DISIMPAN: pembacaan file terjadi di `contextLink`, dan path sepanjang apa pun di sini
   // akan ditulis ulang oleh setiap hook berikutnya pada node yang sama.

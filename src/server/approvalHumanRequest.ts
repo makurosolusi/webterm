@@ -5,6 +5,9 @@ import { projectExists } from './approvalQuery'
 import { isValidRequestId } from './control/controlTypes'
 import { HUMAN_ACTOR, MAX_KIND, MAX_PROJECT_ID, storeFor, type Result } from './approvalHumanShared'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import { createLogger } from './logs'
+
+const log = createLogger('approval')
 
 /**
  * Minting has no actor column in the ledger (`approval.requestedBy` does not exist), so the
@@ -72,6 +75,7 @@ export function requestRoute(
   } catch (err) {
     return classifyLedgerError(err)
   }
+  log.info('approval.request', 'Approval requested', { approvalId: challenge.id, kind, linkedTask: taskId !== undefined })
   // `fence` is not a ledger column; it rides in the request payload the digest covers.
   const result: Result = {
     status: 201,

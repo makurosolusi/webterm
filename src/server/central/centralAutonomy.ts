@@ -5,6 +5,9 @@
 // caller arms it, and consecutive failures quarantine a project instead of retrying forever.
 
 import { flagOn } from '../envFlag'
+import { createLogger } from '../logs'
+
+const log = createLogger('central')
 
 /** Minimal project row the loop needs; `status` is the ledger project.status. */
 export interface AutonomyProject {
@@ -101,6 +104,9 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
   let timer: ReturnType<typeof setInterval> | null = null
 
   function audit(event: AutonomyAuditEvent): void {
+    const fields = { projectId: event.projectId, itemId: event.itemId, ok: event.ok, code: event.code, failures: event.failures }
+    if (event.kind !== 'autonomy.run' || event.ok === false) log.warn(`central.${event.kind}`, `central ${event.kind}`, fields)
+    else log.info(`central.${event.kind}`, `central ${event.kind}`, fields)
     try {
       deps.audit(event)
     } catch {
@@ -130,6 +136,7 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
       try {
         projects = deps.projects()
       } catch {
+        log.warn('central.autonomy.tick_error', 'central autonomy: project list failed', { code: 'projects_read' })
         return { ran: false, reason: 'error' }
       }
       if (projects.length === 0) return { ran: false, reason: 'no_projects' }
@@ -188,6 +195,7 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
     if (timer === null) return
     clearInterval(timer)
     timer = null
+    log.info('central.autonomy.stop', 'central autonomy stopped')
   }
 
   return {

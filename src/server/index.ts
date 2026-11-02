@@ -1,10 +1,13 @@
 import http from 'node:http'
+import { basename, join } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
+import { TOKEN_PARAM, authorizeRequest, denyReason, isNodeTokenPath, logAuthLogin, logAuthReject, resolveToken, writeTokenToEnv } from './auth'
+import { dataDir } from './config'
+import { configureLogging, createLogger, flushLogsSync } from './logs'
 import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
@@ -19,6 +22,7 @@ import { upgradeRoute } from './upgradeRouting'
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
 declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
 
+const LOG_DIR = 'logs'
 const { host: HOST, port: PORT } = resolveHostPort(process.env)
 // Throws (and so refuses to start) when HOST is reachable off-machine without a token.
 const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
@@ -27,12 +31,15 @@ const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
 writeTokenToEnv(TOKEN)
 // Pengaturan > env > default: terapkan override tersimpan ke process.env sebelum ledger/kanal membacanya.
 initEnvSettings()
+// After env overrides are applied: level / buffer / file sink come from WEBTERM_LOG_*.
+configureLogging({ dir: join(dataDir(), LOG_DIR) })
+const log = createLogger('server')
 const dev = process.env.NODE_ENV !== 'production'
 
 // Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
 const ledgerRuntime = startLedgerRuntime()
 if (ledgerRuntime) {
-  console.log(`ledger ${ledgerRuntime.mode}: ${ledgerRuntime.path}`)
+  createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
   startLedgerReaper(ledgerRuntime.ledger)
 }
 
@@ -45,10 +52,10 @@ if (channelsRuntime && activeRuntime) {
   if (resolveTelegramMode() === 'poll') {
     // Poll mode never exposes a reachable webhook; the route stays mounted but nothing calls it.
     if (startTelegramInbound({ channels: channelsRuntime, ledger: activeRuntime, centralChat })) {
-      console.log('telegram channel: on (mode=poll)')
+      createLogger('channels.telegram').info('channels.start', 'Telegram channel on (mode=poll)', { mode: 'poll' })
     }
   } else {
-    console.log(`telegram channel: on (POST ${TELEGRAM_WEBHOOK_PATH})`)
+    createLogger('channels.telegram').info('channels.start', `Telegram channel on (POST ${TELEGRAM_WEBHOOK_PATH})`, { mode: 'webhook' })
   }
 }
 
@@ -75,7 +82,7 @@ function reqUrl(req: http.IncomingMessage): URL {
  * module starts a server.
  */
 function allowed(req: http.IncomingMessage, url: URL): boolean {
-  return authorizeRequest({
+  const ok = authorizeRequest({
     headers: req.headers,
     expectedToken: TOKEN,
     queryToken: url.searchParams.get(TOKEN_PARAM),
@@ -85,6 +92,8 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
     // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
     isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
   })
+  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, TOKEN, url.searchParams.get(TOKEN_PARAM)))
+  return ok
 }
 
 export { isNodeTokenPath }
@@ -157,25 +166,38 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy()
     return
   }
+  if (TOKEN !== undefined) logAuthLogin(url.pathname)
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
 })
 
 wss.on('connection', (ws) => {
+  const wsLog = createLogger('ws')
+  wsLog.info('ws.connect', 'WebSocket client connected', { clients: wss.clients.size })
   const send = (m: ServerMsg) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)) }
   ws.on('message', (raw) => {
     let msg: ClientMsg
     try { msg = JSON.parse(String(raw)) } catch { return }
     try { sessions.handle(msg, send) } catch (err) {
-      console.error(`ws message handling failed (t=${msg?.t}):`, err instanceof Error ? err.message : err)
+      wsLog.error('ws.error', `WebSocket message handling failed (t=${msg?.t})`, { error: err })
     }
   })
-  ws.on('close', () => sessions.detach(send))
+  ws.on('close', (code, reason) => {
+    sessions.detach(send)
+    wsLog.info('ws.disconnect', 'WebSocket client disconnected', { code, reason: reason.toString().slice(0, 120) })
+  })
 })
 
-server.listen(PORT, HOST, () =>
-  // Never print the token itself — only whether one is in force, and how long it is.
-  console.log(
-    `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, ` +
-      `token ${TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`})`
-  )
-)
+server.listen(PORT, HOST, () => {
+  // Never log the token itself — only whether one is in force, and how long it is.
+  const token = TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`
+  log.info('server.start', `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, token ${token})`, {
+    host: HOST, port: PORT, mode: dev ? 'dev' : 'prod', dataDir: basename(dataDir()), authRequired: TOKEN !== undefined,
+  })
+})
+
+// Observe-only crash hook (does not change crash behaviour) + synchronous flush on every exit path.
+process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
+process.on('exit', (code) => { log.info('server.stop', 'webterm stopping', { code }); flushLogsSync() })
+for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
+  process.on(signal, () => process.exit(exitCode))
+}

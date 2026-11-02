@@ -4,6 +4,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { CONTEXT_LINK_VERBS, type ContextLinkVerb, renderForRequester } from './contextLink'
 import { nodeTokenMismatch, requesterNodeId } from './agentStatusApi'
 import { isSafeNodeId } from '../shared/workspace'
+import { createLogger } from './logs'
+
+const log = createLogger('contextlink')
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
@@ -23,12 +26,14 @@ export async function contextLinkRoute(
   // input yang berbeda dari WebSocket.
   const nodeParam = url.searchParams.get('node')
   if (nodeParam !== null && !isSafeNodeId(nodeParam)) {
+    log.warn('contextlink.reject', 'Context-link request rejected: invalid node id', { status: 400 })
     sendJson(res, 400, { error: 'invalid node' })
     return true
   }
   const requester = nodeParam || ''
   // Token node hanya boleh membaca konteks node-nya sendiri; root/tanpa token tetap lama.
   if (nodeTokenMismatch(requesterNodeId(req), requester)) {
+    log.warn('contextlink.reject', 'Context-link request rejected: node token mismatch', { ids: { nodeId: requester }, status: 403 })
     sendJson(res, 403, { error: 'node token does not match node' })
     return true
   }
@@ -37,6 +42,7 @@ export async function contextLinkRoute(
   const want = url.searchParams.get('want') || undefined
   const n = url.searchParams.get('n') || undefined
   const text = await renderForRequester(requester, verb, { node: want, n })
+  log.debug('contextlink.read', 'Context-link read', { ids: { nodeId: requester }, verb, peer: want, chars: text.length })
   res.statusCode = 200
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
   res.end(text)

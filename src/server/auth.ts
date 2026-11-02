@@ -12,6 +12,9 @@
 //     token-free so the default dev loop is untouched.
 import crypto from 'node:crypto'
 import { firstHeader } from './httpHeaders'
+import { createLogger } from './logs'
+
+const log = createLogger('auth')
 
 /** Header the client sends the token in on API requests. `webterm`, not `nodeterm`: this is
  *  our own transport token, unrelated to the `x-nodeterm-node-token` agent-session protocol. */
@@ -165,4 +168,19 @@ export function authorizeRequest(args: {
   const capability = firstHeader(args.headers[CAPABILITY_HEADER])
   if (typeof capability !== 'string' || capability === '') return false
   return args.isCapabilityToken(capability)
+}
+
+/** Why `authorize` said no: a foreign Origin, or a missing/wrong token. */
+export function denyReason(headers: Headers, expectedToken: string | undefined, queryToken?: string | null): 'origin' | 'token' {
+  return sameOrigin(headers) && !tokensMatch(expectedToken, firstHeader(headers[TOKEN_HEADER]) ?? queryToken) ? 'token' : 'origin'
+}
+
+/** Record a refused request (`auth.reject`): path and reason only, never the token or headers. */
+export function logAuthReject(pathname: string, reason: 'origin' | 'token'): void {
+  log.warn('auth.reject', `Rejected request to ${pathname} (${reason})`, { path: pathname, reason })
+}
+
+/** Record that a token-protected surface accepted a credential (`auth.login`); value never logged. */
+export function logAuthLogin(pathname: string): void {
+  log.debug('auth.login', `Authorized request to ${pathname}`, { path: pathname })
 }

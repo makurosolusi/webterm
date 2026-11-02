@@ -45,6 +45,9 @@ import { homedir } from 'node:os'
 import npath from 'node:path'
 import { promisify } from 'node:util'
 import { FS_READ_BINARY_MAX_BYTES, FS_READ_MAX_BYTES, tooLargeSentinel } from '../shared/fsLimits'
+import { createLogger } from './logs'
+
+const log = createLogger('fs')
 
 const run = promisify(execFile)
 
@@ -139,7 +142,13 @@ export async function listDir(dirPath: string): Promise<DirEntry[]> {
 /** Kegagalan baca dengan konteks (operasi + path + penyebab asal). `Error` biasa, bukan subclass:
  *  satu-satunya hal yang perlu dibedakan pemanggil adalah errno, dan itu sudah ada di `cause`. */
 function readFailed(op: string, target: string, err: unknown): Error {
+  logFsError(op, target, err)
   return new Error(`fs ${op} failed: ${target}`, { cause: err })
+}
+
+/** `fs.error` (warn): operasi, basename, errno. Basename saja — path penuh memuat nama pengguna. */
+function logFsError(op: string, target: string, err: unknown): void {
+  log.warn('fs.error', `fs ${op} failed`, { op, file: npath.basename(target), code: errnoOf(err) || undefined })
 }
 
 /** errno di balik sebuah kegagalan baca — `readFailed` menyimpan error asal di `cause`. */
@@ -201,7 +210,8 @@ export async function writeText(filePath: string, content: string): Promise<bool
   try {
     await fs.writeFile(resolveFsPath(filePath), content, 'utf-8')
     return true
-  } catch {
+  } catch (err) {
+    logFsError('write', filePath, err)
     return false
   }
 }
@@ -211,7 +221,8 @@ export async function makeDir(dirPath: string): Promise<boolean> {
   try {
     await fs.mkdir(resolveFsPath(dirPath), { recursive: true })
     return true
-  } catch {
+  } catch (err) {
+    logFsError('mkdir', dirPath, err)
     return false
   }
 }

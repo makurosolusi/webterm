@@ -1,6 +1,10 @@
 // Broadcast fan-out primitive shared by the WebSocket hub. Deliberately dependency-free so it can
 // be unit-tested in node-env without pulling in sessions (which imports bun modules at load).
 
+import { createLogger } from './logs'
+
+const log = createLogger('ws')
+
 export type Subscriber<T> = (msg: T) => void
 
 /**
@@ -41,7 +45,7 @@ export class SubscriberSet<T> {
    *
    * A throwing subscriber never starves its peers: the error is passed to `onError` and delivery
    * continues. `onError` receives only the error, never subscriber identity. Without `onError` the
-   * failure is reported on the console rather than silently swallowed or rethrown into the
+   * failure is reported on the system log rather than silently swallowed or rethrown into the
    * broadcast loop.
    */
   send(msg: T, onError?: (err: unknown) => void): void {
@@ -50,7 +54,7 @@ export class SubscriberSet<T> {
         fn(msg)
       } catch (err) {
         if (onError) onError(err)
-        else console.error('[subscribers] subscriber threw', err)
+        else log.error('subscribers.error', '[subscribers] subscriber threw', { error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) })
       }
     }
   }

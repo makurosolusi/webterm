@@ -18,6 +18,7 @@ const SHORTCUTS: readonly (readonly [readonly Chord[], string])[] = [
     [['Mod', '+'], ['Mod', '−'], ['Mod', '0']],
     'Ukuran font terminal fokus — perlu "Zoom font via keyboard" di settings',
   ],
+  [[['Mod', 'Shift', 'U']], 'Tampilkan atau sembunyikan panel Output (log sistem)'],
   [[['Shift', 'Enter']], 'Baris baru tanpa mengirim, di dalam terminal'],
   [[['Backspace'], ['Delete']], 'Hapus node atau edge yang terpilih'],
   [['Dobel-klik edge'], 'Hapus link context itu'],

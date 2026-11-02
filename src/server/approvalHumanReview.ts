@@ -6,6 +6,9 @@ import { isValidRequestId } from './control/controlTypes'
 import { HUMAN_ACTOR, MAX_PROJECT_ID, secret, storeFor, type Result } from './approvalHumanShared'
 import { approvalDigest, type Approval } from './ledger/ledgerApproval'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
+import { createLogger } from './logs'
+
+const log = createLogger('approval')
 
 interface ReviewLink {
   taskId: string
@@ -91,6 +94,7 @@ export function decideRoute(
   } catch (err) {
     return classifyLedgerError(err)
   }
+  log.info('approval.decide', `Approval ${decision.status}`, { approvalId: decision.id, status: decision.status, linkedTask: link !== null })
   const result: Result = { status: 200, body: { id: decision.id, status: decision.status } }
   if (key !== undefined) store.set(key, result, now)
   return result
@@ -148,6 +152,7 @@ export function consumeRoute(
   } catch (err) {
     return classifyLedgerError(err)
   }
+  log.info('approval.consume', 'Approval consumed', { approvalId: id, linkedTask: link !== null })
   if (key !== undefined) store.set(key, result, now)
   return result
 }

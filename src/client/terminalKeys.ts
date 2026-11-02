@@ -1,5 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
 import type { TerminalShortcutPolicy } from '../shared/settings'
+import { isOutputToggleChord } from './output/outputChord'
 
 /**
  * Keputusan MURNI untuk gestur input terminal — keyboard dan mouse — plus dua pemasang listener
@@ -209,6 +210,8 @@ export function terminalKeyAction(
   // dimatikan lewat setting, kalau tidak `terminal-first` mengunci pengguna di clean view tanpa
   // chrome untuk kembali.
   if (isCleanViewChord(e, platform.isMac)) return 'bubble'
+  // Toggle Output, same reasoning: without this Ctrl+Shift+U reaches the shell as Ctrl+U.
+  if (isOutputToggleChord(e, platform.isMac)) return 'bubble'
   if (policy === 'app-first' && isDigitChord(e, platform.isMac)) return 'bubble'
   return 'pass'
 }
