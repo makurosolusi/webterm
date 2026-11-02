@@ -61,7 +61,7 @@ export interface VscodeDialogProps {
 
 /**
  * VS Code-style modal: portal to body, 480px default width, 8px padding with a
- * 12px content inset, 16px semibold title, 13px body, `x` close button, Esc.
+ * 12px content inset, 14px semibold title, 13px body, `x` close button, Esc.
  * Footer actions are right-aligned; order them with `arrangeDialogButtons`.
  *
  * Focus is trapped inside the dialog and restored to the trigger on close. The

@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
 const badgeVariants = cva(
-  // VS Code badge: 16px tall, 18px minimum width, 11px radius, 11px text, centred.
-  "inline-flex h-4 min-w-[18px] w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[11px] border border-transparent px-1 text-[11px] leading-4 font-normal whitespace-nowrap focus-visible:outline focus-visible:outline-1 focus-visible:outline-(--vscode-focusBorder) aria-invalid:border-destructive [&>svg]:pointer-events-none [&>svg]:size-3",
+  // VS Code badge: 17px tall, 18px minimum width, 2px radius, 11px text, centred.
+  "inline-flex h-[17px] min-w-[18px] w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[2px] border border-transparent px-1 text-[11px] leading-4 font-normal whitespace-nowrap focus-visible:outline focus-visible:outline-1 focus-visible:outline-(--vscode-focusBorder) aria-invalid:border-destructive [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {

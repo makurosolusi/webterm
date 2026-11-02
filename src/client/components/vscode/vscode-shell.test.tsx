@@ -35,7 +35,7 @@ describe('vscode-shell.css metrics', () => {
   it('keeps the menu bar and menu rows at 35px and 22px', () => {
     expect(cssBlock('.vscode-menu-bar')).toContain('height: 35px')
     expect(cssBlock('.vscode-menu-bar__item')).toContain('padding: 0 8px')
-    expect(cssBlock('.vscode-menu__item')).toContain('height: 22px')
+    expect(cssBlock('.vscode-menu__item')).toContain('height: 24px')
   })
 
   it('keeps a 48px activity bar with 48px items, 24px icons and a 2px active edge', () => {

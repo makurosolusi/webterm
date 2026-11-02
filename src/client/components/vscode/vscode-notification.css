@@ -1,5 +1,5 @@
 /* VS Code notification toasts (L1). Values follow notificationsToasts.css and
- * notificationsList.css: stack at right 3px, 450px max, 4px radius, 10px/5px item
+ * notificationsList.css: stack at right 3px, 450px max, 8px radius, 10px/5px item
  * padding, 22px message line, 16px severity icon, 300ms ease-out slide-in, close
  * revealed on hover or focus, 2px progress bar pinned to the bottom edge.
  */
@@ -22,10 +22,10 @@
   width: 100%;
   margin: 4px 0;
   overflow: hidden;
-  border: 1px solid var(--vscode-notifications-border, var(--vscode-editorWidget-border, #2b2b2b));
-  border-radius: 4px;
+  border: 1px solid var(--vscode-notificationToast-border, var(--vscode-widget-border, #313131));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
   background: var(--vscode-notifications-background, var(--vscode-editorWidget-background, #1f1f1f));
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
   color: var(--vscode-notifications-foreground, var(--vscode-foreground, #cccccc));
   font-family: var(--vscode-font-family, system-ui, sans-serif);
   font-size: 13px;
@@ -101,7 +101,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--vscode-cornerRadius-small, 4px);
   background: transparent;
   color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
   cursor: default;
@@ -132,16 +132,16 @@
 
 .vscode-notification__action {
   box-sizing: border-box;
-  min-height: 24px;
+  min-height: 26px;
   margin: 4px 5px;
-  padding: 4px 11px;
+  padding: 4px 8px;
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
+  border-radius: var(--vscode-cornerRadius-small, 4px);
   background: var(--vscode-button-background, #0078d4);
   color: var(--vscode-button-foreground, #ffffff);
   cursor: default;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 16px;
 }
 

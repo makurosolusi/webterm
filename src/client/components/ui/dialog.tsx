@@ -58,8 +58,8 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          // Same surface as VscodeDialog: 5px radius, 8px padding, `0 0 8px 2px` widget shadow, no animation.
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-[5px] border border-(--vscode-dialog-border,transparent) bg-popover p-2 text-popover-foreground shadow-[0_0_8px_2px_var(--vscode-widget-shadow)] outline-none sm:max-w-[560px]",
+          // Same surface as VscodeDialog: 480px, 8px radius, 8px padding, modal shadow, no animation.
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-(--vscode-cornerRadius-large) border border-(--vscode-dialog-border) bg-popover p-2 text-popover-foreground shadow-(--wt-shadow-modal) outline-none sm:max-w-[480px]",
           className
         )}
         {...props}
@@ -68,7 +68,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-1 right-1 flex size-[22px] cursor-default items-center justify-center rounded-[5px] hover:bg-(--vscode-toolbar-hoverBackground) focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-(--vscode-focusBorder) focus:outline-hidden disabled:pointer-events-none"
+            className="absolute top-1 right-1 flex size-[22px] cursor-default items-center justify-center rounded-(--vscode-cornerRadius-small) hover:bg-(--vscode-toolbar-hoverBackground) focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-(--vscode-focusBorder) focus:outline-hidden disabled:pointer-events-none"
           >
             <span className="codicon codicon-close" aria-hidden="true" />
             <span className="sr-only">Close</span>
@@ -101,7 +101,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-row justify-end gap-2 px-1 pb-1",
+        "flex flex-row justify-end gap-2 px-1 pb-1 pt-3",
         className
       )}
       {...props}
@@ -123,7 +123,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-base leading-tight font-semibold", className)}
+      className={cn("text-sm leading-[18px] font-semibold", className)}
       {...props}
     />
   )
@@ -136,7 +136,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-[13px] text-(--vscode-descriptionForeground)", className)}
+      className={cn("text-[13px] leading-5 text-(--vscode-descriptionForeground)", className)}
       {...props}
     />
   )

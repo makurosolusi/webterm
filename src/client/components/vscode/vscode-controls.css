@@ -1,58 +1,10 @@
-/* VS Code control primitives (L1): switch, card. The quick pick has vscode-quick-pick.css.
+/* VS Code control primitives (L1): card. The quick pick has vscode-quick-pick.css.
  *
  * Tokens live in `vscode-theme.css`. Every var() keeps a fallback so the controls
  * still render if the bridge sheet has not loaded yet (tests, early paint). All
  * metrics come from the VS Code source values documented in
  * RND/20-VSCODE-UI-PLAN.md section 1.1.
  */
-
-/* ---------------------------------------------------------------- switch */
-.vscode-switch {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  box-sizing: border-box;
-  width: 36px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--vscode-checkbox-border, var(--vscode-panel-border, transparent));
-  border-radius: 999px;
-  background: var(--vscode-checkbox-background, var(--vscode-input-background, #3a3d41));
-  cursor: pointer;
-  transition: background-color 0.1s linear, border-color 0.1s linear;
-}
-
-.vscode-switch[data-state='checked'] {
-  border-color: transparent;
-  background: var(--vscode-button-background, #0e639c);
-}
-
-.vscode-switch:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder, #007fd4);
-  outline-offset: 1px;
-}
-
-.vscode-switch:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.vscode-switch__thumb {
-  display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--vscode-checkbox-foreground, var(--vscode-foreground, #cccccc));
-  transform: translateX(2px);
-  transition: transform 0.1s ease-in-out, background-color 0.1s linear;
-}
-
-.vscode-switch[data-state='checked'] .vscode-switch__thumb {
-  background: var(--vscode-button-foreground, #ffffff);
-  transform: translateX(18px);
-}
 
 /* ------------------------------------------------------------------ card */
 .vscode-card {

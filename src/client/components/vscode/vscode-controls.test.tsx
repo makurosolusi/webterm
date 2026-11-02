@@ -14,7 +14,6 @@ import {
 } from './vscodeCard'
 import { VscodeQuickPick } from './vscodeQuickPick'
 import type { VscodeQuickPickItem } from './vscodeQuickPick'
-import { VscodeSwitch } from './vscodeSwitch'
 
 afterEach(cleanup)
 
@@ -35,64 +34,8 @@ function cssBlock(selector: string): string {
 }
 
 describe('vscode-controls.css metrics', () => {
-  it('keeps the switch at a 36x20 track with a 16px thumb', () => {
-    const track = cssBlock('.vscode-switch')
-    expect(track).toContain('width: 36px')
-    expect(track).toContain('height: 20px')
-    expect(cssBlock('.vscode-switch__thumb')).toContain('width: 16px')
-  })
-
   it('keeps the card on the 3px VS Code radius', () => {
     expect(cssBlock('.vscode-card')).toContain('border-radius: 3px')
-  })
-})
-
-describe('VscodeSwitch', () => {
-  it('renders a switch role with the checked state and slots', () => {
-    render(<VscodeSwitch checked label="Lock canvas" onCheckedChange={() => {}} />)
-
-    const control = screen.getByRole('switch', { name: 'Lock canvas' })
-    expect(control.getAttribute('data-slot')).toBe('vscode-switch')
-    expect(control.getAttribute('data-state')).toBe('checked')
-    expect(control.getAttribute('aria-checked')).toBe('true')
-    expect(control.querySelector('[data-slot="vscode-switch-thumb"]')).not.toBeNull()
-  })
-
-  it('reflects unchecked state', () => {
-    render(<VscodeSwitch checked={false} label="Lock canvas" onCheckedChange={() => {}} />)
-
-    const control = screen.getByRole('switch', { name: 'Lock canvas' })
-    expect(control.getAttribute('data-state')).toBe('unchecked')
-    expect(control.getAttribute('aria-checked')).toBe('false')
-  })
-
-  it('toggles on click and on Space / Enter without double-firing', () => {
-    const onCheckedChange = vi.fn()
-    render(<VscodeSwitch checked={false} label="Lock canvas" onCheckedChange={onCheckedChange} />)
-
-    const control = screen.getByRole('switch', { name: 'Lock canvas' })
-    fireEvent.click(control)
-    expect(onCheckedChange).toHaveBeenNthCalledWith(1, true)
-
-    fireEvent.keyDown(control, { key: ' ' })
-    expect(onCheckedChange).toHaveBeenNthCalledWith(2, true)
-
-    fireEvent.keyDown(control, { key: 'Enter' })
-    expect(onCheckedChange).toHaveBeenNthCalledWith(3, true)
-    expect(onCheckedChange).toHaveBeenCalledTimes(3)
-  })
-
-  it('does not toggle while disabled', () => {
-    const onCheckedChange = vi.fn()
-    render(
-      <VscodeSwitch checked={false} disabled label="Lock canvas" onCheckedChange={onCheckedChange} />,
-    )
-
-    const control = screen.getByRole('switch', { name: 'Lock canvas' })
-    expect((control as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(control)
-    fireEvent.keyDown(control, { key: ' ' })
-    expect(onCheckedChange).not.toHaveBeenCalled()
   })
 })
 

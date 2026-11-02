@@ -47,8 +47,8 @@ export interface VscodeTooltipProps {
 }
 
 /**
- * VS Code hover hint: 500ms hover delay, 100ms hide delay, 12px text, max-width
- * 500px, 4px 8px padding, 3px radius, editorHoverWidget colours. Focus shows it immediately.
+ * VS Code hover hint: 500ms hover delay, 100ms hide delay, 12px/19px text, max-width
+ * 500px, 2px 8px padding, 8px radius, editorHoverWidget colours. Focus shows it immediately.
  *
  * The tooltip is a portal and keeps itself open while hovered, so a user can move
  * the pointer from trigger to hint without it disappearing. `aria-describedby`

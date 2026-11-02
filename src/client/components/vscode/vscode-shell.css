@@ -31,27 +31,24 @@
 .vscode-menu__list {
   box-sizing: border-box; min-width: 160px; margin: 0; padding: 4px 0;
   border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border));
-  border-radius: 5px;
+  border-radius: var(--vscode-cornerRadius-large, 8px);
   background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+  box-shadow: var(--wt-shadow-floating);
   color: var(--vscode-menu-foreground, var(--vscode-foreground));
   font-family: var(--vscode-font-family, system-ui, sans-serif); font-size: 13px;
 }
 .vscode-menu-bar__row { position: relative; }
 .vscode-menu__item {
-  display: flex; align-items: center; box-sizing: border-box; width: calc(100% - 8px); height: 22px;
-  margin: 0 4px; padding: 0; border: 0; border-radius: 4px;
+  display: flex; align-items: center; box-sizing: border-box; width: calc(100% - 8px); height: 24px;
+  margin: 0 4px; padding: 0; border: 0; border-radius: var(--vscode-cornerRadius-medium, 6px);
   background: transparent; color: inherit; font: inherit; text-align: left;
   cursor: default; white-space: nowrap;
 }
 .vscode-menu__item:hover,
 .vscode-menu__item:focus {
   outline: none;
-  background: var(--vscode-menu-selectionBackground);
-  color: var(--vscode-menu-selectionForeground);
-}
-.vscode-menu__item:focus-visible {
-  outline: 1px solid var(--vscode-menu-selectionBorder, var(--vscode-focusBorder)); outline-offset: -1px;
+  background: var(--vscode-list-hoverBackground);
+  color: var(--vscode-list-hoverForeground, var(--vscode-menu-foreground));
 }
 .vscode-menu__item[data-disabled='true'] { opacity: 0.4; cursor: default; }
 .vscode-menu__item[data-disabled='true']:hover { background: transparent; color: inherit; }
@@ -97,11 +94,11 @@
   position: absolute; right: 6px; bottom: 6px;
   display: inline-flex; align-items: center; justify-content: center;
   box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 4px;
-  border-radius: 10px;
+  border-radius: 20px;
   background: var(--vscode-activityBarBadge-background);
   color: var(--vscode-activityBarBadge-foreground);
   font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: 9px; line-height: 16px;
+  font-size: 9px; font-weight: 600; line-height: 16px;
 }
 
 /* ------------------------------------------------------------ status bar */
@@ -279,9 +276,9 @@ button.vscode-breadcrumbs__segment:focus-visible {
   display: flex; flex-direction: column; box-sizing: border-box;
   min-width: 160px; padding: 4px 0;
   border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border));
-  border-radius: 5px;
+  border-radius: var(--vscode-cornerRadius-large, 8px);
   background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+  box-shadow: var(--wt-shadow-floating);
   color: var(--vscode-menu-foreground, var(--vscode-foreground)); font-size: 13px;
 }
 .vscode-breadcrumbs__menu-item {
@@ -292,8 +289,8 @@ button.vscode-breadcrumbs__segment:focus-visible {
 }
 .vscode-breadcrumbs__menu-item:hover,
 .vscode-breadcrumbs__menu-item:focus {
-  outline: none; background: var(--vscode-menu-selectionBackground);
-  color: var(--vscode-menu-selectionForeground);
+  outline: none; background: var(--vscode-list-hoverBackground);
+  color: var(--vscode-list-hoverForeground, var(--vscode-menu-foreground));
 }
 .vscode-breadcrumbs__menu-item:focus-visible {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px;

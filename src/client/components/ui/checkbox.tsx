@@ -10,8 +10,8 @@ function Checkbox({
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        // VS Code checkbox: 16px, 3px radius, checkbox-* tokens, codicon check, focusBorder outline.
-        "peer size-4 shrink-0 cursor-default rounded-[3px] border border-(--vscode-checkbox-border) bg-(--vscode-checkbox-background) text-(--vscode-checkbox-foreground) outline-none focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-(--vscode-focusBorder) disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive",
+        // VS Code checkbox: 18px, 3px radius, checkbox-* tokens, codicon check, focusBorder outline.
+        "peer size-[18px] shrink-0 cursor-default rounded-[3px] border border-(--vscode-checkbox-border) bg-(--vscode-checkbox-background) text-(--vscode-checkbox-foreground) outline-none focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-(--vscode-focusBorder) disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive",
         className
       )}
       {...props}

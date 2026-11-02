@@ -8,8 +8,9 @@ import { CODICON_STYLESHEET_ID, installCodicons } from './codicons'
 vi.mock('@vscode/codicons/dist/codicon.css?url', () => ({ default: '/codicon.css' }))
 
 // jsdom menulis ulang import.meta.url ke http: resolusi dari cwd (root vitest `src/client` atau root repo).
-const themePath = ['vscode/vscode-theme.css', 'src/client/vscode/vscode-theme.css'].map((f) => path.resolve(f)).find((f) => existsSync(f))!
-const theme = readFileSync(themePath, 'utf8')
+const themeDir = ['vscode', 'src/client/vscode'].map((f) => path.resolve(f)).find((f) => existsSync(path.join(f, 'vscode-theme.css')))!
+// Palet dipecah dark + light (urutan impor = urutan cascade); gabungkan agar asersi tetap membaca seluruh token.
+const theme = ['dark', 'light'].map((part) => readFileSync(path.join(themeDir, `vscode-theme.${part}.css`), 'utf8')).join('\n')
 const light = theme.slice(theme.indexOf("[data-theme='light']"))
 const dark = theme.slice(0, theme.indexOf("[data-theme='light']"))
 

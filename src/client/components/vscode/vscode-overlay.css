@@ -6,8 +6,8 @@
  */
 
 /* ---------------------------------------------------------------- dialog */
-/* Values follow monaco-dialog-box: 480px minimum, 8px padding with a 12px content
- * inset, `0 0 8px 2px` widget shadow, buttons right-aligned 4px apart. */
+/* Values measured on vscode.dev (overlays-forms.md section 2): 480px, 8px padding with a 12px
+ * content inset, 8px radius, modal shadow, 14px/600 title, buttons right-aligned 8px apart. */
 .vscode-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -27,13 +27,13 @@
   max-height: 90vh;
   padding: 8px;
   overflow: auto;
-  border: 1px solid var(--vscode-dialog-border, transparent);
-  border-radius: 5px;
+  border: 1px solid var(--vscode-dialog-border, var(--vscode-widget-border, transparent));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
   background: var(
     --vscode-editorWidget-background,
     var(--vscode-menu-background, var(--vscode-sideBar-background, #252526))
   );
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  box-shadow: var(--wt-shadow-modal, 0 0 20px rgba(0, 0, 0, 0.15));
   color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #cccccc));
   font-family: var(--vscode-font-family, system-ui, sans-serif);
   font-size: 13px;
@@ -59,8 +59,9 @@
   margin: 0;
   overflow: hidden;
   color: inherit;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -75,7 +76,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--vscode-cornerRadius-small, 4px);
   background: transparent;
   color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
   cursor: default;
@@ -98,7 +99,7 @@
   padding: 0 8px 0 12px;
   color: inherit;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 20px;
 }
 
 .vscode-dialog__description {
@@ -125,9 +126,9 @@
   max-width: calc(100vw - 16px);
   padding: 8px;
   border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #454545));
-  border-radius: 5px;
+  border-radius: var(--vscode-cornerRadius-large, 8px);
   background: var(--vscode-menu-background, var(--vscode-editorWidget-background, #252526));
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
   color: var(--vscode-menu-foreground, var(--vscode-foreground, #cccccc));
   font-family: var(--vscode-font-family, system-ui, sans-serif);
   font-size: 13px;
@@ -140,20 +141,33 @@
 }
 
 /* --------------------------------------------------------------- tooltip */
-/* Hover widget: 1px editorHoverWidget border, 3px radius, 12px text (hover.css). */
+/* Hover widget (compact): 1px editorHoverWidget border, 3px radius, 2px 8px padding, 12px/19px text. */
 .vscode-tooltip {
   position: fixed;
   z-index: 1400;
   box-sizing: border-box;
   max-width: 500px;
-  padding: 4px 8px;
+  padding: 2px 8px;
   border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, #454545));
-  border-radius: 3px;
+  border-radius: var(--vscode-cornerRadius-large, 8px);
   background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background, #252526));
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
   color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground, #cccccc));
   font-family: var(--vscode-font-family, system-ui, sans-serif);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 19px;
+  animation: vscode-tooltip-in 0.1s linear;
   pointer-events: auto;
+}
+
+@keyframes vscode-tooltip-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vscode-tooltip {
+    animation: none;
+  }
 }

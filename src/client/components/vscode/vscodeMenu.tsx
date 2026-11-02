@@ -358,8 +358,8 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
 }
 
 /**
- * VS Code menu: portal to body at `anchor`, 22px rows, 160px default minimum,
- * 16px icon column, right-aligned keybindings, separators, headers, disabled and
+ * VS Code menu: portal to body at `anchor`, 24px rows, 160px default minimum,
+ * 26px icon column, right-aligned keybindings, separators, headers, disabled and
  * danger rows, roving focus, type-ahead, and submenus that flip inside the viewport.
  *
  * Escape closes one level and returns focus to the row/trigger that opened it.
