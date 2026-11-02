@@ -64,7 +64,7 @@ describe("shadcn policy", () => {
 
   it("keeps the expected shadcn primitives present", async () => {
     const files = new Set((await readdir(uiRoot)).filter((file) => file.endsWith(".tsx")).map((file) => file.replace(/\.tsx$/, "")));
-    const expected = ["button", "card", "input", "label", "textarea", "badge", "separator", "dialog", "alert-dialog", "dropdown-menu", "tabs", "tooltip", "scroll-area", "sheet", "select", "switch", "checkbox", "progress", "skeleton"];
+    const expected = ["button", "card", "input", "label", "textarea", "badge", "separator", "dialog", "alert-dialog", "dropdown-menu", "tabs", "tooltip", "scroll-area", "sheet", "select", "switch", "checkbox", "progress", "skeleton", "command", "popover"];
     const missing = expected.filter((file) => !files.has(file));
 
     expect(missing, `Missing shadcn primitive files: ${missing.join(", ")}`).toEqual([]);

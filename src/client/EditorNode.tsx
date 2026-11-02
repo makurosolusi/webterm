@@ -2,7 +2,6 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 // Type-only: terhapus saat compile, jadi tidak membatalkan lazy-load Monaco.
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { loadMonaco } from './lazyMonaco'
@@ -318,16 +317,16 @@ function EditorNode({
               <Button
                 variant="ghost"
                 size="xs"
-                className={cn('nodrag editor-node__btn')}
+                className="nodrag"
                 title="Toggle markdown preview (⌘M)"
                 onClick={togglePreview}
               >
                 {preview ? 'Edit' : 'Preview'}
               </Button>
               <Button
-                variant="outline"
+                variant="default"
                 size="xs"
-                className={cn('nodrag editor-node__btn editor-node__btn--save')}
+                className="nodrag"
                 title="Save (⌘S)"
                 disabled={!dirty}
                 onClick={save}
@@ -339,7 +338,7 @@ function EditorNode({
           <Button
             variant="ghost"
             size="icon-xs"
-            className={cn('nodrag editor-node__close')}
+            className="nodrag"
             title="Close"
             aria-label="Close"
             onClick={() => {

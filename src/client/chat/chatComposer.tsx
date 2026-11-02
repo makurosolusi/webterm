@@ -49,12 +49,12 @@ export default function ChatComposer(props: ChatComposerProps) {
         style={{ maxHeight: `${MAX_ROWS * 20}px` }}
       />
       {props.busy ? (
-        <Button type="button" variant="outline" className="chat-send chat-send--stop" onClick={props.onStop}
+        <Button type="button" variant="destructive" size="sm" onClick={props.onStop}
           aria-label="Stop turn" title="Stop turn">
           <Square size={14} /> Stop
         </Button>
       ) : (
-        <Button type="button" className="chat-send" onClick={submit} disabled={!canSend}
+        <Button type="button" size="sm" onClick={submit} disabled={!canSend}
           aria-label="Send message" title="Send (Enter)">
           <Send size={14} /> Send
         </Button>

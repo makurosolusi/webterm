@@ -4,7 +4,7 @@
 // label, aria-label, and class name is the panel's contract with `InboxPanel.test.tsx`.
 import { AlertTriangle, RefreshCw, ShieldAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { InboxState } from './inboxApi'
 import { SECTION_LABEL, SECTION_ORDER } from './inboxPanelModel'
 
@@ -27,12 +27,12 @@ export function InboxPanelHeader(props: InboxPanelHeaderProps): React.JSX.Elemen
       <h2 className="inbox-title" id={`${uid}-title`}>Inbox</h2>
       <span className="inbox-total" aria-label={`${total} items`}>{total}</span>
       <span className="inbox-grow" />
-      <Button type="button" variant="ghost" size="icon-xs" className="inbox-icon-btn" aria-label="Refresh inbox" title="Refresh inbox"
+      <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh inbox" title="Refresh inbox"
         disabled={loading} onClick={onRefresh}>
         <RefreshCw size={14} aria-hidden="true" />
       </Button>
       {onClose && (
-        <Button type="button" variant="ghost" size="icon-xs" className="inbox-icon-btn" aria-label="Close inbox" onClick={onClose}>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label="Close inbox" onClick={onClose}>
           <X size={15} aria-hidden="true" />
         </Button>
       )}
@@ -50,13 +50,16 @@ export function InboxPanelFilters(props: InboxPanelFiltersProps): React.JSX.Elem
   const { filter, counts, onFilter } = props
   return (
     <div className="inbox-filters" role="group" aria-label="Filter inbox">
-      {(['all', ...SECTION_ORDER] as const).map((key) => (
-        <Button key={key} type="button" variant="ghost" className={cn('inbox-chip', filter === key && 'is-active')}
-          aria-pressed={filter === key} onClick={() => onFilter(key)}>
-          {key === 'all' ? 'All' : SECTION_LABEL[key]}
-          <span className="inbox-count">{counts[key]}</span>
-        </Button>
-      ))}
+      <Tabs value={filter} onValueChange={(value) => onFilter(value as InboxFilter)}>
+        <TabsList>
+          {(['all', ...SECTION_ORDER] as const).map((key) => (
+            <TabsTrigger key={key} value={key} onClick={() => onFilter(key)}>
+              {key === 'all' ? 'All' : SECTION_LABEL[key]}
+              <span className="inbox-count">{counts[key]}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
     </div>
   )
 }
@@ -72,10 +75,10 @@ export function InboxPanelBulk(props: InboxPanelBulkProps): React.JSX.Element {
   return (
     <div className="inbox-bulk" role="toolbar" aria-label="Group actions">
       <span aria-live="polite">{selectedCount} selected</span>
-      <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={onReviewSelected}>
+      <Button type="button" variant="ghost" onClick={onReviewSelected}>
         Review selected
       </Button>
-      <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={onClear}>
+      <Button type="button" variant="ghost" onClick={onClear}>
         Clear
       </Button>
     </div>
@@ -93,7 +96,7 @@ export function InboxPanelError(props: InboxPanelErrorProps): React.JSX.Element 
     <div className="inbox-error" role="alert">
       <AlertTriangle size={14} aria-hidden="true" />
       <span>{message}</span>
-      <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={onRetry}>
+      <Button type="button" variant="ghost" onClick={onRetry}>
         Retry
       </Button>
     </div>

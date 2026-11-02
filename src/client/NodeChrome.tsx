@@ -116,7 +116,7 @@ export default function NodeChrome(props: NodeChromeProps) {
     <div className="node-header" style={{ position: 'relative' }}>
       <Button
         variant="ghost" size="icon-xs"
-        className={cn('nodrag icon-btn node-chevron', props.collapsed && 'node-chevron--collapsed')}
+        className={cn('nodrag node-chevron', props.collapsed && 'node-chevron--collapsed')}
         title={props.collapsed ? 'Expand' : 'Collapse'}
         onClick={props.onToggleCollapse}
       ><IconChevron /></Button>

@@ -2,12 +2,21 @@
    memakai token yang sudah dideklarasikan di sana (--panel, --border, --text, --accent, …) —
    tidak ada satu pun warna literal di file ini selain yang transparan. */
 
-.st-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
+.st-dialog-content {
   display: flex;
+  flex-direction: row;
+  height: 100vh;
+  inset: 0;
+  left: 0;
+  max-width: none;
+  padding: 0;
+  top: 0;
+  transform: none;
+  translate: none;
+  width: 100vw;
   background: var(--bg);
+  border: 0;
+  border-radius: 0;
   color: var(--text);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -81,69 +90,12 @@
 }
 .st-unit { color: var(--muted); font-size: 12px; }
 
-.st-input {
-  background: var(--sunken);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font: inherit;
-  padding: 5px 8px;
-  width: 240px;
-}
-.st-input:focus-visible { border-color: var(--accent); outline: none; }
 .st-input-num { width: 84px; }
 .st-input-hex { width: 92px; }
 .st-select { width: 240px; }
 .st-mono { font-family: var(--font-mono); font-size: 12px; }
 
-.st-color {
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  height: 28px;
-  padding: 2px;
-  width: 42px;
-}
-
-.st-toggle {
-  appearance: none;
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  cursor: pointer;
-  height: 22px;
-  padding: 0;
-  position: relative;
-  transition: background 120ms ease;
-  width: 40px;
-}
-.st-toggle.is-on { background: var(--accent); border-color: transparent; }
-.st-toggle-knob {
-  background: #fff;
-  border-radius: 50%;
-  height: 16px;
-  left: 2px;
-  position: absolute;
-  top: 2px;
-  transition: left 120ms ease;
-  width: 16px;
-}
-.st-toggle.is-on .st-toggle-knob { left: 20px; }
-
 /* --- Daftar: launch command, chip agent, kartu agent custom -------------------------------- */
-
-.st-btn {
-  appearance: none;
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  padding: 5px 11px;
-}
-.st-btn:hover { background: var(--overlay); }
-.st-btn-danger:hover { border-color: var(--state-attention); color: var(--state-attention); }
 
 /* Grup lebar-penuh di bawah label field-nya: baris launch command dan kartu agent terlalu lebar
    untuk kolom kontrol di kanan. */

@@ -130,7 +130,7 @@ export function AgentSettings({
                 {AGENT_CONFIG[id].label}
               </span>
               <Input
-                className="st-input st-mono"
+                className="st-mono"
                 type="text"
                 aria-label={`${AGENT_CONFIG[id].label} launch command`}
                 placeholder={AGENT_CONFIG[id].launchCmd}
@@ -153,7 +153,7 @@ export function AgentSettings({
         label="Agent custom"
         hint="Bawa CLI agent sendiri, atau bungkus harness builtin (mis. Claude) untuk mengarahkan inferensi ke proxy-mu. Variabel env TIDAK tersedia di sini — settings webterm melintas HTTP, dan env adalah satu-satunya tempat kredensial akan mendarat."
       >
-        <Button type="button" className="st-btn" variant="outline" onClick={addAgent}>Tambah agent</Button>
+        <Button type="button" variant="outline" size="sm" onClick={addAgent}>Tambah agent</Button>
       </Field>
       <div className="st-cards">
         {s.customAgents.map((a) => (
@@ -219,7 +219,7 @@ function CustomAgentCard({
       />
       <div className="st-card-foot">
         <code className="st-mono st-muted">{agent.id}</code>
-        <Button type="button" className="st-btn st-btn-danger" variant="outline" onClick={() => onRemove(agent.id)}>
+        <Button type="button" variant="destructive" size="sm" onClick={() => onRemove(agent.id)}>
           Hapus
         </Button>
       </div>

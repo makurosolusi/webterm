@@ -79,8 +79,8 @@ describe('menu dock sesudah pindah ke kolom kiri', () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.click(screen.getByLabelText('Add node'))
 
-    const item = await screen.findByText('Terminal')
-    expect(item.closest('.dock-add-menu')).not.toBeNull()
+    const item = await screen.findByRole('button', { name: 'Terminal' })
+    expect(item.closest('[data-slot="dialog-content"]')).not.toBeNull()
 
     fireEvent.click(item)
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-terminal')).toHaveLength(1))
@@ -89,29 +89,37 @@ describe('menu dock sesudah pindah ke kolom kiri', () => {
   it('menu Add menjangkau form workspace', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.click(screen.getByLabelText('Add node'))
-    fireEvent.click(await screen.findByText('Workspace…'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Workspace…' }))
 
     const form = await waitFor(() => {
-      const el = document.querySelector('.dock-menu__form')
+      const el = document.querySelector('[data-slot="dialog-content"]')
       if (!el) throw new Error('form workspace belum muncul')
       return el
     })
     expect(form.querySelector('input[placeholder="name"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="dropdown-menu-content"]')).toBeNull()
   })
 
+  it('menu Add closes on Escape after opening', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.click(screen.getByLabelText('Add node'))
+    await screen.findByRole('button', { name: 'Terminal' })
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull())
+  })
   it('readout zoom membuka daftar preset, dan memilih satu menutupnya', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.click(screen.getByText('100%'))
 
-    const menu = await waitFor(() => {
-      const el = document.querySelector('.dock-zoom-menu')
-      if (!el) throw new Error('menu preset belum muncul')
+    const dialog = await waitFor(() => {
+      const el = document.querySelector('[data-slot="dialog-content"].dock-zoom-dialog')
+      if (!el) throw new Error('dialog preset belum muncul')
       return el
     })
-    // Semua preset terjangkau, bukan cuma panelnya muncul.
-    for (const p of ZOOM_PRESETS) expect(menu.textContent).toContain(`${p}%`)
+    for (const p of ZOOM_PRESETS) expect(dialog.textContent).toContain(`${p}%`)
 
-    fireEvent.click(await screen.findByText('150%'))
-    await waitFor(() => expect(document.querySelector('.dock-zoom-menu')).toBeNull())
+    fireEvent.click(await screen.findByRole('button', { name: '150%' }))
+    await waitFor(() => expect(document.querySelector('[data-slot="dialog-content"].dock-zoom-dialog')).toBeNull())
   })
 })

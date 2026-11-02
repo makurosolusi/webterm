@@ -59,7 +59,7 @@ function renderPanel(client: InboxClient) {
 
 async function openResume(): Promise<HTMLElement> {
   fireEvent.click(await screen.findByRole('button', { name: 'Finish approval for Review task' }))
-  return screen.findByRole('dialog', { name: 'Approved action' })
+  return screen.findByRole('alertdialog', { name: 'Approved action' })
 }
 
 afterEach(() => {
@@ -84,7 +84,7 @@ describe('approved-but-unconsumed resume', () => {
     expect(client.consumeApproval).not.toHaveBeenCalled()
 
     fireEvent.click(finish)
-    const dialog = await screen.findByRole('dialog', { name: 'Approved action' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Approved action' })
     // Opening the dialog is not consent: nothing is consumed or decided on render.
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Consume approval' })).toBeDefined())
     expect(client.consumeApproval).not.toHaveBeenCalled()
@@ -183,7 +183,7 @@ describe('approved-but-unconsumed resume', () => {
     expect(isDisabled(review)).toBe(true)
     expect(review.getAttribute('title')).toBe('Checking existing approvals…')
     fireEvent.click(review)
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(client.requestApproval).not.toHaveBeenCalled()
 
     await act(async () => release([]))
@@ -226,7 +226,7 @@ describe('approved-but-unconsumed resume', () => {
     expect(isDisabled(gated)).toBe(true)
     expect(gated.getAttribute('title')).toBe('Checking existing approvals…')
     fireEvent.click(gated)
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(reopened.requestApproval).not.toHaveBeenCalled()
 
     await act(async () => release([]))

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
 import { listDir } from './api'
 
 interface Props {
@@ -24,12 +23,11 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent showCloseButton={false} className={cn('panel')} style={{ width: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <DialogContent showCloseButton={false} style={{ width: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <DialogHeader className="sr-only"><DialogTitle>Choose a folder</DialogTitle></DialogHeader>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: 10, borderBottom: '1px solid var(--border)' }}>
           <Button
             variant="ghost"
-            className="btn btn--ghost"
             onClick={() => parent && load(parent)}
             disabled={parent === null}
             style={{ cursor: parent === null ? 'default' : 'pointer', opacity: parent === null ? 0.4 : 1 }}
@@ -55,8 +53,8 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
           </div>
         </ScrollArea>
         <DialogFooter style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: 10, borderTop: '1px solid var(--border)' }}>
-          <Button variant="ghost" className="btn btn--ghost" onClick={onClose}>Cancel</Button>
-          <Button className="btn btn--accent" onClick={() => onPick(path)}>Select this folder</Button>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => onPick(path)}>Select this folder</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

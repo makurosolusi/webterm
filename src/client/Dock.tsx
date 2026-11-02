@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
   Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus, Inbox,
@@ -12,6 +12,7 @@ import { formatInboxBadge } from './inboxDockState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 export interface DockProps {
   onAddTerminal: () => void
@@ -70,7 +71,9 @@ export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
 const ICON = 16
 
 export default function Dock(props: DockProps) {
-  const [menu, setMenu] = useState<'add' | 'workspace' | 'zoom' | null>(null)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [zoomOpen, setZoomOpen] = useState(false)
   const [wsName, setWsName] = useState('')
   const [wsCwd, setWsCwd] = useState('')
 
@@ -82,13 +85,37 @@ export default function Dock(props: DockProps) {
 
   const badge = formatInboxBadge(props.inboxUnread ?? 0)
 
-  const close = () => setMenu(null)
+  useEffect(() => {
+    if (!addOpen && !workspaceOpen && !zoomOpen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setAddOpen(false)
+      setWorkspaceOpen(false)
+      setZoomOpen(false)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [addOpen, workspaceOpen, zoomOpen])
+
+  const close = () => setWorkspaceOpen(false)
 
   const addBuiltin = (id: BuiltinAgentId) => {
     // cwd dibiarkan undefined: server memakai cwd workspace, sama seperti nodeterm yang
     // menambah agent dengan satu klik tanpa form.
     props.onAddAgent(assembleCmd(id, launchCmds[id]), id)
-    close()
+    setAddOpen(false)
+  }
+
+  const addTerminal = () => {
+    props.onAddTerminal()
+    setAddOpen(false)
+  }
+
+  const addCustom = (agent: CustomAgent) => {
+    props.onAddAgent(agent.launchCmd, agent.id)
+    setAddOpen(false)
   }
 
   const createWs = () => {
@@ -97,9 +124,13 @@ export default function Dock(props: DockProps) {
     setWsName(''); setWsCwd(''); close()
   }
 
+  const openWorkspaceForm = () => {
+    setAddOpen(false)
+    setWorkspaceOpen(true)
+  }
+
   return (
     <>
-      {menu && <div className="dock-backdrop" onClick={close} />}
       <div className="dock">
         {/* Di ujung ATAS kolom, dipisah dari sisanya: kelompok tombol yang membuka permukaan
             lain alih-alih bekerja pada canvas. */}
@@ -139,56 +170,43 @@ export default function Dock(props: DockProps) {
         <Separator className="dock-sep" />
 
         <div className="dock-slot">
-          {menu === 'add' && (
-            <div className="dock-menu dock-add-menu">
-              <div className="dock-menu__list">
-                <Button onClick={() => { props.onAddTerminal(); close() }}>
-                  <SquareTerminal size={ICON} /> Terminal
-                </Button>
-                <div className="dock-menu__rule" />
+          <Button className="dock-btn dock-add" aria-label="Add node" title="Add node" onClick={() => setAddOpen(true)}><Plus size={ICON} /></Button>
+        </div>
+        {addOpen && (
+          <Dialog open onOpenChange={setAddOpen}>
+            <DialogContent className="dock-add-dialog">
+              <DialogHeader><DialogTitle>Add node</DialogTitle></DialogHeader>
+              <div className="dock-add-list">
+                <Button variant="ghost" className="dock-action-row" onClick={addTerminal}><SquareTerminal size={ICON} /> Terminal</Button>
                 {builtins.map((a) => {
                   const cfg = agentConfig(a)
-                  return (
-                    <Button key={a} title={cfg?.notice} onClick={() => addBuiltin(a)}>
-                      <span className="dock-menu__glyph" style={{ background: cfg?.color ?? FALLBACK_AGENT_COLOR }} />
-                      {cfg?.label ?? a}
-                    </Button>
-                  )
+                  return <Button key={a} variant="ghost" className="dock-action-row" title={cfg?.notice} onClick={() => addBuiltin(a)}><span className="dock-menu__glyph" style={{ background: cfg?.color ?? FALLBACK_AGENT_COLOR }} />{cfg?.label ?? a}</Button>
                 })}
-                {visibleCustoms.length > 0 && <div className="dock-menu__rule" />}
-                {visibleCustoms.map((c) => (
-                  <Button key={c.id} onClick={() => { props.onAddAgent(c.launchCmd, c.id); close() }}>
-                    <span className="dock-menu__glyph" style={{ background: c.color ?? FALLBACK_AGENT_COLOR }} />
-                    {c.label}
-                  </Button>
-                ))}
-                <div className="dock-menu__rule" />
-                <Button onClick={() => setMenu('workspace')}>
-                  <FolderPlus size={ICON} /> Workspace…
-                </Button>
+                {visibleCustoms.map((c) => <Button key={c.id} variant="ghost" className="dock-action-row" onClick={() => addCustom(c)}><span className="dock-menu__glyph" style={{ background: c.color ?? FALLBACK_AGENT_COLOR }} />{c.label}</Button>)}
+                <Button variant="ghost" className="dock-action-row" onClick={openWorkspaceForm}><FolderPlus size={ICON} /> Workspace…</Button>
               </div>
-            </div>
-          )}
+            </DialogContent>
+          </Dialog>
+        )}
 
-          {menu === 'workspace' && (
-            <div className="dock-menu dock-menu__form">
-              <Input className="field" placeholder="name" autoFocus value={wsName}
+        {workspaceOpen && (
+          <Dialog open onOpenChange={setWorkspaceOpen}>
+          <DialogContent className="dock-workspace-dialog">
+            <DialogHeader><DialogTitle>Create workspace</DialogTitle></DialogHeader>
+            <div className="dock-menu__form">
+              <Input placeholder="name" autoFocus value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') createWs() }} />
               <div className="dock-menu__form-row">
-                <Input className="field" style={{ flex: 1 }} placeholder="cwd (optional)" value={wsCwd}
+                <Input style={{ flex: 1 }} placeholder="cwd (optional)" value={wsCwd}
                   onChange={(e) => setWsCwd(e.target.value)} />
-                <Button className="btn btn--ghost" onClick={() => props.onBrowse(setWsCwd)}>Browse</Button>
+                <Button variant="ghost" onClick={() => props.onBrowse(setWsCwd)}>Browse</Button>
               </div>
-              <Button className="btn btn--accent" onClick={createWs}>Create</Button>
+              <Button onClick={createWs}>Create</Button>
             </div>
-          )}
-
-          <Button
-            className={`dock-btn dock-add${menu === 'add' ? ' active' : ''}`}
-            aria-label="Add node" title="Add node" onClick={() => setMenu((m) => (m ? null : 'add'))}
-          ><Plus size={ICON} /></Button>
-        </div>
+          </DialogContent>
+          </Dialog>
+        )}
 
         <Separator className="dock-sep" />
 
@@ -221,24 +239,20 @@ export default function Dock(props: DockProps) {
 
         <Button className="dock-btn" aria-label="Zoom out" title="Zoom out" onClick={props.onZoomOut}><Minus size={ICON} /></Button>
         <div className="dock-slot">
-          {menu === 'zoom' && props.onZoomTo && (
-            <div className="dock-menu dock-zoom-menu">
-              {ZOOM_PRESETS.map((p) => (
-                <Button
-                  key={p} className={p === props.zoomPct ? 'is-current' : undefined}
-                  onClick={() => { props.onZoomTo?.(p); close() }}
-                >
-                  <span className="dock-menu__check">{p === props.zoomPct && <Check size={13} />}</span>
-                  {p}%
-                </Button>
-              ))}
-            </div>
-          )}
           {props.onZoomTo ? (
-            <Button
-              className={`dock-zoom${menu === 'zoom' ? ' active' : ''}`}
-              title="Zoom presets" onClick={() => setMenu((m) => (m === 'zoom' ? null : 'zoom'))}
-            >{props.zoomPct}%</Button>
+            <>
+              <Button className="dock-zoom" title="Zoom presets" onClick={() => setZoomOpen(true)}>{props.zoomPct}%</Button>
+              {zoomOpen && (
+                <Dialog open onOpenChange={setZoomOpen}>
+                <DialogContent className="dock-zoom-dialog">
+                  <DialogHeader><DialogTitle>Zoom</DialogTitle></DialogHeader>
+                  <div className="dock-zoom-list">
+                    {ZOOM_PRESETS.map((p) => <Button key={p} variant={p === props.zoomPct ? 'secondary' : 'ghost'} className="dock-action-row" onClick={() => { props.onZoomTo?.(p); setZoomOpen(false) }}><span className="dock-menu__check">{p === props.zoomPct && <Check size={13} />}</span>{p}%</Button>)}
+                  </div>
+                </DialogContent>
+                </Dialog>
+              )}
+            </>
           ) : (
             <span className="dock-zoom">{props.zoomPct}%</span>
           )}

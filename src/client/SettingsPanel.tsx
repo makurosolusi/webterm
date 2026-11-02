@@ -1,12 +1,18 @@
 // Halaman settings bersection (sidebar + satu pane aktif), bukan popover — bentuk yang sama
-// dengan nodeterm `src/renderer/components/settings/SettingsPage.tsx`: overlay fixed penuh, nav
-// di kiri, Escape menutup. Pengelompokan sectionnya mengikuti komentar grup di
+// dengan nodeterm `src/renderer/components/settings/SettingsPage.tsx`: dialog full-screen, nav
+// di kiri. Pengelompokan sectionnya mengikuti komentar grup di
 // `shared/settings.ts` supaya skema dan UI tidak bisa berbeda pendapat.
 //
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import type { Settings } from '../shared/settings'
 import {
   TERMINAL_SCROLLBACK_LINES_MAX,
@@ -39,20 +45,14 @@ export function SettingsPanel({
 }): React.JSX.Element {
   const [active, setActive] = useState<SectionId>('terminal')
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <div className="st-overlay" role="dialog" aria-modal="true" aria-label="Settings">
-      <nav className="st-sidebar">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="st-dialog-content" showCloseButton={false}>
+        <nav className="st-sidebar">
         <div className="st-sidebar-head">
-          <span className="st-title">Settings</span>
-          <Button type="button" className="st-btn" variant="ghost" size="icon-sm" aria-label="Tutup settings" onClick={onClose}>✕</Button>
+          <DialogTitle className="st-title">Settings</DialogTitle>
+          <DialogDescription className="sr-only">Configure webterm behavior and appearance.</DialogDescription>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Tutup settings" onClick={onClose}>✕</Button>
         </div>
         {SECTIONS.map((sec) => (
           <Button
@@ -66,8 +66,8 @@ export function SettingsPanel({
             {sec.label}
           </Button>
         ))}
-      </nav>
-      <main className="st-main">
+        </nav>
+        <main className="st-main">
         <h2 className="st-section-title">{SECTIONS.find((x) => x.id === active)?.label}</h2>
         {active === 'terminal' ? <TerminalSection settings={s} onChange={onChange} /> : null}
         {active === 'interaction' ? <InteractionSection settings={s} onChange={onChange} /> : null}
@@ -75,8 +75,9 @@ export function SettingsPanel({
         {active === 'agent' ? <AgentSettings settings={s} onChange={onChange} /> : null}
         {active === 'canvas' ? <CanvasSection settings={s} onChange={onChange} /> : null}
         {active === 'preview' ? <PreviewSection settings={s} onChange={onChange} /> : null}
-      </main>
-    </div>
+        </main>
+      </DialogContent>
+    </Dialog>
   )
 }
 

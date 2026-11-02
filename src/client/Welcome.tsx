@@ -132,13 +132,13 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
         </Label>
         <Input
           id="welcome-workspace-name"
-          className="field h-auto focus-visible:ring-0"
+          className="h-auto focus-visible:ring-0"
           placeholder="workspace name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && createEmpty()}
         />
-        <Button type="button" variant="ghost" className="btn btn--ghost h-auto" onClick={createEmpty}>Create empty</Button>
+        <Button type="button" variant="ghost" className="h-auto" onClick={createEmpty}>Create empty</Button>
       </div>
 
       {closed.length > 0 && (

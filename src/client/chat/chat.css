@@ -4,24 +4,18 @@
 
 .chat-panel {
   position: absolute;
-  top: calc(var(--tabbar-h, 46px) + var(--float-gap, 22px));
+  top: calc(var(--tabbar-h, 46px) + var(--float-gap, 22px) + 44px);
   right: var(--float-gap, 22px);
   z-index: 14;
   width: 480px;
   max-width: calc(100vw - 2 * var(--float-gap, 22px));
-  height: min(640px, calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px) - 26px));
+  height: min(640px, calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px) - 26px - 44px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   color: var(--text, rgba(255, 255, 255, 0.85));
   font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif);
   font-size: 12.5px;
-  background: rgba(var(--card-rgb, 28, 28, 30), 0.96);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, calc(0.45 * var(--shadow-k, 1)));
 }
 
 /* Inbox owns the top-right corner; chat steps left instead of stacking on top of it. */
@@ -43,24 +37,6 @@
   letter-spacing: 0.01em;
 }
 .chat-grow { flex: 1; }
-.chat-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
-  color: var(--muted, rgba(255, 255, 255, 0.55));
-  cursor: pointer;
-}
-.chat-icon-btn:hover:not(:disabled) {
-  background: rgba(var(--tint-rgb, 255, 255, 255), 0.1);
-  color: var(--text, rgba(255, 255, 255, 0.85));
-}
-
 .chat-body {
   flex: 1;
   min-height: 0;
@@ -350,28 +326,6 @@
   outline: 2px solid var(--accent, #0a84ff);
   outline-offset: 1px;
 }
-.chat-send {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 0 11px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm, 6px);
-  background: var(--accent, #0a84ff);
-  color: #fff;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.chat-send:disabled { opacity: 0.45; cursor: not-allowed; }
-.chat-send--stop {
-  border-color: rgba(var(--state-attention, #ff453a), 0.45);
-  background: rgba(var(--state-attention, #ff453a), 0.14);
-  color: var(--state-attention, #ff453a);
-}
 .chat-panel :focus-visible { outline: 2px solid var(--accent, #0a84ff); outline-offset: 2px; }
 
 @media (max-width: 1100px) {
@@ -381,12 +335,12 @@
 @media (max-width: 640px) {
   .chat-panel,
   .chat-panel--shifted {
-    top: var(--tabbar-h, 46px);
+    top: calc(var(--tabbar-h, 46px) + 44px);
     right: 0;
     left: 0;
     width: auto;
     max-width: none;
-    height: calc(100vh - var(--tabbar-h, 46px));
+    height: calc(100vh - var(--tabbar-h, 46px) - 44px);
     border-radius: 0;
     border-left: none;
     border-right: none;

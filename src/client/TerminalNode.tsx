@@ -204,8 +204,8 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           // agent): tombol split tidak perlu satu pun prop baru di NodeChrome/NodeToolbar.
           extraHeader={
             <div className="nodrag pane-split-btns">
-              <Button variant="ghost" size="icon-xs" className="icon-btn" title="Split right" onClick={() => split('h', activePane)}><SplitIcon /></Button>
-              <Button variant="ghost" size="icon-xs" className="icon-btn" title="Split down" onClick={() => split('v', activePane)}><SplitIcon down /></Button>
+              <Button variant="ghost" size="icon-xs" title="Split right" onClick={() => split('h', activePane)}><SplitIcon /></Button>
+              <Button variant="ghost" size="icon-xs" title="Split down" onClick={() => split('v', activePane)}><SplitIcon down /></Button>
             </div>
           }
         />

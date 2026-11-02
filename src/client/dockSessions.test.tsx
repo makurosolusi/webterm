@@ -177,17 +177,23 @@ describe('dock diam, panel yang minggir', () => {
     expect(dockCss).not.toContain('transition: left')
   })
 
-  it('menu dock tetap terbuka ke kanan, di ATAS panel yang kini ada di sana', () => {
+  it('Add dialog opens above the panel', async () => {
+    localStorage.setItem(PIN_KEY, '0')
+    await mountCanvas({ nodes: [], dirs: {} })
+
+    fireEvent.click(screen.getByLabelText('Add node'))
+    const dialog = await waitFor(() => {
+      const el = document.querySelector('[data-slot="dialog-content"].dock-add-dialog')
+      if (!el) throw new Error('dialog belum muncul')
+      return el
+    })
+    expect(dialog.textContent).toContain('Terminal')
+
     const dockCss = read('dock.css')
     const panelCss = read('sessions-panel.css')
-
-    // Popover transien boleh menimpa panel — asal benar-benar di atasnya, bukan di belakang.
-    expect(decls(dockCss, '.dock-menu {', 'left')).toEqual(['left: calc(100% + 10px)'])
     const dockZ = Number(decls(dockCss, '.dock {', 'z-index')[0]?.split(':')[1])
     const panelZ = Number(decls(panelCss, '.sessions-sidebar {', 'z-index')[0]?.split(':')[1])
     expect(dockZ).toBe(20)
     expect(dockZ).toBeGreaterThan(panelZ)
-    // Bukan diperbaiki lewat z-index dock yang diturunkan: dock di belakang panel = tombol mati.
-    expect(decls(dockCss, '.dock-menu {', 'z-index')).toEqual([])
   })
 })

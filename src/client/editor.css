@@ -19,49 +19,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.editor-node__btn {
-  flex-shrink: 0;
-  padding: 3px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  font-family: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-.editor-node__btn:hover:not(:disabled) {
-  background: rgba(var(--tint-rgb), 0.08);
-  color: var(--text);
-}
-.editor-node__btn--save:not(:disabled) {
-  background: var(--accent);
-  border-color: transparent;
-  color: #fff;
-}
-.editor-node__btn:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.editor-node__close {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.editor-node__close:hover {
-  background: rgba(var(--tint-rgb), 0.08);
-  color: var(--text);
-}
-
 .editor-node__monaco {
   position: absolute;
   inset: 0;

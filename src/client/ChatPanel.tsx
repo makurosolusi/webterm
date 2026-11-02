@@ -8,6 +8,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { MessageSquare, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
@@ -112,8 +113,8 @@ export default function ChatPanel(props: ChatPanelProps) {
   const titleId = `${uid}-chat-title`
 
   return (
-    <aside
-      className={`chat-panel${props.offsetForInbox ? ' chat-panel--shifted' : ''}`}
+    <Card
+      className={`chat-panel gap-0 p-0${props.offsetForInbox ? ' chat-panel--shifted' : ''}`}
       aria-label="Chat"
       aria-labelledby={titleId}
     >
@@ -121,11 +122,11 @@ export default function ChatPanel(props: ChatPanelProps) {
         <MessageSquare size={15} aria-hidden="true" />
         <h2 className="chat-title" id={titleId}>Central agent</h2>
         <span className="chat-grow" />
-        <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Refresh conversations"
+        <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh conversations"
           title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
           <RefreshCw size={13} />
         </Button>
-        <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Close chat panel"
+        <Button type="button" variant="ghost" size="icon-xs" aria-label="Close chat panel"
           title="Close chat" onClick={props.onClose}>
           <X size={14} />
         </Button>
@@ -134,7 +135,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       {listError !== null && (
         <div className="chat-error" role="alert">
           <span>{listError}</span>
-          <Button type="button" variant="ghost" size="icon-xs" className="chat-icon-btn" aria-label="Dismiss error"
+          <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss error"
             onClick={() => setListError(null)}>
             <X size={13} />
           </Button>
@@ -186,6 +187,6 @@ export default function ChatPanel(props: ChatPanelProps) {
           )}
         </div>
       </div>
-    </aside>
+    </Card>
   )
 }

@@ -8,8 +8,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, Terminal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import SessionRow from './SessionRow'
 import {
@@ -174,7 +176,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const closedCollapsed = collapsed[CLOSED_KEY] ?? false
 
   return (
-    <aside className="sessions-sidebar nodrag" aria-label="Sessions">
+    <Card className="sessions-sidebar nodrag p-0 gap-0" role="complementary" aria-label="Sessions">
       <div className="sessions-sidebar__head">
         {/* Judul DAN hitungan ikut tab aktif: tab Nodes mendaftar editor dan files juga, jadi
             "Sessions" di atasnya menamai — dan `total` menghitung — himpunan lain dari yang
@@ -186,7 +188,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="ss-iconbtn"
             aria-label="Hide sessions panel"
             title="Hide"
             onClick={onClose}
@@ -196,22 +197,19 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         </div>
       </div>
 
-      <div className="ss-tabs" role="tablist" aria-label="Group sessions by">
-        {(['project', 'status', 'nodes'] as const).map((g) => (
-          <Button
-            key={g}
-            type="button"
-            variant="ghost"
-            size="sm"
-            role="tab"
-            className="ss-tab"
-            aria-selected={grouping === g}
-            onClick={() => setGrouping(g)}
-          >
-            {TAB_LABEL[g]}
-          </Button>
-        ))}
-      </div>
+      <Tabs
+        value={grouping}
+        onValueChange={(value) => setGrouping(value as SidebarGrouping)}
+        className="ss-tabs"
+      >
+        <TabsList aria-label="Group sessions by">
+          {(['project', 'status', 'nodes'] as const).map((g) => (
+            <TabsTrigger key={g} value={g}>
+              {TAB_LABEL[g]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="sessions-sidebar__search">
         <Input
@@ -233,7 +231,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="ss-iconbtn ss-search__clear"
+            className="ss-search__clear"
             aria-label="Clear filter"
             title="Clear filter (Esc)"
             onClick={() => setFilter('')}
@@ -465,6 +463,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
           </section>
         )}
       </ScrollArea>
-    </aside>
+    </Card>
   )
 }

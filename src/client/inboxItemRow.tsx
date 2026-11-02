@@ -44,13 +44,13 @@ export function InboxItemRow(props: InboxItemRowProps): React.JSX.Element {
         {item.detail && <p className="inbox-item__detail">{item.detail}</p>}
         <div className="inbox-item__actions">
           {resume ? (
-            <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost"
+            <Button type="button" variant="ghost"
               aria-label={`Finish approval for ${item.title}`}
               onClick={onOpen}>
               Finish approval
             </Button>
           ) : (
-            <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost"
+            <Button type="button" variant="ghost"
               aria-label={`Review ${item.title}`}
               title={checking ? 'Checking existing approvals…' : blocked ?? undefined}
               disabled={checking || blocked !== null}

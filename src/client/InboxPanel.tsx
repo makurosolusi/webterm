@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
 import { CONFIRM_PHRASE, type ReviewState } from './inboxApprovalDialog'
+import { Card } from '@/components/ui/card'
 import { InboxPanelChrome, type InboxFilter } from './inboxPanelChrome'
 import { InboxPanelDialog } from './inboxPanelDialog'
 import { InboxPanelSections } from './inboxPanelSections'
@@ -343,7 +344,7 @@ export default function InboxPanel(props: InboxPanelProps) {
   if (!open) return null
 
   return (
-    <aside className="inbox-panel" aria-label="Inbox" aria-labelledby={`${uid}-title`}>
+    <Card className="inbox-panel p-0 gap-0" role="complementary" aria-label="Inbox" aria-labelledby={`${uid}-title`}>
       <InboxPanelChrome uid={uid} total={counts.all} loading={loading} filter={filter} counts={counts}
         listError={listError} selectedCount={selectedItems.length} onClose={props.onClose}
         onRefresh={() => setRefreshKey((key) => key + 1)} onFilter={setFilter}
@@ -363,6 +364,6 @@ export default function InboxPanel(props: InboxPanelProps) {
           onChecked={(checked) => setDialog((state) => (state ? { ...state, checked } : state))}
           onText={(text) => setDialog((state) => (state ? { ...state, text } : state))} />
       )}
-    </aside>
+    </Card>
   )
 }

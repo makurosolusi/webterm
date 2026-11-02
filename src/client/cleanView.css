@@ -5,10 +5,6 @@
    Yang TETAP: canvas, node, dan header tiap node — tanpa header node tidak bisa ditutup atau
    digeser dengan enak, dan yang diminta fokus, bukan kios.
 
-   `.dock-backdrop` ikut: ia `position: fixed; inset: 0` tak terlihat yang menangkap klik untuk
-   menutup menu dock, jadi menyalakan clean view selagi sebuah menu terbuka akan meninggalkan
-   lapisan pemakan klik di atas seluruh canvas.
-
    `display: none`, bukan `visibility: hidden`: `.tabbar` adalah flex item 46px di dalam
    `.app-shell` dan harus BENAR-BENAR runtuh supaya canvas mengisi layar.
 
@@ -17,7 +13,6 @@
    untuk prompt". */
 body.clean-view .tabbar,
 body.clean-view .dock,
-body.clean-view .dock-backdrop,
 body.clean-view .sessions-sidebar,
 body.clean-view .minimap-dock,
 body.clean-view .controls-cluster {

@@ -57,7 +57,7 @@ export default function Login({ onSubmit }: Props) {
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
         <Input
           id="login-access-token"
-          className="field h-auto focus-visible:ring-0"
+          className="h-auto focus-visible:ring-0"
           type="password"
           aria-label="Access token"
           autoFocus
@@ -67,7 +67,7 @@ export default function Login({ onSubmit }: Props) {
           onChange={(e) => setValue(e.target.value)}
           style={{ fontFamily: mono, textAlign: 'center', width: 260 }}
         />
-        <Button className="btn btn--accent h-auto" type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending}>
           Unlock
         </Button>
         {error && <div style={{ color: '#ff6b6b', fontSize: 12 }}>Token salah</div>}

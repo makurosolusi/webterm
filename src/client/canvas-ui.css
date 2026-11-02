@@ -59,100 +59,42 @@
   line-height: 1.4;
 }
 
-/* ---- Command palette (⌘K) ---- */
-.palette-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 12vh;
-  background: rgba(10, 12, 18, 0.45);
-}
-
-.palette {
+/* ---- Command palette sizing ---- */
+.canvas-command-content {
   width: 560px;
   max-width: 90vw;
   max-height: 60vh;
-  display: flex;
-  flex-direction: column;
+  padding: 0;
   background: rgba(var(--menu-rgb, 40, 40, 42), 0.99);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border-color: var(--border);
   box-shadow: 0 24px 64px rgba(0, 0, 0, calc(0.6 * var(--shadow-k, 1)));
-  overflow: hidden;
 }
 
-.palette__input {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
+.canvas-command-list {
+  max-height: calc(60vh - 49px);
+}
+
+.canvas-command-content [data-slot='command-input-wrapper'] {
+  border-color: var(--border);
+}
+
+.canvas-command-content [data-slot='command-item'] {
   color: var(--text);
-  font-size: 15px;
-  padding: 14px 16px;
-  outline: none;
 }
 
-.palette__list {
-  overflow-y: auto;
-  padding: 6px;
-}
-
-.palette__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.palette__item.active {
+.canvas-command-content [data-slot='command-item'][aria-current='true'],
+.canvas-command-content [data-slot='command-item'][data-selected='true'] {
   background: var(--panel-header);
 }
 
-.palette__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--muted);
+.canvas-command-content .palette__label {
+  font-size: 13px;
 }
 
-.palette__icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.palette__hint {
+.canvas-command-content .palette__hint {
   margin-left: auto;
   color: var(--muted);
   font-size: 11px;
-}
-
-.palette__section {
-  padding: 8px 12px 2px;
-  color: var(--muted-2);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.palette__empty {
-  padding: 16px;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
 }
 
 /* Menu konteks canvas (`CanvasContextMenu.tsx`). Panel, baris, ikon, dan separator dasarnya

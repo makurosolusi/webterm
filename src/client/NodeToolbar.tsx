@@ -33,35 +33,33 @@ export interface NodeToolbarProps {
 
 export default function NodeToolbar(props: NodeToolbarProps) {
   const count = props.commentCount ?? 0
-  const btn = (extra?: string) =>
-    cn('icon-btn', extra)
   return (
     // `nodrag` di container: React Flow mencocokkannya lewat `target.closest()`, jadi satu kelas di
     // sini cukup untuk semua tombol — tanpa itu klik tombol ikut menggeser node.
     <div className="nodrag node-toolbar">
-      <Button variant="ghost" size="icon-xs" className={btn()} title="Refresh view" onClick={props.onRefresh}><IconRefresh /></Button>
+      <Button variant="ghost" size="icon-xs" title="Refresh view" onClick={props.onRefresh}><IconRefresh /></Button>
 
       <Button
         variant="ghost" size="icon-xs"
-        className={btn(props.searchOpen ? 'icon-btn--active' : undefined)}
+        className={props.searchOpen ? 'icon-btn--active' : undefined}
         title="Search" onClick={props.onToggleSearch}
       ><IconSearch /></Button>
 
       {props.onToggleMic && (
         <Button
           variant="ghost" size="icon-xs"
-          className={btn(props.micActive ? 'icon-btn--active' : undefined)}
+          className={props.micActive ? 'icon-btn--active' : undefined}
           title="Dictate" onClick={props.onToggleMic}
         ><IconMic /></Button>
       )}
 
       {props.onAiName && (
-        <Button variant="ghost" size="icon-xs" className={btn()} title="Name with AI" onClick={props.onAiName} disabled={props.aiNaming}><IconSparkle /></Button>
+        <Button variant="ghost" size="icon-xs" title="Name with AI" onClick={props.onAiName} disabled={props.aiNaming}><IconSparkle /></Button>
       )}
 
       <Button
         variant="ghost" size="icon-xs"
-        className={btn(props.commentsOpen ? 'icon-btn--active' : undefined)}
+        className={props.commentsOpen ? 'icon-btn--active' : undefined}
         title="Comments" onClick={props.onToggleComments}
       >
         <IconComments />
@@ -71,7 +69,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
       {props.onBroadcast && (
         <Button
           variant="ghost" size="icon-xs"
-          className={btn(props.broadcastActive ? 'icon-btn--active' : undefined)}
+          className={props.broadcastActive ? 'icon-btn--active' : undefined}
           title="Share live view" onClick={props.onBroadcast} disabled={props.broadcastDisabled}
         ><IconBroadcast /></Button>
       )}
@@ -79,14 +77,14 @@ export default function NodeToolbar(props: NodeToolbarProps) {
       {props.onToggleHideLinks && (
         <Button
           variant="ghost" size="icon-xs"
-          className={btn(props.hideLinks ? 'icon-btn--active' : undefined)}
+          className={props.hideLinks ? 'icon-btn--active' : undefined}
           title={props.hideLinks ? 'Show links' : 'Hide links'} onClick={props.onToggleHideLinks}
         >{props.hideLinks ? <IconEyeOff /> : <IconEye />}</Button>
       )}
 
-      <Button variant="ghost" size="icon-xs" className={btn()} title="Maximize" onClick={props.onToggleMaximize} disabled={props.maximizeDisabled}><IconMaximize /></Button>
+      <Button variant="ghost" size="icon-xs" title="Maximize" onClick={props.onToggleMaximize} disabled={props.maximizeDisabled}><IconMaximize /></Button>
 
-      <Button variant="ghost" size="icon-xs" className={btn('icon-btn--danger')} title="Close (ends the session)" onClick={props.onClose}><IconClose /></Button>
+      <Button variant="ghost" size="icon-xs" className="icon-btn--danger" title="Close (ends the session)" onClick={props.onClose}><IconClose /></Button>
     </div>
   )
 }

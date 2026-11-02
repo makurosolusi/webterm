@@ -45,7 +45,7 @@ export function InboxPanelSections(props: InboxPanelSectionsProps): React.JSX.El
                 aria-label={`Select all in ${SECTION_LABEL[state]}`}
                 checked={allSelected} disabled={rows.length === 0}
                 onCheckedChange={(checked) => onSelectSection(rows, checked === true)} />
-              <Button type="button" variant="ghost" className="inbox-section__toggle" id={`${uid}-section-head-${state}`}
+              <Button type="button" variant="ghost" id={`${uid}-section-head-${state}`}
                 aria-expanded={!isCollapsed} aria-controls={bodyId} onClick={() => onToggleSection(state)}>
                 {isCollapsed
                   ? <ChevronRight size={13} aria-hidden="true" />

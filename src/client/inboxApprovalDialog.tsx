@@ -5,6 +5,7 @@
 // the API calls; this file owns only the literal consent UI.
 import type { RefObject } from 'react'
 import { Check, X } from 'lucide-react'
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -77,34 +78,30 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
   const showConsent = state.phase === 'ready' && !expired && (deferred || challenge !== null)
 
   return (
-    <div
-      className="inbox-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !pending) props.onClose()
-      }}
-    >
-      <div
+    <AlertDialog open onOpenChange={(open) => {
+      if (!open && !pending) props.onClose()
+    }}>
+      <AlertDialogContent
+        forceMount
         ref={props.dialogRef}
         className="inbox-dialog"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby={`${uid}-dialog-title`}
         aria-describedby={`${uid}-dialog-desc`}
       >
         <header className="inbox-dialog__head">
-          <h3 className="inbox-dialog__title" id={`${uid}-dialog-title`}>{title}</h3>
-          <Button type="button" variant="ghost" size="icon-xs" className="inbox-icon-btn" aria-label="Close approval dialog"
+          <AlertDialogTitle className="inbox-dialog__title" id={`${uid}-dialog-title`}>{title}</AlertDialogTitle>
+          <Button type="button" variant="ghost" size="icon-xs" aria-label="Close approval dialog"
             disabled={pending} onClick={props.onClose}>
             <X size={15} aria-hidden="true" />
           </Button>
         </header>
 
-        <p className="inbox-dialog__desc" id={`${uid}-dialog-desc`}>
+        <AlertDialogDescription className="inbox-dialog__desc" id={`${uid}-dialog-desc`}>
           <strong>{item?.title}</strong>
           {state.queue.length > 1 && (
             <span className="inbox-dialog__step">Step {state.index + 1} of {state.queue.length}</span>
           )}
-        </p>
+        </AlertDialogDescription>
 
         {(challenge || deferred) && (
           <dl className="inbox-dialog__facts">
@@ -150,7 +147,7 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
             </label>
             <label className="inbox-consent inbox-consent--type">
               <span>Type {CONFIRM_PHRASE} to confirm</span>
-              <Input type="text" className="inbox-input" aria-label={`Type ${CONFIRM_PHRASE} to confirm`}
+            <Input type="text" aria-label={`Type ${CONFIRM_PHRASE} to confirm`}
                 autoComplete="off" spellCheck={false} value={state.text}
                 onChange={(event) => props.onText(event.target.value)} />
             </label>
@@ -158,11 +155,11 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
               <p className="inbox-hint">Type exactly {CONFIRM_PHRASE} (uppercase).</p>
             )}
             <div className="inbox-dialog__actions">
-              <Button type="button" variant="default" className="inbox-btn inbox-btn--approve"
+              <Button type="button" variant="default"
                 disabled={!canApprove} onClick={() => props.onDecide(true)}>
                 <Check size={14} aria-hidden="true" /> Approve
               </Button>
-              <Button type="button" variant="destructive" className="inbox-btn inbox-btn--danger"
+              <Button type="button" variant="destructive"
                 disabled={pending} onClick={() => props.onDecide(false)}>
                 Reject
               </Button>
@@ -178,11 +175,11 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
               Decision recorded. Consume the approval to let the action run.
             </p>
             <div className="inbox-dialog__actions">
-              <Button type="button" variant="default" className="inbox-btn inbox-btn--approve"
+              <Button type="button" variant="default"
                 disabled={pending || expired} onClick={props.onConsume}>
                 Consume approval
               </Button>
-              <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={props.onClose}>Close</Button>
+              <Button type="button" variant="ghost" onClick={props.onClose}>Close</Button>
             </div>
           </>
         )}
@@ -191,7 +188,7 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
           <>
             <p className="inbox-status" role="status">Rejected. The action will not run.</p>
             <div className="inbox-dialog__actions">
-              <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={props.onAdvance}>
+            <Button type="button" variant="ghost" onClick={props.onAdvance}>
                 {state.index + 1 < state.queue.length ? 'Next' : 'Close'}
               </Button>
             </div>
@@ -204,7 +201,7 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
           <>
             <p className="inbox-status inbox-status--ok" role="status">Consumed. The action is approved.</p>
             <div className="inbox-dialog__actions">
-              <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={props.onAdvance}>
+            <Button type="button" variant="ghost" onClick={props.onAdvance}>
                 {state.index + 1 < state.queue.length ? 'Next' : 'Done'}
               </Button>
             </div>
@@ -213,13 +210,13 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
 
         {state.phase === 'ready' && !deferred && (!challenge || expired) && (
           <div className="inbox-dialog__actions">
-            <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={props.onRetry}>
+            <Button type="button" variant="ghost" onClick={props.onRetry}>
               Request new challenge
             </Button>
-            <Button type="button" variant="ghost" className="inbox-btn inbox-btn--ghost" onClick={props.onClose}>Close</Button>
+            <Button type="button" variant="ghost" onClick={props.onClose}>Close</Button>
           </div>
         )}
-      </div>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

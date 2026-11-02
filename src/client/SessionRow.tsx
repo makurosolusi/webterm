@@ -3,7 +3,6 @@
 // `src/renderer/components/SessionRow.tsx`.
 import { Bell, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { rowMeta, type SessionRowVM } from './sessionList'
 
 /** Kalimat glyph belum-dibaca, dipakai juga sebagai bagian nama aksesibel barisnya. */
@@ -91,7 +90,7 @@ export default function SessionRow({ row, showProject, onFocusNode, onCloseSessi
           type="button"
           variant="ghost"
           size="icon-xs"
-          className={cn('ss-iconbtn ss-row__close')}
+          className="ss-row__close"
           aria-label={`End session ${row.label}`}
           title="End session"
           onClick={(e) => {

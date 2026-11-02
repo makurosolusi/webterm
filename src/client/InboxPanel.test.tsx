@@ -61,7 +61,7 @@ function renderPanel(client: InboxClient, props: Partial<InboxPanelProps> = {}) 
 
 async function openReview(title = 'Deploy main'): Promise<HTMLElement> {
   fireEvent.click(await screen.findByRole('button', { name: `Review ${title}` }))
-  return screen.findByRole('dialog', { name: 'Approve action' })
+  return screen.findByRole('alertdialog', { name: 'Approve action' })
 }
 
 function confirmTypedPhrase(): void {
@@ -89,10 +89,10 @@ describe('list states', () => {
     expect(await screen.findByText('Deploy main')).toBeDefined()
     expect(screen.getByRole('complementary', { name: 'Inbox' })).toBeDefined()
     const filters = within(screen.getByRole('group', { name: 'Filter inbox' }))
-    expect(filters.getByRole('button', { name: /^All/ }).textContent).toContain('4')
-    expect(filters.getByRole('button', { name: /^Needs you/ }).textContent).toContain('2')
-    expect(filters.getByRole('button', { name: /^Review/ }).textContent).toContain('1')
-    expect(filters.getByRole('button', { name: /^Broken/ }).textContent).toContain('1')
+    expect(filters.getByRole('tab', { name: /^All/ }).textContent).toContain('4')
+    expect(filters.getByRole('tab', { name: /^Needs you/ }).textContent).toContain('2')
+    expect(filters.getByRole('tab', { name: /^Review/ }).textContent).toContain('1')
+    expect(filters.getByRole('tab', { name: /^Broken/ }).textContent).toContain('1')
     expect(screen.getByText('2m ago')).toBeDefined()
   })
 
@@ -123,7 +123,7 @@ describe('list states', () => {
   it('filters by section', async () => {
     renderPanel(makeClient())
     await screen.findByText('Deploy main')
-    fireEvent.click(within(screen.getByRole('group', { name: 'Filter inbox' })).getByRole('button', { name: /^Review/ }))
+    fireEvent.click(within(screen.getByRole('group', { name: 'Filter inbox' })).getByRole('tab', { name: /^Review/ }))
 
     expect(screen.queryByText('Deploy main')).toBeNull()
     expect(screen.queryByText('Rotate keys')).toBeNull()
@@ -202,7 +202,7 @@ describe('approval flow', () => {
     await waitFor(() => expect(client.listInbox).toHaveBeenCalledTimes(3))
 
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(screen.queryByText('Approve deploy')).toBeNull()
   })
 
@@ -243,12 +243,12 @@ describe('approval flow', () => {
     const client = makeClient()
     renderPanel(client)
     fireEvent.click(await screen.findByRole('button', { name: 'Review Deploy main' }))
-    await screen.findByRole('dialog')
+    await screen.findByRole('alertdialog')
 
     expect(client.requestApproval).not.toHaveBeenCalled()
     expect(client.getApprovalChallenge).not.toHaveBeenCalled()
     fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(client.requestApproval).not.toHaveBeenCalled()
     expect(client.decideApproval).not.toHaveBeenCalled()
   })
@@ -257,7 +257,7 @@ describe('approval flow', () => {
     const client = makeClient({ listInbox: vi.fn(async () => [TASK_ITEM]) })
     renderPanel(client)
     fireEvent.click(await screen.findByRole('button', { name: 'Review Review task' }))
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
 
     expect(client.requestApproval).not.toHaveBeenCalled()
     confirmTypedPhrase()
@@ -283,7 +283,7 @@ describe('approval flow', () => {
     // The approved-list read gates minting, so wait for it to settle before opening the dialog.
     await waitFor(() => expect(isDisabled(review)).toBe(false))
     fireEvent.click(review)
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
     expect(screen.queryByRole('button', { name: /Finish approval/ })).toBeNull()
 
     confirmTypedPhrase()
@@ -298,14 +298,14 @@ describe('approval flow', () => {
     const client = makeClient({ listInbox: vi.fn(async () => [TASK_ITEM]) })
     renderPanel(client)
     fireEvent.click(await screen.findByRole('button', { name: 'Review Review task' }))
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
     confirmTypedPhrase()
     fireEvent.click(within(dialog).getByRole('button', { name: /^Approve$/ }))
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Consume approval' }))
     await within(dialog).findByText('Consumed. The action is approved.')
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(screen.getByText('Review task')).toBeDefined()
   })
 
@@ -348,10 +348,10 @@ describe('approval flow', () => {
     const trigger = await screen.findByRole('button', { name: 'Review Deploy main' })
     trigger.focus()
     fireEvent.click(trigger)
-    await screen.findByRole('dialog')
+    await screen.findByRole('alertdialog')
 
     fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
@@ -372,7 +372,7 @@ describe('approval flow', () => {
     expect(screen.getByText('2 selected')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'Review selected' }))
 
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText('Step 1 of 2')).toBeDefined()
     // A group review is deferred too: opening the first row mints nothing.
     expect(client.requestApproval).not.toHaveBeenCalled()
@@ -404,7 +404,7 @@ describe('expiry countdown', () => {
     await act(async () => { await Promise.resolve() })
     fireEvent.click(screen.getByRole('button', { name: 'Review Approve deploy' }))
     await act(async () => { await Promise.resolve() })
-    expect(screen.getByRole('dialog')).toBeDefined()
+    expect(screen.getByRole('alertdialog')).toBeDefined()
     expect(screen.getByText('expires in 2:00')).toBeDefined()
 
     act(() => vi.advanceTimersByTime(30_000))

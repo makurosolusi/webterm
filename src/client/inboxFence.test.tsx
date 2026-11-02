@@ -57,7 +57,7 @@ describe('task fence', () => {
     render(<InboxPanel client={client} now={() => NOW} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Review Review task' }))
-    const dialog = await screen.findByRole('dialog')
+    const dialog = await screen.findByRole('alertdialog')
     confirmTypedPhrase()
     fireEvent.click(within(dialog).getByRole('button', { name: /^Approve$/ }))
     expect(await within(dialog).findByRole('button', { name: 'Consume approval' })).toBeDefined()
@@ -92,7 +92,7 @@ describe('task fence', () => {
     expect(button.getAttribute('title')).toMatch(/no fence/i)
 
     fireEvent.click(button)
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(client.requestApproval).not.toHaveBeenCalled()
   })
 

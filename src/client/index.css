@@ -25,3 +25,20 @@
   --color-input: var(--border);
   --color-ring: var(--accent);
 }
+
+@layer base {
+  button[data-slot] {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+  }
+
+  input[data-slot],
+  textarea[data-slot],
+  select[data-slot] {
+    font: inherit;
+  }
+}

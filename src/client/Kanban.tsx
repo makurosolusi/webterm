@@ -41,7 +41,7 @@ export default function Kanban({ nodes, statuses, onFocus, onClose }: Props) {
     <div style={{ position: 'absolute', top: 'var(--tabbar-h, 0px)', left: 0, right: 0, bottom: 0, zIndex: 40, background: 'rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ color: 'var(--text)', fontSize: 15, fontFamily: 'monospace' }}>Board</span>
-        <Button type="button" variant="default" className="btn btn--accent" onClick={onClose}>Close</Button>
+        <Button type="button" onClick={onClose}>Close</Button>
       </div>
       <div style={{ display: 'flex', gap: 12, flex: 1, overflow: 'auto' }}>
         {KANBAN_COLUMNS.map((col) => (

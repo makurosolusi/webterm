@@ -45,14 +45,13 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
       </div>
       <div className="node-comments__composer">
         <Textarea
-          className="field"
           value={draft}
           placeholder="Add a comment…"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
         />
-        <Button variant="default" size="sm" className="btn btn--accent h-auto" title="Send" onClick={send}>Send</Button>
-        <Button variant="ghost" size="icon-xs" className="icon-btn" title="Close" onClick={onClose}>×</Button>
+        <Button variant="default" size="sm" title="Send" onClick={send}>Send</Button>
+        <Button variant="ghost" size="icon-xs" title="Close" onClick={onClose}>×</Button>
       </div>
     </div>
   )

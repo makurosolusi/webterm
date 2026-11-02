@@ -62,12 +62,14 @@ describe('styles.css — token sheet', () => {
     }
   })
 
-  it('keeps the shared controls and canvas furniture', () => {
-    for (const cls of [
-      '.minimap-dock', '.app-shell', '.app-main',
-      '.btn', '.btn--accent', '.btn--ghost', '.field', '.panel', '.bridge-handle',
-    ]) {
+  it('keeps shared layout and canvas furniture', () => {
+    for (const cls of ['.minimap-dock', '.app-shell', '.app-main', '.bridge-handle']) {
       expect(tokens).toContain(cls)
+    }
+  })
+  it('leaves legacy control selectors absent after shadcn migration', () => {
+    for (const gone of ['.btn', '.btn--accent', '.btn--ghost', '.field', '.panel']) {
+      expect(tokens).not.toContain(gone)
     }
   })
 
@@ -163,9 +165,12 @@ describe('node-chrome.css', () => {
     // Judul tidak boleh melar: toolbar yang didorong `margin-left: auto`, bukan judul.
     expect(title).not.toContain('flex: 1')
     expect(chrome).toContain('.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }')
-    const icon = chrome.slice(chrome.indexOf('.icon-btn {'), chrome.indexOf('.icon-btn:hover'))
-    expect(icon).toContain('border-radius: 4px')
-    expect(chrome).toContain('background: rgba(var(--tint-rgb), 0.1)')
+    // Tombol header kini murni shadcn (`size="icon-xs"`); base `.icon-btn` sudah dihapus dan
+    // hanya kelas status semantik yang tersisa.
+    expect(chrome).not.toContain('.icon-btn {')
+    expect(chrome).not.toContain('.icon-btn:hover')
+    expect(chrome).toContain('.icon-btn--active')
+    expect(chrome).toContain('.icon-btn--danger:hover')
     expect(chrome).toContain('border-radius: 50%')
   })
 
@@ -237,26 +242,26 @@ describe('dock.css', () => {
     expect(sep).toContain('margin: 4px 0')
   })
 
-  it('lays the dock out as a left-edge column with menus opening to the right', () => {
+  it('keeps the dock column and primitive menu contract', () => {
     const plate = dock.slice(dock.indexOf('.dock {'), dock.indexOf('.dock-btn {'))
     expect(plate).toContain('flex-direction: column')
     expect(plate).toContain('left: var(--float-gap)')
     expect(plate).not.toContain('translateX(-50%)')
-    const menu = dock.slice(dock.indexOf('.dock-menu {'), dock.indexOf('.dock-menu__list {'))
-    expect(menu).toContain('left: calc(100% + 10px)')
-    expect(menu).not.toContain('bottom: calc(100% + 10px)')
+    expect(dock).not.toContain('.dock-menu {')
+    expect(dock).not.toContain('.dock-backdrop {')
+    expect(dock).not.toContain('.dock-menu__list {')
+    expect(dock).not.toContain('left: calc(100% + 10px)')
   })
 
-  it('defines the dirty marker, the zoom readout and the menus', () => {
+  it('defines the dirty marker and zoom readout without custom menu CSS', () => {
     expect(dock).toContain('.dock-dirty.dirty { background: var(--caution); }')
     // Selebar tombol: readout teks tidak boleh melebarkan kolom.
     expect(dock.slice(dock.indexOf('.dock-zoom {'))).toContain('min-width: var(--dock-btn-size)')
-    for (const cls of [
-      '.dock-backdrop', '.dock-slot', '.dock-menu', '.dock-add-menu', '.dock-menu__list',
-      '.dock-menu__glyph', '.dock-menu__rule', '.dock-menu__check', '.dock-menu__form',
-      '.dock-zoom-menu',
+    for (const gone of [
+      '.dock-backdrop {', '.dock-menu {', '.dock-menu__list {',
+      'left: calc(100% + 10px)',
     ]) {
-      expect(dock).toContain(cls)
+      expect(dock).not.toContain(gone)
     }
   })
 })

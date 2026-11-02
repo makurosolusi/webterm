@@ -167,10 +167,8 @@ const wsBWithNode = harnessWorkspace({
  *  `addFlowNode`), jadi tombol pindah tab berikutnya benar-benar jatuh di dalam debounce 400ms. */
 async function addTerminalToActive(): Promise<void> {
   fireEvent.click(screen.getByLabelText('Add node'))
-  // Diambil dari MENU, bukan `findByText('Terminal')`: header node terminal di workspace lain ikut
-  // berbunyi "Terminal", dan query global akan menemukan dua elemen.
   const item = await waitFor(() => {
-    const el = Array.from(document.querySelectorAll('.dock-add-menu button'))
+    const el = Array.from(document.querySelectorAll('[role="dialog"] button'))
       .find((b) => b.textContent?.includes('Terminal'))
     if (!el) throw new Error('item Terminal belum muncul')
     return el as HTMLElement

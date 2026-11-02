@@ -199,7 +199,6 @@ describe('cleanView.css — penjaga teks', () => {
     for (const sel of [
       '.tabbar',            // header workspace
       '.dock',              // kolom kontrol kiri
-      '.dock-backdrop',     // lapisan tangkap-klik tak terlihat di bawah menu dock
       '.sessions-sidebar',  // panel Sessions
       '.minimap-dock',      // minimap
       '.controls-cluster',  // toolbar kanan-atas

@@ -1,10 +1,11 @@
 /* Sidebar sesi (kiri). Angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css`
-   (.sessions-sidebar 9790, .ss-tab 9880, .ss-row 10050, .ss-group__head 9960) — bukan karangan.
+   (.sessions-sidebar 9790, .ss-tabs 9880, .ss-row 10050, .ss-group__head 9960) — bukan karangan.
    Pelontarnya TIDAK di sini: ia tombol dock biasa (`dock.css`), karena plat terapung kedua di
    tepi kiri adalah yang dulu bertumpuk dengan dock.
-   Token --card-rgb/--menu-rgb/--shadow-k/--tint-rgb/--controls-w milik styles.css
-   (wkr-chrome-01); tiap var() punya fallback nilai nodeterm supaya tampilan tidak pecah
-   kalau namanya bergeser.
+   Permukaan (latar, border, radius, shadow) kini milik Card shadcn; file ini hanya
+   geometri dan isi panel. Token --tint-rgb/--controls-w milik styles.css (wkr-chrome-01);
+   tiap var() punya fallback nilai nodeterm supaya tampilan tidak pecah kalau namanya
+   bergeser.
 
    --ss-top-chrome lokal, BUKAN --tabbar-h nodeterm: webterm tidak punya tab bar, yang ada
    di kiri-atas adalah .ws-switcher. Kolom ini harus turun melewatinya, dan --tabbar-h (yang
@@ -27,11 +28,6 @@
   max-height: calc(100vh - var(--ss-top-chrome) - 2 * var(--float-gap) - 26px);
   display: flex;
   flex-direction: column;
-  background: rgba(var(--card-rgb, 28, 28, 30), 0.96);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, calc(0.45 * var(--shadow-k, 1)));
   overflow: hidden;
   font-size: 12.5px;
 }
@@ -62,73 +58,10 @@
   gap: 2px;
 }
 
-.ss-iconbtn {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.ss-iconbtn:hover {
-  background: rgba(var(--tint-rgb, 255, 255, 255), 0.08);
-  color: var(--text);
-}
-
-.ss-iconbtn[aria-pressed='true'] {
-  color: var(--accent);
-}
-
-.ss-iconbtn svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* ---- Tab Project / Status ---- */
+/* ---- Tab Project / Status / Nodes ---- */
+/* Pita tab kini milik Tabs/TabsList shadcn; di sini hanya jaraknya di dalam panel. */
 .ss-tabs {
-  display: flex;
-  gap: 14px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.ss-tab {
-  position: relative;
-  padding: 4px 1px 8px;
-  margin-bottom: -1px;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.ss-tab:hover {
-  color: var(--text);
-}
-
-.ss-tab[aria-selected='true'] {
-  color: var(--text);
-}
-
-/* Garis 2px tepat di atas border kepala: penanda tab aktif, bukan pil atau background. */
-.ss-tab[aria-selected='true']::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
+  padding: 0 12px 6px;
 }
 
 /* ---- Filter ---- */
@@ -160,11 +93,6 @@
   right: 15px;
   width: 18px;
   height: 18px;
-}
-
-.ss-search__clear svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* ---- Isi ---- */
@@ -488,4 +416,3 @@
 .ss-row__close:hover {
   color: var(--state-attention);
 }
-

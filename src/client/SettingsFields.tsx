@@ -64,7 +64,7 @@ export function NumberField({
     <Field label={label} hint={hint} htmlFor={id}>
       <Input
         id={id}
-        className="st-input st-input-num"
+        className="st-input-num"
         type="number"
         min={min}
         max={max}
@@ -105,7 +105,7 @@ export function TextField({
     <Field label={label} hint={hint} htmlFor={id}>
       <Input
         id={id}
-        className={'st-input' + (mono ? ' st-mono' : '')}
+        className={mono ? 'st-mono' : undefined}
         type="text"
         value={value}
         placeholder={placeholder}
@@ -135,7 +135,7 @@ export function SelectField<T extends string>({
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <Select value={value} onValueChange={(next) => onChange(next as T)}>
-        <SelectTrigger id={id} className="st-input st-select">
+        <SelectTrigger id={id} className="st-select">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -167,7 +167,6 @@ export function ToggleField({
         role="switch"
         aria-checked={value}
         aria-label={label}
-        className={'st-toggle' + (value ? ' is-on' : '')}
         checked={value}
         onCheckedChange={onChange}
       />
@@ -192,9 +191,9 @@ export function ColorField({
 }): React.JSX.Element {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <Input id={id} className="st-color" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} className="h-9 w-10 p-1" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
       <Input
-        className="st-input st-input-hex st-mono"
+        className="st-input-hex st-mono"
         type="text"
         aria-label={`${label} hex`}
         value={value}

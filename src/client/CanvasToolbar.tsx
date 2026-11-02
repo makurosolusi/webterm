@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Bot, CircleQuestionMark, FolderTree, Search, Settings, Terminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import './canvas-ui.css'
 
 // Cluster kontrol kanan-atas + command palette ⌘K. Porting dari nodeterm
@@ -160,73 +167,83 @@ function CommandPalette({ targets, onPick, onClose }: PaletteProps) {
   const [active, setActive] = useState(0)
   const items = useMemo(() => rankTargets(targets, query, PALETTE_LIMIT), [targets, query])
 
+  useEffect(() => {
+    setActive((current) => Math.min(current, Math.max(items.length - 1, 0)))
+  }, [items.length])
+
   const run = (t?: PaletteTarget) => {
     if (!t) return
     onPick(t.id)
     onClose()
   }
 
-  // Portal ke body: palette harus menutupi canvas dan tidak ikut ter-transform viewport React Flow.
-  return createPortal(
-    <div className="palette-overlay nodrag nowheel" onClick={onClose}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Find node" onClick={(e) => e.stopPropagation()}>
-        <Input
-          className="palette__input"
-          aria-label="Find node by name or type"
-          autoFocus
-          spellCheck={false}
-          placeholder="Find a node by name or type…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setActive(0)
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="canvas-command-content nodrag nowheel"
+        showCloseButton={false}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>Find node</DialogTitle>
+          <DialogDescription>Search for a node by name or type.</DialogDescription>
+        </DialogHeader>
+        <Command
+          value={items[active]?.id ?? ''}
+          onValueChange={(id) => {
+            const index = items.findIndex((item) => item.id === id)
+            if (index >= 0) setActive(index)
           }}
-          // Canvas mendengar keydown di document (Backspace menghapus node terpilih, panah mem-pan),
-          // jadi event keyboard palette harus berhenti di sini.
+          shouldFilter={false}
           onKeyDown={(e) => {
             e.stopPropagation()
             if (e.key === 'ArrowDown') {
               e.preventDefault()
-              setActive((a) => Math.min(a + 1, items.length - 1))
+              setActive((current) => Math.min(current + 1, items.length - 1))
             } else if (e.key === 'ArrowUp') {
               e.preventDefault()
-              setActive((a) => Math.max(a - 1, 0))
+              setActive((current) => Math.max(current - 1, 0))
             } else if (e.key === 'Enter') {
               e.preventDefault()
               run(items[active])
             } else if (e.key === 'Escape') {
+              e.preventDefault()
               onClose()
             }
           }}
-        />
-        <div className="palette__list">
-          {items.length === 0 ? (
-            <div className="palette__empty">No matches</div>
-          ) : (
-            <>
-              <div className="palette__section">Nodes</div>
+        >
+          <CommandInput
+            aria-label="Find node by name or type"
+            autoFocus
+            spellCheck={false}
+            placeholder="Find a node by name or type…"
+            value={query}
+            onValueChange={(value) => {
+              setQuery(value)
+              setActive(0)
+            }}
+          />
+          <CommandList className="canvas-command-list">
+            <CommandEmpty>No matches</CommandEmpty>
+            <CommandGroup heading="Nodes">
               {items.map((t, i) => (
-                <Button
+                <CommandItem
                   key={t.id}
-                  type="button"
-                  variant="ghost"
-                  className={`palette__item${i === active ? ' active' : ''}`}
+                  value={t.id}
+                  data-testid={`palette-item-${t.id}`}
                   aria-current={i === active}
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => run(t)}
+                  onSelect={() => run(t)}
                 >
-                  <span className="palette__icon">
-                    {t.hint === 'agent' ? <Bot aria-hidden /> : <Terminal aria-hidden />}
-                  </span>
+                  {t.hint === 'agent' ? <Bot aria-hidden /> : <Terminal aria-hidden />}
                   <span className="palette__label">{t.label}</span>
                   {t.hint && <span className="palette__hint">{t.hint}</span>}
-                </Button>
+                </CommandItem>
               ))}
-            </>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </DialogContent>
+    </Dialog>
   )
 }

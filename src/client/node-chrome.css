@@ -214,35 +214,12 @@
 /* ---- Toolbar header ---- */
 .node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--muted);
-  line-height: 1;
-  cursor: pointer;
-}
-/* Wash netral, bukan accent: header penuh tombol biru-saat-hover bersaing dengan chip status dan
-   warna project, yang justru hal-hal bermakna di baris itu. */
-.icon-btn:hover {
-  background: rgba(var(--tint-rgb), 0.1);
-  color: var(--text);
-}
 /* Menutup node mengakhiri sesinya, jadi ia satu-satunya aksi header yang menjawab dengan merah. */
 .icon-btn--danger:hover {
   background: color-mix(in srgb, var(--state-attention) 20%, transparent);
   color: var(--state-attention);
 }
 .icon-btn--active { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
-.icon-btn:disabled { opacity: 0.6; cursor: default; }
-.icon-btn:disabled:hover { background: transparent; color: var(--muted); }
 
 /* Collapse chevron (berotasi saat collapsed) */
 .node-chevron { display: inline-flex; transition: transform 0.12s ease; color: var(--muted); }
