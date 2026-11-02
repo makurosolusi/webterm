@@ -30,11 +30,11 @@
   flex: 1 1 160px;
   min-width: 80px;
   max-width: 400px;
-  height: 24px;
+  height: 25px;
   box-sizing: border-box;
   padding: 0 6px;
   border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 2px;
+  border-radius: 4px;
   outline: none;
   background: var(--vscode-input-background, var(--sunken, #313131));
   color: var(--vscode-input-foreground, var(--vscode-foreground, #cccccc));
@@ -60,7 +60,7 @@
   box-sizing: border-box;
   padding: 0 6px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
   font: inherit;
@@ -68,10 +68,10 @@
   cursor: default;
 }
 .inbox-filter-toggle:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
+/* Aktif = toggle toolbar VS Code (netral `toolbar-activeBackground`), bukan chip biru `inputOption-active*`. */
 .inbox-filter-toggle[data-active='true'] {
-  border-color: var(--vscode-inputOption-activeBorder, transparent);
-  background: var(--vscode-inputOption-activeBackground, rgba(0, 127, 212, 0.4));
-  color: var(--vscode-inputOption-activeForeground, #ffffff);
+  background: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31));
+  color: var(--vscode-foreground, #cccccc);
 }
 .inbox-count {
   font-variant-numeric: tabular-nums;
@@ -87,7 +87,7 @@
   box-sizing: border-box;
   padding: 0 8px;
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
+  border-radius: 4px;
   background: var(--vscode-button-background, #0078d4);
   color: var(--vscode-button-foreground, #ffffff);
   font: inherit;
@@ -97,31 +97,12 @@
 }
 .inbox-action:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #026ec1); }
 .inbox-action--secondary {
+  border-color: var(--vscode-button-secondaryBorder, transparent);
   background: var(--vscode-button-secondaryBackground, #313131);
   color: var(--vscode-button-secondaryForeground, #cccccc);
 }
 .inbox-action--secondary:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #3c3c3c); }
-/* Dialog button: the 26px VS Code button. */
-.inbox-btn {
-  height: 26px;
-  box-sizing: border-box;
-  padding: 4px 11px;
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
-  background: var(--vscode-button-background, #0078d4);
-  color: var(--vscode-button-foreground, #ffffff);
-  font: inherit;
-  line-height: 16px;
-  cursor: default;
-}
-.inbox-btn:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #026ec1); }
-.inbox-btn--secondary {
-  background: var(--vscode-button-secondaryBackground, #313131);
-  color: var(--vscode-button-secondaryForeground, #cccccc);
-}
-.inbox-btn--secondary:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #3c3c3c); }
-.inbox-action:disabled,
-.inbox-btn:disabled { opacity: 0.4; }
+.inbox-action:disabled { opacity: 0.4; }
 
 /* ---- bulk (group actions) ----------------------------------------------------------------- */
 .inbox-bulk {
@@ -146,15 +127,22 @@
 .inbox-welcome { text-align: center; padding: 16px 20px; }
 .inbox-welcome__title { margin: 0; color: var(--vscode-foreground, #cccccc); }
 .inbox-welcome__hint { margin: 4px 0 0; }
+/* Inline notification (bukan kotak merah penuh): permukaan `notifications-*`, hanya ikon yang merah. */
 .inbox-error {
   display: flex;
   flex: none;
   align-items: center;
   gap: 6px;
   min-height: var(--bottom-panel-row-h, 22px);
-  padding: 2px 12px;
-  color: var(--vscode-errorForeground, #f48771);
+  box-sizing: border-box;
+  margin: 4px 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--vscode-notifications-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  border-radius: 4px;
+  background: var(--vscode-notifications-background, var(--vscode-editorWidget-background, transparent));
+  color: var(--vscode-notifications-foreground, var(--vscode-foreground, #cccccc));
 }
+.inbox-error > .codicon { flex: none; color: var(--vscode-errorForeground, #f48771); font-size: 16px; }
 .inbox-error__text { flex: 1; min-width: 0; word-break: break-word; }
 
 /* ---- groups ------------------------------------------------------------------------------- */
@@ -189,15 +177,16 @@
 }
 .inbox-section__toggle .codicon { font-size: 16px; }
 .inbox-section__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Count badge, same metrics as the tree's `.monaco-count-badge`. */
+/* Count badge, same metrics as sessions-panel.css (17px, 11px, radius 2px, `badge-*` tokens). */
 .inbox-section__toggle .inbox-count {
   box-sizing: border-box;
-  min-width: 18px;
-  padding: 3px 6px;
-  border-radius: 11px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 2px;
   background: var(--vscode-badge-background, #616161);
   color: var(--vscode-badge-foreground, #ffffff);
-  line-height: 11px;
+  line-height: 17px;
   text-align: center;
   opacity: 1;
 }
@@ -272,117 +261,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-.inbox-panel :focus-visible,
-.inbox-dialog :focus-visible {
+.inbox-panel :focus-visible {
   outline: 1px solid var(--vscode-focusBorder, #007fd4);
   outline-offset: -1px;
 }
 
-/* ---- dialog (VS Code dialog body inside the shared alert-dialog surface) ------------------- */
-.inbox-dialog {
-  width: 480px;
-  max-width: 100%;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  color: var(--vscode-foreground, #cccccc);
-  font-family: var(--vscode-font-family, var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif));
-  font-size: 13px;
-  line-height: 1.4;
-}
-.inbox-dialog__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.inbox-dialog__title { flex: 1; margin: 0; font-size: 13px; font-weight: 600; line-height: 22px; }
-.inbox-dialog__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
-  font-size: 16px;
-  cursor: default;
-}
-.inbox-dialog__close:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
-.inbox-dialog__close:disabled { opacity: 0.4; }
-.inbox-dialog__desc { margin: 0; }
-.inbox-dialog__step {
-  display: block;
-  color: var(--vscode-descriptionForeground, #9d9d9d);
-  font-size: 12px;
-}
-.inbox-dialog__facts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 12px;
-  margin: 0;
-  padding: 0;
-  font-size: 12px;
-}
-.inbox-dialog__facts div { min-width: 0; }
-.inbox-dialog__facts dt { color: var(--vscode-descriptionForeground, #9d9d9d); }
-.inbox-dialog__facts dd {
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.inbox-dialog__facts code {
-  font-family: var(--vscode-editor-font-family, var(--font-mono, Menlo, monospace));
-  font-size: 12px;
-}
-.inbox-expired { color: var(--vscode-errorForeground, #f48771); }
-.inbox-dialog__error,
-.inbox-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0;
-  font-size: 12px;
-}
-.inbox-dialog__error { color: var(--vscode-errorForeground, #f48771); }
-.inbox-hint { color: var(--vscode-editorWarning-foreground, #cca700); }
-.inbox-dialog__error .codicon,
-.inbox-hint .codicon { flex: none; font-size: 16px; }
-.inbox-consent {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  cursor: default;
-}
-.inbox-consent--type { display: block; }
-.inbox-consent--type > span { display: block; margin-bottom: 4px; }
-.inbox-input {
-  width: 100%;
-  height: 26px;
-  box-sizing: border-box;
-  padding: 4px 6px;
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 2px;
-  outline: none;
-  background: var(--vscode-input-background, #313131);
-  color: var(--vscode-input-foreground, #cccccc);
-  font: inherit;
-}
-.inbox-input:focus { border-color: var(--vscode-focusBorder, #007fd4); }
-.inbox-dialog__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 @media (max-width: 640px) {
   /* The bottom panel stays flush with the activity bar at every width (inboxPanelSurface.css);
-     only the approval dialog and the dense row columns need narrow-width rules. */
-  .inbox-dialog { width: 100%; }
-  .inbox-dialog__facts { grid-template-columns: 1fr; }
+     only the dense row columns need narrow-width rules. */
   .inbox-item__desc { display: none; }
 }

@@ -1,6 +1,6 @@
 /* Sidebar sesi (kiri) — Explorer VS Code.
    Angka yang dipakai: panel 300px, judul view 35px (uppercase 11px), tab pengelompokan 24px, input
-   24px, baris pohon 22px dengan indent 8px. Tinggi baris, indent, twisty, hover, seleksi aktif/
+   25px, baris pohon 22px dengan indent 8px. Tinggi baris, indent, twisty, hover, seleksi aktif/
    tidak-fokus, dan indent guide datang dari `vscode-tree`/`vscode-tree-item` (lihat `indent={8}`
    di SessionsPanel + `vscode-theme.css`); file ini hanya geometri panel dan isi baris yang
    di-slotted ke dalamnya. Ikon = codicon (CSS-nya dipasang `vscode/codicons.ts`).
@@ -8,19 +8,18 @@
    tepi kiri adalah yang dulu bertumpuk dengan dock.
    Permukaan (latar, border) memakai token VS Code yang sudah dipetakan dari token webterm, jadi
    tema gelap/terang ikut tanpa palet kedua.
-
-   --ss-top-chrome lokal, BUKAN --tabbar-h nodeterm: webterm tidak punya tab bar, yang ada
-   di kiri-atas adalah .ws-switcher. Kolom ini harus turun melewatinya, dan --tabbar-h (yang
-   wajar bernilai 0 di webterm) justru akan menaruhnya di bawah switcher. */
+*/
 :root {
-  --ss-top-chrome: 46px;
+  /* Tidak dirujuk CSS lain; dipertahankan karena `dockSessions.test.tsx` menjaganya sebagai kontrak lebar. */
   --ss-w: 300px;
   /* View title VS Code: 35px, teks 11px uppercase. */
   --ss-title-h: 35px;
   /* Satu baris pohon = 22px. Dipakai juga oleh header seksi supaya ritmenya satu. */
   --ss-row-h: 22px;
-  /* Tombol toolbar VS Code: 22px, ikon 16px, radius 5px. */
+  /* Tombol toolbar VS Code: 22px, ikon 16px, radius 4px (cornerRadius-small). */
   --ss-action-size: 22px;
+  /* Badge hitungan VS Code (`monaco-count-badge`): 17px, 11px, radius 2px, token `badge-*`. */
+  --ss-badge-h: 17px;
 }
 
 /* Berdiri di KANAN kolom dock, bukan di tepi kiri bersamanya: dock yang diam dan panel yang mengalah
@@ -72,18 +71,10 @@
   text-overflow: ellipsis;
 }
 
-/* Hitungan = badge VS Code (16px, pil). */
+/* Hitungan di judul view. Geometri badge dibagi dengan `.ss-tree__count` dan `.ss-signal` di bawah. */
 .sessions-sidebar__count {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
   background: var(--vscode-badge-background, var(--raised));
   color: var(--vscode-badge-foreground, var(--text));
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 16px;
-  text-align: center;
 }
 
 /* Aksi view: tersembunyi sampai view di-hover atau berisi fokus, seperti toolbar judul VS Code. */
@@ -109,7 +100,7 @@
   padding: 0;
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   color: var(--vscode-icon-foreground, var(--muted));
   cursor: default;
 }
@@ -158,7 +149,7 @@
   border-bottom-color: var(--vscode-panelTitle-activeBorder, var(--accent));
 }
 
-/* ---- Filter: VS Code input, 24px ---- */
+/* ---- Filter: VS Code input, 25px, radius 4px ---- */
 .sessions-sidebar__search {
   position: relative;
   display: flex;
@@ -168,11 +159,11 @@
 
 .sessions-sidebar__search input {
   width: 100%;
-  height: 24px;
+  height: 25px;
   padding: 2px 24px 2px 6px;
   background: var(--vscode-input-background, var(--sunken));
   border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 2px;
+  border-radius: 4px;
   color: var(--vscode-input-foreground, var(--text));
   font: inherit;
   outline: none;
@@ -193,10 +184,10 @@
   right: 14px;
   width: 18px;
   height: 18px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
-/* ---- Isi: scrollbar overlay 10px seperti VS Code ---- */
+/* ---- Isi: scrollbar view 8px (diukur dari VS Code; 14px hanya di editor) ---- */
 .sessions-sidebar__body {
   flex: 1;
   min-height: 0;
@@ -205,7 +196,7 @@
 }
 
 .sessions-sidebar__body::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
 }
 
 .sessions-sidebar__body::-webkit-scrollbar-thumb {
@@ -234,13 +225,15 @@
 .ss-empty__button {
   display: block;
   width: 100%;
-  min-height: 24px;
-  padding: 4px 11px;
+  min-height: 26px;
+  padding: 4px 8px;
   background: var(--vscode-button-background, var(--accent));
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
+  border-radius: 4px;
   color: var(--vscode-button-foreground, var(--text));
   font: inherit;
+  font-size: 12px;
+  line-height: 16px;
   text-align: center;
   cursor: default;
 }
@@ -297,18 +290,10 @@
   color: var(--vscode-icon-foreground, var(--text));
 }
 
-/* Hitungan grup = badge 16px. */
+/* Hitungan grup = badge VS Code. */
 .ss-tree__count {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
   background: var(--vscode-badge-background, var(--raised));
   color: var(--vscode-badge-foreground, var(--text));
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 16px;
-  text-align: center;
 }
 
 .ss-tree__decoration {
@@ -343,14 +328,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--ss-action-size);
+  height: var(--ss-action-size);
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   color: var(--vscode-icon-foreground, var(--muted));
   cursor: default;
+}
+
+/* Baris di-hover/di-fokus: aksi (End session) mengambil sisi kanan dan meta redup mengalah, seperti
+   baris tree VS Code yang menyembunyikan deskripsi saat toolbar aksinya muncul. Hanya leaf: baris
+   grup memuat anak-anaknya, jadi `:hover` di sana menyala untuk anak juga. */
+.ss-tree__leaf:has(.ss-tree__end):hover .ss-meta,
+.ss-tree__leaf:has(.ss-tree__end):focus-within .ss-meta {
+  display: none;
 }
 
 .ss-tree__end:hover {
@@ -397,15 +390,18 @@
   }
 }
 
-/* ---- Badge sinyal header grup ---- */
+/* ---- Badge: satu geometri untuk hitungan judul, hitungan grup, dan sinyal header grup ---- */
+.sessions-sidebar__count,
+.ss-tree__count,
 .ss-signal {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 8px;
+  box-sizing: border-box;
+  min-width: var(--ss-badge-h);
+  height: var(--ss-badge-h);
+  padding: 0 4px;
+  border-radius: 2px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  line-height: 16px;
+  line-height: var(--ss-badge-h);
   text-align: center;
 }
 

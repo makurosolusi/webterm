@@ -171,3 +171,31 @@ describe('meta baris sesi', () => {
     expect(row).not.toContain('function dirName')
   })
 })
+
+describe('G-11/G-12/G-18 CSS fidelity', () => {
+  const css = (f: string) => src(f)
+
+  it('badge hitungan sesi memakai token badge-* dan geometri VS Code (bukan pil 8px)', () => {
+    const c = css('sessions-panel.css')
+    const group = c.slice(c.indexOf('.sessions-sidebar__count,\n.ss-tree__count,\n.ss-signal {'))
+    const block = group.slice(0, group.indexOf('}'))
+    expect(block).toContain('border-radius: 2px')
+    expect(block).toContain('height: var(--ss-badge-h)')
+    expect(c).toMatch(/--ss-badge-h:\s*17px/)
+    expect(c).not.toContain('border-radius: 8px')
+    expect(c.match(/var\(--vscode-badge-background/g)?.length).toBe(2)
+  })
+
+  it('meta redup mengalah saat baris ber-aksi di-hover/di-fokus (aksi tak menimpa meta)', () => {
+    const c = css('sessions-panel.css')
+    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):hover .ss-meta')
+    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):focus-within .ss-meta')
+  })
+
+  it('filter chip Inbox netral dan tombol Retry sekunder, bukan biru inputOption', () => {
+    const c = css('inbox.css')
+    const active = c.slice(c.indexOf(".inbox-filter-toggle[data-active='true']"))
+    expect(active.slice(0, active.indexOf('}'))).not.toContain('inputOption')
+    expect(css('inboxPanelChrome.tsx')).toContain('inbox-action inbox-action--secondary')
+  })
+})

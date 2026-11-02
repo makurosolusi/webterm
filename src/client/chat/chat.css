@@ -130,15 +130,29 @@
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  margin: 0 20px 6px;
+  margin: 4px 20px 6px;
   padding: 4px 8px;
-  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
-  border-radius: 2px;
-  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
-  color: var(--vscode-foreground, #cccccc);
+  border: 1px solid var(--vscode-notifications-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  border-radius: 4px;
+  background: var(--vscode-notifications-background, var(--vscode-editorWidget-background, transparent));
+  color: var(--vscode-notifications-foreground, var(--vscode-foreground, #cccccc));
 }
 .chat-error > .codicon:first-child { flex: none; color: var(--vscode-errorForeground, #f48771); font-size: 16px; }
 .chat-error span:not(.codicon) { flex: 1; word-break: break-word; line-height: 16px; padding-top: 0; }
+.chat-error__retry {
+  flex: none;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-button-secondaryBorder, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground, transparent);
+  color: var(--vscode-button-secondaryForeground, inherit);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+.chat-error__retry:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground)); }
 .chat-error__dismiss {
   display: inline-flex;
   flex: none;
@@ -148,7 +162,7 @@
   height: 16px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
   font-size: 16px;
@@ -293,7 +307,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--vscode-icon-foreground, inherit);
   font-size: 16px;
@@ -393,7 +407,7 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--vscode-button-background, #0078d4);
   color: var(--vscode-button-foreground, #ffffff);
   font-size: 16px;

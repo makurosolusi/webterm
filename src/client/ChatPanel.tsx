@@ -78,6 +78,9 @@ export default function ChatPanel(props: ChatPanelProps) {
 
   const [conversations, setConversations] = useState<ChatConversation[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
+  // Terpisah dari `conversations === null`: setelah gagal muat daftar juga masih null, dan "Loading…"
+  // tidak boleh tampil di samping banner error.
+  const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<string | null>(readSelected)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -85,9 +88,11 @@ export default function ChatPanel(props: ChatPanelProps) {
     if (!open) return
     const controller = new AbortController()
     setListError(null)
+    setLoading(true)
     clientRef.current.listConversations({ signal: controller.signal }).then(
       (rows) => {
         if (controller.signal.aborted) return
+        setLoading(false)
         setConversations(rows)
         setSelected((current) => {
           if (current !== null && rows.some((row) => row.id === current)) return current
@@ -96,6 +101,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       },
       (error: unknown) => {
         if (controller.signal.aborted || isAbortError(error)) return
+        setLoading(false)
         setListError(chatErrorMessage(error))
       }
     )
@@ -121,8 +127,13 @@ export default function ChatPanel(props: ChatPanelProps) {
     <>
       {listError !== null && (
         <div className="chat-error" role="alert">
+          <span className="codicon codicon-error" aria-hidden="true" />
           <span>{listError}</span>
-          <button type="button" className="vscode-panel-action" aria-label="Dismiss error"
+          <button type="button" className="chat-error__retry"
+            onClick={() => setRefreshKey((key) => key + 1)}>
+            Retry
+          </button>
+          <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
             onClick={() => setListError(null)}>
             <span className="codicon codicon-close" aria-hidden="true" />
           </button>
@@ -132,7 +143,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       <div className="chat-body">
         <nav className="chat-conversations" aria-label="Conversations">
           {conversations === null ? (
-            <p className="chat-list-status">Loading…</p>
+            loading && <p className="chat-list-status">Loading…</p>
           ) : conversations.length === 0 ? (
             <p className="chat-list-status">No conversations yet</p>
           ) : (
@@ -165,11 +176,11 @@ export default function ChatPanel(props: ChatPanelProps) {
               streamFactory={streamRef.current}
             />
           ) : (
-            <p className="chat-empty">
-              {conversations === null || conversations.length === 0
-                ? 'No conversations yet.'
-                : 'Select a conversation to start.'}
-            </p>
+            conversations !== null && (
+              <p className="chat-empty">
+                {conversations.length === 0 ? 'No conversations yet.' : 'Select a conversation to start.'}
+              </p>
+            )
           )}
         </div>
       </div>

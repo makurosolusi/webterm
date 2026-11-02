@@ -115,6 +115,8 @@ describe('list states', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('GET /api/inbox failed')
+    // G-18: Retry is a secondary VS Code button, not the blue primary action.
+    expect(within(alert).getByRole('button', { name: 'Retry' }).className).toContain('inbox-action--secondary')
     fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('Deploy main')).toBeDefined()
     expect(listInbox).toHaveBeenCalledTimes(2)

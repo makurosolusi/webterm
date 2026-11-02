@@ -83,7 +83,7 @@ export function InboxPanelError(props: InboxPanelErrorProps): React.JSX.Element 
     <div className="inbox-error" role="alert">
       <span className="codicon codicon-error" aria-hidden="true" />
       <span className="inbox-error__text">{message}</span>
-      <button type="button" className="inbox-action" onClick={onRetry}>Retry</button>
+      <button type="button" className="inbox-action inbox-action--secondary" onClick={onRetry}>Retry</button>
     </div>
   )
 }

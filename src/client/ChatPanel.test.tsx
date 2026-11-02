@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatPanel from './ChatPanel'
 import { ChatApiError } from './chatApi'
@@ -190,5 +190,26 @@ describe('ChatPanel busy + errors', () => {
     renderPanel(client)
 
     expect((await screen.findByRole('alert')).textContent).toContain('runtime is off')
+  })
+
+  it('G-17: a failed list shows no Loading or empty copy beside the error, and Retry refetches', async () => {
+    const listConversations = vi
+      .fn<ChatClient['listConversations']>()
+      .mockRejectedValueOnce(new ChatApiError('off', 503, 'central_runtime_off'))
+      .mockResolvedValueOnce([GLOBAL])
+    renderPanel(makeClient({ listConversations }))
+
+    const alert = await screen.findByRole('alert')
+    expect(screen.queryByText('Loading…')).toBeNull()
+    expect(screen.queryByText(/No conversations yet/)).toBeNull()
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(listConversations).toHaveBeenCalledTimes(2)
+  })
+
+  it('G-17: Loading is shown only while the first list request is pending', () => {
+    renderPanel(makeClient({ listConversations: vi.fn(() => new Promise<ChatConversation[]>(() => {})) }))
+    expect(screen.getByText('Loading…')).toBeDefined()
+    expect(screen.queryByText(/No conversations yet/)).toBeNull()
   })
 })
