@@ -23,36 +23,43 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent showCloseButton={false} style={{ width: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* `max-w` di-override di breakpoint `sm` karena bawaan DialogContent (`sm:max-w-lg` = 512px)
+          akan memotong lebar 520px di layar sempit-menetang. flex-col + overflow-hidden menjaga
+          daftar folder satu-satunya area yang menggulir. */}
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[70vh] w-[520px] max-w-[calc(100%-2rem)] flex-col overflow-hidden sm:max-w-[520px]"
+      >
         <DialogHeader className="sr-only"><DialogTitle>Choose a folder</DialogTitle></DialogHeader>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: 10, borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2 border-b border-border p-2.5">
           <Button
             variant="ghost"
             onClick={() => parent && load(parent)}
             disabled={parent === null}
-            style={{ cursor: parent === null ? 'default' : 'pointer', opacity: parent === null ? 0.4 : 1 }}
+            className="disabled:opacity-40"
           >
             ⬆ up
           </Button>
-          <span style={{ flex: 1, color: 'var(--muted)', fontSize: 12, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' }}>{path}</span>
+          {/* `direction: rtl` menahan ekor path tetap terlihat saat terpotong; `text-left` menjaga
+              urutan karakternya tetap kiri-ke-kanan. */}
+          <span className="min-w-0 flex-1 truncate text-left font-mono text-xs text-muted-foreground [direction:rtl]">{path}</span>
         </div>
-        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-          <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {dirs.length === 0 && <span style={{ color: 'var(--muted)', fontSize: 12, padding: 6 }}>(no subfolders)</span>}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex flex-col gap-0.5 p-2">
+          {dirs.length === 0 && <span className="p-1.5 text-xs text-muted-foreground">(no subfolders)</span>}
           {dirs.map((d) => (
             <Button
               variant="ghost"
-              className="folder-picker__entry"
+              className="h-auto w-full min-w-0 justify-start rounded bg-transparent px-2 py-1.5 text-left font-mono text-[13px] text-foreground hover:bg-transparent"
               key={d}
               onClick={() => load(path + '/' + d)}
-              style={{ textAlign: 'left', background: 'transparent', color: 'var(--text)', border: 'none', borderRadius: 4, padding: '6px 8px', cursor: 'pointer', fontSize: 13, fontFamily: 'monospace' }}
             >
               📁 {d}
             </Button>
           ))}
           </div>
         </ScrollArea>
-        <DialogFooter style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: 10, borderTop: '1px solid var(--border)' }}>
+        <DialogFooter className="flex-row justify-end border-t border-border p-2.5">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button onClick={() => onPick(path)}>Select this folder</Button>
         </DialogFooter>

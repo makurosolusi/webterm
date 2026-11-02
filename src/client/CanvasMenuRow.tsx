@@ -4,6 +4,7 @@
 // berbeda. Keputusan geometrinya tetap bukan milik file ini: ia memanggil fungsi murni di
 // `canvasMenu.geometry.ts` dan hanya menyediakan angka hasil pengukuran DOM.
 import { useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { ChevronRight, FolderTree, Scan, Sparkles, SquareDashed, SquareTerminal } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CanvasMenuIcon, CanvasMenuItem } from './canvasMenu.model'
@@ -61,7 +62,7 @@ export function CanvasMenuRowButton({
     >
       <span className="node-menu__icon">
         {item.dot ? (
-          <span className="node-menu__dot" style={{ background: item.dot }} />
+          <span className="node-menu__dot bg-[var(--dot-color)]" style={{ '--dot-color': item.dot } as CSSProperties} />
         ) : (
           <Icon size={ICON_PX} aria-hidden />
         )}
@@ -128,7 +129,7 @@ export function CanvasSubmenu({
       ref={ref}
       className="node-menu node-menu__sub"
       data-side={side}
-      style={lift ? { top: SUBMENU_TOP_PX - lift } : undefined}
+      style={lift ? { '--submenu-top': `${SUBMENU_TOP_PX - lift}px` } as CSSProperties : undefined}
       role="menu"
       aria-labelledby={labelledBy}
     >

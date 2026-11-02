@@ -63,7 +63,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
         title="Comments" onClick={props.onToggleComments}
       >
         <IconComments />
-        {count > 0 && <sup style={{ fontSize: 9, marginLeft: 2 }}>{count}</sup>}
+        {count > 0 && <sup className="text-[9px] ml-0.5">{count}</sup>}
       </Button>
 
       {props.onBroadcast && (

@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -300,8 +301,8 @@ function EditorNode({
     <>
       <NodeResizer isVisible={!!selected} minWidth={320} minHeight={180} color={swatch} />
       <div
-        className={`term-node editor-node${selected ? ' term-node--selected' : ''}`}
-        style={{ borderTopColor: swatch }}
+        className={`term-node editor-node${selected ? ' term-node--selected' : ''} [border-top-color:var(--node-swatch)]!`}
+        style={{ '--node-swatch': swatch } as CSSProperties}
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
       >

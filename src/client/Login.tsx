@@ -7,11 +7,9 @@ interface Props {
   onSubmit: (token: string) => Promise<boolean>
 }
 
-const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
-
 function Brand() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="flex items-center gap-3">
       <svg width={40} height={40} viewBox="0 0 48 48" aria-hidden>
         <defs>
           <linearGradient id="login-brand" x1="0" y1="0" x2="1" y2="1">
@@ -25,7 +23,7 @@ function Brand() {
         <circle cx={31} cy={24} r={3.6} fill="#fff" />
         <rect x={33.5} y={32.5} width={10.5} height={5} rx={2.5} fill="#a38dff" />
       </svg>
-      <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5 }}>webterm</span>
+      <span className="text-[30px] font-extrabold tracking-[-0.5px]">webterm</span>
     </div>
   )
 }
@@ -49,15 +47,15 @@ export default function Login({ onSubmit }: Props) {
   }
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'var(--canvas-bg)', color: 'var(--text)', fontFamily: mono, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-[var(--canvas-bg)] font-mono text-foreground">
       <Brand />
-      <Label htmlFor="login-access-token" style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 400 }}>
+      <Label htmlFor="login-access-token" className="text-[13px] font-normal text-muted-foreground">
         Enter your access token
       </Label>
-      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+      <form onSubmit={submit} className="flex flex-col items-center gap-2.5">
         <Input
           id="login-access-token"
-          className="h-auto focus-visible:ring-0"
+          className="h-auto w-[260px] text-center focus-visible:ring-0"
           type="password"
           aria-label="Access token"
           autoFocus
@@ -65,12 +63,11 @@ export default function Login({ onSubmit }: Props) {
           value={value}
           disabled={pending}
           onChange={(e) => setValue(e.target.value)}
-          style={{ fontFamily: mono, textAlign: 'center', width: 260 }}
         />
         <Button type="submit" disabled={pending}>
           Unlock
         </Button>
-        {error && <div style={{ color: '#ff6b6b', fontSize: 12 }}>Token salah</div>}
+        {error && <div className="text-xs text-destructive">Token salah</div>}
       </form>
     </div>
   )

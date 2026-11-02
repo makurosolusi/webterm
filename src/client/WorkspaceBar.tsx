@@ -22,6 +22,7 @@ import { canScrollStripBy, tabStripOverflow, workspaceTabDot, workspaceTabTitle,
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -174,82 +175,100 @@ export default function WorkspaceBar({
         {/* `data-overflow` hanya menyetel sisi mana yang dipudarkan — aturan maskernya di
             `styles.css`. 'none' tetap dikirim (bukan atribut yang dibuang) supaya selektornya
             selalu eksplisit. */}
-        <div
-          ref={stripRef}
-          className="tabbar__tabs"
-          data-overflow={overflow}
-          role="tablist"
-          aria-label="Workspaces"
-        >
-          {groups.map((g) => (
-            // `div`, bukan `button` seperti dulu: tab sekarang MEMUAT tombol (kebab) dan sebuah
-            // input, dan button di dalam button adalah HTML tidak sah — browser memecah DOM-nya
-            // sendiri. Keyboard tetap sampai ke tab lewat tabIndex + Enter/Space, yang semula
-            // didapat gratis dari elemen button.
-            <div
-              key={g.projectId}
-              role="tab"
-              tabIndex={0}
-              aria-selected={g.isActive}
-              className={g.isActive ? 'tab tab--active' : 'tab'}
-              title={workspaceTabTitle(g)}
-              onClick={() => onSelect(g.projectId)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return
-                e.preventDefault() // Space menggulung halaman
-                onSelect(g.projectId)
-              }}
-            >
-              <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />
-              {editingId === g.projectId ? (
-                <Input
-                  className="tab__edit"
-                  value={draft}
-                  autoFocus
-                  spellCheck={false}
-                  aria-label="Workspace name"
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Tab induk ikut mendengar Enter/Space; tanpa ini mengetik spasi di dalam nama
-                    // juga memilih workspace dan Enter melakukannya dua kali.
-                    e.stopPropagation()
-                    if (e.key === 'Enter') commitRename()
-                    if (e.key === 'Escape') setEditingId(null)
-                  }}
-                  onBlur={commitRename}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="tab__name">{g.projectName}</span>
-              )}
+        {/* `contents` bukan kosmetik: Tabs.Root merender satu wrapper, dan wrapper itu harus tidak
+            ikut menjadi flex item di `tabbar__projects` — tanpa ini strip dan tombol `+`/
+            logout tidak lagi sebaris. */}
+        <Tabs value={activeId ?? ''} onValueChange={onSelect} activationMode="manual" className="contents">
+          {/* `role`, `aria-selected`, `tabIndex`, dan aktivasi keyboard sekarang milik Radix
+              (TabsList/TabsTrigger), bukan markup tangan. `activationMode="manual"` disengaja:
+              aktif-otomatis-saat-fokus akan memindahkan board ketika fokus mendarat di input
+              rename atau kebab — dulu fokus tidak pernah memilih workspace, Enter/Space/klik
+              yang memilih. */}
+          <TabsList
+            ref={stripRef}
+            variant="line"
+            className="tabbar__tabs"
+            data-overflow={overflow}
+            aria-label="Workspaces"
+          >
+            {groups.map((g) => (
+              // TabsTrigger `asChild` dengan `div`, bukan `button` seperti bentuk aslinya: tab
+              // MEMUAT tombol (kebab) dan sebuah input, dan button di dalam button adalah HTML
+              // tidak sah — browser memecah DOM-nya sendiri. Slot Radix yang menempelkan peran
+              // tab, penanda terpilih, dan navigasi panah ke div ini.
+              <TabsTrigger
+                key={g.projectId}
+                asChild
+                value={g.projectId}
+                // Radix mengaktifkan tab pada `mousedown` trigger-nya, dan itu cukup untuk pointer.
+                // Tapi trigger di sini `div` (lewat `asChild`), jadi tidak ada `click` bawaan dari
+                // Enter/Space seperti pada `button` — dan pembaca layar/alat bantu memilih tab
+                // dengan mengirim `click`. Karena nilainya sama, klik ganda (mousedown lalu click)
+                // tidak memanggil `onSelect` dua kali: Tabs menolak nilai yang tak berubah.
+                onClick={() => onSelect(g.projectId)}
+              >
+                <div
+                  className={g.isActive ? 'tab tab--active' : 'tab'}
+                  title={workspaceTabTitle(g)}
+                >
+                  <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />
+                  {editingId === g.projectId ? (
+                    <Input
+                      className="tab__edit"
+                      value={draft}
+                      autoFocus
+                      spellCheck={false}
+                      aria-label="Workspace name"
+                      onChange={(e) => setDraft(e.target.value)}
+                      // Radix mengaktifkan tab lewat `mousedown` pada trigger; tanpa ini mengklik
+                      // input rename milik tab non-aktif ikut berpindah board.
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        // Tab induk ikut mendengar Enter/Space; tanpa ini mengetik spasi di dalam nama
+                        // juga memilih workspace dan Enter melakukannya dua kali.
+                        e.stopPropagation()
+                        if (e.key === 'Enter') commitRename()
+                        if (e.key === 'Escape') setEditingId(null)
+                      }}
+                      onBlur={commitRename}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="tab__name">{g.projectName}</span>
+                  )}
 
-              {editingId !== g.projectId && (
-                <span className="tab__actions">
-                  <Button
-                    type="button"
-                    className="tab__caret"
-                    title="Workspace options"
-                    aria-label="Workspace options"
-                    onClick={(e) => {
-                      // Klik kebab TIDAK berpindah workspace (nodeterm sama): menu ini juga jalan
-                      // untuk tab yang tidak aktif, dan membuka menu bukan permintaan pindah board.
-                      e.stopPropagation()
-                      // Tanpa cabang toggle "klik lagi untuk menutup": `NodeContextMenu` menutup
-                      // diri pada pointerdown di luar panelnya lewat listener CAPTURE di window,
-                      // dan kebab ini ada di luar panel itu. Listener-nya jalan sebelum handler
-                      // ini, jadi menu selalu sudah tertutup di sini dan cabang itu tidak akan
-                      // pernah benar. Penutupnya: klik di luar + Escape.
-                      const r = e.currentTarget.getBoundingClientRect()
-                      setMenu({ id: g.projectId, x: r.left, y: r.bottom + MENU_GAP })
-                    }}
-                  >
-                    <MoreVertical aria-hidden />
-                  </Button>
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+                  {editingId !== g.projectId && (
+                    <span className="tab__actions">
+                      <Button
+                        type="button"
+                        className="tab__caret"
+                        title="Workspace options"
+                        aria-label="Workspace options"
+                        // Radix memilih tab pada `mousedown` trigger, yang TIDAK ikut terhenti oleh
+                        // `stopPropagation` di onClick. Membuka menu bukan permintaan pindah board.
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          // Klik kebab TIDAK berpindah workspace (nodeterm sama): menu ini juga jalan
+                          // untuk tab yang tidak aktif, dan membuka menu bukan permintaan pindah board.
+                          e.stopPropagation()
+                          // Tanpa cabang toggle "klik lagi untuk menutup": `NodeContextMenu` menutup
+                          // diri pada pointerdown di luar panelnya lewat listener CAPTURE di window,
+                          // dan kebab ini ada di luar panel itu. Listener-nya jalan sebelum handler
+                          // ini, jadi menu selalu sudah tertutup di sini dan cabang itu tidak akan
+                          // pernah benar. Penutupnya: klik di luar + Escape.
+                          const r = e.currentTarget.getBoundingClientRect()
+                          setMenu({ id: g.projectId, x: r.left, y: r.bottom + MENU_GAP })
+                        }}
+                      >
+                        <MoreVertical aria-hidden />
+                      </Button>
+                    </span>
+                  )}
+                </div>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <Button
           type="button"
           className="tab__add"

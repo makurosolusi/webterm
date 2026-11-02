@@ -339,7 +339,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     }
   }, [id, settings, fontZoom, refit])
 
-  return <div ref={elRef} className="nodrag nowheel" style={{ height: '100%', width: '100%' }} />
+  return <div ref={elRef} className="nodrag nowheel size-full" />
 })
 
 export default TerminalCore

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
 import { Button } from '@/components/ui/button'
@@ -175,8 +175,8 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
     <>
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
-        className={termNodeClass({ selected: !!selected, collapsed })}
-        style={{ borderTopColor: swatch }}
+        className={`${termNodeClass({ selected: !!selected, collapsed })} [border-top-color:var(--node-swatch)]!`}
+        style={{ '--node-swatch': swatch } as CSSProperties}
         // Tanpa ini Chrome memunculkan menu bawaannya untuk `<canvas>` — "Copy Image" di atas
         // terminal. React Flow tidak menolong: `Pane` hanya meneruskan contextmenu yang target-nya
         // pane itu sendiri, jadi klik kanan di atas node tidak pernah sampai ke menu canvas.

@@ -2,6 +2,7 @@
 // dan `agentLaunchCommands` (override per builtin). Bentuknya mengikuti nodeterm
 // `src/renderer/components/settings/sections/{AgentsSection,CustomAgentsSection}.tsx`: satu kartu
 // per agent custom, dan satu baris input per agent builtin untuk launch command.
+import type { CSSProperties } from 'react'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -126,7 +127,7 @@ export function AgentSettings({
         <div className="st-rows">
           {BUILTIN_AGENT_IDS.map((id: BuiltinAgentId) => (
             <div key={id} className="st-row">
-              <span className="st-row-label" style={{ color: AGENT_CONFIG[id].color }}>
+              <span className="st-row-label text-[var(--agent-color)]" style={{ '--agent-color': AGENT_CONFIG[id].color } as CSSProperties}>
                 {AGENT_CONFIG[id].label}
               </span>
               <Input

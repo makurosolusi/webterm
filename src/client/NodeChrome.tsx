@@ -113,7 +113,7 @@ export default function NodeChrome(props: NodeChromeProps) {
   const chip = statusChip(props.status)
 
   return (
-    <div className="node-header" style={{ position: 'relative' }}>
+    <div className="node-header relative">
       <Button
         variant="ghost" size="icon-xs"
         className={cn('nodrag node-chevron', props.collapsed && 'node-chevron--collapsed')}

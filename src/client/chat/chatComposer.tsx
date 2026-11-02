@@ -15,7 +15,9 @@ export interface ChatComposerProps {
   onStop: () => void
 }
 
-const MAX_ROWS = 6
+// Tinggi maksimum textarea: 6 baris × line-height 20px. Nilainya literal dan statis supaya
+// Tailwind menemukan kelasnya saat scan; angka dan kelas ini harus tetap sepasang.
+const INPUT_MAX_HEIGHT_CLASS = 'max-h-[120px]'
 
 export default function ChatComposer(props: ChatComposerProps) {
   const [text, setText] = useState('')
@@ -38,7 +40,7 @@ export default function ChatComposer(props: ChatComposerProps) {
   return (
     <div className="chat-composer">
       <Textarea
-        className="chat-composer__input"
+        className={`chat-composer__input ${INPUT_MAX_HEIGHT_CLASS}`}
         aria-label="Message the central agent"
         placeholder={props.busy ? 'Turn running. Stop or wait…' : 'Message the central agent…'}
         rows={2}
@@ -46,7 +48,6 @@ export default function ChatComposer(props: ChatComposerProps) {
         disabled={props.disabled}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
-        style={{ maxHeight: `${MAX_ROWS * 20}px` }}
       />
       {props.busy ? (
         <Button type="button" variant="destructive" size="sm" onClick={props.onStop}

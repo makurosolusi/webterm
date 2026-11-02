@@ -31,20 +31,20 @@ export default function HelpOverlay({ onClose }: { onClose: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
-        // `palette` tetap memegang ukuran/permukaan; util di sini hanya menetralkan bingkai
+        // Util di sini menetralkan bingkai
         // DialogContent (p-6, gap-4, center) supaya posisi dan padded list tidak berubah.
-        className="palette nodrag nowheel z-[60] gap-0 p-0 top-[12vh] translate-y-0 motion-reduce:animate-none"
+        className="nodrag nowheel z-[60] gap-0 p-0 top-[12vh] translate-y-0 motion-reduce:animate-none"
         aria-label="Keyboard shortcuts"
         showCloseButton={false}
       >
         {/* Radix memfokuskan viewport saat dialog dibuka; ring/outline di situ bukan penanda
             kontrol (daftar ini memang tak punya kontrol), hanya kotak baru. */}
-        <ScrollArea className="palette__list flex-1 min-h-0 [&_[data-slot=scroll-area-viewport]]:focus-visible:ring-0 [&_[data-slot=scroll-area-viewport]]:focus-visible:outline-none">
-          <DialogTitle className="palette__section" style={{ margin: 0 }}>Keyboard shortcuts</DialogTitle>
+        <ScrollArea className="flex-1 min-h-0 [&_[data-slot=scroll-area-viewport]]:focus-visible:ring-0 [&_[data-slot=scroll-area-viewport]]:focus-visible:outline-none">
+          <DialogTitle className="m-0">Keyboard shortcuts</DialogTitle>
           {SHORTCUTS.map(([chord, what]) => (
-            <div key={chord} className="palette__item">
+            <div key={chord}>
               <span>{what}</span>
-              <span className="palette__hint">{chord}</span>
+              <span>{chord}</span>
             </div>
           ))}
         </ScrollArea>

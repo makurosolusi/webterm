@@ -43,7 +43,6 @@
 
 /* Tombol search melebar untuk memuat chip ⌘K, jadi tujuannya terbaca tanpa tooltip. */
 .cluster-search {
-  width: auto !important;
   gap: 10px;
   padding: 0 10px;
 }

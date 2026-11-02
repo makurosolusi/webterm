@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import {
   Plus, Minus, Undo2, Redo2, ChevronLeft, ChevronRight, Scan, LayoutGrid,
   Save, Layers, Mic, SquareTerminal, FolderPlus, Check, Lock, LockOpen, PanelLeft, Focus, Inbox,
@@ -180,9 +181,9 @@ export default function Dock(props: DockProps) {
                 <Button variant="ghost" className="dock-action-row" onClick={addTerminal}><SquareTerminal size={ICON} /> Terminal</Button>
                 {builtins.map((a) => {
                   const cfg = agentConfig(a)
-                  return <Button key={a} variant="ghost" className="dock-action-row" title={cfg?.notice} onClick={() => addBuiltin(a)}><span className="dock-menu__glyph" style={{ background: cfg?.color ?? FALLBACK_AGENT_COLOR }} />{cfg?.label ?? a}</Button>
+                  return <Button key={a} variant="ghost" className="dock-action-row" title={cfg?.notice} onClick={() => addBuiltin(a)}><span className="dock-menu__glyph bg-[var(--agent-color)]" style={{ '--agent-color': cfg?.color ?? FALLBACK_AGENT_COLOR } as CSSProperties} />{cfg?.label ?? a}</Button>
                 })}
-                {visibleCustoms.map((c) => <Button key={c.id} variant="ghost" className="dock-action-row" onClick={() => addCustom(c)}><span className="dock-menu__glyph" style={{ background: c.color ?? FALLBACK_AGENT_COLOR }} />{c.label}</Button>)}
+                {visibleCustoms.map((c) => <Button key={c.id} variant="ghost" className="dock-action-row" onClick={() => addCustom(c)}><span className="dock-menu__glyph bg-[var(--agent-color)]" style={{ '--agent-color': c.color ?? FALLBACK_AGENT_COLOR } as CSSProperties} />{c.label}</Button>)}
                 <Button variant="ghost" className="dock-action-row" onClick={openWorkspaceForm}><FolderPlus size={ICON} /> Workspace…</Button>
               </div>
             </DialogContent>
@@ -191,14 +192,14 @@ export default function Dock(props: DockProps) {
 
         {workspaceOpen && (
           <Dialog open onOpenChange={setWorkspaceOpen}>
-          <DialogContent className="dock-workspace-dialog">
+          <DialogContent>
             <DialogHeader><DialogTitle>Create workspace</DialogTitle></DialogHeader>
             <div className="dock-menu__form">
               <Input placeholder="name" autoFocus value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') createWs() }} />
               <div className="dock-menu__form-row">
-                <Input style={{ flex: 1 }} placeholder="cwd (optional)" value={wsCwd}
+                <Input className="flex-1" placeholder="cwd (optional)" value={wsCwd}
                   onChange={(e) => setWsCwd(e.target.value)} />
                 <Button variant="ghost" onClick={() => props.onBrowse(setWsCwd)}>Browse</Button>
               </div>

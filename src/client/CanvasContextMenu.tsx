@@ -4,7 +4,7 @@
 // ada di komentar kepala `canvasMenu.model.ts`: vitest repo ini belum punya DOM, jadi apa pun yang
 // dilipat ke dalam komponen otomatis menjadi perilaku yang tidak teruji.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { isSeparator, nextItemIndex } from './canvasMenu.model'
 import type { CanvasMenuItem, CanvasMenuRow } from './canvasMenu.model'
@@ -165,8 +165,8 @@ export default function CanvasContextMenu({ x, y, rows, onClose }: CanvasContext
   return createPortal(
     <div
       ref={place.ref}
-      className="node-menu node-menu--canvas nodrag nopan"
-      style={{ left: place.x, top: place.y }}
+      className="node-menu node-menu--canvas nodrag nopan left-[var(--menu-x)] top-[var(--menu-y)]"
+      style={{ '--menu-x': `${place.x}px`, '--menu-y': `${place.y}px` } as CSSProperties}
       role="menu"
       aria-label="Canvas actions"
       aria-activedescendant={activeId}

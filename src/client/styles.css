@@ -208,6 +208,14 @@ body {
      membungkus: header harus tetap satu baris berapa pun jumlah workspace-nya. */
   flex: 0 1 auto;
   min-width: 0;
+  /* `TabsList` shadcn membawa `h-9` + `p-[3px]` + `justify-center` + `w-fit`. Tiga yang pertama
+     harus dibatalkan di sini: strip setinggi tab-nya (garis bawah varian line duduk di tepi
+     bawah kotak tab), dan `justify-center` pada kontainer yang menggulung akan memotong sisi kiri
+     luapan sehingga tab pertama tak bisa digulung kembali ke tampak. */
+  height: auto;
+  width: auto;
+  padding: 0;
+  justify-content: flex-start;
   overflow-x: auto;
   /* Scrollbar native di dalam header terbaca seperti elemen asing. Trackpad memancarkan deltaX
      jadi ia menggulung sendiri; roda mouse biasa hanya memancarkan deltaY dan TIDAK menggulung
@@ -273,22 +281,21 @@ body {
   background: rgba(var(--tint-rgb), 0.08);
   color: var(--text);
 }
-/* Penanda terpilih: fill ber-aksen + garis dasar 2px — kosakata yang SAMA dengan
-   `.ss-tab[aria-selected='true']` di `sessions-panel.css` dan `.icon-btn--active` di
-   `node-chrome.css`, bukan gaya baru.
-   KENAPA diganti: fill lamanya `var(--raised)` (#242424) duduk di atas bar `var(--panel)`
-   (#282828) — selisih 4 dari 255, di bawah ambang yang bisa dilihat mata, jadi satu-satunya
-   sinyal "ini yang kamu lihat" yang tersisa adalah kecerahan `.tab__dot`. Dot itu membawa status
-   agent, BUKAN keterpilihan (lihat `workspaceTabs.ts`), jadi ia tidak bisa memikul pekerjaan ini.
-   Aksen mengubah HUE, bukan kecerahan, jadi tab aktif terbaca sendiri tanpa dibandingkan dengan
-   tetangganya; garis dasarnya adalah kanal BENTUK, supaya penanda ini tidak bersandar pada warna
-   saja (markup-nya juga membawa `aria-selected`). Keduanya berangkat dari satu token `--accent`,
-   jadi tema terang ikut benar tanpa deklarasi kedua — di sana `--panel` dan `--canvas-bg` sama
-   dekatnya, jadi fill permukaan apa pun akan menghilang dengan cara yang sama. */
+/* Penanda terpilih kini milik `TabsTrigger` shadcn `variant="line"`: garis bawah 2px
+   (`after:bg-foreground`) yang hanya menyala di `data-state=active`, plus `aria-selected` dari
+   Radix. Fill-nya sengaja DIBUANG — bar `var(--panel)` dan fill apa pun di atasnya berjarak
+   empat tingkat dari 255, tidak terbaca mata, sementara garis adalah kanal BENTUK yang tetap
+   terlihat tanpa membandingkan tab dengan tetangganya. Kelas `tab--active` tetap ada sebagai
+   kait (dipakai `revealActiveTab` untuk menggulung tab aktif ke tampak), bukan sebagai sumber
+   gaya. */
 .tab--active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
+}
+/* `TabsTrigger` varian line menaruh garisnya di `bottom: -5px`, yaitu DI LUAR kotak tab. Strip ini
+   adalah kontainer `overflow-x: auto`, yang ikut meng-clip sumbu Y — garisnya akan terpotong.
+   Digeser ke tepi bawah kotak tab sendiri supaya garisnya utuh dan tidak menambah tinggi bar. */
+.tabbar__tabs [data-slot='tabs-trigger']::after {
+  bottom: 0;
 }
 .tab__name {
   overflow: hidden;
@@ -315,6 +322,9 @@ body {
   flex: 1 1 0;
   width: 0;
   min-width: 48px;
+  /* `Input` shadcn membawa `h-9` (36px), sedangkan kotak tab 28px dan strip-nya `overflow-x: auto`
+     — tanpa tinggi sendiri input-nya terpotong di tepi atas/bawah strip. */
+  height: 24px;
   padding: 2px 6px;
   background: var(--sunken);
   border: 1px solid var(--border);

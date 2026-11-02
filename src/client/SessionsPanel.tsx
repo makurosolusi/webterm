@@ -12,7 +12,6 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
 import SessionRow from './SessionRow'
 import {
   buildSessionList,
@@ -214,7 +213,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       <div className="sessions-sidebar__search">
         <Input
           type="text"
-          className={cn('sessions-sidebar__filter-input')}
           value={filter}
           placeholder="Filter sessions…"
           aria-label="Filter sessions"

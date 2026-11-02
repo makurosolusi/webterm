@@ -2,16 +2,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// Yang dijaga di sini adalah PENANDA tab workspace terpilih, yang hidup di aturan CSS
-// `.tab--active` plus kelas/atribut yang memasangnya di `WorkspaceBar.tsx`. Vitest webterm jalan
-// di node-env tanpa DOM, jadi tidak ada komponen yang bisa dirender dan tidak ada computed style
-// yang bisa dibaca. Yang bisa dilakukan: membaca source-nya dan menolak bentuk yang salah — pola
-// yang sama dengan `workspaceCommit.test.ts` dan `sidebarChrome.test.ts`.
-//
-// KENAPA ini perlu dijaga sama sekali: bentuk lamanya menandai tab aktif dengan fill permukaan
-// (`var(--raised)` di atas bar `var(--panel)`), selisih 4 dari 255 yang tidak terlihat mata, jadi
-// keterpilihan praktis bersandar pada kecerahan `.tab__dot` — yang membawa status agent, bukan
-// keterpilihan. Regresi ke "fill permukaan" akan lolos review karena ia TERLIHAT benar di source.
+// Yang dijaga di sini adalah PENANDA tab workspace terpilih. Sejak migrasi shadcn, penandanya
+// bukan lagi aturan CSS buatan sendiri: `TabsTrigger` `variant="line"` milik `components/ui/tabs`
+// menggambar garis bawah dari `data-state=active` dan membawa `aria-selected` dari Radix. Yang
+// tersisa di sisi webterm adalah (a) kelas `tab--active` sebagai kait, (b) satu koreksi posisi
+// garis, dan (c) bahwa strip-nya benar-benar memakai primitif itu. Vitest webterm jalan di
+// node-env tanpa DOM, jadi tidak ada computed style yang bisa dibaca: source-nya yang diperiksa —
+// pola yang sama dengan `workspaceCommit.test.ts` dan `sidebarChrome.test.ts`.
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
 
 /** Badan satu aturan CSS, dari selektornya sampai `}` pertama. String kosong kalau tak ada. */
@@ -21,15 +18,23 @@ const rule = (css: string, selector: string): string => {
 }
 
 /**
- * Penanda terpilih harus bersandar pada `--accent`, bukan pada permukaan: aksen mengubah hue, dan
- * hue terbaca tanpa membandingkan tab dengan tetangganya. `--raised`/`--panel`/`--bg` dilarang
- * eksplisit karena itulah justru bentuk lama yang gagal.
+ * Penanda terpilih tidak boleh kembali menjadi fill permukaan: bar `var(--panel)` dan fill apa pun
+ * di atasnya berjarak empat tingkat dari 255, di bawah ambang yang bisa dilihat mata. Garis
+ * (kanal bentuk) yang dipakai sekarang; fill dan bayangan adalah bentuk lama yang gagal.
  */
-const marksActiveWithAccent = (body: string) =>
-  /background:[^;]*var\(--accent\)/.test(body) && !/background:\s*var\(--(raised|panel|bg|overlay)\)/.test(body)
+const hasNoSurfaceFill = (body: string): boolean =>
+  body.length > 0 && !/^\s*background\s*:/m.test(body) && !/box-shadow/.test(body)
 
-/** Kanal BENTUK, supaya penandanya tidak bersandar pada warna saja: garis dasar 2px ber-aksen. */
-const hasAccentBaseline = (body: string) => /inset 0 -2px 0 var\(--accent\)/.test(body)
+/**
+ * `TabsTrigger` varian line menaruh garisnya di `bottom: -5px`, di luar kotak tab, dan strip ini
+ * adalah kontainer `overflow-x: auto` yang meng-clip sumbu Y. Garis harus digeser ke tepi bawah
+ * kotak tab sendiri supaya terlihat utuh.
+ */
+const underlineSitsInsideTab = (css: string): boolean => {
+  const at = css.indexOf(".tabbar__tabs [data-slot='tabs-trigger']::after")
+  if (at === -1) return false
+  return /bottom:\s*0\s*;/.test(css.slice(at).split('}')[0])
+}
 
 /**
  * Tab aktif yang di-hover tetap terbaca aktif. `.tab:hover` punya spesifisitas lebih tinggi
@@ -41,9 +46,9 @@ const hoverSparesActive = (css: string) =>
 
 // Bentuk lama, persis seperti sebelum dibetulkan. Dipakai untuk membuktikan guard di atas
 // benar-benar menggigit, bukan lulus karena polanya mustahil ditemukan.
-const OLD_ACTIVE = `  background: var(--raised);
+const OLD_ACTIVE = `  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, calc(0.3 * var(--shadow-k)));
+  box-shadow: inset 0 -2px 0 var(--accent);
 `
 const OLD_HOVER_CSS = `
 .tab:hover {
@@ -53,16 +58,14 @@ const OLD_HOVER_CSS = `
 `
 
 describe('penanda tab workspace terpilih', () => {
-  it('`.tab--active` ada dan menandai dengan aksen, bukan dengan fill permukaan', () => {
+  it('`.tab--active` tidak lagi memakai fill atau bayangan permukaan', () => {
     // Dihitung dulu: aturan yang tidak ketemu memulangkan string kosong, dan guard apa pun di
     // atasnya akan menjawab tanpa menjaga apa pun.
-    const body = rule(src('styles.css'), '.tab--active')
-    expect(body.length).toBeGreaterThan(0)
-    expect(marksActiveWithAccent(body)).toBe(true)
+    expect(hasNoSurfaceFill(rule(src('styles.css'), '.tab--active'))).toBe(true)
   })
 
-  it('punya garis dasar ber-aksen — kanal bentuk di samping kanal warna', () => {
-    expect(hasAccentBaseline(rule(src('styles.css'), '.tab--active'))).toBe(true)
+  it('garis bawah dipindahkan ke dalam kotak tab, supaya tidak terpotong scroll container', () => {
+    expect(underlineSitsInsideTab(src('styles.css'))).toBe(true)
   })
 
   it('teksnya tetap `--text`, bukan `--muted` seperti tab non-aktif', () => {
@@ -73,13 +76,12 @@ describe('penanda tab workspace terpilih', () => {
     expect(hoverSparesActive(src('styles.css'))).toBe(true)
   })
 
-  it('ketiga guard menolak bentuk lamanya', () => {
-    expect(marksActiveWithAccent(OLD_ACTIVE)).toBe(false)
-    expect(hasAccentBaseline(OLD_ACTIVE)).toBe(false)
+  it('guard menolak bentuk lamanya', () => {
+    expect(hasNoSurfaceFill(OLD_ACTIVE)).toBe(false)
     expect(hoverSparesActive(OLD_HOVER_CSS)).toBe(false)
     // Dan melewatkan bentuk yang benar, supaya bukan guard yang selalu merah.
-    expect(marksActiveWithAccent('  background: color-mix(in srgb, var(--accent) 18%, transparent);')).toBe(true)
-    expect(hasAccentBaseline('  box-shadow: inset 0 -2px 0 var(--accent);')).toBe(true)
+    expect(hasNoSurfaceFill('  color: var(--text);\n')).toBe(true)
+    expect(underlineSitsInsideTab(".tabbar__tabs [data-slot='tabs-trigger']::after {\n  bottom: -5px;\n}")).toBe(false)
   })
 })
 
@@ -99,12 +101,37 @@ describe('dot status tetap miliknya sendiri', () => {
 })
 
 describe('markup yang memasang penandanya', () => {
-  it('tab aktif membawa kelas `tab--active` DAN `aria-selected` — penanda non-visual', () => {
+  it('strip memakai primitif Tabs: TabsList varian line + TabsTrigger asChild', () => {
     const bar = src('WorkspaceBar.tsx')
-    expect(bar).toContain('aria-selected={g.isActive}')
-    expect(bar).toContain("className={g.isActive ? 'tab tab--active' : 'tab'}")
+    expect(bar).toContain("from '@/components/ui/tabs'")
+    expect(bar).toMatch(/<Tabs value=\{activeId \?\? ''\} onValueChange=\{onSelect\}/)
+    expect(bar).toContain('variant="line"')
+    // Atributnya multiline (ada komentar di antaranya), jadi bukan satu baris literal.
+    expect(bar).toMatch(/<TabsTrigger[\s\S]{0,240}?asChild[\s\S]{0,80}?value=\{g\.projectId\}/)
+    // Root Tabs merender satu wrapper; tanpa `contents` ia menjadi flex item di
+    // `.tabbar__projects` dan tombol `+` terlempar ke baris lain.
+    expect(bar).toContain('className="contents"')
+  })
+
+  it('peran/atribut tab tidak lagi dipasang tangan — Radix yang memilikinya', () => {
+    const bar = src('WorkspaceBar.tsx')
+    expect(bar).not.toContain('role="tablist"')
+    expect(bar).not.toContain('role="tab"')
+    expect(bar).not.toContain('aria-selected=')
+    expect(bar).not.toContain('tabIndex=')
+  })
+
+  it('kelas `tab--active` tetap jadi kait, bukan sumber gaya', () => {
+    expect(src('WorkspaceBar.tsx')).toContain("className={g.isActive ? 'tab tab--active' : 'tab'}")
+  })
+
+  it('kebab dan input memutus `mousedown`: Radix memilih tab pada mousedown trigger', () => {
+    // `onClick` saja tidak cukup — aktivasi Radix terjadi di mousedown, yang tidak ikut berhenti.
+    const bar = src('WorkspaceBar.tsx')
+    expect(bar.match(/onMouseDown=\{\(e\) => e\.stopPropagation\(\)\}/g)).toHaveLength(2)
   })
 })
+
 
 // ---- Luapan strip tab: petunjuk bahwa deretannya berlanjut di luar layar ----
 // Dengan 20 workspace strip menggulung, tapi scrollbar-nya disembunyikan dan tepinya terpotong

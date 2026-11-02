@@ -115,7 +115,6 @@
   width: 14px;
   height: 14px;
   margin: 0;
-  accent-color: var(--accent, #0a84ff);
   cursor: pointer;
 }
 
@@ -267,12 +266,6 @@
   margin: 0 0 10px;
   line-height: 1.35;
   cursor: pointer;
-}
-.inbox-consent input[type='checkbox'] {
-  width: 15px;
-  height: 15px;
-  margin: 1px 0 0;
-  accent-color: var(--accent, #0a84ff);
 }
 .inbox-consent--type { display: block; }
 .inbox-consent--type > span { display: block; margin-bottom: 4px; }

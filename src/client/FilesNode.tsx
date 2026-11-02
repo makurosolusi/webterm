@@ -5,7 +5,7 @@
 // TANPA FILE WATCHER, sama seperti nodeterm: refresh `⟳` manual menaikkan `version`. Watcher berarti
 // satu `fs.watch` per node yang terbuka plus debounce plus rekonsiliasi seleksi, demi sesuatu yang
 // jarang berubah di belakang punggung pengguna.
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import type { Node, NodeProps } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
@@ -199,7 +199,10 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   return (
     <>
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
-      <div className={termNodeClass({ selected: !!selected, collapsed })} style={{ borderTopColor: swatch }}>
+      <div
+        className={`${termNodeClass({ selected: !!selected, collapsed })} [border-top-color:var(--node-swatch)]!`}
+        style={{ '--node-swatch': swatch } as CSSProperties}
+      >
         <NodeChrome
           title={d.title ?? ''}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
@@ -227,7 +230,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
           {filterOpen && (
             <Input
-              className="files-filter nodrag field" autoFocus value={query} placeholder="Filter…"
+              className="files-filter nodrag" autoFocus value={query} placeholder="Filter…"
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setFilterOpen(false) }}
             />
@@ -273,7 +276,11 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       {menu && createPortal(
         // Portal ke body: `position: fixed` di dalam ancestor ber-transform (viewport React Flow)
         // terkurung di containing block-nya, jadi menu akan mendarat di tempat yang salah.
-        <div className="files-menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
+        <div
+          className="files-menu left-[var(--menu-x)] top-[var(--menu-y)]"
+          style={{ '--menu-x': `${menu.x}px`, '--menu-y': `${menu.y}px` } as CSSProperties}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {(() => {
             const target = menu.entry
             if (!target) return null

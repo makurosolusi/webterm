@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -59,8 +59,8 @@ export default function NodeContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="node-menu nodrag nopan"
-      style={{ left: x, top: y }}
+      className="node-menu nodrag nopan left-[var(--menu-x)] top-[var(--menu-y)]"
+      style={{ '--menu-x': `${x}px`, '--menu-y': `${y}px` } as CSSProperties}
       onContextMenu={(e) => e.preventDefault()}
       role="menu"
     >
