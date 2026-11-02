@@ -1,0 +1,131 @@
+/* Pemilih folder: isi modal VS Code. Baris 22px, ikon codicon 16px, input/tombol bertoken. */
+.folder-picker .vscode-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+}
+
+.fp-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fp-up {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--vscode-icon-foreground, var(--text));
+  cursor: default;
+}
+
+.fp-up:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground, var(--raised));
+}
+
+.fp-up:disabled {
+  opacity: 0.4;
+}
+
+/* Path penuh dibungkus, bukan dipotong: ekor path (folder terpilih) tak boleh hilang, dan tanpa
+   arah teks normal garis miring awal tetap di depan. */
+.fp-path {
+  flex: 1;
+  min-width: 0;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-family: var(--vscode-editor-font-family, Menlo, Monaco, 'Courier New', monospace);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fp-error {
+  color: var(--vscode-errorForeground, var(--state-attention));
+  font-size: 12px;
+}
+
+.fp-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  overflow-y: auto;
+  background: var(--vscode-input-background, var(--sunken));
+  border: 1px solid var(--vscode-input-border, var(--border));
+}
+
+.fp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  color: var(--vscode-foreground, var(--text));
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.fp-row:hover {
+  background: var(--vscode-list-hoverBackground, var(--raised));
+}
+
+.fp-row:focus-visible {
+  background: var(--vscode-list-activeSelectionBackground, var(--raised));
+  color: var(--vscode-list-activeSelectionForeground, var(--text));
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+}
+
+.fp-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fp-empty {
+  padding: 4px 8px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+}
+
+/* Tombol VS Code: 26px, padding 4px 8px, 12px/16px, radius 4px; primer = button-*, sekunder = secondaryButton-*. */
+.fp-button {
+  min-height: 26px;
+  padding: 4px 8px;
+  background: var(--vscode-button-secondaryBackground, var(--raised));
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  color: var(--vscode-button-secondaryForeground, var(--text));
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: default;
+}
+
+.fp-button:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--raised));
+}
+
+.fp-button--primary {
+  background: var(--vscode-button-background, var(--accent));
+  color: var(--vscode-button-foreground, var(--text));
+}
+
+.fp-button--primary:hover {
+  background: var(--vscode-button-hoverBackground, var(--accent));
+}
+
+.fp-button:focus-visible,
+.fp-up:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: 1px;
+}

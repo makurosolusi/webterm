@@ -39,13 +39,18 @@ const paneEl = (id: string): HTMLElement => {
 }
 
 const headerBtn = (title: string): HTMLButtonElement => {
-  const el = document.querySelector(`.react-flow__node-terminal button[title="${title}"]`)
+  // Aksi toolbar kini `vscode-toolbar-button` (tombol aslinya di shadow DOM); tombol Split masih
+  // shadcn `Button` di `extraHeader`, jadi kedua bentuk dicari. `title` pada custom element tidak
+  // diterapkan di jsdom (lit wrapper node-build), jadi toolbar juga membawa `data-title`.
+  const el = document.querySelector(
+    `.react-flow__node-terminal button[title="${title}"], .react-flow__node-terminal vscode-toolbar-button[data-title="${title}"]`,
+  )
   if (!el) throw new Error(`tombol header "${title}" tidak ada`)
   return el as HTMLButtonElement
 }
 
 const nodeMenu = (): HTMLElement | null =>
-  document.querySelector('[role="menu"].node-menu:not(.node-menu--canvas)')
+  document.querySelector('[role="menu"][data-slot="vscode-menu"]')
 
 const menuRow = (label: string): HTMLButtonElement => {
   const el = Array.from(nodeMenu()?.querySelectorAll('button') ?? []).find((b) => b.textContent === label)
@@ -100,10 +105,17 @@ function savedNodes(): WsNode[] {
   return JSON.parse(String(put[put.length - 1][1]?.body)).nodes as WsNode[]
 }
 
-/** Satu split lewat tombol header, ditunggu sampai pane barunya ada di DOM. */
+/** Satu split lewat menu konteks node (baris Split right/down), ditunggu sampai pane barunya ada di DOM.
+ *  Klik kanan di `.node-body` (bukan di dalam pane) → sasarannya pane aktif, seperti tombol header dulu. */
 async function splitVia(title: 'Split right' | 'Split down'): Promise<void> {
   const before = paneIds().length
-  fireEvent.click(headerBtn(title))
+  const body = document.querySelector('.react-flow__node-terminal .node-body') as HTMLElement
+  fireEvent.contextMenu(body)
+  const row = Array.from(document.querySelectorAll('[role="menu"][data-slot="vscode-menu"] button')).find(
+    (b) => b.textContent === title,
+  )
+  if (!row) throw new Error(`baris menu "${title}" tidak ada`)
+  fireEvent.click(row)
   await waitFor(() => expect(paneIds()).toHaveLength(before + 1))
 }
 

@@ -27,14 +27,16 @@ const hidesEmptySectionsButAttention = (s: string) => {
 const nodesBranch = (s: string) =>
   s.split("{grouping === 'nodes' ? (")[1]?.split(") : grouping === 'status'")[0] ?? ''
 
-/** Tab Nodes dirender sebagai seksi per grup, memakai ulang kelas tab Status apa adanya. */
+/** Tab Nodes dirender sebagai branch tree per grup; barisnya leaf tree, bukan daftar pipih. */
 const rendersNodeSections = (s: string) => {
   const b = nodesBranch(s)
   return (
     /nodeGroups\.map\(/.test(b) &&
-    ['ss-status"', 'ss-status__head', 'ss-status__label', 'ss-status__count', 'ss-status__rows'].every(
-      (cls) => b.includes(cls),
-    )
+    /<SessionGroupItem/.test(b) &&
+    /label=\{g\.label\}/.test(b) &&
+    /count=\{g\.rows\.length\}/.test(b) &&
+    /<TreeItem/.test(b) &&
+    b.includes('ss-tree__leaf')
   )
 }
 
@@ -43,10 +45,10 @@ const rendersNodeSections = (s: string) => {
  *  file yang sama (tab Project, Recently closed) memang membawa nama workspace. */
 const nodeRowsHaveNoMeta = (s: string) => !nodesBranch(s).includes('ss-meta')
 
-/** Ikon kind duduk di slot glyph yang sudah ada, bukan di kelas baru. */
+/** Ikon kind duduk di slot ikon leaf milik tree item, supaya rata dengan glyph sesi. */
 const rowsHaveKindGlyph = (s: string) => {
   const b = nodesBranch(s)
-  return /ss-row__glyph/.test(b) && /<Icon aria-hidden \/>/.test(b)
+  return /slot="icon-leaf"/.test(b) && /<KindIcon kind=\{g\.kind\} \/>/.test(b)
 }
 
 // Bentuk lama, persis seperti sebelum dibetulkan. Dipakai untuk membuktikan guard di atas
@@ -126,17 +128,18 @@ describe('tab Nodes', () => {
     expect(rowsHaveKindGlyph(src('SessionsPanel.tsx'))).toBe(true)
   })
 
-  it('ikonnya dipetakan per kind, keempatnya, dari lucide-react', () => {
+  it('ikonnya dipetakan per kind, keempatnya, ke codicon (bukan lucide-react)', () => {
     const panel = src('SessionsPanel.tsx')
     for (const [kind, icon] of [
-      ['agent', 'Bot'],
-      ['terminal', 'Terminal'],
-      ['editor', 'FileText'],
-      ['files', 'Folder'],
+      ['agent', 'hubot'],
+      ['terminal', 'terminal'],
+      ['editor', 'file'],
+      ['files', 'folder'],
     ]) {
-      expect(panel).toMatch(new RegExp(String.raw`\b${kind}: ${icon},`))
-      expect(panel.split("from 'lucide-react'")[0]).toContain(icon)
+      expect(panel).toMatch(new RegExp(String.raw`\b${kind}: '${icon}',`))
     }
+    expect(panel).not.toContain('lucide-react')
+    expect(src('SessionRow.tsx')).not.toContain('lucide-react')
   })
 
   it('barisnya tidak mengulang kind di baris meta', () => {
@@ -166,5 +169,33 @@ describe('meta baris sesi', () => {
     expect(row).toMatch(/const meta = rowMeta\(showProject \? row\.projectName : undefined, row\.cwd\)/)
     // `dirName` pindah ke `sessionList` supaya bisa dites; salinan kedua di sini akan menua sendiri.
     expect(row).not.toContain('function dirName')
+  })
+})
+
+describe('G-11/G-12/G-18 CSS fidelity', () => {
+  const css = (f: string) => src(f)
+
+  it('badge hitungan sesi memakai token badge-* dan geometri VS Code (bukan pil 8px)', () => {
+    const c = css('sessions-panel.css')
+    const group = c.slice(c.indexOf('.sessions-sidebar__count,\n.ss-tree__count,\n.ss-signal {'))
+    const block = group.slice(0, group.indexOf('}'))
+    expect(block).toContain('border-radius: 2px')
+    expect(block).toContain('height: var(--ss-badge-h)')
+    expect(c).toMatch(/--ss-badge-h:\s*17px/)
+    expect(c).not.toContain('border-radius: 8px')
+    expect(c.match(/var\(--vscode-badge-background/g)?.length).toBe(2)
+  })
+
+  it('meta redup mengalah saat baris ber-aksi di-hover/di-fokus (aksi tak menimpa meta)', () => {
+    const c = css('sessions-panel.css')
+    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):hover .ss-meta')
+    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):focus-within .ss-meta')
+  })
+
+  it('filter chip Inbox netral dan tombol Retry sekunder, bukan biru inputOption', () => {
+    const c = css('inbox.css')
+    const active = c.slice(c.indexOf(".inbox-filter-toggle[data-active='true']"))
+    expect(active.slice(0, active.indexOf('}'))).not.toContain('inputOption')
+    expect(css('inboxPanelChrome.tsx')).toContain('inbox-action inbox-action--secondary')
   })
 })

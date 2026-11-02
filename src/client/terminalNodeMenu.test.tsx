@@ -21,9 +21,9 @@ const termNode: WsNode = {
   id: 'term-1', kind: 'terminal', x: 0, y: 0, width: 420, height: 320, cwd: '/', title: 'shell',
 }
 
-/** Menu NODE, bukan menu canvas: keduanya `role="menu"` dan ber-class `node-menu`. */
+/** Menu NODE, bukan menu canvas: keduanya `role="menu"`. Menu node kini primitif `VscodeMenu`. */
 const nodeMenu = (): HTMLElement | null =>
-  document.querySelector('[role="menu"].node-menu:not(.node-menu--canvas)')
+  document.querySelector('[role="menu"][data-slot="vscode-menu"]')
 
 const row = (label: string): HTMLButtonElement => {
   const el = Array.from(nodeMenu()?.querySelectorAll('button') ?? []).find(
@@ -97,7 +97,8 @@ describe('menu konteks node terminal', () => {
     await openMenu()
 
     const paste = row('Paste')
-    expect(paste.disabled).toBe(true)
+    // `VscodeMenu` memakai `aria-disabled`, bukan atribut `disabled` native.
+    expect(paste.getAttribute('aria-disabled')).toBe('true')
     // Baris mati tanpa alasan tak bisa dibedakan dari baris rusak.
     expect(paste.title).not.toBe('')
   })
@@ -109,7 +110,7 @@ describe('menu konteks node terminal', () => {
     await openMenu()
 
     const paste = row('Paste')
-    expect(paste.disabled).toBe(false)
+    expect(paste.getAttribute('aria-disabled')).toBeNull()
     fireEvent.click(paste)
 
     expect(readText).toHaveBeenCalledTimes(1)
@@ -132,7 +133,7 @@ describe('menu konteks node terminal', () => {
     await openMenu()
 
     const copy = row('Copy')
-    expect(copy.disabled).toBe(true)
+    expect(copy.getAttribute('aria-disabled')).toBe('true')
     expect(copy.title).not.toBe('')
   })
 
@@ -145,7 +146,7 @@ describe('menu konteks node terminal', () => {
     await openMenu()
 
     const copy = row('Copy')
-    expect(copy.disabled).toBe(false)
+    expect(copy.getAttribute('aria-disabled')).toBeNull()
     fireEvent.click(copy)
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('teks terpilih'))
@@ -205,7 +206,8 @@ describe('menu konteks node terminal', () => {
     await mountCanvas({ nodes: [termNode], dirs: {} })
     await openMenu()
 
-    fireEvent.keyDown(document.body, { key: 'Escape' })
+    // Escape ditangani panel menu; fokus sudah pindah ke baris pertama saat menu dibuka.
+    fireEvent.keyDown(nodeMenu() ?? document.body, { key: 'Escape' })
 
     await waitFor(() => expect(nodeMenu()).toBeNull())
   })

@@ -1,0 +1,68 @@
+/* Keyboard Shortcuts table (HelpOverlay): VS Code keybindings-editor rows and `kbd` chips
+ * (keybindingLabel: 1px border, thicker bottom edge, 3px radius). */
+.help-shortcuts {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.help-shortcuts th {
+  height: 24px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.help-shortcuts td {
+  height: 22px;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+
+.help-shortcuts tbody tr:hover {
+  background: var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.help-shortcuts td:last-child {
+  white-space: nowrap;
+}
+
+/* Kolom Command mengisi sisa lebar; kolom Keybinding menyusut ke isinya, jadi teks Command tak
+   perlu patah di tengah kata bertanda hubung ("di-hover"). */
+.help-shortcuts td:first-child {
+  hyphens: none;
+}
+.help-shortcuts th:last-child,
+.help-shortcuts td:last-child {
+  width: 1%;
+}
+
+.help-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--vscode-keybindingLabel-border, rgba(51, 51, 51, 0.6));
+  border-bottom-width: 2px;
+  border-bottom-color: var(--vscode-keybindingLabel-bottomBorder, rgba(68, 68, 68, 0.6));
+  border-radius: 3px;
+  background: var(--vscode-keybindingLabel-background, rgba(128, 128, 128, 0.17));
+  color: var(--vscode-keybindingLabel-foreground, inherit);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 14px;
+  vertical-align: middle;
+}
+
+.help-shortcuts__plus,
+.help-shortcuts__or {
+  padding: 0 3px;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+}
+
+.help-shortcuts__gesture {
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+}

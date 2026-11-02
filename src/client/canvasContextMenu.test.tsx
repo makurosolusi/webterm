@@ -142,7 +142,7 @@ describe('menu konteks canvas', () => {
 
     // Menu canvas TIDAK boleh ada. Menu node (`NodeContextMenu`) punya jalannya sendiri di dalam
     // AgentNode; yang diuji di sini adalah tidak adanya menu canvas yang dobel di atasnya.
-    expect(document.querySelector('.node-menu--canvas')).toBeNull()
+    expect(document.querySelector('[aria-label="Canvas actions"]')).toBeNull()
   })
 
   it('Select all nonaktif di canvas kosong — diklik pun tidak memilih apa pun', async () => {
@@ -189,16 +189,15 @@ describe('menu konteks canvas', () => {
     expect(menu()).not.toBeNull()
   })
 
-  // Flyout submenu dirender DI DALAM panel root, bukan di portal-nya sendiri — jadi `contains()`
-  // pada ref root mencakupnya. Kalau suatu saat ia dipindah ke portal terpisah, test ini yang
-  // merah, bukan pengguna yang menemukannya: klik baris submenu akan menutup menu tanpa aksi.
+  // Flyout submenu adalah portal tersendiri; pembubar luar harus mengenalinya lewat registri menu.
+  // Kalau tidak, klik baris submenu akan menutup menu tanpa aksi dan test ini yang merah.
   it('baris di dalam flyout submenu tetap bisa dipilih', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.contextMenu(pane(), CLICK)
-    fireEvent.mouseEnter(await screen.findByText(MENU_LABELS.agentGroup))
+    fireEvent.pointerEnter(await screen.findByText(MENU_LABELS.agentGroup))
 
     const subRow = await waitFor(() => {
-      const el = document.querySelector('.node-menu__sub button')
+      const el = document.querySelector('[aria-label="Canvas actions submenu"] button')
       if (!el) throw new Error('flyout submenu tidak terbuka')
       return el as HTMLElement
     })
@@ -230,5 +229,35 @@ describe('menu konteks canvas', () => {
 
     await waitFor(() => expect(nodePositions('files')).toHaveLength(1))
     expect(nodePositions('files')[0]).toEqual(DEFAULT_SPAWN)
+  })
+})
+
+describe('menu konteks canvas — fidelity VS Code', () => {
+  it('memakai VscodeMenu: baris menuitem 22px-class, ikon codicon, caret submenu, tooltip alasan', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.contextMenu(pane(), CLICK)
+    await screen.findByText(MENU_LABELS.terminal)
+
+    const rows = Array.from(document.querySelectorAll('[data-slot="vscode-menu-row"]'))
+    expect(rows.map((r) => r.textContent)).toContain(MENU_LABELS.terminal)
+    expect(document.querySelector('.vscode-menu__icon .codicon-terminal')).not.toBeNull()
+    const group = screen.getByText(MENU_LABELS.agentGroup).closest('button')
+    expect(group?.getAttribute('aria-haspopup')).toBe('menu')
+    expect(group?.querySelector('.codicon-chevron-right')).not.toBeNull()
+    // Alasan baris mati sampai ke pengguna lewat tooltip, bukan hanya redup.
+    expect(screen.getByText(MENU_LABELS.selectAll).closest('button')?.getAttribute('title')).toBeTruthy()
+  })
+
+  it('ArrowRight membuka submenu dan ArrowLeft menutupnya tanpa menutup menu induk', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.contextMenu(pane(), CLICK)
+    const group = (await screen.findByText(MENU_LABELS.agentGroup)).closest('button') as HTMLElement
+    fireEvent.pointerEnter(group)
+    const sub = () => document.querySelector('[aria-label="Canvas actions submenu"]')
+    await waitFor(() => expect(sub()).not.toBeNull())
+
+    fireEvent.keyDown(sub()?.querySelector('button') as HTMLElement, { key: 'ArrowLeft' })
+    await waitFor(() => expect(sub()).toBeNull())
+    expect(menu()).not.toBeNull()
   })
 })

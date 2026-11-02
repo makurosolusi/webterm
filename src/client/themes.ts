@@ -7,11 +7,13 @@ import type { ITheme } from '@xterm/xterm'
  * modul ini ikut termuat di test node-env. Segala yang mengubah tema jadi opsi xterm ada di
  * `terminalConfig.ts`.
  *
- * Kontrak yang membuat ini aman: **`webterm-dark` harus merender persis apa yang dirender
- * TerminalCore sebelum tema ada** — dulu ia hardcode `{ background: '#1e1e1e', foreground: ... }`
- * dan membiarkan xterm mengisi sisanya, jadi tema default membawa dua warna itu plus palet ANSI
- * default xterm (Tango) yang ditulis eksplisit. `themes.test.ts` memakunya: "memperbaiki" ke-18
- * nilai itu diam-diam mengecat ulang terminal setiap pengguna yang sudah ada.
+ * `webterm-dark` / `webterm-light` kini PERSIS integrated terminal VS Code Dark Modern / Light Modern
+ * (id dipertahankan karena tersimpan di settings pengguna; label-nya yang berubah). Nilai diambil
+ * dari sumber VS Code: `terminalColorRegistry.ts` (ANSI 16 warna, default dark/light),
+ * `dark_modern.json` / `light_modern.json` (`editor.background`, `terminal.foreground`,
+ * `terminalCursor.foreground`), `editorColors.ts` (`editor.selectionBackground` #264F78 / #ADD6FF) dan
+ * `miscColors.ts` (`scrollbarSlider.*`). Background = `editor.background` karena terminal node
+ * hidup di area editor, bukan di panel (panel Dark Modern #181818). `themes.test.ts` memakukan nilainya.
  *
  * Id tema nodeterm yang mengandung `nodeterm` di-rename jadi `webterm` (`nodeterm-dark` →
  * `webterm-dark`, `nodeterm-light` → `webterm-light`): id tema muncul di dropdown settings, jadi
@@ -33,31 +35,34 @@ export const DEFAULT_TERMINAL_THEME_ID = 'webterm-dark'
 export const TERMINAL_THEMES: readonly TerminalTheme[] = [
   {
     id: 'webterm-dark',
-    label: 'webterm Dark',
+    label: 'Dark Modern',
     dark: true,
     theme: {
-      background: '#1e1e1e',
-      foreground: '#e6e6e6',
-      cursor: '#ffffff',
-      cursorAccent: '#1e1e1e',
-      selectionBackground: '#ffffff4d',
-      // Palet default built-in xterm (Tango) — lihat komentar modul.
-      black: '#2e3436',
-      red: '#cc0000',
-      green: '#4e9a06',
-      yellow: '#c4a000',
-      blue: '#3465a4',
-      magenta: '#75507b',
-      cyan: '#06989a',
-      white: '#d3d7cf',
-      brightBlack: '#555753',
-      brightRed: '#ef2929',
-      brightGreen: '#8ae234',
-      brightYellow: '#fce94f',
-      brightBlue: '#729fcf',
-      brightMagenta: '#ad7fa8',
-      brightCyan: '#34e2e2',
-      brightWhite: '#eeeeec',
+      background: '#1f1f1f',
+      foreground: '#cccccc',
+      cursor: '#cccccc',
+      cursorAccent: '#1f1f1f',
+      selectionBackground: '#264f78',
+      selectionInactiveBackground: '#264f7880',
+      scrollbarSliderBackground: '#79797966',
+      scrollbarSliderHoverBackground: '#646464b3',
+      scrollbarSliderActiveBackground: '#bfbfbf66',
+      black: '#000000',
+      red: '#cd3131',
+      green: '#0dbc79',
+      yellow: '#e5e510',
+      blue: '#2472c8',
+      magenta: '#bc3fbc',
+      cyan: '#11a8cd',
+      white: '#e5e5e5',
+      brightBlack: '#666666',
+      brightRed: '#f14c4c',
+      brightGreen: '#23d18b',
+      brightYellow: '#f5f543',
+      brightBlue: '#3b8eea',
+      brightMagenta: '#d670d6',
+      brightCyan: '#29b8db',
+      brightWhite: '#e5e5e5',
     },
   },
   {
@@ -258,35 +263,34 @@ export const TERMINAL_THEMES: readonly TerminalTheme[] = [
   },
   {
     id: 'webterm-light',
-    label: 'webterm Light',
+    label: 'Light Modern',
     dark: false,
     theme: {
-      // Pasangan `webterm-dark`: background ini ADALAH `--bg` palet app terang, jadi memilihnya —
-      // yang juga membalik chrome ke terang via appTheme 'auto' — menyisakan terminal dan jendela
-      // di sekelilingnya satu warna, bukan persegi pucat di atas krem. Sengaja bukan putih.
-      background: '#fbf8f3',
-      foreground: '#3a3028',
-      cursor: '#5c4a38',
-      cursorAccent: '#fbf8f3',
-      selectionBackground: '#e6dcc9',
-      black: '#3a3028',
-      red: '#b03a2e',
-      green: '#4a7c2f',
-      yellow: '#9a6b00',
-      blue: '#2a6099',
-      magenta: '#8b4a8b',
-      cyan: '#1f7a7a',
-      // "white" di atas bidang pucat tidak boleh BENAR-BENAR putih atau ia hilang: ia turun ke
-      // kelabu hangat, dan brightWhite lebih gelap lagi supaya teks penekanan TUI agent terbaca.
-      white: '#8a7d6b',
-      brightBlack: '#7a6d5c',
-      brightRed: '#c9503f',
-      brightGreen: '#5c9440',
-      brightYellow: '#b07d00',
-      brightBlue: '#3a7ab8',
-      brightMagenta: '#a05ca0',
-      brightCyan: '#2a9494',
-      brightWhite: '#3a3028',
+      background: '#ffffff',
+      foreground: '#3b3b3b',
+      cursor: '#005fb8',
+      cursorAccent: '#ffffff',
+      selectionBackground: '#add6ff',
+      selectionInactiveBackground: '#add6ff80',
+      scrollbarSliderBackground: '#64646466',
+      scrollbarSliderHoverBackground: '#646464b3',
+      scrollbarSliderActiveBackground: '#00000099',
+      black: '#000000',
+      red: '#cd3131',
+      green: '#107c10',
+      yellow: '#949800',
+      blue: '#0451a5',
+      magenta: '#bc05bc',
+      cyan: '#0598bc',
+      white: '#555555',
+      brightBlack: '#666666',
+      brightRed: '#f14c4c',
+      brightGreen: '#14ce14',
+      brightYellow: '#b5ba00',
+      brightBlue: '#3b8eea',
+      brightMagenta: '#d670d6',
+      brightCyan: '#29b8db',
+      brightWhite: '#a5a5a5',
     },
   },
   {

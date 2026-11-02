@@ -1,0 +1,44 @@
+/* Tailwind utilities only. Existing styles own reset and component presentation. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+
+/* Map shadcn tokens to webterm's existing theme without redefining its tokens. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--overlay);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--vscode-button-foreground);
+  --color-secondary: var(--raised);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--sunken);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--panel-header);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--state-attention);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent);
+}
+
+@layer base {
+  button[data-slot] {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+  }
+
+  input[data-slot],
+  textarea[data-slot],
+  select[data-slot] {
+    font: inherit;
+  }
+}

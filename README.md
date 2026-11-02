@@ -2,6 +2,8 @@
 
 A node-based terminal manager: real shells run as draggable xterm terminals ("nodes") on a pan/zoom React Flow canvas. Terminals are persisted server-side and survive a browser refresh — reload the tab and each node re-attaches its PTY and replays its scrollback, so you never lose a running session by reloading. Terminals and CLI agents live in workspaces (name + working directory + layout) that are persisted in a local SQLite database, so your boards survive a server restart, not just a browser reload. The canvas has a left-edge dock (add nodes, undo/redo, viewport navigation, fit view, zoom, view lock, sessions panel, clean view), a status-colored minimap, and resizable nodes whose size is saved with the workspace. Agent nodes (Claude/Codex/Gemini) can be wired together with context-link edges — a linked node reads a peer's transcript or terminal read-only — and each agent node has an AI "name with AI" button that titles the node from its terminal output.
 
+UI chrome is built on `@vscode-elements/react-elements` 2.4.0 with a `--vscode` theme bridge, so it follows VS Code Dark Modern and Light Modern: a 35px title/menu bar, 35px editor tabs, 48px activity bar, 22px status bar, docked 300px Sessions sidebar, VS Code-style Settings, QuickPick command palette, and Inbox/Chat as tabs of one bottom panel. Tailwind v4 utilities remain for layout and local styling, and the canvas, xterm, Monaco, node geometry, and React Flow interactions stay custom. The chrome is VS Code-like, not a claim of full pixel parity.
+
 ## Requirements
 
 - [Bun](https://bun.sh) — runs the dev server and the Bun-native PTY backend.
@@ -25,11 +27,28 @@ Environment variables:
 
 - `PORT` — listen port (default `8700`).
 - `HOST` — bind address (default `127.0.0.1`); `WEBTERM_HOST` is an accepted fallback.
-- `WEBTERM_TOKEN` — shared secret required on `/api` and the `/ws` upgrade. Optional on a loopback bind; **mandatory** when `WEBTERM_HOST` is reachable from other machines — the server refuses to start without it rather than expose an unauthenticated shell.
+- `WEBTERM_TOKEN` — shared secret required on `/api` and the `/ws` upgrade. Optional on a loopback bind; **mandatory** when `WEBTERM_HOST` is reachable from other machines. The server refuses to start without it rather than expose an unauthenticated shell. The repo does not ship a token in `.env`. Export it explicitly.
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`.
+- `WEBTERM_LEDGER` — `off` (default), `shadow`, or `on`. Turns on the SQLite ledger that backs inbox, approvals, and the channel webhook.
+- `WEBTERM_ALLOW_LOOPBACK_APPROVAL` — default `0`. Human approvals (`/api/approvals/*`) refuse token-free loopback, because an agent shell on the same machine can also reach it. Set `1` only for a disposable local demo. With a root token configured, the normal token gate applies.
+- `WEBTERM_TELEGRAM` — `off` (default) or `on`. Installs `POST /webhooks/telegram` when `WEBTERM_TELEGRAM_WEBHOOK_SECRET` is set and the ledger is on.
+- `WEBTERM_TELEGRAM_WEBHOOK_SECRET` — Telegram `secret_token` for the webhook. Keep it in the environment, not in a committed file.
+- `WEBTERM_TELEGRAM_BOT_TOKEN` — bot token used for replies. The legacy `TELEGRAM_BOT_TOKEN` name is also accepted.
+- `WEBTERM_RUN_REQUIRE_APPROVAL` — default `off`. When `on`, `POST /api/orchestrator/run` requires an approved ledger `approvalId` + `approvalDigest`; when the fields are supplied (even with the flag off) they are consumed exactly once before any worktree or PTY work.
+- `WEBTERM_CENTRAL_AUTONOMY` — default `off`. When `on` (with ledger and `WEBTERM_ORCHESTRATOR_RUN=on`), a 30 s scheduler runs one lowest-seq `assigned` plan item per tick through the same run route, skips paused projects/closed plans, and quarantines a project after 3 consecutive failures. It never creates tasks or approves approvals.
+- `WEBTERM_CENTRAL_CHAT` — default `off`. Exposes the central chat API/SSE and web panel when `WEBTERM_CENTRAL=on`.
+- `WEBTERM_CENTRAL_RUNTIME` — default `off`; `mock` or primary `opencode`. The OpenCode adapter runs `opencode run --format json` without PTY or `--auto`.
+- `WEBTERM_CENTRAL_MODEL` — default `opencode/deepseek-v4.1-flash-free`; use a credentialed provider for sustained turns. Free quota may return `provider.quota` 429 and is not retried.
+- `WEBTERM_OPENCODE_BIN` — default `opencode`; override the OpenCode binary path.
+- `WEBTERM_CENTRAL_TOOLS` — default `read`; `write` enables the four-tool typed proposal MVP: `goal.propose`, `plan.propose`, `task.assign`, and `approval.request`.
+- `WEBTERM_CENTRAL_PLANNER` — default `off`; typed proposal handling requires this flag `on` and `WEBTERM_CENTRAL_TOOLS=write`. `task.assign` also requires `WEBTERM_ORCHESTRATOR_RUN=on` and creates/locks a real ledger task without spawning, running, or approving it.
+- `WEBTERM_CENTRAL_TELEGRAM` — default `off`; enables the private Telegram central chat bridge. Real Telegram delivery/webhook E2E is not verified.
+- `WEBTERM_CENTRAL_MEMORY` — default `off`; bounded, read-only project fact retrieval. It does not write or promote memory. Proposal blocks render as compact cards and do not claim applied or approved status.
 
-Any of these can go in a `.env` file in the working directory instead of the environment — Bun loads it automatically, for both the dev server and the compiled binary.
+Any of these can go in a `.env` file in the working directory instead of the environment. Bun loads that file automatically, for both the dev server and the compiled binary, so every value in it enters `process.env`. Keep the file at mode `600`, and leave `WEBTERM_TOKEN` out of it unless you accept that inheritance.
+
+`WEBTERM_CHANNELS` is the master kill switch for the whole channel runtime (webhook, binding API, reply sender). Only `on|off` is implemented: unset or `on` keeps the current behavior, `off` disables everything even when `WEBTERM_TELEGRAM=on`, and any other value fails closed (channels stay off) with one warning naming the supported values. The `readonly|control` modes remain planned. Channel state lives in a JSON store under the data directory, so enabling channels needs no v4 SQL migration.
 
 Dev is not full browser HMR for every change: Vite HMR covers client edits live, but server edits need a restart.
 
@@ -66,5 +85,7 @@ The vitest run now also covers `src/shared` (assembleCmd / agent config).
 Workspaces + layout are persisted in `bun:sqlite` (`src/server/db.ts`) as the source of truth, served over a small REST API under `/api` (`src/server/api.ts`); a node may be a terminal or an agent — an agent node spawns a CLI command via the login shell (`cmd` on the open message) instead of an interactive shell. PTYs remain in-memory, so a server restart reloads workspace + node definitions from the DB and respawns fresh PTYs.
 
 Live agent status comes from Claude hooks, delivered as a settings file (`claude --settings <path>`) rather than an inline blob, that POST each lifecycle event to `/api/agent-status`; the server maps those events to working/waiting/blocked/done and broadcasts them over the WebSocket as a `StatusMsg`. A pre-set session UUID (`--session-id`) lets a finished Claude session be continued with `--resume`. The Board is a read-only client overlay over the same node data, and the folder picker is served by `GET /api/fs`.
+
+With `WEBTERM_LEDGER` on, the server also exposes read-only inbox, memory, and orchestrator projections, plus a human approval surface under `/api/approvals/*`. That surface is not capability-authorized. It needs the root token, or an explicit loopback opt-in, and it never lets an agent approve its own action. The P3-P5 work behind these routes is still partial. Central proposal MVP, Telegram bridge logic, and memory retrieval have additional limits documented in `RND/14-CENTRAL-AGENT-S0.md`.
 
 Agent nodes can be linked with context-link edges (persisted as workspace bridges); a linked node reads a bridged peer read-only over `GET /api/context-link` (verbs `list` / `summary` / `transcript` / `terminal`), fed by a POSIX-sh shim the server installs under the data dir. The sparkle button calls `GET /api/generate-name`, which spawns the `claude` CLI in print mode on a node's terminal buffer and returns a short Title-Case title. Live-view broadcast is intentionally absent — webterm's single-user loopback has no viewer or relay, mirroring nodeterm's Server Edition.

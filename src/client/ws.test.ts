@@ -235,3 +235,151 @@ test('a reconnect resets each terminal before the server replays its scrollback'
   expect(sentAtReset).toBe(0) // reset ran before the replayed open was sent
   expect(second.sent.map((s) => JSON.parse(s).t)).toContain('open') // replay still happens
 })
+
+// `reason` membedakan proses yang keluar sendiri dari sesi yang ditutup. Server hanya tahu ADA
+// yang meminta close, jadi client ini yang memutuskan apakah itu close-nya sendiri (`closed`,
+// tidak perlu notice) atau close client lain (`peer-closed`, perlu notice netral).
+test('an exit forwards self/undefined as-is and turns a peer close into peer-closed', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const onExit = vi.fn()
+  subscribe('term-exit', () => {}, onExit)
+  const sock = lastSocket()
+
+  // Server bilang "ada yang close", tapi bukan kita: jangan senyapkan, beri notice netral.
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 1, reason: 'closed' }) })
+  expect(onExit).toHaveBeenLastCalledWith(1, 'peer-closed')
+
+  // Close yang KITA minta: senyap.
+  send({ t: 'close', id: 'term-exit' })
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 0, reason: 'closed' }) })
+  expect(onExit).toHaveBeenLastCalledWith(0, 'closed')
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 0, reason: 'self' }) })
+  expect(onExit).toHaveBeenLastCalledWith(0, 'self')
+
+  // Server lama belum mengirim `reason`: parameternya tetap diteruskan sebagai undefined.
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit', code: 0 }) })
+  expect(onExit).toHaveBeenLastCalledWith(0, undefined)
+})
+
+// Close yang kita minta hanya menjelaskan SATU exit. Kalau tidak dikonsumsi, peer close berikutnya
+// pada id yang sama ikut tersenyapkan.
+test('the locally-requested close flag is consumed by one exit', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const onExit = vi.fn()
+  subscribe('term-exit-once', () => {}, onExit)
+  const sock = lastSocket()
+
+  send({ t: 'close', id: 'term-exit-once' })
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit-once', code: -1, reason: 'closed' }) })
+  expect(onExit).toHaveBeenLastCalledWith(-1, 'closed')
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id: 'term-exit-once', code: -1, reason: 'closed' }) })
+  expect(onExit).toHaveBeenLastCalledWith(-1, 'peer-closed')
+})
+
+// P0: exit tidak boleh memutar ulang `open` di reconnect. Server yang menerima `open` untuk id
+// yang PTY-nya sudah mati akan MEN-SPAWN sesi baru (`--resume`), menimpa scrollback terakhir yang
+// sedang dibaca pengguna.
+test('P0: an exited session is not replayed on reconnect, so its final scrollback survives', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-exited-replay'
+  const onExit = vi.fn()
+  subscribe(id, () => {}, onExit)
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id, code: 0, reason: 'self' }) })
+  expect(onExit).toHaveBeenCalledTimes(1)
+
+  sock.sent.length = 0
+  sock.onopen!() // sambung ulang: replay `open` dulu akan meluncurkan PTY baru
+  expect(sock.sent.map((s) => JSON.parse(s)).filter((m) => m.t === 'open' && m.id === id))
+    .toHaveLength(0)
+})
+
+test('input typed after exit is dropped, not queued into a future spawn with the same id', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-exited-input'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id, code: 0, reason: 'self' }) })
+
+  sock.sent.length = 0
+  send({ t: 'input', id, data: 'ls\r' })
+  expect(sock.sent).toHaveLength(0) // tidak dikirim ke sesi yang sudah mati
+
+  sock.onopen!() // dan tidak muncul sebagai antrean reconnect
+  expect(sock.sent.map((s) => JSON.parse(s)).filter((m) => m.t === 'input')).toHaveLength(0)
+})
+
+// `open` eksplisit = sesi baru untuk id itu (spawn ulang), jadi replay harus hidup lagi.
+test('an explicit open after exit clears the exited flag and is replayed again', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-exited-reopen'
+  subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id, code: 0, reason: 'self' }) })
+
+  send({ t: 'open', id, cols: 100, rows: 30 }) // sesi baru
+  sock.sent.length = 0
+  sock.onopen!()
+  const opens = sock.sent.map((s) => JSON.parse(s)).filter((m) => m.t === 'open' && m.id === id)
+  expect(opens).toHaveLength(1)
+  expect(opens[0]).toMatchObject({ cols: 100, rows: 30 })
+})
+
+test('a remount clears the exited flag, so the fresh mount can replay its own open', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-exited-remount'
+  const first = subscribe(id, () => {}, () => {})
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id, code: 0, reason: 'self' }) })
+
+  first() // unmount
+  subscribe(id, () => {}, () => {}) // remount
+  send({ t: 'open', id, cols: 90, rows: 25 })
+  sock.sent.length = 0
+  sock.onopen!()
+  expect(sock.sent.map((s) => JSON.parse(s)).filter((m) => m.t === 'open' && m.id === id))
+    .toHaveLength(1)
+})
+
+// P0: exit TIDAK boleh menutup id di client. Sesi yang lahir ulang dengan id sama (spawn ulang
+// setelah close) harus bisa membuka lagi dan menerima output-nya — tombstone hanya milik server.
+test('P0: an id can be re-opened after its exit and receives the fresh session output', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, send } = await fresh().ws
+  const id = 'term-reopen'
+  const onExit = vi.fn()
+  const onOutput = vi.fn()
+  subscribe(id, onOutput, onExit)
+  const sock = lastSocket()
+  sock.readyState = FakeWS.OPEN
+  send({ t: 'open', id, cols: 80, rows: 24 })
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'exit', id, code: -1, reason: 'closed' }) })
+  expect(onExit).toHaveBeenCalledTimes(1)
+
+  sock.sent.length = 0
+  send({ t: 'open', id, cols: 100, rows: 30 }) // sesi baru, id yang sama
+  expect(sock.sent).toHaveLength(1)
+  expect(JSON.parse(sock.sent[0])).toMatchObject({ t: 'open', id, cols: 100, rows: 30 })
+
+  sock.onmessage!({ data: JSON.stringify({ t: 'output', id, data: 'fresh', seq: 1 }) })
+  expect(onOutput).toHaveBeenCalledWith('fresh')
+  expect(onExit).toHaveBeenCalledTimes(1) // exit lama tidak diputar ulang ke sesi baru
+})

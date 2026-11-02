@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
 
 // React catches render/lifecycle errors only in a class boundary — there is no hook equivalent in
 // React 19. Without one, a single thrown error unmounts the whole tree and the page goes blank (the
@@ -17,35 +18,24 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
   render() {
     const { error } = this.state
     if (!error) return this.props.children
-    // Inline styles on purpose: this must render even if the stylesheet is the thing that failed.
+    // Utility classes only: the fallback stays readable if a component stylesheet fails, though it
+    // still needs the Tailwind sheet itself (the old inline styles did not).
     return (
       <div
         role="alert"
-        style={{
-          position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24,
-          background: '#16181d', color: '#e6e6e6', fontFamily: 'system-ui, sans-serif', textAlign: 'center',
-        }}
+        className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-[var(--vscode-editor-background)] p-6 text-center font-sans text-[var(--vscode-foreground)]"
       >
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Something broke</h1>
-        <pre
-          style={{
-            margin: 0, maxWidth: 560, maxHeight: '40vh', overflow: 'auto', whiteSpace: 'pre-wrap',
-            padding: '10px 14px', borderRadius: 8, background: '#0f1115', color: '#ff9a9a',
-            fontSize: 13, fontFamily: 'ui-monospace, monospace',
-          }}
-        >
+        <h1 className="m-0 text-lg font-semibold">Something broke</h1>
+        <pre className="m-0 max-h-[40vh] max-w-[560px] overflow-auto whitespace-pre-wrap rounded-[5px] border border-[var(--vscode-editorWidget-border)] bg-[var(--vscode-editorWidget-background)] px-3.5 py-2.5 font-mono text-[13px] text-[var(--vscode-errorForeground)]">
           {error.message}
         </pre>
-        <button
+        <Button
+          type="button"
           onClick={() => location.reload()}
-          style={{
-            padding: '8px 18px', borderRadius: 8, border: '1px solid #3a3f4b',
-            background: '#272b33', color: '#e6e6e6', cursor: 'pointer', fontSize: 14,
-          }}
+          className="h-6 cursor-default rounded-sm border-0 bg-[var(--vscode-button-background)] px-3 py-0 text-[13px] text-[var(--vscode-button-foreground)] shadow-none hover:bg-[var(--vscode-button-hoverBackground)]"
         >
           Reload
-        </button>
+        </Button>
       </div>
     )
   }

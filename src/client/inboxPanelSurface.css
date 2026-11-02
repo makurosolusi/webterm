@@ -1,0 +1,242 @@
+/* VS Code bottom panel surface, shared by Inbox, Chat, and the combined shell.
+
+   Metrics follow VS Code's panel (verified against workbench `panelpart.css` and
+   `paneCompositePart.css`): 35px title row, uppercase 11px tab labels with `0 10px` padding, a
+   1px TOP border on the active tab, a 16px count badge, a 4px sash on the top edge, and 22px
+   list rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
+
+   The panel is flush: no radius, no shadow, sitting on top of the status bar. It starts after
+   the activity bar (and the 300px sidebar column while that is open). Height comes from
+   `--bottom-panel-h`, which `bottomPanelHeight.ts` sets on <html> once the user resizes. */
+
+:root {
+  /* Local tokens (proposed global: see the panel report). */
+  --bottom-panel-h: 40vh;
+  --bottom-panel-min-h: 77px;
+  --bottom-panel-title-h: 35px;
+  --bottom-panel-row-h: 22px;
+  --bottom-panel-sash-h: 4px;
+  --bottom-panel-sidebar-w: 300px;
+}
+
+.vscode-bottom-panel {
+  position: absolute;
+  left: var(--activity-bar-w, 48px);
+  right: 0;
+  bottom: var(--status-bar-h, 22px);
+  z-index: 13;
+  display: flex;
+  flex-direction: column;
+  height: var(--bottom-panel-h);
+  min-height: var(--bottom-panel-min-h);
+  max-height: 80vh;
+  border-top: 1px solid var(--vscode-panel-border, var(--border, rgba(128, 128, 128, 0.35)));
+  background: var(--vscode-panel-background, var(--bg, #1e1e1e));
+  color: var(--vscode-foreground, var(--text, #cccccc));
+  font-family: var(--vscode-font-family, var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif));
+  font-size: var(--vscode-font-size, 13px);
+}
+.vscode-bottom-panel[data-maximized='true'] { height: 80vh; }
+.app-shell--sidebar .vscode-bottom-panel {
+  left: calc(var(--activity-bar-w, 48px) + var(--bottom-panel-sidebar-w));
+}
+
+/* ---------------------------------------------------------------- sash */
+.vscode-bottom-panel__sash {
+  position: absolute;
+  top: calc(var(--bottom-panel-sash-h) / -2);
+  left: 0;
+  right: 0;
+  z-index: 35;
+  height: var(--bottom-panel-sash-h);
+  cursor: ns-resize;
+  touch-action: none;
+  background: transparent;
+  transition: background-color 0s 0.1s;
+}
+.vscode-bottom-panel__sash:hover,
+.vscode-bottom-panel__sash:active {
+  background: var(--vscode-sash-hoverBorder, var(--accent, #0078d4));
+}
+.vscode-bottom-panel__sash:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+/* ---------------------------------------------------------------- title row */
+.vscode-bottom-panel__titlebar {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  justify-content: space-between;
+  height: var(--bottom-panel-title-h);
+  min-height: var(--bottom-panel-title-h);
+  box-sizing: border-box;
+  background: var(--vscode-panel-background, var(--bg, #1e1e1e));
+  user-select: none;
+}
+.vscode-panel-tabs {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+.vscode-panel-tab {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  border-top: 1px solid transparent;
+  color: var(--vscode-panelTitle-inactiveForeground, var(--muted, #9d9d9d));
+}
+.vscode-panel-tab:hover,
+.vscode-panel-tab[data-active='true'] {
+  color: var(--vscode-panelTitle-activeForeground, var(--text, #e7e7e7));
+}
+.vscode-panel-tab[data-active='true'] {
+  border-top-color: var(--vscode-panelTitle-activeBorder, var(--accent, #0078d4));
+}
+.vscode-panel-tab__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: default;
+}
+.vscode-panel-tab__button:focus-visible,
+.vscode-panel-action:focus-visible,
+.vscode-panel-tab__close:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+.vscode-panel-tab__badge {
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  padding: 3px 5px;
+  border-radius: 10px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ffffff);
+  font-size: 10px;
+  line-height: 10px;
+  text-align: center;
+  text-transform: none;
+}
+.vscode-panel-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  opacity: 0;
+  cursor: default;
+}
+.vscode-panel-tab:hover .vscode-panel-tab__close,
+.vscode-panel-tab[data-active='true'] .vscode-panel-tab__close,
+.vscode-panel-tab__close:focus-visible { opacity: 1; }
+.vscode-panel-tab__close:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
+
+/* ---------------------------------------------------------------- toolbar */
+.vscode-bottom-panel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px 0 4px;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
+}
+.vscode-panel-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: default;
+}
+.vscode-panel-action:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
+.vscode-panel-action:active { background: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31)); }
+.vscode-panel-action:disabled { opacity: 0.4; }
+
+/* ---------------------------------------------------------------- body */
+.vscode-bottom-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--vscode-panel-background, var(--bg, #1e1e1e));
+}
+.vscode-bottom-panel__pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.vscode-bottom-panel__pane[hidden] { display: none; }
+
+/* Embedded panes keep a compact refresh row; the combined shell's title row belongs to the
+   tab strip. */
+.inbox-pane-actions,
+.chat-pane-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 24px;
+  padding: 1px 8px;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
+}
+
+/* Embedded panels drop their own surface box and fill the pane instead. */
+.inbox-panel--embedded,
+.chat-panel--embedded {
+  position: static;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  width: auto;
+  border: 0;
+  background: transparent;
+}
+
+/* Standalone Chat next to a standalone Inbox: stack instead of overlapping. */
+.chat-panel--above-inbox {
+  bottom: calc(var(--status-bar-h, 22px) + var(--bottom-panel-h));
+}
+
+@media (max-width: 640px) {
+  .vscode-bottom-panel,
+  .app-shell--sidebar .vscode-bottom-panel {
+    left: var(--activity-bar-w, 48px);
+    right: 0;
+  }
+}

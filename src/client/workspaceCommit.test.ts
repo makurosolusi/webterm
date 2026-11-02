@@ -19,7 +19,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import {
-  harnessWorkspace, installCanvasDom, mountCanvas, mountHeld, renderedViewport, unmountCanvas,
+  HARNESS_WS_ID, harnessWorkspace, installCanvasDom, mountCanvas, mountHeld, renderedViewport, unmountCanvas,
 } from './canvasHarness'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Viewport, Workspace } from '../shared/workspace'
@@ -57,6 +57,16 @@ const putViewports = (): Viewport[] =>
   (fetch as unknown as Mock).mock.calls
     .filter((c) => (c[1] as RequestInit | undefined)?.method === 'PUT' && String(c[0]).startsWith('/api/workspaces/'))
     .map((c) => (JSON.parse(String((c[1] as RequestInit).body)) as Workspace).viewport ?? DEFAULT_VIEWPORT)
+
+/** Body PUT per id workspace, urut kirim. Id dibaca dari URL-nya, bukan dari body: justru id URL
+ *  itulah yang menentukan workspace mana yang tertimpa. */
+const putBoards = (): { id: string; ws: Workspace }[] =>
+  (fetch as unknown as Mock).mock.calls
+    .filter((c) => (c[1] as RequestInit | undefined)?.method === 'PUT' && String(c[0]).startsWith('/api/workspaces/'))
+    .map((c) => ({
+      id: decodeURIComponent(String(c[0]).slice('/api/workspaces/'.length)),
+      ws: JSON.parse(String((c[1] as RequestInit).body)) as Workspace,
+    }))
 
 describe('viewport tersimpan terpasang saat board di-mount', () => {
   // `delay` WAJIB di sini, bukan hiasan: dengan fetch yang menjawab di microtask yang sama, React
@@ -140,6 +150,79 @@ describe('jaring pengaman persist klik minimap (penjaga teks)', () => {
     const jsx = app.slice(open, app.indexOf('/>', open))
     expect(open).toBeGreaterThan(-1)
     expect(jsx).toMatch(/syncViewport\(/)
+  })
+})
+
+// Debounce `scheduleSave` mengunci payload 400ms SEBELUM menulis. Versi lama membaca `nodesRef`/
+// `viewportRef` saat timer menembak, jadi pindah tab di dalam jendela itu menulis board workspace B
+// ke id workspace A — penghuni workspace A kehilangan board-nya. Diuji lewat body PUT sungguhan:
+// yang menentukan rusak-tidaknya data adalah apa yang mendarat di server.
+const B_NODE_ID = 'n-b'
+const wsBWithNode = harnessWorkspace({
+  id: 'ws-b', name: 'bravo', viewport: VP_B,
+  nodes: [{ id: B_NODE_ID, kind: 'terminal', x: 40, y: 60, width: 420, height: 320, cwd: '/' }],
+})
+
+/** Tambah node lewat Dock: satu-satunya jalur yang memanggil `scheduleSave` secara SINKRON (via
+ *  `addFlowNode`), jadi tombol pindah tab berikutnya benar-benar jatuh di dalam debounce 400ms. */
+async function addTerminalToActive(): Promise<void> {
+  fireEvent.click(screen.getByLabelText('Add node'))
+  // Dialog "Add node" kini VscodeQuickPick: item-nya role="option".
+  const item = await screen.findByRole('option', { name: 'Terminal' })
+  fireEvent.click(item)
+}
+
+describe('save yang tertunda saat board berpindah', () => {
+  it('pindah tab di tengah debounce menulis board A, bukan board B', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsBWithNode] })
+    await addTerminalToActive()
+    // Pindah SEBELUM 400ms debounce habis — kondisi yang memunculkan bug.
+    fireEvent.click(tab('bravo'))
+    await waitFor(() => expect(renderedViewport()).toEqual(VP_B))
+    // Lewati sisa debounce: timer lama tidak boleh menembak lagi setelah ini.
+    await act(() => new Promise<void>((r) => setTimeout(r, 600)))
+
+    const savedA = putBoards().filter((p) => p.id === HARNESS_WS_ID)
+    // Save-nya TIDAK boleh hilang: node yang baru dibuat milik board A.
+    expect(savedA.length, 'save board A hilang saat pindah tab').toBeGreaterThan(0)
+    for (const { ws } of savedA) {
+      expect(ws.nodes.map((n) => n.id)).not.toContain(B_NODE_ID)
+      expect(ws.viewport).not.toEqual(VP_B)
+    }
+  })
+
+  it('tanpa pindah tab, save yang sama tetap mendarat dengan board aktif', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A })
+    await addTerminalToActive()
+    await waitFor(() => {
+      if (!putBoards().some((p) => p.id === HARNESS_WS_ID)) throw new Error('PUT belum mendarat')
+    }, { timeout: 2000 })
+
+    const saved = putBoards().filter((p) => p.id === HARNESS_WS_ID).at(-1)
+    expect(saved?.ws.nodes).toHaveLength(1)
+    expect(saved?.ws.nodes[0].kind).toBe('terminal')
+    expect(saved?.ws.viewport).toEqual(renderedViewport())
+  })
+
+  it('P0: pindah tab menulis board lama TEPAT sekali, membawa node dan viewport-nya', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsBWithNode] })
+    await addTerminalToActive()
+    // Pindah di tengah debounce: `flushSave` menulis SEKARANG, lalu timer debounce dibatalkan.
+    fireEvent.click(tab('bravo'))
+    await waitFor(() => expect(renderedViewport()).toEqual(VP_B))
+    // Lewati jauh melewati debounce: timer lama tidak boleh menembak PUT kedua.
+    await act(() => new Promise<void>((r) => setTimeout(r, 800)))
+
+    const savedA = putBoards().filter((p) => p.id === HARNESS_WS_ID)
+    expect(savedA, 'board A harus ditulis sekali saat flush pindah tab').toHaveLength(1)
+    expect(savedA[0].ws.nodes).toHaveLength(1)
+    expect(savedA[0].ws.nodes[0].kind).toBe('terminal')
+    expect(savedA[0].ws.viewport).toEqual(VP_A)
+    // Dan tidak ada tulisan susulan yang mencampur board B ke id A.
+    for (const { ws } of savedA) {
+      expect(ws.nodes.map((n) => n.id)).not.toContain(B_NODE_ID)
+      expect(ws.viewport).not.toEqual(VP_B)
+    }
   })
 })
 

@@ -1,0 +1,17 @@
+/* VS Code theme variables: Dark Modern (default) and Light Modern (`data-theme='light'`).
+ *
+ * This file is the entry point for the palette values, split into `vscode-theme.dark.css` and
+ * `vscode-theme.light.css` (imported in that order, so the cascade equals the former single file).
+ * The values are copied from the official
+ * theme files (microsoft/vscode `extensions/theme-defaults/themes/dark_modern.json` and
+ * `light_modern.json`); any key those files do not override carries the registry default
+ * (`src/vs/platform/theme/common/colors/*.ts`, `src/vs/workbench/common/theme.ts`). Keys marked
+ * "derived" are computed the way the registry computes them (darken / transparent).
+ * `styles.css` maps the legacy webterm tokens (`--bg`, `--panel`, ...) onto these variables, so
+ * legacy CSS and the VS Code primitives always read the same palette.
+ *
+ * Everything here is a plain custom property: it inherits into the shadow DOM of the
+ * `vscode-*` Lit elements, which read exactly these names.
+ */
+@import './vscode-theme.dark.css';
+@import './vscode-theme.light.css';

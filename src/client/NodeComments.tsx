@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { Comment } from '../shared/workspace'
+import { ToolbarButton } from '@/vscode/register'
 
 export interface NodeCommentsProps {
   comments: Comment[]
@@ -8,8 +9,13 @@ export interface NodeCommentsProps {
   onClose: () => void
 }
 
+/** Widget komentar per-node bergaya comment widget VS Code: header, daftar, lalu input + "Add Comment". */
 export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsProps) {
   const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Widget dibuka dari tombol toolbar; fokus langsung ke input supaya bisa mengetik tanpa klik lagi.
+  useEffect(() => { inputRef.current?.focus() }, [])
 
   const send = () => {
     const text = draft.trim()
@@ -18,15 +24,24 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
     setDraft('')
   }
 
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+    } else if (e.key === 'Enter' && !e.shiftKey && e.target === inputRef.current) {
       e.preventDefault()
       send()
     }
   }
 
   return (
-    <div className="nodrag node-comments">
+    <div className="nodrag node-comments" role="dialog" aria-label="Comments" onKeyDown={onKeyDown}>
+      <div className="node-comments__header">
+        <span className="node-comments__title">Comments</span>
+        <ToolbarButton label="Close" title="Close" data-title="Close" onClick={onClose}>
+          <span className="codicon codicon-close" aria-hidden="true" />
+        </ToolbarButton>
+      </div>
       <div className="node-comments__list">
         {comments.length === 0 ? (
           <div className="node-comments__empty">No comments yet</div>
@@ -43,14 +58,15 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
       </div>
       <div className="node-comments__composer">
         <textarea
-          className="field"
+          ref={inputRef}
+          className="node-comments__input"
+          rows={1}
           value={draft}
           placeholder="Add a comment…"
+          aria-label="Add a comment"
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
         />
-        <button className="btn btn--accent" title="Send" onClick={send}>Send</button>
-        <button className="icon-btn" title="Close" onClick={onClose}>×</button>
+        <button type="button" className="node-comments__submit" title="Add Comment" onClick={send}>Add Comment</button>
       </div>
     </div>
   )

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Bot, CircleQuestionMark, FolderTree, Search, Settings, Terminal } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
+import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import './canvas-ui.css'
 
-// Cluster kontrol kanan-atas + command palette ⌘K. Porting dari nodeterm
-// `src/renderer/canvas/Canvas.tsx` (.controls-cluster) dan `components/CommandPalette.tsx`.
+// Cluster kontrol kiri-bawah + command palette ⌘K. Porting dari nodeterm
+// `src/renderer/canvas/Canvas.tsx` (.controls-cluster). Palette memakai primitif VS Code
+// (`VscodeQuickPick`) supaya metriknya sama dengan permukaan VS Code lain di webterm.
 
 export interface PaletteTarget {
   id: string
@@ -87,7 +89,9 @@ export function nodeTargets(nodes: CanvasNodeLike[]): PaletteTarget[] {
   })
 }
 
-export const PALETTE_LIMIT = 50
+/** Codicon per tipe node di palette (seragam dengan Add node di Dock); tipe lain = terminal. */
+const KIND_ICONS: Record<string, string> = { agent: 'hubot', files: 'folder', editor: 'edit' }
+export const kindIcon = (kind?: string): string => (kind && KIND_ICONS[kind]) || 'terminal'
 
 export interface CanvasToolbarProps {
   nodes: CanvasNodeLike[]
@@ -110,7 +114,26 @@ export default function CanvasToolbar({
 }: CanvasToolbarProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const chip = shortcutChip(platform ?? navigator.userAgent)
-  const targets = useMemo(() => nodeTargets(nodes), [nodes])
+  const items = useMemo<VscodeQuickPickItem[]>(
+    () =>
+      nodeTargets(nodes).map((target) => ({
+        id: target.id,
+        label: target.label,
+        description: target.hint,
+        group: 'Nodes',
+        icon: <span className={`codicon codicon-${kindIcon(target.hint)}`} aria-hidden />,
+      })),
+    [nodes],
+  )
+
+  const closePalette = useCallback(() => setPaletteOpen(false), [])
+  const selectNode = useCallback(
+    (id: string) => {
+      onFocusNode(id)
+      setPaletteOpen(false)
+    },
+    [onFocusNode],
+  )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -126,103 +149,37 @@ export default function CanvasToolbar({
   return (
     <>
       <div className="controls-cluster">
-        <button className="cluster-search" aria-label="Command palette" title="Command palette" onClick={() => setPaletteOpen(true)}>
-          <Search aria-hidden />
+        <Button className="cluster-search" aria-label="Command palette" title={`Command palette (${chip})`} onClick={() => setPaletteOpen(true)}>
+          <span className="codicon codicon-search" aria-hidden />
           <span className="kbd">{chip}</span>
-        </button>
-        <button aria-label="Explorer" title="Explorer" onClick={onOpenExplorer}>
-          <FolderTree aria-hidden />
-        </button>
-        <button aria-label="Settings" title="Settings" onClick={onOpenSettings}>
-          <Settings aria-hidden />
-        </button>
-        <button aria-label="Help" title="Help" onClick={onOpenHelp}>
-          <CircleQuestionMark aria-hidden />
-        </button>
+        </Button>
+        <Button aria-label="Explorer" title="Explorer" onClick={onOpenExplorer}>
+          <span className="codicon codicon-files" aria-hidden />
+        </Button>
+        <Button aria-label="Settings" title="Settings" onClick={onOpenSettings}>
+          <span className="codicon codicon-settings-gear" aria-hidden />
+        </Button>
+        <Button aria-label="Help" title="Help" onClick={onOpenHelp}>
+          <span className="codicon codicon-question" aria-hidden />
+        </Button>
       </div>
       {paletteOpen && (
-        <CommandPalette targets={targets} onPick={onFocusNode} onClose={() => setPaletteOpen(false)} />
+        <VscodeQuickPick
+          open
+          onClose={closePalette}
+          ariaLabel="Find node"
+          placeholder="Find a node by name or type…"
+          emptyText="No matches"
+          items={items}
+          rank={rankNodeItem}
+          onSelect={selectNode}
+        />
       )}
     </>
   )
 }
 
-interface PaletteProps {
-  targets: PaletteTarget[]
-  onPick: (id: string) => void
-  onClose: () => void
-}
-
-function CommandPalette({ targets, onPick, onClose }: PaletteProps) {
-  const [query, setQuery] = useState('')
-  const [active, setActive] = useState(0)
-  const items = useMemo(() => rankTargets(targets, query, PALETTE_LIMIT), [targets, query])
-
-  const run = (t?: PaletteTarget) => {
-    if (!t) return
-    onPick(t.id)
-    onClose()
-  }
-
-  // Portal ke body: palette harus menutupi canvas dan tidak ikut ter-transform viewport React Flow.
-  return createPortal(
-    <div className="palette-overlay nodrag nowheel" onClick={onClose}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Find node" onClick={(e) => e.stopPropagation()}>
-        <input
-          className="palette__input"
-          aria-label="Find node by name or type"
-          autoFocus
-          spellCheck={false}
-          placeholder="Find a node by name or type…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setActive(0)
-          }}
-          // Canvas mendengar keydown di document (Backspace menghapus node terpilih, panah mem-pan),
-          // jadi event keyboard palette harus berhenti di sini.
-          onKeyDown={(e) => {
-            e.stopPropagation()
-            if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              setActive((a) => Math.min(a + 1, items.length - 1))
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault()
-              setActive((a) => Math.max(a - 1, 0))
-            } else if (e.key === 'Enter') {
-              e.preventDefault()
-              run(items[active])
-            } else if (e.key === 'Escape') {
-              onClose()
-            }
-          }}
-        />
-        <div className="palette__list">
-          {items.length === 0 ? (
-            <div className="palette__empty">No matches</div>
-          ) : (
-            <>
-              <div className="palette__section">Nodes</div>
-              {items.map((t, i) => (
-                <button
-                  key={t.id}
-                  className={`palette__item${i === active ? ' active' : ''}`}
-                  aria-current={i === active}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => run(t)}
-                >
-                  <span className="palette__icon">
-                    {t.hint === 'agent' ? <Bot aria-hidden /> : <Terminal aria-hidden />}
-                  </span>
-                  <span className="palette__label">{t.label}</span>
-                  {t.hint && <span className="palette__hint">{t.hint}</span>}
-                </button>
-              ))}
-            </>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
-  )
+/** Ranking node untuk quick pick; `hint` (tipe node) tetap ikut dicari, seperti palette lama. */
+function rankNodeItem(item: VscodeQuickPickItem, query: string): number | null {
+  return targetScore({ id: item.id, label: item.label, hint: item.description }, query)
 }

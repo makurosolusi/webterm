@@ -1,12 +1,24 @@
 // Bun-only: jalur yang diuji di sini BUTUH PTY nyata yang keluar sendiri (`onExit` adalah yang
 // menyetel 'done' lalu menghapus sesinya dari `map`), jadi ia tidak bisa hidup di vitest.
-import { test, expect } from 'bun:test'
-import { mkdtempSync } from 'node:fs'
+import { test, expect, afterAll } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 // Peluncuran agent claude menulis file settings sungguhan — seluruh file diisolasi ke temp.
-process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-close-'))
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-close-'))
+process.env.WEBTERM_DATA_DIR = DATA_DIR
+// HOME diisolasi: test ini menguji perilaku sesi/PTY, bukan shell rc milik user — `bash -l` yang
+// membaca rc berat (brew/pyenv/nvm/rvm/conda) hanya menambah latensi start yang tak berhubungan.
+const ORIGINAL_HOME = process.env.HOME
+process.env.HOME = DATA_DIR
+// Tiap run meninggalkan satu direktori temp; tanpa pembersihan /tmp menumpuk ratusan direktori
+// setelah beberapa hari, dan `mkdtempSync` tetap memakan inode walau isinya kecil. HOME dikembalikan
+// karena seluruh file test berbagi satu proses: `ptySpawn.bun.test.ts` membaca `process.env.HOME`.
+afterAll(() => {
+  process.env.HOME = ORIGINAL_HOME
+  rmSync(DATA_DIR, { recursive: true, force: true })
+})
 
 import type { AgentStatus } from '../shared/workspace'
 import type { ServerMsg } from '../shared/protocol'
@@ -21,8 +33,9 @@ const OLD_STATUS_AFTER_CLOSE: AgentStatus = 'done'
 const OLD_TRANSCRIPT_AFTER_CLOSE = '/tmp/webterm-close-probe.jsonl'
 // Perilaku LAMA sesudah `close` pada PTY yang masih hidup: `exit` dipancarkan DI ATAS gerbangnya,
 // jadi tepat satu `exit` tetap lolos dan — karena client mencocokkannya by id — mendarat di
-// pelanggan berikutnya dengan node id yang sama.
-const OLD_EXITS_AFTER_CLOSE_KILL = 1
+// pelanggan berikutnya dengan node id yang sama, TANPA alasan. Kontrak baru membalik artinya:
+// `close` memang mengabarkan SATU `exit` beralasan 'closed', dan gema `onExit` PTY-nya diabaikan.
+const CLOSED_EXIT_CODE = -1
 // Perilaku LAMA di cabang SPAWN: senyap, nol pesan status. Client menyimpan salinan statusnya di map
 // modul (`client/ws.ts`), jadi senyap terbaca "tidak ada perubahan" — dan sesudah restart server
 // itulah yang membuat node yang tadinya 'working' terbaca RUNNING selamanya.
@@ -32,14 +45,15 @@ const OLD_SPAWN_STATUS_MESSAGES = 0
 const OLD_STATUS_AFTER_RESPAWN: AgentStatus = 'working'
 
 /** Perekam status; status absen dipetakan ke 'NONE' karena `[undefined].join(',')` sama dengan
- *  senyap — tanpa penandaan ini SENYAP dan PENCABUTAN EKSPLISIT tak terbedakan. `exits` terpisah
- *  dari `seen`: dua jenis pesan yang berbeda, dan test lain di file ini hanya membaca status. */
+ *  senyap — tanpa penandaan ini SENYAP dan PENCABUTAN EKSPLISIT tak terbedakan. `exits` menyimpan
+ *  `{code, reason}`: alasanlah yang membedakan kematian yang KITA minta ('closed') dari proses yang
+ *  keluar sendiri ('self'), dan test lain di file ini hanya membaca status. */
 function recorder() {
   const seen: string[] = []
-  const exits: number[] = []
+  const exits: { code: number; reason?: string }[] = []
   const send = (m: ServerMsg) => {
     if (m.t === 'status') seen.push(m.status ?? 'NONE')
-    else if (m.t === 'exit') exits.push(m.code)
+    else if (m.t === 'exit') exits.push({ code: m.code, reason: m.reason })
   }
   return { seen, exits, send }
 }
@@ -57,23 +71,22 @@ async function waitGone(pid: number, budgetMs: number): Promise<boolean> {
   return !alive(pid)
 }
 
-/** Pid PTY sesi `id`. Lewat `map` privat dengan sengaja: ia tidak punya pembaca publik, dan tanpa
- *  pid-nya test di bawah tidak bisa membuktikan `onExit` sudah SEMPAT mendarat — ia akan lulus
- *  hanya karena belum terjadi apa pun. */
+/** Pid PTY sesi `id`, lewat API publik `pidOf`. Tanpa pid-nya test di bawah tidak bisa membuktikan
+ *  `onExit` sudah SEMPAT mendarat — ia akan lulus hanya karena belum terjadi apa pun. */
 function ptyPid(s: Sessions, id: string): number {
-  const map = (s as unknown as { map: Map<string, { pty: { pid: number } }> }).map
-  const pid = map.get(id)?.pty.pid
-  if (!pid) throw new Error(`no live pty for ${id}`)
+  const pid = s.pidOf(id)
+  if (pid === undefined) throw new Error(`no live pty for ${id}`)
   return pid
 }
 
 /** Status yang diputar ulang ke socket yang re-attach = apa yang server masih SIMPAN tentang node.
- *  `open` MENGGANTI `send` sesi (bukan menambah pelanggan), jadi perekam aslinya dipasang kembali
- *  sesudahnya — tanpa itu probe pertama membuat perekam itu tuli untuk sisa test. */
-function stored(s: Sessions, id: string, reinstall: (m: ServerMsg) => void): string[] {
+ *  `open` pada id hidup MENAMBAH pelanggan dan memutar status ke pendatang baru, jadi probe-nya
+ *  harus dilepas lagi (`detach` hanya membuang pelanggan itu); set pelanggan tidak lagi mengevict
+ *  otomatis, dan tanpa `detach` setiap probe menumpuk jadi pelanggan permanen. */
+function stored(s: Sessions, id: string): string[] {
   const probe = recorder()
   s.open({ t: 'open', id, cols: 80, rows: 24 }, probe.send)
-  s.open({ t: 'open', id, cols: 80, rows: 24 }, reinstall)
+  s.detach(probe.send)
   return probe.seen
 }
 
@@ -83,7 +96,10 @@ test('restarting a finished agent does not inherit its done status', async () =>
   // Urutan nyatanya: CLI-nya keluar lebih dulu (restart selalu mematikannya), jadi saat `close`
   // tiba node ini sudah lenyap dari `map` dan gerbangnya yang dulu menolak pembersihan.
   s.open({ t: 'open', id: 'cl1', cols: 80, rows: 24, cmd: 'exit 0', agentId: 'claude' }, r.send)
-  const deadline = Date.now() + 5000
+  // Plafon 15 s, bukan 5 s: 5 s PERSIS batas default per-test `bun test`, jadi runner bisa menang
+  // lebih dulu dan test merah sebagai "timed out" tanpa menyebut status yang hilang. Jalur yang
+  // rusak tidak pernah memancarkan 'done', jadi plafon tinggi hanya menunda merah yang sah.
+  const deadline = Date.now() + 25_000
   while (!r.seen.includes('done') && Date.now() < deadline) await sleep(25)
   expect(r.seen).toContain('done')
 
@@ -93,10 +109,10 @@ test('restarting a finished agent does not inherit its done status', async () =>
 
   // PTY-nya baru lahir dan belum berkata apa pun, jadi yang benar adalah TIDAK ADA status —
   // bukan 'done', yang menggerbangi tombol Resume/Restart (`canResumeNode`).
-  expect(stored(s, 'cl1', r.send)).toContain('NONE')
-  expect(stored(s, 'cl1', r.send)).not.toContain(OLD_STATUS_AFTER_CLOSE)
+  expect(stored(s, 'cl1')).toContain('NONE')
+  expect(stored(s, 'cl1')).not.toContain(OLD_STATUS_AFTER_CLOSE)
   s.close('cl1', r.send)
-})
+}, 90_000)
 
 test('the socket that asked for the close hears the withdrawal', () => {
   const s = new Sessions()
@@ -112,7 +128,7 @@ test('the socket that asked for the close hears the withdrawal', () => {
   expect(r.seen.length).toBe(before + 1)
   expect(r.seen[before]).toBe('NONE')
   expect(r.seen[before]).not.toBe(OLD_STATUS_AFTER_CLOSE)
-})
+}, 90_000)
 
 test('a pty killed by close does not post a done status after the fact', async () => {
   const s = new Sessions()
@@ -126,10 +142,13 @@ test('a pty killed by close does not post a done status after the fact', async (
   await sleep(150)
 
   s.open({ t: 'open', id: 'cl4', cols: 80, rows: 24, cmd: 'sleep 20', agentId: 'claude' }, r.send)
-  expect(stored(s, 'cl4', r.send)).toContain('NONE')
-  expect(stored(s, 'cl4', r.send)).not.toContain(OLD_STATUS_AFTER_CLOSE)
+  // `onExit` yang mendarat sesudah `close` diabaikan seluruhnya: tidak boleh ada 'done' yang
+  // menghidupkan kembali status yang baru dicabut.
+  expect(r.seen).not.toContain('done')
+  expect(stored(s, 'cl4')).toContain('NONE')
+  expect(stored(s, 'cl4')).not.toContain(OLD_STATUS_AFTER_CLOSE)
   s.close('cl4', r.send)
-})
+}, 90_000)
 
 test('a pty killed by close does not emit a stale exit to the next session', async () => {
   const s = new Sessions()
@@ -144,15 +163,21 @@ test('a pty killed by close does not emit a stale exit to the next session', asy
 
   // `onExit` memancar dari `proc.exited`, jadi prosesnya harus benar-benar hilang dulu; tanpa ini
   // test lulus hanya karena belum sempat terjadi apa pun.
-  expect(await waitGone(old, 3000)).toBe(true)
+  // Anggaran 10 s: SIGTERM langsung memakan `sleep`, tapi di suite penuh proses bisa baru dijadwalkan
+  // keluar setelah antrean CPU menipis. Yang dinilai tetap "prosesnya benar-benar hilang", bukan cepat.
+  expect(await waitGone(old, 10_000)).toBe(true)
   await sleep(100)
 
   // Satu-satunya konsumen `exit` adalah `\r\n[process exited]` di `TerminalCore`, jadi yang lolos
   // di sini menulis baris itu ke terminal SEGAR yang baru saja mount.
-  expect(r.exits.length).toBe(0)
-  expect(r.exits.length).not.toBe(OLD_EXITS_AFTER_CLOSE_KILL)
+  // Yang benar: SATU `exit` dari `close` itu sendiri — beralasan 'closed' — dan gema `onExit` PTY
+  // yang dibunuh TIDAK menambah yang kedua maupun mengaku 'self'.
+  expect(r.exits.length).toBe(1)
+  expect(r.exits[0].reason).toBe('closed')
+  expect(r.exits[0].code).toBe(CLOSED_EXIT_CODE)
+  expect(r.exits.filter((e) => e.reason === 'self').length).toBe(0)
   s.close('cl5', r.send)
-})
+}, 90_000)
 
 test('a pty that exits on its own still emits its exit', async () => {
   const s = new Sessions()
@@ -167,12 +192,13 @@ test('a pty that exits on its own still emits its exit', async () => {
   // kesabaran, bukan kecepatan: `onExit` di jalur ini diukur ~0,65 s (25/25 sampel, terburuk 1,3 s),
   // tapi login shell nyata bisa lewat 6 s saat load average 6 — sedangkan jalur yang rusak tidak
   // memancarkan `exit` sama sekali, jadi plafon tinggi menunda merah yang sah, bukan menutupinya.
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + 25_000
   while (!r.exits.length && Date.now() < deadline) await sleep(25)
 
   expect(r.exits.length).toBe(1)
-  expect(r.exits[0]).toBe(0)
-}, 60_000)
+  expect(r.exits[0].code).toBe(0)
+  expect(r.exits[0].reason).toBe('self')
+}, 90_000)
 
 test('a fresh server answering a replayed open says there is no status', () => {
   const s = new Sessions()
@@ -188,7 +214,7 @@ test('a fresh server answering a replayed open says there is no status', () => {
   expect(r.seen[0]).toBe('NONE')
   expect(r.seen.length).not.toBe(OLD_SPAWN_STATUS_MESSAGES)
   s.close('cl7', r.send)
-})
+}, 90_000)
 
 test('a spawn drops the status left behind by a pty that is gone, not just announces it', () => {
   const s = new Sessions()
@@ -200,10 +226,10 @@ test('a spawn drops the status left behind by a pty that is gone, not just annou
 
   // Bukan cuma pesannya: entry server-nya ikut hilang, jadi RE-ATTACH berikutnya tidak memutar
   // ulang status milik proses yang sudah mati di atas PTY yang baru.
-  expect(stored(s, 'cl8', r.send)).toContain('NONE')
-  expect(stored(s, 'cl8', r.send)).not.toContain(OLD_STATUS_AFTER_RESPAWN)
+  expect(stored(s, 'cl8')).toContain('NONE')
+  expect(stored(s, 'cl8')).not.toContain(OLD_STATUS_AFTER_RESPAWN)
   s.close('cl8', r.send)
-})
+}, 90_000)
 
 test('close clears the transcript path of a node whose pty is already gone', () => {
   const s = new Sessions()

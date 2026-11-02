@@ -64,14 +64,21 @@ describe('resolveCwd', () => {
 describe('ptyEnv', () => {
   const source = {
     PATH: '/usr/bin', NODE_ENV: 'production', PORT: '8700', HOST: '0.0.0.0', VITE_X: '1', BUN_RUNTIME: '1', BUN_INSTALL: '/b',
-    WEBTERM_TOKEN: 't', WEBTERM_DATA_DIR: '/d', NODETERM_NODE_ID: 'n', NODETERM_PORT: '8700',
+    WEBTERM_TOKEN: 'root-token', WEBTERM_DATA_DIR: '/d', NODETERM_NODE_ID: 'inherited', NODETERM_PORT: '8700',
+    NODETERM_NODE_TOKEN: 'inherited-node-token',
   }
-  it('membuang variabel internal server, mempertahankan WEBTERM_*/NODETERM_*/BUN_INSTALL', () => {
+  it('membuang variabel internal server, termasuk WEBTERM_*/NODETERM_*, dan mempertahankan BUN_INSTALL', () => {
     const env = ptyEnv(source, { interactive: true, platform: 'linux' })
-    for (const k of ['NODE_ENV', 'PORT', 'HOST', 'VITE_X', 'BUN_RUNTIME']) expect(k in env).toBe(false)
-    for (const k of ['PATH', 'BUN_INSTALL', 'WEBTERM_TOKEN', 'WEBTERM_DATA_DIR', 'NODETERM_NODE_ID', 'NODETERM_PORT']) {
-      expect(env[k]).toBe(source[k as keyof typeof source])
-    }
+    const stripped = [
+      'NODE_ENV', 'PORT', 'HOST', 'VITE_X', 'BUN_RUNTIME',
+      'WEBTERM_TOKEN', 'WEBTERM_DATA_DIR', 'NODETERM_NODE_ID', 'NODETERM_PORT', 'NODETERM_NODE_TOKEN',
+    ]
+    for (const k of stripped) expect(k in env).toBe(false)
+    for (const k of ['PATH', 'BUN_INSTALL']) expect(env[k]).toBe(source[k as keyof typeof source])
+  })
+  it('tidak membuang nama yang hanya BERAWALAN sama tanpa garis bawah', () => {
+    const env = ptyEnv({ WEBTERMAPP: '1', NODETERMX: '2', PATH: '/x' }, { interactive: false })
+    expect(env).toEqual({ WEBTERMAPP: '1', NODETERMX: '2', PATH: '/x', TERM: 'xterm-256color' })
   })
   it('shell biasa: identitas terminal + locale default per platform', () => {
     const mac = ptyEnv(source, { interactive: true, platform: 'darwin' })

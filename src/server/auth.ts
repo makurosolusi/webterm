@@ -11,6 +11,7 @@
 //  2. Token. Only needed when we are reachable from outside the machine; loopback-only stays
 //     token-free so the default dev loop is untouched.
 import crypto from 'node:crypto'
+import { firstHeader } from './httpHeaders'
 
 /** Header the client sends the token in on API requests. `webterm`, not `nodeterm`: this is
  *  our own transport token, unrelated to the `x-nodeterm-node-token` agent-session protocol. */
@@ -18,14 +19,13 @@ export const TOKEN_HEADER = 'x-webterm-token'
 /** Query parameter carrying the token on the initial page load and on the WS URL (a browser
  *  cannot set headers on `new WebSocket`, so the WS handshake has no other place to put it). */
 export const TOKEN_PARAM = 'token'
+/** Header that carries a per-node capability token (`wcap_*`) to the control API. Root and
+ *  node tokens never travel in this header, and it is never read from the query string. */
+export const CAPABILITY_HEADER = 'x-webterm-capability'
 
 export const DEFAULT_HOST = '127.0.0.1'
 
 type Headers = Record<string, string | string[] | undefined>
-
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
-}
 
 // Deliberately NOT including '0.0.0.0' / '::' — those are wildcards that accept every
 // interface, which is the exact case the token requirement exists for.
@@ -90,16 +90,16 @@ export function tokensMatch(expected: string | undefined, candidate: string | nu
  *    because older browsers omit it.
  */
 export function sameOrigin(headers: Headers): boolean {
-  const origin = first(headers['origin'])
+  const origin = firstHeader(headers['origin'])
   if (typeof origin === 'string' && origin !== '') {
     if (origin === 'null') return false
     try {
-      return new URL(origin).host === first(headers['host'])
+      return new URL(origin).host === firstHeader(headers['host'])
     } catch {
       return false // unparseable Origin: refuse rather than guess
     }
   }
-  const site = first(headers['sec-fetch-site'])
+  const site = firstHeader(headers['sec-fetch-site'])
   return !(site === 'cross-site' || site === 'same-site')
 }
 
@@ -110,6 +110,59 @@ export function authorize(args: {
   queryToken?: string | null
 }): boolean {
   if (!sameOrigin(args.headers)) return false
-  const candidate = first(args.headers[TOKEN_HEADER]) ?? args.queryToken
+  const candidate = firstHeader(args.headers[TOKEN_HEADER]) ?? args.queryToken
   return tokensMatch(args.expectedToken, candidate)
+}
+
+/**
+ * Path yang boleh dilayani dengan token NODE (per sesi agent) alih-alih token root.
+ *
+ * Sengaja sempit: hanya jalur yang memang dipanggil hook dari dalam sesi agent — status hook,
+ * context-link, dan control API. Semua yang menyentuh setelan, workspace, filesystem, generator
+ * nama, atau shell (`/ws`) TETAP butuh token root: token node bocor ke disk sesi agent mana pun,
+ * dan satu sesi tidak boleh bisa menyetel ulang server atau membuka PTY milik sesi lain.
+ */
+export function isNodeTokenPath(pathname: string): boolean {
+  return (
+    pathname === '/api/agent-status' ||
+    pathname === '/api/context-link' ||
+    pathname.startsWith('/api/control/')
+  )
+}
+
+/** Keluarga control API, satu-satunya jalur yang boleh menerima capability token. Sengaja
+ *  memakai prefix ber-trailing-slash supaya `/api/control` sendiri bukan anggota keluarga. */
+export function isControlPath(pathname: string): boolean {
+  return pathname.startsWith('/api/control/')
+}
+
+/**
+ * Gerbang lengkap satu request: token root dulu, dan hanya bila itu gagal, token node untuk
+ * `isNodeTokenPath` — dengan syarat origin tetap lolos. Urutan ini penting supaya perilaku
+ * root tidak berubah sama sekali (loopback tanpa token tetap terbuka; token root tetap menang).
+ */
+export function authorizeRequest(args: {
+  headers: Headers
+  expectedToken: string | undefined
+  queryToken?: string | null
+  pathname: string
+  /** Validator token node (disuntikkan supaya modul ini tetap bebas state server). */
+  isNodeToken: (token: string) => boolean
+  /** Validator capability token (`wcap_*`). Tidak wajib: tanpa ini control API tetap
+   *  root/node-only, yang merupakan perilaku aman bawaan. */
+  isCapabilityToken?: (token: string) => boolean
+}): boolean {
+  if (authorize(args)) return true
+  if (!sameOrigin(args.headers)) return false
+  if (isNodeTokenPath(args.pathname)) {
+    const candidate = firstHeader(args.headers[TOKEN_HEADER]) ?? args.queryToken
+    if (typeof candidate === 'string' && candidate !== '' && args.isNodeToken(candidate)) return true
+  }
+  // Capability: HANYA untuk keluarga control API, HANYA dari header. Query string tidak pernah
+  // diperiksa — capability yang bocor ke URL akan tercatat di log/riwayat, dan gate ini tidak
+  // boleh jadi jalan masuknya. Jalur lain (settings/workspaces/fs//ws) tetap root-only.
+  if (!isControlPath(args.pathname) || args.isCapabilityToken === undefined) return false
+  const capability = firstHeader(args.headers[CAPABILITY_HEADER])
+  if (typeof capability !== 'string' || capability === '') return false
+  return args.isCapabilityToken(capability)
 }

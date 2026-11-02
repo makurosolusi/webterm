@@ -236,11 +236,11 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
         className={termNodeClass({ selected: !!selected, collapsed, status })}
-        style={{ borderTopColor: swatch }}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) }}
       >
         <NodeChrome
           title={label}
+          icon="hubot"
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}

@@ -14,6 +14,7 @@ import {
   hasUsage,
   isBuiltinAgent,
   isPermissionMode,
+  isSafeNodeId,
   isSafeSessionId,
   mintsSessionId,
   resumeCommand,
@@ -255,6 +256,67 @@ describe('isSafeSessionId', () => {
     expect(isSafeSessionId(long)).toBe(true)
     expect(isSafeSessionId(long, true)).toBe(false)
     expect(isSafeSessionId('a'.repeat(256), true)).toBe(true)
+  })
+})
+
+describe('isSafeNodeId', () => {
+  it('menerima id yang benar-benar dipakai client dan test', () => {
+    // UUID dari `src/client/randomId.ts`, plus id pendek yang dipakai suite sesi.
+    for (const id of [
+      '3f2a1c00-0000-4000-8000-000000000001',
+      't1',
+      'cl1',
+      'cl7',
+      'n_1-A',
+      'a'.repeat(64),
+    ]) {
+      expect(isSafeNodeId(id), id).toBe(true)
+    }
+  })
+
+  it('menerima id pane split `${nodeId}:p${n}` dari client/paneTree.ts', () => {
+    // Regresi: tanpa `:` di alfabet, SETIAP pane hasil split ditolak di batas WebSocket dan pane
+    // itu tidak pernah mendapat PTY.
+    for (const id of [
+      'node:p2',
+      '3f2a1c00-0000-4000-8000-000000000001:p2',
+      'a:b:c', // bentuk aneh tetap aman bagi shell; bukan urusan validator menilai struktur
+      `${'a'.repeat(60)}:p10`, // 64 karakter total
+    ]) {
+      expect(isSafeNodeId(id), id).toBe(true)
+    }
+  })
+
+  it('menolak nilai mirip-flag (karakter pertama wajib alfanumerik)', () => {
+    for (const bad of ['-x', '--help', '-', '_:p2', ':p2', '_n1']) {
+      expect(isSafeNodeId(bad), String(bad)).toBe(false)
+    }
+  })
+
+  it('menolak kutip, $( ), newline, spasi, dan metakarakter shell', () => {
+    for (const bad of [
+      `n1'`,
+      '"n1"',
+      'n1$(id)',
+      'n1`id`',
+      'n1\nwhoami',
+      'n1 a',
+      'n1;id',
+      'n1&&id',
+      'n1|tee',
+      'n1&x=1',
+      '../x',
+      'n1:p2 ../x',
+      'a'.repeat(65),
+      `${'a'.repeat(62)}:p10`, // 66 karakter: batas 64 tetap berlaku
+      '',
+      null,
+      undefined,
+      42,
+      {},
+    ]) {
+      expect(isSafeNodeId(bad), String(bad)).toBe(false)
+    }
   })
 })
 

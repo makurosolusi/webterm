@@ -21,14 +21,6 @@ const COLLAPSED_H = 40
  *  mencari fitur yang tak pernah ada, membiarkannya aktif membuatnya diam-diam gagal. */
 const NO_CLIPBOARD_HINT = 'Paste butuh secure context: buka webterm lewat https atau localhost.'
 
-const SplitIcon = (p: { down?: boolean }) => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
-    <path d={p.down ? 'M2.5 8h11' : 'M8 3v10'} />
-  </svg>
-)
-
 function TerminalNode({ id, data, selected, height }: NodeProps) {
   const d = data as { cwd?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; panes?: Pane }
   const rf = useReactFlow()
@@ -175,7 +167,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
         className={termNodeClass({ selected: !!selected, collapsed })}
-        style={{ borderTopColor: swatch }}
         // Tanpa ini Chrome memunculkan menu bawaannya untuk `<canvas>` — "Copy Image" di atas
         // terminal. React Flow tidak menolong: `Pane` hanya meneruskan contextmenu yang target-nya
         // pane itu sendiri, jadi klik kanan di atas node tidak pernah sampai ke menu canvas.
@@ -190,6 +181,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
       >
         <NodeChrome
           title={d.title ?? ''}
+          icon="terminal" description={d.cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
@@ -199,14 +191,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           micActive={micActive} onToggleMic={onToggleMicProp}
           maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
-          // Lewat `extraHeader` yang sudah ada (jalur yang sama dipakai tombol Resume/Restart node
-          // agent): tombol split tidak perlu satu pun prop baru di NodeChrome/NodeToolbar.
-          extraHeader={
-            <div className="nodrag pane-split-btns">
-              <button className="icon-btn" title="Split right" onClick={() => split('h', activePane)}><SplitIcon /></button>
-              <button className="icon-btn" title="Split down" onClick={() => split('v', activePane)}><SplitIcon down /></button>
-            </div>
-          }
         />
         <div className="node-body">
           <PaneView

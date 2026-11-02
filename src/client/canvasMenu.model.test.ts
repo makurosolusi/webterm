@@ -4,7 +4,6 @@ import {
   MENU_LABELS,
   buildCanvasMenuRows,
   isSeparator,
-  nextItemIndex,
   type CanvasMenuContext,
   type CanvasMenuHandlers,
   type CanvasMenuRow,
@@ -187,42 +186,5 @@ describe('buildCanvasMenuRows — penyambungan aksi', () => {
     const sub = item(rows, 'agent-group').children ?? []
     sub.find((c) => c.key === 'agent:custom:a1')?.onClick?.()
     expect(h.addAgent).toHaveBeenCalledWith('my-proxy --tui', 'custom:a1')
-  })
-})
-
-describe('nextItemIndex', () => {
-  const rows: CanvasMenuRow[] = [
-    { key: 'a', label: 'A', icon: 'terminal', onClick: () => {} },
-    { type: 'separator' },
-    { key: 'b', label: 'B', icon: 'fit', disabled: true, onClick: () => {} },
-    { key: 'c', label: 'C', icon: 'fit', onClick: () => {} },
-  ]
-
-  it('menurun dari "belum ada yang aktif" mendarat di baris pertama', () => {
-    expect(nextItemIndex(rows, -1, 1)).toBe(0)
-  })
-
-  it('menaik dari "belum ada yang aktif" mendarat di baris terakhir', () => {
-    expect(nextItemIndex(rows, -1, -1)).toBe(3)
-  })
-
-  it('melewati separator', () => {
-    expect(nextItemIndex(rows, 0, 1)).toBe(2)
-    expect(nextItemIndex(rows, 2, -1)).toBe(0)
-  })
-
-  it('TIDAK melewati baris nonaktif — ia tetap bisa disinggahi agar alasannya terbaca', () => {
-    expect(nextItemIndex(rows, 0, 1)).toBe(2)
-    expect(nextItemIndex(rows, 3, -1)).toBe(2)
-  })
-
-  it('membungkus di kedua ujung', () => {
-    expect(nextItemIndex(rows, 3, 1)).toBe(0)
-    expect(nextItemIndex(rows, 0, -1)).toBe(3)
-  })
-
-  it('-1 saat tidak ada baris yang bisa difokus', () => {
-    expect(nextItemIndex([], 0, 1)).toBe(-1)
-    expect(nextItemIndex([{ type: 'separator' }], -1, 1)).toBe(-1)
   })
 })

@@ -6,15 +6,14 @@
 // `CustomAgent.env` nodeterm tidak diport). Begitu ada kunci yang bisa, ia WAJIB diredaksi di
 // jalur GET di bawah.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { db } from './db'
+import type { Settings } from '../shared/settings'
+import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', (chunk) => { data += chunk })
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
+/** Bagian store settings yang dipakai route ini. Di-inject (bukan import singleton `db`) supaya
+ *  route ini bisa diuji di node-env tanpa `bun:sqlite`; produksi meneruskan `db` dari `api.ts`. */
+export type SettingsStore = {
+  getSettings(): Settings
+  saveSettings(patch: unknown): Settings
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -27,20 +26,35 @@ function json(res: ServerResponse, status: number, body: unknown): void {
  * `GET` mengembalikan snapshot penuh; `PUT` menerima PATCH parsial dan mengembalikan snapshot
  * hasil merge-nya, sehingga client yang menulis tidak perlu menebak apa yang tersimpan.
  *
+ * Body `PUT` dibaca dengan cap `SETTINGS_BODY_MAX_BYTES` (lihat `cappedRequestBody.ts`): 413
+ * `payload_too_large` di atas cap, 400 `body_read_failed` bila stream gagal. `POST` tetap 405 dan
+ * TIDAK menyentuh stream — menambah method yang membaca body di sini akan mengubah dispatch.
+ *
  * Body tidak divalidasi di sini dengan sengaja: `mergeSettings` di dalam `db.saveSettings` adalah
  * batas input tunggal (cocokkan bentuk, buang kunci tak dikenal), jadi validator kedua di sini
  * hanya akan jadi tempat kedua yang bisa tidak sepakat.
  */
-export async function settingsRoute(req: IncomingMessage, res: ServerResponse, method: string): Promise<void> {
-  if (method === 'GET') return json(res, 200, db.getSettings())
+export async function settingsRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  store: SettingsStore
+): Promise<void> {
+  if (method === 'GET') return json(res, 200, store.getSettings())
   if (method === 'PUT') {
+    const read = await readCappedRequestBody(req, SETTINGS_BODY_MAX_BYTES)
+    if (!read.ok) {
+      return read.reason === 'too_large'
+        ? json(res, 413, { error: 'payload_too_large' })
+        : json(res, 400, { error: 'body_read_failed' })
+    }
     let patch: unknown
     try {
-      patch = JSON.parse(await readBody(req))
+      patch = JSON.parse(read.body)
     } catch {
       return json(res, 400, { error: 'bad json' })
     }
-    return json(res, 200, db.saveSettings(patch))
+    return json(res, 200, store.saveSettings(patch))
   }
   json(res, 405, { error: 'method not allowed' })
 }

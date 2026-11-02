@@ -1,9 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
-import { X } from 'lucide-react'
+import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 // Type-only: terhapus saat compile, jadi tidak membatalkan lazy-load Monaco.
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { loadMonaco } from './lazyMonaco'
+import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
+import { fileIconClass } from './fileIcon'
+import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
 import { renderMarkdown } from './markdown'
 import {
   IMAGE_MIME,
@@ -15,9 +19,6 @@ import {
   opensInPreview
 } from './editorFile'
 import './editor.css'
-
-/** Tema Monaco. Chrome webterm gelap dan `--bg` (#1e1e1e) persis latar `vs-dark`. */
-const MONACO_THEME = 'vs-dark'
 
 export interface EditorNodeProps extends NodeProps {
   /** Isi teks file; REJECT saat gagal baca ('' berarti file memang kosong), sentinel too-large
@@ -179,6 +180,7 @@ function EditorNode({
     let disposed = false
     let model: MonacoEditor.ITextModel | null = null
     let editor: MonacoEditor.IStandaloneCodeEditor | null = null
+    let themeObserver: MutationObserver | null = null
 
     Promise.all([loadMonaco(), read(filePath)]).then(
       ([m, content]) => {
@@ -197,15 +199,10 @@ function EditorNode({
         // path-nya — `createModel` dengan language undefined memakai pemetaan ekstensi internal.
         const uri = m.Uri.file(filePath).with({ fragment: id })
         model = m.editor.getModel(uri) ?? m.editor.createModel(content, undefined, uri)
-        editor = m.editor.create(host, {
-          model,
-          theme: MONACO_THEME,
-          minimap: { enabled: false },
-          automaticLayout: true,
-          scrollBeyondLastLine: false,
-          smoothScrolling: true,
-          tabSize: 2
-        })
+        editor = m.editor.create(host, { ...EDITOR_OPTIONS, model, theme: currentMonacoTheme() })
+        // Monaco memegang satu tema global: ikuti pergantian Dark/Light app selama node ini hidup.
+        themeObserver = new MutationObserver(() => m.editor.setTheme(currentMonacoTheme()))
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
         editorRef.current = editor
         savedRef.current = content
         loadedRef.current = true
@@ -229,6 +226,7 @@ function EditorNode({
     return () => {
       disposed = true
       loadedRef.current = false
+      themeObserver?.disconnect()
       editor?.dispose()
       // Model dibuang eksplisit: React tidak melepas resource Monaco hanya karena container-nya
       // keluar dari tree, dan model yang tertinggal menahan worker bahasanya (lihat tsWorkerReaper).
@@ -300,47 +298,62 @@ function EditorNode({
       <NodeResizer isVisible={!!selected} minWidth={320} minHeight={180} color={swatch} />
       <div
         className={`term-node editor-node${selected ? ' term-node--selected' : ''}`}
-        style={{ borderTopColor: swatch }}
+        style={{ '--node-swatch': swatch } as CSSProperties}
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
       >
         <div className="node-header">
           <span className="node-title editor-node__name" title={filePath}>
+            <span className={`${fileIconClass(fileName)} editor-node__icon`} aria-hidden="true" />
             {fileName}
-            {kind === 'text' && dirty ? ' ●' : ''}
+            {kind === 'text' && dirty && (
+              <span className="codicon codicon-circle-filled editor-node__dirty" role="img" aria-label="Unsaved changes" />
+            )}
           </span>
           <span className="editor-node__spacer" />
           {kind === 'image' && imageDims && <span className="editor-node__dims">{imageDims}</span>}
-          {kind === 'text' && !loadError && (
-            <>
-              <button
-                className="nodrag editor-node__btn"
-                title="Toggle markdown preview (⌘M)"
-                onClick={togglePreview}
-              >
-                {preview ? 'Edit' : 'Preview'}
-              </button>
-              <button
-                className="nodrag editor-node__btn editor-node__btn--save"
-                title="Save (⌘S)"
-                disabled={!dirty}
-                onClick={save}
-              >
-                Save
-              </button>
-            </>
-          )}
-          <button
-            className="nodrag editor-node__close"
-            title="Close"
-            aria-label="Close"
-            onClick={() => {
-              void rf.deleteElements({ nodes: [{ id }] })
-            }}
-          >
-            <X size={14} />
-          </button>
+          <ToolbarContainer className="nodrag editor-node__actions">
+            {kind === 'text' && !loadError && (
+              <>
+                <ToolbarButton
+                  label={preview ? 'Edit' : 'Preview'}
+                  title="Toggle markdown preview (⌘M)" data-title="Toggle markdown preview (⌘M)"
+                  toggleable checked={preview}
+                  onClick={togglePreview}
+                >
+                  <span className={`codicon codicon-${preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
+                </ToolbarButton>
+                {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
+                    yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
+                <VscodeButton secondary disabled={!dirty} title="Save (⌘S)" onClick={save}>
+                  Save
+                </VscodeButton>
+              </>
+            )}
+            <ToolbarButton
+              label="Close"
+              title="Close"
+              onClick={() => {
+                void rf.deleteElements({ nodes: [{ id }] })
+              }}
+            >
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </ToolbarButton>
+          </ToolbarContainer>
         </div>
+        {/* Breadcrumb path file seperti di bawah tab editor VS Code: 3 segmen terakhir, statis. */}
+        {filePath && (
+          <VscodeBreadcrumbs
+            className="nodrag editor-node__crumbs"
+            ariaLabel="File path"
+            segments={filePath.split('/').filter(Boolean).slice(-3).map((name, i, all) => ({
+              id: `${i}:${name}`,
+              label: name,
+              title: filePath,
+              icon: i === all.length - 1 ? <span className={`${fileIconClass(name)} editor-node__icon`} aria-hidden="true" /> : undefined,
+            }))}
+          />
+        )}
         <div className={`node-body editor-node__body editor-node__body--${kind}`}>
           {body()}
           {/* Strip DI ATAS body, bukan pengganti body: editor tetap terpasang, isinya tetap

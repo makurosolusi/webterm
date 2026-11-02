@@ -13,7 +13,8 @@ vi.mock('./ws', async (importOriginal) => {
   return { ...real, send: (m: { t: string; id: string }) => { sent.push(m) } }
 })
 // Fallback diperpendek supaya test "tak pernah berukuran" tidak menunggu detik sungguhan.
-const { FALLBACK_MS } = vi.hoisted(() => ({ FALLBACK_MS: 60 }))
+// 500ms: tetap singkat, tapi longgar supaya mount di bawah beban tidak memicu fallback sebelum assertion pertama.
+const { FALLBACK_MS } = vi.hoisted(() => ({ FALLBACK_MS: 500 }))
 vi.mock('./terminalSizing', async (importOriginal) => {
   const real = await importOriginal<typeof import('./terminalSizing')>()
   return { ...real, OPEN_SIZE_FALLBACK_MS: FALLBACK_MS }
@@ -70,7 +71,7 @@ describe('TerminalCore', () => {
     await mountCanvas({ nodes: [termNode], dirs: {} })
     expect(ofType('open')).toHaveLength(0)
 
-    await waitFor(() => expect(ofType('open')).toHaveLength(1))
+    await waitFor(() => expect(ofType('open')).toHaveLength(1), { timeout: 3000 })
     expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
   })
 })

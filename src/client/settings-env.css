@@ -1,0 +1,94 @@
+/* Section Environment di Settings: tiap variabel adalah item setting (kelas `.st-field`).
+   Daftar/heading memakai kelas .st-ch-*; pesan inline memakai `.st-message` dari bawah. */
+.st-env {
+  display: flex;
+  flex-direction: column;
+}
+
+.st-env-row {
+  list-style: none;
+}
+
+.st-env-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.st-env-ctl .st-input,
+.st-env-ctl .st-select-wrap {
+  width: 320px;
+  max-width: 100%;
+}
+
+.st-env-key {
+  font-family: var(--vscode-editor-font-family, var(--font-mono));
+  font-size: 12px;
+}
+
+.st-secret-state {
+  font-size: 12px;
+}
+
+/* Badge status di baris judul (sumber nilai, restart, berbahaya): badge hitungan VS Code, tanpa border. */
+.st-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--vscode-badge-background, var(--raised));
+  color: var(--vscode-badge-foreground, var(--text));
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.st-tag--modified {
+  box-shadow: inset 2px 0 var(--st-modified-indicator);
+}
+
+.st-tag--warning {
+  background: transparent;
+  color: var(--st-warning);
+}
+
+.st-tag .codicon {
+  font-size: 12px;
+}
+
+/* Pesan inline ala VS Code: ikon severity + teks, tanpa kotak merah besar. */
+.st-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 14px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  color: var(--vscode-descriptionForeground, var(--muted));
+}
+
+.st-field .st-message {
+  padding-inline: 0;
+}
+
+.st-message .codicon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 14px;
+}
+
+.st-message--info .codicon {
+  color: var(--st-info);
+}
+
+.st-message--warning .codicon {
+  color: var(--st-warning);
+}
+
+.st-message--error {
+  color: var(--st-error);
+}

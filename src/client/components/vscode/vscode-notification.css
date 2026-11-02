@@ -1,0 +1,188 @@
+/* VS Code notification toasts (L1). Values follow notificationsToasts.css and
+ * notificationsList.css: stack at right 3px, 450px max, 8px radius, 10px/5px item
+ * padding, 22px message line, 16px severity icon, 300ms ease-out slide-in, close
+ * revealed on hover or focus, 2px progress bar pinned to the bottom edge.
+ */
+.vscode-notification-stack {
+  position: fixed;
+  right: 3px;
+  bottom: calc(var(--vscode-statusBar-height, 22px) + 3px);
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 450px;
+  max-width: calc(100vw - 6px);
+  pointer-events: none;
+}
+
+.vscode-notification {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 4px 0;
+  overflow: hidden;
+  border: 1px solid var(--vscode-notificationToast-border, var(--vscode-widget-border, #313131));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
+  background: var(--vscode-notifications-background, var(--vscode-editorWidget-background, #1f1f1f));
+  box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
+  color: var(--vscode-notifications-foreground, var(--vscode-foreground, #cccccc));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+  pointer-events: auto;
+  animation: vscode-notification-in 300ms ease-out;
+}
+
+@keyframes vscode-notification-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vscode-notification {
+    animation: none;
+  }
+}
+
+.vscode-notification__main {
+  display: flex;
+  padding: 10px 5px;
+}
+
+.vscode-notification__icon {
+  display: flex;
+  flex: 0 0 16px;
+  align-items: center;
+  height: 22px;
+  margin: 0 4px;
+  font-size: 18px;
+  color: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder, #007fd4));
+}
+
+.vscode-notification[data-severity='warning'] .vscode-notification__icon {
+  color: var(--vscode-notificationsWarningIcon-foreground, #cca700);
+}
+
+.vscode-notification[data-severity='error'] .vscode-notification__icon {
+  color: var(--vscode-notificationsErrorIcon-foreground, var(--vscode-errorForeground, #f85149));
+}
+
+.vscode-notification__text {
+  flex: 1;
+  min-width: 0;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.vscode-notification__title {
+  display: block;
+  font-weight: 600;
+}
+
+.vscode-notification__message {
+  margin: 0;
+}
+
+/* Hidden until hover or keyboard focus, but kept focusable (monaco toggles display). */
+.vscode-notification__close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
+  cursor: default;
+  font-size: 16px;
+  opacity: 0;
+}
+
+.vscode-notification:hover .vscode-notification__close,
+.vscode-notification:focus-within .vscode-notification__close {
+  opacity: 1;
+}
+
+.vscode-notification__close:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.vscode-notification__close:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+.vscode-notification__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 0 5px 6px;
+}
+
+.vscode-notification__action {
+  box-sizing: border-box;
+  min-height: 26px;
+  margin: 4px 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+  background: var(--vscode-button-background, #0078d4);
+  color: var(--vscode-button-foreground, #ffffff);
+  cursor: default;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.vscode-notification__action:hover {
+  background: var(--vscode-button-hoverBackground, #026ec1);
+}
+
+.vscode-notification__action:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: 2px;
+}
+
+.vscode-notification__progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+}
+
+.vscode-notification__progress-bit {
+  display: block;
+  width: 2%;
+  height: 2px;
+  background: var(--vscode-progressBar-background, #0078d4);
+  transition: width 100ms linear;
+}
+
+.vscode-notification__progress[data-mode='infinite'] .vscode-notification__progress-bit {
+  animation: vscode-notification-progress 4s linear infinite;
+}
+
+@keyframes vscode-notification-progress {
+  from {
+    transform: translateX(0%) scaleX(1);
+  }
+  50% {
+    transform: translateX(2500%) scaleX(3);
+  }
+  to {
+    transform: translateX(4900%) scaleX(1);
+  }
+}

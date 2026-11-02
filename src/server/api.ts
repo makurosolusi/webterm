@@ -5,13 +5,25 @@ import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
+import { ENV_SETTINGS_PATH, envSettingsRoute } from './envSettings.api'
+import { envSettingsApiDeps } from './envSettings.runtime'
 import { workspacesRoute } from './workspacesApi'
+import { agentStatusRoute } from './agentStatusApi'
+import { handleControlHttp } from './control/mount'
+import { inboxRoute } from './inboxApi'
+import { memoryRoute } from './memoryApi'
+import { memoryWriteRoute } from './memoryWriteApi'
+import { orchestratorRoute } from './orchestratorApi'
+import { approvalHumanRoute } from './approvalHumanApi'
+import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
+import { contextLinkRoute } from './contextLinkApi'
+import { centralChatRoute } from './centralChatApi'
 import { fsApiRoute } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
-import { hookStatus, type HookStatusBody } from './hookStatus'
-import { renderForRequester, buildLinkDoc, findWorkspaceFor, CONTEXT_LINK_VERBS, type ContextLinkVerb } from './contextLink'
-import { nextHookContext } from './hookContext'
+import { extendedApiRoute } from './extendedApi'
+import { cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
+import { MEMORY_WRITE_BODY_MAX_BYTES } from './memoryWriteApi'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -53,11 +65,16 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // /api/workspaces[/:id] and /api/active; returns null for anything else, including a method
   // this family does not answer, which then falls through to the 404 at the bottom.
   // A 204 route answers WITHOUT a `body` key, and `json` keeps those body-less.
-  const wsRes = await workspacesRoute(db, path, method, () => readBody(req))
+  // Body-nya berbatas 1 MiB dan hanya dibaca untuk POST/PUT (`cappedBodyGetter`): snapshot
+  // workspace yang wajar ada jauh di bawah itu, sedangkan body GET/DELETE tidak pernah menyentuh
+  // stream. Reader `fs`/`git` di bawah tetap TANPA cap — isi file boleh besar.
+  const wsRes = await workspacesRoute(db, path, method, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES))
   if (wsRes) return json(res, wsRes.status, wsRes.body)
 
+  if (path === ENV_SETTINGS_PATH) return envSettingsRoute(req, res, method, envSettingsApiDeps())
+
   if (path === '/api/settings') {
-    await settingsRoute(req, res, method)
+    await settingsRoute(req, res, method, db)
     // A saved defaultShell/scrollbackBytes must reach the NEXT spawned PTY without a restart.
     if (method === 'PUT') applyPtyOptions()
     return
@@ -76,37 +93,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (gitRes) return json(res, gitRes.status, gitRes.body)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
-  if (path === '/api/agent-status' && method === 'POST') {
-    const node = url.searchParams.get('node')
-    // `HookStatusBody` dipakai apa adanya, bukan disalin ulang: field mana yang menentukan status
-    // adalah milik `hookStatus`, dan dua daftar yang harus berubah bersamaan pasti akan menyimpang.
-    let body: HookStatusBody & { message?: string; transcript_path?: string }
-    try { body = JSON.parse(await readBody(req)) } catch { body = {} }
-    const status = node ? hookStatus(body) : null
-    if (node && status) sessions.setStatus(node, status)
-    if (node && typeof body.transcript_path === 'string') sessions.setTranscript(node, body.transcript_path)
-    // Balasan hook adalah satu-satunya kanal PUSH ke konteks agent. `nextHookContext` sendiri yang
-    // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
-    // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
-    const ws = node ? findWorkspaceFor(db.list(), node) : undefined
-    const ctx = node && ws ? nextHookContext(node, body.hook_event_name, buildLinkDoc(ws, node)) : null
-    if (ctx) return json(res, 200, { hookSpecificOutput: ctx })
-    res.statusCode = 204; res.end(); return
-  }
+  if (await agentStatusRoute(req, res, url)) return
+
+  // Headless control plane (/api/control/*): false = not this family, keep falling through.
+  if (await handleControlHttp(req, res, url, () => readBody(req))) return
 
   // Read-only context-link: a linked node reads a bridged peer's transcript/terminal.
-  if (path === '/api/context-link' && method === 'GET') {
-    const requester = url.searchParams.get('node') || ''
-    const raw = url.searchParams.get('verb') || 'list'
-    const verb = (CONTEXT_LINK_VERBS as string[]).includes(raw) ? (raw as ContextLinkVerb) : 'list'
-    const want = url.searchParams.get('want') || undefined
-    const n = url.searchParams.get('n') || undefined
-    const text = await renderForRequester(requester, verb, { node: want, n })
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-    res.end(text)
-    return
-  }
+  if (await contextLinkRoute(req, res, url)) return
 
   // AI name-gen: spawn claude -p on a node's terminal buffer, return a suggested title.
   if (path === '/api/generate-name' && method === 'GET') {
@@ -126,6 +119,28 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     } catch {
       return json(res, 404, { error: 'cannot read dir' })
     }
+  }
+
+  // Read-only ledger projections for the UI (inbox/memory/orchestrator). Ledger off answers 503
+  // `ledger_off` instead of an empty list; null from a family = keep falling through to 404.
+  const ledger = activeLedgerRuntime()
+  // Central chat (exact paths only; flags inside). Mounted before the read-only projections
+  // and the 404 fallback so its SSE response can stay open; portfolio routes are untouched.
+  if (await centralChatRoute(req, res, url, { ledger })) return
+  if (await extendedApiRoute(req, res, url, ledger)) return
+  if (await approvalHumanRoute(req, res, url)) return
+  // Memory writes (claim/promote). Body capped at 64 KiB and read lazily, so the read-only GETs
+  // below never touch the stream. Authority is derived here as root human, never from the payload.
+  const memoryWrite = await memoryWriteRoute(
+    path,
+    method,
+    cappedBodyGetter(req, method, MEMORY_WRITE_BODY_MAX_BYTES),
+    ledger
+  )
+  if (memoryWrite) return json(res, memoryWrite.status, memoryWrite.body)
+  for (const family of [inboxRoute, memoryRoute, orchestratorRoute]) {
+    const result = family(path, method, url.searchParams, ledger)
+    if (result) return json(res, result.status, result.body)
   }
 
   json(res, 404, { error: 'unknown route' })

@@ -19,11 +19,11 @@ export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'select-all' | 'fi
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
-  terminal: 'New terminal',
-  agentGroup: 'New agent',
-  files: 'New file manager',
-  selectAll: 'Select all',
-  fitView: 'Fit view',
+  terminal: 'New Terminal',
+  agentGroup: 'New Agent',
+  files: 'New File Manager',
+  selectAll: 'Select All',
+  fitView: 'Fit View',
 } as const
 
 /**
@@ -157,23 +157,4 @@ export function buildCanvasMenuRows(
   rows.push({ key: 'fit-view', label: MENU_LABELS.fitView, icon: 'fit', onClick: handlers.fitView })
 
   return rows
-}
-
-/**
- * Baris berikutnya yang bisa difokus keyboard, membungkus di ujung seperti menu native.
- * Separator dilewati; baris NONAKTIF tidak — ia tetap bisa disinggahi supaya pengguna keyboard
- * ikut tahu baris itu ada dan bisa membaca `hint` alasannya, lalu ditolak saat diaktifkan.
- *
- * `from < 0` berarti belum ada yang aktif: menurun mulai dari baris pertama, menaik dari terakhir.
- * Memulangkan -1 kalau tidak ada baris yang bisa difokus sama sekali.
- */
-export function nextItemIndex(rows: CanvasMenuRow[], from: number, step: 1 | -1): number {
-  const n = rows.length
-  if (n === 0) return -1
-  const start = from < 0 ? (step > 0 ? -1 : 0) : from
-  for (let i = 1; i <= n; i++) {
-    const idx = (((start + step * i) % n) + n) % n
-    if (!isSeparator(rows[idx])) return idx
-  }
-  return -1
 }

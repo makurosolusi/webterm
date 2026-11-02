@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { FolderPlus, Folder, GitBranch, Server } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { sessionLabel } from './sessionList'
 import type { ClosedEntry } from './closedHistory'
+import './welcome.css'
 
 interface Props {
   onNewProject: () => void
@@ -10,74 +13,28 @@ interface Props {
   onReopen?: (id: string) => void
 }
 
-const CARD_W = 150
-const CARD_GAP = 14
-// Lebar bingkai daftar = sejajar dengan deretan empat kartu di atasnya.
-const LISTS_W = `calc(${4 * CARD_W}px + ${3 * CARD_GAP}px)`
-
-// Brand chevron nodeterm (porting: 40x40, gradien ungu). Tak ada file aset — satu SVG inline lebih
-// murah daripada menambah dependency atau file gambar untuk satu logo.
-function Brand() {
+function StartLink({ icon, label, onClick, disabled }: { icon: string; label: string; onClick?: () => void; disabled?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <svg width={40} height={40} viewBox="0 0 48 48" aria-hidden>
-        <defs>
-          <linearGradient id="wt-brand" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#a38dff" />
-            <stop offset="1" stopColor="#622994" />
-          </linearGradient>
-        </defs>
-        <path d="M13 12 L31 24 L13 36" fill="none" stroke="url(#wt-brand)" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={13} cy={12} r={3.6} fill="#a38dff" />
-        <circle cx={13} cy={36} r={3.6} fill="#a38dff" />
-        <circle cx={31} cy={24} r={3.6} fill="#fff" />
-        <rect x={33.5} y={32.5} width={10.5} height={5} rx={2.5} fill="#a38dff" />
-      </svg>
-      <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, color: 'var(--text)' }}>webterm</span>
-    </div>
+    <li>
+      <Button
+        type="button"
+        variant="link"
+        className="welcome__link"
+        disabled={disabled}
+        onClick={disabled ? undefined : onClick}
+        title={disabled ? 'Not available in webterm yet' : undefined}
+      >
+        <span className={`codicon codicon-${icon}`} aria-hidden />
+        <span>{label}</span>
+      </Button>
+    </li>
   )
 }
 
-const cardBase: React.CSSProperties = {
-  width: CARD_W,
-  height: 92,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 10,
-  background: 'var(--panel)',
-  border: '1px solid var(--border)',
-  borderRadius: 12,
-  color: 'var(--text)',
-  fontSize: 13,
-}
-
-function Card({ icon, label, onClick, disabled }: { icon: React.ReactNode; label: string; onClick?: () => void; disabled?: boolean }) {
-  const [hover, setHover] = useState(false)
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={disabled ? undefined : onClick}
-      title={disabled ? 'Not available in webterm yet' : undefined}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        ...cardBase,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        background: !disabled && hover ? 'var(--panel-header)' : 'var(--panel)',
-      }}
-    >
-      <span aria-hidden style={{ display: 'flex' }}>{icon}</span>
-      <span>{label}</span>
-    </button>
-  )
-}
-
+/** Layar Welcome tanpa workspace: daftar Start (link biru) dan Recently closed, seperti editor Welcome VS Code. */
 export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, onReopen }: Props) {
   const [name, setName] = useState('')
+  const closed = closedSessions ?? []
 
   const createEmpty = () => {
     if (!name.trim()) return
@@ -85,76 +42,61 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
     setName('')
   }
 
-  const closed = closedSessions ?? []
-
   return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        overflow: 'auto',
-        background: 'var(--canvas-bg)',
-        color: 'var(--text)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        padding: '24px 16px',
-      }}
-    >
-      <Brand />
-      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 28px' }}>
-        A canvas of terminals. Start a project to begin.
-      </div>
+    <div className="welcome">
+      <div className="welcome__inner">
+        <h1 className="welcome__title">webterm</h1>
+        <div className="welcome__subtitle">A canvas of terminals. Start a project to begin.</div>
 
-      <div style={{ display: 'flex', gap: CARD_GAP, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Card icon={<FolderPlus size={22} />} label="New project" onClick={onNewProject} />
-        <Card icon={<Folder size={22} />} label="Open folder…" onClick={onNewProject} />
-        <Card icon={<GitBranch size={22} />} label="Clone repo…" disabled />
-        <Card icon={<Server size={22} />} label="Connect over SSH…" disabled />
-      </div>
-
-      {/* Satu-satunya jalur buat-tanpa-folder webterm; dibiarkan sebagai baris sekunder tipis. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
-        <span style={{ color: 'var(--muted)', fontSize: 12 }}>or create an empty workspace</span>
-        <input
-          className="field"
-          placeholder="workspace name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && createEmpty()}
-        />
-        <button className="btn btn--ghost" onClick={createEmpty}>Create empty</button>
-      </div>
-
-      {closed.length > 0 && (
-        <div style={{ width: '100%', maxWidth: LISTS_W, display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: CARD_GAP, rowGap: 28, marginTop: 28 }}>
-          <div>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', marginBottom: 8 }}>
-              Recently closed
+        <div className="welcome__columns">
+          <section className="welcome__section" aria-labelledby="welcome-start">
+            <h2 id="welcome-start" className="welcome__heading">Start</h2>
+            <ul className="welcome__list">
+              <StartLink icon="new-folder" label="New project" onClick={onNewProject} />
+              <StartLink icon="folder-opened" label="Open folder…" onClick={onNewProject} />
+              <StartLink icon="repo-clone" label="Clone repo…" disabled />
+              <StartLink icon="remote" label="Connect over SSH…" disabled />
+            </ul>
+            {/* Satu-satunya jalur buat-tanpa-folder webterm; dibiarkan sebagai baris sekunder tipis. */}
+            <div className="welcome__empty">
+              <Label htmlFor="welcome-workspace-name" className="text-xs font-normal">
+                or create an empty workspace
+              </Label>
+              <Input
+                id="welcome-workspace-name"
+                className="h-auto focus-visible:ring-0"
+                placeholder="workspace name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && createEmpty()}
+              />
+              <Button type="button" variant="ghost" className="h-auto" onClick={createEmpty}>Create empty</Button>
             </div>
-            {closed.map((e) => (
-              <div
-                key={e.node.id}
-                role="button"
-                tabIndex={0}
-                title={e.node.cwd ?? ''}
-                onClick={() => onReopen?.(e.node.id)}
-                onKeyDown={(ev) => {
-                  if (ev.key !== 'Enter' && ev.key !== ' ') return
-                  ev.preventDefault()
-                  onReopen?.(e.node.id)
-                }}
-                style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 10px', borderRadius: 8, cursor: 'pointer' }}
-              >
-                <span style={{ fontSize: 13 }}>{sessionLabel(e.node)}</span>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{e.workspaceName}</span>
-              </div>
-            ))}
-          </div>
+          </section>
+
+          {closed.length > 0 && (
+            <section className="welcome__section" aria-labelledby="welcome-recent">
+              <h2 id="welcome-recent" className="welcome__heading">Recently closed</h2>
+              <ul className="welcome__list">
+                {closed.map((e) => (
+                  <li key={e.node.id}>
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="welcome__link"
+                      title={e.node.cwd ?? ''}
+                      onClick={() => onReopen?.(e.node.id)}
+                    >
+                      <span>{sessionLabel(e.node)}</span>
+                      <span className="welcome__path">{e.workspaceName}</span>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

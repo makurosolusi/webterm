@@ -2,7 +2,9 @@
 // dan `agentLaunchCommands` (override per builtin). Bentuknya mengikuti nodeterm
 // `src/renderer/components/settings/sections/{AgentsSection,CustomAgentsSection}.tsx`: satu kartu
 // per agent custom, dan satu baris input per agent builtin untuk launch command.
+import type { CSSProperties } from 'react'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
+import { Input } from '@/components/ui/input'
 import {
   AGENT_CONFIG,
   BUILTIN_AGENT_IDS,
@@ -11,6 +13,7 @@ import {
   type BuiltinAgentId,
 } from '../shared/workspace'
 import { ColorField, Field, SelectField, TextField, ToggleField } from './SettingsFields'
+import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
@@ -65,6 +68,7 @@ export function AgentSettings({
     <>
       <SelectField
         id="st-defaultAgent"
+        setting="defaultAgent"
         label="Agent default"
         hint="Agent yang diluncurkan tombol quick-add."
         value={s.defaultAgent}
@@ -73,6 +77,7 @@ export function AgentSettings({
       />
       <SelectField
         id="st-claudePermissionMode"
+        setting="claudePermissionMode"
         label="Mode permission Claude"
         hint="Dipakai sesi Claude saat START — dikirim sebagai --permission-mode saat peluncuran. Shift+Tab tetap bisa memutar mode saat runtime."
         value={s.claudePermissionMode}
@@ -81,6 +86,7 @@ export function AgentSettings({
       />
       <ToggleField
         id="st-hookReplyApprovals"
+        setting="hookReplyApprovals"
         label="Persetujuan hook dari canvas"
         hint="Saat on, sesi Claude diluncurkan dengan NODETERM_PERM_WAIT_SECS — hook permission menahan sejenak menunggu Approve/Deny dari canvas sebelum jatuh ke prompt interaktif biasa. Off = perilaku lama persis."
         value={s.hookReplyApprovals}
@@ -90,42 +96,38 @@ export function AgentSettings({
       <Field
         label="Agent di menu Add"
         hint="Matikan agent yang tidak kamu pakai supaya menu Add tetap pendek."
+        setting="disabledAgents"
+        block
       >
-        <div className="st-chips">
-          {agentOptions.map((o) => {
-            const off = s.disabledAgents.includes(o.value)
-            return (
-              <button
-                key={o.value}
-                type="button"
-                role="switch"
-                aria-checked={!off}
-                className={'st-chip' + (off ? ' is-off' : '')}
-                onClick={() => toggleDisabled(o.value, !off)}
-              >
-                {o.label}
-              </button>
-            )
-          })}
+        <div className="st-checklist">
+          {agentOptions.map((o) => (
+            <label key={o.value} className="st-checkrow">
+              <SettingsCheckbox checked={!s.disabledAgents.includes(o.value)}
+                onChange={(on) => toggleDisabled(o.value, !on)} />
+              {o.label}
+            </label>
+          ))}
         </div>
       </Field>
 
       <Field
         label="Perintah peluncuran"
+        setting="agentLaunchCommands"
         hint={
           'Luncurkan agent builtin dengan perintahmu sendiri — mis. skrip wrapper yang memilih akun. ' +
           'Dipakai di semua jalur peluncuran (sesi baru, resume, restart), dengan flag seperti --resume ' +
           'ditempel SETELAHNYA, jadi perintahnya harus meneruskan argumennya (skrip shell diakhiri ' +
           '`exec claude "$@"`). Kosong = default builtin.'
         }
+        block
       >
         <div className="st-rows">
           {BUILTIN_AGENT_IDS.map((id: BuiltinAgentId) => (
             <div key={id} className="st-row">
-              <span className="st-row-label" style={{ color: AGENT_CONFIG[id].color }}>
+              <span className="st-row-label" style={{ '--agent-color': AGENT_CONFIG[id].color } as CSSProperties}>
                 {AGENT_CONFIG[id].label}
               </span>
-              <input
+              <Input
                 className="st-input st-mono"
                 type="text"
                 aria-label={`${AGENT_CONFIG[id].label} launch command`}
@@ -148,8 +150,9 @@ export function AgentSettings({
       <Field
         label="Agent custom"
         hint="Bawa CLI agent sendiri, atau bungkus harness builtin (mis. Claude) untuk mengarahkan inferensi ke proxy-mu. Variabel env TIDAK tersedia di sini — settings webterm melintas HTTP, dan env adalah satu-satunya tempat kredensial akan mendarat."
+        block
       >
-        <button type="button" className="st-btn" onClick={addAgent}>Tambah agent</button>
+        <button type="button" className="st-button" onClick={addAgent}>Tambah agent</button>
       </Field>
       <div className="st-cards">
         {s.customAgents.map((a) => (
@@ -171,7 +174,7 @@ function CustomAgentCard({
 }): React.JSX.Element {
   const base = agent.baseAgent ? AGENT_CONFIG[agent.baseAgent] : undefined
   return (
-    <div className="st-card">
+    <section className="st-card" aria-label={agent.label || agent.id}>
       <TextField
         id={`st-ca-label-${agent.id}`}
         label="Label"
@@ -215,10 +218,10 @@ function CustomAgentCard({
       />
       <div className="st-card-foot">
         <code className="st-mono st-muted">{agent.id}</code>
-        <button type="button" className="st-btn st-btn-danger" onClick={() => onRemove(agent.id)}>
+        <button type="button" className="st-button" onClick={() => onRemove(agent.id)}>
           Hapus
         </button>
       </div>
-    </div>
+    </section>
   )
 }

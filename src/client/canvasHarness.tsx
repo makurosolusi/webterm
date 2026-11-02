@@ -13,6 +13,9 @@
 // `./markdown.test.ts`. Pragma environment ditaruh di FILE TEST, bukan di sini.
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
+// Elemen `vscode-*` memakai ElementInternals form API yang jsdom belum lengkapi. Satu patch di
+// harness ini menutup semua test canvas yang kini merender chrome VS Code (tombol editor, dsb).
+import './vscode/test-setup'
 import App from './App'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'

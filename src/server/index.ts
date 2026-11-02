@@ -4,7 +4,14 @@ import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { TOKEN_PARAM, authorize, resolveToken, writeTokenToEnv } from './auth'
+import { TOKEN_PARAM, authorizeRequest, isNodeTokenPath, resolveToken, writeTokenToEnv } from './auth'
+import { capabilityStore } from './control/mount'
+import { isValidNodeToken } from './hooks'
+import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
+import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
+import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } from './channels/telegramPollWiring'
+import { startCentralAutonomyBoot } from './centralAutonomyBoot'
+import { initEnvSettings } from './envSettings.runtime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -18,7 +25,37 @@ const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
 // Before anything can spawn a PTY: make the env agree with what we enforce, so children that
 // reference $WEBTERM_TOKEN inherit the same form `authorize` compares against.
 writeTokenToEnv(TOKEN)
+// Pengaturan > env > default: terapkan override tersimpan ke process.env sebelum ledger/kanal membacanya.
+initEnvSettings()
 const dev = process.env.NODE_ENV !== 'production'
+
+// Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
+const ledgerRuntime = startLedgerRuntime()
+if (ledgerRuntime) {
+  console.log(`ledger ${ledgerRuntime.mode}: ${ledgerRuntime.path}`)
+  startLedgerReaper(ledgerRuntime.ledger)
+}
+
+// Channel ingress is off by default: `WEBTERM_TELEGRAM=on` + webhook secret + a live ledger.
+// `null` means no route exists at all, not a route that rejects every request.
+const activeRuntime = activeLedgerRuntime()
+const centralChat = buildTelegramCentralPort(activeRuntime)
+const channelsRuntime = startChannelsRuntime(activeRuntime?.ledger, { centralChat })
+if (channelsRuntime && activeRuntime) {
+  if (resolveTelegramMode() === 'poll') {
+    // Poll mode never exposes a reachable webhook; the route stays mounted but nothing calls it.
+    if (startTelegramInbound({ channels: channelsRuntime, ledger: activeRuntime, centralChat })) {
+      console.log('telegram channel: on (mode=poll)')
+    }
+  } else {
+    console.log(`telegram channel: on (POST ${TELEGRAM_WEBHOOK_PATH})`)
+  }
+}
+
+// Central autonomy (off by default) is a timer over the existing ledger runtime; it never
+// starts a second server. Boot is fail-closed: it logs one line and starts only when
+// WEBTERM_CENTRAL_AUTONOMY=on, a ledger runtime exists, and WEBTERM_ORCHESTRATOR_RUN=on.
+startCentralAutonomyBoot({ runtime: activeLedgerRuntime() })
 
 const API_PREFIX = '/api/'
 
@@ -30,19 +67,37 @@ function reqUrl(req: http.IncomingMessage): URL {
  * Gate for the two surfaces that act on the machine: /api (filesystem, workspaces) and the
  * /ws upgrade (PTYs). Static assets are deliberately NOT gated — the app bundle is not a
  * privilege, and gating it would break every sub-resource request, which carries no token.
+ *
+ * Root token first, unchanged. Only when that fails does a per-node token open the narrow
+ * allowlist in `isNodeTokenPath` (hook status / context-link / control API) — so a PTY child
+ * never needs the root token, and everything else (settings, workspaces, fs, /ws) stays
+ * root-only. Re-exported for tests; the gate itself lives in auth.ts because importing this
+ * module starts a server.
  */
 function allowed(req: http.IncomingMessage, url: URL): boolean {
-  return authorize({ headers: req.headers, expectedToken: TOKEN, queryToken: url.searchParams.get(TOKEN_PARAM) })
+  return authorizeRequest({
+    headers: req.headers,
+    expectedToken: TOKEN,
+    queryToken: url.searchParams.get(TOKEN_PARAM),
+    pathname: url.pathname,
+    isNodeToken: isValidNodeToken,
+    // Capability (wcap_*) hanya diterima authorizeRequest pada keluarga /api/control/*.
+    // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
+    isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
+  })
 }
+
+export { isNodeTokenPath }
 
 function refuse(res: http.ServerResponse): void {
   res.statusCode = 403
   res.end('forbidden')
 }
 
-// Write the context-link sh shim AND the skill that points an agent at it. Takes TOKEN because a
-// shim that cannot authenticate is a shim that 403s the moment WEBTERM_TOKEN is set.
-installContextLink(TOKEN)
+// Write the context-link sh shim AND the skill that points an agent at it. Tanpa argumen: shim
+// membaca token node dari env anak saat runtime, jadi root token tidak pernah ditulis ke disk
+// (file itu terbaca semua proses dengan uid yang sama).
+installContextLink()
 applyPtyOptions()
 
 const server = http.createServer()
@@ -54,7 +109,12 @@ if (dev) {
   const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
   server.on('request', (req, res) => {
     const url = reqUrl(req)
+    // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
+    // before the /api gate. `handle` owns only its exact path.
+    if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
+    if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
@@ -65,7 +125,12 @@ if (dev) {
   const { assets } = await import('./distAssets.generated')
   server.on('request', (req, res) => {
     const url = reqUrl(req)
+    // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
+    // before the /api gate. `handle` owns only its exact path.
+    if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
+    if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }

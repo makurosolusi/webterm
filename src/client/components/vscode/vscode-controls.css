@@ -1,0 +1,64 @@
+/* VS Code control primitives (L1): card. The quick pick has vscode-quick-pick.css.
+ *
+ * Tokens live in `vscode-theme.css`. Every var() keeps a fallback so the controls
+ * still render if the bridge sheet has not loaded yet (tests, early paint). All
+ * metrics come from the VS Code source values documented in
+ * RND/20-VSCODE-UI-PLAN.md section 1.1.
+ */
+
+/* ------------------------------------------------------------------ card */
+.vscode-card {
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
+  border-radius: 3px;
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-menu-background, var(--vscode-sideBar-background, #252526))
+  );
+  color: var(--vscode-foreground, #cccccc);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+}
+
+.vscode-card[data-variant='tile'] {
+  background: var(--vscode-sideBar-background, var(--vscode-panel-background, #252526));
+}
+
+.vscode-card[data-variant='tile']:hover {
+  border-color: var(--vscode-focusBorder, #007fd4);
+}
+
+.vscode-card__header {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 35px;
+  margin: -12px -12px 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
+  border-radius: 2px 2px 0 0;
+}
+
+.vscode-card__title {
+  overflow: hidden;
+  color: var(--vscode-foreground, #cccccc);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vscode-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  min-height: 35px;
+  gap: 8px;
+  margin: 12px -12px -12px;
+  padding: 0 12px;
+  border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
+  border-radius: 0 0 2px 2px;
+}
+

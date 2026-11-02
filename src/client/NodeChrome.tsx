@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
+import { Textfield, ToolbarButton } from '@/vscode/register'
+import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
 import NodeComments from './NodeComments'
 
 export interface NodeChromeProps {
   title: string
+  /** Nama codicon untuk ikon tipe node di depan judul (mis. 'terminal', 'hubot'); kosong = tanpa ikon. */
+  icon?: string
+  /** Teks redup setelah judul, seperti deskripsi tab editor (mis. cwd). */
+  description?: string
   onRename: (t: string) => void
   collapsed: boolean; onToggleCollapse: () => void
   color: string; onColor: (c: string) => void
@@ -84,15 +90,11 @@ export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; stat
   )
 }
 
-const IconChevron = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-    strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M4 6l4 4 4-4" /></svg>
-)
-
 export default function NodeChrome(props: NodeChromeProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const titleRef = useRef<HTMLElement | null>(null)
 
   const beginEdit = () => { setDraft(props.title); setEditing(true) }
   const commit = () => {
@@ -100,7 +102,11 @@ export default function NodeChrome(props: NodeChromeProps) {
     setEditing(false)
     if (next) props.onRename(next)
   }
-  const onTitleKey = (e: KeyboardEvent<HTMLInputElement>) => {
+  // `delegatesFocus` di vscode-textfield membuat fokus host diteruskan ke input di shadow DOM.
+  useEffect(() => {
+    if (editing) titleRef.current?.focus()
+  }, [editing])
+  const onTitleKey = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); commit() }
     else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
   }
@@ -108,27 +114,38 @@ export default function NodeChrome(props: NodeChromeProps) {
   const chip = statusChip(props.status)
 
   return (
-    <div className="node-header" style={{ position: 'relative' }}>
-      <button
-        className={`nodrag icon-btn node-chevron${props.collapsed ? ' node-chevron--collapsed' : ''}`}
+    <div className="node-header relative">
+      <ToolbarButton
+        label={props.collapsed ? 'Expand' : 'Collapse'}
+        className="nodrag"
         title={props.collapsed ? 'Expand' : 'Collapse'}
+        data-title={props.collapsed ? 'Expand' : 'Collapse'}
         onClick={props.onToggleCollapse}
-      ><IconChevron /></button>
+      ><span className={cn('codicon', props.collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down')} /></ToolbarButton>
 
       <NodeColorSwatch color={props.color} onColor={props.onColor} />
 
+      {props.icon && <span className={cn('node-icon codicon', `codicon-${props.icon}`)} aria-hidden="true" />}
+
       {editing ? (
-        <input
-          className="nodrag node-title--edit" autoFocus value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+        <Textfield
+          ref={(node) => { titleRef.current = node }}
+          className="nodrag node-title--edit" value={draft}
+          // `input` adalah event yang diteruskan wrapper; `target` sudah di-retarget ke host,
+          // yang menyimpan properti `value` milik vscode-textfield.
+          onInput={(e) => setDraft((e.target as unknown as { value: string }).value)}
           onKeyDown={onTitleKey} onBlur={commit}
         />
       ) : (
         <span className="nodrag node-title" title="Rename" onClick={beginEdit}>{props.title || UNTITLED}</span>
       )}
 
+      {props.description && !editing && (
+        <span className="node-description" title={props.description}>{props.description}</span>
+      )}
+
       {chip && (
-        <span className={`node-status ${chip.cls}`} title={chip.title}>
+        <span className={cn('node-status', chip.cls)} title={chip.title}>
           <span className="node-status-dot" />
           {chip.label}
         </span>

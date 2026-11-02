@@ -65,15 +65,35 @@ describe('terminal themes', () => {
     expect(byId.get('solarized-light')?.dark).toBe(false)
   })
 
-  it('webterm-dark keeps the colours TerminalCore rendered before themes existed', () => {
-    // Dipaku dengan sengaja: "memperbaiki" nilai-nilai ini diam-diam mengecat ulang terminal
-    // setiap pengguna yang sudah ada. background/foreground dari literal lama TerminalCore,
-    // sisanya palet built-in xterm (Tango) yang dulu terisi implisit.
-    const { theme } = resolveTerminalTheme('webterm-dark')
-    expect(theme.background).toBe('#1e1e1e')
-    expect(theme.red).toBe('#cc0000')
-    expect(theme.brightBlue).toBe('#729fcf')
-    expect(theme.brightWhite).toBe('#eeeeec')
+  it('webterm-dark / webterm-light are the VS Code Dark Modern / Light Modern terminal', () => {
+    // Dipaku dengan sengaja: nilai diambil dari sumber VS Code (terminalColorRegistry.ts ansiColorMap,
+    // dark_modern.json / light_modern.json, editorColors.ts selectionBackground). "Memperbaiki" salah
+    // satunya menjauhkan terminal dari integrated terminal VS Code yang dikenal pengguna.
+    const dark = resolveTerminalTheme('webterm-dark').theme
+    expect(dark).toMatchObject({
+      background: '#1f1f1f', foreground: '#cccccc', cursor: '#cccccc', selectionBackground: '#264f78',
+      black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510', blue: '#2472c8',
+      magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5',
+      brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b', brightYellow: '#f5f543',
+      brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#e5e5e5',
+    })
+    const light = resolveTerminalTheme('webterm-light').theme
+    expect(light).toMatchObject({
+      background: '#ffffff', foreground: '#3b3b3b', cursor: '#005fb8', selectionBackground: '#add6ff',
+      black: '#000000', red: '#cd3131', green: '#107c10', yellow: '#949800', blue: '#0451a5',
+      magenta: '#bc05bc', cyan: '#0598bc', white: '#555555',
+      brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#14ce14', brightYellow: '#b5ba00',
+      brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#a5a5a5',
+    })
+  })
+
+  it('modern themes carry the VS Code scrollbar slider colours', () => {
+    for (const id of ['webterm-dark', 'webterm-light']) {
+      const { theme } = resolveTerminalTheme(id)
+      expect(theme.scrollbarSliderBackground, id).toBeTruthy()
+      expect(theme.scrollbarSliderHoverBackground, id).toBe('#646464b3')
+      expect(theme.scrollbarSliderActiveBackground, id).toBeTruthy()
+    }
   })
 
   it('resolves unknown, empty and missing ids to the default instead of throwing', () => {

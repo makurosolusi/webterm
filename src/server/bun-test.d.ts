@@ -5,6 +5,8 @@ declare module 'bun:test' {
   // `timeoutMs` dipakai test PTY: batas default `bun test` 5 s, sedangkan satu login shell nyata
   // (`bash -l`) kadang butuh lebih dari 2 s untuk start dan test itu menunggu beberapa putaran.
   export function test(name: string, fn: () => void | Promise<void>, timeoutMs?: number): void
+  /** Dipakai test PTY untuk membersihkan direktori temp `mkdtempSync` sesudah file selesai. */
+  export function afterAll(fn: () => void | Promise<void>): void
   interface Matchers {
     toContain(expected: string): void
     toBe(expected: unknown): void

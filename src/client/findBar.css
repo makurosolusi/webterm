@@ -1,0 +1,22 @@
+/* Find widget VS Code (diukur overlays-forms §6): 33px, radius 8, padding 0 4px 0 9px, border 1px widget-border,
+   shadow melayang, latar editorWidget. Posisi: pojok kanan atas node (menimpa konten, z di atas
+   xterm). `.node-find__field/__actions` (lebar field, layout aksi) tetap di node-chrome.css. */
+.findbar {
+  position: absolute;
+  top: 4px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 33px;
+  box-sizing: border-box;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--vscode-widget-border, var(--border));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
+  background: var(--vscode-editorWidget-background, var(--panel-header));
+  color: var(--vscode-editorWidget-foreground, var(--text));
+  box-shadow: 0 0 12px var(--vscode-widget-shadow);
+}
+/* Kotak input 216 lebar (diukur); lebih spesifik dari `.node-find__field` (140px) di node-chrome.css. */
+.findbar .node-find__field { width: 216px; }

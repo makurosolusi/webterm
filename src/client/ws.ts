@@ -1,8 +1,10 @@
 // One shared WebSocket multiplexing many terminals by id.
 // Survives refresh/reconnect: each subscriber's `open` params are retained and
 // re-sent on every (re)connect so the server re-attaches the PTY and replays scrollback.
+// A subscriber whose session has exited is NOT replayed: its `open` would make the server spawn
+// a fresh PTY and wipe the final scrollback the user is looking at.
 import { WS_PATH } from '../shared/protocol'
-import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
+import type { ClientMsg, ExitMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
 import { tokenQuery } from './api'
@@ -10,12 +12,35 @@ import { noteStatus } from './unread'
 
 interface Sub {
   onOutput: (data: string) => void
-  onExit: (code: number) => void
+  onExit: (code: number, reason?: ExitReason) => void
   onReset?: () => void
   open?: ClientMsg & { t: 'open' } // last open sent for this id; replayed on reconnect
+  /** PTY sudah berhenti: jangan putar ulang `open` (itu men-spawn PTY baru) atau antre input. */
+  exited?: boolean
 }
 
+/**
+ * Kenapa PTY berhenti, dari sudut pandang client ini. `self`/`closed` berasal dari server
+ * (`ExitMsg['reason']`): `closed` berarti ADA yang meminta close, bukan prosesnya yang keluar.
+ * Karena itu client menambahkan `peer-closed` untuk close yang diminta client LAIN — tanpa itu,
+ * menutup satu node di satu tab membuat terminal itu senyap di semua tab.
+ */
+export type ExitReason = NonNullable<ExitMsg['reason']> | 'peer-closed'
+
 const subs = new Map<string, Sub>()
+
+// Close yang KITA minta. Server hanya tahu "ada yang menutup", jadi hanya client ini yang bisa
+// membedakan close-nya sendiri (tidak perlu dikabarkan) dari close client lain (perlu notice).
+const closedByUs = new Set<string>()
+
+/**
+ * Terjemahkan intent server ke sudut pandang client. `closed` yang tidak kita minta menjadi
+ * `peer-closed`; intent masuk dikonsumsi supaya close berikutnya tidak ikut tersenyapkan.
+ */
+function exitReasonFor(id: string, reason: ExitMsg['reason']): ExitReason | undefined {
+  if (reason !== 'closed') return reason
+  return closedByUs.delete(id) ? 'closed' : 'peer-closed'
+}
 
 // Status is per-node but consumed by two readers: the node's own dot and the
 // board overlay. Keep it on a separate channel so it survives independent of
@@ -49,9 +74,11 @@ function connect() {
     // still holds what it showed before the drop, so replaying onto it duplicates every line
     // (the macOS login banner piling up while idle). Reset first so replay reproduces the buffer
     // once. Skipped on the first connect: terminals are freshly mounted and empty.
-    if (everConnected) for (const sub of subs.values()) sub.onReset?.()
+    // Terminal yang sudah keluar tidak di-reset: layarnya memuat notice exit, dan tidak ada
+    // scrollback yang akan diputar ulang untuknya.
+    if (everConnected) for (const sub of subs.values()) if (!sub.exited) sub.onReset?.()
     everConnected = true
-    for (const sub of subs.values()) if (sub.open) ws!.send(JSON.stringify(sub.open))
+    for (const sub of subs.values()) if (sub.open && !sub.exited) ws!.send(JSON.stringify(sub.open))
     const pending = queue
     queue = []
     for (const m of pending) ws!.send(JSON.stringify(m))
@@ -81,7 +108,10 @@ function connect() {
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'output') sub.onOutput(msg.data)
-    else if (msg.t === 'exit') sub.onExit(msg.code)
+    else if (msg.t === 'exit') {
+      sub.exited = true
+      sub.onExit(msg.code, exitReasonFor(msg.id, msg.reason))
+    }
   }
   ws.onclose = () => {
     ws = null
@@ -115,9 +145,22 @@ export function replayOpen(msg: OpenMsg): OpenMsg {
 export function send(msg: ClientMsg) {
   if (msg.t === 'open') {
     const sub = subs.get(msg.id)
-    if (sub) sub.open = replayOpen(msg) // remembered; onopen replays it on every (re)connect
+    if (sub) {
+      // `open` eksplisit = sesi baru untuk id ini, jadi status keluar yang lama dilepas.
+      sub.exited = false
+      sub.open = replayOpen(msg) // remembered; onopen replays it on every (re)connect
+    }
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
     return // never queue 'open' — the reconnect/onopen replay covers the not-open case
+  }
+  if (msg.t === 'close') {
+    // Dicatat SEBELUM dikirim: `exit` bisa tiba sebelum jawaban apa pun.
+    closedByUs.add(msg.id)
+  }
+  if (msg.t === 'input' && subs.get(msg.id)?.exited) {
+    // Sesi ini sudah mati. Antrean reconnect hanya akan memuntahkan ketikan ke PTY berikutnya
+    // yang memakai id sama, jadi input-nya dibuang, bukan ditunda.
+    return
   }
   if (msg.t === 'resize') {
     // `open` yang diingat ikut dibarui, kalau tidak ia membawa ukuran SAAT NODE LAHIR selamanya.
@@ -127,7 +170,7 @@ export function send(msg: ClientMsg) {
     // browser sudah di ukuran sekarang. Di sinilah satu-satunya tempat yang semua resize lewati.
     const sub = subs.get(msg.id)
     // Disalin, bukan dimutasi: `replayOpen` bisa mengembalikan objek pemanggil apa adanya.
-    if (sub?.open) sub.open = { ...sub.open, cols: msg.cols, rows: msg.rows }
+    if (sub?.open && !sub.exited) sub.open = { ...sub.open, cols: msg.cols, rows: msg.rows }
   }
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
   else queue.push(msg)
@@ -136,9 +179,12 @@ export function send(msg: ClientMsg) {
 export function subscribe(
   id: string,
   onOutput: (data: string) => void,
-  onExit: (code: number) => void,
+  onExit: (code: number, reason?: ExitReason) => void,
   onReset?: () => void
 ): () => void {
+  // Remount = id ini hidup lagi dari sudut client: lepaskan memori close lama supaya `exit`
+  // yang tertinggal tidak tersenyapkan, dan mulai tanpa `open` (mount baru mengirim miliknya).
+  closedByUs.delete(id)
   subs.set(id, { onOutput, onExit, onReset })
   if (!ws) connect()
   return () => { subs.delete(id) }

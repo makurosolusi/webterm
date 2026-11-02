@@ -1,11 +1,22 @@
 // Bun-only: `open` butuh PTY nyata (Bun.Terminal via spawnPty) supaya ada socket yang menerima
 // pesan status. Aturan basi-nya sendiri murni dan diuji tanpa timer di `src/shared/agentStale.test.ts`.
-import { test, expect } from 'bun:test'
-import { mkdtempSync } from 'node:fs'
+import { test, expect, afterAll } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-stale-'))
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'webterm-stale-'))
+process.env.WEBTERM_DATA_DIR = DATA_DIR
+// HOME diisolasi: test ini menguji perilaku sesi/PTY, bukan shell rc milik user — `bash -l` yang
+// membaca rc berat (brew/pyenv/nvm/rvm/conda) hanya menambah latensi start yang tak berhubungan.
+const ORIGINAL_HOME = process.env.HOME
+process.env.HOME = DATA_DIR
+// Satu direktori per run; tanpa pembersihan /tmp menumpuk ratusan `webterm-stale-*` dari run lokal.
+// HOME dikembalikan karena seluruh file test berbagi satu proses: `ptySpawn.bun.test.ts` membacanya.
+afterAll(() => {
+  process.env.HOME = ORIGINAL_HOME
+  rmSync(DATA_DIR, { recursive: true, force: true })
+})
 
 import type { AgentStatus } from '../shared/workspace'
 import type { ServerMsg } from '../shared/protocol'
@@ -30,12 +41,14 @@ function live(id: string) {
   const record = (m: ServerMsg) => { if (m.t === 'status') seen.push(m.status ?? 'NONE') }
   s.open({ t: 'open', id, cols: 80, rows: 24, cmd: 'sleep 20', agentId: 'claude' }, record)
   // Status yang diputar ulang ke socket yang re-attach = apa yang server masih SIMPAN tentang node.
-  // Perekam aslinya dipasang kembali sesudahnya: `open` MENGGANTI `send` sesi, bukan menambah
-  // pelanggan — tanpa ini probe pertama membuat `seen` tuli untuk sisa test.
+  // `open` pada id hidup MENAMBAH pelanggan dan memutar status ke pendatang baru saja, jadi probe
+  // harus dilepas lagi: `detach` membuang pelanggan ITU saja, dan tanpa itu setiap probe menumpuk
+  // jadi pelanggan permanen (set pelanggan tidak lagi mengevict otomatis).
   const stored = (): string => {
     const replay: string[] = []
-    s.open({ t: 'open', id, cols: 80, rows: 24 }, (m) => { if (m.t === 'status') replay.push(m.status ?? 'NONE') })
-    s.open({ t: 'open', id, cols: 80, rows: 24 }, record)
+    const probe = (m: ServerMsg) => { if (m.t === 'status') replay.push(m.status ?? 'NONE') }
+    s.open({ t: 'open', id, cols: 80, rows: 24 }, probe)
+    s.detach(probe)
     return replay.join(',')
   }
   // Socket-nya pergi tanpa sesinya mati — wifi HP mati, laptop sleep, tab tertidur. `detach`
@@ -48,16 +61,27 @@ const t0 = 1_700_000_000_000
 
 test('a working node that goes silent past the window loses its status', () => {
   const { s, seen, stored } = live('sw1')
+  // Pelanggan KEDUA lewat API publik `subscribe`: pencabutan adalah siaran, bukan surat pribadi
+  // ke satu socket. Kalau hanya pelanggan pertama yang mendengar, tab lain menyimpan 'working'.
+  const other: string[] = []
+  s.subscribe('sw1', (m) => { if (m.t === 'status') other.push(m.status ?? 'NONE') })
   s.setStatus('sw1', 'working', t0)
   expect(stored()).toBe('working')
+  expect(seen).toContain('working')
+  expect(other).toContain('working')
 
   // Masih di dalam jendela: tidak disentuh. Jeda hook terpanjang yang nyata ~10 menit.
   s.sweepStale(t0 + 10 * 60_000)
   expect(stored()).toBe('working')
 
   // Melewati jendela: statusnya dicabut, dan client diberi tahu lewat pesan tanpa `status`.
+  // Dipotong dari panjang SEBELUM sapuan: pesan `NONE` dari spawn duduk di daftar sejak awal, jadi
+  // `toContain('NONE')` di seluruh array akan hijau tanpa sapuan apa pun.
+  const seenBefore = seen.length
+  const otherBefore = other.length
   s.sweepStale(t0 + WORKING_STALE_MS + 1)
-  expect(seen).toContain('NONE')
+  expect(seen.slice(seenBefore)).toContain('NONE')
+  expect(other.slice(otherBefore)).toContain('NONE')
 
   // Berakhir TANPA status — bukan 'done'. 'done' menggerbangi tombol Resume/Restart (canResumeNode),
   // jadi mengklaimnya berarti membuka tombol di atas tebakan. Socket yang re-attach menerima
@@ -67,7 +91,7 @@ test('a working node that goes silent past the window loses its status', () => {
   // Bukti guard menggigit: inilah yang masih tersimpan sebelum ada jam.
   expect(stored()).not.toBe(OLD_STATUS_AFTER_SILENCE)
   s.close('sw1')
-})
+}, 90_000)
 
 test('every status write pushes the clock back, so a long turn is never swept', () => {
   const { s, stored } = live('sw2')
@@ -78,7 +102,7 @@ test('every status write pushes the clock back, so a long turn is never swept', 
   s.sweepStale(t0 + 50 * 60_000 + 1)
   expect(stored()).toBe('working')
   s.close('sw2')
-})
+}, 90_000)
 
 test('only working is swept — waiting, blocked and done count forever', () => {
   for (const status of ['waiting', 'blocked', 'done'] as AgentStatus[]) {
@@ -90,7 +114,7 @@ test('only working is swept — waiting, blocked and done count forever', () => 
     expect(stored()).toBe(status)
     s.close(`sw3-${status}`)
   }
-})
+}, 90_000)
 
 test('the sweep actually runs on its own clock, and can be stopped', async () => {
   const { s, stored } = live('sw4')
@@ -107,7 +131,7 @@ test('the sweep actually runs on its own clock, and can be stopped', async () =>
   await sleep(40)
   expect(stored()).toBe('working')
   s.close('sw4')
-})
+}, 90_000)
 
 test('a node swept while its socket was gone hears the withdrawal on re-attach', () => {
   const { s, seen, stored, drop } = live('sw5')
@@ -130,4 +154,4 @@ test('a node swept while its socket was gone hears the withdrawal on re-attach',
   // Tanpa mengarang nilai nyata apa pun — khususnya bukan 'done', yang membuka Resume/Restart.
   expect(seen).not.toContain('done')
   s.close('sw5')
-})
+}, 90_000)

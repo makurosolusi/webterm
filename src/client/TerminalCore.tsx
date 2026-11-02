@@ -252,7 +252,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const unsub = subscribe(
       id,
       (d) => term.write(d),
-      (code) => term.write(exitMessage(code)),
+      (code, reason) => term.write(exitMessage(code, reason)),
       () => term.reset(),
     )
     term.onData((d) => send({ t: 'input', id, data: d }))
@@ -339,7 +339,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     }
   }, [id, settings, fontZoom, refit])
 
-  return <div ref={elRef} className="nodrag nowheel" style={{ height: '100%', width: '100%' }} />
+  return <div ref={elRef} className="nodrag nowheel size-full" />
 })
 
 export default TerminalCore

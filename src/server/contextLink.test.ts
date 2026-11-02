@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +9,8 @@ import {
   buildContextShim,
   buildContextLinkSkillBody,
   contextShimPath,
+  installContextLink,
+  readTranscriptFile,
   SKILL_NAME,
   CONTEXT_LINK_VERBS,
   linesFromClaude,
@@ -153,32 +157,107 @@ describe('findWorkspaceFor', () => {
   })
 })
 
-// A fake, test-only token. NEVER read the real one from the environment: that would print a
+// Fake, test-only tokens. NEVER read the real ones from the environment: that would print a
 // secret into assertion diffs on the first failure.
-const FAKE_TOKEN = 'tok-for-tests-only' // test-only
+const FAKE_ROOT_TOKEN = 'root-token-for-tests-only' // test-only
+const FAKE_NODE_TOKEN = '11111111-2222-4333-8444-555555555555' // test-only, UUID alphabet
+const FAKE_FALLBACK_TOKEN = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' // test-only, UUID alphabet
 
 describe('buildContextShim', () => {
-  it('sends the transport token in the header auth actually checks', () => {
-    const shim = buildContextShim(FAKE_TOKEN)
-    expect(shim).toContain(`-H '${TOKEN_HEADER}: ${FAKE_TOKEN}'`)
-  })
-  it('emits NO auth header at all when no token is in force', () => {
+  it('expands the node token from the child env instead of embedding any value', () => {
     const shim = buildContextShim()
-    expect(shim).not.toContain(TOKEN_HEADER)
-    expect(shim).not.toContain('-H')
+    expect(shim).toContain(`-H "${TOKEN_HEADER}: \${WEBTERM_TOKEN:-$NODETERM_NODE_TOKEN}"`)
+    // The header value is an expansion, never a literal token.
+    expect(shim).not.toMatch(new RegExp(`${TOKEN_HEADER}: [^"$]`))
   })
-  it('keeps the request shape the route parses either way', () => {
-    for (const shim of [buildContextShim(), buildContextShim(FAKE_TOKEN)]) {
-      for (const p of ['node=', 'verb=', 'want=', 'n=']) expect(shim).toContain(`--data-urlencode "${p}`)
-      expect(shim).toContain('/api/context-link')
-      // Every continuation must still end in a backslash or the injected header breaks the curl.
-      const lines = shim.split('\n')
-      const curl = lines.findIndex((l) => l.startsWith('curl '))
-      for (let i = curl; i < lines.length - 2; i++) expect(lines[i].endsWith('\\')).toBe(true)
+  it('keeps the request shape the route parses', () => {
+    const shim = buildContextShim()
+    for (const p of ['node=', 'verb=', 'want=', 'n=']) expect(shim).toContain(`--data-urlencode "${p}`)
+    expect(shim).toContain('/api/context-link')
+    // Every continuation must still end in a backslash or the header breaks the curl line.
+    const lines = shim.split('\n')
+    const curl = lines.findIndex((l) => l.startsWith('curl '))
+    for (let i = curl; i < lines.length - 2; i++) expect(lines[i].endsWith('\\')).toBe(true)
+  })
+  it('is valid POSIX sh', () => {
+    execFileSync('sh', ['-n'], { input: buildContextShim() })
+  })
+})
+
+/** Run a generated shim with a stubbed `curl`; return the argv that stub received. */
+function curlArgvOfShim(shim: string, env: Record<string, string>): string[] {
+  const dir = mkdtempSync(join(tmpdir(), 'webterm-context-curl-'))
+  try {
+    const out = join(dir, 'argv')
+    // Interpreter absolut supaya PATH boleh memuat shim SAJA: `curl` di baris itu tidak mungkin
+    // me-resolve ke curl sungguhan, yang akan menembak dev server di port 8700 bila ada.
+    writeFileSync(join(dir, 'curl'), '#!/bin/sh\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "$ARGV_OUT"; done\n', {
+      mode: 0o755,
+    })
+    const script = join(dir, 'context.sh')
+    writeFileSync(script, shim, { mode: 0o755 })
+    execFileSync('/bin/sh', ['-c', `${script} </dev/null`], {
+      env: { PATH: dir, ARGV_OUT: out, NODETERM_NODE_ID: 'n-shipped', ...env },
+    })
+    return readFileSync(out, 'utf8').split('\n').slice(0, -1)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function headerOf(argv: string[]): string | undefined {
+  return argv[argv.indexOf('-H') + 1]
+}
+
+describe('the header curl actually receives', () => {
+  it('is the node token the child env carries in WEBTERM_TOKEN', () => {
+    const argv = curlArgvOfShim(buildContextShim(), {
+      WEBTERM_TOKEN: FAKE_NODE_TOKEN,
+      NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN,
+    })
+    expect(headerOf(argv)).toBe(`${TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`)
+    expect(argv.filter((a) => a === '-H')).toHaveLength(1)
+  })
+  it('falls back to NODETERM_NODE_TOKEN when WEBTERM_TOKEN is unset', () => {
+    const argv = curlArgvOfShim(buildContextShim(), { NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN })
+    expect(headerOf(argv)).toBe(`${TOKEN_HEADER}: ${FAKE_FALLBACK_TOKEN}`)
+  })
+})
+
+describe('installContextLink', () => {
+  /** Point both the data dir and HOME at a scratch dir: the installer also writes the skill. */
+  function withScratch<T>(fn: () => T): T {
+    const dir = mkdtempSync(join(tmpdir(), 'webterm-context-install-'))
+    const prevData = process.env.WEBTERM_DATA_DIR
+    const prevHome = process.env.HOME
+    const prevToken = process.env.WEBTERM_TOKEN
+    process.env.WEBTERM_DATA_DIR = dir
+    process.env.HOME = dir
+    process.env.WEBTERM_TOKEN = FAKE_ROOT_TOKEN
+    try {
+      return fn()
+    } finally {
+      if (prevData === undefined) delete process.env.WEBTERM_DATA_DIR
+      else process.env.WEBTERM_DATA_DIR = prevData
+      if (prevHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevHome
+      if (prevToken === undefined) delete process.env.WEBTERM_TOKEN
+      else process.env.WEBTERM_TOKEN = prevToken
+      rmSync(dir, { recursive: true, force: true })
     }
-  })
-  it('escapes a quote in the token instead of breaking out of the shell quoting', () => {
-    expect(buildContextShim("a'b")).toContain(`-H '${TOKEN_HEADER}: a'\\''b'`)
+  }
+
+  it('writes a 0700 shim that contains no token value, even with a root token in force', () => {
+    withScratch(() => {
+      installContextLink(FAKE_ROOT_TOKEN)
+      const file = contextShimPath()
+      expect(statSync(file).mode & 0o777).toBe(0o700)
+      const shim = readFileSync(file, 'utf8')
+      expect(shim).not.toContain(FAKE_ROOT_TOKEN)
+      expect(shim).toContain(`-H "${TOKEN_HEADER}: \${WEBTERM_TOKEN:-$NODETERM_NODE_TOKEN}"`)
+      // No literal header value of any kind.
+      expect(shim).not.toMatch(new RegExp(`${TOKEN_HEADER}: (?!\\$)`))
+    })
   })
 })
 
@@ -228,5 +307,47 @@ describe('buildContextLinkSkillBody', () => {
   })
   it('is honest that only claude peers have a transcript', () => {
     expect(body).toMatch(/Only Claude sessions record a conversation transcript/)
+  })
+})
+
+describe('readTranscriptFile', () => {
+  const withDataDir = <T,>(fn: (dir: string) => T): T => {
+    const dir = mkdtempSync(join(tmpdir(), 'webterm-transcript-'))
+    const prev = process.env.WEBTERM_DATA_DIR
+    process.env.WEBTERM_DATA_DIR = dir
+    try {
+      return fn(dir)
+    } finally {
+      if (prev === undefined) delete process.env.WEBTERM_DATA_DIR
+      else process.env.WEBTERM_DATA_DIR = prev
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('reads a regular file inside the data dir', () => {
+    withDataDir((dir) => {
+      const file = join(dir, 't.jsonl')
+      writeFileSync(file, '{"type":"user"}\n')
+      expect(readTranscriptFile(file)).toBe('{"type":"user"}\n')
+    })
+  })
+
+  it('refuses a symlink swapped in after validation', () => {
+    withDataDir((dir) => {
+      const secret = join(tmpdir(), `webterm-secret-${process.pid}.jsonl`)
+      writeFileSync(secret, '{"secret":true}\n')
+      const link = join(dir, 't.jsonl')
+      symlinkSync(secret, link)
+      try {
+        expect(readTranscriptFile(link)).toBeNull()
+      } finally {
+        rmSync(secret, { force: true })
+      }
+    })
+  })
+
+  it('refuses paths outside the allowed roots and non-regular files', () => {
+    expect(readTranscriptFile('/etc/passwd')).toBeNull()
+    expect(readTranscriptFile('/dev/zero')).toBeNull()
   })
 })

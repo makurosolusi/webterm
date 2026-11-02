@@ -1,5 +1,14 @@
-/** Pesan yang ditulis ke terminal saat proses PTY berakhir. */
-export function exitMessage(code: number): string {
+import type { ExitReason } from './ws'
+
+/**
+ * Pesan yang ditulis ke terminal saat proses PTY berakhir. `closed` berarti KITA yang meminta
+ * close (pengguna menekan close / node dibuang), jadi tidak ada kabar yang perlu dicetak.
+ * `peer-closed` berarti client LAIN yang menutupnya: dari sini prosesnya cuma hilang, jadi
+ * beri notice netral tanpa menyalahkan kode exit. Tanpa `reason` `code` selalu dicetak.
+ */
+export function exitMessage(code: number, reason?: ExitReason): string {
+  if (reason === 'closed') return ''
+  if (reason === 'peer-closed') return '\r\n[session closed]'
   return `\r\n[process exited with code ${code}]`
 }
 

@@ -1,0 +1,173 @@
+/* VS Code overlay primitives (L1): dialog, popover, tooltip. Menu and notification have their own sheets.
+ *
+ * Tokens live in `vscode-theme.css`. Every var() keeps a fallback so the overlays
+ * still render if the bridge sheet has not loaded yet (tests, early paint). Metrics
+ * come from RND/20-VSCODE-UI-PLAN.md sections 1.1, 1.9, and 3.2.
+ */
+
+/* ---------------------------------------------------------------- dialog */
+/* Values measured on vscode.dev (overlays-forms.md section 2): 480px, 8px padding with a 12px
+ * content inset, 8px radius, modal shadow, 14px/600 title, buttons right-aligned 8px apart. */
+.vscode-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.vscode-dialog {
+  box-sizing: border-box;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 90vh;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--vscode-dialog-border, var(--vscode-widget-border, transparent));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-menu-background, var(--vscode-sideBar-background, #252526))
+  );
+  box-shadow: var(--wt-shadow-modal, 0 0 20px rgba(0, 0, 0, 0.15));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #cccccc));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+  outline: none;
+}
+
+.vscode-dialog:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+.vscode-dialog__header {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 24px;
+  gap: 12px;
+  padding: 0 4px 0 12px;
+}
+
+.vscode-dialog__title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vscode-dialog__close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
+  cursor: default;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.vscode-dialog__close:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--vscode-menu-selectionBackground, rgba(90, 93, 94, 0.31)));
+}
+
+.vscode-dialog__close:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+.vscode-dialog__body {
+  margin-top: 12px;
+  padding: 0 8px 0 12px;
+  color: inherit;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.vscode-dialog__description {
+  margin: 0 0 12px;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+  font-size: 13px;
+}
+
+.vscode-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 24px;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 0 4px 4px;
+}
+
+/* --------------------------------------------------------------- popover */
+.vscode-popover {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #454545));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background, #252526));
+  box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #cccccc));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+  outline: none;
+}
+
+.vscode-popover:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+/* --------------------------------------------------------------- tooltip */
+/* Hover widget (compact): 1px editorHoverWidget border, 3px radius, 2px 8px padding, 12px/19px text. */
+.vscode-tooltip {
+  position: fixed;
+  z-index: 1400;
+  box-sizing: border-box;
+  max-width: 500px;
+  padding: 2px 8px;
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-editorWidget-border, #454545));
+  border-radius: var(--vscode-cornerRadius-large, 8px);
+  background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background, #252526));
+  box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
+  color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground, #cccccc));
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 19px;
+  animation: vscode-tooltip-in 0.1s linear;
+  pointer-events: auto;
+}
+
+@keyframes vscode-tooltip-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vscode-tooltip {
+    animation: none;
+  }
+}

@@ -1,5 +1,9 @@
+// Pemilih folder (modal VS Code): daftar subfolder server-side, naik satu level, lalu pilih.
 import { useEffect, useState } from 'react'
+import { VscodeDialog } from './components/vscode/vscodeDialog'
+import { arrangeDialogButtons } from './components/vscode/vscodeDialogButtons'
 import { listDir } from './api'
+import './folderPicker.css'
 
 interface Props {
   initialPath?: string
@@ -7,48 +11,75 @@ interface Props {
   onClose: () => void
 }
 
+/** Gabung folder + anak tanpa menggandakan `/` (akar `/` dan path ber-trailing slash). */
+export function joinPath(base: string, name: string): string {
+  return base.endsWith('/') ? base + name : `${base}/${name}`
+}
+
 export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
   const [path, setPath] = useState(initialPath ?? '')
   const [parent, setParent] = useState<string | null>(null)
   const [dirs, setDirs] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Keep the last good listing on failure (a 404 just means "don't go there").
+  // Keep the last good listing on failure (a 404 just means "don't go there"), but say so.
   const load = (p?: string) => {
-    listDir(p).then((r) => { setPath(r.path); setParent(r.parent); setDirs(r.dirs) }).catch(() => {})
+    listDir(p)
+      .then((r) => {
+        setPath(r.path)
+        setParent(r.parent)
+        setDirs(r.dirs)
+        setError(null)
+      })
+      .catch((err: unknown) => {
+        setError(`Cannot open ${p ?? 'the folder'}: ${err instanceof Error ? err.message : 'request failed'}`)
+      })
   }
   useEffect(() => { load(initialPath) }, [])
 
+  const select = (
+    <button key="select" type="button" className="fp-button fp-button--primary" onClick={() => onPick(path)}>
+      Select this folder
+    </button>
+  )
+  const cancel = (
+    <button key="cancel" type="button" className="fp-button" onClick={onClose}>
+      Cancel
+    </button>
+  )
+
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="panel" style={{ width: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: 10, borderBottom: '1px solid var(--border)' }}>
-          <button
-            className="btn btn--ghost"
-            onClick={() => parent && load(parent)}
-            disabled={parent === null}
-            style={{ cursor: parent === null ? 'default' : 'pointer', opacity: parent === null ? 0.4 : 1 }}
-          >
-            ⬆ up
-          </button>
-          <span style={{ flex: 1, color: 'var(--muted)', fontSize: 12, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' }}>{path}</span>
-        </div>
-        <div style={{ flex: 1, overflow: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {dirs.length === 0 && <span style={{ color: 'var(--muted)', fontSize: 12, padding: 6 }}>(no subfolders)</span>}
-          {dirs.map((d) => (
-            <button
-              key={d}
-              onClick={() => load(path + '/' + d)}
-              style={{ textAlign: 'left', background: 'transparent', color: 'var(--text)', border: 'none', borderRadius: 4, padding: '6px 8px', cursor: 'pointer', fontSize: 13, fontFamily: 'monospace' }}
-            >
-              📁 {d}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: 10, borderTop: '1px solid var(--border)' }}>
-          <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn--accent" onClick={() => onPick(path)}>Select this folder</button>
-        </div>
+    <VscodeDialog
+      open
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="Choose a folder"
+      width={480}
+      className="folder-picker"
+      footer={arrangeDialogButtons([select, cancel], 1)}
+    >
+      <div className="fp-bar">
+        <button
+          type="button"
+          className="fp-up"
+          aria-label="Go up"
+          title="Go up"
+          onClick={() => parent && load(parent)}
+          disabled={parent === null}
+        >
+          <span className="codicon codicon-arrow-up" aria-hidden />
+        </button>
+        <span className="fp-path" title={path}>{path}</span>
       </div>
-    </div>
+      {error && <div className="fp-error" role="alert">{error}</div>}
+      <div className="fp-list" role="list">
+        {dirs.length === 0 && <span className="fp-empty">No subfolders</span>}
+        {dirs.map((d) => (
+          <button key={d} type="button" className="fp-row" role="listitem" onClick={() => load(joinPath(path, d))}>
+            <span className="codicon codicon-folder" aria-hidden />
+            <span className="fp-row__name">{d}</span>
+          </button>
+        ))}
+      </div>
+    </VscodeDialog>
   )
 }

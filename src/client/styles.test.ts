@@ -18,18 +18,22 @@ describe('styles.css — token sheet', () => {
 
   it('defines core surface/accent/status tokens', () => {
     for (const tok of [
-      '--canvas-bg: #000000',
-      '--bg: #1e1e1e',
-      '--panel: #282828',
-      '--accent: #0a84ff',
+      // Palet = variabel resmi Dark/Light Modern (`vscode-theme.css`); token lama hanya menunjuk ke sana.
+      '--canvas-bg: var(--vscode-editor-background)',
+      '--bg: var(--vscode-editor-background)',
+      '--panel: var(--vscode-sideBar-background)',
+      '--accent: var(--vscode-focusBorder)',
       '--state-working: #d97757',
       '--state-attention: #ff453a',
-      '--radius-node: 10px',
       '--float-gap: 22px',
-      // Tinggi header bar. Dipaku: `canvas-ui.css` menurunkan cluster kontrol dengan token ini,
-      // dan nilainya harus sama dengan `--ss-top-chrome` (46px) di `sessions-panel.css` supaya
-      // sidebar sesi dan cluster itu mengapung di baris yang sama di bawah header.
-      '--tabbar-h: 46px',
+      // Geometri chrome VS Code. Dipaku: grid `.app-shell` memakai keempatnya, dan primitif
+      // `components/vscode/vscode-shell.css` menggambar tinggi yang sama.
+      '--title-bar-h: 35px',
+      '--editor-tabs-h: 35px',
+      '--activity-bar-w: 48px',
+      '--status-bar-h: 22px',
+      // Alias warisan untuk sheet yang belum ikut migrasi: tinggi chrome di atas canvas.
+      '--tabbar-h: calc(var(--title-bar-h) + var(--editor-tabs-h))',
     ]) {
       expect(tokens).toContain(tok)
     }
@@ -38,85 +42,109 @@ describe('styles.css — token sheet', () => {
   it('defines the tokens other workers consume', () => {
     for (const tok of [
       '--tint-rgb: 255, 255, 255',
-      '--menu-rgb: 40, 40, 42',
-      '--card-rgb: 28, 28, 30',
+      '--menu-rgb: 31, 31, 31',
       '--shadow-k: 1',
-      '--controls-w: 30px',
-      '--caution: #ffd60a',
     ]) {
       expect(tokens).toContain(tok)
     }
   })
 
   it('routes overlays through --tint-rgb so a theme flip is one declaration', () => {
-    expect(tokens).toContain('--border: rgba(var(--tint-rgb), 0.1)')
-    expect(tokens).toContain('--text: rgba(var(--tint-rgb), 0.85)')
-    expect(tokens).toContain('--shadow-node: 0 8px 28px rgba(0, 0, 0, calc(0.4 * var(--shadow-k)))')
+    expect(tokens).toContain('--muted-2: rgba(var(--tint-rgb), 0.25)')
+    expect(tokens).toContain('--border: var(--vscode-panel-border)')
+    expect(tokens).toContain('--text: var(--vscode-foreground)')
   })
 
   it('ships a light theme that re-points the same tokens', () => {
     expect(tokens).toContain(":root[data-theme='light']")
     const light = tokens.slice(tokens.indexOf(":root[data-theme='light']"))
-    for (const tok of ['--tint-rgb: 58, 48, 38', '--bg: #fbf8f3', '--shadow-k: 0.35', '--caution: #806100']) {
+    for (const tok of ['--tint-rgb: 59, 59, 59', '--menu-rgb: 255, 255, 255', '--shadow-k: 0.35']) {
       expect(light).toContain(tok)
     }
   })
 
-  it('keeps the shared controls and canvas furniture', () => {
-    for (const cls of [
-      '.minimap-dock', '.app-shell', '.app-main',
-      '.btn', '.btn--accent', '.btn--ghost', '.field', '.panel', '.bridge-handle',
+  it('tidak lagi memuat token mati (tak dirujuk satu pun sheet/komponen)', () => {
+    for (const dead of [
+      '--accent-text', '--card-rgb', '--caution', '--controls-w', '--radius:', '--radius-sm',
+      '--radius-lg', '--radius-node', '--shadow-node',
     ]) {
-      expect(tokens).toContain(cls)
+      expect(tokens).not.toContain(dead)
     }
   })
 
-  it('lays the app out as header + canvas, not an overlay floating over the canvas', () => {
-    const shell = tokens.slice(tokens.indexOf('.app-shell {'), tokens.indexOf('/* ---- Header bar'))
-    expect(shell).toContain('flex-direction: column')
-    // Tanpa min-height: 0 tinggi minimum flex item jatuh ke tinggi kontennya dan canvas
-    // mendorong header keluar layar; tanpa flex-basis definit `height: 100%` ReactFlow runtuh.
-    expect(shell).toContain('flex: 1 1 0')
-    expect(shell).toContain('min-height: 0')
-    // Welcome memposisikan diri dengan `inset: 0` — containing block-nya harus .app-main.
-    expect(shell).toContain('position: relative')
-    const bar = tokens.slice(tokens.indexOf('.tabbar {'), tokens.indexOf('.brand {'))
-    expect(bar).toContain('height: var(--tabbar-h)')
-    expect(bar).toContain('flex-shrink: 0')
-    expect(bar).not.toContain('position: absolute')
+  it('scrollbar view 8px dengan slider radius 4px (14px hanya milik editor)', () => {
+    expect(tokens).toContain('::-webkit-scrollbar { width: 8px; height: 8px; }')
+    expect(tokens).toMatch(/::-webkit-scrollbar-thumb \{[^}]*border-radius: 4px/)
   })
 
-  it('keeps the tab strip on one line and the + reachable with many workspaces', () => {
-    const strip = tokens.slice(tokens.indexOf('.tabbar__projects {'), tokens.indexOf('.tab {'))
-    expect(strip).toContain('overflow-x: auto')
-    // Dua min-width: 0 + flex-shrink: 0 pada tombolnya adalah yang menahan `+` di dalam layar.
-    expect((strip.match(/min-width: 0/g) ?? []).length).toBe(2)
-    const add = tokens.slice(tokens.indexOf('.tab__add {'))
-    expect(add).toContain('flex-shrink: 0')
+  it('command center: 24px, radius 5px, border token commandCenter', () => {
+    const pill = tokens.slice(tokens.indexOf('.app-titlebar__name {'))
+    const body = pill.slice(0, pill.indexOf('}'))
+    expect(body).toContain('height: 24px')
+    expect(body).toContain('border-radius: 5px')
+    expect(body).toContain('border: 1px solid var(--vscode-commandCenter-border)')
   })
 
-  it('keeps the tab kebab reachable and visible without hovering', () => {
-    const caret = tokens.slice(tokens.indexOf('.tab__caret {'), tokens.indexOf('.tab:hover .tab__caret'))
-    // Kotak tetap + glyph 14px: lucide menulis ukurannya sebagai atribut, jadi tanpa aturan svg
-    // tombolnya jadi 24px dan merusak tinggi baris tab.
-    expect(caret).toContain('width: 22px')
-    expect(caret).toContain('height: 22px')
-    expect(tokens.slice(tokens.indexOf('.tab__caret svg {'))).toContain('width: 14px')
-    // Affordance rename/hapus satu-satunya: ia tidak boleh hanya muncul saat hover.
-    expect(caret).toContain('opacity: 0.45')
-    // Nama sepanjang kalimat tidak boleh memeras tombolnya sampai nol.
-    const actions = tokens.slice(tokens.indexOf('.tab__actions {'), tokens.indexOf('.tab__caret {'))
-    expect(actions).toContain('flex-shrink: 0')
-    // Tepi kanan tab berakhir di kebab, jadi padding-nya asimetris (seperti nodeterm).
-    expect(tokens.slice(tokens.indexOf('.tab {'), tokens.indexOf('.tab:hover'))).toContain('padding: 0 4px 0 10px')
+  it('keeps shared layout and canvas furniture', () => {
+    for (const cls of ['.minimap-dock', '.app-shell', '.app-main', '.bridge-handle']) {
+      expect(tokens).toContain(cls)
+    }
+  })
+  it('leaves legacy control selectors absent after shadcn migration', () => {
+    for (const gone of ['.btn', '.btn--accent', '.btn--ghost', '.field', '.panel']) {
+      expect(tokens).not.toContain(gone)
+    }
   })
 
-  it('keeps the inline rename input inside the tab instead of widening it', () => {
-    const edit = tokens.slice(tokens.indexOf('.tab__edit {'), tokens.indexOf('.tab__actions {'))
-    // Lebar konten input default (~20 karakter) akan mendorong tab melewati max-width 220px-nya.
-    expect(edit).toContain('flex: 1 1 0')
-    expect(edit).toContain('width: 0')
-    expect(edit).toContain('min-width: 48px')
+  it('lays the app out as a VS Code shell grid: title / tabs / rail+canvas / status', () => {
+    const shell = tokens.slice(tokens.indexOf('.app-shell {'), tokens.indexOf('.app-shell--auth {'))
+    expect(shell).toContain('display: grid')
+    expect(shell).toContain(
+      'grid-template-rows: var(--title-bar-h) var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h)',
+    )
+    // Kolom sidebar selebar 0 saat tertutup; `--sidebar` (di App) membukanya menjadi 300px tanpa
+    // menggeser rail. Canvas tetap `minmax(0, 1fr)` supaya ia yang menyerap sisa lebar.
+    expect(shell).toContain('grid-template-columns: var(--activity-bar-w) 0 minmax(0, 1fr)')
+    expect(shell).toContain("'activity sidebar main'")
+    expect(tokens).toContain('.app-shell--sidebar {')
+    const open = tokens.slice(tokens.indexOf('.app-shell--sidebar {'))
+    expect(open.slice(0, open.indexOf('}'))).toContain('300px')
+
+    // Welcome memposisikan diri dengan `inset: 0` — containing block-nya harus .app-main, dan
+    // min-width/height: 0 menahan isi canvas agar tidak mendorong grid melewati viewport.
+    const main = tokens.slice(tokens.indexOf('.app-main {'), tokens.indexOf('/* ---- Title bar'))
+    expect(main).toContain('grid-area: main')
+    expect(main).toContain('position: relative')
+    expect(main).toContain('min-height: 0')
+    expect(main).toContain('min-width: 0')
+
+    for (const [selector, area] of [
+      ['.app-titlebar {', 'title'],
+      ['.app-tabs {', 'tabs'],
+      ['.app-statusbar {', 'status'],
+    ]) {
+      const block = tokens.slice(tokens.indexOf(selector))
+      expect(block.slice(0, block.indexOf('}'))).toContain(`grid-area: ${area}`)
+    }
+  })
+
+  it('collapses every chrome row in clean view, not just hides the elements', () => {
+    const clean = tokens.slice(tokens.indexOf('body.clean-view .app-shell {'))
+    expect(clean).toContain('grid-template-rows: 0 0 minmax(0, 1fr) 0')
+    expect(clean).toContain('grid-template-columns: 0 minmax(0, 1fr)')
+    for (const selector of ['.app-titlebar', '.app-tabs', '.app-statusbar']) {
+      expect(tokens).toContain(`body.clean-view ${selector}`)
+    }
+  })
+
+  it('keeps the editor tab row one line: strip shrinks, actions never do', () => {
+    const row = tokens.slice(tokens.indexOf('.app-tabs {'), tokens.indexOf('.app-tabs__action {'))
+    expect(row).toContain('display: flex')
+    expect(row).toContain('min-width: 0')
+    const strip = tokens.slice(tokens.indexOf('.app-tabs > .vscode-editor-tabs'))
+    expect(strip.slice(0, strip.indexOf('}'))).toContain('min-width: 0')
+    const actions = tokens.slice(tokens.indexOf('.app-tabs__actions {'), tokens.indexOf('.app-tabs__action {'))
+    expect(actions).toContain('flex: none')
   })
 
   it('gives every tab dot kind a colour, neutral included', () => {
@@ -127,10 +155,13 @@ describe('styles.css — token sheet', () => {
 })
 
 describe('node-chrome.css', () => {
-  it('leaves the node border-top COLOR to the inline style of each node', () => {
+  it('draws the node frame as a flat 1px neutral border, never a coloured 2px top line', () => {
     const frame = chrome.slice(chrome.indexOf('.term-node {'), chrome.indexOf('.term-node--selected'))
-    expect(frame).toContain('border-top-width: 3px')
-    expect(frame).not.toContain('border-top-color')
+    expect(frame).toContain('border: 1px solid var(--nc-border)')
+    expect(frame).not.toContain('border-top-width')
+    expect(frame).not.toContain('box-shadow')
+    expect(chrome).toContain('--nc-border: var(--vscode-editorGroup-border')
+    expect(chrome).not.toContain('border-top-color')
   })
 
   it('hangs the status glow outside .term-node, which clips its own ::after', () => {
@@ -154,24 +185,47 @@ describe('node-chrome.css', () => {
     expect(rm).toContain('opacity: 0.7')
   })
 
-  it('matches nodeterm header metrics', () => {
-    const title = chrome.slice(chrome.indexOf('.node-title {'), chrome.indexOf('.node-title:hover'))
+  it('matches VS Code tab metrics for the header', () => {
+    const header = chrome.slice(chrome.indexOf('.node-header {'), chrome.indexOf('.node-icon'))
+    expect(header).toContain('height: var(--nc-header-h)')
+    expect(chrome).toContain('--nc-header-h: 35px')
+    expect(header).toContain('cursor: default')
+    const title = chrome.slice(chrome.indexOf('.node-title {'), chrome.indexOf('.node-description'))
     expect(title).toContain('max-width: 220px')
-    expect(title).toContain('padding: 2px 5px')
     expect(title).toContain('font-size: 13px')
-    expect(title).toContain('font-weight: 600')
+    expect(title).toContain('font-weight: 400')
     // Judul tidak boleh melar: toolbar yang didorong `margin-left: auto`, bukan judul.
     expect(title).not.toContain('flex: 1')
     expect(chrome).toContain('.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }')
-    const icon = chrome.slice(chrome.indexOf('.icon-btn {'), chrome.indexOf('.icon-btn:hover'))
-    expect(icon).toContain('border-radius: 4px')
-    expect(chrome).toContain('background: rgba(var(--tint-rgb), 0.1)')
+    expect(chrome).not.toContain('.node-toolbar__count')
+    expect(chrome).not.toContain('.pane-split-btns')
+    // Tombol header memakai `vscode-toolbar-button`; kelas status lama dan merah "danger" sudah tidak ada.
+    expect(chrome).not.toContain('.icon-btn {')
+    expect(chrome).not.toContain('.node-toolbar__danger')
+    expect(chrome).toContain(".node-toolbar vscode-toolbar-button[aria-disabled='true']")
     expect(chrome).toContain('border-radius: 50%')
+  })
+
+  it('has no gradients and no radius above the widget radius (8px)', () => {
+    expect(chrome).not.toContain('gradient')
+    expect(chrome).toContain('--nc-radius: 3px')
+    expect(chrome).toContain('--nc-radius-widget: 8px')
+    expect(chrome).not.toContain('--radius-node')
+    expect(chrome).not.toContain('--shadow-node')
+  })
+
+  it('marks the selected node as the active tab with the focus border', () => {
+    const decl = (sel: string) => chrome.match(new RegExp(`\\${sel}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
+    expect(decl('.term-node--selected')).toContain('--nc-border: var(--nc-focus)')
+    expect(chrome).toContain('.term-node--selected .node-header')
+    expect(chrome).toContain('--nc-focus: var(--vscode-focusBorder')
   })
 
   it('styles the status chip without text-transform (nodeterm labels are literal)', () => {
     const chip = chrome.slice(chrome.indexOf('.node-status {'), chrome.indexOf('@keyframes nt-pulse'))
-    expect(chip).toContain('letter-spacing: 0.06em')
+    expect(chip).toContain('font-size: 11px')
+    expect(chip).toContain('font-weight: 400')
+    expect(chip).not.toContain('letter-spacing')
     expect(chip).toContain('.node-status-dot')
     expect(chip).toContain('.node-status--busy')
     expect(chip).toContain('.node-status--attention')
@@ -198,66 +252,55 @@ describe('node-chrome.css', () => {
 
   it('defines the rest of the chrome vocabulary', () => {
     for (const cls of [
-      '.pane-host', '.pane--active', '.pane-divider', '.pane-split-btns',
+      '.pane-host', '.pane--active', '.pane-divider',
       '.node-header', '.node-title--edit', '.node-swatch', '.node-swatch-pop',
-      '.icon-btn--danger', '.icon-btn--active', '.node-chevron', '.node-chevron--collapsed',
+      '.node-icon', '.node-description',
+      '.node-find__field', '.node-find__actions',
       '.node-body', '.term-node--collapsed',
       '.usage-pill', '.usage-pill__label', '.usage-pill__minibar', '.usage-pill__fill',
-      '.node-comments', '.node-comments__composer',
+      '.node-comments', '.node-comments__header', '.node-comments__composer', '.node-comments__input', '.node-comments__submit',
     ]) {
       expect(chrome).toContain(cls)
     }
   })
 })
 
-describe('dock.css', () => {
-  it('matches nodeterm dock plate metrics', () => {
-    const plate = dock.slice(dock.indexOf('.dock {'), dock.indexOf('.dock-btn {'))
-    // Nilai nodeterm-nya kini hidup di token `--dock-pad`, karena `--dock-w` dihitung darinya.
-    expect(dock).toContain('--dock-pad: 7px')
-    expect(plate).toContain('padding: var(--dock-pad)')
-    expect(plate).toContain('border-radius: 16px')
-    expect(plate).toContain('background: rgba(var(--menu-rgb), 0.92)')
-    expect(plate).toContain('backdrop-filter: blur(10px)')
-    expect(plate).toContain('box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)))')
-  })
-
-  it('matches nodeterm dock button metrics', () => {
-    const btn = dock.slice(dock.indexOf('.dock-btn {'), dock.indexOf('.dock-btn:hover'))
-    expect(dock).toContain('--dock-btn-size: 38px')
-    expect(btn).toContain('width: var(--dock-btn-size)')
-    expect(btn).toContain('height: var(--dock-btn-size)')
-    expect(btn).toContain('border-radius: 10px')
-    expect(dock).toContain('.dock-add { background: var(--accent); color: #fff; }')
-    expect(dock).toContain('color-mix(in srgb, var(--accent) 85%, black)')
-    // Dock adalah KOLOM di tepi kiri, bukan bar di bawah: pemisahnya garis horizontal (panjang
-    // nodeterm 22px pindah ke lebar) dan menunya harus terbuka ke kanan, bukan ke atas.
-    const sep = dock.slice(dock.indexOf('.dock-sep {'), dock.indexOf('.dock-dirty {'))
-    expect(sep).toContain('width: 22px')
-    expect(sep).toContain('margin: 4px 0')
-  })
-
-  it('lays the dock out as a left-edge column with menus opening to the right', () => {
-    const plate = dock.slice(dock.indexOf('.dock {'), dock.indexOf('.dock-btn {'))
+describe('dock.css — activity bar rail', () => {
+  it('places the rail in the shell grid instead of anchoring it over the canvas', () => {
+    const plate = dock.slice(dock.indexOf('.dock {'), dock.indexOf('.dock > .vscode-activity-bar {'))
+    expect(plate).toContain('grid-area: activity')
+    expect(plate).toContain('display: flex')
     expect(plate).toContain('flex-direction: column')
-    expect(plate).toContain('left: var(--float-gap)')
-    expect(plate).not.toContain('translateX(-50%)')
-    const menu = dock.slice(dock.indexOf('.dock-menu {'), dock.indexOf('.dock-menu__list {'))
-    expect(menu).toContain('left: calc(100% + 10px)')
-    expect(menu).not.toContain('bottom: calc(100% + 10px)')
+    // z-index 20 dipertahankan: panel sesi mengapung di z-12 dan tidak boleh menutupi rail.
+    expect(plate).toContain('z-index: 20')
+    expect(plate).toContain('background: var(--vscode-activityBar-background')
+    expect(plate).not.toContain('position: absolute')
+    expect(plate).not.toContain('backdrop-filter')
   })
 
-  it('defines the dirty marker, the zoom readout and the menus', () => {
-    expect(dock).toContain('.dock-dirty.dirty { background: var(--caution); }')
-    // Selebar tombol: readout teks tidak boleh melebarkan kolom.
-    expect(dock.slice(dock.indexOf('.dock-zoom {'))).toContain('min-width: var(--dock-btn-size)')
-    for (const cls of [
-      '.dock-backdrop', '.dock-slot', '.dock-menu', '.dock-add-menu', '.dock-menu__list',
-      '.dock-menu__glyph', '.dock-menu__rule', '.dock-menu__check', '.dock-menu__form',
-      '.dock-zoom-menu',
-    ]) {
-      expect(dock).toContain(cls)
-    }
+  it('derives the shared panel offset from the 48px activity bar', () => {
+    // Satu sumber lebar rail: `sessions-panel.css` dan `inbox.css` membaca token ini.
+    const token = dock.slice(dock.indexOf(':root {'), dock.indexOf('/* Grid item'))
+    expect(token).toContain('--dock-w: var(--activity-bar-w)')
+    expect(dock).not.toContain('--dock-btn-size: 38px')
+    expect(dock).not.toContain('--dock-pad: 7px')
+  })
+
+  it('keeps the primitive activity bar flush inside the rail', () => {
+    const primitive = dock.slice(dock.indexOf('.dock > .vscode-activity-bar {'))
+    expect(primitive.slice(0, primitive.indexOf('}'))).toContain('width: 100%')
+    expect(primitive.slice(0, primitive.indexOf('}'))).toContain('background: transparent')
+  })
+
+  it('renders the lock/clean toggles with aria-pressed at VS Code rail width', () => {
+    const modes = dock.slice(dock.indexOf('.dock__modes {'), dock.indexOf(".dock-btn[aria-pressed='true']"))
+    expect(modes).toContain('flex-direction: column')
+    // Dimensi 48x48 + indikator 2px datang dari `.vscode-activity-bar__item` (kelas bersama).
+    expect(dock).not.toContain('.dock-btn {')
+    expect(dock).toContain(".dock-btn[aria-pressed='true']")
+    // VS Code: toggle bukan tab — tanpa marker aktif, warna idle seragam dengan item bar.
+    expect(dock).not.toContain('--vscode-activityBar-activeBorder')
+    expect(modes).toContain('color: var(--vscode-activityBar-inactiveForeground)')
   })
 })
 
