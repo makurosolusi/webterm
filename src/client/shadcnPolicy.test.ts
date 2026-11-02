@@ -10,8 +10,37 @@ const uiRoot = path.join(clientRoot, "components/ui");
 // (plan 0.3): shadow-DOM web components break label association and testing-library.
 // These files are primitives, the same layer as components/ui, not screens.
 const vscodePrimitivesRoot = path.join(clientRoot, "components/vscode") + path.sep;
-/** Hybrid VS Code screens that intentionally use native controls for form semantics. */
-const vscodeScreens = new Set(["src/client/SettingsPanel.tsx"]);
+/**
+ * VS Code-metric screens that intentionally render native controls (plan 0.3: label
+ * association + testing-library). Explicit list, no globs: a NEW file using raw controls
+ * must fail this guard and be added here deliberately.
+ */
+const vscodeScreens = new Set([
+  // Settings / Env / Channels
+  "src/client/SettingsPanel.tsx",
+  "src/client/SettingsAgents.tsx",
+  "src/client/SettingsFields.tsx",
+  "src/client/EnvEntryRow.tsx",
+  "src/client/EnvSecretField.tsx",
+  "src/client/EnvSection.tsx",
+  "src/client/EnvValueControl.tsx",
+  "src/client/ChannelsLists.tsx",
+  "src/client/ChannelsSection.tsx",
+  // Sessions sidebar
+  "src/client/SessionsFilter.tsx",
+  "src/client/SessionsGroupingTabs.tsx",
+  // Bottom panel / Inbox / Chat
+  "src/client/bottomPanelTabs.tsx",
+  "src/client/inboxApprovalDialog.tsx",
+  "src/client/inboxItemRow.tsx",
+  "src/client/inboxPanelChrome.tsx",
+  "src/client/inboxPanelSections.tsx",
+  "src/client/inboxPanelSurface.tsx",
+  "src/client/ChatPanel.tsx",
+  "src/client/chat/chatComposer.tsx",
+  "src/client/chat/chatConversation.tsx",
+  "src/client/chat/chatMessages.tsx",
+]);
 
 async function filesUnder(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
