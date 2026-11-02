@@ -48,7 +48,7 @@ const nodeRowsHaveNoMeta = (s: string) => !nodesBranch(s).includes('ss-meta')
 /** Ikon kind duduk di slot ikon leaf milik tree item, supaya rata dengan glyph sesi. */
 const rowsHaveKindGlyph = (s: string) => {
   const b = nodesBranch(s)
-  return /slot="icon-leaf"/.test(b) && /<Icon aria-hidden \/>/.test(b)
+  return /slot="icon-leaf"/.test(b) && /<KindIcon kind=\{g\.kind\} \/>/.test(b)
 }
 
 // Bentuk lama, persis seperti sebelum dibetulkan. Dipakai untuk membuktikan guard di atas
@@ -128,17 +128,18 @@ describe('tab Nodes', () => {
     expect(rowsHaveKindGlyph(src('SessionsPanel.tsx'))).toBe(true)
   })
 
-  it('ikonnya dipetakan per kind, keempatnya, dari lucide-react', () => {
+  it('ikonnya dipetakan per kind, keempatnya, ke codicon (bukan lucide-react)', () => {
     const panel = src('SessionsPanel.tsx')
     for (const [kind, icon] of [
-      ['agent', 'Bot'],
-      ['terminal', 'Terminal'],
-      ['editor', 'FileText'],
-      ['files', 'Folder'],
+      ['agent', 'hubot'],
+      ['terminal', 'terminal'],
+      ['editor', 'file'],
+      ['files', 'folder'],
     ]) {
-      expect(panel).toMatch(new RegExp(String.raw`\b${kind}: ${icon},`))
-      expect(panel.split("from 'lucide-react'")[0]).toContain(icon)
+      expect(panel).toMatch(new RegExp(String.raw`\b${kind}: '${icon}',`))
     }
+    expect(panel).not.toContain('lucide-react')
+    expect(src('SessionRow.tsx')).not.toContain('lucide-react')
   })
 
   it('barisnya tidak mengulang kind di baris meta', () => {

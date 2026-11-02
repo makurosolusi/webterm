@@ -151,8 +151,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
   it('tab Status mengelompokkan per status dan tetap menyembunyikan seksi kosong', () => {
     render(<SessionsPanel {...baseProps()} />)
 
-    // Radix Tabs aktif lewat mousedown, bukan click (lihat TabsTrigger upstream).
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Status' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Status' }))
 
     const groups = [...document.querySelectorAll('vscode-tree-item[data-group]')].map((el) =>
       el.getAttribute('data-group'),
@@ -182,7 +181,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     ])
     render(<SessionsPanel {...baseProps()} workspaces={[withEditor]} />)
 
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Nodes' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Nodes' }))
 
     const groups = [...document.querySelectorAll('vscode-tree-item[data-group]')].map((el) =>
       el.getAttribute('data-group'),

@@ -7,14 +7,14 @@
 // mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
-import { Bell, Bot, FileText, Folder, Terminal, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tree, TreeItem } from './vscode/register'
 import type { VscTreeSelectEvent } from './vscode/register'
+import { VscodeMenu } from './components/vscode/vscodeMenu'
 import { SessionGroupItem, SessionTreeItem, type RegisterTreeTarget, type TreeTarget } from './SessionRow'
+import { SessionsFilter } from './SessionsFilter'
+import { SessionsGroupingTabs } from './SessionsGroupingTabs'
+import { buildSessionMenu } from './sessionMenu'
+import { useSessionsTreeEvents } from './useSessionsTreeEvents'
 import {
   buildSessionList,
   buildStatusList,
@@ -23,7 +23,6 @@ import {
   projectCollapseKey,
   sidebarEmptyState,
   sessionLabel,
-  sidebarFilterKeyAction,
   signalCounts,
   type SidebarGrouping,
 } from './sessionList'
@@ -35,20 +34,26 @@ import './sessions-panel.css'
 
 type TreeElement = ComponentRef<typeof Tree>
 
-const TAB_LABEL: Record<SidebarGrouping, string> = {
-  project: 'Project',
-  status: 'Status',
-  nodes: 'Nodes',
-}
-
-/** Ikon per kind untuk branch tab Nodes. Baris di sana tidak punya status, jadi slot ikonnya
+/** Codicon per kind untuk branch tab Nodes. Baris di sana tidak punya status, jadi slot ikonnya
  *  kosong — dan bentuk adalah satu-satunya pembeda yang terbaca tanpa membaca: judul kustom
  *  ("notes", "scratch") sama-sama mungkin milik editor, terminal, atau folder. */
-const KIND_ICON: Record<WsNodeKind, typeof Bot> = {
-  agent: Bot,
-  terminal: Terminal,
-  editor: FileText,
-  files: Folder,
+const KIND_ICON: Record<WsNodeKind, string> = {
+  agent: 'hubot',
+  terminal: 'terminal',
+  editor: 'file',
+  files: 'folder',
+}
+
+/** Glyph kind (codicon) untuk header grup dan baris tab Nodes. */
+function KindIcon({ kind }: { kind: WsNodeKind }) {
+  return <span className={`codicon codicon-${KIND_ICON[kind]}`} aria-hidden />
+}
+
+/** Titik menu: target pohon, titik layar, dan keadaan buka grup SAAT menu dibuka. */
+interface MenuState {
+  target: TreeTarget
+  anchor: { x: number; y: number }
+  expanded: boolean
 }
 
 /** Kunci persist keadaan terbuka/tertutup. Namanya warisan dari masa panel ini punya hover-peek
@@ -211,90 +216,103 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     const handler = (e: Event) => onSelectRef.current(e as VscTreeSelectEvent)
     el.addEventListener('vsc-tree-select', handler)
     return () => el.removeEventListener('vsc-tree-select', handler)
-  }, [])
+  }, [open])
+
+  const [menu, setMenu] = useState<MenuState | null>(null)
+  useSessionsTreeEvents(treeRef, {
+    resolve: (el) => targets.current.get(el),
+    onEndSession: onCloseSession,
+    onContextMenu: (target, item, anchor) =>
+      setMenu({ target, anchor, expanded: (item as HTMLElement & { open?: boolean }).open === true }),
+  }, open)
+  const menuItems = useMemo(
+    () =>
+      menu
+        ? buildSessionMenu(menu.target, menu.expanded, {
+            onFocusNode,
+            onCloseSession,
+            onReopenSession,
+            onSelectWorkspace,
+            onToggleGroup: (key, expanded) => setCollapsed((prev) => ({ ...prev, [key]: expanded })),
+            onCopyText: (text) => {
+              navigator.clipboard?.writeText(text).catch((err: unknown) => {
+                console.warn('Copy path failed', err)
+              })
+            },
+          })
+        : [],
+    [menu, onFocusNode, onCloseSession, onReopenSession, onSelectWorkspace],
+  )
+
+  /** Kunci semua header grup yang sedang dirender pada tab aktif (untuk Collapse All). */
+  const groupKeys = (): string[] => {
+    const keys =
+      grouping === 'nodes'
+        ? nodeGroups.map((g) => `nodes:${g.kind}`)
+        : grouping === 'status'
+          ? sections.map((s) => `status:${s.kind}`)
+          : groups.map((g) => projectCollapseKey(g.projectId))
+    return closedSessions.length > 0 && grouping !== 'nodes' ? [...keys, CLOSED_KEY] : keys
+  }
+  const collapseAll = () =>
+    setCollapsed((prev) => ({ ...prev, ...Object.fromEntries(groupKeys().map((k) => [k, true])) }))
 
   // Tertutup = tidak ada apa pun di tepi kiri. Hover TIDAK pernah membuka (panel yang muncul
   // sendiri saat kursor lewat adalah yang dikeluhkan), dan satu-satunya pelontarnya ada di Dock.
   if (!open) return null
 
   return (
-    <Card className="sessions-sidebar nodrag p-0 gap-0" role="complementary" aria-label="Sessions">
+    <div className="sessions-sidebar nodrag" role="complementary" aria-label="Sessions">
       <div className="sessions-sidebar__head">
         {/* Judul DAN hitungan ikut tab aktif: tab Nodes mendaftar editor dan files juga, jadi
             "Sessions" di atasnya menamai — dan `total` menghitung — himpunan lain dari yang
             terbaca di bawahnya. `rowCount` selalu baris yang benar-benar dirender. */}
         <span className="sessions-sidebar__title">{grouping === 'nodes' ? 'Nodes' : 'Sessions'}</span>
         <span className="sessions-sidebar__count">{rowCount}</span>
-        <div className="sessions-sidebar__head-actions">
-          <Button
+        {/* Aksi view seperti toolbar judul VS Code: tampil saat view di-hover/di-fokus. */}
+        <div className="sessions-sidebar__head-actions" role="toolbar" aria-label="Sessions actions">
+          <button
             type="button"
-            variant="ghost"
-            size="icon-xs"
+            className="ss-action"
+            aria-label="Collapse all"
+            title="Collapse All"
+            onClick={collapseAll}
+          >
+            <span className="codicon codicon-collapse-all" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="ss-action"
             aria-label="Hide sessions panel"
             title="Hide"
             onClick={onClose}
           >
-            <X aria-hidden />
-          </Button>
+            <span className="codicon codicon-close" aria-hidden />
+          </button>
         </div>
       </div>
 
-      <Tabs
-        value={grouping}
-        onValueChange={(value) => setGrouping(value as SidebarGrouping)}
-        className="ss-tabs"
-      >
-        <TabsList aria-label="Group sessions by">
-          {(['project', 'status', 'nodes'] as const).map((g) => (
-            <TabsTrigger key={g} value={g}>
-              {TAB_LABEL[g]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      <div className="sessions-sidebar__search">
-        <input
-          type="text"
-          value={filter}
-          placeholder="Filter sessions…"
-          aria-label="Filter sessions"
-          onChange={(e) => setFilter(e.target.value)}
-          // Canvas React Flow mendengarkan keyboard di document: tanpa stopPropagation,
-          // Backspace menghapus node terpilih dan panah menggeser canvas selagi mengetik.
-          onKeyDown={(e) => {
-            e.stopPropagation()
-            if (sidebarFilterKeyAction(e.key, filter) === 'clear') setFilter('')
-          }}
-        />
-        {filter !== '' && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="ss-search__clear"
-            aria-label="Clear filter"
-            title="Clear filter (Esc)"
-            onClick={() => setFilter('')}
-          >
-            <X aria-hidden />
-          </Button>
-        )}
-      </div>
+      <SessionsGroupingTabs value={grouping} onChange={setGrouping} />
+      <SessionsFilter value={filter} onChange={setFilter} />
 
       {/* nowheel: tanpa itu scroll di sini justru mem-pan canvas di belakangnya. */}
-      <ScrollArea className="sessions-sidebar__body nowheel">
+      <div className="sessions-sidebar__body nowheel">
+        {/* Welcome view VS Code: teks deskriptif + tombol utama. */}
         {empty === 'no-matches' && (
           <div className="ss-empty">
-            <div>
+            <p>
               No {noun} match “{filter.trim()}”.
-            </div>
-            <Button type="button" variant="outline" size="xs" onClick={() => setFilter('')}>
-              Clear filter
-            </Button>
+            </p>
+            <button type="button" className="ss-empty__button" onClick={() => setFilter('')}>
+              Clear Filter
+            </button>
           </div>
         )}
-        {empty === 'no-sessions' && <div className="ss-empty">No {noun} yet.</div>}
+        {empty === 'no-sessions' && (
+          <div className="ss-empty">
+            <p>No {noun} yet.</p>
+          </div>
+        )}
 
         <Tree
           ref={treeRef}
@@ -306,7 +324,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
               memusatkan canvas ke node yang bukan shell. */}
           {grouping === 'nodes' ? (
             nodeGroups.map((g) => {
-              const Icon = KIND_ICON[g.kind]
               return (
                 <SessionGroupItem
                   key={g.kind}
@@ -315,7 +332,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                   count={g.rows.length}
                   open={groupOpen(`nodes:${g.kind}`)}
                   register={register}
-                  icon={<Icon aria-hidden />}
+                  icon={<KindIcon kind={g.kind} />}
                 >
                   {g.rows.map((r) => (
                     <TreeItem
@@ -323,10 +340,10 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                       className="ss-tree__leaf"
                       aria-label={`Focus ${r.label}`}
                       title={r.detail ?? ''}
-                      ref={(el) => register(el, { kind: 'node', id: r.id })}
+                      ref={(el) => register(el, { kind: 'node', id: r.id, path: r.detail })}
                     >
                       <span slot="icon-leaf" className="ss-tree__kind" aria-hidden>
-                        <Icon />
+                        <KindIcon kind={g.kind} />
                       </span>
                       {/* Tanpa meta: satu board saja (nama workspace sama di tiap baris), dan
                           kind sudah disebut header seksi + ikon. */}
@@ -352,13 +369,10 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                 open={groupOpen(`status:${s.kind}`)}
                 register={register}
                 icon={
-                  s.kind === 'attention' ? (
-                    <span className="ss-status__icon ss-status__icon--attention">
-                      <Bell aria-hidden />
-                    </span>
-                  ) : (
-                    <span className={`ss-status__icon ss-status__icon--${s.kind}`} />
-                  )
+                  <span
+                    className={`codicon codicon-${s.kind === 'attention' ? 'bell' : 'circle-filled'} ss-status__icon ss-status__icon--${s.kind}`}
+                    aria-hidden
+                  />
                 }
               >
                 {s.rows.length > 0 && (
@@ -426,7 +440,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
                   className="ss-tree__leaf"
                   aria-label={`Reopen ${sessionLabel(e.node)}`}
                   title={e.node.cwd ?? ''}
-                  ref={(el) => register(el, { kind: 'reopen', id: e.node.id })}
+                  ref={(el) => register(el, { kind: 'reopen', id: e.node.id, path: e.node.cwd })}
                 >
                   <span className="ss-tree__label">{sessionLabel(e.node)}</span>
                   {/* Nama workspace SELALU ikut: daftar ini meruntuhkan dinding workspace
@@ -440,7 +454,14 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             </SessionGroupItem>
           )}
         </Tree>
-      </ScrollArea>
-    </Card>
+      </div>
+      <VscodeMenu
+        open={menu !== null}
+        anchor={menu?.anchor ?? { x: 0, y: 0 }}
+        items={menuItems}
+        onClose={() => setMenu(null)}
+        ariaLabel="Session actions"
+      />
+    </div>
   )
 }

@@ -3,7 +3,6 @@
 // layar. Yang tinggal di sini hanya BENTUK baris: judulnya, glyph status, slot ikon, dan tombol
 // akhiri sesi. Logika pengelompokan tetap di `./sessionList` (bebas DOM, dites di node-env).
 import { useEffect, useRef, type ReactNode } from 'react'
-import { Bell, Check, X } from 'lucide-react'
 import { TreeItem } from './vscode/register'
 import { rowMeta, type SessionRowVM, type SignalCounts } from './sessionList'
 
@@ -16,33 +15,20 @@ const UNREAD_TITLE = 'Finished — new for you'
 const showsUnread = (row: SessionRowVM): boolean =>
   row.unread === true && row.statusKind !== 'attention' && row.statusKind !== 'working'
 
-/** Urutan prioritas glyph: bel (giliranmu) → centang belum-dibaca → centang (selesai) → titik
- *  status. Satu baris hanya punya satu slot, jadi sinyal yang paling menuntut tindakan yang menang. */
-function StatusGlyph({ row, slot }: { row: SessionRowVM; slot: string }) {
-  if (row.statusKind === 'attention') {
-    return (
-      <span slot={slot} className="ss-row__glyph ss-bell" title={row.stateLabel}>
-        <Bell aria-hidden />
-      </span>
-    )
-  }
-  if (showsUnread(row)) {
-    return (
-      <span slot={slot} className="ss-row__glyph ss-check ss-check--unread" title={UNREAD_TITLE}>
-        <Check aria-hidden />
-      </span>
-    )
-  }
-  if (row.statusKind === 'done') {
-    return (
-      <span slot={slot} className="ss-row__glyph ss-check" title={row.stateLabel}>
-        <Check aria-hidden />
-      </span>
-    )
-  }
+/** Satu glyph status di slot decoration (kanan baris), seperti dekorasi terminal VS Code. Prioritas:
+ *  bel (giliranmu) → centang belum-dibaca → centang (selesai) → spinner (jalan) → titik. Satu baris
+ *  hanya punya satu slot, jadi sinyal yang paling menuntut tindakan yang menang. */
+function StatusGlyph({ row }: { row: SessionRowVM }) {
+  let icon = 'circle-small-filled'
+  let tone: string = row.statusKind
+  let title = row.stateLabel
+  if (row.statusKind === 'attention') icon = 'bell'
+  else if (showsUnread(row)) [icon, tone, title] = ['check', 'unread', UNREAD_TITLE]
+  else if (row.statusKind === 'done') icon = 'check'
+  else if (row.statusKind === 'working') icon = 'loading codicon-modifier-spin'
   return (
-    <span slot={slot} className="ss-row__glyph" title={row.stateLabel}>
-      <span className={`ss-dot ss-dot--${row.statusKind}`} />
+    <span slot="decoration" className={`ss-glyph ss-glyph--${tone}`} title={title}>
+      <span className={`codicon codicon-${icon}`} aria-hidden />
     </span>
   )
 }
@@ -79,7 +65,7 @@ function EndSessionButton({ label, onEnd }: { label: string; onEnd: () => void }
       aria-label={`End session ${label}`}
       title="End session"
     >
-      <X aria-hidden />
+      <span className="codicon codicon-trash" aria-hidden />
     </button>
   )
 }
@@ -87,9 +73,9 @@ function EndSessionButton({ label, onEnd }: { label: string; onEnd: () => void }
 /** Target aksi sebuah simpul pohon. Panel memetakan elemen → target lewat ref supaya klik/Enter
  *  dari shadow tree tetap bisa memanggil callback React tanpa bergantung pada atribut DOM. */
 export type TreeTarget =
-  | { kind: 'session'; id: string }
-  | { kind: 'node'; id: string }
-  | { kind: 'reopen'; id: string }
+  | { kind: 'session'; id: string; path?: string }
+  | { kind: 'node'; id: string; path?: string }
+  | { kind: 'reopen'; id: string; path?: string }
   | { kind: 'group'; key: string; projectId?: string; isActive?: boolean }
 
 export type RegisterTreeTarget = (el: Element | null, target: TreeTarget) => void
@@ -115,7 +101,7 @@ export function SessionTreeItem({ row, showProject, onCloseSession, register }: 
   // di host (bukan `onAuxClick` React) karena satu file ini sudah hidup di dua sisi shadow boundary
   // yang berbeda; listener host pasti menerima bubble dari isi yang di-slotted.
   const registerRow = (el: HTMLElement | null) => {
-    register(el, { kind: 'session', id: row.id })
+    register(el, { kind: 'session', id: row.id, path: row.cwd })
     if (!el) return
     const handler = (e: Event) => {
       const mouse = e as MouseEvent
@@ -133,15 +119,17 @@ export function SessionTreeItem({ row, showProject, onCloseSession, register }: 
       aria-label={aria}
       ref={registerRow}
     >
-      <StatusGlyph row={row} slot="icon-leaf" />
-      <span className="ss-tree__label" style={row.color ? { color: row.color } : undefined}>
-        {row.label}
+      {/* Ikon tipe di slot ikon; warna sesi menempel di ikon (seperti warna terminal VS Code), label tetap netral. */}
+      <span slot="icon-leaf" className="ss-tree__kind" style={row.color ? { color: row.color } : undefined} aria-hidden>
+        <span className={`codicon codicon-${row.isAgent ? 'hubot' : 'terminal'}`} />
       </span>
+      <span className="ss-tree__label">{row.label}</span>
       {meta.length > 0 && (
         <span slot="description" className="ss-meta">
           {meta.join(' · ')}
         </span>
       )}
+      <StatusGlyph row={row} />
       <EndSessionButton label={row.label} onEnd={() => onCloseSession(row.id)} />
     </TreeItem>
   )

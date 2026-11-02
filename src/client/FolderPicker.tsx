@@ -1,8 +1,9 @@
+// Pemilih folder (modal VS Code): daftar subfolder server-side, naik satu level, lalu pilih.
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { VscodeDialog } from './components/vscode/vscodeDialog'
+import { arrangeDialogButtons } from './components/vscode/vscodeDialogButtons'
 import { listDir } from './api'
+import './folderPicker.css'
 
 interface Props {
   initialPath?: string
@@ -14,56 +15,67 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
   const [path, setPath] = useState(initialPath ?? '')
   const [parent, setParent] = useState<string | null>(null)
   const [dirs, setDirs] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Keep the last good listing on failure (a 404 just means "don't go there").
+  // Keep the last good listing on failure (a 404 just means "don't go there"), but say so.
   const load = (p?: string) => {
-    listDir(p).then((r) => { setPath(r.path); setParent(r.parent); setDirs(r.dirs) }).catch(() => {})
+    listDir(p)
+      .then((r) => {
+        setPath(r.path)
+        setParent(r.parent)
+        setDirs(r.dirs)
+        setError(null)
+      })
+      .catch((err: unknown) => {
+        setError(`Cannot open ${p ?? 'the folder'}: ${err instanceof Error ? err.message : 'request failed'}`)
+      })
   }
   useEffect(() => { load(initialPath) }, [])
 
+  const select = (
+    <button key="select" type="button" className="fp-button fp-button--primary" onClick={() => onPick(path)}>
+      Select this folder
+    </button>
+  )
+  const cancel = (
+    <button key="cancel" type="button" className="fp-button" onClick={onClose}>
+      Cancel
+    </button>
+  )
+
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      {/* `max-w` di-override di breakpoint `sm` karena bawaan DialogContent (`sm:max-w-lg` = 512px)
-          akan memotong lebar 520px di layar sempit-menetang. flex-col + overflow-hidden menjaga
-          daftar folder satu-satunya area yang menggulir. */}
-      <DialogContent
-        showCloseButton={false}
-        className="flex max-h-[70vh] w-[520px] max-w-[calc(100%-2rem)] flex-col overflow-hidden sm:max-w-[520px]"
-      >
-        <DialogHeader className="sr-only"><DialogTitle>Choose a folder</DialogTitle></DialogHeader>
-        <div className="flex items-center gap-2 border-b border-border p-2.5">
-          <Button
-            variant="ghost"
-            onClick={() => parent && load(parent)}
-            disabled={parent === null}
-            className="disabled:opacity-40"
-          >
-            ⬆ up
-          </Button>
-          {/* `direction: rtl` menahan ekor path tetap terlihat saat terpotong; `text-left` menjaga
-              urutan karakternya tetap kiri-ke-kanan. */}
-          <span className="min-w-0 flex-1 truncate text-left font-mono text-xs text-muted-foreground [direction:rtl]">{path}</span>
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-0.5 p-2">
-          {dirs.length === 0 && <span className="p-1.5 text-xs text-muted-foreground">(no subfolders)</span>}
-          {dirs.map((d) => (
-            <Button
-              variant="ghost"
-              className="h-auto w-full min-w-0 justify-start rounded bg-transparent px-2 py-1.5 text-left font-mono text-[13px] text-foreground hover:bg-transparent"
-              key={d}
-              onClick={() => load(path + '/' + d)}
-            >
-              📁 {d}
-            </Button>
-          ))}
-          </div>
-        </ScrollArea>
-        <DialogFooter className="flex-row justify-end border-t border-border p-2.5">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onPick(path)}>Select this folder</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <VscodeDialog
+      open
+      onOpenChange={(open) => { if (!open) onClose() }}
+      title="Choose a folder"
+      width={520}
+      className="folder-picker"
+      footer={arrangeDialogButtons([select, cancel], 1)}
+    >
+      <div className="fp-bar">
+        <button
+          type="button"
+          className="fp-up"
+          aria-label="Go up"
+          title="Go up"
+          onClick={() => parent && load(parent)}
+          disabled={parent === null}
+        >
+          <span className="codicon codicon-arrow-up" aria-hidden />
+        </button>
+        {/* `direction: rtl` menahan ekor path tetap terlihat saat terpotong (lihat css). */}
+        <span className="fp-path" title={path}>{path}</span>
+      </div>
+      {error && <div className="fp-error" role="alert">{error}</div>}
+      <div className="fp-list" role="list">
+        {dirs.length === 0 && <span className="fp-empty">No subfolders</span>}
+        {dirs.map((d) => (
+          <button key={d} type="button" className="fp-row" role="listitem" onClick={() => load(path + '/' + d)}>
+            <span className="codicon codicon-folder" aria-hidden />
+            <span className="fp-row__name">{d}</span>
+          </button>
+        ))}
+      </div>
+    </VscodeDialog>
   )
 }
