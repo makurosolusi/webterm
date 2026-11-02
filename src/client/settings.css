@@ -21,8 +21,8 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  transform: none;
-  translate: none;
+  transform: none !important;
+  translate: none !important;
   animation: none;
   background: var(--vscode-editor-background, var(--bg));
   color: var(--vscode-foreground, var(--text));
