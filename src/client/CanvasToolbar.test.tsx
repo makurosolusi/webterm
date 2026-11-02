@@ -34,6 +34,21 @@ function renderToolbar(overrides: Partial<Parameters<typeof CanvasToolbar>[0]> =
 
 const openWithShortcut = () => fireEvent.keyDown(window, { key: 'k', metaKey: true })
 
+describe('CanvasToolbar chrome', () => {
+  it('uses codicons (no svg) and shows the shortcut in the palette tooltip', () => {
+    renderToolbar()
+    const cluster = document.querySelector('.controls-cluster')!
+    expect(cluster.querySelector('svg')).toBeNull()
+    expect([...cluster.querySelectorAll('.codicon')].map((e) => e.className)).toEqual([
+      'codicon codicon-search',
+      'codicon codicon-files',
+      'codicon codicon-settings-gear',
+      'codicon codicon-question',
+    ])
+    expect(screen.getByRole('button', { name: 'Command palette' }).getAttribute('title')).toBe('Command palette (⌘K)')
+  })
+})
+
 describe('CanvasToolbar palette', () => {
   it('keeps the canvas controls and opens the quick pick from the search button', () => {
     const props = renderToolbar()

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bot, CircleQuestionMark, FolderTree, Search, Settings, Terminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
@@ -118,7 +117,7 @@ export default function CanvasToolbar({
         label: target.label,
         description: target.hint,
         group: 'Nodes',
-        icon: target.hint === 'agent' ? <Bot aria-hidden /> : <Terminal aria-hidden />,
+        icon: target.hint === 'agent' ? <span className="codicon codicon-hubot" aria-hidden /> : <span className="codicon codicon-terminal" aria-hidden />,
       })),
     [nodes],
   )
@@ -146,18 +145,18 @@ export default function CanvasToolbar({
   return (
     <>
       <div className="controls-cluster">
-        <Button className="cluster-search" aria-label="Command palette" title="Command palette" onClick={() => setPaletteOpen(true)}>
-          <Search aria-hidden />
+        <Button className="cluster-search" aria-label="Command palette" title={`Command palette (${chip})`} onClick={() => setPaletteOpen(true)}>
+          <span className="codicon codicon-search" aria-hidden />
           <span className="kbd">{chip}</span>
         </Button>
         <Button aria-label="Explorer" title="Explorer" onClick={onOpenExplorer}>
-          <FolderTree aria-hidden />
+          <span className="codicon codicon-files" aria-hidden />
         </Button>
         <Button aria-label="Settings" title="Settings" onClick={onOpenSettings}>
-          <Settings aria-hidden />
+          <span className="codicon codicon-settings-gear" aria-hidden />
         </Button>
         <Button aria-label="Help" title="Help" onClick={onOpenHelp}>
-          <CircleQuestionMark aria-hidden />
+          <span className="codicon codicon-question" aria-hidden />
         </Button>
       </div>
       {paletteOpen && (

@@ -21,6 +21,19 @@ export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>)
   return (n.data as { color?: string }).color ?? ACCENT
 }
 
+/** Warna edge VS Code: garis netral (seperti garis nomor/indent), terpilih = `focusBorder`.
+ *  Fallback ke token lama supaya tetap benar bila `--vscode-*` belum dipetakan. */
+export const EDGE_STROKE = 'var(--vscode-editorLineNumber-foreground, var(--muted))'
+export const EDGE_STROKE_SELECTED = 'var(--vscode-focusBorder, var(--accent))'
+/** Tebal garis edge: 1px idle, 1.5px terpilih (kisaran VS Code 1-1.5px). */
+const EDGE_WIDTH = 1
+const EDGE_WIDTH_SELECTED = 1.5
+/** `strokeWidth` kepala panah terpilih. Ia masuk ke id `<marker>` (React Flow menyusun id dari
+ *  semua properti marker), dan `canvas-ui.css` mewarnai panah terpilih lewat `[id*='strokeWidth=2']`
+ *  — ubah keduanya bersamaan. Warna marker sendiri `currentColor`: `var()` berspasi/berkoma tak aman
+ *  dijadikan bagian id elemen. */
+export const SELECTED_ARROW_STROKE = 2
+
 /** Label per jenis kabel. Kabel buka-file BUKAN context link — menyebutnya "context" adalah label
  *  bohong tentang apa yang dibaca agent. */
 const EDGE_LABEL: Record<BridgeLink['kind'], { idle: string; selected: string }> = {
@@ -29,7 +42,7 @@ const EDGE_LABEL: Record<BridgeLink['kind'], { idle: string; selected: string }>
 }
 
 /** Edge yang benar-benar dirender: yang node ujungnya menyembunyikan link ditandai `hidden` (flag
- *  bawaan React Flow) dan sisanya diberi label + panah dua arah. Edge terpilih dibuat putih &
+ *  bawaan React Flow) dan sisanya diberi label + panah dua arah. Edge terpilih memakai `focusBorder` &
  *  lebih tebal supaya ⌫ jelas sasarannya.
  *
  *  Ditandai, BUKAN dibuang: `edges` di sini adalah yang dilihat store React Flow, jadi edge yang
@@ -38,8 +51,10 @@ const EDGE_LABEL: Record<BridgeLink['kind'], { idle: string; selected: string }>
 export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
   const hidden = hiddenEdgeNodeIds(nodes as { id: string; data: { hideLinks?: boolean } }[])
   return edges.map((e) => {
-    const stroke = e.selected ? '#ffffff' : ACCENT
-    const arrow = { type: MarkerType.ArrowClosed, color: stroke, width: 14, height: 14 }
+    const arrow = {
+      type: MarkerType.Arrow, color: 'currentColor', width: 10, height: 10,
+      strokeWidth: e.selected ? SELECTED_ARROW_STROKE : 1,
+    }
     const label = EDGE_LABEL[(e.data as { kind?: BridgeLink['kind'] } | undefined)?.kind ?? 'context']
     return {
       ...e,
@@ -47,9 +62,12 @@ export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
       // Spread, jangan timpa: `data.kind` yang hilang membuat kabel file berlabel "context".
       data: { ...e.data, anchor: 'horizontal' },
       label: e.selected ? label.selected : label.idle,
-      labelStyle: { fill: stroke, fontSize: 11, fontWeight: 600 },
-      labelBgStyle: { fill: '#1c1c1e', fillOpacity: 0.85 },
-      style: { stroke, strokeWidth: e.selected ? 3.5 : 2 },
+      labelStyle: { fill: 'var(--vscode-descriptionForeground, var(--muted))', fontSize: 11 },
+      labelBgStyle: { fill: 'var(--vscode-editor-background, var(--canvas-bg))', fillOpacity: 1 },
+      style: {
+        stroke: e.selected ? EDGE_STROKE_SELECTED : EDGE_STROKE,
+        strokeWidth: e.selected ? EDGE_WIDTH_SELECTED : EDGE_WIDTH,
+      },
       markerStart: arrow,
       markerEnd: arrow,
     }

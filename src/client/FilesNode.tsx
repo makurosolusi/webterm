@@ -8,8 +8,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Node, NodeProps } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
-import { ClipboardCopy, File, FilePlus, Folder, FolderPlus, TerminalSquare } from 'lucide-react'
-import { Textfield, Tree, TreeItem } from '@/vscode/register'
+import { Button as VscodeButton, Textfield, Tree, TreeItem } from '@/vscode/register'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
@@ -30,6 +29,7 @@ import {
   type DirEntry,
   type EmptyListingVerdict,
 } from './fileBrowse'
+import { fileIconClass, folderIconClass } from './fileIcon'
 import { EDITOR_SIZE, planFileOpen } from './fileOpen'
 import { listKeyAction, scrollTopToReveal, typeAhead } from './filesKeys'
 import { randomId } from './randomId'
@@ -39,6 +39,9 @@ const COLLAPSED_H = 40
 const UNREACHABLE = 'Could not reach this folder. It may be gone, or its filesystem may be unavailable.'
 
 type Menu = { x: number; y: number; entry: DirEntry | null }
+
+/** Ikon codicon dekoratif (CSS codicon dimuat shell). */
+const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
 function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
@@ -255,20 +258,20 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     if (target) {
       rows.push({
         label: 'Open',
-        icon: target.dir ? <Folder size={13} /> : <File size={13} />,
+        icon: codicon(target.dir ? 'folder' : 'file'),
         onClick: () => open(target),
       })
     }
     rows.push({
-      label: 'New terminal here',
-      icon: <TerminalSquare size={13} />,
+      label: 'Open in Integrated Terminal',
+      icon: codicon('terminal'),
       onClick: () => addNodeBeside(randomId(), 'terminal', { cwd: target?.dir ? menuTarget : cwd }),
     })
-    rows.push({ label: 'New file…', icon: <FilePlus size={13} />, onClick: () => { void createEntry(false) } })
-    rows.push({ label: 'New folder…', icon: <FolderPlus size={13} />, onClick: () => { void createEntry(true) } })
+    rows.push({ label: 'New File…', icon: codicon('new-file'), onClick: () => { void createEntry(false) } })
+    rows.push({ label: 'New Folder…', icon: codicon('new-folder'), onClick: () => { void createEntry(true) } })
     rows.push({
-      label: 'Copy path',
-      icon: <ClipboardCopy size={13} />,
+      label: 'Copy Path',
+      icon: codicon('copy'),
       onClick: () => {
         // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
         navigator.clipboard?.writeText(menuTarget).catch(() => setNotice('Could not copy the path.'))
@@ -333,7 +336,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
                     data-index={i}
                     className={`files-row${i === sel ? ' files-row--sel' : ''}${e.ignored ? ' files-row--ignored' : ''}`}
                   >
-                    {e.dir ? <Folder size={13} className="files-icon files-icon--dir" /> : <File size={13} className="files-icon" />}
+                    <span className={`${e.dir ? folderIconClass(false) : fileIconClass(e.name)} files-icon`} aria-hidden="true" />
                     <span className="files-name">{e.name}</span>
                   </span>
                 </TreeItem>
@@ -350,7 +353,10 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
               <div className="files-empty files-empty--error">{UNREACHABLE}</div>
             )}
             {!loading && entries.length === 0 && (verdict === 'empty' || verdict === 'unknown') && (
-              <div className="files-empty">This folder is empty.</div>
+              <div className="files-empty files-welcome">
+                <p>This folder is empty.</p>
+                <VscodeButton onClick={() => { void createEntry(false) }}>New File…</VscodeButton>
+              </div>
             )}
             {!loading && entries.length > 0 && shown.length === 0 && (
               <div className="files-empty">Nothing matches “{query.trim()}”.</div>

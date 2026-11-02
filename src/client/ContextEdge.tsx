@@ -15,6 +15,6 @@ export default function FloatingEdge(props: EdgeProps) {
     <BaseEdge id={props.id} path={path} style={props.style} markerEnd={props.markerEnd}
       markerStart={props.markerStart} label={props.label} labelX={labelX} labelY={labelY}
       labelStyle={props.labelStyle} labelShowBg labelBgStyle={props.labelBgStyle}
-      labelBgPadding={[6, 3]} labelBgBorderRadius={5} interactionWidth={props.interactionWidth} />
+      labelBgPadding={[4, 2]} labelBgBorderRadius={2} interactionWidth={props.interactionWidth} />
   )
 }

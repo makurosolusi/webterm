@@ -1,5 +1,6 @@
 import type * as Monaco from 'monaco-editor'
 import { createTsWorkerReaper } from './tsWorkerReaper'
+import { defineWebtermThemes } from './monacoTheme'
 
 /**
  * Monaco di-muat MALAS, satu kali, lewat dynamic import.
@@ -53,6 +54,7 @@ export function loadMonaco(): Promise<MonacoApi> {
       }
     }
 
+    defineWebtermThemes(monaco)
     wireTsWorkerReaper(monaco)
     return monaco
   })()

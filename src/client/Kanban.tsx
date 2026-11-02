@@ -2,19 +2,16 @@ import { useEffect } from 'react'
 import type { Node } from '@xyflow/react'
 import type { AgentStatus } from '../shared/workspace'
 import { groupByStatus, KANBAN_COLUMNS } from './store'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import { Button } from '@/vscode/register'
 
 const TITLE: Record<AgentStatus, string> = { working: 'Working', waiting: 'Waiting', blocked: 'Blocked', done: 'Done' }
 // Token warna per status dipetakan ke kelas Tailwind, bukan ke nilai `var(...)` inline: kelasnya
 // statis, jadi ikut ter-scan build dan tetap terbaca sebagai satu sumber warna bersama CSS.
 const DOT: Record<AgentStatus, string> = {
-  working: 'bg-[var(--state-working)]',
-  waiting: 'bg-[var(--state-warning)]',
-  blocked: 'bg-[var(--state-attention)]',
-  done: 'bg-[var(--state-queued)]',
+  working: 'text-[var(--state-working)]',
+  waiting: 'text-[var(--state-warning)]',
+  blocked: 'text-[var(--state-attention)]',
+  done: 'text-[var(--state-queued)]',
 }
 
 interface Props {
@@ -45,31 +42,30 @@ export default function Kanban({ nodes, statuses, onFocus, onClose }: Props) {
   // --tabbar-h, pola sama seperti .controls-cluster di canvas-ui.css. z-40 di atas cluster kontrol
   // (26) dan tabbar (30) supaya Close tidak tertimpa tombol mengapung kanan-atas.
   return (
-    <div className="absolute top-[var(--tabbar-h,0px)] right-0 bottom-0 left-0 z-40 flex flex-col bg-black/55 p-4">
+    <div className="absolute top-[var(--tabbar-h,0px)] right-0 bottom-0 left-0 z-40 flex flex-col bg-[var(--vscode-editor-background,var(--canvas-bg))] p-4 font-[family-name:var(--font-ui)] text-[13px] text-[var(--vscode-foreground,var(--text))]">
       <div className="mb-3 flex items-center justify-between">
-        <span className="font-mono text-[15px] text-foreground">Board</span>
-        <Button type="button" onClick={onClose}>Close</Button>
+        <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-[var(--vscode-sideBarTitle-foreground,var(--vscode-foreground,var(--text)))]">Board</span>
+        <Button type="button" secondary onClick={onClose}>Close</Button>
       </div>
       <div className="flex flex-1 gap-3 overflow-auto">
         {KANBAN_COLUMNS.map((col) => (
-          <Card key={col} className={cn('kanban-column min-w-[180px] flex-1 gap-2 rounded-md border border-border bg-card p-2.5')}>
-            <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-              <Badge variant="outline" aria-hidden="true" className={cn('h-[9px] w-[9px] shrink-0 rounded-full border-0 p-0', DOT[col])} />
+          <section key={col} className="kanban-column flex min-w-[180px] flex-1 flex-col gap-1 border border-[var(--vscode-panel-border,var(--border))] bg-[var(--vscode-sideBar-background,var(--panel))] p-1.5">
+            <div className="flex h-[22px] items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-[var(--vscode-sideBarSectionHeader-foreground,var(--vscode-foreground,var(--text)))]">
+              <span aria-hidden="true" className={`codicon codicon-circle-filled shrink-0 ${DOT[col]}`} />
               <span className="flex-1">{TITLE[col]}</span>
-              <span>{groups[col].length}</span>
+              <span className="min-w-4 rounded-full bg-[var(--vscode-badge-background,var(--accent))] px-1 text-center text-[11px] font-normal normal-case leading-4 text-[var(--vscode-badge-foreground,var(--text))]">{groups[col].length}</span>
             </div>
             {groups[col].map((card) => (
-              <Button
+              <button
                 key={card.id}
                 type="button"
-                variant="ghost"
-                className="h-auto w-full min-w-0 cursor-pointer justify-start overflow-hidden truncate rounded border border-border bg-secondary px-2 py-1.5 text-left font-mono text-xs text-foreground hover:bg-secondary hover:text-foreground"
+                className="h-[22px] w-full min-w-0 cursor-default truncate border border-[var(--vscode-panel-border,var(--border))] bg-transparent px-2 text-left text-[13px] text-inherit hover:bg-[var(--vscode-list-hoverBackground,var(--hover))] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-[var(--vscode-focusBorder,var(--accent))]"
                 onClick={() => onFocus(card.id)}
               >
                 {card.label}
-              </Button>
+              </button>
             ))}
-          </Card>
+          </section>
         ))}
       </div>
     </div>
