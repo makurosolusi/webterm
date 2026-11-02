@@ -24,6 +24,9 @@ import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
 import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
 import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
 import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenuBar'
+import { clearOutput, toggleOutput } from './output/outputCommands'
+import { outputShortcutLabel } from './output/outputChord'
+import { isMacPlatform } from './terminalKeys'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -124,7 +127,14 @@ export default function WorkspaceBar({
   if (onOpenSettings) fileItems.push({ type: 'separator' }, { id: 'settings', label: 'Settings…', onSelect: onOpenSettings })
   if (showLogout && onLogout) fileItems.push({ type: 'separator' }, { id: 'logout', label: 'Logout', onSelect: onLogout })
 
-  const menus: VscodeMenu[] = [{ id: 'file', label: 'File', items: fileItems }]
+  const viewItems: VscodeMenuEntry[] = [
+    { id: 'output', label: 'Output', keybinding: outputShortcutLabel(isMacPlatform()), onSelect: toggleOutput },
+    { id: 'clear-output', label: 'Clear Output', onSelect: () => void clearOutput() },
+  ]
+  const menus: VscodeMenu[] = [
+    { id: 'file', label: 'File', items: fileItems },
+    { id: 'view', label: 'View', items: viewItems },
+  ]
   if (onOpenHelp) {
     menus.push({
       id: 'help',

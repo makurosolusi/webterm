@@ -64,6 +64,8 @@ export interface DockProps {
   /** Membuka dialog Settings. Tombolnya (di bawah Add node) hanya ada bila handler diberikan; ia
    *  membuka dialog modal, jadi tidak pernah ditandai aktif oleh `activeActivityId`. */
   onOpenSettings?: () => void
+  /** Item status bar tambahan (mis. hitungan Output); duduk di ujung kiri grup kanan. */
+  extraStatusItems?: VscodeStatusItem[]
 }
 
 /** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
@@ -96,6 +98,7 @@ function CanvasStatusBar(props: DockProps) {
   }
 
   const right: VscodeStatusItem[] = [
+    ...(props.extraStatusItems ?? []),
     {
       id: 'undo', label: '', icon: codicon('discard'), tooltip: 'Undo', ariaLabel: 'Undo',
       onClick: props.canUndo ? props.onUndo : undefined,

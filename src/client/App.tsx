@@ -17,6 +17,9 @@ import { useInboxOpen } from './inboxPanelModel'
 import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
+import OutputPanelHost from './output/outputPanelHost'
+import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
+import { useOutputStatusItems } from './output/outputStatusItem'
 import { SettingsPanel } from './SettingsPanel'
 import { nodeTypes } from './nodeTypes'
 import { SettingsProvider, useSettings } from './useSettings'
@@ -314,6 +317,11 @@ export default function App() {
   const inboxReady = hydrated && !noWorkspaces
   const inboxUnread = useInboxBadge({ panelOpen: inboxOpen, enabled: inboxReady })
   useInboxHotkey(() => setInboxOpen(!inboxOpen), inboxReady)
+  // Panel Output (log sistem): state-nya modul bersama, jadi menu View, palette, dan status bar
+  // tak perlu prop. Lihat `./output/outputCommands`.
+  useOutputToggleHotkey()
+  const outputStatusItems = useOutputStatusItems()
+  const outputCommands = useMemo(() => outputPaletteCommands(), [])
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
@@ -401,6 +409,7 @@ export default function App() {
           onOpenExplorer={onAddFiles}
           onOpenSettings={() => setShowSettings(true)}
           onOpenHelp={() => setShowHelp(true)}
+          commands={outputCommands}
         />
       </div>
       {hydrated && !noWorkspaces && (
@@ -442,6 +451,7 @@ export default function App() {
             workspaceName={activeWs?.name}
             agentSummary={agentSummary}
             onOpenSettings={() => setShowSettings(true)}
+            extraStatusItems={outputStatusItems}
           />
           <SessionsPanel
             open={sessionsOpen}
@@ -462,6 +472,7 @@ export default function App() {
           {/* Panel menutup sendiri lewat tombol X-nya. Saat Inbox terbuka, Chat minggir ke kiri
               supaya dua permukaan itu tidak saling menimpa. */}
           <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} offsetForInbox={inboxOpen} />
+          <OutputPanelHost />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
         </>
