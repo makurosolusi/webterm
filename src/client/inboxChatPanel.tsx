@@ -5,11 +5,11 @@
 // both panes mounted while the panel is open, so switching tabs never restarts an inbox fetch,
 // drops an approval dialog, or reopens the chat stream. Only the inactive pane is hidden.
 import { useEffect, useState } from 'react'
-import { MessageSquare, ShieldAlert } from 'lucide-react'
 import InboxPanel, { type InboxPanelProps } from './InboxPanel'
 import ChatPanel, { type ChatPanelProps } from './ChatPanel'
 import { InboxPanelSurface } from './inboxPanelSurface'
-import type { VscodeEditorTab } from './components/vscode/vscodeEditorTabBar'
+import type { BottomPanelTab } from './bottomPanelTabs'
+import { usePublishedInboxCount } from './inboxDockState'
 
 export type InboxChatTabId = 'inbox' | 'chat'
 
@@ -33,6 +33,7 @@ export default function InboxChatPanel(props: InboxChatPanelProps): React.JSX.El
   const inboxOpen = props.inboxOpen ?? true
   const chatOpen = props.chatOpen ?? true
   const [active, setActive] = useState<InboxChatTabId>(inboxOpen ? 'inbox' : 'chat')
+  const inboxCount = usePublishedInboxCount()
 
   // Active tab must always name an open pane. Closing the active tab hands focus to the
   // other open pane instead of leaving an empty body under a stale tab.
@@ -44,12 +45,12 @@ export default function InboxChatPanel(props: InboxChatPanelProps): React.JSX.El
 
   if (!inboxOpen && !chatOpen) return null
 
-  const tabs: VscodeEditorTab[] = []
+  const tabs: BottomPanelTab[] = []
   if (inboxOpen) {
     tabs.push({
       id: 'inbox',
       label: 'Inbox',
-      icon: <ShieldAlert size={14} aria-hidden="true" />,
+      ...(inboxCount === null ? {} : { badge: inboxCount }),
       tooltip: 'Operator inbox and approvals',
       closable: props.onCloseInbox !== undefined,
     })
@@ -58,7 +59,6 @@ export default function InboxChatPanel(props: InboxChatPanelProps): React.JSX.El
     tabs.push({
       id: 'chat',
       label: 'Chat',
-      icon: <MessageSquare size={14} aria-hidden="true" />,
       tooltip: 'Central agent',
       closable: props.onCloseChat !== undefined,
     })
@@ -67,6 +67,11 @@ export default function InboxChatPanel(props: InboxChatPanelProps): React.JSX.El
   const closeTab = (id: string): void => {
     if (id === 'inbox') props.onCloseInbox?.()
     else if (id === 'chat') props.onCloseChat?.()
+  }
+
+  const closePanel = (): void => {
+    props.onCloseInbox?.()
+    props.onCloseChat?.()
   }
 
   return (
@@ -79,7 +84,7 @@ export default function InboxChatPanel(props: InboxChatPanelProps): React.JSX.El
       onActivate={(id) => setActive(id === 'chat' ? 'chat' : 'inbox')}
       {...(props.onCloseInbox === undefined && props.onCloseChat === undefined
         ? {}
-        : { onClose: closeTab })}
+        : { onClose: closeTab, onClosePanel: closePanel })}
     >
       <div className="vscode-bottom-panel__pane" hidden={active !== 'inbox'}>
         <InboxPanel {...props.inbox} open={inboxOpen} embedded

@@ -445,16 +445,14 @@ describe('stylesheet scope', () => {
     expect(css).toMatch(/@media \(max-width: 640px\)/)
   })
 
-  it('starts the narrow panel beside the dock instead of underneath it', () => {
+  it('keeps the narrow panel flush with the activity bar instead of floating beside a dock', () => {
+    // The panel is a docked VS Code panel now (inboxPanelSurface.css); the old floating-dock
+    // offsets (--dock-w / --float-gap) must not come back and push it off the left edge.
     const css = readFileSync('src/client/inbox.css', 'utf8')
-    const media = /@media \(max-width: 640px\)\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
-    const panel = /\.inbox-panel\s*\{([^}]*)\}/.exec(media)?.[1] ?? ''
-    // The Dock occupies the left edge (--dock-w) plus its gap; the panel must clear it, not
-    // overlap it (that overlap is what clipped the header and hid the `All` chip at 620px).
-    expect(panel).toContain('left: calc(var(--dock-w')
-    expect(panel).toContain('2 * var(--float-gap')
-    expect(panel).toContain('right: var(--float-gap')
-    // Shrink-to-fit with only `right` set lets nowrap titles push the box past the viewport.
-    expect(panel).toContain('min-width: 0')
+    expect(css).not.toContain('--dock-w')
+    expect(css).not.toContain('--float-gap')
+    expect(readFileSync('src/client/inboxPanelSurface.css', 'utf8')).toMatch(
+      /@media \(max-width: 640px\)[\s\S]*left: var\(--activity-bar-w/
+    )
   })
 })

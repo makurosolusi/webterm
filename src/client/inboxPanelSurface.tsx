@@ -1,19 +1,24 @@
 // VS Code bottom-panel surface shared by Inbox, Chat, and the combined Inbox/Chat shell.
 //
-// The title bar is the same `VscodeEditorTabBar` used by editor surfaces: 35px tall, 13px
-// labels, and a 1px active top border. Panel rows (`.inbox-item`, `.chat-list-item`) are
-// 22px tall; those live in the panels' own sheets, which scope every selector under the
-// panel class so an embedded pane inherits the metrics without the surface chrome.
+// Layout follows VS Code's panel: a sash on the top edge, a 35px title row (uppercase 11px
+// tabs with a count badge on the left, an action toolbar on the right), then the body.
+// Panel rows (`.inbox-item`, `.chat-list-item`) are 22px tall; those live in the panels' own
+// sheets, which scope every selector under the panel class so an embedded pane inherits the
+// metrics without the surface chrome.
 import type { ReactNode } from 'react'
-import { VscodeEditorTabBar, type VscodeEditorTab } from './components/vscode/vscodeEditorTabBar'
+import { togglePanelMaximized, usePanelHeight } from './bottomPanelHeight'
+import { BottomPanelSash } from './bottomPanelSash'
+import { BottomPanelTabs, type BottomPanelTab } from './bottomPanelTabs'
 import './inboxPanelSurface.css'
 
 export interface InboxPanelSurfaceProps {
-  tabs: VscodeEditorTab[]
+  tabs: BottomPanelTab[]
   activeId: string | null
   onActivate: (id: string) => void
   onClose?: (id: string) => void
-  /** Right-aligned title-bar controls (refresh, counts). Close lives on the tab. */
+  /** Closes the whole panel (toolbar `close`); the toolbar button is hidden without it. */
+  onClosePanel?: () => void
+  /** Extra title-bar controls placed before maximize/close (refresh, ...). */
   actions?: ReactNode
   children: ReactNode
   className?: string
@@ -22,29 +27,42 @@ export interface InboxPanelSurfaceProps {
 }
 
 /**
- * Bottom-docked VS Code panel: absolute over the canvas, anchored above the bottom edge and
- * clear of the left Dock column. Owns surface chrome only; tab content and data stay in the
- * panel components.
+ * Bottom-docked VS Code panel: absolute over the canvas, flush with the status bar. Owns
+ * surface chrome only; tab content and data stay in the panel components.
  */
 export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Element {
-  const { tabs, activeId, onActivate, onClose, actions, children, className, ariaLabel } = props
+  const { tabs, activeId, onActivate, onClose, onClosePanel, actions, children, className, ariaLabel } = props
+  const { maximized } = usePanelHeight()
+  const maximizeLabel = maximized ? 'Restore Panel Size' : 'Maximize Panel Size'
   return (
     <section
       className={['vscode-bottom-panel', className].filter(Boolean).join(' ')}
+      data-maximized={maximized ? 'true' : 'false'}
       role="complementary"
       aria-label={ariaLabel}
     >
+      <BottomPanelSash />
       <div className="vscode-bottom-panel__titlebar">
-        <VscodeEditorTabBar
+        <BottomPanelTabs
           tabs={tabs}
           activeId={activeId}
           onActivate={onActivate}
           {...(onClose === undefined ? {} : { onClose })}
           ariaLabel={props.tabsLabel ?? `${ariaLabel} tabs`}
         />
-        {actions !== undefined && (
-          <div className="vscode-bottom-panel__actions">{actions}</div>
-        )}
+        <div className="vscode-bottom-panel__actions" role="toolbar" aria-label={`${ariaLabel} actions`}>
+          {actions}
+          <button type="button" className="vscode-panel-action" aria-label={maximizeLabel}
+            title={maximizeLabel} aria-pressed={maximized} onClick={togglePanelMaximized}>
+            <span className={`codicon codicon-chevron-${maximized ? 'down' : 'up'}`} aria-hidden="true" />
+          </button>
+          {onClosePanel !== undefined && (
+            <button type="button" className="vscode-panel-action" aria-label="Close Panel"
+              title="Close Panel" onClick={onClosePanel}>
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="vscode-bottom-panel__body">{children}</div>
     </section>

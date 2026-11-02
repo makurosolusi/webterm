@@ -1,57 +1,56 @@
-// Presentational chrome for `InboxPanel`: title-bar actions, section filter chips, bulk toolbar, error
+// Presentational chrome for `InboxPanel`: toolbar action, filter row, bulk toolbar, error
 // banner, and the empty/loading status line. Split out of `InboxPanel` to keep the container
 // inside the repo's file-size budget. No state, fetching, or derived logic lives here; every
 // label, aria-label, and class name is the panel's contract with `InboxPanel.test.tsx`.
-import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { InboxState } from './inboxApi'
 import { SECTION_LABEL, SECTION_ORDER } from './inboxPanelModel'
 
-/** Filter identity shared by the chip row and the section list. */
+/** Filter identity shared by the toggle row and the section list. */
 export type InboxFilter = 'all' | InboxState
 
 export interface InboxPanelActionsProps {
-  total: number
   loading: boolean
   onRefresh: () => void
 }
 
-/** Title-bar controls: item count and refresh. Close is the tab's close affordance. */
+/** Toolbar controls: refresh. The item count lives in the tab badge; close is the panel's. */
 export function InboxPanelActions(props: InboxPanelActionsProps): React.JSX.Element {
-  const { total, loading, onRefresh } = props
+  const { loading, onRefresh } = props
   return (
-    <>
-      <span className="inbox-total" aria-label={`${total} items`}>{total}</span>
-      <span className="inbox-grow" />
-      <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh inbox" title="Refresh inbox"
-        disabled={loading} onClick={onRefresh}>
-        <RefreshCw size={14} aria-hidden="true" />
-      </Button>
-    </>
+    <button type="button" className="vscode-panel-action" aria-label="Refresh inbox" title="Refresh inbox"
+      disabled={loading} onClick={onRefresh}>
+      <span className="codicon codicon-refresh" aria-hidden="true" />
+    </button>
   )
 }
 
 export interface InboxPanelFiltersProps {
   filter: InboxFilter
   counts: Record<InboxFilter, number>
+  query: string
   onFilter: (key: InboxFilter) => void
+  onQuery: (query: string) => void
 }
 
+/** Problems-view filter row: a 24px text box plus state toggles with counts. */
 export function InboxPanelFilters(props: InboxPanelFiltersProps): React.JSX.Element {
-  const { filter, counts, onFilter } = props
+  const { filter, counts, query, onFilter, onQuery } = props
   return (
     <div className="inbox-filters" role="group" aria-label="Filter inbox">
-      <Tabs value={filter} onValueChange={(value) => onFilter(value as InboxFilter)}>
-        <TabsList>
-          {(['all', ...SECTION_ORDER] as const).map((key) => (
-            <TabsTrigger key={key} value={key} onClick={() => onFilter(key)}>
-              {key === 'all' ? 'All' : SECTION_LABEL[key]}
-              <span className="inbox-count">{counts[key]}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <input type="search" className="inbox-filter-input" aria-label="Filter items"
+        placeholder="Filter (e.g. text, project)" value={query}
+        onChange={(event) => onQuery(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Escape' && query !== '') { event.stopPropagation(); onQuery('') } }} />
+      <div className="inbox-filter-toggles" role="tablist" aria-label="Filter by state">
+        {(['all', ...SECTION_ORDER] as const).map((key) => (
+          <button key={key} type="button" role="tab" className="inbox-filter-toggle"
+            aria-selected={filter === key} data-active={filter === key ? 'true' : 'false'}
+            onClick={() => onFilter(key)}>
+            {key === 'all' ? 'All' : SECTION_LABEL[key]}
+            <span className="inbox-count">{counts[key]}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -67,12 +66,8 @@ export function InboxPanelBulk(props: InboxPanelBulkProps): React.JSX.Element {
   return (
     <div className="inbox-bulk" role="toolbar" aria-label="Group actions">
       <span aria-live="polite">{selectedCount} selected</span>
-      <Button type="button" variant="ghost" onClick={onReviewSelected}>
-        Review selected
-      </Button>
-      <Button type="button" variant="ghost" onClick={onClear}>
-        Clear
-      </Button>
+      <button type="button" className="inbox-action" onClick={onReviewSelected}>Review selected</button>
+      <button type="button" className="inbox-action inbox-action--secondary" onClick={onClear}>Clear</button>
     </div>
   )
 }
@@ -86,11 +81,9 @@ export function InboxPanelError(props: InboxPanelErrorProps): React.JSX.Element 
   const { message, onRetry } = props
   return (
     <div className="inbox-error" role="alert">
-      <AlertTriangle size={14} aria-hidden="true" />
-      <span>{message}</span>
-      <Button type="button" variant="ghost" onClick={onRetry}>
-        Retry
-      </Button>
+      <span className="codicon codicon-error" aria-hidden="true" />
+      <span className="inbox-error__text">{message}</span>
+      <button type="button" className="inbox-action" onClick={onRetry}>Retry</button>
     </div>
   )
 }
@@ -98,15 +91,28 @@ export function InboxPanelError(props: InboxPanelErrorProps): React.JSX.Element 
 export interface InboxPanelStatusProps {
   loading: boolean
   total: number
+  /** Rows left after the state toggle and the text filter. */
+  matches: number
   hasError: boolean
 }
 
-/** Empty/loading status; an error banner owns the message while one is shown. */
+/** Welcome-view style empty/loading state; an error banner owns the message while one is shown. */
 export function InboxPanelStatus(props: InboxPanelStatusProps): React.JSX.Element | null {
-  const { loading, total, hasError } = props
-  if (hasError || total > 0) return null
-  if (loading) return <p className="inbox-status" role="status">Loading inbox…</p>
-  return <p className="inbox-status" role="status">Inbox is clear.</p>
+  const { loading, total, matches, hasError } = props
+  if (hasError) return null
+  if (total === 0) {
+    if (loading) return <p className="inbox-status" role="status">Loading inbox…</p>
+    return (
+      <div className="inbox-status inbox-welcome" role="status">
+        <p className="inbox-welcome__title">Inbox is clear.</p>
+        <p className="inbox-welcome__hint">Approvals and items that need you will appear here.</p>
+      </div>
+    )
+  }
+  if (matches === 0) {
+    return <p className="inbox-status" role="status">No results found with provided filter criteria.</p>
+  }
+  return null
 }
 
 export interface InboxPanelChromeProps {
@@ -114,30 +120,34 @@ export interface InboxPanelChromeProps {
   loading: boolean
   filter: InboxFilter
   counts: Record<InboxFilter, number>
+  query: string
+  matches: number
   listError: string | null
   selectedCount: number
   onRefresh: () => void
   onFilter: (key: InboxFilter) => void
+  onQuery: (query: string) => void
   onReviewSelected: () => void
   onClearSelection: () => void
 }
 
 /**
- * Everything between the title bar and the section list: filter chips, bulk toolbar, error
- * banner, and the empty/loading line, in that fixed order. The container supplies values;
+ * Everything between the title bar and the section list: filter row, bulk toolbar, error
+ * banner, and the empty/loading state, in that fixed order. The container supplies values;
  * ordering lives here.
  */
 export function InboxPanelChrome(props: InboxPanelChromeProps): React.JSX.Element {
-  const { total, loading, filter, counts, listError, selectedCount } = props
+  const { total, loading, filter, counts, query, matches, listError, selectedCount } = props
   return (
     <>
-      <InboxPanelFilters filter={filter} counts={counts} onFilter={props.onFilter} />
+      <InboxPanelFilters filter={filter} counts={counts} query={query} onFilter={props.onFilter}
+        onQuery={props.onQuery} />
       {selectedCount > 0 && (
         <InboxPanelBulk selectedCount={selectedCount} onReviewSelected={props.onReviewSelected}
           onClear={props.onClearSelection} />
       )}
       {listError && <InboxPanelError message={listError} onRetry={props.onRefresh} />}
-      <InboxPanelStatus loading={loading} total={total} hasError={listError !== null} />
+      <InboxPanelStatus loading={loading} total={total} matches={matches} hasError={listError !== null} />
     </>
   )
 }

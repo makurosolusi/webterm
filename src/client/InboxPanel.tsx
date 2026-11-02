@@ -11,7 +11,6 @@
 // server challenge; this file never hashes anything. Consume is offered only after the decision
 // came back `approved`. Reject is a first-class decision, not "close and forget".
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ShieldAlert } from 'lucide-react'
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
 import { CONFIRM_PHRASE, type ReviewState } from './inboxApprovalDialog'
 import { InboxPanelActions, InboxPanelChrome, type InboxFilter } from './inboxPanelChrome'
@@ -63,6 +62,7 @@ export default function InboxPanel(props: InboxPanelProps) {
   const [listError, setListError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [filter, setFilter] = useState<InboxFilter>('all')
+  const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<ReadonlySet<InboxState>>(() => new Set())
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set())
@@ -339,10 +339,15 @@ export default function InboxPanel(props: InboxPanelProps) {
     return out
   }, [items])
 
-  const visible = useMemo(
-    () => (filter === 'all' ? items : items.filter((item) => item.state === filter)),
-    [items, filter]
-  )
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return items.filter((item) => {
+      if (filter !== 'all' && item.state !== filter) return false
+      if (needle === '') return true
+      return [item.title, item.kind, item.projectId, item.detail ?? '']
+        .some((field) => field.toLowerCase().includes(needle))
+    })
+  }, [items, filter, query])
 
   const selectedItems = items.filter((item) => selected.has(item.id))
 
@@ -351,6 +356,7 @@ export default function InboxPanel(props: InboxPanelProps) {
   const body = (
     <>
       <InboxPanelChrome total={counts.all} loading={loading} filter={filter} counts={counts}
+        query={query} matches={visible.length} onQuery={setQuery}
         listError={listError} selectedCount={selectedItems.length}
         onRefresh={() => setRefreshKey((key) => key + 1)} onFilter={setFilter}
         onReviewSelected={() => beginReview(selectedItems.filter((item) => reviewBlockedReason(item) === null))}
@@ -376,7 +382,7 @@ export default function InboxPanel(props: InboxPanelProps) {
     return (
       <div className="inbox-panel inbox-panel--embedded">
         <div className="inbox-pane-actions" role="toolbar" aria-label="Inbox actions">
-          <InboxPanelActions total={counts.all} loading={loading}
+          <InboxPanelActions loading={loading}
             onRefresh={() => setRefreshKey((key) => key + 1)} />
         </div>
         {body}
@@ -392,14 +398,14 @@ export default function InboxPanel(props: InboxPanelProps) {
       tabs={[{
         id: 'inbox',
         label: 'Inbox',
-        icon: <ShieldAlert size={14} aria-hidden="true" />,
+        badge: counts.all,
         tooltip: 'Operator inbox and approvals',
         closable: props.onClose !== undefined,
       }]}
       activeId="inbox"
       onActivate={() => undefined}
-      {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.() })}
-      actions={<InboxPanelActions total={counts.all} loading={loading}
+      {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.(), onClosePanel: () => props.onClose?.() })}
+      actions={<InboxPanelActions loading={loading}
         onRefresh={() => setRefreshKey((key) => key + 1)} />}
     >
       {body}

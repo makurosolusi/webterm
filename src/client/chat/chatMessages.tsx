@@ -4,14 +4,28 @@
 // goes through the shared sanitizer (`../markdown`), never raw HTML. Auto-scroll only sticks when
 // the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
 import { useEffect, useRef, useState } from 'react'
-import { Wrench } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { renderMarkdown } from '../markdown'
+import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
 import { splitProposalBlocks, type VisibleProposal } from './proposalBlocks'
 
 const NEAR_BOTTOM_PX = 80
+
+/** Turn-header icon and display name per role, as in the VS Code Chat view. */
+const ROLE_HEADER: Record<ChatMessage['role'], { icon: string; name: string }> = {
+  human: { icon: 'account', name: 'You' },
+  assistant: { icon: 'sparkle', name: 'Central agent' },
+  tool: { icon: 'sparkle', name: 'Central agent' },
+  system: { icon: 'info', name: 'System' },
+}
+
+/** Codicon per proposal tool; unknown tools fall back to a generic lightbulb. */
+const PROPOSAL_ICON: Record<string, string> = {
+  'goal.propose': 'target',
+  'plan.propose': 'checklist',
+  'task.assign': 'tasklist',
+  'approval.request': 'shield',
+}
 
 function summarize(value: unknown): string {
   if (value === undefined) return ''
@@ -28,7 +42,7 @@ function ToolCard(props: { part: Extract<ChatPart, { type: 'tool' }> }) {
   const summary = summarize(part.result ?? part.args)
   return (
     <div className="chat-tool" data-state={part.state}>
-      <span className="chat-tool__icon" aria-hidden="true"><Wrench size={12} /></span>
+      <span className="chat-tool__icon codicon codicon-tools" aria-hidden="true" />
       <span className="chat-tool__name">{part.name}</span>
       <span className={`chat-tool__state chat-tool__state--${part.state}`}>{part.state.replace('_', ' ')}</span>
       {summary !== '' && (
@@ -64,7 +78,7 @@ function ProposalCard({ proposal }: { proposal: VisibleProposal }) {
   const details = [proposal.projectId, proposal.itemId, proposalGoal(proposal)].filter(Boolean).join(' · ')
   return (
     <div className="chat-proposal" data-tool={proposal.tool}>
-      <span className="chat-proposal__icon" aria-hidden="true">•</span>
+      <span className={`chat-proposal__icon codicon codicon-${PROPOSAL_ICON[proposal.tool] ?? 'lightbulb'}`} aria-hidden="true" />
       <span className="chat-proposal__label">{label}</span>
       {details && <span className="chat-proposal__details">{details}</span>}
     </div>
@@ -83,7 +97,7 @@ function PartView(props: { part: ChatPart; assistant: boolean }) {
   const parsed = splitProposalBlocks(part.text)
   return (
     <>
-      {parsed.visible !== '' && <div className="chat-markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(parsed.visible) }} />}
+      {parsed.visible !== '' && <ChatMarkdown source={parsed.visible} />}
       {parsed.proposals.map((proposal, index) => <ProposalCard key={`${proposal.tool}-${index}`} proposal={proposal} />)}
     </>
   )
@@ -92,6 +106,7 @@ function PartView(props: { part: ChatPart; assistant: boolean }) {
 function MessageRow(props: { message: ChatMessage }) {
   const { message } = props
   const assistant = message.role === 'assistant' || message.role === 'tool'
+  const header = ROLE_HEADER[message.role]
   return (
     <div
       className={`chat-message chat-message--${message.role}${message.optimistic ? ' is-optimistic' : ''}`}
@@ -99,7 +114,8 @@ function MessageRow(props: { message: ChatMessage }) {
       aria-label={`${message.role} message`}
     >
       <div className="chat-message__meta">
-        <span className="chat-message__role">{message.role}</span>
+        <span className={`chat-message__icon codicon codicon-${header.icon}`} aria-hidden="true" />
+        <span className="chat-message__role">{header.name}</span>
         {message.state === 'streaming' && <span className="chat-message__live">streaming</span>}
         {message.state === 'failed' && <span className="chat-message__failed">failed</span>}
         {message.state === 'cancelled' && <span className="chat-message__cancelled">cancelled</span>}
@@ -155,7 +171,10 @@ export default function ChatMessages(props: ChatMessagesProps) {
         )}
       </div>
       {!atBottom && (
-        <Button type="button" variant="outline" size="xs" className="chat-jump" onClick={jump}>Jump to bottom</Button>
+        <button type="button" className="chat-jump" onClick={jump}>
+          <span className="codicon codicon-arrow-down" aria-hidden="true" />
+          Jump to bottom
+        </button>
       )}
     </div>
   )

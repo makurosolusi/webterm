@@ -3,8 +3,6 @@
 // the server's `lastEventSeq` as the cursor; deltas are flushed per animation frame so a burst of
 // tokens causes one render, not one per token.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { AlertCircle, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import ChatComposer from './chatComposer'
 import ChatMessages from './chatMessages'
 import type {
@@ -169,18 +167,20 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   return (
     <section className="chat-conversation" aria-label="Conversation">
       <header className="chat-conversation__head">
-        <span className={`chat-status-dot${status.live ? ' is-live' : ''}`} aria-hidden="true" />
+        {status.live
+          ? <span className="chat-progress" aria-hidden="true" />
+          : <span className="chat-status-dot" aria-hidden="true" />}
         <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
       </header>
 
       {error !== null && (
         <div className="chat-error" role="alert">
-          <AlertCircle size={13} aria-hidden="true" />
+          <span className="codicon codicon-error" aria-hidden="true" />
           <span>{error}</span>
-          <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss error"
+          <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
             onClick={() => dispatch({ type: 'error', error: null })}>
-            <X size={13} />
-          </Button>
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </button>
         </div>
       )}
 

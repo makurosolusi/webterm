@@ -7,8 +7,6 @@
 // composer with Stop, reconnect status, and error states. Approval cards are intentionally absent;
 // a tool card shows name/state only.
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquare, RefreshCw, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
@@ -111,6 +109,12 @@ export default function ChatPanel(props: ChatPanelProps) {
 
   if (!open) return null
 
+  const refreshButton = (
+    <button type="button" className="vscode-panel-action" aria-label="Refresh conversations"
+      title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
+      <span className="codicon codicon-refresh" aria-hidden="true" />
+    </button>
+  )
   const current = conversations?.find((row) => row.id === selected) ?? null
 
   const body = (
@@ -118,10 +122,10 @@ export default function ChatPanel(props: ChatPanelProps) {
       {listError !== null && (
         <div className="chat-error" role="alert">
           <span>{listError}</span>
-          <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss error"
+          <button type="button" className="vscode-panel-action" aria-label="Dismiss error"
             onClick={() => setListError(null)}>
-            <X size={13} />
-          </Button>
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -135,9 +139,8 @@ export default function ChatPanel(props: ChatPanelProps) {
             <ul className="chat-list">
               {conversations.map((conversation) => (
                 <li key={conversation.id}>
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
                     className={cn('chat-list-item', conversation.id === selected && 'is-active')}
                     aria-current={conversation.id === selected ? 'true' : undefined}
                     onClick={() => setSelected(conversation.id)}
@@ -146,7 +149,7 @@ export default function ChatPanel(props: ChatPanelProps) {
                     {conversation.activeTurnId !== null && (
                       <span className="chat-list-item__live" title="Turn running" aria-label="Turn running" />
                     )}
-                  </Button>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -176,12 +179,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (props.embedded) {
     return (
       <div className="chat-panel chat-panel--embedded">
-        <div className="chat-pane-actions">
-          <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh conversations"
-            title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
-            <RefreshCw size={13} />
-          </Button>
-        </div>
+        <div className="chat-pane-actions">{refreshButton}</div>
         {body}
       </div>
     )
@@ -195,19 +193,13 @@ export default function ChatPanel(props: ChatPanelProps) {
       tabs={[{
         id: 'chat',
         label: 'Chat',
-        icon: <MessageSquare size={14} aria-hidden="true" />,
         tooltip: 'Central agent',
         closable: props.onClose !== undefined,
       }]}
       activeId="chat"
       onActivate={() => undefined}
-      {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.() })}
-      actions={
-        <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh conversations"
-          title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
-          <RefreshCw size={13} />
-        </Button>
-      }
+      {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.(), onClosePanel: () => props.onClose?.() })}
+      actions={refreshButton}
     >
       {body}
     </InboxPanelSurface>

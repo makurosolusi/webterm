@@ -72,7 +72,9 @@ describe('InboxChatPanel tabs', () => {
     expect(await screen.findByRole('tab', { name: /^Inbox/ })).not.toBeNull()
     expect(screen.getByRole('tab', { name: /^Chat/ })).not.toBeNull()
     expect(screen.getByRole('tab', { name: /^Inbox/ }).getAttribute('aria-selected')).toBe('true')
-    expect(document.querySelector('.vscode-editor-tabs')).not.toBeNull()
+    // The panel now uses the bottom-panel tab strip (35px title row), not the editor tab strip.
+    expect(document.querySelector('.vscode-panel-tabs')).not.toBeNull()
+    expect(document.querySelector('.vscode-editor-tabs')).toBeNull()
     expect(screen.getByLabelText('Refresh inbox')).not.toBeNull()
     expect(screen.getByLabelText('Refresh conversations')).not.toBeNull()
     expect(await screen.findByText('Deploy main')).not.toBeNull()

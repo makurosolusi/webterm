@@ -1,67 +1,189 @@
 /* VS Code bottom panel surface, shared by Inbox, Chat, and the combined shell.
 
-   Metrics follow VS Code's panel: a 35px title bar (the same height as the editor tab
-   strip), a 1px top border on the active tab, the panel background token, and 22px list
-   rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
+   Metrics follow VS Code's panel (verified against workbench `panelpart.css` and
+   `paneCompositePart.css`): 35px title row, uppercase 11px tab labels with `0 10px` padding, a
+   1px TOP border on the active tab, a 16px count badge, a 4px sash on the top edge, and 22px
+   list rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
 
-   The surface docks above the bottom edge. It starts after the left Dock column so the
-   dock stays usable, and when the standalone Inbox panel is already docked the standalone
-   Chat panel stacks above it (`.chat-panel--above-inbox`). */
+   The panel is flush: no radius, no shadow, sitting on top of the status bar. It starts after
+   the activity bar (and the 300px sidebar column while that is open). Height comes from
+   `--bottom-panel-h`, which `bottomPanelHeight.ts` sets on <html> once the user resizes. */
 
 :root {
-  /* One source for both panels and for the stacked-chat offset. */
-  --bottom-panel-h: 280px;
+  /* Local tokens (proposed global: see the panel report). */
+  --bottom-panel-h: 40vh;
+  --bottom-panel-min-h: 77px;
   --bottom-panel-title-h: 35px;
   --bottom-panel-row-h: 22px;
-  --bottom-panel-stack-gap: 10px;
+  --bottom-panel-sash-h: 4px;
+  --bottom-panel-sidebar-w: 300px;
 }
 
 .vscode-bottom-panel {
   position: absolute;
-  left: calc(var(--dock-w, 54px) + 2 * var(--float-gap, 22px));
-  right: var(--float-gap, 22px);
-  bottom: var(--float-gap, 22px);
+  left: var(--activity-bar-w, 48px);
+  right: 0;
+  bottom: var(--status-bar-h, 22px);
   z-index: 13;
   display: flex;
   flex-direction: column;
   height: var(--bottom-panel-h);
-  min-height: 160px;
-  max-height: calc(100vh - var(--tabbar-h, 46px) - 3 * var(--float-gap, 22px));
-  overflow: hidden;
-  border: 1px solid var(--vscode-panel-border, var(--border, rgba(255, 255, 255, 0.1)));
-  border-radius: var(--radius, 8px);
+  min-height: var(--bottom-panel-min-h);
+  max-height: 80vh;
+  border-top: 1px solid var(--vscode-panel-border, var(--border, rgba(128, 128, 128, 0.35)));
   background: var(--vscode-panel-background, var(--bg, #1e1e1e));
-  color: var(--vscode-foreground, var(--text, rgba(255, 255, 255, 0.85)));
+  color: var(--vscode-foreground, var(--text, #cccccc));
   font-family: var(--vscode-font-family, var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif));
-  font-size: 12.5px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, calc(0.35 * var(--shadow-k, 1)));
+  font-size: var(--vscode-font-size, 13px);
+}
+.vscode-bottom-panel[data-maximized='true'] { height: 80vh; }
+.app-shell--sidebar .vscode-bottom-panel {
+  left: calc(var(--activity-bar-w, 48px) + var(--bottom-panel-sidebar-w));
 }
 
-/* ---------------------------------------------------------------- title bar */
+/* ---------------------------------------------------------------- sash */
+.vscode-bottom-panel__sash {
+  position: absolute;
+  top: calc(var(--bottom-panel-sash-h) / -2);
+  left: 0;
+  right: 0;
+  z-index: 35;
+  height: var(--bottom-panel-sash-h);
+  cursor: ns-resize;
+  touch-action: none;
+  background: transparent;
+  transition: background-color 0s 0.1s;
+}
+.vscode-bottom-panel__sash:hover,
+.vscode-bottom-panel__sash:active {
+  background: var(--vscode-sash-hoverBorder, var(--accent, #0078d4));
+}
+.vscode-bottom-panel__sash:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+/* ---------------------------------------------------------------- title row */
 .vscode-bottom-panel__titlebar {
   display: flex;
   flex: none;
   align-items: stretch;
+  justify-content: space-between;
   height: var(--bottom-panel-title-h);
   min-height: var(--bottom-panel-title-h);
-  background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-panel-header, var(--panel-header, #323232)));
+  box-sizing: border-box;
+  background: var(--vscode-panel-background, var(--bg, #1e1e1e));
+  user-select: none;
 }
-.vscode-bottom-panel__titlebar .vscode-editor-tabs {
+.vscode-panel-tabs {
+  display: flex;
   flex: 1;
-  width: auto;
+  align-items: stretch;
   min-width: 0;
-  border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--border)));
+  overflow: hidden;
 }
+.vscode-panel-tab {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  border-top: 1px solid transparent;
+  color: var(--vscode-panelTitle-inactiveForeground, var(--muted, #9d9d9d));
+}
+.vscode-panel-tab:hover,
+.vscode-panel-tab[data-active='true'] {
+  color: var(--vscode-panelTitle-activeForeground, var(--text, #e7e7e7));
+}
+.vscode-panel-tab[data-active='true'] {
+  border-top-color: var(--vscode-panelTitle-activeBorder, var(--accent, #0078d4));
+}
+.vscode-panel-tab__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: default;
+}
+.vscode-panel-tab__button:focus-visible,
+.vscode-panel-action:focus-visible,
+.vscode-panel-tab__close:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+.vscode-panel-tab__badge {
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  padding: 3px 5px;
+  border-radius: 10px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ffffff);
+  font-size: 10px;
+  line-height: 10px;
+  text-align: center;
+  text-transform: none;
+}
+.vscode-panel-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  opacity: 0;
+  cursor: default;
+}
+.vscode-panel-tab:hover .vscode-panel-tab__close,
+.vscode-panel-tab[data-active='true'] .vscode-panel-tab__close,
+.vscode-panel-tab__close:focus-visible { opacity: 1; }
+.vscode-panel-tab__close:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
+
+/* ---------------------------------------------------------------- toolbar */
 .vscode-bottom-panel__actions {
   display: flex;
   flex: none;
   align-items: center;
   gap: 2px;
-  padding: 0 6px 0 4px;
-  border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--border)));
-  background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-panel-header, var(--panel-header, #323232)));
-  color: var(--vscode-panelTitle-inactiveForeground, var(--muted, rgba(255, 255, 255, 0.55)));
+  padding: 0 8px 0 4px;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
 }
+.vscode-panel-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: default;
+}
+.vscode-panel-action:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
+.vscode-panel-action:active { background: var(--vscode-toolbar-activeBackground, rgba(99, 102, 103, 0.31)); }
+.vscode-panel-action:disabled { opacity: 0.4; }
 
 /* ---------------------------------------------------------------- body */
 .vscode-bottom-panel__body {
@@ -80,8 +202,8 @@
 }
 .vscode-bottom-panel__pane[hidden] { display: none; }
 
-/* Embedded panes keep their own title-bar actions (count, refresh) in a compact row, since
-   the combined shell's title bar belongs to the tab strip. */
+/* Embedded panes keep a compact refresh row; the combined shell's title row belongs to the
+   tab strip. */
 .inbox-pane-actions,
 .chat-pane-actions {
   display: flex;
@@ -91,8 +213,7 @@
   gap: 2px;
   min-height: 24px;
   padding: 1px 8px;
-  border-bottom: 1px solid var(--vscode-panel-border, var(--border, rgba(255, 255, 255, 0.1)));
-  color: var(--vscode-panelTitle-inactiveForeground, var(--muted, rgba(255, 255, 255, 0.55)));
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
 }
 
 /* Embedded panels drop their own surface box and fill the pane instead. */
@@ -104,20 +225,18 @@
   min-height: 0;
   width: auto;
   border: 0;
-  border-radius: 0;
   background: transparent;
-  box-shadow: none;
 }
 
 /* Standalone Chat next to a standalone Inbox: stack instead of overlapping. */
 .chat-panel--above-inbox {
-  bottom: calc(var(--float-gap, 22px) + var(--bottom-panel-h) + var(--bottom-panel-stack-gap));
+  bottom: calc(var(--status-bar-h, 22px) + var(--bottom-panel-h));
 }
 
 @media (max-width: 640px) {
-  .vscode-bottom-panel {
-    left: var(--float-gap, 22px);
-    right: var(--float-gap, 22px);
-    height: min(340px, calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px)));
+  .vscode-bottom-panel,
+  .app-shell--sidebar .vscode-bottom-panel {
+    left: var(--activity-bar-w, 48px);
+    right: 0;
   }
 }
