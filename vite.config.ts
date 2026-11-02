@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitest/config'
+import path from 'node:path'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
 // Frontend build/dev config. In dev the server (src/server/index.ts) runs this in
@@ -6,7 +8,12 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   root: 'src/client',
   build: { outDir: '../../dist', emptyOutDir: true },
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(process.cwd(), 'src/client'),
+    },
+  },
   // *.bun.test.ts need Bun globals (Bun.Terminal); they run under `bun test`, not vitest.
   // dir '../..' scans the repo root (so src/shared + src/server vitest files are
   // found), but a custom `exclude` replaces vitest's defaults — so the noise dirs
