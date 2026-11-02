@@ -441,6 +441,7 @@ export default function App() {
             agentLaunchCommands={settings.agentLaunchCommands}
             workspaceName={activeWs?.name}
             agentSummary={agentSummary}
+            onOpenSettings={() => setShowSettings(true)}
           />
           <SessionsPanel
             open={sessionsOpen}

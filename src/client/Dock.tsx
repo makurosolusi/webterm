@@ -61,6 +61,9 @@ export interface DockProps {
   /** Override perintah peluncuran per builtin (mis. skrip pemilih akun). Hanya builtin: agent
    *  custom sudah membawa `launchCmd`-nya sendiri. */
   agentLaunchCommands?: Partial<Record<BuiltinAgentId, string>>
+  /** Membuka dialog Settings. Tombolnya (di bawah Add node) hanya ada bila handler diberikan; ia
+   *  membuka dialog modal, jadi tidak pernah ditandai aktif oleh `activeActivityId`. */
+  onOpenSettings?: () => void
 }
 
 /** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
@@ -243,6 +246,9 @@ export default function Dock(props: DockProps) {
       : []),
     { id: 'board', label: 'Board', icon: codicon('project') },
     { id: 'add', label: 'Add node', icon: codicon('add') },
+    ...(props.onOpenSettings
+      ? [{ id: 'settings', label: 'Settings', icon: codicon('settings-gear') }]
+      : []),
   ]
 
   const onActivitySelect = (id: string) => {
@@ -261,6 +267,9 @@ export default function Dock(props: DockProps) {
         break
       case 'add':
         setAddOpen(true)
+        break
+      case 'settings':
+        props.onOpenSettings?.()
         break
       default:
         break
