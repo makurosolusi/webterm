@@ -24,6 +24,7 @@ import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
 import { cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
 import { MEMORY_WRITE_BODY_MAX_BYTES } from './memoryWriteApi'
+import { logsRoute, startRequestLog } from './logs'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -61,6 +62,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url || '/', 'http://x')
   const path = url.pathname
   const method = req.method || 'GET'
+
+  // Log API first: same /api gate as settings (applied in index.ts), own body/SSE handling.
+  if (await logsRoute(req, res, url, method)) return
 
   // /api/workspaces[/:id] and /api/active; returns null for anything else, including a method
   // this family does not answer, which then falls through to the 404 at the bottom.
@@ -154,11 +158,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 // that throws is covered without touching it.
 export function handleApi(req: IncomingMessage, res: ServerResponse): boolean {
   if (!req.url || !req.url.startsWith('/api/')) return false
+  const requestLog = startRequestLog(req, res)
   route(req, res).catch((err: unknown) => {
-    // Method + pathname ONLY: the query string carries the auth token (TOKEN_PARAM), and the
-    // error itself can quote absolute paths or request bodies — so it goes to the log, never
-    // to the body the client reads.
-    console.error(`api ${req.method || 'GET'} ${new URL(req.url || '/', 'http://x').pathname} failed:`, err)
+    // Method + pathname ONLY (inside startRequestLog): the query string carries the auth token
+    // (TOKEN_PARAM), and the error itself can quote absolute paths or request bodies — so it goes
+    // to the log, never to the body the client reads.
+    requestLog.fail(err)
     if (res.writableEnded) return
     // A partially sent response (context-link flushes headers before its body) cannot take a
     // status any more — setting one throws again. Just close what the client already has.

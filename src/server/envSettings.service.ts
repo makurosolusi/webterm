@@ -9,6 +9,9 @@ import type { EnvGroup, EnvKind, EnvSpec } from './envRegistry.types'
 import { parseOverrides, type OverrideStore } from './envSettings.store'
 import { validateEnvValue } from './envSettings.validate'
 import type { SecretStore } from './envSecrets.store'
+import { createLogger } from './logs'
+
+const slog = createLogger('settings')
 
 export type EnvSource = 'override' | 'env' | 'default'
 
@@ -66,7 +69,9 @@ const nonEmpty = (v: string | undefined): v is string => v !== undefined && v.tr
 /** Bangun layanan env-settings di atas `target`. Snapshot `base` diambil SEKARANG, sebelum overlay. */
 export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
   const { registry, target, secrets } = deps
-  const log = deps.log ?? { info: (m) => console.log(m), warn: (m) => console.warn(m) }
+  // Ringkasan `info` turun ke debug: kejadian per-kunci (`env.override.*`) sudah info dan memuat
+  // informasi yang sama, jadi memakai level yang sama hanya menggandakan baris.
+  const log = deps.log ?? { info: (m) => slog.debug('env.summary', m), warn: (m) => slog.warn('env.warn', m) }
   const specs = new Map(registry.map((s) => [s.key, s]))
   const bootstrap = new Set(deps.bootstrapKeys)
   const base: Record<string, string | undefined> = {}
@@ -108,6 +113,7 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
       if (next === undefined) delete target[spec.key]
       else target[spec.key] = next
     }
+    if (locked && bootEnv === undefined) slog.info('env.locked', 'Env settings locked: stored overrides are ignored', { switch: ENV_SETTINGS_SWITCH })
     bootEnv ??= live()
   }
 
@@ -185,7 +191,10 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
   }
 
   function update(change: EnvChange, ctx: EnvContext): EnvUpdateResult {
-    if (locked) return fail(403, 'locked')
+    if (locked) {
+      slog.warn('env.locked', 'Env update rejected: settings are locked', { switch: ENV_SETTINGS_SWITCH })
+      return fail(403, 'locked')
+    }
     const checked = validate(change, ctx)
     if ('error' in checked) return checked.error
     const before = live()
@@ -197,6 +206,9 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
     }
     apply()
     const names = [...checked.values.keys(), ...change.unset]
+    // Nama kunci saja — nilai (terutama secret) tidak pernah dicatat.
+    for (const k of checked.values.keys()) slog.info('env.override.set', 'Env override set', { name: k, source: sourceOf(specs.get(k) as EnvSpec) })
+    for (const k of change.unset) slog.info('env.override.clear', 'Env override cleared', { name: k })
     log.info(`env settings changed: ${names.map((k) => `${k}=${sourceOf(specs.get(k) as EnvSpec)}`).join(', ') || '(none)'}`)
     const restartRequired = names.filter((k) => specs.get(k)?.restartRequired && target[k] !== before[k])
     return { ok: true, state: state(ctx), restartRequired }

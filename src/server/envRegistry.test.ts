@@ -26,6 +26,13 @@ describe('ENV_REGISTRY', () => {
     expect(specFor('WEBTERM_TELEGRAM_MODE')?.default).toBe('poll')
   })
 
+  it('env log terdaftar dengan default, bukan secret, bukan bootstrap', () => {
+    expect(specFor('WEBTERM_LOG_LEVEL')).toMatchObject({ kind: 'enum', default: 'info', dangerous: false })
+    expect(specFor('WEBTERM_LOG_BUFFER')).toMatchObject({ kind: 'number', default: '5000', dangerous: false })
+    expect(specFor('WEBTERM_LOG_FILE')).toMatchObject({ kind: 'flag', default: 'on', dangerous: false })
+    expect(validateEnvValue(specFor('WEBTERM_LOG_BUFFER') as EnvSpec, '50').ok).toBe(false)
+  })
+
   it('default non-secret lolos validatornya sendiri', () => {
     for (const s of ENV_REGISTRY) if (s.default !== undefined) expect(validateEnvValue(s, s.default), s.key).toMatchObject({ ok: true })
   })
