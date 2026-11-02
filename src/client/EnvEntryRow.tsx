@@ -1,11 +1,10 @@
-// Satu baris variabel env: label, badge, kontrol, Simpan/Reset, dan error per entri.
+// Satu variabel env sebagai item Settings: `Webterm › Grup: Nama`, deskripsi, kontrol, Simpan/Reset.
 import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { ENV, ENV_SOURCE_LABEL } from './envLabels'
+import { ENV, ENV_GROUP_LABEL, ENV_SOURCE_LABEL } from './envLabels'
 import { EnvSecretField } from './EnvSecretField'
 import { EnvValueControl } from './EnvValueControl'
 import type { EnvEntry } from './envSettingsApi'
+import { SettingsMessage } from './SettingsMessage'
 
 export interface EnvRowProps {
   entry: EnvEntry
@@ -16,13 +15,17 @@ export interface EnvRowProps {
   onUnset: (key: string) => Promise<boolean>
 }
 
-function Badges({ entry }: { entry: EnvEntry }): React.JSX.Element {
+function Tags({ entry }: { entry: EnvEntry }): React.JSX.Element {
   return (
     <>
-      <Badge variant={entry.source === 'override' ? 'default' : 'secondary'}>{ENV_SOURCE_LABEL[entry.source]}</Badge>
-      {entry.restartRequired ? <Badge variant="outline">{ENV.badgeRestart}</Badge> : null}
-      {entry.pendingRestart ? <Badge variant="outline">{ENV.badgePending}</Badge> : null}
-      {entry.dangerous ? <Badge variant="destructive">{ENV.badgeDangerous}</Badge> : null}
+      <span className={'st-tag' + (entry.source === 'override' ? ' st-tag--modified' : '')}>{ENV_SOURCE_LABEL[entry.source]}</span>
+      {entry.restartRequired ? <span className="st-tag">{ENV.badgeRestart}</span> : null}
+      {entry.pendingRestart ? <span className="st-tag">{ENV.badgePending}</span> : null}
+      {entry.dangerous ? (
+        <span className="st-tag st-tag--warning">
+          <span className="codicon codicon-warning" aria-hidden="true" />{ENV.badgeDangerous}
+        </span>
+      ) : null}
     </>
   )
 }
@@ -39,27 +42,28 @@ export function EnvEntryRow({ entry, locked, busy, error, onSave, onUnset }: Env
     if (await onSave(entry.key, value)) setDraft(null)
   }
   return (
-    <li className="st-env-row" aria-label={entry.key}>
-      <div className="st-env-head">
-        <strong>{entry.label}</strong>
-        <code className="st-mono">{entry.key}</code>
-        <Badges entry={entry} />
+    <li className={'st-env-row st-field' + (entry.source === 'override' ? ' is-modified' : '')} aria-label={entry.key}>
+      <div className="st-title">
+        <span className="st-category">{ENV.categoryRoot} › {ENV_GROUP_LABEL[entry.group] ?? entry.group}: </span>
+        <strong className="st-label">{entry.label}</strong>
+        <Tags entry={entry} />
       </div>
       <p className="st-hint">{entry.description}</p>
+      <p className="st-hint"><code className="st-env-key">{entry.key}</code></p>
       {isSecret ? (
         <EnvSecretField entry={entry} disabled={disabled} onSave={onSave} onUnset={onUnset} />
       ) : (
         <div className="st-env-ctl">
           <EnvValueControl entry={entry} value={value} disabled={disabled} onChange={setDraft} />
-          <Button type="button" variant="default" size="sm" className="st-button" aria-label={`${ENV.save} ${entry.key}`}
+          <button type="button" className="st-button st-button--primary" aria-label={`${ENV.save} ${entry.key}`}
             disabled={disabled || !dirty} onClick={() => void save()}>
             {ENV.save}
-          </Button>
+          </button>
           {entry.source === 'override' ? (
-            <Button type="button" variant="secondary" size="sm" className="st-button" aria-label={`${ENV.reset} ${entry.key}`}
+            <button type="button" className="st-button" aria-label={`${ENV.reset} ${entry.key}`}
               disabled={disabled} onClick={() => void onUnset(entry.key).then(() => setDraft(null))}>
               {ENV.reset}
-            </Button>
+            </button>
           ) : null}
         </div>
       )}
@@ -68,8 +72,10 @@ export function EnvEntryRow({ entry, locked, busy, error, onSave, onUnset }: Env
         <p className="st-note">{ENV.defaultLabel}: {entry.default === '' ? ENV.none : entry.default}</p>
       ) : null}
       {entry.source === 'override' ? <p className="st-note">{isSecret ? ENV.removeHelp : ENV.resetHelp}</p> : null}
-      {entry.dangerous && !entry.editable && !locked ? <p className="st-note">{ENV.dangerousNeedsRoot}</p> : null}
-      {error ? <p className="st-ch-err" role="alert">{error}</p> : null}
+      {entry.dangerous && !entry.editable && !locked ? (
+        <SettingsMessage kind="warning">{ENV.dangerousNeedsRoot}</SettingsMessage>
+      ) : null}
+      {error ? <SettingsMessage kind="error" role="alert">{error}</SettingsMessage> : null}
     </li>
   )
 }

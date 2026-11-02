@@ -73,14 +73,14 @@ describe('EnvSection', () => {
     const r = await row('WEBTERM_TELEGRAM')
     const save = within(r).getByRole('button', { name: 'Simpan WEBTERM_TELEGRAM' }) as HTMLButtonElement
     expect(save.disabled).toBe(true)
-    fireEvent.click(within(r).getByRole('radio', { name: 'on' }))
+    fireEvent.click(within(r).getByRole('checkbox', { name: 'Label WEBTERM_TELEGRAM (WEBTERM_TELEGRAM)' }))
     fireEvent.click(save)
     await waitFor(() => expect(puts()).toEqual([{ set: { WEBTERM_TELEGRAM: 'on' } }]))
   })
 
   it('saves an enum, a number and a string', async () => {
     render(<EnvSection />)
-    fireEvent.click(within(await row('WEBTERM_LEDGER')).getByRole('radio', { name: 'on' }))
+    fireEvent.change(within(await row('WEBTERM_LEDGER')).getByRole('combobox', { name: 'Label WEBTERM_LEDGER (WEBTERM_LEDGER)' }), { target: { value: 'on' } })
     fireEvent.click(within(await row('WEBTERM_LEDGER')).getByRole('button', { name: 'Simpan WEBTERM_LEDGER' }))
     const num = within(await row('WEBTERM_RETRIES')).getByLabelText('Label WEBTERM_RETRIES (WEBTERM_RETRIES)')
     fireEvent.change(num, { target: { value: '7' } })
@@ -143,7 +143,8 @@ describe('EnvSection', () => {
     render(<EnvSection />)
     expect(await screen.findByText(/Dikunci oleh WEBTERM_ENV_SETTINGS=off/)).toBeTruthy()
     const r = await row('WEBTERM_TELEGRAM')
-    for (const b of within(r).getAllByRole('radio')) expect((b as HTMLButtonElement).disabled).toBe(true)
+    expect((within(r).getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
+    expect((within(await row('WEBTERM_LEDGER')).getByRole('combobox') as HTMLSelectElement).disabled).toBe(true)
     expect((within(await row('WEBTERM_TELEGRAM_BOT_TOKEN')).getByLabelText(/BOT_TOKEN\)$/) as HTMLInputElement).disabled).toBe(true)
     expect((within(await row('WEBTERM_LEDGER')).getByRole('button', { name: 'Reset WEBTERM_LEDGER' }) as HTMLButtonElement).disabled).toBe(true)
   })
@@ -184,7 +185,7 @@ describe('EnvSection', () => {
     putReply = { status, body: { error } }
     render(<EnvSection />)
     const r = await row('WEBTERM_TELEGRAM')
-    fireEvent.click(within(r).getByRole('radio', { name: 'on' }))
+    fireEvent.click(within(r).getByRole('checkbox', { name: 'Label WEBTERM_TELEGRAM (WEBTERM_TELEGRAM)' }))
     fireEvent.click(within(r).getByRole('button', { name: 'Simpan WEBTERM_TELEGRAM' }))
     expect((await within(r).findByRole('alert')).textContent).toBe(message)
   })
@@ -192,7 +193,7 @@ describe('EnvSection', () => {
   it('shows a network error without details', async () => {
     render(<EnvSection />)
     const r = await row('WEBTERM_TELEGRAM')
-    fireEvent.click(within(r).getByRole('radio', { name: 'on' }))
+    fireEvent.click(within(r).getByRole('checkbox', { name: 'Label WEBTERM_TELEGRAM (WEBTERM_TELEGRAM)' }))
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch http://x/api/settings/env') }))
     fireEvent.click(within(r).getByRole('button', { name: 'Simpan WEBTERM_TELEGRAM' }))
     expect((await within(r).findByRole('alert')).textContent).toBe('Tidak bisa menghubungi server.')
@@ -201,7 +202,7 @@ describe('EnvSection', () => {
   it('shows a restart banner from the PUT response and replaces state', async () => {
     putReply = { status: 200, body: { ...base(), entries: base().entries.map((e) => (e.key === 'WEBTERM_LEDGER' ? { ...e, value: 'on', pendingRestart: true } : e)), restartRequired: ['WEBTERM_LEDGER', 'WEBTERM_TELEGRAM'] } }
     render(<EnvSection />)
-    fireEvent.click(within(await row('WEBTERM_LEDGER')).getByRole('radio', { name: 'on' }))
+    fireEvent.change(within(await row('WEBTERM_LEDGER')).getByRole('combobox', { name: 'Label WEBTERM_LEDGER (WEBTERM_LEDGER)' }), { target: { value: 'on' } })
     fireEvent.click(within(await row('WEBTERM_LEDGER')).getByRole('button', { name: 'Simpan WEBTERM_LEDGER' }))
     expect(await screen.findByText('Perlu restart server untuk: WEBTERM_LEDGER, WEBTERM_TELEGRAM')).toBeTruthy()
     expect(within(await row('WEBTERM_LEDGER')).getByText('menunggu restart')).toBeTruthy()

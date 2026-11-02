@@ -53,6 +53,21 @@ describe('SettingsPanel VS Code layout', () => {
   })
 })
 
+describe('SettingsPanel keyboard', () => {
+  it('moves focus through the section list with arrow keys, Home and End', () => {
+    renderPanel()
+    const items = within(nav()).getAllByRole('button')
+    items[0]!.focus()
+
+    fireEvent.keyDown(items[0]!, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(items[1])
+    fireEvent.keyDown(items[1]!, { key: 'End' })
+    expect(document.activeElement).toBe(items[items.length - 1])
+    fireEvent.keyDown(items[items.length - 1]!, { key: 'Home' })
+    expect(document.activeElement).toBe(items[0])
+  })
+})
+
 describe('SettingsPanel persistence', () => {
   it('emits the patch for a number field change', () => {
     const { onChange } = renderPanel()
@@ -74,14 +89,34 @@ describe('SettingsPanel persistence', () => {
     expect(onChange).toHaveBeenLastCalledWith({ fontSize: 6 })
   })
 
-  it('toggles through the VS Code switch with the same accessible name', () => {
+  it('toggles a boolean through a native checkbox with the same accessible name', () => {
     const { onChange } = renderPanel()
 
-    const toggle = screen.getByRole('switch', { name: 'Kursor berkedip' })
-    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    const toggle = screen.getByRole('checkbox', { name: 'Kursor berkedip' }) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
     fireEvent.click(toggle)
 
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: false })
+  })
+
+  it('shows the category prefix, marks a modified item and resets it through the gear', () => {
+    const { onChange } = renderPanel({ cursorBlink: false })
+
+    const field = screen.getByLabelText('Kursor berkedip').closest('[data-slot="settings-field"]') as HTMLElement
+    expect(within(field).getByText('(Modified)')).toBeTruthy()
+    expect(field.querySelector('.st-category')?.textContent).toBe('Terminal: ')
+
+    fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Kursor berkedip' }))
+
+    expect(onChange).toHaveBeenCalledWith({ cursorBlink: DEFAULT_SETTINGS.cursorBlink })
+  })
+
+  it('does not show Modified or a reset gear for a default value', () => {
+    renderPanel()
+
+    const field = screen.getByLabelText('Kursor berkedip').closest('[data-slot="settings-field"]') as HTMLElement
+    expect(within(field).queryByText('(Modified)')).toBeNull()
+    expect(within(field).queryByRole('button', { name: /Reset Setting/ })).toBeNull()
   })
 
   it('closes through the header button', () => {
@@ -94,6 +129,21 @@ describe('SettingsPanel persistence', () => {
 })
 
 describe('SettingsPanel search', () => {
+  it('reports the number of matching settings and clears through the clear button', () => {
+    renderPanel()
+    const search = screen.getByRole('searchbox', { name: 'Cari setting' }) as HTMLInputElement
+
+    fireEvent.change(search, { target: { value: 'font' } })
+    const count = document.querySelector('.st-search-count') as HTMLElement
+    expect(count.textContent).toMatch(/^\d+ setting ditemukan$/)
+    expect(Number.parseInt(count.textContent ?? '', 10)).toBe(
+      document.querySelectorAll('[data-slot="settings-field"]').length,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus pencarian' }))
+    expect(search.value).toBe('')
+  })
+
   it('filters fields across every section instead of only the active one', () => {
     renderPanel()
     fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))

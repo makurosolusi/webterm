@@ -1,7 +1,7 @@
 // Section "Environment" di Settings: variabel env (dulu hanya dari .env) dengan default + override.
 // Hook data hanya hidup selama section dirender (pencarian lintas section tidak memasangnya).
 import { useId } from 'react'
-import { Button } from '@/components/ui/button'
+import { SettingsMessage } from './SettingsMessage'
 import { useSettingsSearch } from './SettingsFields'
 import { EnvEntryRow } from './EnvEntryRow'
 import { ENV, ENV_BOOTSTRAP_GROUP, ENV_GROUP_LABEL, ENV_GROUP_ORDER } from './envLabels'
@@ -29,11 +29,12 @@ function groupEntries(entries: EnvEntry[]): Array<[string, EnvEntry[]]> {
 
 function BootstrapRow({ entry }: { entry: EnvEntry }): React.JSX.Element {
   return (
-    <li className="st-env-row" aria-label={entry.key}>
-      <div className="st-env-head">
-        <code className="st-mono">{entry.key}</code>
-        <span className="st-muted">{entry.set ? ENV.secretSet : ENV.secretUnset} · {ENV.bootstrapOnly}</span>
+    <li className="st-env-row st-field" aria-label={entry.key}>
+      <div className="st-title">
+        <span className="st-category">{ENV.categoryRoot} › {ENV_GROUP_LABEL[entry.group] ?? entry.group}: </span>
+        <code className="st-env-key">{entry.key}</code>
       </div>
+      <p className="st-hint">{entry.set ? ENV.secretSet : ENV.secretUnset} · {ENV.bootstrapOnly}</p>
     </li>
   )
 }
@@ -47,15 +48,15 @@ function EnvPanel(): React.JSX.Element {
   return (
     <div className="st-env" aria-busy={e.loading}>
       <div className="st-ch-toolbar">
-        <Button type="button" variant="outline" size="sm" className="st-button" onClick={e.refresh}>
+        <button type="button" className="st-button" onClick={e.refresh}>
           {ENV.refresh}
-        </Button>
+        </button>
       </div>
       {e.loading ? <p className="st-note" role="status">{ENV.loading}</p> : null}
-      {e.error ? <p className="st-ch-err" role="alert">{e.error}</p> : null}
-      {locked ? <p className="st-env-banner" role="status">{ENV.lockedBanner}</p> : null}
+      {e.error ? <SettingsMessage kind="error" role="alert">{e.error}</SettingsMessage> : null}
+      {locked ? <SettingsMessage kind="warning" role="status">{ENV.lockedBanner}</SettingsMessage> : null}
       {e.restartKeys.length > 0 ? (
-        <p className="st-env-banner" role="status">{ENV.restartBanner} {e.restartKeys.join(', ')}</p>
+        <SettingsMessage kind="info" role="status">{ENV.restartBanner} {e.restartKeys.join(', ')}</SettingsMessage>
       ) : null}
       {e.state ? groupEntries(e.state.entries).map(([group, entries]) => (
         <section key={group} aria-labelledby={`${uid}-${group}`}>

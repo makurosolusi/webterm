@@ -1,6 +1,6 @@
 // Daftar pending (bind / abaikan) dan binding aktif (hapus dengan konfirmasi) untuk section Channels.
 import { useId, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { SettingsMessage } from './SettingsMessage'
 import { Input } from '@/components/ui/input'
 import {
   AlertDialog,
@@ -51,28 +51,28 @@ function PendingRow({ chat, listId, busy, act, now }: {
       </div>
       <div role="radiogroup" aria-label={`${CH.role} ${chat.chatId}`} className="st-chips">
         {rolesFor(chat.chatId).map((r) => (
-          <Button key={r} type="button" role="radio" aria-checked={role === r} variant="outline" size="sm"
+          <button key={r} type="button" role="radio" aria-checked={role === r}
             className={'st-button' + (role === r ? ' is-active' : '')} onClick={() => setRole(r)}>
             {ROLE_LABEL[r]}
-          </Button>
+          </button>
         ))}
       </div>
       <label className="st-sr-only" htmlFor={`${uid}-proj`}>{CH.projectId} {chat.chatId}</label>
       <Input id={`${uid}-proj`} className="st-input st-mono" type="text" list={listId}
         placeholder={CH.projectIdPlaceholder} value={projectId} aria-invalid={touched && problem !== null}
         onChange={(e) => { setProjectId(e.target.value); setTouched(true) }} />
-      <Button type="button" variant="default" size="sm" className="st-button" disabled={busy}
+      <button type="button" className="st-button st-button--primary" disabled={busy}
         onClick={() => {
           setTouched(true)
           if (problem === null) void act(() => bindChat({ projectId: projectId.trim(), chatId: chat.chatId, role }))
         }}>
         {CH.bind}
-      </Button>
-      <Button type="button" variant="secondary" size="sm" className="st-button" disabled={busy}
+      </button>
+      <button type="button" className="st-button" disabled={busy}
         onClick={() => void act(() => ignorePending(chat.chatId))}>
         {CH.ignore}
-      </Button>
-      {touched && problem ? <p className="st-ch-err st-ch-rowerr" role="alert">{problem}</p> : null}
+      </button>
+      {touched && problem ? <div className="st-ch-rowerr"><SettingsMessage kind="error" role="alert">{problem}</SettingsMessage></div> : null}
     </li>
   )
 }
@@ -114,10 +114,10 @@ export function ChannelsBindings({ items, busy, act }: {
                 <code className="st-mono">{b.chatId}</code>
                 <span className="st-muted">{b.projectId} · {ROLE_LABEL[b.role] ?? b.role}</span>
               </div>
-              <Button type="button" variant="secondary" size="sm" className="st-button" disabled={busy}
+              <button type="button" className="st-button" disabled={busy}
                 aria-label={`${CH.remove} ${b.chatId}`} onClick={() => setTarget(b.chatId)}>
                 {CH.remove}
-              </Button>
+              </button>
             </li>
           ))}
         </ul>

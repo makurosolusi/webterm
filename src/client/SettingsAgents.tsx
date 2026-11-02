@@ -4,7 +4,6 @@
 // per agent custom, dan satu baris input per agent builtin untuk launch command.
 import type { CSSProperties } from 'react'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   AGENT_CONFIG,
@@ -68,6 +67,7 @@ export function AgentSettings({
     <>
       <SelectField
         id="st-defaultAgent"
+        setting="defaultAgent"
         label="Agent default"
         hint="Agent yang diluncurkan tombol quick-add."
         value={s.defaultAgent}
@@ -76,6 +76,7 @@ export function AgentSettings({
       />
       <SelectField
         id="st-claudePermissionMode"
+        setting="claudePermissionMode"
         label="Mode permission Claude"
         hint="Dipakai sesi Claude saat START — dikirim sebagai --permission-mode saat peluncuran. Shift+Tab tetap bisa memutar mode saat runtime."
         value={s.claudePermissionMode}
@@ -84,6 +85,7 @@ export function AgentSettings({
       />
       <ToggleField
         id="st-hookReplyApprovals"
+        setting="hookReplyApprovals"
         label="Persetujuan hook dari canvas"
         hint="Saat on, sesi Claude diluncurkan dengan NODETERM_PERM_WAIT_SECS — hook permission menahan sejenak menunggu Approve/Deny dari canvas sebelum jatuh ke prompt interaktif biasa. Off = perilaku lama persis."
         value={s.hookReplyApprovals}
@@ -93,23 +95,23 @@ export function AgentSettings({
       <Field
         label="Agent di menu Add"
         hint="Matikan agent yang tidak kamu pakai supaya menu Add tetap pendek."
+        setting="disabledAgents"
         block
       >
         <div className="st-chips">
           {agentOptions.map((o) => {
             const off = s.disabledAgents.includes(o.value)
             return (
-              <Button
+              <button
                 key={o.value}
                 type="button"
                 role="switch"
                 aria-checked={!off}
-                className={'st-chip st-button' + (off ? ' is-off' : '')}
+                className={'st-chip' + (off ? ' is-off' : '')}
                 onClick={() => toggleDisabled(o.value, !off)}
-                variant="ghost"
               >
                 {o.label}
-              </Button>
+              </button>
             )
           })}
         </div>
@@ -117,6 +119,7 @@ export function AgentSettings({
 
       <Field
         label="Perintah peluncuran"
+        setting="agentLaunchCommands"
         hint={
           'Luncurkan agent builtin dengan perintahmu sendiri — mis. skrip wrapper yang memilih akun. ' +
           'Dipakai di semua jalur peluncuran (sesi baru, resume, restart), dengan flag seperti --resume ' +
@@ -128,7 +131,7 @@ export function AgentSettings({
         <div className="st-rows">
           {BUILTIN_AGENT_IDS.map((id: BuiltinAgentId) => (
             <div key={id} className="st-row">
-              <span className="st-row-label text-[var(--agent-color)]" style={{ '--agent-color': AGENT_CONFIG[id].color } as CSSProperties}>
+              <span className="st-row-label" style={{ '--agent-color': AGENT_CONFIG[id].color } as CSSProperties}>
                 {AGENT_CONFIG[id].label}
               </span>
               <Input
@@ -156,7 +159,7 @@ export function AgentSettings({
         hint="Bawa CLI agent sendiri, atau bungkus harness builtin (mis. Claude) untuk mengarahkan inferensi ke proxy-mu. Variabel env TIDAK tersedia di sini — settings webterm melintas HTTP, dan env adalah satu-satunya tempat kredensial akan mendarat."
         block
       >
-        <Button type="button" variant="outline" size="sm" className="st-button" onClick={addAgent}>Tambah agent</Button>
+        <button type="button" className="st-button" onClick={addAgent}>Tambah agent</button>
       </Field>
       <div className="st-cards">
         {s.customAgents.map((a) => (
@@ -222,9 +225,9 @@ function CustomAgentCard({
       />
       <div className="st-card-foot">
         <code className="st-mono st-muted">{agent.id}</code>
-        <Button type="button" variant="secondary" size="sm" className="st-button" onClick={() => onRemove(agent.id)}>
+        <button type="button" className="st-button" onClick={() => onRemove(agent.id)}>
           Hapus
-        </Button>
+        </button>
       </div>
     </section>
   )

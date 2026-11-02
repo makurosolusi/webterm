@@ -2,10 +2,9 @@
 // kontrol yang tipenya cocok; label + deskripsi diambil dari doc-comment kunci di
 // `shared/settings.ts` (di situ alasan defaultnya tertulis, dan user layak tahu).
 //
-// Semua kontrol memakai primitif shadcn yang sudah ada lalu di-restyle lewat `settings.css` ke
-// metrik VS Code Settings: 13px teks, baris 22px, input 24px, radius 2px. Toggle memakai
-// `VscodeSwitch` (36x20, satu-satunya bentuk yang persis sama dengan VS Code) karena role dan
-// keyboard-nya sudah diuji di `components/vscode`.
+// Bentuk item mengikuti VS Code Settings editor: judul `Kategori: Nama`, deskripsi redup, lalu
+// kontrol di bawahnya; boolean memakai checkbox native (bukan switch) dengan deskripsi di
+// sampingnya. Kontrol tetap native/shadcn yang di-restyle lewat `settings-controls.css`.
 //
 // Pencarian: `SettingsSearchProvider` membawa query yang sudah dinormalisasi, dan `Field`
 // menyembunyikan dirinya sendiri ketika label + hint tidak cocok. Itu membuat filter bekerja
@@ -20,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { VscodeSwitch } from './components/vscode/vscodeSwitch'
+import type { Settings } from '../shared/settings'
+import { isModified, resetPatch, useSettingsItemScope } from './settingsContext'
 
 const SearchContext = createContext('')
 
@@ -76,25 +76,59 @@ export function Field({
   hint,
   htmlFor,
   block,
+  inline,
+  setting,
   children,
 }: {
   label: string
   hint?: ReactNode
   htmlFor?: string
-  /** Grup selebar baris (daftar launch command, kartu agent) turun ke bawah label. */
+  /** Grup selebar baris (daftar launch command, kartu agent): kontrol memenuhi lebar item. */
   block?: boolean
+  /** Boolean: kontrol (checkbox) sejajar dengan deskripsi, bukan di bawahnya. */
+  inline?: boolean
+  /** Kunci Settings yang diwakili; mengaktifkan penanda "Modified" dan Reset Setting. */
+  setting?: keyof Settings
   children: ReactNode
 }): React.JSX.Element | null {
   const query = useSettingsSearch()
+  const { category, settings, onChange } = useSettingsItemScope()
   if (!matchesSearch(`${label} ${hintText(hint)}`, query)) return null
 
+  const modified = setting !== undefined && settings !== undefined && isModified(settings, setting)
+  const description = hint ? <p className="st-hint">{hint}</p> : null
   return (
-    <div className={'st-field' + (block ? ' st-field--block' : '')} data-slot="settings-field">
-      <div className="st-field-text">
+    <div
+      className={'st-field' + (block ? ' st-field--block' : '') + (modified ? ' is-modified' : '')}
+      data-slot="settings-field"
+    >
+      <div className="st-title">
+        {category ? <span className="st-category">{category}: </span> : null}
         <Label className="st-label" htmlFor={htmlFor}>{highlightMatches(label, query)}</Label>
-        {hint ? <p className="st-hint">{hint}</p> : null}
+        {modified ? <span className="st-modified">(Modified)</span> : null}
+        {modified && setting && onChange ? (
+          <button
+            type="button"
+            className="st-gear"
+            title="Reset Setting"
+            aria-label={`Reset Setting: ${label}`}
+            onClick={() => onChange(resetPatch(setting))}
+          >
+            <span className="codicon codicon-gear" aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
-      <div className="st-control">{children}</div>
+      {inline ? (
+        <div className="st-checkline">
+          <div className="st-control">{children}</div>
+          {description}
+        </div>
+      ) : (
+        <>
+          {description}
+          <div className="st-control">{children}</div>
+        </>
+      )}
     </div>
   )
 }
@@ -107,6 +141,7 @@ export function NumberField({
   id,
   label,
   hint,
+  setting,
   value,
   min,
   max,
@@ -117,6 +152,7 @@ export function NumberField({
   id: string
   label: string
   hint?: ReactNode
+  setting?: keyof Settings
   value: number
   min: number
   max: number
@@ -125,7 +161,7 @@ export function NumberField({
   onChange: (v: number) => void
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id}>
+    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
       <Input
         id={id}
         className="st-input st-input-num"
@@ -152,6 +188,7 @@ export function TextField({
   id,
   label,
   hint,
+  setting,
   value,
   placeholder,
   mono,
@@ -160,13 +197,14 @@ export function TextField({
   id: string
   label: string
   hint?: ReactNode
+  setting?: keyof Settings
   value: string
   placeholder?: string
   mono?: boolean
   onChange: (v: string) => void
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id}>
+    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
       <Input
         id={id}
         className={mono ? 'st-input st-mono' : 'st-input'}
@@ -185,6 +223,7 @@ export function SelectField<T extends string>({
   id,
   label,
   hint,
+  setting,
   value,
   options,
   onChange,
@@ -192,12 +231,13 @@ export function SelectField<T extends string>({
   id: string
   label: string
   hint?: ReactNode
+  setting?: keyof Settings
   value: T
   options: readonly { value: T; label: string }[]
   onChange: (v: T) => void
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id}>
+    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
       <Select value={value} onValueChange={(next) => onChange(next as T)}>
         <SelectTrigger id={id} className="st-select">
           <SelectValue />
@@ -214,23 +254,23 @@ export function ToggleField({
   id,
   label,
   hint,
+  setting,
   value,
   onChange,
 }: {
   id: string
   label: string
   hint?: ReactNode
+  setting?: keyof Settings
   value: boolean
   onChange: (v: boolean) => void
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id}>
-      <VscodeSwitch
-        id={id}
-        label={label}
-        checked={value}
-        onCheckedChange={onChange}
-      />
+    <Field label={label} hint={hint} htmlFor={id} setting={setting} inline>
+      <span className="st-checkbox">
+        <input id={id} type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+        <span className="st-checkbox-box" aria-hidden="true" />
+      </span>
     </Field>
   )
 }
@@ -241,17 +281,19 @@ export function ColorField({
   id,
   label,
   hint,
+  setting,
   value,
   onChange,
 }: {
   id: string
   label: string
   hint?: ReactNode
+  setting?: keyof Settings
   value: string
   onChange: (v: string) => void
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id}>
+    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
       <Input id={id} className="st-color" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
       <Input
         className="st-input st-input-hex st-mono"

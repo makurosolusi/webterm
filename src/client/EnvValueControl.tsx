@@ -1,5 +1,4 @@
-// Kontrol nilai non-secret per kind: flag/enum = radio, number/string = input teks.
-import { Button } from '@/components/ui/button'
+// Kontrol nilai non-secret per kind: flag = checkbox, enum = dropdown native, number/string = input teks.
 import { Input } from '@/components/ui/input'
 import { ENV } from './envLabels'
 import type { EnvEntry } from './envSettingsApi'
@@ -14,19 +13,23 @@ interface Props {
 /** Nama aksesibel kontrol: label + KEY. */
 export const envAriaName = (e: EnvEntry): string => `${e.label} (${e.key})`
 
-/** Radio untuk flag (on/off) dan enum (options); input untuk number/string. */
+/** Checkbox untuk flag (on/off), dropdown untuk enum (options), input untuk number/string. */
 export function EnvValueControl({ entry, value, disabled, onChange }: Props): React.JSX.Element {
-  const choices = entry.kind === 'flag' ? [ENV.on, ENV.off] : entry.kind === 'enum' ? (entry.options ?? []) : null
-  if (choices) {
+  if (entry.kind === 'flag') {
     return (
-      <div role="radiogroup" aria-label={envAriaName(entry)} className="st-chips">
-        {choices.map((c) => (
-          <Button key={c} type="button" role="radio" aria-checked={value === c} variant="outline" size="sm" disabled={disabled}
-            className={'st-button' + (value === c ? ' is-active' : '')} onClick={() => onChange(c)}>
-            {c}
-          </Button>
-        ))}
-      </div>
+      <span className="st-checkbox">
+        <input type="checkbox" aria-label={envAriaName(entry)} checked={value === ENV.on} disabled={disabled}
+          onChange={(e) => onChange(e.target.checked ? ENV.on : ENV.off)} />
+        <span className="st-checkbox-box" aria-hidden="true" />
+      </span>
+    )
+  }
+  if (entry.kind === 'enum') {
+    return (
+      <select className="st-native-select" aria-label={envAriaName(entry)} value={value} disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}>
+        {(entry.options ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
     )
   }
   return (

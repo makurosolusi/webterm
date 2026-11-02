@@ -1,6 +1,5 @@
 // Input secret write-only: tak pernah diisi dari server; draft dikosongkan begitu request selesai.
 import { useId, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ENV } from './envLabels'
 import type { EnvEntry } from './envSettingsApi'
@@ -26,20 +25,20 @@ export function EnvSecretField({ entry, disabled, onSave, onUnset }: Props): Rea
   }
   return (
     <div className="st-env-ctl">
-      <span className="st-muted">{entry.set ? ENV.secretSet : ENV.secretUnset}</span>
+      <span className="st-muted st-secret-state">{entry.set ? ENV.secretSet : ENV.secretUnset}</span>
       <label className="st-sr-only" htmlFor={id}>{`${entry.label} (${entry.key})`}</label>
       <Input id={id} className="st-input st-mono" type="password" autoComplete="new-password" spellCheck={false}
         placeholder={ENV.secretPlaceholder} value={draft} disabled={disabled}
         onChange={(e) => setDraft(e.target.value)} />
-      <Button type="button" variant="default" size="sm" className="st-button" aria-label={`${ENV.save} ${entry.key}`}
+      <button type="button" className="st-button st-button--primary" aria-label={`${ENV.save} ${entry.key}`}
         disabled={disabled || draft === ''} onClick={() => void save()}>
         {ENV.save}
-      </Button>
+      </button>
       {entry.source === 'override' && entry.set ? (
-        <Button type="button" variant="secondary" size="sm" className="st-button" aria-label={`${ENV.remove} ${entry.key}`}
+        <button type="button" className="st-button" aria-label={`${ENV.remove} ${entry.key}`}
           disabled={disabled} onClick={() => void onUnset(entry.key)}>
           {ENV.remove}
-        </Button>
+        </button>
       ) : null}
     </div>
   )

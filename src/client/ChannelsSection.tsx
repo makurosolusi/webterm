@@ -1,7 +1,7 @@
 // Section "Channels" di Settings: status channel Telegram, chat pending, dan binding aktif.
 // Hook data hanya hidup selama section dirender (pencarian lintas section tidak memasangnya).
 import type { ReactNode } from 'react'
-import { Button } from '@/components/ui/button'
+import { SettingsMessage } from './SettingsMessage'
 import { Field, useSettingsSearch } from './SettingsFields'
 import { ChannelsBindings, ChannelsPending } from './ChannelsLists'
 import type { DirectionStatus, TelegramStatus } from './channelsApi'
@@ -23,9 +23,9 @@ function Direction({ label, dir, now }: { label: string; dir: DirectionStatus; n
         <span>{CH.lastOk}: {ok}</span>
         <span>{dir.okCount} {CH.okCount} / {dir.errorCount} {CH.errorCount}</span>
         {dir.lastError ? (
-          <span className="st-ch-err">
+          <SettingsMessage kind="error">
             {CH.lastError} ({relativeTime(dir.lastError.at, now)}): {dir.lastError.message}
-          </span>
+          </SettingsMessage>
         ) : null}
       </div>
     </Field>
@@ -35,8 +35,13 @@ function Direction({ label, dir, now }: { label: string; dir: DirectionStatus; n
 function StatusBlock({ status, now }: { status: TelegramStatus; now: number }): React.JSX.Element {
   return (
     <>
-      <Field label={CH.mode}>{status.mode === 'webhook' ? CH.modeWebhook : CH.modePoll}</Field>
-      <Field label={CH.botToken}>{status.botTokenSet ? CH.set : CH.unset}</Field>
+      <Field label={CH.mode}>
+        <span className="st-dot st-dot--on" aria-hidden="true" />{status.mode === 'webhook' ? CH.modeWebhook : CH.modePoll}
+      </Field>
+      <Field label={CH.botToken}>
+        <span className={'st-dot' + (status.botTokenSet ? ' st-dot--on' : '')} aria-hidden="true" />
+        {status.botTokenSet ? CH.set : CH.unset}
+      </Field>
       {status.mode === 'webhook' ? (
         <Field label={CH.webhookSecret}>{status.webhookSecretSet ? CH.set : CH.unset}</Field>
       ) : null}
@@ -55,7 +60,7 @@ function ChannelsPanel(): React.JSX.Element {
   } else if (c.inactive) {
     body = (
       <div className="st-ch-inactive" role="status">
-        <strong>{CH.inactiveTitle}</strong>
+        <strong><span className="st-dot" aria-hidden="true" />{CH.inactiveTitle}</strong>
         <p className="st-note">{CH.inactiveHint}</p>
       </div>
     )
@@ -72,12 +77,12 @@ function ChannelsPanel(): React.JSX.Element {
   return (
     <div className="st-ch" aria-busy={c.loading}>
       <div className="st-ch-toolbar">
-        <Button type="button" variant="outline" size="sm" className="st-button" onClick={c.refresh}>
+        <button type="button" className="st-button" onClick={c.refresh}>
           {CH.refresh}
-        </Button>
+        </button>
       </div>
-      {c.error ? <p className="st-ch-err" role="alert">{c.error}</p> : null}
-      {c.actionError ? <p className="st-ch-err" role="alert">{c.actionError}</p> : null}
+      {c.error ? <SettingsMessage kind="error" role="alert">{c.error}</SettingsMessage> : null}
+      {c.actionError ? <SettingsMessage kind="error" role="alert">{c.actionError}</SettingsMessage> : null}
       {body}
     </div>
   )

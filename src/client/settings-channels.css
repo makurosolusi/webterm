@@ -1,24 +1,22 @@
-/* Section Channels di Settings: daftar chat pending/binding dan blok status. Metrik VS Code. */
+/* Section Channels di Settings: status (item setting), daftar chat pending/binding sebagai
+   list 22px+ ala VS Code, dan indikator status mini (dot + teks). */
 .st-ch {
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 .st-ch-toolbar {
   display: flex;
   justify-content: flex-end;
-  padding: 0 8px;
+  padding: 8px 14px 0;
 }
 
 .st-ch-heading {
-  margin: 12px 0 2px;
-  padding: 0 8px;
-  color: var(--vscode-descriptionForeground, var(--muted));
-  font-size: 11px;
+  margin: 0;
+  padding: 12px 14px 2px;
+  color: var(--vscode-foreground, var(--text));
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .st-ch-dir {
@@ -28,18 +26,34 @@
   font-size: 12px;
 }
 
-.st-ch-err {
-  margin: 0;
-  padding: 0 8px;
-  color: var(--vscode-errorForeground, #f48771);
-  font-size: 12px;
-  overflow-wrap: anywhere;
+.st-ch-inactive {
+  margin: 8px 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--vscode-editorWidget-border, var(--border));
+  border-radius: 4px;
 }
 
-.st-ch-inactive {
-  padding: 8px;
-  border: 1px solid var(--vscode-settings-headerBorder, var(--border));
-  border-radius: 2px;
+.st-ch-inactive strong {
+  font-weight: 600;
+}
+
+.st-ch-inactive .st-note {
+  padding-inline: 0;
+}
+
+/* Dot status: abu = mati/kosong, hijau = aktif (state-success). */
+.st-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--vscode-descriptionForeground, var(--muted));
+}
+
+.st-dot--on {
+  background: var(--state-success);
 }
 
 .st-ch-list {
@@ -55,8 +69,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--vscode-settings-headerBorder, var(--border));
+  min-height: 22px;
+  padding: 4px 14px;
+}
+
+.st-ch-row:hover {
+  background: var(--vscode-list-hoverBackground, var(--raised));
 }
 
 .st-ch-meta {
@@ -73,11 +91,6 @@
 
 .st-ch-row .st-chips {
   gap: 4px;
-}
-
-.st-ch-row .st-button.is-active {
-  background: var(--vscode-button-background, var(--accent));
-  color: var(--vscode-button-foreground, var(--text));
 }
 
 .st-ch-rowerr {

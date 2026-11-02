@@ -1,6 +1,7 @@
 // Seluruh string UI section Environment (Rule 15): satu tempat, tidak ada literal di komponen.
 export const ENV = {
   title: 'Environment',
+  categoryRoot: 'Webterm',
   loading: 'Memuat pengaturan environment…',
   refresh: 'Segarkan',
   lockedBanner: 'Dikunci oleh WEBTERM_ENV_SETTINGS=off. Pengaturan tidak bisa diubah dari sini.',
