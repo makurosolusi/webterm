@@ -119,6 +119,38 @@ describe('SettingsPanel persistence', () => {
     expect(within(field).queryByRole('button', { name: /Reset Setting/ })).toBeNull()
   })
 
+  it('renders every dropdown as the same native select with a codicon chevron', () => {
+    const { onChange } = renderPanel()
+
+    const select = screen.getByLabelText('Bentuk kursor') as HTMLSelectElement
+    expect(select.tagName).toBe('SELECT')
+    expect(select.className).toBe('st-select')
+    expect(select.parentElement?.querySelector('.codicon-chevron-down')).toBeTruthy()
+    fireEvent.change(select, { target: { value: 'bar' } })
+
+    expect(onChange).toHaveBeenCalledWith({ cursorStyle: 'bar' })
+  })
+
+  it('draws checkboxes as a codicon check inside the 18px box', () => {
+    renderPanel()
+
+    const toggle = screen.getByRole('checkbox', { name: 'Kursor berkedip' })
+    expect(toggle.nextElementSibling?.className).toBe('st-checkbox-box')
+    expect(toggle.nextElementSibling?.querySelector('.codicon-check')).toBeTruthy()
+  })
+
+  it('lists agents of the Add menu as checkboxes, not toggle chips', () => {
+    const { onChange } = renderPanel({ disabledAgents: [] })
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+
+    expect(document.querySelector('.st-chip')).toBeNull()
+    const [first] = document.querySelectorAll<HTMLInputElement>('.st-checkrow input[type="checkbox"]')
+    expect(first!.checked).toBe(true)
+    fireEvent.click(first!)
+
+    expect(onChange.mock.calls.at(-1)?.[0].disabledAgents).toHaveLength(1)
+  })
+
   it('closes through the header button', () => {
     const { onClose } = renderPanel()
 

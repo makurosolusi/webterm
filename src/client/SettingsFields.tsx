@@ -12,15 +12,9 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import type { Settings } from '../shared/settings'
 import { isModified, resetPatch, useSettingsItemScope } from './settingsContext'
+import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
 
 const SearchContext = createContext('')
 
@@ -238,14 +232,7 @@ export function SelectField<T extends string>({
 }): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id} setting={setting}>
-      <Select value={value} onValueChange={(next) => onChange(next as T)}>
-        <SelectTrigger id={id} className="st-select">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="st-select-content">
-          {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <SettingsSelect id={id} value={value} options={options} onChange={onChange} />
     </Field>
   )
 }
@@ -267,10 +254,7 @@ export function ToggleField({
 }): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id} setting={setting} inline>
-      <span className="st-checkbox">
-        <input id={id} type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
-        <span className="st-checkbox-box" aria-hidden="true" />
-      </span>
+      <SettingsCheckbox id={id} checked={value} onChange={onChange} />
     </Field>
   )
 }

@@ -18,8 +18,8 @@
 }
 
 .st-env-ctl .st-input,
-.st-env-ctl .st-native-select {
-  width: 260px;
+.st-env-ctl .st-select-wrap {
+  width: 320px;
   max-width: 100%;
 }
 
@@ -32,26 +32,25 @@
   font-size: 12px;
 }
 
-/* Penanda status kecil di baris judul (sumber nilai, restart, berbahaya). */
+/* Badge status di baris judul (sumber nilai, restart, berbahaya): badge hitungan VS Code, tanpa border. */
 .st-tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   padding: 0 4px;
-  border: 1px solid var(--vscode-settings-checkboxBorder, var(--border));
   border-radius: 2px;
-  color: var(--vscode-descriptionForeground, var(--muted));
+  background: var(--vscode-badge-background, var(--raised));
+  color: var(--vscode-badge-foreground, var(--text));
   font-size: 11px;
   line-height: 16px;
 }
 
 .st-tag--modified {
-  border-color: var(--st-modified-indicator);
-  color: var(--vscode-foreground, var(--text));
+  box-shadow: inset 2px 0 var(--st-modified-indicator);
 }
 
 .st-tag--warning {
-  border-color: transparent;
+  background: transparent;
   color: var(--st-warning);
 }
 

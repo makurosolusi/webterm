@@ -13,6 +13,7 @@ import {
   type BuiltinAgentId,
 } from '../shared/workspace'
 import { ColorField, Field, SelectField, TextField, ToggleField } from './SettingsFields'
+import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
@@ -98,22 +99,14 @@ export function AgentSettings({
         setting="disabledAgents"
         block
       >
-        <div className="st-chips">
-          {agentOptions.map((o) => {
-            const off = s.disabledAgents.includes(o.value)
-            return (
-              <button
-                key={o.value}
-                type="button"
-                role="switch"
-                aria-checked={!off}
-                className={'st-chip' + (off ? ' is-off' : '')}
-                onClick={() => toggleDisabled(o.value, !off)}
-              >
-                {o.label}
-              </button>
-            )
-          })}
+        <div className="st-checklist">
+          {agentOptions.map((o) => (
+            <label key={o.value} className="st-checkrow">
+              <SettingsCheckbox checked={!s.disabledAgents.includes(o.value)}
+                onChange={(on) => toggleDisabled(o.value, !on)} />
+              {o.label}
+            </label>
+          ))}
         </div>
       </Field>
 

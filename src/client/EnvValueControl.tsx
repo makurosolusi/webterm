@@ -1,5 +1,6 @@
 // Kontrol nilai non-secret per kind: flag = checkbox, enum = dropdown native, number/string = input teks.
 import { Input } from '@/components/ui/input'
+import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
 import { ENV } from './envLabels'
 import type { EnvEntry } from './envSettingsApi'
 
@@ -17,19 +18,14 @@ export const envAriaName = (e: EnvEntry): string => `${e.label} (${e.key})`
 export function EnvValueControl({ entry, value, disabled, onChange }: Props): React.JSX.Element {
   if (entry.kind === 'flag') {
     return (
-      <span className="st-checkbox">
-        <input type="checkbox" aria-label={envAriaName(entry)} checked={value === ENV.on} disabled={disabled}
-          onChange={(e) => onChange(e.target.checked ? ENV.on : ENV.off)} />
-        <span className="st-checkbox-box" aria-hidden="true" />
-      </span>
+      <SettingsCheckbox ariaLabel={envAriaName(entry)} checked={value === ENV.on} disabled={disabled}
+        onChange={(on) => onChange(on ? ENV.on : ENV.off)} />
     )
   }
   if (entry.kind === 'enum') {
     return (
-      <select className="st-native-select" aria-label={envAriaName(entry)} value={value} disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}>
-        {(entry.options ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
-      </select>
+      <SettingsSelect ariaLabel={envAriaName(entry)} value={value} disabled={disabled} onChange={onChange}
+        options={(entry.options ?? []).map((c) => ({ value: c, label: c }))} />
     )
   }
   return (

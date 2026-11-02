@@ -1,18 +1,17 @@
 /* Kontrol Settings (input, select, checkbox, tombol, chip, kartu) dan breakpoint sempit.
    Dipisah dari `settings.css` supaya keduanya tetap di bawah batas file health; urutan import
-   tidak memengaruhi hasil karena selektornya tidak bertumpuk. Metrik VS Code Settings editor:
-   input/dropdown 26px, tombol min 24px, checkbox 16px radius 3px, teks 13px, radius 2px. */
+   tidak memengaruhi hasil karena selektornya tidak bertumpuk. Metrik terukur Settings editor
+   VS Code: input/dropdown 25-26px radius 4px, tombol 26px radius 4px, checkbox 18x18 radius 3px. */
 
 .st-input,
-.st-select,
-.st-native-select {
+.st-select {
   box-sizing: border-box;
   width: 100%;
-  max-width: 600px;
+  max-width: 420px;
   height: var(--st-control-height, 26px);
   padding: 0 6px;
   border: 1px solid var(--vscode-settings-textInputBorder, var(--border));
-  border-radius: 2px;
+  border-radius: 4px;
   outline: none;
   background: var(--vscode-settings-textInputBackground, var(--sunken));
   color: var(--vscode-settings-textInputForeground, var(--text));
@@ -27,9 +26,7 @@
 
 .st-input:focus,
 .st-input:focus-visible,
-.st-select:focus,
-.st-select:focus-visible,
-.st-native-select:focus-visible {
+.st-select:focus-visible {
   border-color: var(--vscode-focusBorder, var(--accent));
   outline: 1px solid var(--vscode-focusBorder, var(--accent));
   outline-offset: -1px;
@@ -43,49 +40,49 @@
 }
 
 .st-input:disabled,
-.st-native-select:disabled,
 .st-select:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
 .st-input-num {
-  width: 88px;
+  width: 200px;
 }
 
 .st-input-hex {
   width: 92px;
 }
 
+/* Dropdown: `<select>` native (seperti Settings editor VS Code) dibungkus supaya chevron codicon
+   bisa ditaruh di kanan; teks panjang di-ellipsis, bukan terpotong. */
+.st-select-wrap {
+  position: relative;
+  display: inline-flex;
+  width: 320px;
+  max-width: 100%;
+}
+
 .st-select {
-  display: flex;
-  justify-content: space-between;
-  gap: 4px;
-  width: 260px;
-  padding: 0 4px 0 6px;
-}
-
-.st-select svg {
-  width: 14px;
-  height: 14px;
-  color: var(--vscode-icon-foreground, var(--muted));
-  opacity: 1;
-}
-
-/* Dropdown native: chevron digambar dari dua gradien supaya mengikuti warna teks di dua tema. */
-.st-native-select {
-  width: 260px;
-  padding-right: 22px;
-  background-color: var(--vscode-settings-dropdownBackground, var(--sunken));
-  background-image:
-    linear-gradient(45deg, transparent 50%, currentcolor 50%),
-    linear-gradient(135deg, currentcolor 50%, transparent 50%);
-  background-position: calc(100% - 11px) 50%, calc(100% - 7px) 50%;
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
-  color: var(--vscode-settings-dropdownForeground, var(--text));
+  width: 100%;
+  max-width: none;
+  padding: 0 24px 0 6px;
+  background: var(--vscode-settings-dropdownBackground, var(--sunken));
   border-color: var(--vscode-settings-dropdownBorder, var(--border));
+  color: var(--vscode-settings-dropdownForeground, var(--text));
+  text-overflow: ellipsis;
+  white-space: nowrap;
   appearance: none;
+  cursor: default;
+}
+
+.st-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  font-size: 16px;
+  color: var(--vscode-icon-foreground, var(--muted));
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .st-color {
@@ -94,7 +91,7 @@
   height: var(--st-control-height, 26px);
   padding: 1px;
   border: 1px solid var(--vscode-settings-checkboxBorder, var(--border));
-  border-radius: 2px;
+  border-radius: 4px;
   background: var(--vscode-settings-checkboxBackground, var(--sunken));
   box-shadow: none;
 }
@@ -109,37 +106,14 @@
   font-size: 12px;
 }
 
-/* Select popup di-portal ke body, jadi selektornya global lewat kelas content. */
-.st-select-content {
-  padding: 4px 0;
-  border: 1px solid var(--vscode-settings-dropdownBorder, var(--border));
-  border-radius: 2px;
-  background: var(--vscode-settings-dropdownBackground, var(--sunken));
-  color: var(--vscode-settings-dropdownForeground, var(--text));
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
-  font-size: 13px;
-}
-
-.st-select-content [data-slot='select-item'] {
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 0;
-  font-size: 13px;
-}
-
-.st-select-content [data-slot='select-item'][data-highlighted] {
-  background: var(--vscode-list-activeSelectionBackground, var(--accent));
-  color: var(--vscode-list-activeSelectionForeground, var(--text));
-}
-
 /* ------------------------------------------------------------- checkbox */
 /* Input native tetap menerima fokus/klik (transparan di atas kotak gambar), jadi label
    association dan keyboard bawaan tidak berubah. */
 .st-checkbox {
   position: relative;
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .st-checkbox input {
@@ -153,25 +127,28 @@
   cursor: default;
 }
 
+/* Kotak 18x18 radius 3; centang = codicon 16px, hanya tampak saat checked. */
 .st-checkbox-box {
   position: absolute;
   inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   border: 1px solid var(--vscode-settings-checkboxBorder, var(--border));
   border-radius: 3px;
   background: var(--vscode-settings-checkboxBackground, var(--sunken));
+  color: var(--vscode-settings-checkboxForeground, var(--text));
+  font-size: 16px;
 }
 
-.st-checkbox input:checked + .st-checkbox-box::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 4px;
-  width: 4px;
-  height: 8px;
-  border: solid var(--vscode-settings-checkboxForeground, var(--text));
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
+.st-checkbox-box .codicon {
+  visibility: hidden;
+  font-size: 16px;
+}
+
+.st-checkbox input:checked + .st-checkbox-box .codicon {
+  visibility: visible;
 }
 
 .st-checkbox input:focus-visible + .st-checkbox-box {
@@ -186,16 +163,16 @@
 /* -------------------------------------------------------------- buttons */
 .st-button {
   box-sizing: border-box;
-  min-height: 24px;
-  padding: 1px 13px;
+  min-height: 26px;
+  padding: 4px 8px;
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
+  border-radius: 4px;
   background: var(--vscode-button-secondaryBackground, var(--raised));
   color: var(--vscode-button-secondaryForeground, var(--text));
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
-  line-height: 18px;
+  line-height: 16px;
   cursor: default;
   box-shadow: none;
 }
@@ -232,7 +209,8 @@
 /* ------------------------------------------- daftar: launch command, kartu */
 .st-rows,
 .st-cards,
-.st-chips {
+.st-chips,
+.st-checklist {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -262,30 +240,12 @@
   width: auto;
 }
 
-/* Chip agent di menu Add: label 22px, badge-style; dimatikan = coret + transparan. */
-.st-chip {
-  box-sizing: border-box;
+/* Daftar agent di menu Add: satu checkbox per agent (centang = tampil). */
+.st-checkrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: var(--vscode-badge-background, var(--accent));
-  color: var(--vscode-badge-foreground, var(--text));
-  font-family: inherit;
-  font-size: 12px;
-  cursor: default;
-}
-
-.st-chip:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder, var(--accent));
-  outline-offset: 1px;
-}
-
-.st-chip.is-off {
-  background: transparent;
-  border-color: var(--vscode-settings-checkboxBorder, var(--border));
-  color: var(--vscode-descriptionForeground, var(--muted));
-  text-decoration: line-through;
 }
 
 .st-cards {
@@ -319,10 +279,8 @@
     width: 150px;
   }
 
-  .st-select,
-  .st-native-select {
+  .st-select-wrap {
     width: 100%;
-    max-width: 320px;
   }
 
   .st-input-num,

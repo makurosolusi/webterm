@@ -19,6 +19,8 @@ const vscodeScreens = new Set([
   // Settings / Env / Channels
   "src/client/SettingsPanel.tsx",
   "src/client/SettingsAgents.tsx",
+  // Native <select>/checkbox restyled with VS Code metrics (hybrid settings screen).
+  "src/client/SettingsControls.tsx",
   "src/client/SettingsFields.tsx",
   "src/client/EnvEntryRow.tsx",
   "src/client/EnvSecretField.tsx",
