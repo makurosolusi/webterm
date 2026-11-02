@@ -43,6 +43,9 @@ import {
   type GitRepoInfo,
 } from '../shared/gitInfo'
 import { resolveFsPath } from './fsOps'
+import { createLogger } from './logs'
+
+const log = createLogger('git')
 
 const run = promisify(execFile)
 
@@ -125,7 +128,7 @@ async function repoStatus(root: string): Promise<GitRepoInfo | null> {
   if (!r.stdout.includes(BRANCH_OID)) {
     // Path TIDAK di-log: path absolut pengguna memuat namanya (Rule 12). Yang perlu untuk
     // diagnosis adalah apakah ini batas waktu atau git yang menolak.
-    console.warn(`git status unusable (killed=${r.killed})`)
+    log.warn('git.status.unusable', 'git status unusable', { timedOut: r.killed })
     return null
   }
   return parseStatus(root, r.stdout)

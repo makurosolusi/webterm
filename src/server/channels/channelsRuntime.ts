@@ -43,6 +43,7 @@ import {
 import type { FlushResult } from './telegramSender'
 import { resolveTelegramMode, type TelegramMode } from './telegramMode'
 import { resolveTelegramBotToken } from './telegramSend'
+import { createLogger } from '../logs'
 import { respondToWebhook, safeError, type ChannelWebhookRuntime } from './telegramWebhookHandler'
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
@@ -82,8 +83,10 @@ export {
   type WebhookBodyResult,
 } from './telegramWebhookHandler'
 
+const log = createLogger('channels')
+
 function logDisabled(reason: string): void {
-  console.warn(`telegram channel disabled: ${reason}`)
+  log.warn('channels.disabled', `telegram channel disabled: ${reason}`)
 }
 
 export function telegramChannelEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -163,7 +166,7 @@ export function startChannelsRuntime(
     if (!resolved.ok) return logDisabledAndNull(resolved.reason)
     secret = resolved.secret
   } else if (resolveTelegramBotToken(env) === undefined) {
-    console.warn('telegram on tetapi bot token belum diset (mode poll tidak menerima update tanpa token)')
+    log.warn('channels.token_missing', 'telegram on tetapi bot token belum diset (mode poll tidak menerima update tanpa token)')
   }
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')
 
@@ -182,7 +185,7 @@ export function startChannelsRuntime(
       ledger.event.appendEvent({ kind: event.kind, actor: 'channel:telegram', payload: event })
     } catch (err) {
       // Audit is best-effort: a missing project row or a busy DB must not break ingress.
-      console.warn(`telegram audit append failed: ${safeError(err)}`)
+      log.warn('channels.audit_failed', `telegram audit append failed: ${safeError(err)}`)
     }
   }
   const pending = new PendingChatStore(options.now === undefined ? {} : { now: options.now })
@@ -193,6 +196,7 @@ export function startChannelsRuntime(
   // A missing bot token only disables egress; ingress and the binding API stay available.
   const sender = startChannelSenderFor(store, env, options.sender ?? {})
 
+  log.info('channels.start', `telegram channel started (${mode})`, { mode, egress: sender !== null })
   return {
     store,
     mode,
@@ -217,6 +221,7 @@ export function startChannelsRuntime(
     flushNow: () => flushChannelSender(sender),
     stop() {
       stopChannelSender(sender)
+      log.info('channels.stop', 'telegram channel stopped', { mode })
     },
   }
 }

@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { binaryExists, ptyEnv, resolveCwd, shellArgv } from './ptyShell'
+import { createLogger } from './logs'
+
+const log = createLogger('pty')
 
 export { binaryExists, shellArgv }
 
@@ -148,6 +151,9 @@ function failedPty(err: unknown): Pty {
   let onData: (data: string) => void = () => {}
   let onExit: (code: number) => void = () => {}
   const reason = err instanceof Error ? err.message : String(err)
+  // Hanya nama/kode error: pesan Bun/spawn memuat path biner dan cwd pengguna.
+  const code = (err as { code?: unknown } | null)?.code
+  log.error('pty.error', 'PTY spawn failed', { error: err instanceof Error ? err.name : 'unknown', code: typeof code === 'string' ? code : undefined })
   queueMicrotask(() => {
     onData(`\r\n[webterm] gagal memulai shell: ${reason}\r\n`)
     onExit(SPAWN_FAILED_EXIT_CODE)

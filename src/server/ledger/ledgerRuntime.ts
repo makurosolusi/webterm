@@ -2,12 +2,13 @@
 // `shadow` opens and migrates the ledger but must never fail the server; `on` is strict.
 import type { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { dataDir } from '../config'
 import { createLedger, type Ledger } from './ledger'
 import { openLedgerDb } from './migration'
 import { ledgerMetrics } from './ledgerMetrics'
 import { setActiveLedgerRuntime } from './ledgerRuntimeState'
+import { createLogger } from '../logs'
 
 // The HTTP layer reads the runtime through this handle; startLedgerRuntime owns the value.
 export {
@@ -22,13 +23,15 @@ const PRIVATE_FILE_MODE = 0o600
 /** SQLite creates these next to the database; all of them can hold ledger bytes. */
 const LEDGER_FILES = ['', '-wal', '-shm', '-journal'] as const
 
+const log = createLogger('ledger')
+
 function isMemoryPath(path: string): boolean {
   return path === '' || path === ':memory:' || path.startsWith('file::memory:')
 }
 
 function warnPermissions(what: string, err: unknown): void {
   const reason = err instanceof Error ? err.message : String(err)
-  console.warn(`ledger ${what} permissions not enforced: ${reason}`)
+  log.warn('ledger.permissions', `ledger ${what} permissions not enforced: ${reason}`, { what })
 }
 
 /**
@@ -100,15 +103,19 @@ export function startLedgerRuntime(opts: {
       path,
       db,
       ledger,
-      close: () => (db as unknown as { close(): void }).close(),
+      close: () => {
+        ;(db as unknown as { close(): void }).close()
+        log.info('ledger.stop', 'ledger runtime closed', { mode })
+      },
     }
     setActiveLedgerRuntime(runtime)
+    log.info('ledger.start', `ledger runtime started (${mode})`, { mode, db: basename(path) })
     return runtime
   } catch (err) {
     setActiveLedgerRuntime(null)
     if (mode === 'on') throw err
     const reason = err instanceof Error ? err.message : String(err)
-    console.error(`ledger shadow disabled: ${reason}`)
+    log.error('ledger.error', `ledger shadow disabled: ${reason}`, { mode })
     return null
   }
 }
@@ -122,9 +129,10 @@ export function startLedgerReaper(
   intervalMs = 30_000,
   onError: (err: unknown) => void = (err) => {
     const reason = err instanceof Error ? err.message : String(err)
-    console.error(`ledger reaper tick failed: ${reason}`)
+    log.error('ledger.reaper.error', `ledger reaper tick failed: ${reason}`)
   }
 ): () => void {
+  log.info('ledger.reaper.start', 'ledger reaper started', { intervalMs })
   const timer = setInterval(() => {
     ledgerMetrics.inc('reaper_tick')
     try {
@@ -135,5 +143,8 @@ export function startLedgerReaper(
     }
   }, intervalMs)
   ;(timer as unknown as { unref?: () => void }).unref?.()
-  return () => clearInterval(timer)
+  return () => {
+    clearInterval(timer)
+    log.info('ledger.reaper.stop', 'ledger reaper stopped')
+  }
 }

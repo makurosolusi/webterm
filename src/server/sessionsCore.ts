@@ -5,6 +5,7 @@ import { STALE_SWEEP_MS } from '../shared/agentStale'
 import { NodeRegistry, tailOutputBytes, type NodeExit } from './nodeRegistry'
 import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
+import { ptyLog } from './sessionsLog'
 
 /** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
  *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
@@ -45,6 +46,8 @@ export class SessionsCore {
     // mendarat sesudah shell-nya keluar) tidak boleh menghidupkan lagi statusnya — client akan
     // merender node mati itu sebagai aktif dan menawarkan Resume.
     if (this.registry.getExit(id)) return
+    const prev = this.registry.getStatus(id)?.status
+    if (prev !== status) ptyLog.status(id, prev, status)
     this.registry.setStatus(id, status, now)
     this.map.get(id)?.subs.send({ t: 'status', id, status })
   }
@@ -55,6 +58,7 @@ export class SessionsCore {
    */
   sweepStale(now: number = this.now()): void {
     for (const id of this.registry.sweepStale(now)) {
+      ptyLog.statusCleared(id)
       // `status` absen = "tidak ada status lagi". Client menghapus entry-nya dan merender "Unknown".
       this.map.get(id)?.subs.send({ t: 'status', id })
     }
@@ -124,6 +128,7 @@ export class SessionsCore {
     if (this.map.get(session.id) !== session || session.exited) return
     session.exited = true
     const at = this.now()
+    ptyLog.exited(session.id, session.agentId, code, 'self', at - session.startedAt)
     // `done` DULU, tombstone exit sesudahnya: `setStatus` mengabaikan node yang sudah punya
     // tombstone (lihat guard di sana), jadi urutan sebaliknya membuat `done` hilang.
     this.setStatus(session.id, 'done', at)

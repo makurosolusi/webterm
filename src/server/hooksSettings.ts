@@ -3,6 +3,9 @@ import { TOKEN_HEADER } from './auth'
 import { NODE_TOKEN_HEADER, nodeToken } from './hooksTokens'
 import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir } from './hooksPaths'
 import { encodeQueryValue, shq } from './hooksQuote'
+import { createLogger } from './logs'
+
+const log = createLogger('hooks')
 
 // ---------------------------------------------------------------------------------------------
 // Langganan event hook.
@@ -126,11 +129,17 @@ export function claudeHooksSettings(nodeId: string, port: number): Record<string
  */
 export function writeClaudeSettings(nodeId: string, port: number): string {
   const path = claudeSettingsPath(nodeId)
-  ensureNodeSettingsDir()
-  // Ditulis SEBELUM settings dikembalikan: baris hook menunjuk ke file ini, dan sesi agent bisa
-  // langsung menjalankan hook pertamanya begitu claude hidup.
-  writeClaudeHeaders(nodeId)
-  writeFileSync(path, JSON.stringify(claudeHooksSettings(nodeId, port)), { mode: 0o600 })
+  try {
+    ensureNodeSettingsDir()
+    // Ditulis SEBELUM settings dikembalikan: baris hook menunjuk ke file ini, dan sesi agent bisa
+    // langsung menjalankan hook pertamanya begitu claude hidup.
+    writeClaudeHeaders(nodeId)
+    writeFileSync(path, JSON.stringify(claudeHooksSettings(nodeId, port)), { mode: 0o600 })
+  } catch (err) {
+    log.error('hooks.error', 'Failed to write hook settings', { ids: { nodeId }, error: err instanceof Error ? err.name : 'unknown', code: (err as { code?: unknown } | null)?.code })
+    throw err
+  }
+  log.info('hooks.install', 'Installed hook settings', { ids: { nodeId }, events: CLAUDE_HOOK_EVENTS.length })
   return path
 }
 

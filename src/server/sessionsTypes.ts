@@ -11,6 +11,10 @@ export interface Session {
   log: OutputLog
   subs: SubscriberSet<ServerMsg>
   exited: boolean
+  /** Waktu spawn (ms) untuk durasi di log `pty.exit`. */
+  startedAt: number
+  /** Agent harness sesi ini (kosong = terminal biasa); dipakai log `agent.*`. */
+  agentId?: string
 }
 
 /** Ringkasan sesi hidup untuk endpoint/panel daftar. Tanpa tombstone: sesi yang sudah keluar tidak

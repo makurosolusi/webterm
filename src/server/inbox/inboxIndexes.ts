@@ -8,6 +8,9 @@
 // `created_at`, and the badge polls it from two places every 30 s. Without an index that is a full
 // table scan per open client.
 import type { Database } from 'bun:sqlite'
+import { createLogger } from '../logs'
+
+const log = createLogger('inbox')
 
 export const INBOX_INDEXES: readonly string[] = [
   'CREATE INDEX IF NOT EXISTS idx_approval_status_expires ON approval(status, expires_at, created_at)',
@@ -29,6 +32,6 @@ export function ensureInboxIndexes(db: Database): void {
     for (const sql of INBOX_INDEXES) db.exec(sql)
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.warn(`inbox indexes unavailable (projection still works unindexed): ${reason}`)
+    log.warn('inbox.indexes.unavailable', `inbox indexes unavailable (projection still works unindexed): ${reason}`)
   }
 }

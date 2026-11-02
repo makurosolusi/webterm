@@ -16,6 +16,7 @@ import {
   writeMemoryFactFile,
 } from './memory/memoryFile'
 import { dataDir } from './config'
+import { createLogger } from './logs'
 import { type RouteResult, capped, failure } from './memoryFileHttpResponse'
 import { LEDGER_OFF } from './apiShared.types'
 
@@ -25,6 +26,7 @@ export const MEMORY_EXPORT_PATH = '/api/memory/export'
 export const MEMORY_REBUILD_PATH = '/api/memory/rebuild'
 export const MEMORY_DIR_ENV = 'WEBTERM_MEMORY_DIR'
 const MAX_ID_CHARS = 200
+const log = createLogger('memory')
 /** Warned-once guard: a relative WEBTERM_MEMORY_DIR is ignored, and must not spam per request. */
 const warnedRelativeDirs = new Set<string>()
 
@@ -56,8 +58,7 @@ function memoryRoot(deps: MemoryFileHttpDeps, env: Record<string, string | undef
     if (isAbsolute(configured)) return configured
     if (!warnedRelativeDirs.has(configured)) {
       warnedRelativeDirs.add(configured)
-      const safe = configured.replace(/[\u0000-\u001f]+/g, ' ').slice(0, 120)
-      console.warn(`memory dir ignored: ${MEMORY_DIR_ENV} must be absolute (got "${safe}")`)
+      log.warn('memory.dir.ignored', `${MEMORY_DIR_ENV} must be absolute; using the default memory dir`, { env: MEMORY_DIR_ENV })
     }
   }
   return join(deps.dataDir ? deps.dataDir() : dataDir(), 'memory')

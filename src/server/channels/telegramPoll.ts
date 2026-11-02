@@ -5,6 +5,9 @@
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './telegramSend'
 import { PollApiError, callBotApi } from './telegramPollApi'
 import { redactSecrets } from '../redactSecrets'
+import { createLogger } from '../logs'
+
+const log = createLogger('channels.telegram')
 
 export const TELEGRAM_POLL_TIMEOUT_SEC = 25
 /** Extra time over the server-side long-poll timeout before the HTTP request is abandoned. */
@@ -83,11 +86,12 @@ export function startTelegramPoller(options: TelegramPollerOptions): TelegramPol
     try {
       options.onStatus?.(status)
     } catch (err) {
-      console.warn(`telegram poll: status callback failed: ${redactSecrets(String(err)).slice(0, 200)}`)
+      log.warn('telegram.poll.error', `telegram poll: status callback failed: ${redactSecrets(String(err)).slice(0, 200)}`, { stage: 'status_callback' })
     }
   }
 
   async function run(): Promise<void> {
+    log.info('telegram.poll.start', 'telegram poll started')
     let offset = options.cursor() + 1
     let webhookCleared = false
     let failures = 0
@@ -127,21 +131,22 @@ export function startTelegramPoller(options: TelegramPollerOptions): TelegramPol
             : new PollApiError('transient', redactSecrets(`poll failed: ${String(err)}`).slice(0, 200))
         report({ ok: false, at: now(), error: failure.message })
         if (failure.kind === 'fatal') {
-          console.error(`telegram poll stopped: ${failure.message}`)
+          log.error('telegram.poll.error', `telegram poll stopped: ${failure.message}`, { kind: failure.kind })
           break
         }
         failures += 1
         const backoff = Math.min(maxMs, baseMs * 2 ** (failures - 1))
         const delay = Math.max(failure.retryAfterMs ?? 0, Math.round(backoff * (0.5 + random() / 2)))
-        console.warn(`telegram poll: ${failure.message} (retry in ${delay}ms)`)
+        log.warn('telegram.poll.error', `telegram poll: ${failure.message} (retry in ${delay}ms)`, { kind: failure.kind, retryInMs: delay, failures })
         await sleep(delay, signal)
       }
     }
   }
 
   const done = run().catch((err) => {
-    console.error(`telegram poll crashed: ${redactSecrets(String(err)).slice(0, 200)}`)
+    log.error('telegram.poll.error', `telegram poll crashed: ${redactSecrets(String(err)).slice(0, 200)}`, { kind: 'crashed' })
   }).finally(() => {
+    log.info('telegram.poll.stop', 'telegram poll ended')
     if (active === poller) active = null
   })
   const poller: TelegramPoller = {

@@ -8,6 +8,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Settings } from '../shared/settings'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
+import { createLogger } from './logs'
+
+const log = createLogger('settings')
 
 /** Bagian store settings yang dipakai route ini. Di-inject (bukan import singleton `db`) supaya
  *  route ini bisa diuji di node-env tanpa `bun:sqlite`; produksi meneruskan `db` dari `api.ts`. */
@@ -54,7 +57,11 @@ export async function settingsRoute(
     } catch {
       return json(res, 400, { error: 'bad json' })
     }
-    return json(res, 200, store.saveSettings(patch))
+    const saved = store.saveSettings(patch)
+    // Nama kunci saja: nilai settings (shell, path, mode) tidak dicatat.
+    const keys = patch !== null && typeof patch === 'object' ? Object.keys(patch) : []
+    log.info('settings.update', 'Settings updated', { keys })
+    return json(res, 200, saved)
   }
   json(res, 405, { error: 'method not allowed' })
 }

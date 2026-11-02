@@ -101,7 +101,7 @@ describe('telegram poller', () => {
     const { poller: p } = start({ fetch: api.fetch, onStatus: (s) => statuses.push(s) })
     await p.done
     expect(api.calls).toHaveLength(1)
-    const errors = logs.filter((l) => l.startsWith('telegram poll stopped'))
+    const errors = logs.filter((l) => l.includes('telegram poll stopped'))
     expect(errors).toHaveLength(1)
     expect(errors[0]).toContain('401')
     expect(statuses).toEqual([expect.objectContaining({ ok: false, error: expect.stringContaining('401') })])
@@ -157,7 +157,8 @@ describe('telegram poller', () => {
     await p.stop()
     await p.stop()
     expect(api.calls).toHaveLength(2)
-    expect(logs.filter((l) => l.includes('telegram poll'))).toEqual([])
+    // Lifecycle lines (started/ended) are info now; a clean stop must still log no warn/error.
+    expect(logs.filter((l) => /\[(warn|error)\]/.test(l))).toEqual([])
   })
 
   it('allows only one poller per process until it is stopped', async () => {

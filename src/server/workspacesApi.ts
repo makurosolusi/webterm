@@ -13,6 +13,7 @@
 import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
 import type { Db } from './db'
 import { BodyReadError } from './cappedRequestBody'
+import { logWorkspaceSave, workspaceLog } from './workspacesLog'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
  *  bila path/method bukan milik modul ini. */
@@ -65,6 +66,16 @@ async function bodyOrFailure(
   }
 }
 
+/** Jalankan tulis-DB; kegagalan dicatat (error) lalu dilempar ulang ke penangan 500 di `api.ts`. */
+function guarded<T>(op: 'create' | 'save' | 'delete', id: string | undefined, run: () => T): T {
+  try {
+    return run()
+  } catch (err) {
+    workspaceLog.failed(op, id, err)
+    throw err
+  }
+}
+
 /**
  * Rute satu request workspace. `store` di-inject (bukan import singleton `db`) supaya tabel rute
  * ini bisa diuji di atas SQLite in-memory tanpa menyentuh DB pengguna.
@@ -85,7 +96,9 @@ export async function workspacesRoute(
       if (!read.ok) return read.result
       const b = parseObjectBody<CreateBody>(read.raw)
       if (!b) return BAD_JSON
-      return { status: 201, body: store.create(b.name, b.cwd, b.color) }
+      const created = guarded('create', undefined, () => store.create(b.name, b.cwd, b.color))
+      workspaceLog.created(created)
+      return { status: 201, body: created }
     }
   }
 
@@ -105,12 +118,15 @@ export async function workspacesRoute(
         id, name: b.name, cwd: b.cwd, color: b.color,
         viewport: b.viewport, nodes: b.nodes, bridges: b.bridges ?? [], updatedAt: Date.now(),
       }
-      store.save(ws)
+      const prev = store.get(id)
+      guarded('save', id, () => store.save(ws))
       const saved = store.get(id)
+      if (saved) logWorkspaceSave(prev, saved)
       return saved ? { status: 200, body: saved } : NOT_FOUND
     }
     if (method === 'DELETE') {
-      store.delete(id)
+      guarded('delete', id, () => store.delete(id))
+      workspaceLog.deleted(id)
       return { status: 204 } // tanpa kunci `body` — lihat catatan 204 di kepala file
     }
   }
@@ -128,6 +144,7 @@ export async function workspacesRoute(
       // kegagalan senyap yang merusak state. Pesan tidak menggemakan nilai yang dikirim client.
       if (typeof b.id !== 'string' || b.id.trim() === '') return BAD_ID
       store.setActive(b.id)
+      workspaceLog.activated(b.id)
       return { status: 204 }
     }
   }

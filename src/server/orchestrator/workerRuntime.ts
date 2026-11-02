@@ -4,6 +4,7 @@
 // orkestrator lewat port sempit. Port sesi/helper prompt di `workerRuntimeSession`/`workerRuntimePrompt`.
 // Kontrak dan tipe ada di `workerRuntimeTypes`; nama publik tetap diekspor ulang dari sini.
 import { randomUUID } from 'node:crypto'
+import { createLogger } from '../logs'
 import { isSafeNodeId } from '../../shared/workspace'
 import type { VerificationEvidence } from './orchestratorModel'
 import { evidenceVerified } from './orchestratorModel'
@@ -19,6 +20,8 @@ import type {
   WorkerRuntime,
   WorkerRuntimeDeps,
 } from './workerRuntimeTypes'
+
+const log = createLogger('orchestrator')
 
 export {
   createSessionsPort,
@@ -60,6 +63,9 @@ function makeOutcome(args: {
   error?: { code: WorkerRunErrorCode; message: string }
   cleanupError?: string
 }): WorkerRunOutcome {
+  // Code only: error messages can quote worker output or worktree paths.
+  if (args.error) log.warn('orchestrator.worker.fail', `worker run failed: ${args.error.code}`, { code: args.error.code, ids: { nodeId: args.nodeId ?? undefined } })
+  else log.info('orchestrator.worker.done', 'worker run verified', { ids: { nodeId: args.nodeId ?? undefined } })
   return {
     ok: args.error === undefined,
     task: args.task,
@@ -107,6 +113,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     const expectedVersion = started.value.plan.version
     const actor = task.leaseOwner ?? task.agentId ?? ''
     const nodeId = deriveNodeId(task.id, task.fence)
+    log.info('orchestrator.worker.start', 'worker run started', { ids: { nodeId } })
     const timeoutMs = input.timeoutMs ?? deps.timeoutMs ?? DEFAULT_TIMEOUT_MS
     let recorded = false
     let opened = false
