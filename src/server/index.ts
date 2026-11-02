@@ -11,6 +11,7 @@ import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './le
 import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
 import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
+import { initEnvSettings } from './envSettings.runtime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
@@ -24,6 +25,8 @@ const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
 // Before anything can spawn a PTY: make the env agree with what we enforce, so children that
 // reference $WEBTERM_TOKEN inherit the same form `authorize` compares against.
 writeTokenToEnv(TOKEN)
+// Pengaturan > env > default: terapkan override tersimpan ke process.env sebelum ledger/kanal membacanya.
+initEnvSettings()
 const dev = process.env.NODE_ENV !== 'production'
 
 // Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.

@@ -5,6 +5,8 @@ import npath from 'node:path'
 import { db } from './db'
 import { sessions } from './sessions'
 import { settingsRoute } from './settingsApi'
+import { ENV_SETTINGS_PATH, envSettingsRoute } from './envSettings.api'
+import { envSettingsApiDeps } from './envSettings.runtime'
 import { workspacesRoute } from './workspacesApi'
 import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
@@ -68,6 +70,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // stream. Reader `fs`/`git` di bawah tetap TANPA cap — isi file boleh besar.
   const wsRes = await workspacesRoute(db, path, method, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES))
   if (wsRes) return json(res, wsRes.status, wsRes.body)
+
+  if (path === ENV_SETTINGS_PATH) return envSettingsRoute(req, res, method, envSettingsApiDeps())
 
   if (path === '/api/settings') {
     await settingsRoute(req, res, method, db)
