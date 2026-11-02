@@ -238,9 +238,9 @@ describe('Dock inbox button', () => {
     const onToggleInbox = vi.fn()
     render(<Dock {...dockProps({ inboxUnread: 4, onToggleInbox })} />)
 
-    const button = screen.getByRole('button', { name: 'Toggle inbox panel (4 unread)' })
-    expect(button.getAttribute('aria-pressed')).toBe('false')
-    const badge = button.querySelector('.dock-badge')
+    const button = screen.getByRole('button', { name: 'Toggle inbox panel, 4' })
+    expect(button.getAttribute('aria-current')).toBeNull()
+    const badge = button.querySelector('.vscode-activity-bar__badge')
     expect(badge?.textContent).toBe('4')
     // Badge dekoratif: pembaca layar sudah menerima angkanya dari aria-label tombol.
     expect(badge?.getAttribute('aria-hidden')).toBe('true')
@@ -254,11 +254,11 @@ describe('Dock inbox button', () => {
   it('reflects the open state and drops the badge at zero', () => {
     const { rerender } = render(<Dock {...dockProps({ inboxOpen: true, inboxUnread: 0 })} />)
     const button = screen.getByRole('button', { name: 'Toggle inbox panel' })
-    expect(button.getAttribute('aria-pressed')).toBe('true')
-    expect(button.querySelector('.dock-badge')).toBeNull()
+    expect(button.getAttribute('aria-current')).toBe('page')
+    expect(button.querySelector('.vscode-activity-bar__badge')).toBeNull()
 
     rerender(<Dock {...dockProps({ inboxOpen: false, inboxUnread: 120 })} />)
-    expect(screen.getByRole('button', { name: 'Toggle inbox panel (99+ unread)' }).querySelector('.dock-badge')?.textContent).toBe('99+')
+    expect(screen.getByRole('button', { name: 'Toggle inbox panel, 99+' }).querySelector('.vscode-activity-bar__badge')?.textContent).toBe('99+')
   })
 })
 
@@ -320,11 +320,12 @@ describe('App wiring', () => {
   })
 })
 
-describe('dock.css contract', () => {
+describe('activity bar badge contract', () => {
   it('badge is absolutely anchored and does not eat clicks', () => {
-    const css = readFileSync('src/client/dock.css', 'utf8')
-    const block = /\.dock-badge\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
+    const css = readFileSync('src/client/components/vscode/vscode-shell.css', 'utf8')
+    const block = /\.vscode-activity-bar__badge\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
     expect(block).toContain('position: absolute')
-    expect(block).toContain('pointer-events: none')
+    expect(block).toContain('right:')
+    expect(block).toContain('bottom:')
   })
 })

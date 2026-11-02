@@ -5,7 +5,6 @@
 import type { CSSProperties } from 'react'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   AGENT_CONFIG,
@@ -94,6 +93,7 @@ export function AgentSettings({
       <Field
         label="Agent di menu Add"
         hint="Matikan agent yang tidak kamu pakai supaya menu Add tetap pendek."
+        block
       >
         <div className="st-chips">
           {agentOptions.map((o) => {
@@ -104,7 +104,7 @@ export function AgentSettings({
                 type="button"
                 role="switch"
                 aria-checked={!off}
-                className={'st-chip' + (off ? ' is-off' : '')}
+                className={'st-chip st-button' + (off ? ' is-off' : '')}
                 onClick={() => toggleDisabled(o.value, !off)}
                 variant="ghost"
               >
@@ -123,6 +123,7 @@ export function AgentSettings({
           'ditempel SETELAHNYA, jadi perintahnya harus meneruskan argumennya (skrip shell diakhiri ' +
           '`exec claude "$@"`). Kosong = default builtin.'
         }
+        block
       >
         <div className="st-rows">
           {BUILTIN_AGENT_IDS.map((id: BuiltinAgentId) => (
@@ -131,7 +132,7 @@ export function AgentSettings({
                 {AGENT_CONFIG[id].label}
               </span>
               <Input
-                className="st-mono"
+                className="st-input st-mono"
                 type="text"
                 aria-label={`${AGENT_CONFIG[id].label} launch command`}
                 placeholder={AGENT_CONFIG[id].launchCmd}
@@ -153,8 +154,9 @@ export function AgentSettings({
       <Field
         label="Agent custom"
         hint="Bawa CLI agent sendiri, atau bungkus harness builtin (mis. Claude) untuk mengarahkan inferensi ke proxy-mu. Variabel env TIDAK tersedia di sini — settings webterm melintas HTTP, dan env adalah satu-satunya tempat kredensial akan mendarat."
+        block
       >
-        <Button type="button" variant="outline" size="sm" onClick={addAgent}>Tambah agent</Button>
+        <Button type="button" variant="outline" size="sm" className="st-button" onClick={addAgent}>Tambah agent</Button>
       </Field>
       <div className="st-cards">
         {s.customAgents.map((a) => (
@@ -176,7 +178,7 @@ function CustomAgentCard({
 }): React.JSX.Element {
   const base = agent.baseAgent ? AGENT_CONFIG[agent.baseAgent] : undefined
   return (
-    <Card className="st-card">
+    <section className="st-card" aria-label={agent.label || agent.id}>
       <TextField
         id={`st-ca-label-${agent.id}`}
         label="Label"
@@ -220,10 +222,10 @@ function CustomAgentCard({
       />
       <div className="st-card-foot">
         <code className="st-mono st-muted">{agent.id}</code>
-        <Button type="button" variant="destructive" size="sm" onClick={() => onRemove(agent.id)}>
+        <Button type="button" variant="secondary" size="sm" className="st-button" onClick={() => onRemove(agent.id)}>
           Hapus
         </Button>
       </div>
-    </Card>
+    </section>
   )
 }

@@ -1,132 +1,78 @@
-/* Kolom kontrol kiri — SATU-SATUNYA kumpulan tombol canvas. Metrik plat & tombol tetap dari
-   nodeterm `src/renderer/styles.css` (blok `---- Bottom-center dock ----`); yang berubah hanya
-   arahnya: kolom ini menelan rail zoom kiri-bawah yang dulu terpisah, jadi zoom in/out/fit tidak
-   lagi ada dobel di dua tempat dan lock ikut pindah ke sini. */
+/* Activity bar kiri — kolom ikon 48px milik VS Code. Primitif `VscodeActivityBar` yang
+   menggambar item, badge, indikator 2px, dan navigasi panah; file ini hanya menempatkannya di
+   grid shell dan menyediakan dua tombol MODE (lock/clean view) yang butuh `aria-pressed`.
 
+   `--dock-w` tetap hidup meski kolomnya kini 48px: panel Inbox yang mengapung memakai token ini
+   untuk meminggirkan dirinya dari rail. Nilainya diturunkan dari lebar activity bar, bukan angka
+   mati, jadi rail yang berubah tidak pernah menabrak panel. */
 :root {
-  /* Metrik tombol dock dari nodeterm. Dijadikan token karena `--dock-w` di bawahnya dihitung dari
-     keduanya — bukan untuk tema. */
-  --dock-btn-size: 38px;
-  --dock-pad: 7px;
-  /* Lebar kolom dock, dan satu-satunya sumbernya: `sessions-panel.css` menggeser panel sejauh angka
-     ini. Dihitung, bukan ditulis 54px: angka mati akan tetap 54px saat tombol/padding dock berubah
-     dan panel menindih dock lagi tanpa satu test pun merah. +2px = border kiri + kanan. */
-  --dock-w: calc(var(--dock-btn-size) + 2 * var(--dock-pad) + 2px);
+  --dock-w: var(--activity-bar-w);
 }
 
-/* Diangkur di bawah-kiri dan TIDAK PERNAH bergerak, termasuk saat panel Sessions terbuka: dock
-   adalah kumpulan tombol permanen, dan tombol yang pindah tiap kali panel dibuka merusak otot-memori
-   pengguna — tangan sudah hafal di mana zoom/undo berada. Panel adalah permukaan sementara, jadi
-   panel yang mengalah ke kanan dock (`--dock-w` dipakai `.sessions-sidebar` di sessions-panel.css).
-   Tumbuh ke atas dari dasar layar, jadi panjangnya isi tidak pernah menabrak apa pun di kiri-atas. */
+/* Grid item, bukan plat melayang: activity bar adalah bagian tetap dari chrome, sama seperti VS
+   Code. `position: relative` menjaga z-index lama (di atas panel yang z-12). */
 .dock {
-  position: absolute;
-  bottom: var(--float-gap);
-  left: var(--float-gap);
+  grid-area: activity;
+  position: relative;
   z-index: 20;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: var(--dock-pad);
-  background: rgba(var(--menu-rgb), 0.92);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, calc(0.5 * var(--shadow-k)));
+  min-height: 0;
+  background: var(--vscode-activityBar-background, var(--panel-header));
+  border-right: 1px solid var(--vscode-activityBar-border, var(--border));
 }
 
+/* Primitif membawa latar sendiri; di dalam rail ia memakai latar rail supaya satu permukaan. */
+.dock > .vscode-activity-bar {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  background: transparent;
+}
+
+/* Kelompok mode di bawah rail: lock dan clean view adalah TOGGLE, jadi ia membawa `aria-pressed`
+   yang tidak disediakan item activity bar biasa. */
+.dock__modes {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  padding: 2px 0 4px;
+  border-top: 1px solid var(--vscode-activityBar-border, var(--border));
+}
+
+/* Tinggi 40px, bukan 48px: dua tombol mode tidak boleh bersaing dengan item navigasi utama. */
 .dock-btn {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--dock-btn-size);
-  height: var(--dock-btn-size);
+  width: 100%;
+  height: 40px;
   padding: 0;
   background: transparent;
-  color: var(--text);
-  border: none;
-  border-radius: 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--vscode-activityBar-inactiveForeground, var(--muted));
   cursor: pointer;
 }
-.dock-btn:hover:not(:disabled) { background: var(--panel-header); }
-.dock-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-
-/* Satu-satunya tombol dock yang terisi accent: menambah node adalah aksi utama permukaan ini. */
-.dock-add { background: var(--accent); color: #fff; }
-.dock-btn.dock-add:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, black); }
-
-.dock-btn.active {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent-hover);
+.dock-btn:hover:not(:disabled) {
+  background: var(--vscode-activityBar-hoverBackground, rgba(var(--tint-rgb), 0.06));
+  color: var(--vscode-activityBar-activeForeground, var(--text));
 }
-
-/* Garis pemisah kelompok — HORIZONTAL karena docknya kolom; panjang garis nodeterm (22px) pindah
-   dari tinggi ke lebar. */
-.dock-sep {
+.dock-btn[aria-pressed='true'] {
+  border-left-color: var(--vscode-activityBar-activeBorder, var(--accent));
+  color: var(--vscode-activityBar-activeForeground, var(--text));
+}
+.dock-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.dock-btn svg {
   width: 22px;
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
+  height: 22px;
 }
 
-/* Titik "ada perubahan belum disimpan", di sudut tombol Save. */
-.dock-dirty {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: transparent;
-}
-.dock-dirty.dirty { background: var(--caution); }
-
-/* Jumlah item inbox yang menunggu. Warna ATTENTION, bukan accent: accent dipakai tombol untuk
-   "sedang aktif", sedangkan badge ini berarti "ada yang menunggu keputusanmu". Cincin selebar
-   latar dock memisahkannya dari glyph di bawahnya. `pointer-events: none` supaya klik selalu
-   mendarat di tombol, bukan di badge. */
-.dock-badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--state-attention, #e0a030);
-  box-shadow: 0 0 0 2px rgba(var(--menu-rgb), 0.92);
-  color: #1a1206;
-  font-size: 9.5px;
-  font-weight: 700;
-  line-height: 15px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
-.dock-slot { display: inline-flex; }
-/* Selebar tombol, bukan 52px seperti di bar horizontal: angka zoom adalah satu-satunya slot
-   berisi teks, dan kalau ia lebih lebar dari tombolnya seluruh kolom ikut melebar. 11px supaya
-   "200%" masih utuh di lebar itu. */
-.dock-zoom {
-  min-width: var(--dock-btn-size);
-  padding: 5px 2px;
-  text-align: center;
-  font-family: inherit;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  user-select: none;
-  cursor: pointer;
-}
-.dock-zoom:hover { background: var(--panel-header); color: var(--text); }
-
+/* Titik warna agent di dalam dialog, bukan item rail. */
 .dock-menu__glyph {
   width: 10px;
   height: 10px;
@@ -134,6 +80,8 @@
   flex-shrink: 0;
 }
 
+/* Dialog Add / Workspace / Zoom tetap memakai primitif dialog, dengan baris 22px dan ukuran
+   VS Code (480px). Isinya daftar aksi, bukan menu. */
 .dock-add-list,
 .dock-zoom-list {
   display: flex;
@@ -152,7 +100,7 @@
 .dock-add-dialog { min-width: 280px; }
 .dock-zoom-dialog { width: 220px; }
 
-/* Titik warna agent sebagai pengganti ikon brand (webterm tidak membawa aset SVG agent). */
+/* Centang preset zoom; lebar tetap supaya label tidak bergeser saat pilihan berubah. */
 .dock-menu__check {
   display: inline-flex;
   align-items: center;
@@ -162,7 +110,7 @@
   color: var(--accent);
 }
 
-/* Form dalam menu (workspace baru): baris input, bukan baris tombol. */
+/* Form workspace baru: baris input, bukan baris tombol. */
 .dock-menu__form {
   display: flex;
   flex-direction: column;

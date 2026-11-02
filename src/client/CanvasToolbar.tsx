@@ -1,19 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bot, CircleQuestionMark, FolderTree, Search, Settings, Terminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
+import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import './canvas-ui.css'
 
 // Cluster kontrol kanan-atas + command palette ⌘K. Porting dari nodeterm
-// `src/renderer/canvas/Canvas.tsx` (.controls-cluster) dan `components/CommandPalette.tsx`.
+// `src/renderer/canvas/Canvas.tsx` (.controls-cluster). Palette memakai primitif VS Code
+// (`VscodeQuickPick`) supaya metriknya sama dengan permukaan VS Code lain di webterm.
 
 export interface PaletteTarget {
   id: string
@@ -96,8 +90,6 @@ export function nodeTargets(nodes: CanvasNodeLike[]): PaletteTarget[] {
   })
 }
 
-export const PALETTE_LIMIT = 50
-
 export interface CanvasToolbarProps {
   nodes: CanvasNodeLike[]
   /** Dipanggil dengan id node terpilih di palette — pemanggil yang melakukan fitView. */
@@ -119,7 +111,26 @@ export default function CanvasToolbar({
 }: CanvasToolbarProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const chip = shortcutChip(platform ?? navigator.userAgent)
-  const targets = useMemo(() => nodeTargets(nodes), [nodes])
+  const items = useMemo<VscodeQuickPickItem[]>(
+    () =>
+      nodeTargets(nodes).map((target) => ({
+        id: target.id,
+        label: target.label,
+        description: target.hint,
+        group: 'Nodes',
+        icon: target.hint === 'agent' ? <Bot aria-hidden /> : <Terminal aria-hidden />,
+      })),
+    [nodes],
+  )
+
+  const closePalette = useCallback(() => setPaletteOpen(false), [])
+  const selectNode = useCallback(
+    (id: string) => {
+      onFocusNode(id)
+      setPaletteOpen(false)
+    },
+    [onFocusNode],
+  )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -150,100 +161,22 @@ export default function CanvasToolbar({
         </Button>
       </div>
       {paletteOpen && (
-        <CommandPalette targets={targets} onPick={onFocusNode} onClose={() => setPaletteOpen(false)} />
+        <VscodeQuickPick
+          open
+          onClose={closePalette}
+          ariaLabel="Find node"
+          placeholder="Find a node by name or type…"
+          emptyText="No matches"
+          items={items}
+          rank={rankNodeItem}
+          onSelect={selectNode}
+        />
       )}
     </>
   )
 }
 
-interface PaletteProps {
-  targets: PaletteTarget[]
-  onPick: (id: string) => void
-  onClose: () => void
-}
-
-function CommandPalette({ targets, onPick, onClose }: PaletteProps) {
-  const [query, setQuery] = useState('')
-  const [active, setActive] = useState(0)
-  const items = useMemo(() => rankTargets(targets, query, PALETTE_LIMIT), [targets, query])
-
-  useEffect(() => {
-    setActive((current) => Math.min(current, Math.max(items.length - 1, 0)))
-  }, [items.length])
-
-  const run = (t?: PaletteTarget) => {
-    if (!t) return
-    onPick(t.id)
-    onClose()
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="canvas-command-content nodrag nowheel"
-        showCloseButton={false}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <DialogHeader className="sr-only">
-          <DialogTitle>Find node</DialogTitle>
-          <DialogDescription>Search for a node by name or type.</DialogDescription>
-        </DialogHeader>
-        <Command
-          value={items[active]?.id ?? ''}
-          onValueChange={(id) => {
-            const index = items.findIndex((item) => item.id === id)
-            if (index >= 0) setActive(index)
-          }}
-          shouldFilter={false}
-          onKeyDown={(e) => {
-            e.stopPropagation()
-            if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              setActive((current) => Math.min(current + 1, items.length - 1))
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault()
-              setActive((current) => Math.max(current - 1, 0))
-            } else if (e.key === 'Enter') {
-              e.preventDefault()
-              run(items[active])
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              onClose()
-            }
-          }}
-        >
-          <CommandInput
-            aria-label="Find node by name or type"
-            autoFocus
-            spellCheck={false}
-            placeholder="Find a node by name or type…"
-            value={query}
-            onValueChange={(value) => {
-              setQuery(value)
-              setActive(0)
-            }}
-          />
-          <CommandList className="canvas-command-list">
-            <CommandEmpty>No matches</CommandEmpty>
-            <CommandGroup heading="Nodes">
-              {items.map((t, i) => (
-                <CommandItem
-                  key={t.id}
-                  value={t.id}
-                  data-testid={`palette-item-${t.id}`}
-                  aria-current={i === active}
-                  onMouseEnter={() => setActive(i)}
-                  onSelect={() => run(t)}
-                >
-                  {t.hint === 'agent' ? <Bot aria-hidden /> : <Terminal aria-hidden />}
-                  <span className="palette__label">{t.label}</span>
-                  {t.hint && <span className="palette__hint">{t.hint}</span>}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </DialogContent>
-    </Dialog>
-  )
+/** Ranking node untuk quick pick; `hint` (tipe node) tetap ikut dicari, seperti palette lama. */
+function rankNodeItem(item: VscodeQuickPickItem, query: string): number | null {
+  return targetScore({ id: item.id, label: item.label, hint: item.description }, query)
 }

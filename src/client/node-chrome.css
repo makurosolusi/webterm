@@ -140,15 +140,10 @@
 .node-title--edit {
   flex: 1;
   min-width: 0;
-  padding: 2px 4px;
-  border: none;
-  border-radius: 4px;
-  background: rgba(var(--tint-rgb), 0.06);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  outline: none;
+  /* Field-nya kini `vscode-textfield`; ukuran dan warnanya dibaca dari variabel tema VS Code. */
+  --vscode-font-size: 13px;
+  --vscode-settings-textInputBackground: rgba(var(--tint-rgb), 0.06);
+  --vscode-settings-textInputBorder: transparent;
 }
 
 .node-swatch {
@@ -211,19 +206,39 @@
   50% { opacity: 0.35; transform: scale(0.7); }
 }
 
-/* ---- Toolbar header ---- */
+/* ---- Toolbar header ----
+   `vscode-toolbar-container` merender flex di dalam shadow DOM; aturan host ini menjaga toolbar
+   tetap terdorong ke kanan dan menempel rapat seperti header nodeterm. */
 .node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 
-/* Menutup node mengakhiri sesinya, jadi ia satu-satunya aksi header yang menjawab dengan merah. */
-.icon-btn--danger:hover {
-  background: color-mix(in srgb, var(--state-attention) 20%, transparent);
-  color: var(--state-attention);
+/* vscode-toolbar-button v2.4.0 tidak punya properti `disabled`; `aria-disabled` di host adalah
+   kontrak kita sendiri. Pointer dimatikan supaya klik tidak pernah sampai ke handler. */
+.node-toolbar vscode-toolbar-button[aria-disabled='true'] {
+  opacity: 0.45;
+  pointer-events: none;
 }
-.icon-btn--active { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
+
+/* Menutup node mengakhiri sesinya, jadi ia satu-satunya aksi header yang menjawab dengan merah.
+   Warna masuk lewat variabel karena tombol aslinya hidup di shadow DOM. */
+.node-toolbar__danger {
+  --vscode-foreground: var(--state-attention);
+  --vscode-toolbar-hoverBackground: color-mix(in srgb, var(--state-attention) 20%, transparent);
+}
+
+/* Badge jumlah komentar ditempel di dalam slot toolbar. */
+.node-toolbar__count {
+  margin-left: 1px;
+  font-size: 9px;
+  line-height: 1;
+}
 
 /* Collapse chevron (berotasi saat collapsed) */
 .node-chevron { display: inline-flex; transition: transform 0.12s ease; color: var(--muted); }
 .node-chevron--collapsed { transform: rotate(-90deg); }
+
+/* ---- Find bar (terminal/agent) ---- */
+.node-find__field { width: 140px; }
+.node-find__actions { display: inline-flex; }
 
 /* ---- Body ---- */
 .node-body { flex: 1; min-height: 0; overflow: hidden; }

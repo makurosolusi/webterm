@@ -1,19 +1,20 @@
-// Floating chat panel for the central agent (RND/11 §3). Sibling of SessionsPanel/InboxPanel:
-// mounted by App, opened by the Dock button, never a canvas node. Props-driven; the default client
-// is the module `chatApi` so production wiring is one prop-free mount.
+// Chat pane for the central agent (RND/11 §3), rendered in the VS Code bottom panel. Standalone
+// it owns a single-tab surface; `inboxChatPanel.tsx` is the two-tab Inbox/Chat mount. Mounted by
+// App, opened by the Dock button, never a canvas node. Props-driven; the default client is the
+// module `chatApi` so production wiring is one prop-free mount.
 //
 // S0 scope: conversation list (global + project scopes), Markdown thread, streaming text,
 // composer with Stop, reconnect status, and error states. Approval cards are intentionally absent;
 // a tool card shows name/state only.
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MessageSquare, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
 import { chatApi, chatErrorMessage, isAbortError, openChatStream } from './chatApi'
+import { InboxPanelSurface } from './inboxPanelSurface'
 import './chat/chat.css'
 
 const OPEN_KEY = 'webterm.chatOpen'
@@ -64,13 +65,14 @@ export interface ChatPanelProps {
   client?: ChatClient
   /** SSE opener; injected in tests. */
   streamFactory?: StreamFactory
-  /** Shift left so an open Inbox keeps its own corner. */
+  /** Stack above a standalone Inbox panel instead of overlapping it. */
   offsetForInbox?: boolean
+  /** Render only the pane body: the combined Inbox/Chat shell owns the surface and tabs. */
+  embedded?: boolean
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
   const open = props.open ?? true
-  const uid = useId()
   const clientRef = useRef<ChatClient>(props.client ?? chatApi)
   clientRef.current = props.client ?? chatApi
   const streamRef = useRef<StreamFactory>(props.streamFactory ?? openChatStream)
@@ -110,28 +112,9 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (!open) return null
 
   const current = conversations?.find((row) => row.id === selected) ?? null
-  const titleId = `${uid}-chat-title`
 
-  return (
-    <Card
-      className={`chat-panel gap-0 p-0${props.offsetForInbox ? ' chat-panel--shifted' : ''}`}
-      aria-label="Chat"
-      aria-labelledby={titleId}
-    >
-      <header className="chat-head">
-        <MessageSquare size={15} aria-hidden="true" />
-        <h2 className="chat-title" id={titleId}>Central agent</h2>
-        <span className="chat-grow" />
-        <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh conversations"
-          title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
-          <RefreshCw size={13} />
-        </Button>
-        <Button type="button" variant="ghost" size="icon-xs" aria-label="Close chat panel"
-          title="Close chat" onClick={props.onClose}>
-          <X size={14} />
-        </Button>
-      </header>
-
+  const body = (
+    <>
       {listError !== null && (
         <div className="chat-error" role="alert">
           <span>{listError}</span>
@@ -187,6 +170,46 @@ export default function ChatPanel(props: ChatPanelProps) {
           )}
         </div>
       </div>
-    </Card>
+    </>
+  )
+
+  if (props.embedded) {
+    return (
+      <div className="chat-panel chat-panel--embedded">
+        <div className="chat-pane-actions">
+          <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh conversations"
+            title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
+            <RefreshCw size={13} />
+          </Button>
+        </div>
+        {body}
+      </div>
+    )
+  }
+
+  return (
+    <InboxPanelSurface
+      className={`chat-panel${props.offsetForInbox ? ' chat-panel--above-inbox' : ''}`}
+      ariaLabel="Chat"
+      tabsLabel="Chat tabs"
+      tabs={[{
+        id: 'chat',
+        label: 'Chat',
+        icon: <MessageSquare size={14} aria-hidden="true" />,
+        tooltip: 'Central agent',
+        closable: props.onClose !== undefined,
+      }]}
+      activeId="chat"
+      onActivate={() => undefined}
+      {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.() })}
+      actions={
+        <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh conversations"
+          title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
+          <RefreshCw size={13} />
+        </Button>
+      }
+    >
+      {body}
+    </InboxPanelSurface>
   )
 }

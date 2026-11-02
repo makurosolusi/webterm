@@ -58,19 +58,21 @@ describe('tombol Sessions di dalam dock', () => {
     expect(screen.queryByLabelText('Show sessions')).toBeNull()
   })
 
-  it('klik membuka, klik lagi menutup, dan aria-pressed mengikuti', async () => {
+  it('klik membuka, klik lagi menutup, dan aria-current mengikuti', async () => {
     localStorage.setItem(PIN_KEY, '0')
     await mountCanvas({ nodes: [], dirs: {} })
     expect(panel()).toBeNull()
-    expect(toggle().getAttribute('aria-pressed')).toBe('false')
+    // Item activity bar memakai `aria-current="page"` untuk keadaan terpilih, bukan
+    // `aria-pressed` — primitifnya memang navigasi, bukan toggle.
+    expect(toggle().getAttribute('aria-current')).toBeNull()
 
     fireEvent.click(toggle())
     await waitFor(() => expect(panel()).not.toBeNull())
-    expect(toggle().getAttribute('aria-pressed')).toBe('true')
+    expect(toggle().getAttribute('aria-current')).toBe('page')
 
     fireEvent.click(toggle())
     await waitFor(() => expect(panel()).toBeNull())
-    expect(toggle().getAttribute('aria-pressed')).toBe('false')
+    expect(toggle().getAttribute('aria-current')).toBeNull()
   })
 
   it('tombol Hide di panel menutupnya juga', async () => {
@@ -81,7 +83,7 @@ describe('tombol Sessions di dalam dock', () => {
     fireEvent.click(screen.getByLabelText('Hide sessions panel'))
 
     await waitFor(() => expect(panel()).toBeNull())
-    expect(toggle().getAttribute('aria-pressed')).toBe('false')
+    expect(toggle().getAttribute('aria-current')).toBeNull()
   })
 
   it('hover di atasnya TIDAK membukanya', async () => {
@@ -148,31 +150,30 @@ describe('dock diam, panel yang minggir', () => {
     expect(dock().className).toBe(before)
   })
 
-  it('panel digeser sejauh lebar dock, dan lebar itu dihitung bukan disalin', () => {
+  it('panel menempati kolom sidebar di grid, dan rail tetap satu sumber lebar', () => {
     const dockCss = read('dock.css')
     const panelCss = read('sessions-panel.css')
+    const shellCss = read('styles.css')
 
-    // Satu sumber lebar dock, dihitung dari metrik tombolnya: angka mati di sini adalah tabrakan
-    // berikutnya yang menunggu begitu tombol/padding dock berubah.
+    // Satu sumber lebar rail: diturunkan dari `--activity-bar-w` (48px) milik grid shell, bukan
+    // angka mati. Panel memakai token yang sama, jadi rail dan panel tidak bisa bertabrakan.
     const dockW = decls(dockCss, ':root {', '--dock-w')
     expect(dockW).toHaveLength(1)
-    expect(dockW[0]).toContain('calc(')
-    expect(dockW[0]).toContain('var(--dock-btn-size)')
-    expect(dockW[0]).toContain('var(--dock-pad)')
-    expect(dockCss).toContain('--dock-btn-size: 38px')
-    expect(dockCss).toContain('--dock-pad: 7px')
-    // Token itu memang yang dipakai tombolnya — kalau tidak, --dock-w menghitung angka fiktif.
-    expect(decls(dockCss, '.dock-btn {', 'width')).toEqual(['width: var(--dock-btn-size)'])
-    expect(decls(dockCss, '.dock {', 'padding')).toEqual(['padding: var(--dock-pad)'])
+    expect(dockW[0]).toBe('--dock-w: var(--activity-bar-w)')
 
-    // Panel yang mengalah: satu-satunya `left`-nya adalah lebar dock + dua gap.
-    expect(decls(panelCss, '.sessions-sidebar {', 'left'))
-      .toEqual(['left: calc(var(--dock-w) + 2 * var(--float-gap))'])
+    // Panel adalah KOLOM grid, bukan kartu absolut: `left`/`top` kembali `auto` dan lebarnya
+    // ditentukan `.app-shell--sidebar` (300px). Rail tidak pernah bergeser karenanya.
+    expect(decls(panelCss, '.sessions-sidebar {', 'grid-area')).toEqual(['grid-area: sidebar'])
+    expect(decls(panelCss, '.sessions-sidebar {', 'left')).toEqual(['left: auto'])
+    expect(decls(panelCss, '.sessions-sidebar {', 'top')).toEqual(['top: auto'])
+    expect(decls(panelCss, '.sessions-sidebar {', 'width')).toEqual(['width: 100%'])
     expect(panelCss).toContain('--ss-w: 300px')
-    expect(panelCss).toContain('width: var(--ss-w)')
+    const open = shellCss.slice(shellCss.indexOf('.app-shell--sidebar {'))
+    expect(open.slice(0, open.indexOf('}'))).toContain('300px')
 
-    // Dock tetap dipaku ke tepi kiri, dan tidak ada sisa CSS dari masa dock yang bergeser.
-    expect(decls(dockCss, '.dock {', 'left')).toEqual(['left: var(--float-gap)'])
+    // Rail adalah grid item, bukan plat absolut yang bisa bergeser.
+    expect(decls(dockCss, '.dock {', 'grid-area')).toEqual(['grid-area: activity'])
+    expect(dockCss).not.toContain('left: var(--float-gap)')
     expect(dockCss).not.toContain('dock--shifted')
     expect(dockCss).not.toContain('transition: left')
   })
@@ -189,11 +190,10 @@ describe('dock diam, panel yang minggir', () => {
     })
     expect(dialog.textContent).toContain('Terminal')
 
+    // Panel kini KOLOM grid di samping rail, bukan kartu absolut yang bertumpuk — tidak ada lagi
+    // kompetisi z-index di antara keduanya. Rail tetap memakai z-index 20 supaya menu/dialog di
+    // atasnya tidak tertutup oleh permukaan yang mengapung.
     const dockCss = read('dock.css')
-    const panelCss = read('sessions-panel.css')
-    const dockZ = Number(decls(dockCss, '.dock {', 'z-index')[0]?.split(':')[1])
-    const panelZ = Number(decls(panelCss, '.sessions-sidebar {', 'z-index')[0]?.split(':')[1])
-    expect(dockZ).toBe(20)
-    expect(dockZ).toBeGreaterThan(panelZ)
+    expect(decls(dockCss, '.dock {', 'z-index')).toEqual(['z-index: 20'])
   })
 })

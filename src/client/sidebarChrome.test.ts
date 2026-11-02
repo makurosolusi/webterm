@@ -27,14 +27,16 @@ const hidesEmptySectionsButAttention = (s: string) => {
 const nodesBranch = (s: string) =>
   s.split("{grouping === 'nodes' ? (")[1]?.split(") : grouping === 'status'")[0] ?? ''
 
-/** Tab Nodes dirender sebagai seksi per grup, memakai ulang kelas tab Status apa adanya. */
+/** Tab Nodes dirender sebagai branch tree per grup; barisnya leaf tree, bukan daftar pipih. */
 const rendersNodeSections = (s: string) => {
   const b = nodesBranch(s)
   return (
     /nodeGroups\.map\(/.test(b) &&
-    ['ss-status"', 'ss-status__head', 'ss-status__label', 'ss-status__count', 'ss-status__rows'].every(
-      (cls) => b.includes(cls),
-    )
+    /<SessionGroupItem/.test(b) &&
+    /label=\{g\.label\}/.test(b) &&
+    /count=\{g\.rows\.length\}/.test(b) &&
+    /<TreeItem/.test(b) &&
+    b.includes('ss-tree__leaf')
   )
 }
 
@@ -43,10 +45,10 @@ const rendersNodeSections = (s: string) => {
  *  file yang sama (tab Project, Recently closed) memang membawa nama workspace. */
 const nodeRowsHaveNoMeta = (s: string) => !nodesBranch(s).includes('ss-meta')
 
-/** Ikon kind duduk di slot glyph yang sudah ada, bukan di kelas baru. */
+/** Ikon kind duduk di slot ikon leaf milik tree item, supaya rata dengan glyph sesi. */
 const rowsHaveKindGlyph = (s: string) => {
   const b = nodesBranch(s)
-  return /ss-row__glyph/.test(b) && /<Icon aria-hidden \/>/.test(b)
+  return /slot="icon-leaf"/.test(b) && /<Icon aria-hidden \/>/.test(b)
 }
 
 // Bentuk lama, persis seperti sebelum dibetulkan. Dipakai untuk membuktikan guard di atas

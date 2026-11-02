@@ -1,0 +1,123 @@
+/* VS Code bottom panel surface, shared by Inbox, Chat, and the combined shell.
+
+   Metrics follow VS Code's panel: a 35px title bar (the same height as the editor tab
+   strip), a 1px top border on the active tab, the panel background token, and 22px list
+   rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
+
+   The surface docks above the bottom edge. It starts after the left Dock column so the
+   dock stays usable, and when the standalone Inbox panel is already docked the standalone
+   Chat panel stacks above it (`.chat-panel--above-inbox`). */
+
+:root {
+  /* One source for both panels and for the stacked-chat offset. */
+  --bottom-panel-h: 280px;
+  --bottom-panel-title-h: 35px;
+  --bottom-panel-row-h: 22px;
+  --bottom-panel-stack-gap: 10px;
+}
+
+.vscode-bottom-panel {
+  position: absolute;
+  left: calc(var(--dock-w, 54px) + 2 * var(--float-gap, 22px));
+  right: var(--float-gap, 22px);
+  bottom: var(--float-gap, 22px);
+  z-index: 13;
+  display: flex;
+  flex-direction: column;
+  height: var(--bottom-panel-h);
+  min-height: 160px;
+  max-height: calc(100vh - var(--tabbar-h, 46px) - 3 * var(--float-gap, 22px));
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border, var(--border, rgba(255, 255, 255, 0.1)));
+  border-radius: var(--radius, 8px);
+  background: var(--vscode-panel-background, var(--bg, #1e1e1e));
+  color: var(--vscode-foreground, var(--text, rgba(255, 255, 255, 0.85)));
+  font-family: var(--vscode-font-family, var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif));
+  font-size: 12.5px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, calc(0.35 * var(--shadow-k, 1)));
+}
+
+/* ---------------------------------------------------------------- title bar */
+.vscode-bottom-panel__titlebar {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  height: var(--bottom-panel-title-h);
+  min-height: var(--bottom-panel-title-h);
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-panel-header, var(--panel-header, #323232)));
+}
+.vscode-bottom-panel__titlebar .vscode-editor-tabs {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--border)));
+}
+.vscode-bottom-panel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--border)));
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-panel-header, var(--panel-header, #323232)));
+  color: var(--vscode-panelTitle-inactiveForeground, var(--muted, rgba(255, 255, 255, 0.55)));
+}
+
+/* ---------------------------------------------------------------- body */
+.vscode-bottom-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--vscode-panel-background, var(--bg, #1e1e1e));
+}
+.vscode-bottom-panel__pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.vscode-bottom-panel__pane[hidden] { display: none; }
+
+/* Embedded panes keep their own title-bar actions (count, refresh) in a compact row, since
+   the combined shell's title bar belongs to the tab strip. */
+.inbox-pane-actions,
+.chat-pane-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 24px;
+  padding: 1px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border, var(--border, rgba(255, 255, 255, 0.1)));
+  color: var(--vscode-panelTitle-inactiveForeground, var(--muted, rgba(255, 255, 255, 0.55)));
+}
+
+/* Embedded panels drop their own surface box and fill the pane instead. */
+.inbox-panel--embedded,
+.chat-panel--embedded {
+  position: static;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Standalone Chat next to a standalone Inbox: stack instead of overlapping. */
+.chat-panel--above-inbox {
+  bottom: calc(var(--float-gap, 22px) + var(--bottom-panel-h) + var(--bottom-panel-stack-gap));
+}
+
+@media (max-width: 640px) {
+  .vscode-bottom-panel {
+    left: var(--float-gap, 22px);
+    right: var(--float-gap, 22px);
+    height: min(340px, calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px)));
+  }
+}

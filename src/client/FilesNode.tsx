@@ -6,15 +6,14 @@
 // satu `fs.watch` per node yang terbuka plus debounce plus rekonsiliasi seleksi, demi sesuatu yang
 // jarang berubah di belakang punggung pengguna.
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { createPortal } from 'react-dom'
 import type { Node, NodeProps } from '@xyflow/react'
 import { NodeResizer, useReactFlow } from '@xyflow/react'
-import { ChevronRight, ClipboardCopy, File, FilePlus, Folder, FolderPlus, TerminalSquare } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { ClipboardCopy, File, FilePlus, Folder, FolderPlus, TerminalSquare } from 'lucide-react'
+import { Textfield, Tree, TreeItem } from '@/vscode/register'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
+import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
+import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
 import * as fsClient from './fsClient'
 import {
   ancestorDirs,
@@ -47,6 +46,8 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   }
   const rf = useReactFlow()
   const listRef = useRef<HTMLDivElement>(null)
+  const treeRef = useRef<HTMLElement | null>(null)
+  const filterRef = useRef<HTMLElement | null>(null)
   const typed = useRef({ buffer: '', at: 0 })
   /** Nama yang harus terpilih begitu listing berikutnya mendarat — dipakai saat naik, supaya
    *  folder yang baru ditinggalkan yang terpilih (Explorer/Finder). */
@@ -68,6 +69,17 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [filterOpen, setFilterOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? 300)
+
+  /** Indeks baris dari event yang mendarat di konten slotted sebuah `vscode-tree-item`.
+   *  Klik di area kosong baris di-retarget ke host item (shadow DOM), jadi host ikut membawa
+   *  `data-index` — kalau hanya span teks yang membawanya, separuh lebar baris jadi area mati. */
+  const rowIndexFrom = (target: EventTarget | null): number => {
+    const row = target instanceof Element
+      ? target.closest('.files-row, vscode-tree-item[data-index]')
+      : null
+    const raw = row?.getAttribute('data-index')
+    return raw === null || raw === undefined ? -1 : Number(raw)
+  }
 
   useEffect(() => {
     let alive = true
@@ -136,6 +148,48 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     }
   }
 
+  // Handler baris dipasang NATIVE di fase capture, bukan lewat prop React: klik di dalam
+  // `vscode-tree-item` dihentikan oleh komponen itu di shadow DOM sebelum event sempat naik ke
+  // root React, jadi `onClick`/`onDoubleClick` delegasi React tidak pernah melihatnya di browser.
+  // Capture di list (di luar shadow) berjalan lebih dulu, dan target slotted tetap terbaca.
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const hit = (event: Event) => {
+      const index = rowIndexFrom(event.target)
+      const entry = index >= 0 ? shown[index] : undefined
+      return entry ? { index, entry } : null
+    }
+    const onClick = (event: MouseEvent) => {
+      const row = hit(event)
+      if (!row) return
+      list.focus()
+      setSel(row.index)
+    }
+    const onDoubleClick = (event: MouseEvent) => {
+      const row = hit(event)
+      if (!row) return
+      setSel(row.index)
+      open(row.entry)
+    }
+    const onContextMenu = (event: MouseEvent) => {
+      const row = hit(event)
+      if (!row) return
+      event.preventDefault()
+      event.stopPropagation()
+      setSel(row.index)
+      setMenu({ x: event.clientX, y: event.clientY, entry: row.entry })
+    }
+    list.addEventListener('click', onClick, true)
+    list.addEventListener('dblclick', onDoubleClick, true)
+    list.addEventListener('contextmenu', onContextMenu, true)
+    return () => {
+      list.removeEventListener('click', onClick, true)
+      list.removeEventListener('dblclick', onDoubleClick, true)
+      list.removeEventListener('contextmenu', onContextMenu, true)
+    }
+  }, [shown])
+
   const createEntry = async (dir: boolean) => {
     // Buat DI DALAM folder yang diklik, tapi DI SAMPING file yang diklik.
     const base = menu?.entry ? createTargetDir(childPath(cwd, menu.entry.name), menu.entry.dir) : cwd
@@ -160,10 +214,16 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
    *  bisa di-scroll — di dalam canvas itu menyeret seluruh pane React Flow. */
   const reveal = (idx: number) => {
     const box = listRef.current
-    const row = box?.children[idx] as HTMLElement | undefined
+    const row = treeRef.current?.children[idx] as HTMLElement | undefined
     if (!box || !row) return
     box.scrollTop = scrollTopToReveal(row.offsetTop, row.offsetHeight, box.scrollTop, box.clientHeight)
   }
+
+  // `autofocus` hanya berlaku saat elemen pertama kali dipasang, sedangkan filter dibuka-tutup.
+  // `delegatesFocus` di vscode-textfield meneruskan fokus host ke input di shadow DOM.
+  useEffect(() => {
+    if (filterOpen) filterRef.current?.focus()
+  }, [filterOpen])
 
   const onListKeyDown = (ev: React.KeyboardEvent<HTMLDivElement>) => {
     // Canvas React Flow membajak keyboard: panah mem-pan, dan BACKSPACE MENGHAPUS NODE INI. Setiap
@@ -186,15 +246,36 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     }
   }
 
-  useEffect(() => {
-    if (!menu) return
-    const close = () => setMenu(null)
-    window.addEventListener('pointerdown', close)
-    return () => window.removeEventListener('pointerdown', close)
-  }, [menu])
-
   const menuTarget = menu?.entry ? childPath(cwd, menu.entry.name) : cwd
   const crumbs = breadcrumbs(cwd)
+  const menuRows: MenuRow[] = (() => {
+    if (!menu) return []
+    const target = menu.entry
+    const rows: MenuRow[] = []
+    if (target) {
+      rows.push({
+        label: 'Open',
+        icon: target.dir ? <Folder size={13} /> : <File size={13} />,
+        onClick: () => open(target),
+      })
+    }
+    rows.push({
+      label: 'New terminal here',
+      icon: <TerminalSquare size={13} />,
+      onClick: () => addNodeBeside(randomId(), 'terminal', { cwd: target?.dir ? menuTarget : cwd }),
+    })
+    rows.push({ label: 'New file…', icon: <FilePlus size={13} />, onClick: () => { void createEntry(false) } })
+    rows.push({ label: 'New folder…', icon: <FolderPlus size={13} />, onClick: () => { void createEntry(true) } })
+    rows.push({
+      label: 'Copy path',
+      icon: <ClipboardCopy size={13} />,
+      onClick: () => {
+        // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
+        navigator.clipboard?.writeText(menuTarget).catch(() => setNotice('Could not copy the path.'))
+      },
+    })
+    return rows
+  })()
 
   return (
     <>
@@ -219,19 +300,22 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         />
 
         <div className="node-body files-node">
-          <div className="files-crumbs nodrag">
-            {crumbs.map((c, i) => (
-              <span key={`${c.path}:${i}`} className="files-crumb-wrap">
-                {i > 0 && <ChevronRight size={11} className="files-crumb-sep" />}
-                <Button variant="ghost" size="xs" className={cn('files-crumb')} onClick={() => navigate(c.path, cwd)} title={c.path}>{c.name}</Button>
-              </span>
-            ))}
-          </div>
+          <VscodeBreadcrumbs
+            className="nodrag files-crumbs"
+            ariaLabel="Folder path"
+            segments={crumbs.map((c, i) => ({
+              id: `${c.path}:${i}`,
+              label: c.name,
+              title: c.path,
+              onClick: () => navigate(c.path, cwd),
+            }))}
+          />
 
           {filterOpen && (
-            <Input
-              className="files-filter nodrag" autoFocus value={query} placeholder="Filter…"
-              onChange={(e) => setQuery(e.target.value)}
+            <Textfield
+              ref={(node) => { filterRef.current = node }}
+              className="files-filter nodrag" value={query} placeholder="Filter…"
+              onInput={(e) => setQuery((e.target as unknown as { value: string }).value)}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') setFilterOpen(false) }}
             />
           )}
@@ -239,18 +323,22 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
           <div ref={listRef} className="files-list nodrag nowheel" tabIndex={0} onKeyDown={onListKeyDown}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, entry: null }) }}
           >
-            {shown.map((e, i) => (
-              <div
-                key={e.name}
-                className={`files-row${i === sel ? ' files-row--sel' : ''}${e.ignored ? ' files-row--ignored' : ''}`}
-                onClick={() => setSel(i)}
-                onDoubleClick={() => open(e)}
-                onContextMenu={(ev) => { ev.preventDefault(); ev.stopPropagation(); setSel(i); setMenu({ x: ev.clientX, y: ev.clientY, entry: e }) }}
-              >
-                {e.dir ? <Folder size={13} className="files-icon files-icon--dir" /> : <File size={13} className="files-icon" />}
-                <span className="files-name">{e.name}</span>
-              </div>
-            ))}
+            {/* Baris memakai `vscode-tree-item` (22px, hover/selection dari VS Code). Handler
+                dipasang di span DI DALAM slot, bukan di host: klik bawaan komponen berhenti di
+                shadow DOM, sedangkan event dari konten slotted melewati target itu lebih dulu. */}
+            <Tree ref={(node) => { treeRef.current = node }} className="files-tree" hideArrows indentGuides="none">
+              {shown.map((e, i) => (
+                <TreeItem key={e.name} data-index={i} selected={i === sel} active={i === sel}>
+                  <span
+                    data-index={i}
+                    className={`files-row${i === sel ? ' files-row--sel' : ''}${e.ignored ? ' files-row--ignored' : ''}`}
+                  >
+                    {e.dir ? <Folder size={13} className="files-icon files-icon--dir" /> : <File size={13} className="files-icon" />}
+                    <span className="files-name">{e.name}</span>
+                  </span>
+                </TreeItem>
+              ))}
+            </Tree>
 
             {/* Empat keadaan berbeda, sengaja TIDAK digabung: masing-masing menyuruh pengguna
                 melakukan hal yang berbeda. */}
@@ -273,36 +361,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         </div>
       </div>
 
-      {menu && createPortal(
-        // Portal ke body: `position: fixed` di dalam ancestor ber-transform (viewport React Flow)
-        // terkurung di containing block-nya, jadi menu akan mendarat di tempat yang salah.
-        <div
-          className="files-menu left-[var(--menu-x)] top-[var(--menu-y)]"
-          style={{ '--menu-x': `${menu.x}px`, '--menu-y': `${menu.y}px` } as CSSProperties}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {(() => {
-            const target = menu.entry
-            if (!target) return null
-            return (
-              <Button variant="ghost" size="sm" onClick={() => { setMenu(null); open(target) }}>
-                {target.dir ? <Folder size={13} /> : <File size={13} />} Open
-              </Button>
-            )
-          })()}
-          <Button variant="ghost" size="sm" onClick={() => { setMenu(null); addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }) }}>
-            <TerminalSquare size={13} /> New terminal here
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => { void createEntry(false); setMenu(null) }}><FilePlus size={13} /> New file…</Button>
-          <Button variant="ghost" size="sm" onClick={() => { void createEntry(true); setMenu(null) }}><FolderPlus size={13} /> New folder…</Button>
-          <Button variant="ghost" size="sm" onClick={() => {
-            setMenu(null)
-            // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
-            navigator.clipboard?.writeText(menuTarget).catch(() => setNotice('Could not copy the path.'))
-          }}><ClipboardCopy size={13} /> Copy path</Button>
-        </div>,
-        document.body
-      )}
+      {menu && <NodeContextMenu x={menu.x} y={menu.y} rows={menuRows} onClose={() => setMenu(null)} />}
     </>
   )
 }

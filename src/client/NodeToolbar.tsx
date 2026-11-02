@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { cn } from '@/lib/utils'
 
 type Svg = React.SVGProps<SVGSVGElement>
@@ -31,60 +31,90 @@ export interface NodeToolbarProps {
   hideLinks?: boolean; onToggleHideLinks?: () => void  // context-capable agent only — omit if undefined
 }
 
+/**
+ * Toolbar aksi node di header, memakai `vscode-toolbar-container`/`vscode-toolbar-button`.
+ *
+ * `toggleable` + `checked` menggantikan kelas `icon-btn--active` lama: status aktif kini milik
+ * komponen (latar `--vscode-inputOption-activeBackground`) dan ikut terbaca sebagai `aria-checked`.
+ * `label` mengisi `aria-label` tombol di dalam shadow DOM; `title` dipertahankan di host karena
+ * tooltip bawaan browser dan query test memakai atribut itu.
+ *
+ * Kelas `nodrag` di container: React Flow mencocokkannya lewat `target.closest()`, jadi satu kelas di
+ * sini cukup untuk semua tombol — tanpa itu klik tombol ikut menggeser node.
+ *
+ * Tombol yang tidak boleh ditekan saat ini (`aiNaming`, `broadcastDisabled`, `maximizeDisabled`)
+ * mendapat `aria-disabled` di host; `vscode-toolbar-button` v2.4.0 tidak punya properti `disabled`,
+ * jadi CSS yang mematikan pointer dan penjaga di handler yang menahan aksinya.
+ */
 export default function NodeToolbar(props: NodeToolbarProps) {
   const count = props.commentCount ?? 0
+  const aiBusy = Boolean(props.aiNaming)
+  const broadcastOff = Boolean(props.broadcastDisabled)
+  const maximizeOff = Boolean(props.maximizeDisabled)
   return (
-    // `nodrag` di container: React Flow mencocokkannya lewat `target.closest()`, jadi satu kelas di
-    // sini cukup untuk semua tombol — tanpa itu klik tombol ikut menggeser node.
-    <div className="nodrag node-toolbar">
-      <Button variant="ghost" size="icon-xs" title="Refresh view" onClick={props.onRefresh}><IconRefresh /></Button>
+    <ToolbarContainer className="nodrag node-toolbar">
+      <ToolbarButton label="Refresh view" title="Refresh view" onClick={props.onRefresh}><IconRefresh /></ToolbarButton>
 
-      <Button
-        variant="ghost" size="icon-xs"
-        className={props.searchOpen ? 'icon-btn--active' : undefined}
-        title="Search" onClick={props.onToggleSearch}
-      ><IconSearch /></Button>
+      <ToolbarButton
+        label="Search" title="Search"
+        toggleable checked={props.searchOpen}
+        onClick={props.onToggleSearch}
+      ><IconSearch /></ToolbarButton>
 
       {props.onToggleMic && (
-        <Button
-          variant="ghost" size="icon-xs"
-          className={props.micActive ? 'icon-btn--active' : undefined}
-          title="Dictate" onClick={props.onToggleMic}
-        ><IconMic /></Button>
+        <ToolbarButton
+          label="Dictate" title="Dictate"
+          toggleable checked={Boolean(props.micActive)}
+          onClick={props.onToggleMic}
+        ><IconMic /></ToolbarButton>
       )}
 
       {props.onAiName && (
-        <Button variant="ghost" size="icon-xs" title="Name with AI" onClick={props.onAiName} disabled={props.aiNaming}><IconSparkle /></Button>
+        <ToolbarButton
+          label="Name with AI" title="Name with AI"
+          aria-disabled={aiBusy || undefined}
+          onClick={() => { if (!aiBusy) props.onAiName?.() }}
+        ><IconSparkle /></ToolbarButton>
       )}
 
-      <Button
-        variant="ghost" size="icon-xs"
-        className={props.commentsOpen ? 'icon-btn--active' : undefined}
-        title="Comments" onClick={props.onToggleComments}
+      <ToolbarButton
+        label="Comments" title="Comments"
+        toggleable checked={props.commentsOpen}
+        onClick={props.onToggleComments}
       >
         <IconComments />
-        {count > 0 && <sup className="text-[9px] ml-0.5">{count}</sup>}
-      </Button>
+        {count > 0 && <sup className="node-toolbar__count">{count}</sup>}
+      </ToolbarButton>
 
       {props.onBroadcast && (
-        <Button
-          variant="ghost" size="icon-xs"
-          className={props.broadcastActive ? 'icon-btn--active' : undefined}
-          title="Share live view" onClick={props.onBroadcast} disabled={props.broadcastDisabled}
-        ><IconBroadcast /></Button>
+        <ToolbarButton
+          label="Share live view" title="Share live view"
+          toggleable checked={Boolean(props.broadcastActive)}
+          aria-disabled={broadcastOff || undefined}
+          onClick={() => { if (!broadcastOff) props.onBroadcast?.() }}
+        ><IconBroadcast /></ToolbarButton>
       )}
 
       {props.onToggleHideLinks && (
-        <Button
-          variant="ghost" size="icon-xs"
-          className={props.hideLinks ? 'icon-btn--active' : undefined}
-          title={props.hideLinks ? 'Show links' : 'Hide links'} onClick={props.onToggleHideLinks}
-        >{props.hideLinks ? <IconEyeOff /> : <IconEye />}</Button>
+        <ToolbarButton
+          label={props.hideLinks ? 'Show links' : 'Hide links'}
+          title={props.hideLinks ? 'Show links' : 'Hide links'}
+          toggleable checked={Boolean(props.hideLinks)}
+          onClick={props.onToggleHideLinks}
+        >{props.hideLinks ? <IconEyeOff /> : <IconEye />}</ToolbarButton>
       )}
 
-      <Button variant="ghost" size="icon-xs" title="Maximize" onClick={props.onToggleMaximize} disabled={props.maximizeDisabled}><IconMaximize /></Button>
+      <ToolbarButton
+        label="Maximize" title="Maximize"
+        aria-disabled={maximizeOff || undefined}
+        onClick={() => { if (!maximizeOff) props.onToggleMaximize() }}
+      ><IconMaximize /></ToolbarButton>
 
-      <Button variant="ghost" size="icon-xs" className="icon-btn--danger" title="Close (ends the session)" onClick={props.onClose}><IconClose /></Button>
-    </div>
+      <ToolbarButton
+        className="node-toolbar__danger"
+        label="Close (ends the session)" title="Close (ends the session)"
+        onClick={props.onClose}
+      ><IconClose /></ToolbarButton>
+    </ToolbarContainer>
   )
 }

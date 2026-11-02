@@ -1,8 +1,5 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { Separator } from '@/components/ui/separator'
-import { Button } from '@/components/ui/button'
-import './agent.css'
+import { useEffect, type ReactNode } from 'react'
+import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 
 export interface MenuItem {
   label: string
@@ -19,10 +16,44 @@ export type MenuRow = MenuItem | { type: 'separator' }
 
 const isSeparator = (r: MenuRow): r is { type: 'separator' } => 'type' in r
 
+/** `VscodeMenu` belum punya properti tooltip per baris. Hint baris disabled tetap WAJIB sampai ke
+ *  pengguna (baris mati tanpa alasan tak bisa dibedakan dari baris rusak), jadi ia ditempel sebagai
+ *  `title` setelah panel ter-mount. `data-index` adalah indeks baris di array yang sama. */
+function attachHints(rows: MenuRow[]): void {
+  const panels = document.querySelectorAll('[data-slot="vscode-menu"][data-level="0"]')
+  const panel = panels[panels.length - 1]
+  if (!panel) return
+  rows.forEach((row, index) => {
+    if (isSeparator(row) || !row.hint) return
+    panel
+      .querySelector(`[data-slot="vscode-menu-row"][data-index="${index}"]`)
+      ?.setAttribute('title', row.hint)
+  })
+}
+
+function toItems(rows: MenuRow[]): VscodeMenuItem[] {
+  return rows.map((row, index) =>
+    isSeparator(row)
+      ? { type: 'separator' }
+      : {
+          type: 'item',
+          id: `${row.label}-${index}`,
+          label: row.label,
+          icon: row.icon,
+          disabled: row.disabled,
+          danger: row.danger,
+          onSelect: row.onClick,
+        },
+  )
+}
+
 /**
- * Context menu sebuah node. Di-portal ke `document.body`: pembungkusnya di canvas React Flow punya
- * `transform` CSS, yang menjadi containing block untuk anak `position: fixed` — di dalamnya menu
- * akan bergeser dan ikut ter-zoom bersama canvas.
+ * Context menu sebuah node di atas primitif `VscodeMenu` (portal ke `document.body`, 22px rows,
+ * roving focus, type-ahead, submenu flip, Escape per level).
+ *
+ * Portal itu bukan detail: pembungkus node di canvas React Flow punya `transform` CSS, yang menjadi
+ * containing block untuk anak `position: fixed` — di dalamnya menu akan bergeser dan ikut ter-zoom
+ * bersama canvas.
  */
 export default function NodeContextMenu({
   x,
@@ -35,58 +66,15 @@ export default function NodeContextMenu({
   rows: MenuRow[]
   onClose: () => void
 }) {
-  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => attachHints(rows), [rows])
 
-  useEffect(() => {
-    // Pointerdown DI DALAM panel dibiarkan: ia menutup panel sebelum `click` terbentuk (click
-    // menuntut pointerdown & pointerup di elemen yang sama), jadi barisnya lenyap dan `onClick`
-    // tidak pernah terpanggil — seluruh menu tampak muncul lalu diam.
-    const close = (e: Event): void => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    // `capture`: terminal xterm di bawahnya menghentikan propagasi pointer-nya sendiri.
-    window.addEventListener('pointerdown', close, true)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('pointerdown', close, true)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [onClose])
-
-  return createPortal(
-    <div
-      ref={ref}
-      className="node-menu nodrag nopan left-[var(--menu-x)] top-[var(--menu-y)]"
-      style={{ '--menu-x': `${x}px`, '--menu-y': `${y}px` } as CSSProperties}
-      onContextMenu={(e) => e.preventDefault()}
-      role="menu"
-    >
-      {rows.map((row, i) =>
-        isSeparator(row) ? (
-          <Separator key={`sep-${i}`} className="node-menu__sep" />
-        ) : (
-          <Button
-            key={row.label}
-            type="button"
-            role="menuitem"
-            variant="ghost"
-            className={`node-menu__item${row.danger ? ' node-menu__item--danger' : ''}`}
-            disabled={row.disabled}
-            title={row.hint}
-            onClick={() => {
-              onClose()
-              row.onClick()
-            }}
-          >
-            {row.icon && <span className="node-menu__icon">{row.icon}</span>}
-            <span>{row.label}</span>
-          </Button>
-        )
-      )}
-    </div>,
-    document.body
+  return (
+    <VscodeMenu
+      open
+      anchor={{ x, y }}
+      items={toItems(rows)}
+      onClose={onClose}
+      ariaLabel="Node actions"
+    />
   )
 }

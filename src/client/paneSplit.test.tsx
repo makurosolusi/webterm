@@ -39,13 +39,17 @@ const paneEl = (id: string): HTMLElement => {
 }
 
 const headerBtn = (title: string): HTMLButtonElement => {
-  const el = document.querySelector(`.react-flow__node-terminal button[title="${title}"]`)
+  // Aksi toolbar kini `vscode-toolbar-button` (tombol aslinya di shadow DOM); tombol Split masih
+  // shadcn `Button` di `extraHeader`, jadi kedua bentuk dicari.
+  const el = document.querySelector(
+    `.react-flow__node-terminal button[title="${title}"], .react-flow__node-terminal vscode-toolbar-button[title="${title}"]`,
+  )
   if (!el) throw new Error(`tombol header "${title}" tidak ada`)
   return el as HTMLButtonElement
 }
 
 const nodeMenu = (): HTMLElement | null =>
-  document.querySelector('[role="menu"].node-menu:not(.node-menu--canvas)')
+  document.querySelector('[role="menu"][data-slot="vscode-menu"]')
 
 const menuRow = (label: string): HTMLButtonElement => {
   const el = Array.from(nodeMenu()?.querySelectorAll('button') ?? []).find((b) => b.textContent === label)

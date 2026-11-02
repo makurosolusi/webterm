@@ -1,8 +1,8 @@
-// Presentational chrome for `InboxPanel`: header, section filter chips, bulk toolbar, error
+// Presentational chrome for `InboxPanel`: title-bar actions, section filter chips, bulk toolbar, error
 // banner, and the empty/loading status line. Split out of `InboxPanel` to keep the container
 // inside the repo's file-size budget. No state, fetching, or derived logic lives here; every
 // label, aria-label, and class name is the panel's contract with `InboxPanel.test.tsx`.
-import { AlertTriangle, RefreshCw, ShieldAlert, X } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { InboxState } from './inboxApi'
@@ -11,32 +11,24 @@ import { SECTION_LABEL, SECTION_ORDER } from './inboxPanelModel'
 /** Filter identity shared by the chip row and the section list. */
 export type InboxFilter = 'all' | InboxState
 
-export interface InboxPanelHeaderProps {
-  uid: string
+export interface InboxPanelActionsProps {
   total: number
   loading: boolean
   onRefresh: () => void
-  onClose?: (() => void) | undefined
 }
 
-export function InboxPanelHeader(props: InboxPanelHeaderProps): React.JSX.Element {
-  const { uid, total, loading, onRefresh, onClose } = props
+/** Title-bar controls: item count and refresh. Close is the tab's close affordance. */
+export function InboxPanelActions(props: InboxPanelActionsProps): React.JSX.Element {
+  const { total, loading, onRefresh } = props
   return (
-    <header className="inbox-head">
-      <ShieldAlert size={15} aria-hidden="true" />
-      <h2 className="inbox-title" id={`${uid}-title`}>Inbox</h2>
+    <>
       <span className="inbox-total" aria-label={`${total} items`}>{total}</span>
       <span className="inbox-grow" />
       <Button type="button" variant="ghost" size="icon-xs" aria-label="Refresh inbox" title="Refresh inbox"
         disabled={loading} onClick={onRefresh}>
         <RefreshCw size={14} aria-hidden="true" />
       </Button>
-      {onClose && (
-        <Button type="button" variant="ghost" size="icon-xs" aria-label="Close inbox" onClick={onClose}>
-          <X size={15} aria-hidden="true" />
-        </Button>
-      )}
-    </header>
+    </>
   )
 }
 
@@ -118,7 +110,6 @@ export function InboxPanelStatus(props: InboxPanelStatusProps): React.JSX.Elemen
 }
 
 export interface InboxPanelChromeProps {
-  uid: string
   total: number
   loading: boolean
   filter: InboxFilter
@@ -126,22 +117,20 @@ export interface InboxPanelChromeProps {
   listError: string | null
   selectedCount: number
   onRefresh: () => void
-  onClose?: (() => void) | undefined
   onFilter: (key: InboxFilter) => void
   onReviewSelected: () => void
   onClearSelection: () => void
 }
 
 /**
- * Everything above the section list: header, filter chips, bulk toolbar, error banner, and the
- * empty/loading line, in that fixed order. The container supplies values; ordering lives here.
+ * Everything between the title bar and the section list: filter chips, bulk toolbar, error
+ * banner, and the empty/loading line, in that fixed order. The container supplies values;
+ * ordering lives here.
  */
 export function InboxPanelChrome(props: InboxPanelChromeProps): React.JSX.Element {
-  const { uid, total, loading, filter, counts, listError, selectedCount } = props
+  const { total, loading, filter, counts, listError, selectedCount } = props
   return (
     <>
-      <InboxPanelHeader uid={uid} total={total} loading={loading} onClose={props.onClose}
-        onRefresh={props.onRefresh} />
       <InboxPanelFilters filter={filter} counts={counts} onFilter={props.onFilter} />
       {selectedCount > 0 && (
         <InboxPanelBulk selectedCount={selectedCount} onReviewSelected={props.onReviewSelected}

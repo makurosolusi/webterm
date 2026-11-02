@@ -1,4 +1,6 @@
-// Operator inbox + blocking approval queue. Props-driven: mount from App, open from Dock.
+// Operator inbox + blocking approval queue, rendered in the VS Code bottom panel. Standalone it
+// owns a single-tab surface; `inboxChatPanel.tsx` is the two-tab Inbox/Chat mount. Props-driven:
+// mount from App, open from Dock.
 //
 //   const [open, setOpen] = useInboxOpen()
 //   <InboxPanel open={open} onClose={() => setOpen(false)} />
@@ -9,12 +11,13 @@
 // server challenge; this file never hashes anything. Consume is offered only after the decision
 // came back `approved`. Reject is a first-class decision, not "close and forget".
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { ShieldAlert } from 'lucide-react'
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
 import { CONFIRM_PHRASE, type ReviewState } from './inboxApprovalDialog'
-import { Card } from '@/components/ui/card'
-import { InboxPanelChrome, type InboxFilter } from './inboxPanelChrome'
+import { InboxPanelActions, InboxPanelChrome, type InboxFilter } from './inboxPanelChrome'
 import { InboxPanelDialog } from './inboxPanelDialog'
 import { InboxPanelSections } from './inboxPanelSections'
+import { InboxPanelSurface } from './inboxPanelSurface'
 import {
   approvalRequest,
   resumeApprovalFor,
@@ -42,6 +45,8 @@ export interface InboxPanelProps {
   pollMs?: number
   /** Recorded on approve/reject decisions when the server wants an actor id. */
   actor?: string
+  /** Render only the pane body: the combined Inbox/Chat shell owns the surface and tabs. */
+  embedded?: boolean
 }
 
 export default function InboxPanel(props: InboxPanelProps) {
@@ -157,14 +162,14 @@ export default function InboxPanel(props: InboxPanelProps) {
   useInboxDialogKeys({ open: dialogOpen, dialogRef, pending, onClose: closeDialog })
   // Panel-level Escape (only when no dialog owns the key).
   useEffect(() => {
-    if (!open || !props.onClose) return
+    if (!open || props.embedded || !props.onClose) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || dialogRef.current) return
       props.onClose?.()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, props.onClose, dialogOpen])
+  }, [open, props.embedded, props.onClose, dialogOpen])
 
   // ---- review flow ------------------------------------------------------------------------
   const beginReview = (queue: InboxItem[], index = 0): void => {
@@ -343,10 +348,10 @@ export default function InboxPanel(props: InboxPanelProps) {
 
   if (!open) return null
 
-  return (
-    <Card className="inbox-panel p-0 gap-0" role="complementary" aria-label="Inbox" aria-labelledby={`${uid}-title`}>
-      <InboxPanelChrome uid={uid} total={counts.all} loading={loading} filter={filter} counts={counts}
-        listError={listError} selectedCount={selectedItems.length} onClose={props.onClose}
+  const body = (
+    <>
+      <InboxPanelChrome total={counts.all} loading={loading} filter={filter} counts={counts}
+        listError={listError} selectedCount={selectedItems.length}
         onRefresh={() => setRefreshKey((key) => key + 1)} onFilter={setFilter}
         onReviewSelected={() => beginReview(selectedItems.filter((item) => reviewBlockedReason(item) === null))}
         onClearSelection={() => setSelected(new Set())} />
@@ -364,6 +369,40 @@ export default function InboxPanel(props: InboxPanelProps) {
           onChecked={(checked) => setDialog((state) => (state ? { ...state, checked } : state))}
           onText={(text) => setDialog((state) => (state ? { ...state, text } : state))} />
       )}
-    </Card>
+    </>
+  )
+
+  if (props.embedded) {
+    return (
+      <div className="inbox-panel inbox-panel--embedded">
+        <div className="inbox-pane-actions" role="toolbar" aria-label="Inbox actions">
+          <InboxPanelActions total={counts.all} loading={loading}
+            onRefresh={() => setRefreshKey((key) => key + 1)} />
+        </div>
+        {body}
+      </div>
+    )
+  }
+
+  return (
+    <InboxPanelSurface
+      className="inbox-panel"
+      ariaLabel="Inbox"
+      tabsLabel="Inbox tabs"
+      tabs={[{
+        id: 'inbox',
+        label: 'Inbox',
+        icon: <ShieldAlert size={14} aria-hidden="true" />,
+        tooltip: 'Operator inbox and approvals',
+        closable: props.onClose !== undefined,
+      }]}
+      activeId="inbox"
+      onActivate={() => undefined}
+      {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.() })}
+      actions={<InboxPanelActions total={counts.all} loading={loading}
+        onRefresh={() => setRefreshKey((key) => key + 1)} />}
+    >
+      {body}
+    </InboxPanelSurface>
   )
 }

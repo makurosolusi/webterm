@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Textfield, ToolbarButton } from '@/vscode/register'
 import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
@@ -98,6 +97,7 @@ export default function NodeChrome(props: NodeChromeProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const titleRef = useRef<HTMLElement | null>(null)
 
   const beginEdit = () => { setDraft(props.title); setEditing(true) }
   const commit = () => {
@@ -105,7 +105,11 @@ export default function NodeChrome(props: NodeChromeProps) {
     setEditing(false)
     if (next) props.onRename(next)
   }
-  const onTitleKey = (e: KeyboardEvent<HTMLInputElement>) => {
+  // `delegatesFocus` di vscode-textfield membuat fokus host diteruskan ke input di shadow DOM.
+  useEffect(() => {
+    if (editing) titleRef.current?.focus()
+  }, [editing])
+  const onTitleKey = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); commit() }
     else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
   }
@@ -114,19 +118,22 @@ export default function NodeChrome(props: NodeChromeProps) {
 
   return (
     <div className="node-header relative">
-      <Button
-        variant="ghost" size="icon-xs"
+      <ToolbarButton
+        label={props.collapsed ? 'Expand' : 'Collapse'}
         className={cn('nodrag node-chevron', props.collapsed && 'node-chevron--collapsed')}
         title={props.collapsed ? 'Expand' : 'Collapse'}
         onClick={props.onToggleCollapse}
-      ><IconChevron /></Button>
+      ><IconChevron /></ToolbarButton>
 
       <NodeColorSwatch color={props.color} onColor={props.onColor} />
 
       {editing ? (
-        <Input
-          className="nodrag node-title--edit" autoFocus value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+        <Textfield
+          ref={(node) => { titleRef.current = node }}
+          className="nodrag node-title--edit" value={draft}
+          // `input` adalah event yang diteruskan wrapper; `target` sudah di-retarget ke host,
+          // yang menyimpan properti `value` milik vscode-textfield.
+          onInput={(e) => setDraft((e.target as unknown as { value: string }).value)}
           onKeyDown={onTitleKey} onBlur={commit}
         />
       ) : (

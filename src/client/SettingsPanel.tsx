@@ -1,12 +1,15 @@
-// Halaman settings bersection (sidebar + satu pane aktif), bukan popover — bentuk yang sama
-// dengan nodeterm `src/renderer/components/settings/SettingsPage.tsx`: dialog full-screen, nav
-// di kiri. Pengelompokan sectionnya mengikuti komentar grup di
-// `shared/settings.ts` supaya skema dan UI tidak bisa berbeda pendapat.
+// Halaman settings dengan bentuk VS Code Settings editor: search di atas, sidebar section 200px,
+// satu pane konten di kanan. Dialog tetap dipertahankan (full-screen, bukan popover) supaya
+// Escape/focus-trap dan alur buka-tutup yang sudah ada tidak berubah; yang berubah hanya chrome
+// dan metriknya — 35px header, 22px baris, teks 13px, kontrol 24px, token `--vscode-*`.
+//
+// Pengelompokan section mengikuti komentar grup di `shared/settings.ts` supaya skema dan UI tidak
+// bisa berbeda pendapat.
 //
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { useMemo, useState } from 'react'
+import { Search, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -20,8 +23,19 @@ import {
 } from './terminalConfig'
 import { TERMINAL_THEMES } from './themes'
 import { AgentSettings } from './SettingsAgents'
-import { ColorField, NumberField, SelectField, TextField, ToggleField } from './SettingsFields'
+import {
+  ColorField,
+  Field,
+  NumberField,
+  SelectField,
+  SettingsSearchProvider,
+  TextField,
+  ToggleField,
+  normalizeQuery,
+  useSettingsSearch,
+} from './SettingsFields'
 import './settings.css'
+import './settings-controls.css'
 
 const SECTIONS = [
   { id: 'terminal', label: 'Terminal' },
@@ -44,38 +58,121 @@ export function SettingsPanel({
   onClose: () => void
 }): React.JSX.Element {
   const [active, setActive] = useState<SectionId>('terminal')
+  const [query, setQuery] = useState('')
+  const normalized = useMemo(() => normalizeQuery(query), [query])
+
+  const renderSection = (id: SectionId): React.JSX.Element => {
+    if (id === 'terminal') return <TerminalSection settings={s} onChange={onChange} />
+    if (id === 'interaction') return <InteractionSection settings={s} onChange={onChange} />
+    if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
+    if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
+    if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
+    return <PreviewSection settings={s} onChange={onChange} />
+  }
+
+  const activeLabel = SECTIONS.find((section) => section.id === active)?.label ?? 'Settings'
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="st-dialog-content" showCloseButton={false}>
-        <nav className="st-sidebar">
-        <div className="st-sidebar-head">
-          <DialogTitle className="st-title">Settings</DialogTitle>
-          <DialogDescription className="sr-only">Configure webterm behavior and appearance.</DialogDescription>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Tutup settings" onClick={onClose}>✕</Button>
+      <DialogContent
+        className="st-dialog-content"
+        showCloseButton={false}
+        onEscapeKeyDown={(event) => {
+          // Escape mengosongkan pencarian dulu; baru Escape kedua menutup dialog.
+          if (query) {
+            event.preventDefault()
+            setQuery('')
+          }
+        }}
+      >
+        <DialogTitle className="st-sr-only">Settings</DialogTitle>
+        <DialogDescription className="st-sr-only">Configure webterm behavior and appearance.</DialogDescription>
+        <div className="st-editor">
+          <header className="st-header">
+            <span className="st-header-title">Settings</span>
+            <button
+              type="button"
+              className="st-close"
+              aria-label="Tutup settings"
+              onClick={onClose}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </header>
+
+          <div className="st-searchbar">
+            <div className="st-search-wrap">
+              <Search size={14} className="st-search-icon" aria-hidden="true" />
+              <input
+                type="search"
+                className="st-search"
+                aria-label="Cari setting"
+                placeholder="Cari setting"
+                value={query}
+                autoFocus
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className="st-search-clear"
+                  aria-label="Hapus pencarian"
+                  onClick={() => setQuery('')}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="st-body">
+            <nav className="st-sidebar" aria-label="Section settings">
+              {SECTIONS.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  aria-current={active === section.id && !normalized}
+                  className={'st-nav' + (active === section.id && !normalized ? ' is-active' : '')}
+                  onClick={() => {
+                    setActive(section.id)
+                    setQuery('')
+                  }}
+                >
+                  {section.label}
+                </button>
+              ))}
+            </nav>
+
+            <SettingsSearchProvider query={normalized}>
+              <main className="st-main" aria-label="Settings">
+                {normalized ? (
+                  <>
+                    {SECTIONS.map((section) => (
+                      <section
+                        key={section.id}
+                        className="st-search-group"
+                        aria-labelledby={`st-group-${section.id}`}
+                      >
+                        <h3 id={`st-group-${section.id}`} className="st-group-title">
+                          {section.label}
+                        </h3>
+                        {renderSection(section.id)}
+                      </section>
+                    ))}
+                    <p className="st-no-results" role="status">
+                      Tidak ada setting yang cocok dengan “{query.trim()}”.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="st-section-title">{activeLabel}</h2>
+                    {renderSection(active)}
+                  </>
+                )}
+              </main>
+            </SettingsSearchProvider>
+          </div>
         </div>
-        {SECTIONS.map((sec) => (
-          <Button
-            key={sec.id}
-            type="button"
-            aria-current={active === sec.id}
-            className={'st-nav' + (active === sec.id ? ' is-active' : '')}
-            onClick={() => setActive(sec.id)}
-            variant="ghost"
-          >
-            {sec.label}
-          </Button>
-        ))}
-        </nav>
-        <main className="st-main">
-        <h2 className="st-section-title">{SECTIONS.find((x) => x.id === active)?.label}</h2>
-        {active === 'terminal' ? <TerminalSection settings={s} onChange={onChange} /> : null}
-        {active === 'interaction' ? <InteractionSection settings={s} onChange={onChange} /> : null}
-        {active === 'shell' ? <ShellSection settings={s} onChange={onChange} /> : null}
-        {active === 'agent' ? <AgentSettings settings={s} onChange={onChange} /> : null}
-        {active === 'canvas' ? <CanvasSection settings={s} onChange={onChange} /> : null}
-        {active === 'preview' ? <PreviewSection settings={s} onChange={onChange} /> : null}
-        </main>
       </DialogContent>
     </Dialog>
   )
@@ -87,9 +184,12 @@ interface P {
 }
 
 function TerminalSection({ settings: s, onChange }: P): React.JSX.Element {
+  const query = useSettingsSearch()
   return (
     <>
-      <p className="st-note">Perubahan di section ini langsung diterapkan ke terminal yang terbuka.</p>
+      {query ? null : (
+        <p className="st-note">Perubahan di section ini langsung diterapkan ke terminal yang terbuka.</p>
+      )}
       <NumberField id="st-fontSize" label="Ukuran font" value={s.fontSize} min={6} max={48} unit="px"
         onChange={(v) => onChange({ fontSize: v })} />
       <TextField id="st-fontFamily" label="Font family" value={s.fontFamily} mono

@@ -3,40 +3,15 @@
    has not loaded styles.css. */
 
 .chat-panel {
-  position: absolute;
-  top: calc(var(--tabbar-h, 46px) + var(--float-gap, 22px) + 44px);
-  right: var(--float-gap, 22px);
-  z-index: 14;
-  width: 480px;
-  max-width: calc(100vw - 2 * var(--float-gap, 22px));
-  height: min(640px, calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px) - 26px - 44px));
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   color: var(--text, rgba(255, 255, 255, 0.85));
   font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif);
   font-size: 12.5px;
 }
 
-/* Inbox owns the top-right corner; chat steps left instead of stacking on top of it. */
-.chat-panel--shifted {
-  right: calc(var(--float-gap, 22px) + 360px);
-}
-
-.chat-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 10px 8px 12px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-}
-.chat-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-.chat-grow { flex: 1; }
 .chat-body {
   flex: 1;
   min-height: 0;
@@ -57,12 +32,15 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 6px 7px;
+  height: var(--bottom-panel-row-h, 22px);
+  min-height: var(--bottom-panel-row-h, 22px);
+  padding: 2px 7px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm, 6px);
   background: transparent;
   color: var(--muted, rgba(255, 255, 255, 0.55));
   font: inherit;
+  line-height: 1.2;
   text-align: left;
   cursor: pointer;
 }
@@ -328,22 +306,6 @@
 }
 .chat-panel :focus-visible { outline: 2px solid var(--accent, #0a84ff); outline-offset: 2px; }
 
-@media (max-width: 1100px) {
-  .chat-panel--shifted { right: var(--float-gap, 22px); }
-}
-
 @media (max-width: 640px) {
-  .chat-panel,
-  .chat-panel--shifted {
-    top: calc(var(--tabbar-h, 46px) + 44px);
-    right: 0;
-    left: 0;
-    width: auto;
-    max-width: none;
-    height: calc(100vh - var(--tabbar-h, 46px) - 44px);
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-  }
   .chat-conversations { flex-basis: 112px; }
 }

@@ -1,25 +1,26 @@
-// Sidebar sesi (kiri): satu daftar dari SEMUA workspace, dikelompokkan per workspace atau per
-// status. Dibentuk mengikuti nodeterm v0.4.5 `SessionsSidebar.tsx` + `SessionRow.tsx`.
+// Sidebar sesi (kiri): satu pohon dari SEMUA workspace, dikelompokkan per workspace, per status,
+// atau per kind node. Kerangkanya kini VS Code tree (`Tree`/`TreeItem` dari `./vscode/register`):
+// tinggi baris 22px, indent 8px, hover/seleksi VS Code — semuanya dari library, bukan tiruan CSS.
 // Props-driven untuk SEMUA data board (workspace, node, status): integrator yang menyuplainya.
 // SATU pengecualian, dan alasannya: tanda `unread` disubscribe langsung dari `./unread` di sini.
 // Ia state turunan-transport dengan tepat satu pembaca — section "Unread" di panel ini — jadi
 // mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
-import { useEffect, useMemo, useState } from 'react'
-import { Bell, Bot, ChevronDown, ChevronRight, FileText, Folder, Terminal, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { Bell, Bot, FileText, Folder, Terminal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import SessionRow from './SessionRow'
+import { Tree, TreeItem } from './vscode/register'
+import type { VscTreeSelectEvent } from './vscode/register'
+import { SessionGroupItem, SessionTreeItem, type RegisterTreeTarget, type TreeTarget } from './SessionRow'
 import {
   buildSessionList,
   buildStatusList,
   isProjectCollapsed,
   parseCollapsed,
   projectCollapseKey,
-  projectHeadClickAction,
   sidebarEmptyState,
   sessionLabel,
   sidebarFilterKeyAction,
@@ -32,13 +33,15 @@ import { subscribeUnread, unreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode, WsNodeKind } from '../shared/workspace'
 import './sessions-panel.css'
 
+type TreeElement = ComponentRef<typeof Tree>
+
 const TAB_LABEL: Record<SidebarGrouping, string> = {
   project: 'Project',
   status: 'Status',
   nodes: 'Nodes',
 }
 
-/** Ikon per kind untuk baris tab Nodes. Baris di sana tidak punya status, jadi slot glyph-nya
+/** Ikon per kind untuk branch tab Nodes. Baris di sana tidak punya status, jadi slot ikonnya
  *  kosong — dan bentuk adalah satu-satunya pembeda yang terbaca tanpa membaca: judul kustom
  *  ("notes", "scratch") sama-sama mungkin milik editor, terminal, atau folder. */
 const KIND_ICON: Record<WsNodeKind, typeof Bot> = {
@@ -165,14 +168,54 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   // Tab Nodes mendaftar lebih dari sesi, jadi pesan kosongnya tidak boleh bilang "sessions".
   const noun = grouping === 'nodes' ? 'nodes' : 'sessions'
 
+  const treeRef = useRef<TreeElement>(null)
+  // Elemen pohon → aksi. Klik/Enter di dalam shadow tree tidak sampai ke root React, jadi satu
+  // listener natif di `vscode-tree` membaca `vscTreeSelect` lalu memetakan item terpilih ke target.
+  const targets = useRef(new WeakMap<Element, TreeTarget>())
+  const register: RegisterTreeTarget = (el, target) => {
+    if (el) targets.current.set(el, target)
+  }
+
+  const filterEmpty = filter.trim() === ''
+  // Selagi memfilter semuanya dibuka: hasil yang disembunyikan di balik baris terlipat terbaca
+  // seperti "tidak ada hasil".
+  const groupOpen = (key: string) => !filterEmpty || !(collapsed[key] ?? false)
+  const projectOpen = (key: string) => !filterEmpty || !isProjectCollapsed(collapsed, key)
+
+  const onSelectRef = useRef<(event: VscTreeSelectEvent) => void>(() => {})
+  onSelectRef.current = (event) => {
+    // Runtime library memancarkan `detail` sebagai ARRAY item, walau `.d.ts`-nya menulis
+    // `{ selectedItems }`. Keduanya diterima supaya versi berikutnya tidak diam-diam mematikan
+    // seluruh panel: klik yang tidak sampai ke handler = baris yang tak bisa difokuskan.
+    const detail = event.detail as unknown
+    const items = Array.isArray(detail)
+      ? detail
+      : ((detail as { selectedItems?: unknown[] } | undefined)?.selectedItems ?? [])
+    const item = items[0] as (Element & { open?: boolean }) | undefined
+    const target = item ? targets.current.get(item) : undefined
+    if (!target || !item) return
+    if (target.kind === 'group') {
+      // Library membalik `open` SETELAH event ini, jadi nilai `open` di sini adalah keadaan
+      // SEBELUM klik. Peta lipatan menyimpan "terlipat", yang persis sama dengan nilai itu.
+      setCollapsed((prev) => ({ ...prev, [target.key]: item.open === true }))
+      if (target.projectId && !target.isActive) onSelectWorkspace(target.projectId)
+      return
+    }
+    if (target.kind === 'reopen') onReopenSession?.(target.id)
+    else onFocusNode(target.id)
+  }
+
+  useEffect(() => {
+    const el = treeRef.current
+    if (!el) return
+    const handler = (e: Event) => onSelectRef.current(e as VscTreeSelectEvent)
+    el.addEventListener('vsc-tree-select', handler)
+    return () => el.removeEventListener('vsc-tree-select', handler)
+  }, [])
+
   // Tertutup = tidak ada apa pun di tepi kiri. Hover TIDAK pernah membuka (panel yang muncul
   // sendiri saat kursor lewat adalah yang dikeluhkan), dan satu-satunya pelontarnya ada di Dock.
   if (!open) return null
-
-  const toggle = (key: string, cur: boolean) => setCollapsed((prev) => ({ ...prev, [key]: !cur }))
-  // Default TERBUKA, beda dari baris workspace: seksi ini cuma muncul kalau ada isinya, jadi
-  // menyembunyikan isi itu di balik satu klik lagi akan menghapus satu-satunya alasan ia muncul.
-  const closedCollapsed = collapsed[CLOSED_KEY] ?? false
 
   return (
     <Card className="sessions-sidebar nodrag p-0 gap-0" role="complementary" aria-label="Sessions">
@@ -211,7 +254,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       </Tabs>
 
       <div className="sessions-sidebar__search">
-        <Input
+        <input
           type="text"
           value={filter}
           placeholder="Filter sessions…"
@@ -253,213 +296,150 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         )}
         {empty === 'no-sessions' && <div className="ss-empty">No {noun} yet.</div>}
 
-        {/* Satu-satunya daftar yang memuat node files/editor juga — jadi satu-satunya jalan
-            memusatkan canvas ke node yang bukan shell. Baris memakai ulang `.ss-row` apa adanya
-            (nol CSS baru); fokus, zoom, dan pindah workspace sudah milik `onFocusNode`. */}
-        {grouping === 'nodes' ? (
-          nodeGroups.map((g) => {
-            const Icon = KIND_ICON[g.kind]
-            return (
-              <section key={g.kind} className="ss-status" aria-label={g.label}>
-                <div className="ss-status__head">
-                  <span className="ss-status__label">{g.label}</span>
-                  <span className="ss-status__count">{g.rows.length}</span>
-                </div>
-                <ul className="ss-rows ss-status__rows">
+        <Tree
+          ref={treeRef}
+          className="ss-tree"
+          indent={8}
+          aria-label={`${grouping === 'nodes' ? 'Nodes' : 'Sessions'} tree`}
+        >
+          {/* Satu-satunya daftar yang memuat node files/editor juga — jadi satu-satunya jalan
+              memusatkan canvas ke node yang bukan shell. */}
+          {grouping === 'nodes' ? (
+            nodeGroups.map((g) => {
+              const Icon = KIND_ICON[g.kind]
+              return (
+                <SessionGroupItem
+                  key={g.kind}
+                  groupKey={`nodes:${g.kind}`}
+                  label={g.label}
+                  count={g.rows.length}
+                  open={groupOpen(`nodes:${g.kind}`)}
+                  register={register}
+                  icon={<Icon aria-hidden />}
+                >
                   {g.rows.map((r) => (
-                    <li key={r.id}>
-                      <div
-                        className="ss-row"
-                        role="button"
-                        tabIndex={0}
-                        title={r.detail ?? ''}
-                        aria-label={`Focus ${r.label}`}
-                        onClick={() => onFocusNode(r.id)}
-                        onKeyDown={(ev) => {
-                          if (ev.key !== 'Enter' && ev.key !== ' ') return
-                          ev.preventDefault()
-                          ev.stopPropagation()
-                          onFocusNode(r.id)
-                        }}
-                      >
-                        <span className="ss-row__glyph">
-                          <Icon aria-hidden />
-                        </span>
-                        {/* Tanpa meta: satu board saja (nama workspace sama di tiap baris), dan
-                            kind sudah disebut header seksi + ikon — kadang judulnya sendiri. */}
-                        <span className="ss-row__text">
-                          <span className="ss-row__title">{r.label}</span>
-                        </span>
-                      </div>
-                    </li>
+                    <TreeItem
+                      key={r.id}
+                      className="ss-tree__leaf"
+                      aria-label={`Focus ${r.label}`}
+                      title={r.detail ?? ''}
+                      ref={(el) => register(el, { kind: 'node', id: r.id })}
+                    >
+                      <span slot="icon-leaf" className="ss-tree__kind" aria-hidden>
+                        <Icon />
+                      </span>
+                      {/* Tanpa meta: satu board saja (nama workspace sama di tiap baris), dan
+                          kind sudah disebut header seksi + ikon. */}
+                      <span className="ss-tree__label">{r.label}</span>
+                    </TreeItem>
                   ))}
-                </ul>
-              </section>
-            )
-          })
-        ) : grouping === 'status'
-          ? // `buildStatusList` menahan SEMUA section supaya posisinya tetap; yang memutuskan mana
+                </SessionGroupItem>
+              )
+            })
+          ) : grouping === 'status' ? (
+            // `buildStatusList` menahan SEMUA section supaya posisinya tetap; yang memutuskan mana
             // yang layak dirender adalah di sini. Section kosong disembunyikan — header "0" tidak
             // membawa apa pun dan tiga di antaranya memakan separuh panel. Satu pengecualian:
             // `attention`, karena nol di sana adalah kabar baik yang justru dicari pengguna, jadi
             // ketiadaannya tidak boleh dibaca sebagai "belum dihitung".
             empty === 'none' &&
             sections.filter((s) => s.kind === 'attention' || s.rows.length > 0).map((s) => (
-              <section key={s.kind} className="ss-status" aria-label={s.label}>
-                <div className="ss-status__head">
-                  {/* Bel untuk attention, titik berwarna untuk sisanya — glyph yang sama dengan
-                      barisnya, supaya header dan isi bicara dalam satu bahasa. */}
-                  {s.kind === 'attention' ? (
+              <SessionGroupItem
+                key={s.kind}
+                groupKey={`status:${s.kind}`}
+                label={s.label}
+                count={s.rows.length}
+                open={groupOpen(`status:${s.kind}`)}
+                register={register}
+                icon={
+                  s.kind === 'attention' ? (
                     <span className="ss-status__icon ss-status__icon--attention">
                       <Bell aria-hidden />
                     </span>
                   ) : (
-                    <span className={`ss-status__icon ss-status__icon--${s.kind}`} aria-hidden />
-                  )}
-                  <span className="ss-status__label">{s.label}</span>
-                  <span className="ss-status__count">{s.rows.length}</span>
-                </div>
+                    <span className={`ss-status__icon ss-status__icon--${s.kind}`} />
+                  )
+                }
+              >
                 {s.rows.length > 0 && (
-                  <ul className="ss-rows ss-status__rows">
-                    {s.rows.map((r) => (
-                      <SessionRow
-                        key={r.id}
-                        row={r}
-                        showProject
-                        onFocusNode={onFocusNode}
-                        onCloseSession={onCloseSession}
-                      />
-                    ))}
-                  </ul>
+                  s.rows.map((r) => (
+                    <SessionTreeItem
+                      key={r.id}
+                      row={r}
+                      showProject
+                      onCloseSession={onCloseSession}
+                      register={register}
+                    />
+                  ))
                 )}
-              </section>
+              </SessionGroupItem>
             ))
-          : groups.map((g) => {
+          ) : (
+            groups.map((g) => {
               const key = projectCollapseKey(g.projectId)
-              // Selagi memfilter semuanya dibuka: hasil yang disembunyikan di balik baris
-              // terlipat terbaca seperti "tidak ada hasil".
-              const isCollapsed = filter.trim() === '' && isProjectCollapsed(collapsed, key)
+              const isCollapsed = !projectOpen(key)
               const sig = signalCounts(g.sessions)
-              const head = () => {
-                if (projectHeadClickAction(g.isActive) === 'switch') onSelectWorkspace(g.projectId)
-                else toggle(key, isCollapsed)
-              }
               return (
-                <section key={g.projectId} className={g.isActive ? 'ss-group ss-group--active' : 'ss-group'}>
-                  <div
-                    className="ss-group__head"
-                    role="button"
-                    tabIndex={0}
-                    // Penandanya tidak boleh cuma warna: pembaca layar harus bisa menyebut board
-                    // mana yang sedang terbuka di canvas.
-                    aria-current={g.isActive ? 'true' : undefined}
-                    onClick={head}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' && e.key !== ' ') return
-                      e.preventDefault()
-                      e.stopPropagation()
-                      head()
-                    }}
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      className="ss-group__chev"
-                      aria-expanded={!isCollapsed}
-                      aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${g.projectName}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggle(key, isCollapsed)
-                      }}
-                    >
-                      {isCollapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
-                    </Button>
-                    <span
-                      className="ss-group__monogram"
-                      style={g.projectColor ? { background: g.projectColor } : undefined}
-                      aria-hidden
-                    >
-                      {monogram(g.projectName)}
-                    </span>
-                    <span className="ss-group__name">{g.projectName}</span>
-                    {sig.attention > 0 && <span className="ss-signal ss-signal--attention">{sig.attention}</span>}
-                    {sig.working > 0 && <span className="ss-signal ss-signal--working">{sig.working}</span>}
-                    <span className="ss-group__count">{g.sessions.length}</span>
-                  </div>
-                  {!isCollapsed && (
-                    <ul className="ss-rows ss-group__sessions">
-                      {g.sessions.map((r) => (
-                        <SessionRow
-                          key={r.id}
-                          row={r}
-                          showProject={false}
-                          onFocusNode={onFocusNode}
-                          onCloseSession={onCloseSession}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </section>
+                <SessionGroupItem
+                  key={g.projectId}
+                  groupKey={key}
+                  label={g.projectName}
+                  count={g.sessions.length}
+                  open={!isCollapsed}
+                  register={register}
+                  // Klik header berpindah board kalau board itu belum aktif; klik pada board yang
+                  // aktif hanya melipat/membukanya. Chevron tetap melipat board mana pun.
+                  workspace
+                  projectId={g.projectId}
+                  isActive={g.isActive}
+                  monogram={monogram(g.projectName)}
+                  color={g.projectColor}
+                  signals={sig}
+                >
+                  {g.sessions.map((r) => (
+                    <SessionTreeItem
+                      key={r.id}
+                      row={r}
+                      showProject={false}
+                      onCloseSession={onCloseSession}
+                      register={register}
+                    />
+                  ))}
+                </SessionGroupItem>
               )
-            })}
+            })
+          )}
 
-        {/* Dirender HANYA bila ada isinya — dan di luar gerbang `empty`: board yang seluruh sesinya
-            baru saja ditutup adalah justru saat daftar ini paling berguna. Memakai ulang kelas
-            `.ss-group__*` + `.ss-row` apa adanya (nol CSS baru): seksi ketiga dengan bahasa visual
-            sendiri akan membuat sidebar terbaca seperti tiga panel yang ditempel. */}
-        {grouping !== 'nodes' && closedSessions.length > 0 && (
-          <section className="ss-group" aria-label="Recently closed">
-            <div
-              className="ss-group__head"
-              role="button"
-              tabIndex={0}
-              onClick={() => toggle(CLOSED_KEY, closedCollapsed)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return
-                e.preventDefault()
-                e.stopPropagation()
-                toggle(CLOSED_KEY, closedCollapsed)
-              }}
+          {/* Dirender HANYA bila ada isinya — dan di luar gerbang `empty`: board yang seluruh
+              sesinya baru saja ditutup adalah justru saat daftar ini paling berguna. */}
+          {grouping !== 'nodes' && closedSessions.length > 0 && (
+            <SessionGroupItem
+              groupKey={CLOSED_KEY}
+              label="Recently closed"
+              count={closedSessions.length}
+              open={groupOpen(CLOSED_KEY)}
+              register={register}
             >
-              <span className="ss-group__chev" aria-hidden>
-                {closedCollapsed ? <ChevronRight /> : <ChevronDown />}
-              </span>
-              <span className="ss-group__name">Recently closed</span>
-              <span className="ss-group__count">{closedSessions.length}</span>
-            </div>
-            {!closedCollapsed && (
-              <ul className="ss-rows ss-status__rows">
-                {closedSessions.map((e) => (
-                  <li key={e.node.id}>
-                    <div
-                      className="ss-row"
-                      role="button"
-                      tabIndex={0}
-                      title={e.node.cwd ?? ''}
-                      aria-label={`Reopen ${sessionLabel(e.node)}`}
-                      onClick={() => onReopenSession?.(e.node.id)}
-                      onKeyDown={(ev) => {
-                        if (ev.key !== 'Enter' && ev.key !== ' ') return
-                        ev.preventDefault()
-                        ev.stopPropagation()
-                        onReopenSession?.(e.node.id)
-                      }}
-                    >
-                      <span className="ss-row__text">
-                        <span className="ss-row__title">{sessionLabel(e.node)}</span>
-                        {/* Nama workspace SELALU ikut: daftar ini meruntuhkan dinding workspace
-                            seperti mode status, jadi tanpa itu barisnya tidak bilang akan muncul
-                            kembali di board mana. */}
-                        <span className="ss-meta">{e.workspaceName}</span>
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
+              {closedSessions.map((e) => (
+                <TreeItem
+                  key={e.node.id}
+                  className="ss-tree__leaf"
+                  aria-label={`Reopen ${sessionLabel(e.node)}`}
+                  title={e.node.cwd ?? ''}
+                  ref={(el) => register(el, { kind: 'reopen', id: e.node.id })}
+                >
+                  <span className="ss-tree__label">{sessionLabel(e.node)}</span>
+                  {/* Nama workspace SELALU ikut: daftar ini meruntuhkan dinding workspace
+                      seperti mode status, jadi tanpa itu barisnya tidak bilang akan muncul
+                      kembali di board mana. */}
+                  <span slot="description" className="ss-meta">
+                    {e.workspaceName}
+                  </span>
+                </TreeItem>
+              ))}
+            </SessionGroupItem>
+          )}
+        </Tree>
       </ScrollArea>
     </Card>
   )

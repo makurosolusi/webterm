@@ -1,11 +1,12 @@
-/* Sidebar sesi (kiri). Angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css`
-   (.sessions-sidebar 9790, .ss-tabs 9880, .ss-row 10050, .ss-group__head 9960) — bukan karangan.
+/* Sidebar sesi (kiri) — kerangka VS Code.
+   Angka yang dipakai: panel 300px, judul view 35px, header seksi 22px (uppercase 11px), baris
+   pohon 22px dengan indent 8px. Tinggi baris, indent, hover, dan seleksi datang dari
+   `vscode-tree`/`vscode-tree-item` (lihat `indent={8}` di SessionsPanel + `vscode-theme.css`);
+   file ini hanya geometri panel dan isi baris yang di-slotted ke dalamnya.
    Pelontarnya TIDAK di sini: ia tombol dock biasa (`dock.css`), karena plat terapung kedua di
    tepi kiri adalah yang dulu bertumpuk dengan dock.
-   Permukaan (latar, border, radius, shadow) kini milik Card shadcn; file ini hanya
-   geometri dan isi panel. Token --tint-rgb/--controls-w milik styles.css (wkr-chrome-01);
-   tiap var() punya fallback nilai nodeterm supaya tampilan tidak pecah kalau namanya
-   bergeser.
+   Permukaan (latar, border) memakai token VS Code yang sudah dipetakan dari token webterm, jadi
+   tema gelap/terang ikut tanpa palet kedua.
 
    --ss-top-chrome lokal, BUKAN --tabbar-h nodeterm: webterm tidak punya tab bar, yang ada
    di kiri-atas adalah .ws-switcher. Kolom ini harus turun melewatinya, dan --tabbar-h (yang
@@ -13,6 +14,10 @@
 :root {
   --ss-top-chrome: 46px;
   --ss-w: 300px;
+  /* View title VS Code: 35px, teks 11px uppercase. */
+  --ss-title-h: 35px;
+  /* Satu baris pohon = 22px. Dipakai juga oleh header seksi supaya ritmenya satu. */
+  --ss-row-h: 22px;
 }
 
 /* Berdiri di KANAN kolom dock, bukan di tepi kiri bersamanya: dock yang diam dan panel yang mengalah
@@ -20,35 +25,52 @@
    dua --float-gap = jarak tepi→dock plus jarak dock→panel. Panel mount/unmount, tidak meluncur,
    jadi tidak ada transition di sini. */
 .sessions-sidebar {
-  position: absolute;
-  top: calc(var(--ss-top-chrome) + var(--float-gap));
-  left: calc(var(--dock-w) + 2 * var(--float-gap));
-  z-index: 12;
-  width: var(--ss-w);
-  max-height: calc(100vh - var(--ss-top-chrome) - 2 * var(--float-gap) - 26px);
+  grid-area: sidebar;
+  position: relative;
+  top: auto;
+  left: auto;
+  z-index: auto;
+  width: 100%;
+  max-height: none;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-size: 12.5px;
+  background: var(--vscode-sideBar-background, var(--panel));
+  border: 0;
+  border-right: 1px solid var(--vscode-sideBar-border, var(--border));
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--vscode-font-family, inherit);
+  font-size: var(--vscode-font-size, 13px);
 }
 
-/* ---- Kepala ---- */
+/* ---- View title: 35px, uppercase 11px ---- */
 .sessions-sidebar__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 10px 8px 12px;
+  gap: 6px;
+  height: var(--ss-title-h);
+  min-height: var(--ss-title-h);
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .sessions-sidebar__title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
+  color: var(--vscode-sideBarTitle-foreground, var(--text));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sessions-sidebar__count {
-  color: var(--muted-2);
-  font-size: 11.5px;
+  color: var(--muted);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -59,38 +81,67 @@
 }
 
 /* ---- Tab Project / Status / Nodes ---- */
-/* Pita tab kini milik Tabs/TabsList shadcn; di sini hanya jaraknya di dalam panel. */
 .ss-tabs {
-  padding: 0 12px 6px;
+  gap: 0;
+  padding: 4px 8px 2px;
 }
 
-/* ---- Filter ---- */
+.ss-tabs [role='tablist'] {
+  width: 100%;
+  height: 24px;
+  padding: 2px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.ss-tabs [role='tab'] {
+  flex: 1;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.ss-tabs [role='tab'][data-state='active'] {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: none;
+}
+
+/* ---- Filter: VS Code input, 24px ---- */
 .sessions-sidebar__search {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 8px 12px 6px;
+  padding: 4px 8px 6px;
 }
 
 .sessions-sidebar__search input {
   width: 100%;
-  padding: 5px 24px 5px 8px;
-  background: rgba(var(--tint-rgb, 255, 255, 255), 0.06);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--text);
+  height: 24px;
+  padding: 2px 24px 2px 6px;
+  background: var(--vscode-settings-textInputBackground, var(--sunken));
+  border: 1px solid var(--vscode-settings-textInputBorder, var(--border));
+  border-radius: 2px;
+  color: var(--vscode-settings-textInputForeground, var(--text));
   font: inherit;
   font-size: 12px;
   outline: none;
 }
 
+.sessions-sidebar__search input::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--muted));
+}
+
 .sessions-sidebar__search input:focus {
-  border-color: var(--accent);
+  border-color: var(--vscode-focusBorder, var(--accent));
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
 }
 
 .ss-search__clear {
   position: absolute;
-  right: 15px;
+  right: 11px;
   width: 18px;
   height: 18px;
 }
@@ -100,13 +151,14 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 6px 8px;
+  padding: 0 4px 8px;
 }
 
 .ss-empty {
   padding: 18px 10px;
-  color: var(--muted);
+  color: var(--vscode-descriptionForeground, var(--muted));
   text-align: center;
+  font-size: 12px;
 }
 
 .ss-empty button {
@@ -114,215 +166,129 @@
   padding: 3px 10px;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 2px;
   color: var(--text);
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
 }
 
-/* ---- Baris workspace ---- */
-.ss-group__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* ---- Pohon ---- */
+/* Font tree mengikuti sidebar, bukan 13px bawaan library: baris 22px tetap, tapi judul sesi
+   panjang dapat satu karakter lebih banyak di lebar 300px. */
+.ss-tree {
+  display: block;
   width: 100%;
-  padding: 5px 6px;
-  border-radius: 7px;
-  color: var(--text);
-  cursor: pointer;
+  --vscode-font-size: 12.5px;
+  --vscode-font-family: var(--font-ui);
 }
 
-.ss-group__head:hover,
-.ss-group__head:focus-visible {
-  background: rgba(var(--tint-rgb, 255, 255, 255), 0.06);
-  outline: none;
-}
-
-.ss-group__chev {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
+/* Header seksi: 22px, uppercase 11px — bahasa visual "section header" VS Code. */
+.ss-tree__group-label {
+  overflow: hidden;
   color: var(--muted);
-  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: var(--ss-row-h);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.ss-group__chev svg {
-  width: 11px;
-  height: 11px;
+.ss-tree__group-label--active {
+  color: var(--vscode-list-highlightForeground, var(--accent));
 }
 
-/* Monogram, bukan ikon generik: inisial membedakan workspace dalam sekali lihat. */
-.ss-group__monogram {
-  width: 18px;
-  height: 18px;
-  flex: none;
+/* Monogram workspace: inisial membedakan board dalam sekali lihat; ikon kind memakai kolom yang
+   sama supaya header dan baris di bawahnya rata. */
+.ss-tree__monogram {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
   background: var(--raised);
   color: var(--text);
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 700;
   line-height: 1;
 }
 
-.ss-group__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
+.ss-tree__kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--vscode-icon-foreground, var(--text));
 }
 
-/* Penanda board aktif, accent pada nama seperti nodeterm. Sebelumnya `var(--text)` — nilai yang
-   sudah dipasang `.ss-group__head`, jadi no-op dan semua board terlihat identik. */
-.ss-group--active .ss-group__name {
-  color: var(--accent);
+.ss-tree__kind svg {
+  width: 13px;
+  height: 13px;
 }
 
-.ss-group__count {
-  color: var(--muted-2);
+.ss-tree__count {
+  color: var(--vscode-descriptionForeground, var(--muted-2));
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
-.ss-signal {
+.ss-tree__decoration {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 0 5px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  gap: 4px;
 }
 
-.ss-signal--attention {
-  background: color-mix(in srgb, var(--state-attention) 22%, transparent);
-  color: var(--state-attention);
-}
-
-.ss-signal--working {
-  background: color-mix(in srgb, var(--state-working) 22%, transparent);
-  color: var(--state-working);
-}
-
-/* ---- Section status ---- */
-/* Header hadir walau barisnya nol (lihat `buildStatusList`), jadi ia dibentuk sebagai KARTU
-   berlatar — teks menggantung tanpa isi di bawahnya akan terbaca seperti sisa render. Ukuran
-   dan jarak disamakan dengan .ss-group__head supaya kedua tab terasa satu panel. */
-.ss-status + .ss-status {
-  margin-top: 6px;
-}
-
-.ss-status__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 6px;
-  border-radius: 7px;
-  background: rgba(var(--tint-rgb, 255, 255, 255), 0.05);
-}
-
-.ss-status__icon {
-  width: 9px;
-  height: 9px;
-  flex: none;
-  border-radius: 50%;
-}
-
-.ss-status__label {
-  flex: 1;
-  min-width: 0;
+.ss-tree__label {
+  display: block;
   overflow: hidden;
+  color: var(--vscode-foreground, var(--text));
+  line-height: var(--ss-row-h);
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
 }
 
-.ss-status__count {
-  color: var(--muted-2);
+/* Meta satu baris (nama workspace · folder), bukan baris kedua: tinggi baris tetap 22px. */
+.ss-meta {
+  display: inline-block;
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground, var(--muted-2));
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  line-height: var(--ss-row-h);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
 }
 
-/* Bel punya bentuk sendiri, jadi ia melepas kotak 9px titik. */
-.ss-status__icon--attention {
-  width: auto;
-  height: auto;
-  border-radius: 0;
+/* Tombol akhiri sesi di slot actions (muncul saat baris di-hover/di-fokus, diatur library). */
+.ss-tree__end {
   display: inline-flex;
-  color: var(--state-attention);
-}
-
-.ss-status__icon--attention svg {
-  width: 11px;
-  height: 11px;
-}
-
-/* Unread = selesai tapi belum dilihat. Memakai --accent (pilihan warna nodeterm juga): ia satu
-   token yang sudah ada di kedua tema, dan "baru untukmu" memang bahasa aksen, bukan bahasa status. */
-.ss-status__icon--unread {
-  background: var(--accent);
-}
-
-.ss-status__icon--working {
-  background: var(--state-working);
-}
-
-/* Idle = turn yang sudah mendarat: hijau sukses, tapi diredam supaya tidak menarik mata. */
-.ss-status__icon--idle {
-  background: var(--state-success);
-  opacity: 0.7;
-}
-
-.ss-status__icon--unknown {
-  background: var(--muted-2);
-}
-
-.ss-status__rows {
-  padding: 2px 0 2px 2px;
-}
-
-/* ---- Baris sesi ---- */
-.ss-rows {
-  list-style: none;
-  margin: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   padding: 0;
-}
-
-.ss-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 6px 5px 8px;
-  border-radius: 7px;
-  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground, var(--muted));
   cursor: pointer;
 }
 
-.ss-row:hover,
-.ss-row:focus-visible {
-  background: rgba(var(--tint-rgb, 255, 255, 255), 0.07);
-  outline: none;
+.ss-tree__end svg {
+  width: 12px;
+  height: 12px;
 }
 
-.ss-group__sessions .ss-row {
-  margin-left: 12px;
+.ss-tree__end:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+  color: var(--state-attention);
 }
 
+/* ---- Glyph status baris ---- */
 .ss-row__glyph {
   width: 14px;
   height: 14px;
@@ -381,38 +347,67 @@
   }
 }
 
-.ss-row__text {
-  flex: 1;
-  min-width: 0;
+/* ---- Badge header grup ---- */
+.ss-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
 }
 
-.ss-row__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ss-meta {
-  display: flex;
-  gap: 6px;
-  color: var(--muted-2);
-  font-size: 10.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Tombol tutup muncul saat baris disentuh — tapi tetap ada untuk keyboard, karena sebuah
-   kontrol yang hanya hadir saat :hover tidak bisa di-Tab. */
-.ss-row__close {
-  opacity: 0;
-}
-
-.ss-row:hover .ss-row__close,
-.ss-row__close:focus-visible {
-  opacity: 1;
-}
-
-.ss-row__close:hover {
+.ss-signal--attention {
+  background: color-mix(in srgb, var(--state-attention) 22%, transparent);
   color: var(--state-attention);
+}
+
+.ss-signal--working {
+  background: color-mix(in srgb, var(--state-working) 22%, transparent);
+  color: var(--state-working);
+}
+
+/* ---- Ikon seksi status ---- */
+.ss-status__icon {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+}
+
+/* Bel punya bentuk sendiri, jadi ia melepas kotak 9px titik. */
+.ss-status__icon--attention {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  display: inline-flex;
+  color: var(--state-attention);
+}
+
+.ss-status__icon--attention svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Unread = selesai tapi belum dilihat. Memakai --accent (pilihan warna nodeterm juga): ia satu
+   token yang sudah ada di kedua tema, dan "baru untukmu" memang bahasa aksen, bukan bahasa status. */
+.ss-status__icon--unread {
+  background: var(--accent);
+}
+
+.ss-status__icon--working {
+  background: var(--state-working);
+}
+
+/* Idle = turn yang sudah mendarat: hijau sukses, tapi diredam supaya tidak menarik mata. */
+.ss-status__icon--idle {
+  background: var(--state-success);
+  opacity: 0.7;
+}
+
+.ss-status__icon--unknown {
+  background: var(--muted-2);
 }

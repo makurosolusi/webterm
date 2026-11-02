@@ -1,0 +1,236 @@
+/* Kontrol Settings (input, select, tombol, chip, kartu) dan breakpoint sempit.
+   Dipisah dari `settings.css` supaya keduanya tetap di bawah batas file health; urutan import
+   tidak memengaruhi hasil karena selektornya tidak bertumpuk. Metrik tetap VS Code: kontrol
+   24px, baris/tombol 22px, teks 13px, radius 2px. */
+
+.st-input,
+.st-select {
+  box-sizing: border-box;
+  width: 300px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-settings-textInputBorder, var(--border));
+  border-radius: 2px;
+  outline: none;
+  background: var(--vscode-settings-textInputBackground, var(--sunken));
+  color: var(--vscode-settings-textInputForeground, var(--text));
+  font-family: var(--vscode-font-family, var(--font-ui));
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.st-input::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--muted));
+}
+
+.st-input:focus,
+.st-input:focus-visible,
+.st-select:focus,
+.st-select:focus-visible {
+  border-color: var(--vscode-focusBorder, var(--accent));
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+  box-shadow: none;
+}
+
+.st-input-num {
+  width: 88px;
+}
+
+.st-input-hex {
+  width: 92px;
+}
+
+.st-select {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  width: 260px;
+  padding: 0 4px 0 6px;
+}
+
+.st-select svg {
+  width: 14px;
+  height: 14px;
+  color: var(--vscode-icon-foreground, var(--muted));
+  opacity: 1;
+}
+
+.st-color {
+  box-sizing: border-box;
+  width: 32px;
+  height: 24px;
+  padding: 1px;
+  border: 1px solid var(--vscode-settings-checkboxBorder, var(--border));
+  border-radius: 2px;
+  background: var(--vscode-settings-checkboxBackground, var(--sunken));
+  box-shadow: none;
+}
+
+.st-color:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+}
+
+.st-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Select popup di-portal ke body, jadi selektornya global lewat kelas content. */
+.st-select-content {
+  padding: 4px 0;
+  border: 1px solid var(--vscode-settings-dropdownBorder, var(--border));
+  border-radius: 2px;
+  background: var(--vscode-settings-dropdownBackground, var(--sunken));
+  color: var(--vscode-settings-dropdownForeground, var(--text));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  font-size: 13px;
+}
+
+.st-select-content [data-slot='select-item'] {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 0;
+  font-size: 13px;
+}
+
+.st-select-content [data-slot='select-item'][data-highlighted] {
+  background: var(--vscode-list-activeSelectionBackground, var(--accent));
+  color: var(--vscode-list-activeSelectionForeground, var(--text));
+}
+
+/* -------------------------------------------------------------- buttons */
+.st-button {
+  box-sizing: border-box;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-secondaryBackground, var(--raised));
+  color: var(--vscode-button-secondaryForeground, var(--text));
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.st-button:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--panel-header));
+}
+
+.st-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+}
+
+/* Tombol di grup block tidak ikut melebar selebar baris — VS Code memakai lebar isi. */
+.st-field--block .st-button {
+  align-self: flex-start;
+}
+
+/* ------------------------------------------- daftar: launch command, kartu */
+.st-rows,
+.st-cards,
+.st-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.st-chips {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.st-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.st-row-label {
+  flex: 0 0 104px;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-row .st-input {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.st-chip {
+  appearance: none;
+  border-radius: 2px;
+  background: var(--vscode-badge-background, var(--accent));
+  color: var(--vscode-badge-foreground, var(--text));
+  cursor: pointer;
+}
+
+.st-chip.is-off {
+  background: transparent;
+  border-color: var(--vscode-settings-checkboxBorder, var(--border));
+  color: var(--vscode-descriptionForeground, var(--muted));
+  text-decoration: line-through;
+}
+
+.st-cards {
+  margin-top: 8px;
+}
+
+.st-card {
+  padding: 2px 10px 8px;
+  border: 1px solid var(--vscode-editorWidget-border, var(--border));
+  border-radius: 2px;
+  background: var(--vscode-editorWidget-background, var(--panel));
+}
+
+/* Kartu yang semua field-nya tersaring tidak menyisakan kotak kosong. */
+.st-card:not(:has(.st-field)) {
+  display: none;
+}
+
+.st-card .st-field:last-of-type {
+  border-bottom: 0;
+}
+
+.st-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+/* ------------------------------------------------------------------ narrow */
+@media (max-width: 720px) {
+  .st-sidebar {
+    flex-basis: 150px;
+    width: 150px;
+  }
+
+  .st-field {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .st-control {
+    width: 100%;
+    max-width: none;
+  }
+
+  .st-input,
+  .st-select {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .st-input-num,
+  .st-input-hex {
+    width: 92px;
+  }
+}

@@ -1,7 +1,16 @@
 // Primitif kontrol untuk SettingsPanel. Tiap field memasangkan satu kunci `Settings` dengan satu
 // kontrol yang tipenya cocok; label + deskripsi diambil dari doc-comment kunci di
 // `shared/settings.ts` (di situ alasan defaultnya tertulis, dan user layak tahu).
-import type { ReactNode } from 'react'
+//
+// Semua kontrol memakai primitif shadcn yang sudah ada lalu di-restyle lewat `settings.css` ke
+// metrik VS Code Settings: 13px teks, baris 22px, input 24px, radius 2px. Toggle memakai
+// `VscodeSwitch` (36x20, satu-satunya bentuk yang persis sama dengan VS Code) karena role dan
+// keyboard-nya sudah diuji di `components/vscode`.
+//
+// Pencarian: `SettingsSearchProvider` membawa query yang sudah dinormalisasi, dan `Field`
+// menyembunyikan dirinya sendiri ketika label + hint tidak cocok. Itu membuat filter bekerja
+// untuk semua section sekaligus tanpa daftar indeks terpisah yang bisa basi.
+import { createContext, useContext, type ReactNode } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -11,23 +20,78 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
+import { VscodeSwitch } from './components/vscode/vscodeSwitch'
+
+const SearchContext = createContext('')
+
+/** Normalisasi query: trim + lowercase. Token dipisah spasi dan harus cocok SEMUA. */
+export function normalizeQuery(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function matchesSearch(text: string, query: string): boolean {
+  if (!query) return true
+  const haystack = text.toLowerCase()
+  return query.split(' ').every((token) => haystack.includes(token))
+}
+
+function hintText(hint: ReactNode): string {
+  if (typeof hint === 'string' || typeof hint === 'number') return String(hint)
+  return ''
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Sorot tiap token query di label — VS Code juga menandai teks yang cocok. */
+function highlightMatches(text: string, query: string): ReactNode {
+  if (!query) return text
+  const tokens = query.split(' ').filter(Boolean).map(escapeRegExp)
+  if (tokens.length === 0) return text
+  const re = new RegExp(`(${tokens.join('|')})`, 'ig')
+  const parts = text.split(re)
+  return parts.map((part, index) => {
+    const hit = tokens.some((token) => new RegExp(`^${token}$`, 'i').test(part))
+    return hit ? <mark key={index} className="st-mark">{part}</mark> : part
+  })
+}
+
+export function useSettingsSearch(): string {
+  return useContext(SearchContext)
+}
+
+export function SettingsSearchProvider({
+  query,
+  children,
+}: {
+  query: string
+  children: ReactNode
+}): React.JSX.Element {
+  return <SearchContext.Provider value={query}>{children}</SearchContext.Provider>
+}
 
 export function Field({
   label,
   hint,
   htmlFor,
+  block,
   children,
 }: {
   label: string
   hint?: ReactNode
   htmlFor?: string
+  /** Grup selebar baris (daftar launch command, kartu agent) turun ke bawah label. */
+  block?: boolean
   children: ReactNode
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  const query = useSettingsSearch()
+  if (!matchesSearch(`${label} ${hintText(hint)}`, query)) return null
+
   return (
-    <div className="st-field">
+    <div className={'st-field' + (block ? ' st-field--block' : '')} data-slot="settings-field">
       <div className="st-field-text">
-        <Label className="st-label" htmlFor={htmlFor}>{label}</Label>
+        <Label className="st-label" htmlFor={htmlFor}>{highlightMatches(label, query)}</Label>
         {hint ? <p className="st-hint">{hint}</p> : null}
       </div>
       <div className="st-control">{children}</div>
@@ -59,12 +123,12 @@ export function NumberField({
   step?: number
   unit?: string
   onChange: (v: number) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <Input
         id={id}
-        className="st-input-num"
+        className="st-input st-input-num"
         type="number"
         min={min}
         max={max}
@@ -100,12 +164,12 @@ export function TextField({
   placeholder?: string
   mono?: boolean
   onChange: (v: string) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <Input
         id={id}
-        className={mono ? 'st-mono' : undefined}
+        className={mono ? 'st-input st-mono' : 'st-input'}
         type="text"
         value={value}
         placeholder={placeholder}
@@ -131,14 +195,14 @@ export function SelectField<T extends string>({
   value: T
   options: readonly { value: T; label: string }[]
   onChange: (v: T) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <Select value={value} onValueChange={(next) => onChange(next as T)}>
         <SelectTrigger id={id} className="st-select">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="st-select-content">
           {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
         </SelectContent>
       </Select>
@@ -158,15 +222,12 @@ export function ToggleField({
   hint?: ReactNode
   value: boolean
   onChange: (v: boolean) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <Switch
+      <VscodeSwitch
         id={id}
-        type="button"
-        role="switch"
-        aria-checked={value}
-        aria-label={label}
+        label={label}
         checked={value}
         onCheckedChange={onChange}
       />
@@ -188,12 +249,12 @@ export function ColorField({
   hint?: ReactNode
   value: string
   onChange: (v: string) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      <Input id={id} className="h-9 w-10 p-1" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} className="st-color" type="color" value={value} onChange={(e) => onChange(e.target.value)} />
       <Input
-        className="st-input-hex st-mono"
+        className="st-input st-input-hex st-mono"
         type="text"
         aria-label={`${label} hex`}
         value={value}

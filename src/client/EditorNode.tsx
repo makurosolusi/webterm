@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 // Type-only: terhapus saat compile, jadi tidak membatalkan lazy-load Monaco.
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { loadMonaco } from './lazyMonaco'
@@ -313,41 +313,34 @@ function EditorNode({
           </span>
           <span className="editor-node__spacer" />
           {kind === 'image' && imageDims && <span className="editor-node__dims">{imageDims}</span>}
-          {kind === 'text' && !loadError && (
-            <>
-              <Button
-                variant="ghost"
-                size="xs"
-                className="nodrag"
-                title="Toggle markdown preview (⌘M)"
-                onClick={togglePreview}
-              >
-                {preview ? 'Edit' : 'Preview'}
-              </Button>
-              <Button
-                variant="default"
-                size="xs"
-                className="nodrag"
-                title="Save (⌘S)"
-                disabled={!dirty}
-                onClick={save}
-              >
-                Save
-              </Button>
-            </>
-          )}
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="nodrag"
-            title="Close"
-            aria-label="Close"
-            onClick={() => {
-              void rf.deleteElements({ nodes: [{ id }] })
-            }}
-          >
-            <X size={14} />
-          </Button>
+          <ToolbarContainer className="nodrag editor-node__actions">
+            {kind === 'text' && !loadError && (
+              <>
+                <ToolbarButton
+                  label={preview ? 'Edit' : 'Preview'}
+                  title="Toggle markdown preview (⌘M)"
+                  toggleable checked={preview}
+                  onClick={togglePreview}
+                >
+                  {preview ? 'Edit' : 'Preview'}
+                </ToolbarButton>
+                {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
+                    yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
+                <VscodeButton secondary disabled={!dirty} title="Save (⌘S)" onClick={save}>
+                  Save
+                </VscodeButton>
+              </>
+            )}
+            <ToolbarButton
+              label="Close"
+              title="Close"
+              onClick={() => {
+                void rf.deleteElements({ nodes: [{ id }] })
+              }}
+            >
+              <X size={14} />
+            </ToolbarButton>
+          </ToolbarContainer>
         </div>
         <div className={`node-body editor-node__body editor-node__body--${kind}`}>
           {body()}

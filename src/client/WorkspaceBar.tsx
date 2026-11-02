@@ -1,60 +1,34 @@
-// Header bar aplikasi: brand di kiri, satu tab per workspace, tombol tambah di ujung deretan.
-// Bentuknya mengikuti nodeterm v0.4.5 `components/TabBar.tsx` + blok `.tabbar` di
-// `src/renderer/styles.css`: dot + nama + kebab (⋮) di tepi kanan tab, rename sebagai input INLINE
-// di dalam tab (Enter simpan, Escape batal, blur simpan), dan menu yang menutup sendiri saat
-// pointer mendarat di luar. Menu kebab ini satu-satunya permukaan rename/hapus workspace di
-// webterm — tanpa dia, workspace yang salah dibuat tidak bisa dibuang dari UI sama sekali.
+// Title bar + editor tab strip aplikasi, mengikuti chrome VS Code.
 //
-// Bar ini MEMAKAN tinggi (bukan pil melayang seperti `.ws-switcher` lama), dan `--tabbar-h` di
-// `styles.css` adalah satu-satunya sumber tinggi itu: `canvas-ui.css` memakai token yang sama
-// untuk menurunkan cluster kontrol melewatinya.
+// Baris 1 (35px): brand, `VscodeMenuBar` (File / Workspace / View), identitas workspace aktif di
+// tengah, dan aksi kanan (logout). Rename workspace memakai command center di tengah itu: input
+// muncul di tempat yang sudah terlihat, bukan di dalam tab yang bisa tergulung keluar layar.
 //
-// Dirender SELALU, juga saat belum ada workspace (App merender `Welcome` di bawahnya). Alasannya:
-// tombol `+` adalah satu-satunya hal baru di permukaan ini, dan header yang baru muncul setelah
-// workspace pertama membuat identitas app berkedip masuk lalu memindahkan canvas 46px ke bawah
-// tepat saat pengguna menekan tombol. Strip nol-tab cuma brand + `+`, yang sudah benar sendiri.
-import { useEffect, useMemo, useRef, useState } from 'react'
+// Baris 2 (35px): `VscodeEditorTabBar` memuat satu tab per workspace — status dot sebagai ikon,
+// nama sebagai label, overflow/fade/wheel/reveal milik primitif. Di ujung kanan deretan duduk dua
+// aksi baris: kebab menu workspace aktif (satu-satunya permukaan rename/hapus) dan `+` workspace
+// baru. `+` sengaja SAUDARA strip, bukan anaknya, supaya 10+ workspace tidak mendorongnya keluar
+// layar.
+//
+// Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
+// bawahnya): tombol `+` adalah jalan masuk yang sama, dan chrome yang baru muncul setelah
+// workspace pertama menggeser canvas tepat saat pengguna menekan tombol.
+import { useMemo, useState } from 'react'
 import { LogOut, MoreVertical, Plus, SquareTerminal } from 'lucide-react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
-import { scrollTopToReveal } from './filesKeys'
-import { canScrollStripBy, tabStripOverflow, workspaceTabDot, workspaceTabTitle, type TabOverflow } from './workspaceTabs'
+import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
+import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
+import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
+import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenuBar'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
 const MENU_GAP = 4
-
-/** Lebar pita pudar strip, dibaca dari `--tab-fade` di `styles.css` — satu sumber angka, bukan
- *  salinan yang bisa menyimpang dari CSS-nya. Properti hilang → 0, yaitu perilaku tanpa pudar. */
-const fadeWidth = (strip: HTMLElement): number =>
-  parseFloat(getComputedStyle(strip).getPropertyValue('--tab-fade')) || 0
-
-/**
- * Gulung tab aktif ke dalam pandangan, "sedekat mungkin": tab yang sudah terlihat seluruhnya tidak
- * bergerak sama sekali. Kotaknya DIMEKARKAN selebar pita pudar di kedua sisi — tanpa itu tab yang
- * baru digulung mendarat rata di tepi, yaitu persis di bawah gradien yang memudarkannya, jadi
- * "sudah terlihat" akan berarti "terlihat separuh transparan".
- *
- * Pakai ulang `scrollTopToReveal` (filesKeys): matematikanya agnostik terhadap sumbu
- * (offset/ukuran/gulungan/pandangan), jadi ini pemakaian sumbu-X-nya, bukan duplikat baru. Hasil di
- * luar rentang (negatif, atau melewati gulungan maksimum) tidak perlu di-clamp — browser
- * meng-clamp sendiri saat `scrollLeft` di-assign.
- */
-const revealActiveTab = (strip: HTMLElement): void => {
-  const tab = strip.querySelector<HTMLElement>('.tab--active')
-  if (!tab) return
-  const fade = fadeWidth(strip)
-  strip.scrollLeft = scrollTopToReveal(
-    tab.offsetLeft - fade,
-    tab.offsetWidth + fade * 2,
-    strip.scrollLeft,
-    strip.clientWidth,
-  )
-}
 
 export interface WorkspaceBarProps {
   /** Semua workspace, urutan tab mengikuti urutan array ini. */
@@ -73,6 +47,10 @@ export interface WorkspaceBarProps {
   onLogout?: () => void
   /** Ada token tersimpan → tampilkan tombol logout. Loopback tanpa token: tak ada yang di-logout. */
   showLogout?: boolean
+  /** Menu View: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
+  onOpenSettings?: () => void
+  /** Menu View: membuka Help. */
+  onOpenHelp?: () => void
 }
 
 export default function WorkspaceBar({
@@ -86,6 +64,8 @@ export default function WorkspaceBar({
   onDeleteWorkspace,
   onLogout,
   showLogout,
+  onOpenSettings,
+  onOpenHelp,
 }: WorkspaceBarProps) {
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
@@ -94,58 +74,12 @@ export default function WorkspaceBar({
     [workspaces, liveActiveNodes, activeId, statuses],
   )
 
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
-  const stripRef = useRef<HTMLDivElement | null>(null)
-  const [overflow, setOverflow] = useState<TabOverflow>('none')
-
-  // Dipasang sekali: posisi gulung strip dilaporkan oleh elemennya sendiri, tidak oleh React.
-  useEffect(() => {
-    const strip = stripRef.current
-    if (!strip) return
-    const sync = (): void =>
-      setOverflow(tabStripOverflow(strip.scrollLeft, strip.clientWidth, strip.scrollWidth))
-    // Roda mouse biasa HANYA memancarkan deltaY (trackpad memancarkan deltaX dan sudah menggulung
-    // sendiri), dan deltaY tidak menggulung kontainer `overflow-x` di hampir semua browser — tanpa
-    // terjemahan ini roda di atas strip tidak melakukan apa pun. `preventDefault` butuh listener
-    // NON-passive, yang tidak bisa didapat dari prop `onWheel` React (React mendaftarkan wheel
-    // sebagai passive di root-nya sejak v17), jadi listener-nya dipasang tangan.
-    const onWheel = (e: WheelEvent): void => {
-      if (e.deltaX !== 0 || e.deltaY === 0) return
-      // Strip yang tidak bisa bergerak ke arah itu TIDAK menelan event: biarkan halaman/canvas
-      // menerimanya, daripada mencuri gulungan dan tidak memberi apa pun.
-      if (!canScrollStripBy(strip.scrollLeft, strip.clientWidth, strip.scrollWidth, e.deltaY)) return
-      e.preventDefault()
-      strip.scrollLeft += e.deltaY
-    }
-    sync()
-    strip.addEventListener('scroll', sync, { passive: true })
-    strip.addEventListener('wheel', onWheel, { passive: false })
-    // Lebar strip ikut berubah tanpa render apa pun (jendela diubah ukurannya, sidebar dibuka), dan
-    // itu memindahkan batas "masih ada yang tersembunyi".
-    const ro = new ResizeObserver(sync)
-    ro.observe(strip)
-    return () => {
-      strip.removeEventListener('scroll', sync)
-      strip.removeEventListener('wheel', onWheel)
-      ro.disconnect()
-    }
-  }, [])
-
-  // Berpindah workspace lewat jalan LAIN (sidebar sesi, palet ⌘K) meninggalkan tab aktifnya di luar
-  // layar: board berganti tapi header masih memperlihatkan tab lama sebagai satu-satunya yang
-  // terlihat. `groups.length` ikut jadi dep karena menambah/menghapus tab mengubah lebar konten
-  // strip tanpa mengubah ukuran elemennya (ResizeObserver tidak melihat itu).
-  useEffect(() => {
-    const strip = stripRef.current
-    if (!strip) return
-    revealActiveTab(strip)
-    setOverflow(tabStripOverflow(strip.scrollLeft, strip.clientWidth, strip.scrollWidth))
-  }, [activeId, groups.length])
-
-  const menuGroup = menu ? groups.find((g) => g.projectId === menu.id) : undefined
+  const activeGroup = groups.find((g) => g.projectId === activeId) ?? null
 
   const commitRename = (): void => {
     if (!editingId) return
@@ -162,160 +96,154 @@ export default function WorkspaceBar({
     setDraft(current)
   }
 
+  const deleteWorkspace = (projectId: string, projectName: string, sessions: number): void => {
+    // Hapus TIDAK bisa dibatalkan (row workspace + seluruh board tersimpannya hilang), jadi ia
+    // wajib lewat satu langkah konfirmasi. `confirm()` native adalah modal yang tidak bisa
+    // terklik sambil lalu; browser yang menekan dialognya memulangkan `false` → tidak menghapus.
+    if (window.confirm(deleteWorkspaceMessage(projectName, sessions))) onDeleteWorkspace(projectId)
+  }
+
+  const workspaceItems: VscodeMenuEntry[] = []
+  if (activeGroup) {
+    workspaceItems.push(
+      {
+        id: 'rename-workspace',
+        label: 'Rename Workspace…',
+        onSelect: () => startRename(activeGroup.projectId, activeGroup.projectName),
+      },
+      {
+        id: 'delete-workspace',
+        label: 'Delete Workspace',
+        danger: true,
+        onSelect: () => deleteWorkspace(activeGroup.projectId, activeGroup.projectName, activeGroup.sessions.length),
+      },
+      { type: 'separator' },
+    )
+  }
+  workspaceItems.push({ id: 'new-workspace', label: 'New Workspace', onSelect: onNewWorkspace })
+
+  const fileItems: VscodeMenuEntry[] = [
+    { id: 'new-workspace', label: 'New Workspace', onSelect: onNewWorkspace },
+  ]
+  if (showLogout && onLogout) {
+    fileItems.push({ type: 'separator' }, { id: 'logout', label: 'Logout', onSelect: onLogout })
+  }
+
+  const viewItems: VscodeMenuEntry[] = []
+  if (onOpenSettings) viewItems.push({ id: 'settings', label: 'Settings…', onSelect: onOpenSettings })
+  if (onOpenHelp) viewItems.push({ id: 'help', label: 'Help', onSelect: onOpenHelp })
+
+  const menus: VscodeMenu[] = [
+    { id: 'file', label: 'File', items: fileItems },
+    { id: 'workspace', label: 'Workspace', items: workspaceItems },
+  ]
+  if (viewItems.length > 0) menus.push({ id: 'view', label: 'View', items: viewItems })
+
+  const tabs: VscodeEditorTab[] = groups.map((g) => ({
+    id: g.projectId,
+    label: g.projectName,
+    tooltip: workspaceTabTitle(g),
+    icon: <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />,
+  }))
+
   return (
-    <header className="tabbar">
-      <div className="brand">
-        <SquareTerminal className="brand__mark" aria-hidden />
-        <span className="brand__name">webterm</span>
-      </div>
+    <>
+      <header className="app-titlebar">
+        <div className="brand">
+          <SquareTerminal className="brand__mark" aria-hidden />
+          <span className="brand__name">webterm</span>
+        </div>
 
-      {/* `+` SAUDARA strip, bukan anaknya: dengan 10+ workspace strip yang menggulung tidak boleh
-          membawa tombol tambah keluar layar (nodeterm issue #375). */}
-      <div className="tabbar__projects">
-        {/* `data-overflow` hanya menyetel sisi mana yang dipudarkan — aturan maskernya di
-            `styles.css`. 'none' tetap dikirim (bukan atribut yang dibuang) supaya selektornya
-            selalu eksplisit. */}
-        {/* `contents` bukan kosmetik: Tabs.Root merender satu wrapper, dan wrapper itu harus tidak
-            ikut menjadi flex item di `tabbar__projects` — tanpa ini strip dan tombol `+`/
-            logout tidak lagi sebaris. */}
-        <Tabs value={activeId ?? ''} onValueChange={onSelect} activationMode="manual" className="contents">
-          {/* `role`, `aria-selected`, `tabIndex`, dan aktivasi keyboard sekarang milik Radix
-              (TabsList/TabsTrigger), bukan markup tangan. `activationMode="manual"` disengaja:
-              aktif-otomatis-saat-fokus akan memindahkan board ketika fokus mendarat di input
-              rename atau kebab — dulu fokus tidak pernah memilih workspace, Enter/Space/klik
-              yang memilih. */}
-          <TabsList
-            ref={stripRef}
-            variant="line"
-            className="tabbar__tabs"
-            data-overflow={overflow}
-            aria-label="Workspaces"
+        <VscodeMenuBar menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />
+
+        {/* Command center: identitas workspace aktif, atau input rename saat diminta menu. */}
+        <div className="app-titlebar__center">
+          {editingId ? (
+            <Input
+              className="app-titlebar__rename"
+              value={draft}
+              autoFocus
+              spellCheck={false}
+              aria-label="Workspace name"
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename()
+                if (e.key === 'Escape') setEditingId(null)
+              }}
+              onBlur={commitRename}
+            />
+          ) : (
+            <span className="app-titlebar__name">{activeGroup?.projectName ?? ''}</span>
+          )}
+        </div>
+
+        <div className="app-titlebar__actions">
+          {showLogout && (
+            <Button
+              type="button"
+              className="titlebar__action"
+              title="Logout"
+              aria-label="Logout"
+              onClick={onLogout}
+            >
+              <LogOut aria-hidden />
+            </Button>
+          )}
+        </div>
+      </header>
+
+      <div className="app-tabs">
+        <VscodeEditorTabBar
+          tabs={tabs}
+          activeId={activeId}
+          onActivate={onSelect}
+          ariaLabel="Workspaces"
+        />
+        <div className="app-tabs__actions">
+          <Button
+            type="button"
+            className="app-tabs__action"
+            title="Workspace options"
+            aria-label="Workspace options"
+            disabled={!activeGroup}
+            onClick={(e) => {
+              // Klik kebab tidak berpindah workspace; menu ini bekerja pada workspace aktif.
+              const r = e.currentTarget.getBoundingClientRect()
+              setMenu({ x: r.left, y: r.bottom + MENU_GAP })
+            }}
           >
-            {groups.map((g) => (
-              // TabsTrigger `asChild` dengan `div`, bukan `button` seperti bentuk aslinya: tab
-              // MEMUAT tombol (kebab) dan sebuah input, dan button di dalam button adalah HTML
-              // tidak sah — browser memecah DOM-nya sendiri. Slot Radix yang menempelkan peran
-              // tab, penanda terpilih, dan navigasi panah ke div ini.
-              <TabsTrigger
-                key={g.projectId}
-                asChild
-                value={g.projectId}
-                // Radix mengaktifkan tab pada `mousedown` trigger-nya, dan itu cukup untuk pointer.
-                // Tapi trigger di sini `div` (lewat `asChild`), jadi tidak ada `click` bawaan dari
-                // Enter/Space seperti pada `button` — dan pembaca layar/alat bantu memilih tab
-                // dengan mengirim `click`. Karena nilainya sama, klik ganda (mousedown lalu click)
-                // tidak memanggil `onSelect` dua kali: Tabs menolak nilai yang tak berubah.
-                onClick={() => onSelect(g.projectId)}
-              >
-                <div
-                  className={g.isActive ? 'tab tab--active' : 'tab'}
-                  title={workspaceTabTitle(g)}
-                >
-                  <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />
-                  {editingId === g.projectId ? (
-                    <Input
-                      className="tab__edit"
-                      value={draft}
-                      autoFocus
-                      spellCheck={false}
-                      aria-label="Workspace name"
-                      onChange={(e) => setDraft(e.target.value)}
-                      // Radix mengaktifkan tab lewat `mousedown` pada trigger; tanpa ini mengklik
-                      // input rename milik tab non-aktif ikut berpindah board.
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => {
-                        // Tab induk ikut mendengar Enter/Space; tanpa ini mengetik spasi di dalam nama
-                        // juga memilih workspace dan Enter melakukannya dua kali.
-                        e.stopPropagation()
-                        if (e.key === 'Enter') commitRename()
-                        if (e.key === 'Escape') setEditingId(null)
-                      }}
-                      onBlur={commitRename}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span className="tab__name">{g.projectName}</span>
-                  )}
-
-                  {editingId !== g.projectId && (
-                    <span className="tab__actions">
-                      <Button
-                        type="button"
-                        className="tab__caret"
-                        title="Workspace options"
-                        aria-label="Workspace options"
-                        // Radix memilih tab pada `mousedown` trigger, yang TIDAK ikut terhenti oleh
-                        // `stopPropagation` di onClick. Membuka menu bukan permintaan pindah board.
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          // Klik kebab TIDAK berpindah workspace (nodeterm sama): menu ini juga jalan
-                          // untuk tab yang tidak aktif, dan membuka menu bukan permintaan pindah board.
-                          e.stopPropagation()
-                          // Tanpa cabang toggle "klik lagi untuk menutup": `NodeContextMenu` menutup
-                          // diri pada pointerdown di luar panelnya lewat listener CAPTURE di window,
-                          // dan kebab ini ada di luar panel itu. Listener-nya jalan sebelum handler
-                          // ini, jadi menu selalu sudah tertutup di sini dan cabang itu tidak akan
-                          // pernah benar. Penutupnya: klik di luar + Escape.
-                          const r = e.currentTarget.getBoundingClientRect()
-                          setMenu({ id: g.projectId, x: r.left, y: r.bottom + MENU_GAP })
-                        }}
-                      >
-                        <MoreVertical aria-hidden />
-                      </Button>
-                    </span>
-                  )}
-                </div>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <Button
-          type="button"
-          className="tab__add"
-          title="New workspace"
-          aria-label="New workspace"
-          onClick={onNewWorkspace}
-        >
-          <Plus aria-hidden />
-        </Button>
+            <MoreVertical aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            className="app-tabs__action"
+            title="New workspace"
+            aria-label="New workspace"
+            onClick={onNewWorkspace}
+          >
+            <Plus aria-hidden />
+          </Button>
+        </div>
       </div>
 
-      {showLogout && (
-        <Button
-          type="button"
-          className="tab__add"
-          title="Logout"
-          aria-label="Logout"
-          onClick={onLogout}
-        >
-          <LogOut aria-hidden />
-        </Button>
-      )}
-
-      {menu && menuGroup && (
+      {menu && activeGroup && (
         <NodeContextMenu
           x={menu.x}
           y={menu.y}
           rows={[
-            { label: 'Rename', onClick: () => startRename(menuGroup.projectId, menuGroup.projectName) },
+            {
+              label: 'Rename',
+              onClick: () => startRename(activeGroup.projectId, activeGroup.projectName),
+            },
             {
               label: 'Delete',
               danger: true,
-              onClick: () => {
-                // Hapus TIDAK bisa dibatalkan (row workspace + seluruh board tersimpannya hilang),
-                // jadi ia wajib lewat satu langkah konfirmasi — nodeterm memakai `ConfirmDialog`
-                // miliknya sendiri, webterm belum punya primitif dialog sama sekali, dan
-                // `confirm()` native adalah satu-satunya modal yang tidak bisa terklik sambil lalu.
-                // Kalau browser menekan dialognya, hasilnya `false` → tidak menghapus apa pun.
-                if (window.confirm(deleteWorkspaceMessage(menuGroup.projectName, menuGroup.sessions.length))) {
-                  onDeleteWorkspace(menuGroup.projectId)
-                }
-              },
+              onClick: () => deleteWorkspace(activeGroup.projectId, activeGroup.projectName, activeGroup.sessions.length),
             },
           ]}
           onClose={() => setMenu(null)}
         />
       )}
-    </header>
+    </>
   )
 }

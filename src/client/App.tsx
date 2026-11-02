@@ -286,6 +286,17 @@ export default function App() {
 
   const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks }), [onSession, onToggleHideLinks])
 
+  // Ringkasan agent untuk status bar: satu kalimat yang dibaca pembaca layar lewat live region
+  // `VscodeStatusBar`. Angkanya diturunkan dari status yang sudah ada, bukan state baru.
+  const agentSummary = useMemo(() => {
+    const values = Object.values(statuses)
+    const working = values.filter((s) => s === 'working').length
+    const blocked = values.filter((s) => s === 'blocked').length
+    return [working ? `${working} working` : '', blocked ? `${blocked} need attention` : '']
+      .filter(Boolean)
+      .join(' · ')
+  }, [statuses])
+
   // TIDAK ada suntikan apa pun ke `data` di sini — callback lewat `useNodeActions`, settings lewat
   // `useLiveSettings`. Node terminal/agent jadi mewarisi identitas objek aslinya (`withLinkHandles`
   // memulangkan `n` itu sendiri kecuali files/editor), satu-satunya cara `memo` menggigit saat drag.
@@ -306,12 +317,12 @@ export default function App() {
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
-  if (authRequired) return <div className="app-shell"><Login onSubmit={onLogin} /></div>
+  if (authRequired) return <div className="app-shell app-shell--auth"><Login onSubmit={onLogin} /></div>
 
   return (
     <SettingsProvider value={settings}>
     <NodeActionsProvider value={nodeActions}>
-    <div className="app-shell">
+    <div className={`app-shell${sessionsOpen && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}`}>
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
@@ -326,6 +337,8 @@ export default function App() {
         onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
         onLogout={onLogout}
         showLogout={hasToken()}
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenHelp={() => setShowHelp(true)}
       />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
@@ -380,6 +393,15 @@ export default function App() {
             />
           </ReactFlow>
         )}
+        {/* Cluster kontrol editor (palette ⌘K, Explorer, Settings, Help) hidup DI DALAM sel
+            editor, bukan mengapung di atas tab bar: `top`-nya jadi jarak dari canvas. */}
+        <CanvasToolbar
+          nodes={flowNodes}
+          onFocusNode={onFocus}
+          onOpenExplorer={onAddFiles}
+          onOpenSettings={() => setShowSettings(true)}
+          onOpenHelp={() => setShowHelp(true)}
+        />
       </div>
       {hydrated && !noWorkspaces && (
         <>
@@ -398,6 +420,7 @@ export default function App() {
             canForward={canForward}
             onFit={onFit}
             onToggleBoard={() => setBoard((v) => !v)}
+            boardOpen={board}
             sessionsOpen={sessionsOpen}
             onToggleSessions={() => setSessionsOpen((v) => !v)}
             inboxOpen={inboxOpen}
@@ -416,13 +439,8 @@ export default function App() {
             disabledAgents={settings.disabledAgents}
             customAgents={settings.customAgents}
             agentLaunchCommands={settings.agentLaunchCommands}
-          />
-          <CanvasToolbar
-            nodes={flowNodes}
-            onFocusNode={onFocus}
-            onOpenExplorer={onAddFiles}
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenHelp={() => setShowHelp(true)}
+            workspaceName={activeWs?.name}
+            agentSummary={agentSummary}
           />
           <SessionsPanel
             open={sessionsOpen}

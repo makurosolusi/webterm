@@ -1,50 +1,63 @@
-/* Chrome mengapung di canvas: cluster kontrol kanan-atas dan ⌘K palette. (Rail zoom kiri-bawah
-   sudah tidak ada: isinya dilebur ke kolom dock di `dock.css`.)
-   Semua angka diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (controls-cluster 5293,
-   tombol cluster 5719, palette 7603) — bukan karangan.
+/* Chrome mengapung di canvas: cluster kontrol kanan-atas. (Rail zoom kiri-bawah sudah tidak ada:
+   isinya dilebur ke kolom dock di `dock.css`.)
+   Angka cluster diambil dari nodeterm v0.4.5 `src/renderer/styles.css` (controls-cluster 5293,
+   tombol cluster 5719) — bukan karangan. Palette ⌘K memakai `VscodeQuickPick`, jadi metriknya
+   tinggal di `components/vscode/vscode-controls.css` (600px, 6px di bawah title bar, baris 22px).
    Token --menu-rgb/--tint-rgb/--shadow-k/--tabbar-h milik styles.css (wkr-chrome-01);
    fallback di tiap var() memakai nilai nodeterm supaya tampilan tidak pecah bila namanya beda. */
 
-/* ---- Cluster kontrol (kanan-atas) ---- */
+/* ---- Cluster kontrol (kanan-atas editor) ----
+   Sekarang hidup DI DALAM `.app-main`, jadi `top` tidak perlu menambahkan tinggi chrome lagi.
+   Metriknya tombol toolbar VS Code: 24px, ikon 16px, radius 4px. Tidak ada plat melayang —
+   satu-satunya latar adalah hover per tombol. */
 .controls-cluster {
   position: absolute;
-  /* webterm belum punya tab bar; fallback 0px menaruh cluster sejajar .ws-switcher di seberangnya. */
-  top: calc(var(--tabbar-h, 0px) + var(--float-gap));
+  top: var(--float-gap);
   right: var(--float-gap);
   z-index: 26;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
+  padding: 2px;
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--panel-header));
+  border: 1px solid var(--vscode-editorGroup-border, var(--border));
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, calc(0.18 * var(--shadow-k, 1)));
 }
 
 .controls-cluster > button {
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--menu-rgb, 40, 40, 42), 0.92);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--text);
-  font-size: 15px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--vscode-icon-foreground, var(--text));
+  font-size: 13px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, calc(0.3 * var(--shadow-k, 1)));
 }
 
 .controls-cluster > button:hover {
-  background: var(--panel-header);
+  background: var(--vscode-toolbar-hoverBackground, var(--panel-header));
+}
+
+.controls-cluster > button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
 }
 
 .controls-cluster > button svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Tombol search melebar untuk memuat chip ⌘K, jadi tujuannya terbaca tanpa tooltip. */
 .cluster-search {
-  gap: 10px;
-  padding: 0 10px;
+  width: auto;
+  gap: 6px;
+  padding: 0 6px;
 }
 
 .kbd {
@@ -56,44 +69,6 @@
   border-radius: 5px;
   padding: 1px 6px;
   line-height: 1.4;
-}
-
-/* ---- Command palette sizing ---- */
-.canvas-command-content {
-  width: 560px;
-  max-width: 90vw;
-  max-height: 60vh;
-  padding: 0;
-  background: rgba(var(--menu-rgb, 40, 40, 42), 0.99);
-  border-color: var(--border);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, calc(0.6 * var(--shadow-k, 1)));
-}
-
-.canvas-command-list {
-  max-height: calc(60vh - 49px);
-}
-
-.canvas-command-content [data-slot='command-input-wrapper'] {
-  border-color: var(--border);
-}
-
-.canvas-command-content [data-slot='command-item'] {
-  color: var(--text);
-}
-
-.canvas-command-content [data-slot='command-item'][aria-current='true'],
-.canvas-command-content [data-slot='command-item'][data-selected='true'] {
-  background: var(--panel-header);
-}
-
-.canvas-command-content .palette__label {
-  font-size: 13px;
-}
-
-.canvas-command-content .palette__hint {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 11px;
 }
 
 /* Menu konteks canvas (`CanvasContextMenu.tsx`). Panel, baris, ikon, dan separator dasarnya

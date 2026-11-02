@@ -1,5 +1,7 @@
 /* Node files. Hanya memakai token yang sudah ada di `styles.css` — tidak ada warna literal, jadi
-   tema apa pun yang dipasang di `:root` ikut berlaku di sini. */
+   tema apa pun yang dipasang di `:root` ikut berlaku di sini.
+   Baris listing memakai `vscode-tree`/`vscode-tree-item`; metrik 22px, hover, dan seleksi dimiliki
+   komponen. Yang tersisa di sheet ini hanya tata letak host dan isi slot. */
 
 .files-node {
   display: flex;
@@ -9,37 +11,11 @@
   color: var(--text);
 }
 
-.files-crumbs {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 1px;
-  padding: 4px 8px;
-  overflow: hidden;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-header);
+.files-filter {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 4px 8px 0;
 }
-
-.files-crumb-wrap { display: inline-flex; align-items: center; min-width: 0; }
-.files-crumb-sep { color: var(--muted-2); flex: none; }
-
-.files-crumb {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 1px 4px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  cursor: pointer;
-}
-.files-crumb:hover { background: var(--raised); color: var(--text); }
-.files-crumb-wrap:last-child .files-crumb { color: var(--text); }
-
-.files-filter { margin: 4px 8px 0; }
 
 .files-list {
   flex: 1;
@@ -51,22 +27,25 @@
 /* Fokus keyboard harus terlihat: seluruh navigasi panah/type-ahead node ini bergantung padanya. */
 .files-list:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
 
+/* Host tree tidak boleh menyerang fokus atau geometri barisnya; `vscode-tree-item` sudah 22px. */
+.files-tree { display: block; outline: none; }
+
 .files-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px;
-  cursor: default;
+  min-width: 0;
   user-select: none;
 }
-.files-row:hover { background: var(--raised); }
-.files-row--sel { background: var(--accent); color: var(--accent-text); }
-.files-row--sel .files-icon { color: var(--accent-text); }
-/* Entry gitignored diredamkan, bukan disembunyikan — `node_modules` masih perlu bisa dibuka. */
-.files-row--ignored { opacity: 0.45; }
 
 .files-icon { flex: none; color: var(--muted); }
 .files-icon--dir { color: var(--accent); }
+/* Warna baris terpilih datang dari `:host([selected]) .wrapper` (VS Code); ikon Lucide di dalam
+   slot tidak ikut aturan `::slotted(vscode-icon)`, jadi ia mengikuti warna teks secara eksplisit. */
+.files-row--sel .files-icon { color: inherit; }
+/* Entry gitignored diredamkan, bukan disembunyikan — `node_modules` masih perlu bisa dibuka. */
+.files-row--ignored { opacity: 0.45; }
+
 .files-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .files-empty { padding: 10px 12px; color: var(--muted); }
@@ -83,33 +62,3 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Diportal ke <body>, jadi ia hidup di luar transform canvas dan butuh z-index sendiri. */
-.files-menu {
-  position: fixed;
-  z-index: 1000;
-  min-width: 170px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--overlay);
-  box-shadow: var(--shadow-node);
-  font: 12px/1.4 var(--font-ui);
-}
-
-.files-menu button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.files-menu button:hover { background: var(--accent); color: var(--accent-text); }

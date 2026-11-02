@@ -2,39 +2,20 @@
    element rules or theme overrides here. Colors come from the shared tokens in styles.css with
    fallbacks, so the panel still reads on a host that has not loaded that sheet.
 
-   The panel anchors top-right of the canvas by default. App may wrap it in its own positioned
-   container; `.inbox-panel` keeps `position: absolute` only because that is how the other
-   floating surfaces (dock, sessions) are placed. */
+   The panel is a VS Code bottom-panel pane. `inboxPanelSurface.css` owns the docked surface
+   (title bar, border, background); this sheet owns only the pane body and its 22px rows. */
 
 .inbox-panel {
-  position: absolute;
-  top: calc(var(--tabbar-h, 46px) + var(--float-gap, 22px) + 44px);
-  right: var(--float-gap, 22px);
-  z-index: 13;
-  width: 348px;
-  max-width: calc(100vw - 2 * var(--float-gap, 22px));
-  max-height: calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px) - 26px - 44px);
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   color: var(--text, rgba(255, 255, 255, 0.85));
   font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif);
   font-size: 12.5px;
 }
 
-/* ---- head -------------------------------------------------------------------------------- */
-.inbox-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 10px 8px 12px;
-}
-.inbox-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
+/* ---- title-bar actions ------------------------------------------------------------------- */
 .inbox-total {
   min-width: 20px;
   padding: 0 6px;
@@ -42,13 +23,14 @@
   background: rgba(var(--tint-rgb, 255, 255, 255), 0.1);
   color: var(--muted, rgba(255, 255, 255, 0.55));
   font-size: 11px;
-  line-height: 18px;
+  line-height: 16px;
   text-align: center;
 }
 .inbox-grow { flex: 1; }
 /* ---- filters ----------------------------------------------------------------------------- */
 .inbox-filters {
-  padding: 0 10px 9px;
+  flex: none;
+  padding: 4px 10px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -95,6 +77,8 @@
 
 /* ---- sections ---------------------------------------------------------------------------- */
 .inbox-sections {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-bottom: 8px;
 }
@@ -103,7 +87,8 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 10px;
+  min-height: var(--bottom-panel-row-h, 22px);
+  padding: 1px 10px;
 }
 .inbox-section__empty {
   margin: 0;
@@ -124,7 +109,8 @@
   display: flex;
   align-items: flex-start;
   gap: 7px;
-  padding: 7px 12px 9px;
+  min-height: var(--bottom-panel-row-h, 22px);
+  padding: 4px 12px 6px;
 }
 .inbox-item:hover { background: rgba(var(--tint-rgb, 255, 255, 255), 0.04); }
 .inbox-item .inbox-check { margin-top: 3px; }
@@ -277,22 +263,14 @@
   margin-top: 12px;
 }
 
-/* ---- narrow screens ---------------------------------------------------------------------- */
-/* The Dock is a fixed 38px column anchored at the LEFT edge and grows upward. A panel spanning
-   `left: gap` therefore sits underneath it (clipped header, unreachable `All` chip) instead of
-   beside it. Starting after `--dock-w + gap` keeps both surfaces usable at 620px without moving
-   the Dock, and `min-width: 0` stops the nowrap row titles from forcing the panel wider than the
-   viewport (an absolutely positioned box with `right` only shrinks-to-fit, and its min-content
-   width can exceed the screen). */
 @media (max-width: 640px) {
+  /* The Dock owns the left edge at every width; keep the narrow bottom panel clear of it
+     instead of letting it start at the viewport edge. `min-width: 0` stops nowrap row
+     titles from forcing the panel past the viewport. */
   .inbox-panel {
-    top: calc(var(--tabbar-h, 46px) + var(--float-gap, 22px) + 44px);
     left: calc(var(--dock-w, 54px) + 2 * var(--float-gap, 22px));
     right: var(--float-gap, 22px);
-    width: auto;
     min-width: 0;
-    max-width: none;
-    max-height: calc(100vh - var(--tabbar-h, 46px) - 2 * var(--float-gap, 22px) - 26px - 44px);
   }
   .inbox-dialog { width: 100%; }
   .inbox-dialog__facts { grid-template-columns: 1fr; }

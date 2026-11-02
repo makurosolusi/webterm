@@ -184,7 +184,9 @@ describe('tidak dipersist, dan tidak meng-unmount apa pun', () => {
     expect(document.querySelector('.react-flow__node-terminal')).not.toBeNull()
     expect(document.querySelector('.react-flow__node-terminal .node-header')).not.toBeNull()
     expect(document.querySelector('.dock')).not.toBeNull()
-    expect(document.querySelector('.tabbar')).not.toBeNull()
+    expect(document.querySelector('.app-titlebar')).not.toBeNull()
+    expect(document.querySelector('.app-tabs')).not.toBeNull()
+    expect(document.querySelector('.app-statusbar')).not.toBeNull()
   })
 })
 
