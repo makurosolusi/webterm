@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const clientRoot = path.join(repoRoot, "src/client");
 const uiRoot = path.join(clientRoot, "components/ui");
+// Native form controls are the sanctioned implementation for VS Code-metric chrome
+// (plan 0.3): shadow-DOM web components break label association and testing-library.
+// These files are primitives, the same layer as components/ui, not screens.
+const vscodePrimitivesRoot = path.join(clientRoot, "components/vscode") + path.sep;
 
 async function filesUnder(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -25,7 +29,11 @@ function stripComments(source: string): string {
 describe("shadcn policy", () => {
   it("does not use raw form controls outside shadcn UI primitives", async () => {
     const files = (await filesUnder(clientRoot)).filter(
-      (file) => file.endsWith(".tsx") && !file.includes(`${path.sep}components${path.sep}ui${path.sep}`) && !file.endsWith(".test.tsx"),
+      (file) =>
+        file.endsWith(".tsx") &&
+        !file.includes(`${path.sep}components${path.sep}ui${path.sep}`) &&
+        !file.startsWith(vscodePrimitivesRoot) &&
+        !file.endsWith(".test.tsx"),
     );
     const forbidden = /<(button|input|textarea|select)\b/;
     const violations = (await Promise.all(files.map(async (file) => {
