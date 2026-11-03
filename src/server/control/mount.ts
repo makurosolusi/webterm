@@ -13,11 +13,14 @@ import {
   writeControlJson,
 } from './controlHttpIo'
 import { handleControl } from './controlApi'
+import { activeBrowser } from '../browser/browser.state'
+import { CAPABILITY_HEADER } from '../auth'
 import { approvalRoute } from './approvalMount'
 import { durableAckFor } from '../ledger/durableAck'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import {
   CONTROL_PREFIX,
+  headerValue,
   type ControlCapabilities,
   type ControlDeps,
   type ControlRequest,
@@ -141,6 +144,16 @@ export async function handleControlHttp(
   )
   if (approval) {
     writeControlJson(res, approval.status, approval.body)
+    return true
+  }
+  // /api/control/browser/*: ada hanya bila runtime browser hidup. Capability yang BERHASIL dipakai diperbarui
+  // geser, karena env PTY (tempat token disuntik) tak bisa diganti setelah spawn dan TTL maks 60 menit.
+  const browser = activeBrowser()
+  const browserResult = await browser?.control(request, deps.capabilities)
+  if (browserResult) {
+    const cap = headerValue(request.headers, CAPABILITY_HEADER)
+    if (cap && browserResult.status < 400) capabilityStore.renew(cap)
+    writeControlJson(res, browserResult.status, browserResult.body)
     return true
   }
   const result = await handleControl(request, deps)

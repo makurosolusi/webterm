@@ -46,6 +46,13 @@ Environment variables:
 - `WEBTERM_CENTRAL_TELEGRAM` — default `off`; enables the private Telegram central chat bridge. Real Telegram delivery/webhook E2E is not verified.
 - `WEBTERM_CENTRAL_MEMORY` — default `off`; bounded, read-only project fact retrieval. It does not write or promote memory. Proposal blocks render as compact cards and do not claim applied or approved status.
 
+- `WEBTERM_BROWSER` — default `off`. `on` enables the Browser node (Chromium on the server, streamed to the canvas). Off means no browser process, proxy, or routes. Real Chromium behaviour is not verified yet. See `docs/decisions/browser-canvas.md`.
+- `WEBTERM_BROWSER_BIN` — absolute path to Chromium/Chrome; empty auto-detects.
+- `WEBTERM_BROWSER_MAX_LIVE` (1 to 8) and `WEBTERM_BROWSER_DISCARD_MS` — live tab cap and how long a hidden node waits before its page is discarded.
+- `WEBTERM_BROWSER_AGENT` — default `off`. `on` lets agent terminals drive Browser nodes whose per-node toggle is on, through the capability-gated control API.
+- `WEBTERM_BROWSER_ALLOW_HOSTS` — comma-separated `host:port` private/localhost targets that may be opened; empty blocks all private networks. A malformed value disables the feature.
+- `WEBTERM_BROWSER_COOKIE_IMPORT` and `WEBTERM_BROWSER_COOKIE_TTL_DAYS` — default `off`; enables the encrypted cookie vault and its retention.
+
 Any of these can go in a `.env` file in the working directory instead of the environment. Bun loads that file automatically, for both the dev server and the compiled binary, so every value in it enters `process.env`. Keep the file at mode `600`, and leave `WEBTERM_TOKEN` out of it unless you accept that inheritance.
 
 `WEBTERM_CHANNELS` is the master kill switch for the whole channel runtime (webhook, binding API, reply sender). Only `on|off` is implemented: unset or `on` keeps the current behavior, `off` disables everything even when `WEBTERM_TELEGRAM=on`, and any other value fails closed (channels stay off) with one warning naming the supported values. The `readonly|control` modes remain planned. Channel state lives in a JSON store under the data directory, so enabling channels needs no v4 SQL migration.

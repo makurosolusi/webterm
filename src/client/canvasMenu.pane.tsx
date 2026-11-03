@@ -24,6 +24,8 @@ export interface CanvasPaneMenuDeps {
   nodeCount: number
   onAddTerminal: (at?: XYPosition) => void
   onAddFiles: (at?: XYPosition) => void
+  /** Tidak ada = fitur browser mati di server; barisnya tidak dibuat. */
+  onAddBrowser?: (at?: XYPosition) => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => void
   onFit: () => void
   onSelectAll: () => void
@@ -73,6 +75,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
         {
           addTerminal: () => deps.onAddTerminal(open.at),
           addFiles: () => deps.onAddFiles(open.at),
+          addBrowser: deps.onAddBrowser && (() => deps.onAddBrowser?.(open.at)),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),
           fitView: deps.onFit,
           selectAll: deps.onSelectAll,

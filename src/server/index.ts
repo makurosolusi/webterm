@@ -18,6 +18,13 @@ import { initEnvSettings } from './envSettings.runtime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
+import { BROWSER_WS_PATH } from '../shared/browser.contract'
+import { installBrowserAgentShim } from './browserAgentShim'
+import { isSafeWorkspaceId } from './browser/profile.paths'
+import { startBrowserRuntime } from './browser/browser.runtime'
+import { activeBrowser, setActiveBrowser } from './browser/browser.state'
+import { createFileSecretStore } from './envSecrets.store'
+import { db } from './db'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
 declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
@@ -107,6 +114,23 @@ function refuse(res: http.ServerResponse): void {
 // membaca token node dari env anak saat runtime, jadi root token tidak pernah ditulis ke disk
 // (file itu terbaca semua proses dengan uid yang sama).
 installContextLink()
+
+// Browser di canvas: flag off (default) => `startBrowserRuntime` mengembalikan null dan tidak ada yang
+// dipasang (tanpa jalur /ws/browser, /api/browser, /api/control/browser, tanpa env capability di PTY).
+// Dimulai SEBELUM `applyPtyOptions` supaya hook capability sesi ikut terpasang pada opsi sesi pertama.
+const browserRuntime = await startBrowserRuntime({
+  env: process.env,
+  webtermPort: PORT,
+  dataRoot: dataDir(),
+  secrets: createFileSecretStore(join(dataDir(), 'secrets')),
+  capabilities: capabilityStore,
+  workspaces: () => db.list(),
+})
+setActiveBrowser(browserRuntime)
+if (browserRuntime) {
+  if (browserRuntime.status().agentEnabled) installBrowserAgentShim()
+  log.info('browser.start', 'Browser nodes on', { maxLive: browserRuntime.status().maxLive })
+}
 applyPtyOptions()
 
 const server = http.createServer()
@@ -149,11 +173,12 @@ if (dev) {
 }
 
 const wss = new WebSocketServer({ noServer: true })
+const browserWss = new WebSocketServer({ noServer: true }) // terpisah: handler 'connection' PTY tidak boleh melihat socket browser
 server.on('upgrade', (req, socket, head) => {
   // Only /ws is ours. In dev Vite's upgrade listener (same server) already claimed its HMR upgrade,
   // so destroying the socket here would kill it; only prod, with no other listener, destroys.
   const url = reqUrl(req)
-  const route = upgradeRoute(url.pathname, WS_PATH, dev)
+  const route = upgradeRoute(url.pathname, WS_PATH, dev, browserRuntime ? BROWSER_WS_PATH : undefined)
   if (route === 'destroy') {
     socket.destroy()
     return
@@ -167,6 +192,17 @@ server.on('upgrade', (req, socket, head) => {
     return
   }
   if (TOKEN !== undefined) logAuthLogin(url.pathname)
+  if (route === 'browser') {
+    // Gerbang `allowed()` di atas sama dengan /ws: root token saja, node-token ditolak (path ini tak ada di allowlist node-token).
+    const workspaceId = url.searchParams.get('workspaceId')
+    if (!browserRuntime || !isSafeWorkspaceId(workspaceId)) {
+      socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
+    browserWss.handleUpgrade(req, socket, head, (ws) => browserRuntime.gateway(ws, workspaceId))
+    return
+  }
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
 })
 
@@ -199,5 +235,10 @@ server.listen(PORT, HOST, () => {
 process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
 process.on('exit', (code) => { log.info('server.stop', 'webterm stopping', { code }); flushLogsSync() })
 for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
-  process.on(signal, () => process.exit(exitCode))
+  // Chromium + proxy dimatikan bersih (batas 5 dtk) sebelum proses keluar; tanpa runtime browser = perilaku lama.
+  process.on(signal, () => {
+    const rt = activeBrowser()
+    if (!rt) return process.exit(exitCode)
+    Promise.race([rt.shutdown(), new Promise((r) => setTimeout(r, 5000))]).finally(() => process.exit(exitCode))
+  })
 }

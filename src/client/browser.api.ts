@@ -68,6 +68,7 @@ export const previewCookies = (workspaceId: string, req: CookiePreviewReq) =>
 export const commitCookies = (workspaceId: string, req: CookieCommitReq) =>
   request<CookieCommitResp>('POST', `/${seg(workspaceId)}/cookies/commit`, req)
 
-/** Remove stored cookies for one domain, or all when `domain` is omitted. */
+/** Remove stored cookies for one domain, or all when `domain` is omitted. The domain rides in the
+ *  path (`/cookies/<domain>`): the server never reads a DELETE body (`cappedBodyGetter`). */
 export const clearCookies = (workspaceId: string, domain?: string) =>
-  request<void>('DELETE', `/${seg(workspaceId)}/cookies`, domain === undefined ? {} : { domain })
+  request<void>('DELETE', `/${seg(workspaceId)}/cookies${domain === undefined ? '' : `/${seg(domain)}`}`)

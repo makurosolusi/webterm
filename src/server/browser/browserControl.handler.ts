@@ -3,7 +3,6 @@
 import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP, BlockedError } from '../../shared/browser.contract'
 import type { BrowserErrorCode, BrowserVerb } from '../../shared/browser.contract'
 import { isSafeNodeId } from '../../shared/workspace'
-import type { CapabilityVerb } from '../control/capabilities'
 import { asObject, headerValue } from '../control/controlTypes'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
 import { createLogger } from '../logs/logger'
@@ -50,8 +49,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   const token = headerValue(req.headers, CAPABILITY_HEADER)
   const record = token ? deps.capabilities.verify(token) : undefined
   if (!record) return fail(401, 'unauthorized')
-  // BROWSER_VERB_CAP ('browser.read'|'browser.act') belum ada di union CapabilityVerb (tipe dimiliki WS lain); `allows` membandingkan string apa adanya.
-  if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[v] as unknown as CapabilityVerb, `node:${nodeId}`)) return fail(403, 'forbidden')
+  if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[v], `node:${nodeId}`)) return fail(403, 'forbidden')
   if (v !== 'release' && !deps.agentAllowed(nodeId)) return fail(403, 'disabled')
 
   try {

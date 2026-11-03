@@ -23,11 +23,11 @@ describe('browser.api', () => {
     await clearCookies('w1')
     expect(calls.map((c) => `${c.init.method} ${c.url}`)).toEqual([
       'GET /api/browser/status', 'POST /api/browser/w1/cookies/preview',
-      'POST /api/browser/n1/agent-control', 'DELETE /api/browser/w1/cookies', 'DELETE /api/browser/w1/cookies',
+      'POST /api/browser/n1/agent-control', 'DELETE /api/browser/w1/cookies/a.com', 'DELETE /api/browser/w1/cookies',
     ])
     expect(calls.map((c) => c.init.body)).toEqual([
       undefined, JSON.stringify({ format: 'netscape', content: 'x' }),
-      JSON.stringify({ enabled: true }), JSON.stringify({ domain: 'a.com' }), JSON.stringify({}),
+      JSON.stringify({ enabled: true }), undefined, undefined,
     ])
   })
 

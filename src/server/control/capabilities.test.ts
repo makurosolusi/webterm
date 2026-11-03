@@ -282,3 +282,33 @@ describe('approval verbs', () => {
     expect(allows(store.verify(node, T0)!, 'approval.decide', 'node:a')).toBe(false)
   })
 })
+
+describe('browser verbs and sliding renewal', () => {
+  it('lists browser.read and browser.act as mintable verbs scoped to a node', () => {
+    expect(CAPABILITY_VERBS).toContain('browser.read')
+    expect(CAPABILITY_VERBS).toContain('browser.act')
+    const store = new CapabilityStore()
+    const token = store.mint({ verb: 'browser.act', resource: 'node:b1' }, T0)
+    const rec = store.verify(token, T0)!
+    expect(allows(rec, 'browser.act', 'node:b1')).toBe(true)
+    expect(allows(rec, 'browser.read', 'node:b1')).toBe(false) // verb harus persis sama
+    expect(allows(rec, 'browser.act', 'node:b2')).toBe(false)
+  })
+
+  it('refuses a wildcard resource for browser verbs', () => {
+    const store = new CapabilityStore()
+    expect(() => store.mint({ verb: 'browser.read', resource: '*' })).toThrow(/only allowed for node\.read/)
+  })
+
+  it('renew slides expiry forward, never shortens it, and refuses dead tokens', () => {
+    const store = new CapabilityStore()
+    const token = store.mint({ verb: 'browser.read', resource: 'node:b1', ttlMs: 1_000 }, T0)
+    expect(store.renew(token, 5_000, T0 + 500)).toBe(true)
+    expect(store.verify(token, T0 + 4_000)).toBeDefined()
+    expect(store.renew(token, 1, T0 + 600)).toBe(true) // ttl lebih pendek tidak memendekkan
+    expect(store.verify(token, T0 + 4_000)).toBeDefined()
+    expect(store.verify(token, T0 + 6_000)).toBeUndefined()
+    expect(store.renew(token, 5_000, T0 + 7_000)).toBe(false)
+    expect(store.renew('wcap_unknown')).toBe(false)
+  })
+})

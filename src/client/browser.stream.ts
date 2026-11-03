@@ -23,6 +23,8 @@ export interface BrowserStream {
   resize: (id: string, vp: ViewportMsg) => void
   detach: (id: string) => void
   send: (msg: ClientMsg) => void
+  /** Putus socket dan lupakan attach lama (ganti workspace); node berikutnya menyambung ulang. */
+  reset: () => void
 }
 
 const isServerMsg = (v: unknown): v is ServerMsg =>
@@ -97,12 +99,31 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
     },
     detach,
     send,
+    reset() {
+      attached.clear()
+      if (timer) { clearTimeout(timer); timer = null }
+      const sock = ws
+      ws = null // `onclose` mengabaikan socket yang bukan `ws` aktif, jadi tak ada reconnect otomatis
+      sock?.close()
+    },
   }
 }
 
+let workspaceId = ''
+
+/** Workspace yang dilayani socket bersama; server mengikat profil/cookie per workspace. Ganti = socket baru. */
+export function setBrowserWorkspace(id: string): void {
+  if (id === workspaceId) return
+  workspaceId = id
+  browserStream.reset()
+}
+
+/** Workspace yang sedang dilayani socket bersama ('' sebelum App memberi tahu). */
+export const getBrowserWorkspace = (): string => workspaceId
+
 function browserWsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const q = tokenQuery() // `new WebSocket` tak bisa set header; token ikut di query
+  const q = [tokenQuery(), workspaceId === '' ? '' : `workspaceId=${encodeURIComponent(workspaceId)}`].filter(Boolean).join('&') // `new WebSocket` tak bisa set header; token ikut di query
   return `${proto}://${location.host}${BROWSER_WS_PATH}${q === '' ? '' : `?${q}`}`
 }
 

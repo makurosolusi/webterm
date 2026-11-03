@@ -20,6 +20,8 @@ export type CapabilityVerb =
   | 'approval.decide'
   | 'approval.consume'
   | 'approval.read'
+  | 'browser.read'
+  | 'browser.act'
 
 export const CAPABILITY_VERBS: readonly CapabilityVerb[] = [
   'node.spawn',
@@ -32,6 +34,8 @@ export const CAPABILITY_VERBS: readonly CapabilityVerb[] = [
   'approval.decide',
   'approval.consume',
   'approval.read',
+  'browser.read',
+  'browser.act',
 ]
 
 /**
@@ -205,6 +209,18 @@ export class CapabilityStore {
       return undefined
     }
     return record
+  }
+
+  /**
+   * Perpanjang token hidup (kedaluwarsa geser): `expiresAt = now + clampTtl(ttlMs)`, tak pernah memendek.
+   * Env PTY tak bisa diganti setelah spawn, jadi token browser agent diperbarui di sini tiap dipakai.
+   * False bila token asing/sudah kedaluwarsa.
+   */
+  renew(token: string, ttlMs?: number, now: number = Date.now()): boolean {
+    const record = this.verify(token, now)
+    if (!record) return false
+    record.expiresAt = Math.max(record.expiresAt, now + clampTtl(ttlMs))
+    return true
   }
 
   /** Revoke satu token. True kalau token memang ada (walau sudah kedaluwarsa). */

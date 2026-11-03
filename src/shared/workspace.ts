@@ -401,7 +401,7 @@ export interface BridgeLink {
   kind: 'context' | 'file'
 }
 
-export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor'
+export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser'
 
 /** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
  *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
@@ -437,6 +437,8 @@ export interface WsNode {
   dirPath?: string        // node 'files': direktori akar yang ditampilkan
   filePath?: string       // node 'editor': file yang dibuka
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node
+  url?: string            // node 'browser': URL terakhir (pemulihan setelah discard/restart)
+  agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
 }
 
 export interface Workspace {

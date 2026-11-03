@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  BROWSER_ACT_CAP_ENV, BROWSER_READ_CAP_ENV, browserShimPath, buildBrowserShim, buildBrowserSkillBody,
+  BROWSER_ACT_CAP_ENV, BROWSER_NODE_ID_ENV, BROWSER_READ_CAP_ENV, browserShimPath, buildBrowserShim, buildBrowserSkillBody,
   installBrowserAgentShim,
 } from './browserAgentShim'
 
@@ -94,6 +94,12 @@ describe('shim behaviour (fake curl)', () => {
     expect(r.argv).not.toContain(READ)
     expect(r.argv).not.toContain(ACT)
     expect(r.argv).toContain('http://127.0.0.1:8701/api/control/browser/n1/snapshot')
+  })
+
+  it('targets the injected browser node id, not the agent session id; --node still wins', () => {
+    const env = { ...sess, [BROWSER_READ_CAP_ENV]: READ, [BROWSER_NODE_ID_ENV]: 'browser-3' }
+    expect(runShim(['status'], env).argv).toContain('/api/control/browser/browser-3/status')
+    expect(runShim(['status', '--node', 'b9'], env).argv).toContain('/api/control/browser/b9/status')
   })
 
   it('status is GET, act verbs are POST', () => {
