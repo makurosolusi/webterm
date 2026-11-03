@@ -13,6 +13,11 @@ import {
   type AutonomyProject,
   type CentralAutonomyHandle,
 } from './central/centralAutonomy'
+import { MAX_INFLIGHT_ENV, RELIABILITY_ENV, maxInflightFromEnv, reliabilityEnabled } from './central/autonomyDispatch'
+import { reconcileAgents } from './central/agents/agentReconciler'
+import { createAgentStore } from './central/agents/agentStore'
+import type { AgentRecord } from './central/contracts'
+import { createBreakerStore } from './central/guard/breakerStore'
 import { createPlanStore } from './orchestrator/plan'
 import { orchestratorRunRoute } from './orchestratorRunApi'
 import { orchestratorRunEnabled, orchestratorRunRequireApproval } from './orchestratorRunModel'
@@ -25,6 +30,11 @@ export interface AutonomyBootOptions {
   runtime: LedgerRuntime | null
   env?: Record<string, string | undefined>
   intervalMs?: number
+  /**
+   * Reliability mode only: whether an agent's process/session still exists. When given, agents
+   * claiming a live process but having none are moved to `orphaned` at boot.
+   */
+  agentAlive?: (agent: AgentRecord) => boolean | Promise<boolean>
   log?: (line: string) => void
   warn?: (line: string) => void
 }
@@ -109,6 +119,13 @@ export function startCentralAutonomyBoot(
   const runtime = opts.runtime
   const plans = createPlanStore(runtime.db)
   const intervalMs = opts.intervalMs ?? DEFAULT_AUTONOMY_INTERVAL_MS
+  const reliable = reliabilityEnabled(env[RELIABILITY_ENV])
+  if (reliable && opts.agentAlive) {
+    const isAlive = opts.agentAlive
+    void reconcileAgents({ store: createAgentStore(runtime.db, Date.now), isAlive }).catch((err: unknown) =>
+      warn(`central autonomy: agent reconcile failed (${err instanceof Error ? err.message : typeof err})`)
+    )
+  }
   const handle = createCentralAutonomy({
     projects: () => listProjects(runtime.db),
     plan: (projectId) => plans.get(projectId),
@@ -136,11 +153,21 @@ export function startCentralAutonomyBoot(
       }
     },
     intervalMs,
+    ...(reliable
+      ? {
+          dispatch: {
+            maxInflight: maxInflightFromEnv(env[MAX_INFLIGHT_ENV]),
+            breaker: createBreakerStore({ db: runtime.db, now: Date.now }),
+          },
+        }
+      : {}),
   })
   handle.start()
   log(
-    `central autonomy: on (every ${intervalMs}ms, max ${DEFAULT_MAX_CONSECUTIVE_FAILURES} ` +
-      'consecutive failures per project)'
+    reliable
+      ? 'central autonomy: on (reliability mode: non-blocking dispatch, wake + sweep, persistent breaker)'
+      : `central autonomy: on (every ${intervalMs}ms, max ${DEFAULT_MAX_CONSECUTIVE_FAILURES} ` +
+          'consecutive failures per project)'
   )
   return handle
 }
