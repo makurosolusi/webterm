@@ -44,9 +44,11 @@
 .browser-start-search { width: 100%; max-width: 480px; margin: 0 auto; }
 .browser-start-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; width: 100%; max-width: 480px; margin: 0 auto; }
 .browser-start-tile, .browser-start-item {
-  display: flex; align-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font: inherit;
+  /* Button (ghost) memberi min-height/padding/nowrap/justify-center bawaan; di sini ditimpa untuk tata letak tile/baris. */
+  display: flex; align-items: center; justify-content: flex-start; min-height: 0; height: auto; border: 0; border-radius: 6px;
+  background: transparent; color: inherit; cursor: pointer; font: inherit;
 }
-.browser-start-tile { flex-direction: column; gap: 4px; width: 100%; padding: 8px 4px; }
+.browser-start-tile { flex-direction: column; justify-content: center; gap: 4px; width: 100%; padding: 8px 4px; }
 .browser-start-tile:hover, .browser-start-item:hover { background: var(--vscode-list-hoverBackground, rgb(127 127 127 / 15%)); }
 .browser-start-tile:focus-visible, .browser-start-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
 .browser-start-icon {
