@@ -216,11 +216,12 @@ test('backup writes a readable copy and keeps the last 3', () => {
 })
 
 test('schema modules list forward-only migrations matching LATEST_VERSION', () => {
-  expect(MIGRATIONS.length).toBe(4)
+  expect(MIGRATIONS.length).toBe(9)
   expect(MIGRATIONS[0]?.version).toBe(1)
   expect(MIGRATIONS[1]?.version).toBe(2)
   expect(MIGRATIONS[2]?.version).toBe(3)
   expect(MIGRATIONS[3]?.version).toBe(4)
+  for (let i = 0; i < MIGRATIONS.length; i++) expect(MIGRATIONS[i]?.version).toBe(i + 1) // v5-v9 contiguous
   expect(MIGRATIONS[MIGRATIONS.length - 1]?.version).toBe(LATEST_VERSION)
 })
 
@@ -303,7 +304,7 @@ test('v3 ledger upgrades to v4 in place: rows survive, goal_json is NULL, centra
   const before = q(db, 'PRAGMA table_info(project)').all().map((r) => String(r['name']))
   expect(before.join(',')).not.toContain('goal_json')
 
-  expect(migrate(db)).toBe(4)
+  expect(migrate(db)).toBe(LATEST_VERSION)
   const names = tables(db)
   for (const t of ['central_conversation', 'central_message', 'central_turn', 'central_event']) {
     expect(names).toContain(t)
@@ -312,7 +313,7 @@ test('v3 ledger upgrades to v4 in place: rows survive, goal_json is NULL, centra
   expect(Number(q(db, 'SELECT count(*) AS c FROM task').get()?.['c'])).toBe(1)
   expect(q(db, "SELECT goal_json FROM project WHERE id = 'p1'").get()?.['goal_json']).toBe(null)
   // Nothing pending on a second pass: v4 must not re-run the ALTER.
-  expect(migrate(db)).toBe(4)
+  expect(migrate(db)).toBe(LATEST_VERSION)
   close(db)
 })
 
@@ -365,8 +366,8 @@ test('migrateWithBackup snapshots a v3 file before applying v4', () => {
   const db = new Database(path)
   expect(migrate(db, MIGRATIONS.slice(0, 3))).toBe(3)
   run(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','p','/tmp',1,1)")
-  expect(migrateWithBackup(db, path)).toBe(4)
-  expect(version(db)).toBe(4)
+  expect(migrateWithBackup(db, path)).toBe(LATEST_VERSION)
+  expect(version(db)).toBe(LATEST_VERSION)
   expect(Number(q(db, 'SELECT count(*) AS c FROM project').get()?.['c'])).toBe(1)
   const backups = readdirSync(root).filter((f) => f.startsWith('v3-upgrade.db.') && f.endsWith('.bak'))
   expect(backups.length >= 1).toBe(true)
