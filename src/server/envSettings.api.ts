@@ -1,25 +1,53 @@
 // Rute `/api/settings/env`. Terpisah dari `settings` biasa: respons di sini membawa metadata
 // sumber/secret dan tak pernah memuat nilai secret (hanya `set`). Gerbang auth /api tetap di
-// index.ts; `rootGate` menambah syarat untuk kunci `dangerous` (root token benar-benar terkonfigurasi).
+// index.ts; mutasi (PUT/POST) tambahan lewat `settingsGuard` (featureCapabilities.guard) dan dicatat ke audit.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { importDotenv } from './envSettings.import'
 import type { EnvChange, EnvSettings } from './envSettings.service'
+import type { AuditEntry } from './featureCapabilities.audit'
+import { peerOf, type GuardResult } from './featureCapabilities.guard'
+import { createLogger } from './logs'
+
+const log = createLogger('settings')
 
 export const ENV_SETTINGS_PATH = '/api/settings/env'
 export const IMPORT_ENDPOINT = '/api/settings/env/import'
 
 export interface EnvSettingsApiDeps {
   service: EnvSettings
-  /** True bila root token terkonfigurasi (request yang sampai sini sudah lolos gerbangnya). */
-  rootGate(): boolean
+  /** Penjaga mutasi; jalur nyata = `settingsGuard`. */
+  guard(req: IncomingMessage): GuardResult
+  /** Catat keputusan (tanpa nilai); opsional di tes. */
+  audit?(entry: AuditEntry): void
 }
+
+/** Request yang lolos penjaga setara pemilik: kunci `dangerous` tidak lagi digerbangi per kunci. */
+const OWNER_CTX = { root: true }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
   res.end(JSON.stringify(body))
+}
+
+/** Tulis audit; gagal tulis hanya di-warn (audit tak boleh menjatuhkan mutasi yang sudah sah). */
+function audit(deps: EnvSettingsApiDeps, req: IncomingMessage, entry: Pick<AuditEntry, 'action' | 'via' | 'detail'>): void {
+  try {
+    deps.audit?.({ capability: 'advanced', peer: peerOf(req), ...entry })
+  } catch (err) {
+    log.warn('audit.write_failed', 'Cannot write settings audit row', { cause: err instanceof Error ? err.name : 'error' })
+  }
+}
+
+/** Jalankan penjaga; bila ditolak balas 403 `forbidden` generik + audit `denied`, dan kembalikan via bila lolos. */
+function guarded(req: IncomingMessage, res: ServerResponse, deps: EnvSettingsApiDeps): 'ui' | 'token' | undefined {
+  const verdict = deps.guard(req)
+  if (verdict.ok) return verdict.via
+  audit(deps, req, { action: 'denied', via: 'rejected', detail: verdict.reason })
+  json(res, 403, { error: 'forbidden' })
+  return undefined
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -54,25 +82,33 @@ export async function envSettingsRoute(
   method: string,
   deps: EnvSettingsApiDeps
 ): Promise<void> {
-  const ctx = { root: deps.rootGate() }
-  if (method === 'GET') return json(res, 200, deps.service.state(ctx))
+  if (method === 'GET') return json(res, 200, deps.service.state(OWNER_CTX))
   if (method !== 'PUT') return json(res, 405, { error: 'method_not_allowed' })
+  const via = guarded(req, res, deps)
+  if (!via) return
   const body = await readJson(req, res)
   if (!body.ok) return
   const change = parseChange(body.value)
   if (!change) return json(res, 400, { error: 'invalid_body' })
-  const result = deps.service.update(change, ctx)
+  const result = deps.service.update(change, OWNER_CTX)
   if (!result.ok) return json(res, result.status, { error: result.error, key: result.key, reason: result.reason })
+  audit(deps, req, { action: 'advanced', via, detail: [...Object.keys(change.set), ...change.unset].join(',') })
   json(res, 200, { ...result.state, restartRequired: result.restartRequired })
 }
 
 /** `POST` impor `.env` (default dry-run; `{ apply: true }` menulis). Body hanya `apply`; path tak pernah dari klien. */
 export async function envImportRoute(req: IncomingMessage, res: ServerResponse, method: string, deps: EnvSettingsApiDeps): Promise<void> {
   if (method !== 'POST') return json(res, 405, { error: 'method_not_allowed' })
+  const via = guarded(req, res, deps)
+  if (!via) return
   const body = await readJson(req, res, {})
   if (!body.ok) return
   const v = body.value
   if (!isRecord(v) || (v.apply !== undefined && typeof v.apply !== 'boolean')) return json(res, 400, { error: 'invalid_body' })
-  const out = importDotenv(deps, v.apply === true)
+  const out = importDotenv({ service: deps.service, rootGate: () => true }, v.apply === true)
+  if (v.apply === true && out.status === 200 && 'items' in out.body) {
+    const keys = out.body.items.filter((i) => i.action === 'add').map((i) => i.key)
+    if (keys.length > 0) audit(deps, req, { action: 'advanced', via, detail: keys.join(',') })
+  }
   json(res, out.status, out.body)
 }
