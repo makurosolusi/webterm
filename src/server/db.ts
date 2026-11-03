@@ -3,10 +3,21 @@ import type { Workspace, WsNode, Viewport, BridgeLink } from '../shared/workspac
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
-import { dbPath } from './config'
+import { chmodSync } from 'node:fs'
+import { dbPath, warnPermsNotTightened } from './config'
+
+const DB_FILE_MODE = 0o600
 
 export function openDb(path: string = dbPath()): Database {
   const d = new Database(path)
+  // Umask membuat berkas 0644; -wal/-shm/-journal mewarisi mode berkas utama. Lewati DB sementara/memori.
+  if (path !== ':memory:' && path !== '' && process.platform !== 'win32') {
+    try {
+      chmodSync(path, DB_FILE_MODE)
+    } catch (e) {
+      warnPermsNotTightened(e) // volume Docker / FS read-only: jangan jatuhkan boot
+    }
+  }
   d.exec(`CREATE TABLE IF NOT EXISTS workspace (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, cwd TEXT, color TEXT,
     viewport TEXT NOT NULL DEFAULT '{"x":0,"y":0,"zoom":1}',
