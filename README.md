@@ -60,7 +60,7 @@ Environment variables:
 - `WEBTERM_FILES_UPLOAD_MAX_MB` — default `100`. Maximum size of one uploaded file.
 
 - `WEBTERM_BROWSER` — default `off`. `on` enables the Browser node (Chromium on the server, streamed to the canvas). Off means no browser process, proxy, or routes. Real Chromium behaviour is not verified yet. See `docs/decisions/browser-canvas.md`.
-- `WEBTERM_BROWSER_BIN` — absolute path to Chromium/Chrome; empty auto-detects.
+- `WEBTERM_BROWSER_BIN` — absolute path to Chromium/Chrome; empty auto-detects (well-known macOS apps: Chrome, Chromium, Chrome Canary, Edge, Brave; Linux paths and `PATH`; Playwright cache). A set path that does not exist is reported as invalid and is not replaced by auto-detection. Settings > Capabilities > Advanced lists what was found.
 - `WEBTERM_BROWSER_MAX_LIVE` (1 to 8) and `WEBTERM_BROWSER_DISCARD_MS` — live tab cap and how long a hidden node waits before its page is discarded.
 - `WEBTERM_BROWSER_AGENT` — default `off`. `on` lets agent terminals drive Browser nodes whose per-node toggle is on, through the capability-gated control API.
 - `WEBTERM_BROWSER_ALLOW_HOSTS` — comma-separated `host:port` private/localhost targets that may be opened; empty blocks all private networks (`localhost` included). A malformed value disables the feature. Hosts match exactly, so `WEBTERM_BROWSER_ALLOW_HOSTS=localhost:3000` does not cover `127.0.0.1:3000`; list each form you open. Automatic localhost preview does not exist yet.

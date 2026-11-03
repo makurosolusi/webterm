@@ -2,7 +2,7 @@
 // (`agentEngine`, `chromiumPath`), tak pernah nama env var, supaya UI tak membocorkan istilah konfigurasi.
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
 import { ENV_BROWSER } from '../shared/browser.contract'
-import { detectChromium } from './browser/chromium.launch'
+import { chromiumCandidates, detectChromium } from './browser/chromium.launch'
 import { detectAgentEngine } from './central/runtime/runtimeDetect'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
 import type { EnvChange } from './envSettings.service'
@@ -21,8 +21,18 @@ export function advancedView(env: NodeJS.ProcessEnv, dataDir: string): Capabilit
       value: ENGINES.find((e) => e === chosen) ?? AUTO,
       detected: detectAgentEngine({ ...env, [CENTRAL_RUNTIME_FLAG]: undefined }),
     },
-    chromiumPath: { value: env[ENV_BROWSER.bin] ?? '', detected: detectChromium(env) !== null },
+    chromiumPath: chromiumView(env),
     dataDir,
+  }
+}
+
+/** Lokasi Chromium: override tersimpan, biner aktif + sumbernya, dan kandidat otomatis yang ada di disk. */
+function chromiumView(env: NodeJS.ProcessEnv): CapabilitiesResponse['advanced']['chromiumPath'] {
+  const value = env[ENV_BROWSER.bin] ?? ''
+  const found = detectChromium(env)
+  return {
+    value, detected: found !== null, active: found?.path ?? null, source: found?.source ?? null,
+    overrideInvalid: value.trim() !== '' && found === null, candidates: chromiumCandidates(env),
   }
 }
 

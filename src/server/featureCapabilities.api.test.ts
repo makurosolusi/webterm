@@ -126,7 +126,7 @@ describe('PUT /advanced', () => {
     const h = harness()
     const r = await h.call('PUT', '/api/capabilities/advanced', { agentEngine: 'opencode', chromiumPath: '/opt/chrome' })
     expect(r.status).toBe(200)
-    expect(r.json?.advanced).toMatchObject({ agentEngine: { value: 'opencode' }, chromiumPath: { value: '/opt/chrome', detected: false } })
+    expect(r.json?.advanced).toMatchObject({ agentEngine: { value: 'opencode' }, chromiumPath: { value: '/opt/chrome', detected: false, active: null, source: null, overrideInvalid: true } })
     expect(h.audits.at(-1)).toMatchObject({ capability: 'advanced', action: 'advanced', detail: 'agentEngine,chromiumPath' })
   })
   it('400 invalid_value hanya dengan nama field; 400 invalid_body; 403', async () => {
