@@ -11,7 +11,7 @@ vi.mock('./fsClient', () => ({ capabilities: h.caps, gitStatus: h.status }))
 
 const file = (name: string, dir = false): FileMeta => ({ name, dir, ignored: false })
 const ctx = (over: Partial<FilesSlotCtx> = {}): FilesSlotCtx =>
-  ({ cwd: '/r', dir: '/r', entries: [], selection: [], refresh: () => {}, open: () => {}, nodeId: 'n1', ...over })
+  ({ cwd: '/r', dir: '/r', entries: [], selection: [], refresh: () => {}, open: () => {}, startInput: vi.fn(), nodeId: 'n1', ...over })
 const ok = (marks: Record<string, GitMark>) => ({ ok: true, marks })
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
 const caps = (git: boolean) => ({ git }) as FsCapabilities

@@ -17,7 +17,7 @@ import { UPLOAD_TEXT, resetUploadSlot, uploadSlot, uploadStatus } from './filesS
 const caps = (o: object) => ({ mutate: true, viewers: true, watch: false, git: false, quickOpen: false, upload: true, listMax: 1, ...o })
 const entries: FileMeta[] = [{ name: 'a.txt', dir: false, ignored: false }, { name: 'sub', dir: true, ignored: false }]
 const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => ({
-  cwd: '/p', dir: '/p', entries, selection: [], refresh: vi.fn(), open: vi.fn(), nodeId: 'n1', ...o,
+  cwd: '/p', dir: '/p', entries, selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', ...o,
 })
 
 /** Meniru FilesNode: memanggil useSlot tiap render, menampilkan toolbar, dan elemen node ber-data-id. */
