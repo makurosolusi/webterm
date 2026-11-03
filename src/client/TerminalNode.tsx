@@ -12,6 +12,8 @@ import { send } from './ws'
 import { writeClipboard } from './clipboard'
 import type { Comment, Pane } from '../shared/workspace'
 import { randomId } from './randomId'
+import { useNodeActions } from './nodeActions'
+import { linkRows } from './terminalLinks'
 import { isPathDrag, readDroppedPath } from './terminalDrop'
 
 const COLLAPSED_H = 40
@@ -37,7 +39,8 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number; pane: string } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; pane: string; link: string | null } | null>(null)
+  const { openBrowserAt } = useNodeActions()
   // Tanpa `onError`: node terminal tidak punya thread aktivitas seperti node agent, jadi kegagalan
   // RUNTIME dikte belum punya permukaan di sini. Yang dijaga cuma kasus "tidak didukung" di bawah.
   const { micActive, toggleMic, supported: micSupported } = useSpeechInput((text) => send({ t: 'input', id: activePane, data: text }))
@@ -116,7 +119,8 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
 
   /** Baris menu untuk pane YANG DIKLIK, bukan untuk node: di node yang terbelah, "Close pane" yang
    *  mengenai pane lain dari yang ditunjuk pengguna membunuh terminal yang salah. */
-  const menuRows = (target: string): MenuRow[] => [
+  const menuRows = (target: string, link: string | null): MenuRow[] => [
+    ...linkRows(link, id, openBrowserAt),
     {
       label: 'Copy',
       disabled: !hasSelection(target),
@@ -197,7 +201,9 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           // Pane diambil dari TARGET, bukan dari pane aktif: urutan pointerdown/contextmenu berbeda
           // antar browser, jadi "yang aktif" belum tentu yang ada di bawah kursor.
           const host = (e.target as HTMLElement).closest('[data-pane-id]')
-          setMenu({ x: e.clientX, y: e.clientY, pane: host?.getAttribute('data-pane-id') ?? activePane })
+          const pane = host?.getAttribute('data-pane-id') ?? activePane
+          // Link ditangkap SEKARANG: `leave` xterm terpicu begitu kursor pindah ke menu.
+          setMenu({ x: e.clientX, y: e.clientY, pane, link: handles.current.get(pane)?.hoveredLink() ?? null })
         }}
       >
         <NodeChrome
@@ -230,7 +236,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           />
         )}
       </div>
-      {menu && <NodeContextMenu x={menu.x} y={menu.y} rows={menuRows(menu.pane)} onClose={() => setMenu(null)} />}
+      {menu && <NodeContextMenu x={menu.x} y={menu.y} rows={menuRows(menu.pane, menu.link)} onClose={() => setMenu(null)} />}
     </>
   )
 }
