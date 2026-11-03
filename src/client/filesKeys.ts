@@ -53,40 +53,76 @@ export function typeAhead(
   return { state: { buffer, at: now }, index: typeAheadIndex(names, current, buffer) }
 }
 
+/** Baris per "halaman" bila tinggi list belum terukur (jsdom/layout 0). */
+export const DEFAULT_PAGE_ROWS = 10
+
 export type ListKeyAction =
-  | { kind: 'select'; index: number }
-  | { kind: 'open'; index: number }
+  | { kind: 'select'; index: number; extend?: true }
+  | { kind: 'open'; index: number; dirOnly?: true }
   | { kind: 'up' }
+  | { kind: 'selectAll' }
+  | { kind: 'rename' }
+  | { kind: 'delete'; permanent: boolean }
+  | { kind: 'menu' }
+  | { kind: 'copyPath'; relative: boolean }
   | null
 
+export interface ListKeyEvent {
+  key: string
+  /** `KeyboardEvent.code`: dipakai ⌥⌘C karena `key` di macOS menjadi "ç" saat Alt ditekan. */
+  code?: string
+  alt?: boolean
+  meta?: boolean
+  ctrl?: boolean
+  shift?: boolean
+}
+
 /**
- * Apa yang dilakukan tombol navigasi di listing. `current` adalah indeks terpilih (-1 bila tidak
- * ada) dan `count` jumlah entry yang ditampilkan. Chord Windows maupun Finder keduanya bekerja,
- * karena tangan pengguna meraih yang ia hafal: Enter / ⌘↓ membuka, Backspace / Alt+↑ / ⌘↑ naik.
- * `null` = bukan tombol listing; pemanggil melepaskannya.
+ * Apa yang dilakukan tombol navigasi di listing. `current` adalah indeks kursor (-1 bila tidak
+ * ada), `count` jumlah entry yang ditampilkan dan `page` baris per PageUp/PageDown. Chord Windows
+ * maupun Finder keduanya bekerja, karena tangan pengguna meraih yang ia hafal: Enter / ⌘↓ membuka,
+ * Backspace / ← / Alt+↑ / ⌘↑ naik, → membuka FOLDER. `Delete`/`F2` hanya dilaporkan (aksi nyatanya
+ * milik slot mutate); tetap diklaim supaya Delete tak ikut menghapus node. `null` = bukan tombol
+ * listing; pemanggil melepaskannya.
  */
 export function listKeyAction(
-  e: { key: string; alt?: boolean; meta?: boolean; ctrl?: boolean },
+  e: ListKeyEvent,
   current: number,
-  count: number
+  count: number,
+  page = DEFAULT_PAGE_ROWS
 ): ListKeyAction {
+  const cmd = e.meta || e.ctrl
+  if (cmd && !e.alt && e.key.toLowerCase() === 'a') return count > 0 ? { kind: 'selectAll' } : null
+  if (cmd && e.alt && e.code === 'KeyC') return { kind: 'copyPath', relative: !!e.shift }
   if (e.ctrl) return null
+  if (e.key === 'ContextMenu' || (e.shift && e.key === 'F10')) return { kind: 'menu' }
   if (e.key === 'ArrowUp' && (e.alt || e.meta)) return { kind: 'up' }
   if (e.key === 'ArrowDown' && e.meta) return current >= 0 ? { kind: 'open', index: current } : null
   if (e.alt || e.meta) return null
-  if (e.key === 'Backspace') return { kind: 'up' }
+  if (e.key === 'Backspace' || e.key === 'ArrowLeft') return { kind: 'up' }
+  if (e.key === 'ArrowRight') return current >= 0 ? { kind: 'open', index: current, dirOnly: true } : null
   if (e.key === 'Enter') return current >= 0 ? { kind: 'open', index: current } : null
+  if (e.key === 'F2') return { kind: 'rename' }
+  if (e.key === 'Delete') return { kind: 'delete', permanent: !!e.shift }
   if (count === 0) return null
   const last = count - 1
+  const at = (index: number): ListKeyAction => {
+    const clamped = Math.max(0, Math.min(index, last))
+    return e.shift ? { kind: 'select', index: clamped, extend: true } : { kind: 'select', index: clamped }
+  }
   switch (e.key) {
     case 'ArrowDown':
-      return { kind: 'select', index: current < 0 ? 0 : Math.min(current + 1, last) }
+      return at(current < 0 ? 0 : current + 1)
     case 'ArrowUp':
-      return { kind: 'select', index: current < 0 ? last : Math.max(current - 1, 0) }
+      return at(current < 0 ? last : current - 1)
+    case 'PageDown':
+      return at(Math.max(current, 0) + Math.max(1, page))
+    case 'PageUp':
+      return at(Math.max(current, 0) - Math.max(1, page))
     case 'Home':
-      return { kind: 'select', index: 0 }
+      return at(0)
     case 'End':
-      return { kind: 'select', index: last }
+      return at(last)
     default:
       return null
   }

@@ -16,9 +16,22 @@ const BY_EXT: Record<string, string> = {
   css: 'file-code', html: 'file-code', yml: 'file-code', yaml: 'file-code', toml: 'file-code',
 }
 
+// Nama KHUSUS menang atas ekstensi (set ikon penuh tidak diambil, P-3). `package.json` dan README
+// sengaja tak ada di sini: mereka tetap ikon json/markdown dari ekstensinya. `Makefile` juga tidak: tes fase 1 menjadikannya contoh ikon default.
+const BY_NAME: Record<string, string> = {
+  'package-lock.json': 'lock', 'bun.lock': 'lock', 'bun.lockb': 'lock', 'yarn.lock': 'lock',
+  'pnpm-lock.yaml': 'lock', 'cargo.lock': 'lock',
+  '.gitignore': 'source-control', '.gitattributes': 'source-control', '.gitmodules': 'source-control',
+  license: 'law', 'license.md': 'law', 'license.txt': 'law',
+  dockerfile: 'server-environment',
+  'tsconfig.json': 'settings-gear', '.editorconfig': 'settings-gear',
+}
+
 /** Class codicon lengkap untuk file `name` (mis. `codicon codicon-json`). */
 export function fileIconClass(name: string): string {
-  return `codicon codicon-${BY_EXT[fileExt(name)] ?? 'file'}`
+  const base = (name.split('/').pop() ?? name).toLowerCase()
+  const special = BY_NAME[base] ?? (base === '.env' || base.startsWith('.env.') ? 'key' : undefined)
+  return `codicon codicon-${special ?? BY_EXT[fileExt(name)] ?? 'file'}`
 }
 
 /** Class codicon folder, terbuka atau tertutup. */

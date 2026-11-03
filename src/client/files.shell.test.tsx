@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 
 const fs = vi.hoisted(() => ({
-  list: vi.fn(), mkdir: vi.fn(), mkdirChecked: vi.fn(), create: vi.fn(), write: vi.fn(),
+  list: vi.fn(), mkdir: vi.fn(), mkdirChecked: vi.fn(), create: vi.fn(), write: vi.fn(), stat: vi.fn(), listV2: vi.fn(),
 }))
 vi.mock('./fsClient', () => fs)
 
@@ -30,10 +30,13 @@ const foot = (c: HTMLElement) => c.querySelector('.files-foot')?.textContent
 const settle = () => act(async () => {})
 const A_TXT = [{ name: 'a.txt', dir: false }]
 
-/** Buka menu konteks daftar → klik item; dipakai untuk New File… / New Folder…. */
-async function pick(c: HTMLElement, label: string) {
+/** Buka menu konteks daftar → klik item → ketik nama di input inline + Enter (pengganti window.prompt). */
+async function pick(c: HTMLElement, label: string, name: string) {
   fireEvent.contextMenu(c.querySelector('.files-list') as HTMLElement)
   fireEvent.click(await screen.findByText(label))
+  const input = await screen.findByRole('textbox', { name: /new (file|folder) name/i })
+  fireEvent.change(input, { target: { value: name } })
+  fireEvent.keyDown(input, { key: 'Enter' })
 }
 
 beforeEach(() => { fs.mkdir.mockResolvedValue(true) })
@@ -43,10 +46,9 @@ describe('createEntry — create eksklusif (G-01)', () => {
   it('nama sudah ada: notice "Sudah ada: <nama>", tidak menimpa, tidak membuka editor', async () => {
     fs.list.mockResolvedValue(A_TXT)
     fs.create.mockResolvedValue({ ok: false, code: 'EEXIST', error: 'EEXIST: file exists' })
-    vi.spyOn(window, 'prompt').mockReturnValue('a.txt')
     const { container } = render(tree('/proj'))
     await waitFor(() => expect(rows(container)).toHaveLength(1))
-    await pick(container, 'New File…')
+    await pick(container, 'New File…', 'a.txt')
     await waitFor(() => expect(foot(container)).toBe('Sudah ada: a.txt'))
     expect(fs.create).toHaveBeenCalledWith('/proj/a.txt')
     expect(fs.write).not.toHaveBeenCalled()
@@ -56,10 +58,9 @@ describe('createEntry — create eksklusif (G-01)', () => {
   it('sukses: daftar dimuat ulang dan file baru dibuka di editor', async () => {
     fs.list.mockResolvedValue(A_TXT)
     fs.create.mockResolvedValue({ ok: true })
-    vi.spyOn(window, 'prompt').mockReturnValue('new.txt')
     const { container } = render(tree('/proj'))
     await waitFor(() => expect(rows(container)).toHaveLength(1))
-    await pick(container, 'New File…')
+    await pick(container, 'New File…', 'new.txt')
     await waitFor(() => expect(rf.getNodes().some((n) => n.type === 'editor' && n.data.filePath === '/proj/new.txt')).toBe(true))
     await waitFor(() => expect(fs.list.mock.calls.filter(([p]) => p === '/proj').length).toBeGreaterThan(1))
   })
@@ -67,20 +68,18 @@ describe('createEntry — create eksklusif (G-01)', () => {
   it('error lain dari FsFail ditampilkan apa adanya, bukan pesan generik', async () => {
     fs.list.mockResolvedValue(A_TXT)
     fs.create.mockResolvedValue({ ok: false, code: 'EACCES', error: 'permission denied' })
-    vi.spyOn(window, 'prompt').mockReturnValue('x.txt')
     const { container } = render(tree('/proj'))
     await waitFor(() => expect(rows(container)).toHaveLength(1))
-    await pick(container, 'New File…')
+    await pick(container, 'New File…', 'x.txt')
     await waitFor(() => expect(foot(container)).toContain('permission denied'))
   })
 
   it('folder: mkdir memakai mkdirChecked; created:false jadi notice "Sudah ada"', async () => {
     fs.list.mockResolvedValue(A_TXT)
     fs.mkdirChecked.mockResolvedValue({ ok: true, created: false })
-    vi.spyOn(window, 'prompt').mockReturnValue('sub')
     const { container } = render(tree('/proj'))
     await waitFor(() => expect(rows(container)).toHaveLength(1))
-    await pick(container, 'New Folder…')
+    await pick(container, 'New Folder…', 'sub')
     await waitFor(() => expect(foot(container)).toBe('Sudah ada: sub'))
     expect(fs.mkdirChecked).toHaveBeenCalledWith('/proj/sub')
     expect(fs.write).not.toHaveBeenCalled()

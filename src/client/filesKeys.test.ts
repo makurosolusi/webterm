@@ -115,3 +115,51 @@ describe('scrollTopToReveal', () => {
     expect(scrollTopToReveal(280, 20, 100, 200)).toBe(100)
   })
 })
+
+describe('listKeyAction — fase 2', () => {
+  it('Delete dan F2 dilaporkan (Shift+Delete = permanen), bukan dilepas ke canvas', () => {
+    expect(listKeyAction({ key: 'Delete' }, 0, 3)).toEqual({ kind: 'delete', permanent: false })
+    expect(listKeyAction({ key: 'Delete', shift: true }, 0, 3)).toEqual({ kind: 'delete', permanent: true })
+    expect(listKeyAction({ key: 'F2' }, 0, 3)).toEqual({ kind: 'rename' })
+    // Tanpa baris pun Delete tetap diklaim: node tidak boleh terhapus.
+    expect(listKeyAction({ key: 'Delete' }, -1, 0)).toEqual({ kind: 'delete', permanent: false })
+  })
+
+  it('Backspace, ArrowLeft naik; ArrowRight hanya membuka folder', () => {
+    expect(listKeyAction({ key: 'Backspace' }, 0, 3)).toEqual({ kind: 'up' })
+    expect(listKeyAction({ key: 'ArrowLeft' }, 0, 3)).toEqual({ kind: 'up' })
+    expect(listKeyAction({ key: 'ArrowRight' }, 1, 3)).toEqual({ kind: 'open', index: 1, dirOnly: true })
+    expect(listKeyAction({ key: 'ArrowRight' }, -1, 3)).toBeNull()
+  })
+
+  it('PageUp/PageDown melompat satu halaman dan terjepit di ujung', () => {
+    expect(listKeyAction({ key: 'PageDown' }, 2, 50, 10)).toEqual({ kind: 'select', index: 12 })
+    expect(listKeyAction({ key: 'PageDown' }, 45, 50, 10)).toEqual({ kind: 'select', index: 49 })
+    expect(listKeyAction({ key: 'PageUp' }, 4, 50, 10)).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'PageDown' }, -1, 50, 10)).toEqual({ kind: 'select', index: 10 })
+  })
+
+  it('Home/End dan Shift+panah memperluas seleksi', () => {
+    expect(listKeyAction({ key: 'Home' }, 5, 9)).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'End', shift: true }, 5, 9)).toEqual({ kind: 'select', index: 8, extend: true })
+    expect(listKeyAction({ key: 'ArrowDown', shift: true }, 2, 9)).toEqual({ kind: 'select', index: 3, extend: true })
+    expect(listKeyAction({ key: 'ArrowUp', shift: true }, 0, 9)).toEqual({ kind: 'select', index: 0, extend: true })
+  })
+
+  it('⌘A / Ctrl+A memilih semua hanya bila ada baris', () => {
+    expect(listKeyAction({ key: 'a', meta: true }, 0, 3)).toEqual({ kind: 'selectAll' })
+    expect(listKeyAction({ key: 'A', ctrl: true }, 0, 3)).toEqual({ kind: 'selectAll' })
+    expect(listKeyAction({ key: 'a', meta: true }, -1, 0)).toBeNull()
+  })
+
+  it('ContextMenu dan Shift+F10 membuka menu', () => {
+    expect(listKeyAction({ key: 'ContextMenu' }, 0, 3)).toEqual({ kind: 'menu' })
+    expect(listKeyAction({ key: 'F10', shift: true }, 0, 3)).toEqual({ kind: 'menu' })
+    expect(listKeyAction({ key: 'F10' }, 0, 3)).toBeNull()
+  })
+
+  it('⌥⌘C menyalin path, dengan Shift path relatif (pakai code, bukan key)', () => {
+    expect(listKeyAction({ key: 'ç', code: 'KeyC', alt: true, meta: true }, 0, 3)).toEqual({ kind: 'copyPath', relative: false })
+    expect(listKeyAction({ key: 'Ç', code: 'KeyC', alt: true, meta: true, shift: true }, 0, 3)).toEqual({ kind: 'copyPath', relative: true })
+  })
+})
