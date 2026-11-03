@@ -3,9 +3,10 @@
  */
 // Tombol "+" (Add node) harus benar-benar toggle: mousedown+click pada tombol yang sama menutup
 // Quick Pick, bukan menutup lalu membukanya lagi.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import Dock, { type DockProps } from './Dock'
+import { resetCapabilitiesCache } from './useCapabilities'
 
 const noop = () => {}
 const baseProps: DockProps = {
@@ -17,7 +18,7 @@ const baseProps: DockProps = {
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
 }
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetCapabilitiesCache() })
 
 const press = (el: Element) => { fireEvent.mouseDown(el); fireEvent.click(el) }
 
@@ -39,5 +40,36 @@ describe('Quick Pick "Add node" di Dock', () => {
     press(screen.getByRole('button', { name: 'Add node' }))
     fireEvent.mouseDown(document.body)
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+describe('baris Browser saat kemampuan browser mati', () => {
+  // test-only: server kemampuan dengan browser off; POST menyalakannya.
+  const caps = (status: string) => new Response(JSON.stringify({
+    capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status }], advanced: {},
+  }))
+
+  it('tetap tampil; memilihnya memunculkan tawaran Nyalakan, lalu node lahir setelah menyala', async () => {
+    const f = vi.fn().mockResolvedValueOnce(caps('off')).mockResolvedValue(caps('on'))
+    vi.stubGlobal('fetch', f)
+    const { rerender } = render(<Dock {...baseProps} />)
+    press(screen.getByRole('button', { name: 'Add node' }))
+    fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
+    expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Nyalakan' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nyalakan browser' })).toBeNull())
+    expect(f.mock.calls.some(([url, init]) => url === '/api/capabilities/browser' && JSON.parse(init.body).enabled === true)).toBe(true)
+    const onAddBrowser = vi.fn()
+    rerender(<Dock {...baseProps} onAddBrowser={onAddBrowser} />) // status browser termuat ulang -> App menerbitkan penambah
+    expect(onAddBrowser).toHaveBeenCalledTimes(1)
+  })
+
+  it('menyala: memilih baris langsung menambah node tanpa tawaran', () => {
+    const onAddBrowser = vi.fn()
+    render(<Dock {...baseProps} onAddBrowser={onAddBrowser} />)
+    press(screen.getByRole('button', { name: 'Add node' }))
+    fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
+    expect(onAddBrowser).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Nyalakan browser' })).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 // Jalan masuk "New Browser" untuk App: mengikat socket browser ke workspace aktif dan memulangkan
-// penambah node HANYA bila server melapor fitur menyala (`undefined` = Dock/menu tidak menampilkan baris).
+// penambah node HANYA bila server melapor fitur menyala (`undefined` = Dock/menu menampilkan tawaran "Nyalakan").
 import { useCallback } from 'react'
 import type { XYPosition } from '@xyflow/react'
 import type { WsNode, Workspace } from '../shared/workspace'
