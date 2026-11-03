@@ -76,7 +76,7 @@ if (channelsRuntime && activeRuntime) {
 // WEBTERM_CENTRAL_AUTONOMY=on, a ledger runtime exists, and WEBTERM_ORCHESTRATOR_RUN=on.
 // Central Agent v2 (every flag off = null, nothing below changes): tool groups, agent executor,
 // panel routes; its liveness probe feeds the autonomy reconciler.
-const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: channelsRuntime?.bots ?? null })
+const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: channelsRuntime?.bots ?? null, settings: () => db.getSettings() })
 startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAlive: ca2.agentAlive } : {}) })
 
 const API_PREFIX = '/api/'

@@ -16,7 +16,8 @@ import { createMemoryFilePort } from '../memory/memoryFilePath'
 import { createUserMemoryStore, userMemoryRoot } from '../memory/memoryUserStore'
 import { projectRepo, resolveWorktrees, worktreeRoot } from '../orchestratorRunProduction'
 import { type SessionsLike, createSessionsPort } from '../orchestrator/workerRuntimeSession'
-import { AGENT_CONFIG, type BuiltinAgentId } from '../../shared/workspace'
+import { AGENT_CONFIG, assembleCmd, customLaunchCmd, type BuiltinAgentId } from '../../shared/workspace'
+import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
 import { type BrowserBootSources, createBrowserToolDeps } from './ca2Boot.browser'
 import { createAgentExecutor, type AgentExecutor } from './agents/agentExecutor'
 import { createAgentHost } from './agents/agentHost'
@@ -65,6 +66,8 @@ export interface Ca2BootOptions {
   registry?: ReturnType<typeof defaultRegistry>
   /** Test seam: capability store + browser runtime lookup for the browser tools (default: process singletons). */
   browser?: BrowserBootSources
+  /** User settings for launch overrides (`agentLaunchCommands`, `customAgents`); absent = defaults, i.e. no overrides. */
+  settings?: () => Settings
   /** Test seam: skip the resume timer. */
   noTimer?: boolean
 }
@@ -93,17 +96,23 @@ export interface Ca2Handle {
 
 export { activeCa2, setActiveCa2 }
 
-function launchLineOf(kind: string): string {
-  const config = (AGENT_CONFIG as Record<string, { launchCmd: string } | undefined>)[kind as BuiltinAgentId]
-  if (!config) throw new Error(`unknown agent kind: ${kind}`)
-  return config.launchCmd
+/** Stable error code prefix for a spawn of a kind that is neither builtin nor a configured custom agent. */
+export const AGENT_KIND_UNKNOWN = 'agent_kind_unknown'
+
+/** Launch line for an agent kind: builtin honours the user override, custom uses its own/base command. */
+export function launchLineFor(kind: string, settings: Settings): string {
+  if (Object.hasOwn(AGENT_CONFIG, kind)) return assembleCmd(kind as BuiltinAgentId, settings.agentLaunchCommands?.[kind as BuiltinAgentId])
+  const custom = settings.customAgents?.find((c) => c.id === kind)
+  const line = custom ? customLaunchCmd(custom, settings.agentLaunchCommands ?? {}) : ''
+  if (!line) throw new Error(`${AGENT_KIND_UNKNOWN}: ${kind}`)
+  return line
 }
 
 function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGuard, env: Env, now: () => number, dir: string): AgentExecutor | null {
   const deps = { ledger: opts.runtime, dataDir: () => dir }
   const wt = resolveWorktrees(deps, worktreeRoot(deps))
   if (!wt.ok) { log.warn('ca2.worktrees_unavailable', 'agent worktree root unavailable; agents disabled'); return null }
-  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), launchLine: launchLineOf })
+  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), launchLine: (kind) => launchLineFor(kind, (opts.settings ?? (() => DEFAULT_SETTINGS))()) })
   return createAgentExecutor({ db, guard, host, now, env })
 }
 

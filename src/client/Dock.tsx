@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BUILTIN_AGENT_IDS, agentConfig, assembleCmd } from '../shared/workspace'
+import { BUILTIN_AGENT_IDS, agentConfig, assembleCmd, customLaunchCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import type { CustomAgent } from '../shared/settings'
@@ -239,7 +239,7 @@ export default function Dock(props: DockProps) {
   }
 
   const addCustom = (agent: CustomAgent) => {
-    props.onAddAgent(agent.launchCmd, agent.id)
+    props.onAddAgent(customLaunchCmd(agent, launchCmds), agent.id)
     setAddOpen(false)
   }
 

@@ -10,7 +10,7 @@
 // bukan sebagai baris redup, bukan sebagai stub `TODO`, melainkan hilang sepenuhnya. Baris yang
 // tidak melakukan apa-apa mengajari pengguna hal yang salah tentang apa yang bisa aplikasi ini
 // lakukan, dan itu lebih mahal daripada menu yang pendek.
-import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd } from '../shared/workspace'
+import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd, customLaunchCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 
@@ -101,14 +101,14 @@ function builtinItem(
   }
 }
 
-/** Agent custom membawa `launchCmd`-nya sendiri — diteruskan apa adanya, seperti di dock. */
-function customItem(c: CustomAgent, h: CanvasMenuHandlers): CanvasMenuItem {
+/** Agent custom: `launchCmd` sendiri, atau perintah base bila kosong — sama seperti di dock. */
+function customItem(c: CustomAgent, h: CanvasMenuHandlers, cmds: CanvasMenuContext['agentLaunchCommands']): CanvasMenuItem {
   return {
     key: `agent:${c.id}`,
     label: c.label,
     icon: 'agent',
     dot: c.color ?? FALLBACK_AGENT_COLOR,
-    onClick: () => h.addAgent(c.launchCmd, c.id),
+    onClick: () => h.addAgent(customLaunchCmd(c, cmds), c.id),
   }
 }
 
@@ -134,7 +134,7 @@ export function buildCanvasMenuRows(
 
   const grouped = [
     ...rest.map((a) => builtinItem(a, '', handlers, ctx.agentLaunchCommands)),
-    ...customs.map((c) => customItem(c, handlers)),
+    ...customs.map((c) => customItem(c, handlers, ctx.agentLaunchCommands)),
   ]
   if (grouped.length > 0) {
     rows.push({ key: 'agent-group', label: MENU_LABELS.agentGroup, icon: 'agent', children: grouped })
