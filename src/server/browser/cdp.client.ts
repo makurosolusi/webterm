@@ -17,6 +17,7 @@ export const CDP = {
   getNavigationHistory: 'Page.getNavigationHistory', navigateToHistoryEntry: 'Page.navigateToHistoryEntry',
   startScreencast: 'Page.startScreencast', stopScreencast: 'Page.stopScreencast',
   screencastFrameAck: 'Page.screencastFrameAck', handleDialog: 'Page.handleJavaScriptDialog',
+  bringToFront: 'Page.bringToFront', setFocusEmulation: 'Emulation.setFocusEmulationEnabled',
   setDeviceMetrics: 'Emulation.setDeviceMetricsOverride', setTouchEmulation: 'Emulation.setTouchEmulationEnabled',
   mouse: 'Input.dispatchMouseEvent', key: 'Input.dispatchKeyEvent', insertText: 'Input.insertText',
   ime: 'Input.imeSetComposition', touch: 'Input.dispatchTouchEvent',

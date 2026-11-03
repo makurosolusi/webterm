@@ -6,7 +6,7 @@ import './vscode/test-setup'
 import type { BrowserState } from '../shared/browser.contract'
 import BrowserLeaseChip from './BrowserLeaseChip'
 import BrowserToolbar from './BrowserToolbar'
-import { CHIP_TEXT, TOOLBAR_TEXT, URL_ERROR_TEXT } from './browser.uxText'
+import { CHIP_TEXT, TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 
 afterEach(cleanup)
 const st = (o: Partial<BrowserState> = {}): BrowserState =>
@@ -70,6 +70,20 @@ describe('BrowserToolbar', () => {
     const { rerender } = render(<BrowserToolbar state={st()} {...props} />)
     rerender(<BrowserToolbar state={st({ url: 'https://c.com/' })} {...props} />)
     expect(address().value).toBe('https://c.com/')
+  })
+})
+
+describe('BrowserToolbar zoom', () => {
+  it('shows the percent and reports step direction, and is absent without onZoom', () => {
+    const onZoom = vi.fn()
+    setup(st(), { zoom: 1.2, onZoom })
+    expect(screen.getByRole('group', { name: ZOOM_TEXT.level }).textContent).toContain('120%')
+    fireEvent.click(screen.getByRole('button', { name: ZOOM_TEXT.out }))
+    fireEvent.click(screen.getByRole('button', { name: ZOOM_TEXT.in }))
+    expect(onZoom.mock.calls).toEqual([[-1], [1]])
+    cleanup()
+    setup()
+    expect(screen.queryByRole('group', { name: ZOOM_TEXT.level })).toBeNull()
   })
 })
 

@@ -9,7 +9,10 @@ import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
-import { shouldMirrorUrl, useGoto } from './browser.useGoto'
+import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
+import BrowserStartPage from './BrowserStartPage'
+import { addRecent } from './browser.recent'
+import { ZOOM_DEFAULT, stepZoom } from './browser.zoom'
 import { randomId } from './randomId'
 import './browser.css'
 
@@ -23,6 +26,9 @@ export interface BrowserSlotCtx {
   state?: BrowserState
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
   takeover: () => void
+  /** Zoom halaman (1 = 100%) dan langkahnya; murni klien, lihat browser.zoom.ts. */
+  zoom: number
+  stepZoom: (dir: -1 | 1) => void
 }
 
 export interface BrowserNodeProps extends NodeProps {
@@ -46,6 +52,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const lowZoom = useStore((s) => s.transform[2] < ZOOM_PAUSE_BELOW)
   const session = useBrowserSession(id, lowZoom || collapsed)
   const [maximized, setMaximized] = useState(false)
+  const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
 
@@ -57,11 +64,19 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
     if (state && shouldMirrorUrl(state, d.url)) rf.updateNodeData(id, { url: state.url })
   }, [state, d.url, id, rf])
 
+  // Catat halaman nyata yang sudah selesai dimuat ke daftar "Terbaru" halaman awal (kriteria sama dengan mirror URL).
+  const recentUrl = state && !isBlankUrl(state.url) && !state.loading && !state.blocked ? state.url : undefined
+  const recentTitle = state?.title ?? ''
+  useEffect(() => { if (recentUrl) addRecent(recentUrl, recentTitle) }, [recentUrl, recentTitle])
+
   const ctx: BrowserSlotCtx = {
     id, state,
     nav: (action, url) => send({ t: 'nav', action, ...(url === undefined ? {} : { url }) }),
     takeover: () => send({ t: 'takeover' }),
+    zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
   }
+  // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.
+  const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked
 
   const toggleCollapse = () => {
     if (!collapsed) { expandedH.current = height ?? DEFAULT_H; rf.updateNode(id, { height: COLLAPSED_H }) }
@@ -92,7 +107,10 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
         <div className="node-body browser-node">
           {renderToolbar?.(ctx)}
           <div className="browser-body">
-            <BrowserSurface session={session} />
+            <div className="browser-zoom" style={{ '--browser-zoom': zoom } as CSSProperties}>
+              <BrowserSurface session={session} />
+            </div>
+            {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} />}
             {renderOverlay?.(ctx)}
           </div>
         </div>

@@ -37,6 +37,10 @@ describe('buildChromiumArgs', () => {
     expect(args).toContain('--deny-permission-prompts')
     expect(DENIED_PERMISSIONS).toEqual(['camera', 'microphone', 'geolocation', 'notifications'])
   })
+  it('turns off Chrome\'s own background calls home (they would egress via the proxy unasked)', () => {
+    expect(args).toContain('--disable-background-networking')
+    expect(args).toContain('--disable-component-update')
+  })
   it('refuses to build without a proxy or profile dir', () => {
     expect(() => buildChromiumArgs({ profileDir: '/p', proxyServer: '' })).toThrow(/proxyServer is required/)
     expect(() => buildChromiumArgs({ profileDir: '', proxyServer: 'http://127.0.0.1:1' })).toThrow(/profileDir is required/)
