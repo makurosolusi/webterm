@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { BotManager } from '../channels/botManager'
 import { dataDir } from '../config'
 import { flagOn } from '../envFlag'
+import { capabilityStore } from '../control/mount'
 import { consumeApproval } from '../ledger/ledgerApproval'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { createLogger } from '../logs'
@@ -16,6 +17,7 @@ import { createUserMemoryStore, userMemoryRoot } from '../memory/memoryUserStore
 import { projectRepo, resolveWorktrees, worktreeRoot } from '../orchestratorRunProduction'
 import { type SessionsLike, createSessionsPort } from '../orchestrator/workerRuntimeSession'
 import { AGENT_CONFIG, type BuiltinAgentId } from '../../shared/workspace'
+import { type BrowserBootSources, createBrowserToolDeps } from './ca2Boot.browser'
 import { createAgentExecutor, type AgentExecutor } from './agents/agentExecutor'
 import { createAgentHost } from './agents/agentHost'
 import { resumeApprovedAgents } from './agents/agentResume'
@@ -61,6 +63,8 @@ export interface Ca2BootOptions {
   now?: () => number
   /** Test seam; production uses the process-wide registry. */
   registry?: ReturnType<typeof defaultRegistry>
+  /** Test seam: capability store + browser runtime lookup for the browser tools (default: process singletons). */
+  browser?: BrowserBootSources
   /** Test seam: skip the resume timer. */
   noTimer?: boolean
 }
@@ -131,6 +135,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let kb: Database | null = null
   const nodeOf = (toRef: string): string | null => (toRef.startsWith('agent:') && executor ? executor.store.get(toRef.slice('agent:'.length))?.nodeId ?? null : null)
   const registry = opts.registry ?? defaultRegistry()
+  const browser = createBrowserToolDeps(env, opts.browser ?? { store: capabilityStore })
   const toolNames = registerCa2Tools(registry, {
     ...(executor ? { executor, deliver: createMailDeliver({ db, store: createMailStore(db, now), port: {
       statusOf: (ref) => { const node = nodeOf(ref); return node ? sessions.statusOf(node) ?? null : null },
@@ -139,6 +144,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     openKb: () => (kb ??= openKnowledgeDb(join(dir, KNOWLEDGE_FILE))),
     ...(skills ? { skills: () => skills } : {}),
     userStore,
+    ...(browser ? { browser } : {}),
     ...(opts.bots ? { bots: { manager: () => opts.bots ?? null, consumeApproval: (id: string, digest: string) => consumeApproval({ db, now }, id, { digest }) } } : {}),
   }, env)
   const hash = toolsHash(registry)
