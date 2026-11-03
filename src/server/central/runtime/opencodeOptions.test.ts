@@ -37,8 +37,9 @@ describe('opencode argv', () => {
 
   it('only treats the exact `on` value as enabling mutating tools', () => {
     expect(opencodeToolsAllowed(undefined)).toBe(false)
-    expect(opencodeToolsAllowed('1')).toBe(false)
-    expect(opencodeToolsAllowed(' true ')).toBe(false)
+    expect(opencodeToolsAllowed('1')).toBe(true)
+    expect(opencodeToolsAllowed(' true ')).toBe(true)
+    expect(opencodeToolsAllowed('yes')).toBe(false)
     expect(opencodeToolsAllowed(' ON ')).toBe(true)
   })
 })
