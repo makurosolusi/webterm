@@ -35,6 +35,10 @@ export function buildChromiumArgs(i: FlagInput): string[] {
     '--remote-debugging-port=0', // TODO(br-01): pipe (--remote-debugging-pipe) bila spike S0 membuktikan fd tambahan di Bun.spawn
     '--force-webrtc-ip-handling-policy=disable_non_proxied_udp', // [BT]
     '--deny-permission-prompts', // kamera/mic/geolokasi/notifikasi ditolak; ditegaskan lagi via Browser.setPermission
+    // Chrome headless sendiri menelepon Google (time/update/optimization-guide) lewat proxy; tidak ada gunanya untuk
+    // node browser dan itu lalu-lintas keluar tak diminta dari mesin user (terbukti di smoke Chrome nyata).
+    '--disable-background-networking',
+    '--disable-component-update',
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-extensions',
