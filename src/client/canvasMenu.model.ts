@@ -65,7 +65,7 @@ export interface CanvasMenuHandlers {
   /** Posisi klik kanan sudah ditutup oleh pemanggil; model tidak tahu-menahu soal koordinat. */
   addAgent: (cmd: string, agentId: AgentId) => void
   addFiles: () => void
-  /** Hanya ada bila server melapor fitur browser menyala (flag mati = baris tidak lahir). */
+  /** Pemanggil (canvasMenu.pane) selalu memberi handler ini: saat kemampuan mati, kliknya memunculkan tawaran menyalakan. */
   addBrowser?: () => void
   fitView: () => void
   selectAll?: () => void

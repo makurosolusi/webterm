@@ -2,8 +2,7 @@
 // (`x-webterm-token`, via `request`); never a node capability. Paths mirror server handlers:
 // CONTROL/HALT exist (guard/haltApi.ts); STATUS, AGENTS, APPROVALS, SKILLS, MEMORY are the
 // contract this panel expects and are mounted by WS-19. Malformed rows are dropped, not thrown.
-import { useEffect, useState } from 'react'
-import { fetchEnv } from '../envSettingsApi'
+import { useCapabilities } from '../useCapabilities'
 import { decideApproval } from '../inboxApi'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
@@ -30,21 +29,10 @@ const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
-const CENTRAL_CHAT_KEY = 'WEBTERM_CENTRAL_CHAT'
-
-/** Panel flag from the server env state (`WEBTERM_CENTRAL_CHAT` effective value). Off until loaded and on 401/403/network error (fail-closed); `override` (tests) skips the fetch. */
+/** Panel flag from `GET /api/capabilities` (`central` is `on`). Off until loaded and on 401/403/network error (fail-closed); `override` (tests) skips the result. */
 export function useCentralControlEnabled(override?: boolean): boolean {
-  const [on, setOn] = useState(false)
-  useEffect(() => {
-    if (override !== undefined) return
-    let live = true
-    fetchEnv().then(
-      (s) => { if (live) setOn(s.entries.some((e) => e.key === CENTRAL_CHAT_KEY && e.effective === 'on')) },
-      () => { if (live) setOn(false) },
-    )
-    return () => { live = false }
-  }, [override])
-  return override ?? on
+  const { data } = useCapabilities()
+  return override ?? data?.capabilities.some((c) => c.id === 'central' && c.status === 'on') === true
 }
 
 function rowsOf(body: unknown): unknown[] {

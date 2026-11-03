@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { BrowserStatusResp } from '../shared/browser.contract'
 import { resetBrowserStatusCache } from './browser.feature'
 import { HARNESS_WS_ID, installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
+import { resetCapabilitiesCache } from './useCapabilities'
 import { TOOLBAR_TEXT } from './browser.uxText'
 import { MENU_LABELS } from './canvasMenu.model'
 
@@ -25,14 +26,14 @@ class FakeWs {
 const STATUS: BrowserStatusResp = { enabled: true, binFound: true, live: 0, maxLive: 2, agentEnabled: false, cookieImportEnabled: false }
 
 beforeAll(installCanvasDom)
-beforeEach(() => { urls.length = 0; resetBrowserStatusCache() })
+beforeEach(() => { urls.length = 0; resetBrowserStatusCache(); resetCapabilitiesCache() })
 afterEach(unmountCanvas)
 
 const stubWs = () => vi.stubGlobal('WebSocket', FakeWs)
 const fetched = () => (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]))
 
 describe('flag browser mati (default)', () => {
-  it('Add node tidak punya item Browser, menu pane tidak punya baris Browser, dan tidak ada socket', async () => {
+  it('Add node tidak punya item Browser, menu pane tetap punya baris Browser, dan tidak ada socket', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     stubWs()
     await waitFor(() => expect(fetched()).toContain('/api/browser/status'))
@@ -43,10 +44,65 @@ describe('flag browser mati (default)', () => {
 
     fireEvent.contextMenu(document.querySelector('.react-flow__pane') as HTMLElement, { clientX: 50, clientY: 50 })
     await screen.findByText(MENU_LABELS.terminal)
-    expect(screen.queryByText(MENU_LABELS.browser)).toBeNull()
+    expect(screen.queryByText(MENU_LABELS.browser)).not.toBeNull()
     expect(urls).toEqual([])
     // Satu-satunya request browser dari klien: probe status (404 => fitur tak ada).
     expect(fetched().filter((u) => u.startsWith('/api/browser/'))).toEqual(['/api/browser/status'])
+  })
+})
+
+// Server palsu untuk tawaran: kemampuan browser mati sampai POST /api/capabilities/browser; sesudahnya
+// /api/browser/status menjawab. Rute lain diteruskan ke fetch harness.
+function stubCapabilityServer(posts: string[], steps?: object): void {
+  const inner = globalThis.fetch
+  let on = false
+  const cap = () => new Response(JSON.stringify({
+    capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status: on ? 'on' : steps ? 'needs-step' : 'off', ...(!on && steps ? steps : {}) }],
+    advanced: {},
+  }))
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input), 'http://localhost').pathname
+    if (path === '/api/capabilities') return Promise.resolve(cap())
+    if (path === '/api/capabilities/browser') { posts.push(String(init?.body)); on = true; return Promise.resolve(cap()) }
+    if (path === '/api/browser/status' && on) return Promise.resolve(new Response(JSON.stringify(STATUS)))
+    return inner(input, init)
+  }))
+}
+const openPaneMenu = () => fireEvent.contextMenu(document.querySelector('.react-flow__pane') as HTMLElement, { clientX: 50, clientY: 50 })
+
+describe('tawaran saat kemampuan browser mati', () => {
+  it('klik baris Browser menampilkan Nyalakan di dalam menu; Nyalakan memanggil API lalu node lahir', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    stubWs()
+    const posts: string[] = []
+    stubCapabilityServer(posts)
+    openPaneMenu()
+    fireEvent.click(await screen.findByText(MENU_LABELS.browser))
+    expect(await screen.findByText(/Nyalakan sekarang\?/)).not.toBeNull()
+    expect(screen.queryByText(MENU_LABELS.terminal)).toBeNull() // panel menu berganti isi
+    expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Nyalakan' }))
+    await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
+    expect(posts.map((b) => JSON.parse(b))).toEqual([{ enabled: true }])
+    expect(screen.queryByText(/Nyalakan sekarang\?/)).toBeNull()
+  })
+
+  it('needs-step menampilkan langkah Chromium, bukan tombol Nyalakan', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    stubCapabilityServer([], { step: { kind: 'chromiumPath', label: 'Pilih lokasi Chromium' }, detail: 'Chromium belum ditemukan.' })
+    openPaneMenu()
+    fireEvent.click(await screen.findByText(MENU_LABELS.browser))
+    expect(await screen.findByRole('button', { name: 'Pilih lokasi Chromium' })).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Nyalakan' })).toBeNull()
+  })
+
+  it('teks status browser tidak menyebut nama env var', async () => {
+    const { browserNotice } = await import('./browser.status')
+    for (const blocked of ['no_binary', 'disabled'] as const) {
+      const n = browserNotice({ state: { blocked } as never, connected: true })
+      expect(n?.text).toMatch(/Pengaturan > Kemampuan > Browser/)
+      expect(n?.text).not.toMatch(/WEBTERM_/)
+    }
   })
 })
 
