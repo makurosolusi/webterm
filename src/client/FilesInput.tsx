@@ -1,6 +1,7 @@
 // Input nama inline untuk "New File…/New Folder…" dan Rename (pengganti `window.prompt`). Enter
 // memasang, Escape/blur membatalkan, nama tak valid ditandai langsung dan Enter tidak melakukan apa pun.
 import { useEffect, useRef, useState } from 'react'
+import { Input } from './components/ui/input'
 import { newEntryPath } from './fileBrowse'
 import { NAME_NOT_ALLOWED } from './filesCreate'
 import { nameProblemText } from './filesMessages'
@@ -46,7 +47,7 @@ export default function FilesInput({ dir, initial, base, onCommit, onCancel }: P
   return (
     <div className="files-input-row nodrag">
       <span className={`codicon codicon-${rename ? (dir ? 'folder' : 'file') : dir ? 'new-folder' : 'new-file'} files-icon`} aria-hidden="true" />
-      <input
+      <Input
         ref={ref}
         className={`files-input${invalid ? ' files-input--invalid' : ''}`}
         value={value}
