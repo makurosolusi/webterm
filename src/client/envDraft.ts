@@ -68,7 +68,9 @@ export function dangerousDirtyLabels(entries: readonly EnvEntryV2[], dirtyKeys: 
   return entries.filter((e) => e.dangerous && dirtyKeys.includes(e.key)).map((e) => e.label)
 }
 
-/** Bagi entri: user → section utama, advanced → "Lanjutan"; owner channels dikeluarkan bila channelsOwned. */
+/** Bagi entri: user → section utama, advanced → "Lanjutan"; owner channels dikeluarkan bila channelsOwned.
+ * Entri `stage:'experimental'` disembunyikan kecuali ada override tersimpan (agar nilai lama tetap bisa dihapus).
+ * Di dalam section, entri diurutkan menurut urutan grup (sub-grup Central) dengan urutan registry sebagai seri. */
 export function partitionEntries(
   entries: readonly EnvEntryV2[],
   groups: readonly EnvGroupMeta[],
@@ -79,6 +81,7 @@ export function partitionEntries(
   const out: EnvPartition = { main: [], advanced: [], channels: [] }
   const ranks = new Map<EnvSectionData, number>()
   for (const e of entries) {
+    if (e.stage === 'experimental' && e.source !== 'override') continue
     if (channelsOwned && e.owner === 'channels') { out.channels.push(e); continue }
     const list = e.audience === 'user' ? out.main : out.advanced
     let sec = list.find((s) => s.title === e.section)
@@ -89,5 +92,6 @@ export function partitionEntries(
   const byRank = (a: EnvSectionData, b: EnvSectionData): number => (ranks.get(a) ?? NO_ORDER) - (ranks.get(b) ?? NO_ORDER)
   out.main.sort(byRank) // sort stabil: urutan kemunculan mempertahankan seri
   out.advanced.sort(byRank)
+  for (const sec of [...out.main, ...out.advanced]) sec.entries.sort((x, y) => rank(x) - rank(y))
   return out
 }
