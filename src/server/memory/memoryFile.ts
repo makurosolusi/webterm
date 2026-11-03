@@ -185,7 +185,8 @@ export async function rebuildMemoryIndex(
   const report = emptyReport(projectId ?? null, 'rebuilt')
   const grouped = new Map<string, Array<{ file: string; record: MemoryFileRecord }>>()
   for (const file of await port.list('')) {
-    if (!file.endsWith('.md')) continue
+    // `user/` holds personal memory with its own format and rebuild (memoryUserStore); not project facts.
+    if (!file.endsWith('.md') || file.startsWith('user/')) continue
     const text = await port.read(file)
     if (text === null) continue
     let record: MemoryFileRecord
