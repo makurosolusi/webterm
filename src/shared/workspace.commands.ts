@@ -1,6 +1,7 @@
 import { agentConfig, AGENT_CONFIG, type AgentId, type BuiltinAgentId } from './workspace.agents'
 import { canResume, capabilityAgentId, mintsSessionId } from './workspace.capabilities'
 import { isSafeSessionId } from './workspace.ids'
+import type { CustomAgent } from './settings'
 
 // ---------------------------------------------------------------------------------------------
 // Grammar peluncuran & resume.
@@ -97,4 +98,9 @@ export function canResumeWith(id: AgentId, sessionId: string): boolean {
  */
 export function assembleCmd(agentId: BuiltinAgentId, base?: string): string {
   return base?.trim() || AGENT_CONFIG[agentId].launchCmd
+}
+
+/** Baris peluncuran agent custom: `launchCmd` sendiri, kalau kosong perintah base (termasuk override pengguna), kalau tak ada keduanya string kosong. */
+export function customLaunchCmd(agent: CustomAgent, cmds: Partial<Record<BuiltinAgentId, string>>): string {
+  return agent.launchCmd.trim() || (agent.baseAgent ? assembleCmd(agent.baseAgent, cmds[agent.baseAgent]) : '')
 }
