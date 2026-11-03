@@ -43,3 +43,34 @@ lifecycle server (`WEBTERM_BROWSER_DISCARD_MS`) membuang halamannya.
 - `status.version` belum disediakan.
 - Throttle mouse-move dan keyCode 229 (IME) di sisi klien belum dikerjakan.
 - Chromium nyata TIDAK diuji; test memakai server CDP tiruan (`fakeCdp.testkit.ts`).
+
+## Penempatan node browser
+Node browser bisa dibuka dari konteks (menu klik kanan link di terminal/agent, drop URL ke canvas), tidak hanya
+dari tombol `+`. Rencana: `PLAN/BROWSER-PLACEMENT-a..c.md`. Keputusan:
+- **Satu pintu `openBrowserAt`** lewat `NodeActions` (`useBrowserOpen`). Nilainya `undefined` bila flag browser
+  mati di server, jadi semua pemicu otomatis tak muncul. Pemicu baru cukup memanggil pintu ini.
+- **Perencana murni** (`browser.open.plan.ts`, `browser.open.place.ts`): tanpa DOM/React Flow, mudah dites.
+  Hasilnya reuse, create (posisi + ukuran), atau invalid. Validasi URL tetap satu: `parseBrowserUrl`.
+- **Dedupe = reuse + seleksi + fit-view, TANPA navigasi.** Kunci kanonik (fragmen dibuang, alias loopback
+  disatukan) hanya untuk perbandingan dengan `data.url`; URL yang dikirim tetap apa adanya. Alasan: `nav` ditolak
+  `lease_agent` saat agent memegang lease, dan navigasi akan merusak sesi pengguna. Mengirim host terkanonisasi
+  juga merusak entri `WEBTERM_BROWSER_ALLOW_HOSTS` yang dicocokkan persis (`127.0.0.1:PORT` != `localhost:PORT`).
+- **URL awal lewat `nav go` sekali setelah attach** (`browser.useGoto.ts`), bukan perubahan kontrak WS `/ws/browser`
+  (kontrak tidak berubah). Sebabnya: server membaca URL awal dari workspace TERSIMPAN, sedangkan simpan klien
+  di-debounce, jadi node baru bisa attach ke `about:blank`. Dikirim sekali per mount agar penolakan tidak jadi
+  loop. Penjaga mirror: `about:blank`/kosong tidak ditulis balik ke `data.url` (`shouldMirrorUrl`).
+- **Penempatan** di sisi anchor dengan kandidat berurutan kanan, bawah, kiri, lalu pindai grid, lalu kaskade;
+  `at` eksplisit (drop) dipakai apa adanya. Ukuran node baru dari konstanta `BROWSER_OPEN_SIZE` (640x400), bukan
+  ukuran bawaan settings. Fit-view hanya bila node tak sepenuhnya terlihat, dengan zoom minimum `FIT_MIN_ZOOM`
+  (0.3) di atas `ZOOM_PAUSE_BELOW` agar stream tidak dijeda.
+- **Pemicu v1:** baris "Open in canvas browser" di menu klik kanan link (terminal dan agent) dan drop URL ke
+  canvas kosong (drop di atas node diabaikan). Cmd/Ctrl+klik tidak diubah (tetap tab baru).
+- **Guard tidak berubah.** URL lokal tetap diblokir default dan tampil lewat UI `blocked` yang ada; baris menu
+  tidak disembunyikan untuk URL lokal. Fitur ini tidak menambah log; bila perlu mencatat, hanya `hostOnly(url)`,
+  tidak pernah URL penuh/query/fragmen.
+
+### Belum ada (ditunda, menunggu keputusan pengguna)
+- Pembukaan node browser oleh agent/central atas inisiatif sendiri (U2); butuh kanal server-ke-klien baru.
+- Preview localhost otomatis tanpa mengisi `WEBTERM_BROWSER_ALLOW_HOSTS` (U1); melonggarkan guard SSRF.
+- Cmd/Ctrl+klik link menjadi canvas browser (U3).
+- Tempel (paste) URL ke canvas.
