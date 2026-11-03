@@ -2,13 +2,14 @@
 // workspace/sesi) — integrator menyambungkannya dengan satu baris di `route()`.
 //
 // KEAMANAN: tidak ada lapisan redaksi di sini, dan itu disengaja. Tidak satu pun kunci di
-// `shared/settings.ts` bisa memuat rahasia (lihat catatan KEAMANAN di kepala file itu, dan alasan
-// `CustomAgent.env` nodeterm tidak diport). Begitu ada kunci yang bisa, ia WAJIB diredaksi di
-// jalur GET di bawah.
+// `shared/settings.ts` bisa memuat rahasia (lihat catatan KEAMANAN di kepala file itu):
+// `CustomAgent.env` hanya literal non-secret atau `${env:NAME}`, dan PUT menolak literal untuk
+// kunci berpola secret. Begitu ada kunci yang bisa, ia WAJIB diredaksi di jalur GET di bawah.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Settings } from '../shared/settings'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { createLogger } from './logs'
+import { SettingsValidationError } from './settingsStore'
 
 const log = createLogger('settings')
 
@@ -57,7 +58,14 @@ export async function settingsRoute(
     } catch {
       return json(res, 400, { error: 'bad json' })
     }
-    const saved = store.saveSettings(patch)
+    let saved: Settings
+    try {
+      saved = store.saveSettings(patch)
+    } catch (err) {
+      if (!(err instanceof SettingsValidationError)) throw err
+      // Hanya {index, field, code}: tak ada nilai input yang dipantulkan balik.
+      return json(res, 400, { error: 'invalid_settings', errors: err.errors })
+    }
     // Nama kunci saja: nilai settings (shell, path, mode) tidak dicatat.
     const keys = patch !== null && typeof patch === 'object' ? Object.keys(patch) : []
     log.info('settings.update', 'Settings updated', { keys })
