@@ -102,4 +102,33 @@ describe('partitionEntries', () => {
     expect(off.channels).toEqual([])
     expect(off.main[0]!.entries.map((e) => e.key)).toEqual(['T', 'U'])
   })
+
+  it('hides stage experimental unless a stored override exists', () => {
+    const entries = [
+      mkEntry({ key: 'EXP', stage: 'experimental', audience: 'advanced', source: 'default' }),
+      mkEntry({ key: 'EXP_ENV', stage: 'experimental', audience: 'advanced', source: 'env' }),
+      mkEntry({ key: 'EXP_OVR', stage: 'experimental', audience: 'advanced', source: 'override' }),
+      mkEntry({ key: 'EXP_CH', stage: 'experimental', owner: 'channels', source: 'default' }),
+      mkEntry({ key: 'REAL', audience: 'advanced' }),
+    ]
+    const keys = (channelsOwned: boolean): string[] => {
+      const p = partitionEntries(entries, [], channelsOwned)
+      return [...p.main, ...p.advanced].flatMap((x) => x.entries).concat(p.channels).map((e) => e.key)
+    }
+    expect(keys(false)).toEqual(['EXP_OVR', 'REAL'])
+    expect(keys(true)).toEqual(['EXP_OVR', 'REAL'])
+    expect(entries).toHaveLength(5) // hanya disembunyikan dari partisi; state tak berubah
+  })
+
+  it('orders entries inside one section by group order (Central sub-groups), stable on ties', () => {
+    const groups = [
+      { id: 'c', label: 'C', order: 40, owner: 'central' }, { id: 'turn', label: 'T', order: 41, owner: 'central' },
+      { id: 'budget', label: 'B', order: 42, owner: 'central' },
+    ]
+    const entries = ['budget', 'c', 'turn', 'budget', 'c'].map((group, i) =>
+      mkEntry({ key: `K${i}`, group, section: 'Central', audience: 'advanced' }))
+    const sec = partitionEntries(entries, groups, false).advanced
+    expect(sec).toHaveLength(1)
+    expect(sec[0]!.entries.map((e) => e.key)).toEqual(['K1', 'K4', 'K2', 'K0', 'K3'])
+  })
 })

@@ -6,6 +6,7 @@ import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY, ENV_SETTINGS_SWITCH, isBootstrapOnly
 import { validateEnvValue } from './envSettings.validate'
 import type { EnvSpec } from './envRegistry.types'
 import { DEFAULT_MAX_LIVE, ENV_BROWSER, MAX_LIVE_RANGE } from '../shared/browser.contract'
+import { GROUP_META } from './envRegistry.groups'
 
 const names = (f: (s: EnvSpec) => boolean): string[] => ENV_REGISTRY.filter(f).map((s) => s.key).sort()
 
@@ -115,7 +116,7 @@ const VERDICT: Row[] = [
   ['WEBTERM_MEMORY_FILES', 'platform', 'Memori', 'user', 'hot', []],
   ['WEBTERM_MEMORY_DIR', 'platform', 'Memori', 'advanced', 'hot', ['WEBTERM_MEMORY_FILES']],
   ['WEBTERM_CONTROL_CWD_ROOTS', 'platform', 'Kontrol', 'advanced', 'hot', []],
-  ['WEBTERM_TRUST_PROXY', 'platform', 'Kontrol', 'advanced', 'hot', ['WEBTERM_TELEGRAM_MODE']],
+  ['WEBTERM_TRUST_PROXY', 'channels', 'Telegram', 'advanced', 'hot', ['WEBTERM_TELEGRAM_MODE']],
   ['WEBTERM_LOG_LEVEL', 'logs', 'Log', 'advanced', 'boot', []],
   ['WEBTERM_LOG_BUFFER', 'logs', 'Log', 'advanced', 'boot', []],
   ['WEBTERM_LOG_FILE', 'logs', 'Log', 'advanced', 'boot', []],
@@ -152,6 +153,9 @@ describe('vonis c-ENV-02 per entri', () => {
     const s = specFor('WEBTERM_TELEGRAM_MODE') as EnvSpec
     expect(s).toMatchObject({ default: '', allowEmpty: true })
     expect(s.effectiveDefault).toContain('poll')
+    expect(s.options).toEqual(['', 'poll', 'webhook']) // opsi kosong ada di dropdown, berlabel Otomatis
+    expect(s.optionLabels?.['']).toBe('Otomatis')
+    expect(s.description).toContain('Otomatis')
     for (const v of ['', 'poll', 'webhook']) expect(validateEnvValue(s, v).ok, v).toBe(true)
     expect(validateEnvValue(s, 'push').ok).toBe(false)
   })
@@ -172,14 +176,42 @@ describe('vonis c-ENV-02 per entri', () => {
 })
 
 describe('metadata domain ca2, files, browser', () => {
-  it('ca2: owner central, section Central — agen, advanced; restart tak berubah (boot)', () => {
-    for (const s of CA2_ENV_SPECS) expect(s, s.key).toMatchObject({ owner: 'central', section: 'Central — agen', audience: 'advanced', restartRequired: true })
+  it('ca2: section Central, advanced; kunci kanal ke channels, EMBED_* ke Memori', () => {
+    const moved: Record<string, [string, string]> = {
+      WEBTERM_CENTRAL_BOTS: ['channels', 'Telegram'], WEBTERM_CHANNEL_APPROVAL_BUTTONS: ['channels', 'Telegram'],
+      WEBTERM_EMBED_URL: ['platform', 'Memori'], WEBTERM_EMBED_MODEL: ['platform', 'Memori'],
+    }
+    for (const s of CA2_ENV_SPECS) {
+      const [owner, section] = moved[s.key] ?? ['central', 'Central']
+      expect(s, s.key).toMatchObject({ owner, section, audience: 'advanced' })
+    }
+    expect(specFor('WEBTERM_TRUST_PROXY')).toMatchObject({ owner: 'channels', section: 'Telegram', group: 'telegram' })
+    expect(specFor('WEBTERM_TRUST_PROXY')?.description).toContain('webhook')
+  })
+  it('ca2: sub-grup Central terdaftar dengan urutan unik setelah grup central dan sebelum orkestrator', () => {
+    const subs = ['central-turn', 'central-budget', 'central-context', 'central-lab']
+    expect(subs.map((g) => GROUP_META[g]?.label)).toEqual(['Batas turn', 'Budget harian', 'Konteks & memori', 'Eksperimen'])
+    const orders = ['central', ...subs, 'orchestrator'].map((g) => GROUP_META[g]?.order as number)
+    expect([...orders].sort((a, b) => a - b)).toEqual(orders)
+    expect(new Set(orders).size).toBe(orders.length)
+    const groupOf = (k: string): string | undefined => specFor(k)?.group
+    expect(['WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_STEPS', 'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_TOKENS'].map(groupOf)).toEqual(Array(4).fill('central-turn'))
+    expect(['WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_DAILY_COST_MICROS'].map(groupOf)).toEqual(Array(3).fill('central-budget'))
+    expect(['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY'].map(groupOf)).toEqual(['central-lab', 'central-lab'])
   })
   it('ca2: 4 kunci tanpa pembaca berstage experimental dan berdeskripsi jujur', () => {
     for (const k of ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL']) {
       expect(specFor(k)?.stage, k).toBe('experimental')
       expect(specFor(k)?.description, k).toContain('Belum dipakai server')
     }
+    expect(specFor('WEBTERM_CENTRAL_TURN_TOKENS')?.description).toContain('belum diberlakukan')
+    expect(specFor('WEBTERM_CENTRAL_DAILY_SPAWNS')?.description).toContain('0 = tidak boleh spawn')
+    expect(specFor('WEBTERM_LOG_LEVEL')?.description).toContain('saat boot')
+  })
+  it('webhook secret menyebut jalur _FILE; label registry berbahasa Indonesia', () => {
+    expect(specFor('WEBTERM_TELEGRAM_WEBHOOK_SECRET')?.description).toContain('WEBTERM_TELEGRAM_WEBHOOK_SECRET_FILE')
+    expect(specFor('WEBTERM_MEMORY_FILES')?.label).toBe('Berkas memori')
+    expect(specFor('WEBTERM_ORCHESTRATOR_RUN')?.label).toBe('Run orkestrator')
   })
   it('files: saklar mutasi user, sisanya advanced, semua hot', () => {
     for (const s of ENV_REGISTRY.filter((x) => x.key.startsWith('WEBTERM_FILES_'))) {

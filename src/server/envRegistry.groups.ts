@@ -9,6 +9,11 @@ export const GROUP_META: Readonly<Record<string, EnvGroupMeta>> = Object.fromEnt
   g('telegram', 'Telegram', 20, 'channels'),
   g('channels', 'Kanal', 30, 'channels'),
   g('central', 'Central', 40, 'central'),
+  // Sub-grup Central (satu section "Central"; hanya mengurutkan entri di dalamnya).
+  g('central-turn', 'Batas turn', 41, 'central'),
+  g('central-budget', 'Budget harian', 42, 'central'),
+  g('central-context', 'Konteks & memori', 43, 'central'),
+  g('central-lab', 'Eksperimen', 44, 'central'),
   g('orchestrator', 'Orkestrator', 50, 'platform'),
   g('memory', 'Memori', 60, 'platform'),
   g('control', 'Kontrol', 70, 'platform'),
