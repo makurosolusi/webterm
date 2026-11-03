@@ -62,7 +62,7 @@ const mkView = (id: CapabilityId, on: ReadonlySet<CapabilityId>): CapabilityView
 })
 const fixture = (on: ReadonlySet<CapabilityId>): CapabilitiesResponse => ({
   capabilities: CAPABILITY_IDS.map((id) => mkView(id, on)),
-  advanced: { agentEngine: { value: 'auto', detected: 'claude' }, chromiumPath: { value: '', detected: false }, dataDir: '/tmp/webterm-data' },
+  advanced: { agentEngine: { value: 'auto', detected: 'claude' }, chromiumPath: { value: '', detected: false, active: null, source: null, overrideInvalid: false, candidates: [] }, dataDir: '/tmp/webterm-data' },
 })
 
 async function openCapabilities(on: ReadonlySet<CapabilityId>): Promise<HTMLElement> {
@@ -105,11 +105,11 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length)
   })
 
-  it('Lanjutan tertutup dengan paling banyak empat kontrol', async () => {
+  it('Lanjutan tertutup dengan tepat empat butir', async () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(details.querySelectorAll('button:not(summary), input, [role="combobox"]').length).toBeLessThanOrEqual(4)
+    expect(details.querySelectorAll(':scope > div').length).toBe(4) // butir, bukan kontrol: Chromium punya beberapa tombol
   })
 
   it('sub-opsi worker hanya muncul saat Worker on', async () => {

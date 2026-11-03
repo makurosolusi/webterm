@@ -19,7 +19,7 @@ const mkView = (id: CapabilityId): CapabilityView => ({
 })
 const fixture = (): CapabilitiesResponse => ({
   capabilities: CAPABILITY_IDS.map(mkView),
-  advanced: { agentEngine: { value: 'auto', detected: 'claude' }, chromiumPath: { value: '', detected: false }, dataDir: '/tmp/webterm-data' },
+  advanced: { agentEngine: { value: 'auto', detected: 'claude' }, chromiumPath: { value: '', detected: false, active: null, source: null, overrideInvalid: false, candidates: [] }, dataDir: '/tmp/webterm-data' },
 })
 
 let calls: string[]
@@ -82,14 +82,14 @@ describe('tab Kemampuan (D8)', () => {
     expect(screen.getByRole('button', { name: 'Pilih lokasi' })).toBeTruthy()
   })
 
-  it('Lanjutan tertutup, berisi paling banyak empat kontrol', async () => {
+  // Batasnya EMPAT BUTIR (mesin, Chromium, folder data, setel ulang), bukan empat kontrol: butir Chromium
+  // sengaja punya beberapa tombol (simpan / pakai otomatis / deteksi ulang / kandidat).
+  it('Lanjutan tertutup, berisi tepat empat butir', async () => {
     const main = await openCapabilities()
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
     expect(within(details).getByText('Lanjutan')).toBeTruthy()
-    const controls = details.querySelectorAll('button:not(summary), input, [role="combobox"]')
-    expect(controls.length).toBeLessThanOrEqual(4)
-    expect(controls.length).toBe(4)
+    expect(details.querySelectorAll(':scope > div').length).toBe(4)
     expect(within(details).getByText('/tmp/webterm-data')).toBeTruthy()
   })
 
