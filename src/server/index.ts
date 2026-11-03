@@ -3,6 +3,8 @@ import { basename, join } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
+import { fsWatchHub } from './fsWatch'
+import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
 import { TOKEN_PARAM, authorizeRequest, denyReason, isNodeTokenPath, logAuthLogin, logAuthReject, resolveToken, writeTokenToEnv } from './auth'
@@ -177,12 +179,18 @@ wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
     let msg: ClientMsg
     try { msg = JSON.parse(String(raw)) } catch { return }
-    try { sessions.handle(msg, send) } catch (err) {
+    try {
+      // fswatch/fsunwatch tidak lewat sessions (bukan sesi PTY); flag WATCH mati = diabaikan.
+      if (msg.t === 'fswatch' || msg.t === 'fsunwatch') {
+        if (filesFlagOn('WATCH') && typeof msg.dir === 'string') fsWatchHub[msg.t === 'fswatch' ? 'watch' : 'unwatch'](send, msg.dir)
+      } else sessions.handle(msg, send)
+    } catch (err) {
       wsLog.error('ws.error', `WebSocket message handling failed (t=${msg?.t})`, { error: err })
     }
   })
   ws.on('close', (code, reason) => {
     sessions.detach(send)
+    fsWatchHub.dropClient(send)
     wsLog.info('ws.disconnect', 'WebSocket client disconnected', { code, reason: reason.toString().slice(0, 120) })
   })
 })

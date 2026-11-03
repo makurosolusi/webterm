@@ -90,3 +90,51 @@ test('list returns entries on success', async () => {
   stubFetch({ body: [{ name: 'a.txt', isDir: false }] })
   await expect(list('/dir')).resolves.toHaveLength(1)
 })
+
+// ---- Kontrak 3: verb baru ber-`FsResult` (tak pernah melempar, FsFail di-parse walau non-2xx) ----
+import { capabilities, create, rawUrl, writeChecked, readMeta, exists, write } from './fsClient'
+
+test('writeChecked: 409 EVERSION ter-parse sebagai FsFail lengkap dengan current', async () => {
+  stubFetch({ ok: false, status: 409, body: { ok: false, code: 'EVERSION', error: 'changed', current: '9-9' } })
+  expect(await writeChecked('/a.txt', 'x', { expectedVersion: '1-1' })).toEqual({ ok: false, code: 'EVERSION', error: 'changed', current: '9-9' })
+})
+
+test('create: 409 EEXIST ter-parse; sukses membawa version', async () => {
+  stubFetch({ ok: false, status: 409, body: { ok: false, code: 'EEXIST', error: 'already exists' } })
+  expect(await create('/a.txt')).toMatchObject({ ok: false, code: 'EEXIST' })
+  stubFetch({ body: { ok: true, version: '1-2' } })
+  expect(await create('/b.txt')).toEqual({ ok: true, version: '1-2' })
+})
+
+test('FsResult tidak melempar: jaringan mati / body bukan FsFail jadi EIO', async () => {
+  stubFetch({ reject: 'Failed to fetch' })
+  expect(await create('/a.txt')).toMatchObject({ ok: false, code: 'EIO' })
+  stubFetch({ ok: false, status: 502 })
+  expect(await create('/a.txt')).toMatchObject({ ok: false, code: 'EIO', error: expect.stringContaining('502') })
+})
+
+test('kontrak lama tetap: write boolean (409 -> false), exists fail-open, read tetap melempar', async () => {
+  stubFetch({ ok: false, status: 500, body: { ok: false, code: 'EIO', error: 'x' } })
+  expect(await write('/a.txt', 'x')).toBe(false)
+  stubFetch({ reject: 'down' })
+  expect(await exists('/a.txt')).toBe(false)
+  await expect(read('/a.txt')).rejects.toThrow(/fs read/)
+})
+
+test('readMeta membawa version/encoding; default utf8 + version kosong untuk server lama', async () => {
+  stubFetch({ body: { content: 'hi', version: '3-2', encoding: 'non-utf8' } })
+  expect(await readMeta('/a.txt')).toEqual({ content: 'hi', version: '3-2', encoding: 'non-utf8' })
+  stubFetch({ body: { content: 'hi' } })
+  expect(await readMeta('/a.txt')).toEqual({ content: 'hi', version: '', encoding: 'utf8' })
+})
+
+test('capabilities fail-closed saat gagal; mencerminkan server saat sukses', async () => {
+  stubFetch({ reject: 'down' })
+  expect(await capabilities()).toMatchObject({ mutate: false, upload: false, listMax: 0 })
+  stubFetch({ body: { ok: true, mutate: true, viewers: false, watch: false, git: false, quickOpen: false, upload: true, listMax: 5000 } })
+  expect(await capabilities()).toMatchObject({ mutate: true, upload: true, listMax: 5000 })
+})
+
+test('rawUrl memakai verb raw dan meng-encode path', () => {
+  expect(rawUrl('/a b/c.png')).toMatch(/^\/api\/fs\/raw\?path=%2Fa\+b%2Fc\.png/)
+})

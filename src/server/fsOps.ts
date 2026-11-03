@@ -44,7 +44,8 @@ import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import npath from 'node:path'
 import { promisify } from 'node:util'
-import { FS_READ_BINARY_MAX_BYTES, FS_READ_MAX_BYTES, tooLargeSentinel } from '../shared/fsLimits'
+import { FS_READ_BINARY_MAX_BYTES, FS_READ_MAX_BYTES, FILES_LIST_MAX_DEFAULT, tooLargeSentinel } from '../shared/fsLimits'
+import { fsErrCode, fsFail, type FileMeta, type FsResult, type FsVersion, type ListV2, type ReadMeta } from '../shared/fsContract'
 import { createLogger } from './logs'
 
 const log = createLogger('fs')
@@ -234,5 +235,31 @@ export async function pathExists(p: string): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+// Wrapper W0a atas kode lama supaya dispatcher `fsApi.ts` final; WS-FM-01 menimpa isinya (version
+// nyata, encoding hasil sniff, size/mtime/kind). Sampai itu: version kosong, encoding 'utf8'.
+
+/** list-v2 di atas `listDir` lama: tanpa size/mtime/kind; `truncated` bila lewat `limit`. */
+export async function listDirV2(dirPath: string, limit = FILES_LIST_MAX_DEFAULT): Promise<FsResult<ListV2>> {
+  const all = await listDir(dirPath)
+  return { ok: true, entries: all.slice(0, limit), truncated: all.length > limit }
+}
+
+/** `readText` + metadata; MELEMPAR seperti `readText` (kontrak 2). */
+export async function readTextMeta(filePath: string): Promise<ReadMeta> {
+  return { content: await readText(filePath), version: '', encoding: 'utf8' }
+}
+
+/** Metadata satu path; galat -> `FsFail` (bukan fail-open). */
+export async function statMeta(p: string): Promise<FsResult<{ meta: FileMeta; version: FsVersion }>> {
+  const target = resolveFsPath(p)
+  try {
+    const s = await fs.stat(target)
+    return { ok: true, version: '', meta: { name: npath.basename(target), dir: s.isDirectory(), ignored: false, size: s.size, mtimeMs: s.mtimeMs } }
+  } catch (err) {
+    logFsError('stat', target, err)
+    return fsFail(fsErrCode(errnoOf(err)), `stat failed: ${npath.basename(target)}`)
   }
 }
