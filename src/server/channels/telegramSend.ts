@@ -1,14 +1,17 @@
 // Low-level Telegram egress transport. `telegramSender.ts` re-exports this so callers have one
 // import surface. The bot token comes ONLY from env (`WEBTERM_TELEGRAM_BOT_TOKEN`, falling back to
-// legacy `TELEGRAM_BOT_TOKEN`), read on every send so rotation needs no restart. It is never
-// stored, returned, or logged; every error is scrubbed.
+// legacy `TELEGRAM_BOT_TOKEN`), read per send so rotation needs no restart; never stored/logged.
 import {
   DEFAULT_TELEGRAM_API_BASE,
   TELEGRAM_MAX_TEXT,
   TELEGRAM_TOKEN_ENV,
   TELEGRAM_TOKEN_ENV_LEGACY,
 } from './telegram'
+import { createLogger } from '../logs/logger'
 import { redactSecrets } from '../redactSecrets'
+
+const log = createLogger('settings')
+let legacyWarned = false // peringatan alias lama: sekali per proses
 
 /** Env names tried in precedence order: preferred first, then the legacy alias. */
 export const TELEGRAM_BOT_TOKEN_ENV_NAMES = [TELEGRAM_TOKEN_ENV, TELEGRAM_TOKEN_ENV_LEGACY] as const
@@ -23,7 +26,12 @@ export const TELEGRAM_SEND_TIMEOUT_MS = 10_000
 export function resolveTelegramBotToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
   for (const name of TELEGRAM_BOT_TOKEN_ENV_NAMES) {
     const value = env[name]?.trim()
-    if (value) return value
+    if (!value) continue
+    if (name === TELEGRAM_TOKEN_ENV_LEGACY && !legacyWarned) {
+      legacyWarned = true
+      log.warn('settings.telegram_token_legacy', `${TELEGRAM_TOKEN_ENV_LEGACY} is deprecated; rename it to ${TELEGRAM_TOKEN_ENV}`)
+    }
+    return value
   }
   return undefined
 }
