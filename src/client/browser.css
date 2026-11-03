@@ -1,0 +1,27 @@
+/* Node browser. Hanya token yang sudah ada; frame hanya piksel di <canvas>. */
+.browser-node { display: flex; flex-direction: column; min-height: 0; }
+.browser-body { position: relative; flex: 1; min-height: 0; }
+.browser-stage { position: absolute; inset: 0; background: var(--vscode-editor-background, var(--bg)); }
+.browser-surface { position: absolute; inset: 0; outline: none; }
+.browser-surface:focus-within { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+.browser-canvas { display: block; width: 100%; height: 100%; }
+
+.browser-loading, .browser-notice { position: absolute; pointer-events: none; }
+.browser-loading { top: 0; left: 0; right: 0; height: 2px; background: var(--vscode-progressBar-background, var(--accent)); }
+.browser-notice {
+  left: 8px; right: 8px; bottom: 8px; padding: 4px 8px; font: 12px/1.4 var(--font-ui);
+  background: var(--vscode-editorWidget-background, var(--bg));
+  color: var(--vscode-foreground, var(--text));
+  border: 1px solid var(--vscode-editorWidget-border, transparent); border-radius: 4px;
+}
+.browser-notice--error { border-color: var(--vscode-inputValidation-errorBorder, var(--state-attention)); }
+
+.browser-dialog-layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 40%); }
+.browser-dialog {
+  display: flex; flex-direction: column; gap: 8px; width: min(360px, 90%); padding: 12px;
+  font: 13px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text));
+  background: var(--vscode-editorWidget-background, var(--bg)); border-radius: 6px;
+}
+.browser-dialog p { margin: 0; overflow-wrap: anywhere; }
+.browser-dialog-title { font-weight: 600; }
+.browser-dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
