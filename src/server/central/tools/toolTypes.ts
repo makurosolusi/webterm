@@ -1,0 +1,63 @@
+// Local tool contracts. TODO(ca2-04): swap `Tier`/`ControlGuard`/`ToolCtx` for the frozen
+// versions in `contracts/*.types.ts` once WS-04 lands; shapes here are the minimal subset used by WS-03.
+import type { Database } from 'bun:sqlite'
+
+/** Risk tier of a tool: R0 read, R1 bounded write, R2 shared mutation, R3 irreversible. */
+export type Tier = 'R0' | 'R1' | 'R2' | 'R3'
+export const TIER_ORDER: readonly Tier[] = ['R0', 'R1', 'R2', 'R3']
+/** True when `tier` does not exceed `max`. */
+export function tierWithin(tier: Tier, max: Tier): boolean { return TIER_ORDER.indexOf(tier) <= TIER_ORDER.indexOf(max) }
+
+/** Validation failures shared by proposal policy and `execTool`. */
+export type ToolValidationCode = 'forbidden_key' | 'project_required' | 'project_not_found' | 'conversation_project_mismatch' | 'invalid_shape' | 'task_not_found'
+/** Every code `execTool` can return itself, on top of handler-specific codes. */
+export type ToolCode = ToolValidationCode | 'unknown_tool' | 'flag_off' | 'tier_denied' | 'guard_denied'
+
+export interface GuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown> }
+export type GuardVerdict = { ok: true } | { ok: false; code: string }
+/** Port to the server-side control guard (level, budget, breaker); injected, mocked in tests. */
+export interface ControlGuard { check(request: GuardRequest): GuardVerdict }
+
+export type ToolInput = Record<string, unknown>
+/** Handler outcome; `data` is returned to the caller and (whitelisted by `auditKeys`) audited. */
+export interface ToolResult { ok: boolean; code?: string; data?: Record<string, unknown> }
+export interface ExecResult extends ToolResult { tool: string; projectId?: string }
+
+export interface ToolCtx {
+  db: Database
+  registry: ToolRegistry
+  guard: ControlGuard
+  /** Highest tier this caller may execute. */
+  maxTier: Tier
+  conversationId: string
+  now(): number
+  /** Flag source; defaults to `process.env`. */
+  env?: Record<string, string | undefined>
+}
+
+export interface ToolDef {
+  name: string
+  /** One-line description, at most 120 chars. */
+  summary: string
+  tier: Tier
+  /** Exact input schema text rendered into the prompt catalog. */
+  usage: string
+  /** Env flag name that must be `on` for the tool to exist; absent = always on. */
+  flag?: string
+  /** Defaults to true: input carries a `projectId` that must exist and match the conversation. */
+  projectScoped?: boolean
+  /** Overrides the default deep forbidden-key scan. */
+  forbidden?(input: ToolInput): boolean
+  /** Shape and tool-specific checks; returns a failure code or null. */
+  validate(input: ToolInput, ctx: ToolCtx): ToolValidationCode | null
+  handler(ctx: ToolCtx, input: ToolInput, projectId: string | undefined): Promise<ToolResult> | ToolResult
+  /** `data` keys copied into the audit event. */
+  auditKeys?: readonly string[]
+}
+
+export interface ToolRegistry {
+  /** Adds a tool; throws on a duplicate name. */
+  register(def: ToolDef): void
+  list(): ToolDef[]
+  get(name: string): ToolDef | undefined
+}
