@@ -61,6 +61,17 @@ let everConnected = false
 let queue: ClientMsg[] = []
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
+const reconnectListeners = new Set<() => void>()
+
+/**
+ * Daftarkan callback yang jalan setelah tiap RECONNECT (bukan koneksi pertama), sesudah replay
+ * `open` dan antrean; untuk memulihkan state per-koneksi di server (mis. langganan fswatch).
+ */
+export function onReconnect(cb: () => void): () => void {
+  reconnectListeners.add(cb)
+  return () => { reconnectListeners.delete(cb) }
+}
+
 function url(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   // `new WebSocket` cannot set headers, so the token (when there is one) rides in the query.
@@ -77,12 +88,16 @@ function connect() {
     // once. Skipped on the first connect: terminals are freshly mounted and empty.
     // Terminal yang sudah keluar tidak di-reset: layarnya memuat notice exit, dan tidak ada
     // scrollback yang akan diputar ulang untuknya.
-    if (everConnected) for (const sub of subs.values()) if (!sub.exited) sub.onReset?.()
+    const wasReconnect = everConnected
+    if (wasReconnect) for (const sub of subs.values()) if (!sub.exited) sub.onReset?.()
     everConnected = true
     for (const sub of subs.values()) if (sub.open && !sub.exited) ws!.send(JSON.stringify(sub.open))
     const pending = queue
     queue = []
     for (const m of pending) ws!.send(JSON.stringify(m))
+    if (wasReconnect) for (const cb of [...reconnectListeners]) {
+      try { cb() } catch (err) { console.warn('ws: onReconnect listener gagal', err) }
+    }
   }
   ws.onmessage = (ev) => {
     let msg: ServerMsg

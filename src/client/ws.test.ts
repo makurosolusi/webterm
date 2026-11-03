@@ -383,3 +383,34 @@ test('P0: an id can be re-opened after its exit and receives the fresh session o
   expect(onOutput).toHaveBeenCalledWith('fresh')
   expect(onExit).toHaveBeenCalledTimes(1) // exit lama tidak diputar ulang ke sesi baru
 })
+
+test('onReconnect: silent on first connect, fires once per later open, off works, a throwing listener is isolated', async () => {
+  setLocation('http://localhost/', 'localhost')
+  const { subscribe, onReconnect } = await fresh().ws
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const bad = vi.fn(() => { throw new Error('boom') })
+  const good = vi.fn()
+  const gone = vi.fn()
+  onReconnect(bad)
+  onReconnect(good)
+  onReconnect(gone)()
+  subscribe('term-onreconnect', () => {}, () => {})
+  const first = lastSocket()
+  first.readyState = FakeWS.OPEN
+  first.onopen!()
+  expect(good).not.toHaveBeenCalled()
+  expect(bad).not.toHaveBeenCalled()
+
+  vi.useFakeTimers()
+  first.onclose!()
+  vi.advanceTimersByTime(1000)
+  vi.useRealTimers()
+  const second = lastSocket()
+  second.readyState = FakeWS.OPEN
+  second.onopen!()
+  expect(bad).toHaveBeenCalledTimes(1)
+  expect(good).toHaveBeenCalledTimes(1) // listener sebelumnya yang melempar tidak menghalangi
+  expect(gone).not.toHaveBeenCalled()
+  expect(warn).toHaveBeenCalledTimes(1)
+  warn.mockRestore()
+})
