@@ -12,6 +12,7 @@
 //     token-free so the default dev loop is untouched.
 import crypto from 'node:crypto'
 import { firstHeader } from './httpHeaders'
+import { type HostAllowlist, hostAllowed, safeHostForLog } from './hostAllow'
 import { createLogger } from './logs'
 
 const log = createLogger('auth')
@@ -29,6 +30,13 @@ export const CAPABILITY_HEADER = 'x-webterm-capability'
 export const DEFAULT_HOST = '127.0.0.1'
 
 type Headers = Record<string, string | string[] | undefined>
+/** Allowlist Host; fungsi dievaluasi per request, `undefined` = gerbang mati. */
+export type AllowedHostsArg = HostAllowlist | (() => HostAllowlist | undefined)
+
+function hostOk(headers: Headers, arg: AllowedHostsArg | undefined): boolean {
+  const list = typeof arg === 'function' ? arg() : arg
+  return list === undefined || hostAllowed(headers['host'], list)
+}
 
 // Deliberately NOT including '0.0.0.0' / '::' — those are wildcards that accept every
 // interface, which is the exact case the token requirement exists for.
@@ -106,13 +114,14 @@ export function sameOrigin(headers: Headers): boolean {
   return !(site === 'cross-site' || site === 'same-site')
 }
 
-/** The whole decision for one request: same-origin AND (no token required, or the right token). */
+/** The whole decision for one request: allowed Host AND same-origin AND (no token required, or the right token). */
 export function authorize(args: {
   headers: Headers
   expectedToken: string | undefined
   queryToken?: string | null
+  allowedHosts?: AllowedHostsArg
 }): boolean {
-  if (!sameOrigin(args.headers)) return false
+  if (!hostOk(args.headers, args.allowedHosts) || !sameOrigin(args.headers)) return false
   const candidate = firstHeader(args.headers[TOKEN_HEADER]) ?? args.queryToken
   return tokensMatch(args.expectedToken, candidate)
 }
@@ -154,7 +163,10 @@ export function authorizeRequest(args: {
   /** Validator capability token (`wcap_*`). Tidak wajib: tanpa ini control API tetap
    *  root/node-only, yang merupakan perilaku aman bawaan. */
   isCapabilityToken?: (token: string) => boolean
+  allowedHosts?: AllowedHostsArg
 }): boolean {
+  // Host ditolak menutup semua jalur, termasuk token node/capability.
+  if (!hostOk(args.headers, args.allowedHosts)) return false
   if (authorize(args)) return true
   if (!sameOrigin(args.headers)) return false
   if (isNodeTokenPath(args.pathname)) {
@@ -170,14 +182,16 @@ export function authorizeRequest(args: {
   return args.isCapabilityToken(capability)
 }
 
-/** Why `authorize` said no: a foreign Origin, or a missing/wrong token. */
-export function denyReason(headers: Headers, expectedToken: string | undefined, queryToken?: string | null): 'origin' | 'token' {
+export type DenyReason = 'origin' | 'token' | 'host'
+/** Why `authorize` said no: a foreign Host, a foreign Origin, or a missing/wrong token. */
+export function denyReason(headers: Headers, expectedToken: string | undefined, queryToken?: string | null, allowedHosts?: AllowedHostsArg): DenyReason {
+  if (!hostOk(headers, allowedHosts)) return 'host'
   return sameOrigin(headers) && !tokensMatch(expectedToken, firstHeader(headers[TOKEN_HEADER]) ?? queryToken) ? 'token' : 'origin'
 }
 
-/** Record a refused request (`auth.reject`): path and reason only, never the token or headers. */
-export function logAuthReject(pathname: string, reason: 'origin' | 'token'): void {
-  log.warn('auth.reject', `Rejected request to ${pathname} (${reason})`, { path: pathname, reason })
+/** Record a refused request (`auth.reject`): path and reason only (plus the sanitised Host when the Host was refused), never the token. */
+export function logAuthReject(pathname: string, reason: DenyReason, host?: unknown): void {
+  log.warn('auth.reject', `Rejected request to ${pathname} (${reason})`, { path: pathname, reason, ...(reason === 'host' && { host: safeHostForLog(host) }) })
 }
 
 /** Record that a token-protected surface accepted a credential (`auth.login`); value never logged. */
