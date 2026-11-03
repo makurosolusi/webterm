@@ -1,8 +1,9 @@
 // Server-side composition for POST /api/orchestrator/run: resolve WHAT runs (repo, agent cmd),
 // WHERE it runs (worktree root) and the worker runtime. Every value here comes from the database,
 // settings or the filesystem, never from the request body.
-import { delimiter, join } from 'node:path'
-import { accessSync, constants, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import { binaryOnPath } from './binaryOnPath'
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { type PlanStore } from './orchestrator/plan'
@@ -126,19 +127,6 @@ export function runItemTaskId(
     return null
   }
   return stored?.items.find((candidate) => candidate.id === itemId)?.taskId ?? null
-}
-
-/** True when an executable `name` exists in a PATH directory. */
-function binaryOnPath(name: string): boolean {
-  return (process.env['PATH'] ?? '').split(delimiter).some((dir) => {
-    try {
-      accessSync(join(dir, name), constants.X_OK)
-      return true
-    } catch {
-      // Not in this directory (or unreadable): keep scanning; absence overall is the answer.
-      return false
-    }
-  })
 }
 
 /** Worker kind + launch line from `settings.agentLaunchCommands` (user override wins over the builtin launcher). */
