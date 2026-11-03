@@ -1,5 +1,6 @@
-// Registry env: file manager (PLAN/FILEMANAGER-b.md §5.5). Semua flag OFF; empat perbaikan P0
-// (create-eksklusif, versi/konflik, body cap, penolakan biner) TIDAK di balik flag. Data murni.
+// Registry env: file manager (PLAN/FILEMANAGER-b.md §5.5). Empat flag baca-saja default ON (L11, minim-.env),
+// MUTATE dan UPLOAD tetap OFF; empat perbaikan P0 (create-eksklusif, versi/konflik, body cap, penolakan biner)
+// TIDAK di balik flag. Data murni.
 // Grup + owner 'files' (envRegistry.groups.ts). Semua restart 'hot': dibaca per panggilan. Hanya saklar mutasi yang 'user'.
 import { FILES_LIST_MAX_DEFAULT, FILES_UPLOAD_MAX_MB_DEFAULT } from '../shared/fsLimits'
 import { flagOn } from './envFlag'
@@ -19,9 +20,18 @@ export type FilesFlag = keyof typeof FILES_FLAG
 const LIST_MAX_KEY = 'WEBTERM_FILES_LIST_MAX'
 const UPLOAD_MAX_KEY = 'WEBTERM_FILES_UPLOAD_MAX_MB'
 
-/** Apakah flag file manager `on` (dibaca per panggilan, jadi perubahan dari Pengaturan langsung berlaku). */
+/** Flag baca-saja yang default ON di zero-config (L11). Mutasi/upload sengaja tidak ada di sini: tulis harus opt-in. */
+export const FILES_DEFAULT_ON: ReadonlySet<FilesFlag> = new Set<FilesFlag>(['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN'])
+
+/** Default `on|off` satu flag; sumber tunggal untuk spec registry DAN pembaca (RND/53 G6). */
+function filesDefault(name: FilesFlag): 'on' | 'off' {
+  return FILES_DEFAULT_ON.has(name) ? 'on' : 'off'
+}
+
+/** Apakah flag file manager `on` (dibaca per panggilan). Kosong/tak ada = default flag; nilai eksplisit menang (`off`/typo = mati). */
 export function filesFlagOn(name: FilesFlag, env: NodeJS.ProcessEnv = process.env): boolean {
-  return flagOn(env[FILES_FLAG[name]])
+  const raw = env[FILES_FLAG[name]]
+  return (raw ?? '').trim() === '' ? filesDefault(name) === 'on' : flagOn(raw)
 }
 
 function positiveInt(raw: string | undefined, def: number): number {
@@ -42,12 +52,12 @@ export function filesUploadMaxBytes(env: NodeJS.ProcessEnv = process.env): numbe
 const F = { owner: 'files', section: 'File manager', audience: 'advanced' } as const
 
 export const FILES_ENV_SPECS: readonly EnvSpec[] = [
-  flag(FILES_FLAG.MUTATE, 'files', { ...F, audience: 'user', label: 'Files: mutasi', description: 'Delete (trash + Undo), restore, rename, copy di node files.', hot: true }),
-  flag(FILES_FLAG.VIEWERS, 'files', { ...F, label: 'Files: viewer', description: 'Endpoint raw + viewer gambar/audio/video/PDF. Mati: file non-teks tampil sebagai placeholder.', hot: true }),
-  flag(FILES_FLAG.WATCH, 'files', { ...F, label: 'Files: watcher', description: 'Sinkronisasi listing/editor saat file berubah di luar webterm.', hot: true }),
-  flag(FILES_FLAG.GIT_STATUS, 'files', { ...F, label: 'Files: status git', description: 'Dekorasi status git (M/A/U/...) pada daftar file.', hot: true }),
-  flag(FILES_FLAG.QUICK_OPEN, 'files', { ...F, label: 'Files: Quick Open', description: 'Pencarian file (Ctrl/Cmd+P) saat node files fokus.', hot: true }),
-  flag(FILES_FLAG.UPLOAD, 'files', { ...F, label: 'Files: upload/download', description: 'Upload ke dan download dari node files.', hot: true }),
+  flag(FILES_FLAG.MUTATE, 'files', { ...F, audience: 'user', label: 'Files: mutasi', description: 'Delete (trash + Undo), restore, rename, copy di node files.', hot: true }, filesDefault('MUTATE')),
+  flag(FILES_FLAG.VIEWERS, 'files', { ...F, label: 'Files: viewer', description: 'Endpoint raw + viewer gambar/audio/video/PDF. Mati: file non-teks tampil sebagai placeholder.', hot: true }, filesDefault('VIEWERS')),
+  flag(FILES_FLAG.WATCH, 'files', { ...F, label: 'Files: watcher', description: 'Sinkronisasi listing/editor saat file berubah di luar webterm.', hot: true }, filesDefault('WATCH')),
+  flag(FILES_FLAG.GIT_STATUS, 'files', { ...F, label: 'Files: status git', description: 'Dekorasi status git (M/A/U/...) pada daftar file.', hot: true }, filesDefault('GIT_STATUS')),
+  flag(FILES_FLAG.QUICK_OPEN, 'files', { ...F, label: 'Files: Quick Open', description: 'Pencarian file (Ctrl/Cmd+P) saat node files fokus.', hot: true }, filesDefault('QUICK_OPEN')),
+  flag(FILES_FLAG.UPLOAD, 'files', { ...F, label: 'Files: upload/download', description: 'Upload ke dan download dari node files.', hot: true }, filesDefault('UPLOAD')),
   num(LIST_MAX_KEY, 'files', 100, 100000, FILES_LIST_MAX_DEFAULT, { ...F, unit: 'entri', label: 'Files: batas entri', description: 'Maks entri satu listing direktori; selebihnya dipotong (truncated).', hot: true }),
   num(UPLOAD_MAX_KEY, 'files', 1, 10240, FILES_UPLOAD_MAX_MB_DEFAULT, { ...F, unit: 'MB', label: 'Files: batas upload (MB)', description: 'Ukuran maksimum satu file upload.', hot: true }),
 ]
