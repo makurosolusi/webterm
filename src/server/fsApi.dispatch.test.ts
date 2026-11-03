@@ -86,8 +86,8 @@ describe('fsApi dispatcher', () => {
 
   it('verb lama tetap bentuk lama + field aditif', async () => {
     const f = join(dir, 'legacy.txt')
-    expect(await fsApiRoute('/api/fs/write', 'POST', q(), json({ path: f, content: 'héllo €' }))).toEqual({ status: 200, body: { ok: true, version: '' } })
-    expect((await fsApiRoute('/api/fs/read', 'GET', q({ path: f }), noBody))?.body).toMatchObject({ content: 'héllo €', version: '', encoding: 'utf8' })
+    expect(await fsApiRoute('/api/fs/write', 'POST', q(), json({ path: f, content: 'héllo €' }))).toEqual({ status: 200, body: { ok: true, version: expect.stringMatching(/^\d+-10$/) } })
+    expect((await fsApiRoute('/api/fs/read', 'GET', q({ path: f }), noBody))?.body).toMatchObject({ content: 'héllo €', version: expect.stringMatching(/^\d+-10$/), encoding: 'utf8' })
     const listed = await fsApiRoute('/api/fs/list', 'GET', q({ path: dir }), noBody)
     expect(Array.isArray(listed?.body)).toBe(true)
     expect((await fsApiRoute('/api/fs/exists', 'GET', q({ path: f }), noBody))?.body).toEqual({ exists: true })
