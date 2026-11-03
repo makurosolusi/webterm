@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { lstatSync, readFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { allRows, getRow } from '../ledger/ledgerCore'
+import { allRows } from '../ledger/ledgerCore'
 import { realPathInsideRoot } from '../orchestrator/safePath'
 import type { Database } from 'bun:sqlite'
 import { KB_MAX_FILE_BYTES, KnowledgeError } from './knowledgeStore'
@@ -105,12 +105,27 @@ export function scanSource(root: string, rel: string, loader: string): ScannedFi
 
 export interface DiscoveredWorkspace { workspaceId: string; name: string; cwd: string; gitRoot: string | null }
 
-/** Workspaces whose cwd has no ledger project yet, with the git toplevel when the cwd is in a repo. */
-export async function discoverProjects(ledger: Database, limit = MAX_DISCOVER): Promise<DiscoveredWorkspace[]> {
-  if (!getRow(ledger, "SELECT 1 AS one FROM sqlite_master WHERE type = 'table' AND name = 'workspace'")) return []
-  const rows = allRows(ledger, `SELECT w.id, w.name, w.cwd FROM workspace w
-    WHERE NOT EXISTS (SELECT 1 FROM project p WHERE p.workspace_id = w.id OR p.path = w.cwd)
-    ORDER BY w.updated_at DESC LIMIT ?`, Math.min(Math.max(limit, 1), MAX_DISCOVER))
+/** Stored workspace fields discovery reads (`Db.list` rows). */
+export interface DiscoverableWorkspace { id?: string; name: string; cwd?: string; updatedAt?: number }
+
+/**
+ * Workspaces whose cwd has no ledger project yet, with the git toplevel when the cwd is in a repo.
+ * `workspaces` come from the workspace store (webterm.db, a different file from the ledger); null = no store.
+ */
+export async function discoverProjects(
+  ledger: Database, workspaces: DiscoverableWorkspace[] | null, limit = MAX_DISCOVER
+): Promise<DiscoveredWorkspace[]> {
+  if (!workspaces) return []
+  const ids = new Set<string>()
+  const paths = new Set<string>()
+  for (const p of allRows(ledger, 'SELECT workspace_id, path FROM project')) {
+    if (p.workspace_id != null) ids.add(String(p.workspace_id))
+    paths.add(String(p.path))
+  }
+  const rows = workspaces
+    .filter((w) => w.id && w.cwd && !ids.has(w.id) && !paths.has(w.cwd))
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+    .slice(0, Math.min(Math.max(limit, 1), MAX_DISCOVER))
   const out: DiscoveredWorkspace[] = []
   for (const r of rows) {
     const cwd = String(r.cwd)

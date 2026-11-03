@@ -50,8 +50,9 @@ const dev = process.env.NODE_ENV !== 'production'
 
 // Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
 const ledgerRuntime = startLedgerRuntime()
-// Project-scoped chats carry workspace ids; the ledger creates its project row from this store.
-registerWorkspaceLookup((id) => db.get(id))
+// Workspaces live in webterm.db, never the ledger file: project chats, node.list, browser tools and
+// project.discover resolve them through this store.
+registerWorkspaceLookup((id) => db.get(id), () => db.list())
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
   startLedgerReaper(ledgerRuntime.ledger)

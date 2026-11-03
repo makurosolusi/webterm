@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import { createKnowledgePort } from '../../../knowledge/knowledgeBrief'
 import { discoverProjects } from '../../../knowledge/knowledgeScan'
+import { listWorkspaces } from '../../workspaceLookup'
 import { KB_LIST_MAX, KB_MAP_DEFAULT } from '../../../knowledge/knowledgeMap'
 import { KnowledgeError } from '../../../knowledge/knowledgeStore'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult, ToolValidationCode } from '../toolTypes'
@@ -73,7 +74,7 @@ export function createKnowledgeDefs(openKb: () => Database): ToolDef[] {
     validate: (input): ToolValidationCode | null => (intIn(input.limit, 1, 50) ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       try {
-        return { ok: true, data: { workspaces: await discoverProjects(ctx.db, limitOf(input.limit, 50)) } }
+        return { ok: true, data: { workspaces: await discoverProjects(ctx.db, listWorkspaces(), limitOf(input.limit, 50)) } }
       } catch (err) { return coded(err) }
     },
   }

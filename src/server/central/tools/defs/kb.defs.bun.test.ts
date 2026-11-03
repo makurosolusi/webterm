@@ -7,6 +7,7 @@ import { allRows } from '../../../ledger/ledgerCore'
 import { FIXTURE_SECRET, NOW, makeLedger, makeRepo, sh } from '../../../knowledge/knowledgeFixture.testutil'
 import { openKnowledgeDb } from '../../../knowledge/knowledgeStore'
 import { refreshIndex } from '../../../knowledge/knowledgeFresh'
+import { registerWorkspaceLookup } from '../../workspaceLookup'
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ToolCtx } from '../toolTypes'
@@ -100,13 +101,16 @@ test('project.discover lists workspaces without a project, with git root', async
   const root = makeRepo()
   const plain = mkdtempSync(join(tmpdir(), 'kbplain-'))
   const { ctx, ledger } = setup(root, { [KNOWLEDGE_FLAG]: 'on' })
-  expect(JSON.stringify((await execTool(ctx, 'project.discover', {})).data)).toBe('{"workspaces":[]}') // no workspace table yet
-  ledger.exec('CREATE TABLE workspace (id TEXT PRIMARY KEY, name TEXT, cwd TEXT, updated_at INTEGER)')
-  const ins = ledger.query('INSERT INTO workspace (id, name, cwd, updated_at) VALUES (?,?,?,?)')
-  ins.run('w-p1', 'registered', root, 1)
-  ins.run('w-git', 'a repo', join(root, 'src'), 3)
-  ins.run('w-plain', 'plain dir', plain, 2)
+  expect(JSON.stringify((await execTool(ctx, 'project.discover', {})).data)).toBe('{"workspaces":[]}') // no store registered yet
+  // The workspace store is webterm.db, a separate file: the ledger has no workspace table (production layout).
+  const store = [
+    { id: 'w-git', name: 'a repo', cwd: join(root, 'src'), updatedAt: 3 },
+    { id: 'w-plain', name: 'plain dir', cwd: plain, updatedAt: 2 },
+    { id: 'w-p1', name: 'registered', cwd: root, updatedAt: 1 },
+  ]
+  const unregister = registerWorkspaceLookup((id) => store.find((w) => w.id === id) ?? null, () => store)
   const r = await execTool(ctx, 'project.discover', {})
+  unregister()
   const ws = (r.data as { workspaces: Array<{ workspaceId: string; gitRoot: string | null }> }).workspaces
   expect(ws.map((w) => w.workspaceId).join(',')).toBe('w-git,w-plain')
   expect(ws[0]?.gitRoot?.endsWith(root.split('/').pop() as string)).toBe(true)

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { registerWorkspaceLookup } from '../../workspaceLookup'
 import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixture.testutil'
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
@@ -7,17 +8,20 @@ import { NODE_READ_DEFS } from './read.node'
 import { READ_TOOLS_FLAG } from './read.shared'
 
 let f: Fixture
+let unregister = (): void => undefined
 beforeEach(() => { f = openFixture(); seedPortfolio(f.db) })
-afterEach(() => f.close())
+afterEach(() => { unregister(); f.close() })
 
 function ctx(): ToolCtx {
   const registry = createRegistry()
   NODE_READ_DEFS.forEach((d) => registry.register(d))
   return { db: f.db, registry, guard: ALLOW_ALL_GUARD, maxTier: 'R0', conversationId: 'central:global', now: () => 1, env: { [READ_TOOLS_FLAG]: 'on' } }
 }
+/** The workspace store is a separate file (webterm.db) in production: the ledger fixture has no workspace table. */
 function workspace(nodes: unknown): void {
-  f.db.exec('CREATE TABLE workspace (id TEXT PRIMARY KEY, name TEXT NOT NULL, nodes TEXT NOT NULL)')
-  f.db.query('INSERT INTO workspace (id, name, nodes) VALUES (?, ?, ?)').run('w-p1', 'Alpha WS', typeof nodes === 'string' ? nodes : JSON.stringify(nodes))
+  // Mirrors `Db.get`: the stored blob is parsed on read, so a corrupt blob throws.
+  const blob = typeof nodes === 'string' ? nodes : JSON.stringify(nodes)
+  unregister = registerWorkspaceLookup((id) => (id === 'w-p1' ? { name: 'Alpha WS', nodes: JSON.parse(blob) as unknown[] } : null))
 }
 
 describe('node.list', () => {
@@ -40,6 +44,8 @@ describe('node.list', () => {
   it('returns coded failures: no table, no workspace row, corrupt blob, bad paging', async () => {
     expect(await execTool(ctx(), 'node.list', { projectId: 'p1' })).toMatchObject({ ok: false, code: 'workspace_unavailable' })
     workspace('{not json')
+    expect(await execTool(ctx(), 'node.list', { projectId: 'p1' })).toMatchObject({ ok: false, code: 'workspace_corrupt' })
+    workspace('{"not":"an array"}')
     expect(await execTool(ctx(), 'node.list', { projectId: 'p1' })).toMatchObject({ ok: false, code: 'workspace_corrupt' })
     expect(await execTool(ctx(), 'node.list', { projectId: 'p2' })).toMatchObject({ ok: false, code: 'workspace_not_found' })
     for (const bad of [{ limit: 0 }, { limit: 51 }, { offset: -1 }, { limit: 'x' }]) {
