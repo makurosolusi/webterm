@@ -2,6 +2,7 @@
 // dilakukan lewat `onGo` milik pemanggil, jadi semua jalur memakai validasi server yang sama.
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { loadRecent } from './browser.recent'
 import { SHORTCUTS } from './browser.startpage.data'
@@ -32,10 +33,10 @@ export default function BrowserStartPage({ onGo }: { onGo: (url: string) => void
       <ul className="browser-start-grid" aria-label={START_TEXT.shortcuts}>
         {SHORTCUTS.map((s) => (
           <li key={s.id}>
-            <button type="button" className="browser-start-tile" aria-label={START_TEXT.open(s.label)} onClick={() => onGo(s.url)}>
+            <Button type="button" variant="ghost" className="browser-start-tile" aria-label={START_TEXT.open(s.label)} onClick={() => onGo(s.url)}>
               <span className="browser-start-icon" style={{ background: s.color }} aria-hidden="true">{s.initial}</span>
               <span className="browser-start-name">{s.label}</span>
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -45,10 +46,10 @@ export default function BrowserStartPage({ onGo }: { onGo: (url: string) => void
           <ul className="browser-start-recent">
             {recent.map((r) => (
               <li key={r.host}>
-                <button type="button" className="browser-start-item" onClick={() => onGo(r.url)}>
+                <Button type="button" variant="ghost" className="browser-start-item" onClick={() => onGo(r.url)}>
                   <span className="browser-start-title">{r.title || r.host}</span>
                   <span className="browser-start-host">{r.host}</span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
