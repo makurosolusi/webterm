@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-// Pintasan Settings di activity bar (slot tepat di bawah "Add node"): membuka dialog modal yang sama
+// Pintasan Settings di grup bawah rail (di atas Lock view, ala "Manage" VS Code): membuka dialog modal yang sama
 // dengan File > Settings…, jadi ia tidak boleh tampil sebagai panel "terpilih".
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -20,29 +20,43 @@ const baseProps: DockProps = {
 afterEach(cleanup)
 
 describe('pintasan Settings di activity bar', () => {
-  it('ada tepat setelah Add node dan klik memanggil handler sekali', () => {
+  it('ada di grup bawah, bukan di <nav>, dan klik memanggil handler sekali', () => {
     const onOpenSettings = vi.fn()
     render(<Dock {...baseProps} onOpenSettings={onOpenSettings} />)
-    const labels = Array.from(document.querySelectorAll('.vscode-activity-bar__item')).map((b) => b.getAttribute('aria-label'))
-    expect(labels.indexOf('Settings')).toBe(labels.indexOf('Add node') + 1)
-
     const btn = screen.getByLabelText('Settings')
+    expect(btn.closest('[data-slot="dock-modes"]')).not.toBeNull()
+    expect(btn.closest('nav')).toBeNull()
     expect(btn.getAttribute('title')).toBe('Settings')
     expect(btn.querySelector('.codicon-settings-gear')).not.toBeNull()
     fireEvent.click(btn)
     expect(onOpenSettings).toHaveBeenCalledTimes(1)
   })
 
+  it('urutan grup bawah: settings, lock, clean view', () => {
+    render(<Dock {...baseProps} onOpenSettings={noop} />)
+    const group = document.querySelector('[data-slot="dock-modes"]')!
+    expect(Array.from(group.children).map((b) => b.getAttribute('aria-label')))
+      .toEqual(['Settings', 'Lock view', 'Clean view'])
+  })
+
+  it('Settings bukan toggle; lock dan clean view tetap ber-aria-pressed', () => {
+    render(<Dock {...baseProps} onOpenSettings={noop} />)
+    expect(screen.getByLabelText('Settings').hasAttribute('aria-pressed')).toBe(false)
+    expect(screen.getByLabelText('Lock view').hasAttribute('aria-pressed')).toBe(true)
+    expect(screen.getByLabelText('Clean view').hasAttribute('aria-pressed')).toBe(true)
+  })
+
   it('tidak dirender bila handler tak diberikan', () => {
     render(<Dock {...baseProps} />)
     expect(screen.queryByLabelText('Settings')).toBeNull()
+    expect(document.querySelector('[data-slot="dock-modes"]')!.children).toHaveLength(2)
   })
 
   it('tidak pernah ditandai aktif, bahkan saat panel lain terbuka', () => {
     render(<Dock {...baseProps} sessionsOpen onOpenSettings={noop} />)
     const btn = screen.getByLabelText('Settings')
     expect(btn.hasAttribute('aria-current')).toBe(false)
-    expect(btn.getAttribute('data-active')).toBe('false')
+    expect(btn.hasAttribute('data-active')).toBe(false)
     expect(screen.getByLabelText('Toggle sessions panel').getAttribute('aria-current')).toBe('page')
   })
 })
