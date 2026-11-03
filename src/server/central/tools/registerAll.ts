@@ -2,6 +2,7 @@
 // flag at registration time, so with all flags off the registry (and `toolsHash`) is the core-only one.
 import type { Database } from 'bun:sqlite'
 import { flagOn } from '../../envFlag'
+import { isEnabled } from '../../featureCapabilities.runtime'
 import type { UserMemoryStore } from '../../memory/memoryUserStore'
 import type { AgentExecutor } from '../agents/agentExecutor'
 import type { MailDeliver } from '../agents/mailDeliver'
@@ -14,7 +15,6 @@ import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
 import { createMemoryDefs } from './defs/memory.defs'
 import { NODE_READ_DEFS } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
-import { READ_TOOLS_FLAG } from './defs/read.shared'
 import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
 import { TASK_RUN_DEF } from './defs/task.run.def'
@@ -22,7 +22,6 @@ import type { ToolDef, ToolRegistry } from './toolTypes'
 
 export { toolsHash } from './toolRegistry'
 
-const MEMORY_FLAG = 'WEBTERM_CENTRAL_MEMORY'
 const BOTS_FLAG = 'WEBTERM_CENTRAL_BOTS'
 const AGENT_MODES = ['propose', 'auto']
 
@@ -43,14 +42,16 @@ const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?
 
 /** Registers the groups whose flag is on and returns the names added (already-registered names are skipped). */
 export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env: Env = process.env): string[] {
+  // Read tools dan memori ikut `central` (turunan, ENVSIMPLE D5); env efektif dari boot sudah memuat kunci turunannya.
+  const central = isEnabled('central', env)
   const groups: Array<[boolean, () => readonly ToolDef[]]> = [
-    [on(env, READ_TOOLS_FLAG), () => [...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
+    [central, () => [...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
     [agentsOn(env) && !!deps.executor, () => createAgentDefs(deps.executor as AgentExecutor)],
     [agentsOn(env), () => [TASK_RUN_DEF]],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],
     [on(env, KNOWLEDGE_FLAG) && !!deps.openKb, () => createKnowledgeDefs(deps.openKb as () => Database)],
     [on(env, SKILLS_FLAG) && !!deps.skills, () => createSkillDefs(deps.skills as SkillStoreResolver)],
-    [on(env, MEMORY_FLAG), () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
+    [central, () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],
     [on(env, BROWSER_TOOLS_FLAG) && !!deps.browser, () => createBrowserDefs(deps.browser as BrowserToolDeps)],
   ]
