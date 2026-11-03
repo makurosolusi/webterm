@@ -173,7 +173,7 @@ test('dispatcher: flag VIEWERS off -> 501 EDISABLED, on -> 200 raw; not-a-file -
     await withTmp(async (at) => {
       await fs.writeFile(at('a.png'), 'png')
       const call = (p: string) => fsApiRoute('/api/fs/raw', 'GET', new URLSearchParams({ path: p }), () => Promise.resolve(''), { headers: {} })
-      delete process.env.WEBTERM_FILES_VIEWERS
+      process.env.WEBTERM_FILES_VIEWERS = 'off' // default ON (L11): jalur mati butuh `off` eksplisit
       const off = await call(at('a.png'))
       expect(off?.status).toBe(501)
       process.env.WEBTERM_FILES_VIEWERS = 'on'

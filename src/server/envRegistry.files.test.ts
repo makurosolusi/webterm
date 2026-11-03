@@ -6,9 +6,9 @@ import { FILES_ENV_SPECS, FILES_FLAG, filesFlagOn, filesListMax, filesUploadMaxB
 import { validateEnvValue } from './envSettings.validate'
 
 describe('envRegistry.files', () => {
-  it('enam flag terdaftar, kind flag, default OFF, bukan dangerous, dan ada di ENV_REGISTRY', () => {
+  it('enam flag terdaftar, kind flag, bukan dangerous, dan ada di ENV_REGISTRY', () => {
     for (const key of Object.values(FILES_FLAG)) {
-      expect(specFor(key), key).toMatchObject({ kind: 'flag', default: 'off', dangerous: false })
+      expect(specFor(key), key).toMatchObject({ kind: 'flag', dangerous: false })
       expect(ENV_REGISTRY.some((s) => s.key === key)).toBe(true)
     }
     expect(Object.keys(FILES_FLAG)).toHaveLength(6)
@@ -20,13 +20,29 @@ describe('envRegistry.files', () => {
     for (const s of FILES_ENV_SPECS) expect(validateEnvValue(s, s.default ?? ''), s.key).toMatchObject({ ok: true })
   })
 
-  it('filesFlagOn: kosong/off/typo = false, hanya `on` = true', () => {
+  it('L11: empat flag baca-saja default on di registry, mutate/upload tetap off', () => {
+    const readOnly: FilesFlag[] = ['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN']
     for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
-      expect(filesFlagOn(name, {})).toBe(false)
+      expect(specFor(FILES_FLAG[name])?.default, name).toBe(readOnly.includes(name) ? 'on' : 'off')
+    }
+  })
+
+  it('filesFlagOn: env kosong => paritas dengan default registry (G6); mutate/upload false', () => {
+    for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
+      expect(filesFlagOn(name, {}), name).toBe(specFor(FILES_FLAG[name])?.default === 'on')
+      expect(filesFlagOn(name, { [FILES_FLAG[name]]: '  ' }), name).toBe(filesFlagOn(name, {}))
+    }
+    for (const name of ['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN'] as const) expect(filesFlagOn(name, {})).toBe(true)
+    for (const name of ['MUTATE', 'UPLOAD'] as const) expect(filesFlagOn(name, {})).toBe(false)
+  })
+
+  it('filesFlagOn: nilai eksplisit menang; off/typo = false, on (spasi/kapital ok) = true', () => {
+    for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
       expect(filesFlagOn(name, { [FILES_FLAG[name]]: 'off' })).toBe(false)
       expect(filesFlagOn(name, { [FILES_FLAG[name]]: 'yes' })).toBe(false)
       expect(filesFlagOn(name, { [FILES_FLAG[name]]: ' ON ' })).toBe(true)
     }
+    expect(filesFlagOn('MUTATE', { WEBTERM_FILES_MUTATE: 'on' })).toBe(true)
   })
 
   it('filesListMax / filesUploadMaxBytes: default, override sah, nilai sampah jatuh ke default', () => {

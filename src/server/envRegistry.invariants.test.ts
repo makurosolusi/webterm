@@ -27,9 +27,9 @@ const KNOWN_KEYS_FROZEN: readonly string[] = [
   'WEBTERM_TRUST_PROXY', 'WEBTERM_LOG_LEVEL', 'WEBTERM_LOG_BUFFER', 'WEBTERM_LOG_FILE',
   // ca2
   'WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_CHECKPOINT', 'WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_TOKENS',
-  'WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_DAILY_COST_MICROS', 'WEBTERM_CENTRAL_TOOL_BRIDGE',
+  'WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_DAILY_COST_MICROS',
   'WEBTERM_CENTRAL_SKILLS', 'WEBTERM_CENTRAL_SKILL_PROPOSE', 'WEBTERM_CENTRAL_BOTS', 'WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'WEBTERM_KNOWLEDGE',
-  'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL', 'WEBTERM_AGENT_IDLE_DONE_MS', 'WEBTERM_CENTRAL_RELIABILITY',
+  'WEBTERM_AGENT_IDLE_DONE_MS', 'WEBTERM_CENTRAL_RELIABILITY',
   'WEBTERM_CENTRAL_MAX_INFLIGHT', 'WEBTERM_AGENT_MAIL', 'WEBTERM_CENTRAL_READ_TOOLS', 'WEBTERM_CENTRAL_CONTEXT_WINDOW', 'WEBTERM_CENTRAL_TURN_STEPS',
   // files
   'WEBTERM_FILES_MUTATE', 'WEBTERM_FILES_VIEWERS', 'WEBTERM_FILES_WATCH', 'WEBTERM_FILES_GIT_STATUS', 'WEBTERM_FILES_QUICK_OPEN', 'WEBTERM_FILES_UPLOAD',
@@ -39,13 +39,11 @@ const KNOWN_KEYS_FROZEN: readonly string[] = [
   'WEBTERM_BROWSER_ALLOW_HOSTS', 'WEBTERM_BROWSER_COOKIE_IMPORT', 'WEBTERM_BROWSER_COOKIE_TTL_DAYS',
 ]
 
+/** Kunci pensiun (EM-04, L9): spec dihapus karena tanpa pembaca; override tersimpan lama tetap dipertahankan store, bukan dikenali registry. */
+const RETIRED_KEYS: readonly string[] = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL']
+
 /** Kunci tampil tanpa pembaca literal di src/server|shared; wajib alasan tertulis. Kosong = tiap kunci punya pembaca. */
-const READER_ALLOWLIST: Readonly<Record<string, string>> = {
-  WEBTERM_CENTRAL_TOOL_BRIDGE: 'Dicadangkan CA2; belum ada pembaca (tool bridge opencode belum dibangun). Stage experimental, deskripsi jujur.',
-  WEBTERM_KNOWLEDGE_GRAPHIFY: 'Dicadangkan CA2; pengisian knowledge lewat graphify belum dibangun. Stage experimental, deskripsi jujur.',
-  WEBTERM_EMBED_URL: 'Hanya komentar TODO(ca2-08) di memoryHybrid.ts; klien embedding belum ada. Stage experimental, deskripsi jujur.',
-  WEBTERM_EMBED_MODEL: 'Pasangan WEBTERM_EMBED_URL; belum ada pembaca. Stage experimental, deskripsi jujur.',
-}
+const READER_ALLOWLIST: Readonly<Record<string, string>> = {}
 
 /** Kunci file manager dibaca lewat helper bernama (literal hanya di registry); pembacanya ditandai pemanggilan helper. */
 const FILES_READER_MARKER: Readonly<Record<string, string>> = {
@@ -185,6 +183,8 @@ describe('invarian 8: kunci beku', () => {
   it('KNOWN_KEYS_FROZEN tetap ter-resolve di registry gabungan; tak ada duplikat', () => {
     expect(new Set(KNOWN_KEYS_FROZEN).size).toBe(KNOWN_KEYS_FROZEN.length)
     expect(KNOWN_KEYS_FROZEN.filter((k) => specFor(k) === undefined)).toEqual([])
+    for (const k of RETIRED_KEYS) expect(specFor(k), k).toBeUndefined()
+    expect(RETIRED_KEYS.filter((k) => KNOWN_KEYS_FROZEN.includes(k))).toEqual([])
     for (const k of Object.values(ENV_BROWSER)) expect(KNOWN_KEYS_FROZEN).toContain(k)
   })
   it('semua kunci registry tercantum di daftar beku (kunci baru wajib didaftarkan sadar)', () => {
@@ -192,7 +192,15 @@ describe('invarian 8: kunci beku', () => {
   })
   it('bootstrap-only tidak pernah ada di registry', () => {
     for (const k of BOOTSTRAP_ONLY_KEYS) expect(specFor(k), k).toBeUndefined()
-    expect(BOOTSTRAP_ONLY_KEYS).toHaveLength(10)
+    expect(BOOTSTRAP_ONLY_KEYS).toHaveLength(11)
+    expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_ALLOWED_HOSTS')
+  })
+  it('kunci bootstrap yang didokumentasikan ke operator tepat 9 (L1)', () => {
+    const operator = BOOTSTRAP_ONLY_KEYS.filter((k) => k !== 'WEBTERM_HOST' && k !== 'WEBTERM_TELEGRAM_API_BASE')
+    expect([...operator].sort()).toEqual([
+      'HOST', 'PORT', 'WEBTERM_ALLOWED_HOSTS', 'WEBTERM_ALLOW_LOOPBACK_APPROVAL', 'WEBTERM_ALLOW_TOKEN_MINT',
+      'WEBTERM_DATA_DIR', 'WEBTERM_ENV_SETTINGS', 'WEBTERM_STRICT_HOOK_AUTH', 'WEBTERM_TOKEN',
+    ])
   })
 })
 

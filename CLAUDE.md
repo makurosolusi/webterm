@@ -32,7 +32,7 @@ Data dir webterm SENDIRI: `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
 
 - `TMPDIR=/tmp/st npm run typecheck` — `tsc --noEmit`. Gate tercepat.
 - `TMPDIR=/tmp/st npm test` — vitest (`vitest run`, node-env default, test DOM per-file via pragma `/** @vitest-environment jsdom */`).
-- `TMPDIR=/tmp/st bun test src/server/*.bun.test.ts` — semua test Bun-only (round-trip PTY,
+- `TMPDIR=/tmp/st bun test --no-env-file src/server/*.bun.test.ts` (atau `npm run test:bun`) — semua test Bun-only (round-trip PTY,
   store SQLite, API workspace, operasi fs). Glob, bukan daftar nama: daftar nama basi tanpa
   pernah merah.
 - **Jebakan macOS:** test bind unix socket di `$TMPDIR`; path default bisa >104 char (batas

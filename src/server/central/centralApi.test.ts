@@ -54,8 +54,9 @@ describe('route matching and flags', () => {
   it('reads WEBTERM_CENTRAL only when it is exactly "on"', () => {
     expect(centralEnabled('on')).toBe(true)
     expect(centralEnabled(' ON ')).toBe(true)
-    expect(centralEnabled('true')).toBe(false)
-    expect(centralEnabled('1')).toBe(false)
+    expect(centralEnabled('true')).toBe(true)
+    expect(centralEnabled('1')).toBe(true)
+    expect(centralEnabled('yes')).toBe(false)
     expect(centralEnabled(undefined)).toBe(false)
   })
 

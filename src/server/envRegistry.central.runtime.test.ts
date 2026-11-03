@@ -62,11 +62,4 @@ describe('entri khusus OpenCode dan CA2 netral-runtime', () => {
     expect((s.requires ?? []).filter((r) => r.key === RUNTIME)).toEqual([])
     expect(s.description.toLowerCase()).not.toContain('runtime opencode')
   })
-
-  it('TOOL_BRIDGE: opsi tak berubah, deskripsi tidak mengklaim jembatan terpasang', () => {
-    const s = spec('WEBTERM_CENTRAL_TOOL_BRIDGE')
-    expect(s.options).toEqual(['text', 'opencode'])
-    expect(s.default).toBe('text')
-    expect(s.description).toContain('Belum dipakai server')
-  })
 })

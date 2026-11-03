@@ -2,6 +2,7 @@
 // Never throws, drops below-level calls before doing any work, and writes to: ring buffer (-> API/SSE),
 // console mirror, and the daily file sink.
 import { isLogLevel, LOG_LEVELS, type LogEntry, type LogLevel } from '../../shared/logEntry'
+import { parseFlag } from '../envFlag'
 import { logBus, parseCapacity } from './logBus'
 import { mirrorToConsole } from './logConsole'
 import { createFileSink, type FileSink } from './logFileSink'
@@ -105,7 +106,7 @@ export function configureLogging(config: LoggingConfig = {}): void {
   state.level = parseLevel(env.WEBTERM_LOG_LEVEL) ?? state.level
   logBus.setCapacity(parseCapacity(env.WEBTERM_LOG_BUFFER))
   if (config.console !== undefined) state.console = config.console
-  const fileOn = (env.WEBTERM_LOG_FILE ?? 'on').trim().toLowerCase() !== 'off'
+  const fileOn = parseFlag(env.WEBTERM_LOG_FILE) !== 'off'
   if (fileOn && config.dir && state.sink?.dir !== config.dir) {
     const sink = createFileSink({ dir: config.dir })
     for (const entry of logBus.snapshot()) sink.write(entry)

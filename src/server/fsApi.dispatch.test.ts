@@ -22,6 +22,7 @@ describe('fsApi dispatcher', () => {
   afterAll(async () => { await rm(dir, { recursive: true, force: true }) })
 
   it('flag mati -> 501 EDISABLED SEBELUM body dibaca, untuk setiap verb berflag', async () => {
+    for (const k of Object.values(FILES_FLAG)) process.env[k] = 'off' // empat flag baca-saja default ON (L11): matikan eksplisit
     for (const [verb, method, params] of GATED) {
       const body = vi.fn(noBody)
       const res = await fsApiRoute(`/api/fs/${verb}`, method, q(params), body)
@@ -63,13 +64,15 @@ describe('fsApi dispatcher', () => {
     expect(await fsApiRoute('/api/other/list', 'GET', q(), noBody)).toBeNull()
   })
 
-  it('capabilities mencerminkan env (default semua off, listMax 5000)', async () => {
-    const off = await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody)
-    expect(off).toEqual({ status: 200, body: { ok: true, mutate: false, viewers: false, watch: false, git: false, quickOpen: false, upload: false, listMax: 5000 } })
+  it('capabilities mencerminkan env (default L11: baca-saja on, mutate/upload off, listMax 5000)', async () => {
+    const def = await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody)
+    expect(def).toEqual({ status: 200, body: { ok: true, mutate: false, viewers: true, watch: true, git: true, quickOpen: true, upload: false, listMax: 5000 } })
+    process.env[FILES_FLAG.GIT_STATUS] = 'off'
+    expect((await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody))?.body).toMatchObject({ git: false, viewers: true })
     process.env[FILES_FLAG.MUTATE] = 'on'
     process.env[FILES_FLAG.UPLOAD] = 'on'
     process.env.WEBTERM_FILES_LIST_MAX = '100'
-    expect((await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody))?.body).toMatchObject({ mutate: true, upload: true, git: false, listMax: 100 })
+    expect((await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody))?.body).toMatchObject({ mutate: true, upload: true, git: false, viewers: true, listMax: 100 })
   })
 
   it('FsFail dipetakan ke status: create ke file ada -> 409 EEXIST dan isi lama utuh', async () => {

@@ -9,7 +9,7 @@ import LevelPanel from './LevelPanel'
 import MemoryView from './MemoryView'
 import SkillReview from './SkillReview'
 import { CL } from './centralLabels'
-import { centralControlApi, centralControlEnabled } from './centralControlApi'
+import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
 import './central.css'
 
@@ -24,9 +24,11 @@ const TABS: BottomPanelTab[] = [
 ]
 
 /** Flag plus persisted open state for the Dock toggle; `enabled` false means App wires nothing. */
-export function useCentralControl(enabled: boolean = centralControlEnabled()) {
+export function useCentralControl(override?: boolean) {
+  const enabled = useCentralControlEnabled(override)
+  // Flag dimuat async dari server, jadi state buka dibaca tanpa gerbang `enabled`; `open` di bawah yang menggerbangi.
   const [open, setOpen] = useState(() => {
-    try { return enabled && localStorage.getItem(OPEN_KEY) === '1' } catch { return false }
+    try { return localStorage.getItem(OPEN_KEY) === '1' } catch { return false }
   })
   const set = useCallback((next: boolean) => {
     setOpen(next)
@@ -42,7 +44,8 @@ export interface CentralControlPanelProps {
   client?: CentralControlClient
 }
 
-export default function CentralControlPanel({ open, onClose, enabled = centralControlEnabled(), client = centralControlApi }: CentralControlPanelProps) {
+export default function CentralControlPanel({ open, onClose, enabled: enabledProp, client = centralControlApi }: CentralControlPanelProps) {
+  const enabled = useCentralControlEnabled(enabledProp)
   const [tab, setTab] = useState<TabId>('control')
   const [status, setStatus] = useState<StatusView | null>(null)
   const [approvalsKey, setApprovalsKey] = useState(0)

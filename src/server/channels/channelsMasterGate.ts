@@ -1,6 +1,8 @@
 // The master kill switch that sits above every provider flag (`WEBTERM_TELEGRAM`, later adapters).
 // Keeping it separate from the HTTP edge means one obvious place decides whether the channel
 // runtime exists at all, and the runtime module stays under its size budget.
+import { parseFlag } from '../envFlag'
+
 export const CHANNELS_MASTER_ENV = 'WEBTERM_CHANNELS'
 
 /** The only values this iteration implements; `readonly|control` remain planned. */
@@ -15,8 +17,6 @@ export type ChannelsMasterState = 'on' | 'off' | 'unsupported'
  * line so it can name the supported values exactly once.
  */
 export function channelsMasterState(env: NodeJS.ProcessEnv = process.env): ChannelsMasterState {
-  const raw = (env[CHANNELS_MASTER_ENV] ?? '').trim().toLowerCase()
-  if (raw === '' || raw === 'on') return 'on'
-  if (raw === 'off') return 'off'
-  return 'unsupported'
+  if ((env[CHANNELS_MASTER_ENV] ?? '').trim() === '') return 'on'
+  return parseFlag(env[CHANNELS_MASTER_ENV]) ?? 'unsupported'
 }

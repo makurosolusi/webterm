@@ -1,6 +1,7 @@
 // Pembangun state env v2 (GET /api/settings/env): nilai ternormalisasi, validitas, nilai efektif.
 // Murni (tanpa I/O). Secret tidak pernah membawa nilai; token root hanya jadi boolean.
 import type { EnvEntryV2, EnvGroupMeta, EnvSourceV2, EnvStateV2 } from '../shared/envSettings.contract'
+import { parseFlag } from './envFlag'
 import { groupMetaFor } from './envRegistry.groups'
 import { resolveMeta } from './envRegistry.meta'
 import type { EnvKind, EnvSpec } from './envRegistry.types'
@@ -36,10 +37,12 @@ const REASON_ABSOLUTE = 'Harus path absolut.'
 
 const nonEmpty = (v: string | undefined): v is string => v !== undefined && v.trim() !== ''
 
-/** Dari mana nilai spec ini berasal. */
-export function sourceOf(spec: EnvSpec, i: Pick<StateInput, 'fileSecrets' | 'overrides' | 'base'>): EnvSourceV2 {
+const FILE_VARIANT_SUFFIX = '_FILE'
+
+/** Dari mana nilai spec ini berasal. Varian `<KEY>_FILE` di env (mis. secret webhook Telegram) = sumber env. */
+export function sourceOf(spec: EnvSpec, i: Pick<StateInput, 'fileSecrets' | 'overrides' | 'base' | 'target'>): EnvSourceV2 {
   if (spec.kind === 'secret' ? i.fileSecrets.has(spec.key) : i.overrides[spec.key] !== undefined) return 'override'
-  return nonEmpty(i.base[spec.key]) ? 'env' : 'default'
+  return nonEmpty(i.base[spec.key]) || nonEmpty(i.target[spec.key + FILE_VARIANT_SUFFIX]) ? 'env' : 'default'
 }
 
 interface View { value: string; valid: boolean; invalidReason?: string; rawValue?: string }
@@ -49,8 +52,8 @@ function view(spec: EnvSpec, raw: string | undefined): View {
   const t = (raw ?? '').trim()
   const fallback = spec.default ?? ''
   if (t === '') return { value: fallback, valid: true }
-  const lower = t.toLowerCase()
-  if (spec.kind === 'flag' && (lower === 'on' || lower === 'off')) return { value: lower, valid: true }
+  const flagValue = spec.kind === 'flag' ? parseFlag(t) : undefined
+  if (flagValue) return { value: flagValue, valid: true }
   const check = spec.kind === 'flag' ? undefined : validateEnvValue(spec, t)
   if (check?.ok) return { value: check.value, valid: true }
   const invalidReason = spec.kind === 'string' && spec.absolutePath ? REASON_ABSOLUTE : REASON[spec.kind]
@@ -58,11 +61,20 @@ function view(spec: EnvSpec, raw: string | undefined): View {
   return { value, valid: false, invalidReason, rawValue: t.slice(0, RAW_VALUE_MAX_CHARS) }
 }
 
+/** Override aktif tapi env awal berisi nilai lain (diabaikan). Dibandingkan di server; hanya boolean keluar. */
+function envShadowed(spec: EnvSpec, i: StateInput): boolean {
+  const env = i.base[spec.key]
+  if (!nonEmpty(env) || sourceOf(spec, i) !== 'override') return false
+  const norm = (v: string | undefined): string => (spec.kind === 'secret' ? (v ?? '').trim() : view(spec, v).value)
+  return norm(env) !== norm(i.target[spec.key])
+}
+
 function entryOf(spec: EnvSpec, i: StateInput): EnvEntryV2 {
   const m = resolveMeta(spec)
   const source = sourceOf(spec, i)
   const boot = m.restart === 'boot'
   const common = {
+    ...(envShadowed(spec, i) && { envShadowed: true }),
     key: spec.key, kind: spec.kind, group: spec.group, label: spec.label, description: spec.description, source,
     restartRequired: boot, pendingRestart: boot && i.target[spec.key] !== i.bootEnv?.[spec.key],
     dangerous: spec.dangerous, editable: !i.locked && (!spec.dangerous || i.root),
