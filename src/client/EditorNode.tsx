@@ -8,25 +8,22 @@ import * as fsClient from './fsClient'
 import { writeClipboard } from './clipboard'
 import { EditorConflictBar } from './EditorConflictBar'
 import { useEditorFile, type WriteChecked } from './useEditorFile'
+import { useEditorSync } from './useEditorSync'
+import { ViewerHost } from './viewers/ViewerHost'
+import type { FileKind } from '../shared/fileKind'
 import type { ReadMeta } from '../shared/fsContract'
-import {
-  IMAGE_MIME,
-  base64ToBytes,
-  editorFileKind,
-  fileBaseName,
-  fileExt,
-  loadRefusal
-} from './editorFile'
+import { editorFileKind, fileBaseName, fileExt } from './editorFile'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
   /** @deprecated Tak dipakai lagi (teks lewat `readMeta`); masih diteruskan `nodeTypes.tsx`.
-   *  TODO(fm-ws02): hapus bersama `write` setelah nodeTypes berhenti meneruskannya. */
+   *  TODO(fm-integration): hapus `read`/`write`/`readBinary` setelah nodeTypes.tsx (milik integrator)
+   *  berhenti meneruskannya; menghapusnya di sini lebih dulu mematahkan typecheck nodeTypes. */
   read?: (path: string) => Promise<string>
-  /** @deprecated Tak dipakai lagi (simpan lewat `writeChecked`); lihat `read`. */
+  /** @deprecated Lihat `read`. */
   write?: (path: string, content: string) => Promise<boolean>
-  /** Isi file sebagai base64 (gambar & PDF); REJECT saat gagal baca. */
-  readBinary: (path: string) => Promise<string>
+  /** @deprecated Biner kini lewat `ViewerHost` (URL raw); lihat `read`. */
+  readBinary?: (path: string) => Promise<string>
   /** Isi teks + `version` + `encoding`; REJECT saat gagal baca. Default `fsClient.readMeta`. */
   readMeta?: (path: string) => Promise<ReadMeta>
   /** Tulis dengan cek versi (`EVERSION`/`ENOENT` lewat `FsResult`). Default `fsClient.writeChecked`. */
@@ -34,9 +31,9 @@ export interface EditorNodeProps extends NodeProps {
   /** Setting: file Markdown dibuka langsung sebagai preview terender. Hanya menentukan tampilan
    *  SAAT node dibuka — toggle Preview/Edit tetap dua arah sesudahnya. */
   openMarkdownPreview?: boolean
+  /** `stat` untuk membandingkan versi saat direktori ditandai berubah. Default `fsClient.stat`. */
+  stat?: typeof fsClient.stat
 }
-
-const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /**
  * Node editor/preview file. Teks dimuat/disimpan lewat `useEditorFile` (cek versi, konflik,
@@ -49,10 +46,10 @@ function EditorNode({
   id,
   data,
   selected,
-  readBinary,
   readMeta = fsClient.readMeta,
   writeChecked = fsClient.writeChecked,
-  openMarkdownPreview = false
+  openMarkdownPreview = false,
+  stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
   const d = data as { filePath?: string; color?: string }
@@ -66,75 +63,23 @@ function EditorNode({
   const hostRef = useRef<HTMLDivElement>(null)
   const hoveredRef = useRef(false)
   const [loadError, setLoadError] = useState('')
-  const [imageSrc, setImageSrc] = useState('')
-  const [imageDims, setImageDims] = useState('')
-  const [pdfSrc, setPdfSrc] = useState('')
 
   const ef = useEditorFile({
     id, filePath, fileName, ext, hostRef, readMeta, writeChecked, setLoadError,
     enabled: kind === 'text', openMarkdownPreview
   })
-  const noViewer = kind !== 'text' && kind !== 'image' && kind !== 'pdf'
   const isBinary = kind === 'text' && ef.encoding === 'binary'
   // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.
   const editable = kind === 'text' && !isBinary && !loadError
   const readOnly = ef.encoding === 'non-utf8'
 
-  // Gambar: data URL base64 + <img>. TANPA zoom/pan — nodeterm juga tidak punya.
-  useEffect(() => {
-    if (kind !== 'image' || !filePath) return
-    let disposed = false
-    readBinary(filePath).then(
-      (b64) => {
-        if (disposed) return
-        const refusal = loadRefusal(b64, 'Image')
-        if (refusal) setLoadError(refusal)
-        else setImageSrc(`data:${IMAGE_MIME[ext]};base64,${b64}`)
-      },
-      (err: unknown) => {
-        if (!disposed) setLoadError(`Couldn’t read ${fileName}: ${errText(err)}`)
-      }
-    )
-    return () => {
-      disposed = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per node; path node tidak berubah
-  }, [])
-
-  // PDF: blob URL + <iframe> ke viewer platform (zoom/cari/halaman/print gratis). Data URL tidak
-  // bisa dipakai di sini — di dalam frame ia origin opaque dan viewer-nya merender kosong.
-  useEffect(() => {
-    if (kind !== 'pdf' || !filePath) return
-    let disposed = false
-    let url = ''
-    readBinary(filePath).then(
-      (b64) => {
-        if (disposed) return
-        const refusal = loadRefusal(b64, 'PDF')
-        if (refusal) {
-          setLoadError(refusal)
-          return
-        }
-        const bytes = base64ToBytes(b64)
-        if (!bytes) {
-          setLoadError(`Couldn’t read ${fileName}: isinya bukan base64 yang sah.`)
-          return
-        }
-        url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-        setPdfSrc(url)
-      },
-      (err: unknown) => {
-        if (!disposed) setLoadError(`Couldn’t read ${fileName}: ${errText(err)}`)
-      }
-    )
-    return () => {
-      disposed = true
-      // WAJIB: blob URL memaku byte-nya di memori sampai dicabut — beberapa node PDF yang pernah
-      // dibuka akan menahan puluhan MB masing-masing selama sesi hidup.
-      if (url) URL.revokeObjectURL(url)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per node; path node tidak berubah
-  }, [])
+  // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
+  // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
+  const sync = useEditorSync({
+    filePath, text: kind === 'text', stat,
+    setPath: (p) => rf.updateNodeData(id, { filePath: p }),
+    snapshot: ef.snapshot, reload: ef.reload, flagConflict: ef.flagConflict
+  })
 
   // ⌘M / Ctrl+M menukar preview saat node ini di-hover — gerbang hover yang sama dengan nodeterm
   // (`canvasOwnsMarkdownChord`), supaya satu chord tidak menyalakan setiap node editor di board.
@@ -150,33 +95,20 @@ function EditorNode({
 
   const body = (): React.ReactNode => {
     if (loadError) return <span className="editor-node__notice">{loadError}</span>
-    if (noViewer || isBinary)
+    if (kind !== 'text')
+      return sync.missing ? (
+        <span className="editor-node__notice">{fileName} was deleted on disk.</span>
+      ) : (
+        <ViewerHost path={filePath} kind={kind as FileKind} version={sync.viewVersion} />
+      )
+    if (isBinary)
       return (
         <div className="editor-node__placeholder">
-          <span>{isBinary ? 'File biner — tidak dapat dibuka sebagai teks.' : `File ${kind} — belum ada penampil untuk jenis ini.`}</span>
+          <span>File biner — tidak dapat dibuka sebagai teks.</span>
           <VscodeButton secondary title="Copy file path" onClick={() => void writeClipboard(filePath)}>
             Copy Path
           </VscodeButton>
         </div>
-      )
-    if (kind === 'image')
-      return imageSrc ? (
-        <img
-          src={imageSrc}
-          alt={fileName}
-          onLoad={(e) => {
-            const img = e.currentTarget
-            if (img.naturalWidth) setImageDims(`${img.naturalWidth} × ${img.naturalHeight}`)
-          }}
-        />
-      ) : (
-        <span className="editor-node__notice">Loading…</span>
-      )
-    if (kind === 'pdf')
-      return pdfSrc ? (
-        <iframe src={pdfSrc} title={fileName} />
-      ) : (
-        <span className="editor-node__notice">Loading…</span>
       )
     return (
       <>
@@ -220,7 +152,6 @@ function EditorNode({
             )}
           </span>
           <span className="editor-node__spacer" />
-          {kind === 'image' && imageDims && <span className="editor-node__dims">{imageDims}</span>}
           <ToolbarContainer className="nodrag editor-node__actions">
             {editable && (
               <>

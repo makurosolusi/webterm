@@ -31,6 +31,14 @@ const fake = vi.hoisted(() => {
 vi.mock('./lazyMonaco', () => ({ loadMonaco: () => { fake.state.loadMonaco(); return Promise.resolve(fake.monaco) } }))
 const clip = vi.hoisted(() => ({ writeClipboard: vi.fn(() => Promise.resolve(true)) }))
 vi.mock('./clipboard', () => clip)
+// ViewerHost (non-teks) membaca capabilities + URL raw lewat fsClient.
+vi.mock('./fsClient', () => ({
+  capabilities: () => Promise.resolve({ mutate: false, viewers: true, watch: false, git: false, quickOpen: false, upload: false, listMax: 10 }),
+  rawUrl: (p: string) => `/raw?path=${encodeURIComponent(p)}`,
+  stat: () => Promise.resolve({ ok: false, code: 'ENOENT', error: 'x' }),
+  readMeta: () => Promise.reject(new Error('tak dipakai')),
+  writeChecked: () => Promise.reject(new Error('tak dipakai')),
+}))
 
 import EditorNode from './EditorNode'
 
@@ -187,10 +195,14 @@ describe('EditorNode biner & non-UTF-8', () => {
     expect(screen.getByText('Save')).toBeTruthy()
   })
 
-  it('audio/zip: placeholder, file tidak dibaca dan Monaco tidak dimuat', async () => {
-    const { readMeta } = mount({ path: '/x/song.mp3' })
-    expect(await screen.findByText(/File audio/)).toBeTruthy()
-    expect(readMeta).not.toHaveBeenCalled()
+  it('audio lewat ViewerHost, zip jadi placeholder; file tidak dibaca dan Monaco tidak dimuat', async () => {
+    const audio = mount({ path: '/x/song.mp3' })
+    await waitFor(() => expect(audio.container.querySelector('audio')).not.toBeNull())
+    expect(audio.readMeta).not.toHaveBeenCalled()
+    cleanup()
+    const zip = mount({ path: '/x/a.zip' })
+    await waitFor(() => expect(zip.container.querySelector('.viewer-placeholder')).not.toBeNull())
+    expect(zip.readMeta).not.toHaveBeenCalled()
     expect(fake.state.loadMonaco).not.toHaveBeenCalled()
   })
 })

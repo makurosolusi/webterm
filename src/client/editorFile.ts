@@ -10,21 +10,8 @@ import { fileKind } from '../shared/fileKind'
  * Port dari nodeterm `src/renderer/lib/localFilePreview.ts` + `markdownPreview.ts`.
  */
 
-/** Ekstensi gambar yang dapat preview visual, bukan editor teks Monaco. */
-export const IMAGE_MIME: Readonly<Record<string, string>> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  bmp: 'image/bmp',
-  ico: 'image/x-icon',
-  svg: 'image/svg+xml',
-  avif: 'image/avif'
-}
-
-/** 'text' dibuka di Monaco, 'image'/'pdf' punya preview; sisanya (audio, video, archive, binary)
- *  tidak punya penampil di editor dan jatuh ke placeholder jujur. */
+/** 'text' dibuka di Monaco; sisanya diserahkan ke `ViewerHost` (image/pdf/audio/video, placeholder
+ *  untuk archive/binary). */
 export type EditorFileKind = 'image' | 'pdf' | 'text' | 'audio' | 'video' | 'archive' | 'binary'
 
 /** Ekstensi lowercase tanpa titik; '' kalau tidak ada (`.gitignore` → '', bukan 'gitignore'). */
@@ -81,26 +68,24 @@ export function loadRefusal(payload: string, label: string, allowEmpty = false):
   return null
 }
 
-/**
- * Byte file dari base64, atau null kalau base64-nya tidak bisa didekode (pemanggil melaporkan
- * kegagalan baca alih-alih membingkai dokumen kosong).
- *
- * `charCodeAt` per byte, BUKAN `TextEncoder`: PDF itu biner, dan mengenkode ulang sebagai UTF-8
- * akan menulis ulang setiap byte di atas 0x7f menjadi rangkaian multi-byte dan merusak dokumennya.
- *
- * Generic `<ArrayBuffer>` eksplisit: `BlobPart` menolak Uint8Array ber-backing `ArrayBufferLike`
- * (yang bisa SharedArrayBuffer), sementara pemanggilnya membungkus hasil ini jadi Blob.
- */
-export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> | null {
-  let bin: string
-  try {
-    bin = atob(b64)
-  } catch {
-    // Satu-satunya kegagalan yang mungkin di sini adalah base64 cacat, dan pemanggil hanya butuh
-    // tahu "tidak bisa didekode" — isi payload-nya sendiri tidak boleh ikut dilaporkan ke mana pun.
-    return null
-  }
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return bytes
+const slashed = (p: string): string => p.replace(/\\/g, '/')
+
+/** Path induk (tanpa slash akhir); '' bila `path` tak punya induk. */
+export function dirName(path: string): string {
+  const p = slashed(path)
+  const i = p.lastIndexOf('/')
+  return i > 0 ? p.slice(0, i) : i === 0 && p.length > 1 ? '/' : ''
+}
+
+/** True bila `path` adalah `root` itu sendiri atau berada di bawahnya (rename/hapus folder ikut file di dalamnya). */
+export function isUnder(path: string, root: string): boolean {
+  const p = slashed(path)
+  const r = slashed(root).replace(/\/+$/, '')
+  return p === r || p.startsWith(`${r}/`)
+}
+
+/** Path baru `path` setelah `from` di-rename jadi `to`, atau null bila `path` tak terdampak. */
+export function remapPath(path: string, from: string, to: string): string | null {
+  if (!isUnder(path, from)) return null
+  return to.replace(/\/+$/, '') + slashed(path).slice(slashed(from).replace(/\/+$/, '').length)
 }

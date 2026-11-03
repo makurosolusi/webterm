@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { tooLargeSentinel } from '../shared/fsLimits'
 import {
-  IMAGE_MIME,
-  base64ToBytes,
   editorFileKind,
   fileBaseName,
   fileExt,
   isMarkdownExt,
   loadRefusal,
+  dirName,
+  isUnder,
+  remapPath,
   opensInPreview
 } from './editorFile'
 
@@ -47,10 +48,8 @@ describe('editorFileKind', () => {
   })
 
   it('kesembilan ekstensi gambar nodeterm ikut terpetakan', () => {
-    expect(Object.keys(IMAGE_MIME).sort()).toEqual(
-      ['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'webp']
-    )
-    for (const ext of Object.keys(IMAGE_MIME)) expect(editorFileKind(`/x/a.${ext}`)).toBe('image')
+    for (const ext of ['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'webp'])
+      expect(editorFileKind(`/x/a.${ext}`)).toBe('image')
   })
 })
 
@@ -94,18 +93,22 @@ describe('loadRefusal (gerbang kehilangan data)', () => {
   })
 })
 
-describe('base64ToBytes', () => {
-  it('mempertahankan byte di atas 0x7f apa adanya (UTF-8 akan merusak PDF)', () => {
-    // '%PDF-' lalu 0xff 0x80 0x00 — rangkaian yang justru akan diubah TextEncoder.
-    const bytes = base64ToBytes(btoa('%PDF-\xff\x80\x00'))
-    expect(bytes && [...bytes]).toEqual([0x25, 0x50, 0x44, 0x46, 0x2d, 0xff, 0x80, 0x00])
+describe('dirName / isUnder / remapPath', () => {
+  it('dirName: induk, root, dan tanpa induk', () => {
+    expect(dirName('/a/b/c.ts')).toBe('/a/b')
+    expect(dirName('/c.ts')).toBe('/')
+    expect(dirName('c.ts')).toBe('')
   })
 
-  it('null untuk base64 cacat, bukan melempar', () => {
-    expect(base64ToBytes('!!! bukan base64 !!!')).toBeNull()
+  it('isUnder: sama persis atau di bawah, bukan sekadar prefiks nama', () => {
+    expect(isUnder('/a/b', '/a/b')).toBe(true)
+    expect(isUnder('/a/b/c.ts', '/a/b/')).toBe(true)
+    expect(isUnder('/a/bc/c.ts', '/a/b')).toBe(false)
   })
 
-  it('base64 kosong jadi nol byte', () => {
-    expect(base64ToBytes('')?.length).toBe(0)
+  it('remapPath: file di-rename, folder induk di-rename, dan tak terdampak', () => {
+    expect(remapPath('/a/old.ts', '/a/old.ts', '/a/new.ts')).toBe('/a/new.ts')
+    expect(remapPath('/a/dir/x/y.ts', '/a/dir', '/a/renamed')).toBe('/a/renamed/x/y.ts')
+    expect(remapPath('/a/dirx/y.ts', '/a/dir', '/a/renamed')).toBeNull()
   })
 })
