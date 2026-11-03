@@ -3,6 +3,7 @@
 // re-sent on every (re)connect so the server re-attaches the PTY and replays scrollback.
 // A subscriber whose session has exited is NOT replayed: its `open` would make the server spawn
 // a fresh PTY and wipe the final scrollback the user is looking at.
+import { emitFsEvent } from './fsEvents'
 import { WS_PATH } from '../shared/protocol'
 import type { ClientMsg, ExitMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { canResumeWith } from '../shared/workspace'
@@ -105,6 +106,8 @@ function connect() {
       for (const l of statusListeners) l(msg.id, msg.status)
       return
     }
+    // Petunjuk watcher file manager (flag WATCH): lewat bus, bukan sub terminal.
+    if (msg.t === 'fsdirty') { emitFsEvent({ kind: 'dirty', path: msg.dir, origin: 'remote' }); return }
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'output') sub.onOutput(msg.data)

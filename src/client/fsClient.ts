@@ -24,6 +24,10 @@
 //
 // `write`/`mkdir` mengembalikan boolean ok seperti sebelumnya. Tiap catch mengembalikan atau
 // melempar nilai yang didokumentasikan, bukan `catch {}` kosong.
+//
+// KONTRAK 3 (verb baru, PLAN/FILEMANAGER-b.md §5): `FsResult` — TIDAK PERNAH melempar. `FsFail`
+// di-parse dari body walau status non-2xx (409/413/501...); jaringan/JSON rusak jadi `EIO`.
+import { fsFail, type FsCapabilities, type FsFail, type FsResult, type FileMeta, type FsVersion, type GitMark, type ListV2, type ReadMeta } from '../shared/fsContract'
 import { tokenQuery } from './api'
 import type { DirEntry } from './fileBrowse'
 
@@ -57,19 +61,30 @@ async function get<T>(verb: string, params: Record<string, string>, fallback: T)
   }
 }
 
-async function post(verb: string, body: unknown): Promise<boolean> {
+function isFsFail(v: unknown): v is FsFail {
+  const f = v as Partial<FsFail> | null
+  return !!f && typeof f === 'object' && f.ok === false && typeof f.code === 'string' && typeof f.error === 'string'
+}
+
+/** Satu request ber-`FsResult` (kontrak 3): tak pernah melempar; `init` kosong = GET. */
+async function call<T extends object = object>(verb: string, params: Record<string, string>, init?: RequestInit): Promise<FsResult<T>> {
   try {
-    const res = await fetch(url(verb), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) return false
-    const json = (await res.json()) as { ok?: boolean }
-    return json.ok === true
-  } catch {
-    return false
+    const res = await fetch(url(verb, params), init)
+    // Proxy/HTML error page: body bukan JSON, tapi statusnya tetap informasi yang berguna.
+    const json: unknown = await res.json().catch(() => null)
+    if (isFsFail(json)) return json
+    if (res.ok && (json as { ok?: unknown } | null)?.ok === true) return json as FsResult<T>
+    return fsFail('EIO', `fs ${verb}: HTTP ${res.status} ${res.statusText || 'error'}`)
+  } catch (e) {
+    return fsFail('EIO', `fs ${verb}: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+const postJson = <T extends object = object>(verb: string, body: unknown): Promise<FsResult<T>> =>
+  call<T>(verb, {}, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+async function post(verb: string, body: unknown): Promise<boolean> {
+  return (await postJson(verb, body)).ok
 }
 
 /** Isi direktori: folder dulu lalu file, `.git` disembunyikan, entry gitignored ditandai. `[]`
@@ -107,4 +122,78 @@ export function write(path: string, content: string): Promise<boolean> {
 /** Buat direktori, rekursif (`mkdir -p`). */
 export function mkdir(path: string): Promise<boolean> {
   return post('mkdir', { path })
+}
+
+/** `read` + `version`/`encoding` (untuk `expectedVersion` saat simpan). MELEMPAR seperti `read`. */
+export async function readMeta(path: string): Promise<ReadMeta> {
+  const m = await getStrict<Partial<ReadMeta>>('read', { path })
+  if (typeof m.content !== 'string') throw new Error(`fs read "${path}": respons tanpa field content`)
+  return { content: m.content, version: m.version ?? '', encoding: m.encoding ?? 'utf8' }
+}
+
+/** Tulis dengan cek konflik: `EVERSION` (+`current`) bila berubah, `ENOENT` bila `mustExist` dan hilang. */
+export function writeChecked(path: string, content: string, opts: { expectedVersion?: FsVersion; mustExist?: boolean } = {}): Promise<FsResult> {
+  return postJson('write', { path, content, ...opts })
+}
+
+/** Buat file baru secara eksklusif: `EEXIST` bila sudah ada (isi lama utuh). */
+export function create(path: string, content?: string): Promise<FsResult> {
+  return postJson('create', { path, content })
+}
+
+/** `mkdir -p` dengan `created` (false = sudah ada). */
+export function mkdirChecked(path: string): Promise<FsResult<{ created: boolean }>> {
+  return postJson('mkdir', { path })
+}
+
+export function stat(path: string): Promise<FsResult<{ meta: FileMeta; version: FsVersion }>> {
+  return call('stat', { path })
+}
+
+/** Listing berisi size/mtime/kind; `truncated` bila lewat batas server. Beda dengan `list`: ini TIDAK fail-open. */
+export function listV2(path: string, limit?: number): Promise<FsResult<ListV2>> {
+  return call('list-v2', limit ? { path, limit: String(limit) } : { path })
+}
+
+/** Hapus ke trash (default) atau permanen. Flag MUTATE; mati = `EDISABLED`. */
+export function remove(path: string, permanent = false): Promise<FsResult<{ trashId?: string }>> {
+  return postJson('delete', { path, permanent })
+}
+
+export function restore(trashId: string): Promise<FsResult<{ path: string }>> {
+  return postJson('restore', { trashId })
+}
+
+export function rename(from: string, to: string, overwrite = false): Promise<FsResult> {
+  return postJson('rename', { from, to, overwrite })
+}
+
+export function copy(from: string, to: string): Promise<FsResult> {
+  return postJson('copy', { from, to })
+}
+
+export function gitStatus(dir: string): Promise<FsResult<{ marks: Record<string, GitMark> }>> {
+  return call('git-status', { path: dir })
+}
+
+export function search(root: string, q: string, limit?: number): Promise<FsResult<{ files: string[]; truncated: boolean }>> {
+  return call('search', limit ? { root, q, limit: String(limit) } : { root, q })
+}
+
+const CAPS_OFF: FsCapabilities = { mutate: false, viewers: false, watch: false, git: false, quickOpen: false, upload: false, listMax: 0 }
+
+/** Kemampuan server. FAIL-CLOSED: gagal = semua fitur opsional mati, bukan menebak hidup. */
+export async function capabilities(): Promise<FsCapabilities> {
+  const r = await call<FsCapabilities>('capabilities', {})
+  return r.ok ? { mutate: r.mutate, viewers: r.viewers, watch: r.watch, git: r.git, quickOpen: r.quickOpen, upload: r.upload, listMax: r.listMax } : CAPS_OFF
+}
+
+/** URL `raw` (gambar/audio/video/PDF/download) dengan token yang sama dengan verb lain. */
+export function rawUrl(path: string): string {
+  return url('raw', { path })
+}
+
+/** Upload satu file ke `dir/name` (stream body mentah). `EEXIST`/`ETOOLARGE` lewat `FsFail`. */
+export function upload(dir: string, name: string, file: Blob): Promise<FsResult<object>> {
+  return call('upload', { dir, name }, { method: 'POST', body: file })
 }

@@ -8,7 +8,10 @@ export interface OpenMsg { t: 'open'; id: string; cols: number; rows: number; cw
 export interface InputMsg { t: 'input'; id: string; data: string }
 export interface ResizeMsg { t: 'resize'; id: string; cols: number; rows: number }
 export interface CloseMsg { t: 'close'; id: string }
-export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg
+// Langganan perubahan direktori untuk node files (flag WEBTERM_FILES_WATCH). `dir` absolut/`~`.
+export interface FsWatchMsg { t: 'fswatch'; dir: string }
+export interface FsUnwatchMsg { t: 'fsunwatch'; dir: string }
+export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg | FsWatchMsg | FsUnwatchMsg
 
 // `seq` = nomor urut potongan dari `OutputLog`. Additif dan opsional supaya server lama/client lama
 // tetap saling bicara; kehadirannya membuat client bisa tahu ada potongan yang hilang saat re-attach.
@@ -19,6 +22,8 @@ export interface ExitMsg { t: 'exit'; id: string; code: number; reason?: 'self' 
 // `status` ABSEN = "tidak ada status lagi" (sapuan basi, lihat `agentStale.ts`), bukan "tidak
 // berubah". Satu-satunya cara server bisa MENCABUT klaim yang pernah ia kirim.
 export interface StatusMsg { t: 'status'; id: string; status?: AgentStatus }
-export type ServerMsg = OutputMsg | ExitMsg | StatusMsg
+// Petunjuk "isi `dir` berubah" (bukan diff): klien menjawab dengan me-refresh listing.
+export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
+export type ServerMsg = OutputMsg | ExitMsg | StatusMsg | FsDirtyMsg
 
 export const WS_PATH = '/ws'
