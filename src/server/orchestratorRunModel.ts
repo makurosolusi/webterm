@@ -4,6 +4,7 @@
 // resolved SERVER-SIDE (project.path + settings), never taken from the payload: a run spawns a
 // real PTY, so a client-supplied repo/cmd would be remote command execution.
 import type { RouteResult } from './apiShared.types'
+import { BUILTIN_AGENT_IDS } from '../shared/workspace'
 import { flagOn } from './envFlag'
 
 export type { RouteResult }
@@ -13,8 +14,12 @@ export const ORCHESTRATOR_RUN_FLAG = 'WEBTERM_ORCHESTRATOR_RUN'
 export const ORCHESTRATOR_REQUIRE_APPROVAL_FLAG = 'WEBTERM_RUN_REQUIRE_APPROVAL'
 export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'
 
+/** Legacy worker kind: used when nothing is configured and `claude` is installed. */
 export const DEFAULT_AGENT_ID = 'claude'
-export const DEFAULT_AGENT_CMD = 'claude'
+/** P3: worker kind for users without Claude (free-model friendly). */
+export const FALLBACK_AGENT_ID = 'opencode'
+/** Preference among configured kinds; the remaining builtins follow in `BUILTIN_AGENT_IDS` order. */
+const WORKER_KIND_PREFERENCE: readonly string[] = [DEFAULT_AGENT_ID, FALLBACK_AGENT_ID]
 export const MAX_ID_CHARS = 200
 export const MAX_PROMPT_CHARS = 2000
 export const MAX_BASE_REF_CHARS = 200
@@ -39,6 +44,21 @@ export function orchestratorRunRequireApproval(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   return flagOn(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG])
+}
+
+/**
+ * Worker kind from `settings.agentLaunchCommands`: the first configured kind (claude, opencode,
+ * then the other builtins). Nothing configured keeps the legacy `claude`, or `opencode` when
+ * `claudeOnPath` is false (P3).
+ */
+export function resolveWorkerKind(
+  configured: Partial<Record<string, string>>,
+  claudeOnPath = true
+): string {
+  const order = [...WORKER_KIND_PREFERENCE, ...BUILTIN_AGENT_IDS.filter((id) => !WORKER_KIND_PREFERENCE.includes(id))]
+  const hit = order.find((id) => (configured[id]?.trim() ?? '') !== '')
+  if (hit !== undefined) return hit
+  return claudeOnPath ? DEFAULT_AGENT_ID : FALLBACK_AGENT_ID
 }
 
 function text(value: unknown, max: number): string | null {

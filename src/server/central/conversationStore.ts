@@ -178,8 +178,18 @@ export function appendMessage(db: Database, input: AppendMessageInput): AppendMe
   })
 }
 
+/** Resume handle of the newest succeeded turn in the conversation (B1), or null. */
+export function sessionRefFor(db: Database, conversationId: string): string | null {
+  const row = getRow(
+    db,
+    `SELECT session_ref FROM central_turn WHERE conversation_id = ? AND status = 'succeeded'
+     AND session_ref IS NOT NULL ORDER BY started_at DESC, rowid DESC LIMIT 1`,
+    conversationId
+  )
+  return row ? optional(row['session_ref']) : null
+}
 /**
- * Creates the active turn for a message. A live `active_turn_id` yields
+ * Creates the active turn for a message, inheriting the session ref. A live `active_turn_id` yields
  * `conversation_busy`; a stale pointer (turn gone or terminal) is cleared.
  */
 export function createTurn(db: Database, input: CreateTurnInput): Turn {
@@ -202,9 +212,9 @@ export function createTurn(db: Database, input: CreateTurnInput): Turn {
     if (!message) fail('message_not_found', `message not found in conversation: ${input.messageId}`)
     execWrite(
       txDb,
-      `INSERT INTO central_turn (id, conversation_id, message_id, status, runtime, started_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      id, conversationId, input.messageId, status, input.runtime ?? null, ts
+      `INSERT INTO central_turn (id, conversation_id, message_id, status, runtime, session_ref, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      id, conversationId, input.messageId, status, input.runtime ?? null, sessionRefFor(txDb, conversationId), ts
     )
     execWrite(txDb, 'UPDATE central_conversation SET active_turn_id = ?, updated_at = ? WHERE id = ?', id, ts, conversationId)
     execWrite(txDb, 'UPDATE central_message SET turn_id = ? WHERE id = ? AND turn_id IS NULL', id, input.messageId)

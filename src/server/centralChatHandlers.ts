@@ -7,6 +7,10 @@ import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { listConversationEvents } from './central/conversationStore'
 import { ConversationError } from './central/conversationModel'
+import { activeCa2 } from './central/ca2Active'
+import { createContextAssembler } from './central/context/contextAssembler'
+import { rollingSummarize } from './central/context/checkpointRolling'
+import { toToolGuard } from './central/guard/controlGuard'
 import { MockRuntime } from './central/runtime/mockRuntime'
 import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
@@ -16,6 +20,9 @@ import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
 } from './central/chat/turnService'
 import { readCappedRequestBody } from './cappedRequestBody'
+import { createLogger } from './logs'
+
+const log = createLogger('central')
 
 export const CENTRAL_CHAT_BODY_MAX_BYTES = 64 * 1024
 
@@ -51,7 +58,16 @@ function buildService(db: Database, kind: RuntimeKind, now?: () => number): Chat
     : kind === 'opencode'
       ? new OpenCodeRuntime()
       : null
-  return { service: new TurnService({ db, runtime, stream, now }), stream, db }
+  // With CA2 armed on this db, retrieval uses its memory provider; the assembler delegates to the
+  // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
+  const ca2 = activeCa2()
+  const armed = ca2 && ca2.db === db ? ca2 : null
+  // Armed: tool calls and applied proposals go through the real guard (halt/level/budget/doom-loop) and
+  // checkpoints get the deterministic rolling summarizer, so `WEBTERM_CENTRAL_CHECKPOINT` never idles silently.
+  const wiring = armed
+    ? { context: createContextAssembler({ memory: armed.memory }), guard: toToolGuard(armed.guard, { onError: (err) => log.error('central.guard_error', 'control guard threw', { error: err instanceof Error ? err.name : typeof err }) }), summarize: rollingSummarize }
+    : {}
+  return { service: new TurnService({ db, runtime, stream, now, ...wiring }), stream, db }
 }
 
 export function resolveChatService(deps: CentralChatDeps, db: Database, kind: RuntimeKind): ChatService {

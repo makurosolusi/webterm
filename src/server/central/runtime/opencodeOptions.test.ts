@@ -83,6 +83,19 @@ describe('opencode child environment', () => {
     expect(permission['task']).toBe('deny')
   })
 
+  it('replaces HOME and XDG_* with the webterm-owned home when given', () => {
+    const invocation = buildOpencodeInvocation({
+      prompt: 'hi', model: 'm', homeDir: '/data/central/home',
+      env: { ...baseEnv, XDG_CONFIG_HOME: '/home/u/.config', XDG_DATA_HOME: '/home/u/.local/share' },
+    })
+    expect(invocation.env['HOME']).toBe('/data/central/home')
+    expect(invocation.env['XDG_CONFIG_HOME']).toBe('/data/central/home/.config')
+    expect(invocation.env['XDG_DATA_HOME']).toBe('/data/central/home/.local/share')
+    expect(invocation.env['XDG_CACHE_HOME']).toBe('/data/central/home/.cache')
+    expect(invocation.env['XDG_STATE_HOME']).toBe('/data/central/home/.local/state')
+    expect(Object.values(invocation.env).some((value) => String(value).includes('/home/u'))).toBe(false)
+  })
+
   it('allows tools only when explicitly opted in', () => {
     const invocation = buildOpencodeInvocation({
       prompt: 'hi', model: 'm', env: baseEnv, allowTools: true,

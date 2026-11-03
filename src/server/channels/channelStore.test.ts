@@ -28,6 +28,7 @@ describe('ChannelStore persistence', () => {
     const store = new ChannelStore(path)
     expect(store.snapshot()).toEqual({
       version: CHANNEL_STORE_VERSION,
+      accounts: {},
       bindings: {},
       processed: {},
       cursor: 0,
@@ -116,28 +117,28 @@ describe('ChannelStore reapplies the group policy on load', () => {
     mkdirSync(join(path, '..'), { recursive: true })
     writeFileSync(
       path,
-      JSON.stringify({ version: CHANNEL_STORE_VERSION, bindings, processed: {}, cursor: 0, outbox: [] })
+      JSON.stringify({ version: CHANNEL_STORE_VERSION, accounts: {}, bindings, processed: {}, cursor: 0, outbox: [] })
     )
     return path
   }
 
   it('downgrades a group owner/approver binding to operator instead of honoring it', () => {
     const path = writeStoreFile({
-      'telegram:-100123': { projectId: 'p', role: 'owner' },
-      'telegram:-100456': { projectId: 'p', role: 'approver' },
+      'telegram:default:-100123': { projectId: 'p', role: 'owner' },
+      'telegram:default:-100456': { projectId: 'p', role: 'approver' },
     })
     const store = new ChannelStore(path)
     expect(store.binding('telegram', '-100123')).toEqual({ projectId: 'p', role: 'operator' })
     expect(store.binding('telegram', '-100456')).toEqual({ projectId: 'p', role: 'operator' })
-    expect(store.snapshot().bindings['telegram:-100123']).toEqual({ projectId: 'p', role: 'operator' })
+    expect(store.snapshot().bindings['telegram:default:-100123']).toEqual({ projectId: 'p', role: 'operator' })
   })
 
   it('keeps group viewer/operator and private owner bindings unchanged', () => {
     const path = writeStoreFile({
-      'telegram:-100123': { projectId: 'p', role: 'viewer' },
-      'telegram:-100456': { projectId: 'p', role: 'operator' },
-      'telegram:424242': { projectId: 'p', role: 'owner' },
-      'telegram:515151': { projectId: 'p', role: 'approver' },
+      'telegram:default:-100123': { projectId: 'p', role: 'viewer' },
+      'telegram:default:-100456': { projectId: 'p', role: 'operator' },
+      'telegram:default:424242': { projectId: 'p', role: 'owner' },
+      'telegram:default:515151': { projectId: 'p', role: 'approver' },
     })
     const store = new ChannelStore(path)
     expect(store.binding('telegram', '-100123')?.role).toBe('viewer')
@@ -149,7 +150,8 @@ describe('ChannelStore reapplies the group policy on load', () => {
   it('does not rewrite the file on load, but a later save persists operator', () => {
     const raw = JSON.stringify({
       version: CHANNEL_STORE_VERSION,
-      bindings: { 'telegram:-100123': { projectId: 'p', role: 'owner' } },
+      accounts: {},
+      bindings: { 'telegram:default:-100123': { projectId: 'p', role: 'owner' } },
       processed: {},
       cursor: 0,
       outbox: [],
@@ -165,7 +167,7 @@ describe('ChannelStore reapplies the group policy on load', () => {
     // Any save round-trips the in-memory state, so the downgrade becomes durable.
     store.bind('telegram', '424242', { projectId: 'p', role: 'viewer' })
     const persisted = JSON.parse(readFileSync(path, 'utf8')) as { bindings: Record<string, { role: string }> }
-    expect(persisted.bindings['telegram:-100123']?.role).toBe('operator')
+    expect(persisted.bindings['telegram:default:-100123']?.role).toBe('operator')
     expect(new ChannelStore(path).binding('telegram', '-100123')?.role).toBe('operator')
   })
 })

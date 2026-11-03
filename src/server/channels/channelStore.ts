@@ -24,15 +24,17 @@ import {
 } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { conversationKey, type ChannelBinding } from './identity'
+import type { ChannelBinding } from './identity'
 import {
   CHANNEL_DEDUPE_LIMIT,
   CHANNEL_DEDUPE_TTL_MS,
   CHANNEL_OUTBOX_LIMIT,
   StoreCorruptError,
+  bindingKey,
   freshStoreState,
   parseBinding,
-  parseStoreState,
+  parseStoreDocument,
+  splitBindingKey,
   type ChannelStoreState,
   type StoredReply,
 } from './channelStoreSchema'
@@ -46,6 +48,10 @@ export {
   type ChannelStoreState,
   type StoredReply,
 } from './channelStoreSchema'
+
+import { DEFAULT_ACCOUNT_ID, backupStoreV1 } from './channelStoreMigrate'
+
+export { DEFAULT_ACCOUNT_ID, STORE_V1_BACKUP_SUFFIX, type ChannelAccount } from './channelStoreMigrate'
 
 const MAX_STORE_BYTES = 4 * 1024 * 1024
 
@@ -62,6 +68,8 @@ export class ChannelStoreError extends Error {
 export interface EnqueueReplyInput {
   key: string
   channel: string
+  /** Sending bot; omitted = `default`. */
+  accountId?: string
   chatId: string
   text: string
   threadId?: number
@@ -94,17 +102,27 @@ export class ChannelStore {
     this.ttlMs = options.ttlMs ?? CHANNEL_DEDUPE_TTL_MS
     this.dedupeLimit = Math.max(1, options.dedupeLimit ?? CHANNEL_DEDUPE_LIMIT)
     this.outboxLimit = Math.max(1, options.outboxLimit ?? CHANNEL_OUTBOX_LIMIT)
-    this.state = this.load()
+    const loaded = this.load()
+    this.state = loaded.state
+    // v1 -> v2: keep the original next to the file, then persist the migrated document once.
+    if (loaded.migrated) {
+      try {
+        backupStoreV1(this.path)
+      } catch {
+        throw new ChannelStoreError('write_failed', this.path)
+      }
+      this.save()
+    }
   }
 
   get storePath(): string {
     return this.path
   }
 
-  private load(): ChannelStoreState {
+  private load(): { state: ChannelStoreState; migrated: boolean } {
     if (!existsSync(this.path)) {
       this.ensureDir()
-      return freshStoreState()
+      return { state: freshStoreState(), migrated: false }
     }
     let raw: string
     try {
@@ -114,7 +132,7 @@ export class ChannelStore {
       throw new ChannelStoreError('read_failed', this.path)
     }
     try {
-      return parseStoreState(raw)
+      return parseStoreDocument(raw, this.clock())
     } catch (err) {
       const code = err instanceof StoreCorruptError ? err.code : 'corrupt'
       throw new ChannelStoreError(code, this.path)
@@ -166,21 +184,21 @@ export class ChannelStore {
     return JSON.parse(JSON.stringify(this.state)) as ChannelStoreState
   }
 
-  binding(channel: string, chatId: string): ChannelBinding | undefined {
-    const found = this.state.bindings[conversationKey(channel, chatId)]
+  binding(channel: string, chatId: string, accountId = DEFAULT_ACCOUNT_ID): ChannelBinding | undefined {
+    const found = this.state.bindings[bindingKey(channel, accountId, chatId)]
     return found ? { ...found } : undefined
   }
 
-  bind(channel: string, chatId: string, binding: ChannelBinding): void {
+  bind(channel: string, chatId: string, binding: ChannelBinding, accountId = DEFAULT_ACCOUNT_ID): void {
     if (!channel.trim() || !chatId.trim()) throw new Error('channel store: channel and chatId are required')
     const parsed = parseBinding(binding)
     if (!parsed) throw new Error('channel store: invalid binding')
-    this.state.bindings[conversationKey(channel, chatId)] = parsed
+    this.state.bindings[bindingKey(channel, accountId, chatId)] = parsed
     this.save()
   }
 
-  unbind(channel: string, chatId: string): boolean {
-    const key = conversationKey(channel, chatId)
+  unbind(channel: string, chatId: string, accountId = DEFAULT_ACCOUNT_ID): boolean {
+    const key = bindingKey(channel, accountId, chatId)
     if (!(key in this.state.bindings)) return false
     delete this.state.bindings[key]
     this.save()
@@ -192,10 +210,10 @@ export class ChannelStore {
    * effect entirely. `releaseUpdate` rolls the claim back when the effect failed, so a provider
    * retry can still be served. Never twice: a crash between claim and effect drops, not duplicates.
    */
-  claimUpdate(updateId: number, channel = 'telegram'): boolean {
+  claimUpdate(updateId: number, channel = 'telegram', accountId = DEFAULT_ACCOUNT_ID): boolean {
     if (!Number.isInteger(updateId) || updateId < 0) throw new Error('channel store: invalid update id')
     this.pruneProcessed()
-    const key = conversationKey(channel, String(updateId))
+    const key = bindingKey(channel, accountId, String(updateId))
     if (key in this.state.processed) return false
     this.state.processed[key] = this.clock()
     this.state.cursor = Math.max(this.state.cursor, updateId)
@@ -204,8 +222,8 @@ export class ChannelStore {
     return true
   }
 
-  releaseUpdate(updateId: number, channel = 'telegram'): void {
-    const key = conversationKey(channel, String(updateId))
+  releaseUpdate(updateId: number, channel = 'telegram', accountId = DEFAULT_ACCOUNT_ID): void {
+    const key = bindingKey(channel, accountId, String(updateId))
     if (!(key in this.state.processed)) return
     delete this.state.processed[key]
     this.save()
@@ -224,6 +242,7 @@ export class ChannelStore {
     this.state.outbox.push({
       key: input.key,
       channel: input.channel,
+      ...(input.accountId === undefined ? {} : { accountId: input.accountId }),
       chatId: input.chatId,
       text: input.text,
       ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
@@ -269,15 +288,17 @@ export class ChannelStore {
     return true
   }
 
-  /** Explicit bindings for the human API, in insertion order. Absence is still "unknown chat". */
-  listBindings(channel?: string): Array<{ channel: string; chatId: string; binding: ChannelBinding }> {
+  /** Explicit bindings of one account (default: `default`) for the human API, in insertion order. */
+  listBindings(
+    channel?: string,
+    accountId = DEFAULT_ACCOUNT_ID
+  ): Array<{ channel: string; chatId: string; binding: ChannelBinding }> {
     const out: Array<{ channel: string; chatId: string; binding: ChannelBinding }> = []
     for (const [key, binding] of Object.entries(this.state.bindings)) {
-      const at = key.indexOf(':')
-      if (at <= 0) continue
-      const keyChannel = key.slice(0, at)
-      if (channel !== undefined && keyChannel !== channel) continue
-      out.push({ channel: keyChannel, chatId: key.slice(at + 1), binding: { ...binding } })
+      const parts = splitBindingKey(key)
+      if (!parts || parts.accountId !== accountId) continue
+      if (channel !== undefined && parts.channel !== channel) continue
+      out.push({ channel: parts.channel, chatId: parts.chatId, binding: { ...binding } })
     }
     return out
   }

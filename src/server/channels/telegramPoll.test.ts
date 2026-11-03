@@ -52,7 +52,7 @@ describe('telegram poller', () => {
     await flush()
     expect(api.calls.map((c) => c.method).slice(0, 3)).toEqual(['deleteWebhook', 'getUpdates', 'getUpdates'])
     expect(api.calls[0]?.params).toEqual({})
-    expect(api.calls[1]?.params).toEqual({ offset: 1, timeout: 7, allowed_updates: ['message'] })
+    expect(api.calls[1]?.params).toEqual({ offset: 1, timeout: 7, allowed_updates: ['message', 'callback_query'] })
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ update_id: 10 }))
     expect(api.calls[2]?.params['offset']).toBe(11)
   })

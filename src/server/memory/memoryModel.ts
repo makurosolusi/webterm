@@ -8,7 +8,10 @@
  * - `core` scope is human-only, mirroring CORE.md being human-written;
  * - corrections use supersede (history kept), never overwrite.
  */
+import type { MemoryKind, MemoryTrust } from '../central/contracts/memory.types'
 import { LedgerError } from '../ledger/ledgerModel'
+
+export type { MemoryKind, MemoryTrust }
 
 export type MemoryStatus = 'claim' | 'fact' | 'quarantine' | 'superseded'
 export const MEMORY_STATUSES: readonly MemoryStatus[] = [
@@ -18,12 +21,20 @@ export const MEMORY_STATUSES: readonly MemoryStatus[] = [
   'superseded',
 ]
 
-/** `core` is the human-only CORE scope; `scratch` is short-lived working memory. */
+/**
+ * Scopes writable through the legacy claim/promote API. `core` is the human-only CORE scope;
+ * `scratch` is short-lived working memory. Kept narrow on purpose: HTTP callers validate against it.
+ */
 export const MEMORY_SCOPES = ['project', 'scratch', 'core'] as const
 export type MemoryScope = (typeof MEMORY_SCOPES)[number]
 
-export type MemoryActorKind = 'human' | 'orchestrator' | 'worker'
-export const MEMORY_ACTOR_KINDS: readonly MemoryActorKind[] = ['human', 'orchestrator', 'worker']
+/** Scopes added by CA2 v7; written only through `memoryRemember`, never by the legacy API. */
+export const MEMORY_V7_SCOPES = ['central', 'user', 'global'] as const
+export const MEMORY_ALL_SCOPES = [...MEMORY_SCOPES, ...MEMORY_V7_SCOPES] as const
+export type MemoryAnyScope = (typeof MEMORY_ALL_SCOPES)[number]
+
+export type MemoryActorKind = 'human' | 'orchestrator' | 'worker' | 'central'
+export const MEMORY_ACTOR_KINDS: readonly MemoryActorKind[] = ['human', 'orchestrator', 'worker', 'central']
 
 /**
  * Who is performing the write, derived by the server from the authenticated caller.
@@ -39,7 +50,7 @@ export interface MemoryAuthority {
 export interface Memory {
   id: string
   projectId: string | null
-  scope: MemoryScope
+  scope: MemoryAnyScope
   key: string
   title: string
   body: string
@@ -50,6 +61,15 @@ export interface Memory {
   supersededAt: number | null
   createdAt: number
   updatedAt: number
+}
+
+/** A memory row with the v7 columns (kind, provenance trust, staleness, usage). */
+export interface MemoryRecord extends Memory {
+  kind: MemoryKind
+  trust: MemoryTrust
+  staleAfter: number | null
+  useCount: number
+  contentHash: string | null
 }
 
 export interface MemorySearchHit extends Memory {
@@ -144,6 +164,13 @@ export class MemoryAuthorityError extends MemoryError {}
 
 /** `(project_id, scope, key)` already exists, or the row is not in a legal state. */
 export class MemoryConflictError extends MemoryError {}
+
+/** A central write was refused by policy; `code` is surfaced to the tool caller. */
+export class MemoryRejectedError extends MemoryError {
+  constructor(readonly code: string, message: string) {
+    super(message)
+  }
+}
 
 export class MemoryNotFoundError extends MemoryError {
   constructor(readonly memoryId: string) {

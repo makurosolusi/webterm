@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RuntimeEvent, TurnInput } from './centralRuntime'
@@ -32,6 +32,7 @@ function runtime(executable: string, extra: Partial<OpenCodeRuntimeOptions> = {}
   return new OpenCodeRuntime({
     executable,
     cwd: dir,
+    homeDir: join(dir, 'child-home'),
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: process.env.HOME, WEBTERM_TOKEN: 'root-secret' },
     ...extra,
   })
@@ -133,6 +134,38 @@ describe('OpenCodeRuntime success', () => {
     expect(argv[argv.indexOf('--session') + 1]).toBe('ses_in')
     expect(argv).not.toContain('--auto')
     expect(argv.at(-1)).toBe('continue please')
+  })
+})
+
+describe('OpenCodeRuntime child environment', () => {
+  it('runs the child with a webterm-owned HOME/XDG and no WEBTERM_/NODETERM_ variables', async () => {
+    const envFile = join(dir, 'env.json')
+    const bin = fakeBin(`
+      ${EMIT}
+      import fs from 'node:fs'
+      fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify(process.env))
+      emit({ type: 'text', sessionID: 's', part: { id: 'p1', text: 'ok' } })
+    `)
+    const userHome = join(dir, 'user-home')
+    const rt = runtime(bin, {
+      env: {
+        PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: userHome, XDG_CONFIG_HOME: join(userHome, '.config'),
+        WEBTERM_TOKEN: 'root-secret', NODETERM_NODE_ID: 'n1',
+      },
+    })
+    const result = await rt.turn(input(), recorder().emit)
+
+    expect(result.outcome).toBe('success')
+    const childEnv = JSON.parse(readFileSync(envFile, 'utf8')) as Record<string, string>
+    const home = join(dir, 'child-home')
+    expect(childEnv['HOME']).toBe(home)
+    expect(childEnv['XDG_CONFIG_HOME']).toBe(join(home, '.config'))
+    expect(childEnv['XDG_DATA_HOME']).toBe(join(home, '.local', 'share'))
+    expect(childEnv['XDG_CACHE_HOME']).toBe(join(home, '.cache'))
+    expect(childEnv['XDG_STATE_HOME']).toBe(join(home, '.local', 'state'))
+    expect(Object.values(childEnv).some((value) => value.includes(userHome))).toBe(false)
+    expect(Object.keys(childEnv).filter((key) => /^(WEBTERM_|NODETERM_)/.test(key))).toEqual([])
+    expect(existsSync(join(home, '.config'))).toBe(true)
   })
 })
 

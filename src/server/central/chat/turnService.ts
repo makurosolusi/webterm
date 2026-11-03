@@ -4,7 +4,6 @@
 // `turnEvents`; portfolio execution in `toolExecutors`. No plan/task/goal writes.
 import { flagOn } from '../../envFlag'
 import type { Database } from 'bun:sqlite'
-import { allRows } from '../../ledger/ledgerCore'
 import {
   type ConversationError, isActiveTurnStatus, normalizeClientMessageId, validateMessageText,
 } from '../conversationModel'
@@ -24,9 +23,16 @@ import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents
 import { parseProposals } from '../proposal/proposalParser'
 import { validateProposal } from '../proposal/proposalPolicy'
 import { applyProposal } from '../proposal/applyProposal'
-import { centralPrompt } from '../proposal/centralPrompt'
-import { buildMemoryContext } from '../memory/contextBuilder'
+import { defaultRegistry } from '../tools/defaultRegistry'
+import type { ControlGuard, ToolRegistry } from '../tools/toolTypes'
+import { isReadBlock, readToolsEnabled, resolveMaxSteps, runToolLoop } from './toolLoop'
+import { createLegacyContextAssembler, type ContextAssembler } from '../context/contextPort'
+import { ContextRejectedError } from '../context/contextAssembler'
+import type { Summarize } from '../context/checkpointSummarizer'
+import { recordTurnContext } from './turnContextLog'
+import { resolveLimits } from './turnLimits'
 import { createLogger } from '../../logs'
+import { redactSecrets } from '../../redactSecrets'
 
 const log = createLogger('central')
 
@@ -42,6 +48,16 @@ export interface TurnServiceDeps {
   runtime: CentralRuntime | null
   stream: StreamHub
   now?: () => number
+  /** Prompt/history assembly; defaults to the legacy behaviour. */
+  context?: ContextAssembler
+  /** Env source for per-turn limits; defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv
+  /** Tool registry for the read-tool loop; defaults to the process-wide registry. */
+  registry?: ToolRegistry
+  /** Guard for loop tool calls and applied proposals; set when Central Agent v2 is armed, else allow-all (R0/R1 only). */
+  guard?: ControlGuard
+  /** Checkpoint summarizer; without one no checkpoint is written after a turn (rotation still seeds a fallback). */
+  summarize?: Summarize
 }
 
 export interface SubmitResult {
@@ -51,7 +67,6 @@ export interface SubmitResult {
 }
 
 const CANCEL_GRACE_MS = 1_500
-const HISTORY_LIMIT = 20
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -65,6 +80,11 @@ export class TurnService {
   private readonly runtime: CentralRuntime | null
   private readonly stream: StreamHub
   private readonly now: () => number
+  private readonly context: ContextAssembler
+  private readonly env: NodeJS.ProcessEnv
+  private readonly registry: ToolRegistry
+  private readonly guard: ControlGuard | undefined
+  private readonly summarize: Summarize | undefined
   private readonly runs = new Map<string, Promise<Turn>>()
   private readonly active = new Map<string, string>()
   private readonly states = new Map<string, RunState>()
@@ -74,6 +94,11 @@ export class TurnService {
     this.runtime = deps.runtime
     this.stream = deps.stream
     this.now = deps.now ?? Date.now
+    this.context = deps.context ?? createLegacyContextAssembler()
+    this.env = deps.env ?? process.env
+    this.registry = deps.registry ?? defaultRegistry()
+    this.guard = deps.guard
+    this.summarize = deps.summarize
   }
 
   /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
@@ -89,10 +114,25 @@ export class TurnService {
     if (this.active.has(conversation.id) || conversation.activeTurnId !== null) {
       throw busyError(conversation, this.active.get(conversation.id))
     }
-    const history = this.history(conversation.id)
+    const planner = flagOn(process.env.WEBTERM_CENTRAL_PLANNER)
+    const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
+    let built: ReturnType<ContextAssembler['build']>
+    try {
+      built = this.context.build({
+        db: this.db, conversationId: conversation.id, text, proposalsEnabled: planner && toolsWrite,
+        memoryEnabled: flagOn(process.env.WEBTERM_CENTRAL_MEMORY), now: this.now,
+      })
+    } catch (err) {
+      if (err instanceof ContextRejectedError) throw new CentralChatError('budget_exhausted', err.message, chatErrorStatus(err.code))
+      throw err
+    }
+    const { prompt, history } = built
+    // Only the real assembler reports rotation; the legacy one never sets it.
+    const rotate = (built as { rotateSession?: boolean }).rotateSession === true
     const appended = appendMessage(this.db, {
       conversationId: conversation.id, role: 'human',
-      parts: [{ type: 'text', text }], clientMessageId, now: this.now(),
+      // The model still gets the raw text (it may need to relay a pasted secret to a tool); history never keeps it.
+      parts: [{ type: 'text', text: redactSecrets(text) }], clientMessageId, now: this.now(),
     })
     if (!appended.created) return this.replay(appended.message)
     const message = appended.message
@@ -111,7 +151,7 @@ export class TurnService {
     this.active.set(conversation.id, turn.id)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
-    const done = this.runTurn(conversation, turn, text, history)
+    const done = this.runTurn(conversation, turn, prompt, history, planner, toolsWrite, rotate)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -151,16 +191,9 @@ export class TurnService {
     return getTurn(this.db, turnId)
   }
 
-  private history(conversationId: string): string[] {
-    return allRows(
-      this.db,
-      'SELECT id FROM central_message WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?',
-      conversationId, HISTORY_LIMIT
-    ).map((row) => String(row['id'])).reverse()
-  }
-
   private async runTurn(
-    conversation: Conversation, turn: Turn, text: string, history: string[]
+    conversation: Conversation, turn: Turn, prompt: string, history: string[],
+    planner: boolean, toolsWrite: boolean, rotate: boolean
   ): Promise<Turn> {
     const runtime = this.runtime
     if (runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
@@ -174,20 +207,26 @@ export class TurnService {
       const projected = projectRuntimeEvent(state, assistant.id, event)
       if (projected) this.record(conversation.id, projected.type, projected.payload, event.turnId, assistant.id)
     }
-    const planner = flagOn(process.env.WEBTERM_CENTRAL_PLANNER)
-    const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
-    const memoryEnabled = flagOn(process.env.WEBTERM_CENTRAL_MEMORY)
-    const memory = memoryEnabled ? buildMemoryContext(this.db, conversation.id, text, { now: this.now }) : ''
     const input: TurnInput = {
       conversationId: conversation.id, turnId: turn.id,
-      text: centralPrompt(this.db, text, planner && toolsWrite, memory), history,
-      tools: [...DEFAULT_CENTRAL_TOOLS], limits: {},
-      ...(turn.sessionRef === null ? {} : { sessionRef: turn.sessionRef }),
+      text: prompt, history,
+      tools: [...DEFAULT_CENTRAL_TOOLS], limits: resolveLimits(this.env),
+      // A rotated conversation starts a fresh runtime session seeded from the checkpoint.
+      ...(turn.sessionRef === null || rotate ? {} : { sessionRef: turn.sessionRef }),
     }
     try {
-      const result = await runtime.turn(input, emit)
-      if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite)
-      return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
+      const loop = readToolsEnabled(this.env)
+      const result = loop
+        ? await runToolLoop({
+          runtime, db: this.db, registry: this.registry, ...(this.guard ? { guard: this.guard } : {}),
+          conversationId: conversation.id, env: this.env, now: this.now,
+          stopped: () => !isActiveTurnStatus(getTurn(this.db, turn.id)?.status ?? 'failed'),
+        }, input, emit, resolveMaxSteps(this.env))
+        : await runtime.turn(input, emit)
+      if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite, loop)
+      const finished = finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
+      recordTurnContext({ db: this.db, env: this.env, now: this.now, ...(this.summarize ? { summarize: this.summarize } : {}) }, conversation.id, turn.id, result)
+      return finished
     } catch (err) {
       // Name only: runtime error messages can quote the conversation.
       log.error('central.turn.error', 'central chat runtime failed', { turnId: turn.id, error: err instanceof Error ? err.name : typeof err })
@@ -206,15 +245,18 @@ export class TurnService {
   }
 
   private async handleProposals(
-    conversationId: string, turnId: string, messageId: string, text: string, planner: boolean, toolsWrite: boolean
+    conversationId: string, turnId: string, messageId: string, text: string, planner: boolean, toolsWrite: boolean,
+    skipReads: boolean
   ): Promise<void> {
     for (const block of parseProposals(text)) {
+      // Read tools belong to the continuation loop; a leftover block (step limit hit) is not a proposal.
+      if (skipReads && isReadBlock(this.registry, block)) continue
       const checked = validateProposal(block, { db: this.db, conversationId, planner, toolsWrite })
       if (!checked.ok) {
         this.record(conversationId, 'entity.updated', { eventType: 'proposal.rejected', tool: block.tool, code: checked.code }, turnId, messageId)
         continue
       }
-      const result = await applyProposal(this.db, checked.proposal!)
+      const result = await applyProposal(this.db, checked.proposal!, this.guard)
       this.record(conversationId, 'entity.updated', {
         eventType: result.ok ? 'proposal.applied' : 'proposal.rejected', tool: result.tool,
         ...(result.ok ? { projectId: result.projectId, goalVersion: result.goalVersion, planVersion: result.planVersion, approvalId: result.approvalId } : { code: result.code }),

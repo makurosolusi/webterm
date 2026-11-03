@@ -12,6 +12,7 @@ import {
   getOrCreateConversation,
   getTurn,
   listConversationEvents,
+  sessionRefFor,
   updateTurn,
 } from './conversationStore'
 
@@ -231,5 +232,23 @@ test('missing conversation and bad limits are typed errors', () => {
   const event = appendConversationEvent(db, { conversationId: 'central:global', type: 'done' })
   expect(event.seq).toBe(1)
   expectThrow(() => listConversationEvents(db, 'central:global', 0, -1), 'invalid_limit')
+  close(db)
+})
+
+test('createTurn inherits session_ref from the newest succeeded turn only', () => {
+  const db = freshDb()
+  getOrCreateConversation(db, 'global')
+  const run = (n: number, status: 'succeeded' | 'failed', sessionRef: string | null) => {
+    const m = appendMessage(db, { conversationId: 'central:global', role: 'human', parts: text, now: n }).message
+    const turn = createTurn(db, { conversationId: 'central:global', messageId: m.id, now: n })
+    updateTurn(db, { turnId: turn.id, status, sessionRef, now: n })
+    return turn
+  }
+  expect(sessionRefFor(db, 'central:global')).toBe(null)
+  run(10, 'succeeded', 'ses_A')
+  run(20, 'failed', 'ses_BAD')
+  expect(sessionRefFor(db, 'central:global')).toBe('ses_A')
+  const m = appendMessage(db, { conversationId: 'central:global', role: 'human', parts: text, now: 30 }).message
+  expect(createTurn(db, { conversationId: 'central:global', messageId: m.id, now: 30 }).sessionRef).toBe('ses_A')
   close(db)
 })

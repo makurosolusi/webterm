@@ -22,6 +22,7 @@ import {
   MemoryNotFoundError,
   type Memory,
   type MemoryActorKind,
+  type MemoryAnyScope,
   type MemoryEvent,
   type MemoryScope,
   type MemoryStatus,
@@ -37,7 +38,7 @@ export function toMemory(row: Record<string, unknown>): Memory {
   return {
     id: String(row['id']),
     projectId: row['project_id'] === null ? null : String(row['project_id']),
-    scope: String(row['scope']) as MemoryScope,
+    scope: String(row['scope']) as MemoryAnyScope,
     key: String(row['key']),
     title: String(row['title']),
     body: String(row['body']),
@@ -114,15 +115,16 @@ export function requireAuthority(value: MemoryAuthority | undefined): MemoryAuth
 /** Server-side evidence digests are sha256 hex; anything else is not verifier output. */
 const EVIDENCE_DIGEST = /^[0-9a-f]{64}$/
 
-/** Workers may never create facts; `core` is human-only even for orchestrators. */
+/** Workers and central may never create project facts; `core` is human-only even for orchestrators. */
 export function assertCanPromote(
   actorKind: MemoryActorKind,
-  scope: MemoryScope,
+  scope: MemoryAnyScope,
   operation: string
 ): void {
-  if (actorKind === 'worker') {
+  // Central proposes claims only (invariant I4); promotion stays with a human or orchestrator.
+  if (actorKind === 'worker' || actorKind === 'central') {
     throw new MemoryAuthorityError(
-      `${operation}: workers may only claim; promotion requires human or orchestrator`
+      `${operation}: ${actorKind === 'worker' ? 'workers' : 'central'} may only claim; promotion requires human or orchestrator`
     )
   }
   if (scope === 'core' && actorKind !== 'human') {

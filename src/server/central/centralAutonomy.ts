@@ -6,6 +6,9 @@
 
 import { flagOn } from '../envFlag'
 import { createLogger } from '../logs'
+import { createDispatcher, type DispatchJob, type DispatchResult, type Dispatcher } from './autonomyDispatch'
+import type { SyncBreaker } from './guard/breakerStore'
+import { createWaker, type Waker } from './wake'
 
 const log = createLogger('central')
 
@@ -30,13 +33,23 @@ export interface AutonomyPlan {
 
 /** Audit payload; the boot layer maps `kind` onto a ledger event row. */
 export interface AutonomyAuditEvent {
-  kind: 'autonomy.run' | 'autonomy.budget_exhausted' | 'autonomy.tick_error'
+  kind: 'autonomy.run' | 'autonomy.budget_exhausted' | 'autonomy.tick_error' | 'autonomy.breaker_open'
   at: number
   projectId?: string
   itemId?: string
   ok?: boolean
   code?: string
   failures?: number
+}
+
+/** Opt-in reliability mode (non-blocking dispatch, persistent breaker, wake + sweep). Absent = legacy loop. */
+export interface AutonomyDispatchConfig {
+  /** Global worker cap; default `DEFAULT_MAX_INFLIGHT_WORKERS`. */
+  maxInflight?: number
+  breaker?: SyncBreaker
+  /** Replaces `intervalMs` as the safety net in this mode; default 60 s. */
+  sweepMs?: number
+  debounceMs?: number
 }
 
 export interface AutonomyDeps {
@@ -52,11 +65,13 @@ export interface AutonomyDeps {
   intervalMs?: number
   /** Default 3. Reached budget skips the project until a success or a status change. */
   maxConsecutiveFailures?: number
+  dispatch?: AutonomyDispatchConfig
 }
 
 export type TickResult =
-  | { ran: false; reason: 'overlap' | 'no_projects' | 'no_eligible' | 'error' }
-  | { ran: true; projectId: string; itemId: string; ok: boolean; code?: string }
+  | { ran: false; reason: 'overlap' | 'no_projects' | 'no_eligible' | 'error' | 'saturated' }
+  /** In dispatch mode `ok` means "started" (the first job) and `dispatched` counts jobs started this tick. */
+  | { ran: true; projectId: string; itemId: string; ok: boolean; code?: string; dispatched?: number }
 
 /** Concurrent `tick()` calls return `{ran:false, reason:'overlap'}`. */
 export interface CentralAutonomyHandle {
@@ -67,6 +82,12 @@ export interface CentralAutonomyHandle {
   readonly running: boolean
   /** Consecutive failures for one project (diagnostics/tests). */
   failures(projectId: string): number
+  /** Dispatch mode: schedules a debounced tick (task settled, plan assigned...). No-op in legacy mode. */
+  wake(reason: string): void
+  /** Workers currently in flight (always 0 in legacy mode). */
+  readonly inflight: number
+  /** Resolves when in-flight workers settled (shutdown/tests). */
+  drain(): Promise<void>
 }
 
 export const DEFAULT_AUTONOMY_INTERVAL_MS = 30_000
@@ -85,10 +106,10 @@ function isTerminal(status: string): boolean {
   return TERMINAL.includes(status)
 }
 /** Lowest-`seq` item in exactly `assigned`; running/done/failed are never selected. */
-function nextItem(plan: AutonomyPlan): AutonomyPlanItem | null {
+function nextItem(plan: AutonomyPlan, skip?: (itemId: string) => boolean): AutonomyPlanItem | null {
   let best: AutonomyPlanItem | null = null
   for (const item of plan.items) {
-    if (item.status !== 'assigned') continue
+    if (item.status !== 'assigned' || skip?.(item.id)) continue
     if (best === null || item.seq < best.seq) best = item
   }
   return best
@@ -128,35 +149,92 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
     }
   }
 
+  function readProjects(): readonly AutonomyProject[] | null {
+    try {
+      return deps.projects()
+    } catch {
+      log.warn('central.autonomy.tick_error', 'central autonomy: project list failed', { code: 'projects_read' })
+      return null
+    }
+  }
+
+  /** Plan of a project the loop may act on, or null (paused, quarantined, unreadable, terminal). */
+  function planFor(project: AutonomyProject): AutonomyPlan | null {
+    // A status flip (pause/resume/etc.) is an operator signal: forget the failure budget.
+    const previous = lastStatus.get(project.id)
+    if (previous !== undefined && previous !== project.status) consecutive.delete(project.id)
+    lastStatus.set(project.id, project.status)
+
+    if (project.status === PROJECT_PAUSED) return null
+    if ((consecutive.get(project.id) ?? 0) >= maxFailures) return null
+
+    let plan: AutonomyPlan | null
+    try {
+      plan = deps.plan(project.id)
+    } catch {
+      audit({ kind: 'autonomy.tick_error', at: now(), projectId: project.id, code: 'plan_read' })
+      return null
+    }
+    return plan === null || isTerminal(plan.status) ? null : plan
+  }
+
+  function recordSuccess(projectId: string, itemId: string): void {
+    consecutive.delete(projectId)
+    audit({ kind: 'autonomy.run', at: now(), projectId, itemId, ok: true })
+  }
+  const dispatcher: Dispatcher | null = deps.dispatch ? createDispatcher({
+    maxInflight: deps.dispatch.maxInflight,
+    breaker: deps.dispatch.breaker,
+    onSettled(job: DispatchJob, result: DispatchResult, breakerOpened: boolean) {
+      if (result.ok) {
+        recordSuccess(job.projectId, job.itemId)
+        waker?.wake('worker_settled')
+        return
+      }
+      recordFailure(job.projectId, job.itemId, result.code)
+      if (breakerOpened) audit({ kind: 'autonomy.breaker_open', at: now(), projectId: job.projectId, itemId: job.itemId, code: result.code })
+    },
+  }) : null
+  const waker: Waker | null = dispatcher ? createWaker({
+    onWake: () => tick(),
+    sweepMs: deps.dispatch?.sweepMs,
+    debounceMs: deps.dispatch?.debounceMs,
+  }) : null
+  let cursor = 0
+  /** Claims at most one item per project (round-robin start) and launches it; never awaits a worker. */
+  function dispatchTick(d: Dispatcher): TickResult {
+    const projects = readProjects()
+    if (projects === null) return { ran: false, reason: 'error' }
+    if (projects.length === 0) return { ran: false, reason: 'no_projects' }
+    const offset = cursor++ % projects.length
+    const started: DispatchJob[] = []
+    let saturated = false
+    for (let i = 0; i < projects.length && !saturated; i++) {
+      const project = projects[(offset + i) % projects.length]
+      const plan = planFor(project)
+      if (plan === null) continue
+      const item = nextItem(plan, (id) => d.has({ projectId: project.id, itemId: id }))
+      if (item === null) continue
+      const job = { projectId: project.id, itemId: item.id }
+      const outcome = d.start(job, () => deps.run(project.id, item.id, plan.version))
+      if (outcome === 'started') started.push(job)
+      else if (outcome === 'saturated') saturated = true
+    }
+    if (started.length === 0) return { ran: false, reason: saturated ? 'saturated' : 'no_eligible' }
+    return { ran: true, ...started[0], ok: true, dispatched: started.length }
+  }
+
   async function tick(): Promise<TickResult> {
+    if (dispatcher) return dispatchTick(dispatcher)
     if (ticking) return { ran: false, reason: 'overlap' }
     ticking = true
     try {
-      let projects: readonly AutonomyProject[]
-      try {
-        projects = deps.projects()
-      } catch {
-        log.warn('central.autonomy.tick_error', 'central autonomy: project list failed', { code: 'projects_read' })
-        return { ran: false, reason: 'error' }
-      }
+      const projects = readProjects()
+      if (projects === null) return { ran: false, reason: 'error' }
       if (projects.length === 0) return { ran: false, reason: 'no_projects' }
       for (const project of projects) {
-        // A status flip (pause/resume/etc.) is an operator signal: forget the failure budget.
-        const previous = lastStatus.get(project.id)
-        if (previous !== undefined && previous !== project.status) consecutive.delete(project.id)
-        lastStatus.set(project.id, project.status)
-
-        if (project.status === PROJECT_PAUSED) continue
-        if ((consecutive.get(project.id) ?? 0) >= maxFailures) continue
-
-        let plan: AutonomyPlan | null
-        try {
-          plan = deps.plan(project.id)
-        } catch {
-          audit({ kind: 'autonomy.tick_error', at: now(), projectId: project.id, code: 'plan_read' })
-          continue
-        }
-        if (plan === null || isTerminal(plan.status)) continue
+        const plan = planFor(project)
+        if (plan === null) continue
         const item = nextItem(plan)
         if (item === null) continue
 
@@ -168,8 +246,7 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
           result = { ok: false, code: 'internal' }
         }
         if (result.ok) {
-          consecutive.delete(project.id)
-          audit({ kind: 'autonomy.run', at: now(), projectId: project.id, itemId: item.id, ok: true })
+          recordSuccess(project.id, item.id)
           return { ran: true, projectId: project.id, itemId: item.id, ok: true }
         }
         recordFailure(project.id, item.id, result.code)
@@ -183,6 +260,7 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
   }
 
   function start(): void {
+    if (waker) return waker.start()
     if (timer !== null) return
     timer = setInterval(() => {
       void tick().catch(() => {})
@@ -192,6 +270,12 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
   }
 
   function stop(): void {
+    if (waker) {
+      if (!waker.running) return
+      waker.stop()
+      log.info('central.autonomy.stop', 'central autonomy stopped')
+      return
+    }
     if (timer === null) return
     clearInterval(timer)
     timer = null
@@ -203,8 +287,13 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
     start,
     stop,
     get running() {
-      return timer !== null
+      return waker ? waker.running : timer !== null
     },
     failures: (projectId: string) => consecutive.get(projectId) ?? 0,
+    wake: (reason) => waker?.wake(reason),
+    get inflight() {
+      return dispatcher?.size ?? 0
+    },
+    drain: () => dispatcher?.drain() ?? Promise.resolve(),
   }
 }

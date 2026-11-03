@@ -4,11 +4,15 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import {
   type AdapterRuntimeKind, type CancelToken, type CentralRuntime, type RuntimeEmit,
-  type RuntimeErrorCode, type RuntimeResult, type RuntimeUsage, type TurnInput,
+  type RuntimeErrorCode, type RuntimeResult, type TurnInput,
   createCancelToken,
 } from './centralRuntime'
 import { createTurnEmitter, type TurnEmitter } from './runtimeEvents'
-import { type OpencodeEvent, type OpencodeUsageDelta, createOpencodeStreamParser } from './opencodeEvents'
+import { type OpencodeEvent, createOpencodeStreamParser } from './opencodeEvents'
+import {
+  type SessionState, type UsageTotals, applyOpencodeEvent, defaultOpencodeHomeDir, emptyUsage,
+  prepareOpencodeHome, runtimeErrorMessage, toRuntimeUsage,
+} from './opencodeSession'
 import {
   buildOpencodeInvocation, opencodeBin, opencodeModel, opencodeToolsAllowed,
 } from './opencodeOptions'
@@ -26,6 +30,8 @@ export interface OpenCodeRuntimeOptions {
   model?: string
   /** Base environment; scrubbed before spawn. Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv
+  /** Child HOME; defaults to `<dataDir>/central/home` so the user's own HOME/XDG stay unread. */
+  homeDir?: string
   /** Optional `--title` for the CLI session. */
   title?: string
   /** Wall timeout when the turn does not set one. */
@@ -36,44 +42,10 @@ export interface OpenCodeRuntimeOptions {
   now?: () => number
 }
 
-interface UsageTotals {
-  inputTokens: number
-  outputTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-  costMicros: number
-}
-
 interface ActiveTurn {
   token: CancelToken
   child: ChildProcess | null
 }
-
-function emptyUsage(): UsageTotals {
-  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costMicros: 0 }
-}
-
-function addUsage(totals: UsageTotals, delta: OpencodeUsageDelta): void {
-  totals.inputTokens += delta.inputTokens
-  // Reasoning tokens are generated tokens; RuntimeUsage has no separate bucket.
-  totals.outputTokens += delta.outputTokens + delta.reasoningTokens
-  totals.cacheReadTokens += delta.cacheReadTokens
-  totals.cacheWriteTokens += delta.cacheWriteTokens
-  totals.costMicros += delta.costMicros
-}
-
-function toRuntimeUsage(totals: UsageTotals, durationMs: number): RuntimeUsage {
-  return {
-    inputTokens: totals.inputTokens,
-    outputTokens: totals.outputTokens,
-    cacheReadTokens: totals.cacheReadTokens,
-    cacheWriteTokens: totals.cacheWriteTokens,
-    costMicros: totals.costMicros,
-    durationMs: Math.max(0, Math.round(durationMs)),
-  }
-}
-
-type Termination = 'cancelled' | 'timeout' | null
 
 export class OpenCodeRuntime implements CentralRuntime {
   readonly kind: AdapterRuntimeKind = 'opencode'
@@ -92,7 +64,7 @@ export class OpenCodeRuntime implements CentralRuntime {
     const emitter = createTurnEmitter({ turnId: input.turnId, emit, now: this.now })
     const startedAt = this.now()
     const totals = emptyUsage()
-    const state: { sessionRef: string | null; sawError: boolean; termination: Termination } = {
+    const state: SessionState = {
       sessionRef: null,
       sawError: false,
       termination: null,
@@ -129,7 +101,15 @@ export class OpenCodeRuntime implements CentralRuntime {
         return this.finish(input, emitter, totals, startedAt, state, 'cancelled', 'cancelled')
       }
 
+      const homeDir = this.options.homeDir ?? defaultOpencodeHomeDir()
+      try {
+        prepareOpencodeHome(homeDir)
+      } catch (err) {
+        spawnError = err instanceof Error ? err : new Error('opencode home setup failed')
+        return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error')
+      }
       const invocation = buildOpencodeInvocation({
+        homeDir,
         prompt: input.text,
         model: opencodeModel(this.options.model),
         executable: opencodeBin(this.options.executable),
@@ -155,7 +135,7 @@ export class OpenCodeRuntime implements CentralRuntime {
 
       const parser = createOpencodeStreamParser()
       const apply = (events: OpencodeEvent[]): void => {
-        for (const event of events) this.applyEvent(event, emitter, totals, startedAt, state)
+        for (const event of events) applyOpencodeEvent(event, emitter, totals, startedAt, this.now(), state)
       }
 
       child.stdout?.setEncoding('utf8')
@@ -219,64 +199,17 @@ export class OpenCodeRuntime implements CentralRuntime {
     this.active.clear()
   }
 
-  private applyEvent(
-    event: OpencodeEvent,
-    emitter: TurnEmitter,
-    totals: UsageTotals,
-    startedAt: number,
-    state: { sessionRef: string | null; sawError: boolean; termination: Termination }
-  ): void {
-    switch (event.type) {
-      case 'text':
-        emitter.textDelta(event.text)
-        return
-      case 'tool.requested':
-        emitter.emit({
-          type: 'tool.requested',
-          toolCallId: event.toolCallId,
-          name: event.name,
-          input: event.input,
-        })
-        return
-      case 'tool.completed':
-        emitter.emit({
-          type: 'tool.completed',
-          toolCallId: event.toolCallId,
-          name: event.name,
-          ok: event.ok,
-          ...(event.output === undefined ? {} : { output: event.output }),
-          ...(event.errorCode === undefined ? {} : { errorCode: event.errorCode }),
-          durationMs: 0,
-        })
-        return
-      case 'usage': {
-        addUsage(totals, event.usage)
-        emitter.emit({ type: 'usage', usage: toRuntimeUsage(totals, this.now() - startedAt) })
-        return
-      }
-      case 'error':
-        // One adapter error event per turn; a later non-zero exit adds no duplicate.
-        if (!state.sawError) {
-          state.sawError = true
-          emitter.emit({ type: 'error', code: event.code, message: event.message, retryable: false })
-        }
-        return
-      default:
-        return
-    }
-  }
-
   private finish(
     input: TurnInput,
     emitter: TurnEmitter,
     totals: UsageTotals,
     startedAt: number,
-    state: { sessionRef: string | null; sawError: boolean; termination: Termination },
+    state: SessionState,
     outcome: RuntimeResult['outcome'],
     errorCode?: RuntimeErrorCode
   ): RuntimeResult {
     if (outcome === 'error' && !state.sawError && errorCode !== undefined) {
-      emitter.emit({ type: 'error', code: errorCode, message: this.errorMessage(errorCode), retryable: false })
+      emitter.emit({ type: 'error', code: errorCode, message: runtimeErrorMessage(errorCode), retryable: false })
     }
     if (state.sessionRef === null && input.sessionRef !== undefined) {
       state.sessionRef = input.sessionRef
@@ -288,19 +221,5 @@ export class OpenCodeRuntime implements CentralRuntime {
       ...(errorCode === undefined ? {} : { errorCode }),
       sessionRef: state.sessionRef,
     })
-  }
-
-  /** Stable, input-free messages: never echo child output or the prompt. */
-  private errorMessage(code: RuntimeErrorCode): string {
-    switch (code) {
-      case 'timeout':
-        return 'opencode timed out'
-      case 'cancelled':
-        return 'opencode turn cancelled'
-      case 'max_turns':
-        return 'opencode turn limit reached'
-      default:
-        return 'opencode runtime failed'
-    }
   }
 }
