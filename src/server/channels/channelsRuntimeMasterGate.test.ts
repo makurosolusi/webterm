@@ -35,7 +35,9 @@ describe('WEBTERM_CHANNELS master gate', () => {
     expect(channelsMasterState({} as NodeJS.ProcessEnv)).toBe('on')
     expect(channelsMasterState({ WEBTERM_CHANNELS: 'on' } as NodeJS.ProcessEnv)).toBe('on')
     expect(channelsMasterState({ WEBTERM_CHANNELS: ' OFF ' } as NodeJS.ProcessEnv)).toBe('off')
-    for (const value of ['readonly', 'control', 'yes', '1']) {
+    for (const value of ['1', 'true']) expect(channelsMasterState({ WEBTERM_CHANNELS: value } as NodeJS.ProcessEnv)).toBe('on')
+    for (const value of ['0', 'false']) expect(channelsMasterState({ WEBTERM_CHANNELS: value } as NodeJS.ProcessEnv)).toBe('off')
+    for (const value of ['readonly', 'control', 'yes']) {
       expect(channelsMasterState({ WEBTERM_CHANNELS: value } as NodeJS.ProcessEnv)).toBe('unsupported')
     }
   })

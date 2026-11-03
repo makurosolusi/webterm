@@ -195,7 +195,8 @@ describe('flag off keeps the legacy loop', () => {
 
   it('reads the flag and cap strictly', () => {
     expect(reliabilityEnabled(undefined)).toBe(false)
-    expect(reliabilityEnabled('true')).toBe(false)
+    expect(reliabilityEnabled('true')).toBe(true)
+    expect(reliabilityEnabled('yes')).toBe(false)
     expect(reliabilityEnabled(' ON ')).toBe(true)
     expect(maxInflightFromEnv(undefined)).toBe(3)
     expect(maxInflightFromEnv('0')).toBe(3)

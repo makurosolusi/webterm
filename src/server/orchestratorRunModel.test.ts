@@ -29,7 +29,8 @@ describe('orchestratorRunModel', () => {
 
   it('gates on the exact flag value "on"', () => {
     expect(orchestratorRunEnabled({})).toBe(false)
-    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: '1' })).toBe(false)
+    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: '1' })).toBe(true)
+    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'yes' })).toBe(false)
     expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'on' })).toBe(true)
   })
 

@@ -1,6 +1,7 @@
 // Pembangun state env v2 (GET /api/settings/env): nilai ternormalisasi, validitas, nilai efektif.
 // Murni (tanpa I/O). Secret tidak pernah membawa nilai; token root hanya jadi boolean.
 import type { EnvEntryV2, EnvGroupMeta, EnvSourceV2, EnvStateV2 } from '../shared/envSettings.contract'
+import { parseFlag } from './envFlag'
 import { groupMetaFor } from './envRegistry.groups'
 import { resolveMeta } from './envRegistry.meta'
 import type { EnvKind, EnvSpec } from './envRegistry.types'
@@ -51,8 +52,8 @@ function view(spec: EnvSpec, raw: string | undefined): View {
   const t = (raw ?? '').trim()
   const fallback = spec.default ?? ''
   if (t === '') return { value: fallback, valid: true }
-  const lower = t.toLowerCase()
-  if (spec.kind === 'flag' && (lower === 'on' || lower === 'off')) return { value: lower, valid: true }
+  const flagValue = spec.kind === 'flag' ? parseFlag(t) : undefined
+  if (flagValue) return { value: flagValue, valid: true }
   const check = spec.kind === 'flag' ? undefined : validateEnvValue(spec, t)
   if (check?.ok) return { value: check.value, valid: true }
   const invalidReason = spec.kind === 'string' && spec.absolutePath ? REASON_ABSOLUTE : REASON[spec.kind]

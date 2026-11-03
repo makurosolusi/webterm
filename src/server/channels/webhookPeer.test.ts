@@ -13,10 +13,12 @@ function req(
 }
 
 describe('trustProxyEnabled', () => {
-  it('accepts only the literal on, case- and whitespace-insensitive', () => {
+  it('accepts on|1|true, case- and whitespace-insensitive; typos stay off', () => {
     expect(trustProxyEnabled(ON)).toBe(true)
-    expect(trustProxyEnabled({ [TRUST_PROXY_ENV]: ' ON ' } as NodeJS.ProcessEnv)).toBe(true)
-    for (const value of ['off', '1', 'true', 'yes', '']) {
+    for (const value of [' ON ', '1', 'true']) {
+      expect(trustProxyEnabled({ [TRUST_PROXY_ENV]: value } as NodeJS.ProcessEnv)).toBe(true)
+    }
+    for (const value of ['off', '0', 'yes', '']) {
       expect(trustProxyEnabled({ [TRUST_PROXY_ENV]: value } as NodeJS.ProcessEnv)).toBe(false)
     }
     expect(trustProxyEnabled(OFF)).toBe(false)
