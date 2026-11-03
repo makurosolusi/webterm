@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
+import type { CapabilityId } from '../../shared/featureCapabilities'
+import { reconcile } from '../featureCapabilities.runtime'
 import { activeCa2, bootCa2, ca2Active, setActiveCa2 } from './ca2Boot'
 import { freshDb } from './guard/controlGuard.testutil'
 import { CORE_DEFS } from './tools/defs/core.defs'
@@ -23,24 +25,61 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
 })
 
-describe('all flags off', () => {
-  it('does not arm CA2: no handle, no new tools, identical toolsHash', () => {
+describe('central off (dormant)', () => {
+  it('merakit handle dormant: tanpa tool baru, hash sama, tidak jadi activeCa2', () => {
     const registry = coreRegistry()
     const before = toolsHash(registry)
     expect(ca2Active({})).toBe(false)
-    expect(bootCa2({ runtime: runtime(), sessions, env: {}, registry })).toBeNull()
+    const handle = bootCa2({ runtime: runtime(), sessions, env: {}, registry })
+    expect(handle).not.toBeNull()
     expect(activeCa2()).toBeNull()
     expect(registerCa2Tools(registry, {}, {})).toEqual([])
     expect(registry.list().map((d) => d.name).sort()).toEqual(CORE_DEFS.map((d) => d.name).sort())
     expect(toolsHash(registry)).toBe(before)
+    handle?.stop()
   })
 
-  it('treats explicit off/garbage values as off', () => {
-    expect(ca2Active({ WEBTERM_CENTRAL_AGENTS: 'off', WEBTERM_CENTRAL_MEMORY: 'nope', WEBTERM_CENTRAL_READ_TOOLS: '0' })).toBe(false)
+  it('anak CA2 tanpa Central diabaikan (tidak aktif, tidak ada tool)', () => {
+    const registry = coreRegistry()
+    const env = { WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on', WEBTERM_CENTRAL_SKILLS: 'on' }
+    expect(ca2Active(env)).toBe(false)
+    const handle = bootCa2({ runtime: runtime(), sessions, env, registry, dataDirPath: tmp(), noTimer: true })
+    expect(handle?.toolNames).toEqual([])
+    expect(handle?.executor).toBeNull()
+    expect(activeCa2()).toBeNull()
+    handle?.stop()
   })
 
-  it('does not boot without a ledger even when flags are on', () => {
-    expect(bootCa2({ runtime: null, sessions, env: { WEBTERM_CENTRAL_MEMORY: 'on' }, registry: coreRegistry() })).toBeNull()
+  it('tanpa ledger: null walau Central on', () => {
+    expect(bootCa2({ runtime: null, sessions, env: { WEBTERM_CENTRAL: 'on' }, registry: coreRegistry() })).toBeNull()
+  })
+})
+
+describe('hot on/off tanpa rebuild', () => {
+  it('Central dinyalakan lewat reconcile: tool baca terdaftar, handle aktif; dipadamkan: handle dilepas; ulang aman', async () => {
+    const registry = coreRegistry()
+    const env: Record<string, string | undefined> = {}
+    const handle = bootCa2({ runtime: runtime(), sessions, env, registry, dataDirPath: tmp(), noTimer: true })
+    expect(activeCa2()).toBeNull()
+    env.WEBTERM_CENTRAL = 'on'
+    await reconcile(new Set(), new Set<CapabilityId>(['central']))
+    expect(activeCa2()).toBe(handle)
+    const names = handle?.toolNames.slice() ?? []
+    expect(names.length).toBeGreaterThan(0)
+    await reconcile(new Set(), new Set<CapabilityId>(['central'])) // start dua kali: satu perakitan
+    expect(handle?.toolNames).toEqual(names)
+    env.WEBTERM_CENTRAL = 'off'
+    await reconcile(new Set<CapabilityId>(['central']), new Set())
+    expect(activeCa2()).toBeNull()
+    await reconcile(new Set<CapabilityId>(['central']), new Set()) // stop dua kali aman
+    env.WEBTERM_CENTRAL = 'on'
+    await reconcile(new Set(), new Set<CapabilityId>(['central']))
+    expect(activeCa2()).toBe(handle)
+    expect(handle?.toolNames).toEqual(names)
+    handle?.stop()
+    await reconcile(new Set<CapabilityId>(['central']), new Set())
+    await reconcile(new Set(), new Set<CapabilityId>(['central'])) // hook sudah dicabut: tak lagi mengaktifkan
+    expect(activeCa2()).toBeNull()
   })
 })
 
@@ -70,11 +109,11 @@ describe('flags on', () => {
     expect(registerCa2Tools(r, {}, { WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_AGENT_MAIL: 'on' }).some((n) => n.startsWith('agent.spawn'))).toBe(false)
   })
 
-  it('boots with skills + memory + read tools: handle, builtin skills installed, tools listed', () => {
+  it('boots with skills (memory + read tools ikut Central): handle, builtin skills installed, tools listed', () => {
     const registry = coreRegistry()
     const handle = bootCa2({
       runtime: runtime(), sessions, registry, noTimer: true, dataDirPath: tmp(),
-      env: { WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' },
+      env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_SKILLS: 'on' },
     })
     expect(handle).not.toBeNull()
     expect(activeCa2()).toBe(handle)
@@ -86,7 +125,7 @@ describe('flags on', () => {
   })
 
   it('boot with the agents flag builds an executor under the injected data dir and sweeps nothing', async () => {
-    const handle = bootCa2({ runtime: runtime(), sessions, registry: coreRegistry(), noTimer: true, dataDirPath: tmp(), env: { WEBTERM_CENTRAL_AGENTS: 'propose' } })
+    const handle = bootCa2({ runtime: runtime(), sessions, registry: coreRegistry(), noTimer: true, dataDirPath: tmp(), env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'propose' } })
     expect(handle?.executor).not.toBeNull()
     expect(handle?.toolNames.some((n) => n.startsWith('agent.'))).toBe(true)
     await handle?.ready

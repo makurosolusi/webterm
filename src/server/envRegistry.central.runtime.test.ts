@@ -63,3 +63,12 @@ describe('entri khusus OpenCode dan CA2 netral-runtime', () => {
     expect(s.description.toLowerCase()).not.toContain('runtime opencode')
   })
 })
+
+describe('kunci turunan central (ES-04)', () => {
+  // Kunci ini diturunkan dari WEBTERM_CENTRAL dan dibaca per panggilan, jadi tak boleh berlabel restart-boot.
+  it.each(['WEBTERM_CENTRAL_CHAT', 'WEBTERM_CENTRAL_MEMORY', 'WEBTERM_CENTRAL_READ_TOOLS'])('%s hot, bukan boot', (key) => {
+    const s = spec(key)
+    expect(s.restart).toBe('hot')
+    expect(s.restartRequired).toBe(false)
+  })
+})

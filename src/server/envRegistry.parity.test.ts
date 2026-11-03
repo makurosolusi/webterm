@@ -31,6 +31,8 @@ const HOT_PROOF: Readonly<Record<string, string>> = {
   WEBTERM_CENTRAL_DAILY_COST_MICROS: 'central/guard/budgetStore.ts',
   WEBTERM_CENTRAL_CONTEXT_WINDOW: 'central/context/rotationPolicy.ts',
   WEBTERM_AGENT_IDLE_DONE_MS: 'orchestrator/workerSignal.ts',
+  // Turunan Central: tool baca didaftarkan saat Central menyala (ca2Boot onCapabilityChange) dan dicek per turn.
+  WEBTERM_CENTRAL_READ_TOOLS: 'central/chat/toolLoop.ts',
 }
 
 /** Resolver publik pembaca dipanggil dengan env kosong; hasilnya harus sama dengan default registry. */

@@ -24,7 +24,7 @@ beforeEach(() => {
   for (const d of CORE_DEFS) registry.register(d)
   const booted = bootCa2({
     runtime: { db: freshDb() } as unknown as LedgerRuntime, sessions, registry, noTimer: true, dataDirPath: dir, now: () => T0,
-    env: { WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_MODEL: 'vendor/model:free' },
+    env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_MODEL: 'vendor/model:free' },
   })
   if (!booted) throw new Error('boot failed')
   h = booted

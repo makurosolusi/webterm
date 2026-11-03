@@ -2,28 +2,29 @@
 // unsupported value fail closed to `off`. Never log or return the raw value: the
 // flag is configuration, but a mistyped environment can contain a credential.
 import type { RuntimeKind } from './centralRuntime'
+import { SUPPORTED_RUNTIME_KINDS, type WhichFn, detectAgentEngine } from './runtimeDetect'
 
 export const CENTRAL_RUNTIME_FLAG = 'WEBTERM_CENTRAL_RUNTIME'
 export const DEFAULT_RUNTIME_KIND: RuntimeKind = 'off'
 
-const SUPPORTED: ReadonlySet<string> = new Set(['off', 'claude', 'codex', 'opencode', 'mock'])
-
 /** Case-insensitive, trimmed; anything unsupported becomes `off`. */
 export function parseRuntimeKind(raw: string | null | undefined): RuntimeKind {
   const value = (raw ?? '').trim().toLowerCase()
-  return SUPPORTED.has(value) ? (value as RuntimeKind) : DEFAULT_RUNTIME_KIND
+  return SUPPORTED_RUNTIME_KINDS.has(value) ? (value as RuntimeKind) : DEFAULT_RUNTIME_KIND
 }
 
-/** Read the process flag; pass an explicit value in tests instead of mutating env. */
+/** Tak diset (undefined) = deteksi otomatis (claude, opencode, mock); string apa pun, termasuk kosong, di-parse fail-closed. */
 export function centralRuntimeKind(
-  raw: string | undefined = process.env.WEBTERM_CENTRAL_RUNTIME
+  raw: string | undefined = process.env.WEBTERM_CENTRAL_RUNTIME,
+  which?: WhichFn
 ): RuntimeKind {
-  return parseRuntimeKind(raw)
+  return raw === undefined ? detectAgentEngine({}, which) : parseRuntimeKind(raw)
 }
 
-/** True only for an explicitly selected adapter; `off` and garbage are false. */
+/** True untuk mesin terpilih atau terdeteksi; `off` dan nilai tak dikenal false. */
 export function centralRuntimeEnabled(
-  raw: string | undefined = process.env.WEBTERM_CENTRAL_RUNTIME
+  raw: string | undefined = process.env.WEBTERM_CENTRAL_RUNTIME,
+  which?: WhichFn
 ): boolean {
-  return parseRuntimeKind(raw) !== 'off'
+  return centralRuntimeKind(raw, which) !== 'off'
 }
