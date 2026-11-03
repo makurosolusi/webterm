@@ -100,6 +100,7 @@ function SettingsPanelView({
 }: PanelProps & { query: string; setQuery: (q: string) => void; normalized: string }): React.JSX.Element {
   const [active, setActive] = useState<SectionId>('terminal')
   const [found, setFound] = useState(0)
+  const [channelsFocus, setChannelsFocus] = useState<string>()
   const mainRef = useRef<HTMLElement>(null)
   const entries = useEnvSettingsContext().state?.entries
   const envHits = useMemo(
@@ -129,12 +130,12 @@ function SettingsPanelView({
     if (id === 'channels') {
       return (
         <>
-          <ChannelsSection />
+          <ChannelsSection focusKey={channelsFocus} onFocused={() => setChannelsFocus(undefined)} />
           <ChannelsHits hits={channelHits} onOpen={() => { setActive('channels'); setQuery('') }} />
         </>
       )
     }
-    if (id === 'env') return <EnvSection />
+    if (id === 'env') return <EnvSection onOpenChannels={(key) => { setActive('channels'); setChannelsFocus(key) }} />
     return <PreviewSection settings={s} onChange={onChange} />
   }
 

@@ -51,19 +51,21 @@ describe('EnvSection', () => {
     expect(screen.getByTestId('row-K_ONE').dataset.locked).toBe('true')
   })
 
-  it('keeps channels entries rendered while CHANNELS_OWNS_TELEGRAM is off, replaces them with one line when on', async () => {
+  it('keeps channels entries in Environment when channelsOwned is off, replaces them with one link when on (default)', async () => {
     const st = baseState()
     st.entries = [...st.entries, mkEntry({ key: 'K_TG', owner: 'channels' })]
     stubEnvApi(st)
-    render(<EnvSection />)
+    render(<EnvSection channelsOwned={false} />)
     expect(await screen.findByTestId('row-K_TG')).toBeTruthy()
     expect(screen.queryByText('Konfigurasi Telegram ada di tab Channels.')).toBeNull()
     cleanup()
     stubEnvApi(st)
-    render(<EnvSection channelsOwned />)
+    const onOpenChannels = vi.fn()
+    render(<EnvSection onOpenChannels={onOpenChannels} />)
     await screen.findByTestId('row-K_ONE')
     expect(screen.queryByTestId('row-K_TG')).toBeNull()
-    expect(screen.getAllByText('Konfigurasi Telegram ada di tab Channels.')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Konfigurasi Telegram ada di tab Channels.' }))
+    expect(onOpenChannels).toHaveBeenCalledWith('K_TG')
   })
 
   it('quick filter "Berbahaya" hides the others without unmounting and toggles off', async () => {

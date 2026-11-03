@@ -6,13 +6,17 @@ import { Field, useSettingsSearch } from './SettingsFields'
 import { ChannelsBindings, ChannelsPending } from './ChannelsLists'
 import type { DirectionStatus, TelegramStatus } from './channelsApi'
 import { CH, relativeTime } from './channelsLabels'
+import { ChannelsTelegramConfig } from './ChannelsTelegramConfig'
 import { useChannels } from './useChannels'
 import './settings-channels.css'
 
+/** Permintaan fokus ke satu kontrol konfigurasi (lompat lintas-tab dari Environment). */
+type ConfigFocus = { focusKey?: string; onFocused?: () => void }
+
 /** Section Channels; kosong saat pencarian aktif supaya tidak polling di belakang hasil cari. */
-export function ChannelsSection(): React.JSX.Element | null {
+export function ChannelsSection(props: ConfigFocus): React.JSX.Element | null {
   const query = useSettingsSearch()
-  return query ? null : <ChannelsPanel />
+  return query ? null : <ChannelsPanel {...props} />
 }
 
 function Direction({ label, dir, now }: { label: string; dir: DirectionStatus; now: number }): React.JSX.Element {
@@ -51,7 +55,7 @@ function StatusBlock({ status, now }: { status: TelegramStatus; now: number }): 
   )
 }
 
-function ChannelsPanel(): React.JSX.Element {
+function ChannelsPanel({ focusKey, onFocused }: ConfigFocus): React.JSX.Element {
   const c = useChannels()
   const now = Date.now()
   let body: ReactNode
@@ -83,6 +87,7 @@ function ChannelsPanel(): React.JSX.Element {
       </div>
       {c.error ? <SettingsMessage kind="error" role="alert">{c.error}</SettingsMessage> : null}
       {c.actionError ? <SettingsMessage kind="error" role="alert">{c.actionError}</SettingsMessage> : null}
+      <ChannelsTelegramConfig focusKey={focusKey} onFocused={onFocused} />
       {body}
     </div>
   )

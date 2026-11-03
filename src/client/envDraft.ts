@@ -3,8 +3,8 @@ import type { EnvEntryV2, EnvGroupMeta } from '../shared/envSettings.contract'
 import type { EnvChange } from './envSettingsApi'
 import { matchesSearch } from './SettingsFields'
 
-/** Entri owner 'channels' dirender tab Channels (ENV-06 menyalakan); sebelum itu tetap di sini. */
-export const CHANNELS_OWNS_TELEGRAM: boolean = false
+/** Entri owner 'channels' dirender tab Channels (ChannelsTelegramConfig), bukan di Environment. */
+export const CHANNELS_OWNS_TELEGRAM: boolean = true
 
 const NO_ORDER = Number.MAX_SAFE_INTEGER
 

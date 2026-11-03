@@ -3,6 +3,7 @@
 // section memasang provider sendiri). Query pencarian tidak pernah membuang section/draft.
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { EnvEntryV2 } from '../shared/envSettings.contract'
+import { Button } from '@/components/ui/button'
 import { EnvGroupSection } from './EnvGroupSection'
 import { EnvRestartBanner } from './EnvRestartBanner'
 import { EnvSaveBar } from './EnvSaveBar'
@@ -18,7 +19,11 @@ import {
 } from './useEnvSettings'
 import './settings-env.css'
 
-interface Props { channelsOwned?: boolean }
+interface Props {
+  channelsOwned?: boolean
+  /** Pindah ke tab Channels lalu fokus kunci itu (kunci milik Channels tak punya baris di sini). */
+  onOpenChannels?: (key: string) => void
+}
 
 const FILTERS: Array<[EnvQuickFilter, string]> = [
   ['changed', ENV_UI.filterChanged], ['restart', ENV_UI.filterRestart], ['dangerous', ENV_UI.filterDangerous],
@@ -26,14 +31,14 @@ const FILTERS: Array<[EnvQuickFilter, string]> = [
 const FOCUSABLE = 'input,select,textarea,button,[role="switch"]'
 
 /** Section Environment; memakai provider dari atas bila ada. */
-export function EnvSection({ channelsOwned = CHANNELS_OWNS_TELEGRAM }: Props): React.JSX.Element {
+export function EnvSection({ channelsOwned = CHANNELS_OWNS_TELEGRAM, onOpenChannels }: Props): React.JSX.Element {
   const query = useSettingsSearch()
   const hasProvider = useHasEnvSettingsContext()
-  const panel = <EnvPanel channelsOwned={channelsOwned} />
+  const panel = <EnvPanel channelsOwned={channelsOwned} onOpenChannels={onOpenChannels} />
   return hasProvider ? panel : <EnvSettingsProvider query={query}>{panel}</EnvSettingsProvider>
 }
 
-function EnvPanel({ channelsOwned }: Required<Props>): React.JSX.Element {
+function EnvPanel({ channelsOwned, onOpenChannels }: Pick<Props, 'onOpenChannels'> & Required<Pick<Props, 'channelsOwned'>>): React.JSX.Element {
   const api = useEnvSettingsContext()
   useEnvLoadOnMount()
   const [filter, setFilter] = useState<EnvQuickFilter>()
@@ -51,11 +56,14 @@ function EnvPanel({ channelsOwned }: Required<Props>): React.JSX.Element {
   const narrowed = q !== '' || filter !== undefined
   const onJump = useCallback((key: string): void => {
     const el = [...(root.current?.querySelectorAll<HTMLElement>('[data-env-item]') ?? [])].find((n) => n.dataset.envItem === key)
-    if (!el) return // kunci milik Channels / tak dirender: pindah tab ditangani ENV-06
+    if (!el) {
+      if (state?.entries.some((e) => e.key === key && e.owner === 'channels')) onOpenChannels?.(key)
+      return
+    }
     for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true
     el.scrollIntoView?.({ block: 'center' })
     el.querySelector<HTMLElement>(FOCUSABLE)?.focus()
-  }, [])
+  }, [state, onOpenChannels])
   const none = narrowed && part !== null && ![...part.main, ...part.advanced].some((s) => s.entries.some(visible))
   const group = (title: string, sections: EnvSectionData[], defaultOpen: boolean, sub = false): React.JSX.Element => (
     <EnvGroupSection key={title} title={title} sections={sections} defaultOpen={defaultOpen} subheadings={sub}
@@ -84,7 +92,13 @@ function EnvPanel({ channelsOwned }: Required<Props>): React.JSX.Element {
           <div hidden={narrowed}><EnvServerCard server={state.server} rootGate={state.rootGate} /></div>
           {part.main.map((s) => group(s.title, [s], true))}
           {part.advanced.length > 0 ? group(ENV_UI.advanced, part.advanced, false, true) : null}
-          {part.channels.length > 0 ? <SettingsMessage kind="info">{ENV_UI.channelsMoved}</SettingsMessage> : null}
+          {part.channels[0] ? (
+            <SettingsMessage kind="info">
+              <Button type="button" variant="link" size="sm" onClick={() => onOpenChannels?.(part.channels[0]!.key)}>
+                {ENV_UI.channelsMoved}
+              </Button>
+            </SettingsMessage>
+          ) : null}
           {none ? <p className="st-note">{ENV_UI.noMatch}</p> : null}
         </>
       ) : null}

@@ -9,6 +9,8 @@ import { ChannelsSection } from './ChannelsSection'
 import { SettingsSearchProvider } from './SettingsFields'
 import { CHANNELS_POLL_MS } from './useChannels'
 
+// Konfigurasi Telegram punya tes sendiri (ChannelsTelegramConfig.test.tsx); di sini hanya status & daftar chat.
+vi.mock('./ChannelsTelegramConfig', () => ({ ChannelsTelegramConfig: () => null }))
 vi.setConfig({ testTimeout: 30_000 })
 
 interface Reply { status: number; body?: unknown }
@@ -56,7 +58,7 @@ describe('ChannelsSection', () => {
     routes['GET /api/channels/telegram/status'] = { status: 404, body: { error: 'channel_disabled' } }
     render(<ChannelsSection />)
     expect(await screen.findByText('Channel Telegram nonaktif')).toBeTruthy()
-    expect(screen.getByText(/WEBTERM_TELEGRAM=on/)).toBeTruthy()
+    expect(screen.getByText(/Nyalakan Telegram dan isi Token bot di bagian ini/)).toBeTruthy()
     expect(count('GET', '/api/channels/telegram/pending')).toBe(0)
   })
 
