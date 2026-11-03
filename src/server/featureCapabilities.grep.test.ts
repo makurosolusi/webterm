@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { CAPABILITIES, CAPABILITY_IDS, DERIVED_FLAGS } from '../shared/featureCapabilities'
@@ -8,17 +8,6 @@ import { CAPABILITIES, CAPABILITY_IDS, DERIVED_FLAGS } from '../shared/featureCa
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url))
 const KEYS = [...CAPABILITY_IDS.map((id) => CAPABILITIES[id].primaryKey), ...DERIVED_FLAGS.map((d) => d.key)]
 const EXEMPT = /(^|\/)(featureCapabilities\.|envRegistry)[^/]*$|\.test\.tsx?$/
-
-// Pelanggar yang SUDAH ada saat ES-00 dibuat. Daftar hanya boleh menyusut: tiap WS menghapus berkasnya
-// setelah pindah ke isEnabled; ES-14 mengosongkan (lalu tes ini menolak tambahan baru).
-const ALLOWLIST = new Set([
-  'central/ca2Boot.ts', 'central/centralApi.ts', 'central/centralAutonomy.ts', 'central/centralModel.ts',
-  'central/chat/turnService.ts', 'central/tools/defs/core.defs.ts', 'central/tools/defs/memory.defs.ts',
-  'central/tools/defs/read.shared.ts', 'central/tools/registerAll.ts', 'centralAutonomyBoot.ts',
-  'centralChatApi.ts', 'centralChatHandlers.ts', 'centralHttp.ts', 'channels/channelsMasterGate.ts',
-  'channels/channelsRuntime.ts', 'channels/telegramCentralBridge.ts', 'channels/telegramPollWiring.ts',
-  'orchestratorControlService.ts', 'orchestratorRunModel.ts', 'orchestratorRunProduction.ts',
-])
 
 const sources = (): string[] =>
   (readdirSync(SERVER_DIR, { recursive: true }) as string[])
@@ -37,13 +26,8 @@ describe('pagar grep kunci katalog', () => {
     expect(touched('WEBTERM_CENTRAL_X, WEBTERM_BROWSERS')).toEqual([])
   })
 
-  it('berkas non-tes di luar runtime/registry tidak menyentuh kunci katalog (kecuali allowlist)', () => {
+  it('berkas non-tes di luar runtime/registry tidak menyentuh kunci katalog (allowlist kosong, ES-14)', () => {
     const offenders = sources().filter((f) => touched(readFileSync(join(SERVER_DIR, f), 'utf8')).length > 0)
-    expect(offenders.filter((f) => !ALLOWLIST.has(f))).toEqual([])
-  })
-
-  it('allowlist hanya memuat berkas yang ada', () => {
-    const all = new Set(sources().map((f) => relative('.', f)))
-    expect([...ALLOWLIST].filter((f) => !all.has(f))).toEqual([])
+    expect(offenders).toEqual([])
   })
 })

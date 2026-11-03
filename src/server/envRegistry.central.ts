@@ -39,7 +39,7 @@ export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Memori central', description: 'Sertakan memori dalam konteks chat central.',
   }),
   flag('WEBTERM_CENTRAL_AUTONOMY', 'central', {
-    ...C, audience: 'user', restart: 'boot', dangerous: true,
+    ...C, audience: 'user', hot: true, dangerous: true,
     requires: [CENTRAL_ON, { key: 'WEBTERM_ORCHESTRATOR_RUN', note: 'Otonomi butuh Orchestrator run.' }],
     label: 'Otonomi central', description: 'Loop yang menjalankan worker nyata tiap interval, tanpa menunggu perintah.',
     dangerNote: 'Menjalankan worker nyata (shell, edit file, commit) secara otomatis tiap interval.',

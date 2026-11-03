@@ -51,7 +51,7 @@ export const CHANNEL_ENV_SPECS: readonly EnvSpec[] = [
     requires: [TELEGRAM_ON, { key: 'WEBTERM_TELEGRAM_MODE', oneOf: ['webhook', ''], note: 'Hanya mode webhook (atau otomatis).' }],
   }),
   flag('WEBTERM_CENTRAL_TELEGRAM', 'telegram', {
-    ...TG, audience: 'user', restart: 'boot',
+    ...TG, audience: 'user', hot: true,
     label: 'Central via Telegram',
     description: 'Jembatan chat central ke Telegram (butuh Central, Central chat, runtime central).',
     requires: [
