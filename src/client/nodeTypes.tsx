@@ -7,6 +7,7 @@ import TerminalNode from './TerminalNode'
 import AgentNode from './AgentNode'
 import FilesNode from './FilesNode'
 import EditorNode from './EditorNode'
+import { BrowserNodeType } from './BrowserNode.slots'
 import { read, readBinary, write } from './fsClient'
 import { useLiveSettings } from './useSettings'
 
@@ -14,6 +15,7 @@ export const nodeTypes = {
   terminal: TerminalNode,
   agent: AgentNode,
   files: FilesNode,
+  browser: BrowserNodeType,
   // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya dari
   // context, bukan lagi dari data node — lihat `useLiveSettings`.
   //

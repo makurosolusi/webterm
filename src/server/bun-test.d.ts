@@ -7,9 +7,15 @@ declare module 'bun:test' {
   export function test(name: string, fn: () => void | Promise<void>, timeoutMs?: number): void
   /** Dipakai test PTY untuk membersihkan direktori temp `mkdtempSync` sesudah file selesai. */
   export function afterAll(fn: () => void | Promise<void>): void
+  export function afterEach(fn: () => void | Promise<void>): void
+  export function describe(name: string, fn: () => void): void
   interface Matchers {
     toContain(expected: string): void
     toBe(expected: unknown): void
+    toBeNull(): void
+    toBeTruthy(): void
+    toBeDefined(): void
+    toMatchObject(expected: unknown): void
   }
   export function expect(value: unknown): Matchers & { not: Matchers }
 }

@@ -2,7 +2,7 @@
 // Satu sumber kebenaran untuk default/validasi/kelas risiko tiap kunci yang bisa diatur dari Pengaturan.
 
 export type EnvKind = 'flag' | 'string' | 'number' | 'enum' | 'secret'
-export type EnvGroup = 'ledger' | 'telegram' | 'channels' | 'central' | 'orchestrator' | 'memory' | 'control' | 'bootstrap'
+export type EnvGroup = 'ledger' | 'telegram' | 'channels' | 'central' | 'orchestrator' | 'memory' | 'control' | 'browser' | 'bootstrap'
 
 export interface EnvSpec {
   key: string

@@ -11,6 +11,8 @@ import { dataDir } from './config'
  *  session spawner (WS-11) must mint them per node and inject them; the shim never holds a value. */
 export const BROWSER_READ_CAP_ENV = 'WEBTERM_BROWSER_READ_CAP'
 export const BROWSER_ACT_CAP_ENV = 'WEBTERM_BROWSER_ACT_CAP'
+/** Env id node BROWSER target (disuntik spawner bersama dua capability); `--node` menimpanya. Absen = id node sesi itu sendiri. */
+export const BROWSER_NODE_ID_ENV = 'WEBTERM_BROWSER_NODE_ID'
 
 /** Skill directory + front-matter `name`. */
 export const BROWSER_SKILL_NAME = 'webterm-browser'
@@ -31,7 +33,7 @@ if [ -z "$NODETERM_NODE_ID" ]; then echo "Not a webterm session (NODETERM_NODE_I
 PORT="\${NODETERM_PORT:-8700}"
 [ "$#" -gt 0 ] || usage
 verb="$1"; shift
-node="$NODETERM_NODE_ID"; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
+node="\${${BROWSER_NODE_ID_ENV}:-$NODETERM_NODE_ID}"; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --node) [ "$#" -ge 2 ] || usage; node="$2"; shift 2 ;;

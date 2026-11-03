@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 export interface DockProps {
   onAddTerminal: () => void
+  /** Tidak ada = fitur browser mati di server; item "Browser" tidak dirender. */
+  onAddBrowser?: () => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string) => void
   onCreateWorkspace: (name: string, cwd?: string) => void
   onBrowse: (onPick: (p: string) => void) => void
@@ -74,6 +76,7 @@ export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
 
 /** Id baris Quick Pick "Add node"; agent builtin/custom diberi prefix + id agent. */
 const ADD_TERMINAL_ID = 'terminal'
+const ADD_BROWSER_ID = 'browser'
 const ADD_WORKSPACE_ID = 'workspace'
 const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
@@ -251,18 +254,21 @@ export default function Dock(props: DockProps) {
 
   // Satu daftar Quick Pick: id baris = kunci pemilihnya, jadi `onAddSelect` tak perlu menutup
   // di atas closure per-baris. Ikon seragam codicon; warna agent tidak dibawa (VS Code tidak mewarnai).
+  const hasBrowser = !!props.onAddBrowser
   const addItems = useMemo<VscodeQuickPickItem[]>(() => [
     { id: ADD_TERMINAL_ID, label: 'Terminal', icon: codicon('terminal') },
+    ...(hasBrowser ? [{ id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') }] : []),
     ...builtins.map((a) => {
       const cfg = agentConfig(a)
       return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, detail: cfg?.notice, icon: codicon('hubot') }
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
-  ], [builtins, visibleCustoms])
+  ], [builtins, visibleCustoms, hasBrowser])
 
   const onAddSelect = (id: string) => {
     if (id === ADD_TERMINAL_ID) return addTerminal()
+    if (id === ADD_BROWSER_ID) { props.onAddBrowser?.(); return setAddOpen(false) }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
     if (id.startsWith(ADD_BUILTIN_PREFIX)) return addBuiltin(id.slice(ADD_BUILTIN_PREFIX.length) as BuiltinAgentId)
     const custom = visibleCustoms.find((c) => `${ADD_CUSTOM_PREFIX}${c.id}` === id)
