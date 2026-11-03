@@ -115,3 +115,41 @@ describe('grup + metadata', () => {
     expect(st).toMatchObject({ locked: true, entries: [{ key: 'X_FLAG', editable: false, value: 'off', effective: 'off' }] })
   })
 })
+
+describe('provenance: envShadowed + varian _FILE', () => {
+  const set = (s: ReturnType<typeof setupEnv>, k: string, v: string) => s.svc.update({ set: { [k]: v }, unset: [] }, ROOT)
+
+  it('override berbeda dari env awal -> envShadowed true', () => {
+    const s = setupEnv({ WEBTERM_CENTRAL: 'off' })
+    set(s, 'WEBTERM_CENTRAL', 'on')
+    expect(get(s, 'WEBTERM_CENTRAL')).toMatchObject({ source: 'override', envShadowed: true })
+  })
+
+  it('override sama dengan env (setelah normalisasi) -> field tidak ada', () => {
+    const s = setupEnv({ WEBTERM_CENTRAL: ' ON ' })
+    set(s, 'WEBTERM_CENTRAL', 'on')
+    expect('envShadowed' in get(s, 'WEBTERM_CENTRAL')).toBe(false)
+  })
+
+  it('tanpa override, atau env kosong -> field tidak ada', () => {
+    expect('envShadowed' in get(setupEnv({ WEBTERM_CENTRAL: 'on' }), 'WEBTERM_CENTRAL')).toBe(false)
+    const s = setupEnv({ WEBTERM_CENTRAL: '  ' })
+    set(s, 'WEBTERM_CENTRAL', 'on')
+    expect('envShadowed' in get(s, 'WEBTERM_CENTRAL')).toBe(false)
+  })
+
+  it('secret override + env beda -> true, nilai tak pernah ada di JSON', () => {
+    const envSecret = '999999:ENVsecretSENTINELvalue'
+    const s = setupEnv({ WEBTERM_TELEGRAM_BOT_TOKEN: envSecret })
+    set(s, 'WEBTERM_TELEGRAM_BOT_TOKEN', SENTINEL_BOT_TOKEN)
+    expect(get(s, 'WEBTERM_TELEGRAM_BOT_TOKEN')).toMatchObject({ source: 'override', envShadowed: true })
+    const json = JSON.stringify(s.svc.state(ROOT))
+    for (const v of [envSecret, SENTINEL_BOT_TOKEN]) expect(json).not.toContain(v)
+  })
+
+  it('varian _FILE di env -> source env, bukan default', () => {
+    const key = 'WEBTERM_TELEGRAM_WEBHOOK_SECRET'
+    expect(get(setupEnv({ [`${key}_FILE`]: '/tmp/x' }), key)).toMatchObject({ source: 'env', set: true })
+    expect(get(setupEnv(), key).source).toBe('default')
+  })
+})

@@ -42,6 +42,8 @@ export interface EnvEntryV2 extends EnvSpecMeta {
   /** Nilai tersimpan yang sudah dinormalisasi (flag on|off, enum kanonik); '' untuk secret. */
   value: string
   source: EnvSourceV2
+  /** Hanya ada (true) bila override aktif sementara env proses awal berisi nilai lain; tanpa nilai. */
+  envShadowed?: boolean
   default?: string
   options?: string[]
   min?: number

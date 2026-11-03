@@ -36,10 +36,12 @@ const REASON_ABSOLUTE = 'Harus path absolut.'
 
 const nonEmpty = (v: string | undefined): v is string => v !== undefined && v.trim() !== ''
 
-/** Dari mana nilai spec ini berasal. */
-export function sourceOf(spec: EnvSpec, i: Pick<StateInput, 'fileSecrets' | 'overrides' | 'base'>): EnvSourceV2 {
+const FILE_VARIANT_SUFFIX = '_FILE'
+
+/** Dari mana nilai spec ini berasal. Varian `<KEY>_FILE` di env (mis. secret webhook Telegram) = sumber env. */
+export function sourceOf(spec: EnvSpec, i: Pick<StateInput, 'fileSecrets' | 'overrides' | 'base' | 'target'>): EnvSourceV2 {
   if (spec.kind === 'secret' ? i.fileSecrets.has(spec.key) : i.overrides[spec.key] !== undefined) return 'override'
-  return nonEmpty(i.base[spec.key]) ? 'env' : 'default'
+  return nonEmpty(i.base[spec.key]) || nonEmpty(i.target[spec.key + FILE_VARIANT_SUFFIX]) ? 'env' : 'default'
 }
 
 interface View { value: string; valid: boolean; invalidReason?: string; rawValue?: string }
@@ -58,11 +60,20 @@ function view(spec: EnvSpec, raw: string | undefined): View {
   return { value, valid: false, invalidReason, rawValue: t.slice(0, RAW_VALUE_MAX_CHARS) }
 }
 
+/** Override aktif tapi env awal berisi nilai lain (diabaikan). Dibandingkan di server; hanya boolean keluar. */
+function envShadowed(spec: EnvSpec, i: StateInput): boolean {
+  const env = i.base[spec.key]
+  if (!nonEmpty(env) || sourceOf(spec, i) !== 'override') return false
+  const norm = (v: string | undefined): string => (spec.kind === 'secret' ? (v ?? '').trim() : view(spec, v).value)
+  return norm(env) !== norm(i.target[spec.key])
+}
+
 function entryOf(spec: EnvSpec, i: StateInput): EnvEntryV2 {
   const m = resolveMeta(spec)
   const source = sourceOf(spec, i)
   const boot = m.restart === 'boot'
   const common = {
+    ...(envShadowed(spec, i) && { envShadowed: true }),
     key: spec.key, kind: spec.kind, group: spec.group, label: spec.label, description: spec.description, source,
     restartRequired: boot, pendingRestart: boot && i.target[spec.key] !== i.bootEnv?.[spec.key],
     dangerous: spec.dangerous, editable: !i.locked && (!spec.dangerous || i.root),
