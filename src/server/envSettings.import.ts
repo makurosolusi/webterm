@@ -12,8 +12,6 @@ import { validateEnvValue } from './envSettings.validate'
 
 export interface EnvImportDeps {
   service: EnvSettings
-  /** Gerbang yang sama dengan PUT: root token terkonfigurasi. */
-  rootGate(): boolean
 }
 
 export type EnvImportOutcome =
@@ -36,10 +34,10 @@ function readDotenv(): Parsed {
 
 /**
  * Klasifikasi tiap kunci `.env`; `apply` menulis semua `add` lewat SATU `service.update`
- * (atomik + rollback secret). Kunci bootstrap tak pernah ditulis; `dangerous` butuh root.
+ * (atomik + rollback secret). Kunci bootstrap tak pernah ditulis.
  */
 export function importDotenv(deps: EnvImportDeps, apply: boolean): EnvImportOutcome {
-  const ctx = { root: deps.rootGate() }
+  const ctx = { root: true }
   const state = deps.service.state(ctx)
   // Sama dengan PUT terkunci: 403 locked, tanpa efek (juga untuk dry-run).
   if (state.locked) return { status: 403, body: { error: 'locked' } }
@@ -60,7 +58,6 @@ export function importDotenv(deps: EnvImportDeps, apply: boolean): EnvImportOutc
     const check = validateEnvValue(spec, raw)
     // Nilai kosong bermakna "hapus override" di PUT; impor tidak pernah menghapus.
     if (!check.ok || check.value === '') { items.push({ ...base, action: 'skip', reason: 'invalid' }); continue }
-    if (base.dangerous && !ctx.root) { items.push({ ...base, action: 'skip', reason: 'needs_root' }); continue }
     if (entry.source !== 'override') { items.push({ ...base, action: 'add' }); toSet[key] = check.value; continue }
     // Nilai secret tak terbaca dari state, jadi override secret yang ada selalu `conflict` (jalur aman: tak ditimpa).
     items.push({ ...base, action: !base.secret && entry.value === check.value ? 'same' : 'conflict' })

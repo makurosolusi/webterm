@@ -72,24 +72,10 @@ export interface EnvEntryV2 extends EnvSpecMeta {
 
 export interface EnvStateV2 {
   locked: boolean
-  rootGate: boolean
   server: { tokenSet: boolean; settingsLocked: boolean }
   groups: EnvGroupMeta[]
   entries: EnvEntryV2[]
 }
 
-export interface EnvRequireResult { require: EnvRequire; met: boolean | 'unknown' }
-
 /** Cermin klien-aman dari server `flagOn`: trim + lowercase === 'on'. */
 export const flagIsOn = (raw: string | undefined): boolean => (raw ?? '').trim().toLowerCase() === 'on'
-
-/** Evaluasi `requires` entri; `get` = nilai draft atau server, undefined = kunci tak dikenal. */
-export function evalRequires(e: EnvEntryV2, get: (key: string) => string | undefined): EnvRequireResult[] {
-  return e.requires.map((require) => {
-    const v = get(require.key)
-    if (v === undefined) return { require, met: 'unknown' as const }
-    if (!require.oneOf?.length) return { require, met: flagIsOn(v) }
-    const norm = v.trim().toLowerCase()
-    return { require, met: require.oneOf.some((o) => o.trim().toLowerCase() === norm) }
-  })
-}

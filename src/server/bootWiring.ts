@@ -43,7 +43,7 @@ export function bootWiring(env: NodeJS.ProcessEnv, cwd: string): { host: string;
   const secretsDir = join(dataDir(), SECRETS_SUBDIR)
   const state = bootstrapToken({ host, env, secretsDir })
   setTokenState(state)
-  // Semua pembaca process.env.WEBTERM_TOKEN (PTY anak, rootGate) harus melihat bentuk kanonik.
+  // Semua pembaca process.env.WEBTERM_TOKEN (PTY anak, penjaga auth) harus melihat bentuk kanonik.
   writeTokenToEnv(state.token)
   announceToken(state, host, port, secretsDir)
   const list = buildAllowedHosts({ host, port, env })
