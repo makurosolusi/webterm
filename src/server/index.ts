@@ -4,6 +4,7 @@ import { WebSocketServer } from 'ws'
 import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
+import { sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
@@ -110,6 +111,7 @@ function refuse(res: http.ServerResponse): void {
 // (file itu terbaca semua proses dengan uid yang sama).
 installContextLink()
 applyPtyOptions()
+void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE off
 
 const server = http.createServer()
 

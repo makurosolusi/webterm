@@ -87,7 +87,7 @@ const VERBS: Record<string, Verb> = {
   copy: { m: 'POST', flag: 'MUTATE', need: ['from', 'to'], run: (a) => copyEntry(a.from, a.to) },
   raw: {
     m: 'GET', flag: 'VIEWERS', need: ['path'],
-    run: async (a, _b, c) => { const r = await serveRaw(a.path, c.headers); return 'status' in r ? { raw: r } : r },
+    run: async (a, _b, c, q) => { const r = await serveRaw(a.path, c.headers, { download: q.get('download') === '1' }); return 'status' in r ? { raw: r } : r },
   },
   'git-status': { m: 'GET', flag: 'GIT_STATUS', need: ['path'], run: (a) => gitMarks(a.path) },
   search: { m: 'GET', flag: 'QUICK_OPEN', need: ['root', 'q'], run: (a, _b, _c, q) => searchFiles(a.root, a.q, Number(q.get('limit')) || undefined) },
