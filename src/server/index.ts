@@ -22,6 +22,7 @@ import { bootCa2 } from './central/ca2Boot'
 import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
+import { tokenAccessRoute } from './tokenAccess.api'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
@@ -150,6 +151,7 @@ if (dev) {
     // before the /api gate. `handle` owns only its exact path.
     if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
+    if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
     if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
@@ -166,6 +168,7 @@ if (dev) {
     // before the /api gate. `handle` owns only its exact path.
     if (channelsRuntime?.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
+    if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
     if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
