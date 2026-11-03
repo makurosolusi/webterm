@@ -1,4 +1,5 @@
 import { tooLargeSize, formatBytes } from '../shared/fsLimits'
+import { fileKind } from '../shared/fileKind'
 
 /**
  * Keputusan murni milik node editor: tampilan apa untuk path ini, apakah ia dibuka langsung di
@@ -22,7 +23,9 @@ export const IMAGE_MIME: Readonly<Record<string, string>> = {
   avif: 'image/avif'
 }
 
-export type EditorFileKind = 'image' | 'pdf' | 'text'
+/** 'text' dibuka di Monaco, 'image'/'pdf' punya preview; sisanya (audio, video, archive, binary)
+ *  tidak punya penampil di editor dan jatuh ke placeholder jujur. */
+export type EditorFileKind = 'image' | 'pdf' | 'text' | 'audio' | 'video' | 'archive' | 'binary'
 
 /** Ekstensi lowercase tanpa titik; '' kalau tidak ada (`.gitignore` → '', bukan 'gitignore'). */
 export function fileExt(path: string): string {
@@ -36,11 +39,10 @@ export function fileBaseName(path: string): string {
   return path.replace(/\\/g, '/').split('/').pop() || ''
 }
 
+/** Jenis tampilan node editor untuk path ini; jenis dari `fileKind()` (satu sumber dgn server). */
 export function editorFileKind(path: string): EditorFileKind {
-  const ext = fileExt(path)
-  if (ext === 'pdf') return 'pdf'
-  if (ext in IMAGE_MIME) return 'image'
-  return 'text'
+  const k = fileKind(path)
+  return k === 'markdown' ? 'text' : k
 }
 
 /** Ekstensi yang dianggap markdown untuk keputusan auto-preview. */
