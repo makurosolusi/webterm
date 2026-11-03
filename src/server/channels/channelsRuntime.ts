@@ -31,6 +31,7 @@ import {
 } from './channelDispatch'
 import type { TelegramCentralPort } from './channelDispatch'
 import { handleChannelBindingsApi } from './channelBindingsHttp'
+import { mountBotManager, type BotManager, type BotManagerDeps } from './botManager'
 import { PendingChatStore } from './channelPending'
 import { handleChannelPendingApi } from './channelPendingHttp'
 import { handleChannelStatusApi } from './channelStatusHttp'
@@ -116,6 +117,8 @@ export interface ChannelsRuntime {
   ingest(update: unknown): Promise<DispatchOutcome>
   /** True when the egress interval is running (a bot token was configured at boot). */
   readonly senderRunning: boolean
+  /** Managed bots manager; null unless WEBTERM_CENTRAL_BOTS=on. */
+  readonly bots: BotManager | null
   handle(req: IncomingMessage, res: ServerResponse): boolean
   /** Root-only binding CRUD. The caller MUST authorize first; false for any other path. */
   handleApi(req: IncomingMessage, res: ServerResponse): boolean
@@ -134,6 +137,8 @@ export interface ChannelsRuntimeOptions {
   /** Egress pacing and transport seam; omitted in production (5s interval, global fetch). */
   sender?: SenderBootOptions
   centralChat?: TelegramCentralPort
+  /** Test seam for the managed bots manager (secrets, registry, fetch). */
+  bots?: Partial<BotManagerDeps>
 }
 
 /**
@@ -196,11 +201,14 @@ export function startChannelsRuntime(
   // A missing bot token only disables egress; ingress and the binding API stay available.
   const sender = startChannelSenderFor(store, env, options.sender ?? {})
 
+  const bots = mountBotManager(env, dataDir(), options.bots)
+
   log.info('channels.start', `telegram channel started (${mode})`, { mode, egress: sender !== null })
   return {
     store,
     mode,
     ingest,
+    bots,
     get senderRunning() {
       return sender !== null && sender.running
     },
