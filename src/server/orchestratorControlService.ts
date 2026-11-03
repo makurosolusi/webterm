@@ -27,7 +27,7 @@ export interface ControlLedger extends OrchestratorLedger {
 
 export interface OrchestratorControlDeps {
   ledger: LedgerRuntime | null
-  /** Defaults to the `WEBTERM_ORCHESTRATOR_RUN` flag; tests may pin it. */
+  /** Defaults to the `workers` capability (isEnabled); tests may pin it. */
   enabled?: boolean
   /** Test seam; production uses `ledger.ledger`. */
   ledgerPort?: ControlLedger
