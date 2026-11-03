@@ -23,7 +23,8 @@ import {
   type ApprovalSummary,
   type ChannelApprovalPort,
 } from './channelApprovals'
-import { TELEGRAM_MAX_TEXT, parseTelegramUpdate, type NormalizedMessage } from './telegram'
+import { TELEGRAM_MAX_TEXT, isCallbackUpdate, parseTelegramCallback, parseTelegramUpdate, type NormalizedMessage } from './telegram'
+import { dispatchTelegramCallback, type ApprovalChallengePort } from './channelCallback'
 import { safeErrorText } from './safeErrorText'
 import type { PendingChatPort } from './channelPending'
 import { maskChatId } from './telegramEgressLog'
@@ -85,6 +86,12 @@ export interface TelegramDispatchDeps {
   centralChat?: TelegramCentralPort
   /** Where denied unknown private chats are listed for the owner (never replied to). */
   pending?: PendingChatPort
+  /** Enables approval buttons; without it a `callback_query` is ignored (pre-v2 behavior). */
+  challenge?: ApprovalChallengePort
+  /** Dismisses the client spinner after a button press (Bot API `answerCallbackQuery`). */
+  answerCallback?: (callbackId: string, text: string) => Promise<void>
+  /** Receives the detached central turn so tests or shutdown can await it; the turn never rejects. */
+  background?: (task: Promise<void>) => void
 }
 
 export type DispatchOutcome =
@@ -183,6 +190,21 @@ async function runCommand(
   }
 }
 
+/** Detached central turn: always resolves; a failed turn is reported to the chat, never thrown. */
+async function runCentralTurn(
+  deps: TelegramDispatchDeps,
+  central: TelegramCentralPort,
+  message: NormalizedMessage,
+  projectId: string
+): Promise<void> {
+  try {
+    const result = await central.ask({ projectId, text: message.text, updateId: message.updateId })
+    await replyTo(deps, message, result.ok ? result.text : `Central agent unavailable (${result.code}).`)
+  } catch (err) {
+    log.error('channel.dispatch', 'telegram central turn failed', { updateId: message.updateId, error: safeErrorText(err, 'unknown error') })
+  }
+}
+
 async function handleClaimed(
   message: NormalizedMessage,
   deps: TelegramDispatchDeps
@@ -211,11 +233,11 @@ async function handleClaimed(
   const parsed = parseCommand(message.text)
   if (!parsed.ok) {
     if (parsed.code === 'not_a_command' && deps.centralChat) {
-      const result = await deps.centralChat.ask({ projectId: binding.projectId, text: message.text, updateId: message.updateId })
-      const text = result.ok ? result.text : `Central agent unavailable (${result.code}).`
-      const reply = await replyTo(deps, message, text)
+      // B7: the turn can take minutes; the claim is already durable, so ack now and reply via the outbox.
+      const task = runCentralTurn(deps, deps.centralChat, message, binding.projectId)
+      if (deps.background) deps.background(task)
       audit('handled', { command: 'free_text', projectId: binding.projectId })
-      return { status: 'handled', command: 'free_text', reply }
+      return { status: 'handled', command: 'free_text', reply: null }
     }
     const text = parsed.code === 'empty' ? COMMAND_USAGE : parsed.message
     const reply = await replyTo(deps, message, text)
@@ -250,6 +272,11 @@ export async function dispatchTelegramUpdate(
   update: unknown,
   deps: TelegramDispatchDeps
 ): Promise<DispatchOutcome> {
+  if (isCallbackUpdate(update)) {
+    const cb = deps.challenge ? parseTelegramCallback(update) : null
+    if (!cb) return { status: 'ignored', reason: 'not_a_message' }
+    return dispatchTelegramCallback(cb, deps, (text) => replyTo(deps, { ...cb, text: '' }, text))
+  }
   const message = parseTelegramUpdate(update)
   if (!message) {
     log.debug('telegram.update.recv', 'telegram update ignored (not a message)', { type: 'other' })

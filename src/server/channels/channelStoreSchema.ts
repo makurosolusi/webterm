@@ -1,17 +1,35 @@
 // Schema + strict validation for the channel store document. Kept apart from the file I/O in
 // channelStore.ts so the shape check is a pure function that tests can feed arbitrary JSON.
 import { APPROVAL_ROLES, CHANNEL_ROLES, type ChannelBinding, type ChannelRole } from './identity'
+import { migrateStoreV1, parseAccounts, type ChannelAccount } from './channelStoreMigrate'
 
-export const CHANNEL_STORE_VERSION = 1
+export const CHANNEL_STORE_VERSION = 2
+/** Last single-account layout; still accepted on read and migrated in memory (see channelStoreMigrate). */
+const LEGACY_STORE_VERSION = 1
 export const CHANNEL_STORE_FILE = 'channels.json'
 /** Telegram retries for up to 24h; an id older than that can never be redelivered usefully. */
 export const CHANNEL_DEDUPE_TTL_MS = 24 * 60 * 60 * 1000
 export const CHANNEL_DEDUPE_LIMIT = 4096
 export const CHANNEL_OUTBOX_LIMIT = 500
 
+/** `channel:accountId:chatId`; chat ids never contain `:` so the key splits unambiguously. */
+export function bindingKey(channel: string, accountId: string, chatId: string): string {
+  return `${channel}:${accountId}:${chatId}`
+}
+
+/** Inverse of `bindingKey`; null for a key without all three segments. */
+export function splitBindingKey(key: string): { channel: string; accountId: string; chatId: string } | null {
+  const first = key.indexOf(':')
+  const second = key.indexOf(':', first + 1)
+  if (first <= 0 || second <= first + 1 || second === key.length - 1) return null
+  return { channel: key.slice(0, first), accountId: key.slice(first + 1, second), chatId: key.slice(second + 1) }
+}
+
 export interface StoredReply {
   key: string
   channel: string
+  /** Sending bot; absent in rows written before v2 (= `default`). */
+  accountId?: string
   chatId: string
   text: string
   threadId?: number
@@ -26,9 +44,11 @@ export interface StoredReply {
 
 export interface ChannelStoreState {
   version: typeof CHANNEL_STORE_VERSION
-  /** `channel:chatId` -> binding. Absence means "unknown chat", which is denied (no auto-enroll). */
+  /** `accountId` -> account. Additive in v2; the token lives in the secret store, not here. */
+  accounts: Record<string, ChannelAccount>
+  /** `channel:accountId:chatId` -> binding. Absence means "unknown chat", which is denied (no auto-enroll). */
   bindings: Record<string, ChannelBinding>
-  /** `channel:updateId` -> claim timestamp; the persisted half of exactly-once ingress. */
+  /** `channel:accountId:updateId` -> claim timestamp; the persisted half of exactly-once ingress. */
   processed: Record<string, number>
   /** Highest `update_id` ever claimed, for health/metrics only. Never used as a dedupe test. */
   cursor: number
@@ -43,7 +63,7 @@ export class StoreCorruptError extends Error {
 }
 
 export function freshStoreState(): ChannelStoreState {
-  return { version: CHANNEL_STORE_VERSION, bindings: {}, processed: {}, cursor: 0, outbox: [] }
+  return { version: CHANNEL_STORE_VERSION, accounts: {}, bindings: {}, processed: {}, cursor: 0, outbox: [] }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -93,6 +113,7 @@ function parseReply(value: unknown): StoredReply | null {
   const threadId = value['threadId']
   const nextAt = value['nextAt']
   const lastError = value['lastError']
+  const accountId = value['accountId']
   const bad =
     typeof key !== 'string' || !key ||
     typeof channel !== 'string' || !channel ||
@@ -103,7 +124,8 @@ function parseReply(value: unknown): StoredReply | null {
     (state !== 'pending' && state !== 'sent' && state !== 'dead') ||
     (threadId !== undefined && (typeof threadId !== 'number' || !Number.isInteger(threadId))) ||
     (nextAt !== undefined && (typeof nextAt !== 'number' || !Number.isFinite(nextAt))) ||
-    (lastError !== undefined && typeof lastError !== 'string')
+    (lastError !== undefined && typeof lastError !== 'string') ||
+    (accountId !== undefined && (typeof accountId !== 'string' || !accountId))
   if (bad) return null
   // A v1 row written before the sender existed has no nextAt; it is immediately due. This is the
   // only in-memory migration, and every other field still passes the strict shape check.
@@ -116,31 +138,36 @@ function parseReply(value: unknown): StoredReply | null {
     attempts,
     nextAt: nextAt === undefined ? createdAt : nextAt,
     state,
+    ...(accountId === undefined ? {} : { accountId }),
     ...(threadId === undefined ? {} : { threadId }),
     ...(lastError === undefined ? {} : { lastError }),
   }
 }
 
-/** Strict load: any shape drift is `corrupt`, never a partial accept with defaults merged in. */
-export function parseStoreState(raw: string): ChannelStoreState {
-  let parsed: unknown
+/** Strict load; a v1 file is migrated in memory first (`migrated`), the caller persists it with a backup. */
+export function parseStoreDocument(raw: string, now: number = Date.now()): { state: ChannelStoreState; migrated: boolean } {
+  let json: unknown
   try {
-    parsed = JSON.parse(raw)
+    json = JSON.parse(raw)
   } catch {
     throw new StoreCorruptError('corrupt')
   }
-  if (!isRecord(parsed)) throw new StoreCorruptError('corrupt')
+  if (!isRecord(json)) throw new StoreCorruptError('corrupt')
+  const migrated = json['version'] === LEGACY_STORE_VERSION
+  const parsed = migrated ? migrateStoreV1(json, now) : json
   if (parsed['version'] !== CHANNEL_STORE_VERSION) {
     throw new StoreCorruptError(typeof parsed['version'] === 'number' ? 'unsupported_version' : 'corrupt')
   }
+  const accounts = parseAccounts(parsed['accounts'])
+  if (!accounts) throw new StoreCorruptError('corrupt')
 
   const bindings: Record<string, ChannelBinding> = {}
   if (!isRecord(parsed['bindings'])) throw new StoreCorruptError('corrupt')
   for (const [key, value] of Object.entries(parsed['bindings'])) {
     const binding = parseBinding(value)
-    const at = key.indexOf(':')
-    if (!binding || at <= 0 || at === key.length - 1) throw new StoreCorruptError('corrupt')
-    bindings[key] = applyGroupApprovalPolicy(key.slice(at + 1), binding)
+    const parts = splitBindingKey(key)
+    if (!binding || !parts) throw new StoreCorruptError('corrupt')
+    bindings[key] = applyGroupApprovalPolicy(parts.chatId, binding)
   }
 
   const processed: Record<string, number> = {}
@@ -162,5 +189,10 @@ export function parseStoreState(raw: string): ChannelStoreState {
     if (!reply) throw new StoreCorruptError('corrupt')
     outbox.push(reply)
   }
-  return { version: CHANNEL_STORE_VERSION, bindings, processed, cursor, outbox }
+  return { state: { version: CHANNEL_STORE_VERSION, accounts, bindings, processed, cursor, outbox }, migrated }
+}
+
+/** Strict load: any shape drift is `corrupt`, never a partial accept with defaults merged in. */
+export function parseStoreState(raw: string, now?: number): ChannelStoreState {
+  return parseStoreDocument(raw, now).state
 }

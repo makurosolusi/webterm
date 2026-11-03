@@ -63,3 +63,46 @@ export function parseTelegramUpdate(update: unknown): NormalizedMessage | null {
     threadId: optionalInt(message['message_thread_id']),
   }
 }
+
+/** A button press (`callback_query`) on a message the bot sent; `data` is the opaque `callback_data`. */
+export interface NormalizedCallback {
+  updateId: number
+  callbackId: string
+  chatId: string
+  userId: string
+  data: string
+  isGroup: boolean
+  messageId?: number
+  threadId?: number
+}
+
+/** Normalize a `callback_query` update; null when it has no originating chat message (inline) or ids. */
+export function parseTelegramCallback(update: unknown): NormalizedCallback | null {
+  const root = asRecord(update)
+  const updateId = optionalInt(root['update_id'])
+  if (updateId === undefined || updateId < 0) return null
+  const query = asRecord(root['callback_query'])
+  const message = asRecord(query['message'])
+  const chat = asRecord(message['chat'])
+  const chatId = idString(chat['id'])
+  const userId = idString(asRecord(query['from'])['id'])
+  const callbackId = query['id']
+  const data = query['data']
+  if (!chatId || !userId || typeof callbackId !== 'string' || !callbackId || typeof data !== 'string') return null
+  const chatType = typeof chat['type'] === 'string' ? chat['type'] : ''
+  return {
+    updateId,
+    callbackId,
+    chatId,
+    userId,
+    data,
+    isGroup: chatType === 'group' || chatType === 'supergroup',
+    messageId: optionalInt(message['message_id']),
+    threadId: optionalInt(message['message_thread_id']),
+  }
+}
+
+/** True when the update carries a `callback_query` (parsed or not). */
+export function isCallbackUpdate(update: unknown): boolean {
+  return 'callback_query' in asRecord(update)
+}
