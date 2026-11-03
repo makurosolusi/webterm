@@ -1,12 +1,13 @@
 // Perakitan runtime browser (WS-11): SSRF proxy + Chromium pool + host + lease + lifecycle + vault + gateway.
-// Dipanggil sekali saat boot HANYA bila `WEBTERM_BROWSER=on`; flag off = fungsi ini mengembalikan null dan
-// tak satu pun modul browser dimuat/dijalankan. Tidak ada nilai cookie/token yang pernah dilog di sini.
+// Dipanggil lewat `startBrowser` (browser.activate.ts) HANYA bila kemampuan `browser` on; off = null dan
+// tak satu pun modul browser dijalankan. Tidak ada nilai cookie/token yang pernah dilog di sini.
 import { DEFAULT_COOKIE_TTL_DAYS, ENV_BROWSER } from '../../shared/browser.contract'
 import type { BrowserState } from '../../shared/browser.contract'
 import { flagOn } from '../envFlag'
+import { isEnabled } from '../featureCapabilities.runtime'
 import { createLogger } from '../logs'
 import type { CdpClient } from './cdp.client'
-import { createChromiumPool, resolveBinary } from './chromium.launch'
+import { createChromiumPool, detectChromium } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
 import { createNavigationGuard } from './navigation.guard'
 import { parseAllowHosts } from './ssrf.allowlist'
@@ -46,16 +47,18 @@ export interface RuntimeDeps {
   launcher?: BrowserLauncher
   connect?: (wsUrl: string) => Promise<CdpClient>
   now?: () => number
+  /** Test: pemeriksa keberadaan biner Chromium (produksi: existsSync). */
+  exists?: (p: string) => boolean
 }
 
 export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntime | null> {
   const { env } = d
-  if (!flagOn(env[ENV_BROWSER.enabled])) return null
+  if (!isEnabled('browser', env)) return null
   const allow = parseAllowHosts(env[ENV_BROWSER.allowHosts], d.webtermPort)
   if (!allow.ok) { log.error('browser.start', 'Browser disabled: invalid allow-hosts', { reason: allow.reason }); return null }
   const now = d.now ?? Date.now
   const proxy = await startSsrfProxy({ allow: allow.hosts, webtermPort: d.webtermPort })
-  const launcher = d.launcher ?? createChromiumPool({ env, dataRoot: d.dataRoot, proxyServer: () => `http://127.0.0.1:${proxy.port}` })
+  const launcher = d.launcher ?? createChromiumPool({ env, dataRoot: d.dataRoot, proxyServer: () => `http://127.0.0.1:${proxy.port}`, exists: d.exists })
   const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allow.hosts, webtermPort: d.webtermPort })), connect: d.connect })
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
@@ -84,8 +87,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       if (ws) versionProbe.probe(ws.id)
     } else if (live.delete(s.id) && live.size === 0) versionProbe.reset() // tak ada browser hidup: restart berikutnya baca ulang
   })
-  const binFound = () => { try { resolveBinary(env); return true } catch { return false } }
-  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || binFound(), ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: flagOn(env[ENV_BROWSER.cookieImport]) })
+  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: flagOn(env[ENV_BROWSER.cookieImport]) })
   const apiDeps = {
     vault, preview: createCookiePreviewStore(), injector: createCookieInjector({ launcher, connect: d.connect }), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
@@ -104,6 +106,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       if (down) return
       down = true
       clearInterval(sweep); unLease(); lifecycle.dispose(); versionProbe.reset()
+      // Tutup halaman satu per satu dulu: stop dari Settings tak boleh meninggalkan tab yatim di Chromium.
+      await Promise.all([...live].map((id) => host.discard(id).catch((e) => log.warn('browser.stop', 'page close failed', { error: e instanceof Error ? e.name : typeof e }))))
       await host.dispose().catch((e) => log.warn('browser.stop', 'CDP dispose failed', { error: e instanceof Error ? e.name : typeof e }))
       launcher.shutdown() // Chromium dimatikan SESUDAH koneksi CDP ditutup
       await proxy.close().catch((e) => log.warn('browser.stop', 'proxy close failed', { error: e instanceof Error ? e.name : typeof e }))
