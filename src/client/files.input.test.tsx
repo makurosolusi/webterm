@@ -9,7 +9,8 @@ import './vscode/test-setup'
 const fs = vi.hoisted(() => ({
   list: vi.fn(), mkdir: vi.fn(), mkdirChecked: vi.fn(), create: vi.fn(), write: vi.fn(), stat: vi.fn(), listV2: vi.fn(),
 }))
-vi.mock('./fsClient', () => fs)
+// Slot menanyakan kemampuan server; tes shell berjalan dengan semua fitur mati.
+vi.mock('./fsClient', async () => ({ ...fs, ...(await import('./filesCaps.fixture')).capsMock() }))
 
 import FilesNode from './FilesNode'
 

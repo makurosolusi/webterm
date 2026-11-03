@@ -5,7 +5,7 @@
 // tambahan masuk lewat `FILES_SLOTS` (kita tidak tahu isinya).
 //
 // TANPA FILE WATCHER di sini: refresh `⟳` manual menaikkan `version`; watcher adalah slot sendiri.
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { Textfield } from '@/vscode/register'
 import type { FileMeta } from '../shared/fsContract'
@@ -13,12 +13,10 @@ import type { Comment, ViewOpts } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
 import { breadcrumbs, childPath, createTargetDir, filterEntries, parentDir } from './fileBrowse'
-import FilesInput from './FilesInput'
 import FilesList, { type PickMods } from './FilesList'
 import FilesMenu from './FilesMenu'
 import FilesToolbar from './FilesToolbar'
 import { decorateEntry } from './FilesRow'
-import { createEntry } from './filesCreate'
 import { DEFAULT_PAGE_ROWS, listKeyAction, scrollTopToReveal, typeAhead, type ListKeyAction } from './filesKeys'
 import {
   EMPTY_SEL, indexOfName, nfcName, selectAll, selectedNames, selectOne, selectRange, toggleName, type Sel,
@@ -26,6 +24,7 @@ import {
 import { FILES_SLOTS, type FilesSlotCtx } from './filesSlots'
 import { applyView, needsMeta, relativePath, viewOf } from './filesView'
 import { randomId } from './randomId'
+import { useFilesInput } from './useFilesInput'
 import { useFilesListing } from './useFilesListing'
 import { useFilesOpen } from './useFilesOpen'
 import './files.css'
@@ -37,7 +36,6 @@ const ROW_H = 22
 const CRUMBS_MAX_VISIBLE = 4
 
 type Menu = { x: number; y: number; entry: FileMeta | null }
-type Creating = { dir: boolean; base: string }
 
 function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
@@ -63,7 +61,6 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [query, setQuery] = useState('')
   const [version, setVersion] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
-  const [creating, setCreating] = useState<Creating | null>(null)
   const [notice, setNotice] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
@@ -76,9 +73,9 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     if (want !== null) setSel(selectOne(want))
   })
 
-  // Filter, seleksi, dan input adalah pertanyaan tentang SATU direktori; membawanya ke direktori
+  // Filter dan seleksi (juga input nama, di `useFilesInput`) adalah pertanyaan tentang SATU direktori; membawanya ke direktori
   // berikutnya membuat folder tampak kosong karena kotak yang sudah tidak dilihat pengguna.
-  useEffect(() => { setQuery(''); setNotice(''); setSel(EMPTY_SEL); setCreating(null) }, [cwd])
+  useEffect(() => { setQuery(''); setNotice(''); setSel(EMPTY_SEL) }, [cwd])
 
   const shown = useMemo(
     () => filterEntries(applyView(entries, view), query),
@@ -89,8 +86,11 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const refresh = () => setVersion((v) => v + 1)
   const { navigate, addNodeBeside, open, openFile } = useFilesOpen({ id, cwd, title: d.title, swatch, setNotice, pendingSel })
 
+  const input = useFilesInput({ cwd, listRef, pendingSel, refresh, setNotice, openFile })
   const ctx: FilesSlotCtx = {
-    cwd, dir: cwd, entries, selection: selectedNames(entries, sel), refresh, open, nodeId: id,
+    cwd, dir: cwd, entries, selection: selectedNames(entries, sel), open, nodeId: id,
+    refresh: (select) => { if (select) pendingSel.current = select; refresh() },
+    startInput: input.start,
   }
   // Urutan FILES_SLOTS tetap, jadi jumlah hook per render konstan.
   for (const s of FILES_SLOTS) s.useSlot?.(ctx)
@@ -118,20 +118,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     // Buat DI DALAM folder yang diklik, tapi DI SAMPING file yang diklik.
     const base = menu?.entry ? createTargetDir(childPath(cwd, menu.entry.name), menu.entry.dir) : cwd
     setMenu(null)
-    setCreating({ dir, base })
-  }
-
-  const commitCreate = async (name: string) => {
-    const c = creating
-    setCreating(null)
-    listRef.current?.focus()
-    if (!c) return
-    const r = await createEntry(c.base, name, c.dir)
-    if (!r.ok) { setNotice(r.notice); return }
-    if (r.notice) setNotice(r.notice)
-    pendingSel.current = r.first
-    refresh()
-    if (!c.dir) openFile(r.target, r.leaf)
+    input.start({ kind: dir ? 'folder' : 'file', base })
   }
 
   const toggleCollapse = () => {
@@ -167,7 +154,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         break
       }
       // 'rename'/'delete': tombol diklaim (Delete tak boleh menghapus NODE) dan sudah ditawarkan ke
-      // slot lewat `onKey` di atas; aksi nyatanya milik slot mutate (WS-05).
+      // slot lewat `onKey` di atas; aksi nyatanya milik slot mutate (filesSlot.mutate).
       default: break
     }
   }
@@ -247,23 +234,19 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             nodeId={id} cwd={cwd} shown={shown} total={entries.length} sel={sel}
             loading={loading} verdict={verdict} query={query} decorate={decorate}
             listRef={listRef} treeRef={treeRef}
-            inputRow={creating && (
-              <FilesInput
-                dir={creating.dir} base={creating.base}
-                onCommit={(n) => { void commitCreate(n) }}
-                onCancel={(refocus) => { setCreating(null); if (refocus) listRef.current?.focus() }}
-              />
-            )}
+            inputRow={input.row}
             onPick={onPick} onOpen={(i) => shown[i] && open(shown[i])} onContext={onContext}
             onKeyDown={onListKeyDown} onRetry={refresh} onNewFile={() => startCreate(false)}
           />
 
           {/* Wilayah live: notice (mis. "Sudah ada: x") dibacakan pembaca layar tanpa memindahkan fokus. */}
           <div className="files-foot" role="status" aria-live="polite">
-            {notice || `${shown.length} of ${entries.length}${sel.names.size > 1 ? ` · ${sel.names.size} selected` : ''}`}
+            {notice || `${shown.length} of ${entries.length}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`}
           </div>
         </div>
       </div>
+
+      {FILES_SLOTS.map((s) => s.overlay && <Fragment key={s.id}>{s.overlay(ctx)}</Fragment>)}
 
       {menu && (
         <FilesMenu

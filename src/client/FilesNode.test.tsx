@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 
 const list = vi.hoisted(() => vi.fn())
-vi.mock('./fsClient', () => ({ list, mkdir: vi.fn(), write: vi.fn(), stat: vi.fn(), listV2: vi.fn() }))
+vi.mock('./fsClient', async () => ({ list, mkdir: vi.fn(), write: vi.fn(), stat: vi.fn(), listV2: vi.fn(), ...(await import('./filesCaps.fixture')).capsMock() }))
 
 import FilesNode from './FilesNode'
 
