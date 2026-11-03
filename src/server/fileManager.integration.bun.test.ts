@@ -116,8 +116,8 @@ test('create -> versioned write -> version conflict -> rename -> trash -> restor
 test('mutation and raw verbs answer 501 EDISABLED when their flags are off', async () => {
   await withTmp(async (at) => {
     await fs.writeFile(at('a.txt'), 'x')
-    delete process.env.WEBTERM_FILES_MUTATE
-    delete process.env.WEBTERM_FILES_VIEWERS
+    process.env.WEBTERM_FILES_MUTATE = 'off'
+    process.env.WEBTERM_FILES_VIEWERS = 'off' // VIEWERS default ON (L11): jalur mati butuh `off` eksplisit
     const del = await post('delete', { path: at('a.txt') })
     expect(del.status).toBe(501)
     expect(del.body.code).toBe('EDISABLED')
