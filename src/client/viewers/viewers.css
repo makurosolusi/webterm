@@ -1,0 +1,32 @@
+/* Viewer non-teks (WS-FM-06). Hanya token yang sudah ada di `styles.css`; tanpa warna literal. */
+.viewer {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--vscode-foreground, var(--text));
+  font: 13px/1.4 var(--font-ui);
+}
+.viewer-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.viewer-video video { width: 100%; height: 100%; }
+.viewer-audio audio { width: min(100%, 420px); }
+.viewer-pdf iframe { width: 100%; height: 100%; border: 0; }
+.viewer-placeholder { flex-direction: column; gap: 6px; padding: 16px; text-align: center; }
+.viewer-name { font-weight: 600; overflow-wrap: anywhere; }
+.viewer-meta { color: var(--muted); }
+.viewer-actions { display: flex; gap: 8px; margin-top: 8px; }
+.viewer-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-background, var(--accent));
+  color: var(--vscode-button-foreground, var(--text));
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.viewer-btn:hover { background: var(--vscode-button-hoverBackground, var(--accent-hover)); }
+.viewer-btn:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 2px; }
