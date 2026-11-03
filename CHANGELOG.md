@@ -44,6 +44,12 @@
 - Drag a file row onto a terminal pane to paste its shell-quoted path. No newline is added, so nothing runs.
 - `WEBTERM_FILES_LIST_MAX` (default 5000) caps entries per listing. The new `/api/fs/*` verbs and the integration flow are covered by `src/server/fileManager.integration.bun.test.ts`; design decisions are in `docs/decisions/files-manager.md`.
 - Not yet verified in a real browser or host: Monaco editing, 100 MB uploads and XHR progress, native drag-and-drop, pasting into xterm, `fs.watch` on macOS under Node, and a real WebSocket reconnect.
+- A non-loopback bind with no `WEBTERM_TOKEN` now generates one: 43 characters of base64url, stored at `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`, directory `700`). On a TTY the server prints the file path and a `?token=` URL; with any other output it prints only the path and the length. An environment `WEBTERM_TOKEN` still wins.
+- Opt-in token on loopback: `GET /api/settings/token` (state), `POST /api/settings/token/enable` (loopback peer only, the value is returned once) and `POST /api/settings/token/rotate`. There is no disable call; to go back to open loopback, stop the server, delete the secrets file and restart. There is no Settings UI for this yet. Limits: a same-uid local process can still read the file, WebSockets already open survive enable and rotate, and node tokens are unaffected.
+- `WEBTERM_ALLOWED_HOSTS` (CSV of `host` or `host:port`) and a Host allowlist against DNS-rebinding. It is checked only while no token is enforced; a request with another `Host` gets `403 host_not_allowed`. Loopback names and the bind address are always allowed.
+- `POST /api/settings/env/import` reads the `.env` in the boot directory. It is a dry run by default; `{"apply":true}` writes the values to Settings. Bootstrap keys are skipped and dangerous keys need the root gate.
+- Env entries in `/api/settings/env` carry `envShadowed`, true when a stored Settings value hides a different process-env value.
+- `npm run test:bun` runs the Bun-only tests with `--no-env-file`, so a developer `.env` cannot change results.
 
 ### Changed
 - Central chat turns now resume the previous session, and orphaned turns are reconciled and turn limits enforced.
@@ -55,6 +61,14 @@
 - `.env` no longer carries `WEBTERM_TOKEN` and is kept at mode `600`. A root token must be exported explicitly, so it is not inherited by every process that reads the auto-loaded file.
 - A newly created file now opens in the editor. Files that are not UTF-8 open read-only with a banner, and binary files show a placeholder instead of loading into the editor. Audio, video, and archives are no longer treated as text.
 - Known limits: DNS-rebinding against `/api/fs/*` is not mitigated (the token is the only guard); Quick Open without `rg` or a git repo does not read `.gitignore`.
+- Boolean env flags accept `on|1|true` and `off|0|false` everywhere. `WEBTERM_X=1` used to read as off for many keys and is now on, including `WEBTERM_TRUST_PROXY`. The three security keys (`WEBTERM_ALLOW_LOOPBACK_APPROVAL`, `WEBTERM_ALLOW_TOKEN_MINT`, `WEBTERM_STRICT_HOOK_AUTH`) still need exactly `1`.
+- Values from a `.env` file and `TELEGRAM_BOT_TOKEN` are no longer inherited by spawned shells. The data directory is created `700` and the database `600`.
+- An invalid `PORT` now stops startup with an error instead of falling back to 8700. Known bind errors (port in use, no permission, bad address) exit 1 with one message.
+- `WEBTERM_FILES_VIEWERS`, `_WATCH`, `_GIT_STATUS` and `_QUICK_OPEN` now default to on; they are read-only. `WEBTERM_FILES_MUTATE` and `_UPLOAD` stay off.
+- The central chat panel is gated by the server flag `WEBTERM_CENTRAL_CHAT`; the build-time `VITE_WEBTERM_CENTRAL_CHAT` is gone.
+- The legacy `TELEGRAM_BOT_TOKEN` name is deprecated: it still works, warns once, and is removed in the release after 0.7.0. Use the Settings value `WEBTERM_TELEGRAM_BOT_TOKEN`.
+- The compiled binary no longer autoloads `bunfig.toml`.
+- `.env.example` now lists only the nine bootstrap keys; everything else is set in Settings > Environment.
 
 ### Fixed
 - A new Browser node now always loads its starting URL; before, it could stay on `about:blank`. A page that has not loaded can no longer overwrite the node's saved URL with `about:blank`.
@@ -77,6 +91,9 @@
 - Large or multi-byte saves no longer corrupt non-ASCII text, and request bodies are capped (413 instead of unbounded memory).
 - Opening audio, video, or zip files no longer loads them as editable text, where a save would have destroyed them.
 - Files watch resubscribes after a WebSocket reconnect, so listings keep updating.
+
+### Removed
+- Four dead keys from the env registry: `WEBTERM_CENTRAL_TOOL_BRIDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_EMBED_URL`, `WEBTERM_EMBED_MODEL`. The unused `WEBTERM_CHANNEL_HMAC_SECRET` entry in log redaction is gone too.
 
 ### Security
 - Human approvals refuse token-free loopback by default. An agent shell on the same machine could otherwise request, read the nonce, approve, and consume its own action. A configured root token, or `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` for a disposable demo, is required.
