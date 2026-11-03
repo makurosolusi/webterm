@@ -4,6 +4,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { onCapabilityChange } from '../featureCapabilities.runtime'
 import type { Ledger } from '../ledger/ledger'
+import { PendingChatStore } from './channelPending'
 import { startChannelsRuntime } from './channelsRuntime'
 import type { ChannelsRuntime, ChannelsRuntimeOptions } from './channelsRuntime.types'
 import { startTelegramInbound } from './telegramPollWiring'
@@ -33,6 +34,10 @@ export function createTelegramHot(input: TelegramHotInput): TelegramHot {
   let channels: ChannelsRuntime | null = null
   let poller: TelegramPoller | null = null
   let chain: Promise<void> = Promise.resolve()
+  // In memory by design (channelPending.ts), but kept across stop/start so a refresh does not drop it.
+  const pending = input.options?.pending ?? new PendingChatStore(
+    input.options?.now === undefined ? {} : { now: input.options.now }
+  )
   const serial = (job: () => Promise<void>): Promise<void> => {
     const run = chain.then(job)
     chain = run.catch(() => undefined) // galat sebuah job tak boleh memblok job berikutnya
@@ -41,7 +46,7 @@ export function createTelegramHot(input: TelegramHotInput): TelegramHot {
 
   const doStart = async (): Promise<void> => {
     if (channels) return
-    const built = startChannelsRuntime(input.ledger(), input.options)
+    const built = startChannelsRuntime(input.ledger(), { ...input.options, pending })
     if (!built) return
     channels = built
     // Poll hanya bila mode poll; webhook tak butuh poller. Tanpa token startTelegramInbound memberi null.

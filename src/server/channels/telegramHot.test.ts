@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHANNEL_ENV_SPECS } from '../envRegistry.channels'
 import { reconcile } from '../featureCapabilities.runtime'
-import { harnessLedger } from './channelsRuntimeHarness'
+import { callApi, harnessLedger } from './channelsRuntimeHarness'
+import { TELEGRAM_PENDING_PATH } from './channelPendingHttp'
 import { createTelegramHot, registerTelegramHot, type TelegramHot } from './telegramHot'
 import { fakeBotApi, TEST_TOKEN } from './telegramPollHarness'
 
@@ -68,6 +69,18 @@ describe('Telegram hot-apply', () => {
     await vi.waitFor(() => expect(deletes()).toBe(3)) // satu per start nyata; tak pernah dua sekaligus
     await hot.stop()
     expect(hot.channels).toBeNull()
+  })
+
+  it('refresh tidak mereset daftar chat pending', async () => {
+    const { hot } = make({ WEBTERM_TELEGRAM: 'on' })
+    await hot.start()
+    const before = hot.channels!
+    await before.ingest({ update_id: 1, message: { message_id: 1, text: 'hi', chat: { id: 555, type: 'private' }, from: { id: 555 } } })
+    const total = async (): Promise<number> => JSON.parse((await callApi(hot.channels!, 'GET', TELEGRAM_PENDING_PATH)).body).total
+    expect(await total()).toBe(1)
+    await hot.refresh()
+    expect(hot.channels).not.toBe(before) // runtime benar-benar dibangun ulang
+    expect(await total()).toBe(1)
   })
 
   it('start tanpa kemampuan on tidak membangun apa pun', async () => {
