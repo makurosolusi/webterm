@@ -2,12 +2,12 @@
 // overlay status/dialog. Overlay dirender SEBAGAI SAUDARA permukaan (bukan anak): kalau tidak,
 // ketikan di input dialog ikut diteruskan ke halaman. Kelas `nodrag nowheel nopan nokey` membuat React Flow tidak mencuri
 // drag/wheel/keyboard. Seluruh isi halaman asing hanya hadir sebagai piksel di canvas.
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { ClipboardEvent, CompositionEvent, KeyboardEvent, PointerEvent } from 'react'
 import type { TouchPoint } from '../shared/browser.contract'
 import { Textarea } from '@/components/ui/textarea'
 import BrowserDialogView from './browser.dialog'
-import { chunkText, classifyKey, keyMsg, makeClickCounter, mouseMsg, touchMsg, wheelMsg } from './browser.input'
+import { chunkText, classifyKey, keyMsg, makeClickCounter, makeMoveCoalescer, mouseMsg, touchMsg, wheelMsg } from './browser.input'
 import { pastedText } from './browser.clipboard'
 import { browserNotice } from './browser.status'
 import type { BrowserSession } from './browser.useSession'
@@ -15,7 +15,14 @@ import type { BrowserSession } from './browser.useSession'
 const TOUCH_KIND = { down: 'start', move: 'move', up: 'end', cancel: 'cancel' } as const
 
 export default function BrowserSurface({ session }: { session: BrowserSession }) {
-  const { hostRef, canvasRef, viewport, send } = session
+  const { hostRef, canvasRef, viewport } = session
+  const rawSend = session.send
+  const sendRef = useRef(rawSend)
+  sendRef.current = rawSend
+  const moves = useMemo(() => makeMoveCoalescer((m) => sendRef.current(m)), [])
+  useEffect(() => () => moves.dispose(), [moves])
+  // Semua pesan selain mousemove mengirim move tertunda dulu: move terakhir sebelum up tak hilang/terbalik urutan.
+  const send = useMemo(() => ((msg: Parameters<typeof rawSend>[0]) => { moves.flush(); rawSend(msg) }) as typeof rawSend, [moves, rawSend])
   const imeRef = useRef<HTMLTextAreaElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const clicks = useRef(makeClickCounter())
@@ -48,7 +55,9 @@ export default function BrowserSurface({ session }: { session: BrowserSession })
     if (kind === 'cancel') return
     if (kind === 'down') lastClicks.current = clicks.current(e.clientX, e.clientY)
     const m = mouseMsg(kind, e, rect, vp, lastClicks.current)
-    if (m) send(m)
+    if (!m) return
+    if (kind === 'move') moves.move(m)
+    else send(m)
   }
 
   const onKey = (type: 'down' | 'up') => (e: KeyboardEvent) => {
