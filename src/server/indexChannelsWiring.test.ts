@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
-const GATE = 'if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)'
+const GATE = 'if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)'
 const BINDINGS = 'if (channelsRuntime?.handleApi(req, res)) return'
 const WEBHOOK = 'if (channelsRuntime?.handle(req, res)) return'
 

@@ -10,7 +10,9 @@ describe('urutan boot env-settings', () => {
   it('overlay: setelah writeTokenToEnv, sebelum startLedgerRuntime/kanal/autonomy', () => {
     const at = (needle: string): number => source.indexOf(needle)
     const overlay = at('initEnvSettings()\n')
-    expect(overlay).toBeGreaterThan(at('writeTokenToEnv(TOKEN)'))
+    // writeTokenToEnv dipanggil di dalam bootWiring (bootWiring.ts); index.ts hanya memanggil bootWiring.
+    expect(at('bootWiring(process.env')).toBeGreaterThan(-1)
+    expect(overlay).toBeGreaterThan(at('bootWiring(process.env'))
     for (const later of ['startLedgerRuntime()', 'buildTelegramCentralPort(', 'startChannelsRuntime(', 'startCentralAutonomyBoot(']) {
       expect(overlay, later).toBeLessThan(at(later))
     }
