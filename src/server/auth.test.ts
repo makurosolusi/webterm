@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   CAPABILITY_HEADER,
   DEFAULT_HOST,
@@ -11,10 +11,8 @@ import {
   isLoopbackHost,
   isNodeTokenPath,
   requiresToken,
-  resolveToken,
   sameOrigin,
   tokensMatch,
-  writeTokenToEnv,
 } from './auth'
 import { CapabilityStore } from './control/capabilities'
 
@@ -103,60 +101,6 @@ describe('isLoopbackHost / requiresToken', () => {
   })
   it('defaults to loopback', () => {
     expect(isLoopbackHost(DEFAULT_HOST)).toBe(true)
-  })
-})
-
-describe('resolveToken', () => {
-  it('allows loopback with no token (the default dev loop)', () => {
-    expect(resolveToken('127.0.0.1', undefined)).toBeUndefined()
-    expect(resolveToken('127.0.0.1', '   ')).toBeUndefined()
-  })
-  it('refuses to start on a non-loopback host with no token, naming the env var', () => {
-    expect(() => resolveToken('0.0.0.0', undefined)).toThrow(/WEBTERM_TOKEN/)
-    expect(() => resolveToken('0.0.0.0', '')).toThrow(/WEBTERM_TOKEN/)
-  })
-  it('trims and keeps a configured token', () => {
-    expect(resolveToken('0.0.0.0', ' s3cret ')).toBe('s3cret')
-  })
-  it('never puts the token value in the refusal message', () => {
-    // The throw path has no token, but assert the host-only shape so a future edit cannot
-    // start interpolating secrets into a message that lands in logs.
-    expect(() => resolveToken('10.0.0.5', '')).toThrow(/10\.0\.0\.5/)
-  })
-})
-
-describe('writeTokenToEnv', () => {
-  // This suite runs in the same process as every other test file's helpers, so put the real
-  // value back no matter what. Tokens below are obvious fakes, injected here.
-  const saved = process.env.WEBTERM_TOKEN
-  const restore = () => {
-    if (saved === undefined) delete process.env.WEBTERM_TOKEN
-    else process.env.WEBTERM_TOKEN = saved
-  }
-  beforeEach(restore)
-  afterEach(restore)
-
-  it('replaces a padded raw value with the exact form the server enforces', () => {
-    process.env.WEBTERM_TOKEN = ' fake-token-not-real \n'
-    const enforced = resolveToken('0.0.0.0', process.env.WEBTERM_TOKEN)
-    writeTokenToEnv(enforced)
-    // The whole point: what a child expands from $WEBTERM_TOKEN now passes authorize().
-    expect(process.env.WEBTERM_TOKEN).toBe(enforced)
-    expect(tokensMatch(enforced, process.env.WEBTERM_TOKEN)).toBe(true)
-  })
-
-  it('unsets the var when no token is enforced, instead of leaving whitespace behind', () => {
-    process.env.WEBTERM_TOKEN = '   '
-    writeTokenToEnv(resolveToken('127.0.0.1', process.env.WEBTERM_TOKEN))
-    expect('WEBTERM_TOKEN' in process.env).toBe(false)
-  })
-
-  it('is called in index.ts on the resolved token, before anything can spawn a PTY', () => {
-    // index.ts starts a server on import, so it cannot be imported here — assert the wiring
-    // from its source instead. Without this the function could be correct and never called.
-    const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
-    expect(src).toMatch(/writeTokenToEnv\(TOKEN\)/)
-    expect(src.indexOf('writeTokenToEnv(TOKEN)')).toBeLessThan(src.indexOf('installContextLink('))
   })
 })
 

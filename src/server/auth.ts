@@ -52,23 +52,6 @@ export function requiresToken(host: string): boolean {
 }
 
 /**
- * The token this process will enforce, or `undefined` for the token-free loopback default.
- * Throws when the host is reachable from outside and no token was configured — refusing to
- * start is the only safe outcome there, an open shell on the LAN is not a degraded mode.
- */
-export function resolveToken(host: string, raw: string | undefined): string | undefined {
-  const token = (raw ?? '').trim()
-  if (token !== '') return token
-  if (requiresToken(host)) {
-    throw new Error(
-      `HOST="${host}" is reachable from other machines, which would expose a full shell. ` +
-        `Set WEBTERM_TOKEN to a long random secret, or use a loopback HOST (localhost/127.0.0.1/::1).`
-    )
-  }
-  return undefined
-}
-
-/**
  * MUTATES `process.env.WEBTERM_TOKEN` so it holds exactly the token this process enforces.
  * Children inherit the whole env (see `pty.ts` `cleanEnv`), so a raw ` s3cret ` would otherwise
  * leave two canonical forms around: the trimmed one `authorize` compares against, and the

@@ -12,9 +12,10 @@ import {
   withSessionId,
 } from '../shared/workspace'
 import { buildClaudeFlags } from './hooks'
+import { parsePort } from './serverConfig'
 
 /** Port yang ditulis ke env hook agent bila pemanggil tidak menyebutkannya. */
-export const PORT = Number(process.env.PORT) || 8700
+export const PORT = parsePort(process.env.PORT)
 
 /** Catatan peluncuran yang terlihat pengguna, ditulis ke stream terminal. Bahasa Inggris supaya
  *  seragam dengan `[process exited]` di client. */
