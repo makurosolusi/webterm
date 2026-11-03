@@ -129,11 +129,11 @@ describe('launchChromium', () => {
 })
 
 describe('createChromiumPool', () => {
-  function pool() {
+  function pool(env: Record<string, string> = {}, platform: NodeJS.Platform = 'darwin') {
     const children: FakeChild[] = []
     const spawned: string[][] = []
     const p = createChromiumPool({
-      env: {}, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
+      env, platform, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
       deps: {
         spawn: (_b, args) => { const c = new FakeChild(); children.push(c); spawned.push(args); return c },
         readFile: () => `${1000 + children.length}\n/devtools/browser/x`,
@@ -142,6 +142,19 @@ describe('createChromiumPool', () => {
     })
     return { p, children, spawned }
   }
+
+  it('launches headful off-screen by default; headless only when forced or Linux has no display', async () => {
+    const run = async (env: Record<string, string>, platform: NodeJS.Platform) => {
+      const { p, spawned } = pool(env, platform)
+      await p.acquire('wa')
+      return spawned[0]
+    }
+    expect(await run({}, 'darwin')).not.toContain('--headless=new')
+    expect(await run({}, 'darwin')).toContain('--window-position=-32000,-32000')
+    expect(await run({ [ENV_BROWSER.headless]: 'on' }, 'darwin')).toContain('--headless=new')
+    expect(await run({}, 'linux')).toContain('--headless=new')
+    expect(await run({ DISPLAY: ':0' }, 'linux')).not.toContain('--headless=new')
+  })
 
   it('starts one process per workspace and reuses it', async () => {
     const { p, children, spawned } = pool()

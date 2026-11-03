@@ -84,6 +84,7 @@ const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
   ['WEBTERM_BROWSER', 'browser/browser.runtime.ts:53'],
   ['WEBTERM_BROWSER_AGENT', 'browser/browser.runtime.ts:75'],
   ['WEBTERM_BROWSER_COOKIE_IMPORT', 'browser/browser.runtime.ts:88'],
+  ['WEBTERM_BROWSER_HEADLESS', 'browser/chromium.flags.ts:headlessReason'],
 ]
 
 /** Tanpa default statis: kosong = perilaku bawaan pembaca (secret, path, daftar, model, mode otomatis). */
