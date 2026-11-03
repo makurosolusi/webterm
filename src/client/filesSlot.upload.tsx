@@ -124,7 +124,15 @@ export const uploadSlot: FilesSlot = {
     const [on, setOn] = useState(uploadEnabled)
     useEffect(() => {
       let alive = true
-      void capabilities().then((c) => { uploadEnabled = c.upload; downloadEnabled = c.upload && c.viewers; if (alive) setOn(c.upload) })
+      // Promise.resolve().then: `capabilities` yang melempar sinkron tetap jadi penolakan, bukan merobohkan FilesNode.
+      Promise.resolve().then(() => capabilities()).then((c) => {
+        uploadEnabled = c.upload; downloadEnabled = c.upload && c.viewers
+        if (alive) setOn(c.upload)
+      }).catch((err: unknown) => {
+        uploadEnabled = false; downloadEnabled = false // fail-closed
+        console.error('files upload slot: capabilities failed, upload disabled', err)
+        if (alive) setOn(false)
+      })
       return () => { alive = false }
     }, [])
     useDrop(ctx, on)
