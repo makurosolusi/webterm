@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
-import { SettingsPanel } from './SettingsPanel'
+import { SettingsPanel, toSectionId } from './SettingsPanel'
 
 // Provider env nyata melakukan fetch; tes layout ini tak membutuhkannya (lihat SettingsPanel.envsearch.test.tsx).
 vi.mock('./useEnvSettings', () => ({
@@ -39,9 +39,8 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Cari setting' })).toBeTruthy()
-    for (const label of ['Terminal', 'Interaksi', 'Shell & buffer', 'Agent', 'Canvas', 'Preview']) {
-      expect(within(nav()).getByRole('button', { name: label })).toBeTruthy()
-    }
+    const labels = ['Terminal', 'Interaksi', 'Shell & buffer', 'Agent', 'Canvas', 'Channels', 'Environment']
+    expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
     const fontSize = screen.getByLabelText('Ukuran font') as HTMLInputElement
@@ -58,6 +57,38 @@ describe('SettingsPanel VS Code layout', () => {
     expect(screen.getByLabelText('Ukuran grid')).toBeTruthy()
     expect(screen.queryByLabelText('Ukuran font')).toBeNull()
     expect(within(nav()).getByRole('button', { name: 'Canvas' }).getAttribute('aria-current')).toBe('true')
+  })
+})
+
+describe('SettingsPanel item placement', () => {
+  it('puts scrollback lines and the app theme in Terminal, not Shell or Canvas', () => {
+    renderPanel()
+    expect(screen.getByLabelText('Scrollback terminal')).toBeTruthy()
+    expect(screen.getByLabelText('Tema app')).toBeTruthy()
+    expect(screen.getByLabelText('Skema warna')).toBeTruthy()
+
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Shell & buffer' }))
+    expect(screen.queryByLabelText('Scrollback terminal')).toBeNull()
+    expect(screen.getByLabelText('Buffer replay server')).toBeTruthy()
+
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
+    expect(screen.queryByLabelText('Tema app')).toBeNull()
+    expect(screen.queryByLabelText('Warna aksen')).toBeNull()
+  })
+
+  it('puts the Markdown preview toggle in Interaksi', () => {
+    renderPanel()
+    expect(screen.queryByLabelText('Buka Markdown sebagai preview')).toBeNull()
+
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Interaksi' }))
+
+    expect(screen.getByLabelText('Buka Markdown sebagai preview')).toBeTruthy()
+  })
+
+  it('falls back to terminal for an unknown or legacy tab id', () => {
+    expect(toSectionId('preview')).toBe('terminal')
+    expect(toSectionId('nope')).toBe('terminal')
+    expect(toSectionId('canvas')).toBe('canvas')
   })
 })
 
