@@ -25,3 +25,37 @@
 .browser-dialog p { margin: 0; overflow-wrap: anywhere; }
 .browser-dialog-title { font-weight: 600; }
 .browser-dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* Zoom: wrapper diperkecil 1/z lalu diskala z, jadi viewport yang dilaporkan ke server = ukuran / z
+   (halaman me-reflow seperti zoom browser) dan rect berskala tetap benar untuk pemetaan pointer. */
+.browser-zoom {
+  position: absolute; top: 0; left: 0;
+  width: calc(100% / var(--browser-zoom, 1)); height: calc(100% / var(--browser-zoom, 1));
+  transform: scale(var(--browser-zoom, 1)); transform-origin: 0 0;
+}
+
+/* Halaman awal: menutupi permukaan; permukaan tetap ter-mount di bawahnya supaya sesi tetap attach. */
+.browser-start {
+  position: absolute; inset: 0; z-index: 1; overflow: auto; display: flex; flex-direction: column; gap: 16px;
+  padding: 16px; font: 13px/1.4 var(--font-ui);
+  color: var(--vscode-foreground, var(--text)); background: var(--vscode-editor-background, var(--bg));
+}
+.browser-start ul { list-style: none; margin: 0; padding: 0; }
+.browser-start-search { width: 100%; max-width: 480px; margin: 0 auto; }
+.browser-start-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; width: 100%; max-width: 480px; margin: 0 auto; }
+.browser-start-tile, .browser-start-item {
+  display: flex; align-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font: inherit;
+}
+.browser-start-tile { flex-direction: column; gap: 4px; width: 100%; padding: 8px 4px; }
+.browser-start-tile:hover, .browser-start-item:hover { background: var(--vscode-list-hoverBackground, rgb(127 127 127 / 15%)); }
+.browser-start-tile:focus-visible, .browser-start-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
+.browser-start-icon {
+  display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%;
+  color: #fff; font-weight: 600; font-size: 15px;
+}
+.browser-start-name { font-size: 12px; }
+.browser-start-heading { width: 100%; max-width: 480px; margin: 0 auto 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; opacity: 0.7; }
+.browser-start-recent { width: 100%; max-width: 480px; margin: 0 auto; }
+.browser-start-item { flex-direction: column; align-items: flex-start; width: 100%; padding: 6px 8px; text-align: left; }
+.browser-start-title, .browser-start-host { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-start-host { font-size: 11px; opacity: 0.7; }

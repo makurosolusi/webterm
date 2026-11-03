@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
 import { parseBrowserUrl } from '../shared/browser.url'
-import { TOOLBAR_TEXT, URL_ERROR_TEXT } from './browser.uxText'
+import { zoomLabel } from './browser.zoom'
+import { TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 
 export interface BrowserToolbarProps {
   state?: BrowserState
@@ -15,12 +16,15 @@ export interface BrowserToolbarProps {
   /** false bila `WEBTERM_BROWSER_AGENT` mati di server: toggle dinonaktifkan. */
   agentEnabled: boolean
   onAgentControl: (enabled: boolean) => void
+  /** Zoom halaman (1 = 100%); kontrol zoom hanya tampil bila `onZoom` diberikan. */
+  zoom?: number
+  onZoom?: (dir: -1 | 1) => void
 }
 
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
 /** Bilah alamat + tombol navigasi + toggle agent untuk satu node browser. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, zoom = 1, onZoom }: BrowserToolbarProps) {
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const stateUrl = state?.url ?? ''
@@ -38,7 +42,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
 
   return (
     <div role="toolbar" aria-label={TOOLBAR_TEXT.group} className="nodrag flex flex-col gap-1 p-1">
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.back} disabled={!state?.canBack} onClick={() => nav('back')}>{icon('arrow-left')}</Button>
         <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.forward} disabled={!state?.canForward} onClick={() => nav('forward')}>{icon('arrow-right')}</Button>
         {state?.loading
@@ -54,6 +58,13 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
           />
           <Button type="submit" size="xs" variant="secondary">{TOOLBAR_TEXT.go}</Button>
         </form>
+        {onZoom && (
+          <div role="group" aria-label={ZOOM_TEXT.level} className="flex items-center gap-0.5 text-xs">
+            <Button size="icon-xs" variant="ghost" aria-label={ZOOM_TEXT.out} onClick={() => onZoom(-1)}>{icon('zoom-out')}</Button>
+            <span className="min-w-9 text-center tabular-nums">{zoomLabel(zoom)}</span>
+            <Button size="icon-xs" variant="ghost" aria-label={ZOOM_TEXT.in} onClick={() => onZoom(1)}>{icon('zoom-in')}</Button>
+          </div>
+        )}
         <label className="flex items-center gap-1 text-xs whitespace-nowrap" title={agentEnabled ? undefined : TOOLBAR_TEXT.agentControlOff}>
           <input
             type="checkbox" checked={agentControl} disabled={!agentEnabled}
