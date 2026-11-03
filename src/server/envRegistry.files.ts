@@ -1,6 +1,6 @@
 // Registry env: file manager (PLAN/FILEMANAGER-b.md §5.5). Semua flag OFF; empat perbaikan P0
 // (create-eksklusif, versi/konflik, body cap, penolakan biner) TIDAK di balik flag. Data murni.
-// Grup 'control': EnvGroup/ENV_GROUP_ORDER bukan milik WS-FM-00, dan menambah grup = ubah UI Pengaturan.
+// Grup + owner 'files' (envRegistry.groups.ts). Semua restart 'hot': dibaca per panggilan. Hanya saklar mutasi yang 'user'.
 import { FILES_LIST_MAX_DEFAULT, FILES_UPLOAD_MAX_MB_DEFAULT } from '../shared/fsLimits'
 import { flagOn } from './envFlag'
 import { flag, num, type EnvSpec } from './envRegistry.types'
@@ -39,13 +39,15 @@ export function filesUploadMaxBytes(env: NodeJS.ProcessEnv = process.env): numbe
   return positiveInt(env[UPLOAD_MAX_KEY], FILES_UPLOAD_MAX_MB_DEFAULT) * 1024 * 1024
 }
 
+const F = { owner: 'files', section: 'File manager', audience: 'advanced' } as const
+
 export const FILES_ENV_SPECS: readonly EnvSpec[] = [
-  flag(FILES_FLAG.MUTATE, 'control', { label: 'Files: mutasi', description: 'Delete (trash + Undo), restore, rename, copy di node files.', hot: true }),
-  flag(FILES_FLAG.VIEWERS, 'control', { label: 'Files: viewer', description: 'Endpoint raw + viewer gambar/audio/video/PDF. Mati: file non-teks tampil sebagai placeholder.', hot: true }),
-  flag(FILES_FLAG.WATCH, 'control', { label: 'Files: watcher', description: 'Sinkronisasi listing/editor saat file berubah di luar webterm.', hot: true }),
-  flag(FILES_FLAG.GIT_STATUS, 'control', { label: 'Files: status git', description: 'Dekorasi status git (M/A/U/...) pada daftar file.', hot: true }),
-  flag(FILES_FLAG.QUICK_OPEN, 'control', { label: 'Files: Quick Open', description: 'Pencarian file (Ctrl/Cmd+P) saat node files fokus.', hot: true }),
-  flag(FILES_FLAG.UPLOAD, 'control', { label: 'Files: upload/download', description: 'Upload ke dan download dari node files.', hot: true }),
-  num(LIST_MAX_KEY, 'control', 100, 100000, FILES_LIST_MAX_DEFAULT, { label: 'Files: batas entri', description: 'Maks entri satu listing direktori; selebihnya dipotong (truncated).', hot: true }),
-  num(UPLOAD_MAX_KEY, 'control', 1, 10240, FILES_UPLOAD_MAX_MB_DEFAULT, { label: 'Files: batas upload (MB)', description: 'Ukuran maksimum satu file upload.', hot: true }),
+  flag(FILES_FLAG.MUTATE, 'files', { ...F, audience: 'user', label: 'Files: mutasi', description: 'Delete (trash + Undo), restore, rename, copy di node files.', hot: true }),
+  flag(FILES_FLAG.VIEWERS, 'files', { ...F, label: 'Files: viewer', description: 'Endpoint raw + viewer gambar/audio/video/PDF. Mati: file non-teks tampil sebagai placeholder.', hot: true }),
+  flag(FILES_FLAG.WATCH, 'files', { ...F, label: 'Files: watcher', description: 'Sinkronisasi listing/editor saat file berubah di luar webterm.', hot: true }),
+  flag(FILES_FLAG.GIT_STATUS, 'files', { ...F, label: 'Files: status git', description: 'Dekorasi status git (M/A/U/...) pada daftar file.', hot: true }),
+  flag(FILES_FLAG.QUICK_OPEN, 'files', { ...F, label: 'Files: Quick Open', description: 'Pencarian file (Ctrl/Cmd+P) saat node files fokus.', hot: true }),
+  flag(FILES_FLAG.UPLOAD, 'files', { ...F, label: 'Files: upload/download', description: 'Upload ke dan download dari node files.', hot: true }),
+  num(LIST_MAX_KEY, 'files', 100, 100000, FILES_LIST_MAX_DEFAULT, { ...F, unit: 'entri', label: 'Files: batas entri', description: 'Maks entri satu listing direktori; selebihnya dipotong (truncated).', hot: true }),
+  num(UPLOAD_MAX_KEY, 'files', 1, 10240, FILES_UPLOAD_MAX_MB_DEFAULT, { ...F, unit: 'MB', label: 'Files: batas upload (MB)', description: 'Ukuran maksimum satu file upload.', hot: true }),
 ]
