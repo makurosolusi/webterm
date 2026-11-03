@@ -2,30 +2,62 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, expect, test } from 'bun:test'
-import { ledgerMode, startLedgerReaper, startLedgerRuntime } from './ledgerRuntime'
+import { activeLedgerRuntime, ledgerMode, startLedgerReaper, startLedgerRuntime } from './ledgerRuntime'
+
+// Batas atas file ledger kosong (R-E1): skema + indeks saja, tanpa baris.
+const MAX_EMPTY_LEDGER_BYTES = 1024 * 1024
 
 const root = mkdtempSync(join(tmpdir(), 'webterm-ledger-runtime-'))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
 
-test('flag parsing: only shadow/on enable the ledger', () => {
-  // Bun auto-loads .env, so the ambient WEBTERM_LEDGER must not leak into this test.
-  const previous = process.env.WEBTERM_LEDGER
+test('ledger selalu hidup: default on, shadow hanya lewat WEBTERM_LEDGER_SHADOW, WEBTERM_LEDGER lama diabaikan', () => {
+  // Bun auto-loads .env, so ambient values must not leak into this test.
+  const prev = { shadow: process.env.WEBTERM_LEDGER_SHADOW, legacy: process.env.WEBTERM_LEDGER }
   try {
-    delete process.env.WEBTERM_LEDGER
-    expect(ledgerMode(undefined)).toBe('off')
-    expect(ledgerMode('')).toBe('off')
-    expect(ledgerMode('garbage')).toBe('off')
-    expect(ledgerMode(' OFF ')).toBe('off')
-    expect(ledgerMode('shadow')).toBe('shadow')
-    expect(ledgerMode('ON')).toBe('on')
+    delete process.env.WEBTERM_LEDGER_SHADOW
+    process.env.WEBTERM_LEDGER = 'off'
+    expect(ledgerMode(undefined)).toBe('on')
+    expect(ledgerMode('')).toBe('on')
+    expect(ledgerMode('garbage')).toBe('on')
+    expect(ledgerMode('off')).toBe('on')
+    expect(ledgerMode('1')).toBe('shadow')
+    expect(ledgerMode(' ON ')).toBe('shadow')
+    expect(ledgerMode()).toBe('on') // override lama 'off' tidak dihormati
 
-    // The default parameter falls back to the env flag when no argument is given.
-    process.env.WEBTERM_LEDGER = 'on'
-    expect(ledgerMode()).toBe('on')
+    process.env.WEBTERM_LEDGER_SHADOW = '1'
+    expect(ledgerMode()).toBe('shadow')
   } finally {
-    if (previous === undefined) delete process.env.WEBTERM_LEDGER
-    else process.env.WEBTERM_LEDGER = previous
+    if (prev.shadow === undefined) delete process.env.WEBTERM_LEDGER_SHADOW
+    else process.env.WEBTERM_LEDGER_SHADOW = prev.shadow
+    if (prev.legacy === undefined) delete process.env.WEBTERM_LEDGER
+    else process.env.WEBTERM_LEDGER = prev.legacy
   }
+})
+
+test('store kosong: ledger hidup (activeLedgerRuntime != null) dengan footprint kecil', () => {
+  const path = join(root, 'default.db')
+  const runtime = startLedgerRuntime({ path })
+  try {
+    expect(runtime).not.toBe(null)
+    expect(runtime!.mode).toBe('on')
+    expect(activeLedgerRuntime()).toBe(runtime)
+    expect(statSync(path).size < MAX_EMPTY_LEDGER_BYTES).toBe(true)
+  } finally {
+    runtime?.close()
+  }
+})
+
+test('default turunan degradasi (null + warn) saat gagal buka; mode on eksplisit tetap melempar', () => {
+  const bad = join(root, 'not-a-dir-default')
+  writeFileSync(bad, 'occupied')
+  expect(startLedgerRuntime({ path: join(bad, 'x.db') })).toBe(null)
+  let threw = false
+  try {
+    startLedgerRuntime({ mode: 'on', path: join(bad, 'x.db') })
+  } catch {
+    threw = true // galat dilempar sebagaimana mestinya (mode eksplisit ketat)
+  }
+  expect(threw).toBe(true)
 })
 
 test('off starts nothing', () => {

@@ -61,7 +61,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_FILES_LIST_MAX', () => String(filesListMax(E)), 'envRegistry.files.ts:filesListMax'],
   ['WEBTERM_FILES_UPLOAD_MAX_MB', () => String(filesUploadMaxBytes(E) / 1024 / 1024), 'envRegistry.files.ts:filesUploadMaxBytes'],
   // Pembaca inline (tak bisa dipanggil): default dikutip dari sumber.
-  ['WEBTERM_LEDGER', () => 'off', 'ledger/ledgerRuntime.ts:74-77 (selain on|shadow = off; modul menarik bun:sqlite, tak bisa diimpor di vitest)'],
+  ['WEBTERM_LEDGER', () => 'off', 'ledger/ledgerRuntime.ts:ledgerMode (kunci lama TIDAK dibaca lagi: ledger selalu hidup, KE-1; nilai = default registry legacy)'],
   ['WEBTERM_LOG_LEVEL', () => 'info', 'logs/logger.ts:34 (`?? DEFAULT_LOG_LEVEL`)'],
   ['WEBTERM_LOG_FILE', () => 'on', "logs/logger.ts:108 (`?? 'on'`)"],
   ['WEBTERM_CENTRAL_TOOLS', () => 'read', "central/chat/turnService.ts:118 (`=== 'write'`, selain itu baca)"],

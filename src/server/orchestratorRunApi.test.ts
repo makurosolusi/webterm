@@ -94,6 +94,7 @@ function deps(
     deps: {
       ledger: runtime(),
       enabled: true,
+      requireApproval: false, // bawaan produksi kini ON (ENVSIMPLE Q3); tes alur run menyematkan off
       planStore: planStore(item()),
       dataDir: () => dataDir,
       settings: () => ({ agentLaunchCommands: {} }),
@@ -113,6 +114,26 @@ function deps(
 }
 
 const valid = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
+
+describe('orchestrator run hot gate', () => {
+  it('rejects while workers are off and accepts after env changes, without rebuilding anything', async () => {
+    const keys = ['WEBTERM_CENTRAL', 'WEBTERM_ORCHESTRATOR_RUN'] as const
+    const saved = keys.map((k) => process.env[k])
+    try {
+      for (const k of keys) delete process.env[k]
+      const { enabled: _unused, ...rest } = deps(async () => outcome()).deps
+      const offOutcome = await orchestratorRunRoute(valid, rest)
+      expect(offOutcome).toEqual({ status: 503, body: { error: 'orchestrator_off' } })
+      process.env.WEBTERM_CENTRAL = 'on'
+      process.env.WEBTERM_ORCHESTRATOR_RUN = 'on'
+      expect((await orchestratorRunRoute(valid, rest)).status).toBe(200)
+      process.env.WEBTERM_ORCHESTRATOR_RUN = 'off'
+      expect((await orchestratorRunRoute(valid, rest)).status).toBe(503)
+    } finally {
+      keys.forEach((k, i) => (saved[i] === undefined ? delete process.env[k] : (process.env[k] = saved[i])))
+    }
+  })
+})
 
 // A digest-bound approved decision, the exact shape the ledger gate consumes.
 const APPROVED_ACTION = { action: 'worker.run', projectId: 'p1', itemId: 'i1' }
