@@ -27,6 +27,7 @@ import { handleBrowserControl } from './browserControl.handler'
 import { handleBrowserApi } from '../browserApi'
 import { createBrowserSessionHook } from './browser.sessionCaps'
 import { adaptGatewayHost } from './browser.runtime.parts'
+import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
 import type { CapabilityStore } from '../control/capabilities'
 import type { Workspace } from '../../shared/workspace'
@@ -75,9 +76,16 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl === true)
   const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now })
   const live = new Set<string>()
-  host.onState((s: BrowserState) => { if (s.live === 'live') live.add(s.id); else live.delete(s.id) })
+  const versionProbe = createVersionProbe({ acquire: (w) => launcher.acquire(w), connect: d.connect })
+  host.onState((s: BrowserState) => {
+    if (s.live === 'live') {
+      live.add(s.id)
+      const ws = d.workspaces().find((w) => w.nodes.some((n) => n.id === s.id))
+      if (ws) versionProbe.probe(ws.id)
+    } else if (live.delete(s.id) && live.size === 0) versionProbe.reset() // tak ada browser hidup: restart berikutnya baca ulang
+  })
   const binFound = () => { try { resolveBinary(env); return true } catch { return false } }
-  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || binFound(), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: flagOn(env[ENV_BROWSER.cookieImport]) })
+  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || binFound(), ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: flagOn(env[ENV_BROWSER.cookieImport]) })
   const apiDeps = {
     vault, preview: createCookiePreviewStore(), injector: createCookieInjector({ launcher, connect: d.connect }), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
@@ -93,7 +101,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     async shutdown() {
       if (down) return
       down = true
-      clearInterval(sweep); unLease(); lifecycle.dispose()
+      clearInterval(sweep); unLease(); lifecycle.dispose(); versionProbe.reset()
       await host.dispose().catch((e) => log.warn('browser.stop', 'CDP dispose failed', { error: e instanceof Error ? e.name : typeof e }))
       launcher.shutdown() // Chromium dimatikan SESUDAH koneksi CDP ditutup
       await proxy.close().catch((e) => log.warn('browser.stop', 'proxy close failed', { error: e instanceof Error ? e.name : typeof e }))
