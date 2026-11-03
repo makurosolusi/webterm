@@ -9,3 +9,12 @@ export function parseFlag(raw: string | null | undefined): 'on' | 'off' | undefi
 
 /** True hanya untuk on; unset, kosong, off, dan typo tetap off (fail-closed). */
 export const flagOn = (raw: string | null | undefined): boolean => parseFlag(raw) === 'on'
+
+/** Dialek kanonik dengan default pemanggil: on/off dikenali, selain itu (kosong, typo) memakai `def`. */
+export const flagOr = (raw: string | null | undefined, def: boolean): boolean => {
+  const v = parseFlag(raw)
+  return v === undefined ? def : v === 'on'
+}
+
+/** Tiga kunci keamanan (ALLOW_LOOPBACK_APPROVAL, ALLOW_TOKEN_MINT, STRICT_HOOK_AUTH): persis `1`, tanpa trim/huruf. */
+export const strictFlag = (raw: string | null | undefined): boolean => raw === '1'
