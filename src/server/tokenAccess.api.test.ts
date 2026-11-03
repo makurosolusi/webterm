@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { authorizeRequest } from './auth'
 import { TOKEN_BODY_MAX_BYTES, tokenAccessRoute } from './tokenAccess.api'
 import { envSettingsRoute } from './envSettings.api'
+import { settingsGuard } from './featureCapabilities.guard'
 import { fakeReq, recorder, setupEnv, type RecordedRes } from './envSettings.testutil'
 import { logBus } from './logs'
 import { getTokenState, setTokenState, tokenFilePath } from './tokenBootstrap'
@@ -194,20 +195,27 @@ describe('GET /api/settings/token', () => {
   })
 })
 
-describe('efek ke kunci dangerous (rootGate)', () => {
-  it('PUT kunci dangerous ditolak sebelum enable dan lolos sesudahnya', async () => {
-    const put = async () => {
-      const s = setupEnv({})
-      const res = recorder()
-      const body = JSON.stringify({ set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } })
-      await envSettingsRoute(fakeReq('PUT', body), res, 'PUT', {
-        service: s.svc,
-        rootGate: () => (process.env.WEBTERM_TOKEN ?? '').trim() !== '',
-      })
-      return res.status
-    }
-    expect(await put()).toBe(403)
-    await call('POST', ENABLE)
-    expect(await put()).toBe(200)
+describe('efek ke kunci dangerous (settingsGuard)', () => {
+  const SAME = { host: `${LOOPBACK}:8700`, origin: `http://${LOOPBACK}:8700` }
+  const put = async (headers: Record<string, string>) => {
+    const s = setupEnv({})
+    const res = recorder()
+    const body = JSON.stringify({ set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } })
+    const req = Object.assign(fakeReq('PUT', body), { headers, socket: { remoteAddress: LOOPBACK } }) as unknown as IncomingMessage
+    await envSettingsRoute(req, res, 'PUT', { service: s.svc, guard: (r) => settingsGuard(r, {}) })
+    return res
+  }
+
+  it('tanpa token ditegakkan: tanpa Origin 403 forbidden; loopback + Origin sama lolos', async () => {
+    const denied = await put({ host: SAME.host })
+    expect([denied.status, denied.json()]).toEqual([403, { error: 'forbidden' }])
+    expect((await put(SAME)).status).toBe(200)
+  })
+
+  it('sesudah enable: tanpa token 403 forbidden, token root lolos tanpa Origin', async () => {
+    const { json } = await call('POST', ENABLE)
+    expect((await put(SAME)).status).toBe(403)
+    expect((await put({ 'x-webterm-token': 'salah' })).status).toBe(403)
+    expect((await put({ 'x-webterm-token': json.token })).status).toBe(200)
   })
 })

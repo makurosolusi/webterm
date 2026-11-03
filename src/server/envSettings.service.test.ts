@@ -90,20 +90,11 @@ describe('bootstrap-only, dangerous, locked', () => {
     expect(JSON.stringify(s.svc.state(ROOT))).not.toContain('9999')
   })
 
-  it('dangerous tanpa root: 403 token_required, tidak ada yang berubah', () => {
+  it('kunci dangerous kini diterima tanpa root (penjaga di rute, bukan di layanan)', () => {
     const s = setupEnv()
-    const r = s.svc.update({ set: { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' }, unset: [] }, USER)
-    expect(r).toMatchObject({ ok: false, status: 403, error: 'token_required', key: 'WEBTERM_ORCHESTRATOR_RUN' })
-    expect(s.overrides.saves).toBe(0)
-    expect(s.target.WEBTERM_CENTRAL).toBeUndefined()
-    expect(entry(s, 'WEBTERM_ORCHESTRATOR_RUN', USER).editable).toBe(false)
-    expect(entry(s, 'WEBTERM_CENTRAL', USER).editable).toBe(true)
-  })
-
-  it('dangerous dengan root diterima; non-dangerous tak butuh root', () => {
-    const s = setupEnv()
-    expect(s.svc.update({ set: { WEBTERM_ORCHESTRATOR_RUN: 'on' }, unset: [] }, ROOT).ok).toBe(true)
-    expect(s.svc.update({ set: { WEBTERM_CENTRAL: 'on' }, unset: [] }, USER).ok).toBe(true)
+    expect(s.svc.update({ set: { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' }, unset: [] }, USER).ok).toBe(true)
+    expect(s.target.WEBTERM_ORCHESTRATOR_RUN).toBe('on')
+    expect(s.svc.update({ set: { WEBTERM_OPENCODE_BIN: '/bin/sh' }, unset: [] }).ok).toBe(true)
   })
 
   it('WEBTERM_ENV_SETTINGS=off mengunci semua PUT dan mengabaikan override tersimpan', () => {

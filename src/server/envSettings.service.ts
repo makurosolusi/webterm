@@ -16,7 +16,7 @@ import { createLogger } from './logs'
 const slog = createLogger('settings')
 
 export interface EnvChange { set: Record<string, unknown>; unset: string[] }
-export interface EnvContext { /** Request lolos gerbang root token (token terkonfigurasi). */ root: boolean }
+export interface EnvContext { /** Hanya tampilan state; mutasi digerbangi penjaga di rute, bukan di sini. */ root: boolean }
 
 export type EnvUpdateResult =
   | { ok: true; state: EnvStateV2; restartRequired: string[] }
@@ -26,7 +26,7 @@ export interface EnvSettings {
   /** Terapkan override + secret ke `target`; panggil saat boot dan (internal) setelah tiap update. */
   apply(): void
   state(ctx: EnvContext): EnvStateV2
-  update(change: EnvChange, ctx: EnvContext): EnvUpdateResult
+  update(change: EnvChange, ctx?: EnvContext): EnvUpdateResult
 }
 
 export interface EnvSettingsDeps {
@@ -101,14 +101,13 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
   const state = (ctx: EnvContext): EnvStateV2 => buildEnvState(input(ctx.root))
 
   /** Cek semua kunci + nilai SEBELUM menyentuh apa pun, supaya update atomik. Nilai kosong `allowEmpty` = unset. */
-  function validate(change: EnvChange, ctx: EnvContext): { error: EnvUpdateResult } | { values: Map<string, string>; unset: string[] } {
+  function validate(change: EnvChange): { error: EnvUpdateResult } | { values: Map<string, string>; unset: string[] } {
     const keys = [...Object.keys(change.set), ...change.unset]
     if (new Set(keys).size !== keys.length) return { error: fail(400, 'duplicate_key') }
     for (const key of keys) {
       if (bootstrap.has(key)) return { error: fail(400, 'bootstrap_only', key) }
       const spec = specs.get(key)
       if (!spec) return { error: fail(400, 'unknown_key') }
-      if (spec.dangerous && !ctx.root) return { error: fail(403, 'token_required', key) }
     }
     const values = new Map<string, string>()
     const unset = [...change.unset]
@@ -146,12 +145,12 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
     }
   }
 
-  function update(change: EnvChange, ctx: EnvContext): EnvUpdateResult {
+  function update(change: EnvChange, ctx: EnvContext = { root: true }): EnvUpdateResult {
     if (locked) {
       slog.warn('env.locked', 'Env update rejected: settings are locked', { switch: ENV_SETTINGS_SWITCH })
       return fail(403, 'locked')
     }
-    const checked = validate(change, ctx)
+    const checked = validate(change)
     if ('error' in checked) return checked.error
     const before = live()
     try {

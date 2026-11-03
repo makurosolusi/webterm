@@ -5,20 +5,23 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { recordDotenvBoot } from './dotenvFiles'
-import { envImportRoute, envSettingsRoute } from './envSettings.api'
+import type { AuditEntry } from './featureCapabilities.audit'
+import { envImportRoute, envSettingsRoute, type EnvSettingsApiDeps } from './envSettings.api'
 import { fakeReq, recorder, SENTINEL_BOT_TOKEN, setupEnv } from './envSettings.testutil'
 
-async function call(method: string, body: unknown, root = true, env: NodeJS.ProcessEnv = {}) {
+const ALLOW: EnvSettingsApiDeps['guard'] = () => ({ ok: true, via: 'ui' })
+
+async function call(method: string, body: unknown, env: NodeJS.ProcessEnv = {}) {
   const s = setupEnv(env)
   const res = recorder()
   const raw = body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body)
-  await envSettingsRoute(fakeReq(method, raw), res, method, { service: s.svc, rootGate: () => root })
+  await envSettingsRoute(fakeReq(method, raw), res, method, { service: s.svc, guard: ALLOW })
   return { res, s, json: res.body ? (res.json() as Record<string, any>) : {} }
 }
 
 describe('GET', () => {
   it('state penuh, no-store, bootstrap tak editable', async () => {
-    const { res, json } = await call('GET', undefined, true, { WEBTERM_LEDGER: 'shadow' })
+    const { res, json } = await call('GET', undefined, { WEBTERM_LEDGER: 'shadow' })
     expect(res.status).toBe(200)
     expect(res.headers['Cache-Control']).toBe('no-store')
     expect(json.locked).toBe(false)
@@ -55,14 +58,49 @@ describe('PUT', () => {
     expect(json.error).toBe(error)
   })
 
-  it('dangerous tanpa root 403 token_required', async () => {
-    const { res, json } = await call('PUT', { set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } }, false)
-    expect(res.status).toBe(403)
-    expect(json).toEqual({ error: 'token_required', key: 'WEBTERM_OPENCODE_BIN' })
+  it('kunci dangerous dari penjaga yang meloloskan kini 200 (gerbang token_required hilang)', async () => {
+    const { res, s } = await call('PUT', { set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } })
+    expect(res.status).toBe(200)
+    expect(s.target.WEBTERM_OPENCODE_BIN).toBe('/bin/sh')
+  })
+
+  it('penjaga menolak: 403 forbidden tanpa efek, tanpa kata token, audit denied generik', async () => {
+    const s = setupEnv({})
+    const rows: AuditEntry[] = []
+    const res = recorder()
+    const deps: EnvSettingsApiDeps = { service: s.svc, guard: () => ({ ok: false, reason: 'origin' }), audit: (e) => rows.push(e) }
+    await envSettingsRoute(fakeReq('PUT', JSON.stringify({ set: { WEBTERM_CENTRAL: 'on' } })), res, 'PUT', deps)
+    expect([res.status, res.json()]).toEqual([403, { error: 'forbidden' }])
+    expect(s.target.WEBTERM_CENTRAL).toBeUndefined()
+    expect(rows).toEqual([{ capability: 'advanced', action: 'denied', peer: 'remote', via: 'rejected', detail: 'origin' }])
+    expect(res.body).not.toMatch(/token/i)
+  })
+
+  it('PUT sukses mencatat audit hanya nama kunci; galat audit tidak menjatuhkan mutasi', async () => {
+    const s = setupEnv({})
+    const rows: AuditEntry[] = []
+    const res = recorder()
+    await envSettingsRoute(fakeReq('PUT', JSON.stringify({ set: { WEBTERM_TELEGRAM_BOT_TOKEN: SENTINEL_BOT_TOKEN, WEBTERM_CENTRAL: 'on' } })), res, 'PUT',
+      { service: s.svc, guard: ALLOW, audit: (e) => rows.push(e) })
+    expect(res.status).toBe(200)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ action: 'advanced', via: 'ui', detail: 'WEBTERM_TELEGRAM_BOT_TOKEN,WEBTERM_CENTRAL' })
+    expect(JSON.stringify(rows)).not.toContain('SENTINEL')
+    const res2 = recorder()
+    await envSettingsRoute(fakeReq('PUT', JSON.stringify({ unset: ['WEBTERM_CENTRAL'] })), res2, 'PUT',
+      { service: s.svc, guard: ALLOW, audit: () => { throw new Error('disk penuh') } })
+    expect(res2.status).toBe(200)
+  })
+
+  it('GET tidak melewati penjaga', async () => {
+    const s = setupEnv({})
+    const res = recorder()
+    await envSettingsRoute(fakeReq('GET'), res, 'GET', { service: s.svc, guard: () => { throw new Error('tidak boleh dipanggil') } })
+    expect(res.status).toBe(200)
   })
 
   it('terkunci: 403 locked untuk semua PUT', async () => {
-    const { res, json } = await call('PUT', { set: { WEBTERM_CENTRAL: 'on' } }, true, { WEBTERM_ENV_SETTINGS: 'off' })
+    const { res, json } = await call('PUT', { set: { WEBTERM_CENTRAL: 'on' } }, { WEBTERM_ENV_SETTINGS: 'off' })
     expect(res.status).toBe(403)
     expect(json.error).toBe('locked')
   })
@@ -93,7 +131,7 @@ describe('POST /import', () => {
   const imp = async (method: string, body: unknown, env: NodeJS.ProcessEnv = {}) => {
     const s = setupEnv(env)
     const res = recorder()
-    await envImportRoute(fakeReq(method, body === undefined ? undefined : JSON.stringify(body)), res, method, { service: s.svc, rootGate: () => true })
+    await envImportRoute(fakeReq(method, body === undefined ? undefined : JSON.stringify(body)), res, method, { service: s.svc, guard: ALLOW })
     return { res, s, json: res.body ? (res.json() as Record<string, any>) : {} }
   }
 
