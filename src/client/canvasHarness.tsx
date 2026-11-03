@@ -214,8 +214,24 @@ export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof 
   // `setTimeout`, jadi `rf.current` App masih null sesaat sesudahnya — dan tanpa instance itu
   // `screenToFlowPosition` tidak ada, sehingga node baru lahir di posisi fallback. Test yang
   // mengklik lebih cepat dari ini menguji canvas yang tidak pernah ada di browser mana pun.
-  await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
+  await settleReady()
   return view
+}
+
+/** Tunggu sampai `onInit` React Flow BENAR-BENAR sudah jalan (bukan menebak lewat satu jeda tetap).
+ *  Rantainya: pane terpasang → effect ZoomPane membuat panZoom (d3-zoom menulis `__zoom` di
+ *  `.react-flow__renderer`) → store memicu render → effect `useOnInitHandler` → `setTimeout(…, 1)`.
+ *  Satu jeda `READY_FLUSH_MS` bisa habis lebih dulu dari rantai itu saat CPU penuh (suite paralel),
+ *  dan timer 1ms-nya baru terjadwal SESUDAH jeda kita — hasilnya `rf.current` masih null. */
+async function settleReady(): Promise<void> {
+  await waitFor(() => {
+    const zoomPane = document.querySelector('.react-flow__renderer') as (HTMLElement & { __zoom?: unknown }) | null
+    if (!zoomPane?.__zoom) throw new Error('panZoom React Flow belum terpasang')
+  })
+  // Dua giliran: yang pertama menguras render + effect yang menjadwalkan timer `onInit`; yang kedua
+  // dimulai SESUDAH timer itu terjadwal, jadi timer 1ms-nya pasti jatuh tempo lebih dulu.
+  await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
+  await act(() => new Promise<void>((r) => setTimeout(r, READY_FLUSH_MS)))
 }
 
 /**
