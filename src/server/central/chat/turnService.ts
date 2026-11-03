@@ -4,7 +4,6 @@
 // `turnEvents`; portfolio execution in `toolExecutors`. No plan/task/goal writes.
 import { flagOn } from '../../envFlag'
 import type { Database } from 'bun:sqlite'
-import { allRows } from '../../ledger/ledgerCore'
 import {
   type ConversationError, isActiveTurnStatus, normalizeClientMessageId, validateMessageText,
 } from '../conversationModel'
@@ -24,8 +23,8 @@ import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents
 import { parseProposals } from '../proposal/proposalParser'
 import { validateProposal } from '../proposal/proposalPolicy'
 import { applyProposal } from '../proposal/applyProposal'
-import { centralPrompt } from '../proposal/centralPrompt'
-import { buildMemoryContext } from '../memory/contextBuilder'
+import { createLegacyContextAssembler, type ContextAssembler } from '../context/contextPort'
+import { resolveLimits } from './turnLimits'
 import { createLogger } from '../../logs'
 
 const log = createLogger('central')
@@ -42,6 +41,10 @@ export interface TurnServiceDeps {
   runtime: CentralRuntime | null
   stream: StreamHub
   now?: () => number
+  /** Prompt/history assembly; defaults to the legacy behaviour. */
+  context?: ContextAssembler
+  /** Env source for per-turn limits; defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv
 }
 
 export interface SubmitResult {
@@ -51,7 +54,6 @@ export interface SubmitResult {
 }
 
 const CANCEL_GRACE_MS = 1_500
-const HISTORY_LIMIT = 20
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -65,6 +67,8 @@ export class TurnService {
   private readonly runtime: CentralRuntime | null
   private readonly stream: StreamHub
   private readonly now: () => number
+  private readonly context: ContextAssembler
+  private readonly env: NodeJS.ProcessEnv
   private readonly runs = new Map<string, Promise<Turn>>()
   private readonly active = new Map<string, string>()
   private readonly states = new Map<string, RunState>()
@@ -74,6 +78,8 @@ export class TurnService {
     this.runtime = deps.runtime
     this.stream = deps.stream
     this.now = deps.now ?? Date.now
+    this.context = deps.context ?? createLegacyContextAssembler()
+    this.env = deps.env ?? process.env
   }
 
   /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
@@ -89,7 +95,12 @@ export class TurnService {
     if (this.active.has(conversation.id) || conversation.activeTurnId !== null) {
       throw busyError(conversation, this.active.get(conversation.id))
     }
-    const history = this.history(conversation.id)
+    const planner = flagOn(process.env.WEBTERM_CENTRAL_PLANNER)
+    const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
+    const { prompt, history } = this.context.build({
+      db: this.db, conversationId: conversation.id, text, proposalsEnabled: planner && toolsWrite,
+      memoryEnabled: flagOn(process.env.WEBTERM_CENTRAL_MEMORY), now: this.now,
+    })
     const appended = appendMessage(this.db, {
       conversationId: conversation.id, role: 'human',
       parts: [{ type: 'text', text }], clientMessageId, now: this.now(),
@@ -111,7 +122,7 @@ export class TurnService {
     this.active.set(conversation.id, turn.id)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
-    const done = this.runTurn(conversation, turn, text, history)
+    const done = this.runTurn(conversation, turn, prompt, history, planner, toolsWrite)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -151,16 +162,9 @@ export class TurnService {
     return getTurn(this.db, turnId)
   }
 
-  private history(conversationId: string): string[] {
-    return allRows(
-      this.db,
-      'SELECT id FROM central_message WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?',
-      conversationId, HISTORY_LIMIT
-    ).map((row) => String(row['id'])).reverse()
-  }
-
   private async runTurn(
-    conversation: Conversation, turn: Turn, text: string, history: string[]
+    conversation: Conversation, turn: Turn, prompt: string, history: string[],
+    planner: boolean, toolsWrite: boolean
   ): Promise<Turn> {
     const runtime = this.runtime
     if (runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
@@ -174,14 +178,10 @@ export class TurnService {
       const projected = projectRuntimeEvent(state, assistant.id, event)
       if (projected) this.record(conversation.id, projected.type, projected.payload, event.turnId, assistant.id)
     }
-    const planner = flagOn(process.env.WEBTERM_CENTRAL_PLANNER)
-    const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
-    const memoryEnabled = flagOn(process.env.WEBTERM_CENTRAL_MEMORY)
-    const memory = memoryEnabled ? buildMemoryContext(this.db, conversation.id, text, { now: this.now }) : ''
     const input: TurnInput = {
       conversationId: conversation.id, turnId: turn.id,
-      text: centralPrompt(this.db, text, planner && toolsWrite, memory), history,
-      tools: [...DEFAULT_CENTRAL_TOOLS], limits: {},
+      text: prompt, history,
+      tools: [...DEFAULT_CENTRAL_TOOLS], limits: resolveLimits(this.env),
       ...(turn.sessionRef === null ? {} : { sessionRef: turn.sessionRef }),
     }
     try {
