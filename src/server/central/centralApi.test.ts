@@ -57,7 +57,22 @@ describe('route matching and flags', () => {
     expect(centralEnabled('true')).toBe(true)
     expect(centralEnabled('1')).toBe(true)
     expect(centralEnabled('yes')).toBe(false)
-    expect(centralEnabled(undefined)).toBe(false)
+    expect(centralEnabled({})).toBe(false)
+    expect(centralEnabled({ WEBTERM_CENTRAL: 'on' })).toBe(true)
+  })
+
+  it('membaca Central per panggilan: off -> 503, on -> 200 tanpa membangun ulang deps', () => {
+    const live: CentralRouteDeps = { runtime, authorize: () => human }
+    const prev = process.env.WEBTERM_CENTRAL
+    try {
+      process.env.WEBTERM_CENTRAL = 'off'
+      expect(call('/api/central/portfolio', 'GET', '', undefined, live)?.status).toBe(503)
+      process.env.WEBTERM_CENTRAL = 'on'
+      expect(call('/api/central/portfolio', 'GET', '', undefined, live)?.status).toBe(200)
+    } finally {
+      if (prev === undefined) delete process.env.WEBTERM_CENTRAL
+      else process.env.WEBTERM_CENTRAL = prev
+    }
   })
 
   it('answers 503 when the flag is off, before any read or mutation', () => {

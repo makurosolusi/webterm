@@ -3,6 +3,7 @@
 // Persistence/finalization lives in `turnPersistence`; event projection in
 // `turnEvents`; portfolio execution in `toolExecutors`. No plan/task/goal writes.
 import { flagOn } from '../../envFlag'
+import { isEnabled } from '../../featureCapabilities.runtime'
 import type { Database } from 'bun:sqlite'
 import {
   type ConversationError, isActiveTurnStatus, normalizeClientMessageId, validateMessageText,
@@ -120,7 +121,7 @@ export class TurnService {
     try {
       built = this.context.build({
         db: this.db, conversationId: conversation.id, text, proposalsEnabled: planner && toolsWrite,
-        memoryEnabled: flagOn(process.env.WEBTERM_CENTRAL_MEMORY), now: this.now,
+        memoryEnabled: isEnabled('central'), now: this.now,
       })
     } catch (err) {
       if (err instanceof ContextRejectedError) throw new CentralChatError('budget_exhausted', err.message, chatErrorStatus(err.code))

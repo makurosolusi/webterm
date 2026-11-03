@@ -53,7 +53,7 @@ describe('bootCa2 settings seam', () => {
     const handle = bootCa2({
       runtime: { db: freshDb() } as unknown as LedgerRuntime,
       sessions: { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike,
-      registry: createRegistry(), noTimer: true, dataDirPath: dir, env: { WEBTERM_CENTRAL_AGENTS: 'propose' },
+      registry: createRegistry(), noTimer: true, dataDirPath: dir, env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'propose' },
       settings: () => { reads += 1; return DEFAULT_SETTINGS },
     })
     expect(handle?.executor).not.toBeNull()
