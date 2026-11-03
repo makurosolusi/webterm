@@ -32,10 +32,13 @@ import {
 import { fileIconClass, folderIconClass } from './fileIcon'
 import { EDITOR_SIZE, planFileOpen } from './fileOpen'
 import { listKeyAction, scrollTopToReveal, typeAhead } from './filesKeys'
+import { indexOfName, nfcName } from './filesSelection'
 import { randomId } from './randomId'
 import './files.css'
 
 const COLLAPSED_H = 40
+const NO_ENTRIES: DirEntry[] = []
+const exists = (name: string) => `Sudah ada: ${name}`
 const UNREACHABLE = 'Could not reach this folder. It may be gone, or its filesystem may be unavailable.'
 
 type Menu = { x: number; y: number; entry: DirEntry | null }
@@ -61,11 +64,16 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const swatch = d.color ?? '#0a84ff'
   const comments = d.comments ?? []
 
-  const [entries, setEntries] = useState<DirEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  // Daftar membawa direktori asalnya: begitu `cwd` berpindah, daftar lama TIDAK boleh tampil —
+  // klik pada entri lama akan membuka `childPath(cwdBaru, namaLama)` (G-04).
+  const [listing, setListing] = useState<{ dir: string; entries: DirEntry[] }>({ dir: '', entries: [] })
+  const [fetching, setFetching] = useState(true)
+  const entries = listing.dir === cwd ? listing.entries : NO_ENTRIES
+  const loading = fetching || listing.dir !== cwd
   const [verdict, setVerdict] = useState<EmptyListingVerdict | null>(null)
   const [query, setQuery] = useState('')
-  const [sel, setSel] = useState(-1)
+  /** Seleksi per nama (NFC); indeks diturunkan dari daftar yang tampil (G-17). */
+  const [selName, setSelName] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
   const [notice, setNotice] = useState('')
@@ -86,11 +94,11 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
+    setFetching(true)
     void (async () => {
       const got = await fsClient.list(cwd)
       if (!alive) return
-      setEntries(got)
+      setListing({ dir: cwd, entries: got })
       if (got.length > 0) setVerdict(null)
       else {
         // Listing kosong ambigu secara kontrak (lihat `classifyEmptyListing`): tanya INDUK.
@@ -99,19 +107,22 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         if (!alive) return
         setVerdict(classifyEmptyListing(cwd, pe))
       }
-      setLoading(false)
+      setFetching(false)
       const want = pendingSel.current
       pendingSel.current = null
-      setSel(want === null ? -1 : got.findIndex((e) => e.name === want))
+      // Refresh biasa mempertahankan seleksi; hanya permintaan eksplisit (naik/buat baru) menggantinya.
+      if (want !== null) setSelName(nfcName(want))
     })()
     return () => { alive = false }
   }, [cwd, version])
 
   // Filter adalah pertanyaan tentang SATU direktori; membawanya ke direktori berikutnya membuat
   // folder tampak kosong karena kotak yang sudah tidak dilihat pengguna.
-  useEffect(() => { setQuery(''); setNotice('') }, [cwd])
+  useEffect(() => { setQuery(''); setNotice(''); setSelName(null) }, [cwd])
 
   const shown = filterEntries(entries, query)
+  const sel = indexOfName(shown, selName)
+  const selectAt = (index: number) => setSelName(index >= 0 && shown[index] ? nfcName(shown[index].name) : null)
 
   const navigate = useCallback((to: string, cameFrom?: string) => {
     if (cameFrom) pendingSel.current = childOnPath(to, cameFrom)
@@ -135,11 +146,15 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const open = (e: DirEntry) => {
     const p = childPath(cwd, e.name)
     if (e.dir) { navigate(p); return }
+    openFile(p, e.name)
+  }
+
+  const openFile = (p: string, name: string) => {
     // Tab browser tidak bisa menyerahkan file ke OS mesin server — katakan, jangan buka buffer sampah.
-    if (fileOpenTarget(p) !== 'canvas') { setNotice(`${e.name} needs an application on the server to open.`); return }
+    if (fileOpenTarget(p) !== 'canvas') { setNotice(`${name} needs an application on the server to open.`); return }
     const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, randomId())
     if (plan.focus) rf.updateNode(plan.nodeId, { selected: true })
-    else addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: e.name }, { ...EDITOR_SIZE, selected: true })
+    else addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: name }, { ...EDITOR_SIZE, selected: true })
     // Kabel penanda "file ini sedang terbuka". Dibuat langsung, BUKAN lewat `onConnect`: `canLink`
     // hanya meloloskan pasangan agent context-capable.
     // `kind` WAJIB masuk ke `data`, bukan level atas: itu satu-satunya tempat yang dibaca
@@ -167,12 +182,12 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       const row = hit(event)
       if (!row) return
       list.focus()
-      setSel(row.index)
+      selectAt(row.index)
     }
     const onDoubleClick = (event: MouseEvent) => {
       const row = hit(event)
       if (!row) return
-      setSel(row.index)
+      selectAt(row.index)
       open(row.entry)
     }
     const onContextMenu = (event: MouseEvent) => {
@@ -180,7 +195,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       if (!row) return
       event.preventDefault()
       event.stopPropagation()
-      setSel(row.index)
+      selectAt(row.index)
       setMenu({ x: event.clientX, y: event.clientY, entry: row.entry })
     }
     list.addEventListener('click', onClick, true)
@@ -201,10 +216,19 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     const target = newEntryPath(base, name)
     if (!target) { setNotice('That name is not allowed here.'); return }
     for (const p of ancestorDirs(base, name)) await fsClient.mkdir(p)
-    const ok = dir ? await fsClient.mkdir(target) : await fsClient.write(target, '')
-    if (!ok) { setNotice(`Could not create ${name}.`); return }
-    pendingSel.current = name.split('/')[0]
+    const leaf = name.trim().split('/').pop() ?? name
+    if (dir) {
+      const r = await fsClient.mkdirChecked(target)
+      if (!r.ok) { setNotice(`Could not create ${name}: ${r.error}`); return }
+      if (!r.created) setNotice(exists(leaf))
+    } else {
+      // `create` eksklusif: nama yang sudah ada TIDAK ditimpa (G-01); pesan datang dari FsFail.
+      const r = await fsClient.create(target)
+      if (!r.ok) { setNotice(r.code === 'EEXIST' ? exists(leaf) : `Could not create ${name}: ${r.error}`); return }
+    }
+    pendingSel.current = name.trim().split('/')[0]
     setVersion((v) => v + 1)
+    if (!dir) openFile(target, leaf)
   }
 
   const toggleCollapse = () => {
@@ -237,7 +261,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       claim()
       if (act.kind === 'up') navigate(parentDir(cwd), cwd)
       else if (act.kind === 'open') open(shown[act.index])
-      else { setSel(act.index); reveal(act.index) }
+      else { selectAt(act.index); reveal(act.index) }
       return
     }
     if (ev.key === 'Escape' && query) { claim(); setQuery(''); return }
@@ -245,7 +269,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       claim()
       const next = typeAhead(typed.current, ev.key, Date.now(), shown.map((e) => e.name), sel)
       typed.current = next.state
-      if (next.index >= 0) { setSel(next.index); reveal(next.index) }
+      if (next.index >= 0) { selectAt(next.index); reveal(next.index) }
     }
   }
 
