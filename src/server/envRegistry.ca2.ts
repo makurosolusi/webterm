@@ -8,6 +8,9 @@ const DEFAULT_TURN_TOKENS = 60_000
 const DEFAULT_DAILY_TOKENS = 1_000_000
 const DEFAULT_DAILY_SPAWNS = 20
 const DEFAULT_AGENT_IDLE_DONE_MS = 45_000
+const DEFAULT_TURN_STEPS = 12
+const DEFAULT_MAX_INFLIGHT = 3
+const DEFAULT_CONTEXT_WINDOW = 128_000
 const MAX_NUMBER = 1_000_000_000
 
 export const CA2_ENV_SPECS: readonly EnvSpec[] = [
@@ -39,4 +42,10 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Idle = kandidat selesai (ms)',
     description: 'Worker non-claude yang diam selama ini dengan diff tak kosong dianggap kandidat selesai.',
   }),
+  flag('WEBTERM_CENTRAL_RELIABILITY', 'central', { label: 'Reliabilitas autonomy', description: 'Autonomy memakai dispatcher non-blocking, wake, dan breaker per item (butuh autonomy).' }),
+  num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { label: 'Worker bersamaan maks', description: 'Batas global worker yang dijalankan autonomy sekaligus (mode reliabilitas).' }),
+  flag('WEBTERM_AGENT_MAIL', 'central', { label: 'Mailbox agen', description: 'Central boleh menitipkan pesan ke worker lewat mailbox (butuh Agen central).' }),
+  flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { label: 'Tool baca central', description: 'Central boleh membaca project, node, dan task lewat tool baca dan melanjutkan turn (butuh tools).' }),
+  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { label: 'Jendela konteks (token)', description: 'Ukuran jendela model untuk rotasi sesi (70%) dan penolakan turn (85%).' }),
+  num('WEBTERM_CENTRAL_TURN_STEPS', 'central', 1, 100, DEFAULT_TURN_STEPS, { label: 'Giliran maks per turn', description: 'Batas giliran runtime dalam satu turn central.' }),
 ]

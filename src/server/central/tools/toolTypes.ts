@@ -1,9 +1,10 @@
-// Local tool contracts. TODO(ca2-04): swap `Tier`/`ControlGuard`/`ToolCtx` for the frozen
-// versions in `contracts/*.types.ts` once WS-04 lands; shapes here are the minimal subset used by WS-03.
+// Local tool contracts. `Tier` is the frozen contract type. `ControlGuard`/`ToolCtx` stay local on purpose:
+// the contract guard is async and keyed by action, while `execTool` needs the synchronous gate;
+// `toToolGuard` (guard/controlGuard.ts) is the one bridge between them, so the two shapes cannot drift.
 import type { Database } from 'bun:sqlite'
+import type { Tier } from '../contracts/level.types'
 
-/** Risk tier of a tool: R0 read, R1 bounded write, R2 shared mutation, R3 irreversible. */
-export type Tier = 'R0' | 'R1' | 'R2' | 'R3'
+export type { Tier }
 export const TIER_ORDER: readonly Tier[] = ['R0', 'R1', 'R2', 'R3']
 /** True when `tier` does not exceed `max`. */
 export function tierWithin(tier: Tier, max: Tier): boolean { return TIER_ORDER.indexOf(tier) <= TIER_ORDER.indexOf(max) }

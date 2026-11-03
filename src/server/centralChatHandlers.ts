@@ -7,6 +7,8 @@ import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { listConversationEvents } from './central/conversationStore'
 import { ConversationError } from './central/conversationModel'
+import { activeCa2 } from './central/ca2Active'
+import { createContextAssembler } from './central/context/contextAssembler'
 import { MockRuntime } from './central/runtime/mockRuntime'
 import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
@@ -51,7 +53,11 @@ function buildService(db: Database, kind: RuntimeKind, now?: () => number): Chat
     : kind === 'opencode'
       ? new OpenCodeRuntime()
       : null
-  return { service: new TurnService({ db, runtime, stream, now }), stream, db }
+  // With CA2 armed on this db, retrieval uses its memory provider; the assembler delegates to the
+  // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
+  const ca2 = activeCa2()
+  const context = ca2 && ca2.db === db ? createContextAssembler({ memory: ca2.memory }) : undefined
+  return { service: new TurnService({ db, runtime, stream, now, ...(context ? { context } : {}) }), stream, db }
 }
 
 export function resolveChatService(deps: CentralChatDeps, db: Database, kind: RuntimeKind): ChatService {

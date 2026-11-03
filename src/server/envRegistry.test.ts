@@ -40,7 +40,7 @@ describe('ENV_REGISTRY', () => {
 
   it('flag CA2: semua flag/enum default off, angka dalam rentang, tanpa duplikat', () => {
     const keys = CA2_ENV_SPECS.map((s) => s.key)
-    expect(keys.length).toBe(17)
+    expect(keys.length).toBe(23)
     expect(new Set(keys).size).toBe(keys.length)
     for (const k of keys) expect(ENV_REGISTRY.filter((s) => s.key === k).length, k).toBe(1)
     for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe('off')
