@@ -20,7 +20,7 @@ export const CDP = {
   setDeviceMetrics: 'Emulation.setDeviceMetricsOverride', setTouchEmulation: 'Emulation.setTouchEmulationEnabled',
   mouse: 'Input.dispatchMouseEvent', key: 'Input.dispatchKeyEvent', insertText: 'Input.insertText',
   ime: 'Input.imeSetComposition', touch: 'Input.dispatchTouchEvent',
-  setDownloadBehavior: 'Browser.setDownloadBehavior', setPermission: 'Browser.setPermission',
+  getVersion: 'Browser.getVersion', setDownloadBehavior: 'Browser.setDownloadBehavior', setPermission: 'Browser.setPermission',
   evaluate: 'Runtime.evaluate',
 } as const
 
@@ -33,6 +33,13 @@ export const CDP_EVENT = {
   frameStartedLoading: 'Page.frameStartedLoading', frameStoppedLoading: 'Page.frameStoppedLoading',
   dialogOpening: 'Page.javascriptDialogOpening',
 } as const
+
+/** Versi produk browser (mis. "Chrome/131.0.6778.85") dari `Browser.getVersion`; userAgent penuh sengaja dibuang. */
+export async function readBrowserProduct(cdp: CdpClient): Promise<string> {
+  const r = await cdp.send<{ product?: unknown }>(CDP.getVersion)
+  if (typeof r.product !== 'string' || !r.product) throw new Error(`cdp ${CDP.getVersion} returned no product string`)
+  return r.product
+}
 
 export type CdpHandler = (params: Record<string, unknown>, sessionId: string | undefined, method: string) => void
 interface Pending { method: string; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
