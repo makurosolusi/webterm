@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 // ada komponen yang bisa dirender untuk membuktikannya. Yang bisa dilakukan: membaca source-nya
 // dan menolak bentuk yang salah — pola yang sama dengan `workspaceCommit.test.ts`.
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
-
+/** Panel dipecah: pohon JSX ada di `SessionsPanel.tree.tsx`; invarian dibaca dari gabungannya. */
+const panelSrc = () => src('SessionsPanel.tsx') + src('SessionsPanel.tree.tsx')
 /** Judul panel harus menamai himpunan yang benar-benar didaftar, dan hitungannya harus `rowCount`
  *  (per tab) — bukan `total`, yang selalu menghitung sesi. */
 const titleFollowsTab = (s: string) =>
@@ -84,7 +85,7 @@ const OLD_NODES_META = `        {grouping === 'nodes' ? (
 
 describe('judul sidebar', () => {
   it('menamai dan menghitung himpunan yang benar-benar didaftar tab aktif', () => {
-    expect(titleFollowsTab(src('SessionsPanel.tsx'))).toBe(true)
+    expect(titleFollowsTab(panelSrc())).toBe(true)
   })
 
   it('guard menolak judul tetap "Sessions" dengan hitungan sesi', () => {
@@ -94,7 +95,7 @@ describe('judul sidebar', () => {
 
 describe('seksi status kosong', () => {
   it('disembunyikan, kecuali Need attention', () => {
-    const panel = src('SessionsPanel.tsx')
+    const panel = panelSrc()
     // Dihitung dulu: blok yang tidak ketemu memulangkan string kosong, dan guard apa pun di
     // atasnya akan lulus/gagal tanpa menjaga apa pun.
     expect(statusGate(panel).length).toBeGreaterThan(0)
@@ -107,29 +108,29 @@ describe('seksi status kosong', () => {
   })
 
   it('header attention tetap dirender saat nol — jadi badan barisnya masih digerbang sendiri', () => {
-    expect(src('SessionsPanel.tsx')).toMatch(/\{s\.rows\.length > 0 && \(/)
+    expect(panelSrc()).toMatch(/\{s\.rows\.length > 0 && \(/)
   })
 })
 
 describe('tab Nodes', () => {
   it('dirender sebagai seksi per grup dengan kelas yang sama seperti tab Status', () => {
-    const panel = src('SessionsPanel.tsx')
+    const panel = panelSrc()
     expect(nodesBranch(panel).length).toBeGreaterThan(0)
     expect(rendersNodeSections(panel)).toBe(true)
   })
 
   it('hitungan panelnya menjumlahkan baris lintas grup, bukan panjang satu daftar datar', () => {
-    const panel = src('SessionsPanel.tsx')
+    const panel = panelSrc()
     expect(panel).toMatch(/nodeGroups\.reduce\(\(n, g\) => n \+ g\.rows\.length, 0\)/)
     expect(panel).not.toContain('nodeRows')
   })
 
   it('setiap baris membawa ikon kind di slot glyph yang sudah ada', () => {
-    expect(rowsHaveKindGlyph(src('SessionsPanel.tsx'))).toBe(true)
+    expect(rowsHaveKindGlyph(panelSrc())).toBe(true)
   })
 
   it('ikonnya dipetakan per kind, keempatnya, ke codicon (bukan lucide-react)', () => {
-    const panel = src('SessionsPanel.tsx')
+    const panel = panelSrc()
     for (const [kind, icon] of [
       ['agent', 'hubot'],
       ['terminal', 'terminal'],
@@ -143,7 +144,7 @@ describe('tab Nodes', () => {
   })
 
   it('barisnya tidak mengulang kind di baris meta', () => {
-    const panel = src('SessionsPanel.tsx')
+    const panel = panelSrc()
     expect(nodesBranch(panel).length).toBeGreaterThan(0)
     expect(nodeRowsHaveNoMeta(panel)).toBe(true)
     // `ss-meta` di luar blok Nodes (tab Project, Recently closed) harus tetap ada: yang dibawanya
