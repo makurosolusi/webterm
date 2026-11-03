@@ -31,8 +31,8 @@
   background: transparent;
 }
 
-/* Kelompok mode di bawah rail: lock dan clean view adalah TOGGLE (`aria-pressed`), bukan tujuan
-   navigasi. Tanpa penanda 2px di kiri: marker itu berarti "panel aktif" di VS Code, jadi toggle
+/* Grup bawah rail: Settings (pembuka dialog) lalu lock dan clean view, yang TOGGLE (`aria-pressed`),
+   bukan tujuan navigasi. Tanpa penanda 2px di kiri: marker itu berarti "panel aktif" di VS Code, jadi toggle
    hanya mengubah kecerahan ikon. Warna idle ikut inactiveForeground rail, karena grup ini berada
    di luar `<nav>` activity bar dan kalau tidak akan mewarisi warna teks biasa. */
 .dock__modes {
