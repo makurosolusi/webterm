@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ENV_BROWSER } from '../../shared/browser.contract'
-import { BIN_CANDIDATES, createChromiumPool, LaunchError, launchChromium, resolveBinary } from './chromium.launch'
+import { BIN_CANDIDATES, chromiumCandidates, createChromiumPool, detectChromium, LaunchError, launchChromium, resolveBinary } from './chromium.launch'
 import type { ChildLike, LaunchDeps } from './chromium.launch'
 
 class FakeChild implements ChildLike {
@@ -22,6 +22,48 @@ const noSleep = async () => undefined
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'wt-launch-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+
+// test-only: disk palsu = himpunan path yang "ada" + isi direktori palsu.
+const fakeFs = (files: string[], dirs: Record<string, string[]> = {}) => ({
+  exists: (p: string) => files.includes(p),
+  listDir: (d: string) => dirs[d] ?? [],
+})
+const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+const BRAVE = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'
+const PW = '/home/u/.cache/ms-playwright'
+
+describe('chromiumCandidates', () => {
+  it('lists only paths on disk, priority: well-known -> PATH -> Playwright (newest revision first)', () => {
+    const files = [BRAVE, CHROME, '/opt/bin/chromium',
+      `${PW}/chromium-1100/chrome-linux/chrome`, `${PW}/chromium-1200/chrome-linux64/chrome`]
+    const fs = fakeFs(files, { [PW]: ['chromium-1100', 'chromium-1200', 'chromium_headless_shell-1200', 'ffmpeg-1'] })
+    expect(chromiumCandidates({ PATH: '/opt/bin:/missing', HOME: '/home/u' }, fs.exists, fs.listDir)).toEqual([
+      CHROME, BRAVE, '/opt/bin/chromium', `${PW}/chromium-1200/chrome-linux64/chrome`, `${PW}/chromium-1100/chrome-linux/chrome`,
+    ])
+  })
+  it('dedupes a PATH hit that is also a well-known location', () => {
+    const fs = fakeFs(['/usr/bin/chromium'])
+    expect(chromiumCandidates({ PATH: '/usr/bin' }, fs.exists, fs.listDir)).toEqual(['/usr/bin/chromium'])
+  })
+  it('empty when nothing exists, and without HOME skips the Playwright cache', () => {
+    const listDir = (d: string) => { throw new Error(`unexpected listDir ${d}`) }
+    expect(chromiumCandidates({}, () => false, listDir)).toEqual([])
+  })
+})
+
+describe('detectChromium with candidates', () => {
+  const fs = fakeFs(['/opt/bin/chromium', '/opt/custom'])
+  const env = { PATH: '/opt/bin' }
+  it('valid override wins over auto candidates', () => {
+    expect(detectChromium({ ...env, [ENV_BROWSER.bin]: '/opt/custom' }, fs.exists, fs.listDir)).toEqual({ path: '/opt/custom', source: 'override' })
+  })
+  it('invalid override does NOT fall back to auto (existing contract)', () => {
+    expect(detectChromium({ ...env, [ENV_BROWSER.bin]: '/opt/gone' }, fs.exists, fs.listDir)).toBeNull()
+  })
+  it('empty/blank override = auto, first candidate', () => {
+    expect(detectChromium({ ...env, [ENV_BROWSER.bin]: '  ' }, fs.exists, fs.listDir)).toEqual({ path: '/opt/bin/chromium', source: 'auto' })
+  })
+})
 
 describe('resolveBinary', () => {
   it('prefers the explicit env path when it exists', () => {

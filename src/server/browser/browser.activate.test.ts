@@ -134,7 +134,7 @@ describe('registerBrowserCapability', () => {
 
 describe('detectChromium', () => {
   it('env eksplisit menang atas lokasi umum', () => {
-    expect(detectChromium({ [ENV_BROWSER.bin]: '/opt/c' }, () => true)).toEqual({ path: '/opt/c', source: 'env' })
+    expect(detectChromium({ [ENV_BROWSER.bin]: '/opt/c' }, () => true)).toEqual({ path: '/opt/c', source: 'override' })
   })
   it('env eksplisit yang hilang tidak jatuh diam-diam ke lokasi umum', () => {
     expect(detectChromium({ [ENV_BROWSER.bin]: '/opt/c' }, (p) => p !== '/opt/c')).toBeNull()

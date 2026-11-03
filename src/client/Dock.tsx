@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BUILTIN_AGENT_IDS, agentConfig, assembleCmd, customLaunchCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
@@ -12,10 +12,12 @@ import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { CapabilityOffer } from './CapabilityOffer'
+import { resetBrowserStatusCache } from './browser.feature'
 
 export interface DockProps {
   onAddTerminal: () => void
-  /** Tidak ada = fitur browser mati di server; item "Browser" tidak dirender. */
+  /** Tidak ada = kemampuan browser mati di server; memilih baris "Browser" memunculkan tawaran "Nyalakan". */
   onAddBrowser?: () => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string) => void
   onCreateWorkspace: (name: string, cwd?: string) => void
@@ -203,6 +205,20 @@ export default function Dock(props: DockProps) {
   const [addOpen, setAddOpen] = useState(false)
   const [wsName, setWsName] = useState('')
   const [wsCwd, setWsCwd] = useState('')
+  // Tawaran menyalakan browser (sama dengan menu kanvas); node lahir begitu `onAddBrowser` terbit.
+  const [offerBrowser, setOfferBrowser] = useState(false)
+  const pendingBrowser = useRef(false)
+  const { onAddBrowser } = props
+  useEffect(() => {
+    if (!pendingBrowser.current || !onAddBrowser) return
+    pendingBrowser.current = false
+    onAddBrowser()
+  }, [onAddBrowser])
+  const browserOffered = () => {
+    pendingBrowser.current = true
+    resetBrowserStatusCache() // hook pemilik status memuat ulang lalu menerbitkan `onAddBrowser`
+    setOfferBrowser(false)
+  }
 
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
   const customs = props.customAgents ?? DEFAULT_SETTINGS.customAgents
@@ -259,21 +275,24 @@ export default function Dock(props: DockProps) {
 
   // Satu daftar Quick Pick: id baris = kunci pemilihnya, jadi `onAddSelect` tak perlu menutup
   // di atas closure per-baris. Ikon seragam codicon; warna agent tidak dibawa (VS Code tidak mewarnai).
-  const hasBrowser = !!props.onAddBrowser
   const addItems = useMemo<VscodeQuickPickItem[]>(() => [
     { id: ADD_TERMINAL_ID, label: 'Terminal', icon: codicon('terminal') },
-    ...(hasBrowser ? [{ id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') }] : []),
+    { id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') },
     ...builtins.map((a) => {
       const cfg = agentConfig(a)
       return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, detail: cfg?.notice, icon: codicon('hubot') }
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
-  ], [builtins, visibleCustoms, hasBrowser])
+  ], [builtins, visibleCustoms])
 
   const onAddSelect = (id: string) => {
     if (id === ADD_TERMINAL_ID) return addTerminal()
-    if (id === ADD_BROWSER_ID) { props.onAddBrowser?.(); return setAddOpen(false) }
+    if (id === ADD_BROWSER_ID) {
+      if (onAddBrowser) onAddBrowser()
+      else setOfferBrowser(true)
+      return setAddOpen(false)
+    }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
     if (id.startsWith(ADD_BUILTIN_PREFIX)) return addBuiltin(id.slice(ADD_BUILTIN_PREFIX.length) as BuiltinAgentId)
     const custom = visibleCustoms.find((c) => `${ADD_CUSTOM_PREFIX}${c.id}` === id)
@@ -380,6 +399,15 @@ export default function Dock(props: DockProps) {
           items={addItems}
           onSelect={onAddSelect}
         />
+
+        {offerBrowser && (
+          <Dialog open onOpenChange={setOfferBrowser}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Nyalakan browser</DialogTitle></DialogHeader>
+              <CapabilityOffer id="browser" onDone={browserOffered} />
+            </DialogContent>
+          </Dialog>
+        )}
 
         {workspaceOpen && (
           <Dialog open onOpenChange={setWorkspaceOpen}>

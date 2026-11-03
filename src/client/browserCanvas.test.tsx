@@ -33,13 +33,13 @@ const stubWs = () => vi.stubGlobal('WebSocket', FakeWs)
 const fetched = () => (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]))
 
 describe('flag browser mati (default)', () => {
-  it('Add node tidak punya item Browser, menu pane tetap punya baris Browser, dan tidak ada socket', async () => {
+  it('Add node dan menu pane tetap punya baris Browser (tawaran Nyalakan), dan tidak ada socket', async () => {
     await mountCanvas({ nodes: [], dirs: {} })
     stubWs()
     await waitFor(() => expect(fetched()).toContain('/api/browser/status'))
     fireEvent.click(screen.getByLabelText('Add node'))
     await screen.findByRole('option', { name: 'Terminal' })
-    expect(screen.queryByRole('option', { name: 'Browser' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Browser' })).not.toBeNull()
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
 
     fireEvent.contextMenu(document.querySelector('.react-flow__pane') as HTMLElement, { clientX: 50, clientY: 50 })

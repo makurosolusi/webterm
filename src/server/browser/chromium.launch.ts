@@ -1,8 +1,8 @@
 // Cari biner Chromium dan jalankan satu proses per profil workspace. Tidak pernah dipanggil test
 // dengan biner nyata: `spawn`, `exists`, `readFile`, `sleep` diinjeksi.
 import { spawn as nodeSpawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { delimiter, join } from 'node:path'
 import { ENV_BROWSER } from '../../shared/browser.contract'
 import { buildChromiumArgs, CDP_LOOPBACK, profileDirFor } from './chromium.flags'
 import { createLogger } from '../logs'
@@ -15,13 +15,53 @@ const STDERR_TAIL_CHARS = 4_096
 const PROFILE_DIR_MODE = 0o700
 const ACTIVE_PORT_FILE = 'DevToolsActivePort'
 
-/** Lokasi umum macOS/Linux bila `WEBTERM_BROWSER_BIN` kosong. */
+// Aplikasi macOS berbasis Chromium yang mendukung headless + DevToolsActivePort. Arc sengaja tidak
+// ada: tidak mendukung headless/CDP secara andal.
+const MAC_APPS = ['Google Chrome', 'Chromium', 'Google Chrome Canary', 'Microsoft Edge', 'Brave Browser'] as const
+
+/** Lokasi umum macOS/Linux bila `WEBTERM_BROWSER_BIN` kosong; urutan = prioritas. */
 export const BIN_CANDIDATES = [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ...MAC_APPS.map((n) => `/Applications/${n}.app/Contents/MacOS/${n}`),
   '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
   '/snap/bin/chromium',
 ] as const
+
+/** Nama perintah yang dicari di tiap direktori `PATH` setelah lokasi umum. */
+export const PATH_NAMES = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'] as const
+
+/** Cache Playwright (macOS, Linux) relatif ke HOME; dicari paling akhir. */
+const PLAYWRIGHT_CACHES = ['Library/Caches/ms-playwright', '.cache/ms-playwright'] as const
+/** Biner di dalam `chromium-<rev>/` lintas versi Playwright (lama: Chromium.app; baru: Chrome for Testing). */
+const PLAYWRIGHT_BINS = [
+  'chrome-mac/Chromium.app/Contents/MacOS/Chromium',
+  'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+  'chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+  'chrome-mac/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+  'chrome-linux/chrome', 'chrome-linux64/chrome',
+] as const
+const PLAYWRIGHT_DIR = /^chromium-(\d+)$/
+
+export type ListDir = (dir: string) => string[]
+const defaultListDir: ListDir = (dir) => (existsSync(dir) ? readdirSync(dir) : [])
+
+/** Semua biner Chromium yang ADA di disk, urut prioritas: lokasi umum -> PATH -> cache Playwright (revisi terbaru dulu). */
+export function chromiumCandidates(
+  env: Record<string, string | undefined>,
+  exists: (p: string) => boolean = existsSync,
+  listDir: ListDir = defaultListDir,
+): string[] {
+  const fromPath = (env.PATH ?? '').split(delimiter).filter(Boolean).flatMap((d) => PATH_NAMES.map((n) => join(d, n)))
+  const home = env.HOME
+  const fromPlaywright = home ? PLAYWRIGHT_CACHES.flatMap((c) => {
+    const root = join(home, c)
+    return listDir(root)
+      .map((name) => ({ name, rev: Number(PLAYWRIGHT_DIR.exec(name)?.[1] ?? NaN) }))
+      .filter((d) => Number.isFinite(d.rev))
+      .sort((a, b) => b.rev - a.rev)
+      .flatMap((d) => PLAYWRIGHT_BINS.map((b) => join(root, d.name, b)))
+  }) : []
+  return [...new Set([...BIN_CANDIDATES, ...fromPath, ...fromPlaywright])].filter((p) => exists(p))
+}
 
 export class LaunchError extends Error {
   constructor(readonly code: 'no_binary' | 'sandbox_unavailable' | 'launch_failed', message: string, cause?: unknown) {
@@ -30,25 +70,30 @@ export class LaunchError extends Error {
   }
 }
 
-/** Path biner: env eksplisit (harus ada) -> lokasi umum -> `LaunchError('no_binary')`. */
-export function resolveBinary(env: Record<string, string | undefined>, exists: (p: string) => boolean = existsSync): string {
+/** Path biner: override eksplisit (harus ada; TIDAK jatuh ke otomatis) -> kandidat pertama -> `LaunchError('no_binary')`. */
+export function resolveBinary(
+  env: Record<string, string | undefined>,
+  exists: (p: string) => boolean = existsSync,
+  listDir: ListDir = defaultListDir,
+): string {
   const explicit = env[ENV_BROWSER.bin]?.trim()
   if (explicit) {
     if (!exists(explicit)) throw new LaunchError('no_binary', `${ENV_BROWSER.bin} points to a missing file`)
     return explicit
   }
-  const found = BIN_CANDIDATES.find((p) => exists(p))
+  const found = chromiumCandidates(env, exists, listDir)[0]
   if (!found) throw new LaunchError('no_binary', `no Chromium found; install one or set ${ENV_BROWSER.bin}`)
   return found
 }
 
-/** Deteksi biner Chromium tanpa melempar: env eksplisit menang (harus ada), lalu lokasi umum; null = hilang. */
+/** Deteksi biner Chromium tanpa melempar: override menang (harus ada), lalu kandidat otomatis; null = hilang. */
 export function detectChromium(
   env: Record<string, string | undefined>,
   exists: (p: string) => boolean = existsSync,
-): { path: string; source: 'env' | 'auto' } | null {
+  listDir: ListDir = defaultListDir,
+): { path: string; source: 'override' | 'auto' } | null {
   try {
-    return { path: resolveBinary(env, exists), source: env[ENV_BROWSER.bin]?.trim() ? 'env' : 'auto' }
+    return { path: resolveBinary(env, exists, listDir), source: env[ENV_BROWSER.bin]?.trim() ? 'override' : 'auto' }
   } catch (e) {
     if (e instanceof LaunchError && e.code === 'no_binary') return null
     throw e
