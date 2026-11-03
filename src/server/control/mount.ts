@@ -61,7 +61,8 @@ function resolveDefaultDeps(): Promise<ControlDeps> {
       capabilities,
       settings: () => db.getSettings(),
       // Token root manusia; absen = route mint tidak ada (404), bukan 401.
-      rootToken: process.env.WEBTERM_TOKEN,
+      // Getter: token bisa berubah setelah import (enable/rotate lewat Settings), jangan di-cache.
+      get rootToken() { return process.env.WEBTERM_TOKEN },
       allowTokenMint: process.env.WEBTERM_ALLOW_TOKEN_MINT === '1',
       cwdAllowed: controlCwdAllowed,
     }
