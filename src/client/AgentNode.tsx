@@ -10,6 +10,7 @@ import UsagePill from './UsagePill'
 import FindBar from './FindBar'
 import { useSpeechInput } from './useSpeechInput'
 import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
+import { linkRows } from './terminalLinks'
 import { EXIT_SETTLE_MS, ineligibleHint, restartEligibility, sendExitSequence } from './agentActions'
 import { send, subscribeStatus, getStatus } from './ws'
 import { unwatchNode, watchNode } from './unread'
@@ -47,7 +48,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     hideLinks?: boolean
   }
   const { cmd, cwd, agentId, sessionId } = d
-  const { onSession, onToggleHideLinks } = useNodeActions()
+  const { onSession, onToggleHideLinks, openBrowserAt } = useNodeActions()
   const rf = useReactFlow()
   const termRef = useRef<TerminalHandle>(null)
 
@@ -90,7 +91,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const [aiNaming, setAiNaming] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; link: string | null } | null>(null)
   const [restarting, setRestarting] = useState(false)
 
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
@@ -158,6 +159,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const restartGate = restartEligibility(agentId, status, resumableSid)
   const canResumeNode = !!agentId && canResume(agentId) && !!resumableSid && status === 'done'
   const menuRows: MenuRow[] = [
+    ...linkRows(menu?.link ?? null, id, openBrowserAt),
     {
       label: 'Restart agent',
       disabled: !restartGate.ok || restarting,
@@ -236,7 +238,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
       <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
         className={termNodeClass({ selected: !!selected, collapsed, status })}
-        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) }}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, link: termRef.current?.hoveredLink() ?? null }) }}
       >
         <NodeChrome
           title={label}
