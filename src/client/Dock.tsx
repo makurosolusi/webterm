@@ -83,6 +83,7 @@ const ADD_BROWSER_ID = 'browser'
 const ADD_WORKSPACE_ID = 'workspace'
 const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
+const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
 
 /** Glyph codicon (font ikon VS Code, dimuat di `main.tsx`); ukurannya diatur CSS per wadah. */
 const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden />
@@ -316,7 +317,7 @@ export default function Dock(props: DockProps) {
         props.onToggleBoard()
         break
       case 'add':
-        setAddOpen(true)
+        setAddOpen((open) => !open)
         break
       case 'settings':
         props.onOpenSettings?.()
@@ -365,6 +366,7 @@ export default function Dock(props: DockProps) {
         <VscodeQuickPick
           open={addOpen}
           onClose={closeAdd}
+          triggerSelector={ADD_TRIGGER_SELECTOR}
           ariaLabel="Add node"
           placeholder="Select a node type to add"
           emptyText="No matching node types"
