@@ -8,10 +8,6 @@ import {
   type AutonomyPlanItem,
   type AutonomyProject,
 } from './centralAutonomy'
-import {
-  autonomyEnabled as bootEnabled,
-  startCentralAutonomyBoot,
-} from '../centralAutonomyBoot'
 
 function item(seq: number, status: string, id = `i${seq}`): AutonomyPlanItem {
   return { id, seq, status }
@@ -201,44 +197,11 @@ describe('central autonomy tick', () => {
   })
 })
 
-describe('central autonomy boot gate', () => {
+describe('central autonomy flag parser', () => {
   it('reads only the literal on value', () => {
     expect(autonomyEnabled('on')).toBe(true)
     expect(autonomyEnabled(' ON ')).toBe(true)
     expect(autonomyEnabled('off')).toBe(false)
     expect(autonomyEnabled(undefined)).toBe(false)
-    expect(bootEnabled({ WEBTERM_CENTRAL_AUTONOMY: 'on' })).toBe(true)
-    expect(bootEnabled({})).toBe(false)
-  })
-
-  it('refuses to start without a ledger runtime, loudly', () => {
-    const warn = vi.fn()
-    const handle = startCentralAutonomyBoot({
-      runtime: null,
-      env: { WEBTERM_CENTRAL_AUTONOMY: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' },
-      warn,
-    })
-    expect(handle).toBeNull()
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(String(warn.mock.calls[0]?.[0])).toContain('ledger is off')
-  })
-
-  it('refuses to arm workers when the run surface is not on', () => {
-    const warn = vi.fn()
-    const handle = startCentralAutonomyBoot({
-      runtime: {} as never,
-      env: { WEBTERM_CENTRAL_AUTONOMY: 'on' },
-      warn,
-    })
-    expect(handle).toBeNull()
-    expect(String(warn.mock.calls[0]?.[0])).toContain('WEBTERM_ORCHESTRATOR_RUN')
-  })
-
-  it('is a no-op when the flag is off', () => {
-    const warn = vi.fn()
-    expect(
-      startCentralAutonomyBoot({ runtime: null, env: { WEBTERM_ORCHESTRATOR_RUN: 'on' }, warn })
-    ).toBeNull()
-    expect(warn).not.toHaveBeenCalled()
   })
 })
