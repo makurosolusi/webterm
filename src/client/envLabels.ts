@@ -36,7 +36,7 @@ export const ENV = {
 } as const
 
 /** Urutan tampil group; group tak dikenal masuk sebelum bootstrap, bootstrap selalu terakhir. */
-export const ENV_GROUP_ORDER = ['ledger', 'telegram', 'channels', 'central', 'orchestrator', 'memory', 'control'] as const
+export const ENV_GROUP_ORDER = ['ledger', 'telegram', 'channels', 'central', 'orchestrator', 'memory', 'control', 'browser'] as const
 export const ENV_BOOTSTRAP_GROUP = 'bootstrap'
 
 export const ENV_GROUP_LABEL: Record<string, string> = {
@@ -47,6 +47,7 @@ export const ENV_GROUP_LABEL: Record<string, string> = {
   orchestrator: 'Orchestrator',
   memory: 'Memori',
   control: 'Kontrol',
+  browser: 'Browser',
   bootstrap: 'Bootstrap (hanya lewat env)',
 }
 

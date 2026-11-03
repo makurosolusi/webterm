@@ -15,13 +15,14 @@ import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 
 /** Ikon dirujuk lewat NAMA, bukan elemen React — supaya modul ini tetap bebas JSX dan bisa diuji. */
-export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'select-all' | 'fit'
+export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'browser' | 'select-all' | 'fit'
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
   terminal: 'New Terminal',
   agentGroup: 'New Agent',
   files: 'New File Manager',
+  browser: 'New Browser',
   selectAll: 'Select All',
   fitView: 'Fit View',
 } as const
@@ -64,6 +65,8 @@ export interface CanvasMenuHandlers {
   /** Posisi klik kanan sudah ditutup oleh pemanggil; model tidak tahu-menahu soal koordinat. */
   addAgent: (cmd: string, agentId: AgentId) => void
   addFiles: () => void
+  /** Hanya ada bila server melapor fitur browser menyala (flag mati = baris tidak lahir). */
+  addBrowser?: () => void
   fitView: () => void
   selectAll?: () => void
 }
@@ -140,6 +143,7 @@ export function buildCanvasMenuRows(
   // Satu-satunya jalan masuk webterm ke filesystem dari canvas; menggantikan submenu `Files ▸`
   // nodeterm, yang isinya (open file…/new file…) butuh dialog file yang webterm belum punya.
   rows.push({ key: 'files', label: MENU_LABELS.files, icon: 'files', onClick: handlers.addFiles })
+  if (handlers.addBrowser) rows.push({ key: 'browser', label: MENU_LABELS.browser, icon: 'browser', onClick: handlers.addBrowser })
 
   rows.push({ type: 'separator' })
 

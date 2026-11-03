@@ -91,7 +91,7 @@ export function nodeTargets(nodes: CanvasNodeLike[]): PaletteTarget[] {
 }
 
 /** Codicon per tipe node di palette (seragam dengan Add node di Dock); tipe lain = terminal. */
-const KIND_ICONS: Record<string, string> = { agent: 'hubot', files: 'folder', editor: 'edit' }
+const KIND_ICONS: Record<string, string> = { agent: 'hubot', files: 'folder', editor: 'edit', browser: 'globe' }
 export const kindIcon = (kind?: string): string => (kind && KIND_ICONS[kind]) || 'terminal'
 
 export interface CanvasToolbarProps {

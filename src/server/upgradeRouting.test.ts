@@ -14,4 +14,11 @@ describe('upgradeRoute', () => {
     expect(upgradeRoute('/', '/ws', false)).toBe('destroy')
     expect(upgradeRoute('/ws/extra', '/ws', false)).toBe('destroy')
   })
+  it('claims the browser path only when it is passed (flag off = old behaviour)', () => {
+    expect(upgradeRoute('/ws/browser', '/ws', true, '/ws/browser')).toBe('browser')
+    expect(upgradeRoute('/ws/browser', '/ws', false, '/ws/browser')).toBe('browser')
+    expect(upgradeRoute('/ws/browser', '/ws', true)).toBe('ignore')
+    expect(upgradeRoute('/ws/browser', '/ws', false)).toBe('destroy')
+    expect(upgradeRoute('/ws', '/ws', false, '/ws/browser')).toBe('ws')
+  })
 })

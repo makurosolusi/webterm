@@ -29,6 +29,8 @@ import { fsFail } from '../shared/fsContract'
 import { sendRaw } from './fsRaw'
 import { MEMORY_WRITE_BODY_MAX_BYTES } from './memoryWriteApi'
 import { logsRoute, startRequestLog } from './logs'
+import { activeBrowser } from './browser/browser.state'
+import { BROWSER_BODY_MAX_BYTES } from './browserApi'
 
 function json(res: ServerResponse, status: number, body?: unknown): void {
   res.statusCode = status
@@ -67,6 +69,8 @@ export function applyPtyOptions(): void {
     // persis seperti sebelum setting ini ada. Mode pilihan user eksplisit tetap diteruskan.
     claudePermissionMode: s.claudePermissionMode === 'auto' ? undefined : s.claudePermissionMode,
     hookReplyApprovals: s.hookReplyApprovals,
+    // Absen (flag browser off) = tidak ada env capability browser; opsi ini DITIMPA utuh tiap panggilan.
+    browser: activeBrowser()?.sessionHook,
   }
 }
 
@@ -86,6 +90,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // stream. Reader `fs`/`git` di bawah tetap TANPA cap — isi file boleh besar.
   const wsRes = await workspacesRoute(db, path, method, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES))
   if (wsRes) return json(res, wsRes.status, wsRes.body)
+
+  // /api/browser/*: hanya ada bila runtime browser hidup (flag on). Gerbang auth di index.ts sudah
+  // menolak node-token (prefix ini tidak ada di allowlist node-token).
+  const browserRes = await activeBrowser()?.api(method, path, cappedBodyGetter(req, method, BROWSER_BODY_MAX_BYTES))
+  if (browserRes) return json(res, browserRes.status, browserRes.body)
 
   if (path === ENV_SETTINGS_PATH) return envSettingsRoute(req, res, method, envSettingsApiDeps())
 

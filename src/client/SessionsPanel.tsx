@@ -42,6 +42,7 @@ const KIND_ICON: Record<WsNodeKind, string> = {
   terminal: 'terminal',
   editor: 'file',
   files: 'folder',
+  browser: 'globe',
 }
 
 /** Glyph kind (codicon) untuk header grup dan baris tab Nodes. */

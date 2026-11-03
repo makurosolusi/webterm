@@ -1,0 +1,68 @@
+// Toolbar node browser: alamat (divalidasi `parseBrowserUrl`), back/forward/reload/stop, toggle
+// kendali agent. Ditempel WS-11 ke slot `renderToolbar`; tanpa state server (semua lewat props).
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
+import { parseBrowserUrl } from '../shared/browser.url'
+import { TOOLBAR_TEXT, URL_ERROR_TEXT } from './browser.uxText'
+
+export interface BrowserToolbarProps {
+  state?: BrowserState
+  nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
+  agentControl: boolean
+  /** false bila `WEBTERM_BROWSER_AGENT` mati di server: toggle dinonaktifkan. */
+  agentEnabled: boolean
+  onAgentControl: (enabled: boolean) => void
+}
+
+const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
+
+/** Bilah alamat + tombol navigasi + toggle agent untuk satu node browser. */
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl }: BrowserToolbarProps) {
+  const [draft, setDraft] = useState(state?.url ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const stateUrl = state?.url ?? ''
+
+  // Ikuti navigasi halaman (URL baru dari server menimpa ketikan yang belum dikirim).
+  useEffect(() => { setDraft(stateUrl); setError(null) }, [stateUrl])
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const p = parseBrowserUrl(draft)
+    if (!p.ok) { setError(URL_ERROR_TEXT[p.reason]); return }
+    setError(null)
+    nav('go', p.url)
+  }
+
+  return (
+    <div role="toolbar" aria-label={TOOLBAR_TEXT.group} className="nodrag flex flex-col gap-1 p-1">
+      <div className="flex items-center gap-1">
+        <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.back} disabled={!state?.canBack} onClick={() => nav('back')}>{icon('arrow-left')}</Button>
+        <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.forward} disabled={!state?.canForward} onClick={() => nav('forward')}>{icon('arrow-right')}</Button>
+        {state?.loading
+          ? <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.stop} onClick={() => nav('stop')}>{icon('debug-stop')}</Button>
+          : <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.reload} onClick={() => nav('reload')}>{icon('refresh')}</Button>}
+        <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={submit}>
+          <Input
+            type="text" inputMode="url" spellCheck={false} autoComplete="off"
+            aria-label={TOOLBAR_TEXT.urlLabel} placeholder={TOOLBAR_TEXT.urlPlaceholder}
+            aria-invalid={error !== null} aria-describedby={error ? 'browser-url-error' : undefined}
+            value={draft}
+            onChange={(e) => { setDraft(e.target.value); setError(null) }}
+          />
+          <Button type="submit" size="xs" variant="secondary">{TOOLBAR_TEXT.go}</Button>
+        </form>
+        <label className="flex items-center gap-1 text-xs whitespace-nowrap" title={agentEnabled ? undefined : TOOLBAR_TEXT.agentControlOff}>
+          <input
+            type="checkbox" checked={agentControl} disabled={!agentEnabled}
+            onChange={(e) => onAgentControl(e.target.checked)}
+          />
+          {TOOLBAR_TEXT.agentControl}
+        </label>
+      </div>
+      {error && <p id="browser-url-error" role="alert" className="m-0 text-xs text-(--vscode-errorForeground)">{error}</p>}
+    </div>
+  )
+}

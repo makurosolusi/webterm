@@ -1,5 +1,6 @@
 // Registry env: orchestrator, memory, control. Data murni (lihat envRegistry.types.ts).
 import { LOG_LEVELS } from '../shared/logEntry'
+import { BROWSER_ENV_SPECS } from './browser/browser.envRegistry'
 import { enumOf, flag, num, text, type EnvSpec } from './envRegistry.types'
 import { DEFAULT_LOG_BUFFER, MAX_LOG_BUFFER, MIN_LOG_BUFFER } from './logs/logBus'
 import { DEFAULT_LOG_LEVEL } from './logs/logger'
@@ -42,4 +43,5 @@ export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
     label: 'File log',
     description: 'Tulis log harian ke <dataDir>/logs/webterm-YYYY-MM-DD.log (rotasi, maks 7 file).',
   }, 'on'),
+  ...BROWSER_ENV_SPECS,
 ]
