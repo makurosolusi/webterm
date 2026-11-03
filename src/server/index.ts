@@ -8,7 +8,7 @@ import { sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { TOKEN_PARAM, authorizeRequest, denyReason, isNodeTokenPath, logAuthLogin, logAuthReject, resolveToken, writeTokenToEnv } from './auth'
+import { TOKEN_PARAM, authorizeRequest, denyReason, isNodeTokenPath, logAuthLogin, logAuthReject } from './auth'
 import { dataDir } from './config'
 import { configureLogging, createLogger, flushLogsSync } from './logs'
 import { capabilityStore } from './control/mount'
@@ -20,7 +20,8 @@ import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } f
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { bootCa2 } from './central/ca2Boot'
 import { initEnvSettings } from './envSettings.runtime'
-import { resolveHostPort } from './serverConfig'
+import { bootWiring, onListenError, refuseRequest } from './bootWiring'
+import { getTokenState } from './tokenBootstrap'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
@@ -35,12 +36,9 @@ import { db } from './db'
 declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
 
 const LOG_DIR = 'logs'
-const { host: HOST, port: PORT } = resolveHostPort(process.env)
-// Throws (and so refuses to start) when HOST is reachable off-machine without a token.
-const TOKEN = resolveToken(HOST, process.env.WEBTERM_TOKEN)
-// Before anything can spawn a PTY: make the env agree with what we enforce, so children that
-// reference $WEBTERM_TOKEN inherit the same form `authorize` compares against.
-writeTokenToEnv(TOKEN)
+// Host/port, provenance .env, dataDir, token (env > berkas > bangkitkan), allowlist Host — urutannya di bootWiring.ts.
+// Berhenti di sini (PORT ngawur / berkas token rusak) sebelum PTY, kanal, atau pengaturan hidup.
+const { host: HOST, port: PORT, hosts: HOSTS } = bootWiring(process.env, process.cwd())
 // Pengaturan > env > default: terapkan override tersimpan ke process.env sebelum ledger/kanal membacanya.
 initEnvSettings()
 // After env overrides are applied: level / buffer / file sink come from WEBTERM_LOG_*.
@@ -97,26 +95,23 @@ function reqUrl(req: http.IncomingMessage): URL {
  * module starts a server.
  */
 function allowed(req: http.IncomingMessage, url: URL): boolean {
+  const expectedToken = getTokenState().token // dibaca per request: enable/rotate token berlaku seketika
   const ok = authorizeRequest({
     headers: req.headers,
-    expectedToken: TOKEN,
+    expectedToken,
     queryToken: url.searchParams.get(TOKEN_PARAM),
     pathname: url.pathname,
+    allowedHosts: HOSTS,
     isNodeToken: isValidNodeToken,
     // Capability (wcap_*) hanya diterima authorizeRequest pada keluarga /api/control/*.
     // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
     isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
   })
-  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, TOKEN, url.searchParams.get(TOKEN_PARAM)))
+  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken, url.searchParams.get(TOKEN_PARAM), HOSTS), req.headers.host)
   return ok
 }
 
 export { isNodeTokenPath }
-
-function refuse(res: http.ServerResponse): void {
-  res.statusCode = 403
-  res.end('forbidden')
-}
 
 // Write the context-link sh shim AND the skill that points an agent at it. Tanpa argumen: shim
 // membaca token node dari env anak saat runtime, jadi root token tidak pernah ditulis ke disk
@@ -154,7 +149,7 @@ if (dev) {
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
     if (channelsRuntime?.handle(req, res)) return
-    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
     if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
@@ -170,7 +165,7 @@ if (dev) {
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
     if (channelsRuntime?.handle(req, res)) return
-    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuse(res)
+    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
     if (channelsRuntime?.handleApi(req, res)) return
     if (handleApi(req, res)) return
@@ -200,7 +195,7 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy()
     return
   }
-  if (TOKEN !== undefined) logAuthLogin(url.pathname)
+  if (getTokenState().token !== undefined) logAuthLogin(url.pathname)
   if (route === 'browser') {
     // Gerbang `allowed()` di atas sama dengan /ws: root token saja, node-token ditolak (path ini tak ada di allowlist node-token).
     const workspaceId = url.searchParams.get('workspaceId')
@@ -238,10 +233,12 @@ wss.on('connection', (ws) => {
   })
 })
 
+server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {
-  // Never log the token itself — only whether one is in force, and how long it is.
+  // Never log the token itself — only whether one is in force, how long it is, and where it came from.
+  const { token: TOKEN, source } = getTokenState()
   const token = TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`
-  log.info('server.start', `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, token ${token})`, {
+  log.info('server.start', `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, token ${token}, source ${source})`, {
     host: HOST, port: PORT, mode: dev ? 'dev' : 'prod', dataDir: basename(dataDir()), authRequired: TOKEN !== undefined,
   })
 })
