@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { RuntimeEvent, TurnInput } from './centralRuntime'
 import { OpenCodeRuntime, type OpenCodeRuntimeOptions } from './opencodeRuntime'
 import { parseRuntimeKind } from './runtimeFlag'
+import { logBus } from '../../logs/logBus'
 
 let dir = ''
 let seq = 0
@@ -33,7 +34,10 @@ function runtime(executable: string, extra: Partial<OpenCodeRuntimeOptions> = {}
     executable,
     cwd: dir,
     homeDir: join(dir, 'child-home'),
-    env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: process.env.HOME, WEBTERM_TOKEN: 'root-secret' },
+    // test-only: a fake user HOME, so nothing from the real one is ever read.
+    env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: join(dir, 'user-home'), WEBTERM_TOKEN: 'root-secret' },
+    // The credential bridge has its own tests (opencodeAuth.test.ts); turns here assume a ready home.
+    preflight: async () => ({ ok: true }),
     ...extra,
   })
 }
@@ -129,7 +133,8 @@ describe('OpenCodeRuntime success', () => {
     expect(result.outcome).toBe('success')
     expect(result.sessionRef).toBe('ses_out')
     const argv = JSON.parse(readFileSync(argvFile, 'utf8')) as string[]
-    expect(argv.slice(0, 5)).toEqual(['run', '--format', 'json', '--model', 'opencode/deepseek-v4.1-flash-free'])
+    // --standalone: a private server, so a user's running `opencode serve --service` cannot collide.
+    expect(argv.slice(0, 6)).toEqual(['run', '--standalone', '--format', 'json', '--model', 'opencode/deepseek-v4.1-flash-free'])
     expect(argv).toContain('--session')
     expect(argv[argv.indexOf('--session') + 1]).toBe('ses_in')
     expect(argv).not.toContain('--auto')
@@ -186,19 +191,50 @@ describe('OpenCodeRuntime failures', () => {
     expect(errors[0]).toMatchObject({ code: 'runtime_error', message: 'upstream unavailable' })
   })
 
-  it('maps a non-zero exit without an error event to a stable message', async () => {
+  it('carries the redacted last stderr Error line into the turn error and the log', async () => {
+    const leaked = 'sk-test0123456789abcdefXYZ' // test-only fake credential
     const bin = fakeBin(`
-      process.stderr.write('raw child output that must not leak')
+      process.stderr.write('Error: Server process exited with code 1\\n')
+      process.stderr.write('Error: port 49374 is already in use, key ${leaked}\\n    at stack (x.js:1:1)\\n')
       process.exit(2)
     `)
+    const logs: string[] = []
+    const off = logBus.subscribe((entry) => { if (entry.event === 'central.opencode_failed') logs.push(JSON.stringify(entry)) })
     const { events, emit } = recorder()
-    const result = await runtime(bin).turn(input(), emit)
+    const result = await runtime(bin).turn(input(), emit).finally(off)
 
     expect(result.outcome).toBe('error')
     expect(result.errorCode).toBe('runtime_error')
     const error = events.find((event) => event.type === 'error')
-    expect(error).toMatchObject({ code: 'runtime_error', message: 'opencode runtime failed' })
-    expect(JSON.stringify(events)).not.toContain('raw child output')
+    expect(error).toMatchObject({
+      code: 'runtime_error', message: 'opencode runtime failed: Error: port 49374 is already in use, key [redacted]',
+    })
+    expect(JSON.stringify(events)).not.toContain(leaked)
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain('port 49374 is already in use')
+    expect(logs[0]).not.toContain(leaked)
+    expect(logs[0]).not.toContain('hello')
+  })
+
+  it('falls back to the exit code when stderr is empty', async () => {
+    const { events, emit } = recorder()
+    await runtime(fakeBin('process.exit(3)')).turn(input(), emit)
+    expect(events.find((event) => event.type === 'error')).toMatchObject({ message: 'opencode runtime failed: exit 3' })
+  })
+
+  it('fails a not-ready turn with the preflight reason and never spawns run', async () => {
+    const marker = join(dir, 'spawned')
+    const bin = fakeBin(`import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'x')`)
+    const { events, emit } = recorder()
+    const result = await runtime(bin, {
+      preflight: async () => ({ ok: false, code: 'opencode_model_unavailable', reason: 'model "x/y" unavailable' }),
+    }).turn(input(), emit)
+
+    expect(result.errorCode).toBe('runtime_error')
+    expect(events.find((event) => event.type === 'error')).toMatchObject({
+      message: 'opencode runtime failed: model "x/y" unavailable',
+    })
+    expect(existsSync(marker)).toBe(false)
   })
 
   it('surfaces a spawn failure as runtime_error', async () => {

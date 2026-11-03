@@ -7,6 +7,7 @@ import type { RuntimeErrorCode, RuntimeUsage } from './centralRuntime'
 import type { TurnEmitter } from './runtimeEvents'
 import type { OpencodeEvent, OpencodeUsageDelta } from './opencodeEvents'
 import { opencodeHomeEnv } from './opencodeOptions'
+import { redactSecrets } from '../../redactSecrets'
 
 export interface UsageTotals {
   inputTokens: number
@@ -87,8 +88,8 @@ export function applyOpencodeEvent(
   }
 }
 
-/** Stable, input-free messages: never echo child output or the prompt. */
-export function runtimeErrorMessage(code: RuntimeErrorCode): string {
+/** Stable messages, never the prompt; `reason` (already redacted) is appended to runtime failures. */
+export function runtimeErrorMessage(code: RuntimeErrorCode, reason?: string): string {
   switch (code) {
     case 'timeout':
       return 'opencode timed out'
@@ -97,8 +98,20 @@ export function runtimeErrorMessage(code: RuntimeErrorCode): string {
     case 'max_turns':
       return 'opencode turn limit reached'
     default:
-      return 'opencode runtime failed'
+      return reason ? `opencode runtime failed: ${reason}` : 'opencode runtime failed'
   }
+}
+
+const MAX_REASON_CHARS = 200
+
+/**
+ * One-line reason from captured stderr: the last `Error:` line (opencode prints the cause last),
+ * else the last non-empty line; redacted and capped. Empty string when stderr has nothing.
+ */
+export function stderrReason(stderr: string, secrets: ReadonlyArray<string | undefined> = []): string {
+  const lines = stderr.split('\n').map((line) => line.trim()).filter((line) => line.length > 0)
+  const pick = [...lines].reverse().find((line) => /^error\b/i.test(line)) ?? lines.at(-1) ?? ''
+  return redactSecrets(pick, secrets).slice(0, MAX_REASON_CHARS)
 }
 
 /** Webterm-owned HOME for the child: `<dataDir>/central/home`, never the user's own. */

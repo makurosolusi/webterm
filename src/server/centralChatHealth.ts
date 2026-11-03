@@ -5,13 +5,18 @@ import {
   type ClaudeReady, type ClaudeRuntimeOptions, type ClaudeUnavailableCode, claudeChildEnv,
 } from './central/runtime/claudeOptions'
 import { createClaudePreflight } from './central/runtime/claudePreflight'
+import { type OpencodeIssue, type OpencodeReady, sharedOpencodePreflight } from './central/runtime/opencodeAuth'
+import { opencodeBin, opencodeModel } from './central/runtime/opencodeOptions'
+import { defaultOpencodeHomeDir } from './central/runtime/opencodeSession'
 import { createLogger } from './logs'
 
 const log = createLogger('central')
 
 export interface RuntimeReadiness {
   runtimeReady: boolean
-  runtimeIssue?: ClaudeUnavailableCode
+  runtimeIssue?: ClaudeUnavailableCode | OpencodeIssue
+  /** Human-readable cause, set for opencode not-ready (model/credential/binary). */
+  runtimeHint?: string
 }
 
 type Preflight = () => Promise<ClaudeReady>
@@ -38,9 +43,22 @@ export function claudePreflightOf(options?: ClaudeRuntimeOptions): Preflight {
   return shared
 }
 
-/** `off` is never ready; `mock`/`opencode` need no probe; `claude` runs the (cached) preflight. */
-export async function runtimeReadiness(kind: RuntimeKind, preflight: Preflight): Promise<RuntimeReadiness> {
+/** The same cached probe the opencode runtime runs before a turn (model/bin read per call: hot env). */
+export function defaultOpencodePreflight(): Promise<OpencodeReady> {
+  return sharedOpencodePreflight({
+    executable: opencodeBin(), model: opencodeModel(), homeDir: defaultOpencodeHomeDir(), env: process.env,
+  })()
+}
+
+/** `off` is never ready; `mock` needs no probe; `claude` and `opencode` run their (cached) preflight. */
+export async function runtimeReadiness(
+  kind: RuntimeKind, preflight: Preflight, opencodePreflight: () => Promise<OpencodeReady> = defaultOpencodePreflight
+): Promise<RuntimeReadiness> {
   if (kind === 'off') return { runtimeReady: false }
+  if (kind === 'opencode') {
+    const ready = await opencodePreflight()
+    return ready.ok ? { runtimeReady: true } : { runtimeReady: false, runtimeIssue: ready.code, runtimeHint: ready.reason }
+  }
   if (kind !== 'claude') return { runtimeReady: true }
   try {
     const ready = await preflight()

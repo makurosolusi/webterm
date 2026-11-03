@@ -11,11 +11,17 @@ import { createTurnEmitter, type TurnEmitter } from './runtimeEvents'
 import { type OpencodeEvent, createOpencodeStreamParser } from './opencodeEvents'
 import {
   type SessionState, type UsageTotals, applyOpencodeEvent, defaultOpencodeHomeDir, emptyUsage,
-  prepareOpencodeHome, runtimeErrorMessage, toRuntimeUsage,
+  prepareOpencodeHome, runtimeErrorMessage, stderrReason, toRuntimeUsage,
 } from './opencodeSession'
 import {
-  buildOpencodeInvocation, opencodeBin, opencodeModel, opencodeToolsAllowed,
+  PROVIDER_ENV_ALLOWLIST, buildOpencodeInvocation, opencodeBin, opencodeModel, opencodeToolsAllowed,
 } from './opencodeOptions'
+import { type OpencodeReady, sharedOpencodePreflight } from './opencodeAuth'
+import { createLogger } from '../../logs/logger'
+
+const log = createLogger('central')
+/** Only the tail of stderr is kept, in memory, for the failure reason. */
+const MAX_STDERR_CHARS = 8 * 1024
 
 /** Session resume only works when the CLI returns a session id; otherwise null. */
 const DEFAULT_WALL_MS = 10 * 60_000
@@ -40,6 +46,8 @@ export interface OpenCodeRuntimeOptions {
   allowTools?: boolean
   killGraceMs?: number
   now?: () => number
+  /** Readiness probe (credential bridge + model check); defaults to the shared cached probe. */
+  preflight?: () => Promise<OpencodeReady>
 }
 
 interface ActiveTurn {
@@ -108,13 +116,26 @@ export class OpenCodeRuntime implements CentralRuntime {
         spawnError = err instanceof Error ? err : new Error('opencode home setup failed')
         return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error')
       }
+      const model = opencodeModel(this.options.model)
+      const executable = opencodeBin(this.options.executable)
+      const baseEnv = this.options.env ?? process.env
+      const preflight = this.options.preflight ??
+        sharedOpencodePreflight({ executable, model, homeDir, env: baseEnv, cwd: this.options.cwd })
+      const ready = await preflight()
+      if (!ready.ok) {
+        log.warn('central.opencode_unready', 'opencode runtime is not ready', { code: ready.code, reason: ready.reason })
+        return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error', ready.reason)
+      }
+      if (token.cancelled) {
+        return this.finish(input, emitter, totals, startedAt, state, 'cancelled', 'cancelled')
+      }
       const invocation = buildOpencodeInvocation({
         homeDir,
         prompt: input.text,
-        model: opencodeModel(this.options.model),
-        executable: opencodeBin(this.options.executable),
+        model,
+        executable,
         cwd: this.options.cwd,
-        env: this.options.env,
+        env: baseEnv,
         title: this.options.title,
         sessionRef: input.sessionRef ?? null,
         allowTools: this.options.allowTools ?? opencodeToolsAllowed(),
@@ -142,8 +163,12 @@ export class OpenCodeRuntime implements CentralRuntime {
       child.stdout?.on('data', (chunk: string | Buffer) => {
         apply(parser.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8')))
       })
-      // Drain stderr so the child cannot block; the text is never retained.
-      child.stderr?.resume()
+      // Keep only a bounded tail of stderr in memory; it is redacted before it is logged or surfaced.
+      let stderr = ''
+      child.stderr?.setEncoding('utf8')
+      child.stderr?.on('data', (chunk: string | Buffer) => {
+        stderr = (stderr + (typeof chunk === 'string' ? chunk : chunk.toString('utf8'))).slice(-MAX_STDERR_CHARS)
+      })
 
       const wallMs = input.limits.maxWallMs ?? this.options.maxWallMs ?? DEFAULT_WALL_MS
       if (wallMs > 0) {
@@ -165,7 +190,10 @@ export class OpenCodeRuntime implements CentralRuntime {
       apply(parser.end())
       state.sessionRef = parser.sessionRef
       if (spawnError !== null) {
-        return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error')
+        // `spawnError` is set in the 'error' callback, which TS narrowing cannot see; hence the cast.
+        const failure = spawnError as NodeJS.ErrnoException
+        const reason = `spawn failed: ${failure.code ?? failure.message}`
+        return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error', reason)
       }
       if (state.termination === 'cancelled') {
         return this.finish(input, emitter, totals, startedAt, state, 'cancelled', 'cancelled')
@@ -177,7 +205,13 @@ export class OpenCodeRuntime implements CentralRuntime {
         return this.finish(input, emitter, totals, startedAt, state, 'success')
       }
       // A non-zero exit (or an in-band error with exit 0) is a runtime failure.
-      return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error')
+      // Redacted one-line cause for the log and the turn error; never the prompt, never raw stderr.
+      const reason = stderrReason(stderr, PROVIDER_ENV_ALLOWLIST.map((name) => baseEnv[name])) ||
+        `exit ${String(child.exitCode ?? child.signalCode)}`
+      log.warn('central.opencode_failed', 'opencode run failed', {
+        exitCode: child.exitCode, inBandError: state.sawError, reason,
+      })
+      return this.finish(input, emitter, totals, startedAt, state, 'error', 'runtime_error', reason)
     } finally {
       if (wallTimer !== undefined) clearTimeout(wallTimer)
       if (killTimer !== undefined) clearTimeout(killTimer)
@@ -206,10 +240,11 @@ export class OpenCodeRuntime implements CentralRuntime {
     startedAt: number,
     state: SessionState,
     outcome: RuntimeResult['outcome'],
-    errorCode?: RuntimeErrorCode
+    errorCode?: RuntimeErrorCode,
+    reason?: string
   ): RuntimeResult {
     if (outcome === 'error' && !state.sawError && errorCode !== undefined) {
-      emitter.emit({ type: 'error', code: errorCode, message: runtimeErrorMessage(errorCode), retryable: false })
+      emitter.emit({ type: 'error', code: errorCode, message: runtimeErrorMessage(errorCode, reason), retryable: false })
     }
     if (state.sessionRef === null && input.sessionRef !== undefined) {
       state.sessionRef = input.sessionRef

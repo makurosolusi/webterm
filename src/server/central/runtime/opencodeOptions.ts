@@ -78,9 +78,13 @@ export interface OpencodeArgvOptions {
   title?: string
 }
 
-/** `['run', '--format', 'json', '--model', model, ...]`; prompt last, never `--auto`. */
+/**
+ * `['run', '--standalone', '--format', 'json', '--model', model, ...]`; prompt last, never `--auto`.
+ * `--standalone` gives the child a private server: without it opencode v2 tries the managed
+ * background service port, which a user's own `opencode serve --service` already holds.
+ */
 export function buildOpencodeArgs(options: OpencodeArgvOptions): string[] {
-  const args = ['run', '--format', 'json', '--model', opencodeModel(options.model)]
+  const args = ['run', '--standalone', '--format', 'json', '--model', opencodeModel(options.model)]
   const session = (options.sessionRef ?? '').trim()
   if (session.length > 0) args.push('--session', session)
   const title = (options.title ?? '').trim()
