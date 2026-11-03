@@ -42,6 +42,19 @@ export function resolveBinary(env: Record<string, string | undefined>, exists: (
   return found
 }
 
+/** Deteksi biner Chromium tanpa melempar: env eksplisit menang (harus ada), lalu lokasi umum; null = hilang. */
+export function detectChromium(
+  env: Record<string, string | undefined>,
+  exists: (p: string) => boolean = existsSync,
+): { path: string; source: 'env' | 'auto' } | null {
+  try {
+    return { path: resolveBinary(env, exists), source: env[ENV_BROWSER.bin]?.trim() ? 'env' : 'auto' }
+  } catch (e) {
+    if (e instanceof LaunchError && e.code === 'no_binary') return null
+    throw e
+  }
+}
+
 /** Bagian ChildProcess yang dipakai (memudahkan fake di test). */
 export interface ChildLike {
   pid?: number

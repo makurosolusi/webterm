@@ -70,7 +70,7 @@ describe('env browser', () => {
     expect(browserSpecs.map((s) => s.key).sort()).toEqual(Object.values(ENV_BROWSER).sort())
     for (const s of browserSpecs) {
       expect(s.group, s.key).toBe('browser')
-      expect(s.restartRequired, s.key).toBe(true) // runtime dirakit sekali saat boot
+      expect(s.restartRequired, s.key).toBe(false) // hidup-mati lewat hook kemampuan browser, tanpa restart
       expect(s.label.length, s.key).toBeGreaterThan(0)
       if (s.kind === 'flag') expect(s.default, s.key).toBe('off')
     }
@@ -221,10 +221,10 @@ describe('metadata domain ca2, files, browser', () => {
     expect(specFor('WEBTERM_FILES_LIST_MAX')?.unit).toBe('entri')
     expect(specFor('WEBTERM_FILES_UPLOAD_MAX_MB')?.unit).toBe('MB')
   })
-  it('browser: saklar utama user, lainnya advanced + requires saklar utama, semua boot', () => {
+  it('browser: saklar utama user, lainnya advanced + requires saklar utama, semua hot', () => {
     for (const k of Object.values(ENV_BROWSER)) {
       const s = specFor(k) as EnvSpec
-      expect(s.restartRequired, k).toBe(true)
+      expect(s.restartRequired, k).toBe(false)
       expect(s.audience, k).toBe(k === ENV_BROWSER.enabled ? 'user' : 'advanced')
       expect((s.requires ?? []).map((r) => r.key), k).toEqual(k === ENV_BROWSER.enabled ? [] : [ENV_BROWSER.enabled])
     }
