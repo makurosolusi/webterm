@@ -70,7 +70,7 @@ describe('env browser', () => {
     expect(browserSpecs.map((s) => s.key).sort()).toEqual(Object.values(ENV_BROWSER).sort())
     for (const s of browserSpecs) {
       expect(s.group, s.key).toBe('browser')
-      expect(s.restartRequired, s.key).toBe(true) // runtime dirakit sekali saat boot
+      expect(s.restartRequired, s.key).toBe(false) // hidup-mati lewat hook kemampuan browser, tanpa restart
       expect(s.label.length, s.key).toBeGreaterThan(0)
       if (s.kind === 'flag') expect(s.default, s.key).toBe('off')
     }
@@ -101,23 +101,23 @@ const RT = 'WEBTERM_CENTRAL_RUNTIME'
 /** Tabel vonis c-ENV-02 (E01..E26): owner, section, audience, restart, key requires. */
 const VERDICT: Row[] = [
   [L, 'platform', 'Dasar', 'user', 'boot', []],
-  ['WEBTERM_CHANNELS', 'channels', 'Telegram', 'user', 'boot', []],
-  [TG, 'channels', 'Telegram', 'user', 'boot', [L, 'WEBTERM_CHANNELS']],
+  ['WEBTERM_CHANNELS', 'channels', 'Telegram', 'user', 'hot', []],
+  [TG, 'channels', 'Telegram', 'user', 'hot', ['WEBTERM_CHANNELS']],
   ['WEBTERM_TELEGRAM_MODE', 'channels', 'Telegram', 'user', 'boot', [TG]],
   ['WEBTERM_TELEGRAM_BOT_TOKEN', 'channels', 'Telegram', 'user', 'hot', [TG]],
   ['WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'channels', 'Telegram', 'advanced', 'boot', [TG, 'WEBTERM_TELEGRAM_MODE']],
   [CE, 'central', 'Central', 'user', 'hot', []],
   ['WEBTERM_CENTRAL_CHAT', 'central', 'Central', 'user', 'hot', [CE]],
-  ['WEBTERM_CENTRAL_TELEGRAM', 'channels', 'Telegram', 'user', 'boot', [TG, CE, 'WEBTERM_CENTRAL_CHAT', RT, L]],
+  ['WEBTERM_CENTRAL_TELEGRAM', 'channels', 'Telegram', 'user', 'hot', [TG, CE, 'WEBTERM_CENTRAL_CHAT', RT]],
   [RT, 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_MODEL', 'central', 'Central', 'advanced', 'hot', [RT]],
   ['WEBTERM_CENTRAL_PLANNER', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_CENTRAL_TOOLS']],
   ['WEBTERM_CENTRAL_TOOLS', 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_MEMORY', 'central', 'Central', 'user', 'hot', [CE]],
-  ['WEBTERM_CENTRAL_AUTONOMY', 'central', 'Central', 'user', 'boot', [CE, 'WEBTERM_ORCHESTRATOR_RUN']],
+  ['WEBTERM_CENTRAL_AUTONOMY', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_ORCHESTRATOR_RUN']],
   ['WEBTERM_OPENCODE_BIN', 'central', 'Central', 'advanced', 'hot', [RT]],
   ['WEBTERM_OPENCODE_ALLOW_TOOLS', 'central', 'Central', 'advanced', 'hot', [RT]],
-  ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orkestrator', 'user', 'boot', [L]],
+  ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orkestrator', 'user', 'hot', []],
   ['WEBTERM_RUN_REQUIRE_APPROVAL', 'platform', 'Orkestrator', 'user', 'hot', ['WEBTERM_ORCHESTRATOR_RUN']],
   ['WEBTERM_MEMORY_FILES', 'platform', 'Memori', 'user', 'hot', []],
   ['WEBTERM_MEMORY_DIR', 'platform', 'Memori', 'advanced', 'hot', ['WEBTERM_MEMORY_FILES']],
@@ -140,7 +140,7 @@ describe('vonis c-ENV-02 per entri', () => {
     expect((s.requires ?? []).map((r) => r.key)).toEqual(requires)
   })
   it('restart dikoreksi ke hot pada E05, E11, E16, E17, E19, E23', () => {
-    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY']) {
+    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY', 'WEBTERM_ORCHESTRATOR_RUN']) {
       expect(specFor(k)?.restartRequired, k).toBe(false)
     }
   })
@@ -221,10 +221,10 @@ describe('metadata domain ca2, files, browser', () => {
     expect(specFor('WEBTERM_FILES_LIST_MAX')?.unit).toBe('entri')
     expect(specFor('WEBTERM_FILES_UPLOAD_MAX_MB')?.unit).toBe('MB')
   })
-  it('browser: saklar utama user, lainnya advanced + requires saklar utama, semua boot', () => {
+  it('browser: saklar utama user, lainnya advanced + requires saklar utama, semua hot', () => {
     for (const k of Object.values(ENV_BROWSER)) {
       const s = specFor(k) as EnvSpec
-      expect(s.restartRequired, k).toBe(true)
+      expect(s.restartRequired, k).toBe(false)
       expect(s.audience, k).toBe(k === ENV_BROWSER.enabled ? 'user' : 'advanced')
       expect((s.requires ?? []).map((r) => r.key), k).toEqual(k === ENV_BROWSER.enabled ? [] : [ENV_BROWSER.enabled])
     }

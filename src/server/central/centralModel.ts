@@ -2,6 +2,7 @@
 // (RND/03-RENCANA.md §7). No SQLite and no I/O here, so role authority and
 // priority clamping can be tested without a database.
 import { flagOn } from '../envFlag'
+import { isEnabled } from '../featureCapabilities.runtime'
 import { type TaskStatus } from '../ledger/ledgerModel'
 import { MAX_PROJECT_ID } from '../apiShared.types'
 
@@ -63,9 +64,9 @@ export const DEFAULT_PORTFOLIO_LIMIT = 50
 export const MAX_PORTFOLIO_LIMIT = 200
 export const MAX_PORTFOLIO_OFFSET = 1_000_000
 
-/** `WEBTERM_CENTRAL=on` enables the surface; every other value (and unset) is off. */
-export function centralEnabled(raw: string | undefined = process.env.WEBTERM_CENTRAL): boolean {
-  return flagOn(raw)
+/** Central aktif per panggilan lewat `isEnabled`; argumen string (nilai mentah) dipertahankan untuk pemanggil lama. */
+export function centralEnabled(env: NodeJS.ProcessEnv | string | undefined = process.env): boolean {
+  return typeof env === 'string' ? flagOn(env) : isEnabled('central', env)
 }
 
 export function validateProjectId(value: unknown): string {

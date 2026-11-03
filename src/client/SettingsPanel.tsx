@@ -7,14 +7,13 @@
 // Pengelompokan section mengikuti komentar grup di `shared/settings.ts` supaya skema dan UI tidak
 // bisa berbeda pendapat.
 //
-// Pencarian lintas Environment: `EnvSettingsProvider` (state + draft) dipasang DI ATAS view dan tak
-// pernah di-remount saat query berubah, jadi mengetik di pencarian tidak membuang draft. Baris env
-// dihitung dari state (bukan DOM) supaya baris tersembunyi/akordeon tertutup tetap terhitung; entri
-// milik Channels tak punya baris di Environment dan tampil sebagai tautan ke tab Channels.
+// Tab Kemampuan (ENVSIMPLE D6) menggantikan Channels dan Environment: tujuh kartu, satu sakelar
+// tiap kartu. Pencarian di sana hanya mencocokkan judul bagian dan judul kartu; tautan lama ke
+// `env`/`channels` tetap mendarat di tab ini lewat `toSectionId`.
 //
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -23,13 +22,8 @@ import {
 } from '@/components/ui/dialog'
 import type { Settings } from '../shared/settings'
 import { AgentSettings } from './SettingsAgents'
-import { ChannelsSection } from './ChannelsSection'
-import { OpenEnvContext } from './channelsOpenEnv'
-import { EnvSection } from './EnvSection'
+import { CapabilitiesSection } from './CapabilitiesSection'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
-import { ENV_KEY_ATTR, matchesEntry } from './envSearch'
-import { EnvSettingsProvider, useEnvSettingsContext } from './useEnvSettings'
-import type { EnvEntryV2 } from '../shared/envSettings.contract'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
 import './settings.css'
@@ -41,83 +35,41 @@ const SECTIONS = [
   { id: 'shell', label: 'Shell & buffer' },
   { id: 'agent', label: 'Agent' },
   { id: 'canvas', label: 'Canvas' },
-  { id: 'channels', label: 'Channels' },
-  { id: 'env', label: 'Environment' },
+  { id: 'capabilities', label: 'Kemampuan' },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
 
-/** Id tab tak dikenal (mis. `preview` warisan, sudah dilebur ke Terminal/Interaksi) jatuh ke Terminal. */
+/** Id tab lama `env`/`channels` mendarat di Kemampuan; id tak dikenal (mis. `preview` warisan) jatuh ke Terminal. */
 export function toSectionId(id: string): SectionId {
+  if (id === 'env' || id === 'channels') return 'capabilities'
   return SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
 }
-
-const OWNER_CHANNELS = 'channels'
-const IN_CHANNELS_TAB = 'ada di tab Channels'
 
 interface PanelProps {
   settings: Settings
   onChange: (patch: Partial<Settings>) => void
   onClose: () => void
+  /** Workspace aktif: proyek tujuan tautan chat Telegram. */
+  projectId?: string
 }
 
-/** Entri Channels yang cocok query: tautan ke tab pemiliknya (tanpa baris env di Environment). */
-function ChannelsHits({ hits, onOpen }: { hits: EnvEntryV2[]; onOpen: () => void }): React.JSX.Element | null {
-  if (hits.length === 0) return null
-  return (
-    <ul className="st-ch-list">
-      {hits.map((entry) => (
-        <li key={entry.key} className="st-field" data-env-hit={entry.key}>
-          <div className="st-title">
-            <span className="st-label">{entry.label}</span> <code className="st-mono">{entry.key}</code>
-          </div>
-          <button type="button" className="st-button" onClick={onOpen}>{IN_CHANNELS_TAB}</button>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-/** Dialog Settings; provider env ada di luar view agar draft selamat dari perubahan query. */
-export function SettingsPanel(props: PanelProps): React.JSX.Element {
+/** Dialog Settings. */
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
-  return (
-    <EnvSettingsProvider query={normalized}>
-      <SettingsPanelView {...props} query={query} setQuery={setQuery} normalized={normalized} />
-    </EnvSettingsProvider>
-  )
-}
-
-function SettingsPanelView({
-  settings: s,
-  onChange,
-  onClose,
-  query,
-  setQuery,
-  normalized,
-}: PanelProps & { query: string; setQuery: (q: string) => void; normalized: string }): React.JSX.Element {
   const [activeRaw, setActive] = useState<string>('terminal')
   const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
-  const [channelsFocus, setChannelsFocus] = useState<string>()
-  const [envFocus, setEnvFocus] = useState<string>()
-  // Kebalikan onOpenChannels: prasyarat milik Environment yang dibuka dari tab Channels.
-  const openEnv = useCallback((key: string): void => { setActive('env'); setEnvFocus(key) }, [])
+  const [capabilityHits, setCapabilityHits] = useState(0)
   const mainRef = useRef<HTMLElement>(null)
-  const entries = useEnvSettingsContext().state?.entries
-  const envHits = useMemo(
-    () => (normalized && entries ? entries.filter((entry) => matchesEntry(entry, normalized)) : []),
-    [normalized, entries],
-  )
-  const channelHits = useMemo(() => envHits.filter((entry) => entry.owner === OWNER_CHANNELS), [envHits])
 
-  // Hitungan "N setting ditemukan": Field non-env dibaca dari DOM (menyaring dirinya sendiri, jadi
-  // tak bisa berbeda dari layar) + entri env yang cocok dari state, termasuk milik Channels.
+  // Hitungan "N setting ditemukan": Field dibaca dari DOM (menyaring dirinya sendiri, jadi tak bisa
+  // berbeda dari layar) + kartu Kemampuan yang cocok, dilaporkan bagiannya sendiri.
   useEffect(() => {
-    const fields = mainRef.current?.querySelectorAll(`[data-slot="settings-field"]:not([${ENV_KEY_ATTR}])`).length ?? 0
-    setFound(normalized ? fields + envHits.length : 0)
-  }, [normalized, s, envHits])
+    const fields = mainRef.current?.querySelectorAll('[data-slot="settings-field"]').length ?? 0
+    setFound(normalized ? fields + capabilityHits : 0)
+  }, [normalized, s, capabilityHits])
 
   // Pindah section = daftar baru, mulai dari atas seperti VS Code saat memilih entri TOC.
   useEffect(() => {
@@ -130,19 +82,9 @@ function SettingsPanelView({
     if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
-    if (id === 'channels') {
-      return (
-        <>
-          <OpenEnvContext.Provider value={openEnv}>
-            <ChannelsSection focusKey={channelsFocus} onFocused={() => setChannelsFocus(undefined)} />
-          </OpenEnvContext.Provider>
-          <ChannelsHits hits={channelHits} onOpen={() => { setActive('channels'); setQuery('') }} />
-        </>
-      )
-    }
     return (
-      <EnvSection focusKey={envFocus} onFocused={() => setEnvFocus(undefined)}
-        onOpenChannels={(key) => { setActive('channels'); setChannelsFocus(key) }} />
+      <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
+        onVisibleCount={setCapabilityHits} />
     )
   }
 

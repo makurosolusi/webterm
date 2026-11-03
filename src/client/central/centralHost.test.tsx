@@ -1,30 +1,32 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../vscode/test-setup'
 import Dock, { type DockProps } from '../Dock'
 import CentralControlPanel from './CentralControlPanel'
 import { centralControlApi, useCentralControlEnabled, CONTROL_PATH, HALT_PATH } from './centralControlApi'
+import { resetCapabilitiesCache } from '../useCapabilities'
 import { fakeClient } from './centralFixtures.testutil'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('flag gate', () => {
-  const stubEnv = (fetchImpl: () => Promise<Response>) => vi.stubGlobal('fetch', vi.fn(fetchImpl))
-  const envState = (effective: string) => new Response(JSON.stringify({
-    locked: false, rootGate: false, server: { tokenSet: false, settingsLocked: false }, groups: [],
-    entries: [{ key: 'WEBTERM_CENTRAL_CHAT', kind: 'flag', value: effective, effective }],
+  const stubCaps = (fetchImpl: () => Promise<Response>) => vi.stubGlobal('fetch', vi.fn(fetchImpl))
+  const caps = (status: string) => new Response(JSON.stringify({
+    capabilities: [{ id: 'central', title: 'Agent Pusat', blurb: 'b', status }], advanced: {},
   }), { status: 200 })
+  beforeEach(resetCapabilitiesCache)
 
-  it('follows the server env state: on enables, off and unloaded stay off', async () => {
+  it('follows GET /api/capabilities: central on enables, off and unloaded stay off', async () => {
     let release: (r: Response) => void = () => {}
-    stubEnv(() => new Promise<Response>((r) => { release = r }))
+    stubCaps(() => new Promise<Response>((r) => { release = r }))
     const { result } = renderHook(() => useCentralControlEnabled())
     expect(result.current).toBe(false)
-    release(envState('on'))
+    release(caps('on'))
     await waitFor(() => expect(result.current).toBe(true))
-    stubEnv(async () => envState('off'))
+    resetCapabilitiesCache()
+    stubCaps(async () => caps('off'))
     const off = renderHook(() => useCentralControlEnabled())
     await waitFor(() => expect(fetch).toHaveBeenCalled())
     expect(off.result.current).toBe(false)
@@ -32,27 +34,27 @@ describe('flag gate', () => {
 
   it('fails closed on reject and 401', async () => {
     for (const impl of [async () => { throw new TypeError('down') }, async () => new Response('{}', { status: 401 })]) {
-      stubEnv(impl)
+      resetCapabilitiesCache()
+      stubCaps(impl)
       const { result } = renderHook(() => useCentralControlEnabled())
       await waitFor(() => expect(fetch).toHaveBeenCalled())
       expect(result.current).toBe(false)
     }
   })
 
-  it('prop override wins and skips the fetch', () => {
-    stubEnv(async () => envState('on'))
+  it('prop override wins over the server answer', async () => {
+    stubCaps(async () => caps('on'))
     expect(renderHook(() => useCentralControlEnabled(false)).result.current).toBe(false)
     expect(renderHook(() => useCentralControlEnabled(true)).result.current).toBe(true)
-    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('does not set state after unmount', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     let release: (r: Response) => void = () => {}
-    stubEnv(() => new Promise<Response>((r) => { release = r }))
+    stubCaps(() => new Promise<Response>((r) => { release = r }))
     const { unmount } = renderHook(() => useCentralControlEnabled())
     unmount()
-    release(envState('on'))
+    release(caps('on'))
     await new Promise((r) => setTimeout(r, 0))
     expect(err).not.toHaveBeenCalled()
     err.mockRestore()

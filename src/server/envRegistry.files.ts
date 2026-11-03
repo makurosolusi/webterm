@@ -4,6 +4,7 @@
 // Grup + owner 'files' (envRegistry.groups.ts). Semua restart 'hot': dibaca per panggilan. Hanya saklar mutasi yang 'user'.
 import { FILES_LIST_MAX_DEFAULT, FILES_UPLOAD_MAX_MB_DEFAULT } from '../shared/fsLimits'
 import { flagOn } from './envFlag'
+import { isEnabled } from './featureCapabilities.runtime'
 import { flag, num, type EnvSpec } from './envRegistry.types'
 
 /** Nama env tiap flag; kunci = nama flag di dispatcher (`fsApi.ts`) dan cabang ws (`index.ts`). */
@@ -28,10 +29,28 @@ function filesDefault(name: FilesFlag): 'on' | 'off' {
   return FILES_DEFAULT_ON.has(name) ? 'on' : 'off'
 }
 
-/** Apakah flag file manager `on` (dibaca per panggilan). Kosong/tak ada = default flag; nilai eksplisit menang (`off`/typo = mati). */
+/** Env dengan default L11 diisi untuk kunci kosong: isEnabled (pembaca tunggal) hanya melihat nilai eksplisit. */
+function withFilesDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out = { ...env }
+  for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
+    const key = FILES_FLAG[name]
+    if ((out[key] ?? '').trim() === '') out[key] = filesDefault(name)
+  }
+  return out
+}
+
+/**
+ * Apakah flag file manager `on` (dibaca per panggilan lewat isEnabled). Kosong = default flag; nilai eksplisit menang.
+ * Baca = `files`; tulis/unggah = `filesWrite` (implies `files`); WATCH/GIT_STATUS/QUICK_OPEN/UPLOAD anak: induk on DAN kunci anak on.
+ */
 export function filesFlagOn(name: FilesFlag, env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = env[FILES_FLAG[name]]
-  return (raw ?? '').trim() === '' ? filesDefault(name) === 'on' : flagOn(raw)
+  const e = withFilesDefaults(env)
+  switch (name) {
+    case 'VIEWERS': return isEnabled('files', e)
+    case 'MUTATE': return isEnabled('filesWrite', e)
+    case 'UPLOAD': return isEnabled('filesWrite', e) && flagOn(e[FILES_FLAG[name]])
+    default: return isEnabled('files', e) && flagOn(e[FILES_FLAG[name]])
+  }
 }
 
 function positiveInt(raw: string | undefined, def: number): number {

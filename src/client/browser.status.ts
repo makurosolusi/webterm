@@ -9,8 +9,8 @@ const BLOCK_TEXT: Record<BlockReason, string> = {
   private_host: 'This address is on a private network and is blocked.',
   dns_fail: 'Could not resolve this host.',
   not_allowed_port: 'This port is not allowed.',
-  no_binary: 'No Chromium found on the server. Set WEBTERM_BROWSER_BIN.',
-  disabled: 'The browser is disabled on this server.',
+  no_binary: 'Chromium belum ditemukan. Atur lewat Pengaturan > Kemampuan > Browser.',
+  disabled: 'Browser belum menyala. Nyalakan lewat Pengaturan > Kemampuan > Browser.',
   max_live: 'Too many live browsers. Hide another one first.',
 }
 

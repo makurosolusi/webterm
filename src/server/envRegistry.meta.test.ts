@@ -1,6 +1,6 @@
 // Derivasi metadata v2, mapping restart, metadata grup, dan invarian registry (requires, grup).
 import { describe, expect, it } from 'vitest'
-import { evalRequires, flagIsOn, type EnvEntryV2, type EnvRequire } from '../shared/envSettings.contract'
+import { flagIsOn, type EnvRequire } from '../shared/envSettings.contract'
 import { ENV_REGISTRY } from './envRegistry'
 import { GROUP_META, groupMetaFor, UNKNOWN_GROUP_ORDER } from './envRegistry.groups'
 import { resolveMeta } from './envRegistry.meta'
@@ -83,25 +83,10 @@ describe('invarian requires', () => {
   })
 })
 
-describe('flagIsOn / evalRequires', () => {
-  it('flagIsOn: trim + case-insensitive, hanya on', () => {
+describe('flagIsOn', () => {
+  it('trim + case-insensitive, hanya on', () => {
     expect([' ON ', 'on', 'On'].map(flagIsOn)).toEqual([true, true, true])
     expect(['off', '1', 'true', '', undefined].map(flagIsOn)).toEqual([false, false, false, false, false])
-  })
-
-  const entry = (requires: EnvRequire[]) => ({ requires }) as EnvEntryV2
-  const vals: Record<string, string> = { F: 'on', G: 'off', M: 'Shadow' }
-  const get = (k: string) => vals[k]
-
-  it('tanpa oneOf = flag on; oneOf case-insensitive; kunci tak dikenal = unknown', () => {
-    const r = evalRequires(entry([{ key: 'F' }, { key: 'G' }, { key: 'M', oneOf: ['shadow', 'on'] }, { key: 'M', oneOf: ['on'] }, { key: 'Q' }, { key: 'F', oneOf: [] }]), get)
-    expect(r.map((x) => x.met)).toEqual([true, false, true, false, 'unknown', true])
-  })
-
-  it('draft menimpa nilai server dan entri tanpa requires -> []', () => {
-    const draft = (k: string) => (k === 'G' ? 'on' : get(k))
-    expect(evalRequires(entry([{ key: 'G' }]), draft)[0]!.met).toBe(true)
-    expect(evalRequires(entry([]), get)).toEqual([])
   })
 })
 

@@ -1,5 +1,5 @@
-// Startup wiring for the P2 ledger. Flag default OFF so existing installs are untouched.
-// `shadow` opens and migrates the ledger but must never fail the server; `on` is strict.
+// Startup wiring for the P2 ledger. Selalu hidup (ENVSIMPLE KE-1); `WEBTERM_LEDGER_SHADOW=1` = shadow.
+// `shadow` opens and migrates the ledger but must never fail the server; an explicit `on` is strict.
 import type { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
@@ -9,6 +9,7 @@ import { openLedgerDb } from './migration'
 import { ledgerMetrics } from './ledgerMetrics'
 import { setActiveLedgerRuntime } from './ledgerRuntimeState'
 import { createLogger } from '../logs'
+import { flagOn } from '../envFlag'
 
 // The HTTP layer reads the runtime through this handle; startLedgerRuntime owns the value.
 export {
@@ -71,10 +72,12 @@ export interface LedgerRuntime {
   close(): void
 }
 
-export function ledgerMode(raw = process.env.WEBTERM_LEDGER): LedgerMode {
-  const value = (raw ?? '').trim().toLowerCase()
-  if (value === 'on' || value === 'shadow') return value
-  return 'off'
+/** Env pengembang: ledger hanya shadow (gagal buka tak menjatuhkan server). */
+export const LEDGER_SHADOW_FLAG = 'WEBTERM_LEDGER_SHADOW'
+
+/** Mode ledger: selalu `on`, kecuali `WEBTERM_LEDGER_SHADOW` hidup => `shadow`. Kunci `WEBTERM_LEDGER` lama diabaikan. */
+export function ledgerMode(raw = process.env[LEDGER_SHADOW_FLAG]): LedgerMode {
+  return flagOn(raw) ? 'shadow' : 'on'
 }
 
 /**
@@ -113,9 +116,10 @@ export function startLedgerRuntime(opts: {
     return runtime
   } catch (err) {
     setActiveLedgerRuntime(null)
-    if (mode === 'on') throw err
+    // Mode eksplisit `on` (tes/pemanggil) tetap ketat; default turunan degradasi dengan warn (KE-1).
+    if (mode === 'on' && opts.mode === 'on') throw err
     const reason = err instanceof Error ? err.message : String(err)
-    log.error('ledger.error', `ledger shadow disabled: ${reason}`, { mode })
+    log.error('ledger.error', `ledger disabled (${mode}): ${reason}`, { mode })
     return null
   }
 }

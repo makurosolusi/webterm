@@ -1,22 +1,10 @@
-// The master kill switch that sits above every provider flag (`WEBTERM_TELEGRAM`, later adapters).
-// Keeping it separate from the HTTP edge means one obvious place decides whether the channel
-// runtime exists at all, and the runtime module stays under its size budget.
-import { parseFlag } from '../envFlag'
+// Gerbang induk kanal: kanal ada bila kemampuan `telegram` on. Satu-satunya pembaca kunci adalah
+// isEnabled (pagar grep ES-14); tak ada saklar kanal terpisah yang bisa menyimpang dari Telegram.
+import { isEnabled } from '../featureCapabilities.runtime'
 
-export const CHANNELS_MASTER_ENV = 'WEBTERM_CHANNELS'
+export type ChannelsMasterState = 'on' | 'off'
 
-/** The only values this iteration implements; `readonly|control` remain planned. */
-export const CHANNELS_MASTER_VALUES = 'on|off' as const
-
-export type ChannelsMasterState = 'on' | 'off' | 'unsupported'
-
-/**
- * Unset and `on` both preserve the pre-gate behavior; `off` disables the whole runtime. Any other
- * value (including the planned `readonly`/`control`) fails closed as `unsupported`: taking the
- * channel down is recoverable, silently accepting an unknown mode is not. The caller owns the log
- * line so it can name the supported values exactly once.
- */
+/** `on` bila kemampuan telegram on (termasuk prasyaratnya), selain itu `off`. */
 export function channelsMasterState(env: NodeJS.ProcessEnv = process.env): ChannelsMasterState {
-  if ((env[CHANNELS_MASTER_ENV] ?? '').trim() === '') return 'on'
-  return parseFlag(env[CHANNELS_MASTER_ENV]) ?? 'unsupported'
+  return isEnabled('telegram', env) ? 'on' : 'off'
 }

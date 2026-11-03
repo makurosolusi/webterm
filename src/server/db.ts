@@ -5,6 +5,7 @@ import type { Settings } from '../shared/settings'
 import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
 import { chmodSync } from 'node:fs'
 import { dbPath, warnPermsNotTightened } from './config'
+import { ensureAuditSchema } from './featureCapabilities.audit'
 
 const DB_FILE_MODE = 0o600
 
@@ -30,6 +31,7 @@ export function openDb(path: string = dbPath()): Database {
   if (!cols.some((c) => c.name === 'bridges')) {
     d.exec("ALTER TABLE workspace ADD COLUMN bridges TEXT NOT NULL DEFAULT '[]'")
   }
+  ensureAuditSchema(d)
   return d
 }
 

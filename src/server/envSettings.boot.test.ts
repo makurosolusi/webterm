@@ -13,7 +13,7 @@ describe('urutan boot env-settings', () => {
     // writeTokenToEnv dipanggil di dalam bootWiring (bootWiring.ts); index.ts hanya memanggil bootWiring.
     expect(at('bootWiring(process.env')).toBeGreaterThan(-1)
     expect(overlay).toBeGreaterThan(at('bootWiring(process.env'))
-    for (const later of ['startLedgerRuntime()', 'buildTelegramCentralPort(', 'startChannelsRuntime(', 'startCentralAutonomyBoot(']) {
+    for (const later of ['startLedgerRuntime()', 'createTelegramHot(', 'registerTelegramHot(', 'startCentralAutonomyBoot(']) {
       expect(overlay, later).toBeLessThan(at(later))
     }
   })

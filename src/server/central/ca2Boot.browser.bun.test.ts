@@ -26,7 +26,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
 })
 
-const BASE = { WEBTERM_CENTRAL_READ_TOOLS: 'on' }
+const BASE = { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' }
 const ON = { ...BASE, WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'on' }
 const STATE: BrowserState = { id: 'b1', url: 'https://app.example.com/inbox?token=SECRET', title: 'Inbox', loading: false, canBack: false, canForward: false, lease: 'agent', live: 'live' }
 

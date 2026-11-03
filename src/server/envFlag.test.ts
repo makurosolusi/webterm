@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { flagOn, parseFlag } from './envFlag'
+import { flagOn, flagOr, parseFlag, strictFlag } from './envFlag'
 
 describe('flagOn', () => {
   it.each(['on', 'ON', 'On', ' on ', ' ON\n', '\ton', '1', 'true', 'TRUE'])('treats %j as on', (raw) => {
@@ -25,11 +25,33 @@ describe('flags that used to be strict now share the loose semantics', () => {
   it('orchestrator run and memory files accept " ON "', async () => {
     const { orchestratorRunEnabled, orchestratorRunRequireApproval } = await import('./orchestratorRunModel')
     const { memoryFilesEnabled } = await import('./memory/memoryFilePath')
-    const env = { WEBTERM_ORCHESTRATOR_RUN: ' ON ', WEBTERM_RUN_REQUIRE_APPROVAL: 'On', WEBTERM_MEMORY_FILES: ' on' }
+    const env = { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: ' ON ', WEBTERM_RUN_REQUIRE_APPROVAL: 'On', WEBTERM_MEMORY_FILES: ' on' }
     expect(orchestratorRunEnabled(env)).toBe(true)
     expect(orchestratorRunRequireApproval(env)).toBe(true)
     expect(memoryFilesEnabled(env)).toBe(true)
     expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'off' })).toBe(false)
     expect(memoryFilesEnabled({})).toBe(false)
+  })
+})
+
+describe('flagOr (dialek kanonik, default pemanggil)', () => {
+  it.each(['on', 'ON', '1', 'true', ' true '])('%j => true walau default false', (raw) => expect(flagOr(raw, false)).toBe(true))
+  it.each(['off', 'OFF', '0', 'false', ' False '])('%j => false walau default true', (raw) => expect(flagOr(raw, true)).toBe(false))
+  it.each(['yes', '2', '', '   ', 'onn'])('%j => default pemanggil', (raw) => {
+    expect(flagOr(raw, true)).toBe(true)
+    expect(flagOr(raw, false)).toBe(false)
+  })
+  it('unset => default pemanggil', () => {
+    expect(flagOr(undefined, true)).toBe(true)
+    expect(flagOr(null, false)).toBe(false)
+  })
+})
+
+describe('strictFlag (tiga kunci keamanan)', () => {
+  it('hanya persis "1"', () => expect(strictFlag('1')).toBe(true))
+  it.each(['on', 'true', ' 1', '1 ', 'ON', '0', '', 'yes'])('%j => false', (raw) => expect(strictFlag(raw)).toBe(false))
+  it('unset => false', () => {
+    expect(strictFlag(undefined)).toBe(false)
+    expect(strictFlag(null)).toBe(false)
   })
 })

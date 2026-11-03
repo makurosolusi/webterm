@@ -1,15 +1,16 @@
-// Boot wiring for the central autonomous loop. Off by default: it becomes live only when
-// WEBTERM_CENTRAL_AUTONOMY=on AND the orchestrator run surface is armed, because a tick
-// spawns a real worker through the same route a human would call. It never bypasses gates:
-// approval-required runs still answer 409, and a paused project or closed plan is skipped by
-// the loop before the route is even asked. One runtime, one server: this only owns a timer.
+// Boot wiring for the central autonomous loop. The controller always exists (never `null`) and
+// is hot-switchable: `onCapabilityChange('autonomy')` starts/stops the single timer, and every
+// tick re-checks `isEnabled('autonomy')` + `isEnabled('workers')`, because a tick spawns a real
+// worker through the same route a human would call. It never bypasses gates: approval-required
+// runs still answer 409 (autonomy never approves; that is normal, not an anomaly), and a paused
+// project or closed plan is skipped by the loop before the route is even asked.
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import {
   createCentralAutonomy,
-  autonomyEnabled as autonomyFlagOn,
   DEFAULT_AUTONOMY_INTERVAL_MS,
   DEFAULT_MAX_CONSECUTIVE_FAILURES,
+  type AutonomyDeps,
   type AutonomyProject,
   type CentralAutonomyHandle,
 } from './central/centralAutonomy'
@@ -18,15 +19,15 @@ import { reconcileAgents } from './central/agents/agentReconciler'
 import { createAgentStore } from './central/agents/agentStore'
 import type { AgentRecord } from './central/contracts'
 import { createBreakerStore } from './central/guard/breakerStore'
+import { isEnabled, onCapabilityChange } from './featureCapabilities.runtime'
 import { createPlanStore } from './orchestrator/plan'
 import { orchestratorRunRoute } from './orchestratorRunApi'
-import { orchestratorRunEnabled, orchestratorRunRequireApproval } from './orchestratorRunModel'
 import { createLogger } from './logs'
 
 const logger = createLogger('central')
 
 export interface AutonomyBootOptions {
-  /** The process ledger runtime; `null` (ledger off / shadow failed) refuses to boot. */
+  /** The process ledger runtime; `null` (ledger off / shadow failed) makes the controller a no-op. */
   runtime: LedgerRuntime | null
   env?: Record<string, string | undefined>
   intervalMs?: number
@@ -37,12 +38,12 @@ export interface AutonomyBootOptions {
   agentAlive?: (agent: AgentRecord) => boolean | Promise<boolean>
   log?: (line: string) => void
   warn?: (line: string) => void
+  /** Test seam: replace the ledger-backed project list / plan reader / worker run. */
+  overrides?: Partial<Pick<AutonomyDeps, 'projects' | 'plan' | 'run'>>
 }
 
-/** Pure env gate, exported so the boot decision is testable without a database. */
-export function autonomyEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return autonomyFlagOn(env.WEBTERM_CENTRAL_AUTONOMY)
-}
+/** Autonomy controller: the loop handle plus `dispose` to detach from capability changes. */
+export type AutonomyController = CentralAutonomyHandle & { dispose(): void }
 
 function listProjects(db: Database): AutonomyProject[] {
   const rows = db.query('SELECT id, status FROM project ORDER BY id ASC').all() as {
@@ -69,14 +70,15 @@ async function runItem(
   runtime: LedgerRuntime,
   projectId: string,
   itemId: string,
-  expectedVersion: number
+  expectedVersion: number,
+  env: Record<string, string | undefined>
 ): Promise<{ ok: boolean; code?: string }> {
   try {
     const result = await orchestratorRunRoute(
       { projectId, itemId, expectedVersion },
-      // `enabled: true` because boot already required WEBTERM_ORCHESTRATOR_RUN=on; the
+      // Workers are re-read per call: switching them off mid-flight blocks the next run. The
       // approval gate is untouched and still answers 409 when it applies.
-      { ledger: runtime, enabled: true }
+      { ledger: runtime, enabled: isEnabled('workers', env) }
     )
     if (result.status === 200) {
       return (result.body as { ok?: unknown }).ok === false
@@ -91,58 +93,33 @@ async function runItem(
 }
 
 /**
- * Starts the loop or returns `null`. Fail-closed on every missing prerequisite, with one log
- * line explaining why, so an operator never believes autonomy is running when it is not.
+ * Builds the controller; starts the timer now only if autonomy is already on. Never `null`:
+ * a missing ledger or an off capability just makes ticks no-ops, so a later hot enable works.
  */
-export function startCentralAutonomyBoot(
-  opts: AutonomyBootOptions
-): CentralAutonomyHandle | null {
+export function startCentralAutonomyBoot(opts: AutonomyBootOptions): AutonomyController {
   const env = opts.env ?? process.env
   const log = opts.log ?? ((line: string) => logger.info('central.autonomy.start', line))
   const warn = opts.warn ?? ((line: string) => logger.warn('central.autonomy.skip', line))
-  if (!autonomyEnabled(env)) return null
-  if (opts.runtime === null) {
-    warn('central autonomy: ledger is off; not starting')
-    return null
-  }
-  if (!orchestratorRunEnabled(env)) {
-    warn('central autonomy: WEBTERM_ORCHESTRATOR_RUN is not on; not starting')
-    return null
-  }
-  if (orchestratorRunRequireApproval(env)) {
-    warn(
-      'central autonomy: WEBTERM_RUN_REQUIRE_APPROVAL=on; ticks without an approved ' +
-        'approval will return 409 (autonomy never approves)'
-    )
-  }
-
   const runtime = opts.runtime
-  const plans = createPlanStore(runtime.db)
+  const plans = runtime ? createPlanStore(runtime.db) : null
   const intervalMs = opts.intervalMs ?? DEFAULT_AUTONOMY_INTERVAL_MS
-  const reliable = reliabilityEnabled(env[RELIABILITY_ENV])
-  if (reliable && opts.agentAlive) {
-    const isAlive = opts.agentAlive
-    void reconcileAgents({ store: createAgentStore(runtime.db, Date.now), isAlive }).catch((err: unknown) =>
-      warn(`central autonomy: agent reconcile failed (${err instanceof Error ? err.message : typeof err})`)
-    )
-  }
-  const handle = createCentralAutonomy({
-    projects: () => listProjects(runtime.db),
-    plan: (projectId) => plans.get(projectId),
-    run: (projectId, itemId, expectedVersion) =>
-      runItem(runtime, projectId, itemId, expectedVersion),
+  const reliable = runtime !== null && reliabilityEnabled(env[RELIABILITY_ENV])
+  const live = (): boolean => isEnabled('autonomy', env) && isEnabled('workers', env)
+  const inner = createCentralAutonomy({
+    // Gate per tick (also covers the reliability waker, which ticks on its own): an empty
+    // project list means nothing is sent and no failure budget is spent.
+    projects: () => (runtime && live() ? (opts.overrides?.projects ?? (() => listProjects(runtime.db)))() : []),
+    plan: opts.overrides?.plan ?? ((projectId) => plans?.get(projectId) ?? null),
+    run:
+      opts.overrides?.run ??
+      ((projectId, itemId, expectedVersion) => runItem(runtime as LedgerRuntime, projectId, itemId, expectedVersion, env)),
     audit: (event) => {
       try {
-        runtime.ledger.event.appendEvent({
+        runtime?.ledger.event.appendEvent({
           actor: 'central',
           kind: event.kind,
           ...(event.projectId === undefined ? {} : { projectId: event.projectId }),
-          payload: {
-            itemId: event.itemId,
-            ok: event.ok,
-            code: event.code,
-            failures: event.failures,
-          },
+          payload: { itemId: event.itemId, ok: event.ok, code: event.code, failures: event.failures },
           now: event.at,
         })
       } catch (err) {
@@ -153,21 +130,51 @@ export function startCentralAutonomyBoot(
       }
     },
     intervalMs,
-    ...(reliable
-      ? {
-          dispatch: {
-            maxInflight: maxInflightFromEnv(env[MAX_INFLIGHT_ENV]),
-            breaker: createBreakerStore({ db: runtime.db, now: Date.now }),
-          },
-        }
+    ...(reliable && runtime
+      ? { dispatch: { maxInflight: maxInflightFromEnv(env[MAX_INFLIGHT_ENV]), breaker: createBreakerStore({ db: runtime.db, now: Date.now }) } }
       : {}),
   })
-  handle.start()
-  log(
-    reliable
-      ? 'central autonomy: on (reliability mode: non-blocking dispatch, wake + sweep, persistent breaker)'
-      : `central autonomy: on (every ${intervalMs}ms, max ${DEFAULT_MAX_CONSECUTIVE_FAILURES} ` +
-          'consecutive failures per project)'
-  )
-  return handle
+
+  let reconciled = false
+  function start(): void {
+    if (inner.running) return
+    try {
+      if (!runtime) return warn('central autonomy: ledger is off; nothing to run')
+      if (reliable && opts.agentAlive && !reconciled) {
+        reconciled = true // sekali per proses: seperti boot lama, bukan tiap hot-enable
+        const isAlive = opts.agentAlive
+        void reconcileAgents({ store: createAgentStore(runtime.db, Date.now), isAlive }).catch((err: unknown) =>
+          warn(`central autonomy: agent reconcile failed (${err instanceof Error ? err.name : typeof err})`)
+        )
+      }
+      inner.start()
+      log(
+        reliable
+          ? 'central autonomy: on (reliability mode: non-blocking dispatch, wake + sweep, persistent breaker)'
+          : `central autonomy: on (every ${intervalMs}ms, max ${DEFAULT_MAX_CONSECUTIVE_FAILURES} consecutive failures per project)`
+      )
+    } catch (err) {
+      warn(`central autonomy: start failed (${err instanceof Error ? err.name : typeof err})`)
+    }
+  }
+  // KE-5: stop hanya menghentikan timer. Worker yang sedang berjalan dibiarkan selesai sendiri.
+  const stop = (): void => inner.stop()
+  const unregister = onCapabilityChange('autonomy', { start, stop })
+  if (isEnabled('autonomy', env)) start()
+
+  return {
+    tick: inner.tick,
+    start,
+    stop,
+    get running() {
+      return inner.running
+    },
+    failures: inner.failures,
+    wake: inner.wake,
+    get inflight() {
+      return inner.inflight
+    },
+    drain: inner.drain,
+    dispose: unregister,
+  }
 }

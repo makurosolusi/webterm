@@ -7,13 +7,12 @@ import { flag } from '../envRegistry.types'
 import { configureLogging, createLogger, flushLogs } from '../logs/logger'
 import { channelsMasterState } from './channelsMasterGate'
 
-const chan = (v?: string) => channelsMasterState(v === undefined ? {} : { WEBTERM_CHANNELS: v })
+const chan = (v?: string) => channelsMasterState(v === undefined ? {} : { WEBTERM_TELEGRAM: v })
 
 describe('dialek flag (L10)', () => {
-  it('WEBTERM_CHANNELS: 1/true on, 0/false off, asing fail-closed', () => {
-    expect([chan(), chan('1'), chan('TRUE'), chan('on')]).toEqual(['on', 'on', 'on', 'on'])
-    expect([chan('0'), chan('false'), chan('off')]).toEqual(['off', 'off', 'off'])
-    expect([chan('maybe'), chan('readonly')]).toEqual(['unsupported', 'unsupported'])
+  it('gerbang kanal (via telegram): 1/true/on on, 0/false/off/kosong/asing off', () => {
+    expect([chan('1'), chan('TRUE'), chan('on')]).toEqual(['on', 'on', 'on'])
+    expect([chan(), chan('0'), chan('false'), chan('off'), chan('maybe')]).toEqual(['off', 'off', 'off', 'off', 'off'])
   })
 
   it.each([['0', false], ['false', false], ['off', false], ['', true], ['on', true]])('WEBTERM_LOG_FILE=%j => sink %s', async (raw, written) => {

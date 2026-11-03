@@ -30,14 +30,14 @@ describe('telegram central bridge', () => {
   afterEach(() => vi.useRealTimers())
 
   it.each([
-    ['on', true],
-    ['ON', true],
-    [' on ', true],
-    ['off', false],
-    ['', false],
-    ['garbage', false],
-  ])('gates central Telegram for %j', (raw, expected) => {
-    expect(centralTelegramEnabled(raw)).toBe(expected)
+    ['on', 'on', true],
+    ['ON', ' on ', true],
+    ['on', 'off', false],
+    ['off', 'on', false],
+    ['', 'on', false],
+    ['garbage', 'garbage', false],
+  ])('gates central Telegram for central=%j telegram=%j', (central, telegram, expected) => {
+    expect(centralTelegramEnabled({ WEBTERM_CENTRAL: central, WEBTERM_TELEGRAM: telegram })).toBe(expected)
   })
 
   it('answers mock chat and persists conversation and turn rows', async () => {

@@ -6,10 +6,9 @@
 // Flags: `WEBTERM_CENTRAL=on` AND `WEBTERM_CENTRAL_CHAT=on`. Chat off means "not
 // mounted" (404 by the fallback). Runtime off answers 503 `central_runtime_off`; `claude` builds a
 // real runtime and reports an unready CLI as a failed turn (`runtime_unavailable`), never as 503.
-import { flagOn } from './envFlag'
+import { isEnabled } from './featureCapabilities.runtime'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Database } from 'bun:sqlite'
-import { centralEnabled } from './central/centralModel'
 import { claudePreflightOf, runtimeReadiness } from './centralChatHealth'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
@@ -22,8 +21,6 @@ import { handleStream } from './centralChatSse'
 
 export { CENTRAL_CHAT_BODY_MAX_BYTES }
 export type { CentralChatDeps }
-
-export const CENTRAL_CHAT_FLAG = 'WEBTERM_CENTRAL_CHAT'
 
 const CONVERSATIONS_PATH = '/api/central/conversations'
 const MESSAGES = /^\/api\/central\/conversations\/([^/]+)\/messages$/
@@ -46,8 +43,9 @@ export async function centralChatRoute(
 ): Promise<boolean> {
   const path = url.pathname
   if (!isCentralChatPath(path)) return false
-  const chatOn = deps.chatEnabled ?? flagOn(process.env[CENTRAL_CHAT_FLAG])
-  const centralOn = deps.centralEnabled ?? centralEnabled()
+  // Chat ikut kemampuan central (turunan), jadi kedua gerbang membaca kemampuan yang sama.
+  const chatOn = deps.chatEnabled ?? isEnabled('central')
+  const centralOn = deps.centralEnabled ?? isEnabled('central')
   if (!chatOn || !centralOn) return false
 
   const method = req.method || 'GET'

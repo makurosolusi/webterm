@@ -5,8 +5,8 @@ import { DEFAULT_COOKIE_TTL_DAYS, DEFAULT_DISCARD_MS, DEFAULT_MAX_LIVE, ENV_BROW
 import { flag, num, text, type EnvSpec } from '../envRegistry.types'
 
 const GROUP = 'browser'
-// Semua restart 'boot' (runtime dirakit sekali saat boot); hanya saklar utama yang 'user'.
-const B = { owner: 'platform', section: 'Browser', audience: 'advanced', restart: 'boot' } as const
+// Semua 'hot': runtime browser hidup-mati lewat hook kemampuan `browser` (browser.activate.ts), tanpa restart.
+const B = { owner: 'platform', section: 'Browser', audience: 'advanced', restart: 'hot' } as const
 const BROWSER_ON = { key: ENV_BROWSER.enabled }
 const DISCARD_MS_MAX = 86_400_000 // 24 jam
 const COOKIE_TTL_DAYS_MAX = 365

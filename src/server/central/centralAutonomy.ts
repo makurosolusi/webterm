@@ -5,6 +5,7 @@
 // caller arms it, and consecutive failures quarantine a project instead of retrying forever.
 
 import { flagOn } from '../envFlag'
+import { isEnabled } from '../featureCapabilities.runtime'
 import { createLogger } from '../logs'
 import { createDispatcher, type DispatchJob, type DispatchResult, type Dispatcher } from './autonomyDispatch'
 import type { SyncBreaker } from './guard/breakerStore'
@@ -95,11 +96,9 @@ export const DEFAULT_MAX_CONSECUTIVE_FAILURES = 3
 const PROJECT_PAUSED = 'paused'
 const TERMINAL = ['completed', 'abandoned']
 
-/** `WEBTERM_CENTRAL_AUTONOMY=on` arms the loop; every other value (and unset) is off. */
-export function autonomyEnabled(
-  raw: string | undefined = process.env.WEBTERM_CENTRAL_AUTONOMY
-): boolean {
-  return flagOn(raw)
+/** Autonomy on = kemampuan `autonomy` (beserta prasyaratnya) on; string mentah dipertahankan untuk pemanggil lama. */
+export function autonomyEnabled(env: NodeJS.ProcessEnv | string | undefined = process.env): boolean {
+  return typeof env === 'string' ? flagOn(env) : isEnabled('autonomy', env)
 }
 
 function isTerminal(status: string): boolean {

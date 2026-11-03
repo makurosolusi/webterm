@@ -3,10 +3,13 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir } from './config'
+import type { Database } from 'bun:sqlite'
 import { openDb } from './db'
 import { getDotenvBoot } from './dotenvFiles'
 import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY } from './envRegistry'
 import { createFileSecretStore } from './envSecrets.store'
+import { recordAudit } from './featureCapabilities.audit'
+import { settingsGuard } from './featureCapabilities.guard'
 import type { EnvSettingsApiDeps } from './envSettings.api'
 import { createEnvSettings, type EnvSettings } from './envSettings.service'
 import { createAppRowOverrideStore } from './envSettings.store'
@@ -17,6 +20,7 @@ const SECRETS_SUBDIR = 'secrets'
 const log = createLogger('settings')
 
 let instance: EnvSettings | undefined
+let auditDb: Database | undefined
 let dotenvWarned = false
 
 /** Warn SEKALI per proses bila `.env` ada dan memasok kunci registry; hanya NAMA kunci (nilai bisa secret). */
@@ -35,11 +39,12 @@ export function warnDotenvDetected(svc: Pick<EnvSettings, 'state'>, cwd: string 
 export function initEnvSettings(): EnvSettings {
   if (!instance) {
     // Koneksi kedua ke webterm.db: db.ts memegang koneksi pribadi, dan baris `app` ini mandiri.
+    auditDb = openDb()
     instance = createEnvSettings({
       registry: ENV_REGISTRY,
       bootstrapKeys: BOOTSTRAP_ONLY_KEYS,
       target: process.env,
-      overrides: createAppRowOverrideStore(openDb()),
+      overrides: createAppRowOverrideStore(auditDb),
       secrets: createFileSecretStore(join(dataDir(), SECRETS_SUBDIR)),
     })
     instance.apply()
@@ -48,7 +53,8 @@ export function initEnvSettings(): EnvSettings {
   return instance
 }
 
-/** Dependensi rute. `root` = root token terkonfigurasi; gerbang /api sudah memverifikasinya. */
+/** Dependensi rute: layanan + penjaga mutasi + audit (koneksi yang sama dengan store override). */
 export function envSettingsApiDeps(): EnvSettingsApiDeps {
-  return { service: initEnvSettings(), rootGate: () => (process.env.WEBTERM_TOKEN ?? '').trim() !== '' }
+  const service = initEnvSettings()
+  return { service, guard: (req) => settingsGuard(req), audit: (entry) => { if (auditDb) recordAudit(auditDb, entry) } }
 }

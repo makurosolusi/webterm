@@ -1,10 +1,8 @@
 // Boot-time glue for Telegram ingress: mode selection (poll vs webhook), the poller bound to the
 // channel runtime's store, and the central-chat gate. Lives here so index.ts stays declarative.
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
-import { centralEnabled } from '../central/centralModel'
 import { centralRuntimeKind } from '../central/runtime/runtimeFlag'
 import type { RuntimeKind } from '../central/runtime/centralRuntime'
-import { flagOn } from '../envFlag'
 import { recordIngress } from './channelStatus'
 import type { TelegramCentralPort } from './channelDispatch'
 import type { ChannelsRuntime } from './channelsRuntime'
@@ -15,22 +13,18 @@ import { resolveTelegramBotToken } from './telegramSend'
 // Mode selection lives in telegramMode.ts; re-exported so this stays the boot-glue import surface.
 export { TELEGRAM_MODE_ENV, resolveTelegramMode, type TelegramMode } from './telegramMode'
 
-export const TELEGRAM_CENTRAL_CHAT_ENV = 'WEBTERM_CENTRAL_CHAT'
-const CENTRAL_TELEGRAM_ENV = 'WEBTERM_CENTRAL_TELEGRAM'
-const CENTRAL_ENV = 'WEBTERM_CENTRAL'
 const CENTRAL_RUNTIME_ENV = 'WEBTERM_CENTRAL_RUNTIME'
 
 /**
- * Central-chat bridge for Telegram, or undefined unless EVERY gate holds: chat flag, Telegram
- * flag, `WEBTERM_CENTRAL=on` (same gate as the HTTP chat API), a live ledger, runtime != off.
+ * Central-chat bridge for Telegram, or undefined unless EVERY gate holds: capabilities central +
+ * telegram (same central gate as the HTTP chat API), a live ledger, runtime != off.
  */
 export function buildTelegramCentralPort(
   runtime: Pick<LedgerRuntime, 'db'> | null | undefined,
   env: NodeJS.ProcessEnv = process.env,
   create: typeof createTelegramCentralPort = createTelegramCentralPort
 ): TelegramCentralPort | undefined {
-  if (!flagOn(env[TELEGRAM_CENTRAL_CHAT_ENV]) || !runtime) return undefined
-  if (!centralTelegramEnabled(env[CENTRAL_TELEGRAM_ENV]) || !centralEnabled(env[CENTRAL_ENV])) return undefined
+  if (!runtime || !centralTelegramEnabled(env)) return undefined
   const kind: RuntimeKind = centralRuntimeKind(env[CENTRAL_RUNTIME_ENV])
   return kind === 'off' ? undefined : create({ db: runtime.db, kind })
 }
@@ -63,6 +57,9 @@ export function startTelegramInbound(input: TelegramInboundInput): TelegramPolle
       input.onStatus?.(status)
     },
   })
-  process.once('exit', () => void poller.stop())
+  // Dilepas saat loop selesai: start/stop hot berulang tidak menumpuk listener `exit`.
+  const onExit = (): void => void poller.stop()
+  process.once('exit', onExit)
+  void poller.done.finally(() => process.off('exit', onExit))
   return poller
 }

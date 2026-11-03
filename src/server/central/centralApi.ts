@@ -16,7 +16,7 @@ import { LEDGER_OFF, type RouteResult } from '../apiShared.types'
 
 export interface CentralRouteDeps {
   runtime: LedgerRuntime | null
-  /** Defaults to the `WEBTERM_CENTRAL` flag; tests may pin it explicitly. */
+  /** Defaults to the `central` capability; tests may pin it explicitly. */
   enabled?: boolean
   /** Caller-owned authorization; null/undefined (or a throw) denies. */
   authorize?: (action: CentralAction, projectId: string) => CentralActor | null | undefined

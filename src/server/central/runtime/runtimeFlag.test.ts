@@ -33,8 +33,14 @@ describe('WEBTERM_CENTRAL_RUNTIME parsing', () => {
     expect(centralRuntimeKind('nonsense')).toBe('off')
   })
 
+  it('tak diset = deteksi otomatis; string kosong/tak dikenal tetap fail-closed', () => {
+    expect(centralRuntimeKind(undefined, (bin) => bin === 'opencode')).toBe('opencode')
+    expect(centralRuntimeKind(undefined, () => false)).toBe('mock')
+    expect(centralRuntimeKind('', () => true)).toBe('off')
+    expect(centralRuntimeEnabled(undefined, () => false)).toBe(true)
+  })
+
   it('enables only explicitly selected adapters', () => {
-    expect(centralRuntimeEnabled(undefined)).toBe(false)
     expect(centralRuntimeEnabled('off')).toBe(false)
     expect(centralRuntimeEnabled('OFF')).toBe(false)
     expect(centralRuntimeEnabled('garbage')).toBe(false)

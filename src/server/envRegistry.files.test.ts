@@ -40,9 +40,28 @@ describe('envRegistry.files', () => {
     for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
       expect(filesFlagOn(name, { [FILES_FLAG[name]]: 'off' })).toBe(false)
       expect(filesFlagOn(name, { [FILES_FLAG[name]]: 'yes' })).toBe(false)
-      expect(filesFlagOn(name, { [FILES_FLAG[name]]: ' ON ' })).toBe(true)
+      // UPLOAD anak filesWrite: butuh MUTATE on juga (ES-05)
+      const env = { [FILES_FLAG[name]]: ' ON ', ...(name === 'UPLOAD' ? { WEBTERM_FILES_MUTATE: 'on' } : {}) }
+      expect(filesFlagOn(name, env)).toBe(true)
     }
     expect(filesFlagOn('MUTATE', { WEBTERM_FILES_MUTATE: 'on' })).toBe(true)
+  })
+
+  it('kemampuan files/filesWrite: files off menutup semua; mutate/upload tidak terbuka hanya karena files on', () => {
+    const off = { WEBTERM_FILES_VIEWERS: 'off', WEBTERM_FILES_MUTATE: 'on', WEBTERM_FILES_UPLOAD: 'on' }
+    for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) expect(filesFlagOn(name, off), name).toBe(false)
+    expect(filesFlagOn('VIEWERS', { WEBTERM_FILES_VIEWERS: 'on' })).toBe(true)
+    expect(filesFlagOn('MUTATE', { WEBTERM_FILES_VIEWERS: 'on' })).toBe(false)
+    expect(filesFlagOn('UPLOAD', { WEBTERM_FILES_VIEWERS: 'on', WEBTERM_FILES_UPLOAD: 'on' })).toBe(false)
+    expect(filesFlagOn('UPLOAD', { WEBTERM_FILES_MUTATE: 'on', WEBTERM_FILES_UPLOAD: 'on' })).toBe(true)
+    expect(filesFlagOn('WATCH', { WEBTERM_FILES_WATCH: 'off' })).toBe(false) // anak dimatikan sendiri
+  })
+
+  it('dibaca per panggilan: env berubah langsung berlaku tanpa restart', () => {
+    const env: NodeJS.ProcessEnv = {}
+    expect(filesFlagOn('MUTATE', env)).toBe(false)
+    env.WEBTERM_FILES_MUTATE = 'on'
+    expect(filesFlagOn('MUTATE', env)).toBe(true)
   })
 
   it('filesListMax / filesUploadMaxBytes: default, override sah, nilai sampah jatuh ke default', () => {

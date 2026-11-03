@@ -4,7 +4,9 @@
 // Two sources, env first, file second. The file must be mode 0600 (group/other bits are refused:
 // a readable secret file is not a secret) and the value must be at least 32 characters — a short
 // `secret_token` is guessable online (QC M3: a 1-character secret was accepted).
+import { randomBytes } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
+import type { SecretStore } from '../envSecrets.store'
 
 export const TELEGRAM_WEBHOOK_SECRET_ENV = 'WEBTERM_TELEGRAM_WEBHOOK_SECRET'
 /** Points at a 0600 file holding the same value, for deployments that mount secrets. */
@@ -81,4 +83,21 @@ export function resolveWebhookSecret(
   return SECRET_SHAPE.test(secret)
     ? { ok: true, secret, source: 'file' }
     : { ok: false, reason: `${TELEGRAM_WEBHOOK_SECRET_FILE_ENV} must hold ${shapeHint}` }
+}
+
+/** True bila env menunjuk sumber secret webhook (nilai langsung atau file), valid atau tidak. */
+export function webhookSecretConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean((env[TELEGRAM_WEBHOOK_SECRET_ENV] ?? '').trim() || (env[TELEGRAM_WEBHOOK_SECRET_FILE_ENV] ?? '').trim())
+}
+
+// 24 byte -> 32 karakter base64url ([A-Za-z0-9_-]) = tepat batas bawah MIN_WEBHOOK_SECRET_CHARS.
+const GENERATED_SECRET_BYTES = 24
+
+/** Pakai secret webhook yang sudah ada di store, atau bangkitkan satu (0600) dan simpan; nilai tak pernah di-log. */
+export function ensureWebhookSecret(store: SecretStore): string {
+  const existing = store.read(TELEGRAM_WEBHOOK_SECRET_ENV)
+  if (existing && SECRET_SHAPE.test(existing)) return existing
+  const fresh = randomBytes(GENERATED_SECRET_BYTES).toString('base64url')
+  store.write(TELEGRAM_WEBHOOK_SECRET_ENV, fresh)
+  return fresh
 }

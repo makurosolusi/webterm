@@ -46,8 +46,8 @@ const ctl = (rt: BrowserRuntime, store: CapabilityStore, verb: string, token?: s
 }
 
 describe('flag off = tidak ada runtime', () => {
-  test('startBrowserRuntime mengembalikan null untuk flag kosong/off/bukan "on", tanpa membuka port', async () => {
-    for (const v of [undefined, '', 'off', '0', 'true']) {
+  test('startBrowserRuntime mengembalikan null untuk flag kosong/off/nilai tak dikenal (bukan on|1|true), tanpa membuka port', async () => {
+    for (const v of [undefined, '', 'off', '0', 'yes']) {
       const rt = await startBrowserRuntime({ env: v === undefined ? {} : { [ENV_BROWSER.enabled]: v }, webtermPort: 8700, dataRoot: '/nonexistent', secrets: createFileSecretStore('/nonexistent'), capabilities: new CapabilityStore(), workspaces: () => [] })
       expect(rt).toBeNull()
     }
