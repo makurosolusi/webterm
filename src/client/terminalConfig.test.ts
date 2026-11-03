@@ -10,6 +10,7 @@ import {
   TERMINAL_SCROLLBACK_LINES_MAX,
   TERMINAL_SCROLLBACK_LINES_MIN,
   applyLiveOptions,
+  terminalFontSize,
   terminalFontWeight,
   terminalLetterSpacing,
   terminalLineHeight,
@@ -49,6 +50,17 @@ describe('clamps', () => {
     expect(terminalMinContrast(Infinity)).toBe(1)
     expect(terminalFontWeight(NaN, 700)).toBe(700)
     expect(terminalLineHeight('1.5' as unknown as number)).toBe(1)
+  })
+})
+
+describe('fontSize', () => {
+  it('menjepit ke tabel dan menolak NaN/kosong', () => {
+    expect(terminalFontSize(6)).toBe(8)
+    expect(terminalFontSize(99)).toBe(32)
+    expect(terminalFontSize(NaN)).toBe(DEFAULT_SETTINGS.fontSize)
+    expect(terminalFontSize('' as unknown as number)).toBe(DEFAULT_SETTINGS.fontSize)
+    expect(xtermOptionsFromSettings({ ...base, fontSize: NaN }).fontSize).toBe(DEFAULT_SETTINGS.fontSize)
+    expect(xtermOptionsFromSettings(base, 99).fontSize).toBe(32)
   })
 })
 

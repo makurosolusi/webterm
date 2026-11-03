@@ -1,4 +1,5 @@
 import type { TerminalShortcutPolicy } from '../shared/settings'
+import { SETTING_RANGES } from '../shared/settings.ranges'
 import { isOutputToggleChord } from './output/outputChord'
 import { hostPlatform, isMacPlatform, type KeyPlatform } from './terminalKeys.platform'
 
@@ -196,9 +197,9 @@ export function terminalKeyAction(
 
 /* --- Zoom font per-terminal ----------------------------------------------------------------- */
 
-/** Rentang yang sama dengan yang diiklankan field font-size di Settings. */
-export const TERMINAL_FONT_SIZE_MIN = 8
-export const TERMINAL_FONT_SIZE_MAX = 28
+/** Batas zoom = batas field font-size di Settings; keduanya membaca tabel yang sama. */
+export const TERMINAL_FONT_SIZE_MIN = SETTING_RANGES.fontSize.min
+export const TERMINAL_FONT_SIZE_MAX = SETTING_RANGES.fontSize.max
 
 export type TerminalFontZoomAction = 'increase' | 'decrease' | 'reset'
 
