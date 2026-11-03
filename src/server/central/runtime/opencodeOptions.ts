@@ -4,6 +4,7 @@
 // `opencode run --format json` prints JSONL on stdout; we never pass `--auto`, so
 // the CLI cannot run its own mutating tools. Mutating tool families are also
 // denied through `OPENCODE_PERMISSION`.
+import { join } from 'node:path'
 import { flagOn } from '../../envFlag'
 
 export const CENTRAL_MODEL_FLAG = 'WEBTERM_CENTRAL_MODEL'
@@ -100,6 +101,17 @@ export function scrubOpencodeEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.P
   return out
 }
 
+/** HOME + XDG_* rooted in one webterm-owned directory, so the child never reads the user's own. */
+export function opencodeHomeEnv(homeDir: string): NodeJS.ProcessEnv {
+  return {
+    HOME: homeDir,
+    XDG_CONFIG_HOME: join(homeDir, '.config'),
+    XDG_DATA_HOME: join(homeDir, '.local', 'share'),
+    XDG_CACHE_HOME: join(homeDir, '.cache'),
+    XDG_STATE_HOME: join(homeDir, '.local', 'state'),
+  }
+}
+
 export interface OpencodeInvocation {
   executable: string
   args: string[]
@@ -113,11 +125,14 @@ export interface OpencodeInvocationOptions extends OpencodeArgvOptions {
   env?: NodeJS.ProcessEnv
   /** Future switch; defaults to `false` so mutating tools stay denied. */
   allowTools?: boolean
+  /** When set, replaces the inherited HOME/XDG_* with ones rooted here. */
+  homeDir?: string
 }
 
 /** Full child invocation: argv plus the scrubbed env with permission policy. */
 export function buildOpencodeInvocation(options: OpencodeInvocationOptions): OpencodeInvocation {
   const env = scrubOpencodeEnv(options.env ?? process.env)
+  if (options.homeDir !== undefined) Object.assign(env, opencodeHomeEnv(options.homeDir))
   env['OPENCODE_PERMISSION'] = JSON.stringify(
     options.allowTools === true
       ? { bash: 'allow', edit: 'allow', webfetch: 'allow', task: 'allow' }
