@@ -1,19 +1,67 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../vscode/test-setup'
 import Dock, { type DockProps } from '../Dock'
 import CentralControlPanel from './CentralControlPanel'
-import { centralControlApi, centralControlEnabled, CONTROL_PATH, HALT_PATH } from './centralControlApi'
+import { centralControlApi, useCentralControlEnabled, CONTROL_PATH, HALT_PATH } from './centralControlApi'
 import { fakeClient } from './centralFixtures.testutil'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('flag gate', () => {
-  it('is off unless VITE_WEBTERM_CENTRAL_CHAT is exactly on', () => {
-    expect(centralControlEnabled({})).toBe(false)
-    expect(centralControlEnabled({ VITE_WEBTERM_CENTRAL_CHAT: 'off' })).toBe(false)
-    expect(centralControlEnabled({ VITE_WEBTERM_CENTRAL_CHAT: 'on' })).toBe(true)
+  const stubEnv = (fetchImpl: () => Promise<Response>) => vi.stubGlobal('fetch', vi.fn(fetchImpl))
+  const envState = (effective: string) => new Response(JSON.stringify({
+    locked: false, rootGate: false, server: { tokenSet: false, settingsLocked: false }, groups: [],
+    entries: [{ key: 'WEBTERM_CENTRAL_CHAT', kind: 'flag', value: effective, effective }],
+  }), { status: 200 })
+
+  it('follows the server env state: on enables, off and unloaded stay off', async () => {
+    let release: (r: Response) => void = () => {}
+    stubEnv(() => new Promise<Response>((r) => { release = r }))
+    const { result } = renderHook(() => useCentralControlEnabled())
+    expect(result.current).toBe(false)
+    release(envState('on'))
+    await waitFor(() => expect(result.current).toBe(true))
+    stubEnv(async () => envState('off'))
+    const off = renderHook(() => useCentralControlEnabled())
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    expect(off.result.current).toBe(false)
+  })
+
+  it('fails closed on reject and 401', async () => {
+    for (const impl of [async () => { throw new TypeError('down') }, async () => new Response('{}', { status: 401 })]) {
+      stubEnv(impl)
+      const { result } = renderHook(() => useCentralControlEnabled())
+      await waitFor(() => expect(fetch).toHaveBeenCalled())
+      expect(result.current).toBe(false)
+    }
+  })
+
+  it('prop override wins and skips the fetch', () => {
+    stubEnv(async () => envState('on'))
+    expect(renderHook(() => useCentralControlEnabled(false)).result.current).toBe(false)
+    expect(renderHook(() => useCentralControlEnabled(true)).result.current).toBe(true)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not set state after unmount', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let release: (r: Response) => void = () => {}
+    stubEnv(() => new Promise<Response>((r) => { release = r }))
+    const { unmount } = renderHook(() => useCentralControlEnabled())
+    unmount()
+    release(envState('on'))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(err).not.toHaveBeenCalled()
+    err.mockRestore()
+  })
+
+  it('no import.meta.env in the flag files', () => {
+    for (const f of ['centralControlApi.ts', 'CentralControlPanel.tsx']) {
+      expect(readFileSync(new URL(f, import.meta.url), 'utf8')).not.toContain('import.meta.env')
+    }
   })
 
   it('flag off renders nothing even when open', () => {
