@@ -1,10 +1,11 @@
 // Registry env gabungan + kunci bootstrap. Satu pintu untuk lookup; data ada di envRegistry.*.ts.
+import { CA2_ENV_SPECS } from './envRegistry.ca2'
 import { CENTRAL_ENV_SPECS } from './envRegistry.central'
 import { CHANNEL_ENV_SPECS } from './envRegistry.channels'
 import { PLATFORM_ENV_SPECS } from './envRegistry.platform'
 import type { EnvSpec } from './envRegistry.types'
 
-export const ENV_REGISTRY: readonly EnvSpec[] = [...CHANNEL_ENV_SPECS, ...CENTRAL_ENV_SPECS, ...PLATFORM_ENV_SPECS]
+export const ENV_REGISTRY: readonly EnvSpec[] = [...CHANNEL_ENV_SPECS, ...CENTRAL_ENV_SPECS, ...CA2_ENV_SPECS, ...PLATFORM_ENV_SPECS]
 
 /** Kunci kunci-global: HANYA dari env proses, tak pernah dari Pengaturan (lihat BOOTSTRAP_ONLY_KEYS). */
 export const ENV_SETTINGS_SWITCH = 'WEBTERM_ENV_SETTINGS'
