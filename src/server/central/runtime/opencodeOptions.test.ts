@@ -8,7 +8,7 @@ import {
 describe('opencode argv', () => {
   it('builds `run --format json --model` with the prompt last', () => {
     expect(buildOpencodeArgs({ prompt: 'hello', model: 'opencode/test-model' })).toEqual([
-      'run', '--format', 'json', '--model', 'opencode/test-model', 'hello',
+      'run', '--standalone', '--format', 'json', '--model', 'opencode/test-model', 'hello',
     ])
   })
 
@@ -23,7 +23,7 @@ describe('opencode argv', () => {
     expect(
       buildOpencodeArgs({ prompt: 'more', model: 'm', sessionRef: 'ses_123', title: 'Central' })
     ).toEqual([
-      'run', '--format', 'json', '--model', 'm', '--session', 'ses_123', '--title', 'Central', 'more',
+      'run', '--standalone', '--format', 'json', '--model', 'm', '--session', 'ses_123', '--title', 'Central', 'more',
     ])
   })
 
