@@ -10,13 +10,16 @@
 //    `license`): tidak ada permukaan yang mewujudkannya di browser.
 //  - `modelGateway` / `claudeAccounts` / `codexAccounts`.
 //
-// KEAMANAN — alasan poin terakhir. Di nodeterm `settings.json` memuat kredensial dan ditulis mode
-// 0600. Di webterm settings melintas HTTP (`GET /api/settings`), jadi TIDAK ADA SATU PUN kunci di
-// bawah yang boleh memuat rahasia, dan memang tidak ada: tidak ada API key, token, baseUrl
-// bergantung-kredensial, maupun `CustomAgent.env` (lihat catatan di `CustomAgent`). Konsekuensinya
-// endpoint settings tidak butuh lapisan redaksi sama sekali. Kalau nanti ada kunci yang bisa
-// memuat rahasia, ia WAJIB ditandai di sini dan diredaksi di jalur HTTP — jangan tambahkan diam-diam.
+// KEAMANAN. Di nodeterm `settings.json` memuat kredensial dan ditulis mode 0600. Di webterm
+// settings melintas HTTP tanpa redaksi (`GET /api/settings`), jadi TIDAK ADA kunci yang boleh
+// memuat rahasia: tidak ada API key, token, atau baseUrl bergantung-kredensial. Satu-satunya
+// kunci bernilai env adalah `CustomAgent.env`, dan ia hanya boleh berisi literal NON-secret atau
+// rujukan `${env:NAME}` (nilai asli dibaca server dari env proses, tak pernah ikut GET). Kunci
+// berpola KEY|TOKEN|SECRET|PASSWORD|AUTH wajib rujukan; `customAgent.schema.ts` menolak literalnya
+// (PUT -> 400). Kalau nanti ada kunci yang bisa memuat rahasia, ia WAJIB ditandai di sini dan
+// diredaksi di jalur HTTP — jangan tambahkan diam-diam.
 
+import { normalizeCustomAgents, type CustomAgent, type CustomAgentError } from './customAgent.schema'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
@@ -34,30 +37,9 @@ export type TerminalShortcutPolicy = 'app-first' | 'terminal-first'
 export type TerminalGpuRendering = 'off' | 'auto'
 export type AppTheme = 'auto' | 'dark' | 'light'
 
-/**
- * Agent yang didefinisikan pengguna (BYO CLI), ditambahkan ke menu Add.
- *
- * `baseAgent` adalah inti fiturnya: ia membuat agent custom MEWARISI kapabilitas harness builtin
- * (resume, context link, permission mode, minting session id) lewat `capabilityAgentId`. Tanpa
- * `baseAgent`, agent custom hanya dapat spawn + judul terminal dan tidak lebih.
- *
- * `env` milik nodeterm (variabel env yang disuntikkan saat spawn) SENGAJA TIDAK ADA di sini: itu
- * satu-satunya tempat di skema ini yang akan memuat kredensial (`ANTHROPIC_AUTH_TOKEN` dst), dan
- * settings webterm melintas HTTP. Menambahkannya nanti berarti sekaligus menambahkan redaksi di
- * jalur HTTP — bukan satu field saja.
- */
-export interface CustomAgent {
-  /** Id stabil, konvensi `custom:<uuid>`. Dipakai sebagai `agentId` node. */
-  id: string
-  label: string
-  /** Perintah peluncuran dasar. Kosong saat `baseAgent` diisi berarti "pakai perintah base
-   *  harness", sehingga proxy yang kompatibel-claude butuh nol konfigurasi peluncuran. */
-  launchCmd: string
-  /** Harness builtin opsional yang kapabilitasnya diwarisi. */
-  baseAgent?: BuiltinAgentId
-  /** Warna node. Kosong = warna `baseAgent`, atau abu-abu default. */
-  color?: string
-}
+// `CustomAgent` (BYO CLI) hidup di `customAgent.schema.ts`; `baseAgent` membuatnya MEWARISI
+// kapabilitas harness builtin lewat `capabilityAgentId` (tanpa itu hanya spawn + judul terminal).
+export type { CustomAgent, CustomAgentLaunch } from './customAgent.schema'
 
 export interface Settings {
   // --- Visual xterm (live-apply: perubahan langsung diterapkan ke terminal yang terbuka) -------
@@ -244,7 +226,7 @@ const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
  * divalidasi ulang di titik pemakaian (pola `isPermissionMode` di `workspace.ts`), karena di
  * situlah konsekuensinya ada.
  */
-export function mergeSettings(saved: unknown): Settings {
+export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomAgentError[]) => void): Settings {
   const out: Settings = { ...DEFAULT_SETTINGS }
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return out
   const src = saved as Record<string, unknown>
@@ -256,5 +238,10 @@ export function mergeSettings(saved: unknown): Settings {
     if (Array.isArray(v) !== Array.isArray(d)) continue
     ;(out as unknown as Record<string, unknown>)[key] = v
   }
+  // `customAgents` disaring per elemen (mode load: buang yang rusak, tak melempar, tak menulis
+  // balik); `onInvalidAgents` memberi pemanggil server kesempatan `log.warn` tanpa isi.
+  const agents = normalizeCustomAgents(src.customAgents, 'load')
+  out.customAgents = agents.agents
+  if (agents.errors.length) onInvalidAgents?.(agents.errors)
   return out
 }

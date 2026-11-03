@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { capabilityAgentId, setCustomAgentBaseResolver } from '../shared/workspace'
-import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
+import { nextSettings, parseStored, registerAgentBaseResolver, SettingsValidationError } from './settingsStore'
 
 afterEach(() => setCustomAgentBaseResolver(null))
 
@@ -69,5 +69,32 @@ describe('registerAgentBaseResolver', () => {
       })
     )
     expect(capabilityAgentId('codex')).toBe('codex')
+  })
+})
+
+describe('nextSettings customAgents strict', () => {
+  const bad = { id: 'custom:b', label: 'B', launchCmd: '', launch: { program: 'bash' } }
+
+  it('melempar SettingsValidationError berisi galat per field, tanpa memuat nilai', () => {
+    let caught: unknown
+    try { nextSettings(null, { customAgents: [bad] }) } catch (e) { caught = e }
+    expect(caught).toBeInstanceOf(SettingsValidationError)
+    expect((caught as SettingsValidationError).errors).toEqual([{ index: 0, field: 'launch.program', code: 'forbidden_program' }])
+  })
+
+  it('patch tanpa customAgents tidak divalidasi; yang sah diterima', () => {
+    const stored = JSON.stringify({ customAgents: [{ id: 'custom:a', label: 'A', launchCmd: '' }] })
+    expect(nextSettings(stored, { fontSize: 20 }).customAgents).toHaveLength(1)
+    const ok = { id: 'custom:c', label: 'C', launchCmd: '', launch: { program: 'agent' }, centralSpawn: true }
+    expect(nextSettings(null, { customAgents: [ok] }).customAgents).toEqual([ok])
+  })
+
+  it('customAgents non-array dibuang diam-diam seperti kunci salah-bentuk lain', () => {
+    expect(nextSettings(null, { customAgents: { not: 'an array' } }).customAgents).toEqual([])
+  })
+
+  it('load: entri rusak di store dibuang tanpa melempar', () => {
+    const stored = JSON.stringify({ customAgents: [bad, { id: 'custom:a', label: 'A', launchCmd: '' }] })
+    expect(parseStored(stored).customAgents.map((a) => a.id)).toEqual(['custom:a'])
   })
 })

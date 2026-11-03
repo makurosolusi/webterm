@@ -187,4 +187,17 @@ describe('buildCanvasMenuRows — penyambungan aksi', () => {
     sub.find((c) => c.key === 'agent:custom:a1')?.onClick?.()
     expect(h.addAgent).toHaveBeenCalledWith('my-proxy --tui', 'custom:a1')
   })
+
+  it('custom ber-baseAgent tanpa launchCmd mengirim perintah base (termasuk override)', () => {
+    const h = handlers()
+    const customAgents = [{ id: 'custom:a2', label: 'Proxy', launchCmd: '', baseAgent: 'claude' as const }]
+    const click = (cmds: CanvasMenuContext['agentLaunchCommands']) => {
+      const rows = buildCanvasMenuRows(h, ctx({ customAgents, agentLaunchCommands: cmds }))
+      ;(item(rows, 'agent-group').children ?? []).find((c) => c.key === 'agent:custom:a2')?.onClick?.()
+    }
+    click({})
+    expect(h.addAgent).toHaveBeenLastCalledWith('claude', 'custom:a2')
+    click({ claude: 'claude-work' })
+    expect(h.addAgent).toHaveBeenLastCalledWith('claude-work', 'custom:a2')
+  })
 })

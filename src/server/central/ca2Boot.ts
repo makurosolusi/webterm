@@ -16,9 +16,10 @@ import { createMemoryFilePort } from '../memory/memoryFilePath'
 import { createUserMemoryStore, userMemoryRoot } from '../memory/memoryUserStore'
 import { projectRepo, resolveWorktrees, worktreeRoot } from '../orchestratorRunProduction'
 import { type SessionsLike, createSessionsPort } from '../orchestrator/workerRuntimeSession'
-import { AGENT_CONFIG, type BuiltinAgentId } from '../../shared/workspace'
+import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
 import { type BrowserBootSources, createBrowserToolDeps } from './ca2Boot.browser'
 import { createAgentExecutor, type AgentExecutor } from './agents/agentExecutor'
+import { type AgentCatalog, createAgentCatalog, DEFAULT_DENY_ROOTS } from './agents/agentCatalog'
 import { createAgentHost } from './agents/agentHost'
 import { resumeApprovedAgents } from './agents/agentResume'
 import { createMailDeliver } from './agents/mailDeliver'
@@ -29,6 +30,7 @@ import { activeCa2, setActiveCa2 } from './ca2Active'
 import { reconcileTurns } from './chat/turnReconciler'
 import { createSkillStore, type SkillAdminStore } from './skills/skillStore'
 import { defaultRegistry } from './tools/defaultRegistry'
+import { createAgentKindsDef } from './tools/defs/agentKinds.defs'
 import { registerCa2Tools, toolsHash } from './tools/registerAll'
 import type { SyncMemoryBlockProvider } from './context/contextAssembler'
 
@@ -65,6 +67,8 @@ export interface Ca2BootOptions {
   registry?: ReturnType<typeof defaultRegistry>
   /** Test seam: capability store + browser runtime lookup for the browser tools (default: process singletons). */
   browser?: BrowserBootSources
+  /** User settings for launch overrides (`agentLaunchCommands`, `customAgents`); absent = defaults, i.e. no overrides. */
+  settings?: () => Settings
   /** Test seam: skip the resume timer. */
   noTimer?: boolean
 }
@@ -93,18 +97,13 @@ export interface Ca2Handle {
 
 export { activeCa2, setActiveCa2 }
 
-function launchLineOf(kind: string): string {
-  const config = (AGENT_CONFIG as Record<string, { launchCmd: string } | undefined>)[kind as BuiltinAgentId]
-  if (!config) throw new Error(`unknown agent kind: ${kind}`)
-  return config.launchCmd
-}
-
-function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGuard, env: Env, now: () => number, dir: string): AgentExecutor | null {
+function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGuard, env: Env, now: () => number, dir: string): { executor: AgentExecutor; catalog: AgentCatalog } | null {
   const deps = { ledger: opts.runtime, dataDir: () => dir }
   const wt = resolveWorktrees(deps, worktreeRoot(deps))
   if (!wt.ok) { log.warn('ca2.worktrees_unavailable', 'agent worktree root unavailable; agents disabled'); return null }
-  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), launchLine: launchLineOf })
-  return createAgentExecutor({ db, guard, host, now, env })
+  const catalog = createAgentCatalog({ settings: opts.settings ?? (() => DEFAULT_SETTINGS), denyRoots: () => [...DEFAULT_DENY_ROOTS, worktreeRoot(deps)] })
+  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), catalog })
+  return { executor: createAgentExecutor({ db, guard, host, now, env }), catalog }
 }
 
 function buildSkills(db: Database, root: string, now: () => number): SkillAdminStore | null {
@@ -128,7 +127,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   const dir = opts.dataDirPath ?? dataDir()
   const guard = createControlGuard({ db, now, env })
   const agentsOn = AGENT_MODES.includes((env.WEBTERM_CENTRAL_AGENTS ?? '').trim().toLowerCase())
-  const executor = agentsOn ? buildExecutor(opts, db, guard, env, now, dir) : null
+  const built = agentsOn ? buildExecutor(opts, db, guard, env, now, dir) : null
+  const executor = built?.executor ?? null
   const skills = flagOn(env.WEBTERM_CENTRAL_SKILLS) || flagOn(env.WEBTERM_CENTRAL_SKILL_PROPOSE) ? buildSkills(db, join(dir, SKILLS_SUBDIR), now) : null
   const userStore = createUserMemoryStore(createMemoryFilePort(userMemoryRoot(env, dir)))
   const sessions = createSessionsPort(opts.sessions)
@@ -147,6 +147,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     ...(browser ? { browser } : {}),
     ...(opts.bots ? { bots: { manager: () => opts.bots ?? null, consumeApproval: (id: string, digest: string) => consumeApproval({ db, now }, id, { digest }) } } : {}),
   }, env)
+  // `agent.kinds` is registered here (not in registerAll) because it needs the catalog built with the executor.
+  if (built && !registry.get('agent.kinds')) { registry.register(createAgentKindsDef(built.catalog)); toolNames.push('agent.kinds') }
   const hash = toolsHash(registry)
   const handle: Ca2Handle = {
     db, env, now, guard, executor, skills, skillsRoot: join(dir, SKILLS_SUBDIR), memory: createMemoryBlockProvider(db, { now }) as SyncMemoryBlockProvider, toolNames, toolsHash: hash,

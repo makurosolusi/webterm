@@ -55,9 +55,9 @@ const OLD_ADD_AGENT_MINTS_SID = 'sessionId: crypto.randomUUID()'
  *  App → AgentNode tidak bisa dirender. Diambil sampai `]` penutup useCallback-nya. */
 const addAgentBody = (s: string) => {
   const i = s.indexOf('const onAddAgent = useCallback(')
-  const j = s.indexOf('}, [addFlowNode])', i)
+  const j = s.indexOf('}, [addFlowNode', i)
   expect(i, 'onAddAgent tidak ditemukan di App*.ts(x)').toBeGreaterThan(-1)
-  expect(j, 'badan onAddAgent tidak berujung di [addFlowNode]').toBeGreaterThan(i)
+  expect(j, 'badan onAddAgent tidak berujung di dep array yang diawali [addFlowNode').toBeGreaterThan(i)
   return s.slice(i, j)
 }
 const mintsSidAtCreation = (s: string) => /sessionId:\s*crypto\.randomUUID\(\)/.test(s)

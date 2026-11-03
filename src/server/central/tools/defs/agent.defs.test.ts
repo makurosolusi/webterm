@@ -19,7 +19,7 @@ function setup(decide: () => GuardDecision = () => ({ verdict: 'allow', level: '
     breaker: { allow: () => ({ allowed: true, state: 'closed' }), trip: () => 'closed', recordSuccess: () => undefined },
   }
   const host: AgentHost = {
-    runnerFor: () => 'pty', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'go',
+    runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'go',
     openPty: async (_a, _cwd, nodeId) => { sessions.add(nodeId) }, headlessArgv: () => null,
     send: async (_n, t) => { sent.push(t) }, scrollback: async () => ['a', 'b', 'c'], closePty: async (n) => { sessions.delete(n) }, hasSession: (n) => sessions.has(n),
   }
