@@ -67,7 +67,7 @@ export interface DockProps {
   /** Override perintah peluncuran per builtin (mis. skrip pemilih akun). Hanya builtin: agent
    *  custom sudah membawa `launchCmd`-nya sendiri. */
   agentLaunchCommands?: Partial<Record<BuiltinAgentId, string>>
-  /** Membuka dialog Settings. Tombolnya (di bawah Add node) hanya ada bila handler diberikan; ia
+  /** Membuka dialog Settings. Tombolnya (grup bawah rail, di atas Lock view) hanya ada bila handler diberikan; ia
    *  membuka dialog modal, jadi tidak pernah ditandai aktif oleh `activeActivityId`. */
   onOpenSettings?: () => void
   /** Item status bar tambahan (mis. hitungan Output); duduk di ujung kiri grup kanan. */
@@ -83,6 +83,7 @@ const ADD_BROWSER_ID = 'browser'
 const ADD_WORKSPACE_ID = 'workspace'
 const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
+const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
 
 /** Glyph codicon (font ikon VS Code, dimuat di `main.tsx`); ukurannya diatur CSS per wadah. */
 const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden />
@@ -293,9 +294,6 @@ export default function Dock(props: DockProps) {
       : []),
     { id: 'board', label: 'Board', icon: codicon('project') },
     { id: 'add', label: 'Add node', icon: codicon('add') },
-    ...(props.onOpenSettings
-      ? [{ id: 'settings', label: 'Settings', icon: codicon('settings-gear') }]
-      : []),
   ]
 
   const onActivitySelect = (id: string) => {
@@ -316,10 +314,7 @@ export default function Dock(props: DockProps) {
         props.onToggleBoard()
         break
       case 'add':
-        setAddOpen(true)
-        break
-      case 'settings':
-        props.onOpenSettings?.()
+        setAddOpen((open) => !open)
         break
       default:
         break
@@ -336,9 +331,21 @@ export default function Dock(props: DockProps) {
           ariaLabel="Activity bar"
         />
 
-        {/* Dua toggle MODE: lock pandangan dan clean view. Keduanya butuh `aria-pressed`, yang
-            tidak dimiliki item navigasi activity bar. */}
+        {/* Grup bawah (ala "Manage" VS Code): Settings membuka dialog; lock dan clean view adalah
+            toggle ber-`aria-pressed`, yang tidak dimiliki item navigasi activity bar. */}
         <div className="dock__modes" data-slot="dock-modes">
+          {props.onOpenSettings && (
+            <button
+              type="button"
+              className="vscode-activity-bar__item dock-btn"
+              aria-label="Settings"
+              title="Settings"
+              onClick={props.onOpenSettings}
+            >
+              <span className="vscode-activity-bar__icon" aria-hidden>{codicon('settings-gear')}</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="vscode-activity-bar__item dock-btn"
@@ -365,6 +372,7 @@ export default function Dock(props: DockProps) {
         <VscodeQuickPick
           open={addOpen}
           onClose={closeAdd}
+          triggerSelector={ADD_TRIGGER_SELECTOR}
           ariaLabel="Add node"
           placeholder="Select a node type to add"
           emptyText="No matching node types"
