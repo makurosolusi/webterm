@@ -64,3 +64,18 @@ export const COOKIE_TEXT = {
     generic: 'Something went wrong. Try again.',
   },
 } as const
+
+export const ZOOM_TEXT = {
+  out: 'Perkecil halaman',
+  in: 'Perbesar halaman',
+  level: 'Tingkat zoom halaman',
+} as const
+
+export const START_TEXT = {
+  page: 'Halaman awal browser',
+  searchLabel: 'Cari atau ketik alamat',
+  searchPlaceholder: 'Cari di Google atau ketik URL',
+  shortcuts: 'Pintasan',
+  recent: 'Terbaru',
+  open: (name: string) => `Buka ${name}`,
+} as const

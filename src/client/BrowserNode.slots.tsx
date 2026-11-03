@@ -26,7 +26,7 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   }, [p.id, rf])
   return (
     <>
-      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} />
+      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} zoom={ctx.zoom} onZoom={ctx.stepZoom} />
       {status?.cookieImportEnabled && (
         <>
           <Button size="xs" variant="ghost" className="nodrag self-start" onClick={() => setCookiesOpen(true)}>{COOKIE_TEXT.title}</Button>
