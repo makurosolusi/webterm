@@ -38,6 +38,14 @@ describe('open', () => {
     expect(callsOf(CDP.navigate)[0]).toMatchObject({ params: { url: 'https://example.com/' }, sessionId: SID })
   })
 
+  it('forces focus emulation + bringToFront on the page session so Chrome never treats it as hidden', async () => {
+    await openLive()
+    expect(callsOf(CDP.setFocusEmulation)[0]).toMatchObject({ params: { enabled: true }, sessionId: SID })
+    expect(callsOf(CDP.bringToFront)[0].sessionId).toBe(SID)
+    const m = rig.fake.methods()
+    expect(m.indexOf(CDP.setFocusEmulation)).toBeLessThan(m.indexOf(CDP.navigate))
+  })
+
   it('denies downloads and every device permission once per connection', async () => {
     await openLive()
     expect(callsOf(CDP.setDownloadBehavior)[0].params).toMatchObject({ behavior: 'deny' })

@@ -78,6 +78,10 @@ export async function createPageTarget(cdp: CdpClient, vp: NodeRec['viewport']):
   const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })
   await cdp.send(CDP.pageEnable, {}, sessionId)
   await cdp.send(CDP.setDeviceMetrics, metricsParams(vp.w, vp.h, vp.dpr), sessionId)
+  // Tab di jendela headless tanpa fokus dianggap hidden/tak fokus oleh Chrome -> rAF, resize, dan screencast berhenti (beku).
+  // Paksa fokus + tampil agar halaman selalu dianggap terlihat selama node hidup.
+  await cdp.send(CDP.setFocusEmulation, { enabled: true }, sessionId)
+  await cdp.send(CDP.bringToFront, {}, sessionId)
   return { targetId, sessionId }
 }
 
