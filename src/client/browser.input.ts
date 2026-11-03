@@ -17,6 +17,7 @@ const LINE_PX = 16 // satu "baris" wheel DOM (deltaMode 1) dalam CSS px
 const DELTA_LINE = 1
 const DELTA_PAGE = 2
 const IME_KEYCODE = 229 // keydown yang diklaim IME
+const MOVE_INTERVAL_MS = 16 // ~satu mousemove per frame ke server
 const DOUBLE_CLICK_MS = 500
 const DOUBLE_CLICK_PX = 5
 const TEXT_CHUNK_CHARS = TEXT_MAX_BYTES / 4 // <= 4 byte utf8 per char -> selalu muat batas pesan
@@ -107,4 +108,32 @@ export function chunkText(text: string, max = TEXT_CHUNK_CHARS): string[] {
     i = end
   }
   return out
+}
+
+export interface MoveCoalescer { move(m: MouseInput): void; flush(): void; dispose(): void }
+
+/** Batasi mousemove (leading + trailing, satu per interval); `flush` mengirim move tertunda SEBELUM down/up/wheel agar urutan terjaga. */
+export function makeMoveCoalescer(send: (m: MouseInput) => void, intervalMs = MOVE_INTERVAL_MS): MoveCoalescer {
+  let pending: MouseInput | null = null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const tick = () => {
+    timer = undefined
+    if (!pending) return
+    const p = pending
+    pending = null
+    send(p)
+    timer = setTimeout(tick, intervalMs)
+  }
+  return {
+    move(m) {
+      if (timer === undefined) { send(m); timer = setTimeout(tick, intervalMs) } else pending = m
+    },
+    flush() {
+      if (!pending) return
+      const p = pending
+      pending = null
+      send(p)
+    },
+    dispose() { clearTimeout(timer); timer = undefined; pending = null },
+  }
 }

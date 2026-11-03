@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { TouchPoint } from '../shared/browser.contract'
 import { parseClientMsg } from '../shared/browser.wire'
-import { chunkText, classifyKey, keyMsg, makeClickCounter, modsOf, mouseMsg, touchMsg, wheelMsg } from './browser.input'
+import { chunkText, classifyKey, keyMsg, makeClickCounter, makeMoveCoalescer, modsOf, mouseMsg, touchMsg, wheelMsg } from './browser.input'
 import type { KeyLike, PointerLike, WheelLike } from './browser.input'
 
 const noMods = { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }
@@ -97,5 +97,25 @@ describe('browser.input', () => {
     expect(next(100, 100)).toBe(1)
     t = 1000
     expect(next(100, 100)).toBe(1)
+  })
+
+  it('makeMoveCoalescer: move dibatasi per interval, trailing terkirim, flush mendahului up', () => {
+    vi.useFakeTimers()
+    try {
+      const sent: Array<[string, number]> = []
+      const c = makeMoveCoalescer((m) => sent.push([m.type, m.x]), 16)
+      const mv = (x: number) => ({ ...mouseMsg('move', ptr(), { left: 0, top: 0, width: 800, height: 600 }, VP)!, x })
+      c.move(mv(1)); c.move(mv(2)); c.move(mv(3))
+      expect(sent).toEqual([['move', 1]]) // leading langsung, sisanya digabung
+      vi.advanceTimersByTime(16)
+      expect(sent).toEqual([['move', 1], ['move', 3]]) // trailing = move terakhir
+      c.move(mv(4)); c.move(mv(5))
+      c.flush() // ala mouseup: move terakhir keluar sebelum up
+      sent.push(['up', 0])
+      expect(sent.slice(-2)).toEqual([['move', 5], ['up', 0]])
+      vi.advanceTimersByTime(100)
+      expect(sent).toHaveLength(4) // tak ada kiriman ganda setelah flush
+      c.dispose()
+    } finally { vi.useRealTimers() }
   })
 })
