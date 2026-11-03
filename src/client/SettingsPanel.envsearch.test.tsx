@@ -34,6 +34,9 @@ vi.mock('./useEnvSettings', async () => {
   }
 })
 
+// Konfigurasi Telegram di tab Channels punya tes sendiri; di sini hanya navigasi hasil cari.
+vi.mock('./ChannelsTelegramConfig', () => ({ ChannelsTelegramConfig: () => null }))
+
 vi.mock('./EnvSection', async () => {
   const React = await import('react')
   const { useEnvSettingsContext } = await import('./useEnvSettings')

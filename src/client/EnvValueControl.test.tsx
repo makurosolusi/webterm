@@ -87,10 +87,8 @@ describe('EnvValueControl', () => {
     expect((screen.getByRole('textbox') as HTMLInputElement).placeholder).toBe('<dataDir>/memory')
   })
 
-  it('hint Channels menyebut nama var yang benar', () => {
-    expect(CH.inactiveHint).toContain('WEBTERM_TELEGRAM=on')
-    expect(CH.inactiveHint).toContain('WEBTERM_TELEGRAM_BOT_TOKEN')
-    expect(CH.inactiveHint).toContain('Atur di Settings > Fitur & server (sementara) lalu restart')
-    expect(CH.inactiveHint.replace('WEBTERM_TELEGRAM_BOT_TOKEN', '')).toContain('alias lama: TELEGRAM_BOT_TOKEN')
+  it('hint Channels menunjuk bagian konfigurasi di tab sendiri, bukan Environment', () => {
+    expect(CH.inactiveHint).toContain('Nyalakan Telegram dan isi Token bot di bagian ini')
+    expect(CH.inactiveHint).not.toContain('Fitur & server')
   })
 })
