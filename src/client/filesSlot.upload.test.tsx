@@ -70,6 +70,15 @@ describe('capabilities', () => {
     expect(ev.defaultPrevented).toBe(false)
     expect(FakeXhr.calls).toHaveLength(0)
   })
+  it('capabilities melempar sinkron: slot tidak crash, galat dicatat, tanpa menu upload', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fs.capabilities.mockImplementation(() => { throw new Error('mock tanpa export') })
+    render(<Host ctx={mkCtx({ selection: ['a.txt'] })} />)
+    await settle()
+    expect(screen.getByTestId('node')).toBeTruthy()
+    expect(uploadSlot.menu?.(mkCtx({ selection: ['a.txt'] }))).toEqual([])
+    expect(err).toHaveBeenCalled()
+  })
   it('capabilities gagal (fail-closed) -> sama dengan off', async () => {
     fs.capabilities.mockResolvedValue(caps({ upload: false, viewers: false }))
     render(<Host ctx={mkCtx()} />)
