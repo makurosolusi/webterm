@@ -1,6 +1,7 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
+import { getDotenvBoot, PTY_KEEP_FROM_DOTENV } from './dotenvFiles'
 import { createLogger } from './logs'
 
 const log = createLogger('pty')
@@ -84,18 +85,24 @@ export function resolveCwd(
  *  server adalah token ROOT (satu-satunya pembuka API manusia), dan mewariskannya ke shell/agent mana
  *  pun membuat setiap anak memegang kunci penuh. Nilai yang memang dibutuhkan sebuah node di-inject
  *  eksplisit oleh pemanggil sesudah filter ini (lihat env `open` di `sessions.ts`): token node untuk
- *  agent, `NODETERM_NODE_ID`/`NODETERM_PORT` untuk sesi context-capable. */
-const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*|WEBTERM_.*|NODETERM_.*)$/
+ *  agent, `NODETERM_NODE_ID`/`NODETERM_PORT` untuk sesi context-capable.
+ *
+ *  `TELEGRAM_BOT_TOKEN` disapu tanpa syarat: bot token tak punya konsumen di shell/agent. */
+const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*|WEBTERM_.*|NODETERM_.*|TELEGRAM_BOT_TOKEN)$/
 
 /** Env anak. `TERM` LOAD-BEARING: bentuk inline `terminal` tidak menerima `name`, jadi env inilah
  *  satu-satunya yang memberi tahu program di dalam PTY tipe terminalnya (tanpa itu `dumb`).
- *  `interactive` (shell biasa, tanpa `cmd`) menambah identitas terminal; jalur agent tak disentuh. */
+ *  `interactive` (shell biasa, tanpa `cmd`) menambah identitas terminal; jalur agent tak disentuh.
+ *  `strip` = kunci asal `.env` (provenance boot): disapu, kecuali yang `keep` (kunci provider + OS). */
 export function ptyEnv(
   source: NodeJS.ProcessEnv,
-  opts: { interactive: boolean; platform?: string }
+  opts: { interactive: boolean; platform?: string; strip?: ReadonlySet<string>; keep?: (key: string) => boolean }
 ): Record<string, string> {
+  const { strip = getDotenvBoot().keys, keep = PTY_KEEP_FROM_DOTENV } = opts
   const env: Record<string, string> = {}
-  for (const [k, v] of Object.entries(source)) if (v !== undefined && !LEAKED_ENV.test(k)) env[k] = v
+  for (const [k, v] of Object.entries(source)) {
+    if (v !== undefined && !LEAKED_ENV.test(k) && !(strip.has(k) && !keep(k))) env[k] = v
+  }
   env.TERM = 'xterm-256color'
   if (opts.interactive) {
     env.TERM_PROGRAM = 'webterm'
