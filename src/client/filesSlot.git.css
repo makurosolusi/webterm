@@ -1,0 +1,9 @@
+/* Dekorasi git node files: warna hanya dari token VS Code (tanpa literal warna). */
+.files-git--M, .files-git--M .files-badge { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
+.files-git--A, .files-git--A .files-badge { color: var(--vscode-gitDecoration-addedResourceForeground); }
+.files-git--D, .files-git--D .files-badge { color: var(--vscode-gitDecoration-deletedResourceForeground); }
+.files-git--U, .files-git--U .files-badge { color: var(--vscode-gitDecoration-untrackedResourceForeground); }
+.files-git--C, .files-git--C .files-badge { color: var(--vscode-gitDecoration-conflictingResourceForeground); }
+.files-git--R, .files-git--R .files-badge {
+  color: var(--vscode-gitDecoration-renamedResourceForeground, var(--vscode-gitDecoration-addedResourceForeground));
+}
