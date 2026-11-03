@@ -1,4 +1,42 @@
-// STUB(WS-FM-07): slot watch (fswatch + refresh saat fsdirty). Kosong sampai WS-07.
-import type { FilesSlot } from './filesSlots'
+// Slot watch (WS-FM-07, flag WATCH): berlangganan perubahan direktori node ke server dan memuat ulang
+// listing saat ada perubahan dari luar. Mutasi lokal (origin 'local') sudah me-refresh sendiri.
+import { useEffect, useRef } from 'react'
+import type { FilesSlot, FilesSlotCtx } from './filesSlots'
+import { onFsEvent } from './fsEvents'
+import { capabilities } from './fsClient'
+import { send } from './ws'
 
-export const watchSlot: FilesSlot = { id: 'watch' }
+// Beberapa node bisa membuka dir yang sama, sedangkan server menghitung langganan per KLIEN ws:
+// fswatch dikirim pada 0->1 dan fsunwatch pada 1->0.
+const subscribers = new Map<string, number>()
+function useWatchDir(ctx: FilesSlotCtx): void {
+  const { dir } = ctx
+  const refreshRef = useRef(ctx.refresh)
+  refreshRef.current = ctx.refresh
+  useEffect(() => {
+    let live = true
+    let subscribed = false
+    // ponytail: satu GET capabilities per mount/ganti dir (tanpa cache); cache bersama bila terasa boros.
+    Promise.resolve().then(() => capabilities()).then(({ watch }) => {
+      if (!live || !watch) return
+      subscribed = true
+      const n = (subscribers.get(dir) ?? 0) + 1
+      subscribers.set(dir, n)
+      if (n === 1) send({ t: 'fswatch', dir })
+    }).catch((err: unknown) => console.warn(`filesSlot.watch: capabilities gagal untuk ${dir}`, err))
+    const off = onFsEvent((e) => {
+      if (e.kind === 'dirty' && e.origin === 'remote' && e.path === dir) refreshRef.current()
+    })
+    return () => {
+      live = false
+      off()
+      if (!subscribed) return
+      const n = (subscribers.get(dir) ?? 1) - 1
+      if (n > 0) { subscribers.set(dir, n); return }
+      subscribers.delete(dir)
+      send({ t: 'fsunwatch', dir })
+    }
+  }, [dir])
+}
+
+export const watchSlot: FilesSlot = { id: 'watch', useSlot: useWatchDir }
