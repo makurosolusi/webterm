@@ -1,0 +1,35 @@
+/* Panel kontrol Central Agent v2: hanya variabel tema VS Code, tanpa warna literal. */
+.ccp-body { padding: 8px 16px; overflow-y: auto; color: var(--vscode-foreground); font-size: 13px; line-height: 20px; }
+.ccp-body :focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.ccp-section h3 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
+.ccp-privacy { margin: 0 0 8px; padding: 4px 8px; border-left: 3px solid var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); }
+.ccp-error { color: var(--vscode-errorForeground); margin: 4px 0; }
+.ccp-ok { color: var(--vscode-testing-iconPassed, var(--vscode-foreground)); margin: 4px 0; }
+.ccp-kv { display: grid; grid-template-columns: max-content 1fr; gap: 0 12px; margin: 4px 0; }
+.ccp-kv dt { color: var(--vscode-descriptionForeground); }
+.ccp-kv dd { margin: 0; }
+.ccp-kv__row { display: contents; }
+.ccp-meter { display: grid; grid-template-columns: 80px 160px 1fr; align-items: center; gap: 8px; }
+.ccp-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px; border: 1px solid var(--vscode-inputValidation-errorBorder); background: var(--vscode-editorWidget-background); }
+.ccp-confirm p { flex-basis: 100%; margin: 0; }
+.ccp-list { list-style: none; margin: 0; padding: 0; }
+.ccp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 22px; padding: 2px 0; border-bottom: 1px solid var(--vscode-panel-border); }
+.ccp-row__main { flex: 1 1 200px; }
+.ccp-row__meta { color: var(--vscode-descriptionForeground); }
+.ccp-row__actions { display: inline-flex; gap: 4px; }
+.ccp-relay { flex-basis: 100%; display: flex; gap: 8px; }
+.ccp-relay input { flex: 1; }
+.ccp-card { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; background: var(--vscode-editorWidget-background); }
+.ccp-card[data-tier='R3'] { border-color: var(--vscode-inputValidation-errorBorder); }
+.ccp-card header, .ccp-card footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ccp-card footer { margin-top: 8px; }
+.ccp-summary { margin: 6px 0; }
+.ccp-badge { padding: 0 6px; border-radius: 8px; font-size: 11px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+.ccp-badge--warn { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
+.ccp-confirm-input { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.ccp-diff { max-height: 240px; overflow: auto; margin: 6px 0; padding: 6px; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; background: var(--vscode-textCodeBlock-background); }
+.ccp-diff--add { color: var(--vscode-gitDecoration-addedResourceForeground); }
+.ccp-diff--del { color: var(--vscode-gitDecoration-deletedResourceForeground); }
+.ccp-table { width: 100%; border-collapse: collapse; }
+.ccp-table th, .ccp-table td { text-align: left; padding: 2px 8px; border-bottom: 1px solid var(--vscode-panel-border); vertical-align: top; overflow-wrap: anywhere; }
+.ccp-confirm-input input, .ccp-confirm input { width: 16rem; }

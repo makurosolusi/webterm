@@ -34,6 +34,9 @@ export interface DockProps {
    *  itemnya hanya dirender ketika integrator menyediakan handler. */
   chatOpen?: boolean
   onToggleChat?: () => void
+  /** Panel kontrol Central (flag WEBTERM_CENTRAL_CHAT): itemnya hanya dirender bila handler ada. */
+  centralOpen?: boolean
+  onToggleCentral?: () => void
   /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;
    *  dock tidak pernah memanggil `fetch` sendiri. */
   inboxUnread?: number
@@ -87,6 +90,7 @@ function activeActivityId(props: DockProps): string | null {
   if (props.sessionsOpen) return 'sessions'
   if (props.inboxOpen) return 'inbox'
   if (props.chatOpen) return 'chat'
+  if (props.centralOpen) return 'central'
   if (props.boardOpen) return 'board'
   return null
 }
@@ -278,6 +282,9 @@ export default function Dock(props: DockProps) {
     ...(props.onToggleChat
       ? [{ id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion') }]
       : []),
+    ...(props.onToggleCentral
+      ? [{ id: 'central', label: 'Toggle central control panel', icon: codicon('shield') }]
+      : []),
     { id: 'board', label: 'Board', icon: codicon('project') },
     { id: 'add', label: 'Add node', icon: codicon('add') },
     ...(props.onOpenSettings
@@ -295,6 +302,9 @@ export default function Dock(props: DockProps) {
         break
       case 'chat':
         props.onToggleChat?.()
+        break
+      case 'central':
+        props.onToggleCentral?.()
         break
       case 'board':
         props.onToggleBoard()
