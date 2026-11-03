@@ -20,6 +20,7 @@
 // diredaksi di jalur HTTP — jangan tambahkan diam-diam.
 
 import { normalizeCustomAgents, type CustomAgent, type CustomAgentError } from './customAgent.schema'
+import { clampSetting, SETTING_RANGES, type RangedKey } from './settings.ranges'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
@@ -236,7 +237,12 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
     const d = DEFAULT_SETTINGS[key]
     if (typeof v !== typeof d) continue
     if (Array.isArray(v) !== Array.isArray(d)) continue
-    ;(out as unknown as Record<string, unknown>)[key] = v
+    // Angka dijepit ke rentang tabel (muat dari DB maupun PUT): nilai di luar rentang jadi batasnya,
+    // NaN jadi default. Kunci number tanpa entri tabel digagalkan tes, bukan dilewatkan diam-diam.
+    ;(out as unknown as Record<string, unknown>)[key] =
+      typeof v === 'number' && key in SETTING_RANGES
+        ? clampSetting(key as RangedKey, v, d as number)
+        : v
   }
   // `customAgents` disaring per elemen (mode load: buang yang rusak, tak melempar, tak menulis
   // balik); `onInvalidAgents` memberi pemanggil server kesempatan `log.warn` tanpa isi.

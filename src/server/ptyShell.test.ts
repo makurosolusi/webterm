@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { logBus } from './logs'
 import { ptyEnv, resolveCwd, resolveShell, shellArgv } from './ptyShell'
 
 const only = (...present: string[]) => (bin: string) => present.includes(bin)
@@ -92,5 +93,25 @@ describe('ptyEnv', () => {
   it('jalur agent tidak mendapat TERM_PROGRAM/COLORTERM/LANG tambahan', () => {
     const env = ptyEnv({ PATH: '/x' }, { interactive: false })
     expect(env).toEqual({ PATH: '/x', TERM: 'xterm-256color' })
+  })
+})
+
+describe('resolveShell: warn path hilang', () => {
+  it('warn SEKALI per path yang hilang, meski dipanggil berulang', () => {
+    const missing = '/tmp/st-no-such-shell-warn-once'
+    const count = () => logBus.query({}).filter((e) => e.event === 'pty.shell_missing' && e.data?.shell === missing).length
+    const opts = { envShell: '', platform: 'linux', exists: only('/bin/bash') }
+    expect(resolveShell(missing, opts)).toBe('/bin/bash')
+    expect(resolveShell(missing, opts)).toBe('/bin/bash')
+    expect(count()).toBe(1)
+    const e = logBus.query({}).find((x) => x.data?.shell === missing)
+    expect(e).toMatchObject({ level: 'warn', data: { shell: missing, fallback: '/bin/bash' } })
+  })
+
+  it('tidak warn bila setting valid atau kosong', () => {
+    const before = logBus.query({}).filter((e) => e.event === 'pty.shell_missing').length
+    resolveShell('/bin/bash', { envShell: '', platform: 'linux', exists: only('/bin/bash') })
+    resolveShell('  ', { envShell: '', platform: 'linux', exists: only('/bin/bash') })
+    expect(logBus.query({}).filter((e) => e.event === 'pty.shell_missing').length).toBe(before)
   })
 })

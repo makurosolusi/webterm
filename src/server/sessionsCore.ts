@@ -1,6 +1,7 @@
 import type { ServerMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
+import { clampSetting } from '../shared/settings.ranges'
 import { STALE_SWEEP_MS } from '../shared/agentStale'
 import { NodeRegistry, tailOutputBytes, type NodeExit } from './nodeRegistry'
 import { OutputLog } from './outputLog'
@@ -24,10 +25,10 @@ export class SessionsCore {
   constructor(public options: SessionsOptions = {}) {}
 
   /** Batas scrollback efektif. Nilai settings bisa diedit tangan / datang lewat HTTP, jadi
-   *  divalidasi di titik pemakaian; nilai tak masuk akal jatuh ke default. */
+   *  divalidasi di titik pemakaian: tak sah -> default, di luar rentang tabel -> dijepit (bukan
+   *  hanya `n > 0`, supaya 1 byte atau 1e12 tidak lolos ke ring buffer). */
   protected get scrollbackBytes(): number {
-    const n = this.options.scrollbackBytes
-    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : DEFAULT_SETTINGS.scrollbackBytes
+    return clampSetting('scrollbackBytes', this.options.scrollbackBytes, DEFAULT_SETTINGS.scrollbackBytes)
   }
 
   protected now(): number {
