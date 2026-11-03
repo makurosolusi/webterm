@@ -52,6 +52,9 @@
 - `npm run test:bun` runs the Bun-only tests with `--no-env-file`, so a developer `.env` cannot change results.
 
 ### Changed
+- Settings now exposes seven capabilities with one on/off switch each (applied immediately, no restart) instead of environment keys; the Environment and Channels tabs are removed.
+- The ledger is always on, settings changes without a token need a same-origin `Origin` header (scripts use the token), and Worker approval defaults to on. Telegram setup is "paste a bot token".
+- Full ENVSIMPLE entry: [docs/changelog/envsimple.md](docs/changelog/envsimple.md).
 - Central chat turns now resume the previous session, and orphaned turns are reconciled and turn limits enforced.
 - The server now handles SIGINT and SIGTERM itself and exits with 130 and 143, so the stop is logged and the log file is flushed before exit.
 - `Shift+Cmd+U` / `Ctrl+Shift+U` is a new app-level chord: it passes through the terminal to the Output toggle instead of reaching the shell (where Ctrl+U would delete the line).

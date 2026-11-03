@@ -23,6 +23,8 @@ bun run dev
 
 Serves http://127.0.0.1:8700.
 
+Features are switched in Settings > **Kemampuan** (Capabilities): seven cards (Agent Pusat, Worker orchestrator, Otonomi Agent Pusat, Browser di kanvas, Kelola file, Ubah dan unggah file, Telegram), each one on/off switch that applies immediately, with no restart. A capability also turns on what it needs: workers need Central, autonomy needs workers, file writes need file viewing. The per-feature variables below are no longer the main path; they are still read as legacy input (a child key whose parent capability is off is ignored, with one warning per key). Changing settings or capabilities without a token is accepted only from a loopback peer with a same-origin `Origin` header, otherwise `403 forbidden`; scripts send the root token in `x-webterm-token`. Design and limits: `docs/decisions/envsimple.md`; changes: `docs/changelog/envsimple.md`.
+
 Environment variables:
 
 - `PORT` — listen port (default `8700`); a bad value aborts startup.
@@ -31,14 +33,14 @@ Environment variables:
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`.
 - `WEBTERM_ALLOWED_HOSTS` — CSV of extra `Host` values (`host` or `host:port`); checked only while no token is enforced, else `403 host_not_allowed`.
-- `WEBTERM_LEDGER` — `off` (default), `shadow`, or `on`. Turns on the SQLite ledger that backs inbox, approvals, and the channel webhook.
+- `WEBTERM_LEDGER_SHADOW` — set `1` to run the SQLite ledger (inbox, approvals, channel webhook) in shadow mode, where a failed open does not stop the server. The ledger itself is always on; `WEBTERM_LEDGER` is ignored.
 - `WEBTERM_ALLOW_LOOPBACK_APPROVAL` — default `0`. Human approvals (`/api/approvals/*`) refuse token-free loopback, because an agent shell on the same machine can also reach it. Set `1` only for a disposable local demo. With a root token configured, the normal token gate applies.
-- `WEBTERM_TELEGRAM` — `off` (default) or `on`. Installs `POST /webhooks/telegram` when `WEBTERM_TELEGRAM_WEBHOOK_SECRET` is set and the ledger is on.
-- `WEBTERM_TELEGRAM_WEBHOOK_SECRET` — Telegram `secret_token` for the webhook. Keep it in the environment, not in a committed file.
-- `WEBTERM_TELEGRAM_BOT_TOKEN` — bot token used for replies. The legacy `TELEGRAM_BOT_TOKEN` name is deprecated.
-- `WEBTERM_RUN_REQUIRE_APPROVAL` — default `off`. When `on`, `POST /api/orchestrator/run` requires an approved ledger `approvalId` + `approvalDigest`; when the fields are supplied (even with the flag off) they are consumed exactly once before any worktree or PTY work.
+- `WEBTERM_TELEGRAM` — the Telegram capability switch. Normally set by pasting a bot token in the Telegram card (the token is verified with Telegram first). Polling is the default; `POST /webhooks/telegram` is installed only with `WEBTERM_TELEGRAM_MODE=webhook`.
+- `WEBTERM_TELEGRAM_WEBHOOK_SECRET` — optional override of the webhook `secret_token`; generated into `<data dir>/secrets/` when absent. Keep it out of committed files.
+- `WEBTERM_TELEGRAM_BOT_TOKEN` — optional override of the bot token used for replies. The legacy `TELEGRAM_BOT_TOKEN` name is deprecated.
+- `WEBTERM_RUN_REQUIRE_APPROVAL` — default `on` when Worker orchestrator is enabled (a sub-option of that card). When `on`, `POST /api/orchestrator/run` requires an approved ledger `approvalId` + `approvalDigest`; when the fields are supplied (even with the flag off) they are consumed exactly once before any worktree or PTY work.
 - `WEBTERM_CENTRAL_AUTONOMY` — default `off`. When `on` (with ledger and `WEBTERM_ORCHESTRATOR_RUN=on`), a 30 s scheduler runs one lowest-seq `assigned` plan item per tick through the same run route, skips paused projects/closed plans, and quarantines a project after 3 consecutive failures. It never creates tasks or approves approvals.
-- `WEBTERM_CENTRAL_CHAT` — default `off`. Exposes the central chat API/SSE and web panel when `WEBTERM_CENTRAL=on`.
+- `WEBTERM_CENTRAL_CHAT` — derived from Agent Pusat (default `off`). Exposes the central chat API/SSE and web panel when `WEBTERM_CENTRAL=on`.
 - `WEBTERM_CENTRAL_RUNTIME` — default `off`; `mock` or primary `opencode`. The OpenCode adapter runs `opencode run --format json` without PTY or `--auto`.
 - `WEBTERM_CENTRAL_MODEL` — default `opencode/deepseek-v4.1-flash-free`; use a credentialed provider for sustained turns. Free quota may return `provider.quota` 429 and is not retried.
 - `WEBTERM_OPENCODE_BIN` — default `opencode`; override the OpenCode binary path.
@@ -46,14 +48,14 @@ Environment variables:
 - `WEBTERM_CENTRAL_PLANNER` — default `off`; typed proposal handling requires this flag `on` and `WEBTERM_CENTRAL_TOOLS=write`. `task.assign` also requires `WEBTERM_ORCHESTRATOR_RUN=on` and creates/locks a real ledger task without spawning, running, or approving it.
 - `WEBTERM_CENTRAL_TELEGRAM` — default `off`; enables the private Telegram central chat bridge. Real Telegram delivery/webhook E2E is not verified.
 - `WEBTERM_CENTRAL_MEMORY` — default `off`; bounded, read-only project fact retrieval. It does not write or promote memory. Proposal blocks render as compact cards and do not claim applied or approved status.
-- Central Agent v2 flags (all default `off`/safe, need `WEBTERM_LEDGER` on, read at boot so restart after changing; full list in Settings > Environment): `WEBTERM_CENTRAL_AGENTS` (`off|propose|auto`, also the ceiling for the control level), `WEBTERM_CENTRAL_READ_TOOLS`, `WEBTERM_CENTRAL_CHECKPOINT`, `WEBTERM_CENTRAL_SKILLS`, `WEBTERM_CENTRAL_SKILL_PROPOSE`, `WEBTERM_AGENT_MAIL`, `WEBTERM_KNOWLEDGE`, `WEBTERM_CENTRAL_BOTS`, `WEBTERM_CHANNEL_APPROVAL_BUTTONS`, `WEBTERM_CENTRAL_RELIABILITY`, plus limits `WEBTERM_CENTRAL_MAX_STEPS`, `WEBTERM_CENTRAL_TURN_STEPS`, `WEBTERM_CENTRAL_TURN_WALL_MS`, `WEBTERM_CENTRAL_TURN_TOKENS`, `WEBTERM_CENTRAL_DAILY_TOKENS`, `WEBTERM_CENTRAL_DAILY_SPAWNS`, `WEBTERM_CENTRAL_DAILY_COST_MICROS`, `WEBTERM_CENTRAL_CONTEXT_WINDOW`, `WEBTERM_CENTRAL_MAX_INFLIGHT`, `WEBTERM_AGENT_IDLE_DONE_MS`.
+- Central Agent v2 flags (all default `off`/safe, need the always-on ledger; not listed in Settings): `WEBTERM_CENTRAL_AGENTS` (`off|propose|auto`, also the ceiling for the control level), `WEBTERM_CENTRAL_READ_TOOLS`, `WEBTERM_CENTRAL_CHECKPOINT`, `WEBTERM_CENTRAL_SKILLS`, `WEBTERM_CENTRAL_SKILL_PROPOSE`, `WEBTERM_AGENT_MAIL`, `WEBTERM_KNOWLEDGE`, `WEBTERM_CENTRAL_BOTS`, `WEBTERM_CHANNEL_APPROVAL_BUTTONS`, `WEBTERM_CENTRAL_RELIABILITY`, plus limits `WEBTERM_CENTRAL_MAX_STEPS`, `WEBTERM_CENTRAL_TURN_STEPS`, `WEBTERM_CENTRAL_TURN_WALL_MS`, `WEBTERM_CENTRAL_TURN_TOKENS`, `WEBTERM_CENTRAL_DAILY_TOKENS`, `WEBTERM_CENTRAL_DAILY_SPAWNS`, `WEBTERM_CENTRAL_DAILY_COST_MICROS`, `WEBTERM_CENTRAL_CONTEXT_WINDOW`, `WEBTERM_CENTRAL_MAX_INFLIGHT`, `WEBTERM_AGENT_IDLE_DONE_MS`.
 - Central control endpoints (root credential, mounted only when a v2 flag is armed): `GET /api/central/status|agents|approvals|skills|memory`, `GET|PUT /api/central/control`, `POST /api/central/halt` (kill switch), `POST /api/central/agents/:id/relay|close`, `POST /api/central/skills/:id/approve|rollback`. The UI panel shows when `WEBTERM_CENTRAL_CHAT` is on.
 - `WEBTERM_FILES_MUTATE` — default `off`. Enables delete (to trash, with Undo), restore, rename, and copy in files nodes.
 - `WEBTERM_FILES_VIEWERS` — default `on`. Enables `GET /api/fs/raw` and the image/audio/video/PDF viewers.
 - `WEBTERM_FILES_WATCH` — default `on`. Live directory watching, so listings and open editors follow changes made outside webterm.
 - `WEBTERM_FILES_GIT_STATUS` — default `on`. Git status marks (M/A/D/U/R/C) on the file list.
 - `WEBTERM_FILES_QUICK_OPEN` — default `on`. File search behind Ctrl/Cmd+P while a files node has focus.
-- `WEBTERM_FILES_UPLOAD` — default `off`. Upload to and download from files nodes.
+- `WEBTERM_FILES_UPLOAD` — default `off`; derived from Ubah dan unggah file. Upload to and download from files nodes.
 - `WEBTERM_FILES_LIST_MAX` — default `5000`. Maximum entries in one directory listing; the rest is cut and marked truncated.
 - `WEBTERM_FILES_UPLOAD_MAX_MB` — default `100`. Maximum size of one uploaded file.
 
@@ -65,9 +67,9 @@ Environment variables:
 - Opening a Browser node from a link (only when `WEBTERM_BROWSER=on`): right-click an `http(s)` link in a terminal or agent node and choose "Open in canvas browser", or drag a URL onto empty canvas. The node appears beside the source (or at the drop point). If a Browser node already shows that URL, you are taken to it instead of a second node opening, and its page is not navigated. Cmd/Ctrl+click on a link still opens a normal browser tab, and agents cannot open Browser nodes on their own yet.
 - `WEBTERM_BROWSER_COOKIE_IMPORT` and `WEBTERM_BROWSER_COOKIE_TTL_DAYS` — default `off`; enables the encrypted cookie vault and its retention.
 
-No `.env` is required: only the bootstrap keys in `.env.example` need the environment; the rest is set in Settings > Environment (a stored value beats the environment). Bun still loads a cwd `.env`, but spawned shells drop its values.
+No `.env` is required: only the bootstrap keys in `.env.example` need the environment; the rest is switched in Settings > Kemampuan (a stored value beats the environment). Bun still loads a cwd `.env`, but spawned shells drop its values.
 
-`WEBTERM_CHANNELS` is the master kill switch for the whole channel runtime (webhook, binding API, reply sender). Only `on|off` is implemented: unset or `on` keeps the current behavior, `off` disables everything even when `WEBTERM_TELEGRAM=on`, and any other value fails closed (channels stay off) with one warning naming the supported values. The `readonly|control` modes remain planned. Channel state lives in a JSON store under the data directory, so enabling channels needs no v4 SQL migration.
+The channel runtime (webhook, binding API, reply sender) follows the Telegram capability: it exists exactly while Telegram is on. `WEBTERM_CHANNELS` is no longer read as a switch; the capability writes it as a derived key, and a legacy `WEBTERM_CHANNELS=on` while Telegram is off is ignored with one warning. The `readonly|control` modes remain planned. Channel state lives in a JSON store under the data directory, so enabling channels needs no v4 SQL migration.
 
 The file manager API lives under `/api/fs/<verb>` and uses the same token gate as the rest of `/api`. GET verbs: `list`, `list-v2`, `read`, `read-binary`, `exists`, `stat`, `capabilities`, plus `raw` (needs `WEBTERM_FILES_VIEWERS`), `git-status` (`WEBTERM_FILES_GIT_STATUS`), and `search` (`WEBTERM_FILES_QUICK_OPEN`). POST verbs: `create`, `write`, `mkdir`, plus `delete`, `restore`, `rename`, `copy` (`WEBTERM_FILES_MUTATE`) and `upload` (`WEBTERM_FILES_UPLOAD`). A verb whose flag is off answers `501` with code `EDISABLED`. Design decisions and known limits: `docs/decisions/files-manager.md`.
 
