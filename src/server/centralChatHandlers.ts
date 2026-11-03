@@ -31,9 +31,9 @@ export const CENTRAL_CHAT_BODY_MAX_BYTES = 64 * 1024
 
 export interface CentralChatDeps {
   ledger?: LedgerRuntime | null
-  /** Defaults to `WEBTERM_CENTRAL_CHAT`; tests pin it explicitly. */
+  /** Defaults to the `central` capability; tests pin it explicitly. */
   chatEnabled?: boolean
-  /** Defaults to `WEBTERM_CENTRAL`; tests pin it explicitly. */
+  /** Defaults to the `central` capability; tests pin it explicitly. */
   centralEnabled?: boolean
   /** Defaults to `WEBTERM_CENTRAL_RUNTIME`. */
   runtimeKind?: RuntimeKind
