@@ -29,6 +29,7 @@
 // di-parse dari body walau status non-2xx (409/413/501...); jaringan/JSON rusak jadi `EIO`.
 import { fsFail, type FsCapabilities, type FsFail, type FsResult, type FileMeta, type FsVersion, type GitMark, type ListV2, type ReadMeta } from '../shared/fsContract'
 import { tokenQuery } from './api'
+import { onReconnect } from './ws'
 import type { DirEntry } from './fileBrowse'
 
 function url(verb: string, params?: Record<string, string>): string {
@@ -182,10 +183,39 @@ export function search(root: string, q: string, limit?: number): Promise<FsResul
 
 const CAPS_OFF: FsCapabilities = { mutate: false, viewers: false, watch: false, git: false, quickOpen: false, upload: false, listMax: 0 }
 
-/** Kemampuan server. FAIL-CLOSED: gagal = semua fitur opsional mati, bukan menebak hidup. */
-export async function capabilities(): Promise<FsCapabilities> {
+// Cache PROMISE (bukan nilai) supaya slot + ViewerHost yang memanggil serentak berbagi satu request.
+// Flag server dibaca saat boot, jadi cache hidup selama halaman hidup; dikosongkan saat WS reconnect
+// karena server bisa restart dengan flag lain. Hasil gagal (CAPS_OFF / throw) TIDAK di-cache.
+let capsCache: Promise<FsCapabilities> | null = null
+onReconnect(() => { capsCache = null })
+
+/** Kosongkan cache `capabilities()` (dipakai tes dan reconnect). */
+export function resetCapabilitiesCache(): void {
+  capsCache = null
+}
+
+async function fetchCapabilities(): Promise<{ caps: FsCapabilities; ok: boolean }> {
   const r = await call<FsCapabilities>('capabilities', {})
-  return r.ok ? { mutate: r.mutate, viewers: r.viewers, watch: r.watch, git: r.git, quickOpen: r.quickOpen, upload: r.upload, listMax: r.listMax } : CAPS_OFF
+  return r.ok
+    ? { caps: { mutate: r.mutate, viewers: r.viewers, watch: r.watch, git: r.git, quickOpen: r.quickOpen, upload: r.upload, listMax: r.listMax }, ok: true }
+    : { caps: CAPS_OFF, ok: false }
+}
+
+/** Kemampuan server (di-cache bersama). FAIL-CLOSED: gagal = semua fitur opsional mati, bukan menebak hidup. */
+export function capabilities(): Promise<FsCapabilities> {
+  if (capsCache) return capsCache
+  const p: Promise<FsCapabilities> = fetchCapabilities().then(
+    ({ caps, ok }) => {
+      if (!ok && capsCache === p) capsCache = null
+      return caps
+    },
+    (err: unknown) => {
+      if (capsCache === p) capsCache = null
+      throw err
+    },
+  )
+  capsCache = p
+  return p
 }
 
 /** URL `raw` (gambar/audio/video/PDF/download) dengan token yang sama dengan verb lain. */
