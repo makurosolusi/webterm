@@ -94,6 +94,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   let down = false
   return {
     status,
+    state: (id) => host.state(id),
+    listDomains: (workspaceId) => vault.listDomains(workspaceId),
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
     api: (method, pathname, body) => handleBrowserApi(method, pathname, body, apiDeps),
     control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed }),

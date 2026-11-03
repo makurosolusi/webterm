@@ -1,13 +1,17 @@
 // Penampung runtime browser aktif (satu per proses), pola `ledgerRuntimeState`: modul yang menyambung
 // (api.ts, control/mount.ts) hanya bertanya `activeBrowser()`; null (flag off) = tidak ada jalur sama sekali.
 import type { WebSocket } from 'ws'
-import type { BrowserStatusResp } from '../../shared/browser.contract'
+import type { BrowserState, BrowserStatusResp } from '../../shared/browser.contract'
 import type { BrowserApiResult } from '../browserApi'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
 import type { BrowserSessionHook } from '../sessionsTypes'
 
 export interface BrowserRuntime {
   status(): BrowserStatusResp
+  /** Live state of one browser node (central agent tools); undefined when the host does not know it. */
+  state(nodeId: string): BrowserState | undefined
+  /** Cookie domain names saved for a workspace (never values). */
+  listDomains(workspaceId: string): Array<{ domain: string }>
   /** Layani satu socket `/ws/browser` milik workspace tertentu. */
   gateway(ws: WebSocket, workspaceId: string): void
   /** `/api/browser/*`; null = bukan prefix itu. */
