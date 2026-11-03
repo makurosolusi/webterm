@@ -14,7 +14,7 @@ export const TELEGRAM_POLL_TIMEOUT_SEC = 25
 export const TELEGRAM_POLL_REQUEST_MARGIN_MS = 10_000
 export const TELEGRAM_POLL_BACKOFF_BASE_MS = 1_000
 export const TELEGRAM_POLL_BACKOFF_MAX_MS = 60_000
-export const TELEGRAM_POLL_ALLOWED_UPDATES = ['message'] as const
+export const TELEGRAM_POLL_ALLOWED_UPDATES = ['message', 'callback_query'] as const
 
 export interface TelegramPollStatus {
   ok: boolean

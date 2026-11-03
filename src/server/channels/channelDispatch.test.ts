@@ -324,10 +324,18 @@ describe('telegram dispatch idempotency and scrubbing', () => {
       return { ok: true as const, text: 'assistant answer' }
     })
     const replies: ChannelReply[] = []
-    const deps = { store, centralChat: { ask }, enqueue: (reply: ChannelReply): void => { replies.push(reply) } }
+    const tasks: Promise<void>[] = []
+    const deps = {
+      store,
+      centralChat: { ask },
+      enqueue: (reply: ChannelReply): void => { replies.push(reply) },
+      background: (task: Promise<void>): void => { tasks.push(task) },
+    }
     const first = await dispatchTelegramUpdate(update(18, 100, 7, 'hello central'), deps)
     const second = await dispatchTelegramUpdate(update(18, 100, 7, 'hello central'), deps)
-    expect(first).toMatchObject({ status: 'handled', command: 'free_text', reply: 'assistant answer' })
+    await Promise.all(tasks)
+    // B7: the dispatch acks without waiting for the turn; the answer arrives through the outbox.
+    expect(first).toMatchObject({ status: 'handled', command: 'free_text', reply: null })
     expect(second.status).toBe('duplicate')
     expect(ask).toHaveBeenCalledTimes(1)
     expect(replies[0]?.text).toBe('assistant answer')
