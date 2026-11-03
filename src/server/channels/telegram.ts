@@ -2,6 +2,7 @@
 // in `telegramSend.ts` (the only egress path); this file is provider-only and network-free.
 
 export const TELEGRAM_TOKEN_ENV = 'WEBTERM_TELEGRAM_BOT_TOKEN'
+/** @deprecated Gunakan `WEBTERM_TELEGRAM_BOT_TOKEN`. Alias ini dihapus di rilis setelah 0.7.0 (EM-10, Rule 17). */
 export const TELEGRAM_TOKEN_ENV_LEGACY = 'TELEGRAM_BOT_TOKEN'
 /** Bot API message limit; longer text is truncated rather than rejected by the provider. */
 export const TELEGRAM_MAX_TEXT = 4096
