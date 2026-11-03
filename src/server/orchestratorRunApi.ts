@@ -21,7 +21,6 @@ import {
   type RouteResult,
 } from './orchestratorRunModel'
 import {
-  agentCommand,
   assignmentProblem,
   guardedRun,
   productionRuntime,
@@ -29,6 +28,7 @@ import {
   projectRepo,
   resolveWorktrees,
   runItemTaskId,
+  workerLaunch,
   workerInput,
   worktreeRoot,
   type OrchestratorRunDeps,
@@ -127,7 +127,7 @@ export async function orchestratorRunRoute(
     const worktrees = resolved.worktrees
 
     try {
-      const compose: RuntimeCompose = { root, repo, cmd: await agentCommand(deps), plan, worktrees }
+      const compose: RuntimeCompose = { root, repo, ...(await workerLaunch(deps)), plan, worktrees }
       const worker = deps.createRuntime ? deps.createRuntime(compose) : await productionRuntime(deps, compose)
       const outcome: WorkerRunOutcome = await worker.runTask(workerInput(request, repo))
       if (outcome.ok) return { status: 200, body: { ok: true, outcome } }
