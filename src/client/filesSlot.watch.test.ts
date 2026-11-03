@@ -7,7 +7,9 @@ import type { FilesSlotCtx } from './filesSlots'
 const capabilities = vi.hoisted(() => vi.fn())
 const send = vi.hoisted(() => vi.fn())
 vi.mock('./fsClient', () => ({ capabilities }))
-vi.mock('./ws', () => ({ send }))
+// onReconnect didaftarkan sekali saat modul diimpor: tangkap callback-nya untuk mensimulasikan reconnect.
+const reconnect = vi.hoisted(() => ({ cb: (() => {}) as () => void }))
+vi.mock('./ws', () => ({ send, onReconnect: (cb: () => void) => { reconnect.cb = cb; return () => {} } }))
 
 import { emitFsEvent } from './fsEvents'
 import { watchSlot } from './filesSlot.watch'
@@ -72,6 +74,22 @@ describe('watchSlot', () => {
     unmount()
     emitFsEvent({ kind: 'dirty', path: '/a', origin: 'remote' })
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('reconnect: kirim ulang fswatch tepat sekali per dir aktif; dir yang sudah di-unwatch tidak', async () => {
+    const one = renderHook(() => useSlot(ctx('/a')))
+    const two = renderHook(() => useSlot(ctx('/a')))
+    const b = renderHook(() => useSlot(ctx('/b')))
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2)) // /a sekali + /b
+    await flush()
+    b.unmount() // /b di-unwatch
+    send.mockClear()
+    reconnect.cb()
+    expect(send.mock.calls.map((c) => c[0])).toEqual([{ t: 'fswatch', dir: '/a' }])
+    one.unmount(); two.unmount()
+    send.mockClear()
+    reconnect.cb()
+    expect(send).not.toHaveBeenCalled()
   })
 
   it('capabilities.watch false atau gagal: tidak mengirim apa pun', async () => {

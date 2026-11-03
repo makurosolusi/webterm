@@ -4,11 +4,13 @@ import { useEffect, useRef } from 'react'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
 import { onFsEvent } from './fsEvents'
 import { capabilities } from './fsClient'
-import { send } from './ws'
+import { onReconnect, send } from './ws'
 
 // Beberapa node bisa membuka dir yang sama, sedangkan server menghitung langganan per KLIEN ws:
 // fswatch dikirim pada 0->1 dan fsunwatch pada 1->0.
 const subscribers = new Map<string, number>()
+// Klien ws baru = nol langganan di server, padahal `subscribers` masih mengira aktif: kirim ulang.
+onReconnect(() => { for (const [dir, n] of subscribers) if (n > 0) send({ t: 'fswatch', dir }) })
 function useWatchDir(ctx: FilesSlotCtx): void {
   const { dir } = ctx
   const refreshRef = useRef(ctx.refresh)
