@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react'
 import type { FileMeta } from '../shared/fsContract'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
-import type { MenuRow } from './NodeContextMenu'
+import type { SlotMenuRow } from './filesSlots'
 
 /** Ikon codicon dekoratif (CSS codicon dimuat shell). */
 export const codicon = (name: string): ReactNode => <span className={`codicon codicon-${name}`} aria-hidden="true" />
@@ -23,7 +23,7 @@ interface Props {
   y: number
   entry: FileMeta | null
   /** Baris dari `FILES_SLOTS[*].menu`; satu grup, dipisah dari grup bawaan. */
-  slotRows: MenuRow[]
+  slotRows: SlotMenuRow[]
   actions: FilesMenuActions
   onClose: () => void
 }
@@ -32,10 +32,10 @@ const item = (label: string, icon: string, onSelect: () => void, keybinding?: st
   ({ type: 'item', id: label, label, icon: codicon(icon), keybinding, onSelect })
 
 /** Ubah baris slot ke item menu; separator di dalam slot dipertahankan. */
-function fromSlot(rows: MenuRow[], group: number): VscodeMenuItem[] {
+function fromSlot(rows: SlotMenuRow[], group: number): VscodeMenuItem[] {
   return rows.map((r, i): VscodeMenuItem => 'type' in r
     ? { type: 'separator' }
-    : { type: 'item', id: `slot${group}-${i}-${r.label}`, label: r.label, icon: r.icon, disabled: r.disabled, danger: r.danger, title: r.hint, onSelect: r.onClick })
+    : { type: 'item', id: `slot${group}-${i}-${r.label}`, label: r.label, icon: r.icon, disabled: r.disabled, danger: r.danger, title: r.hint, keybinding: r.keybinding, onSelect: r.onClick })
 }
 
 /** Sambung grup dengan satu separator di antaranya; grup kosong dilewati (tanpa separator ganda). */
@@ -43,7 +43,7 @@ export function joinGroups(groups: VscodeMenuItem[][]): VscodeMenuItem[] {
   return groups.filter((g) => g.length > 0).flatMap((g, i) => (i === 0 ? g : [{ type: 'separator' } as VscodeMenuItem, ...g]))
 }
 
-export function buildMenuItems(entry: FileMeta | null, slotRows: MenuRow[], a: FilesMenuActions): VscodeMenuItem[] {
+export function buildMenuItems(entry: FileMeta | null, slotRows: SlotMenuRow[], a: FilesMenuActions): VscodeMenuItem[] {
   return joinGroups([
     entry ? [item('Open', entry.dir ? 'folder' : 'file', () => a.open(entry), 'Enter')] : [],
     [item('Open in Integrated Terminal', 'terminal', a.terminal)],

@@ -108,3 +108,15 @@
 /* Panel error (folder hilang / tak terjangkau / 401) membawa tombol Retry. */
 .files-empty--error p { margin: 0 0 8px; }
 .files-empty--error vscode-button { display: block; width: 100%; }
+
+/* Tombol dialog konfirmasi mutasi (mengikuti tombol VS Code: 26px, primer = button-*). */
+.files-btn {
+  min-height: 26px; padding: 4px 8px; font: inherit; font-size: 12px; line-height: 16px; cursor: default;
+  background: var(--vscode-button-secondaryBackground, var(--raised));
+  border: 1px solid var(--vscode-button-border, transparent); border-radius: 4px;
+  color: var(--vscode-button-secondaryForeground, var(--text));
+}
+.files-btn:hover { background: var(--vscode-button-secondaryHoverBackground, var(--raised)); }
+.files-btn--primary { background: var(--vscode-button-background, var(--accent)); color: var(--vscode-button-foreground, var(--text)); }
+.files-btn--primary:hover { background: var(--vscode-button-hoverBackground, var(--accent)); }
+.files-btn:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 1px; }
