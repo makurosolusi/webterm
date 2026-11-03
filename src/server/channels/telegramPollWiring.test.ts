@@ -3,7 +3,7 @@ import type { Database } from 'bun:sqlite'
 import { buildTelegramCentralPort, resolveTelegramMode } from './telegramPollWiring'
 
 const db = {} as Database
-const central = { WEBTERM_CENTRAL_CHAT: 'on', WEBTERM_CENTRAL_TELEGRAM: 'on', WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_RUNTIME: 'mock' }
+const central = { WEBTERM_TELEGRAM: 'on', WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_RUNTIME: 'mock' }
 
 describe('buildTelegramCentralPort gate', () => {
   it('creates the bridge only when every flag is on', () => {
@@ -15,8 +15,7 @@ describe('buildTelegramCentralPort gate', () => {
   it.each([
     ['WEBTERM_CENTRAL=off', { WEBTERM_CENTRAL: 'off' }],
     ['WEBTERM_CENTRAL unset', { WEBTERM_CENTRAL: undefined }],
-    ['WEBTERM_CENTRAL_CHAT off', { WEBTERM_CENTRAL_CHAT: 'off' }],
-    ['WEBTERM_CENTRAL_TELEGRAM off', { WEBTERM_CENTRAL_TELEGRAM: 'off' }],
+    ['WEBTERM_TELEGRAM off', { WEBTERM_TELEGRAM: 'off' }],
     ['runtime off', { WEBTERM_CENTRAL_RUNTIME: 'off' }],
   ])('does not create the bridge when %s', (_name, override) => {
     const create = vi.fn(() => ({ ask: vi.fn() }))
@@ -24,9 +23,9 @@ describe('buildTelegramCentralPort gate', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('tolerates case and surrounding whitespace in the chat flag (shared flagOn)', () => {
+  it('tolerates case and surrounding whitespace in the capability flags (shared flagOn)', () => {
     const create = vi.fn(() => ({ ask: vi.fn() }))
-    expect(buildTelegramCentralPort({ db }, { ...central, WEBTERM_CENTRAL_CHAT: ' ON ' }, create)).toBeDefined()
+    expect(buildTelegramCentralPort({ db }, { ...central, WEBTERM_TELEGRAM: ' ON ', WEBTERM_CENTRAL: ' On ' }, create)).toBeDefined()
   })
 
   it('does not create the bridge without a ledger runtime', () => {

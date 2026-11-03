@@ -13,7 +13,6 @@ import { budgetLimits } from './central/guard/budgetStore'
 import { envCeiling } from './central/guard/levelStore'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import { opencodeBin, opencodeToolsAllowed } from './central/runtime/opencodeOptions'
-import { channelsMasterState } from './channels/channelsMasterGate'
 import { telegramChannelEnabled } from './channels/channelsRuntime'
 import { trustProxyEnabled } from './channels/webhookPeer'
 import { flagOn } from './envFlag'
@@ -31,7 +30,7 @@ const budget = (k: 'tokens' | 'spawns' | 'costMicros') => (): string => String(b
 
 /** [kunci, pembaca nyata pada env kosong, lokasi pembaca]. */
 const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
-  ['WEBTERM_CHANNELS', () => channelsMasterState(E), 'channels/channelsMasterGate.ts:17'],
+  ['WEBTERM_CHANNELS', () => 'on', 'channels/channelsMasterGate.ts (kunci TIDAK dibaca lagi: kanal ikut kemampuan telegram; nilai = default registry legacy)'],
   ['WEBTERM_TELEGRAM', () => onOff(telegramChannelEnabled(E)), 'channels/channelsRuntime.ts:94'],
   ['WEBTERM_CENTRAL', () => onOff(centralEnabled('')), 'central/centralModel.ts:67'],
   ['WEBTERM_CENTRAL_RUNTIME', () => centralRuntimeKind(''), 'central/runtime/runtimeFlag.ts:18'],

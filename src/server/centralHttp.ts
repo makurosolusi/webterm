@@ -20,7 +20,7 @@ export const CENTRAL_HTTP_ACTOR: CentralActor = { kind: 'human', id: 'root' }
 
 export interface CentralHttpDeps {
   runtime: LedgerRuntime | null
-  /** Defaults to the `WEBTERM_CENTRAL` flag; tests may pin it. */
+  /** Defaults to the `central` capability; tests may pin it. */
   enabled?: boolean
 }
 

@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import { flagOn } from '../envFlag'
+import { isEnabled } from '../featureCapabilities.runtime'
 import { resolveChatService } from '../centralChatHandlers'
 import { listMessages, type TurnService } from '../central/chat/turnService'
 import { CentralChatError } from '../central/chat/chatErrors'
@@ -12,9 +12,9 @@ const TIMEOUT_MS = 120_000
 // Persisted turn error code (RuntimeErrorCode) that maps to a fast, distinct Telegram reply.
 const RUNTIME_UNAVAILABLE = 'runtime_unavailable'
 
-// D-phase gate, independent of WEBTERM_CENTRAL_CHAT.
-export function centralTelegramEnabled(raw = process.env.WEBTERM_CENTRAL_TELEGRAM): boolean {
-  return flagOn(raw)
+// Gerbang jembatan: butuh kemampuan central DAN telegram (bukan lagi saklar tersendiri).
+export function centralTelegramEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isEnabled('central', env) && isEnabled('telegram', env)
 }
 
 export function createTelegramCentralPort(input: {
