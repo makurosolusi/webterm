@@ -15,6 +15,7 @@ import { type ClosedEntry, takeClosed } from './closedHistory'
 import { speechErrorText } from './useSpeechInput'
 
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
+const appSrc = () => ['App.tsx', 'App.board.ts', 'App.canvas.tsx', 'App.hooks.ts'].map(src).join('\n')
 
 const SID = '6432c1be-c265-4c86-a6d2-05deea24e259'
 
@@ -55,7 +56,7 @@ const OLD_ADD_AGENT_MINTS_SID = 'sessionId: crypto.randomUUID()'
 const addAgentBody = (s: string) => {
   const i = s.indexOf('const onAddAgent = useCallback(')
   const j = s.indexOf('}, [addFlowNode])', i)
-  expect(i, 'onAddAgent tidak ditemukan di App.tsx').toBeGreaterThan(-1)
+  expect(i, 'onAddAgent tidak ditemukan di App*.ts(x)').toBeGreaterThan(-1)
   expect(j, 'badan onAddAgent tidak berujung di [addFlowNode]').toBeGreaterThan(i)
   return s.slice(i, j)
 }
@@ -71,7 +72,7 @@ describe('titik pembuatan node agent TIDAK mencetak session id', () => {
   // `sessionId` sebagai proksi untuk "pernah diluncurkan". Proksi itu hanya benar kalau tak ada yang
   // mencetak id di muka. Ini KOMPOSISInya — yang di atas cuma menguji fungsinya dengan input manual.
   it('`onAddAgent` di App.tsx melahirkan node tanpa sessionId', () => {
-    expect(mintsSidAtCreation(addAgentBody(src('App.tsx')))).toBe(false)
+    expect(mintsSidAtCreation(addAgentBody(appSrc()))).toBe(false)
   })
 
   it('guard menolak bentuk lama yang mencetaknya di muka', () => {

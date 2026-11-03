@@ -37,6 +37,7 @@ describe('spawnPosition', () => {
 // node-env, jadi yang bisa dilakukan untuk bagian itu: membaca source-nya dan menolak bentuk yang
 // salah, pola yang sama dengan `nodeRender.test.ts` / `workspaceCommit.test.ts`.
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
+const appSrc = () => ['App.tsx', 'App.board.ts', 'App.canvas.tsx', 'App.hooks.ts'].map(src).join('\n')
 
 const ADDERS = ['onAddTerminal', 'onAddFiles', 'onAddAgent']
 
@@ -66,15 +67,15 @@ const OLD_ADDERS = `  const onAddTerminal = useCallback(() => {
 
 describe('titik lahir node baru di App', () => {
   it('tangga diagonal `80 + n * 40` sudah tidak ada lagi', () => {
-    expect(src('App.tsx')).not.toMatch(/80 \+ n \* 40/)
+    expect(appSrc()).not.toMatch(/80 \+ n \* 40/)
   })
 
   it('ketiga tombol tambah memakai tengah viewport, tak satu pun menaruh x/y sendiri', () => {
-    expect(spawnsAtViewportCenter(src('App.tsx'))).toBe(true)
+    expect(spawnsAtViewportCenter(appSrc())).toBe(true)
   })
 
   it('node baru ditandai terseleksi — round-trip toFlow membuang `selected` yang lain', () => {
-    expect(src('App.tsx')).toMatch(/next\[next\.length - 1\]\.selected = true/)
+    expect(appSrc()).toMatch(/next\[next\.length - 1\]\.selected = true/)
   })
 
   it('guardnya menolak bentuk lamanya', () => {
