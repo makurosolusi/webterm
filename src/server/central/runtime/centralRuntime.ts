@@ -19,6 +19,7 @@ export type RuntimeErrorCode =
   | 'tool_failed'
   | 'unknown_tool'
   | 'runtime_error'
+  | 'runtime_unavailable'
 
 export interface RuntimeUsage {
   inputTokens: number
