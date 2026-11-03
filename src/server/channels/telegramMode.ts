@@ -22,3 +22,8 @@ export function resolveTelegramMode(env: NodeJS.ProcessEnv = process.env, warn =
   }
   return resolveTelegramBotToken(env) ? 'poll' : 'webhook'
 }
+
+/** True bila webhook dipilih eksplisit lewat env (KE-9: tanpa deteksi URL publik). */
+export function isWebhookExplicit(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env[TELEGRAM_MODE_ENV] ?? '').trim().toLowerCase() === 'webhook'
+}

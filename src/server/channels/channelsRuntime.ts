@@ -9,44 +9,36 @@
 //     >= 32 [A-Za-z0-9_-]). Poll mode (WEBTERM_TELEGRAM_MODE) needs only the bot token.
 //   WEBTERM_LEDGER=on|shadow (an approval needs the ledger; without it the channel is pointless)
 // A corrupt channel store disables the channel too; it is never reset to defaults.
-import { flagOn } from '../envFlag'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { isEnabled } from '../featureCapabilities.runtime'
 import { join } from 'node:path'
 import { dataDir } from '../config'
-import type { ApprovalStatus } from '../ledger/ledgerApproval'
+import { createFileSecretStore } from '../envSecrets.store'
 import type { Ledger } from '../ledger/ledger'
 import { CHANNEL_STORE_FILE, ChannelStore } from './channelStore'
 import { CHANNELS_MASTER_ENV, CHANNELS_MASTER_VALUES, channelsMasterState } from './channelsMasterGate'
 import {
+  ensureWebhookSecret,
   readSecretFile,
   resolveWebhookSecret,
-  type SecretFileRead,
+  webhookSecretConfigured,
 } from './channelSecret'
+import { ledgerApprovalPort, type ChannelsRuntime, type ChannelsRuntimeOptions } from './channelsRuntime.types'
 import { FailureThrottle } from './channelThrottle'
-import {
-  dispatchTelegramUpdate,
-  type ChannelApprovalPort,
-  type ChannelAuditEvent,
-  type DispatchOutcome,
-} from './channelDispatch'
-import type { TelegramCentralPort, TelegramDispatchDeps } from './channelDispatch'
+import { dispatchTelegramUpdate, type ChannelAuditEvent, type DispatchOutcome } from './channelDispatch'
 import { createBackgroundTracker } from './channelButtons'
 import { handleChannelBindingsApi } from './channelBindingsHttp'
-import { mountBotManager, type BotManager, type BotManagerDeps } from './botManager'
+import { mountBotManager } from './botManager'
 import { PendingChatStore } from './channelPending'
 import { handleChannelPendingApi } from './channelPendingHttp'
 import { handleChannelStatusApi } from './channelStatusHttp'
-import {
-  flushChannelSender,
-  startChannelSenderFor,
-  stopChannelSender,
-  type SenderBootOptions,
-} from './channelSenderBoot'
-import type { FlushResult } from './telegramSender'
-import { resolveTelegramMode, type TelegramMode } from './telegramMode'
+import { flushChannelSender, startChannelSenderFor, stopChannelSender } from './channelSenderBoot'
+import { isWebhookExplicit, resolveTelegramMode } from './telegramMode'
 import { resolveTelegramBotToken } from './telegramSend'
 import { createLogger } from '../logs'
 import { respondToWebhook, safeError, type ChannelWebhookRuntime } from './telegramWebhookHandler'
+
+// Tipe + port ledger tinggal di channelsRuntime.types.ts; re-export supaya import lama tetap sah.
+export { ledgerApprovalPort, type ChannelsRuntime, type ChannelsRuntimeOptions } from './channelsRuntime.types'
 
 export const TELEGRAM_WEBHOOK_PATH = '/webhooks/telegram'
 export const TELEGRAM_ENABLED_ENV = 'WEBTERM_TELEGRAM'
@@ -92,58 +84,7 @@ function logDisabled(reason: string): void {
 }
 
 export function telegramChannelEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return flagOn(env[TELEGRAM_ENABLED_ENV])
-}
-
-/** Production approval port: the real ledger, unchanged, behind the dispatcher's narrow slice. */
-export function ledgerApprovalPort(ledger: Ledger): ChannelApprovalPort {
-  return {
-    listApprovals: (opts) =>
-      ledger.approval.listApprovals({
-        projectId: opts?.projectId,
-        status: opts?.status as ApprovalStatus | undefined,
-        limit: opts?.limit,
-      }),
-    getApproval: (id) => ledger.approval.getApproval(id),
-    decideApproval: (id, input) => ledger.approval.decideApproval(id, input),
-    consumeApproval: (id, input) => ledger.approval.consumeApproval(id, input),
-  }
-}
-
-export interface ChannelsRuntime {
-  store: ChannelStore
-  /** Ingress mode this runtime was booted in; poll mode installs no webhook route. */
-  readonly mode: TelegramMode
-  /** Same dedupe + dispatch + pending path as the webhook; the poller feeds updates through it. */
-  ingest(update: unknown): Promise<DispatchOutcome>
-  /** Resolves when no detached central turn is running (shutdown, tests). */
-  idle(): Promise<void>
-  /** True when the egress interval is running (a bot token was configured at boot). */
-  readonly senderRunning: boolean
-  /** Managed bots manager; null unless WEBTERM_CENTRAL_BOTS=on. */
-  readonly bots: BotManager | null
-  handle(req: IncomingMessage, res: ServerResponse): boolean
-  /** Root-only binding CRUD. The caller MUST authorize first; false for any other path. */
-  handleApi(req: IncomingMessage, res: ServerResponse): boolean
-  /** Drain the reply outbox now; resolves to an idle result when egress is not configured. */
-  flushNow(): Promise<FlushResult>
-  /** Stop the egress interval. Safe to call more than once. */
-  stop(): void
-}
-
-export interface ChannelsRuntimeOptions {
-  env?: NodeJS.ProcessEnv
-  storePath?: string
-  now?: () => number
-  /** Injection seam for tests; production reads the real filesystem. */
-  readSecret?: (path: string) => SecretFileRead
-  /** Egress pacing and transport seam; omitted in production (5s interval, global fetch). */
-  sender?: SenderBootOptions
-  centralChat?: TelegramCentralPort
-  /** Approval-button deps (see `buildButtonDeps`); omitted = callbacks ignored. */
-  buttons?: Pick<TelegramDispatchDeps, 'challenge' | 'answerCallback'> | null
-  /** Test seam for the managed bots manager (secrets, registry, fetch). */
-  bots?: Partial<BotManagerDeps>
+  return isEnabled('telegram', env)
 }
 
 /**
@@ -167,15 +108,24 @@ export function startChannelsRuntime(
   // Flag next: with `WEBTERM_TELEGRAM` off there is no route and the secret is never touched.
   if (!telegramChannelEnabled(env)) return null
 
-  const mode = resolveTelegramMode(env, false) // index.ts resolves (and warns) once on the same env
+  let mode = resolveTelegramMode(env, false) // index.ts resolves (and warns) once on the same env
   const readSecret = options.readSecret ?? readSecretFile
   // Poll mode never receives a webhook, so the secret is not required (nor read) there.
   let secret: string | undefined
   if (mode === 'webhook') {
     const resolved = resolveWebhookSecret(env, readSecret)
-    if (!resolved.ok) return logDisabledAndNull(resolved.reason)
-    secret = resolved.secret
-  } else if (resolveTelegramBotToken(env) === undefined) {
+    if (resolved.ok) secret = resolved.secret
+    else if (webhookSecretConfigured(env)) return logDisabledAndNull(resolved.reason)
+    else if (isWebhookExplicit(env)) {
+      // KE-9: webhook hanya bila dipilih eksplisit; secret-nya dibuat otomatis ke secrets/.
+      try {
+        secret = ensureWebhookSecret(options.secrets ?? createFileSecretStore(join(dataDir(), 'secrets')))
+      } catch (err) {
+        return logDisabledAndNull(safeError(err))
+      }
+    } else mode = 'poll' // tanpa token & tanpa secret: tunggu token diisi (hot), jangan matikan kanal
+  }
+  if (mode === 'poll' && resolveTelegramBotToken(env) === undefined) {
     log.warn('channels.token_missing', 'telegram on tetapi bot token belum diset (mode poll tidak menerima update tanpa token)')
   }
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')

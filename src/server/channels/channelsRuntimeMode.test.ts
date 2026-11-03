@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { SecretStore } from '../envSecrets.store'
 import { startChannelsRuntime, TELEGRAM_WEBHOOK_PATH } from './channelsRuntime'
 import { callApi, cleanTempStores, harnessLedger, tempStorePath } from './channelsRuntimeHarness'
 import { recordIngress, resetChannelStatus } from './channelStatus'
@@ -14,10 +15,19 @@ const SECRET = 'webhook-secret-for-tests-0123456789'
 const TOKEN = '123456:AAFakeBotTokenForStatusTests_xyz'
 const BASE = { WEBTERM_TELEGRAM: 'on' }
 
+// Store in-memori: secret webhook otomatis tak boleh menulis ke data dir sungguhan.
+const memStore = new Map<string, string>()
+const secrets: SecretStore = {
+  read: (key) => memStore.get(key) ?? null,
+  write: (key, value) => void memStore.set(key, value),
+  remove: (key) => void memStore.delete(key),
+}
+
 function start(extra: Record<string, string>) {
   return startChannelsRuntime(harnessLedger(), {
     env: { ...BASE, ...extra } as NodeJS.ProcessEnv,
     storePath: tempStorePath(),
+    secrets,
     sender: { intervalMs: 60_000 },
   })
 }
@@ -33,6 +43,7 @@ function webhookHit(channels: { handle(req: IncomingMessage, res: ServerResponse
 
 let warn: { mock: { calls: unknown[][] } }
 beforeEach(() => {
+  memStore.clear()
   resetChannelStatus()
   warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -61,17 +72,33 @@ describe('startChannelsRuntime mode gating', () => {
     channels?.stop()
   })
 
-  it('webhook mode still requires the secret and installs the route when present', () => {
-    expect(start({ WEBTERM_TELEGRAM_MODE: 'webhook', WEBTERM_TELEGRAM_BOT_TOKEN: TOKEN })).toBeNull()
-    expect(warn.mock.calls.map((c) => String(c[0])).join('\n')).toContain('telegram channel disabled')
+  it('explicit webhook mode without a secret generates one into the secret store and installs the route (KE-9)', () => {
+    const channels = start({ WEBTERM_TELEGRAM_MODE: 'webhook', WEBTERM_TELEGRAM_BOT_TOKEN: TOKEN })
+    expect(channels?.mode).toBe('webhook')
+    expect(webhookHit(channels!)).toBe(true)
+    expect(memStore.get('WEBTERM_TELEGRAM_WEBHOOK_SECRET')).toMatch(/^[A-Za-z0-9_-]{32,256}$/)
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(memStore.get('WEBTERM_TELEGRAM_WEBHOOK_SECRET'))
+    channels?.stop()
+    // Dijalankan ulang: secret yang sama dipakai, tidak dibangkitkan lagi.
+    const first = memStore.get('WEBTERM_TELEGRAM_WEBHOOK_SECRET')
+    start({ WEBTERM_TELEGRAM_MODE: 'webhook' })?.stop()
+    expect(memStore.get('WEBTERM_TELEGRAM_WEBHOOK_SECRET')).toBe(first)
+  })
+
+  it('webhook mode with a configured secret installs the route', () => {
     const channels = start({ WEBTERM_TELEGRAM_MODE: 'webhook', WEBTERM_TELEGRAM_WEBHOOK_SECRET: SECRET })
     expect(channels?.mode).toBe('webhook')
     expect(webhookHit(channels!)).toBe(true)
+    expect(memStore.size).toBe(0)
     channels?.stop()
   })
 
-  it('defaults to webhook (secret required) when no mode and no token are set', () => {
-    expect(start({})).toBeNull()
+  it('with no mode, no token and no secret it waits in poll mode (no webhook, no generated secret)', () => {
+    const waiting = start({})
+    expect(waiting?.mode).toBe('poll')
+    expect(webhookHit(waiting!)).toBe(false)
+    expect(memStore.size).toBe(0)
+    waiting?.stop()
     expect(start({ WEBTERM_TELEGRAM_WEBHOOK_SECRET: SECRET })?.mode).toBe('webhook')
   })
 })
