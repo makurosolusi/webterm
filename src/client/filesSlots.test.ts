@@ -17,12 +17,20 @@ it('mutate: menu + onKey + overlay + useSlot, tanpa decorate/toolbar', () => {
   expect(s?.toolbar).toBeUndefined()
 })
 
-it('git hanya boleh decorate; watch/search/dnd/upload (stub) tidak menambah menu/dekorasi/toolbar/tombol', () => {
-  for (const id of ['git', 'watch', 'search', 'dnd', 'upload']) {
+it('git hanya boleh decorate; watch/search/dnd (stub) tidak menambah menu/dekorasi/toolbar/tombol', () => {
+  for (const id of ['git', 'watch', 'search', 'dnd']) {
     const s = slot(id)
     expect(s?.menu, id).toBeUndefined()
     expect(s?.toolbar, id).toBeUndefined()
     expect(s?.onKey, id).toBeUndefined()
     if (id !== 'git') expect(s?.decorate, id).toBeUndefined()
   }
+})
+
+it('upload (nyata, WS-FM-10): punya menu + toolbar, tanpa decorate/onKey', () => {
+  const s = slot('upload')
+  expect(s?.menu).toBeTypeOf('function')
+  expect(s?.toolbar).toBeTypeOf('function')
+  expect(s?.decorate).toBeUndefined()
+  expect(s?.onKey).toBeUndefined()
 })
