@@ -16,7 +16,6 @@ const MAX_NUMBER = 1_000_000_000
 // Semua entri ca2: owner central, tak ditampilkan di kelompok utama (advanced); restart tetap boot (pembaca di ca2Boot).
 const C = { owner: 'central', section: 'Central — agen', audience: 'advanced' } as const
 const AGENTS_ON = { key: 'WEBTERM_CENTRAL_AGENTS', oneOf: ['propose', 'auto'], note: 'Butuh Agen central propose atau auto.' }
-const RUNTIME_OPENCODE = { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['opencode'], note: 'Butuh runtime opencode.' }
 
 export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'off', {
@@ -25,14 +24,14 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Central boleh menjalankan worker: propose = kartu approval per aksi, auto = dalam amplop. Butuh tools=write, planner, orchestrator run.',
     dangerous: true,
   }),
-  flag('WEBTERM_CENTRAL_CHECKPOINT', 'central', { ...C, requires: [RUNTIME_OPENCODE], label: 'Checkpoint percakapan', description: 'Ringkas percakapan central ke checkpoint (butuh runtime opencode).' }),
+  flag('WEBTERM_CENTRAL_CHECKPOINT', 'central', { ...C, label: 'Checkpoint percakapan', description: 'Ringkas percakapan central ke checkpoint (ringkasan deterministik, tanpa memanggil model).' }),
   num('WEBTERM_CENTRAL_MAX_STEPS', 'central', 1, 10, DEFAULT_MAX_STEPS, { ...C, label: 'Langkah maks per turn', description: 'Batas langkah tool dalam satu turn central.' }),
   num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, label: 'Batas waktu turn (ms)', description: 'Batas dinding waktu satu turn central.' }),
   num('WEBTERM_CENTRAL_TURN_TOKENS', 'central', 1000, MAX_NUMBER, DEFAULT_TURN_TOKENS, { ...C, label: 'Batas token turn', description: 'Batas token satu turn central.' }),
   num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, label: 'Budget token harian', description: 'Batas token central per hari UTC; 0 = tanpa batas.' }),
   num('WEBTERM_CENTRAL_DAILY_SPAWNS', 'central', 0, MAX_NUMBER, DEFAULT_DAILY_SPAWNS, { ...C, label: 'Budget spawn harian', description: 'Batas worker yang boleh di-spawn central per hari UTC.' }),
   num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central', 0, MAX_NUMBER, 0, { ...C, label: 'Budget biaya harian (mikro)', description: 'Batas biaya central per hari dalam mikro-unit; 0 = tanpa batas.' }),
-  enumOf('WEBTERM_CENTRAL_TOOL_BRIDGE', 'central', ['text', 'opencode'], 'text', { ...C, stage: 'experimental', label: 'Jembatan tool', description: 'Belum dipakai server. Rencana: text = parse teks, opencode = tool native opencode.' }),
+  enumOf('WEBTERM_CENTRAL_TOOL_BRIDGE', 'central', ['text', 'opencode'], 'text', { ...C, stage: 'experimental', label: 'Jembatan tool', description: 'Belum dipakai server. Rencana: cara central memanggil tool; text = parse teks, opencode = tool native opencode.' }),
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Skill central', description: 'Central membaca skill dari <dataDir>/central/skills (butuh tools).' }),
   flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_SKILLS' }], label: 'Usul skill central', description: 'Central boleh mengusulkan skill baru untuk disetujui manusia (butuh Skill central).' }),
   flag('WEBTERM_CENTRAL_BOTS', 'central', { ...C, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_CHANNELS', oneOf: ['on'] }], label: 'Bot per project', description: 'Satu bot dengan topic per project (butuh Telegram dan WEBTERM_CHANNELS).' }),
