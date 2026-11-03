@@ -249,3 +249,39 @@
 .editor-node__md-body th:not([align]) {
   text-align: start;
 }
+
+/* Konflik simpan / banner non-UTF-8: strip DI ATAS body (tidak menggantikannya) supaya buffer
+   pengguna tetap terlihat dan bisa disalin. */
+.editor-node__conflict,
+.editor-node__banner {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--state-attention);
+  background: var(--panel);
+  color: var(--state-attention);
+  font-size: 11px;
+  user-select: text;
+}
+.editor-node__conflict-msg { flex: 1 1 auto; }
+
+/* Placeholder file yang tak bisa dibuka sebagai teks (biner/audio/video/archive). */
+.editor-node__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 16px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+  text-align: center;
+}

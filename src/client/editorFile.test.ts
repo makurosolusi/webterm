@@ -28,6 +28,16 @@ describe('fileExt / fileBaseName', () => {
   })
 })
 
+describe('editorFileKind (via fileKind WS-00)', () => {
+  it('audio/video/archive/biner BUKAN text; markdown tetap text', () => {
+    expect(editorFileKind('/x/a.mp3')).toBe('audio')
+    expect(editorFileKind('/x/a.MP4')).toBe('video')
+    expect(editorFileKind('/x/a.zip')).toBe('archive')
+    expect(editorFileKind('/x/a.exe')).toBe('binary')
+    expect(editorFileKind('/x/README.md')).toBe('text')
+  })
+})
+
 describe('editorFileKind', () => {
   it('pdf dapat viewer platform, gambar dapat <img>, sisanya teks', () => {
     expect(editorFileKind('/x/doc.PDF')).toBe('pdf')
