@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { portalContainer, useOnFullscreenChange } from './portalContainer'
 import './vscode-quick-pick.css'
 import { customRank, defaultRank, highlightSegments } from './vscodeQuickPickRanking'
 
@@ -32,6 +34,8 @@ export interface VscodeQuickPickProps {
    * without the prefix, so typing it keeps the list instead of emptying it.
    */
   modePrefix?: string
+  /** CSS selector of the opener; a press on it is not "outside", so its own click can toggle the pick shut. */
+  triggerSelector?: string
 }
 
 const DEFAULT_HINT = 'Press Enter to confirm or Escape to cancel'
@@ -60,12 +64,15 @@ export function VscodeQuickPick({
   ariaLabel,
   hint = DEFAULT_HINT,
   modePrefix,
+  triggerSelector,
 }: VscodeQuickPickProps) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const listId = useId()
+  // The portal target changes on fullscreen enter/exit; close instead of moving the open pick.
+  useOnFullscreenChange(onClose, open)
 
   const needle = modePrefix && query.startsWith(modePrefix) ? query.slice(modePrefix.length) : query
   const filtered = useMemo(
@@ -100,11 +107,14 @@ export function VscodeQuickPick({
   useEffect(() => {
     if (!open) return
     const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) onClose()
+      const target = event.target as Element
+      if (rootRef.current?.contains(target)) return
+      if (triggerSelector && target.closest?.(triggerSelector)) return
+      onClose()
     }
     document.addEventListener('mousedown', onPointerDown)
     return () => document.removeEventListener('mousedown', onPointerDown)
-  }, [open, onClose])
+  }, [open, onClose, triggerSelector])
 
   if (!open) return null
 
@@ -230,7 +240,8 @@ export function VscodeQuickPick({
     )
   })
 
-  return (
+  // Portal: inside `.dock` (z-index 20) the pick lost to the title/tab bars (z 30/29).
+  return createPortal(
     <div
       ref={rootRef}
       role="dialog"
@@ -280,6 +291,7 @@ export function VscodeQuickPick({
           {hint}
         </div>
       ) : null}
-    </div>
+    </div>,
+    portalContainer(),
   )
 }
