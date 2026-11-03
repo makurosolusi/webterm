@@ -12,7 +12,9 @@ import { SettingsPanel } from './SettingsPanel'
 // Provider env nyata melakukan fetch; tes layout ini tak membutuhkannya (lihat SettingsPanel.envsearch.test.tsx).
 vi.mock('./useEnvSettings', () => ({
   EnvSettingsProvider: ({ children }: { children: React.ReactNode }) => children,
-  useEnvSettingsContext: () => ({ state: null }),
+  useEnvSettingsContext: () => ({ state: null, query: '', draft: new Map(), dirtyKeys: [], loading: false, error: null }),
+  useHasEnvSettingsContext: () => true,
+  useEnvLoadOnMount: () => undefined,
 }))
 
 afterEach(cleanup)

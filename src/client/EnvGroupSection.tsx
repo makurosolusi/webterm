@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { EnvEntryV2 } from '../shared/envSettings.contract'
 import type { EnvSectionData } from './envDraft'
-import { EnvRow } from './envRowContract'
+import { EnvEntryRow } from './EnvEntryRow'
 import { useEnvSettingsContext } from './useEnvSettings'
 
 interface Props {
@@ -31,7 +31,7 @@ export function EnvGroupSection({ title, sections, defaultOpen, subheadings, vis
   const rootGate = api.state?.rootGate ?? false
   const row = (e: EnvEntryV2): React.JSX.Element => (
     <div key={e.key} className="st-env-item" data-env-item={e.key} hidden={!visible(e)}>
-      <EnvRow entry={e} draft={api.draft.get(e.key)} onDraft={(v) => api.setDraft(e.key, v)}
+      <EnvEntryRow entry={e} draft={api.draft.get(e.key)} onDraft={(v) => api.setDraft(e.key, v)}
         onReset={() => void api.reset(e.key)} get={api.valueOf} onJump={onJump} locked={locked} rootGate={rootGate} />
     </div>
   )

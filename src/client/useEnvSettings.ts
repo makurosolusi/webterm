@@ -1,6 +1,6 @@
 // Provider state Environment (kontrak c-0): state server + draft terpusat + simpan massal atomik.
-// Fetch lazy (saat ada konsumen section atau query terisi), cache selama provider hidup. Nilai
-// secret tidak pernah masuk draft: dikirim langsung dan tidak disimpan di sini.
+// Fetch lazy (saat ada konsumen section atau query terisi), cache selama provider hidup. Secret ikut
+// draft dan simpan massal (nilainya tak pernah masuk state/log); Hapus = reset → unset langsung.
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { EnvStateV2 } from '../shared/envSettings.contract'
 import { buildChange, dropSent, reconcileDraft, valueOfKey, withDraft } from './envDraft'
@@ -103,10 +103,8 @@ export function EnvSettingsProvider(props: { children: ReactNode; query: string 
   const setDraft = useCallback((k: string, v: string): void => {
     const entry = stateRef.current?.entries.find((x) => x.key === k)
     if (!entry || !entry.editable || stateRef.current?.locked) return
-    // Secret: simpan langsung, nilainya tidak pernah masuk draft.
-    if (entry.kind === 'secret') void send({ set: { [k]: v } })
-    else setDraftMap((prev) => withDraft(prev, k, v, entry.value))
-  }, [send])
+    setDraftMap((prev) => withDraft(prev, k, v, entry.value))
+  }, [])
 
   const save = useCallback(async (): Promise<void> => {
     const change = buildChange(draftRef.current)

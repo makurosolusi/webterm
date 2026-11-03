@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-// Provider Environment: fetch lazy, draft terpusat, simpan massal atomik, refresh, secret langsung.
+// Provider Environment: fetch lazy, draft terpusat, simpan massal atomik, refresh, secret lewat draft.
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -115,16 +115,21 @@ describe('EnvSettingsProvider', () => {
     expect(result.current.error).toBe('Pengaturan dikunci oleh WEBTERM_ENV_SETTINGS=off.')
   })
 
-  it('secret value is sent directly and never enters draft or state', async () => {
+  it('secret typing stays in draft until bulk save; reset unsets directly', async () => {
     const { result, stub } = setup()
     await waitFor(() => expect(result.current.state).not.toBeNull())
     stub.getState = { ...stub.getState, entries: stub.getState.entries.map((e) => (e.key === 'K_SECRET' ? mkEntry({ key: 'K_SECRET', kind: 'secret', value: '', secretSet: true }) : e)) }
+    await act(async () => { await result.current.refresh() })
     act(() => result.current.setDraft('K_SECRET', SENTINEL))
-    await waitFor(() => expect(putBodies(stub)).toEqual([{ set: { K_SECRET: SENTINEL } }]))
-    await waitFor(() => expect(result.current.state?.entries.find((e) => e.key === 'K_SECRET')?.secretSet).toBe(true))
+    expect(putBodies(stub)).toEqual([])
+    expect(result.current.dirtyKeys).toEqual(['K_SECRET'])
+    await act(async () => { await result.current.save() })
+    expect(putBodies(stub)).toEqual([{ set: { K_SECRET: SENTINEL } }])
     expect(result.current.dirtyKeys).toEqual([])
     expect(JSON.stringify(result.current.state)).not.toContain(SENTINEL)
     expect(result.current.valueOf('K_SECRET')).toBe('on')
+    await act(async () => { await result.current.reset('K_SECRET') })
+    expect(putBodies(stub)[1]).toEqual({ unset: ['K_SECRET'] })
   })
 
   it('non-editable entries ignore drafts', async () => {

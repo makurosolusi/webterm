@@ -1,7 +1,7 @@
 // Fixture bersama tes ENV-03 (test-only): entri/state v2 sintetis, stub fetch /api/settings/env, row tiruan.
 import { vi } from 'vitest'
 import type { EnvEntryV2, EnvStateV2 } from '../shared/envSettings.contract'
-import type { EnvEntryRowProps } from './envRowContract'
+import type { EnvEntryRowProps } from './EnvEntryRow'
 import { EnvSettingsProvider, useEnvLoadOnMount } from './useEnvSettings'
 
 /** Entri v2 sintetis (test-only); tidak ada nilai nyata. */

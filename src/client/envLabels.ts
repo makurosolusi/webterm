@@ -4,7 +4,6 @@ export const ENV = {
   categoryRoot: 'Webterm',
   loading: 'Memuat pengaturan environment…',
   refresh: 'Segarkan',
-  lockedBanner: 'Dikunci oleh WEBTERM_ENV_SETTINGS=off. Pengaturan tidak bisa diubah dari sini.',
   restartBanner: 'Perlu restart server untuk:',
   badgeChanged: 'Diubah',
   badgeRestart: 'Perlu restart',
