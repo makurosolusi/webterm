@@ -6,6 +6,7 @@ import {
   ORCHESTRATOR_RUN_PATH,
   parseRunBody,
   orchestratorRunEnabled,
+  resolveWorkerKind,
 } from './orchestratorRunModel'
 import {
   parseRunBody as parseViaApi,
@@ -77,5 +78,21 @@ describe('orchestratorRunModel', () => {
       expect(parsed.ok).toBe(false)
       if (!parsed.ok) expect(parsed.result.body).toMatchObject({ error: 'invalid_timeout' })
     }
+  })
+})
+
+describe('resolveWorkerKind', () => {
+  it('picks the first configured kind: claude, then opencode, then other builtins', () => {
+    expect(resolveWorkerKind({ codex: 'codex', claude: 'claude-work' })).toBe('claude')
+    expect(resolveWorkerKind({ codex: 'codex', opencode: 'opencode' })).toBe('opencode')
+    expect(resolveWorkerKind({ gemini: 'gemini', codex: 'codex' })).toBe('codex')
+    expect(resolveWorkerKind({ claude: '   ', gemini: 'gemini' })).toBe('gemini')
+  })
+
+  it('keeps legacy claude when nothing is configured, and falls back to opencode without claude', () => {
+    expect(resolveWorkerKind({})).toBe('claude')
+    expect(resolveWorkerKind({}, true)).toBe('claude')
+    expect(resolveWorkerKind({}, false)).toBe('opencode')
+    expect(resolveWorkerKind({ codex: 'codex' }, false)).toBe('codex')
   })
 })

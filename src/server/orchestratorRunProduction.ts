@@ -1,8 +1,8 @@
 // Server-side composition for POST /api/orchestrator/run: resolve WHAT runs (repo, agent cmd),
 // WHERE it runs (worktree root) and the worker runtime. Every value here comes from the database,
 // settings or the filesystem, never from the request body.
-import { join } from 'node:path'
-import { mkdirSync } from 'node:fs'
+import { delimiter, join } from 'node:path'
+import { accessSync, constants, mkdirSync } from 'node:fs'
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { type PlanStore } from './orchestrator/plan'
@@ -19,13 +19,17 @@ import { recordWorkerResult, startWorker } from './orchestrator/orchestratorRun'
 import { verifyWorktree, type VerifyInput, type VerifyOutcome } from './orchestrator/verify'
 import { createProcessExec } from './orchestrator/verifier'
 import { dataDir } from './config'
-import { DEFAULT_AGENT_CMD, DEFAULT_AGENT_ID, orchestratorRunRequireApproval, type RawRun, type RouteResult } from './orchestratorRunModel'
-import {
-  ApprovalRequiredError,
-  runApproved,
-  type ApprovalPort,
-  type ApprovalRequest,
-} from './orchestrator/approvalGate'
+import { DEFAULT_AGENT_ID, resolveWorkerKind, type RawRun, type RouteResult } from './orchestratorRunModel'
+import type { ApprovalPort } from './orchestrator/approvalGate'
+import { idleDoneMs, withCandidateSignal, type GitProbe } from './orchestrator/workerSignal'
+import { createLogger } from './logs'
+import { assembleCmd, isBuiltinAgent } from '../shared/workspace'
+
+export { approvalMissing, approvalPortOf, guardedRun } from './orchestratorRunApproval'
+
+const log = createLogger('orchestrator')
+const SIGNAL_GIT_TIMEOUT_MS = 15_000
+const SIGNAL_GIT_OUTPUT_BYTES = 64 * 1024
 
 const GIT_TIMEOUT_MS = 120_000
 const GIT_OUTPUT_BYTES = 256 * 1024
@@ -34,6 +38,8 @@ export interface RuntimeCompose {
   root: string
   repo: string
   cmd: string
+  /** Worker kind resolved from settings; absent = legacy `claude`. */
+  agentId?: string
   plan: Pick<PlanStore, 'get'>
   worktrees: WorktreeService
 }
@@ -57,6 +63,8 @@ export interface OrchestratorRunDeps {
   requireApproval?: boolean
   /** Injected clock for approval expiry checks; defaults to `Date.now()`. */
   now?: () => number
+  /** Test seam: is `claude` installed? Production probes PATH (only matters when nothing is configured). */
+  claudeOnPath?: () => boolean
 }
 
 export function projectRepo(db: Database, projectId: string): string | null {
@@ -120,14 +128,33 @@ export function runItemTaskId(
   return stored?.items.find((candidate) => candidate.id === itemId)?.taskId ?? null
 }
 
-export async function agentCommand(deps: OrchestratorRunDeps): Promise<string> {
+/** True when an executable `name` exists in a PATH directory. */
+function binaryOnPath(name: string): boolean {
+  return (process.env['PATH'] ?? '').split(delimiter).some((dir) => {
+    try {
+      accessSync(join(dir, name), constants.X_OK)
+      return true
+    } catch {
+      // Not in this directory (or unreadable): keep scanning; absence overall is the answer.
+      return false
+    }
+  })
+}
+
+/** Worker kind + launch line from `settings.agentLaunchCommands` (user override wins over the builtin launcher). */
+export async function workerLaunch(deps: OrchestratorRunDeps): Promise<{ agentId: string; cmd: string }> {
+  let configured: Partial<Record<string, string>> = {}
   try {
     const settings = deps.settings ? deps.settings() : (await import('./db')).db.getSettings()
-    return settings.agentLaunchCommands[DEFAULT_AGENT_ID]?.trim() || DEFAULT_AGENT_CMD
+    configured = settings.agentLaunchCommands
   } catch {
-    // A broken settings read must not block an otherwise valid run: the plain launcher works.
-    return DEFAULT_AGENT_CMD
+    // A broken settings read must not block an otherwise valid run: fall back to the default launcher.
+    log.warn('orchestrator.worker.settings', 'settings unreadable; using default worker launcher', { code: 'settings_unreadable' })
   }
+  const claudeOnPath = (deps.claudeOnPath ?? (() => binaryOnPath('claude')))()
+  const agentId = resolveWorkerKind(configured, claudeOnPath)
+  const cmd = isBuiltinAgent(agentId) ? assembleCmd(agentId, configured[agentId]) : agentId
+  return { agentId, cmd }
 }
 
 function gitExecFor(deps: OrchestratorRunDeps, root: string): Exec {
@@ -152,140 +179,15 @@ export function workerInput(request: RawRun, repo: string): WorkerRunInput {
   }
 }
 
-const APPROVAL_REQUIRED: RouteResult = {
-  status: 409,
-  body: {
-    error: 'approval_required',
-    message: 'run requires approvalId and approvalDigest from an approved ledger decision',
-  },
-}
-
-const INTERNAL_RUN_FAILURE: RouteResult = {
-  status: 500,
-  body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },
-}
-
-/**
- * 409 `approval_project_mismatch`: the named approval was issued for another project. Nothing is
- * consumed and nothing runs; the message never echoes the approval id or digest.
- */
-const APPROVAL_PROJECT_MISMATCH: RouteResult = {
-  status: 409,
-  body: {
-    error: 'approval_rejected',
-    code: 'approval_project_mismatch',
-    message: 'approval does not belong to the requested project',
-  },
-}
-
-/**
- * 409 `approval_task_mismatch`: the named approval was issued for another task in the same
- * project. Nothing is consumed and nothing runs; the message never echoes ids or the digest.
- */
-const APPROVAL_TASK_MISMATCH: RouteResult = {
-  status: 409,
-  body: {
-    error: 'approval_rejected',
-    code: 'approval_task_mismatch',
-    message: 'approval does not belong to the task bound to this plan item',
-  },
-}
-
-/** Production uses the ledger facade's approval slice; tests may inject a narrow port. */
-export function approvalPortOf(deps: OrchestratorRunDeps): ApprovalPort | null {
-  if (deps.approval) return deps.approval
-  const port = (deps.ledger?.ledger as { approval?: Partial<ApprovalPort> } | undefined)?.approval
-  if (typeof port?.getApproval !== 'function' || typeof port.consumeApproval !== 'function') {
-    return null
-  }
-  return port as ApprovalPort
-}
-
-/** Policy gate: on only when the flag is set AND the request names no approval. */
-export function approvalMissing(deps: OrchestratorRunDeps, request: RawRun): boolean {
-  if (!(deps.requireApproval ?? orchestratorRunRequireApproval())) return false
-  return request.approvalId === undefined || request.approvalDigest === undefined
-}
-
-/**
- * Runs `action` behind the ledger approval named by the request, so consent is consumed exactly
- * once BEFORE any spawn or worktree allocation. A rejection returns 409 and never reaches
- * `action`; the message may name the approval id but never echoes the digest.
- *
- * `expectedTaskId` is the plan item's own task (resolved by the caller). A task-bound approval
- * (`taskId !== null`) only authorizes that task; a generic one (`taskId === null`) is not
- * task-scoped. A `null` expected id fails closed against every task-bound approval.
- *
- * Field presence is decided here, after body/project/plan validation, so an invalid request
- * never burns an approval and a missing one is reported as policy (409), not malformed (400).
- */
-export async function guardedRun(
-  deps: OrchestratorRunDeps,
-  request: RawRun,
-  action: () => Promise<RouteResult>,
-  expectedTaskId: string | null
-): Promise<RouteResult> {
-  const { approvalId, approvalDigest } = request
-  if (approvalId === undefined || approvalDigest === undefined) {
-    return approvalMissing(deps, request) ? APPROVAL_REQUIRED : await action()
-  }
-  const port = approvalPortOf(deps)
-  if (port === null) {
-    return {
-      status: 409,
-      body: {
-        error: 'approval_rejected',
-        code: 'approval_unavailable',
-        message: 'approval ledger is unavailable',
-      },
-    }
-  }
-  const now = deps.now?.()
-  const gateRequest: ApprovalRequest =
-    now === undefined
-      ? { approvalId, digest: approvalDigest }
-      : { approvalId, digest: approvalDigest, now }
-  try {
-    // Project isolation: an approval only authorizes work in the project it was requested for.
-    // Reading it here (before the gate consumes) keeps the check off the consume path, and the
-    // same snapshot is handed to `runApproved` so a status/digest flip between the two reads
-    // cannot slip through. A missing record stays `approval_not_found` inside the gate.
-    const approval = port.getApproval(approvalId)
-    if (approval !== null) {
-      // Project isolation first: an approval never authorizes work in another project.
-      if (approval.projectId !== request.projectId) return APPROVAL_PROJECT_MISMATCH
-      // Task isolation: a task-bound approval only authorizes the run item's own task. A generic
-      // approval (`taskId === null`) is not task-scoped, so only the project check applies.
-      if (approval.taskId !== null && approval.taskId !== expectedTaskId) {
-        return APPROVAL_TASK_MISMATCH
-      }
-    }
-    const gatePort: ApprovalPort =
-      approval === null
-        ? port
-        : {
-            getApproval: () => approval,
-            consumeApproval: (id, input) => port.consumeApproval(id, input),
-          }
-    return await runApproved({ approval: gatePort }, gateRequest, action)
-  } catch (error) {
-    // A failed action still burns its approval (the gate has no catch), as designed.
-    if (error instanceof ApprovalRequiredError) {
-      return {
-        status: 409,
-        body: { error: 'approval_rejected', code: error.code, message: error.message },
-      }
-    }
-    return INTERNAL_RUN_FAILURE
-  }
-}
-
 /** Production composition: real sessions, real verifier, one runtime per request. */
 export async function productionRuntime(
   deps: OrchestratorRunDeps,
   compose: RuntimeCompose
 ): Promise<WorkerRuntime> {
-  const sessions = deps.sessions ?? createSessionsPort((await import('./sessions')).sessions)
+  const base = deps.sessions ?? createSessionsPort((await import('./sessions')).sessions)
+  const agentId = compose.agentId ?? DEFAULT_AGENT_ID
+  // Non-claude kinds report no `done` hook: idle + a changed worktree is their candidate signal.
+  const sessions = agentId === DEFAULT_AGENT_ID ? base : withCandidateSignal(base, { thresholdMs: idleDoneMs(), probe: signalProbe(deps) })
   const ctx = contextOf({
     ledger: (deps.ledger?.ledger ?? {}) as never,
     plan: compose.plan as PlanStore,
@@ -302,9 +204,17 @@ export async function productionRuntime(
       ((input: VerifyInput) => verifyWorktree({ root: compose.root, exec: createProcessExec() }, input)),
     worktrees: compose.worktrees,
     cmd: compose.cmd,
-    agentId: DEFAULT_AGENT_ID,
+    agentId,
     plan: compose.plan as PlanStore,
   })
+}
+
+function signalProbe(deps: OrchestratorRunDeps): GitProbe {
+  const runExec = createProcessExec()
+  return async (cwd, args) =>
+    deps.gitExec
+      ? await deps.gitExec('git', ['-C', cwd, ...args])
+      : await runExec('git', args, { cwd, timeoutMs: SIGNAL_GIT_TIMEOUT_MS, maxOutputBytes: SIGNAL_GIT_OUTPUT_BYTES })
 }
 
 export function worktreeRoot(deps: OrchestratorRunDeps): string {
