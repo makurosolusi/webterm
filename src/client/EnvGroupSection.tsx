@@ -30,10 +30,11 @@ export function EnvGroupSection({ title, sections, defaultOpen, subheadings, vis
   const locked = api.state?.locked ?? false
   const rootGate = api.state?.rootGate ?? false
   const row = (e: EnvEntryV2): React.JSX.Element => (
-    <div key={e.key} className="st-env-item" data-env-item={e.key} hidden={!visible(e)}>
+    // Satu <ul> per baris: pembungkus ini yang disembunyikan/dicari (data-env-item), dan <li> baris wajib punya <ul> induk.
+    <ul key={e.key} className="st-env-item" data-env-item={e.key} hidden={!visible(e)}>
       <EnvEntryRow entry={e} draft={api.draft.get(e.key)} onDraft={(v) => api.setDraft(e.key, v)}
         onReset={() => void api.reset(e.key)} get={api.valueOf} onJump={onJump} locked={locked} rootGate={rootGate} />
-    </div>
+    </ul>
   )
   return (
     <details className="st-env-group" hidden={narrowed && shown.length === 0}

@@ -205,3 +205,15 @@
 .st-env-saved:empty {
   display: none;
 }
+
+/* Tombol Segarkan menempel ke ujung kanan header, terpisah dari deretan chip filter. */
+.st-env-refresh {
+  margin-inline-start: auto;
+}
+
+/* <ul> pembungkus baris env (hierarki ul>li): tanpa bullet/indent bawaan. */
+.st-env-item {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
