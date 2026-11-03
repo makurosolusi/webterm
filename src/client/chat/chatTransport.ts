@@ -30,12 +30,16 @@ export class ChatApiError extends Error {
   }
 }
 
+/** Shown when the server's Claude Code runtime is missing or not logged in (code `runtime_unavailable`). */
+export const RUNTIME_UNAVAILABLE_MESSAGE = 'Claude Code is not ready on the server (not installed or not logged in).'
+
 /** Short human text; never echoes a response body (it could contain server internals). */
 export function chatErrorMessage(error: unknown): string {
   if (error instanceof ChatApiError) {
     if (error.status === 401 || error.status === 403) return 'Not allowed. Reload and sign in again.'
     if (error.code === 'conversation_busy') return 'Another turn is running. Stop it or wait for it to finish.'
     if (error.code === 'central_runtime_off') return 'The central agent runtime is off.'
+    if (error.code === 'runtime_unavailable') return RUNTIME_UNAVAILABLE_MESSAGE
     if (error.code === 'turn_not_active') return 'This turn already finished.'
     if (error.code === 'conversation_not_found') return 'This conversation no longer exists.'
     if (error.code === 'http_404') return 'Central chat is not enabled on this server.'
