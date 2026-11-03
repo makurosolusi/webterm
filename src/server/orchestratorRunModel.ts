@@ -5,12 +5,13 @@
 // real PTY, so a client-supplied repo/cmd would be remote command execution.
 import type { RouteResult } from './apiShared.types'
 import { BUILTIN_AGENT_IDS } from '../shared/workspace'
-import { flagOn } from './envFlag'
+import { flagOr } from './envFlag'
+import { isEnabled } from './featureCapabilities.runtime'
 
 export type { RouteResult }
 
 export const ORCHESTRATOR_RUN_FLAG = 'WEBTERM_ORCHESTRATOR_RUN'
-/** Opt-in policy gate: when `on`, a run must name an approved, digest-bound ledger approval. */
+/** Policy gate (default on): a run must name an approved, digest-bound ledger approval. */
 export const ORCHESTRATOR_REQUIRE_APPROVAL_FLAG = 'WEBTERM_RUN_REQUIRE_APPROVAL'
 export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'
 
@@ -36,14 +37,14 @@ export const CLIENT_CONTROLLED_FIELDS = [
 export function orchestratorRunEnabled(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return flagOn(env[ORCHESTRATOR_RUN_FLAG])
+  return isEnabled('workers', env)
 }
 
-/** Default OFF: approval is optional unless an operator explicitly requires it. */
+/** Default ON (ENVSIMPLE Q3): approval wajib kecuali sub dimatikan eksplisit; dibaca per panggilan. */
 export function orchestratorRunRequireApproval(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return flagOn(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG])
+  return flagOr(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG], true)
 }
 
 /**

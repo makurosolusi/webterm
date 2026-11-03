@@ -6,6 +6,7 @@ import {
   ORCHESTRATOR_RUN_PATH,
   parseRunBody,
   orchestratorRunEnabled,
+  orchestratorRunRequireApproval,
   resolveWorkerKind,
 } from './orchestratorRunModel'
 import {
@@ -27,11 +28,29 @@ describe('orchestratorRunModel', () => {
     expect(ORCHESTRATOR_RUN_PATH).toBe('/api/orchestrator/run')
   })
 
-  it('gates on the exact flag value "on"', () => {
+  it('gates on the exact flag value "on", and only while central is on (implies)', () => {
+    const central = { WEBTERM_CENTRAL: 'on' }
     expect(orchestratorRunEnabled({})).toBe(false)
-    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: '1' })).toBe(true)
-    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'yes' })).toBe(false)
-    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'on' })).toBe(true)
+    expect(orchestratorRunEnabled({ ...central, WEBTERM_ORCHESTRATOR_RUN: '1' })).toBe(true)
+    expect(orchestratorRunEnabled({ ...central, WEBTERM_ORCHESTRATOR_RUN: 'yes' })).toBe(false)
+    expect(orchestratorRunEnabled({ ...central, WEBTERM_ORCHESTRATOR_RUN: 'on' })).toBe(true)
+    expect(orchestratorRunEnabled({ WEBTERM_ORCHESTRATOR_RUN: 'on' })).toBe(false)
+  })
+
+  it('reads the env per call (hot): flipping the same env object flips the answer', () => {
+    const env: Record<string, string | undefined> = { WEBTERM_CENTRAL: 'on' }
+    expect(orchestratorRunEnabled(env)).toBe(false)
+    env.WEBTERM_ORCHESTRATOR_RUN = 'on'
+    expect(orchestratorRunEnabled(env)).toBe(true)
+    env.WEBTERM_ORCHESTRATOR_RUN = 'off'
+    expect(orchestratorRunEnabled(env)).toBe(false)
+  })
+
+  it('approval policy defaults ON and is off only when set explicitly', () => {
+    expect(orchestratorRunRequireApproval({})).toBe(true)
+    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: 'typo' })).toBe(true)
+    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: 'off' })).toBe(false)
+    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: '0' })).toBe(false)
   })
 
   it('explains why server-resolved fields are refused', () => {

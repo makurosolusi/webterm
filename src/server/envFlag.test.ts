@@ -25,7 +25,7 @@ describe('flags that used to be strict now share the loose semantics', () => {
   it('orchestrator run and memory files accept " ON "', async () => {
     const { orchestratorRunEnabled, orchestratorRunRequireApproval } = await import('./orchestratorRunModel')
     const { memoryFilesEnabled } = await import('./memory/memoryFilePath')
-    const env = { WEBTERM_ORCHESTRATOR_RUN: ' ON ', WEBTERM_RUN_REQUIRE_APPROVAL: 'On', WEBTERM_MEMORY_FILES: ' on' }
+    const env = { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: ' ON ', WEBTERM_RUN_REQUIRE_APPROVAL: 'On', WEBTERM_MEMORY_FILES: ' on' }
     expect(orchestratorRunEnabled(env)).toBe(true)
     expect(orchestratorRunRequireApproval(env)).toBe(true)
     expect(memoryFilesEnabled(env)).toBe(true)

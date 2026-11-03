@@ -117,7 +117,7 @@ const VERDICT: Row[] = [
   ['WEBTERM_CENTRAL_AUTONOMY', 'central', 'Central', 'user', 'boot', [CE, 'WEBTERM_ORCHESTRATOR_RUN']],
   ['WEBTERM_OPENCODE_BIN', 'central', 'Central', 'advanced', 'hot', [RT]],
   ['WEBTERM_OPENCODE_ALLOW_TOOLS', 'central', 'Central', 'advanced', 'hot', [RT]],
-  ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orkestrator', 'user', 'boot', [L]],
+  ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orkestrator', 'user', 'hot', []],
   ['WEBTERM_RUN_REQUIRE_APPROVAL', 'platform', 'Orkestrator', 'user', 'hot', ['WEBTERM_ORCHESTRATOR_RUN']],
   ['WEBTERM_MEMORY_FILES', 'platform', 'Memori', 'user', 'hot', []],
   ['WEBTERM_MEMORY_DIR', 'platform', 'Memori', 'advanced', 'hot', ['WEBTERM_MEMORY_FILES']],
@@ -140,7 +140,7 @@ describe('vonis c-ENV-02 per entri', () => {
     expect((s.requires ?? []).map((r) => r.key)).toEqual(requires)
   })
   it('restart dikoreksi ke hot pada E05, E11, E16, E17, E19, E23', () => {
-    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY']) {
+    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY', 'WEBTERM_ORCHESTRATOR_RUN']) {
       expect(specFor(k)?.restartRequired, k).toBe(false)
     }
   })

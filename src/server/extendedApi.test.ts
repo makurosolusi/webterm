@@ -224,6 +224,7 @@ describe('extended API mount', () => {
       {
         orchestrator: {
           enabled: true,
+          requireApproval: false, // bawaan produksi ON; tes ini bukan tentang approval
           planStore: plan,
           dataDir: () => '/tmp/data',
           settings: () => ({ agentLaunchCommands: {} }),

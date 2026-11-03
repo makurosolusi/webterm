@@ -15,15 +15,15 @@ const LOGS = { owner: 'logs', section: 'Log', audience: 'advanced', restart: 'bo
 
 export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_ORCHESTRATOR_RUN', 'orchestrator', {
-    ...ORCH, audience: 'user', restart: 'boot', dangerous: true,
-    requires: [{ key: 'WEBTERM_LEDGER', oneOf: ['on', 'shadow'], note: 'Run butuh ledger hidup.' }],
+    // Dibaca per panggilan lewat isEnabled('workers') (orchestratorRunModel), jadi hot; ledger selalu hidup (tanpa requires).
+    ...ORCH, audience: 'user', hot: true, dangerous: true,
     label: 'Run orkestrator', description: 'Menjalankan worker nyata lewat /api/orchestrator/run.',
     dangerNote: 'Mengizinkan menjalankan worker nyata (shell dan edit file) di mesin server.',
   }),
   flag('WEBTERM_RUN_REQUIRE_APPROVAL', 'orchestrator', {
     ...ORCH, audience: 'user', hot: true, requires: [{ key: 'WEBTERM_ORCHESTRATOR_RUN' }],
-    label: 'Run wajib approval', description: 'Setiap run butuh approval ledger; dibaca ulang tiap panggilan run.',
-  }),
+    label: 'Run wajib approval', description: 'Setiap run butuh approval ledger (bawaan aktif); dibaca ulang tiap panggilan run.',
+  }, 'on'),
   flag('WEBTERM_MEMORY_FILES', 'memory', { ...MEM, audience: 'user', hot: true, label: 'Berkas memori', description: 'Gerbang export dan rebuild file memory.' }),
   text('WEBTERM_MEMORY_DIR', 'memory', {
     ...MEM, audience: 'advanced', hot: true, dangerous: true, allowEmpty: true, unsetLabel: '<dataDir>/memory',

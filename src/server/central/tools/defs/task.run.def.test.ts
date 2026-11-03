@@ -12,7 +12,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixtu
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ControlGuard, Tier, ToolCtx } from '../toolTypes'
-import { createTaskRunDef } from './task.run.def'
+import { createTaskRunDef, runGateFlags } from './task.run.def'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -91,6 +91,13 @@ describe('task.run tool', () => {
     expect(await execTool(s.ctx, 'task.run', args)).toMatchObject({ ok: false, code: 'approval_required' })
     expect(s.runs).toHaveLength(0)
     expect(s.consumed).toHaveLength(0)
+  })
+
+  it('gerbang default sama dengan API: env kosong + RUN on => requireApproval true, off eksplisit => false', () => {
+    const on = { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' }
+    expect(runGateFlags(on)).toEqual({ enabled: true, requireApproval: true })
+    expect(runGateFlags({ ...on, WEBTERM_RUN_REQUIRE_APPROVAL: 'off' })).toEqual({ enabled: true, requireApproval: false })
+    expect(runGateFlags({ WEBTERM_ORCHESTRATOR_RUN: 'on' }).enabled).toBe(false) // workers implies central
   })
 
   it('consumes an approval bound to this exact item, and rejects one approved for another item', async () => {
