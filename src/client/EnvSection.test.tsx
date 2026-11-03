@@ -37,11 +37,11 @@ describe('EnvSection', () => {
     stubEnvApi(baseState())
     render(<EnvSection />)
     await screen.findByRole('region', { name: 'Info server' })
-    expect(screen.queryByText(/butuh WEBTERM_TOKEN/)).toBeNull()
+    expect(screen.queryByText(/Atur WEBTERM_TOKEN/)).toBeNull()
     cleanup()
     stubEnvApi({ ...baseState(), rootGate: false, server: { tokenSet: false, settingsLocked: false } })
     render(<EnvSection />)
-    expect(await screen.findByText(/butuh WEBTERM_TOKEN/)).toBeTruthy()
+    expect(await screen.findByText(/Atur WEBTERM_TOKEN/)).toBeTruthy()
   })
 
   it('shows the locked banner and passes locked to rows', async () => {

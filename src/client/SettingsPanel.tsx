@@ -14,7 +14,7 @@
 //
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -24,19 +24,14 @@ import {
 import type { Settings } from '../shared/settings'
 import { AgentSettings } from './SettingsAgents'
 import { ChannelsSection } from './ChannelsSection'
+import { OpenEnvContext } from './channelsOpenEnv'
 import { EnvSection } from './EnvSection'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { ENV_KEY_ATTR, matchesEntry } from './envSearch'
 import { EnvSettingsProvider, useEnvSettingsContext } from './useEnvSettings'
 import type { EnvEntryV2 } from '../shared/envSettings.contract'
 import { SettingsItemScopeProvider } from './settingsContext'
-import {
-  CanvasSection,
-  InteractionSection,
-  PreviewSection,
-  ShellSection,
-  TerminalSection,
-} from './SettingsSections'
+import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
 import './settings.css'
 import './settings-controls.css'
 
@@ -46,12 +41,16 @@ const SECTIONS = [
   { id: 'shell', label: 'Shell & buffer' },
   { id: 'agent', label: 'Agent' },
   { id: 'canvas', label: 'Canvas' },
-  { id: 'preview', label: 'Preview' },
   { id: 'channels', label: 'Channels' },
   { id: 'env', label: 'Environment' },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
+
+/** Id tab tak dikenal (mis. `preview` warisan, sudah dilebur ke Terminal/Interaksi) jatuh ke Terminal. */
+export function toSectionId(id: string): SectionId {
+  return SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
+}
 
 const OWNER_CHANNELS = 'channels'
 const IN_CHANNELS_TAB = 'ada di tab Channels'
@@ -98,9 +97,13 @@ function SettingsPanelView({
   setQuery,
   normalized,
 }: PanelProps & { query: string; setQuery: (q: string) => void; normalized: string }): React.JSX.Element {
-  const [active, setActive] = useState<SectionId>('terminal')
+  const [activeRaw, setActive] = useState<string>('terminal')
+  const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
   const [channelsFocus, setChannelsFocus] = useState<string>()
+  const [envFocus, setEnvFocus] = useState<string>()
+  // Kebalikan onOpenChannels: prasyarat milik Environment yang dibuka dari tab Channels.
+  const openEnv = useCallback((key: string): void => { setActive('env'); setEnvFocus(key) }, [])
   const mainRef = useRef<HTMLElement>(null)
   const entries = useEnvSettingsContext().state?.entries
   const envHits = useMemo(
@@ -130,13 +133,17 @@ function SettingsPanelView({
     if (id === 'channels') {
       return (
         <>
-          <ChannelsSection focusKey={channelsFocus} onFocused={() => setChannelsFocus(undefined)} />
+          <OpenEnvContext.Provider value={openEnv}>
+            <ChannelsSection focusKey={channelsFocus} onFocused={() => setChannelsFocus(undefined)} />
+          </OpenEnvContext.Provider>
           <ChannelsHits hits={channelHits} onOpen={() => { setActive('channels'); setQuery('') }} />
         </>
       )
     }
-    if (id === 'env') return <EnvSection onOpenChannels={(key) => { setActive('channels'); setChannelsFocus(key) }} />
-    return <PreviewSection settings={s} onChange={onChange} />
+    return (
+      <EnvSection focusKey={envFocus} onFocused={() => setEnvFocus(undefined)}
+        onOpenChannels={(key) => { setActive('channels'); setChannelsFocus(key) }} />
+    )
   }
 
   const activeLabel = SECTIONS.find((section) => section.id === active)?.label ?? 'Settings'

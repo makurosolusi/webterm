@@ -53,11 +53,10 @@ describe('mergeSettings', () => {
       cursorBlink: false,
       drawBoldTextInBrightColors: false,
       terminalLetterSpacing: 0,
-      gridSize: 0,
     })
     expect(merged.cursorBlink).toBe(false)
     expect(merged.drawBoldTextInBrightColors).toBe(false)
-    expect(merged.gridSize).toBe(0)
+    expect(merged.terminalLetterSpacing).toBe(0)
   })
 
   it('membuang nilai yang bentuknya tidak cocok dengan default (batas input HTTP)', () => {

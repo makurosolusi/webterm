@@ -23,6 +23,7 @@ afterAll(() => {
 
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
+import { SETTING_RANGES } from '../shared/settings.ranges'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
 import { resolveShell } from './ptyShell'
 import {
@@ -434,7 +435,8 @@ test('a configured shell is the one that actually runs the command', async () =>
 }, 90_000)
 
 test('the scrollback limit drops old output and keeps the newest', async () => {
-  const s = new Sessions({ scrollbackBytes: 512 })
+  // Terkecil yang diizinkan tabel rentang: nilai di bawahnya dijepit naik, jadi 512 tak lagi berarti.
+  const s = new Sessions({ scrollbackBytes: SETTING_RANGES.scrollbackBytes.min })
   const a = collector()
   try {
     s.open({ t: 'open', id: 'sb1', cols: 80, rows: 24 }, a.send)
@@ -446,8 +448,8 @@ test('the scrollback limit drops old output and keeps the newest', async () => {
     await pollFor(() => s.getTerminal('sb1'), 'FIRST_MARKER_9f3a', 20_000, 'sb1 first marker')
     expect(s.getTerminal('sb1')).toContain('FIRST_MARKER_9f3a')
 
-    // Lebih dari 512 byte output sesudahnya harus mendorong marker pertama keluar ring buffer.
-    s.input('sb1', 'for i in 1 2 3 4 5 6 7 8; do echo pad-$i-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; done\n')
+    // Lebih dari batas minimum (16 KiB) output sesudahnya harus mendorong marker pertama keluar ring buffer.
+    s.input('sb1', 'for i in $(seq 1 400); do echo pad-$i-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; done\n')
     s.input('sb1', 'echo LAST_MARKER_9f3a\n')
     await pollFor(() => s.getTerminal('sb1'), 'LAST_MARKER_9f3a', 20_000, 'sb1 last marker')
 

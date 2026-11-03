@@ -1,9 +1,10 @@
 // Konfigurasi Telegram di tab Channels: entri registry `owner:'channels'` dirender dengan komponen Env yang
 // sama (EnvGroupSection/EnvEntryRow) dan disimpan lewat save bar yang sama. Token write-only (EnvSecretField).
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef } from 'react'
 import { EnvGroupSection } from './EnvGroupSection'
 import { EnvRestartBanner } from './EnvRestartBanner'
 import { EnvSaveBar } from './EnvSaveBar'
+import { OpenEnvContext } from './channelsOpenEnv'
 import { CH } from './channelsLabels'
 import { partitionEntries } from './envDraft'
 import { SettingsMessage } from './SettingsMessage'
@@ -33,13 +34,16 @@ export function ChannelsTelegramConfig(props: Props): React.JSX.Element {
 function TelegramPanel({ focusKey, onFocused }: Props): React.JSX.Element {
   const api = useEnvSettingsContext()
   useEnvLoadOnMount()
+  const openEnv = useContext(OpenEnvContext)
   const root = useRef<HTMLDivElement>(null)
   const state = api.state
   const sections = useMemo(() => {
     if (!state) return []
     const own = state.entries.filter((e) => e.owner === OWNER_CHANNELS)
     const part = partitionEntries(own, state.groups, false)
-    return [...part.main, ...part.advanced]
+    // Satu section "Telegram" untuk kunci user dan lanjutan; dua section sejudul akan berebut key React.
+    const entries = [...part.main, ...part.advanced].flatMap((s) => s.entries)
+    return entries.length > 0 ? [{ title: CH.configTitle, entries }] : []
   }, [state])
 
   const focus = useCallback((key: string): boolean => {
@@ -50,6 +54,12 @@ function TelegramPanel({ focusKey, onFocused }: Props): React.JSX.Element {
     el.querySelector<HTMLElement>(FOCUSABLE)?.focus()
     return true
   }, [])
+
+  // Kunci milik Channels fokus lokal; prasyarat milik Environment (LEDGER, CENTRAL, ...) pindah tab.
+  const jump = useCallback((key: string): void => {
+    if (focus(key)) return
+    if (state?.entries.some((e) => e.key === key && e.owner !== OWNER_CHANNELS)) openEnv?.(key)
+  }, [focus, state, openEnv])
 
   useEffect(() => {
     if (!focusKey || sections.length === 0) return
@@ -65,7 +75,7 @@ function TelegramPanel({ focusKey, onFocused }: Props): React.JSX.Element {
       <EnvRestartBanner />
       {sections.length > 0 ? (
         <EnvGroupSection title={CH.configTitle} sections={sections} defaultOpen visible={ALL_VISIBLE}
-          narrowed={false} onJump={focus} />
+          narrowed={false} onJump={jump} />
       ) : null}
       <EnvSaveBar />
     </div>

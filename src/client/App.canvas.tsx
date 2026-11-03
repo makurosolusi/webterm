@@ -6,7 +6,8 @@ import { nodeTypes } from './nodeTypes'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
 import { useNodeActions } from './nodeActions'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
-import type { Settings } from '../shared/settings'
+import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
+import { clampSetting } from '../shared/settings.ranges'
 import type { Viewport } from '../shared/workspace'
 
 const edgeTypes = { context: ContextEdge }
@@ -47,6 +48,8 @@ export default function BoardCanvas({
     const at = rf.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY })
     if (url && at) openBrowserAt({ url, at })
   }
+  // 0 / NaN / di luar rentang tak boleh sampai ke React Flow: grid 0 menghasilkan NaN saat snap.
+  const gridSize = clampSetting('gridSize', settings.gridSize, DEFAULT_SETTINGS.gridSize)
   return (
     <ReactFlow
       nodes={nodes}
@@ -67,7 +70,7 @@ export default function BoardCanvas({
       minZoom={0.01}
       maxZoom={2}
       snapToGrid={settings.snapToGrid}
-      snapGrid={[settings.gridSize, settings.gridSize]}
+      snapGrid={[gridSize, gridSize]}
       panOnDrag={!locked}
       panOnScroll={!locked}
       zoomOnPinch={!locked}
@@ -75,7 +78,7 @@ export default function BoardCanvas({
       proOptions={{ hideAttribution: true }}
     >
       {settings.canvasDots && (
-        <Background variant={BackgroundVariant.Dots} gap={settings.gridSize} size={2.5} color="var(--canvas-dot)" />
+        <Background variant={BackgroundVariant.Dots} gap={gridSize} size={2.5} color="var(--canvas-dot)" />
       )}
       <MiniMap
         className="minimap-dock" pannable zoomable nodeColor={nodeColor}

@@ -22,7 +22,7 @@ export interface EnvEntryRowProps {
 
 const show = (v: string): string => (v === '' ? ENV.none : v)
 
-/** Baris entri non-bootstrap; simpan massal di bar provider (tanpa Simpan per baris); `rootGate` dipakai kartu tunggal ENV-03, baris tidak mengulang pesan. */
+/** Baris satu entri env; simpan massal di bar provider (tanpa Simpan per baris); `rootGate` dipakai kartu tunggal ENV-03, baris tidak mengulang pesan. */
 export function EnvEntryRow({ entry, draft, onDraft, onReset, get, onJump, locked }: EnvEntryRowProps): React.JSX.Element {
   const uid = useId()
   const ctlId = `${uid}-ctl`, descId = `${uid}-desc`, errId = `${uid}-err`, dangerId = `${uid}-danger`

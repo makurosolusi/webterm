@@ -44,7 +44,7 @@ describe('EnvEntryRow', () => {
     const { onReset } = draw(flag({ value: 'on', source: 'override' }))
     expect(within(row()).getByText('Diubah')).toBeTruthy()
     expect(within(row()).getByText('Default: off')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Reset F' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Atur ulang F' }))
     expect(onReset).toHaveBeenCalledTimes(1)
     expect(document.activeElement).toBe(screen.getByRole('switch'))
   })
@@ -57,7 +57,7 @@ describe('EnvEntryRow', () => {
 
   it('Reset pada draft murni mengembalikan draft ke nilai tersimpan tanpa menyentuh server', () => {
     const { onReset, onDraft } = draw(flag(), { draft: 'on' })
-    fireEvent.click(screen.getByRole('button', { name: 'Reset F' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Atur ulang F' }))
     expect(onDraft).toHaveBeenCalledWith('off')
     expect(onReset).not.toHaveBeenCalled()
   })

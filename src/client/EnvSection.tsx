@@ -1,7 +1,7 @@
 // Section "Fitur & server" di Settings: header + filter cepat, banner, kartu server, akordeon per
 // section, bar simpan massal. State dari EnvSettingsProvider (dipasang ENV-05 di panel; bila tak ada,
 // section memasang provider sendiri). Query pencarian tidak pernah membuang section/draft.
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EnvEntryV2 } from '../shared/envSettings.contract'
 import { Button } from '@/components/ui/button'
 import { EnvGroupSection } from './EnvGroupSection'
@@ -23,6 +23,10 @@ interface Props {
   channelsOwned?: boolean
   /** Pindah ke tab Channels lalu fokus kunci itu (kunci milik Channels tak punya baris di sini). */
   onOpenChannels?: (key: string) => void
+  /** Kunci yang difokuskan setelah state termuat (lompat dari prasyarat di tab Channels). */
+  focusKey?: string
+  /** Dipanggil sekali setelah `focusKey` ditangani, supaya pemanggil membersihkan permintaan lompat. */
+  onFocused?: () => void
 }
 
 const FILTERS: Array<[EnvQuickFilter, string]> = [
@@ -31,14 +35,14 @@ const FILTERS: Array<[EnvQuickFilter, string]> = [
 const FOCUSABLE = 'input,select,textarea,button,[role="switch"]'
 
 /** Section Environment; memakai provider dari atas bila ada. */
-export function EnvSection({ channelsOwned = CHANNELS_OWNS_TELEGRAM, onOpenChannels }: Props): React.JSX.Element {
+export function EnvSection({ channelsOwned = CHANNELS_OWNS_TELEGRAM, ...rest }: Props): React.JSX.Element {
   const query = useSettingsSearch()
   const hasProvider = useHasEnvSettingsContext()
-  const panel = <EnvPanel channelsOwned={channelsOwned} onOpenChannels={onOpenChannels} />
+  const panel = <EnvPanel channelsOwned={channelsOwned} {...rest} />
   return hasProvider ? panel : <EnvSettingsProvider query={query}>{panel}</EnvSettingsProvider>
 }
 
-function EnvPanel({ channelsOwned, onOpenChannels }: Pick<Props, 'onOpenChannels'> & Required<Pick<Props, 'channelsOwned'>>): React.JSX.Element {
+function EnvPanel({ channelsOwned, onOpenChannels, focusKey, onFocused }: Omit<Props, 'channelsOwned'> & Required<Pick<Props, 'channelsOwned'>>): React.JSX.Element {
   const api = useEnvSettingsContext()
   useEnvLoadOnMount()
   const [filter, setFilter] = useState<EnvQuickFilter>()
@@ -64,6 +68,11 @@ function EnvPanel({ channelsOwned, onOpenChannels }: Pick<Props, 'onOpenChannels
     el.scrollIntoView?.({ block: 'center' })
     el.querySelector<HTMLElement>(FOCUSABLE)?.focus()
   }, [state, onOpenChannels])
+  useEffect(() => {
+    if (!focusKey || !part) return
+    onJump(focusKey)
+    onFocused?.()
+  }, [focusKey, part, onJump, onFocused])
   const none = narrowed && part !== null && ![...part.main, ...part.advanced].some((s) => s.entries.some(visible))
   const group = (title: string, sections: EnvSectionData[], defaultOpen: boolean, sub = false): React.JSX.Element => (
     <EnvGroupSection key={title} title={title} sections={sections} defaultOpen={defaultOpen} subheadings={sub}
@@ -79,7 +88,7 @@ function EnvPanel({ channelsOwned, onOpenChannels }: Pick<Props, 'onOpenChannels
               onClick={() => setFilter(filter === id ? undefined : id)}>{label}</button>
           ))}
         </div>
-        <button type="button" className="st-button" disabled={api.loading} onClick={() => void api.refresh()}>
+        <button type="button" className="st-button st-env-refresh" disabled={api.loading} onClick={() => void api.refresh()}>
           {ENV_UI.refresh}
         </button>
       </div>
@@ -89,7 +98,7 @@ function EnvPanel({ channelsOwned, onOpenChannels }: Pick<Props, 'onOpenChannels
       <EnvRestartBanner />
       {state && part ? (
         <>
-          <div hidden={narrowed}><EnvServerCard server={state.server} rootGate={state.rootGate} /></div>
+          <div hidden={q !== '' || (filter !== undefined && filter !== 'dangerous')}><EnvServerCard server={state.server} rootGate={state.rootGate} /></div>
           {part.main.map((s) => group(s.title, [s], true))}
           {part.advanced.length > 0 ? group(ENV_UI.advanced, part.advanced, false, true) : null}
           {part.channels[0] ? (

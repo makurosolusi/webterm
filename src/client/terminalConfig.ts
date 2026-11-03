@@ -1,5 +1,6 @@
 import type { FontWeight, ITheme } from '@xterm/xterm'
 import { DEFAULT_SETTINGS } from '../shared/settings'
+import { clampSetting, SETTING_RANGES } from '../shared/settings.ranges'
 import type {
   Settings,
   TerminalCursorInactiveStyle,
@@ -22,57 +23,44 @@ import { resolveTerminalTheme } from './themes'
  * mendarat di satu jalur saja.
  */
 
-/** Tinggi baris sebagai kelipatan ukuran font. Di bawah 1 xterm memotong descender glyph; di atas
- *  2 grid-nya sebagian besar udara dan TUI layar-penuh berhenti memuat apa pun yang berguna. */
-export const TERMINAL_LINE_HEIGHT_MIN = 1
-export const TERMINAL_LINE_HEIGHT_MAX = 2
-/** Px ekstra antar sel. Negatif merapatkan; melewati batas ini karakter box-drawing (yang dipakai
- *  CLI agent menggambar rangkanya) berhenti bertemu dan output tampak tercabik. */
-export const TERMINAL_LETTER_SPACING_MIN = -2
-export const TERMINAL_LETTER_SPACING_MAX = 4
-/** Bobot font numerik CSS. */
-export const TERMINAL_FONT_WEIGHT_MIN = 100
-export const TERMINAL_FONT_WEIGHT_MAX = 900
-/** Batas kontras xterm sendiri: 1 mematikan penyesuaian, 21 memaksa hitam-di-atas-putih. */
-export const TERMINAL_MIN_CONTRAST_MIN = 1
-export const TERMINAL_MIN_CONTRAST_MAX = 21
-/** Baris scrollback xterm (`settings.scrollbackLines`). Di bawah batas bawah ini satu `clear` saja
- *  sudah membuang output yang baru lewat; di atas batas atas biayanya nyata — xterm mengalokasikan
- *  `cols × 12 B` untuk SETIAP baris yang di-buffer, per node, dan satu canvas memuat banyak node. */
-export const TERMINAL_SCROLLBACK_LINES_MIN = 1_000
-export const TERMINAL_SCROLLBACK_LINES_MAX = 100_000
+// Rentang hidup di `settings.ranges.ts` (satu sumber). Nama ekspor di bawah dipertahankan sebagai
+// alias tabel supaya pemakai lama (UI settings, tes) tidak menyalin angkanya.
+export const TERMINAL_LINE_HEIGHT_MIN = SETTING_RANGES.terminalLineHeight.min
+export const TERMINAL_LINE_HEIGHT_MAX = SETTING_RANGES.terminalLineHeight.max
+export const TERMINAL_LETTER_SPACING_MIN = SETTING_RANGES.terminalLetterSpacing.min
+export const TERMINAL_LETTER_SPACING_MAX = SETTING_RANGES.terminalLetterSpacing.max
+export const TERMINAL_FONT_WEIGHT_MIN = SETTING_RANGES.fontWeight.min
+export const TERMINAL_FONT_WEIGHT_MAX = SETTING_RANGES.fontWeight.max
+export const TERMINAL_MIN_CONTRAST_MIN = SETTING_RANGES.terminalMinContrast.min
+export const TERMINAL_MIN_CONTRAST_MAX = SETTING_RANGES.terminalMinContrast.max
+export const TERMINAL_SCROLLBACK_LINES_MIN = SETTING_RANGES.scrollbackLines.min
+export const TERMINAL_SCROLLBACK_LINES_MAX = SETTING_RANGES.scrollbackLines.max
 
-function clamp(value: number, min: number, max: number, fallback: number): number {
-  // Nilai settings bisa diedit tangan dan datang lewat HTTP: nilai hilang/NaN harus mendarat di
-  // default, bukan di NaN — yang akan diterima xterm dengan senang hati lalu dirender jadi grid
-  // bertinggi nol.
-  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
-  return Math.min(Math.max(min, value), max)
+// Nilai settings bisa diedit tangan dan datang lewat HTTP: hilang/NaN/'' harus mendarat di default,
+// bukan di NaN — yang akan diterima xterm lalu dirender jadi grid bertinggi nol.
+export function terminalFontSize(value: number): number {
+  return clampSetting('fontSize', value, DEFAULT_SETTINGS.fontSize)
 }
 
 export function terminalLineHeight(value: number): number {
-  return clamp(value, TERMINAL_LINE_HEIGHT_MIN, TERMINAL_LINE_HEIGHT_MAX, 1)
+  return clampSetting('terminalLineHeight', value, DEFAULT_SETTINGS.terminalLineHeight)
 }
 
 export function terminalLetterSpacing(value: number): number {
-  return clamp(value, TERMINAL_LETTER_SPACING_MIN, TERMINAL_LETTER_SPACING_MAX, 0)
+  return clampSetting('terminalLetterSpacing', value, DEFAULT_SETTINGS.terminalLetterSpacing)
 }
 
-export function terminalFontWeight(value: number, fallback: number): number {
-  return clamp(value, TERMINAL_FONT_WEIGHT_MIN, TERMINAL_FONT_WEIGHT_MAX, fallback)
+/** Bobot font; `fallback` beda untuk normal (400) dan bold (700), jadi dua kunci tabel dipakai. */
+export function terminalFontWeight(value: number, fallback: number, key: 'fontWeight' | 'fontWeightBold' = 'fontWeight'): number {
+  return clampSetting(key, value, fallback)
 }
 
 export function terminalMinContrast(value: number): number {
-  return clamp(value, TERMINAL_MIN_CONTRAST_MIN, TERMINAL_MIN_CONTRAST_MAX, 1)
+  return clampSetting('terminalMinContrast', value, DEFAULT_SETTINGS.terminalMinContrast)
 }
 
 export function terminalScrollbackLines(value: number): number {
-  return clamp(
-    value,
-    TERMINAL_SCROLLBACK_LINES_MIN,
-    TERMINAL_SCROLLBACK_LINES_MAX,
-    DEFAULT_SETTINGS.scrollbackLines,
-  )
+  return clampSetting('scrollbackLines', value, DEFAULT_SETTINGS.scrollbackLines)
 }
 
 /** Opsi turunan-appearance, sudah diresolve dan di-clamp. */
@@ -134,10 +122,10 @@ export function xtermOptionsFromSettings(
 ): XtermVisualOptions & { allowProposedApi: true; macOptionClickForcesSelection: true } {
   return {
     fontFamily: s.fontFamily,
-    fontSize: fontSizeOverride ?? s.fontSize,
+    fontSize: terminalFontSize(fontSizeOverride ?? s.fontSize),
     wordSeparator: s.terminalWordSeparator,
-    fontWeight: terminalFontWeight(s.fontWeight, 400),
-    fontWeightBold: terminalFontWeight(s.fontWeightBold, 700),
+    fontWeight: terminalFontWeight(s.fontWeight, DEFAULT_SETTINGS.fontWeight),
+    fontWeightBold: terminalFontWeight(s.fontWeightBold, DEFAULT_SETTINGS.fontWeightBold, 'fontWeightBold'),
     drawBoldTextInBrightColors: s.drawBoldTextInBrightColors,
     minimumContrastRatio: terminalMinContrast(s.terminalMinContrast),
     cursorBlink: s.cursorBlink,

@@ -1,6 +1,12 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
+import { createLogger } from './logs'
+
+const log = createLogger('pty')
+// Path shell hilang yang sudah diwarn. Tanpa ini setiap spawn node baru mengulang warn yang sama
+// selama setting basi belum dibetulkan, dan log penuh satu pesan.
+const warnedMissing = new Set<string>()
 
 /** Apakah `bin` bisa dieksekusi — path langsung bila mengandung `/`, selain itu dicari di PATH.
  *  Hanya cek keberadaan + bit executable: TIDAK pernah menjalankan binary-nya.
@@ -38,7 +44,15 @@ export function resolveShell(
 ): string {
   const { envShell = process.env.SHELL, platform = process.platform, exists = binaryExists } = opts
   const candidates = [shell?.trim(), envShell?.trim(), platform === 'darwin' ? DARWIN_DEFAULT_SHELL : '', BASH_SHELL]
-  return candidates.find((c): c is string => !!c && exists(c)) ?? LAST_RESORT_SHELL
+  const chosen = candidates.find((c): c is string => !!c && exists(c)) ?? LAST_RESORT_SHELL
+  // Hanya kandidat SEBELUM yang terpilih: itu yang benar-benar dilewati. Path shell bukan PII.
+  const at = candidates.indexOf(chosen)
+  for (const c of candidates.slice(0, at < 0 ? candidates.length : at)) {
+    if (!c || warnedMissing.has(c)) continue
+    warnedMissing.add(c)
+    log.warn('pty.shell_missing', 'Configured shell not found, using fallback', { shell: c, fallback: chosen })
+  }
+  return chosen
 }
 
 /** argv untuk shell. Perintah diluncurkan lewat login shell (`-l -c`) supaya PATH/alias resolve dan
