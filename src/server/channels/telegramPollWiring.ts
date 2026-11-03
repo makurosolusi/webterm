@@ -63,6 +63,9 @@ export function startTelegramInbound(input: TelegramInboundInput): TelegramPolle
       input.onStatus?.(status)
     },
   })
-  process.once('exit', () => void poller.stop())
+  // Dilepas saat loop selesai: start/stop hot berulang tidak menumpuk listener `exit`.
+  const onExit = (): void => void poller.stop()
+  process.once('exit', onExit)
+  void poller.done.finally(() => process.off('exit', onExit))
   return poller
 }

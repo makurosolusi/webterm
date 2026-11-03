@@ -101,14 +101,14 @@ const RT = 'WEBTERM_CENTRAL_RUNTIME'
 /** Tabel vonis c-ENV-02 (E01..E26): owner, section, audience, restart, key requires. */
 const VERDICT: Row[] = [
   [L, 'platform', 'Dasar', 'user', 'boot', []],
-  ['WEBTERM_CHANNELS', 'channels', 'Telegram', 'user', 'boot', []],
-  [TG, 'channels', 'Telegram', 'user', 'boot', [L, 'WEBTERM_CHANNELS']],
+  ['WEBTERM_CHANNELS', 'channels', 'Telegram', 'user', 'hot', []],
+  [TG, 'channels', 'Telegram', 'user', 'hot', ['WEBTERM_CHANNELS']],
   ['WEBTERM_TELEGRAM_MODE', 'channels', 'Telegram', 'user', 'boot', [TG]],
   ['WEBTERM_TELEGRAM_BOT_TOKEN', 'channels', 'Telegram', 'user', 'hot', [TG]],
   ['WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'channels', 'Telegram', 'advanced', 'boot', [TG, 'WEBTERM_TELEGRAM_MODE']],
   [CE, 'central', 'Central', 'user', 'hot', []],
   ['WEBTERM_CENTRAL_CHAT', 'central', 'Central', 'user', 'hot', [CE]],
-  ['WEBTERM_CENTRAL_TELEGRAM', 'channels', 'Telegram', 'user', 'boot', [TG, CE, 'WEBTERM_CENTRAL_CHAT', RT, L]],
+  ['WEBTERM_CENTRAL_TELEGRAM', 'channels', 'Telegram', 'user', 'boot', [TG, CE, 'WEBTERM_CENTRAL_CHAT', RT]],
   [RT, 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_MODEL', 'central', 'Central', 'advanced', 'hot', [RT]],
   ['WEBTERM_CENTRAL_PLANNER', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_CENTRAL_TOOLS']],
