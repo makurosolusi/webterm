@@ -121,3 +121,22 @@ test('list-v2 and stat give kind/size and coded failures', async () => {
     expect(typeof st.body.version).toBe('string')
   })
 })
+
+test('raw via dispatcher: ?download=1 -> Content-Disposition attachment; without it, none (inline)', async () => {
+  const prev = process.env.WEBTERM_FILES_VIEWERS
+  process.env.WEBTERM_FILES_VIEWERS = 'on'
+  try {
+    await withTmp(async (at) => {
+      await fs.writeFile(at('pic.png'), 'x')
+      const raw = async (q: Record<string, string>) =>
+        (await fsApiRoute('/api/fs/raw', 'GET', new URLSearchParams({ path: at('pic.png'), ...q }), noBody, { headers: {} }))?.raw
+      const dl = await raw({ download: '1' })
+      expect(dl?.headers['Content-Disposition']?.startsWith('attachment')).toBe(true)
+      expect((await raw({}))?.headers['Content-Disposition']).toBe(undefined)
+      expect((await raw({ download: '0' }))?.headers['Content-Disposition']).toBe(undefined)
+    })
+  } finally {
+    if (prev === undefined) delete process.env.WEBTERM_FILES_VIEWERS
+    else process.env.WEBTERM_FILES_VIEWERS = prev
+  }
+})
