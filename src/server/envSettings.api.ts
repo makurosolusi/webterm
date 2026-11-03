@@ -3,9 +3,11 @@
 // index.ts; `rootGate` menambah syarat untuk kunci `dangerous` (root token benar-benar terkonfigurasi).
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
+import { importDotenv } from './envSettings.import'
 import type { EnvChange, EnvSettings } from './envSettings.service'
 
 export const ENV_SETTINGS_PATH = '/api/settings/env'
+export const IMPORT_ENDPOINT = '/api/settings/env/import'
 
 export interface EnvSettingsApiDeps {
   service: EnvSettings
@@ -21,6 +23,18 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** Baca + parse body JSON berbatas; pada kegagalan sudah membalas (413/400) dan `ok:false`. Body kosong = `empty` bila diberikan. */
+async function readJson(req: IncomingMessage, res: ServerResponse, empty?: unknown): Promise<{ ok: true; value: unknown } | { ok: false }> {
+  const read = await readCappedRequestBody(req, SETTINGS_BODY_MAX_BYTES)
+  if (!read.ok) {
+    const big = read.reason === 'too_large'
+    json(res, big ? 413 : 400, { error: big ? 'payload_too_large' : 'body_read_failed' })
+    return { ok: false }
+  }
+  if (empty !== undefined && read.body.trim() === '') return { ok: true, value: empty }
+  try { return { ok: true, value: JSON.parse(read.body) } } catch { json(res, 400, { error: 'bad_json' }); return { ok: false } }
+}
 
 /** Bentuk body `{ set?: {KEY: string}, unset?: KEY[] }`, atau null bila salah bentuk. */
 function parseChange(body: unknown): EnvChange | null {
@@ -43,17 +57,22 @@ export async function envSettingsRoute(
   const ctx = { root: deps.rootGate() }
   if (method === 'GET') return json(res, 200, deps.service.state(ctx))
   if (method !== 'PUT') return json(res, 405, { error: 'method_not_allowed' })
-  const read = await readCappedRequestBody(req, SETTINGS_BODY_MAX_BYTES)
-  if (!read.ok) {
-    return read.reason === 'too_large' ? json(res, 413, { error: 'payload_too_large' }) : json(res, 400, { error: 'body_read_failed' })
-  }
-  let parsed: unknown
-  try { parsed = JSON.parse(read.body) } catch { return json(res, 400, { error: 'bad_json' }) }
-  const change = parseChange(parsed)
+  const body = await readJson(req, res)
+  if (!body.ok) return
+  const change = parseChange(body.value)
   if (!change) return json(res, 400, { error: 'invalid_body' })
   const result = deps.service.update(change, ctx)
-  if (!result.ok) {
-    return json(res, result.status, { error: result.error, key: result.key, reason: result.reason })
-  }
+  if (!result.ok) return json(res, result.status, { error: result.error, key: result.key, reason: result.reason })
   json(res, 200, { ...result.state, restartRequired: result.restartRequired })
+}
+
+/** `POST` impor `.env` (default dry-run; `{ apply: true }` menulis). Body hanya `apply`; path tak pernah dari klien. */
+export async function envImportRoute(req: IncomingMessage, res: ServerResponse, method: string, deps: EnvSettingsApiDeps): Promise<void> {
+  if (method !== 'POST') return json(res, 405, { error: 'method_not_allowed' })
+  const body = await readJson(req, res, {})
+  if (!body.ok) return
+  const v = body.value
+  if (!isRecord(v) || (v.apply !== undefined && typeof v.apply !== 'boolean')) return json(res, 400, { error: 'invalid_body' })
+  const out = importDotenv(deps, v.apply === true)
+  json(res, out.status, out.body)
 }
