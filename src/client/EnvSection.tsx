@@ -1,76 +1,94 @@
-// Section "Environment" di Settings: variabel env (dulu hanya dari .env) dengan default + override.
-// Hook data hanya hidup selama section dirender (pencarian lintas section tidak memasangnya).
-import { useId } from 'react'
+// Section "Fitur & server" di Settings: header + filter cepat, banner, kartu server, akordeon per
+// section, bar simpan massal. State dari EnvSettingsProvider (dipasang ENV-05 di panel; bila tak ada,
+// section memasang provider sendiri). Query pencarian tidak pernah membuang section/draft.
+import { useCallback, useMemo, useRef, useState } from 'react'
+import type { EnvEntryV2 } from '../shared/envSettings.contract'
+import { EnvGroupSection } from './EnvGroupSection'
+import { EnvRestartBanner } from './EnvRestartBanner'
+import { EnvSaveBar } from './EnvSaveBar'
+import { EnvServerCard } from './EnvServerCard'
 import { SettingsMessage } from './SettingsMessage'
-import { useSettingsSearch } from './SettingsFields'
-import { EnvEntryRow } from './EnvEntryRow'
-import { ENV, ENV_BOOTSTRAP_GROUP, ENV_GROUP_LABEL, ENV_GROUP_ORDER } from './envLabels'
-import type { EnvEntry } from './envSettingsApi'
-import { useEnvSettings } from './useEnvSettings'
+import { normalizeQuery, useSettingsSearch } from './SettingsFields'
+import {
+  CHANNELS_OWNS_TELEGRAM, entryMatches, matchesQuickFilter, partitionEntries, type EnvQuickFilter, type EnvSectionData,
+} from './envDraft'
+import { ENV_UI } from './envSectionLabels'
+import {
+  EnvSettingsProvider, useEnvLoadOnMount, useEnvSettingsContext, useHasEnvSettingsContext,
+} from './useEnvSettings'
 import './settings-env.css'
 
-/** Section Environment; kosong saat pencarian aktif. */
-export function EnvSection(): React.JSX.Element | null {
+interface Props { channelsOwned?: boolean }
+
+const FILTERS: Array<[EnvQuickFilter, string]> = [
+  ['changed', ENV_UI.filterChanged], ['restart', ENV_UI.filterRestart], ['dangerous', ENV_UI.filterDangerous],
+]
+const FOCUSABLE = 'input,select,textarea,button,[role="switch"]'
+
+/** Section Environment; memakai provider dari atas bila ada. */
+export function EnvSection({ channelsOwned = CHANNELS_OWNS_TELEGRAM }: Props): React.JSX.Element {
   const query = useSettingsSearch()
-  return query ? null : <EnvPanel />
+  const hasProvider = useHasEnvSettingsContext()
+  const panel = <EnvPanel channelsOwned={channelsOwned} />
+  return hasProvider ? panel : <EnvSettingsProvider query={query}>{panel}</EnvSettingsProvider>
 }
 
-/** Kelompokkan per group: urutan tetap, group tak dikenal sebelum bootstrap, bootstrap terakhir. */
-function groupEntries(entries: EnvEntry[]): Array<[string, EnvEntry[]]> {
-  const groups = new Map<string, EnvEntry[]>()
-  for (const e of entries) groups.set(e.group, [...(groups.get(e.group) ?? []), e])
-  const rank = (g: string): number => {
-    if (g === ENV_BOOTSTRAP_GROUP) return Number.MAX_SAFE_INTEGER
-    const i = (ENV_GROUP_ORDER as readonly string[]).indexOf(g)
-    return i === -1 ? ENV_GROUP_ORDER.length : i
-  }
-  return [...groups].sort((a, b) => rank(a[0]) - rank(b[0]))
-}
-
-function BootstrapRow({ entry }: { entry: EnvEntry }): React.JSX.Element {
-  return (
-    <li className="st-env-row st-field" aria-label={entry.key}>
-      <div className="st-title">
-        <span className="st-category">{ENV.categoryRoot} › {ENV_GROUP_LABEL[entry.group] ?? entry.group}: </span>
-        <code className="st-env-key">{entry.key}</code>
-      </div>
-      <p className="st-hint">{entry.set ? ENV.secretSet : ENV.secretUnset} · {ENV.bootstrapOnly}</p>
-    </li>
+function EnvPanel({ channelsOwned }: Required<Props>): React.JSX.Element {
+  const api = useEnvSettingsContext()
+  useEnvLoadOnMount()
+  const [filter, setFilter] = useState<EnvQuickFilter>()
+  const root = useRef<HTMLDivElement>(null)
+  const q = useMemo(() => normalizeQuery(api.query), [api.query])
+  const state = api.state
+  const part = useMemo(
+    () => (state ? partitionEntries(state.entries, state.groups, channelsOwned) : null),
+    [state, channelsOwned],
   )
-}
-
-function EnvPanel(): React.JSX.Element {
-  const e = useEnvSettings()
-  const uid = useId()
-  const locked = e.state?.locked ?? false
-  const save = (key: string, value: string): Promise<boolean> => e.apply(key, { set: { [key]: value } })
-  const unset = (key: string): Promise<boolean> => e.apply(key, { unset: [key] })
+  const visible = useCallback(
+    (e: EnvEntryV2) => matchesQuickFilter(e, filter, api.draft) && entryMatches(e, q),
+    [filter, q, api.draft],
+  )
+  const narrowed = q !== '' || filter !== undefined
+  const onJump = useCallback((key: string): void => {
+    const el = [...(root.current?.querySelectorAll<HTMLElement>('[data-env-item]') ?? [])].find((n) => n.dataset.envItem === key)
+    if (!el) return // kunci milik Channels / tak dirender: pindah tab ditangani ENV-06
+    for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) d.open = true
+    el.scrollIntoView?.({ block: 'center' })
+    el.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+  }, [])
+  const none = narrowed && part !== null && ![...part.main, ...part.advanced].some((s) => s.entries.some(visible))
+  const group = (title: string, sections: EnvSectionData[], defaultOpen: boolean, sub = false): React.JSX.Element => (
+    <EnvGroupSection key={title} title={title} sections={sections} defaultOpen={defaultOpen} subheadings={sub}
+      visible={visible} narrowed={narrowed} onJump={onJump} />
+  )
   return (
-    <div className="st-env" aria-busy={e.loading}>
-      <div className="st-ch-toolbar">
-        <button type="button" className="st-button" onClick={e.refresh}>
-          {ENV.refresh}
+    <div className="st-env" aria-busy={api.loading} ref={root}>
+      <div className="st-env-head">
+        <h3 className="st-env-title">{ENV_UI.title}</h3>
+        <div className="st-env-filters" role="group" aria-label={ENV_UI.filterGroup}>
+          {FILTERS.map(([id, label]) => (
+            <button key={id} type="button" className="st-button st-env-chip" aria-pressed={filter === id}
+              onClick={() => setFilter(filter === id ? undefined : id)}>{label}</button>
+          ))}
+        </div>
+        <button type="button" className="st-button" disabled={api.loading} onClick={() => void api.refresh()}>
+          {ENV_UI.refresh}
         </button>
       </div>
-      {e.loading ? <p className="st-note" role="status">{ENV.loading}</p> : null}
-      {e.error ? <SettingsMessage kind="error" role="alert">{e.error}</SettingsMessage> : null}
-      {locked ? <SettingsMessage kind="warning" role="status">{ENV.lockedBanner}</SettingsMessage> : null}
-      {e.restartKeys.length > 0 ? (
-        <SettingsMessage kind="info" role="status">{ENV.restartBanner} {e.restartKeys.join(', ')}</SettingsMessage>
+      {api.loading ? <p className="st-note" role="status">{ENV_UI.loading}</p> : null}
+      {api.error ? <SettingsMessage kind="error" role="alert">{api.error}</SettingsMessage> : null}
+      {state?.locked ? <SettingsMessage kind="warning" role="status">{ENV_UI.lockedBanner}</SettingsMessage> : null}
+      <EnvRestartBanner />
+      {state && part ? (
+        <>
+          <div hidden={narrowed}><EnvServerCard server={state.server} rootGate={state.rootGate} /></div>
+          {part.main.map((s) => group(s.title, [s], true))}
+          {part.advanced.length > 0 ? group(ENV_UI.advanced, part.advanced, false, true) : null}
+          {part.channels.length > 0 ? <SettingsMessage kind="info">{ENV_UI.channelsMoved}</SettingsMessage> : null}
+          {none ? <p className="st-note">{ENV_UI.noMatch}</p> : null}
+        </>
       ) : null}
-      {e.state ? groupEntries(e.state.entries).map(([group, entries]) => (
-        <section key={group} aria-labelledby={`${uid}-${group}`}>
-          <h3 className="st-ch-heading" id={`${uid}-${group}`}>{ENV_GROUP_LABEL[group] ?? group}</h3>
-          <ul className="st-ch-list">
-            {entries.map((entry) => group === ENV_BOOTSTRAP_GROUP ? (
-              <BootstrapRow key={entry.key} entry={entry} />
-            ) : (
-              <EnvEntryRow key={entry.key} entry={entry} locked={locked} busy={e.busy}
-                error={e.entryErrors[entry.key]} onSave={save} onUnset={unset} />
-            ))}
-          </ul>
-        </section>
-      )) : null}
+      <EnvSaveBar />
     </div>
   )
 }
