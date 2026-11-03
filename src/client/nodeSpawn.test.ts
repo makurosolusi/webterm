@@ -41,9 +41,13 @@ const appSrc = () => ['App.tsx', 'App.board.ts', 'App.canvas.tsx', 'App.hooks.ts
 
 const ADDERS = ['onAddTerminal', 'onAddFiles', 'onAddAgent']
 
-/** Potongan dari tiap `const onAdd... = useCallback(` sampai ujung dep array-nya. */
+/**
+ * Potongan dari tiap `const onAdd... = useCallback(` sampai dep array pertama yang diawali `[addFlowNode`.
+ * Regex, bukan string persis: dep array boleh bertambah (`[addFlowNode, settings.customAgents])`),
+ * dan terminator literal yang tak ketemu membuat potongan melebar ke kode lain lalu menuduh x:/y: palsu.
+ */
 const adderBody = (s: string, name: string) =>
-  s.split(`const ${name} = useCallback(`)[1]?.split('[addFlowNode])')[0] ?? ''
+  s.split(`const ${name} = useCallback(`)[1]?.split(/\[addFlowNode[^\]]*\]\)/)[0] ?? ''
 
 /** x/y yang ditulis sendiri si pemanggil = penempatan yang buta viewport. */
 const setsOwnXY = (t: string) => /\bx:\s|\by:\s/.test(t)
@@ -76,6 +80,23 @@ describe('titik lahir node baru di App', () => {
 
   it('node baru ditandai terseleksi — round-trip toFlow membuang `selected` yang lain', () => {
     expect(appSrc()).toMatch(/next\[next\.length - 1\]\.selected = true/)
+  })
+
+  it('pemotong adderBody berhenti di badan adder, tidak melebar ke kode lain', () => {
+    for (const n of ADDERS) {
+      const body = adderBody(appSrc(), n)
+      expect(body).not.toBe('')
+      expect(body).not.toMatch(/useCallback\(/) // adder lain / hook lain ikut terpotong
+      expect(body).not.toMatch(/^ {2}const /m) // deklarasi sejajar adder (indent 2); const di dalam badan (indent 4) sah
+    }
+  })
+
+  it('guard tetap menggigit: x/y sendiri di salah satu adder membuat spawnsAtViewportCenter false', () => {
+    const real = appSrc()
+    expect(spawnsAtViewportCenter(real)).toBe(true)
+    const bad = real.replace(/(const onAddTerminal = useCallback\([^\n]*?kind: 'terminal', )/, '$1x: 1, ')
+    expect(bad).not.toBe(real)
+    expect(spawnsAtViewportCenter(bad)).toBe(false)
   })
 
   it('guardnya menolak bentuk lamanya', () => {
