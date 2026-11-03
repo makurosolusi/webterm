@@ -1,33 +1,17 @@
 // Klien REST untuk /api/settings/env. Token hanya di header (sessionStorage, seperti inboxTransport);
 // nilai yang dikirim tak pernah masuk URL, log, atau pesan error.
 import { TOKEN_HEADER } from './api'
+import type { EnvEntryV2, EnvKindV2, EnvSourceV2, EnvStateV2 } from '../shared/envSettings.contract'
 import { ENV } from './envLabels'
 
 const PATH = '/api/settings/env'
 const TOKEN_KEY = 'webterm.token'
 
-export type EnvSource = 'override' | 'env' | 'default'
-export type EnvKind = 'flag' | 'string' | 'number' | 'enum' | 'secret'
-
-export interface EnvEntry {
-  key: string
-  group: string
-  kind: EnvKind
-  label: string
-  description: string
-  default?: string
-  options?: readonly string[]
-  source: EnvSource
-  /** Non-secret saja. */
-  value?: string
-  /** Secret / bootstrap saja: terisi atau tidak. */
-  set?: boolean
-  restartRequired: boolean
-  pendingRestart: boolean
-  dangerous: boolean
-  editable: boolean
-}
-export interface EnvState { locked: boolean; entries: EnvEntry[] }
+export type { EnvAudience, EnvGroupMeta, EnvRequire, EnvRestart } from '../shared/envSettings.contract'
+export type EnvSource = EnvSourceV2
+export type EnvKind = EnvKindV2
+export type EnvEntry = EnvEntryV2
+export type EnvState = EnvStateV2
 export interface EnvChange { set?: Record<string, string>; unset?: string[] }
 
 /** Error API env: hanya status + kode + reason statis dari server. */
@@ -58,8 +42,17 @@ async function call<T>(init: RequestInit): Promise<T> {
     throw new EnvApiError(res.status, typeof b.error === 'string' ? b.error : `http_${res.status}`,
       typeof b.reason === 'string' ? b.reason : undefined)
   }
-  if (!body || typeof body !== 'object' || !Array.isArray((body as EnvState).entries)) throw new EnvApiError(502, 'bad_response')
+  if (!isEnvState(body)) throw new EnvApiError(502, 'bad_response')
   return body as T
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** Bentuk minimum state v2 (hanya yang dibaca klien); respons PUT juga memuat `restartRequired`. */
+export function isEnvState(body: unknown): body is EnvState {
+  if (!isObj(body) || !isObj(body.server) || !Array.isArray(body.groups) || !Array.isArray(body.entries)) return false
+  if (typeof body.locked !== 'boolean' || typeof body.rootGate !== 'boolean') return false
+  return body.entries.every((e) => isObj(e) && typeof e.key === 'string' && typeof e.kind === 'string' && typeof e.value === 'string')
 }
 
 /** State env penuh. */

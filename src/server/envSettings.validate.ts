@@ -12,15 +12,21 @@ export type EnvValueCheck = { ok: true; value: string } | { ok: false; reason: s
 
 const bad = (reason: string): EnvValueCheck => ({ ok: false, reason })
 
-/** Periksa `raw` terhadap `spec`; nilai kembalian sudah kanonik (string di-trim). */
+/** Periksa `raw` terhadap `spec`; nilai kembalian sudah kanonik (string di-trim, enum ke opsi kanonik). */
 export function validateEnvValue(spec: EnvSpec, raw: unknown): EnvValueCheck {
   if (typeof raw !== 'string') return bad('must be a string')
+  // allowEmpty: '' sah dan berarti "hapus override" (ditangani layanan); tak berlaku untuk secret/flag.
+  if (spec.allowEmpty && spec.kind !== 'secret' && spec.kind !== 'flag' && raw.trim() === '') return { ok: true, value: '' }
   if (spec.kind === 'secret') {
     if (raw.length > SECRET_MAX_CHARS) return bad('too long')
     return spec.pattern?.test(raw) ? { ok: true, value: raw } : bad('has an unexpected shape')
   }
   if (spec.kind === 'flag') return raw === 'on' || raw === 'off' ? { ok: true, value: raw } : bad('must be on or off')
-  if (spec.kind === 'enum') return spec.options?.includes(raw) ? { ok: true, value: raw } : bad('not an allowed option')
+  if (spec.kind === 'enum') {
+    const lower = raw.trim().toLowerCase()
+    const hit = spec.options?.find((o) => o.toLowerCase() === lower)
+    return hit === undefined ? bad('not an allowed option') : { ok: true, value: hit }
+  }
   const value = raw.trim()
   if (spec.kind === 'number') {
     const n = Number(value)
