@@ -15,8 +15,8 @@ import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { buildButtonDeps } from './channels/channelButtons'
-import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
-import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } from './channels/telegramPollWiring'
+import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
+import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { bootCa2 } from './central/ca2Boot'
 import { initEnvSettings } from './envSettings.runtime'
@@ -28,8 +28,8 @@ import { upgradeRoute } from './upgradeRouting'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import { installBrowserAgentShim } from './browserAgentShim'
 import { isSafeWorkspaceId } from './browser/profile.paths'
-import { startBrowserRuntime } from './browser/browser.runtime'
-import { activeBrowser, setActiveBrowser } from './browser/browser.state'
+import { activeBrowser, registerBrowserCapability } from './browser/browser.activate'
+import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureCapabilities.runtime'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 
@@ -54,28 +54,27 @@ if (ledgerRuntime) {
   startLedgerReaper(ledgerRuntime.ledger)
 }
 
-// Channel ingress is off by default: `WEBTERM_TELEGRAM=on` + webhook secret + a live ledger.
-// `null` means no route exists at all, not a route that rejects every request.
-const activeRuntime = activeLedgerRuntime()
-const centralChat = buildTelegramCentralPort(activeRuntime)
-const channelsRuntime = startChannelsRuntime(activeRuntime?.ledger, { centralChat, buttons: activeRuntime ? buildButtonDeps(activeRuntime.db) : null })
-if (channelsRuntime && activeRuntime) {
-  if (resolveTelegramMode() === 'poll') {
-    // Poll mode never exposes a reachable webhook; the route stays mounted but nothing calls it.
-    if (startTelegramInbound({ channels: channelsRuntime, ledger: activeRuntime, centralChat })) {
-      createLogger('channels.telegram').info('channels.start', 'Telegram channel on (mode=poll)', { mode: 'poll' })
-    }
-  } else {
-    createLogger('channels.telegram').info('channels.start', `Telegram channel on (POST ${TELEGRAM_WEBHOOK_PATH})`, { mode: 'webhook' })
-  }
-}
+// Telegram hot-apply: runtime kanal + poller dibangun/dihentikan hook kemampuan `telegram`, bukan di boot;
+// token tak dibaca di sini. Opsi berupa getter agar tiap start memakai flag central terbaru.
+const telegramHot = createTelegramHot({
+  ledger: () => activeLedgerRuntime()?.ledger,
+  options: {
+    get centralChat() { return buildTelegramCentralPort(activeLedgerRuntime()) },
+    get buttons() { const rt = activeLedgerRuntime(); return rt ? buildButtonDeps(rt.db) : null },
+  },
+})
+registerTelegramHot(telegramHot)
+// Jembatan central dirakit saat start: central berubah => kanal yang sedang on dirakit ulang (bukan saat boot).
+let booted = false
+const refreshTelegram = () => (booted && isEnabled('telegram') ? telegramHot.refresh() : undefined)
+onCapabilityChange('central', { start: refreshTelegram, stop: refreshTelegram })
+// bootCa2 merakit manajer bot sekali; bila telegram sudah on nyalakan lebih dulu supaya `bots` ada.
+if (isEnabled('telegram')) await telegramHot.start()
 
-// Central autonomy (off by default) is a timer over the existing ledger runtime; it never
-// starts a second server. Boot is fail-closed: it logs one line and starts only when
-// WEBTERM_CENTRAL_AUTONOMY=on, a ledger runtime exists, and WEBTERM_ORCHESTRATOR_RUN=on.
-// Central Agent v2 (every flag off = null, nothing below changes): tool groups, agent executor,
-// panel routes; its liveness probe feeds the autonomy reconciler.
-const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: channelsRuntime?.bots ?? null, settings: () => db.getSettings() })
+// Central autonomy is a timer over the existing ledger runtime (never a second server); its hook
+// starts/stops it by capability. Central Agent v2: tool groups, agent executor, panel routes; its
+// liveness probe feeds the autonomy reconciler.
+const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: telegramHot.channels?.bots ?? null, settings: () => db.getSettings() })
 startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAlive: ca2.agentAlive } : {}) })
 
 const API_PREFIX = '/api/'
@@ -119,22 +118,14 @@ export { isNodeTokenPath }
 // (file itu terbaca semua proses dengan uid yang sama).
 installContextLink()
 
-// Browser di canvas: flag off (default) => `startBrowserRuntime` mengembalikan null dan tidak ada yang
-// dipasang (tanpa jalur /ws/browser, /api/browser, /api/control/browser, tanpa env capability di PTY).
-// Dimulai SEBELUM `applyPtyOptions` supaya hook capability sesi ikut terpasang pada opsi sesi pertama.
-const browserRuntime = await startBrowserRuntime({
-  env: process.env,
-  webtermPort: PORT,
-  dataRoot: dataDir(),
-  secrets: createFileSecretStore(join(dataDir(), 'secrets')),
-  capabilities: capabilityStore,
-  workspaces: () => db.list(),
-})
-setActiveBrowser(browserRuntime)
-if (browserRuntime) {
-  if (browserRuntime.status().agentEnabled) installBrowserAgentShim()
-  log.info('browser.start', 'Browser nodes on', { maxLive: browserRuntime.status().maxLive })
-}
+// Browser di canvas: hook kemampuan `browser` menyalakan/mematikan runtime tanpa restart; /ws/browser dan
+// /api/browser selalu terdaftar dan membaca `activeBrowser()` per panggilan. Opsi sesi PTY dihitung ulang
+// tiap perubahan (hook kedua jalan setelah hook runtime), jadi capability browser ikut hidup/mati.
+registerBrowserCapability({ env: process.env, webtermPort: PORT, dataRoot: dataDir(), secrets: createFileSecretStore(join(dataDir(), 'secrets')), capabilities: capabilityStore, workspaces: () => db.list() })
+onCapabilityChange('browser', { start: () => { if (activeBrowser()?.status().agentEnabled) installBrowserAgentShim(); applyPtyOptions() }, stop: applyPtyOptions })
+// Semua hook sudah terpasang: boot = reconcile dari himpunan kosong ke yang on di env (hanya yang on yang jalan).
+await reconcile(new Set(), enabledSet(process.env))
+booted = true
 applyPtyOptions()
 void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE off
 
@@ -149,11 +140,11 @@ if (dev) {
     const url = reqUrl(req)
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
-    if (channelsRuntime?.handle(req, res)) return
+    if (telegramHot.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
-    if (channelsRuntime?.handleApi(req, res)) return
+    if (telegramHot.handleApi(req, res)) return
     if (handleApi(req, res)) return
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
@@ -166,11 +157,11 @@ if (dev) {
     const url = reqUrl(req)
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
-    if (channelsRuntime?.handle(req, res)) return
+    if (telegramHot.handle(req, res)) return
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
-    if (channelsRuntime?.handleApi(req, res)) return
+    if (telegramHot.handleApi(req, res)) return
     if (handleApi(req, res)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
@@ -185,7 +176,7 @@ server.on('upgrade', (req, socket, head) => {
   // Only /ws is ours. In dev Vite's upgrade listener (same server) already claimed its HMR upgrade,
   // so destroying the socket here would kill it; only prod, with no other listener, destroys.
   const url = reqUrl(req)
-  const route = upgradeRoute(url.pathname, WS_PATH, dev, browserRuntime ? BROWSER_WS_PATH : undefined)
+  const route = upgradeRoute(url.pathname, WS_PATH, dev, BROWSER_WS_PATH)
   if (route === 'destroy') {
     socket.destroy()
     return
@@ -202,12 +193,13 @@ server.on('upgrade', (req, socket, head) => {
   if (route === 'browser') {
     // Gerbang `allowed()` di atas sama dengan /ws: root token saja, node-token ditolak (path ini tak ada di allowlist node-token).
     const workspaceId = url.searchParams.get('workspaceId')
-    if (!browserRuntime || !isSafeWorkspaceId(workspaceId)) {
+    const rt = activeBrowser()
+    if (!rt || !isSafeWorkspaceId(workspaceId)) {
       socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
       socket.destroy()
       return
     }
-    browserWss.handleUpgrade(req, socket, head, (ws) => browserRuntime.gateway(ws, workspaceId))
+    browserWss.handleUpgrade(req, socket, head, (ws) => rt.gateway(ws, workspaceId))
     return
   }
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))

@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
 const GATE = 'if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)'
-const BINDINGS = 'if (channelsRuntime?.handleApi(req, res)) return'
-const WEBHOOK = 'if (channelsRuntime?.handle(req, res)) return'
+const BINDINGS = 'if (telegramHot.handleApi(req, res)) return'
+const WEBHOOK = 'if (telegramHot.handle(req, res)) return'
 
 describe('index.ts channel wiring', () => {
   it('gates the binding API in both listeners, always after `allowed`', () => {
@@ -27,7 +27,7 @@ describe('index.ts channel wiring', () => {
   })
 
   it('does not grow a second auth path for the bindings route', () => {
-    expect(source.split('channelsRuntime?.handleApi').length - 1).toBe(2)
+    expect(source.split('telegramHot.handleApi').length - 1).toBe(2)
     expect(source).not.toContain('isNodeTokenPath(' + "'/api/channels")
     expect(source).toContain("import http from 'node:http'")
     expect(source).toContain('http.createServer()')
