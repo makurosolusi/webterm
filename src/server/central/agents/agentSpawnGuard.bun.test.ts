@@ -15,7 +15,7 @@ function setup(level: 'propose' | 'act_envelope') {
   const guard = createControlGuard({ db, now: () => T0, env: AUTO, random: () => 0 })
   const sessions = new Set<string>()
   const host: AgentHost = {
-    runnerFor: () => 'pty', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'do it',
+    runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'do it',
     openPty: async (_a, _cwd, nodeId) => { await Promise.resolve(); sessions.add(nodeId) },
     headlessArgv: () => null, send: async () => undefined, scrollback: async () => [],
     closePty: async () => undefined, hasSession: (n) => sessions.has(n),

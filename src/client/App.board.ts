@@ -146,9 +146,11 @@ export function useBoardActions({
   // `resumesOnFirstLaunch` membaca node yang baru lahir sebagai "pernah diluncurkan" → claude dipanggil
   // dengan `--resume <uuid>` yang belum pernah ada di disk → "No conversation found with session ID".
   const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => {
-    const color = agentConfig(agentId)?.color
+    // Custom tanpa warna sendiri mewarisi warna baseAgent (kontrak `CustomAgent.color`).
+    const custom = settings.customAgents.find((c) => c.id === agentId)
+    const color = agentConfig(agentId)?.color ?? custom?.color ?? (custom?.baseAgent && agentConfig(custom.baseAgent)?.color)
     addFlowNode((_, ws) => ({ id: randomId(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }), at)
-  }, [addFlowNode])
+  }, [addFlowNode, settings.customAgents])
 
   // A node minted its own session uuid (or restarted): persist it to that node.
   // Data-only change — not pushed to layout history (undo must not drop a live session id).
