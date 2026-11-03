@@ -6,6 +6,7 @@ import type { BrowserStatusResp } from '../shared/browser.contract'
 import { getBrowserStatus } from './browser.api'
 
 let cached: Promise<BrowserStatusResp | null> | null = null
+const listeners = new Set<() => void>()
 
 /** Status server, di-cache. Gagal (flag mati, jaringan, belum login) = `null` dan cache dibuang supaya dicoba lagi. */
 export function loadBrowserStatus(): Promise<BrowserStatusResp | null> {
@@ -16,8 +17,11 @@ export function loadBrowserStatus(): Promise<BrowserStatusResp | null> {
   return cached
 }
 
-/** Hanya untuk test: lupakan cache. */
-export function resetBrowserStatusCache(): void { cached = null }
+/** Lupakan cache dan minta hook yang sedang terpasang memuat ulang (dipakai setelah kemampuan browser dinyalakan; juga dipakai test). */
+export function resetBrowserStatusCache(): void {
+  cached = null
+  for (const l of listeners) l()
+}
 
 /** Status browser server, atau `null` selama belum tahu / fitur mati. `ready=false` menunda fetch (belum hydrate/login). */
 export function useBrowserStatus(ready = true): BrowserStatusResp | null {
@@ -25,8 +29,10 @@ export function useBrowserStatus(ready = true): BrowserStatusResp | null {
   useEffect(() => {
     if (!ready) return
     let live = true
-    void loadBrowserStatus().then((s) => { if (live) setStatus(s) })
-    return () => { live = false }
+    const load = (): void => { void loadBrowserStatus().then((s) => { if (live) setStatus(s) }) }
+    load()
+    listeners.add(load)
+    return () => { live = false; listeners.delete(load) }
   }, [ready])
   return status
 }

@@ -8,10 +8,13 @@
 //
 // Pembagian kerjanya tetap seperti sebelumnya: isi menu = data murni (`canvasMenu.model.ts`),
 // matematika penempatan = fungsi murni (`canvasMenu.geometry.ts`), file ini cuma yang menyambung.
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react'
 import type { ReactFlowInstance, XYPosition } from '@xyflow/react'
 import CanvasContextMenu from './CanvasContextMenu'
+import { CapabilityOffer } from './CapabilityOffer'
+import { resetBrowserStatusCache } from './browser.feature'
+import { VscodePopover } from './components/vscode/vscodePopover'
 import { buildCanvasMenuRows } from './canvasMenu.model'
 import type { AgentId } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
@@ -24,7 +27,7 @@ export interface CanvasPaneMenuDeps {
   nodeCount: number
   onAddTerminal: (at?: XYPosition) => void
   onAddFiles: (at?: XYPosition) => void
-  /** Tidak ada = fitur browser mati di server; barisnya tidak dibuat. */
+  /** Tidak ada = kemampuan browser mati di server; klik barisnya memunculkan tawaran "Nyalakan". */
   onAddBrowser?: (at?: XYPosition) => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => void
   onFit: () => void
@@ -47,12 +50,27 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
   // Koordinat LAYAR untuk menaruh panelnya, koordinat FLOW (`at`) untuk melahirkan node di titik
   // klik. Dua-duanya disimpan karena konversinya butuh viewport pada saat klik.
   const [open, setOpen] = useState<{ x: number; y: number; at: XYPosition } | null>(null)
-  const { rf } = deps
+  // Tawaran menyalakan browser menggantikan isi menu (panel yang sama, titik yang sama).
+  const [offering, setOffering] = useState(false)
+  // Titik node browser yang menunggu `onAddBrowser` terbit setelah kemampuan menyala.
+  const pendingAt = useRef<{ at: XYPosition } | null>(null)
+  // Dinyalakan oleh klik baris: menu menutup dirinya sesudah onSelect, tapi panelnya harus tetap hidup.
+  const keepOpen = useRef(false)
+  const { rf, onAddBrowser } = deps
+
+  useEffect(() => {
+    const pending = pendingAt.current
+    if (!pending || !onAddBrowser) return
+    pendingAt.current = null
+    onAddBrowser(pending.at)
+  }, [onAddBrowser])
 
   const onPaneContextMenu = useCallback(
     (e: ReactMouseEvent | MouseEvent) => {
       // Tanpa ini menu konteks BROWSER yang muncul — persis gejala yang dilaporkan pengguna.
       e.preventDefault()
+      pendingAt.current = null
+      setOffering(false)
       const screen = { x: e.clientX, y: e.clientY }
       // Koordinat flow dihitung SEKARANG, bukan saat item dipilih: pengguna masih bisa men-pan di
       // antara keduanya, dan node harus lahir di titik yang ia klik. Tanpa instance (sebelum
@@ -62,9 +80,34 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
     [rf],
   )
 
-  const close = useCallback(() => setOpen(null), [])
+  const close = useCallback(() => {
+    if (keepOpen.current) return
+    setOffering(false)
+    setOpen(null)
+  }, [])
 
-  const menu = open ? (
+  const offerBrowser = useCallback(() => {
+    keepOpen.current = true
+    queueMicrotask(() => { keepOpen.current = false }) // penutupan menu terjadi sinkron setelah onSelect
+    setOffering(true)
+  }, [])
+
+  // Setelah menyala: cache status dibuang, hook pemilik status memuat ulang, lalu efek di atas melahirkan node.
+  const offered = useCallback((at: XYPosition) => {
+    pendingAt.current = { at }
+    resetBrowserStatusCache()
+    close()
+  }, [close])
+
+  const anchor = useMemo(() => (open ? ({ left: open.x, top: open.y, right: open.x, bottom: open.y, width: 0, height: 0 } as DOMRect) : null), [open])
+
+  const menu = open && offering && anchor ? (
+    <VscodePopover anchor={anchor} open onOpenChange={close} ariaLabel="Nyalakan browser">
+      <div className="w-64 p-3"><CapabilityOffer id="browser" onDone={() => offered(open.at)} /></div>
+    </VscodePopover>
+  ) : null
+
+  const menuRows = open && !offering ? (
     <CanvasContextMenu
       x={open.x}
       y={open.y}
@@ -75,7 +118,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
         {
           addTerminal: () => deps.onAddTerminal(open.at),
           addFiles: () => deps.onAddFiles(open.at),
-          addBrowser: deps.onAddBrowser && (() => deps.onAddBrowser?.(open.at)),
+          addBrowser: () => (onAddBrowser ? onAddBrowser(open.at) : offerBrowser()),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),
           fitView: deps.onFit,
           selectAll: deps.onSelectAll,
@@ -90,5 +133,5 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
     />
   ) : null
 
-  return { onPaneContextMenu, menu }
+  return { onPaneContextMenu, menu: menu ?? menuRows }
 }
