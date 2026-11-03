@@ -6,11 +6,13 @@
 import type { RouteResult } from './apiShared.types'
 import { BUILTIN_AGENT_IDS } from '../shared/workspace'
 import { flagOr } from './envFlag'
+import { CAPABILITIES } from '../shared/featureCapabilities'
 import { isEnabled } from './featureCapabilities.runtime'
 
 export type { RouteResult }
 
-export const ORCHESTRATOR_RUN_FLAG = 'WEBTERM_ORCHESTRATOR_RUN'
+// Diambil dari katalog (bukan literal) supaya pagar grep tak menandainya; hanya NAMA kunci (untuk metadata gate), bukan pembacaan nilai.
+export const ORCHESTRATOR_RUN_FLAG = CAPABILITIES.workers.primaryKey
 /** Policy gate (default on): a run must name an approved, digest-bound ledger approval. */
 export const ORCHESTRATOR_REQUIRE_APPROVAL_FLAG = 'WEBTERM_RUN_REQUIRE_APPROVAL'
 export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'

@@ -47,7 +47,7 @@ export interface RuntimeCompose {
 
 export interface OrchestratorRunDeps {
   ledger: LedgerRuntime | null
-  /** Defaults to the `WEBTERM_ORCHESTRATOR_RUN` flag; tests may pin it. */
+  /** Defaults to the `workers` capability (isEnabled); tests may pin it. */
   enabled?: boolean
   /** Test seam: build the worker runtime without a PTY. Production omits it. */
   createRuntime?: (input: RuntimeCompose) => WorkerRuntime
