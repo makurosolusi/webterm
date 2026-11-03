@@ -41,6 +41,8 @@ export interface TerminalHandle {
   getSelection(): string
   /** Fokus ke terminal, kecuali input lain (rename, dialog) sedang memegangnya. */
   focus(): void
+  /** Link di bawah kursor (null bila tidak ada); menu klik-kanan menangkapnya saat dibuka. */
+  hoveredLink(): string | null
 }
 
 export interface TerminalCoreProps {
@@ -99,6 +101,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   const fitRef = useRef<FitAddon | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
   const webglRef = useRef<WebglAddon | null>(null)
+  const linkRef = useRef<string | null>(null)
   // `last` = ukuran terakhir yang dikirim (via `open` atau `resize`); dedupe SIGWINCH bertumpu padanya.
   const session = useRef<{ opened: boolean; last: TermSize | null; open: () => void }>({
     opened: false,
@@ -158,6 +161,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       paste(text) {
         termRef.current?.paste(text)
       },
+      hoveredLink: () => linkRef.current,
       hasSelection: () => termRef.current?.hasSelection() ?? false,
       getSelection: () => termRef.current?.getSelection() ?? '',
       focus() {
@@ -180,7 +184,10 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     // nodeterm sengaja TIDAK memakai addon ini (TerminalNode.tsx:3283): addon-nya tidak bisa
     // menyambung baris yang dipotong-keras tmux, jadi URL yang terlipat jadi dua link rusak.
     // webterm tidak punya tmux — output PTY tiba utuh, jadi di sini addon-nya tepat.
-    term.loadAddon(new WebLinksAddon((e, uri) => openLinkOnModifiedClick(e, uri)))
+    term.loadAddon(new WebLinksAddon((e, uri) => openLinkOnModifiedClick(e, uri), {
+      hover: (_e, text) => { linkRef.current = text },
+      leave: () => { linkRef.current = null },
+    }))
     try {
       term.loadAddon(new Unicode11Addon())
       // Tabel lebar default xterm adalah Unicode 6: di sana emoji selebar SATU sel. Setiap TUI

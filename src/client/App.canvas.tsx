@@ -1,8 +1,10 @@
 import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react'
 import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance, OnMoveEnd } from '@xyflow/react'
-import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
+import type { DragEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import ContextEdge from './ContextEdge'
 import { nodeTypes } from './nodeTypes'
+import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
+import { useNodeActions } from './nodeActions'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 import type { Viewport } from '../shared/workspace'
@@ -30,6 +32,21 @@ export default function BoardCanvas({
   rf, nodes, edges, settings, viewport, locked, nodeColor, syncViewport,
   onNodesChange, onEdgesChange, onConnect, onMoveEnd, onPaneContextMenu,
 }: CanvasProps) {
+  // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
+  const { openBrowserAt } = useNodeActions()
+  // Drop di atas node (mis. xterm) milik node itu, bukan pemicu node browser baru.
+  const overNode = (e: DragEvent) => (e.target as HTMLElement).closest('.react-flow__node') !== null
+  const onDragOver = (e: DragEvent) => {
+    if (openBrowserAt && !overNode(e) && DROP_URL_TYPES.some((t) => e.dataTransfer.types.includes(t))) e.preventDefault()
+  }
+  const onDrop = (e: DragEvent) => {
+    if (!openBrowserAt || overNode(e) || !DROP_URL_TYPES.some((t) => e.dataTransfer.types.includes(t))) return
+    // Selalu dicegah: dragover sudah menerima drop ini, kalau tidak peramban menavigasi tab ke teks yang dijatuhkan.
+    e.preventDefault()
+    const url = urlFromDrop(e.dataTransfer)
+    const at = rf.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    if (url && at) openBrowserAt({ url, at })
+  }
   return (
     <ReactFlow
       nodes={nodes}
@@ -42,6 +59,8 @@ export default function BoardCanvas({
       onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
       onMoveEnd={onMoveEnd}
       onPaneContextMenu={onPaneContextMenu}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       onInit={(i) => (rf.current = i)}
       defaultViewport={viewport ?? DEFAULT_VIEWPORT}
       fitView={false}

@@ -9,6 +9,7 @@ import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
+import { shouldMirrorUrl, useGoto } from './browser.useGoto'
 import { randomId } from './randomId'
 import './browser.css'
 
@@ -48,10 +49,13 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
 
+  useGoto({ want: d.url, state, send })
+
   // Simpan halaman terakhir ke data node: pulih dari sini saat sesi di-discard (PLAN b §4.7).
+  // about:blank tidak boleh menimpa URL niat pengguna (isBlankUrl di shouldMirrorUrl).
   useEffect(() => {
-    if (state?.url && !state.loading && !state.blocked && state.url !== d.url) rf.updateNodeData(id, { url: state.url })
-  }, [state?.url, state?.loading, state?.blocked, d.url, id, rf])
+    if (state && shouldMirrorUrl(state, d.url)) rf.updateNodeData(id, { url: state.url })
+  }, [state, d.url, id, rf])
 
   const ctx: BrowserSlotCtx = {
     id, state,

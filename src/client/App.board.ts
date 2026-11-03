@@ -10,6 +10,7 @@ import { spawnSpot } from './canvasMenu.geometry'
 import { paneSessionIds } from './paneTree'
 import { send } from './ws'
 import { useBrowserAdd } from './useBrowserAdd'
+import { useBrowserOpen } from './useBrowserOpen'
 import type { ClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
@@ -140,6 +141,8 @@ export function useBoardActions({
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
   const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
   const onAddBrowser = useBrowserAdd(addFlowNode, activeId, browserReady) // undefined = fitur mati di server
+  const defaultSize = useMemo(() => ({ width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }), [settings.defaultNodeWidth, settings.defaultNodeHeight])
+  const openBrowserAt = useBrowserOpen({ enabled: onAddBrowser !== undefined, addFlowNode, rf, nodesRef, setNodes, defaultSize })
 
   // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
   // saat mount (lalu mem-persist-nya lewat `onSession` di bawah). Mencetaknya di sini membuat
@@ -167,7 +170,7 @@ export function useBoardActions({
     rf.current?.updateNodeData(id, { hideLinks: !(cur?.data as { hideLinks?: boolean })?.hideLinks })
   }, [])
 
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks }), [onSession, onToggleHideLinks])
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt }), [onSession, onToggleHideLinks, openBrowserAt])
 
   return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, nodeActions }
 }
