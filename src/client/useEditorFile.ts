@@ -32,7 +32,11 @@ const errText = (err: unknown): string => (err instanceof Error ? err.message : 
  * (`ENOENT`) tidak membuang buffer — keduanya jadi `conflict` untuk `EditorConflictBar`.
  */
 export function useEditorFile(a: UseEditorFileArgs) {
-  const { id, filePath, fileName, ext, enabled, hostRef } = a
+  const { id, fileName, ext, enabled, hostRef } = a
+  // Path SAAT INI: rename mengganti path tanpa membuang buffer, jadi baca/tulis memakai ref —
+  // efek pemuatan (di bawah) sengaja tidak bergantung pada path.
+  const pathRef = useRef(a.filePath)
+  pathRef.current = a.filePath
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const savedRef = useRef('')
   const versionRef = useRef<FsVersion>('')
@@ -65,7 +69,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
     if (!editor || !loadedRef.current || readOnlyRef.current || savingRef.current) return
     const value = editor.getValue()
     savingRef.current = true
-    a.writeChecked(filePath, value, opts).then(
+    a.writeChecked(pathRef.current, value, opts).then(
       (r) => {
         savingRef.current = false
         if (r.ok) {
@@ -106,15 +110,20 @@ export function useEditorFile(a: UseEditorFileArgs) {
     doWrite(conflict.kind === 'version' ? { expectedVersion: conflict.current, mustExist: true } : {})
   }
 
-  /** Ganti buffer dengan isi disk (pilihan pengguna di bar konflik). */
-  const reload = async () => {
+  /** Ganti buffer dengan isi disk. `onlyIfClean`: auto-reload dari perubahan remote — batal jadi
+   *  konflik bila pengguna sempat mengetik selagi baca berjalan (buffer tidak boleh hilang). */
+  const reload = async (onlyIfClean = false) => {
     const editor = editorRef.current
     if (!editor) return
     try {
-      const meta = await a.readMeta(filePath)
+      const meta = await a.readMeta(pathRef.current)
       const refusal = loadRefusal(meta.content, 'File', true)
       if (refusal || meta.encoding !== 'utf8') {
         setSaveError(refusal ?? `${fileName} sekarang bukan teks UTF-8; buffer tidak diganti.`)
+        return
+      }
+      if (onlyIfClean && editor.getValue() !== savedRef.current) {
+        setConflict({ kind: 'version', current: meta.version })
         return
       }
       savedRef.current = meta.content
@@ -128,9 +137,22 @@ export function useEditorFile(a: UseEditorFileArgs) {
     }
   }
 
+  /** Pandangan sesaat untuk `useEditorSync`: dirty/saving/versi terakhir yang dikenal. */
+  const snapshot = () => ({
+    dirty: !!editorRef.current && editorRef.current.getValue() !== savedRef.current,
+    saving: savingRef.current,
+    version: versionRef.current
+  })
+
   // Teks: baca dulu (versi + encoding), baru muat Monaco — biner tidak boleh memicu pemuatan Monaco.
   useEffect(() => {
-    if (!enabled || !filePath) return
+    if (!enabled || !pathRef.current) return
+    // Berganti jenis (mis. rename .txt -> .png lalu balik) = muat ulang bersih, bukan sisa state lama.
+    setDirty(false)
+    setConflict(null)
+    setEncoding('utf8')
+    setPreview(false)
+    const filePath = pathRef.current
     let disposed = false
     let model: MonacoEditor.ITextModel | null = null
     let editor: MonacoEditor.IStandaloneCodeEditor | null = null
@@ -189,8 +211,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
       model?.dispose()
       editorRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per node; path node tidak berubah (fase 2: dengan filePath)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) yang memuat ulang
+  }, [enabled])
 
-  return { dirty, preview, previewHtml, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite }
+  return { dirty, preview, previewHtml, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }
