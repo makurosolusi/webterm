@@ -12,13 +12,16 @@ vi.setConfig({ testTimeout: 30_000 })
 
 const SENTINEL = 'TOK-SENTINEL-1234567890'
 const mk = (e: Partial<EnvEntry> & Pick<EnvEntry, 'key' | 'kind'>): EnvEntry => ({
-  group: 'telegram', label: `Label ${e.key}`, description: `Desc ${e.key}`, source: 'default',
-  restartRequired: false, pendingRestart: false, dangerous: false, editable: true, ...e,
+  group: 'telegram', label: `Label ${e.key}`, description: `Desc ${e.key}`, source: 'default', value: '',
+  restartRequired: false, pendingRestart: false, dangerous: false, editable: true,
+  owner: 'telegram', section: 'Telegram', audience: 'advanced', requires: [], restart: 'none', effective: '', valid: true, ...e,
 })
 const base = (): EnvState => ({
   locked: false,
+  rootGate: true,
+  server: { tokenSet: false, settingsLocked: false },
+  groups: [],
   entries: [
-    mk({ key: 'PORT', kind: 'string', group: 'bootstrap', set: true, source: 'env', editable: false, restartRequired: true }),
     mk({ key: 'WEBTERM_TELEGRAM', kind: 'flag', value: 'off', default: 'off' }),
     mk({ key: 'WEBTERM_LEDGER', kind: 'enum', group: 'ledger', options: ['off', 'shadow', 'on'], value: 'shadow', default: 'off', source: 'override', restartRequired: true }),
     mk({ key: 'WEBTERM_CENTRAL_MODEL', kind: 'string', group: 'central', value: 'm1', default: 'm1' }),
@@ -51,11 +54,11 @@ const puts = (): unknown[] => calls.filter((c) => c.method === 'PUT').map((c) =>
 const row = async (key: string): Promise<HTMLElement> => screen.findByRole('listitem', { name: key })
 
 describe('EnvSection', () => {
-  it('renders groups in stable order with bootstrap last and source badges', async () => {
+  it('renders groups in stable order and source badges', async () => {
     render(<EnvSection />)
     await row('WEBTERM_LEDGER')
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
-    expect(headings).toEqual(['Ledger', 'Telegram', 'Central', 'Kontrol', 'Bootstrap (hanya lewat env)'])
+    expect(headings).toEqual(['Ledger', 'Telegram', 'Central', 'Kontrol'])
     expect(within(await row('WEBTERM_LEDGER')).getByText('override')).toBeTruthy()
     expect(within(await row('WEBTERM_LEDGER')).getByText('restart')).toBeTruthy()
     expect(within(await row('WEBTERM_TELEGRAM')).getByText('default')).toBeTruthy()
@@ -63,7 +66,7 @@ describe('EnvSection', () => {
   })
 
   it('shows pending restart badge', async () => {
-    getState.entries[2] = { ...getState.entries[2]!, pendingRestart: true }
+    getState.entries[1] = { ...getState.entries[1]!, pendingRestart: true }
     render(<EnvSection />)
     expect(within(await row('WEBTERM_LEDGER')).getByText('menunggu restart')).toBeTruthy()
   })
@@ -132,7 +135,7 @@ describe('EnvSection', () => {
   })
 
   it('removes an override secret via unset', async () => {
-    getState.entries[5] = { ...getState.entries[5]!, set: true, source: 'override' }
+    getState.entries[4] = { ...getState.entries[4]!, set: true, source: 'override' }
     render(<EnvSection />)
     fireEvent.click(within(await row('WEBTERM_TELEGRAM_BOT_TOKEN')).getByRole('button', { name: 'Hapus WEBTERM_TELEGRAM_BOT_TOKEN' }))
     await waitFor(() => expect(puts()).toEqual([{ unset: ['WEBTERM_TELEGRAM_BOT_TOKEN'] }]))
@@ -154,15 +157,6 @@ describe('EnvSection', () => {
     const r = await row('WEBTERM_OPENCODE_BIN')
     expect((within(r).getByLabelText(/OPENCODE_BIN\)$/) as HTMLInputElement).disabled).toBe(true)
     expect(within(r).getByText(/Butuh token root/)).toBeTruthy()
-  })
-
-  it('shows bootstrap entries read-only without any value', async () => {
-    render(<EnvSection />)
-    const r = await row('PORT')
-    expect(r.textContent).toContain('hanya lewat env')
-    expect(r.textContent).toContain('Terisi')
-    expect(within(r).queryByRole('button')).toBeNull()
-    expect(within(r).queryByRole('textbox')).toBeNull()
   })
 
   it('shows the static reason for invalid_value on the entry', async () => {

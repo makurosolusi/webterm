@@ -30,31 +30,60 @@ export function createAppRowOverrideStore(d: AppRowDb): OverrideStore {
   }
 }
 
+/** Resolver kunci -> spec: nama kanonik atau salah satu `aliases` (nama lama) sebuah spec. */
+export function specResolver(registry: readonly EnvSpec[]): (key: string) => EnvSpec | undefined {
+  const byName = new Map<string, EnvSpec>()
+  for (const s of registry) for (const a of s.aliases ?? []) byName.set(a, s)
+  for (const s of registry) byName.set(s.key, s)
+  return (key) => byName.get(key)
+}
+
+export interface ParsedOverrides {
+  /** `{KEY kanonik: nilai kanonik}` yang berlaku. */
+  values: Record<string, string>
+  /** Kunci tak dikenal: tidak diterapkan, tapi ditulis balik apa adanya agar tak hilang saat bergantian build. */
+  unknownKept: Record<string, unknown>
+}
+
+const nameForLog = (key: string): string => key.slice(0, 64)
+
 /**
- * Baca JSON tersimpan jadi `{KEY: nilai}`. Rusak / kunci tak dikenal / secret / nilai tak valid
- * diabaikan dengan `warn` (hanya NAMA kunci), tak pernah melempar: setelan tak boleh menjatuhkan boot.
+ * Baca JSON tersimpan. Rusak -> kosong (warn); alias dipetakan ke kunci kanonik (kunci kanonik menang
+ * bila keduanya ada); kunci tak dikenal dipertahankan di `unknownKept`; secret / nilai tak valid / ''
+ * dibuang dengan `warn` (hanya NAMA kunci). Tak pernah melempar: setelan tak boleh menjatuhkan boot.
  */
 export function parseOverrides(
   json: string | null,
-  specOf: (key: string) => EnvSpec | undefined,
+  resolve: (key: string) => EnvSpec | undefined,
   warn: (msg: string) => void
-): Record<string, string> {
-  if (!json) return {}
+): ParsedOverrides {
+  const out: ParsedOverrides = { values: {}, unknownKept: {} }
+  if (!json) return out
   let parsed: unknown
   try { parsed = JSON.parse(json) } catch {
     warn('env settings: stored overrides are unreadable JSON; ignoring all')
-    return {}
+    return out
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     warn('env settings: stored overrides have an unexpected shape; ignoring all')
-    return {}
+    return out
   }
-  const out: Record<string, string> = {}
-  for (const [key, raw] of Object.entries(parsed)) {
-    const spec = specOf(key)
-    const check = spec && spec.kind !== 'secret' ? validateEnvValue(spec, raw) : undefined
-    if (check?.ok) out[key] = check.value
-    else warn(`env settings: ignoring invalid stored override for ${spec ? key : 'an unknown key'}`)
+  const stored = Object.entries(parsed)
+  const canonical = new Set(stored.filter(([k]) => resolve(k)?.key === k).map(([k]) => k))
+  for (const [key, raw] of stored) {
+    const spec = resolve(key)
+    if (!spec) {
+      out.unknownKept[key] = raw
+      warn(`env settings: keeping unknown stored override ${nameForLog(key)} (not applied)`)
+      continue
+    }
+    if (spec.key !== key) {
+      if (canonical.has(spec.key)) { warn(`env settings: ignoring legacy name ${nameForLog(key)}; ${spec.key} is also stored`); continue }
+      warn(`env settings: stored override uses legacy name ${nameForLog(key)}; mapped to ${spec.key}`)
+    }
+    const check = spec.kind === 'secret' ? undefined : validateEnvValue(spec, raw)
+    if (check?.ok && check.value !== '') out.values[spec.key] = check.value
+    else warn(`env settings: ignoring invalid stored override for ${spec.key}`)
   }
   return out
 }
