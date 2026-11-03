@@ -286,7 +286,7 @@ export default function App() {
           petunjuk jalan keluarnya juga tidak boleh. */}
       {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>
     </NodeActionsProvider>
