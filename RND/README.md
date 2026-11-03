@@ -10,6 +10,10 @@ D bridge dan E retrieval teruji pada unit/acceptance terbatas, belum production-
 
 Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 
+**Central Agent v2 (CA2):** WS-01..19 terintegrasi di `feature/ca2` (HEAD `7e67e6b`, 2026-11-03); semua
+flag baru default OFF. Peta dan bukti di §10. Ini status *kode terintegrasi + test unit/integrasi*,
+bukan status "teruji di dunia nyata": lihat "Belum terbukti" di §10.
+
 ---
 
 ## 1. Mulai dari sini
@@ -27,6 +31,9 @@ Semua dokumen di folder ini bahan keputusan sebelum implementasi lebih lanjut.
 10. `15`-`19` — migrasi UI shadcn: inventaris/rencana (`15`, ARSIP), audit konformansi (`16`),
     ledger utang CSS (`17`), utang inline style (`18`), audit polusi CSS (`19`, ARSIP).
 11. `20-VSCODE-UI-PLAN.md` — rencana dan status migrasi chrome ke gaya VS Code.
+12a. `21`-`30` — Central Agent v2: audit gap (`21`), kontrol (`22`), konteks/cache (`23`), memori (`24`),
+    skill/tool (`25`), kanal/bot (`26`), self-knowledge (`27`), reliabilitas/eval (`28-a/b`),
+    arsitektur (`29`), rencana implementasi per workstream (`30-a/b`).
 12. `qc/` — review P0-P4: security, integration, tests, E2E UI, acceptance wave 2 dan
    `p4-wave2-fixes.md` (temuan → fix → bukti, residual).
 13. `90-REFERENSI/AGENT_PUSAT.md` — bukti detail, URL, insiden.
@@ -60,6 +67,7 @@ RND/
   18-INLINE-STYLE-DEBT.md
   19-CSS-POLLUTION.md                (ARSIP -> 17)
   20-VSCODE-UI-PLAN.md
+  21-CA2-GAP-AUDIT.md .. 30-CA2-IMPLEMENTATION-PLAN-b.md   (riset + arsitektur + rencana CA2, lihat §10)
   qc/
     p1-*.md p2-*.md p3-*.md p4-*.md wave5-*.md review/hunt/soak notes, p3-e2e-ui-assets/
   90-REFERENSI/
@@ -281,3 +289,47 @@ E2E juga belum diverifikasi.
 | `0b63714` | fix kontrol: tolak field klien konsisten + agent id ber-`:` |
 | `2f04f77` | fix loop: root worktree `0700` + prompt satu baris |
 | `98441a4` / `c85d37e` | QC wave 2: acceptance, security, cold root |
+
+---
+
+## 10. Central Agent v2: status workstream (bukti git `feature/ca2`)
+
+Status = "kode + test ada dan merge di `feature/ca2`", dibaca dari `git log`. Belum merge ke `main`.
+
+| WS | Isi | Commit kode | Status |
+|---|---|---|---|
+| 01 | migrasi ledger v5-v9 + flag env | `5052253` | terintegrasi |
+| 02 | perbaikan turn (resume sesi, orphan, limit) | `e5525c8` | terintegrasi |
+| 03 | registry tool bertipe | `c9e7b74` | terintegrasi |
+| 04 | tipe kontrak lintas-WS | `f00ee95` | terintegrasi |
+| 05 | tool baca + tool loop terbatas | `2f44156` | terintegrasi |
+| 06 | context assembler, checkpoint, rotasi sesi | `4964b5e` | terintegrasi |
+| 07 | ControlGuard (level, budget, breaker persisten) | `8d2da4f` | terintegrasi |
+| 08 | memori berlingkup + recall hibrida | `0995ed5` | terintegrasi |
+| 09 | agent store, state machine, tool `agent.*` | `abd2ade` | terintegrasi |
+| 10 | worker kind + `task.run` | `e753f76` | terintegrasi |
+| 11 | mailbox agen + `agent.relay` | `5d52758` | terintegrasi |
+| 12 | Telegram ack-first, approval via callback, store v2 | `d9797d8` | terintegrasi |
+| 13 | managed bots + kartu status | `93950c8` | terintegrasi |
+| 14 | skill store + lifecycle | `a5dcffe` | terintegrasi |
+| 15 | knowledge index + `kb.*` | `b11d875` | terintegrasi |
+| 16 | scripted runtime + harness golden | `fdebb1b` | **sebagian**: hanya G2, G3, G7 (`eval/golden/`); G1, G4-G6, G8-G12 (W2b) belum ada di cabang |
+| 17 | dispatcher autonomy reliabel | `44a49fd` | terintegrasi |
+| 18 | panel kontrol UI | `a8d5eae` | terintegrasi |
+| 19 | wiring: `ca2Boot`, `registerAll`, rute `/api/central/*`, guard nyata, spawn lock | `c90fde5`, `c9ceaf1` | terintegrasi |
+| 20 | dokumen (CHANGELOG, README, RND, `.env.example`) | cabang `chore/ca2-docs` | dokumen saja |
+
+Flag baru terdaftar di `src/server/envRegistry.ca2.ts` (default OFF); rinci di `.env.example`.
+Rute yang ter-mount (lewat `ca2Route` di `api.ts`, hanya bila `ca2Boot` aktif): `/api/central/status|agents|approvals|skills|memory|control|halt`,
+`agents/:id/relay|close`, `skills/:id/approve|rollback`. Panel UI hanya dibangun dengan `VITE_WEBTERM_CENTRAL_CHAT=on`.
+
+### Belum terbukti / butuh manusia
+
+- **OpenCode + MCP/tool native nyata:** `WEBTERM_CENTRAL_TOOL_BRIDGE=opencode` dan worker opencode headless belum dijalankan
+  nyata di sini; yang teruji adalah runtime skrip/palsu (`eval/`).
+- **Pengiriman Telegram nyata:** handler `callback_query` dan managed bots hanya teruji dengan fetch palsu. Tombol approval
+  Telegram belum punya pengirim kartu approval, jadi tidak ada kartu yang bisa ditekan.
+- **Soak / uji beban:** belum ada. Gate S2 (soak 7 hari, 0 turn zombie, 0 budget terlewat) belum dijalankan.
+- **Uji browser panel kontrol:** panel hanya teruji jsdom; belum dilihat di browser nyata.
+- **Golden sisa (G1, G4-G6, G8-G12)** belum ditulis.
+- Semua flag default OFF; belum ada keputusan mengaktifkan default. Merge ke `main` menunggu perintah.

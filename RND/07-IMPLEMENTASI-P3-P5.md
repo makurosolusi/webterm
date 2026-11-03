@@ -497,3 +497,14 @@ Wave 5-6 (`51dab65`..`5214ea2`): vitest penuh 138 file / 1844 test, bun penuh 29
 `tsc` strict + unused bersih; hijau dengan `TMPDIR=/tmp` (gate §9). Harness soak dan acceptance
 HTTP 36/36 (agen PTY palsu) PASS; `controlCwd` butuh `TMPDIR=/tmp`.
 Terarah wave 5: 4 file / 65 test (`verifier`, `orchestratorRun`, `approvalHumanApi`, `centralAutonomy`).
+
+## 10. Update Central Agent v2 (2026-11-03)
+
+WS-01..19 terintegrasi di `feature/ca2` (HEAD `7e67e6b`); peta per workstream ada di `RND/README.md` §10.
+Dampak ke P3-P5: ledger naik ke migrasi v5-v9 (`WEBTERM_LEDGER` wajib hidup untuk CA2); approval R2 lewat kartu
+(`/api/central/approvals`), R3 web saja; autonomy P3 punya mode `WEBTERM_CENTRAL_RELIABILITY` (dispatcher
+non-blocking). Semua flag baru default OFF, jadi perilaku P3-P5 di atas tidak berubah tanpa opt-in.
+
+Tetap **belum terbukti**: OpenCode + tool native nyata, pengiriman Telegram nyata (tombol approval belum punya
+pengirim kartu), soak/uji beban, uji browser panel kontrol, dan golden G1/G4-G6/G8-G12. Soak P3 2 project
+x 2 minggu dari wave 5 juga masih belum dibuktikan.
