@@ -54,7 +54,7 @@ export interface TurnServiceDeps {
   env?: NodeJS.ProcessEnv
   /** Tool registry for the read-tool loop; defaults to the process-wide registry. */
   registry?: ToolRegistry
-  /** Guard for loop tool calls; defaults to allow-all (R0 only). */
+  /** Guard for loop tool calls and applied proposals; set when Central Agent v2 is armed, else allow-all (R0/R1 only). */
   guard?: ControlGuard
   /** Checkpoint summarizer; without one no checkpoint is written after a turn (rotation still seeds a fallback). */
   summarize?: Summarize
@@ -256,7 +256,7 @@ export class TurnService {
         this.record(conversationId, 'entity.updated', { eventType: 'proposal.rejected', tool: block.tool, code: checked.code }, turnId, messageId)
         continue
       }
-      const result = await applyProposal(this.db, checked.proposal!)
+      const result = await applyProposal(this.db, checked.proposal!, this.guard)
       this.record(conversationId, 'entity.updated', {
         eventType: result.ok ? 'proposal.applied' : 'proposal.rejected', tool: result.tool,
         ...(result.ok ? { projectId: result.projectId, goalVersion: result.goalVersion, planVersion: result.planVersion, approvalId: result.approvalId } : { code: result.code }),

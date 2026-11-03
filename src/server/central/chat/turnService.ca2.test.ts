@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { getOrCreateConversation, listConversationEvents } from '../conversationStore'
 import { CHECKPOINT_FLAG, ContextRejectedError } from '../context/contextAssembler'
+import { rollingSummarize } from '../context/checkpointRolling'
 import type { ContextAssembler } from '../context/contextPort'
 import { lastCtxTokens } from '../context/contextUsage'
 import type { CentralRuntime, RuntimeEmit, TurnInput } from '../runtime/centralRuntime'
@@ -91,6 +92,18 @@ describe('turnService CA2 wiring', () => {
     await send(new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, env, summarize }), 'k2').done
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(calls).toHaveLength(1)
+  })
+
+  it('the production rollingSummarize writes a real checkpoint with the flag on, none with it off', async () => {
+    const count = () => (fixture.db.query('SELECT COUNT(*) AS n FROM central_checkpoint').get() as { n: number }).n
+    const { runtime } = runtimeOf(null)
+    await send(new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, summarize: rollingSummarize }), 'c0').done
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(count()).toBe(0)
+    const env = { [CHECKPOINT_FLAG]: 'on' }
+    await send(new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, env, summarize: rollingSummarize }), 'c1').done
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(count()).toBe(1)
   })
 
   it('keeps a pasted bot token out of stored history while the model still receives it', async () => {

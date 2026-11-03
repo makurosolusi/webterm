@@ -30,6 +30,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { label: 'Skill central', description: 'Central membaca skill dari <dataDir>/central/skills (butuh tools).' }),
   flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { label: 'Usul skill central', description: 'Central boleh mengusulkan skill baru untuk disetujui manusia (butuh Skill central).' }),
   flag('WEBTERM_CENTRAL_BOTS', 'central', { label: 'Bot per project', description: 'Satu bot dengan topic per project (butuh Telegram dan WEBTERM_CHANNELS).' }),
+  flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'central', { label: 'Tombol approval Telegram', description: 'Tombol setuju/tolak pada kartu approval Telegram diproses (butuh Telegram dan ledger).' }),
   flag('WEBTERM_KNOWLEDGE', 'central', { label: 'Knowledge base', description: 'Indeks pengetahuan project di <dataDir>/knowledge.db.' }),
   flag('WEBTERM_KNOWLEDGE_GRAPHIFY', 'central', { label: 'Knowledge via graphify', description: 'Isi knowledge base lewat graphify (butuh graphify di PATH).' }),
   text('WEBTERM_EMBED_URL', 'memory', {

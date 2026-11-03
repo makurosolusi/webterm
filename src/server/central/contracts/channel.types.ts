@@ -47,6 +47,8 @@ export interface OutboundMessage {
   card?: { title: string; status: string; actions: readonly OutboundAction[] }
   replyTo?: string
   threadKey?: string
+  /** Destination chat; adapters put it in the payload so `send` needs no extra step. */
+  chatId?: string
 }
 
 /** Provider-specific payload produced by `render`; opaque outside the adapter. */
