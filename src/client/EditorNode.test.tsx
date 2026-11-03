@@ -56,7 +56,7 @@ function mount(over: { path?: string; meta?: Meta; writeChecked?: WriteFn } = {}
   const writeChecked = vi.fn(over.writeChecked ?? (() => Promise.resolve({ ok: true, version: 'v2' })))
   const props = {
     id: 'n1', data: { filePath: over.path ?? '/x/app.json' }, selected: false,
-    readMeta, writeChecked, readBinary: () => Promise.resolve(''),
+    readMeta, writeChecked,
   }
   const r = render(<ReactFlowProvider><EditorNode {...(props as unknown as ComponentProps<typeof EditorNode>)} /></ReactFlowProvider>)
   return { ...r, readMeta, writeChecked }

@@ -16,14 +16,6 @@ import { editorFileKind, fileBaseName, fileExt } from './editorFile'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
-  /** @deprecated Tak dipakai lagi (teks lewat `readMeta`); masih diteruskan `nodeTypes.tsx`.
-   *  TODO(fm-integration): hapus `read`/`write`/`readBinary` setelah nodeTypes.tsx (milik integrator)
-   *  berhenti meneruskannya; menghapusnya di sini lebih dulu mematahkan typecheck nodeTypes. */
-  read?: (path: string) => Promise<string>
-  /** @deprecated Lihat `read`. */
-  write?: (path: string, content: string) => Promise<boolean>
-  /** @deprecated Biner kini lewat `ViewerHost` (URL raw); lihat `read`. */
-  readBinary?: (path: string) => Promise<string>
   /** Isi teks + `version` + `encoding`; REJECT saat gagal baca. Default `fsClient.readMeta`. */
   readMeta?: (path: string) => Promise<ReadMeta>
   /** Tulis dengan cek versi (`EVERSION`/`ENOENT` lewat `FsResult`). Default `fsClient.writeChecked`. */
