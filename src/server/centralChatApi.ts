@@ -4,11 +4,13 @@
 // this module never reads a token and never puts one in an event or response.
 //
 // Flags: `WEBTERM_CENTRAL=on` AND `WEBTERM_CENTRAL_CHAT=on`. Chat off means "not
-// mounted" (404 by the fallback). Runtime off answers 503 `central_runtime_off`.
+// mounted" (404 by the fallback). Runtime off answers 503 `central_runtime_off`; `claude` builds a
+// real runtime and reports an unready CLI as a failed turn (`runtime_unavailable`), never as 503.
 import { flagOn } from './envFlag'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Database } from 'bun:sqlite'
 import { centralEnabled } from './central/centralModel'
+import { claudePreflightOf, runtimeReadiness } from './centralChatHealth'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import {
@@ -54,7 +56,7 @@ export async function centralChatRoute(
 
   if (path === HEALTH_PATH) {
     if (method !== 'GET') return methodNotAllowed(res, method), true
-    handleHealth(res, kind, db)
+    handleHealth(res, kind, db, await runtimeReadiness(kind, claudePreflightOf(deps.claudeOptions)))
     return true
   }
   if (db === null) {

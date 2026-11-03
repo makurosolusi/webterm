@@ -13,6 +13,9 @@ import { rollingSummarize } from './central/context/checkpointRolling'
 import { toToolGuard } from './central/guard/controlGuard'
 import { MockRuntime } from './central/runtime/mockRuntime'
 import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
+import { ClaudeRuntime } from './central/runtime/claudeRuntime'
+import type { ClaudeRuntimeOptions } from './central/runtime/claudeOptions'
+import { claudePreflightOf, type RuntimeReadiness } from './centralChatHealth'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import { createPortfolioReadExecutor } from './central/chat/toolExecutors'
 import { StreamHub } from './central/chat/streamHub'
@@ -38,6 +41,8 @@ export interface CentralChatDeps {
   service?: TurnService
   stream?: StreamHub
   now?: () => number
+  /** Tests inject a fake executable and a preflight for `claude`; default is the real CLI + shared probe. */
+  claudeOptions?: ClaudeRuntimeOptions
 }
 
 export interface ChatService {
@@ -49,7 +54,8 @@ export interface ChatService {
 /** One service/hub per database + runtime kind, so turns and subscribers share state. */
 const cache = new WeakMap<object, Map<string, ChatService>>()
 
-function buildService(db: Database, kind: RuntimeKind, now?: () => number): ChatService {
+function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDeps, 'now' | 'claudeOptions'>): ChatService {
+  const { now } = deps
   const stream = new StreamHub({
     replay: (conversationId, afterSeq) => listConversationEvents(db, conversationId, afterSeq, 500),
   })
@@ -57,7 +63,9 @@ function buildService(db: Database, kind: RuntimeKind, now?: () => number): Chat
     ? new MockRuntime({ toolExecutor: createPortfolioReadExecutor(db, { now }), stepDelayMs: 5 })
     : kind === 'opencode'
       ? new OpenCodeRuntime()
-      : null
+      : kind === 'claude'
+        ? new ClaudeRuntime({ ...deps.claudeOptions, preflight: claudePreflightOf(deps.claudeOptions) })
+        : null
   // With CA2 armed on this db, retrieval uses its memory provider; the assembler delegates to the
   // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
   const ca2 = activeCa2()
@@ -79,7 +87,7 @@ export function resolveChatService(deps: CentralChatDeps, db: Database, kind: Ru
   }
   let entry = byKind.get(kind)
   if (!entry) {
-    entry = buildService(db, kind, deps.now)
+    entry = buildService(db, kind, deps)
     byKind.set(kind, entry)
   }
   return entry
@@ -150,8 +158,10 @@ function parseBody(raw: string): { clientMessageId: string; text: string } | nul
   }
 }
 
-export function handleHealth(res: ServerResponse, kind: RuntimeKind, db: Database | null): void {
-  sendJson(res, 200, { runtime: kind, chat: true, ledger: db !== null })
+export function handleHealth(
+  res: ServerResponse, kind: RuntimeKind, db: Database | null, readiness: RuntimeReadiness
+): void {
+  sendJson(res, 200, { runtime: kind, chat: true, ledger: db !== null, ...readiness })
 }
 
 export function handleConversations(res: ServerResponse, db: Database, now?: number): void {
