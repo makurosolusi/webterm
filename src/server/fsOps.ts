@@ -1,62 +1,38 @@
 // Operasi filesystem sisi server untuk node files (dan pembaca file mana pun yang lewat
-// `/api/fs/*`). Diadaptasi dari nodeterm `src/core/fs-ops.ts` (listDir/readText/readBinary/
-// writeText/makeDir/pathExists) plus `expandHomePath` dari `src/core/fs-handlers.ts`.
-//
-// TIDAK DIPORT dari nodeterm: `listQuickOpenFiles` (rg/git-ls-files/walk — tidak ada permukaan
-// quick-open di webterm), jalur sshFs, relay, dan tiket download. Dari 229 + 126 baris di sana
-// yang relevan untuk 6 method ini hanya ±120 baris, bukan ±250.
+// `/api/fs/*`). Diadaptasi dari nodeterm `src/core/fs-ops.ts` + `expandHomePath` dari
+// `fs-handlers.ts`; TIDAK diport: quick-open, sshFs, relay, tiket download.
 //
 // DUA KONTRAK YANG SENGAJA BERBEDA — JANGAN DISERAGAMKAN.
 //
-// 1. PENELUSURAN (`listDir`, `pathExists`) FAIL-OPEN, dan itu kontrak, bukan kelalaian: keduanya
-//    mengembalikan nilai kosong/false pada kegagalan, dan client BERGANTUNG pada itu.
-//    `classifyEmptyListing` (src/client/fileBrowse.ts) memutuskan arti listing kosong dengan
-//    bertanya ke direktori INDUK, justru karena `list` tidak pernah throw. Mengubahnya jadi
-//    re-throw akan membuat empat empty state di UI runtuh jadi satu pesan error.
+// 1. PENELUSURAN (`listDir`, `pathExists`) FAIL-OPEN: nilai kosong/false pada kegagalan. Client
+//    BERGANTUNG pada itu: `classifyEmptyListing` (src/client/fileBrowse.ts) memutuskan arti listing
+//    kosong dengan bertanya ke direktori INDUK, justru karena `list` tidak pernah throw.
+//    (`listDirV2`/`statMeta` di bawah verb baru, boleh berkode galat.)
 //
-// 2. PEMBACAAN ISI (`readText`, `readBinary`) MELEMPAR. Untuk sebuah listing, kosong masih bisa
-//    ditafsirkan; untuk isi file, kosong adalah jawaban yang SAH — file yang memang kosong tidak
-//    bisa dibedakan dari file yang gagal dibaca (EPERM, ENOENT, direktori yang disangka file,
-//    galat I/O). Akibatnya bukan kosmetik: editor yang membuka buffer kosong untuk file
-//    tak-terbaca akan MENIMPA file aslinya dengan kosong saat pengguna menekan Save. Karena itu
-//    kegagalan baca harus tetap terlihat sebagai kegagalan sampai ke browser — route menjawab
-//    non-2xx lewat `readErrorResult`, bukan 200 berisi `content: ''`.
+// 2. PEMBACAAN ISI (`readText`, `readBinary`, `readTextMeta`) MELEMPAR. Untuk isi file, kosong adalah
+//    jawaban yang SAH, jadi file tak-terbaca tak boleh tampak kosong: editor yang membuka buffer
+//    kosong lalu Save akan MENIMPA file aslinya. Kegagalan harus sampai ke browser sebagai non-2xx
+//    lewat `readErrorResult`. Sentinel too-large (`src/shared/fsLimits.ts`) BUKAN kegagalan.
 //
-// Sentinel too-large (`src/shared/fsLimits.ts`) BUKAN kegagalan: ia jawaban sukses yang
-// disengaja dan bagian dari wire-protocol. `writeText`/`makeDir` melaporkan sukses sebagai
-// boolean — pemanggil tetap bisa membedakannya, jadi itu juga bukan fail-open.
+// Tiap catch mengembalikan nilai yang didokumentasikan atau melempar dengan konteks, bukan `catch {}` kosong.
 //
-// Tiap catch di bawah karena itu mengembalikan nilai yang didokumentasikan atau melempar dengan
-// konteks, bukan `catch {}` kosong.
-//
-// KEAMANAN PATH — sengaja TIDAK ada jail. nodeterm mengambil keputusan yang sama
-// (`src/core/relay/access-policy.ts`: "relay peers were fully trusted, so fs:read is not jailed";
-// pemagaran hanya ada untuk peran relay non-editor, yang webterm tidak punya). Alasannya: siapa
-// pun yang bisa menjangkau endpoint ini sudah bisa men-spawn PTY lewat `/ws`, jadi membatasi
-// pembacaan file ke sebuah subtree adalah teater keamanan. Yang NYATA menjaga permukaan ini ada
-// di lapisan transport — bind loopback + cek Origin + token (`src/server/auth.ts`). Tanggung
-// jawab modul ini: `path.resolve` setiap input (di bawah) dan memberlakukan batas ukuran dari
-// `src/shared/fsLimits.ts`.
-//
-// Isi file TIDAK PERNAH di-log di sini, sengaja: file yang dibaca pengguna bisa memuat kredensial.
-import { promises as fs, type Dirent } from 'node:fs'
+// KEAMANAN PATH — sengaja TIDAK ada jail (sama seperti nodeterm `relay/access-policy.ts`): siapa pun
+// yang bisa menjangkau endpoint ini sudah bisa men-spawn PTY lewat `/ws`. Yang NYATA menjaga ada di
+// transport (loopback + Origin + token, `src/server/auth.ts`). Modul ini: `path.resolve` tiap input,
+// batas ukuran `fsLimits.ts`, dan `checkFsPath` untuk verb v2. Isi file TIDAK PERNAH di-log.
+import { promises as fs, type Dirent, type Stats } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import npath from 'node:path'
 import { promisify } from 'node:util'
 import { FS_READ_BINARY_MAX_BYTES, FS_READ_MAX_BYTES, FILES_LIST_MAX_DEFAULT, tooLargeSentinel } from '../shared/fsLimits'
-import { fsErrCode, fsFail, type FileMeta, type FsResult, type FsVersion, type ListV2, type ReadMeta } from '../shared/fsContract'
-import { createLogger } from './logs'
-
-const log = createLogger('fs')
+import { fsFail, type EntryKind, type FileMeta, type FsFail, type FsResult, type FsVersion, type ListV2, type ReadMeta } from '../shared/fsContract'
+import { decodeStrict, sniffBinary } from '../shared/fileKind'
+import { FS_NAME_MAX_BYTES, errnoOf, failFrom, logFsError, versionOf } from './fsAtomic'
 
 const run = promisify(execFile)
 
-/**
- * Satu entry direktori di wire. Kembarannya ada di `src/client/fileBrowse.ts` — dua deklarasi,
- * satu per sisi batas HTTP, karena `src/shared` final dan client tidak boleh menarik `node:fs`
- * ke dalam graph bundle-nya.
- */
+/** Satu entry direktori di wire; kembarannya di `src/client/fileBrowse.ts` (client tak boleh menarik `node:fs`). */
 export interface DirEntry {
   name: string
   dir: boolean
@@ -64,17 +40,12 @@ export interface DirEntry {
   ignored: boolean
 }
 
-/**
- * Kembangkan `~` / `~/` terhadap home directory MESIN INI. Harus terjadi di server: client adalah
- * tab browser yang tidak tahu home directory server. `~user` BUKAN path home-relative dan tetap
- * literal, sama seperti di nodeterm.
- */
+/** Kembangkan `~` / `~/` terhadap home MESIN INI (client tak tahu home server). `~user` tetap literal, seperti nodeterm. */
 export function expandHomePath(p: string, home: string = homedir()): string {
   return p === '~' || p.startsWith('~/') ? npath.join(home, p.slice(1)) : p
 }
 
-/** Path absolut yang ternormalisasi untuk sebuah input. Satu-satunya pintu masuk path di modul
- *  ini — lihat catatan keamanan di kepala file untuk apa yang dijamin dan apa yang tidak. */
+/** Path absolut ternormalisasi untuk sebuah input; pintu masuk path modul ini (lihat catatan keamanan di atas). */
 export function resolveFsPath(p: string, home: string = homedir()): string {
   return npath.resolve(expandHomePath(p, home))
 }
@@ -147,17 +118,6 @@ function readFailed(op: string, target: string, err: unknown): Error {
   return new Error(`fs ${op} failed: ${target}`, { cause: err })
 }
 
-/** `fs.error` (warn): operasi, basename, errno. Basename saja — path penuh memuat nama pengguna. */
-function logFsError(op: string, target: string, err: unknown): void {
-  log.warn('fs.error', `fs ${op} failed`, { op, file: npath.basename(target), code: errnoOf(err) || undefined })
-}
-
-/** errno di balik sebuah kegagalan baca — `readFailed` menyimpan error asal di `cause`. */
-function errnoOf(err: unknown): string {
-  const origin = err instanceof Error && err.cause !== undefined ? err.cause : err
-  return origin !== null && typeof origin === 'object' && 'code' in origin ? String(origin.code) : ''
-}
-
 /** errno yang bisa dibedakan dengan murah → status + pesan. Sisanya 500: menebak lebih buruk
  *  daripada mengaku tidak tahu. */
 const READ_FAILURES = new Map<string, [number, string]>([
@@ -166,6 +126,8 @@ const READ_FAILURES = new Map<string, [number, string]>([
   ['EACCES', [403, 'permission denied']],
   ['EPERM', [403, 'permission denied']],
   ['EISDIR', [400, 'not a file']],
+  ['EINVAL', [400, 'invalid path']],
+  ['ENAMETOOLONG', [400, 'invalid path']],
 ])
 
 /**
@@ -206,28 +168,6 @@ export async function readBinary(filePath: string): Promise<string> {
   }
 }
 
-/** Tulis teks UTF-8. `true` bila sukses, `false` pada kegagalan apa pun. */
-export async function writeText(filePath: string, content: string): Promise<boolean> {
-  try {
-    await fs.writeFile(resolveFsPath(filePath), content, 'utf-8')
-    return true
-  } catch (err) {
-    logFsError('write', filePath, err)
-    return false
-  }
-}
-
-/** Buat direktori (rekursif, semantik `mkdir -p`). `true` bila sukses. */
-export async function makeDir(dirPath: string): Promise<boolean> {
-  try {
-    await fs.mkdir(resolveFsPath(dirPath), { recursive: true })
-    return true
-  } catch (err) {
-    logFsError('mkdir', dirPath, err)
-    return false
-  }
-}
-
 /** True bila path ada (file maupun direktori). */
 export async function pathExists(p: string): Promise<boolean> {
   try {
@@ -238,28 +178,121 @@ export async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-// Wrapper W0a atas kode lama supaya dispatcher `fsApi.ts` final; WS-FM-01 menimpa isinya (version
-// nyata, encoding hasil sniff, size/mtime/kind). Sampai itu: version kosong, encoding 'utf8'.
 
-/** list-v2 di atas `listDir` lama: tanpa size/mtime/kind; `truncated` bila lewat `limit`. */
-export async function listDirV2(dirPath: string, limit = FILES_LIST_MAX_DEFAULT): Promise<FsResult<ListV2>> {
-  const all = await listDir(dirPath)
-  return { ok: true, entries: all.slice(0, limit), truncated: all.length > limit }
+// ---- API v2 (file manager): hasil berkode `FsResult`; kegagalan TIDAK fail-open ----
+
+/**
+ * Validasi server atas path masuk (M-11/M-12): NUL ditolak, path non-absolut (setelah `~`) ->
+ * `EINVAL` (bukan di-resolve terhadap cwd server), nama akhir >255 byte -> `ENAMETOOLONG`.
+ * Mengembalikan path ternormalisasi, atau `FsFail`. Dipakai verb v2 saja; `list`/`exists` lama tak berubah.
+ */
+export function checkFsPath(p: string, home: string = homedir()): string | FsFail {
+  if (p.includes('\0')) return fsFail('EINVAL', 'path contains NUL')
+  if (!npath.isAbsolute(expandHomePath(p, home))) return fsFail('EINVAL', 'path must be absolute')
+  const target = resolveFsPath(p, home)
+  if (Buffer.byteLength(npath.basename(target)) > FS_NAME_MAX_BYTES) return fsFail('ENAMETOOLONG', 'name too long')
+  return target
 }
 
-/** `readText` + metadata; MELEMPAR seperti `readText` (kontrak 2). */
-export async function readTextMeta(filePath: string): Promise<ReadMeta> {
-  return { content: await readText(filePath), version: '', encoding: 'utf8' }
+const STAT_CONCURRENCY = 64
+const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/** Jalankan `fn` atas `items` dengan paling banyak `STAT_CONCURRENCY` sekaligus (cegah EMFILE). */
+async function inBatches<T, R>(items: T[], fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += STAT_CONCURRENCY) out.push(...(await Promise.all(items.slice(i, i + STAT_CONCURRENCY).map(fn))))
+  return out
 }
 
-/** Metadata satu path; galat -> `FsFail` (bukan fail-open). */
-export async function statMeta(p: string): Promise<FsResult<{ meta: FileMeta; version: FsVersion }>> {
-  const target = resolveFsPath(p)
+/** Entri awal dari dirent; symlink di-resolve ke target (dir? putus?), sisanya dari tipe dirent. */
+async function metaOf(dir: string, d: Dirent): Promise<{ meta: FileMeta; st?: Stats }> {
+  if (!d.isSymbolicLink()) {
+    const kind: EntryKind = d.isDirectory() ? 'dir' : d.isFile() ? 'file' : 'other'
+    return { meta: { name: d.name, dir: kind === 'dir', ignored: false, kind } }
+  }
   try {
-    const s = await fs.stat(target)
-    return { ok: true, version: '', meta: { name: npath.basename(target), dir: s.isDirectory(), ignored: false, size: s.size, mtimeMs: s.mtimeMs } }
+    const st = await fs.stat(npath.join(dir, d.name))
+    const kind: EntryKind = st.isDirectory() ? 'symlink-dir' : 'symlink-file'
+    return { meta: { name: d.name, dir: st.isDirectory(), ignored: false, kind, size: st.size, mtimeMs: st.mtimeMs }, st }
+  } catch {
+    // ENOENT/ELOOP = link putus: jawaban sah ('symlink-broken'), bukan kegagalan listing.
+    return { meta: { name: d.name, dir: false, ignored: false, kind: 'symlink-broken' } }
+  }
+}
+
+/**
+ * list-v2: `FileMeta` (kind/size/mtimeMs, symlink di-resolve), natural-numeric, folder dulu, ber-cap
+ * `limit` (`truncated`). Gagal baca direktori -> `FsFail` (beda dari `listDir` yang fail-open).
+ */
+export async function listDirV2(dirPath: string, limit = FILES_LIST_MAX_DEFAULT): Promise<FsResult<ListV2>> {
+  const dir = checkFsPath(dirPath)
+  if (typeof dir !== 'string') return dir
+  let dirents: Dirent[]
+  try {
+    dirents = await fs.readdir(dir, { withFileTypes: true })
   } catch (err) {
-    logFsError('stat', target, err)
-    return fsFail(fsErrCode(errnoOf(err)), `stat failed: ${npath.basename(target)}`)
+    return failFrom('list', dir, err)
+  }
+  const rows = await inBatches(dirents.filter((e) => e.name !== '.git'), (d) => metaOf(dir, d))
+  rows.sort((a, b) => (a.meta.dir === b.meta.dir ? nameOrder.compare(a.meta.name, b.meta.name) || (a.meta.name < b.meta.name ? -1 : 1) : a.meta.dir ? -1 : 1))
+  const kept = rows.slice(0, limit)
+  // size/mtime hanya untuk yang lolos cap; symlink sudah punya dari stat target.
+  await inBatches(kept.filter((r) => !r.st && r.meta.kind !== 'symlink-broken'), async (r) => {
+    try {
+      const st = await fs.lstat(npath.join(dir, r.meta.name))
+      r.meta.size = st.size
+      r.meta.mtimeMs = st.mtimeMs
+    } catch (err) {
+      logFsError('list-stat', r.meta.name, err) // entri hilang di antara readdir dan lstat: tampil tanpa size
+    }
+  })
+  const entries = kept.map((r) => r.meta)
+  await flagIgnored(dir, entries)
+  return { ok: true, entries, truncated: rows.length > limit }
+}
+
+/**
+ * `readText` + metadata: versi (stat SEBELUM baca, jadi salah-arahnya hanya konflik palsu, tak
+ * pernah timpa diam-diam), encoding hasil sniff (`binary` = ada NUL, konten kosong; `non-utf8` =
+ * byte tak sah, konten decode lossy untuk tampilan read-only). MELEMPAR seperti `readText`
+ * (kontrak 2); sentinel too-large tetap sukses.
+ */
+export async function readTextMeta(filePath: string): Promise<ReadMeta> {
+  const target = checkFsPath(filePath)
+  if (typeof target !== 'string') throw readFailed('read', filePath, Object.assign(new Error(target.error), { code: target.code }))
+  try {
+    const st = await fs.stat(target, { bigint: true })
+    // FIFO/socket: open() akan menggantung; hanya file reguler yang dibaca.
+    if (!st.isFile()) throw Object.assign(new Error('not a regular file'), { code: st.isDirectory() ? 'EISDIR' : 'EINVAL' })
+    const version = versionOf(st)
+    if (st.size > BigInt(FS_READ_MAX_BYTES)) return { content: tooLargeSentinel(Number(st.size)), version, encoding: 'utf8' }
+    const bytes = await fs.readFile(target)
+    if (sniffBinary(bytes)) return { content: '', version, encoding: 'binary' }
+    const text = decodeStrict(bytes)
+    return text === null
+      ? { content: new TextDecoder().decode(bytes), version, encoding: 'non-utf8' }
+      : { content: text, version, encoding: 'utf8' }
+  } catch (err) {
+    throw readFailed('read', target, err)
+  }
+}
+
+/** Metadata satu path (symlink diikuti; link putus -> `kind:'symlink-broken'`, version ''). Galat -> `FsFail`. */
+export async function statMeta(p: string): Promise<FsResult<{ meta: FileMeta; version: FsVersion }>> {
+  const target = checkFsPath(p)
+  if (typeof target !== 'string') return target
+  const name = npath.basename(target)
+  try {
+    const link = (await fs.lstat(target)).isSymbolicLink()
+    try {
+      const st = await fs.stat(target, { bigint: true })
+      const kind: EntryKind = st.isDirectory() ? (link ? 'symlink-dir' : 'dir') : st.isFile() ? (link ? 'symlink-file' : 'file') : 'other'
+      return { ok: true, version: versionOf(st), meta: { name, dir: st.isDirectory(), ignored: false, kind, size: Number(st.size), mtimeMs: Number(st.mtimeMs) } }
+    } catch (err) {
+      if (!link) throw err
+      return { ok: true, version: '', meta: { name, dir: false, ignored: false, kind: 'symlink-broken' } }
+    }
+  } catch (err) {
+    return failFrom('stat', target, err)
   }
 }

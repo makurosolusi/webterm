@@ -8,14 +8,17 @@ import npath from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FS_READ_BINARY_MAX_BYTES, FS_READ_MAX_BYTES, tooLargeSize } from '../shared/fsLimits'
 import {
+  checkFsPath,
   expandHomePath,
   listDir,
-  makeDir,
+  listDirV2,
   pathExists,
   readBinary,
+  readErrorResult,
   readText,
+  readTextMeta,
   resolveFsPath,
-  writeText,
+  statMeta,
 } from './fsOps'
 
 let root = ''
@@ -163,33 +166,129 @@ describe('readBinary', () => {
   })
 })
 
-describe('writeText / makeDir / pathExists', () => {
-  it('writes a file and reads it back', async () => {
-    expect(await writeText(at('new.txt'), 'hi')).toBe(true)
-    expect(await readText(at('new.txt'))).toBe('hi')
-  })
-
-  it('reports false rather than throwing when the parent does not exist', async () => {
-    expect(await writeText(at('no', 'such', 'f.txt'), 'hi')).toBe(false)
-  })
-
-  it('creates nested directories (mkdir -p)', async () => {
-    expect(await makeDir(at('deep', 'a', 'b'))).toBe(true)
-    expect(await pathExists(at('deep', 'a', 'b'))).toBe(true)
-  })
-
-  it('is idempotent for an existing directory', async () => {
-    expect(await makeDir(at('deep', 'a'))).toBe(true)
-  })
-
-  it('reports false for a directory whose name is taken by a file', async () => {
-    await fs.writeFile(at('taken'), 'x')
-    expect(await makeDir(at('taken'))).toBe(false)
-  })
-
-  it('answers pathExists for files, dirs and neither', async () => {
+describe('pathExists', () => {
+  it('answers for files, dirs and neither', async () => {
+    await fs.mkdir(at('deep'))
+    await fs.writeFile(at('new.txt'), 'hi')
     expect(await pathExists(at('new.txt'))).toBe(true)
     expect(await pathExists(at('deep'))).toBe(true)
     expect(await pathExists(at('nothing-here'))).toBe(false)
+  })
+})
+
+describe('checkFsPath', () => {
+  it('normalizes absolute and ~ paths', () => {
+    expect(checkFsPath('/a/b/../c', '/h/me')).toBe('/a/c')
+    expect(checkFsPath('~/x', '/h/me')).toBe('/h/me/x')
+  })
+
+  it('rejects relative paths, NUL and over-long names with a coded failure', () => {
+    expect(checkFsPath('rel/x')).toMatchObject({ ok: false, code: 'EINVAL' })
+    expect(checkFsPath('/a/b\0c')).toMatchObject({ ok: false, code: 'EINVAL' })
+    expect(checkFsPath(`/a/${'x'.repeat(256)}`)).toMatchObject({ ok: false, code: 'ENAMETOOLONG' })
+    expect(checkFsPath(`/a/${'x'.repeat(255)}`)).toBe(`/a/${'x'.repeat(255)}`)
+    // 128 karakter 2-byte = 256 byte: panjang dihitung dalam BYTE, bukan karakter.
+    expect(checkFsPath(`/a/${'é'.repeat(128)}`)).toMatchObject({ ok: false, code: 'ENAMETOOLONG' })
+  })
+})
+
+describe('listDirV2', () => {
+  beforeAll(async () => {
+    const d = at('v2')
+    await fs.mkdir(npath.join(d, 'dir10'), { recursive: true })
+    await fs.mkdir(npath.join(d, 'dir2'))
+    await fs.mkdir(npath.join(d, '.git'))
+    await fs.writeFile(npath.join(d, 'f10.txt'), '0123456789')
+    await fs.writeFile(npath.join(d, 'f2.txt'), 'ab')
+    await fs.symlink(npath.join(d, 'dir2'), npath.join(d, 'link-dir'))
+    await fs.symlink(npath.join(d, 'f2.txt'), npath.join(d, 'link-file'))
+    await fs.symlink(npath.join(d, 'ghost'), npath.join(d, 'link-broken'))
+  })
+
+  it('sorts natural-numeric with folders first, hides .git, and resolves symlinks', async () => {
+    const r = await listDirV2(at('v2'))
+    if (!r.ok) throw new Error('listDirV2 failed')
+    expect(r.truncated).toBe(false)
+    // symlink ke dir dihitung folder (dir:true) dan ikut kelompok folder.
+    expect(r.entries.map((e) => e.name)).toEqual(['dir2', 'dir10', 'link-dir', 'f2.txt', 'f10.txt', 'link-broken', 'link-file'])
+    const by = new Map(r.entries.map((e) => [e.name, e]))
+    expect(by.get('link-dir')).toMatchObject({ dir: true, kind: 'symlink-dir' })
+    expect(by.get('link-file')).toMatchObject({ dir: false, kind: 'symlink-file', size: 2 })
+    expect(by.get('link-broken')).toMatchObject({ dir: false, kind: 'symlink-broken' })
+    expect(by.get('f10.txt')).toMatchObject({ kind: 'file', size: 10, ignored: false })
+    expect(typeof by.get('f10.txt')?.mtimeMs).toBe('number')
+  })
+
+  it('caps at limit and reports truncated', async () => {
+    const r = await listDirV2(at('v2'), 3)
+    if (!r.ok) throw new Error('listDirV2 failed')
+    expect(r.entries.map((e) => e.name)).toEqual(['dir2', 'dir10', 'link-dir'])
+    expect(r.truncated).toBe(true)
+  })
+
+  it('does not fail on >2000 entries (git check-ignore is skipped)', async () => {
+    const d = at('many')
+    await fs.mkdir(d)
+    await Promise.all(Array.from({ length: 2100 }, (_, i) => fs.writeFile(npath.join(d, `f${i}`), '')))
+    const r = await listDirV2(d)
+    if (!r.ok) throw new Error('listDirV2 failed')
+    expect(r.entries.length).toBe(2100)
+    expect(r.entries.every((e) => !e.ignored)).toBe(true)
+  })
+
+  it('answers a coded failure (not []) for a missing dir, a file and a relative path', async () => {
+    expect(await listDirV2(at('nope'))).toMatchObject({ ok: false, code: 'ENOENT' })
+    expect(await listDirV2(at('v2', 'f2.txt'))).toMatchObject({ ok: false, code: 'ENOTDIR' })
+    expect(await listDirV2('relative')).toMatchObject({ ok: false, code: 'EINVAL' })
+  })
+})
+
+describe('readTextMeta', () => {
+  it('reads utf-8 with a version, and the version changes when content changes', async () => {
+    await fs.writeFile(at('m.txt'), 'héllo')
+    const a = await readTextMeta(at('m.txt'))
+    expect(a).toMatchObject({ content: 'héllo', encoding: 'utf8' })
+    expect(a.version).toMatch(/^\d+-6$/)
+    await fs.writeFile(at('m.txt'), 'héllo!')
+    expect((await readTextMeta(at('m.txt'))).version).not.toBe(a.version)
+  })
+
+  it('classifies NUL as binary (empty content) and invalid utf-8 as non-utf8 (lossy content)', async () => {
+    await fs.writeFile(at('b.dat'), Buffer.from([0x68, 0x00, 0x69]))
+    expect(await readTextMeta(at('b.dat'))).toMatchObject({ content: '', encoding: 'binary' })
+    await fs.writeFile(at('l1.txt'), Buffer.from([0x63, 0x61, 0x66, 0xe9])) // "café" Latin-1
+    expect(await readTextMeta(at('l1.txt'))).toMatchObject({ content: 'caf\ufffd', encoding: 'non-utf8' })
+  })
+
+  it('keeps the BOM and returns the too-large sentinel with a version', async () => {
+    await fs.writeFile(at('bom.txt'), Buffer.from([0xef, 0xbb, 0xbf, 0x61]))
+    expect((await readTextMeta(at('bom.txt'))).content).toBe('\ufeffa')
+    await fs.writeFile(at('big2.log'), '')
+    await fs.truncate(at('big2.log'), FS_READ_MAX_BYTES + 1)
+    const r = await readTextMeta(at('big2.log'))
+    expect(tooLargeSize(r.content)).toBe(FS_READ_MAX_BYTES + 1)
+    expect(r.version).not.toBe('')
+  })
+
+  it('still throws (contract 2): missing, directory, relative path', async () => {
+    await expect(readTextMeta(at('ghost.txt'))).rejects.toThrow(/^fs read failed: /)
+    const dirErr = await readTextMeta(at('deep')).catch((e: unknown) => e)
+    expect(readErrorResult(dirErr).status).toBe(400)
+    const relErr = await readTextMeta('rel.txt').catch((e: unknown) => e)
+    expect(readErrorResult(relErr).status).toBe(400)
+    expect(readErrorResult(relErr).body.error).toBe('invalid path')
+  })
+})
+
+describe('statMeta', () => {
+  it('returns meta + version for file, dir and symlink; FsFail for missing/relative', async () => {
+    const f = await statMeta(at('m.txt'))
+    expect(f).toMatchObject({ ok: true, meta: { name: 'm.txt', dir: false, kind: 'file', size: 7 } })
+    if (f.ok) expect(f.version).toBe((await readTextMeta(at('m.txt'))).version)
+    expect(await statMeta(at('deep'))).toMatchObject({ ok: true, meta: { dir: true, kind: 'dir' } })
+    expect(await statMeta(at('v2', 'link-dir'))).toMatchObject({ ok: true, meta: { dir: true, kind: 'symlink-dir' } })
+    expect(await statMeta(at('v2', 'link-broken'))).toMatchObject({ ok: true, version: '', meta: { kind: 'symlink-broken' } })
+    expect(await statMeta(at('ghost'))).toMatchObject({ ok: false, code: 'ENOENT' })
+    expect(await statMeta('rel')).toMatchObject({ ok: false, code: 'EINVAL' })
   })
 })
