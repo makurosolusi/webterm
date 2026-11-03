@@ -22,6 +22,11 @@ const FAKE = {
 }
 
 describe('redactSecrets patterns', () => {
+  it('daftar nama env rahasia tanpa hantu CHANNEL_HMAC_SECRET (tanpa pembaca)', () => {
+    expect(SECRET_ENV_NAMES as readonly string[]).not.toContain('WEBTERM_CHANNEL_HMAC_SECRET')
+    expect(SECRET_ENV_NAMES).toContain('WEBTERM_TOKEN')
+  })
+
   it.each(Object.entries(FAKE).filter(([k]) => k !== 'bearer' && k !== 'bot'))('scrubs %s tokens', (_name, secret) => {
     const out = redactSecrets(`before ${secret} after`)
     expect(out).not.toContain(secret)

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { CA2_ENV_SPECS } from './envRegistry.ca2'
 import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY, ENV_SETTINGS_SWITCH, isBootstrapOnly, specFor } from './envRegistry'
+import { setupEnv } from './envSettings.testutil'
 import { validateEnvValue } from './envSettings.validate'
 import type { EnvSpec } from './envRegistry.types'
 import { DEFAULT_MAX_LIVE, ENV_BROWSER, MAX_LIVE_RANGE } from '../shared/browser.contract'
@@ -18,11 +19,19 @@ describe('ENV_REGISTRY', () => {
     expect(isBootstrapOnly(ENV_SETTINGS_SWITCH)).toBe(true)
     expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_TELEGRAM_API_BASE')
   })
+  it('jumlah entri 62; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
+    expect(ENV_REGISTRY).toHaveLength(62)
+    const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL']
+    const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid' }))
+    expect(s.svc.state({ root: true }).entries.filter((e) => retired.includes(e.key))).toEqual([])
+    expect(s.svc.update({ set: { WEBTERM_LEDGER: 'on' }, unset: [] }, { root: true }).ok).toBe(true)
+    expect(JSON.parse(s.overrides.json as string)).toMatchObject({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_LEDGER: 'on' })
+  })
 
   it('kelas dangerous dan secret sesuai rancangan', () => {
     expect(names((s) => s.dangerous)).toEqual([
       'WEBTERM_BROWSER', 'WEBTERM_BROWSER_AGENT', 'WEBTERM_BROWSER_ALLOW_HOSTS', 'WEBTERM_BROWSER_BIN', 'WEBTERM_BROWSER_COOKIE_IMPORT',
-      'WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_AUTONOMY', 'WEBTERM_CONTROL_CWD_ROOTS', 'WEBTERM_EMBED_URL', 'WEBTERM_MEMORY_DIR', 'WEBTERM_OPENCODE_ALLOW_TOOLS',
+      'WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_AUTONOMY', 'WEBTERM_CONTROL_CWD_ROOTS', 'WEBTERM_MEMORY_DIR', 'WEBTERM_OPENCODE_ALLOW_TOOLS',
       'WEBTERM_OPENCODE_BIN', 'WEBTERM_ORCHESTRATOR_RUN', 'WEBTERM_TRUST_PROXY',
     ])
     expect(names((s) => s.kind === 'secret')).toEqual(['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET'])
@@ -43,14 +52,11 @@ describe('ENV_REGISTRY', () => {
 
   it('flag CA2: semua flag/enum default off, angka dalam rentang, tanpa duplikat', () => {
     const keys = CA2_ENV_SPECS.map((s) => s.key)
-    expect(keys.length).toBe(24)
+    expect(keys.length).toBe(20)
     expect(new Set(keys).size).toBe(keys.length)
     for (const k of keys) expect(ENV_REGISTRY.filter((s) => s.key === k).length, k).toBe(1)
     for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe('off')
     expect(specFor('WEBTERM_CENTRAL_AGENTS')?.default).toBe('off')
-    expect(specFor('WEBTERM_CENTRAL_TOOL_BRIDGE')?.default).toBe('text')
-    expect(specFor('WEBTERM_EMBED_URL')?.default).toBeUndefined() // tak diset = leksikal saja
-    expect(specFor('WEBTERM_EMBED_MODEL')?.default).toBeUndefined()
     expect(specFor('WEBTERM_CENTRAL_DAILY_TOKENS')?.default).toBe('1000000')
     expect(specFor('WEBTERM_CENTRAL_DAILY_SPAWNS')?.default).toBe('20')
     expect(specFor('WEBTERM_CENTRAL_TURN_WALL_MS')?.default).toBe('120000')
@@ -176,10 +182,9 @@ describe('vonis c-ENV-02 per entri', () => {
 })
 
 describe('metadata domain ca2, files, browser', () => {
-  it('ca2: section Central, advanced; kunci kanal ke channels, EMBED_* ke Memori', () => {
+  it('ca2: section Central, advanced; kunci kanal ke channels', () => {
     const moved: Record<string, [string, string]> = {
       WEBTERM_CENTRAL_BOTS: ['channels', 'Telegram'], WEBTERM_CHANNEL_APPROVAL_BUTTONS: ['channels', 'Telegram'],
-      WEBTERM_EMBED_URL: ['platform', 'Memori'], WEBTERM_EMBED_MODEL: ['platform', 'Memori'],
     }
     for (const s of CA2_ENV_SPECS) {
       const [owner, section] = moved[s.key] ?? ['central', 'Central']
@@ -197,13 +202,8 @@ describe('metadata domain ca2, files, browser', () => {
     const groupOf = (k: string): string | undefined => specFor(k)?.group
     expect(['WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_STEPS', 'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_TOKENS'].map(groupOf)).toEqual(Array(4).fill('central-turn'))
     expect(['WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_DAILY_COST_MICROS'].map(groupOf)).toEqual(Array(3).fill('central-budget'))
-    expect(['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY'].map(groupOf)).toEqual(['central-lab', 'central-lab'])
   })
-  it('ca2: 4 kunci tanpa pembaca berstage experimental dan berdeskripsi jujur', () => {
-    for (const k of ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL']) {
-      expect(specFor(k)?.stage, k).toBe('experimental')
-      expect(specFor(k)?.description, k).toContain('Belum dipakai server')
-    }
+  it('ca2: deskripsi jujur soal batas yang belum diberlakukan', () => {
     expect(specFor('WEBTERM_CENTRAL_TURN_TOKENS')?.description).toContain('belum diberlakukan')
     expect(specFor('WEBTERM_CENTRAL_DAILY_SPAWNS')?.description).toContain('0 = tidak boleh spawn')
     expect(specFor('WEBTERM_LOG_LEVEL')?.description).toContain('saat boot')

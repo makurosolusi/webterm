@@ -26,6 +26,8 @@ export const BOOTSTRAP_ONLY_KEYS: readonly string[] = [
   'WEBTERM_ALLOW_TOKEN_MINT',
   'WEBTERM_STRICT_HOOK_AUTH',
   'WEBTERM_TELEGRAM_API_BASE',
+  // Allowlist Host harus aktif sebelum overlay Settings/DB dimuat; lewat API penyerang bisa melonggarkan pagarnya sendiri.
+  'WEBTERM_ALLOWED_HOSTS',
   ENV_SETTINGS_SWITCH,
 ]
 
