@@ -20,6 +20,8 @@ const NAME_PREFIX = '[A-Za-z0-9_.-]*'
 const PATTERNS: Array<[RegExp, string]> = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, REDACTED],
   [/\bbot\d+:[A-Za-z0-9_-]{10,}\b/g, `bot${REDACTED}`],
+  // Bare BotFather token (`<bot id>:<35 chars>`), as pasted by a human or echoed by a model without the `bot` prefix.
+  [/\b\d{6,}:[A-Za-z0-9_-]{30,}\b/g, REDACTED],
   [/\b(Bearer)\s+[A-Za-z0-9._~+/=-]{8,}/gi, `$1 ${REDACTED}`],
   [/\bsk-[A-Za-z0-9_-]{16,}/g, REDACTED],
   [/\bgh[pousr]_[A-Za-z0-9]{16,}/g, REDACTED],
@@ -40,7 +42,7 @@ const PATTERNS: Array<[RegExp, string]> = [
 
 /** Object keys whose value is always masked, whatever it contains. */
 const SECRET_KEY =
-  /^(password|passwd|secret|token|api[-_]?key|access[-_]?token|refresh[-_]?token|auth[-_]?token|authorization|cookie|private[-_]?key|credentials?)$/i
+  /^(password|passwd|secret|token|bot[-_]?token|api[-_]?key|access[-_]?token|refresh[-_]?token|auth[-_]?token|authorization|cookie|private[-_]?key|credentials?)$/i
 
 /**
  * Egress scrubber for text. `secrets` is for in-memory values a caller already holds (never pass

@@ -14,6 +14,7 @@ import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './le
 import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
 import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
+import { bootCa2 } from './central/ca2Boot'
 import { initEnvSettings } from './envSettings.runtime'
 import { resolveHostPort } from './serverConfig'
 import { resolveAsset } from './staticAssets'
@@ -62,7 +63,10 @@ if (channelsRuntime && activeRuntime) {
 // Central autonomy (off by default) is a timer over the existing ledger runtime; it never
 // starts a second server. Boot is fail-closed: it logs one line and starts only when
 // WEBTERM_CENTRAL_AUTONOMY=on, a ledger runtime exists, and WEBTERM_ORCHESTRATOR_RUN=on.
-startCentralAutonomyBoot({ runtime: activeLedgerRuntime() })
+// Central Agent v2 (every flag off = null, nothing below changes): tool groups, agent executor,
+// panel routes; its liveness probe feeds the autonomy reconciler.
+const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: channelsRuntime?.bots ?? null })
+startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAlive: ca2.agentAlive } : {}) })
 
 const API_PREFIX = '/api/'
 
