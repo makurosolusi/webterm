@@ -60,7 +60,8 @@ Environment variables:
 - `WEBTERM_BROWSER_BIN` — absolute path to Chromium/Chrome; empty auto-detects.
 - `WEBTERM_BROWSER_MAX_LIVE` (1 to 8) and `WEBTERM_BROWSER_DISCARD_MS` — live tab cap and how long a hidden node waits before its page is discarded.
 - `WEBTERM_BROWSER_AGENT` — default `off`. `on` lets agent terminals drive Browser nodes whose per-node toggle is on, through the capability-gated control API.
-- `WEBTERM_BROWSER_ALLOW_HOSTS` — comma-separated `host:port` private/localhost targets that may be opened; empty blocks all private networks. A malformed value disables the feature.
+- `WEBTERM_BROWSER_ALLOW_HOSTS` — comma-separated `host:port` private/localhost targets that may be opened; empty blocks all private networks (`localhost` included). A malformed value disables the feature. Hosts match exactly, so `WEBTERM_BROWSER_ALLOW_HOSTS=localhost:3000` does not cover `127.0.0.1:3000`; list each form you open. Automatic localhost preview does not exist yet.
+- Opening a Browser node from a link (only when `WEBTERM_BROWSER=on`): right-click an `http(s)` link in a terminal or agent node and choose "Open in canvas browser", or drag a URL onto empty canvas. The node appears beside the source (or at the drop point). If a Browser node already shows that URL, you are taken to it instead of a second node opening, and its page is not navigated. Cmd/Ctrl+click on a link still opens a normal browser tab, and agents cannot open Browser nodes on their own yet.
 - `WEBTERM_BROWSER_COOKIE_IMPORT` and `WEBTERM_BROWSER_COOKIE_TTL_DAYS` — default `off`; enables the encrypted cookie vault and its retention.
 
 Any of these can go in a `.env` file in the working directory instead of the environment. Bun loads that file automatically, for both the dev server and the compiled binary, so every value in it enters `process.env`. Keep the file at mode `600`, and leave `WEBTERM_TOKEN` out of it unless you accept that inheritance.
