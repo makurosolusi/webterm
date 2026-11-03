@@ -7,6 +7,8 @@ import type { AgentExecutor } from '../agents/agentExecutor'
 import type { MailDeliver } from '../agents/mailDeliver'
 import { AGENT_MAIL_FLAG, createAgentRelayDef } from './defs/agent.relay.def'
 import { AGENTS_FLAG, createAgentDefs } from './defs/agent.defs'
+import { BROWSER_TOOLS_FLAG, createBrowserDefs } from './defs/browser.act'
+import type { BrowserToolDeps } from './defs/browser.status'
 import { type ChannelBotDefDeps, createChannelBotDef } from './defs/channel.bot.def'
 import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
 import { createMemoryDefs } from './defs/memory.defs'
@@ -32,6 +34,7 @@ export interface Ca2ToolDeps {
   skills?: SkillStoreResolver
   userStore?: UserMemoryStore
   bots?: ChannelBotDefDeps
+  browser?: BrowserToolDeps
 }
 
 type Env = Record<string, string | undefined>
@@ -49,6 +52,7 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
     [on(env, SKILLS_FLAG) && !!deps.skills, () => createSkillDefs(deps.skills as SkillStoreResolver)],
     [on(env, MEMORY_FLAG), () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],
+    [on(env, BROWSER_TOOLS_FLAG) && !!deps.browser, () => createBrowserDefs(deps.browser as BrowserToolDeps)],
   ]
   const added: string[] = []
   for (const [enabled, build] of groups) {
