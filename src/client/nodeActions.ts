@@ -1,9 +1,12 @@
 import { createContext, useContext } from 'react'
+import type { OpenBrowserReq, OpenResult } from './browser.open.plan'
 
 export type NodeActions = {
   /** Node mencetak session uuid-nya sendiri (atau restart) dan perlu dipersist ke node itu. */
   onSession: (nodeId: string, uuid: string) => void
   onToggleHideLinks: (nodeId: string) => void
+  /** Buka URL di node browser; undefined = flag browser mati (pemicu tidak boleh menampilkan aksi). Tanpa default. */
+  openBrowserAt?: (req: OpenBrowserReq) => OpenResult
 }
 
 /**
