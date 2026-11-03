@@ -145,7 +145,9 @@ describe('jaring pengaman persist klik minimap (penjaga teks)', () => {
   it('`onClick` minimap masih memanggil syncViewport', () => {
     // Path disusun dari STRING, bukan `new URL('./App.tsx', import.meta.url)`: `URL` di file jsdom
     // ini milik jsdom, yang mengabaikan base `file://` dan memulangkan `http://localhost/App.tsx`.
-    const app = readFileSync(fileURLToPath(import.meta.url).replace(/[^/]+$/, 'App.tsx'), 'utf8')
+    const app = ['App.tsx', 'App.canvas.tsx']
+      .map((f) => readFileSync(fileURLToPath(import.meta.url).replace(/[^/]+$/, f), 'utf8'))
+      .join('\n')
     const open = app.indexOf('<MiniMap')
     const jsx = app.slice(open, app.indexOf('/>', open))
     expect(open).toBeGreaterThan(-1)

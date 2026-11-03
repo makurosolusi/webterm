@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReactFlow, Background, BackgroundVariant, MiniMap, applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
-import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
+import type { Node, Edge, ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import ContextEdge from './ContextEdge'
 import WorkspaceBar from './WorkspaceBar'
 import Dock from './Dock'
 import Kanban from './Kanban'
@@ -15,36 +13,25 @@ import InboxPanel from './InboxPanel'
 import ChatPanel, { useChatOpen } from './ChatPanel'
 import CentralControlPanel, { useCentralControl } from './central/CentralControlPanel'
 import { useInboxOpen } from './inboxPanelModel'
-import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
 import OutputPanelHost from './output/outputPanelHost'
-import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
-import { useOutputStatusItems } from './output/outputStatusItem'
 import { SettingsPanel } from './SettingsPanel'
-import { nodeTypes } from './nodeTypes'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
-import { resolveTerminalTheme } from './themes'
-import { toFlow, toWsNode, toFlowEdge, addNode } from './store'
-import { canLink, bridgeExists } from './floatingEdge'
-import { spawnAt, spawnPosition } from './nodeSpawn'
-import { randomId } from './randomId'
-import { spawnSpot } from './canvasMenu.geometry'
+import { toWsNode } from './store'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { useLayoutHistory } from './layoutHistory'
-import { paneSessionIds } from './paneTree'
-import { send, subscribeStatus } from './ws'
-import { validateToken, storeToken, clearToken, hasToken } from './api'
+import { hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
 import { useClosedHistory } from './closedHistory'
-import { useBrowserAdd } from './useBrowserAdd'
-import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
-import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
-
-const edgeTypes = { context: ContextEdge }
+import { useBoardActions } from './App.board'
+import BoardCanvas from './App.canvas'
+import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
+import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
 
 export default function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -86,29 +73,8 @@ export default function App() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rf = useRef<ReactFlowInstance | null>(null)
 
-  useEffect(() => {
-    // `s` undefined = sapuan basi mencabut statusnya (`shared/agentStale.ts`), jadi key-nya DIHAPUS:
-    // menaruh `undefined` di bawah key yang masih ada akan membuat node terbaca berstatus kosong.
-    const unsub = subscribeStatus((id, s) =>
-      setStatuses((prev) => {
-        const next = { ...prev }
-        if (s) next[id] = s
-        else delete next[id]
-        return next
-      })
-    )
-    return unsub
-  }, [])
-
-  // Satu-satunya penulis `data-theme`; `styles.css` menyimpan varian terangnya di
-  // `:root[data-theme='light']`. 'auto' mengikut tema terminal supaya memilih skema terang
-  // tidak menyisakan rangka hitam di sekelilingnya.
-  useEffect(() => {
-    const dark = settings.appTheme === 'auto'
-      ? resolveTerminalTheme(settings.terminalTheme).dark
-      : settings.appTheme === 'dark'
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-  }, [settings.appTheme, settings.terminalTheme])
+  useStatusSubscription(setStatuses)
+  useAppTheme(settings)
 
   // Payload dikunci di `scheduleSave`, bukan dibaca ulang saat timer menembak: board bisa berpindah
   // workspace dalam 400ms debounce. Lihat `useWorkspaceSaver` — termasuk kenapa `flushSave` wajib
@@ -134,127 +100,13 @@ export default function App() {
   const { onUndo, onRedo, canUndo, canRedo, pushLayout, resetLayout } =
     useLayoutHistory({ nodesRef, setNodes, scheduleSave })
 
-  const applyWorkspace = useCallback((ws: Workspace) => {
-    // Save yang masih menggantung milik board LAMA: tulis dulu dengan payload yang sudah terkunci,
-    // baru pasang board ini. Tanpa ini timer-nya menembak belakangan dan menulis board baru ke id lama.
-    flushSave()
-    setActiveWs(ws)
-    activeWsRef.current = ws
-    resetViewport(ws.viewport ?? DEFAULT_VIEWPORT)
-    const flow = ws.nodes.map(toFlow)
-    nodesRef.current = flow
-    setNodes(flow)
-    const fe = (ws.bridges ?? []).map(toFlowEdge)
-    edgesRef.current = fe
-    setEdges(fe)
-    resetLayout(flow)
-  }, [flushSave, resetViewport, resetLayout])
+  const {
+    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, nodeActions,
+  } = useBoardActions({
+    rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
+    setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
+  })
 
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    // Di LUAR updater: `recordClosed` setState, dan dari dalam updater itu menulis di fase render.
-    const gone = changes.flatMap((c) => (c.type === 'remove' ? [c.id] : []))
-    if (gone.length) {
-      recordClosed(gone, nodesRef.current.map(toWsNode), activeWsRef.current)
-      // Satu node bisa memegang banyak PTY (split pane), jadi yang ditutup adalah tiap DAUN-nya:
-      // `close` untuk id node saja meninggalkan shell pane kedua dan seterusnya hidup tanpa pemilik
-      // sampai server restart. Di LUAR updater, alasannya sama dengan `recordClosed`: updater
-      // setState bisa dijalankan lebih dari sekali dan efeknya ikut terkirim dua kali.
-      for (const sid of paneSessionIds(nodesRef.current, gone)) send({ t: 'close', id: sid })
-    }
-    setNodes((prev) => {
-      const next = applyNodeChanges(changes, prev)
-      nodesRef.current = next
-      // 'add' ikut dihitung: node yang dibuat di dalam node lain (FilesNode membuka file sebagai
-      // node editor di sebelahnya) masuk lewat `addNodes`, bukan lewat `addFlowNode` di bawah —
-      // tanpa cabang ini node itu tidak pernah tersimpan dan tidak bisa di-undo.
-      const settled = changes.some(
-        (c) => (c.type === 'position' && !c.dragging) || c.type === 'remove' || c.type === 'add' || (c.type === 'dimensions' && !c.resizing),
-      )
-      if (settled) {
-        scheduleSave()
-        pushLayout(next)
-      } else if (changes.some((c) => c.type === 'replace')) {
-        // Data-only change (collapse/color/rename/comments/hideLinks via updateNodeData):
-        // persist but DON'T push to layout history — mirrors onSession.
-        scheduleSave()
-      }
-      return next
-    })
-  }, [recordClosed, scheduleSave, pushLayout])
-
-  const onConnect = useCallback((c: Connection) => {
-    if (!c.source || !c.target) return
-    const src = nodesRef.current.find((n) => n.id === c.source)
-    const tgt = nodesRef.current.find((n) => n.id === c.target)
-    const sa = (src?.data as { agentId?: AgentId })?.agentId
-    const ta = (tgt?.data as { agentId?: AgentId })?.agentId
-    if (!canLink(sa, ta, c.source, c.target)) return
-    if (bridgeExists(edgesRef.current, c.source, c.target)) return
-    setEdges((es) => {
-      const next = addEdge({ id: `bridge-${c.source}-${c.target}`, source: c.source!, target: c.target!, type: 'context' }, es)
-      edgesRef.current = next
-      return next
-    })
-    scheduleSave()
-  }, [scheduleSave])
-
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    setEdges((prev) => {
-      const next = applyEdgeChanges(changes, prev)
-      edgesRef.current = next
-      // 'add' ikut dihitung, kelas bug yang sama dengan node di `onNodesChange`: kabel yang dibuat
-      // di dalam node lain (FilesNode menandai file yang terbuka) masuk lewat `rf.addEdges`, yang
-      // diantar ke sini sebagai change 'add' — tanpa cabang ini kabelnya hilang setelah reload.
-      if (changes.some((c) => c.type === 'remove' || c.type === 'add')) scheduleSave()
-      return next
-    })
-  }, [scheduleSave])
-
-  // Spawn SEBELUM `make`: node baru lahir di tengah pandangan, node yang dibuka ulang menimpanya dengan x/y aslinya.
-  // `at` (koordinat FLOW) menggantikan "tengah pandangan": menu konteks canvas memakainya.
-  const addFlowNode = useCallback((make: (n: number, ws: Workspace) => Omit<WsNode, 'x' | 'y'>, at?: XYPosition) => {
-    const ws = activeWsRef.current
-    if (!ws) return
-    setNodes((prev) => {
-      const size = { width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }
-      const spot = spawnSpot(at) // Lihat `spawnSpot`: `at` bisa berisi event, bukan titik.
-      const node = { ...size, ...(spot ? spawnPosition(spot, size, 0) : spawnAt(rf.current, settings, prev.length)), ...make(prev.length, ws) }
-      const next = addNode(prev.map(toWsNode), node).map(toFlow)
-      // Round-trip `toWsNode`/`toFlow` tidak membawa `selected`, jadi yang lain sudah ter-deselect;
-      next[next.length - 1].selected = true // node baru selalu terakhir (`addNode` append).
-      nodesRef.current = next
-      scheduleSave()
-      pushLayout(next)
-      return next
-    })
-  }, [scheduleSave, pushLayout, settings.defaultNodeWidth, settings.defaultNodeHeight])
-
-  const onAddTerminal = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'terminal', cwd: ws.cwd }), at), [addFlowNode])
-
-  // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
-  // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
-  const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
-  const onAddBrowser = useBrowserAdd(addFlowNode, activeId, hydrated && !authRequired) // undefined = fitur mati di server
-
-  // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
-  // saat mount (lalu mem-persist-nya lewat `onSession` di bawah). Mencetaknya di sini membuat
-  // `resumesOnFirstLaunch` membaca node yang baru lahir sebagai "pernah diluncurkan" → claude dipanggil
-  // dengan `--resume <uuid>` yang belum pernah ada di disk → "No conversation found with session ID".
-  const onAddAgent = useCallback((cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => {
-    const color = agentConfig(agentId)?.color
-    addFlowNode((_, ws) => ({ id: randomId(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }), at)
-  }, [addFlowNode])
-
-  // A node minted its own session uuid (or restarted): persist it to that node.
-  // Data-only change — not pushed to layout history (undo must not drop a live session id).
-  const onSession = useCallback((nodeId: string, uuid: string) => {
-    setNodes((prev) => {
-      const next = prev.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, sessionId: uuid } } : n))
-      nodesRef.current = next
-      scheduleSave()
-      return next
-    })
-  }, [scheduleSave])
 
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
@@ -266,14 +118,7 @@ export default function App() {
       activeWsRef, nodesRef, edgesRef, cancelSave, rf,
     })
 
-  // Token disimpan lalu halaman di-reload: `api.ts` menangkap token sekali saat import, jadi hanya
-  // load berikutnya yang membacanya kembali — reload adalah cara termalas yang benar, bukan membuat
-  // modul token bisa dimutasi hidup-hidup.
-  const onLogin = useCallback(async (t: string) => {
-    if (await validateToken(t)) { storeToken(t); location.reload(); return true }
-    return false
-  }, [])
-  const onLogout = useCallback(() => { clearToken(); location.reload() }, [])
+  const { onLogin, onLogout } = useAuthActions()
 
   // Lewat `onNodesChange`, bukan setNodes langsung: riwayat & persistensi menggantung di sana.
   const onSelectAll = useCallback(() => {
@@ -286,23 +131,7 @@ export default function App() {
 
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
 
-  const onToggleHideLinks = useCallback((id: string) => {
-    const cur = nodesRef.current.find((n) => n.id === id)
-    rf.current?.updateNodeData(id, { hideLinks: !(cur?.data as { hideLinks?: boolean })?.hideLinks })
-  }, [])
-
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks }), [onSession, onToggleHideLinks])
-
-  // Ringkasan agent untuk status bar: satu kalimat yang dibaca pembaca layar lewat live region
-  // `VscodeStatusBar`. Angkanya diturunkan dari status yang sudah ada, bukan state baru.
-  const agentSummary = useMemo(() => {
-    const values = Object.values(statuses)
-    const working = values.filter((s) => s === 'working').length
-    const blocked = values.filter((s) => s === 'blocked').length
-    return [working ? `${working} working` : '', blocked ? `${blocked} need attention` : '']
-      .filter(Boolean)
-      .join(' · ')
-  }, [statuses])
+  const agentSummary = useAgentSummary(statuses)
 
   // TIDAK ada suntikan apa pun ke `data` di sini — callback lewat `useNodeActions`, settings lewat
   // `useLiveSettings`. Node terminal/agent jadi mewarisi identitas objek aslinya (`withLinkHandles`
@@ -315,17 +144,8 @@ export default function App() {
 
   const noWorkspaces = workspaces.length === 0
 
-  // Inbox + badge berbagi satu endpoint (`GET /api/inbox`), jadi hanya SATU yang memuat pada satu
-  // waktu: panel saat terbuka (pollMs di bawah), hook badge saat tertutup. Sebelum hidrasi dan di
-  // layar Welcome keduanya diam. Tombol `i` hanya hidup ketika memang ada board.
   const inboxReady = hydrated && !noWorkspaces
-  const inboxUnread = useInboxBadge({ panelOpen: inboxOpen, enabled: inboxReady })
-  useInboxHotkey(() => setInboxOpen(!inboxOpen), inboxReady)
-  // Panel Output (log sistem): state-nya modul bersama, jadi menu View, palette, dan status bar
-  // tak perlu prop. Lihat `./output/outputCommands`.
-  useOutputToggleHotkey()
-  const outputStatusItems = useOutputStatusItems()
-  const outputCommands = useMemo(() => outputPaletteCommands(), [])
+  const { inboxUnread, outputStatusItems, outputCommands } = useDockFeeds(inboxOpen, setInboxOpen, inboxReady)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
@@ -365,45 +185,22 @@ export default function App() {
             onReopen={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
           />
         ) : (
-          <ReactFlow
+          <BoardCanvas
             key={activeId ?? 'empty'}
+            rf={rf}
             nodes={flowNodes}
-            nodeTypes={nodeTypes}
             edges={displayEdges}
-            edgeTypes={edgeTypes}
+            settings={settings}
+            viewport={activeWs?.viewport}
+            locked={locked}
+            nodeColor={nodeColor}
+            syncViewport={syncViewport}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
             onMoveEnd={onMoveEnd}
             onPaneContextMenu={onPaneContextMenu}
-            onInit={(i) => (rf.current = i)}
-            defaultViewport={activeWs?.viewport ?? DEFAULT_VIEWPORT}
-            fitView={false}
-            minZoom={0.01}
-            maxZoom={2}
-            snapToGrid={settings.snapToGrid}
-            snapGrid={[settings.gridSize, settings.gridSize]}
-            panOnDrag={!locked}
-            panOnScroll={!locked}
-            zoomOnPinch={!locked}
-            zoomOnScroll={false}
-            proOptions={{ hideAttribution: true }}
-          >
-            {settings.canvasDots && (
-              <Background variant={BackgroundVariant.Dots} gap={settings.gridSize} size={2.5} color="var(--canvas-dot)" />
-            )}
-            <MiniMap
-              className="minimap-dock" pannable zoomable nodeColor={nodeColor}
-              // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.
-              // `setCenter` tanpa `zoom` jatuh ke maxZoom, bukan zoom sekarang — klik cuma boleh
-              // memindahkan titik pandang, jadi zoom berjalan diteruskan eksplisit.
-              onClick={(_, p) => {
-                const vp = rf.current?.getViewport()
-                if (vp) { rf.current?.setCenter(p.x, p.y, { zoom: vp.zoom, duration: 300 }); syncViewport(320) }
-              }}
-            />
-          </ReactFlow>
+          />
         )}
         {/* Cluster kontrol editor (palette ⌘K, Explorer, Settings, Help) hidup DI DALAM sel
             editor, bukan mengapung di atas tab bar: `top`-nya jadi jarak dari canvas. */}
