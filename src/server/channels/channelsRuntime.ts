@@ -128,7 +128,7 @@ export function startChannelsRuntime(
       log.warn('channels.audit_failed', `telegram audit append failed: ${safeError(err)}`)
     }
   }
-  const pending = new PendingChatStore(options.now === undefined ? {} : { now: options.now })
+  const pending = options.pending ?? new PendingChatStore(options.now === undefined ? {} : { now: options.now })
   const background = createBackgroundTracker()
   const ingest = (update: unknown): Promise<DispatchOutcome> =>
     dispatchTelegramUpdate(update, {

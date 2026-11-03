@@ -3,7 +3,9 @@
 // append/publish, assistant-message finalization, and history reads. The service
 // keeps orchestration/lock logic only.
 import type { Database } from 'bun:sqlite'
+import { homedir } from 'node:os'
 import { allRows, execWrite, getRow } from '../../ledger/ledgerCore'
+import { projectRepository } from '../../ledger/ledgerEntity'
 import {
   type CentralEventType, conversationIdForScope, isActiveTurnStatus,
   scopeFromConversationId, type MessagePart, type TurnStatus,
@@ -52,19 +54,44 @@ export function recordEvent(
   stream.publish(conversationId, event)
 }
 
+/** Workspace store lookup (webterm.db, a different file from the ledger); registered at boot. */
+export type WorkspaceLookup = (id: string) => { name: string; cwd?: string } | null
+let lookupWorkspace: WorkspaceLookup = () => null
+
+/** Lets project ids that are workspace ids (UI bind, Telegram) resolve; returns the unregister. */
+export function registerWorkspaceLookup(lookup: WorkspaceLookup): () => void {
+  lookupWorkspace = lookup
+  return () => { lookupWorkspace = () => null }
+}
+
+/**
+ * Ledger project id for a project id or a workspace id. Callers (UI bind, Telegram) pass the
+ * workspace id, and nothing else creates ledger rows for workspaces, so the first turn creates
+ * it (id = workspace id). Synchronous SQLite, so a second call sees the row: never doubled.
+ */
+function ensureLedgerProjectId(db: Database, id: string): string {
+  if (getRow(db, 'SELECT 1 AS one FROM project WHERE id = ?', id) !== null) return id
+  const linked = getRow(db, 'SELECT id FROM project WHERE workspace_id = ?', id)
+  if (linked !== null) return String(linked['id'])
+  const workspace = lookupWorkspace(id)
+  if (workspace === null) throw new CentralChatError('project_not_found', `project not found: ${id}`, 404)
+  projectRepository({ db, now: Date.now }).createProject({
+    id, workspaceId: id, name: workspace.name, path: workspace.cwd || homedir(),
+  })
+  return id
+}
+
 /**
  * Canonical ids auto-create on first use. A project conversation is only created
- * when the project row exists; an unknown project is a typed 404, not an empty chat.
+ * when the project row exists (or its workspace does); otherwise a typed 404, not an empty chat.
  */
 export function resolveOrCreateConversation(db: Database, rawId: string): Conversation {
   const scope = scopeFromConversationId(rawId)
-  const canonicalId = conversationIdForScope(scope)
-  const existing = getConversation(db, canonicalId)
+  const existing = getConversation(db, conversationIdForScope(scope))
   if (existing) return existing
-  if (scope.kind === 'project' && getRow(db, 'SELECT 1 AS one FROM project WHERE id = ?', scope.projectId) === null) {
-    throw new CentralChatError('project_not_found', `project not found: ${scope.projectId}`, 404)
-  }
-  return getOrCreateConversation(db, scope.kind === 'global' ? 'global' : `project:${scope.projectId}`)
+  if (scope.kind === 'global') return getOrCreateConversation(db, 'global')
+  const projectId = ensureLedgerProjectId(db, scope.projectId)
+  return getOrCreateConversation(db, `project:${projectId}`)
 }
 
 export function findByClientMessageId(

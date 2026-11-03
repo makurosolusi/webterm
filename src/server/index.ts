@@ -32,6 +32,7 @@ import { activeBrowser, registerBrowserCapability } from './browser/browser.acti
 import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureCapabilities.runtime'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
+import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
 declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
@@ -49,6 +50,8 @@ const dev = process.env.NODE_ENV !== 'production'
 
 // Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
 const ledgerRuntime = startLedgerRuntime()
+// Project-scoped chats carry workspace ids; the ledger creates its project row from this store.
+registerWorkspaceLookup((id) => db.get(id))
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
   startLedgerReaper(ledgerRuntime.ledger)

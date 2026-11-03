@@ -7,6 +7,7 @@ import type { Ledger } from '../ledger/ledger'
 import type { ChannelStore } from './channelStore'
 import type { ChannelApprovalPort, DispatchOutcome, TelegramCentralPort, TelegramDispatchDeps } from './channelDispatch'
 import type { BotManager, BotManagerDeps } from './botManager'
+import type { PendingChatStore } from './channelPending'
 import type { SecretFileRead } from './channelSecret'
 import type { SenderBootOptions } from './channelSenderBoot'
 import type { FlushResult } from './telegramSender'
@@ -63,4 +64,6 @@ export interface ChannelsRuntimeOptions {
   bots?: Partial<BotManagerDeps>
   /** Secret store untuk secret webhook otomatis (KE-9); produksi: `<dataDir>/secrets`. */
   secrets?: SecretStore
+  /** Pending-chat list owned by the caller so it survives a runtime rebuild (telegramHot.refresh). */
+  pending?: PendingChatStore
 }
