@@ -9,6 +9,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
 import { SettingsPanel } from './SettingsPanel'
 
+// Provider env nyata melakukan fetch; tes layout ini tak membutuhkannya (lihat SettingsPanel.envsearch.test.tsx).
+vi.mock('./useEnvSettings', () => ({
+  EnvSettingsProvider: ({ children }: { children: React.ReactNode }) => children,
+  useEnvSettingsContext: () => ({ state: null, query: '', draft: new Map(), dirtyKeys: [], loading: false, error: null }),
+  useHasEnvSettingsContext: () => true,
+  useEnvLoadOnMount: () => undefined,
+}))
+
 afterEach(cleanup)
 
 // Render Settings membangun Dialog + enam section di jsdom; saat suite lain berjalan paralel

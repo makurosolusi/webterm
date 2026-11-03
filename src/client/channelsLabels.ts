@@ -6,7 +6,7 @@ export const CH = {
   refreshing: 'Menyegarkan…',
   inactiveTitle: 'Channel Telegram nonaktif',
   inactiveHint:
-    'Aktifkan dengan mengisi WEBTERM_TELEGRAM=on dan TELEGRAM_BOT_TOKEN di environment server, lalu restart server.',
+    'Aktifkan dengan mengisi WEBTERM_TELEGRAM=on dan WEBTERM_TELEGRAM_BOT_TOKEN (alias lama: TELEGRAM_BOT_TOKEN). Atur di Settings > Fitur & server (sementara) lalu restart.',
   statusHeading: 'Status',
   mode: 'Mode',
   modePoll: 'poll (long polling)',

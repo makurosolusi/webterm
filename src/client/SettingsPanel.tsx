@@ -7,6 +7,11 @@
 // Pengelompokan section mengikuti komentar grup di `shared/settings.ts` supaya skema dan UI tidak
 // bisa berbeda pendapat.
 //
+// Pencarian lintas Environment: `EnvSettingsProvider` (state + draft) dipasang DI ATAS view dan tak
+// pernah di-remount saat query berubah, jadi mengetik di pencarian tidak membuang draft. Baris env
+// dihitung dari state (bukan DOM) supaya baris tersembunyi/akordeon tertutup tetap terhitung; entri
+// milik Channels tak punya baris di Environment dan tampil sebagai tautan ke tab Channels.
+//
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,6 +26,9 @@ import { AgentSettings } from './SettingsAgents'
 import { ChannelsSection } from './ChannelsSection'
 import { EnvSection } from './EnvSection'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
+import { ENV_KEY_ATTR, matchesEntry } from './envSearch'
+import { EnvSettingsProvider, useEnvSettingsContext } from './useEnvSettings'
+import type { EnvEntryV2 } from '../shared/envSettings.contract'
 import { SettingsItemScopeProvider } from './settingsContext'
 import {
   CanvasSection,
@@ -45,26 +53,67 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]['id']
 
-export function SettingsPanel({
-  settings: s,
-  onChange,
-  onClose,
-}: {
+const OWNER_CHANNELS = 'channels'
+const IN_CHANNELS_TAB = 'ada di tab Channels'
+
+interface PanelProps {
   settings: Settings
   onChange: (patch: Partial<Settings>) => void
   onClose: () => void
-}): React.JSX.Element {
-  const [active, setActive] = useState<SectionId>('terminal')
+}
+
+/** Entri Channels yang cocok query: tautan ke tab pemiliknya (tanpa baris env di Environment). */
+function ChannelsHits({ hits, onOpen }: { hits: EnvEntryV2[]; onOpen: () => void }): React.JSX.Element | null {
+  if (hits.length === 0) return null
+  return (
+    <ul className="st-ch-list">
+      {hits.map((entry) => (
+        <li key={entry.key} className="st-field" data-env-hit={entry.key}>
+          <div className="st-title">
+            <span className="st-label">{entry.label}</span> <code className="st-mono">{entry.key}</code>
+          </div>
+          <button type="button" className="st-button" onClick={onOpen}>{IN_CHANNELS_TAB}</button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Dialog Settings; provider env ada di luar view agar draft selamat dari perubahan query. */
+export function SettingsPanel(props: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
+  const normalized = useMemo(() => normalizeQuery(query), [query])
+  return (
+    <EnvSettingsProvider query={normalized}>
+      <SettingsPanelView {...props} query={query} setQuery={setQuery} normalized={normalized} />
+    </EnvSettingsProvider>
+  )
+}
+
+function SettingsPanelView({
+  settings: s,
+  onChange,
+  onClose,
+  query,
+  setQuery,
+  normalized,
+}: PanelProps & { query: string; setQuery: (q: string) => void; normalized: string }): React.JSX.Element {
+  const [active, setActive] = useState<SectionId>('terminal')
   const [found, setFound] = useState(0)
   const mainRef = useRef<HTMLElement>(null)
-  const normalized = useMemo(() => normalizeQuery(query), [query])
+  const entries = useEnvSettingsContext().state?.entries
+  const envHits = useMemo(
+    () => (normalized && entries ? entries.filter((entry) => matchesEntry(entry, normalized)) : []),
+    [normalized, entries],
+  )
+  const channelHits = useMemo(() => envHits.filter((entry) => entry.owner === OWNER_CHANNELS), [envHits])
 
-  // Hitungan "N setting ditemukan" dibaca dari DOM: Field menyaring dirinya sendiri, jadi
-  // jumlah field yang tampil adalah satu-satunya sumber yang tidak bisa berbeda dari layar.
+  // Hitungan "N setting ditemukan": Field non-env dibaca dari DOM (menyaring dirinya sendiri, jadi
+  // tak bisa berbeda dari layar) + entri env yang cocok dari state, termasuk milik Channels.
   useEffect(() => {
-    setFound(normalized ? (mainRef.current?.querySelectorAll('[data-slot="settings-field"]').length ?? 0) : 0)
-  }, [normalized, s])
+    const fields = mainRef.current?.querySelectorAll(`[data-slot="settings-field"]:not([${ENV_KEY_ATTR}])`).length ?? 0
+    setFound(normalized ? fields + envHits.length : 0)
+  }, [normalized, s, envHits])
 
   // Pindah section = daftar baru, mulai dari atas seperti VS Code saat memilih entri TOC.
   useEffect(() => {
@@ -77,7 +126,14 @@ export function SettingsPanel({
     if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
-    if (id === 'channels') return <ChannelsSection />
+    if (id === 'channels') {
+      return (
+        <>
+          <ChannelsSection />
+          <ChannelsHits hits={channelHits} onOpen={() => { setActive('channels'); setQuery('') }} />
+        </>
+      )
+    }
     if (id === 'env') return <EnvSection />
     return <PreviewSection settings={s} onChange={onChange} />
   }

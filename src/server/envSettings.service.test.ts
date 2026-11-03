@@ -1,8 +1,10 @@
 // Presedensi, validasi, gerbang, atomik, dan larangan bocor untuk layanan env-settings.
 import { describe, expect, it } from 'vitest'
 import { BOOTSTRAP_ONLY_KEYS } from './envRegistry'
-import { SENTINEL_BOT_TOKEN, SENTINEL_WEBHOOK_SECRET, setupEnv } from './envSettings.testutil'
-import type { EnvEntry } from './envSettings.service'
+import { SENTINEL_BOT_TOKEN, SENTINEL_WEBHOOK_SECRET, memOverrides, memSecrets, setupEnv } from './envSettings.testutil'
+import { createEnvSettings } from './envSettings.service'
+import { text } from './envRegistry.types'
+import type { EnvEntryV2 as EnvEntry } from '../shared/envSettings.contract'
 import { resolveWebhookSecret } from './channels/channelSecret'
 import { redactSecrets } from './redactSecrets'
 
@@ -39,8 +41,10 @@ describe('presedensi override > env > default', () => {
     expect(s.target.WEBTERM_CENTRAL).toBe('on')
   })
 
-  it('nilai env non-kanonik tampil apa adanya sebagai sumber env', () => {
-    expect(entry(setupEnv({ WEBTERM_CENTRAL: ' ON ' }), 'WEBTERM_CENTRAL')).toMatchObject({ source: 'env', value: 'ON' })
+  it('nilai env non-kanonik dinormalisasi di state (sumber tetap env), env proses tak diubah', () => {
+    const s = setupEnv({ WEBTERM_CENTRAL: ' ON ' })
+    expect(entry(s, 'WEBTERM_CENTRAL')).toMatchObject({ source: 'env', value: 'on', effective: 'on', valid: true })
+    expect(s.target.WEBTERM_CENTRAL).toBe(' ON ')
   })
 })
 
@@ -76,13 +80,12 @@ describe('bootstrap-only, dangerous, locked', () => {
     const s = setupEnv()
     expect(s.svc.update({ set: { [key]: 'x' }, unset: [] }, ROOT)).toMatchObject({ status: 400, error: 'bootstrap_only', key })
     expect(s.svc.update({ set: {}, unset: [key] }, ROOT)).toMatchObject({ status: 400, error: 'bootstrap_only', key })
-    expect(entry(s, key)).toMatchObject({ editable: false, group: 'bootstrap' })
-    expect(entry(s, key).value).toBeUndefined()
+    expect(s.svc.state(ROOT).entries.some((e) => e.key === key)).toBe(false) // v2: bukan baris editor
   })
 
-  it('bootstrap hanya melaporkan terisi/kosong, tak pernah nilai', () => {
+  it('bootstrap hanya melaporkan token terisi/kosong (server.tokenSet), tak pernah nilai', () => {
     const s = setupEnv({ WEBTERM_TOKEN: 'tok-sentinel-xyz', PORT: '9999' })
-    expect(entry(s, 'WEBTERM_TOKEN').set).toBe(true)
+    expect(s.svc.state(ROOT).server).toEqual({ tokenSet: true, settingsLocked: false })
     expect(JSON.stringify(s.svc.state(ROOT))).not.toContain('tok-sentinel-xyz')
     expect(JSON.stringify(s.svc.state(ROOT))).not.toContain('9999')
   })
@@ -175,7 +178,8 @@ describe('secret', () => {
     expect(r.ok).toBe(true)
     const e = entry(s, 'WEBTERM_TELEGRAM_BOT_TOKEN')
     expect(e).toMatchObject({ set: true, source: 'override' })
-    expect(e.value).toBeUndefined()
+    expect(e).toMatchObject({ value: '', effective: '', valid: true })
+    expect(e.rawValue).toBeUndefined()
     const everything = JSON.stringify(r) + JSON.stringify(s.svc.state(ROOT)) + s.logs.join('\n') + String(s.overrides.json)
     expect(everything).not.toContain(SENTINEL_BOT_TOKEN)
     expect(everything).not.toContain(SENTINEL_WEBHOOK_SECRET)
@@ -215,5 +219,28 @@ describe('secret', () => {
     s.secrets.write('WEBTERM_TELEGRAM_BOT_TOKEN', SENTINEL_BOT_TOKEN)
     s.svc.apply()
     expect(s.target.WEBTERM_TELEGRAM_BOT_TOKEN).toBe(SENTINEL_BOT_TOKEN)
+  })
+})
+
+describe('v2: kunci tak dikenal + allowEmpty', () => {
+  it('kunci tersimpan tak dikenal dipertahankan saat update, tak diterapkan ke env, warn tanpa nilai', () => {
+    const s = setupEnv({}, JSON.stringify({ WEBTERM_FUTURE: 'nilai-masa-depan-xyz', WEBTERM_CENTRAL: 'on' }))
+    expect(s.target.WEBTERM_FUTURE).toBeUndefined()
+    expect(s.logs.join('\n')).toContain('WEBTERM_FUTURE')
+    expect(s.logs.join('\n')).not.toContain('nilai-masa-depan-xyz')
+    expect(s.svc.update({ set: { WEBTERM_LEDGER: 'shadow' }, unset: [] }, ROOT).ok).toBe(true)
+    expect(JSON.parse(s.overrides.json!)).toEqual({ WEBTERM_FUTURE: 'nilai-masa-depan-xyz', WEBTERM_CENTRAL: 'on', WEBTERM_LEDGER: 'shadow' })
+  })
+
+  it('allowEmpty: set "" menghapus override (unset), tanpa error', () => {
+    const registry = [text('X_PATH', 'memory', { label: 'l', description: 'd', allowEmpty: true })]
+    const overrides = memOverrides(JSON.stringify({ X_PATH: '/tmp/a' }))
+    const target: NodeJS.ProcessEnv = {}
+    const svc = createEnvSettings({ registry, bootstrapKeys: [], target, overrides, secrets: memSecrets(), log: { info: () => {}, warn: () => {} } })
+    svc.apply()
+    expect(target.X_PATH).toBe('/tmp/a')
+    expect(svc.update({ set: { X_PATH: '' }, unset: [] }, ROOT).ok).toBe(true)
+    expect(JSON.parse(overrides.json!)).toEqual({})
+    expect(target.X_PATH).toBeUndefined()
   })
 })

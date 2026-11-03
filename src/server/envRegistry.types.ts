@@ -1,10 +1,13 @@
 // Tipe + pembangun entri registry env. Registry adalah DATA: tidak ada logika di file domain.
 // Satu sumber kebenaran untuk default/validasi/kelas risiko tiap kunci yang bisa diatur dari Pengaturan.
 
-export type EnvKind = 'flag' | 'string' | 'number' | 'enum' | 'secret'
-export type EnvGroup = 'ledger' | 'telegram' | 'channels' | 'central' | 'orchestrator' | 'memory' | 'control' | 'browser' | 'bootstrap'
+import type { EnvKindV2, EnvSpecMeta } from '../shared/envSettings.contract'
 
-export interface EnvSpec {
+export type EnvKind = EnvKindV2
+/** Id grup bebas (domain baru tak perlu mengedit tipe ini); label/urutan lewat envRegistry.groups.ts. */
+export type EnvGroup = string
+
+export interface EnvSpec extends EnvSpecMeta {
   key: string
   group: EnvGroup
   kind: EnvKind
@@ -27,16 +30,18 @@ export interface EnvSpec {
   dangerous: boolean
 }
 
-interface Meta {
+interface Meta extends EnvSpecMeta {
   label: string
   description: string
-  /** Terbukti dibaca ulang tiap panggilan, jadi tak butuh restart. */
+  /** Terbukti dibaca ulang tiap panggilan, jadi tak butuh restart (setara `restart: 'hot'`). */
   hot?: boolean
   dangerous?: boolean
 }
 
 function base(key: string, group: EnvGroup, kind: EnvKind, m: Meta): EnvSpec {
-  return { key, group, kind, label: m.label, description: m.description, restartRequired: !m.hot, dangerous: m.dangerous ?? false }
+  const { hot, ...meta } = m
+  const restart = m.restart ?? (hot ? 'hot' : 'boot')
+  return { ...meta, key, group, kind, restart, restartRequired: restart === 'boot', dangerous: m.dangerous ?? false }
 }
 
 /** Flag `on|off` kanonik. */
