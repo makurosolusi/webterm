@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatBytes } from '../../shared/fsLimits'
+import { Button } from '../components/ui/button'
 import { writeClipboard } from '../clipboard'
 import { rawUrl, stat } from '../fsClient'
 
@@ -38,9 +39,9 @@ export function BinaryPlaceholder({ path, canDownload, note }: BinaryPlaceholder
       {note ? <div className="viewer-meta">{note}</div> : null}
       <div className="viewer-actions">
         {canDownload ? <a className="viewer-btn" href={`${rawUrl(path)}&download=1`} download={name}>Download</a> : null}
-        <button type="button" className="viewer-btn" onClick={() => void writeClipboard(path).then(setCopied)}>
+        <Button type="button" size="xs" className="viewer-btn" onClick={() => void writeClipboard(path).then(setCopied)}>
           {copied ? 'Copied' : 'Copy Path'}
-        </button>
+        </Button>
       </div>
     </div>
   )

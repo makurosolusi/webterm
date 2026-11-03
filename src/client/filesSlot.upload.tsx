@@ -3,6 +3,7 @@
 // Drop dipasang lewat `useSlot` pada elemen node React Flow (`[data-id=nodeId]`) karena kontrak
 // FilesSlot belum punya `onDrop`; integrasi nanti cukup memanggil `runUpload` dari slot itu.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Button } from './components/ui/button'
 import { childPath } from './fileBrowse'
 import { capabilities } from './fsClient'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
@@ -89,9 +90,9 @@ function UploadStatusView() {
   const title = [...(s.summary?.failed.map((f) => f.message) ?? []), s.note].filter(Boolean).join('\n')
   const text = s.summary ? UPLOAD_TEXT.summary(s.summary.ok.length, s.summary.failed.length) : s.note
   return (
-    <button type="button" className="files-tool" role="status" title={title} aria-label={`${text}. ${UPLOAD_TEXT.dismiss}`} onClick={() => setStatus(IDLE)}>
+    <Button type="button" variant="ghost" size="icon-sm" className="files-tool" role="status" title={title} aria-label={`${text}. ${UPLOAD_TEXT.dismiss}`} onClick={() => setStatus(IDLE)}>
       {text}
-    </button>
+    </Button>
   )
 }
 
