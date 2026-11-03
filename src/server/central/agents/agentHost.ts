@@ -6,24 +6,20 @@ import type { WorktreeService } from '../../orchestrator/worktree'
 import { AGENT_ENVELOPE } from './agentExecutor'
 import type { AgentHost } from './agentExecutor'
 import type { AgentRecord, AgentRunner } from '../contracts'
+import { AGENT_KIND_UNKNOWN, type AgentCatalog } from './agentCatalog'
 
 /** Worker owner label stored on the worktree allocation. */
 export const AGENT_WORKTREE_OWNER = 'central'
 /** Branch namespace of central-owned worktrees, so a human can tell and prune them. */
 export const AGENT_BRANCH_PREFIX = 'central/'
 
-/** Headless argv builders by kind (P3: opencode headless is the default non-Claude worker). */
-const HEADLESS_ARGV: Readonly<Record<string, (prompt: string) => readonly string[]>> = {
-  opencode: (prompt) => ['opencode', 'run', prompt],
-}
-
 export interface AgentHostDeps {
   sessions: WorkerSessionPort
   worktrees: WorktreeService
   /** Repo path of a project, or null when the project has none (spawn then fails at the worktree stage). */
   repoOf(projectId: string): string | null
-  /** Interactive launch line of a kind (settings override or builtin launcher). */
-  launchLine(kind: string): string
+  /** Kind catalog: launch line, headless argv, tier and env of every spawnable kind. */
+  catalog: AgentCatalog
   /** Optional human-set task title; only server data, never model text. */
   taskTitle?(agent: AgentRecord): string | null
 }
@@ -31,7 +27,10 @@ export interface AgentHostDeps {
 /** Builds the host over injected sessions/worktrees (real ones in `ca2Boot`, fakes in tests). */
 export function createAgentHost(deps: AgentHostDeps): AgentHost {
   return {
-    runnerFor: (kind): AgentRunner => (HEADLESS_ARGV[kind] ? 'exec' : 'pty'),
+    runnerFor: (kind): AgentRunner => (deps.catalog.resolve(kind)?.headlessArgv ? 'exec' : 'pty'),
+    spawnTier: (kind) => deps.catalog.resolve(kind)?.tier ?? null,
+    defHashOf: (kind) => deps.catalog.resolve(kind)?.defHash,
+    execEnv: (kind) => deps.catalog.resolve(kind)?.childEnv() ?? {},
     async worktree(agent) {
       const existing = deps.worktrees.get(agent.id)
       if (existing) return existing.path
@@ -46,9 +45,12 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       return `${AGENT_ENVELOPE}\nRole: ${agent.role}. ${task} Work only inside this worktree; do not merge or push.`
     },
     async openPty(agent, cwd, nodeId) {
-      await deps.sessions.open({ nodeId, cwd, cmd: deps.launchLine(agent.kind), agentId: agent.kind })
+      const entry = deps.catalog.resolve(agent.kind)
+      if (!entry) throw new Error(`${AGENT_KIND_UNKNOWN}: ${agent.kind}`)
+      // ponytail: PTY sessions take no env from the host (OpenMsg has no env field), so `CustomAgent.env` only reaches headless runs.
+      await deps.sessions.open({ nodeId, cwd, cmd: entry.launchLine, agentId: agent.kind })
     },
-    headlessArgv: (kind, prompt) => HEADLESS_ARGV[kind]?.(prompt) ?? null,
+    headlessArgv: (kind, prompt) => deps.catalog.resolve(kind)?.headlessArgv?.(prompt) ?? null,
     async send(nodeId, text) { deps.sessions.input(nodeId, `${text}\r`) },
     async scrollback(nodeId, lines) { return deps.sessions.getTerminal(nodeId).split('\n').slice(-lines) },
     async closePty(nodeId) { deps.sessions.close(nodeId) },

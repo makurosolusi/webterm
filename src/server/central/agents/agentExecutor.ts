@@ -6,6 +6,7 @@ import { requestApproval } from '../../ledger/ledgerApproval'
 import type { AgentRecord, AgentRole, AgentRunner, AgentState, ControlGuard, Tier } from '../contracts'
 import type { ToolResult } from '../tools/toolTypes'
 import { AGENT_TRANSITIONS } from '../contracts'
+import { AGENT_KIND_UNKNOWN } from './agentCatalog'
 import { AgentTransitionError, isTerminalState } from './agentStateMachine'
 import { type AgentStore, createAgentStore } from './agentStore'
 import { type ExecHandle, type ExecOutcome, startExec } from './execRunner'
@@ -29,6 +30,12 @@ export interface AgentHost {
   openPty(agent: AgentRecord, cwd: string, nodeId: string): Promise<void>
   /** Argv array of the headless form of `kind`, or null when it has none. */
   headlessArgv(kind: string, prompt: string): readonly string[] | null
+  /** Tier a spawn of `kind` is judged at (builtin R2, custom R3), or null when the kind is unknown. */
+  spawnTier(kind: string): Tier | null
+  /** Definition hash of a custom kind, for the approval card and audit; absent for builtins. */
+  defHashOf?(kind: string): string | undefined
+  /** Extra env for a headless child of `kind` (already resolved; never logged or audited). */
+  execEnv?(kind: string): Record<string, string>
   send(nodeId: string, text: string): Promise<void>
   scrollback(nodeId: string, lines: number): Promise<string[]>
   closePty(nodeId: string, force: boolean): Promise<void>
@@ -124,7 +131,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     if (agent.runner === 'pty') { await host.openPty(agent, cwd, nodeId); return nodeId }
     const argv = host.headlessArgv(agent.kind, await host.initialPrompt(agent))
     if (!argv) throw new Error(`no headless form for kind ${agent.kind}`)
-    const handle = startExec({ argv, cwd, env: deps.env, timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS })
+    const handle = startExec({ argv, cwd, env: deps.env, timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS, overrides: host.execEnv?.(agent.kind) })
     handles.set(agent.id, handle)
     void handle.done.then((outcome) => onExit(agent, outcome))
     return null
@@ -158,7 +165,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
   async function pendApproval(agent: AgentRecord): Promise<ToolResult> {
     let challenge: { id: string }
     try {
-      challenge = requestApproval({ db, now }, { id: `agent-${agent.id}`, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId }, ...(agent.taskId ? { taskId: agent.taskId } : {}) })
+      challenge = requestApproval({ db, now }, { id: `agent-${agent.id}`, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(agent.taskId ? { taskId: agent.taskId } : {}) })
     } catch (err) {
       // Without a card the agent must not stay launchable: close the row and surface a code, not the message.
       tryMove(agent.id, 'cancelled', { reason: `approval_request_failed:${err instanceof Error ? err.name : 'unknown'}` })
@@ -167,6 +174,13 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const pending = store.transition(agent.id, 'approval_pending', { approvalId: challenge.id })
     audit(pending, 'spawn.approval', { approvalId: challenge.id })
     return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id } }
+  }
+
+  /** Adds kind (+ custom definition hash) to a spawn result so the audit trail ties a spawn to one definition. */
+  const withDefHash = (r: ToolResult, kind: string): ToolResult => {
+    if (!r.ok && r.code !== 'approval_required') return r
+    const defHash = host.defHashOf?.(kind)
+    return { ...r, data: { ...r.data, kind, ...(defHash ? { defHash } : {}) } }
   }
 
   let spawnChain: Promise<unknown> = Promise.resolve()
@@ -178,18 +192,21 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
   }
 
   async function doSpawn(input: SpawnInput): Promise<ToolResult> {
+    // Unknown kind is refused before the guard, the store or the audit trail see it.
+    const tier = host.spawnTier(input.kind)
+    if (!tier) return { ok: false, code: AGENT_KIND_UNKNOWN }
     const existing = store.getByReqId(input.reqId)
     if (existing) {
       if (existing.projectId !== input.projectId || existing.kind !== input.kind || existing.role !== input.role || existing.taskId !== (input.taskId ?? null)) return { ok: false, code: 'request_conflict' }
       if (existing.state === 'approval_pending') return { ok: false, code: 'approval_required', data: { agentId: existing.id, approvalId: existing.approvalId } }
       if (existing.state !== 'requested') return snapshot(existing, { reused: true })
       // Crash remnant before the launch claim: judge it again, the earlier verdict is not trusted.
-      const again = await gate(input.projectId, 'agent.spawn', 'R2')
+      const again = await gate(input.projectId, 'agent.spawn', tier)
       return again && again.code !== 'approval_required' ? again : proceed(existing, again, input.requireApproval)
     }
     // Judge and insert as one step: the caps count rows, so two spawns judged before either inserts would both pass.
     const created = await exclusive(async () => {
-      const verdict = await gate(input.projectId, 'agent.spawn', 'R2')
+      const verdict = await gate(input.projectId, 'agent.spawn', tier)
       if (verdict && verdict.code !== 'approval_required') return { verdict }
       return { verdict, agent: store.create({ id: `ag-${input.reqId.slice(0, 20)}`, projectId: input.projectId, kind: input.kind, role: input.role, runner: host.runnerFor(input.kind), owner: input.owner, reqId: input.reqId, taskId: input.taskId }) }
     })
@@ -208,7 +225,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     spawn(input) {
       const running = inflight.get(input.reqId)
       if (running) return running
-      const p = doSpawn(input).finally(() => inflight.delete(input.reqId))
+      const p = doSpawn(input).then((r) => withDefHash(r, input.kind)).finally(() => inflight.delete(input.reqId))
       inflight.set(input.reqId, p)
       return p
     },

@@ -18,7 +18,7 @@ const MAX_TAIL = 200
 const DEFAULT_TAIL = 50
 const MAX_PAGE = 100
 const ROLES = ['worker', 'reviewer']
-const AUDIT_KEYS = ['agentId', 'state', 'approvalId', 'count'] as const
+const AUDIT_KEYS = ['agentId', 'state', 'approvalId', 'count', 'kind', 'defHash'] as const
 
 const safeId = (v: unknown, max = MAX_ID): v is string => typeof v === 'string' && v.length >= 1 && v.length <= max && SAFE_ID.test(v)
 const intIn = (v: unknown, min: number, max: number): boolean => v === undefined || (Number.isSafeInteger(v) && (v as number) >= min && (v as number) <= max)
@@ -27,7 +27,7 @@ const agentsMode = (ctx: ToolCtx): string => ((ctx.env ?? process.env)[AGENTS_FL
 const noControl = (s: string): boolean => !/[\x00-\x08\x0b-\x1f\x7f]/.test(s)
 
 /** Runs `fn` only when the flag is `propose` or `auto`; the registry flag check only understands `on`. */
-function flagged(fn: (ctx: ToolCtx, input: ToolInput, projectId: string) => Promise<ToolResult> | ToolResult): ToolDef['handler'] {
+export function flagged(fn: (ctx: ToolCtx, input: ToolInput, projectId: string) => Promise<ToolResult> | ToolResult): ToolDef['handler'] {
   return (ctx, input, projectId) => {
     const mode = agentsMode(ctx)
     return mode === 'propose' || mode === 'auto' ? fn(ctx, input, projectId as string) : { ok: false, code: 'flag_off' }

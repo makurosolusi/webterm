@@ -24,7 +24,7 @@ function fakeHost(over: Partial<AgentHost> = {}) {
   const closed: Array<[string, boolean]> = []
   let opens = 0
   const host: AgentHost = {
-    runnerFor: () => 'pty', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'do it',
+    runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'do it',
     openPty: async (_a, _cwd, nodeId) => { opens++; await Promise.resolve(); sessions.add(nodeId) },
     headlessArgv: () => null, send: async (n, t) => { sent.push([n, t]) }, scrollback: async () => ['l1', 'l2', 'l3'],
     closePty: async (n, f) => { closed.push([n, f]); sessions.delete(n) }, hasSession: (n) => sessions.has(n), ...over,

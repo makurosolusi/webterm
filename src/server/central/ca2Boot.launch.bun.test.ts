@@ -6,7 +6,8 @@ import { AGENT_CONFIG } from '../../shared/workspace'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
-import { bootCa2, launchLineFor, setActiveCa2 } from './ca2Boot'
+import { createAgentCatalog } from './agents/agentCatalog'
+import { bootCa2, setActiveCa2 } from './ca2Boot'
 import { freshDb } from './guard/controlGuard.testutil'
 import { createRegistry } from './tools/toolRegistry'
 
@@ -14,33 +15,34 @@ const withSettings = (over: Partial<Settings>): Settings => ({ ...DEFAULT_SETTIN
 const dirs: string[] = []
 afterEach(() => { setActiveCa2(null); for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 
-const msgOf = (fn: () => unknown): string => { try { fn() } catch (err) { return (err as Error).message } return 'no throw' }
+const lineOf = (kind: string, s: Settings): string | null => createAgentCatalog({ settings: () => s }).resolve(kind)?.launchLine ?? null
 
-describe('launchLineFor', () => {
+describe('catalog launch line (was launchLineFor)', () => {
   it('builtin tanpa override = launchCmd builtin apa adanya', () => {
-    expect(launchLineFor('claude', DEFAULT_SETTINGS)).toBe(AGENT_CONFIG.claude.launchCmd)
+    expect(lineOf('claude', DEFAULT_SETTINGS)).toBe(AGENT_CONFIG.claude.launchCmd)
   })
 
   it('override agentLaunchCommands dipakai untuk builtin', () => {
-    expect(launchLineFor('claude', withSettings({ agentLaunchCommands: { claude: 'claude-work' } }))).toBe('claude-work')
+    expect(lineOf('claude', withSettings({ agentLaunchCommands: { claude: 'claude-work' } }))).toBe('claude-work')
   })
 
-  it('custom: launchCmd sendiri; kosong + baseAgent => base (dengan override)', () => {
+  it('custom (centralSpawn): launchCmd sendiri; kosong + baseAgent => base (dengan override)', () => {
     const customAgents = [
-      { id: 'custom:own', label: 'Own', launchCmd: 'my-proxy --tui' },
-      { id: 'custom:base', label: 'Base', launchCmd: '', baseAgent: 'claude' as const },
+      { id: 'custom:own', label: 'Own', launchCmd: 'my-proxy --tui', centralSpawn: true },
+      { id: 'custom:base', label: 'Base', launchCmd: '', baseAgent: 'claude' as const, centralSpawn: true },
     ]
     const s = withSettings({ customAgents, agentLaunchCommands: { claude: 'claude-work' } })
-    expect(launchLineFor('custom:own', s)).toBe('my-proxy --tui')
-    expect(launchLineFor('custom:base', s)).toBe('claude-work')
-    expect(launchLineFor('custom:base', withSettings({ customAgents }))).toBe(AGENT_CONFIG.claude.launchCmd)
+    expect(lineOf('custom:own', s)).toBe('my-proxy --tui')
+    expect(lineOf('custom:base', s)).toBe('claude-work')
+    expect(lineOf('custom:base', withSettings({ customAgents }))).toBe(AGENT_CONFIG.claude.launchCmd)
   })
 
-  it('id asing, custom tanpa perintah, dan nama prototype => agent_kind_unknown', () => {
-    const s = withSettings({ customAgents: [{ id: 'custom:empty', label: 'E', launchCmd: '' }] })
-    expect(msgOf(() => launchLineFor('nope', s))).toBe('agent_kind_unknown: nope')
-    expect(msgOf(() => launchLineFor('custom:empty', s))).toBe('agent_kind_unknown: custom:empty')
-    expect(msgOf(() => launchLineFor('toString', s))).toBe('agent_kind_unknown: toString')
+  it('id asing, custom tanpa perintah, custom tertutup, dan nama prototype => null (agent_kind_unknown)', () => {
+    const s = withSettings({ customAgents: [
+      { id: 'custom:empty', label: 'E', launchCmd: '', centralSpawn: true },
+      { id: 'custom:closed', label: 'C', launchCmd: 'x' },
+    ] })
+    for (const k of ['nope', 'custom:empty', 'custom:closed', 'toString']) expect(lineOf(k, s)).toBeNull()
   })
 })
 
