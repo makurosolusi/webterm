@@ -23,6 +23,9 @@ import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents
 import { parseProposals } from '../proposal/proposalParser'
 import { validateProposal } from '../proposal/proposalPolicy'
 import { applyProposal } from '../proposal/applyProposal'
+import { defaultRegistry } from '../tools/defaultRegistry'
+import type { ControlGuard, ToolRegistry } from '../tools/toolTypes'
+import { isReadBlock, readToolsEnabled, resolveMaxSteps, runToolLoop } from './toolLoop'
 import { createLegacyContextAssembler, type ContextAssembler } from '../context/contextPort'
 import { resolveLimits } from './turnLimits'
 import { createLogger } from '../../logs'
@@ -45,6 +48,10 @@ export interface TurnServiceDeps {
   context?: ContextAssembler
   /** Env source for per-turn limits; defaults to `process.env`. */
   env?: NodeJS.ProcessEnv
+  /** Tool registry for the read-tool loop; defaults to the process-wide registry. */
+  registry?: ToolRegistry
+  /** Guard for loop tool calls; defaults to allow-all (R0 only). */
+  guard?: ControlGuard
 }
 
 export interface SubmitResult {
@@ -69,6 +76,8 @@ export class TurnService {
   private readonly now: () => number
   private readonly context: ContextAssembler
   private readonly env: NodeJS.ProcessEnv
+  private readonly registry: ToolRegistry
+  private readonly guard: ControlGuard | undefined
   private readonly runs = new Map<string, Promise<Turn>>()
   private readonly active = new Map<string, string>()
   private readonly states = new Map<string, RunState>()
@@ -80,6 +89,8 @@ export class TurnService {
     this.now = deps.now ?? Date.now
     this.context = deps.context ?? createLegacyContextAssembler()
     this.env = deps.env ?? process.env
+    this.registry = deps.registry ?? defaultRegistry()
+    this.guard = deps.guard
   }
 
   /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
@@ -185,8 +196,15 @@ export class TurnService {
       ...(turn.sessionRef === null ? {} : { sessionRef: turn.sessionRef }),
     }
     try {
-      const result = await runtime.turn(input, emit)
-      if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite)
+      const loop = readToolsEnabled(this.env)
+      const result = loop
+        ? await runToolLoop({
+          runtime, db: this.db, registry: this.registry, ...(this.guard ? { guard: this.guard } : {}),
+          conversationId: conversation.id, env: this.env, now: this.now,
+          stopped: () => !isActiveTurnStatus(getTurn(this.db, turn.id)?.status ?? 'failed'),
+        }, input, emit, resolveMaxSteps(this.env))
+        : await runtime.turn(input, emit)
+      if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite, loop)
       return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
     } catch (err) {
       // Name only: runtime error messages can quote the conversation.
@@ -206,9 +224,12 @@ export class TurnService {
   }
 
   private async handleProposals(
-    conversationId: string, turnId: string, messageId: string, text: string, planner: boolean, toolsWrite: boolean
+    conversationId: string, turnId: string, messageId: string, text: string, planner: boolean, toolsWrite: boolean,
+    skipReads: boolean
   ): Promise<void> {
     for (const block of parseProposals(text)) {
+      // Read tools belong to the continuation loop; a leftover block (step limit hit) is not a proposal.
+      if (skipReads && isReadBlock(this.registry, block)) continue
       const checked = validateProposal(block, { db: this.db, conversationId, planner, toolsWrite })
       if (!checked.ok) {
         this.record(conversationId, 'entity.updated', { eventType: 'proposal.rejected', tool: block.tool, code: checked.code }, turnId, messageId)
