@@ -1,5 +1,7 @@
-import { test, expect, afterEach } from 'vitest'
-import { list, read, readBinary } from './fsClient'
+import { test, expect, afterEach, vi } from 'vitest'
+import { list, read, readBinary, resetCapabilitiesCache } from './fsClient'
+const ws = vi.hoisted(() => ({ cbs: [] as Array<() => void> }))
+vi.mock('./ws', () => ({ onReconnect: (cb: () => void) => { ws.cbs.push(cb); return () => {} } }))
 import { tooLargeSentinel } from '../shared/fsLimits'
 
 /**
@@ -29,6 +31,7 @@ function stubFetch(init: { ok?: boolean; status?: number; body?: unknown; reject
 
 afterEach(() => {
   globalThis.fetch = realFetch
+  resetCapabilitiesCache()
 })
 
 test('read throws on a failing HTTP response, with operation + path in the message', async () => {
@@ -137,4 +140,52 @@ test('capabilities fail-closed saat gagal; mencerminkan server saat sukses', asy
 
 test('rawUrl memakai verb raw dan meng-encode path', () => {
   expect(rawUrl('/a b/c.png')).toMatch(/^\/api\/fs\/raw\?path=%2Fa\+b%2Fc\.png/)
+})
+
+// ---- cache capabilities() ----
+const CAPS_BODY = { ok: true, mutate: true, viewers: true, watch: true, git: true, quickOpen: true, upload: true, listMax: 5000 }
+
+/** Stub fetch yang menghitung panggilan; `replies` dipakai berurutan (terakhir diulang). */
+function countingFetch(...replies: Array<{ body?: unknown; reject?: string }>): { calls: () => number } {
+  let n = 0
+  globalThis.fetch = (() => {
+    const r = replies[Math.min(n++, replies.length - 1)]
+    return r.reject !== undefined
+      ? Promise.reject(new Error(r.reject))
+      : Promise.resolve({ ok: true, status: 200, statusText: '', json: () => Promise.resolve(r.body) })
+  }) as typeof globalThis.fetch
+  return { calls: () => n }
+}
+
+test('capabilities: panggilan serentak berbagi satu fetch dan satu objek', async () => {
+  const f = countingFetch({ body: CAPS_BODY })
+  const [a, b] = await Promise.all([capabilities(), capabilities()])
+  expect(f.calls()).toBe(1)
+  expect(a).toBe(b)
+})
+
+test('capabilities: panggilan setelah sukses tidak fetch lagi', async () => {
+  const f = countingFetch({ body: CAPS_BODY })
+  await capabilities()
+  expect(await capabilities()).toMatchObject({ mutate: true, listMax: 5000 })
+  expect(f.calls()).toBe(1)
+})
+
+test('capabilities: kegagalan tidak di-cache; fetch ulang dan pulih', async () => {
+  const f = countingFetch({ reject: 'down' }, { body: CAPS_BODY })
+  expect(await capabilities()).toMatchObject({ mutate: false, listMax: 0 })
+  expect(await capabilities()).toMatchObject({ mutate: true, listMax: 5000 })
+  expect(f.calls()).toBe(2)
+})
+
+test('capabilities: resetCapabilitiesCache dan onReconnect memaksa fetch ulang', async () => {
+  const f = countingFetch({ body: CAPS_BODY })
+  await capabilities()
+  resetCapabilitiesCache()
+  await capabilities()
+  expect(f.calls()).toBe(2)
+  expect(ws.cbs.length).toBeGreaterThan(0)
+  ws.cbs.forEach((cb) => cb())
+  await capabilities()
+  expect(f.calls()).toBe(3)
 })
