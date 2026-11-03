@@ -1,17 +1,32 @@
 // Wiring produksi env-settings: process.env + tabel `app` + file secret di `<dataDir>/secrets`.
 // Dipisah dari service supaya service tetap murni; modul ini menyentuh db.ts (bun:sqlite).
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir } from './config'
 import { openDb } from './db'
+import { getDotenvBoot } from './dotenvFiles'
 import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY } from './envRegistry'
 import { createFileSecretStore } from './envSecrets.store'
 import type { EnvSettingsApiDeps } from './envSettings.api'
 import { createEnvSettings, type EnvSettings } from './envSettings.service'
 import { createAppRowOverrideStore } from './envSettings.store'
+import { createLogger } from './logs'
 
 const SECRETS_SUBDIR = 'secrets'
 
+const log = createLogger('settings')
+
 let instance: EnvSettings | undefined
+let dotenvWarned = false
+
+/** Warn SEKALI per proses bila `.env` ada dan memasok kunci registry; hanya NAMA kunci (nilai bisa secret). */
+export function warnDotenvDetected(svc: Pick<EnvSettings, 'state'>, cwd: string = getDotenvBoot().cwd): void {
+  if (dotenvWarned || !existsSync(join(cwd, '.env'))) return
+  const keys = svc.state({ root: false }).entries.filter((e) => e.source === 'env').map((e) => e.key)
+  if (keys.length === 0) return
+  dotenvWarned = true
+  log.warn('env.dotenv_detected', '.env supplies registry keys; Settings overrides win over it', { count: keys.length, keys })
+}
 
 /**
  * Buat (sekali) dan terapkan overlay. Panggil di boot SETELAH `writeTokenToEnv` dan SEBELUM modul
@@ -28,6 +43,7 @@ export function initEnvSettings(): EnvSettings {
       secrets: createFileSecretStore(join(dataDir(), SECRETS_SUBDIR)),
     })
     instance.apply()
+    warnDotenvDetected(instance)
   }
   return instance
 }
