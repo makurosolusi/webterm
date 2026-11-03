@@ -14,7 +14,7 @@
 //
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import {
 import type { Settings } from '../shared/settings'
 import { AgentSettings } from './SettingsAgents'
 import { ChannelsSection } from './ChannelsSection'
+import { OpenEnvContext } from './channelsOpenEnv'
 import { EnvSection } from './EnvSection'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { ENV_KEY_ATTR, matchesEntry } from './envSearch'
@@ -100,6 +101,9 @@ function SettingsPanelView({
   const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
   const [channelsFocus, setChannelsFocus] = useState<string>()
+  const [envFocus, setEnvFocus] = useState<string>()
+  // Kebalikan onOpenChannels: prasyarat milik Environment yang dibuka dari tab Channels.
+  const openEnv = useCallback((key: string): void => { setActive('env'); setEnvFocus(key) }, [])
   const mainRef = useRef<HTMLElement>(null)
   const entries = useEnvSettingsContext().state?.entries
   const envHits = useMemo(
@@ -129,12 +133,17 @@ function SettingsPanelView({
     if (id === 'channels') {
       return (
         <>
-          <ChannelsSection focusKey={channelsFocus} onFocused={() => setChannelsFocus(undefined)} />
+          <OpenEnvContext.Provider value={openEnv}>
+            <ChannelsSection focusKey={channelsFocus} onFocused={() => setChannelsFocus(undefined)} />
+          </OpenEnvContext.Provider>
           <ChannelsHits hits={channelHits} onOpen={() => { setActive('channels'); setQuery('') }} />
         </>
       )
     }
-    return <EnvSection onOpenChannels={(key) => { setActive('channels'); setChannelsFocus(key) }} />
+    return (
+      <EnvSection focusKey={envFocus} onFocused={() => setEnvFocus(undefined)}
+        onOpenChannels={(key) => { setActive('channels'); setChannelsFocus(key) }} />
+    )
   }
 
   const activeLabel = SECTIONS.find((section) => section.id === active)?.label ?? 'Settings'

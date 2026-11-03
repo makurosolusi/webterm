@@ -1,10 +1,5 @@
 // Seluruh string UI section Environment (Rule 15): satu tempat, tidak ada literal di komponen.
 export const ENV = {
-  title: 'Fitur & server',
-  categoryRoot: 'Webterm',
-  loading: 'Memuat pengaturan environment…',
-  refresh: 'Segarkan',
-  restartBanner: 'Perlu restart server untuk:',
   badgeChanged: 'Diubah',
   badgeRestart: 'Perlu restart',
   badgeDangerous: 'Berbahaya',
@@ -12,9 +7,8 @@ export const ENV = {
   badgeLocked: 'Dikunci',
   badgeEnvTitle: 'Nilai ini berasal dari file .env, bukan dari pengaturan di sini.',
   badgeLockedTitle: 'Tidak bisa diubah dari UI (butuh token root atau dikunci server).',
-  save: 'Simpan',
-  reset: 'Reset',
-  resetHelp: 'Reset mengembalikan ke nilai env atau default.',
+  reset: 'Atur ulang',
+  resetHelp: 'Atur ulang mengembalikan ke nilai env atau default.',
   activeNow: 'Aktif sekarang',
   storedValue: 'Tersimpan',
   requiresPrefix: 'Belum berpengaruh: butuh',
@@ -34,9 +28,7 @@ export const ENV = {
   secretSet: 'Terisi',
   secretUnset: 'Kosong',
   secretFromEnv: 'dari .env',
-  secretPlaceholder: 'Nilai baru (write-only)',
-  secretHint: 'Nilai tidak pernah ditampilkan kembali.',
-  bootstrapOnly: 'hanya lewat env',
+  secretPlaceholder: 'Nilai baru (tidak ditampilkan lagi)',
   on: 'on',
   off: 'off',
   errNetwork: 'Tidak bisa menghubungi server.',
@@ -48,20 +40,7 @@ export const ENV = {
   errInvalid: 'Nilai ditolak server',
   errRejected: 'Permintaan ditolak server.',
   errGeneric: 'Permintaan gagal. Coba lagi.',
+  serverSettingsOpen: 'Dapat diubah',
+  serverSettingsLocked: 'Terkunci (WEBTERM_ENV_SETTINGS=off)',
+  noRootGate: 'Token root belum diatur, jadi kunci berbahaya tidak bisa diubah dari sini. Atur WEBTERM_TOKEN di shell atau file .env, lalu restart server. Hanya relevan untuk akses loopback; akses di luar loopback tanpa token ditolak server.',
 } as const
-
-/** Urutan tampil group; group tak dikenal masuk sebelum bootstrap, bootstrap selalu terakhir. */
-export const ENV_GROUP_ORDER = ['ledger', 'telegram', 'channels', 'central', 'orchestrator', 'memory', 'control', 'browser'] as const
-export const ENV_BOOTSTRAP_GROUP = 'bootstrap'
-
-export const ENV_GROUP_LABEL: Record<string, string> = {
-  ledger: 'Ledger',
-  telegram: 'Telegram',
-  channels: 'Kanal',
-  central: 'Central',
-  orchestrator: 'Orchestrator',
-  memory: 'Memori',
-  control: 'Kontrol',
-  browser: 'Browser',
-  bootstrap: 'Bootstrap (hanya lewat env)',
-}

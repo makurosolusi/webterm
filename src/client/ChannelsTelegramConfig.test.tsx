@@ -35,7 +35,7 @@ describe('ChannelsTelegramConfig', () => {
     expect(screen.getByLabelText('WEBTERM_TELEGRAM_MODE')).toBeTruthy()
     const token = screen.getByLabelText('WEBTERM_TELEGRAM_BOT_TOKEN')
     expect(within(token).getByText(/Terisi/)).toBeTruthy()
-    expect((within(token).getByPlaceholderText('Nilai baru (write-only)') as HTMLInputElement).value).toBe('')
+    expect((within(token).getByPlaceholderText('Nilai baru (tidak ditampilkan lagi)') as HTMLInputElement).value).toBe('')
     expect(screen.getByLabelText('WEBTERM_TELEGRAM_WEBHOOK_SECRET')).toBeTruthy()
     expect(screen.queryByLabelText('WEBTERM_LEDGER')).toBeNull()
   })
@@ -43,7 +43,7 @@ describe('ChannelsTelegramConfig', () => {
   it('saves toggle + token in one PUT via the shared save bar and never renders the token', async () => {
     const stub = stubEnvApi(tgState())
     render(<ChannelsTelegramConfig />)
-    const tokenInput = within(await screen.findByLabelText('WEBTERM_TELEGRAM_BOT_TOKEN')).getByPlaceholderText('Nilai baru (write-only)')
+    const tokenInput = within(await screen.findByLabelText('WEBTERM_TELEGRAM_BOT_TOKEN')).getByPlaceholderText('Nilai baru (tidak ditampilkan lagi)')
     fireEvent.click(within(screen.getByLabelText('WEBTERM_TELEGRAM')).getByRole('switch'))
     fireEvent.change(tokenInput, { target: { value: LEAKED } })
     expect(screen.getByText('2 perubahan belum disimpan')).toBeTruthy()

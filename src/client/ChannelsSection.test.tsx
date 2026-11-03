@@ -84,7 +84,7 @@ describe('ChannelsSection', () => {
     routes['GET /api/channels/telegram/pending'] = { status: 200, body: { items: [] } }
     render(<ChannelsSection />)
     expect(await screen.findByText(/Tidak ada chat yang menunggu/)).toBeTruthy()
-    expect(screen.getByText('Belum ada chat yang ter-bind.')).toBeTruthy()
+    expect(screen.getByText('Belum ada chat yang tertaut.')).toBeTruthy()
   })
 
   it('binds a pending chat with the chosen role and refreshes', async () => {
@@ -96,7 +96,7 @@ describe('ChannelsSection', () => {
     fireEvent.change(within(row).getByLabelText('Project ID 555'), { target: { value: '  proj-1 ' } })
     routes['GET /api/channels/telegram/pending'] = { status: 200, body: { items: [] } }
     const before = count('GET', '/api/channels/telegram/status')
-    fireEvent.click(within(row).getByRole('button', { name: 'Bind' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Tautkan' }))
 
     await waitFor(() => expect(count('POST', '/api/channels/telegram/bindings')).toBe(1))
     const post = calls.find((c) => c.method === 'POST')!
@@ -108,7 +108,7 @@ describe('ChannelsSection', () => {
   it('refuses to bind with an empty project id and sends nothing', async () => {
     render(<ChannelsSection />)
     const row = await screen.findByRole('listitem', { name: '555' })
-    fireEvent.click(within(row).getByRole('button', { name: 'Bind' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Tautkan' }))
     expect((await screen.findByRole('alert')).textContent).toMatch(/Project ID wajib diisi/)
     expect(count('POST', '/api/channels/telegram/bindings')).toBe(0)
   })
@@ -155,7 +155,7 @@ describe('ChannelsSection', () => {
     render(<ChannelsSection />)
     const row = await screen.findByRole('listitem', { name: '555' })
     fireEvent.change(within(row).getByLabelText('Project ID 555'), { target: { value: 'p' } })
-    fireEvent.click(within(row).getByRole('button', { name: 'Bind' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Tautkan' }))
     expect((await screen.findByRole('alert')).textContent).toBe('Input ditolak server.')
   })
 
