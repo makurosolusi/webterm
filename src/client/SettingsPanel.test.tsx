@@ -9,12 +9,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
 import { SettingsPanel, toSectionId } from './SettingsPanel'
 
-// Provider env nyata melakukan fetch; tes layout ini tak membutuhkannya (lihat SettingsPanel.envsearch.test.tsx).
-vi.mock('./useEnvSettings', () => ({
-  EnvSettingsProvider: ({ children }: { children: React.ReactNode }) => children,
-  useEnvSettingsContext: () => ({ state: null, query: '', draft: new Map(), dirtyKeys: [], loading: false, error: null }),
-  useHasEnvSettingsContext: () => true,
-  useEnvLoadOnMount: () => undefined,
+// Tab Kemampuan memuat dari server; tes layout ini tak membutuhkannya (D8 ada di SettingsPanel.capabilities.test.tsx).
+vi.mock('./useCapabilities', () => ({
+  useCapabilities: () => ({ data: null, loading: false, error: null, busyId: null, refresh: async () => undefined, toggle: async () => true, setSub: async () => true }),
+  capabilityErrorMessage: () => '',
 }))
 
 afterEach(cleanup)
@@ -39,7 +37,7 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Cari setting' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaksi', 'Shell & buffer', 'Agent', 'Canvas', 'Channels', 'Environment']
+    const labels = ['Terminal', 'Interaksi', 'Shell & buffer', 'Agent', 'Canvas', 'Kemampuan']
     expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
@@ -89,6 +87,8 @@ describe('SettingsPanel item placement', () => {
     expect(toSectionId('preview')).toBe('terminal')
     expect(toSectionId('nope')).toBe('terminal')
     expect(toSectionId('canvas')).toBe('canvas')
+    expect(toSectionId('env')).toBe('capabilities')
+    expect(toSectionId('channels')).toBe('capabilities')
   })
 })
 
