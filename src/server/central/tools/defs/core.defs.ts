@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import { flagOn } from '../../../envFlag'
+import { isEnabled } from '../../../featureCapabilities.runtime'
 import { type LedgerContext, getRow } from '../../../ledger/ledgerCore'
 import { approvalDigest, getApproval, requestApproval } from '../../../ledger/ledgerApproval'
 import { createPlanStore } from '../../../orchestrator/plan'
@@ -101,7 +101,7 @@ const taskAssign: ToolDef = {
   async handler(ctx, input, projectId): Promise<ToolResult> {
     const { createLedger } = await import('../../../ledger/ledger')
     const ledger = createLedger(ctx.db, { now: Date.now })
-    const result = await assignControl({ projectId: projectId as string, itemId: input.itemId as string, expectedVersion: input.expectedVersion as number, ...(input.assignee ? { assignee: input.assignee as string } : {}) }, { ledger: { mode: 'on', path: '', db: ctx.db, ledger, close() {} }, enabled: flagOn(process.env.WEBTERM_ORCHESTRATOR_RUN) })
+    const result = await assignControl({ projectId: projectId as string, itemId: input.itemId as string, expectedVersion: input.expectedVersion as number, ...(input.assignee ? { assignee: input.assignee as string } : {}) }, { ledger: { mode: 'on', path: '', db: ctx.db, ledger, close() {} }, enabled: isEnabled('workers', ctx.env ?? process.env) })
     const body = result.body as { taskId?: unknown; planVersion?: unknown; error?: unknown }
     return result.status === 200
       ? { ok: true, data: { taskId: String(body.taskId), planVersion: Number(body.planVersion) } }

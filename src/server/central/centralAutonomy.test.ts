@@ -203,5 +203,8 @@ describe('central autonomy flag parser', () => {
     expect(autonomyEnabled(' ON ')).toBe(true)
     expect(autonomyEnabled('off')).toBe(false)
     expect(autonomyEnabled(undefined)).toBe(false)
+    // objek env: autonomy butuh workers butuh central (implies)
+    expect(autonomyEnabled({ WEBTERM_CENTRAL_AUTONOMY: 'on' })).toBe(false)
+    expect(autonomyEnabled({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AUTONOMY: 'on' })).toBe(true)
   })
 })

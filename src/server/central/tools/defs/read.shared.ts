@@ -1,9 +1,18 @@
 // Shared bits of the R0 read tools (project.read, node.list, task.status, run.result):
 // the gate flag, id/page validation and text clipping. No SQL, no filesystem.
+import { DERIVED_FLAGS } from '../../../../shared/featureCapabilities'
 import type { ToolInput } from '../toolTypes'
 
-/** Env flag that must be `on` for the read tools (and the continuation loop) to exist; default off. */
-export const READ_TOOLS_FLAG = 'WEBTERM_CENTRAL_READ_TOOLS'
+/**
+ * Nama kunci turunan Central dari registry (bukan literal): toolExec/toolRegistry masih mencocokkan `def.flag`
+ * terhadap env, jadi pemakai di luar berkas ini butuh namanya. Kunci ini ikut `central`, bukan saklar sendiri.
+ */
+export function derivedFlagKey(suffix: string): string {
+  return DERIVED_FLAGS.find((d) => d.key.endsWith(`_${suffix}`))?.key ?? ''
+}
+
+/** Flag turunan untuk read tools dan continuation loop (ikut `central`, ENVSIMPLE D5). */
+export const READ_TOOLS_FLAG = derivedFlagKey('READ_TOOLS')
 
 export const SAFE_ID = /^[A-Za-z0-9._:-]+$/
 export const MAX_ID = 200

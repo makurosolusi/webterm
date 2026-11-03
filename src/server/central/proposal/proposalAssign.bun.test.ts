@@ -32,8 +32,8 @@ test('task.assign off has no effect', async () => {
 })
 
 test('task.assign creates task, rejects stale version, and reports unknown item', async () => {
-  const f = fixture(); const item = plan(f); const previous = process.env.WEBTERM_ORCHESTRATOR_RUN
-  process.env.WEBTERM_ORCHESTRATOR_RUN = 'on'
+  const f = fixture(); const item = plan(f); const previous = process.env.WEBTERM_ORCHESTRATOR_RUN; const prevCentral = process.env.WEBTERM_CENTRAL
+  process.env.WEBTERM_ORCHESTRATOR_RUN = 'on'; process.env.WEBTERM_CENTRAL = 'on' // workers butuh central (implies)
   try {
     const input = { projectId: 'assign-project', itemId: item.itemId, expectedVersion: item.version, assignee: 'worker:assign-project' }
     const success = await applyProposal(f.db, { tool: 'task.assign', projectId: 'assign-project', input })
@@ -49,5 +49,5 @@ test('task.assign creates task, rejects stale version, and reports unknown item'
     const missing = await applyProposal(f.db, { tool: 'task.assign', projectId: 'assign-project', input: { ...input, itemId: 'missing', expectedVersion: 2 } })
     expect(missing.code).toBe('item_not_found')
     expect(allRows(f.db, 'SELECT * FROM task').length).toBe(1)
-  } finally { if (previous === undefined) delete process.env.WEBTERM_ORCHESTRATOR_RUN; else process.env.WEBTERM_ORCHESTRATOR_RUN = previous; f.close() }
+  } finally { if (previous === undefined) delete process.env.WEBTERM_ORCHESTRATOR_RUN; else process.env.WEBTERM_ORCHESTRATOR_RUN = previous; if (prevCentral === undefined) delete process.env.WEBTERM_CENTRAL; else process.env.WEBTERM_CENTRAL = prevCentral; f.close() }
 })

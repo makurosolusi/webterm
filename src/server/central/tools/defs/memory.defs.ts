@@ -11,8 +11,10 @@ import type { MemoryAnyScope, MemoryKind, MemoryRecord } from '../../../memory/m
 import { scopeFromConversationId } from '../../conversationModel'
 import { redactSecrets } from '../../../redactSecrets'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
+import { derivedFlagKey } from './read.shared'
 
-const MEMORY_FLAG = 'WEBTERM_CENTRAL_MEMORY'
+/** Flag turunan tool memori (ikut `central`, ENVSIMPLE D5). */
+export const MEMORY_FLAG = derivedFlagKey('MEMORY')
 const SEARCH_LIMIT_MAX = 8
 const QUERY_MAX_CHARS = 300
 const ID_MAX_CHARS = 100

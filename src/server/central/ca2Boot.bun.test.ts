@@ -86,7 +86,7 @@ describe('hot on/off tanpa rebuild', () => {
 describe('flags on', () => {
   it('read tools flag registers the read defs and changes the hash; order of registration does not', () => {
     const a = coreRegistry()
-    const added = registerCa2Tools(a, {}, { WEBTERM_CENTRAL_READ_TOOLS: 'on' })
+    const added = registerCa2Tools(a, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' })
     expect(added.length).toBeGreaterThan(0)
     expect(added.every((n) => a.get(n))).toBe(true)
     expect(toolsHash(a)).not.toBe(toolsHash(coreRegistry()))
@@ -94,12 +94,12 @@ describe('flags on', () => {
     for (const def of [...a.list()].reverse()) b.register(def)
     expect(toolsHash(b)).toBe(toolsHash(a))
     // registering again adds nothing (idempotent)
-    expect(registerCa2Tools(a, {}, { WEBTERM_CENTRAL_READ_TOOLS: 'on' })).toEqual([])
+    expect(registerCa2Tools(a, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' })).toEqual([])
   })
 
   it('memory flag registers the memory defs only', () => {
     const r = coreRegistry()
-    const added = registerCa2Tools(r, {}, { WEBTERM_CENTRAL_MEMORY: 'on' })
+    const added = registerCa2Tools(r, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MEMORY: 'on' })
     expect(added.length).toBeGreaterThan(0)
     expect(added.every((n) => n.startsWith('memory.'))).toBe(true)
   })
@@ -136,7 +136,7 @@ describe('flags on', () => {
 describe('prompt catalog', () => {
   it('includes the read tools once registered and the flag is on, and not before', () => {
     const registry = defaultRegistry()
-    const env = { WEBTERM_CENTRAL_READ_TOOLS: 'on' }
+    const env = { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' }
     const before = renderCatalog(registry, 'R0', env)
     registerCa2Tools(registry, {}, env)
     const names = activeTools(registry, 'R0', env).map((d) => d.name)
