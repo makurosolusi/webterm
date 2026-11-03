@@ -40,6 +40,7 @@ import { send, subscribeStatus } from './ws'
 import { validateToken, storeToken, clearToken, hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
 import { useClosedHistory } from './closedHistory'
+import { useBrowserAdd } from './useBrowserAdd'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentId, AgentStatus, Viewport, Workspace, WsNode } from '../shared/workspace'
 
@@ -233,6 +234,7 @@ export default function App() {
   // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
   const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
+  const onAddBrowser = useBrowserAdd(addFlowNode, activeId, hydrated && !authRequired) // undefined = fitur mati di server
 
   // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
   // saat mount (lalu mem-persist-nya lewat `onSession` di bawah). Mencetaknya di sini membuat
@@ -279,7 +281,7 @@ export default function App() {
   }, [onNodesChange])
 
   const { onPaneContextMenu, menu: paneMenu } = useCanvasPaneMenu({
-    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddAgent, onFit, onSelectAll,
+    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, onFit, onSelectAll,
   })
 
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
@@ -418,6 +420,7 @@ export default function App() {
         <>
           <Dock
             onAddTerminal={onAddTerminal}
+            onAddBrowser={onAddBrowser}
             onAddAgent={onAddAgent}
             onCreateWorkspace={onCreateWorkspace}
             onBrowse={(onPick) => setPicker({ onPick })}

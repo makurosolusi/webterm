@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- Browser node on the canvas, off by default (`WEBTERM_BROWSER=on`). It streams a server-side Chromium into a node, with a toolbar, lease chip (human or agent), optional agent control (`WEBTERM_BROWSER_AGENT`), and an encrypted cookie dialog (`WEBTERM_BROWSER_COOKIE_IMPORT`). "New Browser" appears in the Dock and canvas menu only when the feature is on; with it off nothing changes. Private networks are blocked unless listed in `WEBTERM_BROWSER_ALLOW_HOSTS`. Tested against a fake Chromium only; real-browser behaviour is not verified yet.
 - System log and an Output panel. The server now records tagged, structured events (PTY and agent lifecycle, workspaces and nodes, filesystem, settings, hooks, approvals, Telegram and channels, ledger, HTTP and auth errors, WebSocket connections) and browser errors, with secrets and personal data redacted. Open the Output panel from the status bar, the View menu, the command palette, or `Shift+Cmd+U` / `Ctrl+Shift+U`; it has a channel dropdown, level selector, filter, clear, auto-scroll lock, copy, and save. See "Logs and the Output panel" in the README.
 - `WEBTERM_LOG_LEVEL` (default `info`), `WEBTERM_LOG_BUFFER` (default `5000`), and `WEBTERM_LOG_FILE` (default `on`, daily files under `<data dir>/logs`, 5 MiB per file, 7 files kept), also listed in Settings.
 - Log API under the root-token gate: `GET /api/logs`, `GET /api/logs/stream`, `PUT /api/logs/level`, `POST /api/logs/client`, and `DELETE /api/logs`.

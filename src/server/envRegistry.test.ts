@@ -5,6 +5,7 @@ import { CA2_ENV_SPECS } from './envRegistry.ca2'
 import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY, ENV_SETTINGS_SWITCH, isBootstrapOnly, specFor } from './envRegistry'
 import { validateEnvValue } from './envSettings.validate'
 import type { EnvSpec } from './envRegistry.types'
+import { DEFAULT_MAX_LIVE, ENV_BROWSER, MAX_LIVE_RANGE } from '../shared/browser.contract'
 
 const names = (f: (s: EnvSpec) => boolean): string[] => ENV_REGISTRY.filter(f).map((s) => s.key).sort()
 
@@ -19,6 +20,7 @@ describe('ENV_REGISTRY', () => {
 
   it('kelas dangerous dan secret sesuai rancangan', () => {
     expect(names((s) => s.dangerous)).toEqual([
+      'WEBTERM_BROWSER', 'WEBTERM_BROWSER_AGENT', 'WEBTERM_BROWSER_ALLOW_HOSTS', 'WEBTERM_BROWSER_BIN', 'WEBTERM_BROWSER_COOKIE_IMPORT',
       'WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_AUTONOMY', 'WEBTERM_CONTROL_CWD_ROOTS', 'WEBTERM_EMBED_URL', 'WEBTERM_MEMORY_DIR', 'WEBTERM_OPENCODE_ALLOW_TOOLS',
       'WEBTERM_OPENCODE_BIN', 'WEBTERM_ORCHESTRATOR_RUN', 'WEBTERM_TRUST_PROXY',
     ])
@@ -58,6 +60,27 @@ describe('ENV_REGISTRY', () => {
     for (const f of ['channels', 'central', 'ca2', 'platform', 'types']) {
       expect(readFileSync(new URL(`./envRegistry.${f}.ts`, import.meta.url), 'utf8').split('\n').length, f).toBeLessThanOrEqual(100)
     }
+  })
+})
+
+describe('env browser', () => {
+  const browserSpecs = ENV_REGISTRY.filter((s) => s.key.startsWith('WEBTERM_BROWSER') || s.key === 'WEBTERM_BROWSER')
+  it('semua kunci kontrak terdaftar di group browser dan flag default off', () => {
+    expect(browserSpecs.map((s) => s.key).sort()).toEqual(Object.values(ENV_BROWSER).sort())
+    for (const s of browserSpecs) {
+      expect(s.group, s.key).toBe('browser')
+      expect(s.restartRequired, s.key).toBe(true) // runtime dirakit sekali saat boot
+      expect(s.label.length, s.key).toBeGreaterThan(0)
+      if (s.kind === 'flag') expect(s.default, s.key).toBe('off')
+    }
+  })
+  it('batas angka mengikuti kontrak', () => {
+    expect(specFor(ENV_BROWSER.maxLive)).toMatchObject({ min: MAX_LIVE_RANGE.min, max: MAX_LIVE_RANGE.max, default: String(DEFAULT_MAX_LIVE) })
+    expect(validateEnvValue(specFor(ENV_BROWSER.maxLive) as EnvSpec, '9').ok).toBe(false)
+    expect(validateEnvValue(specFor(ENV_BROWSER.bin) as EnvSpec, 'relatif/chromium').ok).toBe(false)
+  })
+  it('file definisi <= 100 baris (Rule 8 config)', () => {
+    expect(readFileSync(new URL('./browser/browser.envRegistry.ts', import.meta.url), 'utf8').split('\n').length).toBeLessThanOrEqual(100)
   })
 })
 

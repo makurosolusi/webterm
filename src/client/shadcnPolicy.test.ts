@@ -16,6 +16,9 @@ const vscodePrimitivesRoot = path.join(clientRoot, "components/vscode") + path.s
  * must fail this guard and be added here deliberately.
  */
 const vscodeScreens = new Set([
+  // Browser node: URL bar and cookie import form keep native controls so label queries and file input work.
+  "src/client/BrowserToolbar.tsx",
+  "src/client/BrowserCookieDialog.tsx",
   // Settings / Env / Channels
   "src/client/SettingsPanel.tsx",
   "src/client/SettingsAgents.tsx",

@@ -10,6 +10,7 @@ const ICON_NAMES: Record<CanvasMenuIcon, string> = {
   terminal: 'terminal',
   agent: 'hubot',
   files: 'files',
+  browser: 'globe',
   'select-all': 'selection',
   fit: 'screen-full',
 }

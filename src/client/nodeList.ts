@@ -13,6 +13,7 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   agent: 'Agent',
   files: 'Files',
   editor: 'Editor',
+  browser: 'Browser',
 }
 
 /** Jamaknya menamai HIMPUNAN: header seksi, dan lewat itu haystack filter. Tetap terpisah karena
@@ -23,12 +24,13 @@ const NODE_KIND_PLURAL: Record<WsNodeKind, string> = {
   agent: 'Agents',
   files: 'Files',
   editor: 'Editors',
+  browser: 'Browsers',
 }
 
 /** Urutan seksi dipaku, bukan mengikuti isi board: node agent paling sering ditindaklanjuti,
  *  terminal berikutnya, editor/files cuma artefak statis. Urutan yang bergeser mengikuti isi
  *  memaksa mata mencari ulang tiap kali ada node baru. */
-const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'terminal', 'editor', 'files']
+const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'terminal', 'browser', 'editor', 'files']
 
 export interface NodeRowVM {
   id: string
@@ -47,12 +49,14 @@ export function nodeRowLabel(n: WsNode): string {
   if (title) return title
   if (n.kind === 'files') return n.dirPath ? folderTitle(n.dirPath) : NODE_KIND_LABEL.files
   if (n.kind === 'editor') return n.filePath ? fileBaseName(n.filePath) : NODE_KIND_LABEL.editor
+  if (n.kind === 'browser') return NODE_KIND_LABEL.browser
   return sessionLabel(n)
 }
 
 function detailOf(n: WsNode): string | undefined {
   if (n.kind === 'files') return n.dirPath
   if (n.kind === 'editor') return n.filePath
+  if (n.kind === 'browser') return n.url
   return n.cwd
 }
 

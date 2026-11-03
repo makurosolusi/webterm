@@ -20,6 +20,7 @@ import App from './App'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
+import type { BrowserStatusResp } from '../shared/browser.contract'
 import type { DirEntry } from './fileBrowse'
 
 /** Ukuran pane yang dilaporkan ke React Flow. Angka apa pun yang cukup besar untuk memuat node
@@ -142,6 +143,8 @@ export interface CanvasFixture {
    *  rantai request. Test yang menguji URUTAN commit wajib memasang tunda: tanpa itu urutan apa pun
    *  menghasilkan render yang sama, dan guard-nya lulus karena jaringannya terlalu cepat. */
   delay?: number
+  /** Jawaban `GET /api/browser/status`. Tanpa ini rute itu 404, persis server dengan flag browser mati. */
+  browserStatus?: BrowserStatusResp
 }
 
 export const HARNESS_WS_ID = 'ws-harness'
@@ -187,6 +190,7 @@ function routeFetch(fx: CanvasFixture) {
       const id = decodeURIComponent(path.slice('/api/workspaces/'.length))
       return reply(all.find((w) => w.id === id) ?? ws)
     }
+    if (path === '/api/browser/status' && fx.browserStatus) return reply(fx.browserStatus)
     if (path === '/api/active') return reply({ id: fx.blank ? null : HARNESS_WS_ID })
     if (path === '/api/fs/list') return reply(fx.dirs[arg] ?? [])
     if (path === '/api/fs/read') return reply({ content: fx.files?.[arg] ?? '' })
