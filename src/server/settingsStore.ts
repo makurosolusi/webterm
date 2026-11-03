@@ -14,15 +14,35 @@
 //    `glassTerminals`). Semuanya membaca kunci warisan dari `settings.json` versi lama; webterm
 //    belum pernah merilis settings tersimpan, jadi tidak ada satu pun file yang bisa memicunya.
 
+import { normalizeCustomAgents, type CustomAgentError } from '../shared/customAgent.schema'
 import { mergeSettings, type Settings } from '../shared/settings'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
+import { createLogger } from './logs'
+
+const log = createLogger('settings')
+
+/** Galat validasi `PUT /api/settings` per field; rute memetakannya ke HTTP 400. */
+export class SettingsValidationError extends Error {
+  constructor(readonly errors: CustomAgentError[]) {
+    super(`invalid customAgents: ${errors.length} error(s)`)
+    this.name = 'SettingsValidationError'
+  }
+}
+
+/** Peringatan tanpa isi (hanya jumlah + nama field skema): entri rusak dibuang saat load. */
+function warnDropped(errors: CustomAgentError[]): void {
+  log.warn('settings.customAgents.dropped', 'Dropped invalid custom agents on load', {
+    count: new Set(errors.map((e) => e.index)).size,
+    fields: [...new Set(errors.map((e) => e.field.replace(/^env\..*/, 'env.*')))],
+  })
+}
 
 /** Baca baris `app.settings`. JSON rusak / baris absen jatuh ke default, tidak melempar: settings
  *  tidak boleh menjadi alasan server gagal start. */
 export function parseStored(json: string | null): Settings {
   if (!json) return mergeSettings(null)
   try {
-    return mergeSettings(JSON.parse(json))
+    return mergeSettings(JSON.parse(json), warnDropped)
   } catch {
     return mergeSettings(null)
   }
@@ -31,10 +51,18 @@ export function parseStored(json: string | null): Settings {
 /**
  * Snapshot berikutnya: `patch` di-merge di atas yang tersimpan. Satu-satunya tempat bentuk input
  * diperiksa adalah `mergeSettings` — ia sekaligus batas input HTTP (cocokkan typeof + array-ness,
- * buang kunci tak dikenal), jadi `patch` boleh berupa body mentah dari jaringan.
+ * buang kunci tak dikenal), jadi `patch` boleh berupa body mentah dari jaringan. Pengecualian:
+ * `patch.customAgents` divalidasi mode `strict` dan MELEMPAR `SettingsValidationError` bila ada
+ * galat, supaya PUT yang rusak ditolak (400) alih-alih diam-diam dibuang.
  */
 export function nextSettings(storedJson: string | null, patch: unknown): Settings {
-  return mergeSettings({ ...parseStored(storedJson), ...asRecord(patch) })
+  const p = asRecord(patch)
+  // Bukan array = salah bentuk: jatuh ke `mergeSettings` (dibuang), sama seperti kunci lain.
+  if (Array.isArray(p.customAgents)) {
+    const { errors } = normalizeCustomAgents(p.customAgents, 'strict')
+    if (errors.length) throw new SettingsValidationError(errors)
+  }
+  return mergeSettings({ ...parseStored(storedJson), ...p })
 }
 
 function asRecord(v: unknown): Record<string, unknown> {

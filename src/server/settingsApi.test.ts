@@ -7,6 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Settings } from '../shared/settings'
 import { SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { settingsRoute, type SettingsStore } from './settingsApi'
+import { nextSettings } from './settingsStore'
 
 const CAP = SETTINGS_BODY_MAX_BYTES
 
@@ -174,5 +175,25 @@ describe('tidak ada efek samping diam-diam', () => {
     const req = trackedReq('PUT', { 'content-length': String(CAP * 4) })
     await settingsRoute(req, recorder(), 'PUT', store)
     expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('PUT /api/settings customAgents strict', () => {
+  it('entri rusak => 400 invalid_settings + galat per field; nilai tidak dipantulkan', async () => {
+    const store: SettingsStore = { getSettings: () => SNAPSHOT, saveSettings: (p) => (nextSettings(null, p), SNAPSHOT) }
+    const req = trackedReq('PUT')
+    feed(req, [JSON.stringify({ customAgents: [{ id: 'custom:x', label: 'X', launchCmd: '', env: { MY_TOKEN: 'sekrit-value' } }] })])
+    const res = recorder()
+    await settingsRoute(req, res, 'PUT', store)
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toEqual({ error: 'invalid_settings', errors: [{ index: 0, field: 'env.MY_TOKEN', code: 'secret_literal' }] })
+    expect(res.body).not.toContain('sekrit-value')
+  })
+
+  it('galat non-validasi tetap dilempar ke pemanggil', async () => {
+    const store: SettingsStore = { getSettings: () => SNAPSHOT, saveSettings: () => { throw new Error('disk') } }
+    const req = trackedReq('PUT')
+    feed(req, ['{}'])
+    await expect(settingsRoute(req, recorder(), 'PUT', store)).rejects.toThrow('disk')
   })
 })
