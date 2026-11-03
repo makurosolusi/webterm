@@ -35,10 +35,12 @@ export function createTelegramCentralPort(input: {
         })
         await Promise.race([submitted.done, timeout])
         // Claude missing / logged out fails the turn at once; say so instead of a generic "empty".
-        if (getTurn(input.db, submitted.response.turnId)?.errorCode === RUNTIME_UNAVAILABLE) {
+        const turn = getTurn(input.db, submitted.response.turnId)
+        if (turn?.errorCode === RUNTIME_UNAVAILABLE) {
           return { ok: false, code: 'central_runtime_unavailable' }
         }
-        const page = listMessages(input.db, conversationId, { limit: 20 })
+        // The turn's own conversation: a workspace id may resolve to a ledger project with another id.
+        const page = listMessages(input.db, turn?.conversationId ?? conversationId, { limit: 20 })
         const assistant = page.items.find(
           (message) => message.role === 'assistant' && message.turnId === submitted.response.turnId
         ) ?? page.items.filter((message) => message.role === 'assistant').at(-1)
