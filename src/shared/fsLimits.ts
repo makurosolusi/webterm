@@ -11,6 +11,18 @@
 export const FS_READ_MAX_BYTES = 10 * 1024 * 1024
 export const FS_READ_BINARY_MAX_BYTES = 24 * 1024 * 1024
 
+/** Jendela awal yang diperiksa untuk deteksi biner (ada byte NUL = biner). */
+export const SNIFF_BYTES = 8 * 1024
+/**
+ * Batas body JSON rute `/api/fs/*` (413 `ETOOLARGE` di atasnya). 2x cap baca: escape JSON
+ * (`\n`, `\"`, `\uXXXX`) menggelembungkan teks, dan file yang bisa DIBUKA (<= cap baca) harus
+ * tetap bisa DISIMPAN balik; margin tetap 64 KiB untuk field pembungkus.
+ */
+export const FS_BODY_MAX = FS_READ_MAX_BYTES * 2 + 64 * 1024
+/** Default `WEBTERM_FILES_LIST_MAX` / `WEBTERM_FILES_UPLOAD_MAX_MB`. */
+export const FILES_LIST_MAX_DEFAULT = 5000
+export const FILES_UPLOAD_MAX_MB_DEFAULT = 100
+
 // Prefiks dipertahankan apa adanya dari nodeterm: ia string protokol antar lapisan, dan CLAUDE.md
 // melarang rename permukaan `nodeterm:` tanpa perintah eksplisit. Konsumen tidak pernah menyentuh
 // literal ini — pakai `tooLargeSentinel` / `tooLargeSize`.

@@ -12,6 +12,7 @@ import { send } from './ws'
 import { writeClipboard } from './clipboard'
 import type { Comment, Pane } from '../shared/workspace'
 import { randomId } from './randomId'
+import { isPathDrag, readDroppedPath } from './terminalDrop'
 
 const COLLAPSED_H = 40
 
@@ -109,6 +110,10 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
     )
   }
 
+  /** Pane di bawah kursor drop (bukan pane aktif); jatuh ke pane aktif bila drop di luar pane. */
+  const dropTarget = (el: EventTarget): string =>
+    (el as HTMLElement).closest('[data-pane-id]')?.getAttribute('data-pane-id') ?? activePane
+
   /** Baris menu untuk pane YANG DIKLIK, bukan untuk node: di node yang terbelah, "Close pane" yang
    *  mengenai pane lain dari yang ditunjuk pengguna membunuh terminal yang salah. */
   const menuRows = (target: string): MenuRow[] => [
@@ -170,6 +175,22 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
         // Tanpa ini Chrome memunculkan menu bawaannya untuk `<canvas>` — "Copy Image" di atas
         // terminal. React Flow tidak menolong: `Pane` hanya meneruskan contextmenu yang target-nya
         // pane itu sendiri, jadi klik kanan di atas node tidak pernah sampai ke menu canvas.
+        // Drop path dari file manager → paste (tanpa newline) ke pane di bawah kursor. Input ke sesi
+        // yang sudah exit dibuang oleh `send` di ws.ts, jadi paste ke sana tak mengeksekusi apa pun.
+        onDragOver={(e) => {
+          if (!isPathDrag(e.dataTransfer)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDrop={(e) => {
+          const text = readDroppedPath(e.dataTransfer)
+          if (!text) return
+          e.preventDefault()
+          e.stopPropagation()
+          const target = dropTarget(e.target)
+          setActivePane(target)
+          handles.current.get(target)?.paste(text)
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           e.stopPropagation()

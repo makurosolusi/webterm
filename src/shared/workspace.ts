@@ -416,6 +416,9 @@ export interface PaneSplit { dir: 'h' | 'v'; ratio: number; a: Pane; b: Pane }
  *  dalam split, dan daftar datar tidak bisa menyatakan sisi mana yang terbagi. */
 export type Pane = PaneLeaf | PaneSplit
 
+/** Opsi tampilan node 'files' yang dipersist per node (P-15). Absen = default (hidden tampil, nama naik). */
+export interface ViewOpts { hidden: boolean; sortKey: 'name' | 'size' | 'mtime'; sortDir: 'asc' | 'desc' }
+
 // CATATAN PERSISTENSI: `WsNode` dipersist sebagai satu blob JSON di satu kolom SQLite
 // (`src/server/db.ts`), jadi menambah kind atau field di sini adalah NOL migration.
 export interface WsNode {
@@ -436,6 +439,7 @@ export interface WsNode {
   comments?: Comment[]    // thread aktivitas/catatan per node
   dirPath?: string        // node 'files': direktori akar yang ditampilkan
   filePath?: string       // node 'editor': file yang dibuka
+  viewOpts?: ViewOpts     // node 'files': opsi tampilan (hidden/sort); absen = default
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node
 }
 

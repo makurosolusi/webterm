@@ -34,6 +34,14 @@
 - Knowledge base: a per-project index in `<data dir>/knowledge.db` with a Lite Map, a deterministic project brief, and tools `kb.search`, `kb.map`, `project.discover`, and `project.brief` (`WEBTERM_KNOWLEDGE`, optionally `WEBTERM_KNOWLEDGE_GRAPHIFY`).
 - Central control panel: level and budget, a halt button, an agent list, approval cards for shared mutations, skill review, and a memory view, served by `GET /api/central/status|agents|approvals|skills|memory` and `POST /api/central/agents/:id/relay|close` and `/api/central/skills/:id/approve|rollback`. The panel is built only with `VITE_WEBTERM_CENTRAL_CHAT=on`.
 - Not yet verified end to end: a real OpenCode run with native tools, real Telegram delivery (nothing yet sends the approval card to Telegram, so the buttons have no card to press), sustained load, and the control panel in a browser.
+- File manager overhaul in files nodes. New file/folder and rename use an inline name field instead of a browser prompt, with keyboard navigation (F2, Delete, arrows, Home/End, Shift/Cmd selection) and multi-select. Hidden-file and sort (name, size, modified; natural order, folders first) toggles are remembered per node across restarts. The extra capabilities below are each behind a `WEBTERM_FILES_*` flag that defaults to off; see the README.
+- Delete moves to a trash (kept 30 days) with an Undo toast, plus restore, rename, and duplicate (`WEBTERM_FILES_MUTATE`). Shift+Delete is permanent and asks first. A rename that only changes letter case is allowed; a name that collides case-insensitively is refused.
+- Editor saves are version-checked and atomic. When the file changed on disk since you opened it, a conflict bar offers Reload or Overwrite and your buffer is kept. The editor follows renames, deletes, and outside writes to the open file (`WEBTERM_FILES_WATCH`).
+- Images, audio, video, and PDF open in viewers through `GET /api/fs/raw` with range requests and ETag (`WEBTERM_FILES_VIEWERS`). Upload (streamed, one file per request, capped by `WEBTERM_FILES_UPLOAD_MAX_MB`, never overwrites) and download (`WEBTERM_FILES_UPLOAD`).
+- Live listing updates when files change outside webterm (`WEBTERM_FILES_WATCH`), git status marks on the list (`WEBTERM_FILES_GIT_STATUS`), and Quick Open on Ctrl/Cmd+P while a files node has focus (`WEBTERM_FILES_QUICK_OPEN`).
+- Drag a file row onto a terminal pane to paste its shell-quoted path. No newline is added, so nothing runs.
+- `WEBTERM_FILES_LIST_MAX` (default 5000) caps entries per listing. The new `/api/fs/*` verbs and the integration flow are covered by `src/server/fileManager.integration.bun.test.ts`; design decisions are in `docs/decisions/files-manager.md`.
+- Not yet verified in a real browser or host: Monaco editing, 100 MB uploads and XHR progress, native drag-and-drop, pasting into xterm, `fs.watch` on macOS under Node, and a real WebSocket reconnect.
 
 ### Changed
 - Central chat turns now resume the previous session, and orphaned turns are reconciled and turn limits enforced.
@@ -43,6 +51,8 @@
 - Central chat can use `WEBTERM_CENTRAL_RUNTIME=opencode`; real free-model E2E now covers all four proposal tools, including pending approval creation without decision/run. B3 remains partial only for `task.run`/`approval.decide` and sustained credentialed-model/soak evidence. Proposal blocks render as compact cards without claiming applied or approved status. Real Telegram delivery and production memory E2E remain unverified.
 - Approval dispatch reuses one deps object per ledger port, so the documented ten-minute `requestId` replay window works in production instead of allocating a fresh ack store per request.
 - `.env` no longer carries `WEBTERM_TOKEN` and is kept at mode `600`. A root token must be exported explicitly, so it is not inherited by every process that reads the auto-loaded file.
+- A newly created file now opens in the editor. Files that are not UTF-8 open read-only with a banner, and binary files show a placeholder instead of loading into the editor. Audio, video, and archives are no longer treated as text.
+- Known limits: DNS-rebinding against `/api/fs/*` is not mitigated (the token is the only guard); Quick Open without `rg` or a git repo does not read `.gitignore`.
 
 ### Fixed
 - A task whose approval was approved but never consumed could not be finished from the inbox: the approval disappeared from every list, so a lost response left the task stuck. The inbox now shows "Finish approval" on that row, which opens the existing consent at the Consume step instead of minting a second approval, and the approved list now carries the task id, fence, and request so the row can be matched.
@@ -59,6 +69,11 @@
 - The first orchestrator run on a fresh install failed with `worktree_failed`, because `<data>/worktrees` was handed to git before anything had created it. The directory is created owner-only (`0700`) first, and a creation failure is reported as `worktree_root_failed` instead of a generic git error.
 - A worker agent could receive only the first line of its task, because the prompt was multi-line and an agent that reads one line at a time saw a fragment. The prompt is collapsed to a single line before it is sent.
 - The root-only route families added in this wave are now pinned in the node-token and capability negative tests, so adding one of them to the node allowlist fails the suite instead of passing it.
+- New File no longer overwrites an existing file. Creation is exclusive and answers "already exists" instead.
+- Saving (Cmd+S) no longer clobbers changes made elsewhere, and no longer silently recreates a file that was deleted. A stale save is refused with a conflict; a clean buffer does not write at all.
+- Large or multi-byte saves no longer corrupt non-ASCII text, and request bodies are capped (413 instead of unbounded memory).
+- Opening audio, video, or zip files no longer loads them as editable text, where a save would have destroyed them.
+- Files watch resubscribes after a WebSocket reconnect, so listings keep updating.
 
 ### Security
 - Human approvals refuse token-free loopback by default. An agent shell on the same machine could otherwise request, read the nonce, approve, and consume its own action. A configured root token, or `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` for a disposable demo, is required.

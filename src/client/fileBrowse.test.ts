@@ -70,6 +70,15 @@ describe('newEntryPath', () => {
     expect(newEntryPath('/a', 'x/y/z.ts')).toBe('/a/x/y/z.ts')
   })
 
+  it('refuses a NUL byte and a segment over 255 bytes', () => {
+    expect(newEntryPath('/a', 'x\0y')).toBeNull()
+    expect(newEntryPath('/a', 'a'.repeat(255))).toBe(`/a/${'a'.repeat(255)}`)
+    expect(newEntryPath('/a', 'a'.repeat(256))).toBeNull()
+    // 86 x 3 byte = 258 byte walau hanya 86 karakter: batasnya byte, bukan panjang string.
+    expect(newEntryPath('/a', '€'.repeat(86))).toBeNull()
+    expect(newEntryPath('/a', `${'a'.repeat(200)}/${'b'.repeat(200)}`)).not.toBeNull()
+  })
+
   it('refuses empty, absolute and drive-letter names', () => {
     expect(newEntryPath('/a', '')).toBeNull()
     expect(newEntryPath('/a', '   ')).toBeNull()

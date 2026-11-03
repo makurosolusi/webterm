@@ -2,44 +2,34 @@ import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
-// Type-only: terhapus saat compile, jadi tidak membatalkan lazy-load Monaco.
-import type { editor as MonacoEditor } from 'monaco-editor'
-import { loadMonaco } from './lazyMonaco'
-import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
 import { fileIconClass } from './fileIcon'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
-import { renderMarkdown } from './markdown'
-import {
-  IMAGE_MIME,
-  base64ToBytes,
-  editorFileKind,
-  fileBaseName,
-  fileExt,
-  loadRefusal,
-  opensInPreview
-} from './editorFile'
+import * as fsClient from './fsClient'
+import { writeClipboard } from './clipboard'
+import { EditorConflictBar } from './EditorConflictBar'
+import { useEditorFile, type WriteChecked } from './useEditorFile'
+import { useEditorSync } from './useEditorSync'
+import { ViewerHost } from './viewers/ViewerHost'
+import type { FileKind } from '../shared/fileKind'
+import type { ReadMeta } from '../shared/fsContract'
+import { editorFileKind, fileBaseName, fileExt } from './editorFile'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
-  /** Isi teks file; REJECT saat gagal baca ('' berarti file memang kosong), sentinel too-large
-   *  saat melewati cap `fsLimits`. Kontrak di kepala `./fsClient`. */
-  read: (path: string) => Promise<string>
-  /** Tulis teks; resolve true saat berhasil. */
-  write: (path: string, content: string) => Promise<boolean>
-  /** Isi file sebagai base64 (gambar & PDF); REJECT saat gagal baca. */
-  readBinary: (path: string) => Promise<string>
+  /** Isi teks + `version` + `encoding`; REJECT saat gagal baca. Default `fsClient.readMeta`. */
+  readMeta?: (path: string) => Promise<ReadMeta>
+  /** Tulis dengan cek versi (`EVERSION`/`ENOENT` lewat `FsResult`). Default `fsClient.writeChecked`. */
+  writeChecked?: WriteChecked
   /** Setting: file Markdown dibuka langsung sebagai preview terender. Hanya menentukan tampilan
    *  SAAT node dibuka — toggle Preview/Edit tetap dua arah sesudahnya. */
   openMarkdownPreview?: boolean
+  /** `stat` untuk membandingkan versi saat direktori ditandai berubah. Default `fsClient.stat`. */
+  stat?: typeof fsClient.stat
 }
 
-const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
-
 /**
- * Node editor/preview file. Membaca file saat mount, menebak bahasa dari path-nya (pemetaan
- * ekstensi→bahasa milik Monaco sendiri lewat `monaco.Uri.file`, bukan tabel tulisan sendiri), dan
- * menulis balik dengan ⌘S atau tombol Save. File gambar dan PDF ditampilkan sebagai preview, tidak
- * dibuka sebagai teks (biner).
+ * Node editor/preview file. Teks dimuat/disimpan lewat `useEditorFile` (cek versi, konflik,
+ * biner, non-UTF-8); gambar dan PDF jadi preview; audio/video/archive/biner jadi placeholder jujur.
  *
  * Port dari nodeterm `src/renderer/nodes/EditorNode.tsx`. Bedanya: fs masuk sebagai prop callback
  * (webterm tidak punya preload Electron), dan tidak ada cabang SSH/worktree.
@@ -48,10 +38,10 @@ function EditorNode({
   id,
   data,
   selected,
-  read,
-  write,
-  readBinary,
-  openMarkdownPreview = false
+  readMeta = fsClient.readMeta,
+  writeChecked = fsClient.writeChecked,
+  openMarkdownPreview = false,
+  stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
   const d = data as { filePath?: string; color?: string }
@@ -63,178 +53,25 @@ function EditorNode({
   const kind = editorFileKind(filePath)
 
   const hostRef = useRef<HTMLDivElement>(null)
-  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
-  const savedRef = useRef('')
-  // GERBANG KEHILANGAN DATA: hanya true setelah pembacaan selesai dan isinya benar-benar masuk ke
-  // model. Tanpa ini, ⌘S pada node yang gagal memuat akan menulis buffer kosong ke file pengguna.
-  const loadedRef = useRef(false)
   const hoveredRef = useRef(false)
-
-  const [dirty, setDirty] = useState(false)
-  const [preview, setPreview] = useState(false)
-  const [previewHtml, setPreviewHtml] = useState('')
   const [loadError, setLoadError] = useState('')
-  // TERPISAH dari `loadError` dengan sengaja — konsekuensinya berlawanan. Gagal BACA harus menolak
-  // merender editor (buffer kosong di atas file berisi = ⌘S menimpanya). Gagal SIMPAN harus
-  // MEMPERTAHANKAN editor: editan yang belum tersimpan hanya hidup di dalam instance Monaco, jadi
-  // meng-unmount host-nya berarti membuang pekerjaan pengguna justru di saat penyimpanan gagal.
-  const [saveError, setSaveError] = useState('')
-  const [imageSrc, setImageSrc] = useState('')
-  const [imageDims, setImageDims] = useState('')
-  const [pdfSrc, setPdfSrc] = useState('')
 
-  const togglePreview = () => {
-    if (kind !== 'text' || !loadedRef.current) return
-    setPreview((p) => {
-      const next = !p
-      if (next && editorRef.current) setPreviewHtml(renderMarkdown(editorRef.current.getValue()))
-      return next
-    })
-  }
-  // Handler disimpan di ref supaya listener keyboard & command Monaco (keduanya didaftarkan sekali)
-  // selalu memanggil closure terbaru, bukan yang terbekukan saat mount.
-  const toggleRef = useRef(togglePreview)
-  toggleRef.current = togglePreview
+  const ef = useEditorFile({
+    id, filePath, fileName, ext, hostRef, readMeta, writeChecked, setLoadError,
+    enabled: kind === 'text', openMarkdownPreview
+  })
+  const isBinary = kind === 'text' && ef.encoding === 'binary'
+  // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.
+  const editable = kind === 'text' && !isBinary && !loadError
+  const readOnly = ef.encoding === 'non-utf8'
 
-  const save = () => {
-    const editor = editorRef.current
-    if (!editor || !loadedRef.current) return
-    const value = editor.getValue()
-    write(filePath, value).then(
-      (ok) => {
-        if (!ok) {
-          setSaveError(`Couldn’t save ${fileName}.`)
-          return
-        }
-        savedRef.current = value
-        setDirty(false)
-        // Pesan basi dibersihkan di sini, bukan di awal percobaan: kalau save gagal lagi, strip-nya
-        // tidak sempat berkedip hilang-muncul.
-        setSaveError('')
-      },
-      (err: unknown) => setSaveError(`Couldn’t save ${fileName}: ${errText(err)}`)
-    )
-  }
-  const saveRef = useRef(save)
-  saveRef.current = save
-
-  // Gambar: data URL base64 + <img>. TANPA zoom/pan — nodeterm juga tidak punya.
-  useEffect(() => {
-    if (kind !== 'image' || !filePath) return
-    let disposed = false
-    readBinary(filePath).then(
-      (b64) => {
-        if (disposed) return
-        const refusal = loadRefusal(b64, 'Image')
-        if (refusal) setLoadError(refusal)
-        else setImageSrc(`data:${IMAGE_MIME[ext]};base64,${b64}`)
-      },
-      (err: unknown) => {
-        if (!disposed) setLoadError(`Couldn’t read ${fileName}: ${errText(err)}`)
-      }
-    )
-    return () => {
-      disposed = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per node; path node tidak berubah
-  }, [])
-
-  // PDF: blob URL + <iframe> ke viewer platform (zoom/cari/halaman/print gratis). Data URL tidak
-  // bisa dipakai di sini — di dalam frame ia origin opaque dan viewer-nya merender kosong.
-  useEffect(() => {
-    if (kind !== 'pdf' || !filePath) return
-    let disposed = false
-    let url = ''
-    readBinary(filePath).then(
-      (b64) => {
-        if (disposed) return
-        const refusal = loadRefusal(b64, 'PDF')
-        if (refusal) {
-          setLoadError(refusal)
-          return
-        }
-        const bytes = base64ToBytes(b64)
-        if (!bytes) {
-          setLoadError(`Couldn’t read ${fileName}: isinya bukan base64 yang sah.`)
-          return
-        }
-        url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-        setPdfSrc(url)
-      },
-      (err: unknown) => {
-        if (!disposed) setLoadError(`Couldn’t read ${fileName}: ${errText(err)}`)
-      }
-    )
-    return () => {
-      disposed = true
-      // WAJIB: blob URL memaku byte-nya di memori sampai dicabut — beberapa node PDF yang pernah
-      // dibuka akan menahan puluhan MB masing-masing selama sesi hidup.
-      if (url) URL.revokeObjectURL(url)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per node; path node tidak berubah
-  }, [])
-
-  // Teks: Monaco (dimuat malas) + pembacaan file, paralel.
-  useEffect(() => {
-    if (kind !== 'text' || !filePath) return
-    let disposed = false
-    let model: MonacoEditor.ITextModel | null = null
-    let editor: MonacoEditor.IStandaloneCodeEditor | null = null
-    let themeObserver: MutationObserver | null = null
-
-    Promise.all([loadMonaco(), read(filePath)]).then(
-      ([m, content]) => {
-        if (disposed) return
-        const refusal = loadRefusal(content, 'File', true)
-        if (refusal) {
-          // MENOLAK membuka, bukan membuka buffer kosong: ⌘S di atas placeholder akan menimpa
-          // file (besar) yang asli dengan nol byte.
-          setLoadError(refusal)
-          return
-        }
-        const host = hostRef.current
-        if (!host) return
-        // Satu model per NODE: fragment berisi id node, supaya dua node yang membuka file yang
-        // sama tidak berbagi (dan saling menimpa) satu model. Bahasa tetap ditebak Monaco dari
-        // path-nya — `createModel` dengan language undefined memakai pemetaan ekstensi internal.
-        const uri = m.Uri.file(filePath).with({ fragment: id })
-        model = m.editor.getModel(uri) ?? m.editor.createModel(content, undefined, uri)
-        editor = m.editor.create(host, { ...EDITOR_OPTIONS, model, theme: currentMonacoTheme() })
-        // Monaco memegang satu tema global: ikuti pergantian Dark/Light app selama node ini hidup.
-        themeObserver = new MutationObserver(() => m.editor.setTheme(currentMonacoTheme()))
-        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-        editorRef.current = editor
-        savedRef.current = content
-        loadedRef.current = true
-        editor.onDidChangeModelContent(() => setDirty(editor!.getValue() !== savedRef.current))
-        editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => saveRef.current())
-        // Preview awal diputuskan di sini, bukan saat init useState, karena ia butuh isi file —
-        // ini state yang sama dengan klik Preview tepat setelah load, jadi ⌘M/Edit tetap normal.
-        if (opensInPreview(ext, openMarkdownPreview)) {
-          setPreviewHtml(renderMarkdown(content))
-          setPreview(true)
-        }
-      },
-      (err: unknown) => {
-        // `read` yang reject TIDAK boleh berakhir sebagai editor kosong: `loadError` membuat
-        // `body()` merender notice alih-alih host Monaco, jadi editor tak pernah dibuat,
-        // `loadedRef` tetap false dan `save()` keluar lebih awal — file asli aman dari ⌘S.
-        if (!disposed) setLoadError(`Couldn’t open ${fileName}: ${errText(err)}`)
-      }
-    )
-
-    return () => {
-      disposed = true
-      loadedRef.current = false
-      themeObserver?.disconnect()
-      editor?.dispose()
-      // Model dibuang eksplisit: React tidak melepas resource Monaco hanya karena container-nya
-      // keluar dari tree, dan model yang tertinggal menahan worker bahasanya (lihat tsWorkerReaper).
-      model?.dispose()
-      editorRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per node; path node tidak berubah
-  }, [])
+  // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
+  // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
+  const sync = useEditorSync({
+    filePath, text: kind === 'text', stat,
+    setPath: (p) => rf.updateNodeData(id, { filePath: p }),
+    snapshot: ef.snapshot, reload: ef.reload, flagConflict: ef.flagConflict
+  })
 
   // ⌘M / Ctrl+M menukar preview saat node ini di-hover — gerbang hover yang sama dengan nodeterm
   // (`canvasOwnsMarkdownChord`), supaya satu chord tidak menyalakan setiap node editor di board.
@@ -242,7 +79,7 @@ function EditorNode({
     const onKey = (e: KeyboardEvent) => {
       if (!hoveredRef.current || e.key.toLowerCase() !== 'm' || !(e.metaKey || e.ctrlKey)) return
       e.preventDefault()
-      toggleRef.current()
+      ef.toggleRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -250,24 +87,20 @@ function EditorNode({
 
   const body = (): React.ReactNode => {
     if (loadError) return <span className="editor-node__notice">{loadError}</span>
-    if (kind === 'image')
-      return imageSrc ? (
-        <img
-          src={imageSrc}
-          alt={fileName}
-          onLoad={(e) => {
-            const img = e.currentTarget
-            if (img.naturalWidth) setImageDims(`${img.naturalWidth} × ${img.naturalHeight}`)
-          }}
-        />
+    if (kind !== 'text')
+      return sync.missing ? (
+        <span className="editor-node__notice">{fileName} was deleted on disk.</span>
       ) : (
-        <span className="editor-node__notice">Loading…</span>
+        <ViewerHost path={filePath} kind={kind as FileKind} version={sync.viewVersion} />
       )
-    if (kind === 'pdf')
-      return pdfSrc ? (
-        <iframe src={pdfSrc} title={fileName} />
-      ) : (
-        <span className="editor-node__notice">Loading…</span>
+    if (isBinary)
+      return (
+        <div className="editor-node__placeholder">
+          <span>File biner — tidak dapat dibuka sebagai teks.</span>
+          <VscodeButton secondary title="Copy file path" onClick={() => void writeClipboard(filePath)}>
+            Copy Path
+          </VscodeButton>
+        </div>
       )
     return (
       <>
@@ -278,7 +111,7 @@ function EditorNode({
             node. `nodrag` supaya seleksi teks tidak menggeser node, `nowheel` supaya scroll
             menggulung editor, bukan men-zoom canvas. */}
         <div className="editor-node__monaco nodrag nowheel nokey" ref={hostRef} />
-        {preview && (
+        {ef.preview && (
           <div className="editor-node__md nodrag nowheel">
             <div className="editor-node__md-bar">
               <span>Preview</span>
@@ -286,7 +119,7 @@ function EditorNode({
             </div>
             {/* Isi file adalah input tak terpercaya; `renderMarkdown` mensanitasi lewat DOMPurify
                 dan fail-closed kalau sanitizer-nya tidak hidup. */}
-            <div className="editor-node__md-body" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div className="editor-node__md-body" dangerouslySetInnerHTML={{ __html: ef.previewHtml }} />
           </div>
         )}
       </>
@@ -306,28 +139,29 @@ function EditorNode({
           <span className="node-title editor-node__name" title={filePath}>
             <span className={`${fileIconClass(fileName)} editor-node__icon`} aria-hidden="true" />
             {fileName}
-            {kind === 'text' && dirty && (
+            {editable && ef.dirty && (
               <span className="codicon codicon-circle-filled editor-node__dirty" role="img" aria-label="Unsaved changes" />
             )}
           </span>
           <span className="editor-node__spacer" />
-          {kind === 'image' && imageDims && <span className="editor-node__dims">{imageDims}</span>}
           <ToolbarContainer className="nodrag editor-node__actions">
-            {kind === 'text' && !loadError && (
+            {editable && (
               <>
                 <ToolbarButton
-                  label={preview ? 'Edit' : 'Preview'}
+                  label={ef.preview ? 'Edit' : 'Preview'}
                   title="Toggle markdown preview (⌘M)" data-title="Toggle markdown preview (⌘M)"
-                  toggleable checked={preview}
-                  onClick={togglePreview}
+                  toggleable checked={ef.preview}
+                  onClick={ef.togglePreview}
                 >
-                  <span className={`codicon codicon-${preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
+                  <span className={`codicon codicon-${ef.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
                 </ToolbarButton>
                 {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
                     yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
-                <VscodeButton secondary disabled={!dirty} title="Save (⌘S)" onClick={save}>
-                  Save
-                </VscodeButton>
+                {!readOnly && (
+                  <VscodeButton secondary disabled={!ef.dirty} title="Save (⌘S)" onClick={ef.save}>
+                    Save
+                  </VscodeButton>
+                )}
               </>
             )}
             <ToolbarButton
@@ -358,9 +192,17 @@ function EditorNode({
           {body()}
           {/* Strip DI ATAS body, bukan pengganti body: editor tetap terpasang, isinya tetap
               terlihat, dan tombol Save tetap `dirty` sehingga bisa dicoba ulang. */}
-          {saveError && (
+          {editable && readOnly && (
+            <div className="editor-node__banner nodrag" role="status">
+              Bukan UTF-8 — dibuka read-only supaya byte aslinya tidak rusak.
+            </div>
+          )}
+          {editable && ef.conflict && (
+            <EditorConflictBar conflict={ef.conflict} fileName={fileName} onReload={() => void ef.reload()} onOverwrite={ef.overwrite} />
+          )}
+          {ef.saveError && (
             <div className="editor-node__save-error nodrag" role="alert">
-              {saveError}
+              {ef.saveError}
             </div>
           )}
         </div>

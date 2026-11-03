@@ -45,6 +45,9 @@ export function createTargetDir(path: string, isDir: boolean): string {
   return isDir ? path : parentDir(path)
 }
 
+/** Batas byte satu segmen nama pada filesystem umum (ext4/APFS). */
+const MAX_NAME_BYTES = 255
+
 /**
  * Tempelkan nama yang diketik pengguna ke sebuah base dir. Nama relatif multi-segmen (`a/b.ts`)
  * diizinkan; direktori perantaranya tugas pemanggil (lihat `ancestorDirs`). `null` untuk apa pun
@@ -63,6 +66,8 @@ export function newEntryPath(baseDir: string, name: string): string | null {
   if (n.endsWith('/') || n.endsWith('\\')) return null
   if (n.split(/[\\/]/).some((seg) => seg === '..')) return null
   if (n.split('/').some((seg) => !seg)) return null
+  // NUL memotong path di syscall; segmen >255 byte ditolak kernel (ENAMETOOLONG) — tolak lebih awal.
+  if (n.includes('\0') || n.split('/').some((seg) => new TextEncoder().encode(seg).length > MAX_NAME_BYTES)) return null
   return `${baseDir.replace(/\/+$/, '')}/${n}`
 }
 

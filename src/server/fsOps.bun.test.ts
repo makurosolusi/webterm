@@ -6,7 +6,8 @@ import { test, expect } from 'bun:test'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import npath from 'node:path'
-import { listDir, pathExists, readBinary, readErrorResult, readText } from './fsOps'
+import { execFileSync } from 'node:child_process'
+import { listDir, pathExists, readBinary, readErrorResult, readText, readTextMeta } from './fsOps'
 
 /** Fixture di direktori temporer sendiri, dibereskan apa pun hasil `fn`. Tidak ada tulisan di
  *  luar `$TMPDIR` — lihat catatan `sun_path`/TMPDIR di CLAUDE.md. */
@@ -93,4 +94,17 @@ test('an unmapped cause falls back to 500 without leaking details', async () => 
   const out = readErrorResult(new Error('fs read failed: /home/u/x', { cause: new Error('weird') }))
   expect(out.status).toBe(500)
   expect(out.body.error).toBe('cannot read file')
+})
+
+test('readTextMeta keeps contract 2: unreadable file is 403, and a FIFO is refused instead of hanging', async () => {
+  await withTmp(async (at) => {
+    if (process.getuid?.() !== 0) {
+      await fs.writeFile(at('locked.txt'), 'secret')
+      await fs.chmod(at('locked.txt'), 0o000)
+      expect(readErrorResult(await readError(() => readTextMeta(at('locked.txt')).then((m) => m.content))).status).toBe(403)
+    }
+    execFileSync('mkfifo', [at('pipe')])
+    // open() pada FIFO tanpa penulis menggantung selamanya; stat-dulu menolaknya sebagai 400.
+    expect(readErrorResult(await readError(() => readTextMeta(at('pipe')).then((m) => m.content))).status).toBe(400)
+  })
 })

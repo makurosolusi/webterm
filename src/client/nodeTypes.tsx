@@ -7,7 +7,6 @@ import TerminalNode from './TerminalNode'
 import AgentNode from './AgentNode'
 import FilesNode from './FilesNode'
 import EditorNode from './EditorNode'
-import { read, readBinary, write } from './fsClient'
 import { useLiveSettings } from './useSettings'
 
 export const nodeTypes = {
@@ -26,9 +25,6 @@ export const nodeTypes = {
     return (
       <EditorNode
         {...p}
-        read={read}
-        write={write}
-        readBinary={readBinary}
         openMarkdownPreview={settings.openMarkdownPreview}
       />
     )

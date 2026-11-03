@@ -1,71 +1,64 @@
-// Node file-manager. Diport dari nodeterm `src/renderer/nodes/FilesNode.tsx`; SEMUA keputusannya
-// (naik ke mana, breadcrumb apa, filter cocok apa, tombol melakukan apa) ada di `./fileBrowse.ts`
-// supaya bisa dites tanpa DOM — vitest webterm berjalan di node-env.
+// Node file-manager. Diport dari nodeterm `src/renderer/nodes/FilesNode.tsx`; keputusannya (naik ke
+// mana, breadcrumb apa, filter cocok apa) ada di `./fileBrowse.ts`, `./filesView.ts` dan
+// `./filesSelection.ts` supaya bisa dites tanpa DOM. File ini kerangka + state; daftar di
+// `FilesList`, baris di `FilesRow`, input nama di `FilesInput`, menu di `FilesMenu`, dan fitur
+// tambahan masuk lewat `FILES_SLOTS` (kita tidak tahu isinya).
 //
-// TANPA FILE WATCHER, sama seperti nodeterm: refresh `⟳` manual menaikkan `version`. Watcher berarti
-// satu `fs.watch` per node yang terbuka plus debounce plus rekonsiliasi seleksi, demi sesuatu yang
-// jarang berubah di belakang punggung pengguna.
-import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import type { Node, NodeProps } from '@xyflow/react'
-import { NodeResizer, useReactFlow } from '@xyflow/react'
-import { Button as VscodeButton, Textfield, Tree, TreeItem } from '@/vscode/register'
-import type { Comment } from '../shared/workspace'
+// TANPA FILE WATCHER di sini: refresh `⟳` manual menaikkan `version`; watcher adalah slot sendiri.
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
+import { Textfield } from '@/vscode/register'
+import type { FileMeta } from '../shared/fsContract'
+import type { Comment, ViewOpts } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
-import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
-import * as fsClient from './fsClient'
+import { breadcrumbs, childPath, createTargetDir, filterEntries, parentDir } from './fileBrowse'
+import FilesList, { type PickMods } from './FilesList'
+import FilesMenu from './FilesMenu'
+import FilesToolbar from './FilesToolbar'
+import { decorateEntry } from './FilesRow'
+import { DEFAULT_PAGE_ROWS, listKeyAction, scrollTopToReveal, typeAhead, type ListKeyAction } from './filesKeys'
 import {
-  ancestorDirs,
-  breadcrumbs,
-  childOnPath,
-  childPath,
-  classifyEmptyListing,
-  createTargetDir,
-  fileOpenTarget,
-  filterEntries,
-  folderTitle,
-  newEntryPath,
-  parentDir,
-  type DirEntry,
-  type EmptyListingVerdict,
-} from './fileBrowse'
-import { fileIconClass, folderIconClass } from './fileIcon'
-import { EDITOR_SIZE, planFileOpen } from './fileOpen'
-import { listKeyAction, scrollTopToReveal, typeAhead } from './filesKeys'
+  EMPTY_SEL, indexOfName, nfcName, selectAll, selectedNames, selectOne, selectRange, toggleName, type Sel,
+} from './filesSelection'
+import { FILES_SLOTS, type FilesSlotCtx } from './filesSlots'
+import { applyView, needsMeta, relativePath, viewOf } from './filesView'
 import { randomId } from './randomId'
+import { useFilesInput } from './useFilesInput'
+import { useFilesListing } from './useFilesListing'
+import { useFilesOpen } from './useFilesOpen'
 import './files.css'
 
 const COLLAPSED_H = 40
-const UNREACHABLE = 'Could not reach this folder. It may be gone, or its filesystem may be unavailable.'
+/** Tinggi baris `vscode-tree-item`; dasar hitung PageUp/PageDown. */
+const ROW_H = 22
+/** Segmen breadcrumb terlihat sebelum sisanya masuk menu "…". */
+const CRUMBS_MAX_VISIBLE = 4
 
-type Menu = { x: number; y: number; entry: DirEntry | null }
-
-/** Ikon codicon dekoratif (CSS codicon dimuat shell). */
-const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
+type Menu = { x: number; y: number; entry: FileMeta | null }
 
 function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
-    dirPath?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]
+    dirPath?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; viewOpts?: ViewOpts
   }
   const rf = useReactFlow()
   const listRef = useRef<HTMLDivElement>(null)
   const treeRef = useRef<HTMLElement | null>(null)
   const filterRef = useRef<HTMLElement | null>(null)
   const typed = useRef({ buffer: '', at: 0 })
-  /** Nama yang harus terpilih begitu listing berikutnya mendarat — dipakai saat naik, supaya
-   *  folder yang baru ditinggalkan yang terpilih (Explorer/Finder). */
+  /** Nama yang harus terpilih begitu listing berikutnya mendarat (naik / entri baru). */
   const pendingSel = useRef<string | null>(null)
 
   const cwd = d.dirPath ?? '/'
+  // Akar "Relative Path": folder tempat node ini dipasang (tidak ada konteks workspace-cwd di sini).
+  const rootRef = useRef(cwd)
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
   const comments = d.comments ?? []
+  const view = viewOf(d.viewOpts)
 
-  const [entries, setEntries] = useState<DirEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [verdict, setVerdict] = useState<EmptyListingVerdict | null>(null)
+  const [sel, setSel] = useState<Sel>(EMPTY_SEL)
   const [query, setQuery] = useState('')
-  const [sel, setSel] = useState(-1)
   const [version, setVersion] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
   const [notice, setNotice] = useState('')
@@ -73,138 +66,59 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? 300)
 
-  /** Indeks baris dari event yang mendarat di konten slotted sebuah `vscode-tree-item`.
-   *  Klik di area kosong baris di-retarget ke host item (shadow DOM), jadi host ikut membawa
-   *  `data-index` — kalau hanya span teks yang membawanya, separuh lebar baris jadi area mati. */
-  const rowIndexFrom = (target: EventTarget | null): number => {
-    const row = target instanceof Element
-      ? target.closest('.files-row, vscode-tree-item[data-index]')
-      : null
-    const raw = row?.getAttribute('data-index')
-    return raw === null || raw === undefined ? -1 : Number(raw)
-  }
+  const { entries, loading, verdict } = useFilesListing(cwd, version, needsMeta(view), () => {
+    const want = pendingSel.current
+    pendingSel.current = null
+    // Refresh biasa mempertahankan seleksi; hanya permintaan eksplisit (naik/buat baru) menggantinya.
+    if (want !== null) setSel(selectOne(want))
+  })
 
+  // Filter dan seleksi (juga input nama, di `useFilesInput`) adalah pertanyaan tentang SATU direktori; membawanya ke direktori
+  // berikutnya membuat folder tampak kosong karena kotak yang sudah tidak dilihat pengguna.
+  useEffect(() => { setQuery(''); setNotice(''); setSel(EMPTY_SEL) }, [cwd])
+
+  const shown = useMemo(
+    () => filterEntries(applyView(entries, view), query),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `view` dipecah ke field supaya identitas objek tak memicu hitung ulang
+    [entries, view.hidden, view.sortKey, view.sortDir, query],
+  )
+  const cursor = indexOfName(shown, sel.cursor)
+  const refresh = () => setVersion((v) => v + 1)
+  const { navigate, addNodeBeside, open, openFile } = useFilesOpen({ id, cwd, title: d.title, swatch, setNotice, pendingSel })
+
+  const input = useFilesInput({ cwd, listRef, pendingSel, refresh, setNotice, openFile })
+  const ctx: FilesSlotCtx = {
+    cwd, dir: cwd, entries, selection: selectedNames(entries, sel), open, nodeId: id,
+    refresh: (select) => { if (select) pendingSel.current = select; refresh() },
+    startInput: input.start,
+  }
+  // Urutan FILES_SLOTS tetap, jadi jumlah hook per render konstan.
+  for (const s of FILES_SLOTS) s.useSlot?.(ctx)
+  const decorate = (e: FileMeta) => decorateEntry(FILES_SLOTS, e, ctx)
+
+  // Gulirkan kursor ke dalam pandangan setiap kali ia pindah (keyboard, klik, Reveal).
+  // `scrollIntoView` juga menggulirkan ancestor — di canvas itu menyeret seluruh pane React Flow.
   useEffect(() => {
-    let alive = true
-    setLoading(true)
-    void (async () => {
-      const got = await fsClient.list(cwd)
-      if (!alive) return
-      setEntries(got)
-      if (got.length > 0) setVerdict(null)
-      else {
-        // Listing kosong ambigu secara kontrak (lihat `classifyEmptyListing`): tanya INDUK.
-        const parent = parentDir(cwd)
-        const pe = parent === cwd ? null : await fsClient.list(parent)
-        if (!alive) return
-        setVerdict(classifyEmptyListing(cwd, pe))
-      }
-      setLoading(false)
-      const want = pendingSel.current
-      pendingSel.current = null
-      setSel(want === null ? -1 : got.findIndex((e) => e.name === want))
-    })()
-    return () => { alive = false }
-  }, [cwd, version])
+    const box = listRef.current
+    const row = treeRef.current?.children[cursor] as HTMLElement | undefined
+    if (box && row) box.scrollTop = scrollTopToReveal(row.offsetTop, row.offsetHeight, box.scrollTop, box.clientHeight)
+  }, [cursor])
 
-  // Filter adalah pertanyaan tentang SATU direktori; membawanya ke direktori berikutnya membuat
-  // folder tampak kosong karena kotak yang sudah tidak dilihat pengguna.
-  useEffect(() => { setQuery(''); setNotice('') }, [cwd])
+  // `autofocus` hanya berlaku saat elemen pertama kali dipasang, sedangkan filter dibuka-tutup.
+  useEffect(() => { if (filterOpen) filterRef.current?.focus() }, [filterOpen])
 
-  const shown = filterEntries(entries, query)
-
-  const navigate = useCallback((to: string, cameFrom?: string) => {
-    if (cameFrom) pendingSel.current = childOnPath(to, cameFrom)
-    // Judul mengikuti folder hanya selama pengguna belum menamainya sendiri.
-    const auto = !d.title || d.title === folderTitle(cwd)
-    rf.updateNodeData(id, { dirPath: to, ...(auto ? { title: folderTitle(to) } : {}) })
-  }, [cwd, d.title, id, rf])
-
-  const addNodeBeside = (
-    nid: string, kind: 'terminal' | 'editor', extra: Record<string, unknown>, attrs?: Partial<Node>,
-  ) => {
-    const me = rf.getNode(id)
-    rf.addNodes({
-      id: nid, type: kind,
-      position: { x: (me?.position.x ?? 0) + (me?.measured?.width ?? 420) + 32, y: me?.position.y ?? 0 },
-      ...attrs,
-      data: { id: nid, kind, color: swatch, ...extra },
-    })
+  const copy = (entry: FileMeta | null, relative: boolean) => {
+    const target = entry ? childPath(cwd, entry.name) : cwd
+    const text = relative ? relativePath(rootRef.current, target) : target
+    // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
+    navigator.clipboard?.writeText(text).catch(() => setNotice('Could not copy the path.'))
   }
 
-  const open = (e: DirEntry) => {
-    const p = childPath(cwd, e.name)
-    if (e.dir) { navigate(p); return }
-    // Tab browser tidak bisa menyerahkan file ke OS mesin server — katakan, jangan buka buffer sampah.
-    if (fileOpenTarget(p) !== 'canvas') { setNotice(`${e.name} needs an application on the server to open.`); return }
-    const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, randomId())
-    if (plan.focus) rf.updateNode(plan.nodeId, { selected: true })
-    else addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: e.name }, { ...EDITOR_SIZE, selected: true })
-    // Kabel penanda "file ini sedang terbuka". Dibuat langsung, BUKAN lewat `onConnect`: `canLink`
-    // hanya meloloskan pasangan agent context-capable.
-    // `kind` WAJIB masuk ke `data`, bukan level atas: itu satu-satunya tempat yang dibaca
-    // `decorateEdges` (label "↔ open") dan `toBridge` (persistensi). Di level atas React Flow
-    // menyimpannya tanpa keluhan, lalu kabelnya tampil "⇄ context" dan tersimpan sebagai context.
-    if (plan.edge) {
-      const { kind: edgeKind, ...edge } = plan.edge
-      rf.addEdges({ ...edge, type: 'context', data: { kind: edgeKind } })
-    }
-  }
-
-  // Handler baris dipasang NATIVE di fase capture, bukan lewat prop React: klik di dalam
-  // `vscode-tree-item` dihentikan oleh komponen itu di shadow DOM sebelum event sempat naik ke
-  // root React, jadi `onClick`/`onDoubleClick` delegasi React tidak pernah melihatnya di browser.
-  // Capture di list (di luar shadow) berjalan lebih dulu, dan target slotted tetap terbaca.
-  useEffect(() => {
-    const list = listRef.current
-    if (!list) return
-    const hit = (event: Event) => {
-      const index = rowIndexFrom(event.target)
-      const entry = index >= 0 ? shown[index] : undefined
-      return entry ? { index, entry } : null
-    }
-    const onClick = (event: MouseEvent) => {
-      const row = hit(event)
-      if (!row) return
-      list.focus()
-      setSel(row.index)
-    }
-    const onDoubleClick = (event: MouseEvent) => {
-      const row = hit(event)
-      if (!row) return
-      setSel(row.index)
-      open(row.entry)
-    }
-    const onContextMenu = (event: MouseEvent) => {
-      const row = hit(event)
-      if (!row) return
-      event.preventDefault()
-      event.stopPropagation()
-      setSel(row.index)
-      setMenu({ x: event.clientX, y: event.clientY, entry: row.entry })
-    }
-    list.addEventListener('click', onClick, true)
-    list.addEventListener('dblclick', onDoubleClick, true)
-    list.addEventListener('contextmenu', onContextMenu, true)
-    return () => {
-      list.removeEventListener('click', onClick, true)
-      list.removeEventListener('dblclick', onDoubleClick, true)
-      list.removeEventListener('contextmenu', onContextMenu, true)
-    }
-  }, [shown])
-
-  const createEntry = async (dir: boolean) => {
+  const startCreate = (dir: boolean) => {
     // Buat DI DALAM folder yang diklik, tapi DI SAMPING file yang diklik.
     const base = menu?.entry ? createTargetDir(childPath(cwd, menu.entry.name), menu.entry.dir) : cwd
-    const name = window.prompt(dir ? 'New folder name' : 'New file name')
-    if (name === null) return
-    const target = newEntryPath(base, name)
-    if (!target) { setNotice('That name is not allowed here.'); return }
-    for (const p of ancestorDirs(base, name)) await fsClient.mkdir(p)
-    const ok = dir ? await fsClient.mkdir(target) : await fsClient.write(target, '')
-    if (!ok) { setNotice(`Could not create ${name}.`); return }
-    pendingSel.current = name.split('/')[0]
-    setVersion((v) => v + 1)
+    setMenu(null)
+    input.start({ kind: dir ? 'folder' : 'file', base })
   }
 
   const toggleCollapse = () => {
@@ -213,72 +127,61 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     rf.updateNodeData(id, { collapsed: !collapsed })
   }
 
-  /** Gulirkan baris terpilih ke dalam pandangan. `scrollIntoView` juga menggulirkan ancestor yang
-   *  bisa di-scroll — di dalam canvas itu menyeret seluruh pane React Flow. */
-  const reveal = (idx: number) => {
-    const box = listRef.current
-    const row = treeRef.current?.children[idx] as HTMLElement | undefined
-    if (!box || !row) return
-    box.scrollTop = scrollTopToReveal(row.offsetTop, row.offsetHeight, box.scrollTop, box.clientHeight)
+  const onPick = (index: number, mods: PickMods) => {
+    const e = shown[index]
+    if (!e) return
+    setSel((s) => (mods.shift ? selectRange(s, shown, index) : mods.toggle ? toggleName(s, e.name) : selectOne(e.name)))
   }
 
-  // `autofocus` hanya berlaku saat elemen pertama kali dipasang, sedangkan filter dibuka-tutup.
-  // `delegatesFocus` di vscode-textfield meneruskan fokus host ke input di shadow DOM.
-  useEffect(() => {
-    if (filterOpen) filterRef.current?.focus()
-  }, [filterOpen])
+  const onContext = (index: number | null, x: number, y: number) => {
+    const e = index === null ? null : shown[index]
+    // Klik kanan pada baris di luar seleksi memilih baris itu; di dalam seleksi, seleksi dipertahankan.
+    if (e && !sel.names.has(nfcName(e.name))) setSel(selectOne(e.name))
+    setMenu({ x, y, entry: e ?? null })
+  }
 
-  const onListKeyDown = (ev: React.KeyboardEvent<HTMLDivElement>) => {
-    // Canvas React Flow membajak keyboard: panah mem-pan, dan BACKSPACE MENGHAPUS NODE INI. Setiap
-    // tombol yang kita tangani harus diklaim di sini, bukan hanya di-preventDefault.
-    const claim = () => { ev.preventDefault(); ev.stopPropagation() }
-    const act = listKeyAction({ key: ev.key, alt: ev.altKey, meta: ev.metaKey, ctrl: ev.ctrlKey }, sel, shown.length)
-    if (act) {
-      claim()
-      if (act.kind === 'up') navigate(parentDir(cwd), cwd)
-      else if (act.kind === 'open') open(shown[act.index])
-      else { setSel(act.index); reveal(act.index) }
-      return
+  const run = (act: NonNullable<ListKeyAction>) => {
+    const at = shown[act.kind === 'select' || act.kind === 'open' ? act.index : -1]
+    switch (act.kind) {
+      case 'up': navigate(parentDir(cwd), cwd); break
+      case 'open': if (at && (!act.dirOnly || at.dir)) open(at); break
+      case 'select': if (at) setSel(act.extend ? selectRange(sel, shown, act.index) : selectOne(at.name)); break
+      case 'selectAll': setSel(selectAll(sel, shown)); break
+      case 'copyPath': copy(shown[cursor] ?? null, act.relative); break
+      case 'menu': {
+        const rect = (treeRef.current?.children[cursor] ?? listRef.current)?.getBoundingClientRect()
+        setMenu({ x: rect?.left ?? 0, y: rect?.bottom ?? 0, entry: shown[cursor] ?? null })
+        break
+      }
+      // 'rename'/'delete': tombol diklaim (Delete tak boleh menghapus NODE) dan sudah ditawarkan ke
+      // slot lewat `onKey` di atas; aksi nyatanya milik slot mutate (filesSlot.mutate).
+      default: break
     }
+  }
+
+  const onListKeyDown = (ev: KeyboardEvent<HTMLDivElement>) => {
+    // Canvas React Flow membajak keyboard: panah mem-pan, dan BACKSPACE/DELETE MENGHAPUS NODE INI.
+    // Setiap tombol yang kita tangani harus diklaim di sini, bukan hanya di-preventDefault.
+    const claim = () => { ev.preventDefault(); ev.stopPropagation() }
+    if (FILES_SLOTS.some((s) => s.onKey?.(ev, ctx))) { claim(); return }
+    const box = listRef.current
+    const page = box && box.clientHeight > 0 ? Math.floor(box.clientHeight / ROW_H) : DEFAULT_PAGE_ROWS
+    const act = listKeyAction(
+      { key: ev.key, code: ev.code, alt: ev.altKey, meta: ev.metaKey, ctrl: ev.ctrlKey, shift: ev.shiftKey },
+      cursor, shown.length, page,
+    )
+    if (act) { claim(); run(act); return }
     if (ev.key === 'Escape' && query) { claim(); setQuery(''); return }
     if (ev.key.length === 1 && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
       claim()
-      const next = typeAhead(typed.current, ev.key, Date.now(), shown.map((e) => e.name), sel)
+      const next = typeAhead(typed.current, ev.key, Date.now(), shown.map((e) => e.name), cursor)
       typed.current = next.state
-      if (next.index >= 0) { setSel(next.index); reveal(next.index) }
+      if (next.index >= 0) setSel(selectOne(shown[next.index].name))
     }
   }
 
+  const crumbs = breadcrumbs(cwd, Number.MAX_SAFE_INTEGER)
   const menuTarget = menu?.entry ? childPath(cwd, menu.entry.name) : cwd
-  const crumbs = breadcrumbs(cwd)
-  const menuRows: MenuRow[] = (() => {
-    if (!menu) return []
-    const target = menu.entry
-    const rows: MenuRow[] = []
-    if (target) {
-      rows.push({
-        label: 'Open',
-        icon: codicon(target.dir ? 'folder' : 'file'),
-        onClick: () => open(target),
-      })
-    }
-    rows.push({
-      label: 'Open in Integrated Terminal',
-      icon: codicon('terminal'),
-      onClick: () => addNodeBeside(randomId(), 'terminal', { cwd: target?.dir ? menuTarget : cwd }),
-    })
-    rows.push({ label: 'New File…', icon: codicon('new-file'), onClick: () => { void createEntry(false) } })
-    rows.push({ label: 'New Folder…', icon: codicon('new-folder'), onClick: () => { void createEntry(true) } })
-    rows.push({
-      label: 'Copy Path',
-      icon: codicon('copy'),
-      onClick: () => {
-        // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
-        navigator.clipboard?.writeText(menuTarget).catch(() => setNotice('Could not copy the path.'))
-      },
-    })
-    return rows
-  })()
 
   return (
     <>
@@ -288,14 +191,14 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         style={{ '--node-swatch': swatch } as CSSProperties}
       >
         <NodeChrome
-          title={d.title ?? ''}
+          title={d.title ?? ''} icon="folder" description={cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           comments={comments}
           onAddComment={(text) =>
             rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
-          onRefresh={() => setVersion((v) => v + 1)}
+          onRefresh={refresh}
           searchOpen={filterOpen} onToggleSearch={() => setFilterOpen((o) => !o)}
           maximized={maximized}
           onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
@@ -303,16 +206,20 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         />
 
         <div className="node-body files-node">
-          <VscodeBreadcrumbs
-            className="nodrag files-crumbs"
-            ariaLabel="Folder path"
-            segments={crumbs.map((c, i) => ({
-              id: `${c.path}:${i}`,
-              label: c.name,
-              title: c.path,
-              onClick: () => navigate(c.path, cwd),
-            }))}
-          />
+          <div className="files-bar">
+            <VscodeBreadcrumbs
+              className="nodrag files-crumbs"
+              ariaLabel="Folder path"
+              maxVisible={CRUMBS_MAX_VISIBLE}
+              segments={crumbs.map((c, i) => ({
+                id: `${c.path}:${i}`,
+                label: c.name,
+                title: c.path,
+                onClick: () => navigate(c.path, cwd),
+              }))}
+            />
+            <FilesToolbar view={view} ctx={ctx} onChange={(v) => rf.updateNodeData(id, { viewOpts: v })} />
+          </div>
 
           {filterOpen && (
             <Textfield
@@ -323,51 +230,39 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             />
           )}
 
-          <div ref={listRef} className="files-list nodrag nowheel" tabIndex={0} onKeyDown={onListKeyDown}
-            onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, entry: null }) }}
-          >
-            {/* Baris memakai `vscode-tree-item` (22px, hover/selection dari VS Code). Handler
-                dipasang di span DI DALAM slot, bukan di host: klik bawaan komponen berhenti di
-                shadow DOM, sedangkan event dari konten slotted melewati target itu lebih dulu. */}
-            <Tree ref={(node) => { treeRef.current = node }} className="files-tree" hideArrows indentGuides="none">
-              {shown.map((e, i) => (
-                <TreeItem key={e.name} data-index={i} selected={i === sel} active={i === sel}>
-                  <span
-                    data-index={i}
-                    className={`files-row${i === sel ? ' files-row--sel' : ''}${e.ignored ? ' files-row--ignored' : ''}`}
-                  >
-                    <span className={`${e.dir ? folderIconClass(false) : fileIconClass(e.name)} files-icon`} aria-hidden="true" />
-                    <span className="files-name">{e.name}</span>
-                  </span>
-                </TreeItem>
-              ))}
-            </Tree>
+          <FilesList
+            nodeId={id} cwd={cwd} shown={shown} total={entries.length} sel={sel}
+            loading={loading} verdict={verdict} query={query} decorate={decorate}
+            listRef={listRef} treeRef={treeRef}
+            inputRow={input.row}
+            onPick={onPick} onOpen={(i) => shown[i] && open(shown[i])} onContext={onContext}
+            onKeyDown={onListKeyDown} onRetry={refresh} onNewFile={() => startCreate(false)}
+          />
 
-            {/* Empat keadaan berbeda, sengaja TIDAK digabung: masing-masing menyuruh pengguna
-                melakukan hal yang berbeda. */}
-            {loading && <div className="files-empty">Loading…</div>}
-            {!loading && entries.length === 0 && verdict === 'missing' && (
-              <div className="files-empty files-empty--error">This folder no longer exists.</div>
-            )}
-            {!loading && entries.length === 0 && verdict === 'unreachable' && (
-              <div className="files-empty files-empty--error">{UNREACHABLE}</div>
-            )}
-            {!loading && entries.length === 0 && (verdict === 'empty' || verdict === 'unknown') && (
-              <div className="files-empty files-welcome">
-                <p>This folder is empty.</p>
-                <VscodeButton onClick={() => { void createEntry(false) }}>New File…</VscodeButton>
-              </div>
-            )}
-            {!loading && entries.length > 0 && shown.length === 0 && (
-              <div className="files-empty">Nothing matches “{query.trim()}”.</div>
-            )}
+          {/* Wilayah live: notice (mis. "Sudah ada: x") dibacakan pembaca layar tanpa memindahkan fokus. */}
+          <div className="files-foot" role="status" aria-live="polite">
+            {notice || `${shown.length} of ${entries.length}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`}
           </div>
-
-          <div className="files-foot">{notice || `${shown.length} of ${entries.length}`}</div>
         </div>
       </div>
 
-      {menu && <NodeContextMenu x={menu.x} y={menu.y} rows={menuRows} onClose={() => setMenu(null)} />}
+      {FILES_SLOTS.map((s) => s.overlay && <Fragment key={s.id}>{s.overlay(ctx)}</Fragment>)}
+
+      {menu && (
+        <FilesMenu
+          x={menu.x} y={menu.y} entry={menu.entry}
+          slotRows={FILES_SLOTS.flatMap((s) => s.menu?.(ctx) ?? [])}
+          onClose={() => setMenu(null)}
+          actions={{
+            open,
+            terminal: () => addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }),
+            newEntry: startCreate,
+            refresh,
+            reveal: (e) => { setQuery(''); setSel(selectOne(e.name)); listRef.current?.focus() },
+            copyPath: (relative) => copy(menu.entry, relative),
+          }}
+        />
+      )}
     </>
   )
 }

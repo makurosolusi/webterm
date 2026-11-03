@@ -47,10 +47,20 @@ Environment variables:
 - `WEBTERM_CENTRAL_MEMORY` — default `off`; bounded, read-only project fact retrieval. It does not write or promote memory. Proposal blocks render as compact cards and do not claim applied or approved status.
 - Central Agent v2 flags (all default `off`/safe, need `WEBTERM_LEDGER` on, read at boot so restart after changing; full list with defaults in `.env.example`): `WEBTERM_CENTRAL_AGENTS` (`off|propose|auto`, also the ceiling for the control level), `WEBTERM_CENTRAL_READ_TOOLS`, `WEBTERM_CENTRAL_CHECKPOINT`, `WEBTERM_CENTRAL_SKILLS`, `WEBTERM_CENTRAL_SKILL_PROPOSE`, `WEBTERM_AGENT_MAIL`, `WEBTERM_KNOWLEDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_CENTRAL_BOTS`, `WEBTERM_CHANNEL_APPROVAL_BUTTONS`, `WEBTERM_CENTRAL_RELIABILITY`, plus limits `WEBTERM_CENTRAL_MAX_STEPS`, `WEBTERM_CENTRAL_TURN_STEPS`, `WEBTERM_CENTRAL_TURN_WALL_MS`, `WEBTERM_CENTRAL_TURN_TOKENS`, `WEBTERM_CENTRAL_DAILY_TOKENS`, `WEBTERM_CENTRAL_DAILY_SPAWNS`, `WEBTERM_CENTRAL_DAILY_COST_MICROS`, `WEBTERM_CENTRAL_CONTEXT_WINDOW`, `WEBTERM_CENTRAL_MAX_INFLIGHT`, `WEBTERM_AGENT_IDLE_DONE_MS`. `WEBTERM_EMBED_URL` sends memory text to that endpoint; leave it empty to keep recall local.
 - Central control endpoints (root credential, mounted only when a v2 flag is armed): `GET /api/central/status|agents|approvals|skills|memory`, `GET|PUT /api/central/control`, `POST /api/central/halt` (kill switch), `POST /api/central/agents/:id/relay|close`, `POST /api/central/skills/:id/approve|rollback`. The UI panel for them is built only with `VITE_WEBTERM_CENTRAL_CHAT=on`.
+- `WEBTERM_FILES_MUTATE` — default `off`. Enables delete (to trash, with Undo), restore, rename, and copy in files nodes.
+- `WEBTERM_FILES_VIEWERS` — default `off`. Enables `GET /api/fs/raw` and the image/audio/video/PDF viewers.
+- `WEBTERM_FILES_WATCH` — default `off`. Live directory watching, so listings and open editors follow changes made outside webterm.
+- `WEBTERM_FILES_GIT_STATUS` — default `off`. Git status marks (M/A/D/U/R/C) on the file list.
+- `WEBTERM_FILES_QUICK_OPEN` — default `off`. File search behind Ctrl/Cmd+P while a files node has focus.
+- `WEBTERM_FILES_UPLOAD` — default `off`. Upload to and download from files nodes.
+- `WEBTERM_FILES_LIST_MAX` — default `5000`. Maximum entries in one directory listing; the rest is cut and marked truncated.
+- `WEBTERM_FILES_UPLOAD_MAX_MB` — default `100`. Maximum size of one uploaded file.
 
 Any of these can go in a `.env` file in the working directory instead of the environment. Bun loads that file automatically, for both the dev server and the compiled binary, so every value in it enters `process.env`. Keep the file at mode `600`, and leave `WEBTERM_TOKEN` out of it unless you accept that inheritance.
 
 `WEBTERM_CHANNELS` is the master kill switch for the whole channel runtime (webhook, binding API, reply sender). Only `on|off` is implemented: unset or `on` keeps the current behavior, `off` disables everything even when `WEBTERM_TELEGRAM=on`, and any other value fails closed (channels stay off) with one warning naming the supported values. The `readonly|control` modes remain planned. Channel state lives in a JSON store under the data directory, so enabling channels needs no v4 SQL migration.
+
+The file manager API lives under `/api/fs/<verb>` and uses the same token gate as the rest of `/api`. GET verbs: `list`, `list-v2`, `read`, `read-binary`, `exists`, `stat`, `capabilities`, plus `raw` (needs `WEBTERM_FILES_VIEWERS`), `git-status` (`WEBTERM_FILES_GIT_STATUS`), and `search` (`WEBTERM_FILES_QUICK_OPEN`). POST verbs: `create`, `write`, `mkdir`, plus `delete`, `restore`, `rename`, `copy` (`WEBTERM_FILES_MUTATE`) and `upload` (`WEBTERM_FILES_UPLOAD`). A verb whose flag is off answers `501` with code `EDISABLED`. Design decisions and known limits: `docs/decisions/files-manager.md`.
 
 Dev is not full browser HMR for every change: Vite HMR covers client edits live, but server edits need a restart.
 

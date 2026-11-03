@@ -19,11 +19,14 @@ import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { contextLinkRoute } from './contextLinkApi'
 import { centralChatRoute } from './centralChatApi'
 import { ca2Route } from './central/ca2Routes'
-import { fsApiRoute } from './fsApi'
+import { fsApiRoute, type FsApiResult } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
-import { cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
+import { BodyReadError, cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
+import { FS_BODY_MAX } from '../shared/fsLimits'
+import { fsFail } from '../shared/fsContract'
+import { sendRaw } from './fsRaw'
 import { MEMORY_WRITE_BODY_MAX_BYTES } from './memoryWriteApi'
 import { logsRoute, startRequestLog } from './logs'
 
@@ -43,6 +46,14 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(data))
     req.on('error', reject)
   })
+}
+
+/** Galat dispatcher fs -> respons: body kebesaran 413 ETOOLARGE, stream putus 400, sisanya galat baca. */
+function fsErrorResult(err: unknown): NonNullable<FsApiResult> {
+  if (!(err instanceof BodyReadError)) return readErrorResult(err)
+  return err.reason === 'too_large'
+    ? { status: 413, body: fsFail('ETOOLARGE', 'request body too large') }
+    : { status: 400, body: fsFail('EINVAL', 'request body unreadable') }
 }
 
 /** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
@@ -85,12 +96,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     return
   }
 
-  // Six filesystem verbs under /api/fs/<verb>; returns null for anything else, including the
-  // exact /api/fs folder picker below, whose response shape is different.
-  // `read`/`read-binary` throw on an unreadable file (see the fsOps header): 200 with an empty
-  // body looks like a readable EMPTY file, and the editor then truncates it on the next save.
-  const fsRes = await fsApiRoute(path, method, url.searchParams, () => readBody(req))
-    .catch(readErrorResult)
+  // Verb filesystem di /api/fs/<verb> (dispatcher fsApi.ts); null untuk path lain, termasuk folder
+  // picker /api/fs persis di bawah. Body dibatasi FS_BODY_MAX dan dibaca sebagai Buffer (bukan
+  // `data += chunk`, yang membelah multibyte antar-chunk). `read`/`read-binary` melempar bila file
+  // tak terbaca: 200 + body kosong terbaca sebagai file KOSONG dan editor menimpanya saat Save.
+  const fsRes = await fsApiRoute(path, method, url.searchParams, cappedBodyGetter(req, method, FS_BODY_MAX), { headers: req.headers, stream: req })
+    .catch(fsErrorResult)
+  if (fsRes?.raw) return sendRaw(res, fsRes.raw)
   if (fsRes) return json(res, fsRes.status, fsRes.body)
 
   // Batch git state for a set of node cwds; null for anything else, including a GET of this path.

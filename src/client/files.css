@@ -67,3 +67,56 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Bilah di bawah header: breadcrumb mengisi sisa lebar, toggle tampilan di kanan. */
+.files-bar { display: flex; align-items: center; min-width: 0; }
+.files-crumbs { flex: 1; min-width: 0; }
+.files-toolbar { display: flex; flex: none; align-items: center; gap: 2px; padding-right: 6px; }
+.files-tool {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--vscode-icon-foreground, var(--muted)); cursor: pointer;
+}
+.files-tool:hover { background: var(--vscode-toolbar-hoverBackground, var(--panel-header)); }
+.files-tool[aria-pressed="true"] { background: var(--vscode-toolbar-activeBackground, var(--panel-header)); }
+.files-tool:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
+
+/* Baris besar tak perlu dirender sampai mendekati viewport (daftar ribuan entri). */
+.files-tree > * { content-visibility: auto; contain-intrinsic-size: auto 22px; }
+
+/* Kursor (baris aktif) pada seleksi ganda; seleksi lain memakai gaya `selected` komponen. */
+.files-row--cursor .files-name { text-decoration: none; }
+.files-badge {
+  flex: none; margin-left: auto; padding-right: 8px; font-size: 11px;
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--state-warning));
+}
+
+/* Input nama inline (New File/Folder): satu baris 22px di atas daftar, seperti Explorer. */
+.files-input-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 8px; min-height: 22px; }
+.files-input {
+  flex: 1; min-width: 0; height: 20px; padding: 0 4px; font: inherit;
+  color: var(--vscode-input-foreground, var(--text));
+  background: var(--vscode-input-background, transparent);
+  border: 1px solid var(--vscode-focusBorder, var(--accent)); outline: none;
+}
+.files-input--invalid { border-color: var(--vscode-inputValidation-errorBorder, var(--state-warning)); }
+.files-input-error {
+  flex-basis: 100%; padding: 2px 4px; font-size: 11px;
+  color: var(--vscode-errorForeground, var(--state-warning));
+}
+
+/* Panel error (folder hilang / tak terjangkau / 401) membawa tombol Retry. */
+.files-empty--error p { margin: 0 0 8px; }
+.files-empty--error vscode-button { display: block; width: 100%; }
+
+/* Tombol dialog konfirmasi mutasi (mengikuti tombol VS Code: 26px, primer = button-*). */
+.files-btn {
+  min-height: 26px; padding: 4px 8px; font: inherit; font-size: 12px; line-height: 16px; cursor: default;
+  background: var(--vscode-button-secondaryBackground, var(--raised));
+  border: 1px solid var(--vscode-button-border, transparent); border-radius: 4px;
+  color: var(--vscode-button-secondaryForeground, var(--text));
+}
+.files-btn:hover { background: var(--vscode-button-secondaryHoverBackground, var(--raised)); }
+.files-btn--primary { background: var(--vscode-button-background, var(--accent)); color: var(--vscode-button-foreground, var(--text)); }
+.files-btn--primary:hover { background: var(--vscode-button-hoverBackground, var(--accent)); }
+.files-btn:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 1px; }
