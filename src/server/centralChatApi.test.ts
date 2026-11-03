@@ -102,7 +102,7 @@ describe('mount and flags', () => {
   it('reports runtime kind and chat flag from health', async () => {
     const result = await call(deps(), '/api/central/health')
     expect(result.status).toBe(200)
-    expect(result.json).toEqual({ runtime: 'mock', chat: true, ledger: true })
+    expect(result.json).toEqual({ runtime: 'mock', chat: true, ledger: true, runtimeReady: true })
   })
 })
 
