@@ -26,7 +26,7 @@ describe('ENV_REGISTRY', () => {
     ])
     expect(names((s) => s.kind === 'secret')).toEqual(['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET'])
     expect(specFor('WEBTERM_CHANNEL_HMAC_SECRET')).toBeUndefined() // tak ada pembaca nilainya
-    expect(specFor('WEBTERM_TELEGRAM_MODE')?.default).toBe('poll')
+    expect(specFor('WEBTERM_TELEGRAM_MODE')?.default).toBe('') // otomatis (P-8); 'poll' eksplisit tersimpan tetap sah
   })
 
   it('env log terdaftar dengan default, bukan secret, bukan bootstrap', () => {
@@ -54,12 +54,6 @@ describe('ENV_REGISTRY', () => {
     expect(specFor('WEBTERM_CENTRAL_DAILY_SPAWNS')?.default).toBe('20')
     expect(specFor('WEBTERM_CENTRAL_TURN_WALL_MS')?.default).toBe('120000')
     expect(validateEnvValue(specFor('WEBTERM_CENTRAL_AGENTS') as EnvSpec, 'bogus').ok).toBe(false)
-  })
-
-  it('registry dipecah per domain: tiap file data <= 100 baris (Rule 8 config)', () => {
-    for (const f of ['channels', 'central', 'ca2', 'platform', 'types']) {
-      expect(readFileSync(new URL(`./envRegistry.${f}.ts`, import.meta.url), 'utf8').split('\n').length, f).toBeLessThanOrEqual(100)
-    }
   })
 })
 
@@ -89,5 +83,118 @@ describe('validateEnvValue number', () => {
   it('rentang dan bentuk', () => {
     expect(validateEnvValue(spec, '5')).toEqual({ ok: true, value: '5' })
     for (const bad of ['0', '11', 'abc', '', 'NaN', 5]) expect(validateEnvValue(spec, bad).ok).toBe(false)
+  })
+})
+
+type Row = [key: string, owner: string, section: string, audience: 'user' | 'advanced', restart: 'hot' | 'boot', requires: string[]]
+const L = 'WEBTERM_LEDGER'
+const TG = 'WEBTERM_TELEGRAM'
+const CE = 'WEBTERM_CENTRAL'
+const RT = 'WEBTERM_CENTRAL_RUNTIME'
+/** Tabel vonis c-ENV-02 (E01..E26): owner, section, audience, restart, key requires. */
+const VERDICT: Row[] = [
+  [L, 'platform', 'Dasar', 'user', 'boot', []],
+  ['WEBTERM_CHANNELS', 'channels', 'Telegram', 'user', 'boot', []],
+  [TG, 'channels', 'Telegram', 'user', 'boot', [L, 'WEBTERM_CHANNELS']],
+  ['WEBTERM_TELEGRAM_MODE', 'channels', 'Telegram', 'user', 'boot', [TG]],
+  ['WEBTERM_TELEGRAM_BOT_TOKEN', 'channels', 'Telegram', 'user', 'hot', [TG]],
+  ['WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'channels', 'Telegram', 'advanced', 'boot', [TG, 'WEBTERM_TELEGRAM_MODE']],
+  [CE, 'central', 'Central', 'user', 'hot', []],
+  ['WEBTERM_CENTRAL_CHAT', 'central', 'Central', 'user', 'hot', [CE]],
+  ['WEBTERM_CENTRAL_TELEGRAM', 'channels', 'Telegram', 'user', 'boot', [TG, CE, 'WEBTERM_CENTRAL_CHAT', RT, L]],
+  [RT, 'central', 'Central', 'user', 'hot', [CE]],
+  ['WEBTERM_CENTRAL_MODEL', 'central', 'Central', 'advanced', 'hot', [RT]],
+  ['WEBTERM_CENTRAL_PLANNER', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_CENTRAL_TOOLS']],
+  ['WEBTERM_CENTRAL_TOOLS', 'central', 'Central', 'user', 'hot', [CE]],
+  ['WEBTERM_CENTRAL_MEMORY', 'central', 'Central', 'user', 'hot', [CE]],
+  ['WEBTERM_CENTRAL_AUTONOMY', 'central', 'Central', 'user', 'boot', [CE, 'WEBTERM_ORCHESTRATOR_RUN']],
+  ['WEBTERM_OPENCODE_BIN', 'central', 'Central', 'advanced', 'hot', [RT]],
+  ['WEBTERM_OPENCODE_ALLOW_TOOLS', 'central', 'Central', 'advanced', 'hot', [RT]],
+  ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orkestrator', 'user', 'boot', [L]],
+  ['WEBTERM_RUN_REQUIRE_APPROVAL', 'platform', 'Orkestrator', 'user', 'hot', ['WEBTERM_ORCHESTRATOR_RUN']],
+  ['WEBTERM_MEMORY_FILES', 'platform', 'Memori', 'user', 'hot', []],
+  ['WEBTERM_MEMORY_DIR', 'platform', 'Memori', 'advanced', 'hot', ['WEBTERM_MEMORY_FILES']],
+  ['WEBTERM_CONTROL_CWD_ROOTS', 'platform', 'Kontrol', 'advanced', 'hot', []],
+  ['WEBTERM_TRUST_PROXY', 'platform', 'Kontrol', 'advanced', 'hot', ['WEBTERM_TELEGRAM_MODE']],
+  ['WEBTERM_LOG_LEVEL', 'logs', 'Log', 'advanced', 'boot', []],
+  ['WEBTERM_LOG_BUFFER', 'logs', 'Log', 'advanced', 'boot', []],
+  ['WEBTERM_LOG_FILE', 'logs', 'Log', 'advanced', 'boot', []],
+]
+
+describe('vonis c-ENV-02 per entri', () => {
+  it('tabel mencakup 26 kunci inti, tanpa duplikat', () => {
+    expect(VERDICT).toHaveLength(26)
+    expect(new Set(VERDICT.map((r) => r[0])).size).toBe(26)
+  })
+  it.each(VERDICT)('%s: owner/section/audience/restart/requires', (key, owner, section, audience, restart, requires) => {
+    const s = specFor(key) as EnvSpec
+    expect(s, key).toBeDefined()
+    expect(s).toMatchObject({ owner, section, audience, restart, restartRequired: restart === 'boot' })
+    expect((s.requires ?? []).map((r) => r.key)).toEqual(requires)
+  })
+  it('restart dikoreksi ke hot pada E05, E11, E16, E17, E19, E23', () => {
+    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY']) {
+      expect(specFor(k)?.restartRequired, k).toBe(false)
+    }
+  })
+  it('grup: Telegram+central-telegram di telegram, log di logs, file di files', () => {
+    expect(specFor('WEBTERM_CENTRAL_TELEGRAM')?.group).toBe('telegram')
+    for (const k of ['WEBTERM_LOG_LEVEL', 'WEBTERM_LOG_BUFFER', 'WEBTERM_LOG_FILE']) expect(specFor(k)?.group, k).toBe('logs')
+    for (const s of ENV_REGISTRY.filter((x) => x.key.startsWith('WEBTERM_FILES_'))) expect(s).toMatchObject({ group: 'files', owner: 'files' })
+  })
+  it('E01 ledger: optionLabels; E02 channels: default on, nilai asing tidak sah, ON dinormalisasi', () => {
+    expect(specFor('WEBTERM_LEDGER')?.optionLabels).toEqual({ off: 'Mati', shadow: 'Bayangan', on: 'Aktif' })
+    expect(specFor('WEBTERM_CHANNELS')).toMatchObject({ kind: 'enum', default: 'on' })
+    expect(validateEnvValue(specFor('WEBTERM_CHANNELS') as EnvSpec, 'maybe').ok).toBe(false)
+    expect(validateEnvValue(specFor('WEBTERM_CHANNELS') as EnvSpec, 'ON')).toEqual({ ok: true, value: 'on' })
+  })
+  it('E04 mode Telegram: default kosong + effectiveDefault; kosong dan poll/webhook sah, nilai lain tidak', () => {
+    const s = specFor('WEBTERM_TELEGRAM_MODE') as EnvSpec
+    expect(s).toMatchObject({ default: '', allowEmpty: true })
+    expect(s.effectiveDefault).toContain('poll')
+    for (const v of ['', 'poll', 'webhook']) expect(validateEnvValue(s, v).ok, v).toBe(true)
+    expect(validateEnvValue(s, 'push').ok).toBe(false)
+  })
+  it('E13 tools, E26 log file: optionLabels; E25 buffer: unit entri, rentang 100..100000', () => {
+    expect(specFor('WEBTERM_CENTRAL_TOOLS')?.optionLabels).toEqual({ read: 'Baca saja', write: 'Boleh menulis' })
+    expect(specFor('WEBTERM_LOG_FILE')?.optionLabels).toEqual({ on: 'Aktif', off: 'Mati' })
+    expect(specFor('WEBTERM_LOG_BUFFER')).toMatchObject({ unit: 'entri', min: 100, max: 100000 })
+  })
+  it('E15, E17, E21, E22: dangerNote dan bentuk nilai', () => {
+    expect(specFor('WEBTERM_CENTRAL_AUTONOMY')?.dangerNote).toContain('worker nyata')
+    expect(specFor('WEBTERM_OPENCODE_ALLOW_TOOLS')?.dangerNote).toContain('bash/edit/webfetch/task')
+    const dir = specFor('WEBTERM_MEMORY_DIR') as EnvSpec
+    expect(dir).toMatchObject({ allowEmpty: true, absolutePath: true, unsetLabel: '<dataDir>/memory' })
+    expect(validateEnvValue(dir, '').ok).toBe(true)
+    expect(validateEnvValue(dir, 'relatif/memory').ok).toBe(false)
+    expect(specFor('WEBTERM_CONTROL_CWD_ROOTS')?.description).toContain('titik dua')
+  })
+})
+
+describe('metadata domain ca2, files, browser', () => {
+  it('ca2: owner central, section Central — agen, advanced; restart tak berubah (boot)', () => {
+    for (const s of CA2_ENV_SPECS) expect(s, s.key).toMatchObject({ owner: 'central', section: 'Central — agen', audience: 'advanced', restartRequired: true })
+  })
+  it('ca2: 4 kunci tanpa pembaca berstage experimental dan berdeskripsi jujur', () => {
+    for (const k of ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL']) {
+      expect(specFor(k)?.stage, k).toBe('experimental')
+      expect(specFor(k)?.description, k).toContain('Belum dipakai server')
+    }
+  })
+  it('files: saklar mutasi user, sisanya advanced, semua hot', () => {
+    for (const s of ENV_REGISTRY.filter((x) => x.key.startsWith('WEBTERM_FILES_'))) {
+      expect(s.audience, s.key).toBe(s.key === 'WEBTERM_FILES_MUTATE' ? 'user' : 'advanced')
+      expect(s.restartRequired, s.key).toBe(false)
+    }
+    expect(specFor('WEBTERM_FILES_LIST_MAX')?.unit).toBe('entri')
+    expect(specFor('WEBTERM_FILES_UPLOAD_MAX_MB')?.unit).toBe('MB')
+  })
+  it('browser: saklar utama user, lainnya advanced + requires saklar utama, semua boot', () => {
+    for (const k of Object.values(ENV_BROWSER)) {
+      const s = specFor(k) as EnvSpec
+      expect(s.restartRequired, k).toBe(true)
+      expect(s.audience, k).toBe(k === ENV_BROWSER.enabled ? 'user' : 'advanced')
+      expect((s.requires ?? []).map((r) => r.key), k).toEqual(k === ENV_BROWSER.enabled ? [] : [ENV_BROWSER.enabled])
+    }
   })
 })

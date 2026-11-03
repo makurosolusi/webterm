@@ -1,47 +1,54 @@
-// Registry env: orchestrator, memory, control. Data murni (lihat envRegistry.types.ts).
+// Registry env: orchestrator, memory, control, log (owner platform/logs). Data murni (lihat envRegistry.types.ts).
 import { LOG_LEVELS } from '../shared/logEntry'
 import { BROWSER_ENV_SPECS } from './browser/browser.envRegistry'
 import { enumOf, flag, num, text, type EnvSpec } from './envRegistry.types'
 import { DEFAULT_LOG_BUFFER, MAX_LOG_BUFFER, MIN_LOG_BUFFER } from './logs/logBus'
 import { DEFAULT_LOG_LEVEL } from './logs/logger'
 
+const ORCH = { owner: 'platform', section: 'Orkestrator' } as const
+const MEM = { owner: 'platform', section: 'Memori' } as const
+const CTRL = { owner: 'platform', section: 'Kontrol' } as const
+// Logging dibaca sekali saat boot (configureLogging), jadi restart wajib.
+const LOGS = { owner: 'logs', section: 'Log', audience: 'advanced', restart: 'boot' } as const
+
 export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_ORCHESTRATOR_RUN', 'orchestrator', {
-    label: 'Orchestrator run',
-    description: 'Menjalankan worker nyata lewat /api/orchestrator/run.',
-    dangerous: true,
+    ...ORCH, audience: 'user', restart: 'boot', dangerous: true,
+    requires: [{ key: 'WEBTERM_LEDGER', oneOf: ['on', 'shadow'], note: 'Run butuh ledger hidup.' }],
+    label: 'Orchestrator run', description: 'Menjalankan worker nyata lewat /api/orchestrator/run.',
+    dangerNote: 'Mengizinkan menjalankan worker nyata (shell dan edit file) di mesin server.',
   }),
-  flag('WEBTERM_RUN_REQUIRE_APPROVAL', 'orchestrator', { label: 'Run wajib approval', description: 'Setiap run butuh approval ledger.' }),
-  flag('WEBTERM_MEMORY_FILES', 'memory', { label: 'Memory files', description: 'Gerbang export/rebuild file memory.', hot: true }),
+  flag('WEBTERM_RUN_REQUIRE_APPROVAL', 'orchestrator', {
+    ...ORCH, audience: 'user', hot: true, requires: [{ key: 'WEBTERM_ORCHESTRATOR_RUN' }],
+    label: 'Run wajib approval', description: 'Setiap run butuh approval ledger; dibaca ulang tiap panggilan run.',
+  }),
+  flag('WEBTERM_MEMORY_FILES', 'memory', { ...MEM, audience: 'user', hot: true, label: 'Memory files', description: 'Gerbang export dan rebuild file memory.' }),
   text('WEBTERM_MEMORY_DIR', 'memory', {
-    label: 'Direktori memory',
-    description: 'Path absolut root file memory; kosong = <dataDir>/memory.',
-    hot: true,
-    dangerous: true,
+    ...MEM, audience: 'advanced', hot: true, dangerous: true, allowEmpty: true, unsetLabel: '<dataDir>/memory',
+    requires: [{ key: 'WEBTERM_MEMORY_FILES' }],
+    label: 'Direktori memory', description: 'Path absolut root file memory; kosong = <dataDir>/memory.',
+    dangerNote: 'File memory ditulis dan dibaca dari path ini; arahkan hanya ke direktori yang memang milikmu.',
   }, { absolutePath: true }),
   text('WEBTERM_CONTROL_CWD_ROOTS', 'control', {
-    label: 'Root cwd control',
-    description: 'Root tambahan untuk cwd spawn control, dipisah delimiter path.',
-    hot: true,
-    dangerous: true,
+    ...CTRL, audience: 'advanced', hot: true, dangerous: true, allowEmpty: true,
+    label: 'Root cwd control', description: 'Root tambahan untuk cwd spawn control, dipisah titik dua (Windows: titik koma).',
+    dangerNote: 'Memperluas direktori yang boleh dipakai sebagai cwd shell yang di-spawn oleh control.',
   }),
   flag('WEBTERM_TRUST_PROXY', 'control', {
-    label: 'Percaya proxy',
-    description: 'Throttle webhook memakai x-forwarded-for. Aktifkan hanya di belakang proxy tepercaya.',
-    dangerous: true,
+    ...CTRL, audience: 'advanced', hot: true, dangerous: true,
+    requires: [{ key: 'WEBTERM_TELEGRAM_MODE', oneOf: ['webhook', ''], note: 'Hanya relevan untuk throttle webhook.' }],
+    label: 'Percaya proxy', description: 'Throttle webhook memakai x-forwarded-for. Aktifkan hanya di belakang proxy tepercaya.',
+    dangerNote: 'Header x-forwarded-for dipercaya; tanpa proxy tepercaya penyerang bisa memalsukan IP dan menghindari throttle.',
   }),
-  // Logging: dibaca sekali saat boot (configureLogging), jadi perlu restart.
-  enumOf('WEBTERM_LOG_LEVEL', 'control', LOG_LEVELS, DEFAULT_LOG_LEVEL, {
-    label: 'Level log',
-    description: 'Level minimum yang dicatat di panel Output; dapat diubah sementara dari panel tanpa restart.',
+  enumOf('WEBTERM_LOG_LEVEL', 'logs', LOG_LEVELS, DEFAULT_LOG_LEVEL, {
+    ...LOGS, label: 'Level log', description: 'Level minimum yang dicatat di panel Output; dapat diubah sementara dari panel tanpa restart.',
   }),
-  num('WEBTERM_LOG_BUFFER', 'control', MIN_LOG_BUFFER, MAX_LOG_BUFFER, DEFAULT_LOG_BUFFER, {
-    label: 'Buffer log',
-    description: 'Jumlah entri log yang disimpan di memori (ring buffer) untuk panel Output.',
+  num('WEBTERM_LOG_BUFFER', 'logs', MIN_LOG_BUFFER, MAX_LOG_BUFFER, DEFAULT_LOG_BUFFER, {
+    ...LOGS, unit: 'entri', label: 'Buffer log', description: 'Jumlah entri log yang disimpan di memori (ring buffer) untuk panel Output.',
   }),
-  flag('WEBTERM_LOG_FILE', 'control', {
-    label: 'File log',
-    description: 'Tulis log harian ke <dataDir>/logs/webterm-YYYY-MM-DD.log (rotasi, maks 7 file).',
+  flag('WEBTERM_LOG_FILE', 'logs', {
+    ...LOGS, label: 'File log', description: 'Tulis log harian ke <dataDir>/logs/webterm-YYYY-MM-DD.log (rotasi, maks 7 file).',
+    optionLabels: { on: 'Aktif', off: 'Mati' },
   }, 'on'),
   ...BROWSER_ENV_SPECS,
 ]

@@ -13,6 +13,7 @@ export const GROUP_META: Readonly<Record<string, EnvGroupMeta>> = Object.fromEnt
   g('memory', 'Memori', 60, 'platform'),
   g('control', 'Kontrol', 70, 'platform'),
   g('browser', 'Browser', 75, 'platform'),
+  g('files', 'File manager', 78, 'files'),
   g('logs', 'Log', 80, 'logs'),
   g('bootstrap', 'Bootstrap', 90, 'platform'),
 ])
