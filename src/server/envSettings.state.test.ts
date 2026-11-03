@@ -67,11 +67,6 @@ describe('secret + bootstrap', () => {
     expect(setupEnv({ WEBTERM_TOKEN: '  ' }).svc.state(ROOT).server.tokenSet).toBe(false)
     expect(setupEnv().svc.state(ROOT).server.tokenSet).toBe(false)
   })
-
-  it('rootGate mengikuti konteks request', () => {
-    const s = setupEnv()
-    expect([s.svc.state({ root: true }).rootGate, s.svc.state({ root: false }).rootGate]).toEqual([true, false])
-  })
 })
 
 describe('effective vs value', () => {

@@ -101,7 +101,6 @@ export function buildEnvState(i: StateInput): EnvStateV2 {
   for (const s of i.registry) groups.set(s.group, groupMetaFor(s.group))
   return {
     locked: i.locked,
-    rootGate: i.root,
     server: { tokenSet: nonEmpty(i.target[TOKEN_KEY]), settingsLocked: i.locked },
     groups: [...groups.values()].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
     entries: i.registry.map((s) => entryOf(s, i)),

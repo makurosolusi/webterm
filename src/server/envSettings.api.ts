@@ -105,7 +105,7 @@ export async function envImportRoute(req: IncomingMessage, res: ServerResponse, 
   if (!body.ok) return
   const v = body.value
   if (!isRecord(v) || (v.apply !== undefined && typeof v.apply !== 'boolean')) return json(res, 400, { error: 'invalid_body' })
-  const out = importDotenv({ service: deps.service, rootGate: () => true }, v.apply === true)
+  const out = importDotenv({ service: deps.service }, v.apply === true)
   if (v.apply === true && out.status === 200 && 'items' in out.body) {
     const keys = out.body.items.filter((i) => i.action === 'add').map((i) => i.key)
     if (keys.length > 0) audit(deps, req, { action: 'advanced', via, detail: keys.join(',') })

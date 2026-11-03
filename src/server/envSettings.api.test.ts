@@ -28,7 +28,7 @@ describe('GET', () => {
     const ledger = json.entries.find((e: any) => e.key === 'WEBTERM_LEDGER')
     expect(ledger).toMatchObject({ source: 'env', value: 'shadow', restartRequired: true, dangerous: false, editable: true, kind: 'enum' })
     expect(json.entries.some((e: any) => e.key === 'HOST')).toBe(false)
-    expect(json).toMatchObject({ rootGate: true, server: { tokenSet: false, settingsLocked: false } })
+    expect(json).toMatchObject({ server: { tokenSet: false, settingsLocked: false } })
     expect(json.groups.map((g: any) => g.id)).toContain('telegram')
     expect(json.entries.some((e: any) => e.key === 'WEBTERM_CHANNEL_HMAC_SECRET')).toBe(false)
   })
@@ -58,7 +58,7 @@ describe('PUT', () => {
     expect(json.error).toBe(error)
   })
 
-  it('kunci dangerous dari penjaga yang meloloskan kini 200 (gerbang token_required hilang)', async () => {
+  it('kunci dangerous dari penjaga yang meloloskan kini 200', async () => {
     const { res, s } = await call('PUT', { set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } })
     expect(res.status).toBe(200)
     expect(s.target.WEBTERM_OPENCODE_BIN).toBe('/bin/sh')

@@ -28,7 +28,7 @@ describe('importDotenv klasifikasi', () => {
       'WEBTERM_CENTRAL=on', 'WEBTERM_LEDGER=shadow', 'WEBTERM_CENTRAL_SKILLS=on', 'HOST=0.0.0.0', 'PORT=9', `WEBTERM_TOKEN=${ROOT_MARK}`,
       'WEBTERM_CENTRAL_MAX_STEPS=999', 'NOT_IN_REGISTRY=x', 'ALSO_UNKNOWN=y',
     ])
-    const r = importDotenv({ service: svc, rootGate: () => true }, false)
+    const r = importDotenv({ service: svc }, false)
     expect(r.status).toBe(200)
     if (r.status !== 200) return
     expect(r.body).toMatchObject({ found: true, ignored: 2 })
@@ -46,7 +46,7 @@ describe('importDotenv klasifikasi', () => {
     const { svc, overrides, target } = setupEnv()
     svc.update({ set: { WEBTERM_CENTRAL_SKILLS: 'off' }, unset: [] }, { root: true })
     dotenv(['WEBTERM_CENTRAL=on', 'WEBTERM_CENTRAL_SKILLS=on', 'PORT=9', 'HOST=0.0.0.0'])
-    const r = importDotenv({ service: svc, rootGate: () => true }, true)
+    const r = importDotenv({ service: svc }, true)
     expect(r.status === 200 && r.body.applied).toBe(1)
     const stored = JSON.parse(overrides.json ?? '{}')
     expect(stored).toEqual({ WEBTERM_CENTRAL_SKILLS: 'off', WEBTERM_CENTRAL: 'on' })
@@ -57,7 +57,7 @@ describe('importDotenv klasifikasi', () => {
   it('tanpa item add: apply = 0 tanpa menulis', () => {
     const { svc, overrides } = setupEnv()
     dotenv(['PORT=9'])
-    const r = importDotenv({ service: svc, rootGate: () => true }, true)
+    const r = importDotenv({ service: svc }, true)
     expect(r.status === 200 && r.body.applied).toBe(0)
     expect(overrides.saves).toBe(0)
   })
@@ -65,26 +65,22 @@ describe('importDotenv klasifikasi', () => {
   it('.env hilang => found:false', () => {
     const { svc } = setupEnv()
     rmSync(join(cwd, '.env'), { force: true })
-    expect(importDotenv({ service: svc, rootGate: () => true }, true)).toEqual({ status: 200, body: { found: false, ignored: 0, items: [] } })
+    expect(importDotenv({ service: svc }, true)).toEqual({ status: 200, body: { found: false, ignored: 0, items: [] } })
   })
 
   it('terkunci => 403 locked seperti PUT, tanpa efek', () => {
     const { svc, overrides } = setupEnv({ WEBTERM_ENV_SETTINGS: 'off' })
     dotenv(['WEBTERM_CENTRAL=on'])
-    expect(importDotenv({ service: svc, rootGate: () => true }, true)).toEqual({ status: 403, body: { error: 'locked' } })
+    expect(importDotenv({ service: svc }, true)).toEqual({ status: 403, body: { error: 'locked' } })
     expect(overrides.saves).toBe(0)
   })
 })
 
 describe('importDotenv gerbang dangerous', () => {
-  it('tanpa rootGate => skip/needs_root dan tidak tertulis; dengan rootGate tertulis', () => {
+  it('kunci dangerous ikut tertulis', () => {
     const { svc, overrides } = setupEnv()
     dotenv([`WEBTERM_OPENCODE_BIN=${BIN_MARK}`])
-    const denied = importDotenv({ service: svc, rootGate: () => false }, true)
-    expect(keyOf(denied, 'WEBTERM_OPENCODE_BIN')).toMatchObject({ action: 'skip', reason: 'needs_root', dangerous: true })
-    expect(denied.status === 200 && denied.body.applied).toBe(0)
-    expect(overrides.json).toBeNull()
-    const ok = importDotenv({ service: svc, rootGate: () => true }, true)
+    const ok = importDotenv({ service: svc }, true)
     expect(keyOf(ok, 'WEBTERM_OPENCODE_BIN')?.action).toBe('add')
     expect(JSON.parse(overrides.json ?? '{}')).toEqual({ WEBTERM_OPENCODE_BIN: BIN_MARK })
     expect(JSON.stringify(ok)).not.toContain(BIN_MARK)
@@ -98,7 +94,7 @@ describe('importDotenv secret + atomik', () => {
     const svc = createEnvSettings({ registry: ENV_REGISTRY, bootstrapKeys: BOOTSTRAP_ONLY_KEYS, target: {}, overrides, secrets: createFileSecretStore(secretsDir) })
     svc.apply()
     dotenv([`WEBTERM_TELEGRAM_BOT_TOKEN=${SENTINEL_BOT_TOKEN}`])
-    const r = importDotenv({ service: svc, rootGate: () => true }, true)
+    const r = importDotenv({ service: svc }, true)
     expect(keyOf(r, 'WEBTERM_TELEGRAM_BOT_TOKEN')).toMatchObject({ action: 'add', secret: true })
     expect(statSync(join(secretsDir, 'WEBTERM_TELEGRAM_BOT_TOKEN')).mode & 0o777).toBe(0o600)
     expect(overrides.json ?? '').not.toContain('SENTINEL')
@@ -109,7 +105,7 @@ describe('importDotenv secret + atomik', () => {
     const { svc, overrides, secrets } = setupEnv()
     secrets.failOn = 'WEBTERM_TELEGRAM_BOT_TOKEN'
     dotenv(['WEBTERM_CENTRAL=on', `WEBTERM_TELEGRAM_BOT_TOKEN=${SENTINEL_BOT_TOKEN}`])
-    const r = importDotenv({ service: svc, rootGate: () => true }, true)
+    const r = importDotenv({ service: svc }, true)
     expect(r.status).toBe(500)
     expect('applied' in r.body).toBe(false)
     expect(overrides.json).toBeNull()
