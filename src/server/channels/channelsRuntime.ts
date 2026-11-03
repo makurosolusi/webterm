@@ -29,7 +29,8 @@ import {
   type ChannelAuditEvent,
   type DispatchOutcome,
 } from './channelDispatch'
-import type { TelegramCentralPort } from './channelDispatch'
+import type { TelegramCentralPort, TelegramDispatchDeps } from './channelDispatch'
+import { createBackgroundTracker } from './channelButtons'
 import { handleChannelBindingsApi } from './channelBindingsHttp'
 import { mountBotManager, type BotManager, type BotManagerDeps } from './botManager'
 import { PendingChatStore } from './channelPending'
@@ -115,6 +116,8 @@ export interface ChannelsRuntime {
   readonly mode: TelegramMode
   /** Same dedupe + dispatch + pending path as the webhook; the poller feeds updates through it. */
   ingest(update: unknown): Promise<DispatchOutcome>
+  /** Resolves when no detached central turn is running (shutdown, tests). */
+  idle(): Promise<void>
   /** True when the egress interval is running (a bot token was configured at boot). */
   readonly senderRunning: boolean
   /** Managed bots manager; null unless WEBTERM_CENTRAL_BOTS=on. */
@@ -137,6 +140,8 @@ export interface ChannelsRuntimeOptions {
   /** Egress pacing and transport seam; omitted in production (5s interval, global fetch). */
   sender?: SenderBootOptions
   centralChat?: TelegramCentralPort
+  /** Approval-button deps (see `buildButtonDeps`); omitted = callbacks ignored. */
+  buttons?: Pick<TelegramDispatchDeps, 'challenge' | 'answerCallback'> | null
   /** Test seam for the managed bots manager (secrets, registry, fetch). */
   bots?: Partial<BotManagerDeps>
 }
@@ -194,8 +199,17 @@ export function startChannelsRuntime(
     }
   }
   const pending = new PendingChatStore(options.now === undefined ? {} : { now: options.now })
+  const background = createBackgroundTracker()
   const ingest = (update: unknown): Promise<DispatchOutcome> =>
-    dispatchTelegramUpdate(update, { store, approval, audit, centralChat: options.centralChat, pending })
+    dispatchTelegramUpdate(update, {
+      store,
+      approval,
+      audit,
+      centralChat: options.centralChat,
+      pending,
+      background: background.track,
+      ...(options.buttons ?? {}),
+    })
   const runtime: ChannelWebhookRuntime | null = secret === undefined ? null : { secret, dispatch: ingest }
   const throttle = new FailureThrottle(undefined, undefined, options.now ?? Date.now)
   // A missing bot token only disables egress; ingress and the binding API stay available.
@@ -208,6 +222,7 @@ export function startChannelsRuntime(
     store,
     mode,
     ingest,
+    idle: background.idle,
     bots,
     get senderRunning() {
       return sender !== null && sender.running

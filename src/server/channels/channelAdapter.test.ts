@@ -40,6 +40,12 @@ describe('telegram ChannelAdapter', () => {
     expect(payload['reply_markup']).toEqual({ inline_keyboard: [[{ text: 'Approve', callback_data: 'a:1:y' }]] })
   })
 
+  it('render puts chatId into the payload as chat_id and omits it otherwise', () => {
+    const adapter = createTelegramAdapter({ secret: SECRET, tokenFor: () => TOKEN })
+    expect(adapter.render({ text: 'hi', chatId: '42' })['chat_id']).toBe('42')
+    expect('chat_id' in adapter.render({ text: 'hi' })).toBe(false)
+  })
+
   it('send uses the per-account token, and failures never expose it', async () => {
     const ok = fakeFetch(200, { ok: true, result: { message_id: 12 } })
     const tokens: Record<string, string> = { default: TOKEN }

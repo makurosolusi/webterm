@@ -148,6 +148,21 @@ describe('skills admin', () => {
     expect(h.skills?.load(SKILL.name)).toBeNull()
   })
 
+  it('diffs a new version against the active one, and is all-added for a first proposal', async () => {
+    await pend()
+    const first = ((await get('/api/central/skills'))?.body as { items: Array<{ diff: string }> }).items[0]?.diff ?? ''
+    expect(first).toContain('+ 2. Write five lines.')
+    expect(first.split('\n').filter((l) => l !== '' && !l.startsWith('+ '))).toEqual([])
+    await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })
+    h.skills?.propose({ ...SKILL, body: '1. Read the portfolio.\n2. Write ten lines.' }, 'central:c1')
+    await h.skills?.evaluate(SKILL.name, '2')
+    h.skills?.submit(SKILL.name, '2')
+    const diff = ((await get('/api/central/skills'))?.body as { items: Array<{ diff: string }> }).items[0]?.diff ?? ''
+    expect(diff).toContain('- 2. Write five lines.')
+    expect(diff).toContain('+ 2. Write ten lines.')
+    expect(diff).toContain('  1. Read the portfolio.')
+  })
+
   it('a human approve activates the skill; a bad version is a client error', async () => {
     await pend()
     expect((await call('POST', `/api/central/skills/${SKILL.name}/approve`, {}))?.status).toBe(400)

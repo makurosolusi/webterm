@@ -11,6 +11,7 @@ import { configureLogging, createLogger, flushLogsSync } from './logs'
 import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
+import { buildButtonDeps } from './channels/channelButtons'
 import { TELEGRAM_WEBHOOK_PATH, startChannelsRuntime } from './channels/channelsRuntime'
 import { buildTelegramCentralPort, resolveTelegramMode, startTelegramInbound } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
@@ -48,7 +49,7 @@ if (ledgerRuntime) {
 // `null` means no route exists at all, not a route that rejects every request.
 const activeRuntime = activeLedgerRuntime()
 const centralChat = buildTelegramCentralPort(activeRuntime)
-const channelsRuntime = startChannelsRuntime(activeRuntime?.ledger, { centralChat })
+const channelsRuntime = startChannelsRuntime(activeRuntime?.ledger, { centralChat, buttons: activeRuntime ? buildButtonDeps(activeRuntime.db) : null })
 if (channelsRuntime && activeRuntime) {
   if (resolveTelegramMode() === 'poll') {
     // Poll mode never exposes a reachable webhook; the route stays mounted but nothing calls it.

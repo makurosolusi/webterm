@@ -169,6 +169,14 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id } }
   }
 
+  let spawnChain: Promise<unknown> = Promise.resolve()
+  /** Runs `fn` after every earlier exclusive step settled (the chain itself never rejects). */
+  function exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const run = spawnChain.then(fn)
+    spawnChain = run.catch(() => undefined)
+    return run
+  }
+
   async function doSpawn(input: SpawnInput): Promise<ToolResult> {
     const existing = store.getByReqId(input.reqId)
     if (existing) {
@@ -179,11 +187,15 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       const again = await gate(input.projectId, 'agent.spawn', 'R2')
       return again && again.code !== 'approval_required' ? again : proceed(existing, again, input.requireApproval)
     }
-    const blocked = await gate(input.projectId, 'agent.spawn', 'R2')
-    if (blocked && blocked.code !== 'approval_required') return blocked
-    const agent = store.create({ id: `ag-${input.reqId.slice(0, 20)}`, projectId: input.projectId, kind: input.kind, role: input.role, runner: host.runnerFor(input.kind), owner: input.owner, reqId: input.reqId, taskId: input.taskId })
-    audit(agent, 'spawn.requested', { kind: input.kind, role: input.role })
-    return proceed(agent, blocked, input.requireApproval)
+    // Judge and insert as one step: the caps count rows, so two spawns judged before either inserts would both pass.
+    const created = await exclusive(async () => {
+      const verdict = await gate(input.projectId, 'agent.spawn', 'R2')
+      if (verdict && verdict.code !== 'approval_required') return { verdict }
+      return { verdict, agent: store.create({ id: `ag-${input.reqId.slice(0, 20)}`, projectId: input.projectId, kind: input.kind, role: input.role, runner: host.runnerFor(input.kind), owner: input.owner, reqId: input.reqId, taskId: input.taskId }) }
+    })
+    if (!created.agent) return created.verdict as ToolResult
+    audit(created.agent, 'spawn.requested', { kind: input.kind, role: input.role })
+    return proceed(created.agent, created.verdict, input.requireApproval)
   }
 
   const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || requireApproval ? pendApproval(agent) : launch(agent))

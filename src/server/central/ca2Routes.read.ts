@@ -8,6 +8,7 @@ import { allRows } from '../ledger/ledgerCore'
 import { redactSecrets, redactValue, STREAM_LIMITS } from '../redactSecrets'
 import type { Ca2Handle } from './ca2Boot'
 import { budgetLimits, readBudget, utcDay } from './guard/budgetStore'
+import { lineDiff } from './ca2Routes.diff'
 import { SKILL_FILE, skillDir } from './skills/skillIndex'
 import { lintSkill } from './skills/skillLint'
 import { confirmPhrase } from './skills/skillLifecycle'
@@ -105,7 +106,15 @@ function draftText(root: string, name: string, version: string): string | null {
   try { return readFileSync(join(skillDir(root, 'proposed', name, version), SKILL_FILE), 'utf8') } catch { return null }
 }
 
-/** Skills awaiting review, with lint findings and the clipped draft as the diff (no previous-version diff yet). */
+/** SKILL.md of the version active now for `name`, or null when none is active (first proposal). */
+function activeText(h: Ca2Handle, name: string): string | null {
+  const active = h.skills?.load(name)
+  if (!active) return null
+  const bucket = active.record.origin === 'builtin' ? 'builtin' : 'versions'
+  try { return readFileSync(join(skillDir(h.skillsRoot, bucket, name, active.record.version), SKILL_FILE), 'utf8') } catch { return null }
+}
+
+/** Skills awaiting review, with lint findings and a line diff against the active version (all-added when none). */
 export function skillsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
   const page = pageOf(q)
   if (!page || !h.skills) return fail(h.skills ? 400 : 404, h.skills ? 'invalid_page' : 'skills_off')
@@ -114,7 +123,7 @@ export function skillsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
     const text = draftText(h.skillsRoot, record.name, record.version)
     const lint = text === null ? null : lintSkill(text, { expectedName: record.name })
     return {
-      record, diff: text === null ? '' : redactSecrets(text).slice(0, MAX_TEXT * 10),
+      record, diff: text === null ? '' : redactSecrets(lineDiff(activeText(h, record.name) ?? '', text)).slice(0, MAX_TEXT * 10),
       lint: { ok: lint?.ok ?? false, findings: lint ? lint.issues.map((i) => clip(typeof i === 'string' ? i : JSON.stringify(i))) : ['draft_missing'] },
       confirmPhrase: confirmPhrase(record.name, record.version),
     }

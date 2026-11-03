@@ -109,8 +109,9 @@ export function createTelegramAdapter(options: TelegramAdapterOptions): Telegram
     },
     render(msg: OutboundMessage): ProviderPayload {
       const head = msg.card ? `${msg.card.title}\n${msg.card.status}\n\n` : ''
-      // No parse_mode: untrusted text is delivered literally. The caller adds `chat_id` before `send`.
+      // No parse_mode: untrusted text is delivered literally.
       const payload: Record<string, unknown> = { text: `${head}${msg.text}`.slice(0, TELEGRAM_CAPS.maxText) }
+      if (msg.chatId !== undefined) payload['chat_id'] = msg.chatId
       if (msg.replyTo !== undefined) payload['reply_to_message_id'] = Number(msg.replyTo)
       if (msg.threadKey !== undefined) payload['message_thread_id'] = Number(msg.threadKey)
       const buttons = (msg.card?.actions ?? []).filter((a) => Buffer.byteLength(a.id) <= CALLBACK_DATA_MAX_BYTES)
