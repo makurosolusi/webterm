@@ -1,70 +1,133 @@
-// State section Environment: muat sekali, ganti state dari respons PUT, kumpulkan kunci yang
-// butuh restart. Nilai yang dikirim (termasuk secret) tidak pernah disimpan di sini.
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { envErrorMessage, fetchEnv, putEnv, type EnvChange, type EnvState } from './envSettingsApi'
+// Provider state Environment (kontrak c-0): state server + draft terpusat + simpan massal atomik.
+// Fetch lazy (saat ada konsumen section atau query terisi), cache selama provider hidup. Nilai
+// secret tidak pernah masuk draft: dikirim langsung dan tidak disimpan di sini.
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { EnvStateV2 } from '../shared/envSettings.contract'
+import { buildChange, dropSent, reconcileDraft, valueOfKey, withDraft } from './envDraft'
+import { envErrorMessage, fetchEnv, putEnv, type EnvChange } from './envSettingsApi'
 
-export interface EnvSettingsHook {
+export interface EnvSettingsApi {
+  state: EnvStateV2 | null
   loading: boolean
-  state: EnvState | null
-  /** Error muat (state lama tetap tampil). */
   error: string | null
-  /** Error simpan per KEY. */
-  entryErrors: Record<string, string>
-  busy: boolean
-  /** Kunci yang sudah diubah dan butuh restart (kumulatif selama section terbuka). */
-  restartKeys: string[]
-  refresh: () => void
-  /** Kirim satu perubahan untuk `key`; true bila sukses. */
-  apply: (key: string, change: EnvChange) => Promise<boolean>
+  draft: ReadonlyMap<string, string>
+  dirtyKeys: string[]
+  setDraft(k: string, v: string): void
+  discard(): void
+  /** Kirim semua draft dalam satu PUT; menolak (dan mengisi `error`) bila gagal. */
+  save(): Promise<void>
+  /** Hapus override satu kunci langsung (draft kunci lain utuh); tidak menolak, gagal → `error`. */
+  reset(k: string): Promise<void>
+  refresh(): Promise<void>
+  valueOf(k: string): string | undefined
+  query: string
 }
 
-/** Hook data env; hanya pasang saat section terlihat. */
-export function useEnvSettings(): EnvSettingsHook {
-  const [loading, setLoading] = useState(true)
-  const [state, setState] = useState<EnvState | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [entryErrors, setEntryErrors] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState(false)
-  const [restartKeys, setRestartKeys] = useState<string[]>([])
-  const alive = useRef(true)
+const ApiCtx = createContext<EnvSettingsApi | null>(null)
+const RequestCtx = createContext<() => void>(() => undefined)
 
-  const load = useCallback(async (): Promise<void> => {
+/** Ada provider di atas? EnvSection memasang provider sendiri bila belum. */
+export function useHasEnvSettingsContext(): boolean {
+  return useContext(ApiCtx) !== null
+}
+
+/** Minta provider memuat state (lazy); dipanggil section yang tampil. */
+export function useEnvLoadOnMount(): void {
+  const request = useContext(RequestCtx)
+  useEffect(() => { request() }, [request])
+}
+
+/** Akses provider; melempar bila dipanggil di luar EnvSettingsProvider. */
+export function useEnvSettingsContext(): EnvSettingsApi {
+  const api = useContext(ApiCtx)
+  if (!api) throw new Error('useEnvSettingsContext harus dipakai di dalam EnvSettingsProvider')
+  return api
+}
+
+/** Provider state env + draft; `query` = kueri pencarian Settings (tidak menghapus draft). */
+export function EnvSettingsProvider(props: { children: ReactNode; query: string }): React.JSX.Element {
+  const { children, query } = props
+  const [state, setState] = useState<EnvStateV2 | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [draft, setDraftMap] = useState<ReadonlyMap<string, string>>(new Map())
+  const [wanted, setWanted] = useState(false)
+  const started = useRef(false)
+  const alive = useRef(true)
+  const stateRef = useRef<EnvStateV2 | null>(null)
+  const draftRef = useRef(draft)
+  stateRef.current = state
+  draftRef.current = draft
+
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false }
+  }, [])
+
+  const adopt = useCallback((next: EnvStateV2): void => {
+    setState(next)
+    setDraftMap((prev) => reconcileDraft(prev, next.entries))
+    setError(null)
+  }, [])
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setLoading(true)
     try {
       const next = await fetchEnv()
-      if (!alive.current) return
-      setState(next)
-      setError(null)
+      if (alive.current) adopt(next)
     } catch (e) {
       if (alive.current) setError(envErrorMessage(e))
     } finally {
       if (alive.current) setLoading(false)
     }
-  }, [])
+  }, [adopt])
 
   useEffect(() => {
-    alive.current = true
-    void load()
-    return () => { alive.current = false }
-  }, [load])
+    if (!(wanted || query !== '') || started.current) return
+    started.current = true
+    void refresh()
+  }, [wanted, query, refresh])
 
-  const apply = useCallback(async (key: string, change: EnvChange): Promise<boolean> => {
-    setBusy(true)
-    setEntryErrors((prev) => ({ ...prev, [key]: '' }))
+  /** Kirim satu PUT; true bila sukses, gagal → `error` terisi. */
+  const send = useCallback(async (change: EnvChange): Promise<boolean> => {
     try {
-      const { restartRequired, ...next } = await putEnv(change)
-      if (!alive.current) return true
-      setState(next)
-      setRestartKeys((prev) => [...new Set([...prev, ...restartRequired])])
+      const next = await putEnv(change)
+      if (alive.current) adopt(next)
       return true
     } catch (e) {
-      if (alive.current) setEntryErrors((prev) => ({ ...prev, [key]: envErrorMessage(e) }))
+      if (alive.current) setError(envErrorMessage(e))
       return false
-    } finally {
-      if (alive.current) setBusy(false)
     }
-  }, [])
+  }, [adopt])
 
-  const refresh = useCallback(() => void load(), [load])
+  const setDraft = useCallback((k: string, v: string): void => {
+    const entry = stateRef.current?.entries.find((x) => x.key === k)
+    if (!entry || !entry.editable || stateRef.current?.locked) return
+    // Secret: simpan langsung, nilainya tidak pernah masuk draft.
+    if (entry.kind === 'secret') void send({ set: { [k]: v } })
+    else setDraftMap((prev) => withDraft(prev, k, v, entry.value))
+  }, [send])
 
-  return { loading, state, error, entryErrors, busy, restartKeys, refresh, apply }
+  const save = useCallback(async (): Promise<void> => {
+    const change = buildChange(draftRef.current)
+    const sent = change.set ?? {}
+    if (Object.keys(sent).length === 0) return
+    if (!(await send(change))) throw new Error('env settings: simpan perubahan gagal')
+    if (alive.current) setDraftMap((prev) => dropSent(prev, sent))
+  }, [send])
+
+  const reset = useCallback(async (k: string): Promise<void> => {
+    setDraftMap((prev) => { const n = new Map(prev); n.delete(k); return n })
+    await send({ unset: [k] })
+  }, [send])
+
+  const discard = useCallback((): void => { setDraftMap(new Map()); setError(null) }, [])
+  const request = useCallback(() => setWanted(true), [])
+  const api = useMemo<EnvSettingsApi>(() => ({
+    state, loading, error, draft, query, dirtyKeys: [...draft.keys()],
+    setDraft, discard, save, reset, refresh,
+    valueOf: (k) => valueOfKey(state?.entries ?? [], draft, k),
+  }), [state, loading, error, draft, query, setDraft, discard, save, reset, refresh])
+
+  return createElement(RequestCtx.Provider, { value: request }, createElement(ApiCtx.Provider, { value: api }, children))
 }
