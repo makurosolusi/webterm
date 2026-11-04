@@ -16,6 +16,7 @@ import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
 import { useDiffEditor } from './DiffNode.editor'
 import { enqueueNotes, sendRefusal, type DiffNote } from './DiffNode.notes'
 import { randomId } from './randomId'
+import { ScmPanel } from './ScmPanel'
 import { getStatus, subscribeStatus } from './ws'
 import './DiffNode.css'
 
@@ -152,6 +153,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
           </ToolbarContainer>
         </div>
         {msg && <div className="diff-node__msg nodrag" role="status">{msg}</div>}
+        {root && <ScmPanel root={root} agentId={agent?.id ?? null} onChanged={refresh} />}
         <div className="node-body diff-node__body nodrag nowheel nokey">
           {!root ? (
             <span className="diff-node__notice">Wire an agent to this node, or open it on a workspace folder, to see changes.</span>

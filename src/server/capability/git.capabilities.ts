@@ -3,6 +3,7 @@
 import { GIT_DIFF_PAGE_MAX, GIT_DIFF_PATH } from '../gitDiff.types'
 import { defineCapability, type CapabilitySpec } from './capability.define'
 import { obj, S } from './capability.schema'
+import { SCM_CAPABILITIES } from '../gitScm.capabilities'
 
 export const GIT_CAPABILITIES: readonly CapabilitySpec[] = [
   defineCapability({
@@ -11,4 +12,5 @@ export const GIT_CAPABILITIES: readonly CapabilitySpec[] = [
     input: obj({ root: S.str(4096), path: S.str(4096), offset: S.int(0), limit: S.int(1, GIT_DIFF_PAGE_MAX) }, ['root']),
     output: S.anyObj('GitDiffList, or GitFileDiff when path is given (gitDiff.types.ts).'),
   }),
+  ...SCM_CAPABILITIES, // Source Control verbs (gitScm.capabilities.ts); appended so GIT_CAPABILITIES[0] stays git.diff
 ]
