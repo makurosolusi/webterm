@@ -15,7 +15,8 @@ import type { VerifyOutcome } from '../orchestrator/verify'
 import type { AgentSpawnRequest } from '../spawn/agentSpawn'
 import { judgeCompletion } from '../verifier/verifier.judge'
 import { handleDagApi, type DagApiDeps } from './dag.api'
-import { createDagScheduler, dagWorkerArgv, type DagPorts, type VerifyTaskInput } from './dag.scheduler'
+import { dagWorkerArgv, type DagPorts, type VerifyTaskInput } from './dag.ports'
+import { createDagScheduler } from './dag.scheduler'
 
 // test-only brief
 const brief = (lease: string[], extra: Record<string, unknown> = {}) => ({

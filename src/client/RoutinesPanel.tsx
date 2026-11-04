@@ -10,7 +10,9 @@ import { peekToken } from './transportToken'
 
 export const ROUTINES_PATH = '/api/routines'
 
-export interface RoutineRun { id: string; trigger: string; status: 'running' | 'ran' | 'skipped' | 'failed'; reason: string | null; startedAt: number; costUsd: number | null }
+export interface RoutineRun { id: string; trigger: string; status: 'running' | 'ran' | 'skipped' | 'failed'; reason: string | null; startedAt: number; costUsd: number | null
+  /** Cost-oracle estimate taken before the run (median of similar past runs); null = no history. */
+  estimateUsd?: number | null }
 export interface RoutineView extends RoutineDef { id: string; tier: string; nextRunAt: number | null; lastRun: RoutineRun | null }
 interface Template { id: string; name: string; description: string; input: Omit<RoutineDef, 'workspaceId' | 'enabled'> }
 interface ListView { routines: RoutineView[]; templates: Template[] }
@@ -39,8 +41,12 @@ async function request(method: string, path = ROUTINES_PATH, body?: unknown): Pr
 
 const triggerText = (r: RoutineDef): string =>
   r.trigger.type === 'schedule' ? `cron ${r.trigger.cron}` : r.trigger.type === 'event' ? `on ${r.trigger.pattern}` : 'API / manual'
+const money = (usd: number): string => `$${usd.toFixed(2)}`
+/** ` · $spent · est. $estimate`, each part only when known. */
+export const costText = (run: Pick<RoutineRun, 'costUsd' | 'estimateUsd'>): string =>
+  [run.costUsd != null ? money(run.costUsd) : '', run.estimateUsd != null ? `est. ${money(run.estimateUsd)}` : ''].filter(Boolean).map((s) => ` · ${s}`).join('')
 const runText = (run: RoutineRun): string =>
-  `${new Date(run.startedAt).toLocaleString()} · ${run.trigger} · ${run.status}${run.reason ? ` — ${run.reason}` : ''}${run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}`
+  `${new Date(run.startedAt).toLocaleString()} · ${run.trigger} · ${run.status}${run.reason ? ` — ${run.reason}` : ''}${costText(run)}`
 const toDef = ({ name, enabled, workspaceId, trigger, precheck, action, budget }: RoutineDef): RoutineDef => ({ name, enabled, workspaceId, trigger, precheck, action, budget })
 
 export function RoutinesPanel(): React.JSX.Element {
@@ -96,7 +102,7 @@ export function RoutinesPanel(): React.JSX.Element {
                   onChange={(enabled) => void act(T.edit, () => request('PUT', `${ROUTINES_PATH}/${encodeURIComponent(r.id)}`, { ...toDef(r), enabled }))} />
                 <strong className="flex-1">{r.name}</strong>
                 <span className="opacity-70">{triggerText(r)} · {r.tier}{r.nextRunAt ? ` · ${T.next(r.nextRunAt)}` : ''}</span>
-                <span className="opacity-70" data-testid="last-run">{r.lastRun ? `${r.lastRun.status}${r.lastRun.reason ? ` — ${r.lastRun.reason}` : ''}` : T.never}</span>
+                <span className="opacity-70" data-testid="last-run">{r.lastRun ? `${r.lastRun.status}${r.lastRun.reason ? ` — ${r.lastRun.reason}` : ''}${costText(r.lastRun)}` : T.never}</span>
                 <Button size="sm" onClick={() => void act(T.runNow, () => request('POST', `${ROUTINES_PATH}/${encodeURIComponent(r.id)}/run`))}>{T.runNow}</Button>
                 <Button size="sm" variant="secondary" onClick={() => setEditing({ id: r.id, def: toDef(r) })}>{T.edit}</Button>
                 <Button size="sm" variant="secondary" onClick={() => showHistory(r.id)}>{history?.id === r.id ? T.hideHistory : T.history}</Button>

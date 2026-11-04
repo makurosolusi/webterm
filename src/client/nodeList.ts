@@ -15,6 +15,7 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   editor: 'Editor',
   browser: 'Browser',
   diff: 'Changes',
+  plan: 'Plan',
 }
 
 /** Jamaknya menamai HIMPUNAN: header seksi, dan lewat itu haystack filter. Tetap terpisah karena
@@ -27,12 +28,13 @@ const NODE_KIND_PLURAL: Record<WsNodeKind, string> = {
   editor: 'Editors',
   browser: 'Browsers',
   diff: 'Changes',
+  plan: 'Plans',
 }
 
 /** Urutan seksi dipaku, bukan mengikuti isi board: node agent paling sering ditindaklanjuti,
  *  terminal berikutnya, editor/files cuma artefak statis. Urutan yang bergeser mengikuti isi
  *  memaksa mata mencari ulang tiap kali ada node baru. */
-const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'terminal', 'browser', 'diff', 'editor', 'files']
+const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'plan', 'terminal', 'browser', 'diff', 'editor', 'files']
 
 export interface NodeRowVM {
   id: string

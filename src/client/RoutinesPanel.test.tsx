@@ -38,7 +38,7 @@ const routine: RoutineView = {
 
 describe('Routines (Settings › Control)', () => {
   it('lists routines with trigger, tier and the last skip reason; Run now and history', async () => {
-    const { writes } = server([routine], [{ id: 'a', trigger: 'catch_up', status: 'ran', reason: null, startedAt: AT, costUsd: 0.5 }])
+    const { writes } = server([routine], [{ id: 'a', trigger: 'catch_up', status: 'ran', reason: null, startedAt: AT, costUsd: 0.5, estimateUsd: 0.4 }])
     render(<RoutinesPanel />)
     expect(await screen.findByText('Nightly tests')).toBeTruthy()
     expect(screen.getByText(/cron 0 2 \* \* \* · R2/)).toBeTruthy()
@@ -48,7 +48,13 @@ describe('Routines (Settings › Control)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'History' }))
     const list = await screen.findByRole('list', { name: 'History: Nightly tests' })
     expect(list.textContent).toContain('catch_up · ran')
-    expect(list.textContent).toContain('$0.50')
+    expect(list.textContent).toContain('$0.50 · est. $0.40')
+  })
+
+  it('shows the run estimate next to a skipped run that never spent', async () => {
+    server([{ ...routine, lastRun: { ...routine.lastRun!, reason: 'budget: cap', estimateUsd: 2 } }])
+    render(<RoutinesPanel />)
+    expect((await screen.findByTestId('last-run')).textContent).toBe('skipped — budget: cap · est. $2.00')
   })
 
   it('toggling Enabled sends the whole definition with enabled flipped', async () => {

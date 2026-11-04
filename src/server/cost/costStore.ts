@@ -1,36 +1,20 @@
 // Cost tables in the ledger DB: one row per billed response (`cost_usage`), one per routine run /
-// DAG task (`cost_run`, a time window on a node), and caps/pauses (`cost_cap`). Module-owned like
-// knowledgeStore: additive `IF NOT EXISTS` DDL, nothing to backfill, so it needs no ledger version.
+// DAG task (`cost_run`, a time window on a node), and caps/pauses (`cost_cap`). The schema is ledger
+// migration v17 (`ledgerSchemaV17.ts`); this module only reads and writes rows.
 import type { Database } from 'bun:sqlite'
 import { allRows, execWrite, getRow } from '../ledger/ledgerCore'
 
-const DDL = `
-CREATE TABLE IF NOT EXISTS cost_usage (
-  key TEXT PRIMARY KEY, ts INTEGER NOT NULL, source TEXT NOT NULL,
-  workspace_id TEXT, node_id TEXT, session_id TEXT, model TEXT,
-  input INTEGER NOT NULL, output INTEGER NOT NULL, cache_read INTEGER NOT NULL,
-  cache_write_5m INTEGER NOT NULL, cache_write_1h INTEGER NOT NULL,
-  cost_micros INTEGER, price_known INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_cost_usage_ts ON cost_usage(ts);
-CREATE INDEX IF NOT EXISTS idx_cost_usage_node_ts ON cost_usage(node_id, ts);
-CREATE TABLE IF NOT EXISTS cost_run (
-  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('routine','dag')), ref TEXT NOT NULL, label TEXT,
-  workspace_id TEXT, node_id TEXT, started_at INTEGER NOT NULL, ended_at INTEGER,
-  produced_diff INTEGER, cost_micros INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_cost_run_ref ON cost_run(kind, ref, ended_at);
-CREATE TABLE IF NOT EXISTS cost_cap (
-  scope TEXT PRIMARY KEY, limit_micros INTEGER NOT NULL DEFAULT 0, paused_at INTEGER, reason TEXT
-);
-`
-
 const ready = new WeakSet<Database>()
 
-/** Idempotent; every entry point calls it, so a fresh ledger gets the tables on first use. */
+/**
+ * Fails loudly when `db` is not a ledger migrated to v17 (the cost tables are missing), instead of a
+ * bare "no such table" deep in a query. Checked once per handle.
+ */
 export function ensureCostSchema(db: Database): void {
   if (ready.has(db)) return
-  db.exec(DDL)
+  if (!getRow(db, "SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = 'cost_run'")) {
+    throw new Error('cost store: ledger has no cost tables; open it through openLedgerDb (migration v17)')
+  }
   ready.add(db)
 }
 

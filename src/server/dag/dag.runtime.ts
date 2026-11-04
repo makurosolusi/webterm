@@ -18,7 +18,8 @@ import { spawnAgent } from '../spawn/agentSpawn'
 import { projectChecks } from '../verifier/verifier.checks'
 import { judgeCompletion } from '../verifier/verifier.judge'
 import { recordCompletion } from '../verifier/verifier.report'
-import { createDagScheduler, type DagPorts, type DagScheduler, type VerifyTaskInput } from './dag.scheduler'
+import type { DagPorts, VerifyTaskInput } from './dag.ports'
+import { createDagScheduler, type DagScheduler } from './dag.scheduler'
 
 const log = createLogger('dag')
 export const DAG_TICK_MS = 2000

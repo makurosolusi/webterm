@@ -2,7 +2,8 @@
 // /api/approvals, `approvalAuth.ts`): an agent credential gets 403 before any DAG code runs, so no agent
 // can create work for other agents or resolve a decision gate (Orca: only explicit human resolution).
 //   GET  /api/dag[?limit=&offset=]           -> { dags }
-//   GET  /api/dag/:id                        -> { dag, tasks, gates, waves, estimate }
+//   GET  /api/dag/:id                        -> { dag, tasks, gates, dispatches, waves, estimate }
+//   /api/dag/plan*                           -> drafts from an intent, never a dag (dag.plan.ts)
 //   POST /api/dag  { projectId, title, repo, baseRef?, baseBranch?, tasks } -> 201 { dag, waves, estimate }
 // `estimate`: cost-oracle median per worker run x agent tasks not done yet (null total = no history).
 //   POST /api/dag/:id/tick                   -> { dag, tasks }
@@ -11,11 +12,11 @@ import type { IncomingMessage } from 'node:http'
 import { isAbsolute } from 'node:path'
 import { uiOnlyDenial } from '../approvalAuth'
 import { actorForRequest } from '../approvalHumanShared'
-import { estimateCost, type Estimate } from '../cost/costOracle'
 import type { AppendEventInput } from '../events/eventModel'
 import { actOnItem } from '../inbox/inboxActions'
 import type { LedgerContext } from '../ledger/ledgerCore'
-import { DagError, planWaves, type DagTask } from './dag.model'
+import { DagError, planWaves } from './dag.model'
+import { handlePlanApi, planEstimate, type PlanDeps } from './dag.plan'
 import type { DagScheduler } from './dag.scheduler'
 
 export const DAG_PATH = '/api/dag'
@@ -24,7 +25,7 @@ const TITLE_MAX = 200
 
 export type DagResult = { status: number; body: unknown } | null
 
-export interface DagApiDeps {
+export interface DagApiDeps extends PlanDeps {
   ctx: LedgerContext
   scheduler: DagScheduler
   isNodeToken(token: string): boolean
@@ -37,21 +38,12 @@ const ours = (p: string): boolean => p === DAG_PATH || p.startsWith(`${DAG_PATH}
 const fail = (status: number, error: string, detail?: string): DagResult => ({ status, body: { error, ...(detail ? { detail } : {}) } })
 const optText = (v: unknown, max: number): v is string | undefined => v === undefined || (typeof v === 'string' && v.trim() !== '' && v.length <= max)
 
-export interface DagEstimate extends Estimate { tasks: number; totalMicros: number | null }
-
-/** Plan estimate: every agent task still to run is one cost run of scope `dag:<id>`. */
-function planEstimate(deps: DagApiDeps, dagId: string, tasks: DagTask[]): DagEstimate {
-  const per = estimateCost(deps.ctx.db, { kind: 'dag', ref: dagId })
-  const n = tasks.filter((t) => t.kind !== 'gate' && t.status !== 'done').length
-  return { ...per, tasks: n, totalMicros: per.medianMicros === null ? null : per.medianMicros * n }
-}
-
 function view(deps: DagApiDeps, id: string) {
   const s = deps.scheduler
   const dag = s.store.get(id)
   if (!dag) return null
   const tasks = s.store.tasks(id)
-  return { dag, tasks, gates: s.store.gates(id), waves: planWaves(tasks), estimate: planEstimate(deps, id, tasks) }
+  return { dag, tasks, gates: s.store.gates(id), dispatches: s.store.dispatchesOf(id), waves: planWaves(tasks), estimate: planEstimate(deps.ctx, id, tasks) }
 }
 
 function create(deps: DagApiDeps, req: IncomingMessage, url: URL, body: Record<string, unknown>): DagResult {
@@ -70,7 +62,7 @@ function create(deps: DagApiDeps, req: IncomingMessage, url: URL, body: Record<s
   deps.scheduler.created(dag)
   deps.arm?.()
   const tasks = deps.scheduler.store.tasks(dag.id)
-  return { status: 201, body: { dag, waves: planWaves(tasks), estimate: planEstimate(deps, dag.id, tasks) } }
+  return { status: 201, body: { dag, waves: planWaves(tasks), estimate: planEstimate(deps.ctx, dag.id, tasks) } }
 }
 
 async function decide(deps: DagApiDeps, req: IncomingMessage, url: URL, gateId: string, body: Record<string, unknown>): Promise<DagResult> {
@@ -102,6 +94,7 @@ export async function handleDagApi(deps: DagApiDeps, req: IncomingMessage, url: 
     return fail(400, 'invalid_path')
   }
   if (method === 'GET') {
+    if (parts[0] === 'plan') return handlePlanApi(deps, method, parts, body)
     if (parts.length === 0) {
       const limit = Number(url.searchParams.get('limit') ?? 50)
       const offset = Number(url.searchParams.get('offset') ?? 0)
@@ -115,6 +108,7 @@ export async function handleDagApi(deps: DagApiDeps, req: IncomingMessage, url: 
   const denial = uiOnlyDenial(req, url, deps.isNodeToken)
   if (denial) return fail(403, denial)
   try {
+    if (parts[0] === 'plan') return handlePlanApi(deps, method, parts, body)
     if (parts.length === 0) return create(deps, req, url, body)
     if (parts.length === 2 && parts[1] === 'tick') {
       if (!deps.scheduler.store.get(parts[0])) return fail(404, 'not_found')

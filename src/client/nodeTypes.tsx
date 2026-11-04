@@ -8,6 +8,7 @@ import AgentNode from './AgentNode'
 import FilesNode from './FilesNode'
 import EditorNode from './EditorNode'
 import DiffNode from './DiffNode'
+import PlanNode from './PlanNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { useLiveSettings } from './useSettings'
 
@@ -18,6 +19,8 @@ export const nodeTypes = {
   browser: BrowserNodeType,
   // Working-tree diff + review notes (DiffNode.tsx); cwd comes from node data or the wired agent.
   diff: DiffNode,
+  // ⌘K intent -> DAG draft, approved by a human, then the map of its workers (PlanNode.tsx, F4-f).
+  plan: PlanNode,
   // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya dari
   // context, bukan lagi dari data node — lihat `useLiveSettings`.
   //
