@@ -83,10 +83,12 @@ export function BakeoffDialog({ repo, workspaceId, onClose }: { repo?: string; w
             <label className="text-xs font-semibold" htmlFor="bakeoff-prompt">{T.prompt}</label>
             <Textarea id="bakeoff-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} />
             <div className="flex items-center gap-2 text-xs">
-              <label htmlFor="bakeoff-count">{T.count}</label>
-              <select id="bakeoff-count" value={count} onChange={(e) => setCount(Number(e.target.value))}>
-                {COUNTS.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <span id="bakeoff-count">{T.count}</span>
+              <div role="group" aria-labelledby="bakeoff-count" className="flex gap-1">
+                {COUNTS.map((n) => (
+                  <Button key={n} size="sm" variant={count === n ? 'default' : 'outline'} aria-pressed={count === n} onClick={() => setCount(n)}>{n}</Button>
+                ))}
+              </div>
               <Button size="sm" disabled={busy || prompt.trim() === ''} onClick={() => void start()}>{busy ? T.starting : T.start}</Button>
             </div>
           </div>
@@ -94,9 +96,13 @@ export function BakeoffDialog({ repo, workspaceId, onClose }: { repo?: string; w
         {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
         <h4 className="text-xs font-semibold">{T.recent}</h4>
         {list.length === 0 ? <p className="text-xs opacity-70">{T.none}</p> : (
-          <select aria-label={T.recent} className="text-xs" value={selected ?? ''} onChange={(e) => { setSelected(e.target.value); setConfirm(null) }}>
-            {list.map((b) => <option key={b.id} value={b.id}>{`${T.status[b.status]} · ${b.prompt.slice(0, 60)}`}</option>)}
-          </select>
+          <div role="group" aria-label={T.recent} className="flex flex-wrap gap-1">
+            {list.map((b) => (
+              <Button key={b.id} size="sm" variant={b.id === selected ? 'default' : 'outline'} aria-pressed={b.id === selected} onClick={() => { setSelected(b.id); setConfirm(null) }}>
+                {`${T.status[b.status]} · ${b.prompt.slice(0, 60)}`}
+              </Button>
+            ))}
+          </div>
         )}
         {current && (
           <div className="flex flex-col gap-2">
