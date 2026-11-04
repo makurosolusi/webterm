@@ -25,6 +25,7 @@ import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
 import { codexInstructionsFlag, tomlString } from './webtermAwareness'
 import { shq } from './hooksQuote'
+import { codexMcpFlags } from './mcp/mcp.launch'
 import { SETTING_RANGES } from '../shared/settings.ranges'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
 import { resolveShell } from './ptyShell'
@@ -180,9 +181,10 @@ test('launchLine mints the session id with each harness own grammar', () => {
   expect(cursor).toBe(`cursor-agent --resume ${SID}`)
 
   // codex & gemini resumable tapi BUKAN session-id-capable: tanpa flag session id. gemini tetap
-  // identik byte demi byte; codex hanya mendapat `-c developer_instructions` (aturan rumah webterm).
+  // identik byte demi byte; codex hanya mendapat `-c developer_instructions` (aturan rumah webterm)
+  // dan `-c mcp_servers.webterm.*` (server MCP webterm).
   expect(launchLine(open({ cmd: 'gemini', agentId: 'gemini', sessionId: SID }), 9999)).toBe('gemini')
-  expect(launchLine(open({ cmd: 'codex', agentId: 'codex', sessionId: SID }), 9999)).toBe(`codex ${CODEX_N1}`)
+  expect(launchLine(open({ cmd: 'codex', agentId: 'codex', sessionId: SID }), 9999)).toBe(`codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)}`)
 
   // Terminal biasa (tanpa agentId) dan agent tanpa session id: perintah apa adanya.
   expect(launchLine(open({ cmd: 'htop' }), 9999)).toBe('htop')
@@ -248,11 +250,11 @@ test('launchLine resumes with the harness resume grammar', () => {
   const r = (agentId: string, cmd: string) =>
     launchLine(open({ cmd, agentId, sessionId: SID, resume: true }), 9999)
   expect(r('claude', 'claude')).toContain(`--resume ${SID}`)
-  expect(r('codex', 'codex')).toBe(`codex ${CODEX_N1} resume ${SID}`)
+  expect(r('codex', 'codex')).toBe(`codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)} resume ${SID}`)
   expect(r('copilot', 'copilot')).toBe(`copilot --resume=${SID}`)
   expect(r('antigravity', 'agy')).toBe(`agy --conversation=${SID}`)
   // Pembungkus tetap utuh: perintah client dipakai sebagai program secara keseluruhan.
-  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex ${CODEX_N1} resume ${SID}`)
+  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)} resume ${SID}`)
   // Agent tak dikenal tanpa kapabilitas apa pun: tidak ada flag yang ditempelkan.
   expect(r('custom', 'mycli')).toBe('mycli')
 })

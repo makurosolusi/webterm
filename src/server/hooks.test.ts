@@ -357,8 +357,14 @@ describe('buildClaudeFlags', () => {
   // Penulis settings di-stub: test ini harus tetap bebas I/O.
   const writeSettings = () => '/tmp/x.json'
   const writeRules = () => '/tmp/rules.md'
+  const writeMcp = () => '/tmp/x.mcp.json'
   const flags = (resume: boolean, permissionMode?: AgentPermissionMode) =>
-    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules })
+    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules, writeMcp })
+
+  it('adds the webterm MCP server config as the LAST flag (--mcp-config is variadic)', () => {
+    expect(flags(false).endsWith("--mcp-config '/tmp/x.mcp.json'")).toBe(true)
+    expect(flags(true).endsWith("--mcp-config '/tmp/x.mcp.json'")).toBe(true)
+  })
 
   it('appends the webterm house rules file to the system prompt, fresh and resumed', () => {
     expect(flags(false)).toContain("--append-system-prompt-file '/tmp/rules.md'")

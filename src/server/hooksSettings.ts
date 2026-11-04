@@ -7,6 +7,7 @@ import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir, houseRule
 import { encodeQueryValue, shq } from './hooksQuote'
 import { createLogger } from './logs'
 import { HOUSE_RULES } from './webtermAwareness'
+import { MCP_SERVER_NAME } from './mcp/mcp.paths'
 
 const log = createLogger('hooks')
 
@@ -120,7 +121,11 @@ export function claudeHooksSettings(nodeId: string, port: number): Record<string
 
 /** Whole `--settings` object of a webterm Claude node: hooks + same-uid protection (`agentSandbox`). */
 export function claudeNodeSettings(nodeId: string, port: number): Record<string, unknown> {
-  return { ...claudeHooksSettings(nodeId, port), ...claudeProtectionSettings(dataDir(), { ownHeaders: claudeHeadersPath(nodeId) }) }
+  const protection = claudeProtectionSettings(dataDir(), { ownHeaders: claudeHeadersPath(nodeId) })
+  // The webterm MCP tools are pre-allowed in Claude: the webterm policy engine already decides every
+  // call server-side (mcp/mcp.tools.ts), so a second Claude prompt per tool would only add friction.
+  const permissions = { ...(protection.permissions as Record<string, unknown>), allow: [`mcp__${MCP_SERVER_NAME}`] }
+  return { ...claudeHooksSettings(nodeId, port), ...protection, permissions }
 }
 
 /**
