@@ -11,6 +11,7 @@ import { CONTROL_TEXT, SOURCE_LABEL } from './controlPanelLabels'
 import { ControlField } from './ControlPanelField'
 import { ControlPanelDoctor } from './ControlPanelDoctor'
 import { PolicyRules } from './PolicyRules'
+import { PolicySimulator } from './PolicySimulator'
 import { AgentMemory } from './AgentMemory'
 import { SecretsPanel } from './SecretsPanel'
 import { RoutinesPanel } from './RoutinesPanel'
@@ -135,6 +136,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
       <ControlPanelDoctor />
 
       <PolicyRules />
+      <PolicySimulator />
 
       <AgentMemory />
       <SecretsPanel />

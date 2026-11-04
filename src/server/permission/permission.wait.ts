@@ -9,6 +9,9 @@ import type { AppendEventInput } from '../events/eventModel'
 import { execWrite } from '../ledger/ledgerCore'
 import { approvedArgsFor } from '../inbox/inboxItemStore'
 import type { Policy } from '../policy/policy.decide'
+import type { GatedAction } from '../policy/policy.classifier'
+import { toolImpact } from '../inbox/inboxItemModel'
+import { createLogger } from '../logs'
 import {
   PERMISSION_ID_PREFIX,
   PERMISSION_KIND,
@@ -37,6 +40,11 @@ export interface PermissionWaitDeps {
   now?: () => number
   pollMs?: number
   sleep?: (ms: number) => Promise<void>
+  /**
+   * F4-d (off unless Settings › Control turns it on): classifies the held prompt next to the human; on
+   * `allow` it approves the same card, which the poll below then consumes like a human click.
+   */
+  classify?: (a: GatedAction & { approvalId: string }) => Promise<unknown>
 }
 
 export interface PermissionAsk {
@@ -84,6 +92,7 @@ function editedInput(db: Database, approvalId: string, original: Record<string, 
   return JSON.stringify(args) === JSON.stringify(original) ? null : (args as Record<string, unknown>)
 }
 
+const log = createLogger('permission')
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** A live human-ui rule on `claude.tool:*` decides; any other rule (builtin node deny, control grants) never does. */
@@ -116,6 +125,17 @@ export async function answerPermission(deps: PermissionWaitDeps, ask: Permission
   // TTL = the wait: the row expires (and leaves the inbox) exactly when the hook stops listening.
   requestApproval(ctx, { id, projectId: deps.projectId, kind: PERMISSION_KIND, request, ttlMs: deps.waitMs })
   event({ approvalId: id, pattern: request.pattern }, `node:${ask.nodeId}`, PERMISSION_REQUEST_EVENT)
+  if (deps.classify) {
+    const capability = `${TOOL_CAPABILITY_PREFIX}${request.tool}`
+    const d = deps.policy.evaluate(`node:${ask.nodeId}`, capability, { resource: toolResource(ask.body) })
+    const cwd = (ask.body as { cwd?: unknown }).cwd
+    // classifyCard never throws; a throwing custom port is logged and the human card keeps waiting.
+    deps.classify({
+      principal: `node:${ask.nodeId}`, capability, tier: toolImpact(request.tool, label).tier, args: ask.body.tool_input ?? {},
+      askRule: d.effect === 'ask' && d.origin === 'human-ui', cwd: typeof cwd === 'string' ? cwd : null,
+      projectId: deps.projectId, workspaceId: ask.workspaceId, nodeId: ask.nodeId, approvalId: id,
+    }).catch((err: unknown) => log.warn('permission.classify_failed', 'classifier threw; the prompt waits for a human', { ids: { nodeId: ask.nodeId, requestId: id }, cause: err instanceof Error ? err.message : String(err) }))
+  }
 
   const deadline = now() + deps.waitMs
   const sleep = deps.sleep ?? defaultSleep

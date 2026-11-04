@@ -9,7 +9,10 @@ import type { BreakerKey, ControlGuard, ControlLevel, GuardCode, GuardDecision, 
 import { addUsage, budgetExhausted, budgetLimits, readBudget, utcDay } from './budgetStore'
 import { createBreakerStore, type SyncBreaker } from './breakerStore'
 import { DEFAULT_GLOBAL_LEVEL, effectiveLevelOf, levelRank, projectRef, readLevel } from './levelStore'
-import { createPolicy, type Policy } from '../../policy/policy.decide'
+import { createPolicy, isDestructive, type Policy } from '../../policy/policy.decide'
+import type { Classifier, GatedOutcome } from '../../policy/policy.classifier'
+import type { AppendEventInput } from '../../events/eventModel'
+import { classifyGuardCall } from './guardClassifier'
 
 /** I11: concurrent workers per project and across the whole server. */
 export const MAX_WORKERS_PER_PROJECT = 3
@@ -35,6 +38,8 @@ export interface SyncControlGuard extends ControlGuard {
   readonly breaker: SyncBreaker
   /** Policy over the same DB; tier minima and allow/ask/deny rules are read from it. */
   readonly policy: Policy
+  /** F4-d: classifies the approval card of a ladder ask (switch on, R2 at act_gated); null otherwise. */
+  classifyLater?(req: ToolGuardRequest, decision: GuardDecision): Promise<GatedOutcome | null>
 }
 
 export interface GuardDeps {
@@ -45,6 +50,10 @@ export interface GuardDeps {
   random?: () => number
   breaker?: SyncBreaker
   policy?: Policy
+  /** Classifier port (tests inject a fake); default `claude -p --model haiku`. */
+  classifier?: Classifier
+  /** Classifier event sink; default the process event log. */
+  record?: (e: AppendEventInput) => void
 }
 
 function activeAgents(db: Database, projectId: string | null): number {
@@ -126,6 +135,9 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     policy,
     effectiveLevel,
     recordUsage: (usage) => addUsage(db, usage, now),
+    classifyLater: (req, decision) => classifyGuardCall({
+      db, now, policy, ...(deps.classifier ? { classifier: deps.classifier } : {}), ...(deps.record ? { record: deps.record } : {}),
+    }, { ...req, destructive: isDestructive(req.tool) }, decision),
     check(req) {
       const level = effectiveLevel(req.projectId)
       const decision = judge(req, level)
@@ -164,6 +176,8 @@ export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean;
         const action = SPAWN_TOOLS.includes(req.tool) ? 'spawn' : 'tool'
         const d = guard.check({ action, projectId: req.projectId ?? null, tool: req.tool, tier: req.tier, digest })
         if (d.verdict === 'allow' || (d.verdict === 'needs_approval' && opts.approved)) return { ok: true }
+        // F4-d: off by default; never blocks the caller, a failure leaves the card for the human.
+        if (d.verdict === 'needs_approval') guard.classifyLater?.(req, d).catch((err: unknown) => opts.onError?.(err))
         return { ok: false, code: d.verdict === 'deny' ? d.code : 'approval_required' }
       } catch (err) {
         opts.onError?.(err)

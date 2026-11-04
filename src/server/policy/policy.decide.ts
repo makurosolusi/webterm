@@ -51,6 +51,8 @@ export interface PolicyDeps {
 }
 
 const DESTRUCTIVE = new Set(CONTROL_CAPABILITIES.filter((c) => c.destructive).map((c) => c.name))
+/** Registry `destructive` flag of a control capability (never auto-allowed by a non-human rule). */
+export const isDestructive = (capability: string): boolean => DESTRUCTIVE.has(capability)
 
 const validPattern = (s: unknown): s is string => typeof s === 'string' && s !== '' && s.length <= MAX_PATTERN
 
