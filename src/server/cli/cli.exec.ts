@@ -20,6 +20,8 @@ import { cableGrants } from '../policy/policy.cable'
 import type { Policy } from '../policy/policy.decide'
 import type { Decision, Grant, Principal } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
+import { isSecretCapability } from '../secrets/secret.capabilities'
+import { runSecretCapability } from '../secrets/secret.broker'
 import type { SeenStore } from './cli.seen'
 
 /** One-shot capability lifetime: long enough for one in-process call; revoked right after it. */
@@ -117,6 +119,7 @@ function bind(route: NonNullable<CapabilitySpec['route']>, args: Args): { url: s
 export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args, principal: Principal, headers: IncomingMessage['headers']): Promise<{ receipt: Receipt; data?: unknown }> {
   const problem = checkSchema(cap.input, input)
   if (problem) return { receipt: receipt('error', 'invalid_shape', { problem }, 'webterm agent-context --json shows the exact input schema') }
+  if (isSecretCapability(cap.name)) return runSecretCapability(deps, cap.name, input, principal) // secret broker decides per secret (secret.broker.ts)
   const route = cap.route as NonNullable<CapabilitySpec['route']>
   const browser = route.path.startsWith(BROWSER_CONTROL_PREFIX)
   const nodeId = nodeOf(principal)
