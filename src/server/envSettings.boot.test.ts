@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
-const apiSource = readFileSync(new URL('./api.ts', import.meta.url), 'utf8')
+// Rute env tinggal di tabel route ber-urutan (routes/settings.routes.ts); urutan penuh dijaga apiRoutes.bun.test.ts.
+const apiSource = readFileSync(new URL('./routes/settings.routes.ts', import.meta.url), 'utf8')
 
 describe('urutan boot env-settings', () => {
   it('overlay: setelah writeTokenToEnv, sebelum startLedgerRuntime/kanal/autonomy', () => {
@@ -19,7 +20,7 @@ describe('urutan boot env-settings', () => {
   })
 
   it('rute env di-mount sebelum /api/settings dan sesudah gerbang (api.ts dipanggil setelah allowed)', () => {
-    expect(apiSource.indexOf('ENV_SETTINGS_PATH) return')).toBeGreaterThan(-1)
-    expect(apiSource.indexOf('ENV_SETTINGS_PATH) return')).toBeLessThan(apiSource.indexOf("path === '/api/settings'"))
+    expect(apiSource.indexOf('c.path === ENV_SETTINGS_PATH')).toBeGreaterThan(-1)
+    expect(apiSource.indexOf('c.path === ENV_SETTINGS_PATH')).toBeLessThan(apiSource.indexOf("c.path === '/api/settings'"))
   })
 })

@@ -433,12 +433,12 @@ describe('context-link tidak tersentuh', () => {
     expect(res.statusCode).toBe(0)
   })
 
-  it('api.ts tetap men-dispatch context-link seperti sebelumnya', async () => {
+  it('tabel route (routes/control.routes.ts) tetap men-dispatch context-link seperti sebelumnya', async () => {
     const { readFileSync } = await import('node:fs')
     const { fileURLToPath } = await import('node:url')
-    const src = readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
-    expect(src).toContain('await agentStatusRoute(req, res, url)')
-    expect(src).toContain('await contextLinkRoute(req, res, url)')
+    const src = readFileSync(fileURLToPath(new URL('./routes/control.routes.ts', import.meta.url)), 'utf8')
+    expect(src).toContain('agentStatusRoute(c.req, c.res, c.url)')
+    expect(src).toContain('contextLinkRoute(c.req, c.res, c.url)')
     const route = readFileSync(
       fileURLToPath(new URL('./contextLinkApi.ts', import.meta.url)),
       'utf8'
