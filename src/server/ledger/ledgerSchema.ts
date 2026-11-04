@@ -15,6 +15,7 @@ import { applyV13 } from './ledgerSchemaV13'
 import { applyV14 } from './ledgerSchemaV14'
 import { applyV15 } from './ledgerSchemaV15'
 import { applyV16 } from './ledgerSchemaV16'
+import { applyV18 } from './ledgerSchemaV18'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -52,4 +53,9 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 15, up: applyV15 },
   // v16: task DAG (F4-b); additive tables. v15 is taken by the routines WP in parallel.
   { version: 16, up: applyV16 },
+  // v17: reserved for wkr-plan-107 (parallel WP). No-op placeholder so the list stays contiguous;
+  // the merge replaces this line with the real v17 entry. Do not ship both.
+  { version: 17, up: () => {} },
+  // v18: memory intelligence (F5-a): bi-temporal columns, cognitive kind, tombstones, incognito.
+  { version: 18, up: applyV18 },
 ]

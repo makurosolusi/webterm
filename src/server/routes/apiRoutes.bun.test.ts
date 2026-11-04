@@ -30,7 +30,7 @@ test('full route order snapshot', () => {
     'agent-status', 'tools', 'mcp', 'control', 'context-link',
     'generate-name', 'folder-picker',
     'central-chat', 'ca2', 'extended',
-    'approval-human', 'policy', 'secrets', 'procedural', 'policy-sim', 'routines',
+    'approval-human', 'policy', 'secrets', 'procedural', 'policy-sim', 'memory-controls', 'routines',
     'memory-write', 'inbox', 'memory', 'orchestrator',
     'cost',
     'dag',
@@ -47,7 +47,7 @@ test('auth-sensitive ordering invariants', () => {
   // /api/control/mcp/* nests inside the control family: mcp must claim it first.
   before('mcp', 'control')
   // UI-only families (agent credentials get 403) must win over the generic ledger memory writes.
-  for (const uiOnly of ['policy', 'secrets', 'procedural']) before(uiOnly, 'memory-write')
+  for (const uiOnly of ['policy', 'secrets', 'procedural', 'memory-controls']) before(uiOnly, 'memory-write')
   // Memory writes read the body lazily so the read-only projections after them never touch it.
   for (const read of ['inbox', 'memory', 'orchestrator']) before('memory-write', read)
   // Central chat SSE must be mounted before the read-only projections and the 404 fallback.

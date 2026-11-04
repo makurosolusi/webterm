@@ -11,6 +11,8 @@ import { redactSecrets } from '../redactSecrets'
 import { archiveExpiredClaims, contentHash } from './memoryConsolidate'
 import { attestUserQuote } from './memoryAttest'
 import { appendMemoryEvent, memoryContext } from './memoryCore'
+import { guardMemoryWrite } from './memoryGuard'
+import { maskPii } from './memoryPii'
 import { type NewMemoryRow, findActiveByHash, findRowByKey, insertMemoryRow, supersedeRow } from './memoryInsert'
 import { MemoryConflictError, type MemoryKind, MemoryRejectedError, type MemoryRecord } from './memoryModel'
 import type { UserMemoryStore } from './memoryUserStore'
@@ -50,7 +52,8 @@ function cleanText(value: unknown, field: string, max: number): string {
   const text = value.trim()
   if (text.length > max) reject('too_long', `${field} exceeds ${max} characters`)
   if (redactSecrets(text) !== text) reject('secret_detected', `${field} looks like a credential`)
-  return text
+  // Rule 12: PII is masked before hashing, so dedupe and tombstones compare what is stored.
+  return maskPii(text)
 }
 
 function cleanKey(value: unknown): string {
@@ -96,8 +99,9 @@ export function rememberClaim(db: Database, ctx: RememberContext, input: ClaimIn
       id: newId(), projectId: ctx.projectId, scope: 'central', key, title, body, status: 'claim', kind, trust: 'agent',
       sourceKind: 'central', sourceRef: ctx.conversationId, supersedes: old?.id ?? null, contentHash: hash,
       staleAfter: kind === 'episode' || kind === 'summary' ? ctx.now + EPISODE_TTL_MS : null, verifiedAt: null, now: ctx.now,
+      sessionRef: ctx.conversationId,
     }
-    if (old !== null) supersedeRow(db, old, ctx.now)
+    if (old !== null) supersedeRow(db, old, ctx.now, row.id)
     insertMemoryRow(db, row)
     appendMemoryEvent(memoryContext(db, ctx.now), row.id, `${CENTRAL_ACTOR_PREFIX}${ctx.conversationId}`, 'memory.claim',
       { actorKind: 'central', supersedes: old?.id ?? null }, ctx.now)
@@ -114,12 +118,14 @@ export interface UserInput { key: unknown; quote: unknown; summary?: unknown; ki
 export async function rememberUser(db: Database, ctx: RememberContext, input: UserInput, store?: UserMemoryStore): Promise<RememberResult> {
   const key = cleanKey(input.key)
   const attestation = attestUserQuote(db, ctx.conversationId, input.quote)
-  const quote = input.quote as string
+  const quote = maskPii(input.quote as string)
   const title = input.summary === undefined ? key : cleanText(input.summary, 'summary', MAX_TITLE_CHARS)
   const kind = cleanKind(input.kind, 'preference')
   if (kind === 'episode' || kind === 'summary') reject('invalid_shape', 'user memory kind must be fact, preference, decision or procedure')
   const hash = contentHash(title, quote)
   const plan = tx(memoryContext(db, ctx.now), () => {
+    // Refuse before the file is written: an incognito or forgotten memory must not touch disk at all.
+    guardMemoryWrite(db, { projectId: null, title, body: quote, status: 'fact', trust: 'attested', refs: [attestation.messageId, ctx.conversationId] })
     const same = findActiveByHash(db, null, 'user', hash)
     if (same !== null) return { deduped: same, old: null }
     const old = findRowByKey(db, null, 'user', key)
@@ -140,12 +146,12 @@ export async function rememberUser(db: Database, ctx: RememberContext, input: Us
         // Re-check inside the write transaction: another writer may have changed the slot since the plan.
         const current = findRowByKey(db, null, 'user', key)
         if (current?.id !== old.id || current.status !== 'fact') throw new MemoryConflictError(`user/${key} changed concurrently`)
-        supersedeRow(db, old, ctx.now)
+        supersedeRow(db, old, ctx.now, id)
       }
       insertMemoryRow(db, {
         id, projectId: null, scope: 'user', key, title, body: quote, status: 'fact', kind, trust: 'attested',
         sourceKind: 'user_quote', sourceRef, supersedes: old?.id ?? null, contentHash: hash, staleAfter: null,
-        verifiedAt: ctx.now, now: ctx.now,
+        verifiedAt: ctx.now, now: ctx.now, sessionRef: ctx.conversationId,
       })
       appendMemoryEvent(memoryContext(db, ctx.now), id, `${CENTRAL_ACTOR_PREFIX}${ctx.conversationId}`, 'memory.remember_user',
         { actorKind: 'central', messageId: sourceRef, quoteChars: quote.length, supersedes: old?.id ?? null }, ctx.now)
