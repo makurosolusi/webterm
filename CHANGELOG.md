@@ -95,6 +95,7 @@
 - The 403 message when a settings change is refused explains why (the page was not opened directly on the machine running webterm) and names the real address to open, with this page's port.
 - Importing cookies from a file skips Google login cookies (the `google.com` family and Google's device-bound cookies such as `SIDCC` and `AEC`), following Orca's import policy (MIT). Google ties those sessions to the browser they came from, so they would not work anyway. The preview says how many were skipped and asks you to sign in to Google directly in the Browser node. YouTube cookies are still imported.
 - Browser nodes respond faster. Mouse, keyboard, and scroll input is sent to Chrome without waiting for each event to finish, frames are sized to the node's viewport (capped at 2048 px a side) instead of the full window, the server acknowledges each frame to Chrome as soon as it arrives, only the newest frame is painted, and the stale-size frames sent while a node is resized are dropped (for at most 500 ms). Measured on a trackpad scroll burst: the tail went from about 950 ms to about 25 ms, and frames from about 86 KB to about 43 KB.
+- Agents can drive the browser by default (`WEBTERM_BROWSER_AGENT` now defaults to on). Wire an agent terminal node to a Browser node with a cable (edge) and the agent can drive it right away; the cable is the permission and is checked on every call, so no restart is needed. With several browsers wired, the agent picks one with `--node <id>`; with none wired, it gets a clear message asking you to connect one. Turn it off with the agent checkbox in the Browser toolbar or the "Izinkan agent mengendalikan browser" sub-option of the Browser card. Central's `browser_act` follows the same default.
 
 ### Fixed
 - A new Browser node now always loads its starting URL; before, it could stay on `about:blank`. A page that has not loaded can no longer overwrite the node's saved URL with `about:blank`.
@@ -126,6 +127,10 @@
 - "Nyalakan yang dibutuhkan" (turn on what is needed) turns on the missing prerequisites of that card only. Before, it reset every capability.
 - A capability that is waiting for a setup step can always be switched off. Before, its switch was disabled.
 - "Periksa lagi" for an OpenCode engine now updates the status right away. The re-check used to bypass the shared cache without replacing it, so the next status poll could still show "not ready" for up to 30 seconds.
+- Wiring or unwiring an agent and a Browser node takes effect immediately. Before, the change applied only after the agent session restarted.
+- Telegram replies render Markdown. Agent text is converted to Telegram HTML, file names such as `note.md` no longer turn into links, and a message Telegram refuses to format is sent again as plain text.
+- Long Central replies reach Telegram complete, as several messages in order (up to 32,000 characters in total). A send that fails partway resumes where it stopped, without repeating parts already delivered.
+- Central sees every canvas workspace as a project. Before, it saw only the workspaces it had already chatted with. A new `project.list` tool lists them, and the portfolio panel shows all workspaces.
 
 ### Removed
 - Four dead keys from the env registry: `WEBTERM_CENTRAL_TOOL_BRIDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_EMBED_URL`, `WEBTERM_EMBED_MODEL`. The unused `WEBTERM_CHANNEL_HMAC_SECRET` entry in log redaction is gone too.
@@ -136,6 +141,7 @@
 - Human approvals work from the webterm page with zero configuration, and agents cannot approve their own actions. `/api/approvals/*` and token enable/rotate accept a request only when it comes from the webterm page in a browser (`Sec-Fetch-Site: same-origin` and a same-origin `Origin`), and refuse any agent credential (node token or capability) with `403 agent_cannot_approve`. A root token, when enabled, is still checked first. Accepted limit: a local process running as the same user that deliberately forges these headers still passes; enable the root token to close that. Details: `docs/decisions/approval-ui-origin.md`.
 - Node tokens and capabilities do not open the human approval route, so an agent cannot approve its own irreversible action.
 - Without a root token, the terminal (`/ws`) and Browser node (`/ws/browser`) WebSockets accept only a connection that carries the webterm page's `Origin`, as a browser always sends. curl, agent shells, and other local processes without one are refused with `403 origin_required`, so they can no longer open a fresh shell or watch your browser. With a root token the token is checked as before. Accepted limit: a local process that forges `Origin` still passes; enable the root token to close that.
+- An agent terminal can drive only the Browser nodes wired to it by a cable. Before, an agent with no cable could drive the only browser on the board.
 
 ## [0.7.0] - 2026-10-29
 ### Added
