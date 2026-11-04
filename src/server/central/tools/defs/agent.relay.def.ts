@@ -4,6 +4,7 @@ import type { MailDeliver } from '../../agents/mailDeliver'
 import { MAIL_KINDS, MAX_MAIL_BODY_BYTES, createMailStore, isMailRef } from '../../agents/mailStore'
 import type { MailKind } from '../../contracts/mail.types'
 import type { ToolDef } from '../toolTypes'
+import { obj, S } from '../../../capability/capability.schema'
 
 export const AGENT_MAIL_FLAG = 'WEBTERM_AGENT_MAIL'
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,200}$/
@@ -18,6 +19,8 @@ export function createAgentRelayDef(deps: { deliver?: MailDeliver } = {}): ToolD
     tier: 'R1',
     flag: AGENT_MAIL_FLAG,
     usage: '{"projectId":"<id>","to":"agent:<id>","text":"<=8KB","kind":"msg|ask|reply","threadId":"<optional>","reqId":"<optional idempotency key>"}. The recipient sees it labelled as an agent message, never as human input or approval.',
+    input: obj({ to: S.str(), text: S.str(), kind: S.oneOf(...CENTRAL_KINDS), threadId: S.str(200), reqId: S.str(200) }, ['to', 'text']),
+    output: S.keys('mailId', 'threadId', 'duplicate', 'delivered'),
     auditKeys: ['mailId', 'threadId', 'delivered'],
     validate(input, ctx) {
       const { to, text, kind, threadId, reqId, from } = input

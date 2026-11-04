@@ -7,6 +7,7 @@ import { assignControl } from '../../../orchestratorControlService'
 import { proposeGoal } from '../../goalStore'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { APPROVAL_NESTED_FORBIDDEN, FORBIDDEN_KEYS } from '../toolValidate'
+import { obj, S } from '../../../capability/capability.schema'
 
 const SAFE_ID = /^[A-Za-z0-9._:-]+$/
 const MAX_REQUEST_BYTES = 8 * 1024
@@ -22,6 +23,8 @@ const approvalRequest: ToolDef = {
   summary: 'Create a pending human approval for a request; never decides or runs it.',
   tier: 'R1',
   usage: '{"projectId":"<id>","requestId":"<safe id>","kind":"<safe id>","request":{}}. taskId is optional, must be an existing task id, never a plan item id, and should be omitted unless asked. It creates a pending approval for a human and never decides or runs.',
+  input: obj({ requestId: S.str(MAX_ID), kind: S.str(MAX_KIND), request: S.anyObj(), taskId: S.str(MAX_ID) }, ['requestId', 'kind', 'request']),
+  output: S.keys('approvalId', 'expiresAt', 'reused'),
   auditKeys: AUDIT_KEYS,
   forbidden(input) {
     const nested = isRecord(input.request) && Object.keys(input.request).some((key) => APPROVAL_NESTED_FORBIDDEN.has(key))
@@ -60,6 +63,8 @@ const goalPropose: ToolDef = {
   summary: 'Propose a project goal with success criteria and a cost/time envelope.',
   tier: 'R1',
   usage: '{"projectId":"<id>","statement":"<=500 chars","successCriteria":[{"kind":"review","by":"human"}],"owner":"human:<name>","horizon":"YYYY-MM-DD","envelope":{"maxCostMicros":1000000,"maxWallMs":600000,"maxItems":3}}; successCriteria entries MUST be objects with kind command|scope|review, and review requires by:"human"; use no title/description fields.',
+  input: obj({ statement: S.str(), successCriteria: { type: 'array' }, owner: S.str(), horizon: S.str(), envelope: S.anyObj(), expectedVersion: S.any() }, ['statement', 'successCriteria', 'owner', 'horizon', 'envelope']),
+  output: S.keys('goalVersion'),
   auditKeys: AUDIT_KEYS,
   validate: (input) => (typeof input.statement === 'string' && Array.isArray(input.successCriteria) && typeof input.owner === 'string' && typeof input.horizon === 'string' && !!input.envelope && typeof input.envelope === 'object' ? null : 'invalid_shape'),
   handler(ctx, input, projectId): ToolResult {
@@ -73,6 +78,8 @@ const planPropose: ToolDef = {
   summary: 'Propose a draft plan: ordered items with titles and relative-path scopes.',
   tier: 'R1',
   usage: '{"projectId":"<id>","items":[{"title":"...","scope":["relative/path"]}],"expectedVersion":<current version or omit>}.',
+  input: obj({ items: S.arr(obj({ title: S.str(), scope: { type: 'array' } }, ['title', 'scope'])), expectedVersion: S.any() }, ['items']),
+  output: S.keys('planVersion'),
   auditKeys: AUDIT_KEYS,
   validate: (input) => (Array.isArray(input.items) && input.items.every((item) => item && typeof item === 'object' && typeof item.title === 'string' && Array.isArray(item.scope)) ? null : 'invalid_shape'),
   handler(ctx, input, projectId): ToolResult {
@@ -96,6 +103,8 @@ const taskAssign: ToolDef = {
   summary: 'Create a task for an existing pending plan item; does not run or approve.',
   tier: 'R1',
   usage: '{"projectId":"<id>","itemId":"<existing pending item>","expectedVersion":<plan version>}. Assign only creates a task for an existing pending plan item. It does not run, spawn, or approve.',
+  input: obj({ itemId: S.str(), expectedVersion: S.int(1), assignee: S.str(MAX_ID) }, ['itemId', 'expectedVersion']),
+  output: S.keys('taskId', 'planVersion'),
   auditKeys: AUDIT_KEYS,
   validate: (input) => (assignShape(input) ? null : 'invalid_shape'),
   async handler(ctx, input, projectId): Promise<ToolResult> {

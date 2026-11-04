@@ -6,7 +6,8 @@ import { getRow } from '../../../ledger/ledgerCore'
 import { scopeFromConversationId } from '../../conversationModel'
 import { livePortfolio } from '../../workspaceLookup'
 import type { ToolDef, ToolResult } from '../toolTypes'
-import { READ_TOOLS_FLAG, readPage } from './read.shared'
+import { MAX_PAGE, READ_TOOLS_FLAG, readPage } from './read.shared'
+import { obj, S } from '../../../capability/capability.schema'
 
 const MAX_ENTRIES = 60
 const DOC_BYTES = 2048
@@ -52,6 +53,8 @@ const projectRead: ToolDef = {
   tier: 'R0',
   flag: READ_TOOLS_FLAG,
   usage: '{"projectId":"<id>"}. Read-only; returns truncated text, never secrets.',
+  input: obj({}),
+  output: S.keys('project', 'branch', 'entriesTotal', 'entries', 'readme', 'claudeMd'),
   validate: () => null,
   handler(ctx, _input, projectId): ToolResult {
     const row = getRow(ctx.db, 'SELECT name, path, status, branch_base FROM project WHERE id = ?', projectId)
@@ -87,6 +90,8 @@ const projectList: ToolDef = {
   flag: READ_TOOLS_FLAG,
   projectScoped: false,
   usage: '{"limit":<1-50, optional, default 20>,"offset":<>=0, optional>}. boundProjectId is the project this chat is bound to.',
+  input: obj({ limit: S.int(1, MAX_PAGE), offset: S.int(0) }),
+  output: S.keys('total', 'offset', 'boundProjectId', 'projects'),
   validate: (input) => (readPage(input) ? null : 'invalid_shape'),
   handler(ctx, input): ToolResult {
     const page = livePortfolio(ctx.db, readPage(input) ?? {})
