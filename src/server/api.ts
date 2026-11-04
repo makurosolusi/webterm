@@ -26,6 +26,7 @@ import { claudeProviderRoutes } from './routes/claudeProvider.routes'
 import { proxyInfoRoutes } from './routes/proxy.routes'
 import { bakeoffRoutes } from './routes/bakeoff.routes'
 import { evalCasesRoutes } from './routes/evalcases.routes'
+import { replayRoutes } from './routes/replay.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -64,6 +65,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...proxyInfoRoutes,
   ...bakeoffRoutes,
   ...evalCasesRoutes,
+  ...replayRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

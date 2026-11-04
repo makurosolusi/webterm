@@ -34,6 +34,7 @@ import { toWsNode } from './store'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { BrowserLinkOfferHost } from './browserLinkOffer'
 import BakeoffHost from './bakeoff/BakeoffHost'
+import ReplayHost from './replay/ReplayHost'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { setNotifyCanvas } from './osNotify'
@@ -334,6 +335,7 @@ export default function App() {
           {paneMenu}
           <BrowserLinkOfferHost />
           <BakeoffHost repo={activeWs?.cwd} workspaceId={activeId} />
+          <ReplayHost workspaceId={activeId} nodes={(activeWs?.nodes ?? []).filter((n) => n.agentId)} />
         </>
       )}
       {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi
