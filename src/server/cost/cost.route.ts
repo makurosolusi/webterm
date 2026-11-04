@@ -5,6 +5,7 @@
 //   POST /api/cost/resume {scope}
 import type { Database } from 'bun:sqlite'
 import { LEDGER_OFF, type RouteResult } from '../apiShared.types'
+import { prefixStats, type PrefixStats } from '../central/context/promptPrefix'
 import { utcDayStart } from '../central/guard/budgetStore'
 import { PRICING_CHECKED_AT, PRICING_SOURCE_URL } from './costPricing'
 import { spendSummary, type SpendSummary } from './costStore'
@@ -23,6 +24,8 @@ export interface CostResponse {
   /** Display names for workspace and node ids seen in the groups. */
   labels: Record<string, string>
   pricing: { source: string; checkedAt: string }
+  /** Central prompt-prefix reuse over the 7-day window (central/context/promptPrefix.ts). */
+  prefix: PrefixStats
 }
 
 export interface CostRouteDeps {
@@ -55,7 +58,8 @@ export async function costRoute(path: string, method: string, query: URLSearchPa
     deps.sync?.()
     const startOfToday = utcDayStart(now)
     const today = spendSummary(db, startOfToday)
-    const week = spendSummary(db, startOfToday - (WEEK_DAYS - 1) * DAY_MS)
+    const weekStart = startOfToday - (WEEK_DAYS - 1) * DAY_MS
+    const week = spendSummary(db, weekStart)
     const labels: Record<string, string> = {}
     if (deps.label) {
       for (const s of [today, week]) {
@@ -63,7 +67,7 @@ export async function costRoute(path: string, method: string, query: URLSearchPa
         for (const g of s.byNode) if (g.key) labels[`node:${g.key}`] = deps.label('node', g.key)
       }
     }
-    const res: CostResponse = { today, week, caps: listCaps(db, now), labels, pricing: { source: PRICING_SOURCE_URL, checkedAt: PRICING_CHECKED_AT } }
+    const res: CostResponse = { today, week, caps: listCaps(db, now), labels, pricing: { source: PRICING_SOURCE_URL, checkedAt: PRICING_CHECKED_AT }, prefix: prefixStats(db, weekStart) }
     return { status: 200, body: res }
   }
   if (path === `${COST_PATH}/estimate`) {

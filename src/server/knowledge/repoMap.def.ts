@@ -10,7 +10,9 @@ import { dataDir } from '../config'
 import { getRow } from '../ledger/ledgerCore'
 import { KnowledgeError } from './knowledgeStore'
 import { REPO_MAP_DEFAULT_TOKENS, REPO_MAP_MAX_TOKENS } from './repoMapRank'
-import { buildRepoMap, openRepoMapDb } from './repoMapCache'
+import { REPO_MAP_SCHEMA_VERSION, buildRepoMap, openRepoMapDb } from './repoMapCache'
+import { cachedToolRead } from '../toolcache/toolCache'
+import { gitTreeVersion } from '../toolcache/toolCacheGit'
 
 export const REPO_MAP_TOOL = 'repo.map'
 const MAX_FOCUS = 50
@@ -36,12 +38,20 @@ export function createRepoMapDef(open: () => Database = repoMapDb): ToolDef {
     async handler(ctx, input, projectId): Promise<ToolResult> {
       const row = getRow(ctx.db, 'SELECT path FROM project WHERE id = ?', projectId as string)
       if (!row) return { ok: false, code: 'project_not_found' }
-      try {
-        const m = await buildRepoMap(open(), String(row.path), {
+      const root = String(row.path)
+      const build = async (): Promise<ToolResult> => {
+        const m = await buildRepoMap(open(), root, {
           ...(Array.isArray(input.focus) ? { focus: input.focus as string[] } : {}),
           ...(typeof input.maxTokens === 'number' ? { maxTokens: input.maxTokens } : {}),
         })
         return { ok: true, data: { map: m.text, files: m.files, totalFiles: m.totalFiles, truncated: m.truncated, tokens: m.tokens } }
+      }
+      try {
+        // Not a git work tree: no version, so build uncached (buildRepoMap then answers not_git).
+        const version = await gitTreeVersion(root).catch(() => null)
+        if (version === null) return await build()
+        const args = { root, focus: input.focus ?? null, maxTokens: input.maxTokens ?? null, schema: REPO_MAP_SCHEMA_VERSION }
+        return (await cachedToolRead(ctx.db, { tool: 'repo.map', args, version }, build, ctx.now(), (r) => r.ok)).value
       } catch (err) {
         if (err instanceof KnowledgeError) return { ok: false, code: err.code }
         throw err

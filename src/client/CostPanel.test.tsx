@@ -21,6 +21,7 @@ const DATA: CostResponse = {
   caps: [{ scope: 'routine:lint', limitMicros: 0, spentMicros: 300, pausedAt: 1, reason: 'low ROI' }],
   labels: { 'workspace:w1': 'Alpha', 'node:n1': 'Claude in Alpha' },
   pricing: { source: 'https://platform.claude.com/docs/en/about-claude/pricing', checkedAt: '2026-11-04' },
+  prefix: { prefixes: 2, hits: 6, reuseRate: 0.75 },
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -36,6 +37,7 @@ describe('CostPanel', () => {
     render(<CostPanel />)
     expect(await screen.findByTestId('cost-total')).toHaveProperty('textContent', '$1.25')
     expect(screen.getByTestId('cost-cache').textContent).toBe('75%')
+    expect(screen.getByTestId('cost-prefix').textContent).toBe(COST_TEXT.prefixValue(0.75, 2))
     expect(screen.getByText('Alpha')).toBeTruthy()
     expect(screen.getByText('Claude in Alpha')).toBeTruthy()
     expect(screen.getAllByText(COST_TEXT.central).length).toBeGreaterThan(0)
