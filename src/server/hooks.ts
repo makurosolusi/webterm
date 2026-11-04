@@ -4,6 +4,7 @@ import { NODE_HEADERS_ENV } from './hooksTokens'
 import { claudeHeadersPath } from './hooksPaths'
 import { shq } from './hooksQuote'
 import { writeClaudeMcpConfig } from './mcp/mcp.launch'
+import { explorePluginFlag, writeExplorePlugin } from './subagents/exploreAgent'
 
 // Modul ini dulu memuat SEMUANYA (token, settings, perakitan baris peluncuran). Ia sekarang
 // menyisakan bagian "apa yang dibawa sesi agent" dan MEMBAGI sisanya ke modul bersaudara
@@ -80,6 +81,8 @@ export function buildClaudeFlags(
     writeRules?: () => string
     /** Same: writer of the node's `--mcp-config` file (`webterm mcp`, mcp/mcp.launch.ts). */
     writeMcp?: (nodeId: string, port: number) => string
+    /** Same: writer of the session-only plugin holding the `webterm:explore` subagent (subagents/exploreAgent.ts). */
+    writePlugin?: () => string
   }
 ): string {
   const idFlag = resume ? `--resume ${sessionId}` : `--session-id ${sessionId}`
@@ -90,5 +93,6 @@ export function buildClaudeFlags(
   // webterm MCP server, added next to the user's own servers (no --strict-mcp-config). LAST on
   // purpose: `--mcp-config <configs...>` is variadic and would swallow any argument after it.
   const mcp = (opts?.writeMcp ?? writeClaudeMcpConfig)(nodeId, port)
-  return [idFlag, perm, `--settings ${shq(settings)}`, `--append-system-prompt-file ${shq(rules)}`, `--mcp-config ${shq(mcp)}`].filter(Boolean).join(' ')
+  const plugin = explorePluginFlag(opts?.writePlugin ?? writeExplorePlugin)
+  return [idFlag, perm, `--settings ${shq(settings)}`, `--append-system-prompt-file ${shq(rules)}`, plugin, `--mcp-config ${shq(mcp)}`].filter(Boolean).join(' ')
 }

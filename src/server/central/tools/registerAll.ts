@@ -13,6 +13,7 @@ import { CAP_DEFS } from './defs/cap.defs'
 import type { BrowserToolDeps } from './defs/browser.status'
 import { type ChannelBotDefDeps, createChannelBotDef } from './defs/channel.bot.def'
 import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
+import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
 import { NODE_READ_DEFS } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
@@ -51,6 +52,8 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
     [agentsOn(env), () => [TASK_RUN_DEF]],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],
     [on(env, KNOWLEDGE_FLAG) && !!deps.openKb, () => createKnowledgeDefs(deps.openKb as () => Database)],
+    // repo.map keeps its own cache (repomap.db), so it needs no knowledge.db handle.
+    [on(env, KNOWLEDGE_FLAG), () => [createRepoMapDef()]],
     [on(env, SKILLS_FLAG) && !!deps.skills, () => createSkillDefs(deps.skills as SkillStoreResolver)],
     [central, () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],

@@ -34,6 +34,7 @@ test('full route order snapshot', () => {
     'memory-write', 'inbox', 'memory', 'orchestrator',
     'cost',
     'dag',
+    'knowledge2',
   ])
 })
 

@@ -11,6 +11,7 @@ import FindBar from './FindBar'
 import { useSpeechInput } from './useSpeechInput'
 import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
 import { linkRows } from './terminalLinks'
+import { PROVENANCE_TEXT, ProvenancePanel } from './ProvenancePanel'
 import { EXIT_SETTLE_MS, ineligibleHint, restartEligibility, sendExitSequence } from './agentActions'
 import { send, subscribeStatus, getStatus } from './ws'
 import { unwatchNode, watchNode } from './unread'
@@ -115,6 +116,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const [aiNaming, setAiNaming] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; link: string | null } | null>(null)
   const [restarting, setRestarting] = useState(false)
+  const [provenanceOpen, setProvenanceOpen] = useState(false)
 
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
@@ -198,6 +200,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
         : 'Only for sessions that have ended and have a resumable id.',
       onClick: doResume,
     },
+    { label: PROVENANCE_TEXT.menu, hint: PROVENANCE_TEXT.menuHint, onClick: () => setProvenanceOpen(true) },
     { type: 'separator' },
     {
       label: 'New session',
@@ -313,6 +316,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
         </>)}
       </div>
       {menu && <NodeContextMenu x={menu.x} y={menu.y} rows={menuRows} onClose={() => setMenu(null)} />}
+      {provenanceOpen && <ProvenancePanel nodeId={id} onClose={() => setProvenanceOpen(false)} />}
     </>
   )
 }
