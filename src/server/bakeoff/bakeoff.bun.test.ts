@@ -9,6 +9,7 @@ import type { IncomingMessage } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startExec, type ExecSpec } from '../central/agents/execRunner'
+import { setCostCap } from '../cost/costOracle'
 import { getInboxItem } from '../inbox/inboxItemStore'
 import { LATEST_VERSION, migrate } from '../ledger/migration'
 import { MIGRATIONS } from '../ledger/ledgerSchema'
@@ -72,6 +73,9 @@ test('fans one prompt out to N worktrees and fills a comparison card per candida
   const done = svc.get(b.id)
   expect(done.status).toBe('ready')
   expect(done.candidates.map((c) => c.costMicros)).toEqual([150_000, 250_000])
+  // Each candidate is a cost run, so it counts toward the cost caps.
+  expect(db.query("SELECT ref, node_id, cost_micros FROM cost_run WHERE kind = 'bakeoff' ORDER BY cost_micros").all())
+    .toEqual(done.candidates.map((c) => ({ ref: b.id, node_id: c.nodeId, cost_micros: c.costMicros })))
   for (const c of done.candidates) {
     expect(c.status).toBe('done')
     expect(c.verified).toBe(true)
@@ -134,6 +138,29 @@ test('rejects a bad count and leaves no worktrees behind', async () => {
   expect(await codeOf(svc.start({ repo, prompt: 'x', count: 5 }))).toBe('bad_request')
   expect(await codeOf(svc.start({ repo, prompt: '  ', count: 2 }))).toBe('bad_request')
   expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1)
+}, T)
+
+test('the daily cost cap refuses a bake-off whose N x estimate does not fit, before any worktree exists', async () => {
+  const svc = service()
+  const first = await svc.start({ repo, prompt: 'x', count: 2 }) // records 150k + 250k, median 200k per candidate
+  await svc.settled(first.id)
+  setCostCap(db, 'day', 1_000_000) // 600k left
+  const worktrees = git(repo, 'worktree', 'list')
+  const spawned = argvSeen.length
+  const refused = svc.start({ repo, prompt: 'x', count: 4 })
+  expect(await codeOf(refused)).toBe('cost_cap')
+  const message = 'A bake-off of 4 candidates is estimated at $0.80, but only $0.60 of the $1.00 daily cost cap remains. Use fewer candidates or raise the cap.'
+  expect(await refused.catch((e: Error) => e.message)).toBe(message)
+  const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
+  const viaApi = await handleBakeoffApi({ service: svc, isNodeToken: () => false }, { method: 'POST', headers: ui } as unknown as IncomingMessage,
+    new URL('http://127.0.0.1:8700/api/bakeoff'), async () => JSON.stringify({ repo, prompt: 'x', count: 4 }))
+  expect(viaApi).toEqual({ status: 429, body: { error: 'cost_cap', message } })
+  expect(git(repo, 'worktree', 'list')).toBe(worktrees)
+  expect(argvSeen).toHaveLength(spawned)
+  expect(svc.list()).toHaveLength(1)
+  const ok = await svc.start({ repo, prompt: 'x', count: 3 }) // 600k fits exactly
+  await svc.settled(ok.id)
+  expect(svc.get(ok.id).candidates).toHaveLength(3)
 }, T)
 
 test('recover fails candidates orphaned by a restart and opens the card', () => {

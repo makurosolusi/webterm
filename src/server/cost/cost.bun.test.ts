@@ -9,7 +9,7 @@ import { openLedgerDb } from '../ledger/migration'
 import { registerWorkspaceLookup } from '../central/workspaceLookup'
 import { readBudget, utcDay } from '../central/guard/budgetStore'
 import { captureTranscript, syncCentralTurns } from './costCapture'
-import { beginCostRun, costGate, endCostRun, estimateCost, listCaps, median, ROI_NO_DIFF_RUNS, setCostCap, type Notice } from './costOracle'
+import { bakeoffGate, beginCostRun, costGate, endCostRun, estimateCost, listCaps, median, ROI_NO_DIFF_RUNS, setCostCap, type Notice } from './costOracle'
 import { insertCostUsage, spendSummary, spentMicros } from './costStore'
 import { costRoute, type CostResponse } from './cost.route'
 import { recordPrefix } from '../central/context/promptPrefix'
@@ -145,6 +145,34 @@ describe('oracle', () => {
     const later = () => T0 + 86_400_000 + 20
     expect(costGate(db, { kind: 'routine', ref: 'docs' }, later, () => {}).allowed).toBe(false)
     expect(listCaps(db, later()).find((c) => c.scope === 'routine:docs')).toMatchObject({ limitMicros: 500, spentMicros: 600, pausedAt: null })
+  })
+
+  test('bake-off candidates are runs: a reported cost counts toward the day cap once, and the gate needs N x the estimate', () => {
+    const notices: Notice[] = []
+    const keep = (_db: Database, n: Notice) => { notices.push(n) }
+    // No cap: always open; no past candidates: no estimate.
+    expect(bakeoffGate(db, { count: 3 }, () => T0, keep)).toMatchObject({ allowed: true, estimate: { medianMicros: null, basis: 'none' } })
+    // Candidate 1: transcript captured 100k of a reported 300k; candidate 2: nothing captured, reported 500k.
+    const a = beginCostRun(db, { kind: 'bakeoff', ref: 'b1', nodeId: 'bk-1' }, () => T0)
+    usage('bk1', 'bk-1', T0 + 5, 100_000)
+    expect(endCostRun(db, a, { costMicros: 300_000 }, () => T0 + 10, keep).costMicros).toBe(300_000)
+    const b = beginCostRun(db, { kind: 'bakeoff', ref: 'b1', nodeId: 'bk-2' }, () => T0)
+    endCostRun(db, b, { costMicros: 500_000 }, () => T0 + 10, keep)
+    expect(all("SELECT kind, ref, cost_micros FROM cost_run WHERE kind = 'bakeoff' ORDER BY cost_micros")).toEqual([
+      { kind: 'bakeoff', ref: 'b1', cost_micros: 300_000 }, { kind: 'bakeoff', ref: 'b1', cost_micros: 500_000 },
+    ])
+    expect(listCaps(db, T0 + 20)).toEqual([])
+    setCostCap(db, 'day', 2_000_000)
+    // Day spend = 100k captured + 200k + 500k uncaptured = 800k (not 900k: the captured part is not counted twice).
+    expect(listCaps(db, T0 + 20).find((c) => c.scope === 'day')?.spentMicros).toBe(800_000)
+    // Estimate per candidate = median(300k, 500k) = 400k. 3 x 400k fits in the 1.2M left; 4 x 400k does not.
+    expect(bakeoffGate(db, { count: 3 }, () => T0 + 20, keep)).toMatchObject({ allowed: true, estimate: { medianMicros: 1_200_000, basis: 'kind' } })
+    const over = bakeoffGate(db, { count: 4, workspaceId: 'w1' }, () => T0 + 20, keep)
+    expect(over.allowed).toBe(false)
+    expect(over.reason).toBe('A bake-off of 4 candidates is estimated at $1.60, but only $1.20 of the $2.00 daily cost cap remains. Use fewer candidates or raise the cap.')
+    expect(notices.map((n) => n.title)).toEqual(['Bake-off refused: daily cost cap'])
+    setCostCap(db, 'day', 800_000)
+    expect(bakeoffGate(db, { count: 2 }, () => T0 + 20, keep).reason).toContain('Daily cost cap reached: spent $0.80 of $0.80')
   })
 })
 

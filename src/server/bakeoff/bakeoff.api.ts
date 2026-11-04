@@ -20,7 +20,7 @@ export const BAKEOFF_BODY_MAX_BYTES = 64 * 1024
 
 type Result = { status: number; body: unknown } | null
 const STATUS: Record<BakeoffError['code'], number> = {
-  bad_request: 400, not_found: 404, wrong_state: 409, base_moved: 409, dirty_repo: 409, merge_conflict: 409, git_failed: 500,
+  bad_request: 400, not_found: 404, wrong_state: 409, base_moved: 409, dirty_repo: 409, merge_conflict: 409, git_failed: 500, cost_cap: 429,
 }
 const WT_STATUS: Partial<Record<WorktreeError['code'], number>> = { branch_in_use: 409, not_found: 404, git_failed: 500 }
 const bad = (message: string): Result => ({ status: 400, body: { error: 'bad_request', message } })
