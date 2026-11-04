@@ -1,7 +1,8 @@
 // Session-mutating `/api/control/*` routes: spawn, prompt, close. Split out of `controlApi.ts`.
 import npath from 'node:path'
 import { assembleCmd, isBuiltinAgent, isSafeNodeId } from '../../shared/workspace'
-import { authorize, badRequest } from './controlAuth'
+import { activePolicy } from '../policy/policy.runtime'
+import { authorize, badRequest, capabilityHolder } from './controlAuth'
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
@@ -63,6 +64,8 @@ export function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: AckStor
     },
     () => {}
   )
+  // K3: the spawned node's decisions are capped by its spawner's from now on (lineage persists).
+  activePolicy()?.registerSpawn(capabilityHolder(auth.record), `node:${nodeId}`)
   const result = { status: 201, body: { ok: true, requestId: body.requestId, nodeId } }
   acks.set(key, result, now)
   return result

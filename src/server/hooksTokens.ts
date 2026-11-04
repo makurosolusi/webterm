@@ -1,8 +1,13 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import { rmSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { forgetHookContext } from './hookContext'
 import { claudeHeadersPath, claudeSettingsPath } from './hooksPaths'
 import { firstHeader } from './httpHeaders'
+import { createLogger } from './logs'
+import { activePolicy } from './policy/policy.runtime'
+
+const log = createLogger('hooks')
+const NODE_PRINCIPAL = 'node:'
 
 /**
  * Header yang membawa token node sebuah hook. JANGAN di-rename: ia wire-protocol yang kompatibel
@@ -28,14 +33,51 @@ const tokens = new Map<string, string>()
  */
 const tokenOwners = new Map<string, string>()
 
-/** Token node, dicetak saat pertama diminta. Satu token per node, stabil selama proses berjalan. */
-export function nodeToken(nodeId: string): string {
-  let t = tokens.get(nodeId)
-  if (!t) {
-    t = randomUUID()
-    tokens.set(nodeId, t)
-    tokenOwners.set(t, nodeId)
+function remember(nodeId: string, token: string): void {
+  tokens.set(nodeId, token)
+  tokenOwners.set(token, nodeId)
+}
+
+/**
+ * Token yang sudah ada di file header node itu sendiri, bila ledger masih mengakuinya untuk node ini.
+ * Nilai mentah hanya hidup di file header (0600); ledger menyimpan sha256-nya (policy_token), jadi
+ * restart + re-adopt supervisor menulis ulang file dengan token YANG SAMA, bukan mencetak baru.
+ */
+function persistedToken(nodeId: string): string | undefined {
+  const policy = activePolicy()
+  if (!policy) return undefined
+  let text: string
+  try {
+    text = readFileSync(claudeHeadersPath(nodeId), 'utf8')
+  } catch (err) {
+    const code = (err as { code?: unknown } | null)?.code
+    if (code !== 'ENOENT') log.warn('hooks.token.header_unreadable', 'Node header file unreadable; minting a new node token', { ids: { nodeId }, code })
+    return undefined
   }
+  const prefix = `${NODE_TOKEN_HEADER}: `
+  const line = text.split('\n').find((l) => l.startsWith(prefix))
+  const token = line?.slice(prefix.length).trim()
+  return token && policy.store.verifyToken(token) === `${NODE_PRINCIPAL}${nodeId}` ? token : undefined
+}
+
+/** Token baru; dengan ledger, token lama node ini dicabut dulu supaya hanya satu yang hidup. */
+function mintToken(nodeId: string): string {
+  const store = activePolicy()?.store
+  if (!store) return randomUUID()
+  store.revokeTokensOf(`${NODE_PRINCIPAL}${nodeId}`)
+  return store.issueToken(`${NODE_PRINCIPAL}${nodeId}`)
+}
+
+/**
+ * Token node, dicetak saat pertama diminta. Satu token per node, stabil selama proses berjalan dan,
+ * saat ledger aktif, LINTAS restart (sha256 di ledger, nilai di file header node). Tanpa ledger:
+ * UUID in-memory seperti sebelumnya.
+ */
+export function nodeToken(nodeId: string): string {
+  const known = tokens.get(nodeId)
+  if (known) return known
+  const t = persistedToken(nodeId) ?? mintToken(nodeId)
+  remember(nodeId, t)
   return t
 }
 
@@ -46,6 +88,8 @@ export function forgetNodeToken(nodeId: string): void {
   // membuktikan identitas node mana pun (kalau tidak, ia jadi kunci bebas ke seluruh registry).
   if (t !== undefined) tokenOwners.delete(t)
   tokens.delete(nodeId)
+  // Yang persisten ikut dicabut: token node yang dilupakan tidak boleh hidup lagi setelah restart.
+  activePolicy()?.store.revokeTokensOf(`${NODE_PRINCIPAL}${nodeId}`)
   // Memo pengumuman roster hidup per node di memori: tanpa disapu di sini Map-nya tumbuh selamanya,
   // dan id yang dipakai ulang mewarisi dedup milik node yang sudah mati.
   forgetHookContext(nodeId)
@@ -85,7 +129,20 @@ export function isValidNodeToken(token: string): boolean {
  */
 export function nodeIdForToken(token: string): string | undefined {
   if (typeof token !== 'string' || token === '') return undefined
-  return tokenOwners.get(token)
+  const owner = tokenOwners.get(token)
+  if (owner !== undefined) return owner
+  // Setelah restart map kosong; token yang dicetak proses sebelumnya dibuktikan lewat ledger.
+  const principal = activePolicy()?.store.verifyToken(token)
+  if (!principal?.startsWith(NODE_PRINCIPAL)) return undefined
+  const nodeId = principal.slice(NODE_PRINCIPAL.length)
+  if (tokens.get(nodeId) === undefined) remember(nodeId, token)
+  return nodeId
+}
+
+/** Test hook: lupakan map in-memory saja (simulasi restart proses); yang persisten tetap. */
+export function resetNodeTokenMemoryForTest(): void {
+  tokens.clear()
+  tokenOwners.clear()
 }
 
 /**
@@ -97,8 +154,9 @@ export function nodeIdForToken(token: string): string | undefined {
  */
 export function stateVerified(nodeId: string, header: string | string[] | undefined): boolean {
   const got = firstHeader(header)
-  const want = tokens.get(nodeId)
-  if (!want || typeof got !== 'string') return false
+  if (typeof got !== 'string') return false
+  const want = tokens.get(nodeId) ?? (nodeIdForToken(got) === nodeId ? got : undefined)
+  if (!want) return false
   const a = Buffer.from(got)
   const b = Buffer.from(want)
   // Panjang beda sudah membocorkan ketidakcocokan lewat `timingSafeEqual` yang melempar, jadi

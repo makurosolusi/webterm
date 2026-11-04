@@ -9,6 +9,7 @@ import type { BreakerKey, ControlGuard, ControlLevel, GuardCode, GuardDecision, 
 import { addUsage, budgetExhausted, budgetLimits, readBudget, utcDay } from './budgetStore'
 import { createBreakerStore, type SyncBreaker } from './breakerStore'
 import { DEFAULT_GLOBAL_LEVEL, effectiveLevelOf, levelRank, projectRef, readLevel } from './levelStore'
+import { createPolicy, type Policy } from '../../policy/policy.decide'
 
 /** I11: concurrent workers per project and across the whole server. */
 export const MAX_WORKERS_PER_PROJECT = 3
@@ -23,7 +24,8 @@ const GUARD_AUDIT_KIND = 'central.guard'
 const SPAWN_TOOLS: readonly string[] = ['agent.spawn', 'task.run']
 /** Agent states that no longer hold a worker slot (`approval_pending` has not started yet). */
 const SLOT_FREE_STATES = ['approval_pending', 'closed', 'failed', 'timed_out', 'lease_expired', 'session_exited', 'cancelled', 'killed', 'orphaned']
-const MIN_LEVEL: Record<Tier, ControlLevel> = { R0: 'observe', R1: 'propose', R2: 'act_gated', R3: 'propose' }
+/** Central acts as this principal in the policy (PLAN S2). */
+const CENTRAL_PRINCIPAL = 'central'
 
 /** The guard with synchronous returns (still assignable to the contract's `ControlGuard`). */
 export interface SyncControlGuard extends ControlGuard {
@@ -31,6 +33,8 @@ export interface SyncControlGuard extends ControlGuard {
   effectiveLevel(projectId: string | null): ControlLevel
   recordUsage(usage: GuardUsage): void
   readonly breaker: SyncBreaker
+  /** Policy over the same DB; tier minima and allow/ask/deny rules are read from it. */
+  readonly policy: Policy
 }
 
 export interface GuardDeps {
@@ -40,6 +44,7 @@ export interface GuardDeps {
   env?: Record<string, string | undefined>
   random?: () => number
   breaker?: SyncBreaker
+  policy?: Policy
 }
 
 function activeAgents(db: Database, projectId: string | null): number {
@@ -55,6 +60,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
   const env = (): Record<string, string | undefined> => deps.env ?? process.env
   const breaker = deps.breaker ?? createBreakerStore({ db, now, ...(deps.random ? { random: deps.random } : {}) })
   const seen = new Map<string, number[]>()
+  const policy = deps.policy ?? createPolicy({ db, now })
 
   const effectiveLevel = (projectId: string | null): ControlLevel => effectiveLevelOf(db, projectId, env())
 
@@ -78,7 +84,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
       if (status === PROJECT_PAUSED) return deny('project_paused', 'project is paused')
     }
     const spawn = req.action === 'spawn'
-    const need: ControlLevel = spawn ? 'act_gated' : req.action === 'turn' ? 'observe' : MIN_LEVEL[req.tier]
+    const need: ControlLevel = spawn ? 'act_gated' : req.action === 'turn' ? 'observe' : policy.store.tierMinimum(req.tier)
     if (level === 'off' || levelRank(level) < levelRank(need)) return deny('level_denied', `level ${level} is below ${need}`)
 
     if (spawn) {
@@ -104,12 +110,20 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     if (req.projectId && !breaker.allow(`project:${req.projectId}`).allowed) return deny('breaker_open', 'project breaker is open')
 
     const tier: Tier = spawn && req.tier < 'R2' ? 'R2' : req.tier
+    // Rules last: the ladder above still bounds Central; a human rule can only narrow it further.
+    // Builtin `central * allow` keeps the pre-policy verdicts. A turn is not a capability.
+    if (req.action !== 'turn') {
+      const d = policy.decide(CENTRAL_PRINCIPAL, req.tool, req.projectId ? { resource: `project:${req.projectId}` } : {})
+      if (d.effect === 'deny') return deny('policy_denied', d.reason)
+      if (d.effect === 'ask') return { verdict: 'needs_approval', level, tier }
+    }
     if (tier === 'R3' || (tier === 'R2' && level !== 'act_envelope')) return { verdict: 'needs_approval', level, tier }
     return { verdict: 'allow', level }
   }
 
   return {
     breaker,
+    policy,
     effectiveLevel,
     recordUsage: (usage) => addUsage(db, usage, now),
     check(req) {
