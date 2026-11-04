@@ -31,7 +31,7 @@ export const SPAWN_HEADLESS_TIMEOUT_MS = 30 * 60 * 1000
 export const DEFAULT_AGENT_KIND = 'claude'
 const TITLE_MAX = 200
 
-export type SpawnDoor = 'control' | 'orchestrator' | 'central' | 'canvas'
+export type SpawnDoor = 'control' | 'orchestrator' | 'central' | 'canvas' | 'routine'
 export type SpawnDenyCode = 'spawn_invalid' | 'spawn_depth_exceeded' | 'spawn_cap_exceeded'
 
 export interface AgentSpawnRequest {

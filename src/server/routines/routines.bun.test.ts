@@ -40,10 +40,11 @@ function setup(opts: { realSpawn?: boolean } = {}) {
   const store = createRoutineStore(ctx)
   const events: AppendEventInput[] = []
   const spawns: AgentSpawnRequest[] = []
+  const spawnEvents: AppendEventInput[] = []
   const queued: { to: string; body: string }[] = []
   const awake = { starts: 0, kills: 0 }
   const spawner = createAgentSpawner({
-    ancestors: () => [], registerSpawn: () => {}, record: () => {}, onPtyExit: () => {},
+    ancestors: () => [], registerSpawn: () => {}, record: (e) => { spawnEvents.push(e) }, onPtyExit: () => {},
     // Same argv shape agentSpawn builds, but the executable is the fake binary.
     exec: (spec) => startExec({ ...spec, argv: [fakeClaude, ...spec.argv.slice(1)] }),
   })
@@ -60,7 +61,7 @@ function setup(opts: { realSpawn?: boolean } = {}) {
   const bus = createEventBus()
   const fired: FireResult[] = []
   const scheduler = createRoutineScheduler({ store, runner, bus, now: ctx.now, onFire: (f) => fired.push(f) })
-  return { db, clock, ctx, store, runner, scheduler, bus, events, spawns, queued, awake, fired }
+  return { db, clock, ctx, store, runner, scheduler, bus, events, spawns, spawnEvents, queued, awake, fired }
 }
 
 const ev = (kind: string, trust: 'trusted' | 'untrusted', nodeId: string | null = 'n1'): SenseEvent => ({
@@ -80,7 +81,8 @@ test('a run spawns a headless agent (fake claude), records cost, creates an inbo
   const [last] = s.store.runs(r.id)
   expect(last).toMatchObject({ status: 'ran', trigger: 'manual', costUsd: 0.5 })
   expect(last!.childId).toMatch(/^node:headless-/)
-  expect(s.spawns[0]).toMatchObject({ mode: 'headless', parent: `routine:${r.id}`, cwd: dir, prompt: 'find missing tests' })
+  expect(s.spawns[0]).toMatchObject({ mode: 'headless', parent: `routine:${r.id}`, cwd: dir, prompt: 'find missing tests', door: 'routine' })
+  expect(s.spawnEvents.find((e) => e.kind === 'agent.spawn')?.payload).toMatchObject({ door: 'routine', mode: 'headless' })
   const items = rows(s.db, 'SELECT kind, source, title, body FROM inbox_item WHERE id = ?', last!.inboxItemId)
   expect(items[0]).toMatchObject({ kind: 'review', source: 'routines', title: 'Routine "Find tests" finished', body: 'Found 2 untested files' })
   expect(s.events.map((e) => e.kind)).toEqual([ROUTINE_EVENT.run, ROUTINE_EVENT.finish])
