@@ -30,16 +30,17 @@ export const ADVANCED_TEXT = {
   changeFailed: 'The change did not go through. Try again in a moment.',
 } as const
 
-export const ENGINE_OPTIONS: ReadonlyArray<{ value: Engine; label: string }> = [
-  { value: 'auto', label: 'Automatic' },
-  { value: 'claude', label: 'Claude' },
-  { value: 'opencode', label: 'OpenCode' },
+/** Picker label adds what the engine can do; `name` is the bare engine name used in status sentences. */
+export const ENGINE_OPTIONS: ReadonlyArray<{ value: Engine; label: string; name: string }> = [
+  { value: 'auto', label: 'Automatic', name: 'Automatic' },
+  { value: 'claude', label: 'Claude', name: 'Claude' },
+  { value: 'opencode', label: 'OpenCode (chat only)', name: 'OpenCode' },
 ]
 
 /** Nama mesin hasil deteksi otomatis; `off` = tidak ada CLI yang ditemukan. */
 export const engineName = (kind: string): string =>
   kind === 'off' ? 'none (install Claude Code or OpenCode)'
-    : ENGINE_OPTIONS.find((o) => o.value === kind)?.label ?? kind
+    : ENGINE_OPTIONS.find((o) => o.value === kind)?.name ?? kind
 
 export const SECTION_TEXT = {
   loading: 'Loading capabilities…',

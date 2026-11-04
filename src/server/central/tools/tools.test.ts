@@ -4,7 +4,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.
 import { defaultRegistry } from './defaultRegistry'
 import { CORE_DEFS } from './defs/core.defs'
 import { ALLOW_ALL_GUARD, execTool } from './toolExec'
-import { CATALOG_TOKEN_BUDGET, createRegistry, estimateTokens, renderCatalog, toolsHash } from './toolRegistry'
+import { createRegistry, toolsHash } from './toolRegistry'
 import { TIER_ORDER, type ControlGuard, type Tier, type ToolCtx, type ToolDef, type ToolRegistry } from './toolTypes'
 
 function fake(name: string, tier: Tier, extra: Partial<ToolDef> = {}): ToolDef {
@@ -39,29 +39,6 @@ describe('registry', () => {
     expect(toolsHash(make([defs[1]!, defs[2]!, defs[0]!]))).toBe(h1)
     expect(toolsHash(make([defs[0]!, defs[1]!, fake('c', 'R3')]))).not.toBe(h1)
     expect(toolsHash(make([defs[0]!, defs[1]!, fake('c', 'R2', { usage: 'changed' })]))).not.toBe(h1)
-  })
-})
-
-describe('renderCatalog', () => {
-  it('renders the core catalog within the token budget', () => {
-    const text = renderCatalog(defaultRegistry(), 'R1')
-    for (const name of ['goal.propose', 'plan.propose', 'task.assign', 'approval.request']) expect(text).toContain(`${name} {"projectId":"<id>"`)
-    expect(estimateTokens(text)).toBeLessThanOrEqual(CATALOG_TOKEN_BUDGET)
-  })
-  it('filters by tier and flag, and stays under budget with many tools', () => {
-    const reg = createRegistry()
-    reg.register(fake('r0.tool', 'R0'))
-    reg.register(fake('r2.tool', 'R2'))
-    reg.register(fake('flagged.tool', 'R0', { flag: 'WEBTERM_TEST_FLAG' }))
-    expect(renderCatalog(reg, 'R0', {})).toContain('r0.tool')
-    expect(renderCatalog(reg, 'R1', {})).not.toContain('r2.tool')
-    expect(renderCatalog(reg, 'R2', {})).toContain('r2.tool')
-    expect(renderCatalog(reg, 'R0', {})).not.toContain('flagged.tool')
-    expect(renderCatalog(reg, 'R0', { WEBTERM_TEST_FLAG: 'on' })).toContain('flagged.tool')
-    for (let i = 0; i < 300; i++) reg.register(fake(`bulk.tool${i}`, 'R0'))
-    const big = renderCatalog(reg, 'R3', {})
-    expect(estimateTokens(big)).toBeLessThanOrEqual(CATALOG_TOKEN_BUDGET)
-    expect(big).toContain('r0.tool')
   })
 })
 

@@ -101,3 +101,20 @@ describe('runtime event redaction', () => {
     expect(json).toContain(REDACTED)
   })
 })
+
+describe('known secret masking', () => {
+  const KNOWN = 'plain-known-value-9Z' // test-only: no credential shape, only the broker store would know it
+  it('masks a known value in text, tool input/output, errors and the result, keeping other text', () => {
+    const { events, emit } = recorder()
+    const emitter = createTurnEmitter({ turnId: 't1', emit, secrets: [KNOWN] })
+    emitter.textDelta(`use ${KNOWN} now`)
+    emitter.emit({ type: 'tool.requested', toolCallId: 'c1', name: 'goal.propose', input: { statement: `ship ${KNOWN}`, n: 2 } })
+    emitter.emit({ type: 'tool.completed', toolCallId: 'c1', name: 'goal.propose', ok: true, output: { echo: [KNOWN] }, durationMs: 1 })
+    emitter.emit({ type: 'error', code: 'timeout', message: `failed ${KNOWN}` })
+    const result = emitter.result('success', { text: `final ${KNOWN}` })
+    expect(JSON.stringify(events)).not.toContain(KNOWN)
+    expect(events[0]).toMatchObject({ text: `use ${REDACTED} now` })
+    expect(events[1]).toMatchObject({ input: { statement: `ship ${REDACTED}`, n: 2 } })
+    expect(result.text).toBe(`final ${REDACTED}`)
+  })
+})

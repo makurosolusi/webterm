@@ -9,6 +9,7 @@ import type { Database } from 'bun:sqlite'
 import type { CapabilitySpec } from '../capability/capability.define'
 import { checkSchema } from '../capability/capability.schema'
 import { type SyncControlGuard, toToolGuard } from '../central/guard/controlGuard'
+import { brokerSecretValues } from '../central/runtime/runtimeEvents'
 import { toolCapability } from '../central/tools/toolCapability'
 import { execToolReceipt } from '../central/tools/toolExec'
 import { type ToolRegistry, defEnabled } from '../central/tools/toolTypes'
@@ -17,7 +18,7 @@ import { allRows } from '../ledger/ledgerCore'
 import { redactValue } from '../redactSecrets'
 import { APPROVAL_PENDING, CENTRAL_MCP_MINTER } from './mcp.paths'
 import type { McpTool } from './mcp.protocol'
-import { type McpReceipt, mcpName } from './mcp.tools'
+import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
 
 /**
  * Tools whose handler runs its own approval (agent.spawn cards + resume sweep, task.run's worker.run
@@ -29,7 +30,11 @@ const APPROVAL_ID_PREFIX = 'ct-'
 const APPROVAL_HASH_CHARS = 24
 
 type Env = Record<string, string | undefined>
-export interface CentralMcpDeps { db: Database; registry: ToolRegistry; env: Env; guard: SyncControlGuard; now?: () => number }
+export interface CentralMcpDeps {
+  db: Database; registry: ToolRegistry; env: Env; guard: SyncControlGuard; now?: () => number
+  /** Broker-held secret values to mask in tool input (tests); absent = the real broker store. */
+  secretValues?: () => readonly string[]
+}
 
 /** Conversation a capability record speaks for; null when it was not minted for Central's MCP child. */
 export function centralConversationOf(record: { mintedBy?: string } | undefined): string | null {
@@ -94,9 +99,11 @@ async function exec(c: CentralMcpDeps, conversationId: string, tool: string, arg
 }
 
 /** Runs one Central MCP call; never throws for a bad call. */
-export async function callCentralTool(c: CentralMcpDeps, conversationId: string, name: string, args: Record<string, unknown>): Promise<McpReceipt> {
+export async function callCentralTool(c: CentralMcpDeps, conversationId: string, name: string, raw: Record<string, unknown>): Promise<McpReceipt> {
   const cap = centralCapabilities(c).get(name)
   if (!cap) return receipt('error', 'unknown_tool', null, 'tools/list or cap_search shows the tools that exist')
+  // Scrubbed first, so the guard, approval digest, receipts and every store see only redacted input (K7-F1).
+  const args = redactToolArgs(cap.name, raw, c.secretValues ?? (() => brokerSecretValues()))
   const violation = cap.input ? checkSchema(cap.input, args) : null
   if (violation !== null) return receipt('error', 'invalid_shape', null, 'tools/list shows the exact input schema', { violation })
   const tool = cap.name

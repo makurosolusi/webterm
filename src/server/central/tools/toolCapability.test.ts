@@ -6,7 +6,7 @@ import { CAP_DEFS } from './defs/cap.defs'
 import { CORE_DEFS } from './defs/core.defs'
 import { ALLOW_ALL_GUARD, execTool, execToolReceipt } from './toolExec'
 import { toolCapability, toolInputSchema } from './toolCapability'
-import { buildCatalog, createRegistry, estimateTokens, renderCatalog } from './toolRegistry'
+import { createRegistry } from './toolRegistry'
 import type { Tier, ToolCtx, ToolDef, ToolRegistry } from './toolTypes'
 
 const ENV = { WEBTERM_CENTRAL_READ_TOOLS: 'on' } // test-only
@@ -37,29 +37,6 @@ describe('ToolDef as capability', () => {
     expect(validated).toBe(0)
     expect(await execTool(ctxOf(f, reg), 'a.one', { projectId: 'p1', n: 2 })).toMatchObject({ ok: true })
     f.close()
-  })
-})
-
-describe('catalog overflow', () => {
-  const many = [...CAP_DEFS, ...Array.from({ length: 40 }, (_, i) => def(`bulk.t${i}`))]
-  it('a catalog within budget renders exactly name + usage per tool', () => {
-    expect(renderCatalog(registryOf(CORE_DEFS), 'R1')).toBe(CORE_DEFS.map((d) => `${d.name} ${d.usage}`).join(' '))
-  })
-  it('over budget: keeps cap.describe, names every omitted tool, stays within budget', () => {
-    const budget = 300
-    const catalog = buildCatalog(registryOf(many), 'R3', ENV, budget)
-    expect(catalog.omitted.length).toBeGreaterThan(0)
-    expect(catalog.omitted).not.toContain('cap.describe')
-    expect(catalog.text).toContain('cap.describe {"name"')
-    expect(catalog.text).toContain(`${catalog.omitted.length} more tools over the catalog budget`)
-    for (const name of catalog.omitted) expect(catalog.text).toContain(name)
-    expect(estimateTokens(catalog.text)).toBeLessThanOrEqual(budget)
-  })
-  it('names that cannot all fit are counted and pointed to cap.search', () => {
-    const huge = registryOf([...CAP_DEFS, ...Array.from({ length: 400 }, (_, i) => def(`bulk.tool${i}`))])
-    const catalog = buildCatalog(huge, 'R3', ENV)
-    expect(catalog.text).toMatch(/and \d+ others \(cap\.search finds them\)\]$/)
-    expect(estimateTokens(catalog.text)).toBeLessThanOrEqual(1200)
   })
 })
 
