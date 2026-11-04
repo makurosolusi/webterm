@@ -1,5 +1,5 @@
-// Settings › Control (F0-c): read-only table of every behaviour knob with effective value, source, reason and
-// UI location, grouped by subsystem. Imitates the VS Code Settings editor: a colored bar left of modified rows
+// Settings › Control (F0-c read model, F1-f writes): every behaviour knob with effective value, source, reason
+// and an editor (ControlPanelField) or the card that owns it, grouped by subsystem, plus the Doctor. Imitates the VS Code Settings editor: a colored bar left of modified rows
 // and a "Modified" filter (VS Code `@modified`, code.visualstudio.com/docs/configure/settings), plus an
 // "env-only" filter so hidden knobs are one click away. A red MOCK badge shows whenever a runtime is simulated.
 import { useEffect, useMemo, useState } from 'react'
@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { TOKEN_HEADER } from './api'
 import { CONTROL_TEXT, SOURCE_LABEL } from './controlPanelLabels'
+import { ControlField } from './ControlPanelField'
+import { ControlPanelDoctor } from './ControlPanelDoctor'
 import { matchesSearch, normalizeQuery } from './SettingsFields'
 import { peekToken } from './transportToken'
 
@@ -18,9 +20,26 @@ export const AGENT_PROTECTION_PATH = '/api/agents/protection'
 export interface EffectiveRow {
   key: string; label: string; description: string; subsystem: string; value: string; secret: boolean; set?: boolean
   source: string; reason: string; modified: boolean; ui: string | null; envOnly: boolean; mock?: true
+  kind: string; editable: boolean; lockReason?: string; restart: 'none' | 'hot' | 'boot'; setting: string; default?: string
+  pendingRestart: boolean; options?: string[]; optionLabels?: Record<string, string>; min?: number; max?: number; dangerNote?: string
 }
 export interface EffectiveConfig { mock: { active: boolean; keys: string[] }; rows: EffectiveRow[] }
 export interface AgentProtection { kind: string; level: string; reasons: string[] }
+
+/** Call `/api/control/effective` (GET read model or Doctor, PUT settings write, POST Doctor fix). Throws with the server reason. */
+export async function controlRequest(method: string, body?: unknown, query = ''): Promise<unknown> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  const t = peekToken()
+  if (t !== '') headers[TOKEN_HEADER] = t
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const res = await fetch(CONTROL_EFFECTIVE_PATH + query, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+  const out: unknown = await res.json().catch(() => null)
+  if (!res.ok) {
+    const e = (out ?? {}) as { error?: string; reason?: string }
+    throw new Error(e.reason ?? e.error ?? `${method} ${CONTROL_EFFECTIVE_PATH} failed (${res.status})`)
+  }
+  return out
+}
 
 async function getJson(path: string): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
@@ -53,7 +72,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
 
   useEffect(() => {
     let live = true
-    getJson(CONTROL_EFFECTIVE_PATH)
+    controlRequest('GET')
       .then((v) => { if (!live) return; if (isConfig(v)) setData(v); else setFailed(true) })
       .catch(() => { if (live) setFailed(true) }) // shown as the loadFailed alert
     getJson(AGENT_PROTECTION_PATH)
@@ -61,6 +80,16 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
       .catch(() => { if (live) setProtection(null) }) // endpoint not built yet (wkr-sec-51): degrade, do not fail
     return () => { live = false }
   }, [])
+
+  const write = async (key: string, value: string | null): Promise<string | null> => {
+    try {
+      const next = await controlRequest('PUT', value === null ? { set: {}, unset: [key] } : { set: { [key]: value }, unset: [] })
+      if (isConfig(next)) setData(next)
+      return null
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err)
+    }
+  }
 
   const q = normalizeQuery(`${query} ${filter}`)
   const rows = useMemo(() => (data?.rows ?? []).filter((r) =>
@@ -98,6 +127,8 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
         ) : null}
       </section>
 
+      <ControlPanelDoctor />
+
       <div className="flex flex-wrap items-center gap-3">
         <Input type="search" aria-label={CONTROL_TEXT.search} placeholder={CONTROL_TEXT.search} value={filter}
           onChange={(e) => setFilter(e.target.value)} className="min-w-48 flex-1" />
@@ -120,9 +151,9 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
           <table className="w-full table-fixed border-collapse text-xs">
             <thead>
               <tr className="text-left opacity-70">
-                <th className="w-[28%]">{CONTROL_TEXT.colKey}</th><th className="w-[12%]">{CONTROL_TEXT.colValue}</th>
+                <th className="w-[22%]">{CONTROL_TEXT.colKey}</th><th className="w-[12%]">{CONTROL_TEXT.colValue}</th>
                 <th className="w-[10%]">{CONTROL_TEXT.colSource}</th><th>{CONTROL_TEXT.colReason}</th>
-                <th className="w-[20%]">{CONTROL_TEXT.colUi}</th>
+                <th className="w-[30%]">{CONTROL_TEXT.colUi}</th>
               </tr>
             </thead>
             <tbody>
@@ -139,7 +170,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
                   </td>
                   <td>{SOURCE_LABEL[r.source] ?? r.source}</td>
                   <td>{r.reason}</td>
-                  <td>{r.ui ?? <em className="opacity-70">{CONTROL_TEXT.noUi}</em>}</td>
+                  <td><ControlField row={r} write={write} /></td>
                 </tr>
               ))}
             </tbody>

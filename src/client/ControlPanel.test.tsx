@@ -11,21 +11,23 @@ import { SettingsPanel } from './SettingsPanel'
 // test-only fixture rows
 const row = (key: string, extra: Partial<EffectiveRow>): EffectiveRow => ({
   key, label: key, description: '', subsystem: 'Central agent', value: 'off', secret: false, source: 'default',
-  reason: 'Code default.', modified: false, ui: null, envOnly: true, ...extra,
+  reason: 'Code default.', modified: false, ui: 'Settings › Control', envOnly: false, kind: 'flag', editable: true,
+  restart: 'hot', setting: 'off', pendingRestart: false, ...extra,
 })
 const config = (mock: boolean): EffectiveConfig => ({
   mock: { active: mock, keys: mock ? ['WEBTERM_CENTRAL_RUNTIME'] : [] },
   rows: [
-    row('WEBTERM_CENTRAL', { value: 'on', source: 'settings', modified: true, ui: 'Settings › Capabilities › Central agent', envOnly: false }),
-    row('WEBTERM_CENTRAL_RUNTIME', { value: mock ? 'mock' : 'auto (claude)', ...(mock ? { mock: true as const } : {}), ui: 'x', envOnly: false }),
-    row('WEBTERM_CENTRAL_MAX_STEPS', { value: '2' }),
-    row('WEBTERM_TELEGRAM_BOT_TOKEN', { subsystem: 'Telegram', secret: true, set: true, value: '', ui: 'y', envOnly: false }),
+    row('WEBTERM_CENTRAL', { value: 'on', source: 'settings', modified: true, ui: 'Settings › Capabilities › Central agent', editable: false }),
+    row('WEBTERM_CENTRAL_RUNTIME', { value: mock ? 'mock' : 'auto (claude)', ...(mock ? { mock: true as const } : {}), ui: 'x', editable: false }),
+    row('WEBTERM_CENTRAL_MAX_STEPS', { value: '2', kind: 'number', setting: '2' }),
+    row('WEBTERM_TOKEN', { subsystem: 'Bootstrap', secret: true, set: true, value: '', ui: null, envOnly: true, editable: false, lockReason: 'Bootstrap-only by design.' }),
   ],
 })
 
 function stub(mock: boolean, protection: unknown = null): void {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === CONTROL_EFFECTIVE_PATH) return new Response(JSON.stringify(config(mock)), { status: 200 })
+    if (url === `${CONTROL_EFFECTIVE_PATH}?doctor=1`) return new Response('{"checks":[]}', { status: 200 })
     if (url === AGENT_PROTECTION_PATH && protection) return new Response(JSON.stringify(protection), { status: 200 })
     return new Response('{"error":"not_found"}', { status: 404 })
   }))
@@ -38,7 +40,7 @@ describe('ControlPanel', () => {
     render(<ControlPanel />)
     const central = await screen.findByRole('region', { name: 'Central agent' })
     expect(within(central).getAllByRole('row')).toHaveLength(4) // header + 3
-    expect(screen.getByRole('region', { name: 'Telegram' }).textContent).toContain('set')
+    expect(screen.getByRole('region', { name: 'Bootstrap' }).textContent).toContain('set')
     expect(document.querySelector('[data-key="WEBTERM_CENTRAL"]')?.getAttribute('data-modified')).toBe('true')
     expect(document.querySelector('[data-key="WEBTERM_CENTRAL_MAX_STEPS"]')?.hasAttribute('data-modified')).toBe(false)
     expect(await screen.findByText('Agent protection status is not available yet.')).toBeTruthy()
@@ -49,14 +51,14 @@ describe('ControlPanel', () => {
     stub(false)
     render(<ControlPanel />)
     await screen.findByRole('region', { name: 'Central agent' })
-    fireEvent.click(screen.getByLabelText('Env-only (no UI switch)'))
+    fireEvent.click(screen.getByLabelText('Bootstrap only (no UI switch)'))
     expect(screen.getByRole('status').textContent).toBe('1 of 4 settings')
-    expect(document.querySelector('[data-key="WEBTERM_CENTRAL_MAX_STEPS"]')).not.toBeNull()
-    fireEvent.click(screen.getByLabelText('Env-only (no UI switch)'))
+    expect(document.querySelector('[data-key="WEBTERM_TOKEN"]')).not.toBeNull()
+    fireEvent.click(screen.getByLabelText('Bootstrap only (no UI switch)'))
     fireEvent.click(screen.getByLabelText('Modified'))
     expect(screen.getByRole('status').textContent).toBe('1 of 4 settings')
     fireEvent.click(screen.getByLabelText('Modified'))
-    fireEvent.change(screen.getByLabelText('Filter settings'), { target: { value: 'telegram' } })
+    fireEvent.change(screen.getByLabelText('Filter settings'), { target: { value: 'bootstrap' } })
     expect(screen.getByRole('status').textContent).toBe('1 of 4 settings')
   })
 
@@ -73,7 +75,8 @@ describe('ControlPanel', () => {
   it('load failure is reported, not silent', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 500 })))
     render(<ControlPanel />)
-    expect((await screen.findByRole('alert')).textContent).toContain('could not be loaded')
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts.map((a) => a.textContent).join(' ')).toContain('effective configuration could not be loaded')
   })
 
   it('is mounted as the Control tab in Settings', async () => {

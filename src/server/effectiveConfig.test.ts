@@ -2,10 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY } from './envRegistry'
 import { buildEffectiveConfig, type EffectiveRow } from './effectiveConfig'
-import { ENV_ONLY_PENDING_F1, uiWhere } from './effectiveConfig.ui'
-import { controlEffectiveRoute, rootReader } from './envSettings.api'
-import { capabilitiesRoute } from './featureCapabilities.api'
-import { fakeReq, recorder, SENTINEL_BOT_TOKEN, setupEnv } from './envSettings.testutil'
+import { CONTROL_WHERE, uiWhere } from './effectiveConfig.ui'
+import { SENTINEL_BOT_TOKEN, setupEnv } from './envSettings.testutil'
 
 function build(env: NodeJS.ProcessEnv, stored: string | null = null, dotenv: string[] = []) {
   const s = setupEnv(env, stored)
@@ -26,13 +24,13 @@ describe('buildEffectiveConfig', () => {
   it('tells default, shell env, .env, Settings and capability sources apart', () => {
     const stored = JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_CHAT: 'on', WEBTERM_LOG_BUFFER: '900' })
     const { row } = build({ WEBTERM_LEDGER: 'shadow', WEBTERM_LOG_LEVEL: 'debug' }, stored, ['WEBTERM_LOG_LEVEL'])
-    expect(row('WEBTERM_FILES_LIST_MAX')).toMatchObject({ source: 'default', modified: false, reason: 'Code default.', envOnly: true })
+    expect(row('WEBTERM_FILES_LIST_MAX')).toMatchObject({ source: 'default', modified: false, reason: 'Code default.', envOnly: false, ui: CONTROL_WHERE, editable: true })
     expect(row('WEBTERM_LEDGER')).toMatchObject({ source: 'env', value: 'shadow', modified: true })
     expect(row('WEBTERM_LOG_LEVEL')).toMatchObject({ source: '.env', value: 'debug', reason: 'From the .env file in the server folder.' })
     expect(row('WEBTERM_CENTRAL')).toMatchObject({ source: 'settings', value: 'on', ui: 'Settings › Capabilities › Central agent', envOnly: false })
     expect(row('WEBTERM_CENTRAL').reason).toBe('Set in Settings › Capabilities › Central agent.')
     expect(row('WEBTERM_CENTRAL_CHAT')).toMatchObject({ source: 'capability', reason: 'Derived from the Central agent card (Central agent on).' })
-    expect(row('WEBTERM_LOG_BUFFER').reason).toContain('no UI switch yet')
+    expect(row('WEBTERM_LOG_BUFFER').reason).toBe('Set in Settings › Control.')
   })
 
   it('derived row names the card it follows (Worker card)', () => {
@@ -65,50 +63,30 @@ describe('buildEffectiveConfig', () => {
   })
 })
 
-describe('A2 drift: every behaviour key has a UI switch or is listed env-only pending F1', () => {
-  it('registry and allowlist agree', () => {
-    const registry = new Set(ENV_REGISTRY.map((s) => s.key))
-    const envOnly = ENV_REGISTRY.filter((s) => uiWhere(s.key) === null).map((s) => s.key)
-    console.info(`[A2] env-only, pending F1 (${envOnly.length}): ${envOnly.join(', ')}`)
-    expect(envOnly.filter((k) => !ENV_ONLY_PENDING_F1.includes(k))).toEqual([]) // new hidden knob
-    expect(ENV_ONLY_PENDING_F1.filter((k) => !registry.has(k) || uiWhere(k) !== null)).toEqual([]) // stale entry
+describe('A2 drift: no behaviour key is env-only (F1 exit)', () => {
+  it('every registry key has a UI location; only bootstrap keys are env-only', () => {
+    expect(ENV_REGISTRY.filter((s) => !uiWhere(s.key)).map((s) => s.key)).toEqual([])
+    const { out } = build({})
+    expect(out.rows.filter((r) => r.envOnly).every((r) => r.bootstrap)).toBe(true)
   })
 })
 
-describe('GET /api/control/effective', () => {
-  const svc = () => setupEnv({}).svc
-  const req = (headers: Record<string, string>) => Object.assign(fakeReq('GET'), { headers })
-
-  it('serves the model to the owner', () => {
-    const res = recorder()
-    controlEffectiveRoute(req({}), res, 'GET', { service: svc(), env: {}, dotenvKeys: new Set(), rootToken: null })
-    expect(res.status).toBe(200)
-    expect(res.headers['Cache-Control']).toBe('no-store')
-    expect((res.json() as { rows: unknown[] }).rows.length).toBeGreaterThan(ENV_REGISTRY.length)
+describe('Control locks (explicit env wins, VS Code policy pattern)', () => {
+  it('shell env locks a Control row with the reason; .env and defaults stay editable', () => {
+    const { row } = build({ WEBTERM_LOG_LEVEL: 'debug', WEBTERM_LOG_BUFFER: '900' }, null, ['WEBTERM_LOG_BUFFER'])
+    expect(row('WEBTERM_LOG_LEVEL')).toMatchObject({ editable: false, restart: 'boot' })
+    expect(row('WEBTERM_LOG_LEVEL').lockReason).toContain('shell environment')
+    expect(row('WEBTERM_LOG_BUFFER')).toMatchObject({ editable: true, source: '.env' })
+    expect(row('WEBTERM_AGENT_SANDBOX')).toMatchObject({ editable: true, restart: 'hot', kind: 'flag', setting: 'on' })
   })
 
-  it('refuses node and capability tokens, and wrong root tokens', () => {
-    expect(rootReader(req({ 'x-webterm-token': 'node-token' }), undefined)).toBe(false)
-    expect(rootReader(req({ 'x-webterm-capability': 'wcap_x' }), undefined)).toBe(false)
-    expect(rootReader(req({ 'x-webterm-token': 'wrong' }), 'root')).toBe(false)
-    expect(rootReader(req({}), 'root')).toBe(false)
-    expect(rootReader(req({ 'x-webterm-token': 'root' }), 'root')).toBe(true)
-    const res = recorder()
-    controlEffectiveRoute(req({ 'x-webterm-token': 'node-token' }), res, 'GET', { service: svc(), rootToken: null })
-    expect(res.status).toBe(403)
-  })
-
-  it('rejects writes with 405', () => {
-    const res = recorder()
-    controlEffectiveRoute(req({}), res, 'PUT', { service: svc(), rootToken: null })
-    expect(res.status).toBe(405)
-  })
-
-  it('is reachable through the capabilities dispatcher (mounted before /api/control/*)', async () => {
-    const res = recorder()
-    const deps = () => ({ service: svc(), guard: () => ({ ok: true as const, via: 'ui' as const }) })
-    const handled = await capabilitiesRoute(req({ 'x-webterm-capability': 'wcap_x' }), res, 'GET', '/api/control/effective', deps, { env: {} })
-    expect(handled).toBe(true)
-    expect(res.status).toBe(403)
+  it('card-owned and derived keys are not editable here; global lock and bootstrap keys carry a reason', () => {
+    const { row } = build({})
+    expect(row('WEBTERM_CENTRAL')).toMatchObject({ editable: false, ui: 'Settings › Capabilities › Central agent' })
+    expect(row('WEBTERM_CENTRAL').lockReason).toBeUndefined()
+    expect(row('WEBTERM_TOKEN')).toMatchObject({ editable: false, bootstrap: true })
+    const locked = build({ WEBTERM_ENV_SETTINGS: 'off' }).row('WEBTERM_FILES_LIST_MAX')
+    expect(locked.editable).toBe(false)
+    expect(locked.lockReason).toContain('WEBTERM_ENV_SETTINGS=off')
   })
 })
