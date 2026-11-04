@@ -72,6 +72,17 @@ describe('runtime menyala di atas CDP tiruan', () => {
     expect((await rt?.api('GET', '/api/other', body())) ?? null).toBeNull()
   })
 
+  test('impor cookie menyala bersama browser tanpa env cookie; hanya off eksplisit yang mematikan', async () => {
+    const preview = (rt: BrowserRuntime | null) => rt?.api('POST', '/api/browser/w1/cookies/preview', body('{}'))
+    const { rt } = await boot({ [ENV_BROWSER.enabled]: 'on' })
+    expect(rt?.status().cookieImportEnabled).toBe(true)
+    expect(await rt?.api('GET', '/api/browser/status', body())).toMatchObject({ status: 200, body: { cookieImportEnabled: true } })
+    expect((await preview(rt))?.status).toBe(400) // rute hidup: body kosong ditolak validasi, bukan 404 disabled
+    const off = (await boot({ [ENV_BROWSER.enabled]: 'on', [ENV_BROWSER.cookieImport]: 'off' })).rt
+    expect(off?.status().cookieImportEnabled).toBe(false)
+    expect(await preview(off)).toMatchObject({ status: 404, body: { error: 'disabled' } })
+  })
+
   test('gateway: attach membuka target di CDP tiruan, state live dan frame biner sampai ke klien', async () => {
     const { rt, fake } = await boot()
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })

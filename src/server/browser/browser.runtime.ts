@@ -27,7 +27,7 @@ import { SnapshotStore } from './browserAgent.snapshot'
 import { handleBrowserControl } from './browserControl.handler'
 import { handleBrowserApi } from '../browserApi'
 import { createBrowserSessionHook } from './browser.sessionCaps'
-import { adaptGatewayHost } from './browser.runtime.parts'
+import { adaptGatewayHost, cookieImportOn } from './browser.runtime.parts'
 import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
 import type { CapabilityStore } from '../control/capabilities'
@@ -87,7 +87,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       if (ws) versionProbe.probe(ws.id)
     } else if (live.delete(s.id) && live.size === 0) versionProbe.reset() // tak ada browser hidup: restart berikutnya baca ulang
   })
-  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: flagOn(env[ENV_BROWSER.cookieImport]) })
+  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env) })
   const apiDeps = {
     vault, preview: createCookiePreviewStore(), injector: createCookieInjector({ launcher, connect: d.connect }), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },

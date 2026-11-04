@@ -8,7 +8,7 @@ import type { BrowserStatusResp } from '../shared/browser.contract'
 import { resetBrowserStatusCache } from './browser.feature'
 import { HARNESS_WS_ID, installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { resetCapabilitiesCache } from './useCapabilities'
-import { TOOLBAR_TEXT } from './browser.uxText'
+import { COOKIE_MENU_TEXT, COOKIE_TEXT, TOOLBAR_TEXT } from './browser.uxText'
 import { MENU_LABELS } from './canvasMenu.model'
 
 const urls: string[] = []
@@ -128,5 +128,33 @@ describe('flag browser menyala', () => {
     fireEvent.contextMenu(document.querySelector('.react-flow__pane') as HTMLElement, { clientX: 50, clientY: 50 })
     fireEvent.click(await screen.findByText(MENU_LABELS.browser))
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
+  })
+
+  it('impor cookie lewat menu ⋯ node: Import Cookies ▸ From File… + catatan Google membuka dialog; tombol lama hilang', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, browserStatus: { ...STATUS, cookieImportEnabled: true } })
+    stubWs()
+    fireEvent.click(screen.getByLabelText('Add node'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Browser' }))
+    await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
+    const node = document.querySelector('.react-flow__node-browser') as HTMLElement
+    expect(screen.queryByRole('button', { name: COOKIE_TEXT.title })).toBeNull() // tombol ghost "Cookies" sudah diganti menu
+    fireEvent.click(node.querySelector('[data-title="More Actions…"]') as HTMLElement)
+    fireEvent.click(await screen.findByText(COOKIE_MENU_TEXT.importCookies))
+    const fromFile = await screen.findByText(COOKIE_MENU_TEXT.fromFile)
+    expect(screen.getByText(COOKIE_MENU_TEXT.googleNote)).not.toBeNull()
+    expect(screen.queryByText(/From (Google Chrome|Brave|Safari)/)).toBeNull() // webterm tak membaca store browser lain
+    fireEvent.click(fromFile)
+    expect(await screen.findByRole('dialog', { name: COOKIE_TEXT.title })).not.toBeNull()
+  })
+
+  it('impor cookie mati di server: menu ⋯ tanpa Import Cookies', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, browserStatus: STATUS })
+    stubWs()
+    fireEvent.click(screen.getByLabelText('Add node'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Browser' }))
+    await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
+    fireEvent.click(document.querySelector('.react-flow__node-browser [data-title="More Actions…"]') as HTMLElement)
+    await screen.findByText('Refresh view')
+    expect(screen.queryByText(COOKIE_MENU_TEXT.importCookies)).toBeNull()
   })
 })

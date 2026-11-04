@@ -1,6 +1,6 @@
 // Definisi env fitur Browser Canvas untuk registry Pengaturan (data murni; lihat envRegistry.types.ts).
-// Nama kunci & default berasal dari `browser.contract.ts`. SEMUA fitur mati secara default: tanpa
-// `WEBTERM_BROWSER=on` tidak ada proses Chromium, proxy, rute, maupun jalur `/ws/browser`.
+// Nama kunci & default berasal dari `browser.contract.ts`. SEMUA fitur mati tanpa
+// `WEBTERM_BROWSER=on` (impor cookie menyala otomatis bersama browser): tidak ada proses Chromium, proxy, rute, maupun jalur `/ws/browser`.
 import { DEFAULT_COOKIE_TTL_DAYS, DEFAULT_DISCARD_MS, DEFAULT_MAX_LIVE, ENV_BROWSER, MAX_LIVE_RANGE } from '../../shared/browser.contract'
 import { flag, num, text, type EnvSpec } from '../envRegistry.types'
 
@@ -63,9 +63,9 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     requires: [BROWSER_ON],
     dangerNote: 'Cookie sesi login masuk ke vault server dan dipakai browser; hanya impor dari sumber yang kamu percaya.',
     label: 'Impor cookie',
-    description: 'Mengizinkan mengimpor cookie dari berkas ke profil browser workspace (disimpan terenkripsi). Nilai cookie tidak pernah ditampilkan.',
+    description: 'Mengizinkan mengimpor cookie dari berkas ke profil browser workspace (disimpan terenkripsi). Nilai cookie tidak pernah ditampilkan. Default menyala bersama browser; tiap impor tetap butuh pratinjau + konfirmasi.',
     dangerous: true,
-  }),
+  }, 'on'),
   num(ENV_BROWSER.cookieTtlDays, GROUP, 1, COOKIE_TTL_DAYS_MAX, DEFAULT_COOKIE_TTL_DAYS, {
     ...B,
     requires: [BROWSER_ON],

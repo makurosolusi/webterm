@@ -3,6 +3,7 @@
 // wajib masuk salah satu tabel di bawah, jadi default baru tak bisa menyimpang diam-diam.
 import { describe, expect, it } from 'vitest'
 import { lifecycleConfig } from './browser/browserLifecycle.service'
+import { cookieImportOn } from './browser/browser.runtime.parts'
 import { centralEnabled } from './central/centralModel'
 import { autonomyEnabled } from './central/centralAutonomy'
 import { maxInflightFromEnv, reliabilityEnabled } from './central/autonomyDispatch'
@@ -55,6 +56,8 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_TRUST_PROXY', () => onOff(trustProxyEnabled(E)), 'channels/webhookPeer.ts:22'],
   ['WEBTERM_LOG_BUFFER', () => String(parseCapacity(undefined)), 'logs/logBus.ts:12'],
   ['WEBTERM_BROWSER_MAX_LIVE', () => String(lifecycleConfig(E).maxLive), 'browser/browserLifecycle.service.ts:19'],
+  // Default 'on' sejak impor cookie ikut menyala bersama browser (dulu FLAGON_READERS = off).
+  ['WEBTERM_BROWSER_COOKIE_IMPORT', () => onOff(cookieImportOn(E)), 'browser/browser.runtime.parts.ts:cookieImportOn'],
   ['WEBTERM_BROWSER_DISCARD_MS', () => String(lifecycleConfig(E).discardMs), 'browser/browserLifecycle.service.ts:20'],
   ...(Object.entries(FILES_FLAG) as Array<[FilesFlag, string]>).map(([n, k]) => [k, files(n), 'envRegistry.files.ts:filesFlagOn'] as const),
   ['WEBTERM_FILES_LIST_MAX', () => String(filesListMax(E)), 'envRegistry.files.ts:filesListMax'],
@@ -83,7 +86,6 @@ const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
   ['WEBTERM_CENTRAL_READ_TOOLS', 'central/chat/toolLoop.ts:36'],
   ['WEBTERM_BROWSER', 'browser/browser.runtime.ts:53'],
   ['WEBTERM_BROWSER_AGENT', 'browser/browser.runtime.ts:75'],
-  ['WEBTERM_BROWSER_COOKIE_IMPORT', 'browser/browser.runtime.ts:88'],
   ['WEBTERM_BROWSER_HEADLESS', 'browser/chromium.flags.ts:headlessReason'],
 ]
 
