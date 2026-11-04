@@ -8,8 +8,10 @@ import { dataDir } from './config'
 import { createFileSecretStore } from './envSecrets.store'
 import type { EnvSettingsApiDeps } from './envSettings.api'
 import { peerOf } from './featureCapabilities.guard'
+import type { DetectOptions } from './featureCapabilities.detect'
 import { buildResponse, connect, defaultDetect, reset, setAdvanced, setSub, toggle, type CapCtx, type Detect, type Reply } from './featureCapabilities.service'
 import { createLogger } from './logs'
+import { resolveHostPort } from './serverConfig'
 
 const log = createLogger('capabilities')
 export const CAPABILITIES_PATH = '/api/capabilities'
@@ -18,7 +20,7 @@ const SECRETS_SUBDIR = 'secrets'
 const FIXED_METHODS: Record<string, string> = { '/': 'GET', 'advanced/': 'GET|PUT', 'reset/': 'POST', 'telegram/connect': 'POST' }
 
 /** Seam produksi yang bisa diganti tes. */
-export interface CapabilityExtras { env: NodeJS.ProcessEnv; detect: () => Detect | Promise<Detect>; dataDir: string; secrets: CapCtx['secrets']; fetch: CapCtx['fetch'] }
+export interface CapabilityExtras { env: NodeJS.ProcessEnv; detect: (opts?: DetectOptions) => Detect | Promise<Detect>; dataDir: string; secrets: CapCtx['secrets']; fetch: CapCtx['fetch'] }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const isCapabilityId = (v: string): v is CapabilityId => (CAPABILITY_IDS as readonly string[]).includes(v)
@@ -56,10 +58,14 @@ export async function capabilitiesRoute(
   const dir = extras.dataDir ?? dataDir() // lazy: tes menyuntik dir sendiri dan tak boleh menyentuh home
   const fetch = extras.fetch ?? globalThis.fetch as unknown as CapCtx['fetch']
   const x = {
-    detect: () => defaultDetect(env, fetch), fetch, ...extras,
+    detect: (opts?: DetectOptions) => defaultDetect(env, fetch, opts), fetch, ...extras,
     dataDir: dir, secrets: extras.secrets ?? createFileSecretStore(join(dir, SECRETS_SUBDIR)),
   }
-  if (method === 'GET') return send(res, { status: 200, body: buildResponse(env, await x.detect(), x.dataDir) })
+  // `?refresh=1` = "Periksa lagi": deteksi melewati cache probe login untuk panggilan ini saja; polling biasa tetap ber-cache.
+  if (method === 'GET') {
+    const fresh = new URL(req.url ?? '/', 'http://x').searchParams.get('refresh') === '1'
+    return send(res, { status: 200, body: buildResponse(env, await x.detect({ fresh }), x.dataDir) })
+  }
 
   const verdict = deps.guard(req)
   const [peer, via] = [peerOf(req), verdict.ok ? verdict.via : 'rejected' as const]
@@ -69,7 +75,8 @@ export async function capabilitiesRoute(
   }
   if (!verdict.ok) {
     note({ capability: isCapabilityId(seg) ? seg : 'advanced', action: 'denied', detail: verdict.reason })
-    return fail(res, 403, 'forbidden')
+    // Port dengar server asli: di balik tunnel/proxy `location.port` klien = port tunnel, bukan yang harus dibuka.
+    return send(res, { status: 403, body: { error: 'forbidden', port: resolveHostPort(env).port } })
   }
   if (!fixed && !isCapabilityId(seg)) return fail(res, 404, 'unknown_capability')
 

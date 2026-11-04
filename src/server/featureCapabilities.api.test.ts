@@ -11,24 +11,25 @@ import { onCapabilityChange } from './featureCapabilities.runtime'
 
 // test-only: server nyata untuk semua hal kecuali jaringan; guard asli dengan env kosong (port bawaan, tanpa token).
 const ORIGIN = 'http://127.0.0.1:8700'
-interface Opts { origin?: string | null; remote?: boolean }
+interface Opts { origin?: string | null; remote?: boolean; query?: string }
 
 function harness(fetch = fakeBotApi([]).fetch) {
   const h = setupEnv({})
   const audits: AuditEntry[] = []
   const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, {}, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
-  const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
+  const detectCalls: Array<{ fresh?: boolean } | undefined> = []
+  const extras = { env: h.target, detect: (o?: { fresh?: boolean }) => { detectCalls.push(o); return { chromium: true, telegramToken: false, agentEngine: true } }, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
   const call = async (method: string, path: string, body?: unknown, opts: Opts = {}) => {
     const headers: Record<string, string> = { host: '127.0.0.1:8700' }
     if (opts.origin !== null) headers.origin = opts.origin ?? ORIGIN
     const raw = body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]
     const socket = { remoteAddress: opts.remote ? '203.0.113.9' : '127.0.0.1' }
-    const req = Object.assign(Readable.from(raw), { method, headers, socket }) as unknown as IncomingMessage
+    const req = Object.assign(Readable.from(raw), { method, headers, socket, url: path + (opts.query ?? '') }) as unknown as IncomingMessage
     const res = recorder()
     const handled = await capabilitiesRoute(req, res, method, path, () => deps, extras)
     return { handled, status: res.status, text: res.body, json: res.body ? (res.json() as Record<string, any>) : undefined } // eslint-disable-line @typescript-eslint/no-explicit-any
   }
-  return { ...h, audits, call }
+  return { ...h, audits, call, detectCalls }
 }
 
 const offs: Array<() => void> = []
@@ -87,9 +88,21 @@ describe('POST /:id', () => {
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: 'http://evil.example' }),
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { remote: true }),
     ]
-    expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden' }]))
+    expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden', port: 8700 }]))
     expect(h.target.WEBTERM_CENTRAL).toBeUndefined()
     expect(h.audits.map((a) => [a.action, a.via, a.detail])).toEqual([['denied', 'rejected', 'origin'], ['denied', 'rejected', 'origin'], ['denied', 'rejected', 'peer']])
+  })
+  it('GET ?refresh=1 meminta deteksi segar; GET biasa tetap memakai cache', async () => {
+    const h = harness()
+    expect((await h.call('GET', '/api/capabilities')).status).toBe(200)
+    expect((await h.call('GET', '/api/capabilities', undefined, { query: '?refresh=1' })).status).toBe(200)
+    expect(h.detectCalls).toEqual([{ fresh: false }, { fresh: true }])
+  })
+  it('403 memuat port dengar server (PORT), bukan port tunnel yang dilihat halaman', async () => {
+    const h = harness()
+    h.target.PORT = '9123' // test-only
+    const r = await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: null })
+    expect([r.status, r.json]).toEqual([403, { error: 'forbidden', port: 9123 }])
   })
   it('dua POST bersamaan konsisten dan tiap hook start/stop tepat sekali', async () => {
     offs.push(onCapabilityChange('files', { start: () => { events.push('start') }, stop: () => { events.push('stop') } }))

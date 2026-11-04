@@ -22,6 +22,8 @@ export const CAPABILITY_TEXT = {
   offerQuestion: 'Nyalakan sekarang?',
   offerAction: 'Nyalakan',
   offerTitle: (title: string): string => `Nyalakan ${title}`,
+  confirmDangerous: (label: string): string =>
+    `${label}?\n\nIni memberi agent kendali lebih besar atas komputer ini dan akun yang sedang Anda pakai. Nyalakan hanya bila Anda memercayai agent yang berjalan.`,
   loadFailed: 'Kemampuan belum bisa dimuat. Coba lagi sebentar.',
   changeFailed: 'Perubahan belum berhasil. Coba lagi sebentar.',
   forbidden: forbiddenText(typeof location === 'undefined' ? '' : location.port),

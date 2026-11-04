@@ -2,9 +2,8 @@
 import { useState } from 'react'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ADVANCED_TEXT, ENGINE_OPTIONS, engineName } from './advancedLabels'
+import { ADVANCED_TEXT } from './advancedLabels'
+import { AgentEngineField } from './AgentEngineField'
 import { callCapabilities } from './capabilitiesApi'
 import { ChromiumPathField } from './ChromiumPathField'
 import { capabilityErrorMessage } from './useCapabilities'
@@ -15,13 +14,15 @@ export interface AdvancedSectionProps {
   advanced: Advanced
   /** Dipanggil setelah server menerima perubahan, agar kartu memuat ulang. */
   onChanged(): Promise<void>
+  /** Muat ulang dengan deteksi segar (tombol "Periksa lagi" mesin agen); bawaan = `onChanged`. */
+  onRecheck?(): Promise<void>
   /** Terbuka atau tidak; dikendalikan induk supaya tombol langkah di kartu Browser bisa membukanya. */
   open: boolean
   onOpenChange(open: boolean): void
 }
 
 /** Bagian Lanjutan: mesin agen, lokasi Chromium, folder data (baca-saja), setel ulang. */
-export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: AdvancedSectionProps): React.JSX.Element {
+export function AdvancedSection({ advanced, onChanged, onRecheck = onChanged, open, onOpenChange }: AdvancedSectionProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   const run = async (suffix: string, method: string, body: unknown): Promise<void> => {
@@ -37,16 +38,8 @@ export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: Adv
   return (
     <details className="st-capabilities-advanced" open={open} onToggle={(e) => onOpenChange(e.currentTarget.open)}>
       <summary>{ADVANCED_TEXT.summary}</summary>
-      <div className="flex flex-col gap-1 py-2">
-        <Label>{ADVANCED_TEXT.engineLabel}</Label>
-        <Select value={advanced.agentEngine.value} onValueChange={(v) => void run('/advanced', 'PUT', { agentEngine: v })}>
-          <SelectTrigger aria-label={ADVANCED_TEXT.engineLabel}><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {ENGINE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <p className="m-0 text-xs opacity-70">{ADVANCED_TEXT.engineDetected(engineName(advanced.agentEngine.detected))}</p>
-      </div>
+      <AgentEngineField engine={advanced.agentEngine}
+        save={(agentEngine) => run('/advanced', 'PUT', { agentEngine })} redetect={onRecheck} />
       <ChromiumPathField chromium={advanced.chromiumPath}
         save={(chromiumPath) => run('/advanced', 'PUT', { chromiumPath })} redetect={onChanged} />
       <div className="flex flex-col gap-1 py-2">

@@ -4,7 +4,7 @@
 export const CAPABILITY_IDS =
   ['central', 'workers', 'autonomy', 'browser', 'files', 'filesWrite', 'telegram'] as const
 export type CapabilityId = (typeof CAPABILITY_IDS)[number]
-/** `dangerous` = klien wajib minta konfirmasi sebelum menyalakan (seperti kartu Otonomi). */
+/** `dangerous` = klien wajib minta konfirmasi sebelum menyalakan, sama seperti kartu Otonomi (`CapabilityCard.tsx`). */
 export interface CapabilitySub { key: string; label: string; defaultOn: boolean; dangerous?: boolean }
 export interface CapabilityDef {
   id: CapabilityId

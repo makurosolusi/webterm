@@ -7,8 +7,13 @@ import { CAPABILITY_TEXT, forbiddenText } from './capabilitiesLabels'
 import { resetCapabilitiesCache } from './useCapabilities'
 
 const chromiumPath = { value: '', detected: false, active: null, source: null, overrideInvalid: false, candidates: ['/opt/chrome'] } // test-only
+const agentEngine = { value: 'auto', detected: 'claude' } // test-only
 const body = (status: string, extra: object = {}) =>
-  JSON.stringify({ capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status, ...extra }], advanced: { chromiumPath } })
+  JSON.stringify({ capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status, ...extra }], advanced: { chromiumPath, agentEngine } })
+const central = (status: string) => JSON.stringify({
+  capabilities: [{ id: 'central', title: 'Agent Pusat', blurb: 'Asisten.', status, ...(status === 'needs-step' ? { step: { kind: 'agentEngine', label: 'Pasang atau login Claude Code / OpenCode' } } : {}) }],
+  advanced: { chromiumPath, agentEngine },
+})
 const pathStep = { step: { kind: 'chromiumPath', label: 'Pilih lokasi' } }
 
 beforeEach(resetCapabilitiesCache)
@@ -96,5 +101,26 @@ describe('CapabilityOffer', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
     expect(f.mock.calls.map((c) => c[0])).not.toContain('/api/capabilities/reset')
     expect(JSON.parse(f.mock.calls[1][1].body)).toEqual({ enabled: true })
+  })
+
+  it('langkah agentEngine tanpa onStep: pilihan mesin + status jujur di tempat; Periksa lagi memuat ulang; onDone hanya saat on', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(new Response(central('needs-step')))
+      .mockResolvedValueOnce(new Response(central('needs-step'))) // Periksa lagi #1: masih belum login
+      .mockResolvedValue(new Response(central('on'))) // Periksa lagi #2: sudah login
+    vi.stubGlobal('fetch', f)
+    const onDone = vi.fn()
+    render(<CapabilityOffer id="central" onDone={onDone} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Pasang atau login Claude Code / OpenCode' }))
+    expect(screen.getByLabelText('Mesin agen Agent Pusat')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toBe('Claude terpasang, tapi belum login. Login di terminal, lalu periksa lagi.')
+    fireEvent.click(screen.getByRole('button', { name: 'Periksa lagi' }))
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(2))
+    expect(onDone).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Periksa lagi' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
+    expect(f.mock.calls.map((c) => [c[0], c[1]?.method ?? 'GET'])).toEqual([
+      ['/api/capabilities', 'GET'], ['/api/capabilities?refresh=1', 'GET'], ['/api/capabilities?refresh=1', 'GET'],
+    ])
   })
 })

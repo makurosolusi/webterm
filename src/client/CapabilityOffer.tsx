@@ -1,9 +1,10 @@
 // Tawaran "tanya saat dibutuhkan": satu baris untuk menyalakan kemampuan yang masih mati.
 // Langkah (needs-step) diselesaikan DI SINI, bukan dilempar ke pemanggil: Dock dan menu kanvas tidak
-// punya Settings, jadi dulu tombol "Pilih lokasi Chrome" di tawaran tidak melakukan apa pun.
+// punya Settings, jadi dulu tombol "Pilih lokasi Chrome" / "Pasang atau login Claude Code" di tawaran tidak melakukan apa pun.
 import { useEffect, useRef, useState } from 'react'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import { callCapabilities } from './capabilitiesApi'
+import { AgentEngineField } from './AgentEngineField'
 import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { ChromiumPathField } from './ChromiumPathField'
 import { capabilityErrorMessage, useCapabilities } from './useCapabilities'
@@ -19,8 +20,9 @@ export interface CapabilityOfferProps {
 
 /** Tawaran menyalakan kemampuan; tidak merender apa pun bila sudah aktif atau belum termuat. */
 export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): React.JSX.Element | null {
-  const { data, error, busyId, toggle, refresh } = useCapabilities()
-  const [pathOpen, setPathOpen] = useState(false)
+  const { data, error, busyId, toggle, refresh, recheck } = useCapabilities()
+  // Langkah yang dikerjakan di tempat: kolom lokasi Chrome atau pilihan mesin agen.
+  const [openStep, setOpenStep] = useState<'chromiumPath' | 'agentEngine' | null>(null)
   const [stepError, setStepError] = useState<string | null>(null)
   const view = data?.capabilities.find((c) => c.id === id)
   // Pengguna sudah bertindak (Nyalakan / langkah) dan status server jadi `on` = selesai, apa pun jalurnya.
@@ -37,9 +39,9 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
     acted.current = true
     if (!(await toggle(id, true))) acted.current = false
   }
-  const saveChromium = async (chromiumPath: string): Promise<void> => {
+  const saveAdvanced = async (body: { chromiumPath: string } | { agentEngine: string }): Promise<void> => {
     try {
-      await callCapabilities('/advanced', 'PUT', { chromiumPath })
+      await callCapabilities('/advanced', 'PUT', body)
       setStepError(null)
       await refresh()
     } catch (e) {
@@ -48,7 +50,7 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
   }
   const step = (kind: NonNullable<CapabilityView['step']>['kind']): void => {
     if (kind === 'fixChain') void enable() // toggle biasa: server ikut menyalakan prasyaratnya
-    else if (kind === 'chromiumPath') { acted.current = true; setPathOpen(true) }
+    else if (kind === 'chromiumPath' || kind === 'agentEngine') { acted.current = true; setOpenStep(kind) }
     else onStep?.(kind)
   }
   const shownError = error ?? stepError
@@ -57,8 +59,11 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
       <p className="m-0">{view.blurb} {view.status === 'off' ? CAPABILITY_TEXT.offerQuestion : null}</p>
       {view.detail ? <p className="m-0 opacity-70">{view.detail}</p> : null}
       {view.status === 'needs-step' && view.step ? (
-        pathOpen && data ? (
-          <ChromiumPathField chromium={data.advanced.chromiumPath} save={saveChromium} redetect={refresh} />
+        openStep === 'chromiumPath' && data ? (
+          <ChromiumPathField chromium={data.advanced.chromiumPath} save={(chromiumPath) => saveAdvanced({ chromiumPath })} redetect={refresh} />
+        ) : openStep === 'agentEngine' && data ? (
+          // Masih needs-step = mesin belum siap; begitu siap status jadi `on`, tawaran hilang dan onDone jalan.
+          <AgentEngineField engine={data.advanced.agentEngine} ready={false} save={(agentEngine) => saveAdvanced({ agentEngine })} redetect={recheck} />
         ) : (
           <Button size="sm" variant="secondary" className="self-start" disabled={busy} onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
         )
