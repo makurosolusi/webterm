@@ -3,21 +3,31 @@
 // from its token, runs policy and audits. The token is read from the node's own 0600 header file on
 // every request (a restarted server rewrites it), never from argv or env (hooksPaths.ts NODE_HEADERS_ENV).
 // stdout carries JSON-RPC only; diagnostics go to stderr (MCP stdio transport).
+// Central mode (`--approval-wait-ms <n>`, mcp.central.ts): a call answered "approval card pending" is
+// re-asked every APPROVAL_POLL_MS until a human decides or the wait ends, so an approved call finishes
+// inside the same turn. Short polls instead of one long request: no HTTP timeout to outlive.
 import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
-import { MCP_CALL_PATH, MCP_TOOLS_PATH } from './mcp.paths'
+import { APPROVAL_PENDING, MCP_CALL_PATH, MCP_TOOLS_PATH } from './mcp.paths'
 import { handleLine, type McpBackend, type McpTool } from './mcp.protocol'
 
-export interface McpArgs { headers: string; port: number }
+export interface McpArgs { headers: string; port: number; approvalWaitMs: number }
+export const APPROVAL_POLL_MS = 500
+const MAX_APPROVAL_WAIT_MS = 30 * 60_000
 
-/** `--headers <path> --port <n>`; throws with the missing flag named. */
+/** `--headers <path> --port <n> [--approval-wait-ms <n>]`; throws with the bad flag named. */
 export function parseArgs(argv: readonly string[]): McpArgs {
   const at = (flag: string): string | undefined => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined }
   const headers = at('--headers')
   const port = Number(at('--port'))
   if (!headers) throw new Error('webterm mcp: --headers <file> is required')
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('webterm mcp: --port <1-65535> is required')
-  return { headers, port }
+  const rawWait = at('--approval-wait-ms')
+  const approvalWaitMs = rawWait === undefined ? 0 : Number(rawWait)
+  if (!Number.isInteger(approvalWaitMs) || approvalWaitMs < 0 || approvalWaitMs > MAX_APPROVAL_WAIT_MS) {
+    throw new Error(`webterm mcp: --approval-wait-ms must be 0-${MAX_APPROVAL_WAIT_MS}`)
+  }
+  return { headers, port, approvalWaitMs }
 }
 
 /** `Name: value` lines of a curl header file. */
@@ -30,8 +40,11 @@ export function readHeaderFile(path: string): Record<string, string> {
   return out
 }
 
+const awaitingHuman = (r: Record<string, unknown>): boolean =>
+  r.detail === 'approval_required' && (r.evidence as Record<string, unknown> | undefined)?.approvalStatus === APPROVAL_PENDING
+
 /** Backend over the webterm server HTTP API, authenticated with the node's header file. */
-export function httpBackend(args: McpArgs, fetchImpl: typeof fetch = fetch): McpBackend {
+export function httpBackend(args: McpArgs, fetchImpl: typeof fetch = fetch, pollMs = APPROVAL_POLL_MS): McpBackend {
   const base = `http://127.0.0.1:${args.port}`
   const request = async (path: string, init: RequestInit = {}): Promise<Record<string, unknown>> => {
     const res = await fetchImpl(`${base}${path}`, { ...init, headers: { ...readHeaderFile(args.headers), 'content-type': 'application/json' } })
@@ -45,7 +58,14 @@ export function httpBackend(args: McpArgs, fetchImpl: typeof fetch = fetch): Mcp
       const body = await request(MCP_TOOLS_PATH)
       return Array.isArray(body.tools) ? body.tools as McpTool[] : []
     },
-    call: (name, args) => request(MCP_CALL_PATH, { method: 'POST', body: JSON.stringify({ name, arguments: args }) }),
+    async call(name, callArgs) {
+      const deadline = Date.now() + args.approvalWaitMs
+      for (;;) {
+        const r = await request(MCP_CALL_PATH, { method: 'POST', body: JSON.stringify({ name, arguments: callArgs }) })
+        if (!awaitingHuman(r) || Date.now() + pollMs > deadline) return r
+        await new Promise((done) => setTimeout(done, pollMs))
+      }
+    },
   }
 }
 

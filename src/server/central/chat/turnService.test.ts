@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { allRows, getRow } from '../../ledger/ledgerCore'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { appendConversationEvent, getConversation, getOrCreateConversation, getTurn, listConversationEvents } from '../conversationStore'
+import { type TurnInput, zeroUsage } from '../runtime/centralRuntime'
 import { MockRuntime } from '../runtime/mockRuntime'
 import { StreamHub, type StreamFrame } from './streamHub'
 import { createPortfolioReadExecutor } from './toolExecutors'
@@ -142,6 +143,32 @@ describe('turn lifecycle', () => {
       const submitted = svc.submit({ conversationId: 'central:global', clientMessageId: 'proposal', text: 'plan' })
       expect((await submitted.done).status).toBe('succeeded')
       expect(getGoal(fixture.db, 'p1')).toMatchObject({ version: 1, status: 'proposed', statement: 'Ship it' })
+    } finally {
+      if (previousPlanner === undefined) delete process.env.WEBTERM_CENTRAL_PLANNER
+      else process.env.WEBTERM_CENTRAL_PLANNER = previousPlanner
+      if (previousTools === undefined) delete process.env.WEBTERM_CENTRAL_TOOLS
+      else process.env.WEBTERM_CENTRAL_TOOLS = previousTools
+    }
+  })
+
+  it('claude runtime (native MCP tools): no text catalog in its prompt and proposal text in its reply is inert', async () => {
+    const previousPlanner = process.env.WEBTERM_CENTRAL_PLANNER
+    const previousTools = process.env.WEBTERM_CENTRAL_TOOLS
+    process.env.WEBTERM_CENTRAL_PLANNER = 'on'
+    process.env.WEBTERM_CENTRAL_TOOLS = 'write'
+    try {
+      const proposal = '<webterm-proposal>{"tool":"goal.propose","input":{"projectId":"p1","statement":"Ship it","successCriteria":[{"kind":"review","by":"human"}],"owner":"human:root","horizon":"2026-11-30","envelope":{"maxCostMicros":1000,"maxWallMs":1000,"maxItems":1}}}</webterm-proposal>'
+      const prompts: string[] = []
+      const runtime = {
+        kind: 'claude' as const, cancel: () => false,
+        async turn(input: TurnInput) { prompts.push(input.text); return { turnId: input.turnId, outcome: 'success' as const, text: proposal, usage: zeroUsage(), sessionRef: null } },
+      }
+      const svc = new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW })
+      expect((await svc.submit({ conversationId: 'central:global', clientMessageId: 'native', text: 'plan' }).done).status).toBe('succeeded')
+      expect(prompts[0]).not.toContain('webterm-proposal')
+      expect(getGoal(fixture.db, 'p1')).toBeNull()
+      const kinds = listConversationEvents(fixture.db, 'central:global', 0, 500).map((e) => (e.payload as { eventType?: string }).eventType)
+      expect(kinds.filter((k) => k?.startsWith('proposal.'))).toEqual([])
     } finally {
       if (previousPlanner === undefined) delete process.env.WEBTERM_CENTRAL_PLANNER
       else process.env.WEBTERM_CENTRAL_PLANNER = previousPlanner

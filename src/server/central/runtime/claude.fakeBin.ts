@@ -51,7 +51,19 @@ export const assistantRecord = (
   ...extra,
 })
 
-export const resultRecord = (extra: Record<string, unknown> = {}) => ({
+/** Assistant message calling one MCP tool (shape of a real Claude Code 2.1.318 run). */
+export const toolUseRecord = (messageId: string, id: string, name: string, input: unknown = {}) => ({
+  type: 'assistant',
+  message: { id: messageId, content: [{ type: 'tool_use', id, name, input }], usage: { input_tokens: 10, output_tokens: 5 } },
+})
+
+/** The `user` record Claude Code writes after the MCP server answered. */
+export const toolResultRecord = (toolUseId: string, content: unknown, isError = false) => ({
+  type: 'user',
+  message: { role: 'user', content: [{ tool_use_id: toolUseId, type: 'tool_result', content, ...(isError ? { is_error: true } : {}) }] },
+})
+
+export const resultRecord =(extra: Record<string, unknown> = {}) => ({
   type: 'result', subtype: 'success', is_error: false, session_id: 'sess-1', total_cost_usd: 0.00025,
   duration_ms: 1200,
   usage: { input_tokens: 10, output_tokens: 7, cache_read_input_tokens: 3, cache_creation_input_tokens: 1 },

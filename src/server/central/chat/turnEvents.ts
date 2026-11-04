@@ -8,9 +8,18 @@ import { zeroUsage } from '../runtime/centralRuntime'
 export interface ToolRecord {
   toolCallId: string
   name: string
-  state: 'succeeded' | 'failed' | 'cancelled'
+  state: 'succeeded' | 'failed' | 'cancelled' | 'awaiting_approval'
   args?: unknown
   result?: unknown
+  /** Ledger approval card the call is waiting on (MCP receipt `approval_required`, mcp/mcp.central.ts). */
+  approvalId?: string
+}
+
+/** Approval id of a pending-card receipt, else undefined. */
+function pendingApproval(output: unknown): string | undefined {
+  const r = output && typeof output === 'object' ? output as { detail?: unknown; data?: { approvalId?: unknown } | null } : null
+  const id = r?.detail === 'approval_required' ? r.data?.approvalId : undefined
+  return typeof id === 'string' && id !== '' ? id : undefined
 }
 
 export interface RunState {
@@ -48,8 +57,10 @@ export function projectRuntimeEvent(
   if (event.type === 'tool.completed') {
     const record = state.tools.get(event.toolCallId)
     if (record) {
-      record.state = event.ok ? 'succeeded' : event.errorCode === 'cancelled' ? 'cancelled' : 'failed'
+      const approvalId = event.ok ? undefined : pendingApproval(event.output)
+      record.state = event.ok ? 'succeeded' : approvalId ? 'awaiting_approval' : event.errorCode === 'cancelled' ? 'cancelled' : 'failed'
       record.result = event.output
+      if (approvalId) record.approvalId = approvalId
     }
     return {
       type: 'tool.completed',
