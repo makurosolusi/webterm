@@ -2,7 +2,7 @@
 // session. The node id IS the server app id (mcpApp.store.ts). The view runs in a sandboxed srcdoc
 // frame (opaque origin, resource CSP as its first bytes) and talks to webterm only over the
 // postMessage bridge (mcpApp.bridge.ts); its tools/call goes through webterm policy as `node:<this id>`.
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
@@ -32,7 +32,10 @@ function McpAppNode({ id, data, selected }: NodeProps) {
     return () => { live = false }
   }, [id])
 
-  useEffect(() => {
+  // Layout effect, not a passive one: it runs in the same commit that inserts the iframe, before the
+  // frame can load and post `ui/initialize`. A passive effect is flushed in a later task, so a fast view
+  // (or a busy main thread) could send its first message to a page that is not listening yet.
+  useLayoutEffect(() => {
     if (!view) return
     const win = () => frame.current?.contentWindow ?? null
     const bridge = createAppBridge({
