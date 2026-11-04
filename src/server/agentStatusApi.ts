@@ -16,6 +16,7 @@ import { stateVerified } from './hooks'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
 import { linkedBrowsers, nextBrowserNotice } from './linkAwareness'
+import { linkNoteTold, startLinkNotes } from './linkNoteDelivery'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
@@ -66,6 +67,9 @@ function json(res: ServerResponse, status: number, body: unknown): void {
  */
 async function defaultDeps(): Promise<AgentStatusDeps> {
   const [{ db }, { sessions }] = await Promise.all([import('./db'), import('./sessions')])
+  // Satu-satunya titik start loop link-note: hook Claude Code pertama (SessionStart) menyalakannya,
+  // jadi tidak ada flag/konfigurasi — dan test dengan deps palsu tidak pernah memuatnya.
+  await startLinkNotes()
   return {
     setStatus: (nodeId, status) => sessions.setStatus(nodeId, status),
     setTranscript: (nodeId, path) => sessions.setTranscript(nodeId, path),
@@ -150,6 +154,9 @@ export async function agentStatusRoute(
   const event = body.hook_event_name
   const peers = ws ? nextHookContext(node, event, buildLinkDoc(ws, node)) : null
   const browsers = ws ? nextBrowserNotice(node, event, linkedBrowsers(ws, node)) : null
+  // Hook yang bisa mengumumkan sudah memberi tahu keadaan kabel sekarang: link-note yang mengantre
+  // untuk perubahan yang sama tidak boleh menyusul (no double announce).
+  if (ws) linkNoteTold(node, event, ws)
   const text = [peers?.additionalContext, browsers].filter(Boolean).join('\n\n')
   if (text && event) {
     json(res, 200, { hookSpecificOutput: { hookEventName: event, additionalContext: text } })

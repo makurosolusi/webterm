@@ -61,10 +61,12 @@ export function buildBrowserNotice(
   const nowIds = new Set(now.map((b) => b.id))
   const added = now.filter((b) => !before.has(b.id))
   const removed = (prev ?? []).filter((b) => !nowIds.has(b.id))
-  if (!added.length && !removed.length) return null
+  const renamed = now.filter((b) => (prev ?? []).some((p) => p.id === b.id && p.title !== b.title))
+  if (!added.length && !removed.length && !renamed.length) return null
   const out: string[] = []
   if (added.length) out.push('Since the last prompt, a canvas cable now wires this webterm node to:', ...list(added), CAN)
   if (removed.length) out.push('Since the last prompt, the cable to this webterm node was removed for:', ...list(removed), CANNOT)
+  if (renamed.length) out.push('Since the last prompt, these wired browser nodes were renamed (current titles):', ...list(renamed))
   return out.join('\n')
 }
 
@@ -77,6 +79,12 @@ export function nextBrowserNotice(nodeId: string, event: string | undefined, now
   // Memo hanya maju pada event yang bisa mengumumkan; event lain tidak boleh "menelan" perubahan.
   if (event === 'SessionStart' || event === 'UserPromptSubmit') lastAnnounced.set(nodeId, now)
   return text
+}
+
+/** Catat `now` sebagai sudah diumumkan TANPA membangun teks — dipakai `linkNote` saat ia sudah
+ *  mengetik pengumuman yang sama ke PTY, supaya `UserPromptSubmit` berikutnya tidak mengulangnya. */
+export function markBrowsersAnnounced(nodeId: string, now: WiredBrowser[]): void {
+  lastAnnounced.set(nodeId, now)
 }
 
 /** Lupakan memo sebuah node (node dihapus / sesi ditutup). */

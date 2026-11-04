@@ -103,6 +103,8 @@ export class Sessions extends SessionsCore {
       exited: false,
       startedAt: this.now(),
       agentId: msg.agentId,
+      cols: msg.cols,
+      rows: msg.rows,
     }
     this.map.set(msg.id, session)
     ptyLog.spawned(msg, pty.pid, this.options.shell)
@@ -128,6 +130,8 @@ export class Sessions extends SessionsCore {
     const session = this.map.get(id)
     if (!session) return
     ptyLog.resized(id, cols, rows)
+    session.cols = cols
+    session.rows = rows
     session.pty.resize(cols, rows)
   }
 
