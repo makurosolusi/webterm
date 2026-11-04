@@ -19,12 +19,8 @@ import {
   type ChannelCommand,
   type ChannelMessageIdentity,
 } from './identity'
-import {
-  handleApprove,
-  handleReject,
-  type ApprovalSummary,
-  type ChannelApprovalPort,
-} from './channelApprovals'
+import type { ChannelApprovalPort } from './channelApprovals'
+import { runCommand } from './channelCommands'
 import { TELEGRAM_MAX_TEXT, isCallbackUpdate, parseTelegramCallback, parseTelegramUpdate, type NormalizedMessage } from './telegram'
 import { dispatchTelegramCallback, type ApprovalChallengePort } from './channelCallback'
 import { safeErrorText } from './safeErrorText'
@@ -152,46 +148,6 @@ function recordPending(deps: TelegramDispatchDeps, chatId: string): void {
     deps.pending?.record(chatId, 'private') // groups were denied earlier, so only private reaches here
   } catch (err) {
     log.warn('channel.dispatch', `telegram pending record failed: ${safeErrorText(err, 'outbox unavailable')}`, { stage: 'pending' })
-  }
-}
-
-async function renderApprovals(
-  deps: TelegramDispatchDeps,
-  projectId: string,
-  heading: string
-): Promise<string> {
-  if (!deps.approval) return 'Approvals are unavailable: the ledger runtime is off.'
-  let rows: ApprovalSummary[]
-  try {
-    rows = deps.approval.listApprovals({ projectId, status: 'pending', limit: 5 })
-  } catch {
-    return 'Could not read approvals. Nothing changed.'
-  }
-  if (rows.length === 0) return `${heading}: no pending approvals for project ${projectId}.`
-  const lines = rows.map((row) => `- ${row.id} ${row.kind ?? 'approval'} exp=${row.expiresAt ?? 'n/a'}`)
-  return [`${heading}: ${rows.length} pending approval(s) in project ${projectId}.`, ...lines].join('\n')
-}
-
-async function runCommand(
-  deps: TelegramDispatchDeps,
-  message: NormalizedMessage,
-  binding: ChannelBinding,
-  command: ChannelCommand
-): Promise<string> {
-  switch (command.kind) {
-    case 'status':
-      return renderApprovals(deps, binding.projectId, 'Status')
-    case 'inbox':
-      return renderApprovals(deps, binding.projectId, 'Inbox')
-    case 'approve':
-      return handleApprove(deps, message, binding, command)
-    case 'reject':
-      return handleReject(deps, message, binding, command)
-    case 'pause':
-    case 'resume':
-      return 'Pause and resume are controlled from the webterm UI in v1; this channel does not change project state.'
-    case 'task':
-      return 'Task detail is not available on this channel in v1. Use /inbox or the webterm UI.'
   }
 }
 
