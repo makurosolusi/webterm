@@ -1,11 +1,14 @@
 // Read model for `GET /api/control/effective` (Control panel, F0-c): every behaviour key of the env
 // registry plus the WEBTERM_* bootstrap keys, each with its effective value, source, a reason sentence,
-// and where (if anywhere) the UI controls it. Pure: callers pass the env-settings state and the env.
-// Secrets and bootstrap keys never carry a value, only `set`.
-import type { EnvEntryV2, EnvStateV2 } from '../shared/envSettings.contract'
+// and where the UI controls it. Rows owned by the Control tab (F1-f) also carry what the editor needs
+// (kind, options, bounds, restart class) and, when they cannot be written there, a lock reason
+// (VS Code policy settings: a value set outside the editor wins and is shown read-only, `@haspolicy`).
+// Pure: callers pass the env-settings state and the env. Secrets and bootstrap keys never carry a value, only `set`.
+import type { EnvEntryV2, EnvRestart, EnvStateV2 } from '../shared/envSettings.contract'
 import { detectAgentEngine } from './central/runtime/runtimeDetect'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
-import { CAPABILITY_NAME, DERIVED_FROM, uiWhere } from './effectiveConfig.ui'
+import { CAPABILITY_NAME, CONTROL_WHERE, DERIVED_FROM, uiWhere } from './effectiveConfig.ui'
+import { ENV_SETTINGS_SWITCH } from './envRegistry'
 import { enabledSet } from './featureCapabilities.runtime'
 
 export type EffectiveSource = 'default' | 'env' | '.env' | 'settings' | 'capability'
@@ -33,6 +36,21 @@ export interface EffectiveRow {
   mock?: true
   pendingRestart: boolean
   valid: boolean
+  /** Writable from the Control tab right now. */
+  editable: boolean
+  /** Why a Control-owned row cannot be written (shell env wins, settings locked, bootstrap). */
+  lockReason?: string
+  /** none = immediate, hot = next use / new sessions, boot = server restart. */
+  restart: EnvRestart
+  /** Stored value the editor starts from ('' for secrets); differs from `value` for a pending `boot` change. */
+  setting: string
+  options?: string[]
+  optionLabels?: Record<string, string>
+  min?: number
+  max?: number
+  unit?: string
+  allowEmpty?: boolean
+  dangerNote?: string
 }
 
 export interface EffectiveConfig {
@@ -57,6 +75,8 @@ const SUBSYSTEM: Readonly<Record<string, string>> = {
 const BOOTSTRAP_SUBSYSTEM = 'Bootstrap'
 const BOOTSTRAP_REASON =
   'Bootstrap-only by design: read from the process environment at start so an agent shell cannot loosen it through the API.'
+const LOCK_SHELL = 'Set in the shell environment of the server process, which wins over the UI. Unset it there and restart to control it here.'
+const LOCK_SETTINGS = `Settings are locked because ${ENV_SETTINGS_SWITCH}=off in the server environment.`
 const MOCK_REASON = 'MOCK: Central replies are simulated, not produced by a real agent.'
 
 const nonEmpty = (v: string | undefined): boolean => v !== undefined && v.trim() !== ''
@@ -75,7 +95,7 @@ function reasonOf(e: EnvEntryV2, source: EffectiveSource, ui: string | null, env
     const state = derived.map((id) => `${CAPABILITY_NAME[id]} ${on.has(id) ? 'on' : 'off'}`).join(', ')
     parts.push(`Derived from the ${derived.map((id) => CAPABILITY_NAME[id]).join(' / ')} card (${state}).`)
   } else if (source === 'settings') {
-    parts.push(ui ? `Set in ${ui}.` : 'Stored Settings override (imported from .env or set earlier); no UI switch yet.')
+    parts.push(`Set in ${ui ?? CONTROL_WHERE}.`)
   } else if (source === 'env') {
     parts.push('From the shell environment of the server process.')
   } else if (source === '.env') {
@@ -102,11 +122,16 @@ function rowOf(e: EnvEntryV2, i: EffectiveInput): EffectiveRow {
   }
   const mock = e.key === CENTRAL_RUNTIME_FLAG && e.effective === 'mock'
   if (mock) reason = `${MOCK_REASON} ${reason}`
+  // Explicit shell env wins (VS Code policy pattern); a .env value is overridable from the UI by design.
+  const lockReason = i.state.locked || !e.editable ? LOCK_SETTINGS : source === 'env' ? LOCK_SHELL : undefined
   return {
     key: e.key, label: e.label, description: e.description, subsystem: SUBSYSTEM[e.group] ?? e.group, kind: e.kind,
     value, secret, ...(secret ? { set: e.secretSet === true } : { default: e.default }),
     source, reason, modified: source !== 'default', ui, envOnly: ui === null,
     ...(mock ? { mock: true as const } : {}), pendingRestart: e.pendingRestart, valid: e.valid,
+    editable: ui === CONTROL_WHERE && lockReason === undefined, ...(lockReason ? { lockReason } : {}),
+    restart: e.restart, setting: secret ? '' : e.value, options: e.options, optionLabels: e.optionLabels,
+    min: e.min, max: e.max, unit: e.unit, allowEmpty: e.allowEmpty, dangerNote: e.dangerNote,
   }
 }
 
@@ -116,7 +141,7 @@ function bootstrapRow(key: string, i: EffectiveInput): EffectiveRow {
   return {
     key, label: key, description: 'Bootstrap key (process environment only).', subsystem: BOOTSTRAP_SUBSYSTEM, kind: 'bootstrap',
     value: '', secret: true, set, source, reason: BOOTSTRAP_REASON, modified: set, ui: null, envOnly: true, bootstrap: true,
-    pendingRestart: false, valid: true,
+    pendingRestart: false, valid: true, editable: false, lockReason: BOOTSTRAP_REASON, restart: 'boot', setting: '',
   }
 }
 

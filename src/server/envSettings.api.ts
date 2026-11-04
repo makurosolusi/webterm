@@ -2,25 +2,20 @@
 // sumber/secret dan tak pernah memuat nilai secret (hanya `set`). Gerbang auth /api tetap di
 // index.ts; mutasi (PUT/POST) tambahan lewat `settingsGuard` (featureCapabilities.guard) dan dicatat ke audit.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { CAPABILITY_HEADER, TOKEN_HEADER, tokensMatch } from './auth'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
-import { getDotenvBoot } from './dotenvFiles'
-import { buildEffectiveConfig } from './effectiveConfig'
-import { BOOTSTRAP_ONLY_KEYS } from './envRegistry'
+import { parseChange } from './envSettings.control'
 import { importDotenv } from './envSettings.import'
-import type { EnvChange, EnvSettings } from './envSettings.service'
+import type { EnvSettings } from './envSettings.service'
 import type { AuditEntry } from './featureCapabilities.audit'
 import { peerOf, type GuardResult } from './featureCapabilities.guard'
-import { firstHeader } from './httpHeaders'
 import { createLogger } from './logs'
-import { getTokenState } from './tokenBootstrap'
 
 const log = createLogger('settings')
 
 export const ENV_SETTINGS_PATH = '/api/settings/env'
 export const IMPORT_ENDPOINT = '/api/settings/env/import'
-/** Read-only Control panel model (F0-c). Lives under /api/control/ but is root-only, see `rootReader`. */
-export const CONTROL_EFFECTIVE_PATH = '/api/control/effective'
+// Control tab route (read model, writes, Doctor) lives in envSettings.control.ts; re-exported for its mount.
+export { CONTROL_EFFECTIVE_PATH, controlEffectiveRoute, rootReader } from './envSettings.control'
 
 export interface EnvSettingsApiDeps {
   service: EnvSettings
@@ -72,14 +67,6 @@ async function readJson(req: IncomingMessage, res: ServerResponse, empty?: unkno
   try { return { ok: true, value: JSON.parse(read.body) } } catch { json(res, 400, { error: 'bad_json' }); return { ok: false } }
 }
 
-/** Bentuk body `{ set?: {KEY: string}, unset?: KEY[] }`, atau null bila salah bentuk. */
-function parseChange(body: unknown): EnvChange | null {
-  if (!isRecord(body)) return null
-  const { set = {}, unset = [] } = body
-  if (!isRecord(set) || !Array.isArray(unset) || !unset.every((k) => typeof k === 'string')) return null
-  return { set, unset: unset as string[] }
-}
-
 /**
  * `GET` = state penuh. `PUT` = ubah atomik (semua valid atau tidak ada yang berubah), balas state
  * baru + `restartRequired`. Pesan error statis dan hanya menyebut NAMA kunci, tak pernah nilai.
@@ -119,29 +106,4 @@ export async function envImportRoute(req: IncomingMessage, res: ServerResponse, 
     if (keys.length > 0) audit(deps, req, { action: 'advanced', via, detail: keys.join(',') })
   }
   json(res, out.status, out.body)
-}
-
-/**
- * Only the owner reads the effective config. /api/control/* also admits node and capability tokens
- * (agent sessions), so this route rejects both: with a root token set the request must present it;
- * without one (loopback mode) any presented token is a node token and is refused.
- */
-export function rootReader(req: IncomingMessage, rootToken: string | undefined = getTokenState().token): boolean {
-  if (firstHeader(req.headers?.[CAPABILITY_HEADER])) return false
-  const presented = firstHeader(req.headers?.[TOKEN_HEADER]) || undefined
-  return rootToken === undefined ? presented === undefined : presented !== undefined && tokensMatch(rootToken, presented)
-}
-
-/** `GET /api/control/effective`: every behaviour knob with effective value / source / reason / UI location. */
-export function controlEffectiveRoute(
-  req: IncomingMessage, res: ServerResponse, method: string,
-  deps: Pick<EnvSettingsApiDeps, 'service'> & { env?: NodeJS.ProcessEnv; dotenvKeys?: ReadonlySet<string>; rootToken?: string | null },
-): void {
-  if (method !== 'GET') return json(res, 405, { error: 'method_not_allowed' })
-  const root = deps.rootToken === undefined ? rootReader(req) : rootReader(req, deps.rootToken ?? undefined)
-  if (!root) return json(res, 403, { error: 'forbidden' })
-  json(res, 200, buildEffectiveConfig({
-    state: deps.service.state(OWNER_CTX), env: deps.env ?? process.env,
-    dotenvKeys: deps.dotenvKeys ?? getDotenvBoot().keys, bootstrapKeys: BOOTSTRAP_ONLY_KEYS,
-  }))
 }
