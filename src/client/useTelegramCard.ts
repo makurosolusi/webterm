@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { bindChat, fetchBindings, fetchPending, ignorePending, unbindChat } from './channelsApi'
 import type { PendingChat, TelegramBinding } from './channelsApi'
 import { InboxApiError } from './inboxTypes'
-import { fetchTelegramView, fetchTokenStored, postConnect, postEnabled, postPairing, type PairingLink } from './telegramCardApi'
+import {
+  fetchForwarding, fetchTelegramView, fetchTokenStored, postConnect, postEnabled, postPairing, putForwarding, type PairingLink,
+} from './telegramCardApi'
 import { TG, connectErrorText } from './telegramCardLabels'
 
 /** Jeda penyegaran daftar chat menunggu saat tab terlihat. */
@@ -26,6 +28,7 @@ export function useTelegramCard(projectId: string) {
   const [pending, setPending] = useState<PendingChat[]>([])
   const [bindings, setBindings] = useState<TelegramBinding[]>([])
   const [pair, setPair] = useState<PairingLink | null>(null)
+  const [awayMinutes, setAwayMinutes] = useState<number | null>(null)
   const pairRef = useRef<{ link: PairingLink; bound: number } | null>(null)
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
@@ -60,10 +63,11 @@ export function useTelegramCard(projectId: string) {
         if (alive.current) setTokenStored(stored)
         return
       }
-      const [p, b] = await Promise.all([fetchPending(), fetchBindings()])
+      const [p, b, away] = await Promise.all([fetchPending(), fetchBindings(), fetchForwarding().catch(() => null)])
       if (!alive.current) return
       setPending(p)
       setBindings(b)
+      if (typeof away === 'number') setAwayMinutes(away)
       await syncPair(b.length)
     } catch {
       // Segarkan latar gagal (jaringan putus): tampilan terakhir dipertahankan, percobaan berikutnya jalan sendiri.
@@ -116,7 +120,8 @@ export function useTelegramCard(projectId: string) {
   const status = detail ?? (botName ? TG.connected(botName) : TG.connectedAnon)
 
   return {
-    token, setToken, connected, status, tokenStored, connecting, error, pending, bindings, connect, pair,
+    token, setToken, connected, status, tokenStored, connecting, error, pending, bindings, connect, pair, awayMinutes,
+    saveAwayMinutes: (minutes: number) => act(async () => { setAwayMinutes(await putForwarding(minutes)) }),
     projectName: pair?.projectName ?? null,
     stopBot: () => act(async () => { await postEnabled(false); setBot(null) }),
     restart: () => act(async () => {

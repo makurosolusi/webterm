@@ -21,6 +21,7 @@ import {
 } from './identity'
 import type { ChannelApprovalPort } from './channelApprovals'
 import { runCommand } from './channelCommands'
+import type { WorldCountsPort } from './channelWorld'
 import { isCallbackUpdate, parseTelegramCallback, parseTelegramUpdate, type NormalizedMessage } from './telegram'
 import { dispatchTelegramCallback, type ApprovalChallengePort } from './channelCallback'
 import { safeErrorText } from './safeErrorText'
@@ -97,6 +98,8 @@ export interface TelegramDispatchDeps {
   challenge?: ApprovalChallengePort
   /** Dismisses the client spinner after a button press (Bot API `answerCallbackQuery`). */
   answerCallback?: (callbackId: string, text: string) => Promise<void>
+  /** World-view counts shown by `/status` (same numbers as the canvas); omitted = no counts line. */
+  world?: WorldCountsPort
   /** Receives the detached central turn so tests or shutdown can await it; the turn never rejects. */
   background?: (task: Promise<void>) => void
 }

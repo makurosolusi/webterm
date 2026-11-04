@@ -1,34 +1,21 @@
 // Durable channel state (P5-2/P5-4/P5-6): conversation bindings, the queued reply outbox, and the
-// inbound `update_id` dedupe record. One small JSON document, written atomically (tmp + rename,
-// mode 0600, directory 0700) so a crash can never leave a half-written file that a later boot
-// would treat as truth.
+// inbound `update_id` dedupe record. One small JSON document, replaced atomically by its backend
+// (channelStorePersist.ts): the ledger `channel_store` row in production (F2-g, imported once from
+// the legacy channels.json), or that JSON file for node-env tests.
 //
 // Two rules this file exists to enforce:
-//  - FAIL CLOSED. A file that cannot be parsed or does not match the schema throws
+//  - FAIL CLOSED. A document that cannot be parsed or does not match the schema throws
 //    `ChannelStoreError`; it is never overwritten with defaults. The server disables the channel
 //    instead of silently forgetting bindings (which would also forget an unlink).
 //  - NO SECRETS. Only ids, roles and queued text live here. Bot tokens and webhook secrets stay in
-//    env; error messages carry the store path but never file content.
-import {
-  chmodSync,
-  closeSync,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeSync,
-} from 'node:fs'
-import { dirname } from 'node:path'
-import { randomUUID } from 'node:crypto'
+//    env; error messages carry the store location but never content.
 import type { ChannelBinding } from './identity'
 import {
   CHANNEL_DEDUPE_LIMIT,
   CHANNEL_DEDUPE_TTL_MS,
   CHANNEL_OUTBOX_LIMIT,
+  DEFAULT_FORWARD_AWAY_MINUTES,
+  MAX_FORWARD_AWAY_MINUTES,
   StoreCorruptError,
   bindingKey,
   freshStoreState,
@@ -45,15 +32,15 @@ export {
   CHANNEL_OUTBOX_LIMIT,
   CHANNEL_STORE_FILE,
   CHANNEL_STORE_VERSION,
+  DEFAULT_FORWARD_AWAY_MINUTES,
   type ChannelStoreState,
   type StoredReply,
 } from './channelStoreSchema'
 
-import { DEFAULT_ACCOUNT_ID, backupStoreV1 } from './channelStoreMigrate'
+import { DEFAULT_ACCOUNT_ID } from './channelStoreMigrate'
+import { PersistError, filePersistence, type ChannelStorePersistence } from './channelStorePersist'
 
 export { DEFAULT_ACCOUNT_ID, STORE_V1_BACKUP_SUFFIX, type ChannelAccount } from './channelStoreMigrate'
-
-const MAX_STORE_BYTES = 4 * 1024 * 1024
 
 export type ChannelStoreErrorCode = 'corrupt' | 'unsupported_version' | 'read_failed' | 'write_failed'
 
@@ -84,100 +71,71 @@ export interface ChannelStoreOptions {
 }
 
 /**
- * File-backed store. Constructing it loads the file (or starts empty when absent). A corrupt file
- * throws here, before any request can be served, so the caller can disable the channel.
+ * Store over one persistence backend (a path = the JSON file backend). Constructing it loads the
+ * document (or starts empty when absent). A corrupt document throws here, before any request can
+ * be served, so the caller can disable the channel.
  */
 export class ChannelStore {
-  private readonly path: string
+  private readonly backend: ChannelStorePersistence
   private readonly clock: () => number
   private readonly ttlMs: number
   private readonly dedupeLimit: number
   private readonly outboxLimit: number
   private state: ChannelStoreState
 
-  constructor(storePath: string, options: ChannelStoreOptions = {}) {
-    if (!storePath.trim()) throw new ChannelStoreError('read_failed', '<empty>')
-    this.path = storePath
+  constructor(store: string | ChannelStorePersistence, options: ChannelStoreOptions = {}) {
+    if (typeof store === 'string' && !store.trim()) throw new ChannelStoreError('read_failed', '<empty>')
+    this.backend = typeof store === 'string' ? filePersistence(store) : store
     this.clock = options.now ?? Date.now
     this.ttlMs = options.ttlMs ?? CHANNEL_DEDUPE_TTL_MS
     this.dedupeLimit = Math.max(1, options.dedupeLimit ?? CHANNEL_DEDUPE_LIMIT)
     this.outboxLimit = Math.max(1, options.outboxLimit ?? CHANNEL_OUTBOX_LIMIT)
     const loaded = this.load()
     this.state = loaded.state
-    // v1 -> v2: keep the original next to the file, then persist the migrated document once.
-    if (loaded.migrated) {
-      try {
-        backupStoreV1(this.path)
-      } catch {
-        throw new ChannelStoreError('write_failed', this.path)
-      }
-      this.save()
-    }
+    // v1 -> v2: keep the original, then persist the migrated document once. A legacy import is
+    // persisted the same way, only after it passed the strict parse above.
+    if (loaded.migrated) this.guard(() => this.backend.backupV1())
+    if (loaded.migrated || this.backend.pendingImport) this.save()
   }
 
   get storePath(): string {
-    return this.path
+    return this.backend.location
+  }
+
+  private guard<T>(fn: () => T): T {
+    try {
+      return fn()
+    } catch (err) {
+      throw new ChannelStoreError(err instanceof PersistError ? err.code : 'write_failed', this.backend.location)
+    }
   }
 
   private load(): { state: ChannelStoreState; migrated: boolean } {
-    if (!existsSync(this.path)) {
-      this.ensureDir()
-      return { state: freshStoreState(), migrated: false }
-    }
-    let raw: string
-    try {
-      if (statSync(this.path).size > MAX_STORE_BYTES) throw new Error('too_large')
-      raw = readFileSync(this.path, 'utf8')
-    } catch {
-      throw new ChannelStoreError('read_failed', this.path)
-    }
+    const raw = this.guard(() => this.backend.read())
+    if (raw === null) return { state: freshStoreState(), migrated: false }
     try {
       return parseStoreDocument(raw, this.clock())
     } catch (err) {
       const code = err instanceof StoreCorruptError ? err.code : 'corrupt'
-      throw new ChannelStoreError(code, this.path)
+      throw new ChannelStoreError(code, this.backend.location)
     }
   }
 
-  private ensureDir(): void {
-    const dir = dirname(this.path)
-    try {
-      mkdirSync(dir, { recursive: true, mode: 0o700 })
-      // mkdir's mode is filtered by umask, so assert the final mode explicitly.
-      if ((statSync(dir).mode & 0o077) !== 0) chmodSync(dir, 0o700)
-    } catch {
-      throw new ChannelStoreError('write_failed', this.path)
-    }
-  }
-
-  /** Atomic write: fsync tmp, rename over the target, then force 0600 on the final file. */
   private save(): void {
-    this.ensureDir()
-    const tmp = `${this.path}.${process.pid}.${randomUUID()}.tmp`
-    let fd: number | undefined
-    try {
-      fd = openSync(tmp, 'wx', 0o600)
-      writeSync(fd, JSON.stringify(this.state))
-      fsyncSync(fd)
-      closeSync(fd)
-      fd = undefined
-      renameSync(tmp, this.path)
-      chmodSync(this.path, 0o600)
-    } catch {
-      if (fd !== undefined) {
-        try {
-          closeSync(fd)
-        } catch {
-          // fd was already closed by the failure path; nothing to recover.
-        }
-      }
-      try {
-        unlinkSync(tmp)
-      } catch {
-        // tmp was never created or was already renamed; nothing to clean up.
-      }
-      throw new ChannelStoreError('write_failed', this.path)
+    this.guard(() => this.backend.write(JSON.stringify(this.state)))
+  }
+
+  /** Minutes all browser tabs must be away before agent notices go to Telegram; 0 = off. */
+  get forwardAwayMinutes(): number {
+    return this.state.forwardAwayMinutes ?? DEFAULT_FORWARD_AWAY_MINUTES
+  }
+
+  setForwardAwayMinutes(minutes: number): void {
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_FORWARD_AWAY_MINUTES) {
+      throw new Error('channel store: invalid away minutes')
     }
+    this.state.forwardAwayMinutes = minutes
+    this.save()
   }
 
   snapshot(): ChannelStoreState {

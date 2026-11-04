@@ -31,14 +31,14 @@ describe('status card', () => {
   it('sends once into the topic, then edits; identical content makes no API call (idempotent)', async () => {
     const { cards, calls, snap, clock } = setup()
     expect(await cards.refresh(target)).toBe('sent')
-    expect(calls[0]).toMatchObject({ method: 'sendMessage', params: { chat_id: '-1001', message_thread_id: 9 } })
+    expect(calls[0]).toMatchObject({ method: 'sendMessage', params: { chat_id: '-1001', message_thread_id: 9, parse_mode: 'HTML' } })
     expect(await cards.refresh(target)).toBe('unchanged')
     expect(await cards.refresh(target)).toBe('unchanged')
     expect(calls).toHaveLength(1)
     snap.activeWorkers = 3
     clock.t += STATUS_CARD_DEBOUNCE_MS
     expect(await cards.refresh(target)).toBe('edited')
-    expect(calls[1]).toMatchObject({ method: 'editMessageText', params: { chat_id: '-1001', message_id: 5 } })
+    expect(calls[1]).toMatchObject({ method: 'editMessageText', params: { chat_id: '-1001', message_id: 5, parse_mode: 'HTML' } })
     expect(String(calls[1]?.params['text'])).toContain('Active workers: 3')
   })
 

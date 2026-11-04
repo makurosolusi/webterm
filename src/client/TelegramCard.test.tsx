@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TelegramCard } from './TelegramCard'
 import { PENDING_POLL_MS } from './useTelegramCard'
+import { qrMatrix, qrPath } from './telegramCardQr'
 
 interface Reply { status: number; body?: unknown }
 interface Call { method: string; url: string; body?: string }
@@ -191,6 +192,28 @@ describe('TelegramCard', () => {
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
     const post = calls.find((c) => c.method === 'POST' && c.url === '/api/channels/telegram/pairing')
     expect(JSON.parse(post?.body ?? '{}')).toEqual({ projectId: PROJECT })
+  })
+
+  it('pairing: QR kode dari tautan t.me yang sama tampil di kartu', async () => {
+    connectedRoutes()
+    render(<TelegramCard projectId={PROJECT} />)
+    const qr = await screen.findByRole('img', { name: /QR code of the pairing link/ })
+    expect(qr.querySelector('path')?.getAttribute('d')).toBe(qrPath(qrMatrix(PAIR_LINK), 4))
+  })
+
+  it('penerusan: menit away dibaca lalu disimpan lewat PUT', async () => {
+    connectedRoutes()
+    routes['GET /api/channels/telegram/forwarding'] = { status: 200, body: { awayMinutes: 3 } }
+    routes['PUT /api/channels/telegram/forwarding'] = { status: 200, body: { awayMinutes: 10 } }
+    render(<TelegramCard projectId={PROJECT} />)
+    const input = (await screen.findByLabelText(/after minutes away/)) as HTMLInputElement
+    expect(input.value).toBe('3')
+    fireEvent.change(input, { target: { value: '10' } })
+    fireEvent.blur(input)
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.url === '/api/channels/telegram/forwarding')).toBe(true))
+    const put = calls.find((c) => c.method === 'PUT')
+    expect(JSON.parse(put?.body ?? '{}')).toEqual({ awayMinutes: 10 })
+    await waitFor(() => expect(input.value).toBe('10'))
   })
 
   it('pairing: kode baru diminta setelah chat tertaut (kode lama sudah terpakai)', async () => {
