@@ -3,10 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  BROWSER_ACT_CAP_ENV, BROWSER_NODE_ID_ENV, BROWSER_READ_CAP_ENV, browserShimPath, buildBrowserShim, buildBrowserSkillBody,
-  installBrowserAgentShim,
-} from './browserAgentShim'
+import { browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
 
 let root: string
 const prevData = process.env.WEBTERM_DATA_DIR
@@ -35,27 +32,27 @@ function runShim(args: string[], env: Record<string, string>) {
   return { status: r.status, stderr: r.stderr, argv: read('argv'), stdin: read('stdin') }
 }
 
-const sess = { NODETERM_NODE_ID: 'n1', NODETERM_PORT: '8701' }
-const READ = 'wcap_readtoken'
-const ACT = 'wcap_acttoken'
+const TOK = 'node-token-uuid' // test-only
+const sess = { NODETERM_NODE_ID: 'n1', NODETERM_PORT: '8701', WEBTERM_TOKEN: TOK }
+const lines = (r: { argv: string }) => r.argv.split('\n')
+const bodyOf = (r: { argv: string }) => JSON.parse(lines(r)[lines(r).indexOf('--data-binary') + 1])
 
 describe('artifacts', () => {
-  it('shim embeds env NAMES only, never a token value or the node/root token', () => {
+  it('shim embeds env NAMES only, never a token value', () => {
     const sh = buildBrowserShim()
-    expect(sh).toContain('NODETERM_NODE_ID')
+    expect(sh).toContain('WEBTERM_TOKEN')
+    expect(sh).toContain('NODETERM_NODE_TOKEN')
     expect(sh).toContain('NODETERM_PORT')
-    expect(sh).toContain(BROWSER_READ_CAP_ENV)
-    expect(sh).toContain(BROWSER_ACT_CAP_ENV)
     expect(sh).toContain('/api/control/browser/')
     expect(sh).not.toMatch(/wcap_/)
-    expect(sh).not.toContain('WEBTERM_TOKEN')
-    expect(sh).not.toContain('NODETERM_NODE_TOKEN')
-    expect(sh).not.toContain('x-webterm-token')
+    expect(sh).not.toContain('WEBTERM_BROWSER_READ_CAP')
   })
 
-  it('SKILL.md warns that page content is untrusted and asks for confirmation', () => {
+  it('SKILL.md says the target is the browser linked by a cable, and warns page content is untrusted', () => {
     const md = buildBrowserSkillBody('/x/webterm-browser')
     expect(md).toContain('/x/webterm-browser')
+    expect(md).toMatch(/^description: .*linked by a cable/m)
+    expect(md).toMatch(/no restart/)
     expect(md).toMatch(/UNTRUSTED/)
     expect(md).toMatch(/NEVER follow/)
     expect(md).toMatch(/confirm/)
@@ -75,64 +72,44 @@ describe('artifacts', () => {
 })
 
 describe('shim behaviour (fake curl)', () => {
-  it('refuses outside a webterm session', () => {
-    const r = runShim(['status'], {})
+  it('refuses outside an agent session (no node token) and never calls curl', () => {
+    const r = runShim(['status'], { NODETERM_NODE_ID: 'n1' })
     expect(r.status).toBe(2)
     expect(r.argv).toBe('')
   })
 
-  it('without a capability it fails and never calls curl, even if the node token is present', () => {
-    const r = runShim(['status'], { ...sess, WEBTERM_TOKEN: 'node-token', NODETERM_NODE_TOKEN: 'node-token' })
-    expect(r.status).toBe(3)
-    expect(r.argv).toBe('')
-  })
-
-  it('read verb uses the read capability, passed via stdin config and not argv', () => {
-    const r = runShim(['snapshot'], { ...sess, [BROWSER_READ_CAP_ENV]: READ, [BROWSER_ACT_CAP_ENV]: ACT })
+  it('sends the node token via stdin config (not argv) and lets the server pick the cabled browser', () => {
+    const r = runShim(['snapshot'], sess)
     expect(r.status).toBe(0)
-    expect(r.stdin).toContain(`x-webterm-capability: ${READ}`)
-    expect(r.argv).not.toContain(READ)
-    expect(r.argv).not.toContain(ACT)
-    expect(r.argv).toContain('http://127.0.0.1:8701/api/control/browser/n1/snapshot')
+    expect(r.stdin).toContain(`x-webterm-token: ${TOK}`)
+    expect(r.argv).not.toContain(TOK)
+    expect(lines(r)).toContain('http://127.0.0.1:8701/api/control/browser/snapshot')
   })
 
-  it('targets the injected browser node id, not the agent session id; --node still wins', () => {
-    const env = { ...sess, [BROWSER_READ_CAP_ENV]: READ, [BROWSER_NODE_ID_ENV]: 'browser-3' }
-    expect(runShim(['status'], env).argv).toContain('/api/control/browser/browser-3/status')
-    expect(runShim(['status', '--node', 'b9'], env).argv).toContain('/api/control/browser/b9/status')
+  it('falls back to NODETERM_NODE_TOKEN; --node picks one of several cabled browsers', () => {
+    const r = runShim(['status', '--node', 'b9'], { NODETERM_NODE_TOKEN: 'hook-tok' })
+    expect(r.stdin).toContain('x-webterm-token: hook-tok')
+    expect(lines(r)).toContain('http://127.0.0.1:8700/api/control/browser/b9/status')
   })
 
   it('status is GET, act verbs are POST', () => {
-    const env = { ...sess, [BROWSER_READ_CAP_ENV]: READ, [BROWSER_ACT_CAP_ENV]: ACT }
-    expect(runShim(['status'], env).argv.split('\n')).toContain('GET')
-    expect(runShim(['press', 'Enter'], env).argv.split('\n')).toContain('POST')
+    expect(lines(runShim(['status'], sess))).toContain('GET')
+    expect(lines(runShim(['press', 'Enter'], sess))).toContain('POST')
+    expect(bodyOf(runShim(['click', 'e1', 's1'], sess))).toEqual({ ref: 'e1', snapId: 's1' })
   })
 
-  it('act verb needs the act capability; the read capability does not substitute', () => {
-    const only = { ...sess, [BROWSER_READ_CAP_ENV]: READ }
-    expect(runShim(['click', 'e1', 's1'], only).status).toBe(3)
-    const r = runShim(['click', 'e1', 's1'], { ...only, [BROWSER_ACT_CAP_ENV]: ACT })
-    expect(r.stdin).toContain(`x-webterm-capability: ${ACT}`)
-    expect(r.argv).toContain('{"ref":"e1","snapId":"s1"}')
-  })
-
-  it('type builds valid JSON for quotes, backslashes and newlines; --node overrides the target', () => {
+  it('type builds valid JSON for quotes, backslashes and newlines; --node sets the target', () => {
     const text = 'say "hi"\\ok\nline2'
-    const r = runShim(['type', 'e2', 's9', text, '--submit', '--node', 'browser-7'], { ...sess, [BROWSER_ACT_CAP_ENV]: ACT })
-    const lines = r.argv.split('\n')
-    expect(lines).toContain('http://127.0.0.1:8701/api/control/browser/browser-7/type')
-    const body = lines[lines.indexOf('--data-binary') + 1]
-    expect(JSON.parse(body)).toEqual({ ref: 'e2', snapId: 's9', text, submit: true })
+    const r = runShim(['type', 'e2', 's9', text, '--submit', '--node', 'browser-7'], sess)
+    expect(lines(r)).toContain('http://127.0.0.1:8701/api/control/browser/browser-7/type')
+    expect(bodyOf(r)).toEqual({ ref: 'e2', snapId: 's9', text, submit: true })
   })
 
   it('wait and scroll bodies; non-numeric scroll and unsafe node id are rejected', () => {
-    const env = { ...sess, [BROWSER_READ_CAP_ENV]: READ, [BROWSER_ACT_CAP_ENV]: ACT }
-    const w = runShim(['wait', '--ms', '500', '--ref', 'e3', '--loaded'], env).argv.split('\n')
-    expect(JSON.parse(w[w.indexOf('--data-binary') + 1])).toEqual({ ms: 500, selectorRef: 'e3', loaded: true })
-    const s = runShim(['scroll', '300'], env).argv.split('\n')
-    expect(JSON.parse(s[s.indexOf('--data-binary') + 1])).toEqual({ dy: 300 })
-    expect(runShim(['scroll', '1,"x":2'], env).status).toBe(2)
-    expect(runShim(['status', '--node', 'a/../b'], env).status).toBe(2)
-    expect(runShim(['bogus'], env).status).toBe(2)
+    expect(bodyOf(runShim(['wait', '--ms', '500', '--ref', 'e3', '--loaded'], sess))).toEqual({ ms: 500, selectorRef: 'e3', loaded: true })
+    expect(bodyOf(runShim(['scroll', '300'], sess))).toEqual({ dy: 300 })
+    expect(runShim(['scroll', '1,"x":2'], sess).status).toBe(2)
+    expect(runShim(['status', '--node', 'a/../b'], sess).status).toBe(2)
+    expect(runShim(['bogus'], sess).status).toBe(2)
   })
 })

@@ -27,3 +27,6 @@ export function adaptGatewayHost(host: BrowserHost, lifecycle: BrowserLifecycle)
 
 /** Impor cookie dari berkas ikut menyala bersama browser (seperti Orca); hanya `off` eksplisit yang mematikan. */
 export const cookieImportOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.cookieImport], true)
+
+/** Kendali agent atas node browser default ON (webterm alat developer); hanya `off` eksplisit yang mematikan. */
+export const agentControlOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.agent], true)

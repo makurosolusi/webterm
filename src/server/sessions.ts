@@ -85,7 +85,6 @@ export class Sessions extends SessionsCore {
       ...(msg.agentId && hasClaudeHookSettings(msg.agentId)
         ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })
         : {}),
-      ...(this.options.browser?.envFor(msg.id, msg.agentId) ?? {}),
     }
     const spawn = this.options.spawn ?? spawnPty
     const pty = spawn({
@@ -139,7 +138,6 @@ export class Sessions extends SessionsCore {
     // SEBELUM gerbang sesi. Agent yang keluar sendiri sudah dihapus dari `map` oleh `onExit`,
     // sehingga `close` yang menyusul tetap harus membersihkannya.
     forgetNodeToken(id)
-    this.options.browser?.release(id)
     this.registry.deleteStatus(id)
     this.registry.deleteTranscript(id)
     const session = this.map.get(id)

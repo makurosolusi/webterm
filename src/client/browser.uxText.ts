@@ -11,13 +11,14 @@ export const TOOLBAR_TEXT = {
   urlPlaceholder: 'Cari atau ketik alamat',
   go: 'Buka',
   agentControl: 'Agent boleh mengemudi',
+  agentControlHint: 'Default on: agent terminal yang tersambung kabel ke browser ini bisa langsung mengendalikannya. Hapus centang untuk mematikan.',
 } as const
 
-// Tawaran inline saat kendali agent mati di server (meniru Orca BrowserUsePane "Agent Browser Use":
+// Tawaran inline, HANYA saat user mematikan kendali agent di Pengaturan (default on). Meniru Orca BrowserUsePane "Agent Browser Use":
 // "Let coding agents drive this browser with your logins"): konfirmasi dulu karena agent memakai cookie login.
 export const AGENT_OFFER_TEXT = {
   offer: 'Izinkan agent mengendalikan browser ini',
-  warning: 'Agent terminal akan bisa mengklik, mengetik, dan membuka halaman di browser ini dengan cookie login kamu. ' +
+  warning: 'Agent terminal yang tersambung kabel ke browser ini akan bisa mengklik, mengetik, dan membuka halaman di browser ini dengan cookie login kamu. ' +
     'Konten halaman tidak tepercaya. Bisa dimatikan lagi di Pengaturan > Kemampuan > Browser.',
   confirm: 'Izinkan',
   cancel: 'Batal',

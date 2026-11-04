@@ -14,7 +14,7 @@ export interface BrowserToolbarProps {
   state?: BrowserState
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
   agentControl: boolean
-  /** false bila sub-opsi kendali agent mati di server: toggle diganti tawaran untuk menyalakannya. */
+  /** false hanya bila user mematikan sub-opsi kendali agent (default on): toggle diganti tawaran untuk menyalakannya. */
   agentEnabled: boolean
   onAgentControl: (enabled: boolean) => void
   /** Nyalakan sub-opsi kendali agent di server (dipanggil setelah konfirmasi di tawaran). */
@@ -72,7 +72,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
           </div>
         )}
         {agentEnabled ? (
-          <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+          <label className="flex items-center gap-1 text-xs whitespace-nowrap" title={TOOLBAR_TEXT.agentControlHint}>
             <input type="checkbox" checked={agentControl} onChange={(e) => onAgentControl(e.target.checked)} />
             {TOOLBAR_TEXT.agentControl}
           </label>

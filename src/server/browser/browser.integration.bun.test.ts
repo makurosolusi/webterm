@@ -11,7 +11,7 @@ import type { Workspace } from '../../shared/workspace'
 import { authorizeRequest, TOKEN_HEADER } from '../auth'
 import { CapabilityStore, allows } from '../control/capabilities'
 import { createFileSecretStore } from '../envSecrets.store'
-import { BROWSER_ACT_CAP_ENV, BROWSER_READ_CAP_ENV } from '../browserAgentShim'
+import { forgetNodeToken, nodeToken } from '../hooksTokens'
 import { startBrowserRuntime } from './browser.runtime'
 import { activeBrowser, setActiveBrowser } from './browser.state'
 import type { BrowserRuntime } from './browser.state'
@@ -27,13 +27,13 @@ const ON = { [ENV_BROWSER.enabled]: 'on', [ENV_BROWSER.agent]: 'on', [ENV_BROWSE
 const cleanup: Array<() => Promise<void> | void> = []
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c() })
 
-async function boot(env: Record<string, string> = ON, onAgentUse?: () => void) {
+async function boot(env: Record<string, string> = ON, onAgentUse?: () => void, workspaces: () => Workspace[] = () => [WS]) {
   const dir = mkdtempSync(join(tmpdir(), 'wt-brint-'))
   const fake: FakeCdp = await startFakeCdp()
   const capabilities = new CapabilityStore()
   const rt = await startBrowserRuntime({
     env, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), capabilities, onAgentUse,
-    workspaces: () => [WS], launcher: { acquire: async () => fake.url, shutdown: () => undefined },
+    workspaces, launcher: { acquire: async () => fake.url, shutdown: () => undefined },
   })
   cleanup.push(async () => { await rt?.shutdown(); await fake.close(); rmSync(dir, { recursive: true, force: true }) })
   return { rt, fake, capabilities }
@@ -104,36 +104,55 @@ describe('runtime menyala di atas CDP tiruan', () => {
     expect(rt?.status().live).toBe(1)
   })
 
-  test('kendali agent dinyalakan saat runtime hidup: sesi berikutnya dapat capability dan shim dipasang, tanpa restart', async () => {
-    const env: Record<string, string> = { [ENV_BROWSER.enabled]: 'on', [ENV_BROWSER.agent]: 'off' }
+  test('default on: shim dipasang saat start; kabel dipasang SETELAH sesi jalan langsung berlaku, dilepas = ditolak', async () => {
+    const board: Workspace = { ...WS, bridges: [], nodes: [WS.nodes[0], { id: 'b1', kind: 'browser', x: 0, y: 0 }] } // agentControl absen = on
     let installs = 0
-    const { rt } = await boot(env, () => { installs++ })
+    const { rt, capabilities } = await boot({ [ENV_BROWSER.enabled]: 'on' }, () => { installs++ }, () => [board])
     if (!rt) throw new Error('runtime tidak menyala')
-    expect(rt.sessionHook.envFor('a1', 'claude')).toEqual({})
-    expect(installs).toBe(0)
-    env[ENV_BROWSER.agent] = 'on' // sub `browserAgent` lewat API kemampuan menulis ke env proses
-    expect(rt.status().agentEnabled).toBe(true)
-    expect(rt.sessionHook.envFor('a1', 'claude')[BROWSER_ACT_CAP_ENV]).toBeTruthy()
     expect(installs).toBe(1)
-    rt.sessionHook.release('a1')
+    expect(rt.status().agentEnabled).toBe(true)
+    const tok = nodeToken('a1')
+    cleanup.push(() => forgetNodeToken('a1'))
+    const asAgent = (path: string) => rt.control({ method: 'GET', path, headers: { [TOKEN_HEADER]: tok } }, { verify: (t: string) => capabilities.verify(t), allows })
+    expect(await asAgent('/api/control/browser/status')).toMatchObject({ status: 404, body: { error: 'no_linked_browser', available: [{ id: 'b1' }] } })
+    board.bridges.push({ id: 'l1', source: 'a1', target: 'b1', kind: 'context' }) // user menyambung kabel; tanpa restart
+    // 404 not_found = lolos auth+kabel+flag, b1 hanya belum live di host (belum attach).
+    expect(await asAgent('/api/control/browser/status')).toMatchObject({ status: 404, body: { error: 'not_found' } })
+    expect(await asAgent('/api/control/browser/b1/status')).toMatchObject({ status: 404, body: { error: 'not_found' } })
+    board.bridges.length = 0 // kabel dilepas = izin dicabut
+    expect(await asAgent('/api/control/browser/b1/status')).toMatchObject({ status: 403, body: { error: 'not_linked' } })
+    expect((await asAgent('/api/control/browser/status'))?.status).toBe(404)
+    // Tanpa identitas node (token asing) = 401, walau gerbang auth meloloskannya.
+    const anon = await rt.control({ method: 'GET', path: '/api/control/browser/b1/status', headers: { [TOKEN_HEADER]: 'bukan-token-node' } }, { verify: () => undefined, allows })
+    expect(anon?.status).toBe(401)
   })
 
-  test('capability dari hook sesi: read boleh status, act ditolak untuk verb read, tanpa capability 401, token node 401', async () => {
+  test('off eksplisit dihormati: sub-opsi off atau toggle node off = disabled untuk agent bertali', async () => {
+    const board: Workspace = { ...WS, bridges: [{ id: 'l1', source: 'a1', target: 'b1', kind: 'context' }], nodes: [WS.nodes[0], { id: 'b1', kind: 'browser', x: 0, y: 0, agentControl: false }] }
+    const env: Record<string, string> = { [ENV_BROWSER.enabled]: 'on' }
+    const { rt, capabilities } = await boot(env, undefined, () => [board])
+    if (!rt) throw new Error('runtime tidak menyala')
+    const tok = nodeToken('a1')
+    cleanup.push(() => forgetNodeToken('a1'))
+    const caps = { verify: (t: string) => capabilities.verify(t), allows }
+    const status = () => rt.control({ method: 'GET', path: '/api/control/browser/status', headers: { [TOKEN_HEADER]: tok } }, caps)
+    expect(await status()).toMatchObject({ status: 403, body: { error: 'disabled' } })
+    board.nodes[1] = { ...board.nodes[1], agentControl: undefined }
+    expect((await status())?.status).toBe(404) // lolos gerbang (node belum live)
+    env[ENV_BROWSER.agent] = 'off'
+    expect(rt.status().agentEnabled).toBe(false)
+    expect(await status()).toMatchObject({ status: 403, body: { error: 'disabled' } })
+  })
+
+  test('capability (Agent Pusat) tetap jalan: read boleh status, read tak boleh act, node wajib di path', async () => {
     const { rt, capabilities } = await boot()
     if (!rt) throw new Error('runtime tidak menyala')
-    const env = rt.sessionHook.envFor('a1', 'claude')
-    const read = env[BROWSER_READ_CAP_ENV], act = env[BROWSER_ACT_CAP_ENV]
-    expect(read).toBeTruthy(); expect(act).toBeTruthy()
-
-    // 404 = lolos auth+flag tetapi node b1 belum live di host (belum ada attach); yang dibuktikan di sini adalah gerbangnya.
+    const read = capabilities.mint({ verb: 'browser.read', resource: 'node:b1', ttlMs: 60_000, mintedBy: 'test' })
     expect((await ctl(rt, capabilities, 'status', read))?.status).toBe(404)
-    expect((await ctl(rt, capabilities, 'navigate', read, { url: 'https://example.com/' }))?.status).toBe(403) // read tak boleh act
+    expect((await ctl(rt, capabilities, 'navigate', read, { url: 'https://example.com/' }))?.status).toBe(403)
     expect((await ctl(rt, capabilities, 'status'))?.status).toBe(401)
-    // Token node (per sesi agent) BUKAN capability browser: handler menolaknya walau gerbang auth meloloskannya.
-    expect((await ctl(rt, capabilities, 'status', 'nodeterm-node-token-bukan-capability'))?.status).toBe(401)
-    expect((await ctl(rt, capabilities, 'status', act))?.status).toBe(403) // act tidak membawa browser.read
-    rt.sessionHook.release('a1')
-    expect((await ctl(rt, capabilities, 'status', read))?.status).toBe(401) // dicabut saat sesi tutup
+    const auto = await rt.control({ method: 'GET', path: '/api/control/browser/status', headers: { 'x-webterm-capability': read } }, { verify: (t: string) => capabilities.verify(t), allows })
+    expect(auto?.status).toBe(400)
   })
 
   test('shutdown idempotent dan menutup gateway baru', async () => {

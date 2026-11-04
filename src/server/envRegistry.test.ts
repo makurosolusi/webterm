@@ -66,13 +66,13 @@ describe('ENV_REGISTRY', () => {
 
 describe('env browser', () => {
   const browserSpecs = ENV_REGISTRY.filter((s) => s.key.startsWith('WEBTERM_BROWSER') || s.key === 'WEBTERM_BROWSER')
-  it('semua kunci kontrak terdaftar di group browser dan flag default off (kecuali impor cookie: ikut browser)', () => {
+  it('semua kunci kontrak terdaftar di group browser dan flag default off (kecuali impor cookie & kendali agent: default on)', () => {
     expect(browserSpecs.map((s) => s.key).sort()).toEqual(Object.values(ENV_BROWSER).sort())
     for (const s of browserSpecs) {
       expect(s.group, s.key).toBe('browser')
       expect(s.restartRequired, s.key).toBe(false) // hidup-mati lewat hook kemampuan browser, tanpa restart
       expect(s.label.length, s.key).toBeGreaterThan(0)
-      if (s.kind === 'flag') expect(s.default, s.key).toBe(s.key === ENV_BROWSER.cookieImport ? 'on' : 'off')
+      if (s.kind === 'flag') expect(s.default, s.key).toBe(s.key === ENV_BROWSER.cookieImport || s.key === ENV_BROWSER.agent ? 'on' : 'off')
     }
   })
   it('batas angka mengikuti kontrak', () => {

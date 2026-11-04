@@ -3,7 +3,6 @@
 // tak satu pun modul browser dijalankan. Tidak ada nilai cookie/token yang pernah dilog di sini.
 import { DEFAULT_COOKIE_TTL_DAYS, ENV_BROWSER } from '../../shared/browser.contract'
 import type { BrowserState } from '../../shared/browser.contract'
-import { flagOn } from '../envFlag'
 import { isEnabled } from '../featureCapabilities.runtime'
 import { createLogger } from '../logs'
 import type { CdpClient } from './cdp.client'
@@ -26,8 +25,8 @@ import { createAgentVerbs } from './browserAgent.verbs'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { handleBrowserControl } from './browserControl.handler'
 import { handleBrowserApi } from '../browserApi'
-import { createBrowserSessionHook } from './browser.sessionCaps'
-import { adaptGatewayHost, cookieImportOn } from './browser.runtime.parts'
+import { resolveLinkedBrowser } from './browser.linkedTarget'
+import { adaptGatewayHost, agentControlOn, cookieImportOn } from './browser.runtime.parts'
 import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
 import type { CapabilityStore } from '../control/capabilities'
@@ -41,7 +40,7 @@ export interface RuntimeDeps {
   webtermPort: number
   /** Webterm bind loopback: localhost dev server boleh dibuka tanpa allowlist (port webterm tetap ditolak). */
   loopbackBind?: boolean
-  /** Dipanggil saat sesi agent mendapat capability browser (sub `browserAgent` on); pemasang shim agent. */
+  /** Dipanggil sekali saat runtime start: pemasang shim + skill agent (target dipilih per panggilan, jadi tanpa restart sesi). */
   onAgentUse?: () => void
   dataRoot: string
   secrets: SecretStore
@@ -93,8 +92,9 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
 
   const nodeOf = (id: string) => d.workspaces().flatMap((w) => w.nodes).find((n) => n.id === id)
   const agentOverride = new Map<string, boolean>() // toggle terbaru dari UI menang atas snapshot board yang belum tersimpan
-  const agentEnv = () => flagOn(env[ENV_BROWSER.agent])
-  const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl === true)
+  // Default ON (alat developer): hanya `off` eksplisit di sub-opsi atau toggle node yang mematikan.
+  const agentEnv = () => agentControlOn(env)
+  const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now })
   const live = new Set<string>()
   const versionProbe = createVersionProbe({ acquire: (w) => launcher.acquire(w), connect: d.connect })
@@ -111,6 +111,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
     setAgentControl: (id: string, on: boolean) => { agentOverride.set(id, on) },
   }
+  d.onAgentUse?.() // shim + skill ada begitu browser hidup; sub-opsi off cukup ditolak handler
   let down = false
   return {
     status,
@@ -118,9 +119,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     listDomains: (workspaceId) => vault.listDomains(workspaceId),
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
     api: (method, pathname, body) => handleBrowserApi(method, pathname, body, apiDeps),
-    control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed }),
-    // Sub `browserAgent` bisa dinyalakan saat runtime hidup: shim dipasang saat sesi agent pertama memakainya.
-    sessionHook: createBrowserSessionHook({ store: d.capabilities, agentEnabled: () => { const on = agentEnv(); if (on) d.onAgentUse?.(); return on }, workspaces: d.workspaces }),
+    control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted) }),
     async shutdown() {
       if (down) return
       down = true

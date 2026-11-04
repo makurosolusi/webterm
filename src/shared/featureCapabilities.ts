@@ -58,7 +58,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   browser: {
     id: 'browser', title: 'Browser di kanvas', implies: [], primaryKey: 'WEBTERM_BROWSER', needs: 'chromium',
     blurb: 'Buka halaman web sebagai node di kanvas.',
-    subs: [{ key: 'WEBTERM_BROWSER_AGENT', label: 'Izinkan agent mengendalikan browser', defaultOn: false, dangerous: true }],
+    subs: [{ key: 'WEBTERM_BROWSER_AGENT', label: 'Izinkan agent mengendalikan browser', defaultOn: true, dangerous: true }],
   },
   files: {
     id: 'files', title: 'Kelola file', implies: [], primaryKey: 'WEBTERM_FILES_VIEWERS',

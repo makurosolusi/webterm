@@ -1,4 +1,4 @@
-// Tawaran inline "Izinkan agent mengendalikan browser ini" saat sub-opsi `browserAgent` mati. Meniru Orca
+// Tawaran inline "Izinkan agent mengendalikan browser ini" saat user mematikan sub-opsi `browserAgent` (default on). Meniru Orca
 // BrowserUsePane ("Agent Browser Use — Let coding agents drive this browser with your logins"): satu tombol,
 // lalu konfirmasi yang menjelaskan risikonya, baru sub-opsi dinyalakan lewat API kemampuan.
 import { useState } from 'react'

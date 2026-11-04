@@ -34,6 +34,10 @@ describe('katalog', () => {
     expect(CAPABILITIES.workers.subs).toEqual([
       { key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: expect.any(String), defaultOn: true },
     ])
+    // Kendali agent atas browser default ON (alat developer); tetap `dangerous` = mematikan/menyalakan lewat konfirmasi.
+    expect(CAPABILITIES.browser.subs).toEqual([
+      { key: 'WEBTERM_BROWSER_AGENT', label: expect.any(String), defaultOn: true, dangerous: true },
+    ])
   })
 
   it('teks katalog Indonesia tanpa nama env var atau kata terlarang', () => {

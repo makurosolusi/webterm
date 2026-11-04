@@ -71,8 +71,6 @@ export function applyPtyOptions(): void {
     // persis seperti sebelum setting ini ada. Mode pilihan user eksplisit tetap diteruskan.
     claudePermissionMode: s.claudePermissionMode === 'auto' ? undefined : s.claudePermissionMode,
     hookReplyApprovals: s.hookReplyApprovals,
-    // Absen (flag browser off) = tidak ada env capability browser; opsi ini DITIMPA utuh tiap panggilan.
-    browser: activeBrowser()?.sessionHook,
   }
 }
 
