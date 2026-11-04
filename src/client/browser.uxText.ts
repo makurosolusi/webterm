@@ -70,6 +70,8 @@ export const COOKIE_TEXT = {
   removeAll: 'Hapus semua',
   loading: 'Memuat…',
   cookieCount: (n: number) => `${n} cookie`,
+  // Kebijakan Orca "Google logins aren't imported": sesi Google terikat perangkat asal.
+  googleSkipped: (n: number) => `Login Google tidak diimpor — masuk langsung ke Google di node browser (${n} cookie dilewati).`,
   imported: (cookies: number, sites: number) => `${cookies} cookie dari ${sites} situs diimpor.`,
   removeLabel: (domain: string) => `Hapus cookie untuk ${domain}`,
   selectLabel: (domain: string) => `Impor cookie untuk ${domain}`,

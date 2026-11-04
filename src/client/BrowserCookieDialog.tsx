@@ -128,6 +128,7 @@ export default function BrowserCookieDialog({ cookieImportEnabled, workspaceId, 
         {preview && (
           <fieldset className="m-0 flex flex-col gap-1 border-0 p-0 text-xs">
             <legend className="font-semibold">{T.domainsHeading}</legend>
+            {!!preview.googleSkipped && <p role="note" className="m-0">{T.googleSkipped(preview.googleSkipped)}</p>}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox" checked={picked.size === preview.domains.length && picked.size > 0}

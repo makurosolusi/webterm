@@ -73,6 +73,16 @@ describe('BrowserCookieDialog', () => {
     expect(document.body.innerHTML).not.toContain(CANARY)
   })
 
+  it('shows how many Google login cookies were skipped and why; silent when none', async () => {
+    open()
+    await upload()
+    expect(document.body.textContent).not.toContain(T.googleSkipped(0).split(' (')[0])
+    api.previewCookies.mockResolvedValue({ ...PREVIEW, googleSkipped: 3 })
+    await upload()
+    expect(await screen.findByText(T.googleSkipped(3))).toBeTruthy()
+    expect(T.googleSkipped(3)).toContain('Login Google tidak diimpor — masuk langsung ke Google di node browser')
+  })
+
   it('select-all picks every domain', async () => {
     open()
     await upload()
