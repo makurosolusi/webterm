@@ -8,14 +8,17 @@ import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
 import { resolveOmniboxInput, type SearchEngine } from '../shared/browser.omnibox'
 import { zoomLabel } from './browser.zoom'
 import { TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
+import BrowserAgentOffer from './browser.agentOffer'
 
 export interface BrowserToolbarProps {
   state?: BrowserState
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
   agentControl: boolean
-  /** false bila `WEBTERM_BROWSER_AGENT` mati di server: toggle dinonaktifkan. */
+  /** false bila sub-opsi kendali agent mati di server: toggle diganti tawaran untuk menyalakannya. */
   agentEnabled: boolean
   onAgentControl: (enabled: boolean) => void
+  /** Nyalakan sub-opsi kendali agent di server (dipanggil setelah konfirmasi di tawaran). */
+  onEnableAgent?: () => Promise<void>
   /** Zoom halaman (1 = 100%); kontrol zoom hanya tampil bila `onZoom` diberikan. */
   zoom?: number
   onZoom?: (dir: -1 | 1) => void
@@ -26,7 +29,7 @@ export interface BrowserToolbarProps {
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
 /** Bilah alamat + tombol navigasi + toggle agent untuk satu node browser. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, zoom = 1, onZoom, searchEngine }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, searchEngine }: BrowserToolbarProps) {
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const stateUrl = state?.url ?? ''
@@ -68,13 +71,12 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
             <Button size="icon-xs" variant="ghost" aria-label={ZOOM_TEXT.in} onClick={() => onZoom(1)}>{icon('zoom-in')}</Button>
           </div>
         )}
-        <label className="flex items-center gap-1 text-xs whitespace-nowrap" title={agentEnabled ? undefined : TOOLBAR_TEXT.agentControlOff}>
-          <input
-            type="checkbox" checked={agentControl} disabled={!agentEnabled}
-            onChange={(e) => onAgentControl(e.target.checked)}
-          />
-          {TOOLBAR_TEXT.agentControl}
-        </label>
+        {agentEnabled ? (
+          <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+            <input type="checkbox" checked={agentControl} onChange={(e) => onAgentControl(e.target.checked)} />
+            {TOOLBAR_TEXT.agentControl}
+          </label>
+        ) : onEnableAgent && <BrowserAgentOffer enable={onEnableAgent} />}
       </div>
       {error && <p id="browser-url-error" role="alert" className="m-0 text-xs text-(--vscode-errorForeground)">{error}</p>}
     </div>

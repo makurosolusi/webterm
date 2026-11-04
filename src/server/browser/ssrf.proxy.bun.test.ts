@@ -21,11 +21,11 @@ afterAll(async () => {
   web.close()
 })
 
-async function setup(resolve: Resolver, allow: string[] = [], toPort = echoPort) {
+async function setup(resolve: Resolver, allow: string[] | (() => ReadonlySet<string>) = [], toPort = echoPort, allowLoopback = false) {
   const dialed: string[] = []
   const resolved: string[] = []
   const proxy = await startSsrfProxy({
-    allow: new Set(allow), webtermPort: SELF_PORT,
+    allow: Array.isArray(allow) ? new Set(allow) : allow, webtermPort: SELF_PORT, allowLoopback,
     resolver: async (h) => { resolved.push(h); return resolve(h) },
     dial: (ip, port) => { dialed.push(`${ip}:${port}`); return connect({ host: '127.0.0.1', port: toPort }) },
   })
@@ -114,4 +114,22 @@ test('request absolut ke host privat ditolak; bentuk origin-form (bukan proxy) =
   expect(await raw(t.proxy.port, 'GET /admin HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')).toContain('400 Bad Request')
   expect(await raw(t.proxy.port, 'GET https://pub.example/ HTTP/1.1\r\nHost: pub.example\r\nConnection: close\r\n\r\n')).toContain('400 Bad Request')
   expect(t.dialed.length).toBe(0)
+})
+
+test('bind loopback: localhost dev server lolos tanpa allowlist; port webterm, LAN, dan nama publik ke 127.0.0.1 tetap ditolak', async () => {
+  const t = await setup(async (h) => (h === 'localhost' ? ['127.0.0.1'] : h === 'lan.example' ? ['192.168.1.10'] : ['127.0.0.1']), [], echoPort, true)
+  expect(await raw(t.proxy.port, connectReq('localhost:3000'), 'Established')).toContain('200 Connection Established')
+  expect(await raw(t.proxy.port, connectReq('127.0.0.1:5173'), 'Established')).toContain('200 Connection Established')
+  expect(await raw(t.proxy.port, connectReq(`localhost:${SELF_PORT}`))).toContain('blocked: not_allowed_port')
+  expect(await raw(t.proxy.port, connectReq('rebind.example:3000'))).toContain('blocked: private_host')
+  expect(await raw(t.proxy.port, connectReq('lan.example:80'))).toContain('blocked: private_host')
+  expect(await raw(t.proxy.port, connectReq('10.0.0.1:80'))).toContain('blocked: private_host')
+})
+
+test('allowlist getter dibaca ulang tiap koneksi (izin dari Pengaturan berlaku tanpa restart)', async () => {
+  let allow: ReadonlySet<string> = new Set()
+  const t = await setup(async () => ['192.168.1.10'], () => allow)
+  expect(await raw(t.proxy.port, connectReq('nas.lan:8080'))).toContain('blocked: private_host')
+  allow = new Set([allowKey('nas.lan', 8080)])
+  expect(await raw(t.proxy.port, connectReq('nas.lan:8080'), 'Established')).toContain('200 Connection Established')
 })

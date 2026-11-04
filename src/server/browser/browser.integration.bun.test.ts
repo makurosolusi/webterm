@@ -27,12 +27,12 @@ const ON = { [ENV_BROWSER.enabled]: 'on', [ENV_BROWSER.agent]: 'on', [ENV_BROWSE
 const cleanup: Array<() => Promise<void> | void> = []
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c() })
 
-async function boot(env: Record<string, string> = ON) {
+async function boot(env: Record<string, string> = ON, onAgentUse?: () => void) {
   const dir = mkdtempSync(join(tmpdir(), 'wt-brint-'))
   const fake: FakeCdp = await startFakeCdp()
   const capabilities = new CapabilityStore()
   const rt = await startBrowserRuntime({
-    env, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), capabilities,
+    env, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), capabilities, onAgentUse,
     workspaces: () => [WS], launcher: { acquire: async () => fake.url, shutdown: () => undefined },
   })
   cleanup.push(async () => { await rt?.shutdown(); await fake.close(); rmSync(dir, { recursive: true, force: true }) })
@@ -102,6 +102,20 @@ describe('runtime menyala di atas CDP tiruan', () => {
     fake.emit('Page.screencastFrame', { data: Buffer.from('jpeg').toString('base64'), sessionId: 7, metadata: {} }, 'S-T1')
     await until(() => frames > 0)
     expect(rt?.status().live).toBe(1)
+  })
+
+  test('kendali agent dinyalakan saat runtime hidup: sesi berikutnya dapat capability dan shim dipasang, tanpa restart', async () => {
+    const env: Record<string, string> = { [ENV_BROWSER.enabled]: 'on', [ENV_BROWSER.agent]: 'off' }
+    let installs = 0
+    const { rt } = await boot(env, () => { installs++ })
+    if (!rt) throw new Error('runtime tidak menyala')
+    expect(rt.sessionHook.envFor('a1', 'claude')).toEqual({})
+    expect(installs).toBe(0)
+    env[ENV_BROWSER.agent] = 'on' // sub `browserAgent` lewat API kemampuan menulis ke env proses
+    expect(rt.status().agentEnabled).toBe(true)
+    expect(rt.sessionHook.envFor('a1', 'claude')[BROWSER_ACT_CAP_ENV]).toBeTruthy()
+    expect(installs).toBe(1)
+    rt.sessionHook.release('a1')
   })
 
   test('capability dari hook sesi: read boleh status, act ditolak untuk verb read, tanpa capability 401, token node 401', async () => {

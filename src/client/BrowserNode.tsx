@@ -5,6 +5,7 @@ import type { NodeProps } from '@xyflow/react'
 import { NAV_ACTIONS, ZOOM_PAUSE_BELOW } from '../shared/browser.contract'
 import type { BrowserState } from '../shared/browser.contract'
 import { hostOnly } from '../shared/browser.url'
+import type { BrowserErr } from './browser.status'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
@@ -27,6 +28,10 @@ const DEFAULT_TITLE = 'Browser'
 export interface BrowserSlotCtx {
   id: string
   state?: BrowserState
+  /** Galat terakhir sesi (pesan overlay); dipakai slot untuk tombol pemulihan. */
+  error?: BrowserErr
+  /** URL yang terakhir diminta (ketikan toolbar / data node); saat diblokir, state.url masih halaman lama. */
+  target?: string
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
   takeover: () => void
   /** Zoom halaman (1 = 100%) dan langkahnya; murni klien, lihat browser.zoom.ts. */
@@ -61,6 +66,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
+  const lastGo = useRef<string | undefined>(undefined)
 
   useGoto({ want: d.url, state, send })
 
@@ -76,8 +82,11 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   useEffect(() => { if (recentUrl) addRecent(recentUrl, recentTitle) }, [recentUrl, recentTitle])
 
   const ctx: BrowserSlotCtx = {
-    id, state,
-    nav: (action, url) => send({ t: 'nav', action, ...(url === undefined ? {} : { url }) }),
+    id, state, error: session.error, target: lastGo.current ?? d.url,
+    nav: (action, url) => {
+      if (action === 'go' && url !== undefined) lastGo.current = url
+      send({ t: 'nav', action, ...(url === undefined ? {} : { url }) })
+    },
     takeover: () => send({ t: 'takeover' }),
     zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
   }
