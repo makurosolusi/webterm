@@ -17,6 +17,7 @@ import { routinesRoutes } from './routes/routines.routes'
 import { sensorRoutes } from './routes/sensors.routes'
 import { costRoutes } from './routes/cost.routes'
 import { dagRoutes } from './routes/dag.routes'
+import { knowledge2Routes } from './routes/knowledge2.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -46,6 +47,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...ledgerRoutes,
   ...costRoutes,
   ...dagRoutes,
+  ...knowledge2Routes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

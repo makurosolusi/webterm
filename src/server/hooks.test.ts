@@ -355,8 +355,15 @@ describe('buildClaudeFlags', () => {
   const writeSettings = () => '/tmp/x.json'
   const writeRules = () => '/tmp/rules.md'
   const writeMcp = () => '/tmp/x.mcp.json'
+  const writePlugin = () => '/tmp/claude-plugin'
   const flags = (resume: boolean, permissionMode?: AgentPermissionMode) =>
-    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules, writeMcp })
+    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules, writeMcp, writePlugin })
+
+  it('loads the webterm explore subagent plugin right before the variadic --mcp-config', () => {
+    for (const resume of [false, true]) {
+      expect(flags(resume).endsWith("--plugin-dir '/tmp/claude-plugin' --mcp-config '/tmp/x.mcp.json'")).toBe(true)
+    }
+  })
 
   it('adds the webterm MCP server config as the LAST flag (--mcp-config is variadic)', () => {
     expect(flags(false).endsWith("--mcp-config '/tmp/x.mcp.json'")).toBe(true)
