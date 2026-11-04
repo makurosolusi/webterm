@@ -329,14 +329,11 @@ describe('hookEnv', () => {
     expect(env).not.toHaveProperty(NODE_TOKEN_ENV)
     expect(Object.values(env)).not.toContain(nodeToken('n-env'))
   })
-  it('sets NODETERM_PERM_WAIT_SECS when hook-reply approvals are on', () => {
-    expect(hookEnv('n-env', { hookReplyApprovals: true }).NODETERM_PERM_WAIT_SECS).toBe(
-      String(PERM_WAIT_SECS_INTERACTIVE)
-    )
-  })
-  it('omits NODETERM_PERM_WAIT_SECS when off (legacy behaviour, exactly)', () => {
-    expect(hookEnv('n-env', { hookReplyApprovals: false })).not.toHaveProperty('NODETERM_PERM_WAIT_SECS')
-    expect(hookEnv('n-env')).not.toHaveProperty('NODETERM_PERM_WAIT_SECS')
+  it('injects only the header path, whatever hookReplyApprovals says (the hold lives in the hook, not env)', () => {
+    const expected = { [NODE_HEADERS_ENV]: claudeHeadersPath('n-env') }
+    expect(hookEnv('n-env', { hookReplyApprovals: true })).toEqual(expected)
+    expect(hookEnv('n-env', { hookReplyApprovals: false })).toEqual(expected)
+    expect(hookEnv('n-env')).toEqual(expected)
   })
 })
 

@@ -1,5 +1,5 @@
 import { isPermissionMode, type AgentPermissionMode } from '../shared/workspace'
-import { PERM_WAIT_SECS_INTERACTIVE, writeClaudeSettings, writeHouseRules } from './hooksSettings'
+import { writeClaudeSettings, writeHouseRules } from './hooksSettings'
 import { NODE_HEADERS_ENV } from './hooksTokens'
 import { claudeHeadersPath } from './hooksPaths'
 import { shq } from './hooksQuote'
@@ -36,15 +36,14 @@ export {
  * PTY) yang menggabungkannya ke env proses. Hanya PATH file header, tidak pernah nilai token
  * (`NODE_HEADERS_ENV`); file-nya ditulis `writeNodeHeaders` sebelum spawn.
  *
- * `hookReplyApprovals` off ⇒ `NODETERM_PERM_WAIT_SECS` ABSEN ⇒ perilaku lama persis: hook permission
- * tidak menahan apa pun dan claude langsung menampilkan prompt interaktifnya.
+ * Hook-reply approvals do NOT travel through env: the managed PermissionRequest hook holds for
+ * `PERM_WAIT_SECS_INTERACTIVE` (hooksSettings.ts) and the server answers it
+ * (permission/permission.runtime.ts). The old `NODETERM_PERM_WAIT_SECS` injection was read by nothing.
  */
-export function hookEnv(nodeId: string, opts?: { hookReplyApprovals?: boolean }): Record<string, string> {
-  const waitSecs = opts?.hookReplyApprovals ? PERM_WAIT_SECS_INTERACTIVE : 0
-  return {
-    [NODE_HEADERS_ENV]: claudeHeadersPath(nodeId),
-    ...(waitSecs > 0 ? { NODETERM_PERM_WAIT_SECS: String(waitSecs) } : {}),
-  }
+// `_opts` is ignored. Kept only so sessions.ts:105 (still passing `{ hookReplyApprovals }`) compiles;
+// drop it together with that argument and `SessionsOptions.hookReplyApprovals` (api.ts:86).
+export function hookEnv(nodeId: string, _opts?: { hookReplyApprovals?: boolean }): Record<string, string> {
+  return { [NODE_HEADERS_ENV]: claudeHeadersPath(nodeId) }
 }
 
 /**

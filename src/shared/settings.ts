@@ -135,9 +135,9 @@ export interface Settings {
   /** Mode permission yang dipakai sesi Claude saat START — dikirim sebagai `--permission-mode`
    *  saat peluncuran; Shift+Tab tetap bisa memutar mode saat runtime. */
   claudePermissionMode: AgentPermissionMode
-  /** Persetujuan hook yang deterministik: saat on (default), sesi Claude diluncurkan dengan
-   *  `NODETERM_PERM_WAIT_SECS` — hook permission menahan sejenak menunggu Approve/Deny dari canvas
-   *  sebelum jatuh ke prompt interaktif biasa. Off ⇒ env var absen ⇒ perilaku lama persis. */
+  /** Persetujuan hook yang deterministik: saat on (default), hook PermissionRequest menahan sampai
+   *  `PERM_WAIT_SECS_INTERACTIVE` menunggu Approve/Deny dari canvas sebelum jatuh ke prompt
+   *  interaktif biasa (permission/permission.runtime.ts). Off ⇒ tanpa penahanan, langsung ke prompt interaktif. */
   hookReplyApprovals: boolean
 
   // --- Canvas ----------------------------------------------------------------------------------
