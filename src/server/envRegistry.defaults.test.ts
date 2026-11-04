@@ -13,6 +13,7 @@ import { budgetLimits } from './central/guard/budgetStore'
 import { envCeiling } from './central/guard/levelStore'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import { opencodeBin, opencodeToolsAllowed } from './central/runtime/opencodeOptions'
+import { approvalButtonsOn } from './channels/channelButtons'
 import { telegramChannelEnabled } from './channels/channelsRuntime'
 import { trustProxyEnabled } from './channels/webhookPeer'
 import { agentSandboxOn } from './agentSandbox'
@@ -60,6 +61,8 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_BROWSER_COOKIE_IMPORT', () => onOff(cookieImportOn(E)), 'browser/browser.runtime.parts.ts:cookieImportOn'],
   // Default 'on': webterm alat developer; agent yang tersambung kabel langsung bisa mengemudikan browser.
   ['WEBTERM_BROWSER_AGENT', () => onOff(agentControlOn(E)), 'browser/browser.runtime.parts.ts:agentControlOn'],
+  // Default 'on' (F3-a zero-config): every inbox gate goes to Telegram with Approve once / Deny.
+  ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', () => onOff(approvalButtonsOn(E)), 'channels/channelButtons.ts:approvalButtonsOn'],
   ['WEBTERM_BROWSER_DISCARD_MS', () => String(lifecycleConfig(E).discardMs), 'browser/browserLifecycle.service.ts:20'],
   ...(Object.entries(FILES_FLAG) as Array<[FilesFlag, string]>).map(([n, k]) => [k, files(n), 'envRegistry.files.ts:filesFlagOn'] as const),
   ['WEBTERM_FILES_LIST_MAX', () => String(filesListMax(E)), 'envRegistry.files.ts:filesListMax'],
@@ -82,7 +85,6 @@ const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
   ['WEBTERM_CENTRAL_SKILLS', 'central/ca2Boot.ts:132'],
   ['WEBTERM_CENTRAL_SKILL_PROPOSE', 'central/ca2Boot.ts:132'],
   ['WEBTERM_CENTRAL_BOTS', 'channels/botManager.ts:120'],
-  ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'channels/channelButtons.ts:61'],
   ['WEBTERM_KNOWLEDGE', 'central/tools/registerAll.ts:51'],
   ['WEBTERM_AGENT_MAIL', 'central/tools/registerAll.ts:50'],
   ['WEBTERM_CENTRAL_READ_TOOLS', 'central/tools/defs/read.shared.ts:READ_TOOLS_FLAG (def.flag, toolTypes defEnabled)'],

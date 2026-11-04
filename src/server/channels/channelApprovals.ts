@@ -1,6 +1,9 @@
 // Approve/deny bridge between chat text and `ledger.approval`. Split from the dispatcher so the
 // consent rules stay reviewable on their own: the ledger remains the only authority on digest,
 // nonce, expiry and single-use state, and this file only translates a parsed command into it.
+import type { AppendEventInput } from '../events/eventModel'
+import { recordEvent } from '../events/producers'
+import { gateDecisionEvent } from '../inbox/inboxItemModel'
 import type { ChannelCommand } from './identity'
 import type { NormalizedMessage } from './telegram'
 import { safeErrorText } from './safeErrorText'
@@ -34,6 +37,16 @@ export interface ApprovalDeps {
    * executor (nothing in v1 does), otherwise the action would find its consent already spent.
    */
   consumeOnApprove?: boolean
+  /**
+   * Senses log writer (production `recordEvent`). Every decision made here emits the same
+   * `inbox.decision` event as the canvas Inbox (`inbox/inboxActions.ts`), only the actor differs.
+   */
+  record?: (event: AppendEventInput) => void
+}
+
+function recordDecision(deps: ApprovalDeps, id: string, approve: boolean, actor: string): void {
+  // Never throws (recordEvent swallows); the decision itself is already durable in the ledger.
+  ;(deps.record ?? recordEvent)(gateDecisionEvent({ approvalId: id, approve, actor }))
 }
 
 export function actorFor(userId: string): string {
@@ -93,6 +106,7 @@ export function handleApprove(
   } catch (err) {
     return `Approve failed for ${id}: ${safeErrorText(err, 'unexpected error')}`
   }
+  recordDecision(deps, id, true, actorFor(message.userId))
   const digestTag = command.digest.slice(0, 12)
   if (!deps.consumeOnApprove) {
     return `Approved ${id} by ${actorFor(message.userId)} (digest ${digestTag}). The control plane executes it once.`
@@ -142,5 +156,6 @@ export function handleReject(
   } catch (err) {
     return `Deny failed for ${id}: ${safeErrorText(err, 'unexpected error')}`
   }
+  recordDecision(deps, id, false, actorFor(message.userId))
   return `Denied ${id}${challenge.reason ? `: ${challenge.reason}` : ''}. The service wakes with a refusal.`
 }

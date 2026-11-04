@@ -50,12 +50,13 @@ describe('ENV_REGISTRY', () => {
     for (const s of ENV_REGISTRY) if (s.default !== undefined) expect(validateEnvValue(s, s.default), s.key).toMatchObject({ ok: true })
   })
 
-  it('flag CA2: semua flag/enum default off, angka dalam rentang, tanpa duplikat', () => {
+  it('flag CA2: semua flag/enum default off (kecuali tombol approval Telegram, F3-a zero-config), angka dalam rentang, tanpa duplikat', () => {
     const keys = CA2_ENV_SPECS.map((s) => s.key)
     expect(keys.length).toBe(19)
     expect(new Set(keys).size).toBe(keys.length)
     for (const k of keys) expect(ENV_REGISTRY.filter((s) => s.key === k).length, k).toBe(1)
-    for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe('off')
+    const DEFAULT_ON = new Set(['WEBTERM_CHANNEL_APPROVAL_BUTTONS'])
+    for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe(DEFAULT_ON.has(s.key) ? 'on' : 'off')
     expect(specFor('WEBTERM_CENTRAL_AGENTS')?.default).toBe('off')
     expect(specFor('WEBTERM_CENTRAL_DAILY_TOKENS')?.default).toBe('1000000')
     expect(specFor('WEBTERM_CENTRAL_DAILY_SPAWNS')?.default).toBe('20')

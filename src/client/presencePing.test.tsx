@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { PRESENCE_PING_MS, usePresencePing } from './presencePing'
+import { FOCUS_PING_GAP_MS, PRESENCE_PING_MS, focusedNodeId, usePresencePing } from './presencePing'
 import { writeNotifyPrefs } from './osNotify.prefs'
 
 let visibility: DocumentVisibilityState = 'visible'
@@ -11,7 +11,7 @@ function setVisibility(v: DocumentVisibilityState): void {
   visibility = v
   document.dispatchEvent(new Event('visibilitychange'))
 }
-const bodies = (): Array<{ visible: boolean; muted: string[] }> =>
+const bodies = (): Array<{ visible: boolean; muted: string[]; nodeId: string | null }> =>
   fetchMock.mock.calls.map((c) => JSON.parse(String((c[1] as RequestInit).body)))
 
 beforeEach(() => {
@@ -32,7 +32,7 @@ test('pings on mount, every 30 s while visible, on return to visible; stops on u
   const { unmount } = renderHook(() => usePresencePing(true))
   expect(fetchMock).toHaveBeenCalledTimes(1)
   expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/channels/presence')
-  expect(bodies()[0]).toEqual({ visible: true, muted: ['ws-1'] })
+  expect(bodies()[0]).toEqual({ visible: true, muted: ['ws-1'], nodeId: null })
 
   vi.advanceTimersByTime(PRESENCE_PING_MS)
   expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -48,6 +48,22 @@ test('pings on mount, every 30 s while visible, on return to visible; stops on u
   vi.advanceTimersByTime(PRESENCE_PING_MS * 3)
   setVisibility('visible')
   expect(fetchMock).toHaveBeenCalledTimes(3)
+})
+
+test('carries the focused canvas node, and pings again when focus moves to another node', () => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+  document.body.innerHTML = '<div class="react-flow__node" data-id="n-a"><textarea id="ta"></textarea></div>' +
+    '<div class="react-flow__node selected" data-id="n-b"></div>'
+  const { unmount } = renderHook(() => usePresencePing(true))
+  expect(bodies()[0].nodeId).toBe('n-b') // nothing focused: the selected node
+  vi.advanceTimersByTime(FOCUS_PING_GAP_MS)
+  ;(document.getElementById('ta') as HTMLTextAreaElement).focus()
+  expect(bodies().at(-1)?.nodeId).toBe('n-a') // keyboard focus wins
+  vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  expect(focusedNodeId()).toBeNull() // an unfocused window watches nothing
+  unmount()
+  document.body.innerHTML = ''
+  vi.restoreAllMocks()
 })
 
 test('disabled hook (login gate) sends nothing', () => {

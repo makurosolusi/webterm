@@ -27,9 +27,10 @@ describe('ledgerChallengePort', () => {
 })
 
 describe('buildButtonDeps', () => {
-  test('flag off gives null so callbacks stay ignored', () => {
+  test('on by default (zero-config); only an explicit off gives null so callbacks stay ignored', () => {
     const { db } = fixture()
-    expect(buildButtonDeps(db, { env: {} })).toBeNull()
+    expect(buildButtonDeps(db, { env: {} })).not.toBeNull()
+    expect(buildButtonDeps(db, { env: { WEBTERM_CHANNEL_APPROVAL_BUTTONS: 'typo' } })).not.toBeNull()
     expect(buildButtonDeps(db, { env: { WEBTERM_CHANNEL_APPROVAL_BUTTONS: 'off' } })).toBeNull()
   })
 

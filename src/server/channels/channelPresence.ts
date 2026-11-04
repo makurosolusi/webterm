@@ -16,11 +16,19 @@ const log = createLogger('channels')
 const MINUTE_MS = 60_000
 const VERB: Record<string, string> = { done: 'finished', waiting: 'needs input', blocked: 'needs approval' }
 
+/** A focused-node claim older than this is stale (the tab pings every 30 s and on selection change). */
+export const FOCUS_FRESH_MS = 45_000
+
 export interface PresenceTracker {
-  /** One ping from a tab; `muted` = that browser's muted workspace ids (osNotify prefs). */
-  note(input: { visible: boolean; muted?: readonly string[] }): void
+  /**
+   * One ping from a tab; `muted` = that browser's muted workspace ids (osNotify prefs); `nodeId` =
+   * the canvas node the user is on in a focused window (null = none), `workspaceId` its board.
+   */
+  note(input: { visible: boolean; muted?: readonly string[]; nodeId?: string | null; workspaceId?: string | null }): void
   awayMs(): number
   isMuted(workspaceId: string): boolean
+  /** Node the user is looking at right now (fresh visible ping that named it), else null. */
+  focusedNode(): { nodeId: string; workspaceId: string | null } | null
 }
 
 /** Boot counts as "seen": a fresh server does not forward before anyone had a chance to look. */
@@ -28,13 +36,17 @@ export function createPresenceTracker(now: () => number = Date.now): PresenceTra
   let lastVisibleAt = now()
   // ponytail: last ping's mute list wins; per-browser lists merged only if several browsers diverge in practice.
   let muted = new Set<string>()
+  // ponytail: last ping wins across tabs, like the mute list.
+  let focus: { nodeId: string; workspaceId: string | null; at: number } | null = null
   return {
-    note({ visible, muted: list }) {
+    note({ visible, muted: list, nodeId, workspaceId }) {
       if (visible) lastVisibleAt = now()
       if (list) muted = new Set(list)
+      if (nodeId !== undefined) focus = visible && nodeId ? { nodeId, workspaceId: workspaceId ?? null, at: now() } : null
     },
     awayMs: () => now() - lastVisibleAt,
     isMuted: (workspaceId) => muted.has(workspaceId),
+    focusedNode: () => (focus && now() - focus.at < FOCUS_FRESH_MS ? { nodeId: focus.nodeId, workspaceId: focus.workspaceId } : null),
   }
 }
 

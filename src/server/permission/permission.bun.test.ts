@@ -9,6 +9,8 @@ import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import type { AppendEventInput } from '../events/eventModel'
 import { freshDb, rows, T0 } from '../central/guard/controlGuard.testutil'
 import { createPolicy } from '../policy/policy.decide'
+import { actOnItem } from '../inbox/inboxActions'
+import { listInboxItems } from '../inbox/inboxItemStore'
 import { decidePermission, listPendingPermissions } from './permission.human'
 import { answerPermission, PERMISSION_DECISION_EVENT, PERMISSION_REQUEST_EVENT, type PermissionWaitDeps } from './permission.wait'
 
@@ -50,6 +52,23 @@ test('allow once: inbox item appears, the human allows, the reply is the documen
   expect(s.events[1]).toMatchObject({ actor: 'human:loopback', payload: { behavior: 'allow', by: 'human:loopback' } })
   // Single use: the consent was consumed by the hook.
   expect(rows(s.db, "SELECT d.single_use AS u FROM approval a JOIN decision d ON d.id = a.decision_id")[0].u).toBe(0)
+})
+
+test('edit in the Inbox: Claude gets the edited tool input as updatedInput; unchanged approve sends none', async () => {
+  const s = setup()
+  const deps = { ctx: { db: s.db, now: s.now }, actor: 'human:loopback', record: () => {}, outbox: async () => { throw new Error('no outbox in this test') } }
+  s.onFirstWait((id) => {
+    const item = listInboxItems(deps.ctx).find((i) => i.approvalId === id)
+    expect(item?.actions).toContain('edit')
+    expect(item?.args).toEqual({ command: 'npm publish' })
+    void actOnItem(deps, id, { type: 'edit', args: { command: 'npm publish --dry-run' } })
+  })
+  const out = await answerPermission(s.deps, ask('npm publish'))
+  expect(out).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', updatedInput: { command: 'npm publish --dry-run' } } } })
+  expect(s.events.at(-1)).toMatchObject({ payload: { behavior: 'allow', edited: true } })
+
+  s.onFirstWait((id) => { void actOnItem(deps, listInboxItems(deps.ctx).find((i) => i.approvalId === id)!.id, { type: 'approve' }) })
+  expect(await answerPermission(s.deps, ask('ls'))).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } })
 })
 
 test('deny: the reply blocks with a message for Claude', async () => {

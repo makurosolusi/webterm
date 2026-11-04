@@ -12,6 +12,7 @@ import { applyV10 } from './ledgerSchemaV10'
 import { applyV11 } from './ledgerSchemaV11'
 import { applyV12 } from './ledgerSchemaV12'
 import { applyV13 } from './ledgerSchemaV13'
+import { applyV14 } from './ledgerSchemaV14'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -20,8 +21,8 @@ export interface Migration {
 }
 
 /**
- * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..13}.ts`
- * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log, policy grants, agent outbox, channel store); never renumber or reorder an entry.
+ * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..14}.ts`
+ * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log, policy grants, agent outbox, channel store, inbox items); never renumber or reorder an entry.
  */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, up: (db) => db.exec(DDL_V1) },
@@ -43,4 +44,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 12, up: applyV12 },
   // v13: channel store document (F2-g); additive table, channels.json is imported lazily at channel start.
   { version: 13, up: applyV13 },
+  // v14: inbox items (F3-a); additive table, pending approvals are mirrored lazily at the first read.
+  { version: 14, up: applyV14 },
 ]
