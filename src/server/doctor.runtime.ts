@@ -11,6 +11,8 @@ import { opencodeBin } from './central/runtime/opencodeOptions'
 import { callBotApi, PollApiError } from './channels/telegramPollApi'
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './channels/telegramSend'
 import { dataDir } from './config'
+import { lastProviderTest } from './claudeProvider/claudeProvider.api'
+import { providerView } from './claudeProvider/claudeProvider.store'
 import { SKILL_NAME, buildContextLinkSkillBody, buildContextShim, contextShimPath, installContextLink } from './contextLinkSkill'
 import type { DoctorDeps, GeneratedFile } from './doctor'
 import { activeEventsRuntime } from './events/eventsRuntime'
@@ -67,6 +69,7 @@ export function doctorDeps(i: DoctorRuntimeInput): DoctorDeps {
       const r = await claudePreflightOf()()
       return r.ok ? { ok: true } : { ok: false, reason: r.hint || r.code }
     },
+    claudeProvider: () => ({ view: providerView(), lastTest: lastProviderTest() }),
     opencodeBin: opencodeBin(),
     opencodeReady: async () => {
       const r = await defaultOpencodePreflight()

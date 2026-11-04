@@ -22,6 +22,7 @@ import {
 import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
 import { CENTRAL_MODEL_FLAG } from './opencodeOptions'
 import { createLogger } from '../../logs'
+import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 
 const log = createLogger('central')
 
@@ -166,7 +167,8 @@ export class ClaudeRuntime implements CentralRuntime {
     })
     return spawn(this.options.executable ?? DEFAULT_CLAUDE_BIN, argv, {
       cwd: ensureWorkDir(this.options.workDir),
-      env: claudeChildEnv(this.options.env ?? process.env),
+      // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
+      env: claudeEnv(claudeChildEnv(this.options.env ?? process.env)),
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
     })

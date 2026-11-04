@@ -3,6 +3,7 @@
 // contextLink.ts) so the node-env vitest suite never pulls a bun module at load.
 // Bun.spawn is typed locally (a narrow slice) because @types/bun reddens
 // unrelated files — same reason pty.ts declares its own Bun types.
+import { claudeEnv } from './claudeProvider/claudeProvider.store'
 
 export function clipTerminal(content: string): string {
   const trimmed = content.trim()
@@ -59,11 +60,9 @@ declare const Bun: {
   }
 }
 
-function cleanEnv(): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v
-  env.TERM = 'xterm-256color'
-  return env
+/** Env of the headless `claude -p`: the server env with the Claude provider (Settings > Capabilities) applied. */
+export function cleanEnv(): Record<string, string> {
+  return { ...claudeEnv(process.env), TERM: 'xterm-256color' }
 }
 
 /**

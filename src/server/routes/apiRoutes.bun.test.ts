@@ -35,6 +35,7 @@ test('full route order snapshot', () => {
     'cost',
     'dag',
     'knowledge2',
+    'claude-provider',
   ])
 })
 
