@@ -2,18 +2,20 @@
 // /api/approvals, `approvalAuth.ts`): an agent credential gets 403 before any DAG code runs, so no agent
 // can create work for other agents or resolve a decision gate (Orca: only explicit human resolution).
 //   GET  /api/dag[?limit=&offset=]           -> { dags }
-//   GET  /api/dag/:id                        -> { dag, tasks, gates, waves }
-//   POST /api/dag  { projectId, title, repo, baseRef?, baseBranch?, tasks } -> 201 { dag, waves }
+//   GET  /api/dag/:id                        -> { dag, tasks, gates, waves, estimate }
+//   POST /api/dag  { projectId, title, repo, baseRef?, baseBranch?, tasks } -> 201 { dag, waves, estimate }
+// `estimate`: cost-oracle median per worker run x agent tasks not done yet (null total = no history).
 //   POST /api/dag/:id/tick                   -> { dag, tasks }
 //   POST /api/dag/gates/:gateId/decide { approve, option? } -> { gate, task }
 import type { IncomingMessage } from 'node:http'
 import { isAbsolute } from 'node:path'
 import { uiOnlyDenial } from '../approvalAuth'
 import { actorForRequest } from '../approvalHumanShared'
+import { estimateCost, type Estimate } from '../cost/costOracle'
 import type { AppendEventInput } from '../events/eventModel'
 import { actOnItem } from '../inbox/inboxActions'
 import type { LedgerContext } from '../ledger/ledgerCore'
-import { DagError, planWaves } from './dag.model'
+import { DagError, planWaves, type DagTask } from './dag.model'
 import type { DagScheduler } from './dag.scheduler'
 
 export const DAG_PATH = '/api/dag'
@@ -35,11 +37,21 @@ const ours = (p: string): boolean => p === DAG_PATH || p.startsWith(`${DAG_PATH}
 const fail = (status: number, error: string, detail?: string): DagResult => ({ status, body: { error, ...(detail ? { detail } : {}) } })
 const optText = (v: unknown, max: number): v is string | undefined => v === undefined || (typeof v === 'string' && v.trim() !== '' && v.length <= max)
 
-function view(s: DagScheduler, id: string) {
+export interface DagEstimate extends Estimate { tasks: number; totalMicros: number | null }
+
+/** Plan estimate: every agent task still to run is one cost run of scope `dag:<id>`. */
+function planEstimate(deps: DagApiDeps, dagId: string, tasks: DagTask[]): DagEstimate {
+  const per = estimateCost(deps.ctx.db, { kind: 'dag', ref: dagId })
+  const n = tasks.filter((t) => t.kind !== 'gate' && t.status !== 'done').length
+  return { ...per, tasks: n, totalMicros: per.medianMicros === null ? null : per.medianMicros * n }
+}
+
+function view(deps: DagApiDeps, id: string) {
+  const s = deps.scheduler
   const dag = s.store.get(id)
   if (!dag) return null
   const tasks = s.store.tasks(id)
-  return { dag, tasks, gates: s.store.gates(id), waves: planWaves(tasks) }
+  return { dag, tasks, gates: s.store.gates(id), waves: planWaves(tasks), estimate: planEstimate(deps, id, tasks) }
 }
 
 function create(deps: DagApiDeps, req: IncomingMessage, url: URL, body: Record<string, unknown>): DagResult {
@@ -57,7 +69,8 @@ function create(deps: DagApiDeps, req: IncomingMessage, url: URL, body: Record<s
   })
   deps.scheduler.created(dag)
   deps.arm?.()
-  return { status: 201, body: { dag, waves: planWaves(deps.scheduler.store.tasks(dag.id)) } }
+  const tasks = deps.scheduler.store.tasks(dag.id)
+  return { status: 201, body: { dag, waves: planWaves(tasks), estimate: planEstimate(deps, dag.id, tasks) } }
 }
 
 async function decide(deps: DagApiDeps, req: IncomingMessage, url: URL, gateId: string, body: Record<string, unknown>): Promise<DagResult> {
@@ -95,7 +108,7 @@ export async function handleDagApi(deps: DagApiDeps, req: IncomingMessage, url: 
       if (!Number.isInteger(limit) || !Number.isInteger(offset)) return fail(400, 'invalid_page')
       return { status: 200, body: { dags: deps.scheduler.store.list(limit, offset) } }
     }
-    if (parts.length === 1) { const v = view(deps.scheduler, parts[0]); return v ? { status: 200, body: v } : fail(404, 'not_found') }
+    if (parts.length === 1) { const v = view(deps, parts[0]); return v ? { status: 200, body: v } : fail(404, 'not_found') }
     return fail(404, 'not_found')
   }
   if (method !== 'POST') return fail(405, 'method_not_allowed')
@@ -106,7 +119,7 @@ export async function handleDagApi(deps: DagApiDeps, req: IncomingMessage, url: 
     if (parts.length === 2 && parts[1] === 'tick') {
       if (!deps.scheduler.store.get(parts[0])) return fail(404, 'not_found')
       await deps.scheduler.tick()
-      return { status: 200, body: view(deps.scheduler, parts[0]) }
+      return { status: 200, body: view(deps, parts[0]) }
     }
     if (parts.length === 3 && parts[0] === 'gates' && parts[2] === 'decide') return await decide(deps, req, url, parts[1], body)
     return fail(404, 'not_found')

@@ -59,6 +59,8 @@ export interface RoutineRun {
   startedAt: number
   finishedAt: number | null
   costUsd: number | null
+  /** Cost-oracle median of past runs at start, USD; null = no history. */
+  estimateUsd: number | null
   inboxItemId: string | null
   childId: string | null
 }

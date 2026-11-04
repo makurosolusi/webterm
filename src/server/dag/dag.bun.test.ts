@@ -5,15 +5,17 @@ import { expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import { freshDb, T0 } from '../central/guard/controlGuard.testutil'
 import type { ExecOutcome } from '../central/agents/execRunner'
+import { beginCostRun, costGate, endCostRun, setCostCap, type BeginRunInput } from '../cost/costOracle'
 import type { AppendEventInput } from '../events/eventModel'
 import { createGate } from '../inbox/inboxItemStore'
+import { execWrite } from '../ledger/ledgerCore'
 import { LATEST_VERSION } from '../ledger/migration'
 import { SERVER_VERIFIED_BY } from '../orchestrator/orchestratorModel'
 import type { VerifyOutcome } from '../orchestrator/verify'
 import type { AgentSpawnRequest } from '../spawn/agentSpawn'
 import { judgeCompletion } from '../verifier/verifier.judge'
 import { handleDagApi, type DagApiDeps } from './dag.api'
-import { createDagScheduler, type DagPorts, type VerifyTaskInput } from './dag.scheduler'
+import { createDagScheduler, dagWorkerArgv, type DagPorts, type VerifyTaskInput } from './dag.scheduler'
 
 // test-only brief
 const brief = (lease: string[], extra: Record<string, unknown> = {}) => ({
@@ -29,7 +31,7 @@ function outcome(patch: Partial<VerifyOutcome> = {}): VerifyOutcome {
   }
 }
 
-function setup(opts: { behind?: number | null; workers?: boolean } = {}) {
+function setup(opts: { behind?: number | null; workers?: boolean; cost?: boolean } = {}) {
   const db = freshDb()
   const clock = { t: T0 }
   const ctx = { db, now: () => clock.t }
@@ -52,6 +54,12 @@ function setup(opts: { behind?: number | null; workers?: boolean } = {}) {
     verify: async (i) => { verifies.push(i); return state.verdict(i) },
     report: () => {},
     openGate: (g) => createGate(ctx, { projectId: g.projectId, source: 'dag', title: g.title, args: { options: g.options }, impact: { what: 'Unblocks a DAG task', tier: 'R1', rewindable: true } }).approvalId!,
+    // The real cost oracle over the same ledger (what costRuntime calls in production).
+    ...(opts.cost ? { cost: {
+      gate: async (q: { kind: 'dag'; ref: string }) => costGate(db, q),
+      begin: async (i: BeginRunInput) => beginCostRun(db, i),
+      end: async (id: string | null, o: { producedDiff?: boolean }) => (id ? endCostRun(db, id, o) : null),
+    } } : {}),
   }
   const s = createDagScheduler(ports)
   const exit = async (key: string, result = 'finished') => {
@@ -83,11 +91,11 @@ test('overlapping leases are serialized into waves; disjoint ones run in paralle
   expect(h.status(dag.id).a).toBe('done')
   await h.s.tick()
   expect(h.status(dag.id).b).toBe('running')
-  // Workers are headless Claude Code in their own worktree, brief as the prompt, tools as --allowedTools.
+  // Workers are headless Claude Code in their own worktree, brief as the prompt; --tools restricts, --allowedTools pre-approves.
   const sp = h.spawns[0]
   expect(sp).toMatchObject({ mode: 'headless', door: 'orchestrator', parent: 'central' })
   expect(sp.cwd?.startsWith('/tmp/st/wt-a-')).toBe(true)
-  expect(sp.headless?.argv).toEqual(['claude', '-p', sp.prompt, '--output-format', 'json', '--allowedTools', 'Read,Edit'])
+  expect(sp.headless?.argv).toEqual(['claude', '-p', sp.prompt, '--output-format', 'json', '--tools', 'Read,Edit', '--allowedTools', 'Read,Edit'])
   expect(sp.prompt).toContain('Objective: Implement it')
 })
 
@@ -239,11 +247,37 @@ test('API: create validates the brief, previews waves; reads are open, writes UI
   expect(bad).toMatchObject({ status: 400, body: { error: 'invalid_brief' } })
   expect((await handleDagApi(deps, human, url, { ...body, projectId: 'nope' }))?.status).toBe(404)
   const created = await handleDagApi(deps, human, url, body)
-  expect(created).toMatchObject({ status: 201, body: { waves: [['a'], ['b']] } })
+  // No cost history yet: the plan says so instead of inventing a number.
+  expect(created).toMatchObject({ status: 201, body: { waves: [['a'], ['b']], estimate: { tasks: 2, medianMicros: null, totalMicros: null, basis: 'none' } } })
   const id = (created!.body as { dag: { id: string } }).dag.id
   const get = { method: 'GET', headers: {} } as unknown as IncomingMessage
-  expect(await handleDagApi(deps, get, new URL(`http://x/api/dag/${id}`), {})).toMatchObject({ status: 200, body: { tasks: expect.any(Array), waves: [['a'], ['b']] } })
+  execWrite(h.db, 'INSERT INTO cost_run (id, kind, ref, started_at, ended_at, cost_micros) VALUES (?, ?, ?, ?, ?, ?)', 'c1', 'dag', id, 1, 2, 300_000)
+  expect(await handleDagApi(deps, get, new URL(`http://x/api/dag/${id}`), {})).toMatchObject({ status: 200, body: { tasks: expect.any(Array), waves: [['a'], ['b']], estimate: { tasks: 2, medianMicros: 300_000, totalMicros: 600_000, basis: 'ref' } } })
   expect((await handleDagApi(deps, get, new URL('http://x/api/dag?limit=10'), {}))?.body).toMatchObject({ dags: [{ id }] })
   expect(h.kinds()).toContain('dag.created')
   expect(await handleDagApi(deps, get, new URL('http://x/api/dagger'), {})).toBeNull()
+})
+
+test('worker argv: --tools takes bare names, --allowedTools keeps scoped rules; no tools = none available', () => {
+  expect(dagWorkerArgv('p', ['Read', 'Bash(git diff *)', 'Bash(git log *)']).slice(5)).toEqual(['--tools', 'Read,Bash', '--allowedTools', 'Read,Bash(git diff *),Bash(git log *)'])
+  expect(dagWorkerArgv('p', []).slice(5)).toEqual(['--tools', ''])
+})
+
+test('cost: each dispatch opens a window closed with the verifier diff; a used-up dag cap holds tasks pending', async () => {
+  const h = setup({ cost: true })
+  const dag = h.make([{ key: 'a', brief: brief(['src/a/**']) }, { key: 'b', deps: ['a'], brief: brief(['src/b']) }])
+  await h.s.tick()
+  await h.exit('a') // verifier: src/a/x.ts changed
+  await h.s.drain() // the cost window closes after settle
+  const runs = h.db.query('SELECT kind, ref, node_id, produced_diff, ended_at FROM cost_run').all() as Record<string, unknown>[]
+  expect(runs).toEqual([{ kind: 'dag', ref: dag.id, node_id: h.spawns[0].nodeId, produced_diff: 1, ended_at: expect.any(Number) }])
+  const now = Date.now() // the oracle's own clock
+  execWrite(h.db, 'UPDATE cost_run SET started_at = ?, cost_micros = ?', now, 5_000_000)
+  setCostCap(h.db, `dag:${dag.id}`, 1_000_000)
+  await h.s.tick()
+  expect(h.status(dag.id).b).toBe('pending')
+  expect(h.spawns).toHaveLength(1)
+  const refused = h.events.find((e) => e.kind === 'dag.dispatch.cost_refused')
+  expect(refused?.payload).toMatchObject({ reason: 'budget', estimateMicros: 5_000_000 })
+  expect(h.s.store.get(dag.id)?.status).toBe('active') // waits for the cap to be raised, not failed
 })

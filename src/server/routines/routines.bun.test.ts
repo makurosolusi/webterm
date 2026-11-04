@@ -8,6 +8,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { freshDb, rows, T0 } from '../central/guard/controlGuard.testutil'
 import { startExec } from '../central/agents/execRunner'
+import { beginCostRun, costGate, endCostRun, ROI_NO_DIFF_RUNS, setCostCap, type BeginRunInput } from '../cost/costOracle'
+import { ensureCostSchema } from '../cost/costStore'
+import { execWrite } from '../ledger/ledgerCore'
 import { createEventBus } from '../events/eventBus'
 import type { AppendEventInput, SenseEvent } from '../events/eventModel'
 import { createAgentSpawner, type AgentSpawnRequest, type AgentSpawnResult } from '../spawn/agentSpawn'
@@ -17,7 +20,7 @@ import { createRoutineRunner, ROUTINE_EVENT, type FireResult } from './routineRu
 import { createRoutineScheduler } from './routineScheduler'
 import { createRoutineStore } from './routineStore'
 import { handleRoutinesApi } from './routines.api'
-import { createKeepAwake } from './routinesRuntime'
+import { createKeepAwake, gitTreeState } from './routinesRuntime'
 
 const HOUR = 3_600_000
 const dir = mkdtempSync(join(tmpdir(), 'wt-routines-'))
@@ -33,7 +36,7 @@ function input(over: Partial<Record<string, unknown>> = {}): RoutineInput {
   return r
 }
 
-function setup(opts: { realSpawn?: boolean } = {}) {
+function setup(opts: { realSpawn?: boolean; cost?: boolean; treeState?: () => string | null } = {}) {
   const db = freshDb()
   const clock = { t: T0 }
   const ctx = { db, now: () => clock.t }
@@ -57,6 +60,13 @@ function setup(opts: { realSpawn?: boolean } = {}) {
     enqueue: async (m) => { queued.push(m); return null },
     keepAwake: createKeepAwake(() => { awake.starts += 1; return { kill: () => { awake.kills += 1; return true } } as never }),
     spawn: async (req) => { spawns.push(req); return opts.realSpawn === false ? fakeSpawn(req) : spawner.spawn(req) },
+    // The real cost oracle over the same ledger (what costRuntime calls in production).
+    ...(opts.cost ? { cost: {
+      gate: async (q: { kind: 'routine'; ref: string; workspaceId: string | null }) => costGate(db, q),
+      begin: async (i: BeginRunInput) => beginCostRun(db, i),
+      end: async (id: string | null, o: { producedDiff?: boolean }) => (id ? endCostRun(db, id, o) : null),
+    } } : {}),
+    ...(opts.treeState ? { treeState: async () => opts.treeState!() } : {}),
   })
   const bus = createEventBus()
   const fired: FireResult[] = []
@@ -240,4 +250,52 @@ test('orphaned running rows from a crash are failed at scheduler start', () => {
   s.scheduler.start()
   stops.push(s.scheduler.stop)
   expect(s.store.runs(r.id)[0]).toMatchObject({ status: 'failed', reason: 'interrupted' })
+})
+
+test('cost gate: a used-up cap skips the run as "budget" with the estimate on the row, before precheck or spawn', async () => {
+  const s = setup({ realSpawn: false, cost: true })
+  const r = s.store.create(input({ precheck: { command: 'exit 0', timeoutSeconds: 5 } }))
+  ensureCostSchema(s.db)
+  const now = Date.now() // the oracle's own clock
+  execWrite(s.db, 'INSERT INTO cost_run (id, kind, ref, node_id, started_at, ended_at, cost_micros) VALUES (?, ?, ?, ?, ?, ?, ?)', 'past', 'routine', r.id, 'n0', now - 1000, now - 500, 2_000_000)
+  setCostCap(s.db, `routine:${r.id}`, 1_000_000)
+  await s.runner.fire(r, 'manual').done
+  expect(s.spawns).toHaveLength(0)
+  expect(s.store.runs(r.id)[0]).toMatchObject({ status: 'skipped', estimateUsd: 2, reason: `budget: routine:${r.id} spent $2.00 of its $1.00 cap` })
+})
+
+test('cost window wraps an agent run; no diff 5x pauses the routine and the next run is skipped as "roi_paused"', async () => {
+  const s = setup({ realSpawn: false, cost: true })
+  const r = s.store.create(input())
+  for (let i = 0; i < ROI_NO_DIFF_RUNS; i++) await s.runner.fire(r, 'manual').done
+  const runs = rows(s.db, 'SELECT kind, ref, node_id, produced_diff, ended_at FROM cost_run WHERE ref = ?', r.id)
+  expect(runs).toHaveLength(ROI_NO_DIFF_RUNS)
+  expect(runs.every((c) => c['kind'] === 'routine' && c['node_id'] === 'headless-x' && c['produced_diff'] === 0 && c['ended_at'] !== null)).toBe(true)
+  expect(s.store.runs(r.id)[0]!.estimateUsd).toBe(0) // history exists now: median of $0 windows (fake agent bills nothing)
+  await s.runner.fire(r, 'manual').done
+  expect(s.spawns).toHaveLength(ROI_NO_DIFF_RUNS)
+  expect(s.store.runs(r.id)[0]).toMatchObject({ status: 'skipped' })
+  expect(s.store.runs(r.id)[0]!.reason).toMatch(/^roi_paused: low ROI/)
+})
+
+test('a changed working tree counts as a diff; outbox actions open no cost window', async () => {
+  let calls = 0
+  const s = setup({ realSpawn: false, cost: true, treeState: () => (calls++ === 0 ? 'before' : 'after') }) // the agent edited files while it ran
+  const r = s.store.create(input())
+  await s.runner.fire(r, 'manual').done
+  expect(rows(s.db, 'SELECT produced_diff FROM cost_run WHERE ref = ?', r.id)[0]).toMatchObject({ produced_diff: 1 })
+  const ping = s.store.create(input({ name: 'Ping', action: { type: 'outbox', to: 'n9', body: 'hi' } }))
+  await s.runner.fire(ping, 'manual').done
+  expect(s.store.runs(ping.id)[0]).toMatchObject({ status: 'ran' })
+  expect(rows(s.db, 'SELECT COUNT(*) AS n FROM cost_run WHERE ref = ?', ping.id)[0]!['n']).toBe(0)
+})
+
+test('gitTreeState: a checkout has a fingerprint that changes with an edit; a non-repo dir has none', async () => {
+  expect(await gitTreeState(dir)).toBeNull()
+  const repo = mkdtempSync(join(tmpdir(), 'wt-tree-'))
+  await runPrecheck('git init -q', repo, 10)
+  const before = await gitTreeState(repo)
+  expect(before).not.toBeNull()
+  writeFileSync(join(repo, 'new.txt'), 'x')
+  expect(await gitTreeState(repo)).not.toBe(before)
 })

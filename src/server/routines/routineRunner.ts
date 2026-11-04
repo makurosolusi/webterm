@@ -1,13 +1,15 @@
-// One routine run: trust gate, busy guard, budget cap, shell precheck, then the action (a headless
+// One routine run: trust gate, busy guard, budget cap, cost-oracle gate, shell precheck, then the action (a headless
 // Claude agent through `agent.spawn`, or a message into a wired agent's outbox). Every outcome is a
 // history row; a finished agent run becomes an inbox review item; start/skip/finish are events.
 //
 // Order follows Orca `automation-dispatch-request.ts:199-221`: the precheck runs before any agent is
 // launched, so "nothing to do" costs zero tokens. Keep-awake (`caffeinate -i`) is held while a run is
 // active, like Claude Code Desktop scheduled tasks needing the machine awake.
+import type { BeginRunInput, GateResult } from '../cost/costOracle'
 import type { AppendEventInput } from '../events/eventModel'
 import { createInboxItem } from '../inbox/inboxItemStore'
 import type { LedgerContext } from '../ledger/ledgerCore'
+import { createLogger } from '../logs'
 import { redactSecrets } from '../redactSecrets'
 import type { AgentSpawnRequest, AgentSpawnResult } from '../spawn/agentSpawn'
 import { routineTier, untrustedMayFire, type Routine, type RoutineRun, type RunTrigger } from './routineModel'
@@ -17,6 +19,7 @@ import type { RoutineStore } from './routineStore'
 export const ROUTINE_EVENT = { run: 'routine.run', skip: 'routine.skip', finish: 'routine.finish' } as const
 export const ROUTINE_SOURCE = 'routines'
 const RESULT_MAX = 4000
+const log = createLogger('routines')
 
 export interface KeepAwake { acquire(): void; release(): void }
 
@@ -30,6 +33,14 @@ export interface RunnerDeps {
   keepAwake: KeepAwake
   /** Working directory for a routine's workspace (null = unknown workspace). */
   cwdOf(workspaceId: string | null): string | null
+  /** Cost oracle (costRuntime): gate before a run, a cost window around an agent run. Absent = no gate. */
+  cost?: {
+    gate(q: { kind: 'routine'; ref: string; workspaceId: string | null }): Promise<GateResult>
+    begin(input: BeginRunInput): Promise<string | null>
+    end(id: string | null, outcome: { producedDiff?: boolean }): Promise<unknown>
+  }
+  /** Fingerprint of `cwd` (HEAD + status); a change across the run = the agent produced a diff. null = not git. Never throws. */
+  treeState?(cwd: string): Promise<string | null>
 }
 
 export interface FireOptions { scheduledFor?: number | null; untrusted?: boolean }
@@ -59,6 +70,13 @@ export function createRoutineRunner(deps: RunnerDeps) {
   }
 
   async function execute(r: Routine, runId: string, trigger: RunTrigger, cwd: string): Promise<void> {
+    if (deps.cost) {
+      const gate = await deps.cost.gate({ kind: 'routine', ref: r.id, workspaceId: r.workspaceId })
+      const m = gate.estimate.medianMicros
+      if (m !== null) store.finishRun(runId, { status: 'running', estimateUsd: m / 1e6 })
+      // costGate reasons: `paused: <why>` (low-ROI pause) or the cap that is used up.
+      if (!gate.allowed) return settle(r, runId, trigger, { status: 'skipped', reason: gate.reason?.startsWith('paused:') ? `roi_paused: ${gate.reason.slice(8).trim()}` : `budget: ${gate.reason ?? 'cost cap reached'}` })
+    }
     if (r.precheck) {
       const result = await deps.precheck(r.precheck.command, cwd, r.precheck.timeoutSeconds)
       if (!precheckPassed(result)) return settle(r, runId, trigger, { status: 'skipped', reason: precheckReason(result, r.precheck.timeoutSeconds) })
@@ -68,6 +86,7 @@ export function createRoutineRunner(deps: RunnerDeps) {
       const error = await deps.enqueue({ to: r.action.to, body: r.action.body, operationId: `routine:${runId}`, createdBy: `routine:${r.id}` })
       return settle(r, runId, trigger, error ? { status: 'failed', reason: error } : { status: 'ran', reason: `message queued for ${r.action.to}` })
     }
+    const before = deps.treeState ? await deps.treeState(cwd) : null
     const spawned = await deps.spawn({
       mode: 'headless', parent: `routine:${r.id}`, cwd, prompt: r.action.prompt, title: r.name,
       door: 'routine', ...(r.workspaceId ? { workspaceId: r.workspaceId } : {}),
@@ -75,7 +94,12 @@ export function createRoutineRunner(deps: RunnerDeps) {
     if (!spawned.ok) return settle(r, runId, trigger, { status: 'failed', reason: `${spawned.code}: ${spawned.message}` })
     children.add(spawned.nodeId)
     store.finishRun(runId, { status: 'running', childId: spawned.childId })
+    // Outbox actions open no cost window: their spend lands on the receiving agent, and a message is
+    // not a diff, so they never count toward the low-ROI pause.
+    let costId: string | null = null
+    let producedDiff = false
     try {
+      if (deps.cost) costId = await deps.cost.begin({ kind: 'routine', ref: r.id, label: r.name, workspaceId: r.workspaceId, nodeId: spawned.nodeId })
       const outcome = spawned.handle ? await spawned.handle.done : null
       const last = outcome?.lastEvent ?? null
       const costUsd = typeof last?.['total_cost_usd'] === 'number' ? last['total_cost_usd'] : null
@@ -88,8 +112,12 @@ export function createRoutineRunner(deps: RunnerDeps) {
         body: redactSecrets(text).slice(-RESULT_MAX) || reason,
       })
       settle(r, runId, trigger, { status: ok ? 'ran' : 'failed', reason, costUsd, inboxItemId: item.id })
+      const after = before !== null && deps.treeState ? await deps.treeState(cwd) : null
+      producedDiff = after !== null && after !== before
     } finally {
       children.delete(spawned.nodeId)
+      // The run is already settled; a ledger hiccup here must not rewrite it as failed.
+      if (deps.cost) await deps.cost.end(costId, { producedDiff }).catch((err: unknown) => log.warn('routines.cost_end_failed', `Cannot close cost run for routine ${r.id}`, { cause: errText(err) }))
     }
   }
 

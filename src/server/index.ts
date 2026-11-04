@@ -19,6 +19,8 @@ import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
 import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { ensureRoutines } from './routines/routinesRuntime'
+import { startCostCapture } from './cost/costRuntime'
+import { armDagLoop } from './dag/dag.runtime'
 import { bootCa2 } from './central/ca2Boot'
 import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
@@ -96,6 +98,9 @@ startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAliv
 // Schedules and event triggers must fire without the UI open (otherwise the first /api/routines call starts them); never under a test runner.
 if (process.env.NODE_ENV !== 'test') {
   try { ensureRoutines() } catch (e) { log.warn('routines.start.failed', 'Cannot start routines at boot', { cause: e instanceof Error ? e.message : String(e) }) }
+  // Cost capture listens to agent hooks from the first session; a DAG left active by a restart resumes polling.
+  startCostCapture().catch((e: unknown) => log.warn('cost.start.failed', 'Cannot start cost capture at boot', { cause: e instanceof Error ? e.message : String(e) }))
+  try { armDagLoop() } catch (e) { log.warn('dag.start.failed', 'Cannot arm the DAG scheduler at boot', { cause: e instanceof Error ? e.message : String(e) }) }
 }
 
 const API_PREFIX = '/api/'
