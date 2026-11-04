@@ -68,9 +68,9 @@ export function createKnowledgeDefs(openKb: () => Database): ToolDef[] {
   }
   const discoverDef: ToolDef = {
     name: 'project.discover',
-    summary: 'List workspaces that have no ledger project yet, with their git root; registers nothing.',
+    summary: 'Canvas workspaces register automatically; lists only folders not yet a ledger project, with repo root.',
     tier: 'R0', flag: KNOWLEDGE_FLAG, projectScoped: false,
-    usage: '{"limit":<1-50, optional>}. Registration still needs a human-approved bootstrap.',
+    usage: '{"limit":<1-50, optional>}. Registers nothing; a canvas workspace (created by the human) is the approval.',
     validate: (input): ToolValidationCode | null => (intIn(input.limit, 1, 50) ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       try {

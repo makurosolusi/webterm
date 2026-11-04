@@ -9,7 +9,8 @@ import {
   centralEnabled,
   clampPriority,
 } from './centralModel'
-import { pauseProject, portfolio, prioritize, projectPortfolio, resumeProject } from './central'
+import { pauseProject, prioritize, projectPortfolio, resumeProject } from './central'
+import { livePortfolio } from './workspaceLookup'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { boundedInteger } from '../apiShared.params'
 import { LEDGER_OFF, type RouteResult } from '../apiShared.types'
@@ -119,7 +120,7 @@ export function centralRoute(
     try {
       return {
         status: 200,
-        body: portfolio(runtime.db, {
+        body: livePortfolio(runtime.db, { // every canvas workspace, deleted ones hidden
           ...(limit === undefined ? {} : { limit }),
           ...(offset === undefined ? {} : { offset }),
         }),

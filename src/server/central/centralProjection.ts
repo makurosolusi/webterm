@@ -196,8 +196,15 @@ export function portfolio(db: Database, opts: PortfolioOptions = {}): PortfolioP
   const limit = clampPortfolioLimit(opts.limit)
   const offset = clampPortfolioOffset(opts.offset)
   const projectId = opts.projectId === undefined ? undefined : validateProjectId(opts.projectId)
-  const where = projectId === undefined ? '' : 'WHERE id = ?'
-  const filter = projectId === undefined ? [] : [projectId]
+  const conds: string[] = []
+  const filter: unknown[] = []
+  if (projectId !== undefined) { conds.push('id = ?'); filter.push(projectId) }
+  if (opts.workspaceIds !== undefined) {
+    if (opts.workspaceIds.length === 0) return { items: [], total: 0, limit, offset }
+    conds.push(`workspace_id IN (${placeholders(opts.workspaceIds.length)})`)
+    filter.push(...opts.workspaceIds)
+  }
+  const where = conds.length === 0 ? '' : `WHERE ${conds.join(' AND ')}`
   const totalRow = getRow(db, `SELECT COUNT(*) AS count FROM project ${where}`, ...filter)
   const rows = allRows(
     db,

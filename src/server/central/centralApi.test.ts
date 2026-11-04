@@ -4,6 +4,7 @@ import type { RouteResult } from '../apiShared.types'
 import { centralEnabled, type CentralActor } from './centralModel'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { openFixture, seedPortfolio, type Fixture } from './centralTestFixture.testutil'
+import { registerWorkspaceLookup } from './workspaceLookup'
 
 const human: CentralActor = { id: 'alice', kind: 'human' }
 const agent: CentralActor = { id: 'bot', kind: 'agent' }
@@ -109,6 +110,16 @@ describe('read routes', () => {
     expect(body.offset).toBe(0)
     expect(body.items.map((p) => p.id)).toEqual(['p2', 'p1'])
     expect(body).not.toHaveProperty('runtime')
+  })
+
+  it('lists canvas workspaces: unregistered ones added, deleted ones hidden', () => {
+    const workspaces = [{ id: 'w-p1', name: 'Alpha' }, { id: 'ws-new', name: 'noc' }] // test-only
+    const unregister = registerWorkspaceLookup((id) => workspaces.find((w) => w.id === id) ?? null, () => workspaces)
+    try {
+      const body = ok('/api/central/portfolio').body as { items: { id: string; name: string }[]; total: number }
+      expect(body.total).toBe(2)
+      expect(body.items.map((p) => [p.id, p.name])).toEqual([['p1', 'Alpha'], ['ws-new', 'noc']])
+    } finally { unregister() }
   })
 
   it('rejects malformed paging instead of coercing', () => {

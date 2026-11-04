@@ -176,6 +176,8 @@ export interface PortfolioPage {
 
 export interface PortfolioOptions {
   projectId?: string
+  /** Keeps only projects linked to these workspaces (the live canvas); absent = every ledger project. */
+  workspaceIds?: readonly string[]
   limit?: number
   offset?: number
 }
