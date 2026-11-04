@@ -21,7 +21,7 @@ import {
 } from './identity'
 import type { ChannelApprovalPort } from './channelApprovals'
 import { runCommand } from './channelCommands'
-import { TELEGRAM_MAX_TEXT, isCallbackUpdate, parseTelegramCallback, parseTelegramUpdate, type NormalizedMessage } from './telegram'
+import { isCallbackUpdate, parseTelegramCallback, parseTelegramUpdate, type NormalizedMessage } from './telegram'
 import { dispatchTelegramCallback, type ApprovalChallengePort } from './channelCallback'
 import { safeErrorText } from './safeErrorText'
 import type { PendingChatPort } from './channelPending'
@@ -35,6 +35,12 @@ export type { ApprovalSummary, ChannelApprovalPort } from './channelApprovals'
 export { extractRejectChallenge } from './channelApprovals'
 
 export const TELEGRAM_CHANNEL = 'telegram'
+/**
+ * Upper bound for one queued reply. The sender splits it into <=4096-char Telegram messages
+ * (`telegramMarkdownChunks`); this cap only stops a runaway reply from flooding the chat (~8 msgs).
+ */
+export const CHANNEL_REPLY_MAX_CHARS = 32_000
+export const CHANNEL_REPLY_CLIPPED_SUFFIX = '\n\n… (dipotong)'
 
 export interface ChannelReply {
   channel: string
@@ -112,7 +118,9 @@ async function replyTo(
   message: NormalizedMessage,
   text: string
 ): Promise<string | null> {
-  const clipped = text.slice(0, TELEGRAM_MAX_TEXT)
+  const clipped = text.length <= CHANNEL_REPLY_MAX_CHARS
+    ? text
+    : text.slice(0, CHANNEL_REPLY_MAX_CHARS - CHANNEL_REPLY_CLIPPED_SUFFIX.length) + CHANNEL_REPLY_CLIPPED_SUFFIX
   const reply: ChannelReply = {
     channel: TELEGRAM_CHANNEL,
     chatId: message.chatId,

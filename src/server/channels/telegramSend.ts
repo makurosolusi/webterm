@@ -7,6 +7,7 @@ import {
   TELEGRAM_TOKEN_ENV,
   TELEGRAM_TOKEN_ENV_LEGACY,
 } from './telegram'
+import { escapeTelegramHtml, markdownToTelegramHtml, splitTelegramHtml, telegramHtmlToPlain } from './telegramFormat'
 import { createLogger } from '../logs/logger'
 import { redactSecrets } from '../redactSecrets'
 
@@ -51,6 +52,8 @@ export interface TelegramSendInput {
   chatId: string
   text: string
   threadId?: number
+  /** `HTML` sends `text` as Telegram HTML (caller-escaped) with link previews off. */
+  parseMode?: 'HTML'
 }
 
 export interface TelegramSendOptions {
@@ -127,8 +130,8 @@ function resolveApiBase(options: TelegramSendOptions): string {
 }
 
 /**
- * Send one plain-text message. Never throws. `parse_mode` is deliberately absent so untrusted
- * text is delivered literally (no Markdown/HTML injection).
+ * Send one message. Never throws. Without `parseMode` there is no `parse_mode`, so the text is
+ * delivered literally; with `HTML` the caller must have escaped it (see `telegramFormat.ts`).
  */
 export async function sendTelegramMessage(
   input: TelegramSendInput,
@@ -152,6 +155,10 @@ export async function sendTelegramMessage(
     text: input.text.slice(0, TELEGRAM_MAX_TEXT),
   }
   if (input.threadId !== undefined) body['message_thread_id'] = input.threadId
+  if (input.parseMode === 'HTML') {
+    body['parse_mode'] = 'HTML'
+    body['link_preview_options'] = { is_disabled: true }
+  }
 
   const controller = typeof AbortController === 'function' ? new AbortController() : undefined
   let timedOut = false
@@ -222,4 +229,52 @@ export async function sendTelegramMessage(
 
   const result = asRecord(payload['result'])
   return { ok: true, status: response.status, messageId: optionalInt(result['message_id']) ?? null }
+}
+
+// Bot API 400 for markup it cannot parse; same pattern as OpenClaw `rich-plain-fallback.ts`.
+const PARSE_ERROR_RE = /can't parse entities|find end of the entity/i
+
+/** Tag-balanced HTML chunks (each <= `TELEGRAM_MAX_TEXT`) for one Markdown reply. Deterministic. */
+export function telegramMarkdownChunks(markdown: string): string[] {
+  try {
+    return splitTelegramHtml(markdownToTelegramHtml(markdown), TELEGRAM_MAX_TEXT).filter((c) => c.trim())
+  } catch (err) {
+    // Only an impossible limit throws; degrade to escaped literal text, still chunked.
+    log.warn('telegram.send.fail', `telegram markdown formatting failed, sending literal text: ${errorText(err)}`)
+    return splitTelegramHtml(escapeTelegramHtml(markdown), TELEGRAM_MAX_TEXT).filter((c) => c.trim())
+  }
+}
+
+/** `chunksDone`: how many chunks of the reply Telegram has accepted, counting `fromChunk`. */
+export type TelegramMarkdownResult = TelegramSendResult & { chunksDone: number }
+
+/**
+ * Send Markdown (Central agent replies, command replies) as Telegram HTML, split into
+ * tag-balanced chunks. Chunks before `fromChunk` were already accepted and are skipped, so a retry
+ * resumes where a partial delivery stopped (OpenClaw `send-prepared.ts` counts `acceptedPages`
+ * the same way). A chunk the provider cannot parse is re-sent once as plain text. Returns the
+ * first failure, else the last success. Never throws.
+ */
+export async function sendTelegramMarkdown(
+  input: TelegramSendInput & { fromChunk?: number },
+  options: TelegramSendOptions = {}
+): Promise<TelegramMarkdownResult> {
+  const { fromChunk = 0, ...message } = input
+  const chunks = telegramMarkdownChunks(message.text)
+  if (chunks.length === 0) {
+    // Nothing visible after formatting (e.g. whitespace): the plain path validates/rejects it.
+    const result = await sendTelegramMessage({ ...message, parseMode: undefined }, options)
+    return { ...result, chunksDone: result.ok ? 1 : 0 }
+  }
+  let result: TelegramSendResult = { ok: true, status: 200, messageId: null }
+  for (let index = fromChunk; index < chunks.length; index += 1) {
+    const chunk = chunks[index]!
+    result = await sendTelegramMessage({ ...message, text: chunk, parseMode: 'HTML' }, options)
+    if (!result.ok && result.status === 400 && PARSE_ERROR_RE.test(result.error)) {
+      log.warn('telegram.send.fail', 'telegram rejected HTML entities; re-sending chunk as plain text', { chunkLength: chunk.length })
+      result = await sendTelegramMessage({ ...message, text: telegramHtmlToPlain(chunk), parseMode: undefined }, options)
+    }
+    if (!result.ok) return { ...result, chunksDone: index }
+  }
+  return { ...result, chunksDone: chunks.length }
 }

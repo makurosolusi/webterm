@@ -276,11 +276,12 @@ export class ChannelStore {
    */
   markReplyFailed(
     key: string,
-    change: { nextAt: number; error?: string; dead?: boolean }
+    change: { nextAt: number; error?: string; dead?: boolean; chunksDone?: number }
   ): boolean {
     const row = this.state.outbox.find((entry) => entry.key === key)
     if (!row || row.state === 'sent') return false
     row.attempts += 1
+    if (change.chunksDone !== undefined && change.chunksDone > 0) row.chunksDone = change.chunksDone
     row.nextAt = Number.isFinite(change.nextAt) ? change.nextAt : this.clock()
     row.state = change.dead ? 'dead' : 'pending'
     row.lastError = change.error ? change.error.slice(0, 300) : undefined

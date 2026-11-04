@@ -40,6 +40,11 @@ export interface StoredReply {
   state: 'pending' | 'sent' | 'dead'
   /** Last scrubbed provider error, for operator diagnosis. Never contains a token. */
   lastError?: string
+  /**
+   * Chunks of a multi-message reply Telegram already accepted; a retry resumes after them so no
+   * chunk is sent twice. Additive optional field (absent = 0), so no store version bump.
+   */
+  chunksDone?: number
 }
 
 export interface ChannelStoreState {
@@ -114,6 +119,7 @@ function parseReply(value: unknown): StoredReply | null {
   const nextAt = value['nextAt']
   const lastError = value['lastError']
   const accountId = value['accountId']
+  const chunksDone = value['chunksDone']
   const bad =
     typeof key !== 'string' || !key ||
     typeof channel !== 'string' || !channel ||
@@ -125,7 +131,8 @@ function parseReply(value: unknown): StoredReply | null {
     (threadId !== undefined && (typeof threadId !== 'number' || !Number.isInteger(threadId))) ||
     (nextAt !== undefined && (typeof nextAt !== 'number' || !Number.isFinite(nextAt))) ||
     (lastError !== undefined && typeof lastError !== 'string') ||
-    (accountId !== undefined && (typeof accountId !== 'string' || !accountId))
+    (accountId !== undefined && (typeof accountId !== 'string' || !accountId)) ||
+    (chunksDone !== undefined && (typeof chunksDone !== 'number' || !Number.isInteger(chunksDone) || chunksDone < 0))
   if (bad) return null
   // A v1 row written before the sender existed has no nextAt; it is immediately due. This is the
   // only in-memory migration, and every other field still passes the strict shape check.
@@ -141,6 +148,7 @@ function parseReply(value: unknown): StoredReply | null {
     ...(accountId === undefined ? {} : { accountId }),
     ...(threadId === undefined ? {} : { threadId }),
     ...(lastError === undefined ? {} : { lastError }),
+    ...(chunksDone === undefined ? {} : { chunksDone }),
   }
 }
 
