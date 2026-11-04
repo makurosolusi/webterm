@@ -402,7 +402,8 @@ describe('buildClaudeFlags', () => {
 // dengan `src/client/workspaceCommit.test.ts`. Sejak blok route dipindah ke `agentStatusApi.ts`,
 // yang di-slice adalah badan `agentStatusRoute` di sana; `api.ts` hanya menyisakan satu baris
 // dispatch, dan itu pun diuji (lihat "api.ts hanya men-dispatch").
-const apiSrc = () => readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
+// Dispatch-nya kini satu entri di tabel route (routes/control.routes.ts), bukan baris di api.ts.
+const apiSrc = () => readFileSync(fileURLToPath(new URL('./routes/control.routes.ts', import.meta.url)), 'utf8')
 const agentStatusSrc = () =>
   readFileSync(fileURLToPath(new URL('./agentStatusApi.ts', import.meta.url)), 'utf8')
 const contextLinkSrc = () =>
@@ -460,9 +461,9 @@ describe('route POST /api/agent-status', () => {
     expect(statusPathRunsFirst(OLD_ROUTE)).toBe(false)
   })
 
-  it('api.ts hanya men-dispatch satu baris ke modul route', () => {
+  it('tabel route hanya men-dispatch satu baris ke modul route', () => {
     const s = apiSrc()
-    expect(s).toContain('await agentStatusRoute(req, res, url)')
+    expect(s).toContain('agentStatusRoute(c.req, c.res, c.url)')
     // Blok lamanya tidak boleh tersisa di api.ts — dua salinan guard/payload akan menyimpang.
     expect(s).not.toContain('hookSpecificOutput')
     expect(agentStatusBlock(agentStatusSrc())).toContain('/api/agent-status')
