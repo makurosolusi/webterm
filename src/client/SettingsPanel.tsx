@@ -23,6 +23,7 @@ import {
 import type { Settings } from '../shared/settings'
 import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
+import { ControlPanel } from './ControlPanel'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
@@ -36,6 +37,7 @@ const SECTIONS = [
   { id: 'agent', label: 'Agent' },
   { id: 'canvas', label: 'Canvas' },
   { id: 'capabilities', label: 'Kemampuan' },
+  { id: 'control', label: 'Control' },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
@@ -82,6 +84,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
     if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
+    if (id === 'control') return <ControlPanel query={normalized} />
     return (
       <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
         onVisibleCount={setCapabilityHits} />
