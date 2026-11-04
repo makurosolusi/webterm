@@ -9,6 +9,7 @@ import { TOKEN_BODY_MAX_BYTES, tokenAccessRoute } from './tokenAccess.api'
 import { envSettingsRoute } from './envSettings.api'
 import { settingsGuard } from './featureCapabilities.guard'
 import { fakeReq, recorder, setupEnv, type RecordedRes } from './envSettings.testutil'
+import { forgetNodeToken, nodeToken } from './hooksTokens'
 import { logBus } from './logs'
 import { getTokenState, setTokenState, tokenFilePath } from './tokenBootstrap'
 
@@ -19,6 +20,8 @@ const GET_PATH = '/api/settings/token'
 const ENABLE = `${GET_PATH}/enable`
 const ROTATE = `${GET_PATH}/rotate`
 const NONE = { token: undefined, source: 'none', created: false } as const
+/** Bentuk permintaan fetch() dari halaman webterm sendiri (fetch metadata + Origin sama). */
+const BROWSER = { host: `${LOOPBACK}:8700`, origin: `http://${LOOPBACK}:8700`, 'sec-fetch-site': 'same-origin' }
 
 let root: string
 let secretsDir: string
@@ -45,7 +48,7 @@ interface Reply { res: RecordedRes; json: Record<string, any> }
 function call(method: string, path: string, opts: { peer?: string; body?: string; dir?: string; headers?: Record<string, string> } = {}): Promise<Reply> {
   const req = Object.assign(fakeReq(method, opts.body), {
     socket: { remoteAddress: opts.peer ?? LOOPBACK },
-    headers: opts.headers ?? {},
+    headers: opts.headers ?? BROWSER,
   }) as unknown as IncomingMessage
   const res = recorder()
   return new Promise((resolve) => {
@@ -99,7 +102,7 @@ describe('POST /api/settings/token/enable', () => {
   })
 
   it('peer non-loopback: 403 loopback_only, X-Forwarded-For diabaikan, state tak berubah', async () => {
-    const { res, json } = await call('POST', ENABLE, { peer: LAN_PEER, headers: { 'x-forwarded-for': LOOPBACK } })
+    const { res, json } = await call('POST', ENABLE, { peer: LAN_PEER, headers: { ...BROWSER, 'x-forwarded-for': LOOPBACK } })
     expect(res.status).toBe(403)
     expect(json).toEqual({ error: 'loopback_only' })
     expect(getTokenState().source).toBe('none')
@@ -173,6 +176,42 @@ describe('POST /api/settings/token/rotate', () => {
   it('enable pada source env: 409 already_enabled', async () => {
     setTokenState({ token: 'e'.repeat(40), source: 'env', created: false })
     expect((await call('POST', ENABLE)).json).toEqual({ error: 'already_enabled' })
+  })
+})
+
+describe('enable/rotate hanya dari UI (bukan agent / curl)', () => {
+  it('curl tanpa fetch metadata: 403 approval_browser_only, token tidak dibuat', async () => {
+    const { res, json } = await call('POST', ENABLE, { headers: { host: BROWSER.host } })
+    expect([res.status, json]).toEqual([403, { error: 'approval_browser_only' }])
+    expect(getTokenState().source).toBe('none')
+    expect(readdirSync(root)).toEqual([])
+  })
+
+  it('Origin asing atau cross-site: 403 approval_browser_only', async () => {
+    const foreign = await call('POST', ENABLE, { headers: { ...BROWSER, origin: 'http://evil.test' } })
+    expect(foreign.json).toEqual({ error: 'approval_browser_only' })
+    const cross = await call('POST', ENABLE, { headers: { host: BROWSER.host, 'sec-fetch-site': 'cross-site' } })
+    expect(cross.json).toEqual({ error: 'approval_browser_only' })
+    expect(getTokenState().source).toBe('none')
+  })
+
+  it('token node sesi agent, walau fetch metadata benar: 403 agent_cannot_approve', async () => {
+    const agent = nodeToken('node-tokenaccess-test')
+    try {
+      const { res, json } = await call('POST', ENABLE, { headers: { ...BROWSER, 'x-webterm-token': agent } })
+      expect([res.status, json]).toEqual([403, { error: 'agent_cannot_approve' }])
+      expect(getTokenState().source).toBe('none')
+    } finally {
+      forgetNodeToken('node-tokenaccess-test')
+    }
+  })
+
+  it('header capability: 403 agent_cannot_approve, juga untuk rotate', async () => {
+    const enable = await call('POST', ENABLE, { headers: { ...BROWSER, 'x-webterm-capability': 'wcap_x' } })
+    expect([enable.res.status, enable.json]).toEqual([403, { error: 'agent_cannot_approve' }])
+    await call('POST', ENABLE)
+    const rotate = await call('POST', ROTATE, { headers: { host: BROWSER.host } })
+    expect([rotate.res.status, rotate.json]).toEqual([403, { error: 'approval_browser_only' }])
   })
 })
 

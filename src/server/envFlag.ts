@@ -1,6 +1,6 @@
 /**
  * Dialek on/off bersama semua flag `WEBTERM_*` non-keamanan: `on|1|true` => on, `off|0|false` => off
- * (trim, case-insensitive); selain itu undefined. Tiga kunci keamanan tetap `=== '1'` dan tidak lewat sini.
+ * (trim, case-insensitive); selain itu undefined. Dua kunci keamanan tetap `=== '1'` dan tidak lewat sini.
  */
 export function parseFlag(raw: string | null | undefined): 'on' | 'off' | undefined {
   const v = (raw ?? '').trim().toLowerCase()
@@ -16,5 +16,5 @@ export const flagOr = (raw: string | null | undefined, def: boolean): boolean =>
   return v === undefined ? def : v === 'on'
 }
 
-/** Tiga kunci keamanan (ALLOW_LOOPBACK_APPROVAL, ALLOW_TOKEN_MINT, STRICT_HOOK_AUTH): persis `1`, tanpa trim/huruf. */
+/** Dua kunci keamanan (ALLOW_TOKEN_MINT, STRICT_HOOK_AUTH): persis `1`, tanpa trim/huruf. */
 export const strictFlag = (raw: string | null | undefined): boolean => raw === '1'

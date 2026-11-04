@@ -51,7 +51,7 @@ function fixture(
   return {
     runtime,
     clock,
-    deps: { runtime, now: () => clock.at, authAllowed: () => true },
+    deps: { runtime, now: () => clock.at, isNodeToken: () => false },
   }
 }
 
@@ -81,7 +81,7 @@ async function call(
   const chunks = init.body === undefined ? [] : [Buffer.from(init.body)]
   const req = Readable.from(chunks) as unknown as IncomingMessage
   req.method = init.method ?? (init.body === undefined ? 'GET' : 'POST')
-  req.headers = {}
+  req.headers = { 'sec-fetch-site': 'same-origin' } // fetch() from the webterm page (UI-only policy)
   const res = fakeRes()
   await approvalHumanRoute(req, res as unknown as ServerResponse, new URL(path, 'http://x'), f.deps)
   return {

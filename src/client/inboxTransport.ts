@@ -1,9 +1,10 @@
 // Transport plumbing for the operator inbox: token lookup, fetch wrapper, and response mapping.
 // Split out of `./inboxApi` so both files stay small; `./inboxApi` re-exports everything here.
 //
-// Every request carries the transport token (`x-webterm-token`), the same credential `./api` uses
-// for /api/workspaces and /api/fs. It never uses a node capability (`x-webterm-capability`): an
-// agent must not be able to approve its own irreversible action. Secrets are only ever placed in a
+// Every request carries the transport token (`x-webterm-token`) when one is set, the same credential
+// `./api` uses for /api/workspaces and /api/fs. It never uses a node capability
+// (`x-webterm-capability`): the server refuses agent credentials and non-browser callers on
+// /api/approvals (`approvalAuth.ts`), so an agent cannot approve its own irreversible action. Secrets are only ever placed in a
 // request header: never in a URL, never in logs, and never in an error message.
 import { TOKEN_HEADER } from './api'
 import type {
@@ -16,10 +17,20 @@ import { InboxApiError } from './inboxTypes'
 import { isAbortError, peekToken } from './transportToken'
 
 export const INBOX_PATH = '/api/inbox'
-/** Human approval surface: transport-token/loopback auth, never an agent capability. */
+/** Human approval surface: webterm page only, never an agent credential (server `approvalAuth.ts`). */
 export const APPROVAL_PATH = '/api/approvals'
 
 export { isAbortError }
+
+/** Server refused an agent credential (node token / capability) on a human-only route. */
+export const MSG_AGENT_CANNOT_APPROVE = 'Persetujuan hanya bisa dari UI webterm, bukan dari sesi agent.'
+/** Server refused a caller without browser fetch metadata / with a foreign Origin. */
+export const MSG_APPROVAL_BROWSER_ONLY = 'Persetujuan harus dari jendela webterm di browser.'
+export const MSG_UNAUTHORIZED = 'Token akses salah atau kedaluwarsa — buka ulang tautan berisi token.'
+/** Outer transport gate (`refuseRequest`): wrong/missing root token, foreign Host or Origin. */
+export const MSG_FORBIDDEN = 'Ditolak server: token akses tidak cocok atau alamat tidak diizinkan — buka ulang tautan berisi token.'
+/** Any other 403; the code names which rule refused, there is no login to retry. */
+export const msgForbiddenCode = (code: string): string => `Ditolak server (${code}).`
 
 /**
  * Human-facing message for anything the client can throw. Deliberately short: the dialog shows it
@@ -28,7 +39,10 @@ export { isAbortError }
  */
 export function inboxErrorMessage(error: unknown): string {
   if (error instanceof InboxApiError) {
-    if (error.status === 401 || error.status === 403) return 'Not allowed. Reload and sign in again.'
+    if (error.code === 'agent_cannot_approve') return MSG_AGENT_CANNOT_APPROVE
+    if (error.code === 'approval_browser_only') return MSG_APPROVAL_BROWSER_ONLY
+    if (error.status === 401) return MSG_UNAUTHORIZED
+    if (error.status === 403) return error.code === 'forbidden' || error.code === 'http_403' ? MSG_FORBIDDEN : msgForbiddenCode(error.code)
     if (error.code === 'digest_mismatch') return 'The action changed since this challenge was issued. Request a new one.'
     if (error.code === 'nonce_mismatch' || error.code === 'nonce_reused') return 'This challenge is no longer valid. Request a new one.'
     if (error.code === 'digest_mismatch_server') return 'The action changed. Request a new one.'

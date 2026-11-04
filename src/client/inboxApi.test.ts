@@ -152,7 +152,7 @@ describe('listInbox', () => {
     const error = await listInbox().catch((e: unknown) => e)
     expect(error).toBeInstanceOf(InboxApiError)
     expect(error).toMatchObject({ status: 403, code: 'forbidden' })
-    expect(inboxErrorMessage(error)).toMatch(/not allowed/i)
+    expect(inboxErrorMessage(error)).toMatch(/ditolak server/i)
   })
 
   it('falls back to http_<status> when the error body is not JSON', async () => {

@@ -28,8 +28,8 @@ describe('dialek flag (L10)', () => {
     }
   })
 
-  it('tiga kunci keamanan tetap === \'1\'', () => {
-    for (const f of ['approvalAuth.ts', 'control/mount.ts', 'agentStatusAuth.ts']) {
+  it('dua kunci keamanan tetap === \'1\'', () => {
+    for (const f of ['control/mount.ts', 'agentStatusAuth.ts']) {
       expect(readFileSync(join(__dirname, '..', f), 'utf8'), f).toContain("=== '1'")
     }
   })
