@@ -22,6 +22,9 @@ import { useCommandKeybindings } from './commandRegistry'
 import { useKeybindingsSync } from './keybindings.store'
 import { usePresencePing } from './presencePing'
 import OutputPanelHost from './output/outputPanelHost'
+import { usePortsStatusItems } from './PortsChip'
+import ProblemsPanel, { useProblems } from './ProblemsPanel'
+import { useTasksMenu } from './TasksMenu'
 import TimelineHost from './Timeline'
 import MorningBrief from './MorningBrief'
 import { SettingsPanel } from './SettingsPanel'
@@ -160,6 +163,10 @@ export default function App() {
 
   const inboxReady = hydrated && !noWorkspaces
   const { inboxUnread, outputStatusItems, outputCommands } = useDockFeeds(inboxOpen, setInboxOpen, inboxReady)
+  // Senses chips: detected ports, Problems counter, Run Task (src/server/ports|problems|tasks).
+  const portItems = usePortsStatusItems(activeId, nodeActions.openBrowserAt)
+  const problems = useProblems(activeId)
+  const tasks = useTasksMenu(activeId, addFlowNode)
 
   // ⌘K omnibox / ⌘P Go to File / ⇧⌘F Find in Files + the command registry behind them and Help.
   const omni = useOmnibox({
@@ -286,7 +293,7 @@ export default function App() {
             workspaceName={activeWs?.name}
             agentSummary={agentSummary}
             onOpenSettings={() => setShowSettings(true)}
-            extraStatusItems={outputStatusItems}
+            extraStatusItems={[...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SessionsPanel
             open={sessionsOpen}
@@ -310,6 +317,8 @@ export default function App() {
           <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} offsetForInbox={inboxOpen} />
           <CentralControlPanel open={central.open} onClose={central.close} enabled={central.enabled} />
           <OutputPanelHost />
+          <ProblemsPanel problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode} onFocus={(id) => void onFocus(id)} />
+          {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} />
           <TimelineHost workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} onFocusNode={(id) => void onFocus(id)} />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
