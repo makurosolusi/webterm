@@ -30,6 +30,8 @@ export interface GatewayDeps {
 }
 
 const INPUT_TYPES = new Set<ClientMsg['t']>(['mouse', 'key', 'text', 'ime', 'touch', 'nav'])
+/** Input manusia murni (tanpa `nav`): dikirim fire-and-forget oleh host, tak perlu antre di belakang input lain. */
+const DIRECT_INPUT = new Set<ClientMsg['t']>(['mouse', 'key', 'text', 'ime', 'touch'])
 const errorCode = (e: unknown): { code: BrowserErrorCode; hostname?: string } =>
   e instanceof BlockedError ? { code: 'blocked', hostname: e.hostname }
     : e instanceof BrowserError ? { code: e.code, hostname: e.hostname }
@@ -42,9 +44,9 @@ function makeSink(ws: WebSocket): ViewerSink {
   const onSent = (err?: Error) => { if (err) log.warn('browser.ws', 'send failed', { error: err.name }) }
   return {
     get bufferedAmount() { return ws.bufferedAmount },
-    sendBinary(bytes) {
+    sendBinary(bytes, done) {
       if (ws.readyState !== ws.OPEN) return false
-      ws.send(bytes, { binary: true }, onSent)
+      ws.send(bytes, { binary: true }, (err) => { onSent(err); done?.() })
       return true
     },
     sendJson(msg) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg), onSent) },
@@ -124,12 +126,16 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
     else if (!attached.has(m.id)) { reject(m.id, 'not_found'); return }
     if (INPUT_TYPES.has(m.t) && leases.holder(m.id) === 'agent') { reject(m.id, 'lease_agent'); return }
     if (INPUT_TYPES.has(m.t)) leases.noteHumanInput(m.id)
+    const task = async () => {
+      try { await run(m) } catch (err) { if (!closed) fail(m.id, err) }
+    }
     let q = queues.get(m.id)
     if (!q) queues.set(m.id, (q = createSerialQueue()))
-    const droppable = m.t === 'mouse' && m.type === 'move'
-    q.push(async () => {
-      try { await run(m) } catch (err) { if (!closed) fail(m.id, err) }
-    }, droppable)
+    // Antrean idle = tak ada attach/resize/nav/copy tertunda: input langsung ke host (yang tak menunggu balasan
+    // Chromium; DevTools InputModel.ts:72,89). Urutan tetap terjaga oleh satu socket CDP. Antrean sibuk = antre,
+    // supaya input tak pernah mendahului attach yang belum selesai.
+    if (DIRECT_INPUT.has(m.t) && q.depth === 0) { void task(); return }
+    q.push(task, m.t === 'mouse' && m.type === 'move')
   }
 
   ws.on('message', (data, isBinary) => {

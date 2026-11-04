@@ -1,5 +1,7 @@
 // Mengikat satu node browser ke klien WS bersama: attach/resize/detach (ResizeObserver, debounce),
 // menggambar frame lalu `ack`, dan menampung state/galat/dialog/kursor dari server.
+// Hanya frame TERBARU yang digambar (decode bisa selesai tak berurutan), dan setelah resize frame transisi
+// berukuran lama dibuang sampai frame yang cocok tiba (Orca browser-screencast-stream.ts:114-127).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { DSF_MAX, RESIZE_DEBOUNCE_MS } from '../shared/browser.contract'
@@ -9,6 +11,8 @@ import type { Viewport } from './browser.input'
 import { STICKY_ERRORS } from './browser.status'
 import type { BrowserErr } from './browser.status'
 import { browserStream } from './browser.stream'
+import { passesResizeFilter, RESIZE_FILTER_MAX_MS } from './browser.stream.fit'
+import type { ResizeFilter } from './browser.stream.fit'
 import type { BrowserStream } from './browser.stream'
 
 export type BrowserDialog = Extract<ServerMsg, { t: 'dialog' }>
@@ -38,6 +42,10 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewport = useRef<Viewport | null>(null)
   const attached = useRef(false)
+  /** Aktif sesudah resize terkirim: buang frame berukuran salah; `held` = frame terbuang terbaru (digambar bila waktu habis). */
+  const filter = useRef<(ResizeFilter & { held?: { bmp: ImageBitmap; order: number } }) | null>(null)
+  /** Nomor urut kedatangan frame (bukan `seq` server, yang mulai dari 1 lagi tiap screencast dimulai ulang). */
+  const order = useRef({ arrived: 0, painted: 0 })
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
   const [state, setState] = useState<BrowserState>()
   const [error, setError] = useState<BrowserErr>()
@@ -52,22 +60,44 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   }, [])
   const flash = useCallback((text: string) => { setLocalNotice(text); arm(() => setLocalNotice('')) }, [arm])
 
+  /** Gambar bila lebih baru dari yang sudah tergambar (decode bisa selesai tak berurutan); bitmap selalu ditutup. */
+  const draw = useCallback((bmp: ImageBitmap, n: number) => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (n > order.current.painted && canvas && ctx) {
+      order.current.painted = n
+      // Ukuran backing store = piksel frame (viewport x dpr): tanpa resample, tanpa blur.
+      if (canvas.width !== bmp.width || canvas.height !== bmp.height) { canvas.width = bmp.width; canvas.height = bmp.height }
+      ctx.drawImage(bmp, 0, 0)
+    }
+    bmp.close()
+  }, [])
+  /** Matikan filter resize; frame tertahan (bila ada) digambar. */
+  const endFilter = useCallback(() => {
+    const held = filter.current?.held
+    filter.current = null
+    if (held) draw(held.bmp, held.order)
+  }, [draw])
+
   useEffect(() => {
     const paint = async (seq: number, jpeg: Uint8Array) => {
+      const n = ++order.current.arrived
       try {
         const bmp = await createImageBitmap(new Blob([jpeg as BlobPart], { type: 'image/jpeg' }))
-        const canvas = canvasRef.current
-        const ctx = canvas?.getContext('2d')
-        if (canvas && ctx) {
-          // Ukuran backing store = piksel frame (viewport x dpr): tanpa resample, tanpa blur.
-          if (canvas.width !== bmp.width || canvas.height !== bmp.height) { canvas.width = bmp.width; canvas.height = bmp.height }
-          ctx.drawImage(bmp, 0, 0)
+        const f = filter.current
+        if (n <= order.current.painted) bmp.close() // lebih tua dari frame yang sudah tergambar
+        else if (f && !passesResizeFilter(f, bmp)) {
+          // Frame transisi resize (ukuran lama): tahan yang terbaru saja, untuk batas waktu filter.
+          if (!f.held || n > f.held.order) { f.held?.bmp.close(); f.held = { bmp, order: n } } else bmp.close()
+        } else {
+          if (f) { f.held?.bmp.close(); filter.current = null } // cocok, atau batas jumlah buang tercapai
+          draw(bmp, n)
         }
-        bmp.close()
       } catch (err) {
         flash(`Frame decode failed: ${err instanceof Error ? err.message : String(err)}`)
       }
-      // Ack SETELAH gambar (juga bila decode gagal, supaya stream tak macet di MAX_FRAMES_IN_FLIGHT).
+      // Ack SETELAH gambar (juga bila decode/dibuang): hanya mengatur laju kirim server ke klien ini
+      // (MAX_FRAMES_IN_FLIGHT); Chromium sudah di-ack server saat frame diterima.
       if (attached.current) stream.send({ t: 'ack', id, seq })
     }
     const unsub = stream.subscribe(id, {
@@ -90,12 +120,13 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       for (const t of timers.current) clearTimeout(t)
       timers.current.clear()
     }
-  }, [id, stream, arm, flash])
+  }, [id, stream, arm, flash, draw, endFilter])
 
   useEffect(() => {
     const host = hostRef.current
     if (paused || !host || typeof ResizeObserver === 'undefined') return
     let debounce: ReturnType<typeof setTimeout> | null = null
+    let expire: ReturnType<typeof setTimeout> | null = null
     const vpMsg = (v: Viewport) => ({ ...v, dpr: Math.min(window.devicePixelRatio || 1, DSF_MAX) })
     const ro = new ResizeObserver((entries) => {
       const box = entries[entries.length - 1]?.contentRect
@@ -103,18 +134,30 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       if (w < 1 || h < 1) return // node tersembunyi/collapse: ukuran nol tidak valid di kawat
       const first = !attached.current
       viewport.current = { w, h }
-      if (first) { attached.current = true; stream.attach(id, vpMsg({ w, h })); return }
+      if (first) {
+        attached.current = true
+        stream.attach(id, vpMsg({ w, h }))
+        return
+      }
       if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => stream.resize(id, vpMsg({ w, h })), RESIZE_DEBOUNCE_MS)
+      debounce = setTimeout(() => {
+        const vp = vpMsg({ w, h })
+        filter.current?.held?.bmp.close()
+        filter.current = { vp, drops: 0 }
+        if (expire) clearTimeout(expire)
+        expire = setTimeout(endFilter, RESIZE_FILTER_MAX_MS) // batas waktu: node tak boleh membeku
+        stream.resize(id, vp)
+      }, RESIZE_DEBOUNCE_MS)
     })
     ro.observe(host)
     return () => {
       ro.disconnect()
       if (debounce) clearTimeout(debounce)
+      if (expire) clearTimeout(expire)
       attached.current = false
       stream.detach(id)
     }
-  }, [id, paused, stream])
+  }, [id, paused, stream, endFilter])
 
   const send = useCallback((msg: WithoutId<ClientMsg>) => stream.send({ ...msg, id } as ClientMsg), [id, stream])
   return {

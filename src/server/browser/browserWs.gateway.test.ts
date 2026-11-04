@@ -56,33 +56,30 @@ describe('viewers and screencast', () => {
     expect(rig.host.eventCbs.size).toBe(0)
   })
 
-  it('withholds frame 3 until the client acks (maxInFlight) and acks the host only after the client acked', async () => {
+  it('acks the host on receipt and holds only the newest frame while the client is at maxInFlight', async () => {
     rig = await makeRig()
     const c = await attached()
-    for (let s = 1; s <= MAX_FRAMES_IN_FLIGHT + 1; s++) rig.host.emitFrame('n1', s)
+    for (let s = 1; s <= MAX_FRAMES_IN_FLIGHT + 3; s++) rig.host.emitFrame('n1', s)
+    expect(rig.host.acks.map(([, s]) => s)).toEqual([1, 2, 3, 4, 5]) // tiap frame di-ack saat diterima
     await wait(() => c.bin.length === MAX_FRAMES_IN_FLIGHT, 'two frames')
     await settle()
     expect(c.bin).toHaveLength(MAX_FRAMES_IN_FLIGHT)
-    expect(decodeFrameHeader(c.bin[0])).toMatchObject({ nodeId: 'n1', seq: 1 })
-    expect(rig.host.acks).toEqual([['n1', 3]]) // frame yang dibuang tidak boleh menahan host
     c.send({ t: 'ack', id: 'n1', seq: 1 })
-    await wait(() => rig.host.acks.length === 2, 'host ack after client ack')
-    expect(rig.host.acks[1]).toEqual(['n1', 1])
-    rig.host.emitFrame('n1', 4)
-    await wait(() => c.bin.length === 3, 'frame after ack')
+    await wait(() => c.bin.length === 3, 'pending frame after client ack')
+    expect(decodeFrameHeader(c.bin[2])?.seq).toBe(5) // frame 3 & 4 ditimpa frame terbaru
+    c.send({ t: 'ack', id: 'n1', seq: 2 })
+    await settle()
+    expect(c.bin).toHaveLength(3) // tidak ada frame basi yang menyusul
   })
 
-  it('acks the host for a frame only after every viewer received-and-acked it', async () => {
+  it('a slow viewer does not hold back a fast one', async () => {
     rig = await makeRig()
     const a = await attached(), b = await attached()
-    rig.host.emitFrame('n1', 1)
-    await wait(() => a.bin.length === 1 && b.bin.length === 1, 'both got frame')
+    for (let s = 1; s <= 3; s++) rig.host.emitFrame('n1', s)
+    await wait(() => a.bin.length === 2 && b.bin.length === 2, 'both got two')
     a.send({ t: 'ack', id: 'n1', seq: 1 })
-    await settle()
-    expect(rig.host.acks).toEqual([])
-    b.ws.terminate() // viewer yang putus tidak boleh menahan ack selamanya
-    await wait(() => rig.host.acks.length === 1, 'ack after slow viewer left')
-    expect(rig.host.acks[0]).toEqual(['n1', 1])
+    await wait(() => a.bin.length === 3, 'fast viewer got the pending frame')
+    expect(b.bin).toHaveLength(2)
   })
 
   it('ignores an ack for an unknown seq', async () => {
@@ -149,6 +146,30 @@ describe('input, lease and errors', () => {
     await wait(() => rig.host.inputs.length === 3, 'three inputs')
     expect(rig.host.inputs.map((e) => (e.t === 'mouse' ? e.type : e.t))).toEqual(['down', 'move', 'up'])
     expect(rig.host.viewports[0]).toEqual(['n1', 800, 600, 2])
+  })
+
+  it('a click is not stuck behind a wheel the host has not finished', async () => {
+    rig = await makeRig()
+    const c = await attached()
+    rig.host.hold.wheel = new Promise(() => undefined) // wheel yang tak pernah selesai
+    c.send({ t: 'mouse', id: 'n1', type: 'wheel', x: 1, y: 1, button: 'none', buttons: 0, clickCount: 0, mods: 0, dx: 0, dy: 50 })
+    c.send({ t: 'mouse', id: 'n1', type: 'down', x: 1, y: 1, button: 'left', buttons: 1, clickCount: 1, mods: 0 })
+    await wait(() => rig.host.inputs.length === 1, 'click reached host')
+    expect(rig.host.inputs[0]).toMatchObject({ t: 'mouse', type: 'down' })
+  })
+
+  it('input never overtakes a pending attach', async () => {
+    rig = await makeRig()
+    let release!: () => void
+    rig.host.hold.open = new Promise((r) => { release = r })
+    const c = await rig.connect()
+    c.send(attach())
+    c.send({ t: 'text', id: 'n1', text: 'x' })
+    await settle()
+    expect(rig.host.inputs).toEqual([])
+    release()
+    await wait(() => rig.host.inputs.length === 1, 'input after attach')
+    expect(rig.host.viewports).toHaveLength(1)
   })
 
   it('maps host failures to typed errors without leaking messages or killing the socket', async () => {
@@ -237,9 +258,8 @@ describe('with the real BrowserHost over a fake CDP server', () => {
     expect(h.host).toBeInstanceOf(BrowserHost)
     h.fake.emit(CDP_EVENT.screencastFrame, { data: Buffer.from([0xff, 0xd8]).toString('base64'), sessionId: 77 }, 'S-T1')
     await waitCdp(() => got.length === 1, 'frame at client')
-    expect(h.fake.methods()).not.toContain('Page.screencastFrameAck') // belum di-ack klien
-    ws.send(JSON.stringify({ t: 'ack', id: 'n1', seq: decodeFrameHeader(got[0])?.seq }))
-    await waitCdp(() => h.fake.methods().includes('Page.screencastFrameAck'), 'host ack')
+    await waitCdp(() => h.fake.methods().includes('Page.screencastFrameAck'), 'host ack on receipt (before any client ack)')
+    expect(h.fake.calls.find((c) => c.method === 'Page.startScreencast')?.params).toMatchObject({ maxWidth: 800, maxHeight: 600 })
     expect(h.fake.calls.find((c) => c.method === 'Page.screencastFrameAck')?.params).toEqual({ sessionId: 77 })
     ws.terminate()
     await waitCdp(() => h.fake.methods().includes('Page.stopScreencast'), 'stopScreencast on disconnect')

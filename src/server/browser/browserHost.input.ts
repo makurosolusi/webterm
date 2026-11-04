@@ -1,5 +1,5 @@
 // Peta input manusia (kontrak WS) -> perintah `Input.dispatch*` CDP. Murni, tanpa I/O.
-import { DSF_MAX, MOD } from '../../shared/browser.contract'
+import { DSF_MAX, JPEG_QUALITY_DEFAULT, MOD, SCREENCAST_MAX_DIM } from '../../shared/browser.contract'
 import type { BrowserInputEvent } from '../../shared/browser.contract'
 import { CDP } from './cdp.client'
 
@@ -50,4 +50,16 @@ export function clampDpr(dpr: number): number {
 /** Parameter `Emulation.setDeviceMetricsOverride` (viewport CSS px bulat, DSF dijepit). */
 export function metricsParams(w: number, h: number, dpr: number): Record<string, unknown> {
   return { width: Math.round(w), height: Math.round(h), deviceScaleFactor: clampDpr(dpr), mobile: false }
+}
+
+/**
+ * Parameter `Page.startScreencast`: batas frame = viewport x dpr, dijepit SCREENCAST_MAX_DIM (DevTools
+ * ScreencastView.ts:560-571). Tanpa batas, jendela headful di layar Retina menangkap 2x fisik walau dpr 1.
+ */
+export function screencastParams(vp: { w: number; h: number; dpr: number }): Record<string, unknown> {
+  const dpr = clampDpr(vp.dpr)
+  return {
+    format: 'jpeg', quality: JPEG_QUALITY_DEFAULT,
+    maxWidth: Math.min(SCREENCAST_MAX_DIM, Math.round(vp.w * dpr)), maxHeight: Math.min(SCREENCAST_MAX_DIM, Math.round(vp.h * dpr)),
+  }
 }

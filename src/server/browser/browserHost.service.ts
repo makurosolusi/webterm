@@ -1,6 +1,6 @@
 // BrowserHost: implementasi `BrowserHostApi` di atas CDP. Satu koneksi CDP per workspace (satu proses
 // Chromium per profil), satu target per node. Chromium nyata tidak dijalankan di test: koneksi & peluncur diinjeksi.
-import { JPEG_QUALITY_DEFAULT, MAX_FRAMES_IN_FLIGHT, TOUCH_POINTS_MAX, BlockedError } from '../../shared/browser.contract'
+import { TOUCH_POINTS_MAX, BlockedError } from '../../shared/browser.contract'
 import type { BrowserHostApi, BrowserInputEvent, BrowserState, Frame, NAV_ACTIONS } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
@@ -8,7 +8,7 @@ import { CDP, CdpClient } from './cdp.client'
 import type { CdpHandler } from './cdp.client'
 import { LaunchError } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
-import { metricsParams, toCdpCommands } from './browserHost.input'
+import { metricsParams, screencastParams, toCdpCommands } from './browserHost.input'
 import { createEventRouter } from './browserHost.events'
 import { blockOf, BrowserError, createPageTarget, mergeState, newRec, readHistory, setupConnection, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
@@ -68,15 +68,20 @@ export class BrowserHost implements BrowserHostApi {
 
   async setViewport(nodeId: string, w: number, h: number, dpr: number): Promise<void> {
     const rec = this.need(nodeId)
+    const prev = rec.viewport
     rec.viewport = { w, h, dpr }
     await this.send(rec, CDP.setDeviceMetrics, metricsParams(w, h, dpr))
+    this.fire(rec, CDP.setVisibleSize, { width: Math.round(w), height: Math.round(h) }) // Orca ...-device-metrics.ts:45-54
+    const p = screencastParams(rec.viewport) // batas frame ikut ukuran baru: restart (DevTools ScreencastView: stop/start)
+    if (!rec.cast || JSON.stringify(screencastParams(prev)) === JSON.stringify(p)) return
+    await this.send(rec, CDP.stopScreencast)
+    await this.send(rec, CDP.startScreencast, p)
   }
 
   async startScreencast(nodeId: string, onFrame: (f: Frame) => void): Promise<void> {
     const rec = this.need(nodeId)
     rec.cast = { onFrame, seq: 0, acks: new Map() }
-    // R-1: Page.startScreencast eksperimental; `maxFramesInFlight` mengikuti PLAN (tidak dikenal Chromium lama = diabaikan) [BT].
-    await this.send(rec, CDP.startScreencast, { format: 'jpeg', quality: JPEG_QUALITY_DEFAULT, maxFramesInFlight: MAX_FRAMES_IN_FLIGHT })
+    await this.send(rec, CDP.startScreencast, screencastParams(rec.viewport))
   }
 
   async stopScreencast(nodeId: string): Promise<void> {
@@ -100,7 +105,9 @@ export class BrowserHost implements BrowserHostApi {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
     }
-    for (const c of toCdpCommands(ev)) await this.send(rec, c.method, c.params)
+    // DevTools InputModel.ts:72,89 (`void invoke_dispatchMouseEvent`): tak menunggu balasan (wheel dibalas setelah renderer
+    // memprosesnya; await = burst trackpad telat detik). Urutan dijaga satu socket CDP; galat dilog `fire`.
+    for (const c of toCdpCommands(ev)) this.fire(rec, c.method, c.params)
   }
 
   /** Jalur CDP generik; hanya dipanggil lewat `cdpAllowlist` (WS-07). */

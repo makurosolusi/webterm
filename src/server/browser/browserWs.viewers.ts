@@ -1,5 +1,7 @@
-// Penonton per node untuk /ws/browser: screencast mulai pada penonton pertama dan berhenti pada yang terakhir,
-// frame di-fanout dengan backpressure per (klien,node), ack ke host baru setelah SEMUA penerima frame meng-ack.
+// Penonton per node untuk /ws/browser: screencast mulai pada penonton pertama dan berhenti pada yang terakhir.
+// Frame di-ack ke host SAAT DITERIMA (DevTools ScreenCaptureModel.ts:154-155) supaya produksi frame Chromium tak
+// terikat round-trip klien; tiap penonton memegang SATU frame tertunda, frame terbaru menimpa yang lama, dikirim saat
+// `ws.send` sebelumnya selesai atau klien meng-ack (Steel page-screencast.ts:146-168,200-232: deliver/flush/send).
 import { encodeFrame } from '../../shared/browser.wire'
 import type { BrowserHostApi, BrowserState, Frame, LeaseView, ServerMsg } from '../../shared/browser.contract'
 import { createLogger } from '../logs'
@@ -21,18 +23,19 @@ export interface GatewayHost extends BrowserHostApi {
 /** Ujung tulis satu klien; implementasi nyata membungkus `ws`. */
 export interface ViewerSink {
   readonly bufferedAmount: number
-  /** false bila socket tidak lagi terbuka (frame dianggap dibuang). */
-  sendBinary(bytes: Uint8Array): boolean
+  /** false bila socket tidak lagi terbuka (frame dianggap dibuang); `done` dipanggil saat tulisan selesai. */
+  sendBinary(bytes: Uint8Array, done?: () => void): boolean
   sendJson(msg: ServerMsg): void
 }
 
 /** Satu koneksi klien; identitas objek dipakai sebagai kunci. */
 export interface Viewer { readonly sink: ViewerSink }
 
+/** Jatah kirim satu (klien,node) + satu frame terbaru yang belum terkirim. */
+interface Slot { gate: FrameGate; pending?: { seq: number; bytes: Uint8Array } }
+
 interface NodeEntry {
-  viewers: Map<Viewer, FrameGate>
-  /** seq -> penonton yang belum meng-ack; kosong = ack diteruskan ke host. */
-  pending: Map<number, Set<Viewer>>
+  viewers: Map<Viewer, Slot>
   casting: boolean
 }
 
@@ -83,8 +86,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
     if (!e) return
     if (s.live === 'discarded') { // target hilang (crash/discard): screencast lama mati, ack lama tak berarti
       e.casting = false
-      e.pending.clear()
-      for (const g of e.viewers.values()) g.clear()
+      for (const slot of e.viewers.values()) { slot.gate.clear(); slot.pending = undefined }
     } else if (s.live === 'live' && e.viewers.size > 0 && !e.casting) {
       sync(s.id).catch((err) => log.warn('browser.ws', 'restart screencast failed', { ids: { nodeId: s.id }, error: errName(err) }))
     }
@@ -92,19 +94,24 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
   }
 
   function fanout(nodeId: string, f: Frame) {
+    host.ackFrame(nodeId, f.seq) // ack saat diterima: Chromium lanjut memproduksi tanpa menunggu klien
     const e = nodes.get(nodeId)
-    const to = new Set<Viewer>()
-    let bytes: Uint8Array | undefined
-    for (const [v, gate] of e?.viewers ?? []) {
-      if (gate.admit(f.seq, v.sink.bufferedAmount) === 'drop') continue
-      bytes ??= encodeFrame(nodeId, f.seq, f.jpeg)
-      if (v.sink.sendBinary(bytes)) to.add(v)
-      else gate.ack(f.seq)
+    if (!e || e.viewers.size === 0) return
+    const bytes = encodeFrame(nodeId, f.seq, f.jpeg)
+    for (const [v, slot] of e.viewers) {
+      slot.pending = { seq: f.seq, bytes } // terbaru menimpa: klien lambat tetap melihat frame terakhir, bukan yang basi
+      flush(v, slot)
     }
-    // ponytail: frame yang dibuang langsung di-ack ke host; bila itu frame terakhir sebelum halaman diam, klien lambat
-    // melihat frame basi sampai perubahan visual berikut. Upgrade: simpan 1 frame terbaru per penonton, kirim saat ack.
-    if (to.size === 0 || !e) host.ackFrame(nodeId, f.seq)
-    else e.pending.set(f.seq, to)
+  }
+
+  /** Kirim frame tertunda bila jatah klien (MAX_FRAMES_IN_FLIGHT belum di-ack, buffer socket) masih ada. */
+  // ponytail: buffer penuh karena node LAIN di socket yang sama tidak memicu flush; frame tertunda node ini menunggu
+  // frame/ack berikutnya. Upgrade: flush semua slot penonton dari callback tulis apa pun bila terlihat basi.
+  function flush(v: Viewer, slot: Slot) {
+    const p = slot.pending
+    if (!p || slot.gate.admit(p.seq, v.sink.bufferedAmount) === 'drop') return
+    slot.pending = undefined
+    if (!v.sink.sendBinary(p.bytes, () => flush(v, slot))) slot.gate.ack(p.seq) // socket tertutup: frame dibuang
   }
 
   async function reconcile(nodeId: string) {
@@ -134,39 +141,29 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
     return next
   }
 
-  /** Lepas jatah in-flight penonton; seq yang tak lagi menunggu siapa pun di-ack ke host. */
-  function release(nodeId: string, e: NodeEntry, v: Viewer, seqs: number[]) {
-    for (const seq of seqs) {
-      const set = e.pending.get(seq)
-      if (!set) continue
-      set.delete(v)
-      if (set.size === 0) { e.pending.delete(seq); host.ackFrame(nodeId, seq) }
-    }
-  }
-
   return {
     join(nodeId, v) {
       let e = nodes.get(nodeId)
-      if (!e) nodes.set(nodeId, (e = { viewers: new Map(), pending: new Map(), casting: false }))
+      if (!e) nodes.set(nodeId, (e = { viewers: new Map(), casting: false }))
       if (e.viewers.has(v)) return
       const first = e.viewers.size === 0
-      e.viewers.set(v, createFrameGate())
+      e.viewers.set(v, { gate: createFrameGate() })
       subscribe()
       if (first) setVisible?.(nodeId, true)
     },
     async leave(nodeId, v) {
       const e = nodes.get(nodeId)
-      const gate = e?.viewers.get(v)
-      if (!e || !gate) return
-      release(nodeId, e, v, gate.clear())
+      const slot = e?.viewers.get(v)
+      if (!e || !slot) return
+      slot.pending = undefined // callback `ws.send` yang masih jalan tak boleh mengirim frame node yang sudah dilepas
       e.viewers.delete(v)
       if (e.viewers.size === 0) setVisible?.(nodeId, false)
       unsubscribeIfIdle()
       await sync(nodeId)
     },
     ack(nodeId, v, seq) {
-      const e = nodes.get(nodeId)
-      if (e?.viewers.get(v)?.ack(seq)) release(nodeId, e, v, [seq])
+      const slot = nodes.get(nodeId)?.viewers.get(v)
+      if (slot?.gate.ack(seq)) flush(v, slot)
     },
     sync,
     refreshState(nodeId) {

@@ -18,7 +18,7 @@ export const CDP = {
   startScreencast: 'Page.startScreencast', stopScreencast: 'Page.stopScreencast',
   screencastFrameAck: 'Page.screencastFrameAck', handleDialog: 'Page.handleJavaScriptDialog',
   setFocusEmulation: 'Emulation.setFocusEmulationEnabled',
-  setDeviceMetrics: 'Emulation.setDeviceMetricsOverride', setTouchEmulation: 'Emulation.setTouchEmulationEnabled',
+  setDeviceMetrics: 'Emulation.setDeviceMetricsOverride', setVisibleSize: 'Emulation.setVisibleSize', setTouchEmulation: 'Emulation.setTouchEmulationEnabled',
   mouse: 'Input.dispatchMouseEvent', key: 'Input.dispatchKeyEvent', insertText: 'Input.insertText',
   ime: 'Input.imeSetComposition', touch: 'Input.dispatchTouchEvent',
   getVersion: 'Browser.getVersion', setDownloadBehavior: 'Browser.setDownloadBehavior', setPermission: 'Browser.setPermission',

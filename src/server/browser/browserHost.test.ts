@@ -7,7 +7,7 @@ import { newRec, pushFrame } from './browserHost.targets'
 import { CDP, CDP_EVENT } from './cdp.client'
 import { DENIED_PERMISSIONS } from './chromium.flags'
 import { LaunchError } from './chromium.launch'
-import { makeHostRig, stubGuard, waitFor } from './fakeCdp.testkit'
+import { makeHostRig, SILENT, stubGuard, waitFor } from './fakeCdp.testkit'
 
 type Rig = Awaited<ReturnType<typeof makeHostRig>>
 let rig: Rig
@@ -170,7 +170,7 @@ describe('screencast', () => {
     await openLive()
     const frames: Frame[] = []
     await rig.host.startScreencast('n1', (f) => frames.push(f))
-    expect(callsOf(CDP.startScreencast)[0]).toMatchObject({ sessionId: SID, params: { format: 'jpeg' } })
+    expect(callsOf(CDP.startScreencast)[0]).toMatchObject({ sessionId: SID, params: { format: 'jpeg', quality: 80 } })
     rig.fake.emit(CDP_EVENT.screencastFrame, { data: jpegB64, sessionId: 77, metadata: {} }, SID)
     rig.fake.emit(CDP_EVENT.screencastFrame, { data: jpegB64, sessionId: 78, metadata: {} }, SID)
     await waitFor(() => frames.length === 2, 'two frames')
@@ -202,6 +202,21 @@ describe('screencast', () => {
     await waitFor(() => callsOf(CDP.stopScreencast).length === 1, 'stop')
     await new Promise((r) => setTimeout(r, 30))
     expect(frames).toHaveLength(0)
+  })
+
+  it('caps frames at viewport x dpr (max 2048) and restarts the screencast with new limits on resize', async () => {
+    await openLive()
+    await rig.host.setViewport('n1', 1000, 700, 1)
+    await rig.host.startScreencast('n1', () => undefined)
+    expect(callsOf(CDP.startScreencast)[0].params).toMatchObject({ maxWidth: 1000, maxHeight: 700 })
+    expect(callsOf(CDP.setVisibleSize).at(-1)?.params).toEqual({ width: 1000, height: 700 })
+    await rig.host.setViewport('n1', 1000, 700, 1) // ukuran sama: tidak ada restart
+    expect(callsOf(CDP.startScreencast)).toHaveLength(1)
+    await rig.host.setViewport('n1', 1500, 800, 2)
+    expect(callsOf(CDP.stopScreencast)).toHaveLength(1)
+    expect(callsOf(CDP.startScreencast)[1].params).toMatchObject({ maxWidth: 2048, maxHeight: 1600 })
+    const m = rig.fake.methods()
+    expect(m.lastIndexOf(CDP.setDeviceMetrics)).toBeLessThan(m.lastIndexOf(CDP.startScreencast))
   })
 
   it('seq wraps as uint32', () => {
@@ -260,12 +275,25 @@ describe('lifecycle and extras', () => {
   it('input dispatches CDP commands and enables touch emulation once', async () => {
     await openLive()
     await rig.host.input('n1', { t: 'key', type: 'down', key: 'a', code: 'KeyA', text: 'a', vk: 65, mods: 0 })
+    await waitFor(() => callsOf(CDP.key).length === 2, 'key dispatched') // fire-and-forget: sampai di CDP sesudahnya
     expect(callsOf(CDP.key).map((c) => c.params.type)).toEqual(['rawKeyDown', 'char'])
     const touch: BrowserInputEvent = { t: 'touch', type: 'start', points: [{ x: 1, y: 1, id: 1 }] }
     await rig.host.input('n1', touch)
     await rig.host.input('n1', touch)
+    await waitFor(() => callsOf(CDP.touch).length === 2, 'touch dispatched')
     expect(callsOf(CDP.setTouchEmulation)).toHaveLength(1)
-    expect(callsOf(CDP.touch)).toHaveLength(2)
+  })
+
+  it('input resolves without waiting for Chromium replies and keeps command order', async () => {
+    await openLive()
+    rig.fake.handle(CDP.mouse, () => SILENT) // wheel dibalas setelah renderer memproses; di sini tak pernah
+    rig.fake.handle(CDP.key, () => SILENT)
+    const wheel = (dy: number): BrowserInputEvent => ({ t: 'mouse', type: 'wheel', x: 1, y: 1, button: 'none', buttons: 0, clickCount: 0, mods: 0, dx: 0, dy })
+    for (let i = 1; i <= 20; i++) await rig.host.input('n1', wheel(i)) // await tidak boleh menggantung
+    await rig.host.input('n1', { t: 'key', type: 'down', key: 'a', code: 'KeyA', text: 'a', vk: 65, mods: 0 })
+    await waitFor(() => callsOf(CDP.key).length === 2, 'all commands sent')
+    const seen = rig.fake.calls.filter((c) => c.method === CDP.mouse || c.method === CDP.key)
+    expect(seen.map((c) => c.params.deltaY ?? c.params.type)).toEqual([...Array.from({ length: 20 }, (_, i) => i + 1), 'rawKeyDown', 'char'])
   })
 
   it('input on a node that was never opened is a not_found BrowserError', async () => {
