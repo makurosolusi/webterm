@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
-import { SEARCH_URL_PREFIX, SHORTCUTS } from './browser.startpage.data'
+import { SHORTCUTS } from './browser.startpage.data'
+import { SEARCH_ENGINES } from '../shared/browser.omnibox'
 import { START_TEXT } from './browser.uxText'
 
 beforeEach(() => { localStorage.clear() })
@@ -28,7 +29,17 @@ describe('BrowserStartPage', () => {
     type('   ')
     expect(onGo).not.toHaveBeenCalled()
     type('kucing lucu')
-    expect(onGo).toHaveBeenCalledExactlyOnceWith(SEARCH_URL_PREFIX + 'kucing%20lucu')
+    expect(onGo).toHaveBeenCalledExactlyOnceWith(SEARCH_ENGINES.google.prefix + 'kucing%20lucu')
+  })
+
+  it('uses the chosen search engine and never navigates a forbidden scheme', () => {
+    const onGo = vi.fn()
+    render(<BrowserStartPage onGo={onGo} searchEngine="duckduckgo" />)
+    expect(box().placeholder).toBe(START_TEXT.searchPlaceholder('DuckDuckGo'))
+    type('javascript:alert(1)')
+    expect(onGo).not.toHaveBeenCalled()
+    type('kucing lucu')
+    expect(onGo).toHaveBeenCalledExactlyOnceWith('https://duckduckgo.com/?q=kucing%20lucu')
   })
 
   it('renders all shortcuts as named buttons and navigates on click', () => {

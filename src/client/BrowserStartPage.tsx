@@ -6,19 +6,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { loadRecent } from './browser.recent'
 import { SHORTCUTS } from './browser.startpage.data'
-import { resolveStartInput } from './browser.startpage.resolve'
+import { DEFAULT_SEARCH_ENGINE, resolveOmniboxInput, SEARCH_ENGINES, toSearchEngine, type SearchEngine } from '../shared/browser.omnibox'
 import { START_TEXT } from './browser.uxText'
 
 /** Halaman awal; `onGo(url)` dipanggil dengan URL http(s) final. */
-export default function BrowserStartPage({ onGo }: { onGo: (url: string) => void }) {
+export default function BrowserStartPage({ onGo, searchEngine = DEFAULT_SEARCH_ENGINE }: { onGo: (url: string) => void; searchEngine?: SearchEngine }) {
   const [draft, setDraft] = useState('')
   // Dibaca sekali per kemunculan: halaman ini dibongkar begitu ada URL, jadi selalu segar saat muncul lagi.
   const [recent] = useState(loadRecent)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const url = resolveStartInput(draft)
-    if (url) onGo(url)
+    // Skema terlarang (javascript:/file:) ditolak guard: tak ada navigasi, sama seperti di toolbar.
+    const p = resolveOmniboxInput(draft, searchEngine)
+    if (p?.ok) onGo(p.url)
   }
 
   return (
@@ -26,7 +27,7 @@ export default function BrowserStartPage({ onGo }: { onGo: (url: string) => void
       <form className="browser-start-search" onSubmit={submit}>
         <Input
           type="text" spellCheck={false} autoComplete="off"
-          aria-label={START_TEXT.searchLabel} placeholder={START_TEXT.searchPlaceholder}
+          aria-label={START_TEXT.searchLabel} placeholder={START_TEXT.searchPlaceholder(SEARCH_ENGINES[toSearchEngine(searchEngine)].label)}
           value={draft} onChange={(e) => setDraft(e.target.value)}
         />
       </form>

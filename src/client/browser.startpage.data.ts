@@ -1,8 +1,5 @@
-// Data halaman awal browser: mesin pencari + pintasan. Terpisah dari komponen supaya mengganti
-// mesin/daftar situs cukup menyentuh berkas ini (tanpa literal tersebar di UI).
-
-/** Awalan URL pencarian; teks kueri ditambahkan di belakangnya dalam bentuk ter-encode. */
-export const SEARCH_URL_PREFIX = 'https://www.google.com/search?q='
+// Data halaman awal browser: pintasan. Terpisah dari komponen supaya mengganti daftar situs cukup
+// menyentuh berkas ini (tanpa literal tersebar di UI). Mesin pencari: `shared/browser.omnibox.ts`.
 
 export interface Shortcut { id: string; label: string; url: string; initial: string; color: string }
 

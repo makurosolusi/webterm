@@ -8,14 +8,14 @@ export const TOOLBAR_TEXT = {
   reload: 'Reload',
   stop: 'Stop loading',
   urlLabel: 'Address',
-  urlPlaceholder: 'https://example.com',
+  urlPlaceholder: 'Search or enter address',
   go: 'Go',
   agentControl: 'Let agent drive',
   agentControlOff: 'Agent control is disabled on this server.',
 } as const
 
 export const URL_ERROR_TEXT: Record<UrlRejectReason, string> = {
-  invalid: 'Enter a full address starting with http:// or https://.',
+  invalid: 'That address could not be opened.',
   scheme: 'Only http and https addresses can be opened.',
   userinfo: 'Addresses with a username or password are not allowed.',
   too_long: 'That address is too long.',
@@ -87,7 +87,7 @@ export const ZOOM_TEXT = {
 export const START_TEXT = {
   page: 'Halaman awal browser',
   searchLabel: 'Cari atau ketik alamat',
-  searchPlaceholder: 'Cari di Google atau ketik URL',
+  searchPlaceholder: (engine: string) => `Cari di ${engine} atau ketik URL`,
   shortcuts: 'Pintasan',
   recent: 'Terbaru',
   open: (name: string) => `Buka ${name}`,

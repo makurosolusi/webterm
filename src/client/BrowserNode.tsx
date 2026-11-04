@@ -14,6 +14,8 @@ import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
 import { ZOOM_DEFAULT, stepZoom } from './browser.zoom'
 import { randomId } from './randomId'
+import { useLiveSettings } from './useSettings'
+import { toSearchEngine } from '../shared/browser.omnibox'
 import './browser.css'
 
 const COLLAPSED_H = 40
@@ -51,6 +53,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const comments = d.comments ?? []
   const lowZoom = useStore((s) => s.transform[2] < ZOOM_PAUSE_BELOW)
   const session = useBrowserSession(id, lowZoom || collapsed)
+  const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [maximized, setMaximized] = useState(false)
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   const expandedH = useRef(height ?? DEFAULT_H)
@@ -110,7 +113,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
             <div className="browser-zoom" style={{ '--browser-zoom': zoom } as CSSProperties}>
               <BrowserSurface session={session} />
             </div>
-            {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} />}
+            {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
           </div>
         </div>
