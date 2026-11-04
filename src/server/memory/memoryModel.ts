@@ -70,7 +70,20 @@ export interface MemoryRecord extends Memory {
   staleAfter: number | null
   useCount: number
   contentHash: string | null
+  /** semantic | episodic | procedural, derived from `kind` (v18 generated column). */
+  cognitiveKind: CognitiveKind
+  verifiedAt: number | null
+  /** Bi-temporal validity (v18): when the fact started / stopped holding; null = open. */
+  validFrom: number | null
+  validTo: number | null
+  supersededBy: string | null
+  sourceEventId: number | null
+  /** "Don't mention again": kept and listed, never served to a reader. */
+  suppressedAt: number | null
 }
+
+export const COGNITIVE_KINDS = ['semantic', 'episodic', 'procedural'] as const
+export type CognitiveKind = (typeof COGNITIVE_KINDS)[number]
 
 export interface MemorySearchHit extends Memory {
   /** Raw bm25 score from FTS5; lower (more negative) is a better match. */

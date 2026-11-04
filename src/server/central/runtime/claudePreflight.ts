@@ -2,6 +2,8 @@
 // Only the `loggedIn` boolean is ever read from the CLI output; nothing else is returned or logged.
 import { spawn } from 'node:child_process'
 import { binaryOnPath } from '../../binaryOnPath'
+import { providerView } from '../../claudeProvider/claudeProvider.store'
+import type { ProviderView } from '../../claudeProvider/claudeProvider.model'
 
 export type ClaudeReady =
   | { ok: true }
@@ -23,6 +25,8 @@ export interface PreflightDeps {
   now?: () => number
   ttlMs?: number
   timeoutMs?: number
+  /** Claude provider (Settings > Capabilities); defaults to the saved one. */
+  provider?: () => Pick<ProviderView, 'mode' | 'ready'>
 }
 
 export const READY_TTL_MS = 30_000
@@ -33,10 +37,12 @@ const EXIT_NOT_LOGGED_IN = 1
 const MAX_STDOUT_BYTES = 64 * 1024
 
 const HINTS = {
-  claude_not_found: 'CLI claude tidak ditemukan di PATH. Pasang Claude Code lalu coba lagi.',
-  claude_not_authenticated: 'Claude Code belum login. Jalankan "claude auth login" di server.',
-  claude_check_failed: 'Pengecekan status Claude Code gagal. Coba lagi sebentar lagi.',
+  claude_not_found: 'The claude CLI was not found on PATH. Install Claude Code and try again.',
+  claude_not_authenticated: 'Claude Code is not signed in. Run "claude auth login" on the server.',
+  claude_check_failed: 'Checking Claude Code status failed. Try again in a moment.',
 } as const
+
+const PROVIDER_NOT_READY = 'The Claude provider has no key yet. Add it in Settings › Capabilities › Claude provider.'
 
 function notReady(code: keyof typeof HINTS): ClaudeReady {
   return { ok: false, code, hint: HINTS[code] }
@@ -82,6 +88,10 @@ async function check(d: PreflightDeps): Promise<ClaudeReady> {
   const exe = d.executable ?? CLAUDE_BIN
   const onPath = d.onPath ?? ((name: string) => binaryOnPath(name, d.env['PATH'] ?? ''))
   if (!onPath(CLAUDE_BIN)) return notReady('claude_not_found')
+  // A key/endpoint provider needs no Claude Code login: `auth status` would report the login, not the
+  // key webterm injects. Whether the key works is what "Test connection" proves.
+  const p = (d.provider ?? providerView)()
+  if (p.mode !== 'login') return p.ready ? { ok: true } : { ok: false, code: 'claude_not_authenticated', hint: PROVIDER_NOT_READY }
   let result: RunResult
   try {
     result = await (d.run ?? spawnRun)(exe, AUTH_STATUS_ARGS, { env: d.env, timeoutMs: d.timeoutMs ?? AUTH_CHECK_TIMEOUT_MS })

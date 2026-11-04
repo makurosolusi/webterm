@@ -254,3 +254,9 @@
   font-size: 12px;
   text-align: center;
 }
+
+/* Language-server diagnostics in the gutter (editorLsp.monaco.ts `paint`). */
+.monaco-editor .lsp-glyph { display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.monaco-editor .lsp-glyph--error { color: var(--vscode-problemsErrorIcon-foreground, var(--vscode-editorError-foreground, #f14c4c)); }
+.monaco-editor .lsp-glyph--warning { color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground, #cca700)); }
+.monaco-editor .lsp-glyph--info { color: var(--vscode-problemsInfoIcon-foreground, var(--vscode-editorInfo-foreground, #3794ff)); }

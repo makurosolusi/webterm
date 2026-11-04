@@ -6,6 +6,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Dock, { type DockProps } from './Dock'
+import { registerCommands } from './commandRegistry'
 import { resetCapabilitiesCache } from './useCapabilities'
 
 const noop = () => {}
@@ -46,7 +47,7 @@ describe('Quick Pick "Add node" di Dock', () => {
 describe('baris Browser saat kemampuan browser mati', () => {
   // test-only: server kemampuan dengan browser off; POST menyalakannya.
   const caps = (status: string) => new Response(JSON.stringify({
-    capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status }], advanced: {},
+    capabilities: [{ id: 'browser', title: 'Browser on canvas', blurb: 'Open web pages as nodes on the canvas.', status }], advanced: {},
   }))
 
   it('tetap tampil; memilihnya memunculkan tawaran Nyalakan, lalu node lahir setelah menyala', async () => {
@@ -55,9 +56,9 @@ describe('baris Browser saat kemampuan browser mati', () => {
     const { rerender } = render(<Dock {...baseProps} />)
     press(screen.getByRole('button', { name: 'Add node' }))
     fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
-    expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Nyalakan' }))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nyalakan Browser di kanvas' })).toBeNull())
+    expect(await screen.findByText(/Turn it on now\?/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nyalakan Browser on canvas' })).toBeNull())
     expect(f.mock.calls.some(([url, init]) => url === '/api/capabilities/browser' && JSON.parse(init.body).enabled === true)).toBe(true)
     const onAddBrowser = vi.fn()
     rerender(<Dock {...baseProps} onAddBrowser={onAddBrowser} />) // status browser termuat ulang -> App menerbitkan penambah
@@ -70,6 +71,21 @@ describe('baris Browser saat kemampuan browser mati', () => {
     press(screen.getByRole('button', { name: 'Add node' }))
     fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
     expect(onAddBrowser).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('dialog', { name: 'Nyalakan Browser di kanvas' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Nyalakan Browser on canvas' })).toBeNull()
+  })
+})
+
+describe('Diff row in "Add node"', () => {
+  it('appears only while the diff command is registered and runs it', async () => {
+    const run = vi.fn()
+    render(<Dock {...baseProps} />)
+    press(screen.getByRole('button', { name: 'Add node' }))
+    expect(screen.queryByRole('option', { name: /Diff \(working changes\)/ })).toBeNull()
+    const unregister = registerCommands([{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run }])
+    try {
+      fireEvent.click(await screen.findByRole('option', { name: /Diff \(working changes\)/ }))
+      expect(run).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('dialog', { name: 'Add node' })).toBeNull()
+    } finally { unregister() }
   })
 })

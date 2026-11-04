@@ -101,14 +101,14 @@ export async function read(path: string): Promise<string> {
   const { content } = await getStrict<{ content?: string }>('read', { path })
   // Field hilang = respons bukan jawaban read yang sah. Dibiarkan jadi '' akan menghidupkan lagi
   // persis bug buffer-kosong-yang-bisa-disimpan yang kontrak ini tutup.
-  if (typeof content !== 'string') throw new Error(`fs read "${path}": respons tanpa field content`)
+  if (typeof content !== 'string') throw new Error(`fs read "${path}": response has no content field`)
   return content
 }
 
 /** Isi file sebagai base64 (gambar/biner). MELEMPAR bila gagal baca, sentinel bila lewat cap biner. */
 export async function readBinary(path: string): Promise<string> {
   const { base64 } = await getStrict<{ base64?: string }>('read-binary', { path })
-  if (typeof base64 !== 'string') throw new Error(`fs read-binary "${path}": respons tanpa field base64`)
+  if (typeof base64 !== 'string') throw new Error(`fs read-binary "${path}": response has no base64 field`)
   return base64
 }
 
@@ -128,7 +128,7 @@ export function mkdir(path: string): Promise<boolean> {
 /** `read` + `version`/`encoding` (untuk `expectedVersion` saat simpan). MELEMPAR seperti `read`. */
 export async function readMeta(path: string): Promise<ReadMeta> {
   const m = await getStrict<Partial<ReadMeta>>('read', { path })
-  if (typeof m.content !== 'string') throw new Error(`fs read "${path}": respons tanpa field content`)
+  if (typeof m.content !== 'string') throw new Error(`fs read "${path}": response has no content field`)
   return { content: m.content, version: m.version ?? '', encoding: m.encoding ?? 'utf8' }
 }
 

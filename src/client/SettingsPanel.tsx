@@ -23,19 +23,23 @@ import {
 import type { Settings } from '../shared/settings'
 import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
+import { ControlPanel } from './ControlPanel'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
+import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
+import type { SettingsUndo } from './useSettings'
 import './settings.css'
 import './settings-controls.css'
 
 const SECTIONS = [
   { id: 'terminal', label: 'Terminal' },
-  { id: 'interaction', label: 'Interaksi' },
+  { id: 'interaction', label: 'Interaction' },
   { id: 'shell', label: 'Shell & buffer' },
   { id: 'agent', label: 'Agent' },
   { id: 'canvas', label: 'Canvas' },
-  { id: 'capabilities', label: 'Kemampuan' },
+  { id: 'capabilities', label: 'Capabilities' },
+  { id: 'control', label: 'Control' },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
@@ -52,10 +56,12 @@ interface PanelProps {
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
+  /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
+  history?: SettingsUndo
 }
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
   const [activeRaw, setActive] = useState<string>('terminal')
@@ -82,6 +88,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
     if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
+    if (id === 'control') return <ControlPanel query={normalized} />
     return (
       <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
         onVisibleCount={setCapabilityHits} />
@@ -110,6 +117,11 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
       <DialogContent
         className="st-dialog-content"
         showCloseButton={false}
+        onKeyDown={settingsUndoKeyDown(history)}
+        // The Undo toast is portaled outside the dialog; clicking it must not count as "outside".
+        onInteractOutside={(event) => {
+          if ((event.target as Element | null)?.closest?.(`[data-slot="${SETTINGS_UNDO_TOAST_SLOT}"]`)) event.preventDefault()
+        }}
         onEscapeKeyDown={(event) => {
           // Escape mengosongkan pencarian dulu; baru Escape kedua menutup dialog.
           if (query) {
@@ -126,7 +138,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
             <button
               type="button"
               className="st-close"
-              aria-label="Tutup settings"
+              aria-label="Close settings"
               onClick={onClose}
             >
               <span className="codicon codicon-close" aria-hidden="true" />
@@ -139,20 +151,20 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
               <input
                 type="search"
                 className="st-search"
-                aria-label="Cari setting"
-                placeholder="Cari setting"
+                aria-label="Search settings"
+                placeholder="Search settings"
                 value={query}
                 autoFocus
                 onChange={(event) => setQuery(event.target.value)}
               />
               {normalized ? (
-                <span className="st-search-count" role="status">{found} setting ditemukan</span>
+                <span className="st-search-count" role="status">{found} {found === 1 ? 'setting' : 'settings'} found</span>
               ) : null}
               {query ? (
                 <button
                   type="button"
                   className="st-search-clear"
-                  aria-label="Hapus pencarian"
+                  aria-label="Clear search"
                   title="Clear Search Results"
                   onClick={() => setQuery('')}
                 >
@@ -214,6 +226,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
             </SettingsSearchProvider>
           </div>
         </div>
+        <SettingsUndoToast history={history} />
       </DialogContent>
     </Dialog>
   )

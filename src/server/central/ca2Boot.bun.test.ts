@@ -11,8 +11,7 @@ import { freshDb } from './guard/controlGuard.testutil'
 import { CORE_DEFS } from './tools/defs/core.defs'
 import { registerCa2Tools, toolsHash } from './tools/registerAll'
 import { createRegistry } from './tools/toolRegistry'
-import { activeTools, renderCatalog } from './tools/toolRegistry'
-import { centralStaticPrompt } from './proposal/centralPrompt'
+import { defEnabled } from './tools/toolTypes'
 import { defaultRegistry } from './tools/defaultRegistry'
 
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
@@ -97,11 +96,12 @@ describe('flags on', () => {
     expect(registerCa2Tools(a, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' })).toEqual([])
   })
 
-  it('memory flag registers the memory defs only', () => {
+  it('memory flag registers the memory defs and the shared blackboard (F5-b) only', () => {
     const r = coreRegistry()
     const added = registerCa2Tools(r, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MEMORY: 'on' })
     expect(added.length).toBeGreaterThan(0)
-    expect(added.every((n) => n.startsWith('memory.'))).toBe(true)
+    expect(added.every((n) => n.startsWith('memory.') || n.startsWith('blackboard.'))).toBe(true)
+    expect(added.filter((n) => n.startsWith('blackboard.'))).toEqual(['blackboard.read', 'blackboard.propose'])
   })
 
   it('agents/relay groups need their executor and mode', () => {
@@ -133,18 +133,14 @@ describe('flags on', () => {
   })
 })
 
-describe('prompt catalog', () => {
-  it('includes the read tools once registered and the flag is on, and not before', () => {
+describe('read tools', () => {
+  it('are registered once the flag is on, and not before', () => {
     const registry = defaultRegistry()
     const env = { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' }
-    const before = renderCatalog(registry, 'R0', env)
+    const before = registry.list().length
     registerCa2Tools(registry, {}, env)
-    const names = activeTools(registry, 'R0', env).map((d) => d.name)
-    const after = renderCatalog(registry, 'R0', env)
-    expect(after.length).toBeGreaterThan(before.length)
-    const readName = names.find((n) => !CORE_DEFS.some((c) => c.name === n))
-    expect(readName).toBeDefined()
-    expect(after).toContain(readName as string)
-    expect(centralStaticPrompt()).toEqual(expect.any(String))
+    const added = registry.list().filter((d) => d.tier === 'R0' && defEnabled(d, env) && !CORE_DEFS.some((c) => c.name === d.name))
+    expect(registry.list().length).toBeGreaterThan(before)
+    expect(added.length).toBeGreaterThan(0)
   })
 })

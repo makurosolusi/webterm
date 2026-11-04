@@ -169,7 +169,7 @@ function assertRepo(repo: string): string {
   return resolve(repo)
 }
 
-function assertBaseRef(ref: string): string {
+export function assertBaseRef(ref: string): string {
   if (typeof ref !== 'string' || ref.trim() === '' || hasControlChars(ref) || ref.startsWith('-')) {
     throw new WorktreeError('invalid_base', `invalid base ref: ${JSON.stringify(ref)}`)
   }

@@ -9,10 +9,13 @@ import type { MailDeliver } from '../agents/mailDeliver'
 import { AGENT_MAIL_FLAG, createAgentRelayDef } from './defs/agent.relay.def'
 import { AGENTS_FLAG, createAgentDefs } from './defs/agent.defs'
 import { BROWSER_TOOLS_FLAG, createBrowserDefs } from './defs/browser.act'
+import { CAP_DEFS } from './defs/cap.defs'
 import type { BrowserToolDeps } from './defs/browser.status'
 import { type ChannelBotDefDeps, createChannelBotDef } from './defs/channel.bot.def'
 import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
+import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
+import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
 import { NODE_READ_DEFS } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
@@ -45,13 +48,17 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
   // Read tools dan memori ikut `central` (turunan, ENVSIMPLE D5); env efektif dari boot sudah memuat kunci turunannya.
   const central = isEnabled('central', env)
   const groups: Array<[boolean, () => readonly ToolDef[]]> = [
-    [central, () => [...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
+    [central, () => [...CAP_DEFS, ...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
     [agentsOn(env) && !!deps.executor, () => createAgentDefs(deps.executor as AgentExecutor)],
     [agentsOn(env), () => [TASK_RUN_DEF]],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],
     [on(env, KNOWLEDGE_FLAG) && !!deps.openKb, () => createKnowledgeDefs(deps.openKb as () => Database)],
+    // repo.map keeps its own cache (repomap.db), so it needs no knowledge.db handle.
+    [on(env, KNOWLEDGE_FLAG), () => [createRepoMapDef()]],
     [on(env, SKILLS_FLAG) && !!deps.skills, () => createSkillDefs(deps.skills as SkillStoreResolver)],
     [central, () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
+    // Shared blackboard (F5-b): read + propose; nodes see them through Central's MCP projection.
+    [central, () => BLACKBOARD_DEFS],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],
     [on(env, BROWSER_TOOLS_FLAG) && !!deps.browser, () => createBrowserDefs(deps.browser as BrowserToolDeps)],
   ]

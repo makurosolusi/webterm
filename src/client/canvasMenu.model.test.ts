@@ -201,3 +201,15 @@ describe('buildCanvasMenuRows — penyambungan aksi', () => {
     expect(h.addAgent).toHaveBeenLastCalledWith('claude-work', 'custom:a2')
   })
 })
+
+describe('buildCanvasMenuRows — diff row', () => {
+  it('appears right after files only when addDiff is wired, and calls it', () => {
+    expect(keys(buildCanvasMenuRows(handlers(), ctx()))).not.toContain('diff')
+    const addDiff = vi.fn()
+    const rows = buildCanvasMenuRows(handlers({ addDiff }), ctx())
+    expect(keys(rows).slice(4, 6)).toEqual(['files', 'diff'])
+    expect(item(rows, 'diff').label).toBe(MENU_LABELS.diff)
+    item(rows, 'diff').onClick?.()
+    expect(addDiff).toHaveBeenCalledOnce()
+  })
+})

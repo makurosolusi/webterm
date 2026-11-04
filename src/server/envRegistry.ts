@@ -19,6 +19,8 @@ export const ENV_SETTINGS_SWITCH = 'WEBTERM_ENV_SETTINGS'
 export const BOOTSTRAP_ONLY_KEYS: readonly string[] = [
   'HOST',
   'PORT',
+  // Port listener proxy dev-server (origin terpisah); dibaca sekali saat boot, sama seperti PORT.
+  'WEBTERM_PROXY_PORT',
   'WEBTERM_HOST',
   'WEBTERM_DATA_DIR',
   'WEBTERM_TOKEN',

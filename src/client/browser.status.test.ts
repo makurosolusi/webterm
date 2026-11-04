@@ -9,11 +9,11 @@ const blocked = (b: BrowserState['blocked'], url = 'https://old.example/'): Brow
 describe('browserNotice', () => {
   it('memakai host dari galat server, bukan halaman lama di state.url', () => {
     const n = browserNotice({ state: blocked('private_host'), error: { code: 'blocked', hostname: 'localhost' }, connected: true })
-    expect(n?.text).toBe('Alamat ini ada di jaringan privat dan diblokir. (localhost)')
+    expect(n?.text).toBe('This address is on a private network and is blocked. (localhost)')
   })
 
   it('berbahasa Indonesia untuk sambung ulang', () => {
-    expect(browserNotice({ connected: false })?.text).toBe('Menyambung ulang…')
+    expect(browserNotice({ connected: false })?.text).toBe('Reconnecting…')
   })
 })
 

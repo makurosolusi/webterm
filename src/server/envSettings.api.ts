@@ -3,8 +3,9 @@
 // index.ts; mutasi (PUT/POST) tambahan lewat `settingsGuard` (featureCapabilities.guard) dan dicatat ke audit.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
+import { parseChange } from './envSettings.control'
 import { importDotenv } from './envSettings.import'
-import type { EnvChange, EnvSettings } from './envSettings.service'
+import type { EnvSettings } from './envSettings.service'
 import type { AuditEntry } from './featureCapabilities.audit'
 import { peerOf, type GuardResult } from './featureCapabilities.guard'
 import { createLogger } from './logs'
@@ -13,6 +14,8 @@ const log = createLogger('settings')
 
 export const ENV_SETTINGS_PATH = '/api/settings/env'
 export const IMPORT_ENDPOINT = '/api/settings/env/import'
+// Control tab route (read model, writes, Doctor) lives in envSettings.control.ts; re-exported for its mount.
+export { CONTROL_EFFECTIVE_PATH, controlEffectiveRoute, rootReader } from './envSettings.control'
 
 export interface EnvSettingsApiDeps {
   service: EnvSettings
@@ -62,14 +65,6 @@ async function readJson(req: IncomingMessage, res: ServerResponse, empty?: unkno
   }
   if (empty !== undefined && read.body.trim() === '') return { ok: true, value: empty }
   try { return { ok: true, value: JSON.parse(read.body) } } catch { json(res, 400, { error: 'bad_json' }); return { ok: false } }
-}
-
-/** Bentuk body `{ set?: {KEY: string}, unset?: KEY[] }`, atau null bila salah bentuk. */
-function parseChange(body: unknown): EnvChange | null {
-  if (!isRecord(body)) return null
-  const { set = {}, unset = [] } = body
-  if (!isRecord(set) || !Array.isArray(unset) || !unset.every((k) => typeof k === 'string')) return null
-  return { set, unset: unset as string[] }
 }
 
 /**

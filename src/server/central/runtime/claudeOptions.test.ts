@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claudeArgv, claudeChildEnv, claudeModelArg } from './claudeOptions'
+import { CENTRAL_STEWARD_PROMPT, claudeArgv, claudeChildEnv, claudeModelArg } from './claudeOptions'
 
 describe('claudeChildEnv', () => {
   it('keeps only allowlisted variables and drops root tokens, provider keys and capability tokens', () => {
@@ -20,15 +20,22 @@ describe('claudeChildEnv', () => {
 })
 
 describe('claudeArgv', () => {
-  const base = { newSessionId: 'uuid-1', maxTurns: 3 }
+  const base = { newSessionId: 'uuid-1', maxTurns: 3, mcpConfig: '/run/t.mcp.json' }
 
-  it('builds the fixed locked-down argv for a first turn', () => {
+  it('builds the fixed locked-down argv for a first turn: no built-ins, webterm MCP only', () => {
     expect(claudeArgv(base)).toEqual([
       '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-      '--tools', '', '--strict-mcp-config',
-      '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--safe-mode',
+      '--tools', '', '--mcp-config', '/run/t.mcp.json', '--strict-mcp-config', '--allowedTools', 'mcp__webterm__*',
+      '--permission-mode', 'dontAsk', '--permission-prompts', 'none',
+      '--setting-sources', '', '--disable-slash-commands',
+      '--append-system-prompt', CENTRAL_STEWARD_PROMPT,
       '--max-turns', '3', '--session-id', 'uuid-1',
     ])
+    expect(CENTRAL_STEWARD_PROMPT).toContain('approval_required')
+  })
+
+  it('never uses --safe-mode, which would drop the --mcp-config server', () => {
+    expect(claudeArgv(base)).not.toContain('--safe-mode')
   })
 
   it('resumes instead of creating a session when a sessionRef exists, and adds model and budget', () => {
@@ -42,7 +49,7 @@ describe('claudeArgv', () => {
   it('never contains a permission bypass or an unrequested mode', () => {
     const joined = claudeArgv({ ...base, model: 'opus' }).join(' ')
     for (const banned of ['bypassPermissions', '--dangerously-skip-permissions', '--bare',
-      '--no-session-persistence', '--fork-session', '--mcp-config', '--append-system-prompt']) {
+      '--no-session-persistence', '--fork-session', '--permission-prompt-tool', '--add-dir']) {
       expect(joined).not.toContain(banned)
     }
   })

@@ -3,6 +3,12 @@
 import type { ChannelBinding, ChannelCommand } from './identity'
 import { handleApprove, handleReject, type ApprovalDeps, type ApprovalSummary } from './channelApprovals'
 import type { NormalizedMessage } from './telegram'
+import { renderWorldLine, type WorldCountsPort } from './channelWorld'
+
+export interface CommandDeps extends ApprovalDeps {
+  /** World-view counts for `/status`; omitted or null = the line is left out. */
+  world?: WorldCountsPort
+}
 
 async function renderApprovals(
   deps: ApprovalDeps,
@@ -23,14 +29,17 @@ async function renderApprovals(
 
 /** Runs an authorized command and returns the text to send back. */
 export async function runCommand(
-  deps: ApprovalDeps,
+  deps: CommandDeps,
   message: NormalizedMessage,
   binding: ChannelBinding,
   command: ChannelCommand
 ): Promise<string> {
   switch (command.kind) {
-    case 'status':
-      return renderApprovals(deps, binding.projectId, 'Status')
+    case 'status': {
+      const counts = deps.world?.() ?? null
+      const approvals = await renderApprovals(deps, binding.projectId, 'Status')
+      return counts ? `${renderWorldLine(counts)}\n${approvals}` : approvals
+    }
     case 'inbox':
       return renderApprovals(deps, binding.projectId, 'Inbox')
     case 'approve':

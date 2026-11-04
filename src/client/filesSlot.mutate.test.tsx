@@ -26,7 +26,7 @@ import { resetCapabilitiesCache } from './useCapabilities'
 
 /** Respons /api/capabilities: filesWrite mati, lalu (setelah POST) menyala. */
 const capView = (status: string) => new Response(JSON.stringify({
-  capabilities: [{ id: 'filesWrite', title: 'Ubah dan unggah file', blurb: 'Edit, ganti nama, hapus, dan unggah file dari kanvas.', status }], advanced: {},
+  capabilities: [{ id: 'filesWrite', title: 'Edit and upload files', blurb: 'Edit, rename, delete, and upload files from the canvas.', status }], advanced: {},
 }))
 const stubCapApi = () => {
   const f = vi.fn().mockImplementation((_u: string, init?: RequestInit) => Promise.resolve(capView(init?.method === 'POST' || init?.body ? 'on' : 'off')))
@@ -81,21 +81,21 @@ describe('Delete -> trash -> Undo', () => {
     key(c, 'ArrowDown')
     key(c, 'Delete')
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Pindahkan “a.txt” ke Trash?')).toBeTruthy()
+    expect(within(dialog).getByText('Move “a.txt” to Trash?')).toBeTruthy()
     expect(fs.remove).not.toHaveBeenCalled()
 
-    fireEvent.click(within(dialog).getByText('Pindahkan ke Trash'))
+    fireEvent.click(within(dialog).getByText('Move to Trash'))
     await settle()
     expect(fs.remove).toHaveBeenCalledWith('/proj/a.txt', false)
     expect(events).toContainEqual({ kind: 'deleted', path: '/proj/a.txt', origin: 'local' })
-    expect(await screen.findByText('“a.txt” dipindahkan ke Trash.')).toBeTruthy()
+    expect(await screen.findByText('Moved “a.txt” to Trash.')).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
 
     fireEvent.click(screen.getByText('Undo'))
     await settle()
     expect(fs.restore).toHaveBeenCalledWith('t-1')
     expect(events).toContainEqual({ kind: 'created', path: '/proj/a.txt', origin: 'local' })
-    expect(await screen.findByText('“a.txt” dipulihkan.')).toBeTruthy()
+    expect(await screen.findByText('Restored “a.txt”.')).toBeTruthy()
     expect(screen.queryByText('Undo')).toBeNull()
   })
 
@@ -103,7 +103,7 @@ describe('Delete -> trash -> Undo', () => {
     const c = await mount()
     key(c, 'ArrowDown')
     key(c, 'Delete')
-    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Batal'))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Cancel'))
     await settle()
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(fs.remove).not.toHaveBeenCalled()
@@ -115,13 +115,13 @@ describe('Delete -> trash -> Undo', () => {
     key(c, 'ArrowDown')
     key(c, 'Delete', { shiftKey: true })
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Hapus permanen “a.txt”?')).toBeTruthy()
-    expect(within(dialog).getByText('Tindakan ini tidak bisa dibatalkan.')).toBeTruthy()
-    expect(document.activeElement?.textContent).toBe('Batal')
-    fireEvent.click(within(dialog).getByText('Hapus permanen'))
+    expect(within(dialog).getByText('Permanently delete “a.txt”?')).toBeTruthy()
+    expect(within(dialog).getByText('This action can’t be undone.')).toBeTruthy()
+    expect(document.activeElement?.textContent).toBe('Cancel')
+    fireEvent.click(within(dialog).getByText('Delete Permanently'))
     await settle()
     expect(fs.remove).toHaveBeenCalledWith('/proj/a.txt', true)
-    expect(await screen.findByText('“a.txt” dihapus permanen.')).toBeTruthy()
+    expect(await screen.findByText('Permanently deleted “a.txt”.')).toBeTruthy()
     expect(screen.queryByText('Undo')).toBeNull()
   })
 
@@ -135,13 +135,13 @@ describe('Delete -> trash -> Undo', () => {
     fireEvent.click(rows(c)[2], { shiftKey: true })
     key(c, 'Delete')
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Pindahkan 3 item ke Trash?')).toBeTruthy()
-    fireEvent.click(within(dialog).getByText('Pindahkan ke Trash'))
+    expect(within(dialog).getByText('Move 3 items to Trash?')).toBeTruthy()
+    fireEvent.click(within(dialog).getByText('Move to Trash'))
     await settle()
     expect(fs.remove.mock.calls.map((a) => a[0])).toEqual(['/proj/a.txt', '/proj/b.txt', '/proj/c.txt'])
-    expect(await screen.findByText('2 item dipindahkan ke Trash.')).toBeTruthy()
-    expect(screen.getByText('1 dari 3 item gagal diproses.')).toBeTruthy()
-    expect(screen.getByText(/Gagal menghapus “b.txt”\. Izin ditolak/)).toBeTruthy()
+    expect(await screen.findByText('Moved 2 items to Trash.')).toBeTruthy()
+    expect(screen.getByText('1 of 3 items failed.')).toBeTruthy()
+    expect(screen.getByText(/Could not delete “b.txt”\. Permission denied/)).toBeTruthy()
 
     fs.restore.mockReturnValue(ok({ path: '/proj/x' }))
     fireEvent.click(screen.getByText('Undo'))
@@ -155,10 +155,10 @@ describe('Delete -> trash -> Undo', () => {
     const c = await mount()
     key(c, 'ArrowDown')
     key(c, 'Delete')
-    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Pindahkan ke Trash'))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Move to Trash'))
     await settle()
     fireEvent.click(await screen.findByText('Undo'))
-    expect(await screen.findByText(/Gagal memulihkan “a.txt”\. Tempat asalnya sudah terisi/)).toBeTruthy()
+    expect(await screen.findByText(/Could not restore “a.txt”\. Another item already exists at the original location/)).toBeTruthy()
   })
 })
 
@@ -187,7 +187,7 @@ describe('Rename inline', () => {
     const input = await screen.findByLabelText('New name')
     fireEvent.change(input, { target: { value: 'b.txt' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(await screen.findByText('Gagal mengganti nama “a.txt”. Nama “b.txt” sudah dipakai di folder ini.')).toBeTruthy()
+    expect(await screen.findByText('Could not rename “a.txt”. The name “b.txt” is already taken in this folder.')).toBeTruthy()
   })
 
   it('nama tak sah ditandai live dan Enter tidak memanggil rename; Escape membatalkan; nama sama = no-op', async () => {
@@ -197,7 +197,7 @@ describe('Rename inline', () => {
     const input = await screen.findByLabelText('New name')
     fireEvent.change(input, { target: { value: 'a/b' } })
     expect(input.getAttribute('aria-invalid')).toBe('true')
-    expect(screen.getByRole('alert').textContent).toContain('garis miring')
+    expect(screen.getByRole('alert').textContent).toContain('slash')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(fs.rename).not.toHaveBeenCalled()
     fireEvent.keyDown(input, { key: 'Escape' })
@@ -238,7 +238,7 @@ describe('Duplicate', () => {
     fireEvent.click(await screen.findByText('Duplicate'))
     await settle()
     expect(fs.copy.mock.calls).toEqual([['/proj/a.txt', '/proj/a copy.txt'], ['/proj/b.txt', '/proj/b copy.txt']])
-    expect(await screen.findByText('2 item diduplikat.')).toBeTruthy()
+    expect(await screen.findByText('Duplicated 2 items.')).toBeTruthy()
   })
 
   it('folder penuh/izin: EACCES jadi kalimat jelas', async () => {
@@ -247,7 +247,7 @@ describe('Duplicate', () => {
     fireEvent.click(rows(c)[0])
     fireEvent.contextMenu(rows(c)[0])
     fireEvent.click(await screen.findByText('Duplicate'))
-    expect(await screen.findByText('Gagal menduplikat “a.txt”. Ruang disk penuh.')).toBeTruthy()
+    expect(await screen.findByText('Could not duplicate “a.txt”. The disk is full.')).toBeTruthy()
   })
 })
 
@@ -285,7 +285,7 @@ describe('flag/capability mati', () => {
     fireEvent.contextMenu(rows(c)[0])
     await screen.findByText('Refresh')
     for (const l of [/^Rename…/, /^Delete(?! Perm)/]) {
-      expect(screen.getByRole('menuitem', { name: l }).getAttribute('title')).toBe('Terkunci: “Ubah dan unggah file” sedang mati. Klik untuk menyalakan.')
+      expect(screen.getByRole('menuitem', { name: l }).getAttribute('title')).toBe('Locked: “Edit and upload files” is off. Click to turn it on.')
     }
     for (const l of ['Duplicate', 'Delete Permanently…']) expect(screen.queryByText(l)).toBeNull()
     expect(fs.remove).not.toHaveBeenCalled()
@@ -299,13 +299,13 @@ describe('flag/capability mati', () => {
     fireEvent.contextMenu(rows(c)[0])
     fireEvent.click(await screen.findByRole('menuitem', { name: /^Delete/ }))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Nyalakan “Ubah dan unggah file”')).toBeTruthy()
-    expect(await within(dialog).findByText(/Edit, ganti nama, hapus, dan unggah file dari kanvas\. Nyalakan sekarang\?/)).toBeTruthy()
+    expect(within(dialog).getByText('Turn on “Edit and upload files”')).toBeTruthy()
+    expect(await within(dialog).findByText(/Edit, rename, delete, and upload files from the canvas\. Turn it on now\?/)).toBeTruthy()
     expect(within(dialog).queryByText(/WEBTERM_/)).toBeNull()
     expect(fs.remove).not.toHaveBeenCalled()
 
     caps.mutate = true // server kini menjawab hidup setelah POST
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Nyalakan' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(f.mock.calls.some(([u, init]) => u === '/api/capabilities/filesWrite' && JSON.parse(init.body).enabled === true)).toBe(true)
     await settle()
@@ -324,9 +324,9 @@ describe('flag/capability mati', () => {
     fireEvent.change(input, { target: { value: 'z.txt' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await settle()
-    expect(await screen.findByText('Gagal mengganti nama “a.txt”. Kemampuan “Ubah dan unggah file” sedang mati.')).toBeTruthy()
-    fireEvent.click(screen.getByText('Nyalakan…'))
-    expect(within(await screen.findByRole('dialog')).getByText('Nyalakan “Ubah dan unggah file”')).toBeTruthy()
+    expect(await screen.findByText('Could not rename “a.txt”. The “Edit and upload files” capability is turned off.')).toBeTruthy()
+    fireEvent.click(screen.getByText('Turn on…'))
+    expect(within(await screen.findByRole('dialog')).getByText('Turn on “Edit and upload files”')).toBeTruthy()
   })
 
   it('slot langsung: menu() kosong dan onKey() false untuk node yang belum terbukti aktif', () => {
@@ -341,7 +341,7 @@ describe('flag/capability mati', () => {
     const c = await mount()
     key(c, 'ArrowDown')
     key(c, 'Delete')
-    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Pindahkan ke Trash'))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Move to Trash'))
     await settle()
     expect(window.confirm).not.toHaveBeenCalled()
     expect(window.prompt).not.toHaveBeenCalled()

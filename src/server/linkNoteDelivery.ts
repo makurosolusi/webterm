@@ -1,54 +1,62 @@
-// Delivers `linkNote` notes into Claude Code PTYs — only when it cannot hurt. The gate is nodeterm's
-// (`src/renderer/lib/noteLink.ts:205-226` `linkNoteRefusal` + core `pty.sendToEmptyPrompt`):
-// - never into a `working` agent (it would land mid-turn) or a `blocked` one (the Enter would answer
-//   the permission prompt); `waiting` (turn over) and no-status-yet (fresh, at its prompt) are idle;
-// - only when the input box is PROVEN empty on the rebuilt screen (`readClaudeComposer`): a draft,
-//   a dialog, or an unreadable screen all refuse.
-// Unlike nodeterm, a refused note is QUEUED, not dropped (the user asked to see every wire/unwire):
-// each tick re-diffs what the node is wired to against what it was last told, so a queued note is
-// always the current net change and a wire+unwire before delivery says nothing.
+// Link notes (`linkNote`) as OUTBOX mail: this module decides WHAT a Claude Code node must be told
+// about its cables; `outbox/` decides WHEN and HOW it is delivered (idle + proven-empty composer,
+// queued while busy, delivered at the end of the turn, exactly-once per operationId).
 //
-// Driven by a 1 s poll, not by workspace saves: one loop sees edge edits, renames, the agent going
-// idle and the user clearing the input alike, without hooking into the save path.
-// ponytail: polls every workspace each second; move to a save/status event if canvases get large.
-import type { AgentStatus, Workspace } from '../shared/workspace'
+// Unlike nodeterm (`src/renderer/lib/noteLink.ts:205-226`), a refused note is QUEUED, not dropped
+// (the user asked to see every wire/unwire). Coalescing is kept by superseding: each pass diffs what
+// the node is wired to now against what it was last TOLD, and the queued note for that node is
+// replaced by the current net change (or cancelled when the net change is nothing), so a
+// wire+unwire before delivery says nothing.
+//
+// Event-driven (F1-d), no timer: a pass runs on `edge.change` (wire/unwire/rename, recorded by the
+// workspace save) and on the agent going idle; the outbox wakes itself on the same idle hooks.
+import { createHash } from 'node:crypto'
+import type { Workspace } from '../shared/workspace'
 import { hasClaudeHookSettings } from '../shared/workspace'
 import { buildLinkDoc } from './contextLink'
 import { markHookContextAnnounced } from './hookContext'
 import { linkedBrowsers, markBrowsersAnnounced } from './linkAwareness'
 import { buildLinkNote, linkEntries, type LinkEntry } from './linkNote'
-import { composerText, readClaudeComposer } from './linkNoteComposer'
-import { renderStyledScreen } from './linkNoteScreen'
 import { createLogger } from './logs'
+import { eventBus, type EventBus } from './events/eventBus'
+import type { OutboxDelivery } from './outbox/outboxDelivery'
 
 const log = createLogger('linkNote')
 
+/** operationId prefix of a node's link notes: `linknote:<nodeId>:<pid>:<rev>:<hash>`. */
+export const LINK_NOTE_OP = 'linknote:'
+const opPrefix = (nodeId: string): string => `${LINK_NOTE_OP}${nodeId}:`
+
 export interface LinkNoteDeps {
   workspaces(): Workspace[]
-  sessions: {
-    statusOf(id: string): AgentStatus | undefined
-    screenSource(id: string): { data: string; seq: number; cols: number; rows: number; pid: number } | undefined
-    input(id: string, data: string): void
-  }
-  render?: (data: string, cols: number, rows: number) => Promise<string>
-  sleep?: (ms: number) => Promise<void>
+  sessions: { screenSource(id: string): { pid: number } | undefined }
+  outbox: Pick<OutboxDelivery, 'enqueue' | 'cancel' | 'register'>
 }
-
-/** Enter goes in a SEPARATE write once the text is on screen: an Enter in the same burst is read by
- *  Claude Code as a line break and the note sits unsent (nodeterm `core/typed-input.ts`, measured). */
-const SUBMIT_POLL_MS = 100
-const SUBMIT_POLLS = 20
-
-const idle = (s: AgentStatus | undefined): boolean => s === undefined || s === 'waiting'
 
 export class LinkNoteDelivery {
   /** What each node was last told, tied to the PTY it was told in (a restart re-baselines). */
-  private told = new Map<string, { pid: number; links: LinkEntry[] }>()
-  /** The state a note was last refused in; unchanged state = skip the screen rebuild. */
-  private refusedAt = new Map<string, string>()
+  private told = new Map<string, { pid: number; rev: number; links: LinkEntry[] }>()
+  /** The state each queued note announces, applied when the outbox submits it. */
+  private pending = new Map<string, { nodeId: string; pid: number; links: LinkEntry[]; ws: Workspace }>()
   private running = false
 
-  constructor(private deps: LinkNoteDeps) {}
+  constructor(private deps: LinkNoteDeps) {
+    deps.outbox.register(LINK_NOTE_OP, {
+      // A note this process did not compute (queued before a restart) describes a dead PTY: stale.
+      accept: (m) => this.pending.has(m.operationId),
+      // Right BEFORE the submitting Enter: that Enter fires UserPromptSubmit, whose
+      // additionalContext must see this change as already announced.
+      beforeSubmit: (m) => {
+        const p = this.pending.get(m.operationId)
+        if (!p) return
+        this.pending.delete(m.operationId)
+        this.setTold(p.nodeId, p.pid, p.links)
+        markBrowsersAnnounced(p.nodeId, linkedBrowsers(p.ws, p.nodeId))
+        markHookContextAnnounced(p.nodeId, buildLinkDoc(p.ws, p.nodeId))
+        log.info('linkNote.delivered', 'Link note delivered', { ids: { nodeId: p.nodeId } })
+      },
+    })
+  }
 
   /** One pass over every live Claude Code node. Re-entrant calls are skipped, never stacked. */
   async tick(): Promise<void> {
@@ -62,10 +70,10 @@ export class LinkNoteDelivery {
           const src = this.deps.sessions.screenSource(n.id)
           if (!src) continue
           seen.add(n.id)
-          await this.consider(ws, n.id, src)
+          this.consider(ws, n.id, src.pid)
         }
       }
-      for (const id of this.told.keys()) if (!seen.has(id)) { this.told.delete(id); this.refusedAt.delete(id) }
+      for (const id of this.told.keys()) if (!seen.has(id)) this.told.delete(id)
     } finally {
       this.running = false
     }
@@ -74,70 +82,81 @@ export class LinkNoteDelivery {
   /** A hook just announced the current links via additionalContext: that counts as told. */
   markTold(nodeId: string, ws: Workspace): void {
     const pid = this.deps.sessions.screenSource(nodeId)?.pid
-    if (pid !== undefined) this.told.set(nodeId, { pid, links: linkEntries(ws, nodeId) })
+    if (pid === undefined) return
+    this.setTold(nodeId, pid, linkEntries(ws, nodeId))
+    this.supersede(nodeId)
   }
 
-  private async consider(ws: Workspace, id: string, src: NonNullable<ReturnType<LinkNoteDeps['sessions']['screenSource']>>): Promise<void> {
+  private setTold(nodeId: string, pid: number, links: LinkEntry[]): void {
+    this.told.set(nodeId, { pid, links, rev: (this.told.get(nodeId)?.rev ?? 0) + 1 })
+  }
+
+  /** Cancel the node's queued notes except `keepOp`, and forget what they would have announced. */
+  private supersede(nodeId: string, keepOp?: string): void {
+    this.deps.outbox.cancel(nodeId, opPrefix(nodeId), keepOp)
+    for (const [op, p] of this.pending) if (p.nodeId === nodeId && op !== keepOp) this.pending.delete(op)
+  }
+
+  private consider(ws: Workspace, id: string, pid: number): void {
     const now = linkEntries(ws, id)
     const told = this.told.get(id)
     // First sight of this PTY: SessionStart's additionalContext lists the current links, so they
     // are the baseline, not news.
-    if (!told || told.pid !== src.pid) { this.told.set(id, { pid: src.pid, links: now }); return }
+    if (!told || told.pid !== pid) { this.setTold(id, pid, now); this.supersede(id); return }
     const note = buildLinkNote(told.links, now)
-    if (!note) { this.refusedAt.delete(id); return }
-    const status = this.deps.sessions.statusOf(id)
-    if (!idle(status)) return
-    const state = `${src.seq}\0${status}\0${note}`
-    if (this.refusedAt.get(id) === state) return
-    const composer = readClaudeComposer(await this.screen(src))
-    if (composer !== 'empty') { this.refusedAt.set(id, state); return }
-    this.refusedAt.delete(id)
-    await this.deliver(ws, id, now, note)
-  }
-
-  private screen(src: { data: string; cols: number; rows: number }): Promise<string> {
-    return (this.deps.render ?? renderStyledScreen)(src.data, src.cols, src.rows)
-  }
-
-  private async deliver(ws: Workspace, id: string, now: LinkEntry[], note: string): Promise<void> {
-    const pid = this.deps.sessions.screenSource(id)?.pid
-    if (pid === undefined) return
-    // Marked BEFORE the write: submitting the note fires UserPromptSubmit, whose additionalContext
-    // must see this change as already announced.
-    this.told.set(id, { pid, links: now })
-    markBrowsersAnnounced(id, linkedBrowsers(ws, id))
-    markHookContextAnnounced(id, buildLinkDoc(ws, id))
-    this.deps.sessions.input(id, note)
-    const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
-    for (let i = 0; i < SUBMIT_POLLS; i++) {
-      await sleep(SUBMIT_POLL_MS)
-      const src = this.deps.sessions.screenSource(id)
-      if (!src) return
-      if (composerText(await this.screen(src))?.startsWith('[webterm]')) {
-        this.deps.sessions.input(id, '\r')
-        log.info('linkNote.delivered', 'Link note delivered', { ids: { nodeId: id } })
-        return
-      }
-    }
-    // Typed but never seen on screen: the Enter is withheld (it could submit something else).
-    log.warn('linkNote.notSubmitted', 'Link note typed but not confirmed on screen; Enter withheld', { ids: { nodeId: id } })
+    if (!note) { this.supersede(id); return }
+    // `rev` makes the same text after a later change a NEW operation; within one rev a re-run of
+    // this pass is a retry of the same operation and dedupes.
+    const op = `${opPrefix(id)}${pid}:${told.rev}:${createHash('sha256').update(note).digest('hex').slice(0, 16)}`
+    this.supersede(id, op)
+    this.pending.set(op, { nodeId: id, pid, links: now, ws })
+    this.deps.outbox.enqueue({ to: id, body: note, kind: 'visible', operationId: op, createdBy: 'linkNote' })
   }
 }
 
 let singleton: LinkNoteDelivery | undefined
 
-/** Start the process-wide loop once (idempotent). Deps imported lazily: `db`/`sessions` pull
+/** Hook events after which the agent may be idle at an empty prompt. */
+export const LINK_NOTE_IDLE_HOOKS: ReadonlySet<string> = new Set(['hook.Stop', 'hook.StopFailure', 'hook.Notification'])
+
+/**
+ * Runs `delivery.tick()` on every edge change and idle hook. Passes never overlap; an event during
+ * a pass queues exactly one more pass (an event is never lost to the re-entrancy guard). Returns
+ * the unsubscribe function and a `settled` promise for tests.
+ */
+export function subscribeLinkNotes(delivery: LinkNoteDelivery, bus: Pick<EventBus, 'subscribe'> = eventBus) {
+  let current: Promise<void> | null = null
+  let again = false
+  const kick = (): void => {
+    if (current) { again = true; return }
+    current = (async () => {
+      do {
+        again = false
+        await delivery.tick().catch((e) => log.error('linkNote.tick', 'Link note pass failed', { error: String(e) }))
+      } while (again)
+      current = null
+    })()
+  }
+  const offEdge = bus.subscribe('edge.change', kick)
+  const offHook = bus.subscribe('hook.*', (e) => { if (LINK_NOTE_IDLE_HOOKS.has(e.kind)) kick() })
+  return {
+    kick,
+    settled: (): Promise<void> => current ?? Promise.resolve(),
+    stop(): void { offEdge(); offHook() },
+  }
+}
+
+/** Start the process-wide subscriber once (idempotent). Deps imported lazily: `db`/`sessions` pull
  *  `bun:sqlite` and the PTY, which node-env tests of the hook route must never load. */
-export async function startLinkNotes(intervalMs = 1000): Promise<LinkNoteDelivery> {
+export async function startLinkNotes(): Promise<LinkNoteDelivery> {
   if (singleton) return singleton
-  const [{ db }, { sessions }] = await Promise.all([import('./db'), import('./sessions')])
+  const [{ db }, { sessions }, { startOutbox }] = await Promise.all([import('./db'), import('./sessions'), import('./outbox/outboxRuntime')])
+  const outbox = await startOutbox()
   if (singleton) return singleton
-  const delivery = new LinkNoteDelivery({ workspaces: () => db.list(), sessions })
+  const delivery = new LinkNoteDelivery({ workspaces: () => db.list(), sessions, outbox })
   singleton = delivery
-  const timer = setInterval(() => {
-    delivery.tick().catch((e) => log.error('linkNote.tick', 'Link note pass failed', { error: String(e) }))
-  }, intervalMs)
-  timer.unref?.()
+  // One pass now baselines every live PTY, so the first cable change after boot is news.
+  subscribeLinkNotes(delivery).kick()
   return delivery
 }
 

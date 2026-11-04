@@ -4,34 +4,34 @@ import type { FsErrCode, FsFail } from '../shared/fsContract'
 import type { NameProblem } from './filesName'
 import { isAuthFail } from './filesView'
 
-/** Kata kerja mutasi untuk kalimat galat: "Gagal <aksi> “nama”". */
+/** Kata kerja mutasi untuk kalimat galat: "Could not <aksi> “nama”". */
 export type MutateAction = 'delete' | 'rename' | 'duplicate' | 'restore'
 const ACTION_WORD: Record<MutateAction, string> = {
-  delete: 'menghapus', rename: 'mengganti nama', duplicate: 'menduplikat', restore: 'memulihkan',
+  delete: 'delete', rename: 'rename', duplicate: 'duplicate', restore: 'restore',
 }
 
 /** Alasan per kode galat (satu-satunya peta; `Record` penuh = kode baru di kontrak memaksa kalimat baru). */
 const REASON: Record<FsErrCode, (name: string) => string> = {
-  ENOENT: () => 'Item tidak ditemukan; mungkin sudah dipindah atau dihapus.',
-  EEXIST: (n) => `Nama “${n}” sudah dipakai di folder ini.`,
-  EACCES: () => 'Izin ditolak untuk akun yang menjalankan server.',
-  EROFS: () => 'Lokasi ini hanya-baca (read-only).',
-  EISDIR: () => 'Item ini adalah folder, bukan file.',
-  ENOTDIR: () => 'Salah satu bagian path bukan folder.',
-  EINVAL: () => 'Operasi tidak valid, misalnya memindahkan folder ke dalam dirinya sendiri atau nama tak sah.',
-  ENAMETOOLONG: () => 'Nama terlalu panjang (maksimum 255 byte).',
-  ENOSPC: () => 'Ruang disk penuh.',
-  ENOTEMPTY: () => 'Folder tujuan tidak kosong.',
-  EXDEV: () => 'Tidak bisa dipindah lintas volume.',
-  EVERSION: () => 'Isi berubah sejak dibuka.',
-  ETOOLARGE: () => 'Ukuran melewati batas.',
-  EBINARY: () => 'Item ini berkas biner.',
-  EDISABLED: () => 'Kemampuan “Ubah dan unggah file” sedang mati.',
-  EIO: () => 'Terjadi kesalahan saat mengakses disk atau jaringan.',
+  ENOENT: () => 'Item not found; it may have been moved or deleted.',
+  EEXIST: (n) => `The name “${n}” is already taken in this folder.`,
+  EACCES: () => 'Permission denied for the account running the server.',
+  EROFS: () => 'This location is read-only.',
+  EISDIR: () => 'This item is a folder, not a file.',
+  ENOTDIR: () => 'Part of the path is not a folder.',
+  EINVAL: () => 'Invalid operation, such as moving a folder into itself or using an invalid name.',
+  ENAMETOOLONG: () => 'Name is too long (maximum 255 bytes).',
+  ENOSPC: () => 'The disk is full.',
+  ENOTEMPTY: () => 'The destination folder is not empty.',
+  EXDEV: () => 'Items can’t be moved across volumes.',
+  EVERSION: () => 'The contents changed since the file was opened.',
+  ETOOLARGE: () => 'The size exceeds the limit.',
+  EBINARY: () => 'This item is a binary file.',
+  EDISABLED: () => 'The “Edit and upload files” capability is turned off.',
+  EIO: () => 'An error occurred while accessing the disk or network.',
 }
-const REASON_AUTH = 'Sesi ditolak (401). Muat ulang halaman atau masuk lagi.'
+const REASON_AUTH = 'Session rejected (401). Reload the page or sign in again.'
 /** Pemulihan ke tempat asal yang sudah terisi: EEXIST bermakna lain daripada saat rename. */
-const REASON_RESTORE_EXISTS = 'Tempat asalnya sudah terisi item lain, jadi tidak ditimpa.'
+const REASON_RESTORE_EXISTS = 'Another item already exists at the original location, so it was not overwritten.'
 
 /** Alasan satu `FsFail` dalam bahasa jelas; 401 (terselubung sebagai EIO oleh fsClient) dikenali. */
 export function failReason(fail: Pick<FsFail, 'code' | 'error'>, name: string, action?: MutateAction): string {
@@ -40,23 +40,23 @@ export function failReason(fail: Pick<FsFail, 'code' | 'error'>, name: string, a
   return REASON[fail.code](name)
 }
 
-/** Kalimat lengkap satu kegagalan: "Gagal menghapus “a”. <alasan>". */
+/** Kalimat lengkap satu kegagalan: "Could not delete “a”. <alasan>". */
 export function failText(action: MutateAction, name: string, fail: Pick<FsFail, 'code' | 'error'>, subject = name): string {
   // `subject` = nama yang dirujuk alasan (rename EEXIST menyebut nama TUJUAN, bukan nama sumber).
-  return `Gagal ${ACTION_WORD[action]} “${name}”. ${failReason(fail, subject, action)}`
+  return `Could not ${ACTION_WORD[action]} “${name}”. ${failReason(fail, subject, action)}`
 }
 
 const PROBLEM: Record<NameProblem, string> = {
-  empty: 'Nama tidak boleh kosong.',
-  reserved: 'Nama “.” dan “..” tidak boleh dipakai.',
-  slash: 'Nama tidak boleh memuat garis miring (/ atau \\).',
-  nul: 'Nama memuat karakter terlarang.',
-  long: 'Nama terlalu panjang (maksimum 255 byte).',
+  empty: 'Name can’t be empty.',
+  reserved: 'The names “.” and “..” can’t be used.',
+  slash: 'Name can’t contain a slash (/ or \\).',
+  nul: 'Name contains a forbidden character.',
+  long: 'Name is too long (maximum 255 bytes).',
 }
 /** Pesan validasi nama untuk input rename. */
 export const nameProblemText = (p: NameProblem): string => PROBLEM[p]
 
-const items = (n: number, first: string): string => (n === 1 ? `“${first}”` : `${n} item`)
+const items = (n: number, first: string): string => (n === 1 ? `“${first}”` : `${n} items`)
 
 export const MENU = {
   rename: 'Rename…', duplicate: 'Duplicate', trash: 'Delete', permanent: 'Delete Permanently…',
@@ -64,20 +64,20 @@ export const MENU = {
 export const KEYS = { rename: 'F2', trash: 'Delete', permanent: '⇧Delete' } as const
 
 export const CONFIRM = {
-  cancel: 'Batal',
-  trashTitle: (n: number, first: string) => `Pindahkan ${items(n, first)} ke Trash?`,
-  trashBody: 'Item bisa dipulihkan lewat Undo beberapa detik setelahnya.',
-  trashOk: 'Pindahkan ke Trash',
-  permTitle: (n: number, first: string) => `Hapus permanen ${items(n, first)}?`,
-  permBody: 'Tindakan ini tidak bisa dibatalkan.',
-  permOk: 'Hapus permanen',
+  cancel: 'Cancel',
+  trashTitle: (n: number, first: string) => `Move ${items(n, first)} to Trash?`,
+  trashBody: 'You can restore with Undo for a few seconds afterwards.',
+  trashOk: 'Move to Trash',
+  permTitle: (n: number, first: string) => `Permanently delete ${items(n, first)}?`,
+  permBody: 'This action can’t be undone.',
+  permOk: 'Delete Permanently',
 } as const
 
 export const TOAST = {
   undo: 'Undo',
-  trashed: (n: number, first: string) => `${items(n, first)} dipindahkan ke Trash.`,
-  deleted: (n: number, first: string) => `${items(n, first)} dihapus permanen.`,
-  duplicated: (n: number, first: string) => `${items(n, first)} diduplikat.`,
-  restored: (n: number, first: string) => `${items(n, first)} dipulihkan.`,
-  failedSome: (failed: number, total: number) => (total === 1 ? 'Operasi gagal.' : `${failed} dari ${total} item gagal diproses.`),
+  trashed: (n: number, first: string) => `Moved ${items(n, first)} to Trash.`,
+  deleted: (n: number, first: string) => `Permanently deleted ${items(n, first)}.`,
+  duplicated: (n: number, first: string) => `Duplicated ${items(n, first)}.`,
+  restored: (n: number, first: string) => `Restored ${items(n, first)}.`,
+  failedSome: (failed: number, total: number) => (total === 1 ? 'The operation failed.' : `${failed} of ${total} items failed.`),
 } as const

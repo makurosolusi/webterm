@@ -14,6 +14,8 @@ import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspac
 import type { Db } from './db'
 import { BodyReadError } from './cappedRequestBody'
 import { logWorkspaceSave, workspaceLog } from './workspacesLog'
+import { guardWorkspaceRepos } from './repoHygiene'
+import { produceEdgeChange } from './events/producers.edge'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
  *  bila path/method bukan milik modul ini. */
@@ -98,6 +100,7 @@ export async function workspacesRoute(
       if (!b) return BAD_JSON
       const created = guarded('create', undefined, () => store.create(b.name, b.cwd, b.color))
       workspaceLog.created(created)
+      void guardWorkspaceRepos([created]) // secrets guard without a restart; never throws per repo
       return { status: 201, body: created }
     }
   }
@@ -122,6 +125,8 @@ export async function workspacesRoute(
       guarded('save', id, () => store.save(ws))
       const saved = store.get(id)
       if (saved) logWorkspaceSave(prev, saved)
+      if (saved) produceEdgeChange(prev, saved) // linkNote + wake subscribe to this, not a poll
+      if (saved && saved.cwd !== prev?.cwd) void guardWorkspaceRepos([saved]) // cwd changed: guard the new repo
       return saved ? { status: 200, body: saved } : NOT_FOUND
     }
     if (method === 'DELETE') {

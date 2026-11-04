@@ -18,6 +18,9 @@ import { buildButtonDeps } from './channels/channelButtons'
 import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
 import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
+import { ensureRoutines } from './routines/routinesRuntime'
+import { startCostCapture } from './cost/costRuntime'
+import { armDagLoop } from './dag/dag.runtime'
 import { bootCa2 } from './central/ca2Boot'
 import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
@@ -25,6 +28,7 @@ import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
+import { lspUpgrade } from './lsp/lsp.route'
 import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import { installBrowserAgentShim } from './browserAgentShim'
@@ -34,6 +38,10 @@ import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureC
 import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
+import { guardWorkspaceRepos } from './repoHygiene'
+import { startPortScanner } from './ports/ports.runtime'
+import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
+import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
@@ -90,6 +98,13 @@ if (isEnabled('telegram')) await telegramHot.start()
 // liveness probe feeds the autonomy reconciler.
 const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: telegramHot.channels?.bots ?? null, settings: () => db.getSettings() })
 startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAlive: ca2.agentAlive } : {}) })
+// Schedules and event triggers must fire without the UI open (otherwise the first /api/routines call starts them); never under a test runner.
+if (process.env.NODE_ENV !== 'test') {
+  try { ensureRoutines() } catch (e) { log.warn('routines.start.failed', 'Cannot start routines at boot', { cause: e instanceof Error ? e.message : String(e) }) }
+  // Cost capture listens to agent hooks from the first session; a DAG left active by a restart resumes polling.
+  startCostCapture().catch((e: unknown) => log.warn('cost.start.failed', 'Cannot start cost capture at boot', { cause: e instanceof Error ? e.message : String(e) }))
+  try { armDagLoop() } catch (e) { log.warn('dag.start.failed', 'Cannot arm the DAG scheduler at boot', { cause: e instanceof Error ? e.message : String(e) }) }
+}
 
 const API_PREFIX = '/api/'
 
@@ -149,8 +164,17 @@ await reconcile(new Set(), enabledSet(process.env))
 booted = true
 applyPtyOptions()
 void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE off
+void guardWorkspaceRepos(db.list()) // secrets guard: auto-.gitignore untracked secret files in workspace repos
+// Port events must exist without the UI open (otherwise the first GET /api/ports starts it); never under a test runner.
+if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => log.warn('ports.start.failed', 'Cannot start port scanner at boot', { cause: e instanceof Error ? e.message : String(e) }))
+// Web Push to the /m PWA: a gate must reach a phone that is asleep, so the loop runs without /m open.
+if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
 const server = http.createServer()
+// Dev-server proxy (/proxy/<port>/, /absproxy/<port>/) lives on its OWN port = own origin, so a proxied
+// page (arbitrary npm code) cannot read the UI's token. Same bind host; PORT+1 or WEBTERM_PROXY_PORT, busy -> OS port.
+startDevProxy({ host: HOST, mainPort: PORT, allowedHosts: HOSTS, env: process.env })
+  .catch((e: unknown) => log.warn('proxy.start.failed', 'Cannot start the dev-server proxy', { cause: e instanceof Error ? e.message : String(e) }))
 
 if (dev) {
   // Vite in middleware mode shares this port, so the app and its HMR websocket
@@ -162,6 +186,7 @@ if (dev) {
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
     if (telegramHot.handle(req, res)) return
+    if (refuseProxyOnMain(req, res)) return // 404: the proxy has its own origin (proxy.routes.ts)
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
@@ -179,6 +204,7 @@ if (dev) {
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
     if (telegramHot.handle(req, res)) return
+    if (refuseProxyOnMain(req, res)) return // 404: the proxy has its own origin (proxy.routes.ts)
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
@@ -218,6 +244,8 @@ server.on('upgrade', (req, socket, head) => {
     return
   }
   if (getTokenState().token !== undefined) logAuthLogin(url.pathname)
+  // Editor language servers: same gates as above; root = the workspace's stored cwd (lsp.route.ts).
+  if (route === 'lsp') return lspUpgrade(req, socket, head, url, { workspace: (id) => db.get(id) })
   if (route === 'browser') {
     // Gerbang `allowed()` di atas sama dengan /ws: root token saja, node-token ditolak (path ini tak ada di allowlist node-token).
     const workspaceId = url.searchParams.get('workspaceId')

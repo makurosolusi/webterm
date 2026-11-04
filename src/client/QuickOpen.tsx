@@ -8,15 +8,15 @@ import { Input } from '@/components/ui/input'
 import { fuzzyFilter } from './fuzzy'
 import { search } from './fsClient'
 
-/** Satu-satunya tempat string UI Quick Open (Indonesia). */
+/** Satu-satunya tempat string UI Quick Open (Inggris). */
 export const QUICK_TEXT = {
-  title: 'Buka file cepat',
-  description: 'Ketik untuk mencari file di folder ini, Enter untuk membuka.',
-  placeholder: 'Cari file…',
-  loading: 'Memuat daftar file…',
-  failed: 'Gagal memuat daftar file: ',
-  none: 'Tidak ada file yang cocok.',
-  truncated: 'Daftar dipotong; persempit pencarian.',
+  title: 'Quick Open',
+  description: 'Type to search files in this folder, Enter to open.',
+  placeholder: 'Search files…',
+  loading: 'Loading file list…',
+  failed: 'Could not load the file list: ',
+  none: 'No matching files.',
+  truncated: 'List truncated; narrow your search.',
 }
 /** Nilai `q` yang berarti "semua file" (dispatcher mewajibkan `q` non-kosong). */
 export const QUICK_OPEN_MATCH_ALL = '*'

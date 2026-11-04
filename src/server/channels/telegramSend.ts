@@ -155,10 +155,7 @@ export async function sendTelegramMessage(
     text: input.text.slice(0, TELEGRAM_MAX_TEXT),
   }
   if (input.threadId !== undefined) body['message_thread_id'] = input.threadId
-  if (input.parseMode === 'HTML') {
-    body['parse_mode'] = 'HTML'
-    body['link_preview_options'] = { is_disabled: true }
-  }
+  if (input.parseMode === 'HTML') Object.assign(body, TELEGRAM_HTML_PARAMS)
 
   const controller = typeof AbortController === 'function' ? new AbortController() : undefined
   let timedOut = false
@@ -233,6 +230,13 @@ export async function sendTelegramMessage(
 
 // Bot API 400 for markup it cannot parse; same pattern as OpenClaw `rich-plain-fallback.ts`.
 const PARSE_ERROR_RE = /can't parse entities|find end of the entity/i
+
+/**
+ * Bot API params every rendered chunk is sent with. The ONE renderer for outgoing text is
+ * `telegramMarkdownChunks` + these params: outbox replies (Central, commands, approvals, agent
+ * notices), the status card and the ChannelAdapter all go through it.
+ */
+export const TELEGRAM_HTML_PARAMS = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } } as const
 
 /** Tag-balanced HTML chunks (each <= `TELEGRAM_MAX_TEXT`) for one Markdown reply. Deterministic. */
 export function telegramMarkdownChunks(markdown: string): string[] {

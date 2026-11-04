@@ -41,6 +41,7 @@ vi.mock('./fsClient', () => ({
 }))
 
 import EditorNode from './EditorNode'
+import { lspHint, setLspHint } from './editorLsp.hints'
 
 afterEach(() => {
   cleanup(); document.documentElement.removeAttribute('data-theme')
@@ -98,6 +99,32 @@ describe('EditorNode chrome', () => {
     await waitFor(() => expect(fake.state.createdWith).not.toBeNull())
     document.documentElement.setAttribute('data-theme', 'light')
     await waitFor(() => expect(fake.state.setTheme).toHaveBeenCalledWith('webterm-light-modern'))
+  })
+})
+
+describe('EditorNode language server hint', () => {
+  const HINT = { message: 'TypeScript language server not found for this workspace.', command: 'npm install -D typescript-language-server typescript' }
+  afterEach(() => setLspHint('typescript', null))
+
+  it('shows the install command for a .ts file when no server exists, copies it, and dismisses', async () => {
+    setLspHint('typescript', HINT)
+    const { container } = mount({ path: '/x/a.ts' })
+    await waitFor(() => expect(fake.state.createdWith).not.toBeNull())
+    expect(screen.getByRole('status').textContent).toContain(HINT.command)
+    fireEvent.click(screen.getByText('Copy command'))
+    expect(clip.writeClipboard).toHaveBeenCalledWith(HINT.command)
+    const dismiss = container.querySelector('.editor-node__lsp-hint vscode-toolbar-button')
+    expect(dismiss).not.toBeNull()
+    fireEvent.click(dismiss!)
+    expect(screen.queryByText('Copy command')).toBeNull()
+    expect(lspHint('typescript')).toBeNull()
+  })
+
+  it('shows nothing for a language the hint is not about', async () => {
+    setLspHint('typescript', HINT)
+    mount()
+    await waitFor(() => expect(fake.state.createdWith).not.toBeNull())
+    expect(screen.queryByText('Copy command')).toBeNull()
   })
 })
 
@@ -175,7 +202,7 @@ describe('EditorNode simpan aman', () => {
 describe('EditorNode biner & non-UTF-8', () => {
   it('encoding binary: Monaco tidak dimuat, tanpa Save, placeholder + Copy Path', async () => {
     mount({ meta: { content: '', version: 'v1', encoding: 'binary' } })
-    expect(await screen.findByText(/File biner/)).toBeTruthy()
+    expect(await screen.findByText(/Binary file/)).toBeTruthy()
     expect(fake.state.loadMonaco).not.toHaveBeenCalled()
     expect(screen.queryByText('Save')).toBeNull()
     fireEvent.click(screen.getByText('Copy Path'))

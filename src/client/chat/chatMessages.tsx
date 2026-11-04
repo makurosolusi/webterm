@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
-import { splitProposalBlocks, type VisibleProposal } from './proposalBlocks'
+import { splitProposalBlocks, type LegacyProposal } from './proposalBlocks'
 
 const NEAR_BOTTOM_PX = 80
 
@@ -17,14 +17,6 @@ const ROLE_HEADER: Record<ChatMessage['role'], { icon: string; name: string }> =
   assistant: { icon: 'sparkle', name: 'Central agent' },
   tool: { icon: 'sparkle', name: 'Central agent' },
   system: { icon: 'info', name: 'System' },
-}
-
-/** Codicon per proposal tool; unknown tools fall back to a generic lightbulb. */
-const PROPOSAL_ICON: Record<string, string> = {
-  'goal.propose': 'target',
-  'plan.propose': 'checklist',
-  'task.assign': 'tasklist',
-  'approval.request': 'shield',
 }
 
 function summarize(value: unknown): string {
@@ -55,32 +47,15 @@ function ToolCard(props: { part: Extract<ChatPart, { type: 'tool' }> }) {
   )
 }
 
-function proposalGoal(proposal: VisibleProposal): string | undefined {
-  try {
-    const input = (JSON.parse(proposal.raw.slice('<webterm-proposal>'.length, -'</webterm-proposal>'.length)) as { input?: { goal?: unknown; statement?: unknown } }).input
-    const value = input?.goal ?? input?.statement
-    return typeof value === 'string' ? value : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function ProposalCard({ proposal }: { proposal: VisibleProposal }) {
-  const label = proposal.tool === 'goal.propose'
-    ? 'Goal proposal'
-    : proposal.tool === 'plan.propose'
-      ? 'Plan proposal'
-      : proposal.tool === 'task.assign'
-        ? 'Task assignment'
-        : proposal.tool === 'approval.request'
-          ? 'Approval request'
-        : `${proposal.tool} proposal`
-  const details = [proposal.projectId, proposal.itemId, proposalGoal(proposal)].filter(Boolean).join(' · ')
+/** Old history only: Central no longer writes these blocks, and nothing here can run one. */
+function LegacyProposalBlock({ proposal }: { proposal: LegacyProposal }) {
   return (
     <div className="chat-proposal" data-tool={proposal.tool}>
-      <span className={`chat-proposal__icon codicon codicon-${PROPOSAL_ICON[proposal.tool] ?? 'lightbulb'}`} aria-hidden="true" />
-      <span className="chat-proposal__label">{label}</span>
-      {details && <span className="chat-proposal__details">{details}</span>}
+      <span className="chat-proposal__icon codicon codicon-history" aria-hidden="true" />
+      <details className="chat-tool__detail chat-proposal__detail">
+        <summary>{`Legacy proposal · ${proposal.tool} (not run)`}</summary>
+        <pre>{proposal.body}</pre>
+      </details>
     </div>
   )
 }
@@ -98,7 +73,7 @@ function PartView(props: { part: ChatPart; assistant: boolean }) {
   return (
     <>
       {parsed.visible !== '' && <ChatMarkdown source={parsed.visible} />}
-      {parsed.proposals.map((proposal, index) => <ProposalCard key={`${proposal.tool}-${index}`} proposal={proposal} />)}
+      {parsed.proposals.map((proposal, index) => <LegacyProposalBlock key={`${proposal.tool}-${index}`} proposal={proposal} />)}
     </>
   )
 }

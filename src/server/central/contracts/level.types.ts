@@ -33,6 +33,8 @@ export interface GuardRequest {
 /** Why the guard refused or deferred. */
 export type GuardCode =
   | 'level_denied'
+  /** A persisted allow/ask/deny rule (src/server/policy) refused the capability. */
+  | 'policy_denied'
   | 'halted'
   | 'project_paused'
   | 'cap_project'

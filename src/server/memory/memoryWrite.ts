@@ -4,7 +4,8 @@
  * audit row commit together (RND/01-TEMUAN.md §6).
  */
 import type { Database } from 'bun:sqlite'
-import { execInsert, execWrite, newId, requireText, tx } from '../ledger/ledgerCore'
+import { execInsert, execWrite, getRow, newId, requireText, tx } from '../ledger/ledgerCore'
+import { guardMemoryWrite } from './memoryGuard'
 import {
   assertCanPromote,
   appendMemoryEvent,
@@ -19,6 +20,7 @@ import {
   type ClaimMemoryInput,
   MemoryAuthorityError,
   MemoryConflictError,
+  MemoryRejectedError,
   type Memory,
   type MemoryAuthority,
   type PromoteMemoryInput,
@@ -41,22 +43,27 @@ interface InsertRow {
 }
 
 function insertMemory(ctx: ReturnType<typeof memoryContext>, row: InsertRow): void {
+  // Same write guard as the v7 path (PII mask, tombstone, incognito); legacy rows default to trust `agent`.
+  const clean = guardMemoryWrite(ctx.db, {
+    projectId: row.projectId, title: row.title, body: row.body, status: row.status, trust: 'agent', refs: [row.sourceRef],
+  })
   try {
     execInsert(
       ctx.db,
       `INSERT INTO memory (id, project_id, scope, key, title, body, status,
-         source_kind, source_ref, supersedes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         source_kind, source_ref, supersedes, created_at, updated_at, valid_from)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       row.id,
       row.projectId,
       row.scope,
       row.key,
-      row.title,
-      row.body,
+      clean.title,
+      clean.body,
       row.status,
       row.sourceKind,
       row.sourceRef,
       row.supersedes,
+      row.now,
       row.now,
       row.now
     )
@@ -140,6 +147,10 @@ export function promoteMemory(
       throw new MemoryConflictError(`promoteMemory: ${id} is ${memory.status}, expected claim`)
     }
     assertCanPromote(authority.kind, memory.scope, 'promoteMemory')
+    // Poisoning guard: untrusted (external) content stays a claim whoever asks to promote it.
+    if (getRow(ctx.db, "SELECT 1 AS one FROM memory WHERE id = ? AND trust = 'external'", id) !== null) {
+      throw new MemoryRejectedError('untrusted_source', `promoteMemory: ${id} comes from an untrusted source`)
+    }
     const evidence = validateEvidence(input.evidence, at, memory.createdAt, 'promoteMemory')
     // The memory_au trigger reindexes memory_fts, so sqlite3_changes() reports the
     // trigger's statement, not this UPDATE. Verify the resulting row instead.
@@ -200,14 +211,17 @@ export function supersedeMemory(
       evidence = validateEvidence(input.evidence, at, old.createdAt, 'supersedeMemory')
     }
     const alias = `${old.key}#superseded:${old.id}`
+    const nextId = newId()
     // See promoteMemory: the FTS reindex trigger makes sqlite3_changes() unreliable.
     execWrite(
       ctx.db,
-      `UPDATE memory SET scope = ?, key = ?, status = 'superseded', superseded_at = ?,
-         updated_at = ? WHERE id = ? AND status = ?`,
+      `UPDATE memory SET scope = ?, key = ?, status = 'superseded', superseded_at = ?, valid_to = ?,
+         superseded_by = ?, updated_at = ? WHERE id = ? AND status = ?`,
       old.scope,
       alias,
       at,
+      at,
+      nextId,
       at,
       old.id,
       old.status
@@ -215,7 +229,6 @@ export function supersedeMemory(
     if (loadMemory(ctx, old.id).status !== 'superseded') {
       throw new MemoryConflictError(`supersedeMemory: concurrent change for ${id}`)
     }
-    const nextId = newId()
     insertMemory(ctx, {
       id: nextId,
       projectId: old.projectId,

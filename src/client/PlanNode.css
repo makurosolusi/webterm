@@ -1,0 +1,28 @@
+/* Plan node. Imported from PlanNode.tsx so it rides the node's chunk; tokens come from styles.css. */
+.plan-node__title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.plan-node__desc { color: var(--muted); font-size: 11px; }
+.plan-node__spacer { flex: 1; }
+.plan-node__actions { display: inline-flex; align-items: center; gap: 4px; }
+.plan-node__summary { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 4px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.plan-node__intent { color: var(--text); width: 100%; }
+.plan-node__wait { color: var(--vscode-editorWarning-foreground, #cca700); }
+.plan-node__msg { padding: 4px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.plan-node__body { display: flex; min-height: 0; flex: 1; overflow: auto; }
+.plan-node__notice { padding: 12px; margin: 0; color: var(--muted); font-size: 12px; }
+.plan-node__notice--error { color: var(--vscode-errorForeground, #f48771); }
+.plan-node__json { flex: 1; margin: 6px; resize: none; background: var(--sunken); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; }
+.plan-node__waves { display: flex; gap: 8px; list-style: none; margin: 0; padding: 8px; align-items: flex-start; }
+.plan-node__wave { min-width: 180px; max-width: 240px; flex: 0 0 auto; }
+.plan-node__wave-head { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.plan-node__tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plan-node__task { padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--raised); font-size: 12px; }
+.plan-node__task--gate { border-style: dashed; }
+.plan-node__task--running { border-color: var(--vscode-progressBar-background, #0e70c0); }
+.plan-node__task--done { opacity: 0.75; }
+.plan-node__task--failed { border-color: var(--vscode-errorForeground, #f48771); }
+.plan-node__task--blocked { border-color: var(--vscode-editorWarning-foreground, #cca700); }
+.plan-node__task-head { display: flex; align-items: center; gap: 4px; }
+.plan-node__badge, .plan-node__status { font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--sunken); color: var(--muted); }
+.plan-node__remove { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.plan-node__objective { margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.plan-node__meta { margin-top: 2px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }

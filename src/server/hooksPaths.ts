@@ -4,6 +4,13 @@ import { join } from 'node:path'
 import { dataDir } from './config'
 
 /**
+ * Env var holding the PATH (not the value) of the node's own curl header file. The token itself
+ * never enters an agent's env: on macOS any same-user process reads another's environment via
+ * `KERN_PROCARGS2` (verified, even from inside the Claude sandbox), so env is no place for it.
+ */
+export const NODE_HEADERS_ENV = 'WEBTERM_NODE_HEADERS'
+
+/**
  * Nama file di-hash, bukan `nodeId` mentah: id itu datang dari client lewat WebSocket dan tidak
  * pernah divalidasi sebagai nama file, jadi memakainya langsung adalah path traversal.
  */

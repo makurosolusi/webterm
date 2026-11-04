@@ -1,73 +1,77 @@
-// Daftar shortcut yang BENAR-BENAR terpasang di webterm hari ini. nodeterm menaruh daftar ini di
-// belakang tombol Help cluster kontrol lewat menu + panel; di sini satu overlay, karena dua dari
-// empat baris menu nodeterm (bug report, dokumentasi) tidak punya tujuan di webterm.
-// Tampilannya mengikuti editor Keyboard Shortcuts VS Code: tabel Command / Keybinding dengan chip `kbd`.
-import { Fragment, useEffect } from 'react'
+// Keyboard Shortcuts, generated from the command registry (`commandRegistry.ts`), so the list
+// cannot drift from what is wired. Imitates VS Code's Keyboard Shortcuts editor: Command /
+// Keybinding table with `kbd` chips, "Change Keybinding" records the next chord (Escape cancels),
+// overrides land in `keybindings.store.ts`, and a chord shared within one scope is flagged.
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { VscodeDialog } from '@/components/vscode/vscodeDialog'
-import { detectDialogPlatform, type DialogPlatform } from '@/components/vscode/vscodeDialogButtons'
+import { detectDialogPlatform } from '@/components/vscode/vscodeDialogButtons'
+import { chordKeys, effectiveKey, eventChord, findConflicts, useCommands, type Command } from './commandRegistry'
+import { resetKeybinding, setKeybinding, useKeybindingOverrides } from './keybindings.store'
+import './commandRegistry.defaults' // registers the fixed (surface-owned) shortcuts
 import './helpOverlay.css'
 
-/** Satu kunci simbolis (`Mod`, `Shift`, ...) atau teks literal; string tunggal = gestur, bukan kunci. */
-type Chord = readonly string[] | string
-
-const SHORTCUTS: readonly (readonly [readonly Chord[], string])[] = [
-  [[['Mod', 'K']], 'Cari node (command palette)'],
-  [[['Mod', 'M']], 'Tukar preview Markdown pada node editor yang di-hover'],
-  [[['Mod', 'S']], 'Simpan file di node editor'],
-  [
-    [['Mod', '+'], ['Mod', '−'], ['Mod', '0']],
-    'Ukuran font terminal fokus — perlu "Zoom font via keyboard" di settings',
-  ],
-  [[['Mod', 'Shift', 'U']], 'Tampilkan atau sembunyikan panel Output (log sistem)'],
-  [[['Shift', 'Enter']], 'Baris baru tanpa mengirim, di dalam terminal'],
-  [[['Backspace'], ['Delete']], 'Hapus node atau edge yang terpilih'],
-  [['Dobel-klik edge'], 'Hapus link context itu'],
-  [[['Escape']], 'Tutup overlay ini, settings, atau filter'],
-]
-
-const MAC_LABELS: Record<string, string> = { Mod: '⌘', Shift: '⇧', Backspace: '⌫', Delete: '⌦' }
-const PC_LABELS: Record<string, string> = { Mod: 'Ctrl' }
-
-function keyLabel(key: string, platform: DialogPlatform): string {
-  return (platform === 'mac' ? MAC_LABELS : PC_LABELS)[key] ?? key
+export const HELP_TEXT = {
+  title: 'Keyboard Shortcuts',
+  change: 'Change keybinding',
+  reset: 'Reset',
+  remove: 'Remove keybinding',
+  recording: 'Press the new key combination, Escape to cancel',
+  conflict: 'Also bound to: ',
+  none: '—',
 }
 
-function Keybinding({ chord, platform }: { chord: Chord; platform: DialogPlatform }) {
-  if (typeof chord === 'string') return <span className="help-shortcuts__gesture">{chord}</span>
+function Keybinding({ chord, isMac }: { chord: string; isMac: boolean }) {
   return (
     <span className="help-shortcuts__chord" data-slot="help-chord">
-      {chord.map((key, index) => (
-        <Fragment key={key}>
-          {index > 0 && platform !== 'mac' ? <span className="help-shortcuts__plus">+</span> : null}
-          <kbd className="help-kbd">{keyLabel(key, platform)}</kbd>
+      {chordKeys(chord, isMac).map((key, index) => (
+        <Fragment key={`${key}-${index}`}>
+          {index > 0 && !isMac ? <span className="help-shortcuts__plus">+</span> : null}
+          <kbd className="help-kbd">{key}</kbd>
         </Fragment>
       ))}
     </span>
   )
 }
 
-export default function HelpOverlay({ onClose, platform }: { onClose: () => void; platform?: string }) {
-  const os = detectDialogPlatform(platform)
-  // Escape ditangani dialog dan listener ini: dua jalur ke `onClose` aman (idempoten), dan listener
-  // window menjaga kontrak lama bila fokus sedang di luar dialog.
+/** Records one chord while mounted; capture phase on window so nothing else acts on that key. */
+function useChordRecorder(target: string | null, isMac: boolean, done: () => void): void {
   useEffect(() => {
+    if (!target) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') { done(); return }
+      const chord = eventChord(e, isMac)
+      if (!chord) return // bare modifier: keep listening
+      setKeybinding(target, chord)
+      done()
     }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [target, isMac, done])
+}
+
+export default function HelpOverlay({ onClose, platform, commands }: { onClose: () => void; platform?: string; commands?: readonly Command[] }) {
+  const isMac = detectDialogPlatform(platform) === 'mac'
+  const live = useCommands()
+  const list = commands ?? live
+  const overrides = useKeybindingOverrides()
+  const conflicts = useMemo(() => findConflicts(list, overrides), [list, overrides])
+  const labelOf = useMemo(() => new Map(list.map((c) => [c.id, c.label])), [list])
+  const [recording, setRecording] = useState<string | null>(null)
+  const stopRecording = useMemo(() => () => setRecording(null), [])
+  useChordRecorder(recording, isMac, stopRecording)
+
+  // Escape closes; while recording, the recorder above swallows it first (capture phase).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
   return (
-    <VscodeDialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
-      title="Keyboard Shortcuts"
-      width={720}
-      className="help-overlay"
-    >
+    <VscodeDialog open onOpenChange={(open) => { if (!open && !recording) onClose() }} title={HELP_TEXT.title} width={760} className="help-overlay">
       <table className="help-shortcuts" data-slot="help-shortcuts">
         <thead>
           <tr>
@@ -76,19 +80,47 @@ export default function HelpOverlay({ onClose, platform }: { onClose: () => void
           </tr>
         </thead>
         <tbody>
-          {SHORTCUTS.map(([chords, what]) => (
-            <tr key={what}>
-              <td>{what}</td>
-              <td>
-                {chords.map((chord, index) => (
-                  <Fragment key={index}>
-                    {index > 0 ? <span className="help-shortcuts__or">{' / '}</span> : null}
-                    <Keybinding chord={chord} platform={os} />
-                  </Fragment>
-                ))}
-              </td>
-            </tr>
-          ))}
+          {list.map((cmd) => {
+            const key = effectiveKey(cmd, overrides)
+            const clash = conflicts.get(cmd.id)
+            const editable = !cmd.fixed && !!cmd.run
+            return (
+              <tr key={cmd.id} data-command={cmd.id}>
+                <td>
+                  {cmd.label}
+                  {clash ? (
+                    <div className="help-shortcuts__conflict" data-slot="help-conflict" role="note">
+                      {HELP_TEXT.conflict + clash.map((id) => labelOf.get(id) ?? id).join(', ')}
+                    </div>
+                  ) : null}
+                </td>
+                <td>
+                  {recording === cmd.id ? (
+                    <span className="help-shortcuts__gesture" role="status">{HELP_TEXT.recording}</span>
+                  ) : key ? <Keybinding chord={key} isMac={isMac} />
+                    : cmd.gesture ? <span className="help-shortcuts__gesture">{cmd.gesture}</span>
+                    : <span className="help-shortcuts__gesture">{HELP_TEXT.none}</span>}
+                  {editable && recording !== cmd.id ? (
+                    <span className="help-shortcuts__actions">
+                      <Button variant="ghost" size="sm" aria-label={`${HELP_TEXT.change}: ${cmd.label}`} title={HELP_TEXT.change} onClick={() => setRecording(cmd.id)}>
+                        <span className="codicon codicon-edit" aria-hidden />
+                      </Button>
+                      {key ? (
+                        <Button variant="ghost" size="sm" aria-label={`${HELP_TEXT.remove}: ${cmd.label}`} title={HELP_TEXT.remove} onClick={() => setKeybinding(cmd.id, null)}>
+                          <span className="codicon codicon-close" aria-hidden />
+                        </Button>
+                      ) : null}
+                      {Object.hasOwn(overrides, cmd.id) ? (
+                        <Button variant="ghost" size="sm" aria-label={`${HELP_TEXT.reset}: ${cmd.label}`} title={HELP_TEXT.reset} onClick={() => resetKeybinding(cmd.id)}>
+                          <span className="codicon codicon-discard" aria-hidden />
+                        </Button>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </VscodeDialog>

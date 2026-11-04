@@ -39,8 +39,8 @@ export interface SessionsOptions {
    *  `--permission-mode` sama sekali, sehingga peluncuran tetap polos selama integrator belum
    *  menyambungkan settings. */
   claudePermissionMode?: AgentPermissionMode
-  /** `settings.hookReplyApprovals`. Absen/false = `NODETERM_PERM_WAIT_SECS` tidak dikirim, jadi hook
-   *  permission tidak menahan apa pun — perilaku sebelum setting ini ada. */
+  /** Unused since the dead `NODETERM_PERM_WAIT_SECS` injection was removed (the hold is
+   *  `PERM_WAIT_SECS_INTERACTIVE` in hooksSettings.ts). Remove with api.ts:86 and sessions.ts:105. */
   hookReplyApprovals?: boolean
   /** Sumber PTY. Di-inject supaya test bisa memakai PTY palsu tanpa `Bun.Terminal`. */
   spawn?: typeof spawnPty

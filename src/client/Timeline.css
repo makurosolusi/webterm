@@ -1,0 +1,40 @@
+/* Activity timeline body inside the VS Code bottom panel surface (22px rows, 11px chips). */
+.timeline { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.timeline-toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; flex-wrap: wrap; font-size: 12px; }
+.timeline-toolbar select { font: inherit; background: var(--vscode-dropdown-background, transparent); color: inherit; border: 1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.35)); }
+.timeline-spacer { flex: 1; }
+.timeline-connection, .timeline-integrity, .timeline-level, .timeline-ws, .timeline-running {
+  font-size: 11px; padding: 0 6px; border-radius: 8px; line-height: 16px; white-space: nowrap;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.timeline-connection[data-state='open'] { color: var(--vscode-testing-iconPassed, #73c991); }
+.timeline-integrity[data-state='ok'] { color: var(--vscode-testing-iconPassed, #73c991); border-color: currentColor; }
+.timeline-integrity[data-state='warning'] { color: var(--vscode-editorWarning-foreground, #cca700); border-color: currentColor; font-weight: 600; }
+.timeline-integrity[data-state='unknown'] { opacity: 0.7; }
+.timeline-body { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; }
+.timeline-empty { opacity: 0.7; margin: 8px 0; }
+.timeline-group { margin-top: 6px; }
+.timeline-group__head { display: flex; align-items: center; gap: 6px; height: var(--bottom-panel-row-h, 22px); font-weight: 600; }
+.timeline-group__label { all: unset; cursor: default; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.timeline-group__label { cursor: pointer; }
+button.timeline-group__label:hover, .timeline-line button:hover { text-decoration: underline; }
+.timeline-running { color: var(--vscode-progressBar-background, #0e70c0); }
+.timeline-lines { list-style: none; margin: 0; padding: 0 0 0 12px; }
+.timeline-line { min-height: var(--bottom-panel-row-h, 22px); display: flex; align-items: center; }
+.timeline-line > button { all: unset; cursor: pointer; }
+.timeline-line > button:focus-visible, .timeline-group__label:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
+.timeline-line time { opacity: 0.6; font-variant-numeric: tabular-nums; }
+.timeline-line[data-untrusted='true'] .timeline-text { font-style: italic; }
+.timeline-count { opacity: 0.7; }
+.timeline-older { margin-top: 8px; font: inherit; }
+/* Checkpoints (F3-c): Rewind control, preview dialog, "not rewindable" chip. */
+.timeline-line { flex-wrap: wrap; gap: 6px; }
+.timeline-norewind { font-size: 11px; padding: 0 6px; border-radius: 8px; line-height: 16px; border: 1px solid currentColor; color: var(--vscode-editorWarning-foreground, #cca700); }
+.timeline-rewind { font: inherit; font-size: 11px; }
+.timeline-rewind-note[data-state='error'] { color: var(--vscode-errorForeground, #f48771); }
+.timeline-rewind-dialog { flex-basis: 100%; border: 1px solid rgba(128, 128, 128, 0.35); padding: 6px 8px; margin: 4px 0; }
+.timeline-rewind-dialog ul { margin: 0; padding-left: 16px; }
+.timeline-rewind-verb { opacity: 0.7; }
+.timeline-rewind-patch { max-height: 240px; overflow: auto; font-size: 11px; margin: 6px 0; }
+.timeline-rewind-warn { opacity: 0.8; font-size: 11px; }
+.timeline-rewind-actions { display: flex; gap: 6px; }

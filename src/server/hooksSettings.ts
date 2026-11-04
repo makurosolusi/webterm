@@ -1,10 +1,13 @@
 import { writeFileSync } from 'node:fs'
+import { claudeProtectionSettings } from './agentSandbox'
 import { TOKEN_HEADER } from './auth'
+import { dataDir } from './config'
 import { NODE_TOKEN_HEADER, nodeToken } from './hooksTokens'
 import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir, houseRulesPath } from './hooksPaths'
 import { encodeQueryValue, shq } from './hooksQuote'
 import { createLogger } from './logs'
 import { HOUSE_RULES } from './webtermAwareness'
+import { MCP_SERVER_NAME } from './mcp/mcp.paths'
 
 const log = createLogger('hooks')
 
@@ -26,11 +29,13 @@ export const hookEventName = (e: HookSubscription): string => (typeof e === 'str
 export const PERMISSION_REQUEST_HOOK_TIMEOUT_SECS = 600
 
 /**
- * Berapa lama hook permission menahan sebuah request menunggu Approve/Deny dari canvas sebelum
- * jatuh ke prompt interaktif claude biasa. 60 detik di bawah `PERMISSION_REQUEST_HOOK_TIMEOUT_SECS`
- * supaya hook selalu keluar dengan caranya sendiri, bukan dibunuh timeout.
+ * How long the server holds a `PermissionRequest` hook waiting for Allow/Deny from the webterm
+ * Inbox (`permission/permission.wait.ts`) before answering "no decision", which drops Claude back to
+ * its own terminal prompt. 10 s under `PERMISSION_REQUEST_HOOK_TIMEOUT_SECS` so the reply always
+ * arrives before Claude cancels the hook (a cancelled hook's output is discarded). The on/off switch
+ * is `settings.hookReplyApprovals`.
  */
-export const PERM_WAIT_SECS_INTERACTIVE = 540
+export const PERM_WAIT_SECS_INTERACTIVE = 590
 
 /**
  * Event hook Claude Code yang kita langgani. Sebelas, sama dengan `CLAUDE_HOOK_EVENTS` nodeterm
@@ -116,6 +121,15 @@ export function claudeHooksSettings(nodeId: string, port: number): Record<string
   return { hooks }
 }
 
+/** Whole `--settings` object of a webterm Claude node: hooks + same-uid protection (`agentSandbox`). */
+export function claudeNodeSettings(nodeId: string, port: number): Record<string, unknown> {
+  const protection = claudeProtectionSettings(dataDir(), { ownHeaders: claudeHeadersPath(nodeId) })
+  // The webterm MCP tools are pre-allowed in Claude: the webterm policy engine already decides every
+  // call server-side (mcp/mcp.tools.ts), so a second Claude prompt per tool would only add friction.
+  const permissions = { ...(protection.permissions as Record<string, unknown>), allow: [`mcp__${MCP_SERVER_NAME}`] }
+  return { ...claudeHooksSettings(nodeId, port), ...protection, permissions }
+}
+
 /**
  * Tulis settings hook node ini ke file dan kembalikan path-nya.
  *
@@ -134,8 +148,8 @@ export function writeClaudeSettings(nodeId: string, port: number): string {
     ensureNodeSettingsDir()
     // Ditulis SEBELUM settings dikembalikan: baris hook menunjuk ke file ini, dan sesi agent bisa
     // langsung menjalankan hook pertamanya begitu claude hidup.
-    writeClaudeHeaders(nodeId)
-    writeFileSync(path, JSON.stringify(claudeHooksSettings(nodeId, port)), { mode: 0o600 })
+    writeNodeHeaders(nodeId)
+    writeFileSync(path, JSON.stringify(claudeNodeSettings(nodeId, port)), { mode: 0o600 })
   } catch (err) {
     log.error('hooks.error', 'Failed to write hook settings', { ids: { nodeId }, error: err instanceof Error ? err.name : 'unknown', code: (err as { code?: unknown } | null)?.code })
     throw err
@@ -145,12 +159,15 @@ export function writeClaudeSettings(nodeId: string, port: number): string {
 }
 
 /**
- * File header yang dibaca `curl -H @file` (0600). Nilai token hidup DI SINI, bukan di argv.
+ * File header yang dibaca `curl -H @file` (0600). Nilai token hidup DI SINI, bukan di argv dan
+ * bukan di env: hook claude DAN shim skill (context-link, browser) semua agent membacanya lewat
+ * path di `WEBTERM_NODE_HEADERS`. Sandbox claude hanya membuka file milik node itu sendiri.
  *
  * Ditulis ulang setiap peluncuran supaya token node yang baru (proses restarted) ikut. Setelah
  * ada, file ini hanya bisa dibaca pemiliknya.
  */
-function writeClaudeHeaders(nodeId: string): string {
+export function writeNodeHeaders(nodeId: string): string {
+  ensureNodeSettingsDir()
   const path = claudeHeadersPath(nodeId)
   const token = nodeToken(nodeId)
   const lines = [`${NODE_TOKEN_HEADER}: ${token}`, `${TOKEN_HEADER}: ${token}`]

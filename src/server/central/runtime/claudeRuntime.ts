@@ -1,9 +1,11 @@
 // Claude Code CLI runtime adapter (PLAN CENTRAL-RUNTIME-b 1.2). Spawns
 // `claude -p --output-format stream-json` without a shell or PTY, writes the prompt to
-// stdin, and maps the JSONL stdout onto the central runtime port. Tool-less and MCP-less
-// by construction (see claudeOptions); no logging of the prompt or child output.
+// stdin, and maps the JSONL stdout onto the central runtime port. No built-in tools; webterm's
+// registry arrives as native MCP tools through a per-turn `--mcp-config` (claudeMcp.ts, PLAN F2-c);
+// no logging of the prompt or child output.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { dirname, join } from 'node:path'
 import {
   type AdapterRuntimeKind, type CancelToken, type CentralRuntime, type RuntimeEmit,
   type RuntimeResult, type TurnInput, createCancelToken,
@@ -15,10 +17,12 @@ import {
   DEFAULT_WALL_MS, MICROS_PER_USD, claudeArgv, claudeChildEnv, claudeModelArg, createLineReader,
 } from './claudeOptions'
 import {
-  type ClaudeTurnState, createKillLadder, ensureWorkDir, failTurn, finishTurn, newTurnState,
+  type ClaudeTurnState, createKillLadder, defaultWorkDir, ensureWorkDir, failTurn, finishTurn, newTurnState,
 } from './claudeSession'
+import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
 import { CENTRAL_MODEL_FLAG } from './opencodeOptions'
 import { createLogger } from '../../logs'
+import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 
 const log = createLogger('central')
 
@@ -30,9 +34,12 @@ export class ClaudeRuntime implements CentralRuntime {
   readonly kind: AdapterRuntimeKind = 'claude'
   private readonly active = new Map<string, ActiveTurn>()
   private readonly now: () => number
+  private readonly mcp: CentralMcpLink
 
   constructor(private readonly options: ClaudeRuntimeOptions = {}) {
     this.now = options.now ?? Date.now
+    // Turn files sit next to the empty work dir (same 0700 data tree), never inside it.
+    this.mcp = options.mcp ?? createCentralMcpLink({ dir: join(dirname(options.workDir ?? defaultWorkDir()), 'mcp') })
   }
 
   async turn(input: TurnInput, emit: RuntimeEmit, signal?: AbortSignal): Promise<RuntimeResult> {
@@ -48,6 +55,7 @@ export class ClaudeRuntime implements CentralRuntime {
       state, elapsedMs: this.now() - startedAt, fallbackSessionRef: input.sessionRef ?? sessionId,
     })
     let child: ChildProcess | null = null
+    let link: OpenedMcp | null = null
     let ladder: ReturnType<typeof createKillLadder> | null = null
     let wallTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -72,7 +80,15 @@ export class ClaudeRuntime implements CentralRuntime {
       }
 
       try {
-        child = this.spawnChild(input, sessionId)
+        link = await this.mcp.open({ conversationId: input.conversationId, turnId: input.turnId, wallMs: input.limits.maxWallMs ?? DEFAULT_WALL_MS })
+      } catch (err) {
+        log.error('central.claude_mcp_failed', 'central MCP wiring failed; turn not started', { turnId: input.turnId, error: err instanceof Error ? err.message : String(err) })
+        failTurn(emitter, state, { code: 'runtime_error' })
+        return finish()
+      }
+      if (token.cancelled) return this.cancelled(state, finish)
+      try {
+        child = this.spawnChild(input, sessionId, link.configPath)
       } catch (err) {
         state.spawnError = err instanceof Error ? err : new Error('claude spawn failed')
         return finish()
@@ -105,6 +121,7 @@ export class ClaudeRuntime implements CentralRuntime {
       ladder?.clear()
       token.signal.removeEventListener('abort', onAbort)
       if (child !== null && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      link?.close()
       this.active.delete(input.turnId)
     }
   }
@@ -138,9 +155,10 @@ export class ClaudeRuntime implements CentralRuntime {
     }
   }
 
-  private spawnChild(input: TurnInput, sessionId: string): ChildProcess {
+  private spawnChild(input: TurnInput, sessionId: string, mcpConfig: string): ChildProcess {
     const model = claudeModelArg(this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
     const argv = claudeArgv({
+      mcpConfig,
       ...(input.sessionRef === undefined ? {} : { sessionRef: input.sessionRef }),
       newSessionId: sessionId,
       ...(model.arg === undefined ? {} : { model: model.arg }),
@@ -149,7 +167,9 @@ export class ClaudeRuntime implements CentralRuntime {
     })
     return spawn(this.options.executable ?? DEFAULT_CLAUDE_BIN, argv, {
       cwd: ensureWorkDir(this.options.workDir),
-      env: claudeChildEnv(this.options.env ?? process.env),
+      // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
+      // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
+      env: claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv }),
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
     })
@@ -159,7 +179,7 @@ export class ClaudeRuntime implements CentralRuntime {
   private pump(child: ChildProcess, input: TurnInput, emitter: TurnEmitter, state: ClaudeTurnState, kill: () => void): void {
     const reader = createLineReader()
     const maxTurns = input.limits.maxTurns ?? DEFAULT_MAX_TURNS
-    const ctx = { emitter, state, maxTurns, kill, ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }) }
+    const ctx = { emitter, state, maxTurns, kill, now: this.now, ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }) }
     const apply = (lines: string[]): void => {
       for (const line of lines) {
         const event = parseClaudeLine(line)

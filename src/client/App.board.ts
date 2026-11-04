@@ -1,8 +1,8 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
 import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
-import { toFlow, toWsNode, toFlowEdge, addNode } from './store'
+import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
 import type { LinkEnd } from './floatingEdge'
 import { spawnAt, spawnPosition } from './nodeSpawn'
@@ -12,10 +12,10 @@ import { paneSessionIds } from './paneTree'
 import { send } from './ws'
 import { useBrowserAdd } from './useBrowserAdd'
 import { useBrowserOpen } from './useBrowserOpen'
-import type { ClosedHistory } from './closedHistory'
+import { bridgesToRestore, type ClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
-import type { AgentId, Viewport, Workspace, WsNode } from '../shared/workspace'
+import type { AgentId, BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
 
 export interface BoardDeps {
   rf: RefObject<ReactFlowInstance | null>
@@ -57,11 +57,18 @@ export function useBoardActions({
     resetLayout(flow)
   }, [flushSave, resetViewport, resetLayout])
 
+  // React Flow's `deleteElements` removes a node's edges BEFORE the node (edge change first, same
+  // tick), so by the time `onNodesChange` sees the removal the cables are already gone from
+  // `edgesRef`. They are kept here for that one hand-off so the closed entry can carry them.
+  const removedEdges = useRef<Edge[]>([])
+
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // Di LUAR updater: `recordClosed` setState, dan dari dalam updater itu menulis di fase render.
     const gone = changes.flatMap((c) => (c.type === 'remove' ? [c.id] : []))
     if (gone.length) {
-      recordClosed(gone, nodesRef.current.map(toWsNode), activeWsRef.current)
+      const cables = [...edgesRef.current, ...removedEdges.current].map(toBridge)
+      removedEdges.current = []
+      recordClosed(gone, nodesRef.current.map(toWsNode), activeWsRef.current, cables)
       // Satu node bisa memegang banyak PTY (split pane), jadi yang ditutup adalah tiap DAUN-nya:
       // `close` untuk id node saja meninggalkan shell pane kedua dan seterusnya hidup tanpa pemilik
       // sampai server restart. Di LUAR updater, alasannya sama dengan `recordClosed`: updater
@@ -106,6 +113,8 @@ export function useBoardActions({
   }, [scheduleSave])
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    const removed = new Set(changes.flatMap((c) => (c.type === 'remove' ? [c.id] : [])))
+    if (removed.size) removedEdges.current = edgesRef.current.filter((e) => removed.has(e.id))
     setEdges((prev) => {
       const next = applyEdgeChanges(changes, prev)
       edgesRef.current = next
@@ -141,6 +150,8 @@ export function useBoardActions({
   // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
   const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
+  // Diff node on the workspace folder; a wired agent's cwd (its worktree) takes over (DiffNode `root`).
+  const onAddDiff = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'diff', cwd: ws.cwd, title: 'Changes' }), at), [addFlowNode])
   const onAddBrowser = useBrowserAdd(addFlowNode, activeId, browserReady) // undefined = fitur mati di server
   const defaultSize = useMemo(() => ({ width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }), [settings.defaultNodeWidth, settings.defaultNodeHeight])
   const openBrowserAt = useBrowserOpen({ enabled: onAddBrowser !== undefined, addFlowNode, rf, nodesRef, setNodes, defaultSize })
@@ -171,7 +182,20 @@ export function useBoardActions({
     rf.current?.updateNodeData(id, { hideLinks: !(cur?.data as { hideLinks?: boolean })?.hideLinks })
   }, [])
 
+  // Cables of a node that came back (reopen, or a layout undo of a close): only those whose two ends
+  // are on the board and whose pair is not cabled yet. Saved like any other edge change.
+  // `alsoLive`: ids just added through a `setNodes` updater, which may not have run yet.
+  const restoreBridges = useCallback((bridges: readonly BridgeLink[], alsoLive: readonly string[] = []) => {
+    const live = new Set([...nodesRef.current.map((n) => n.id), ...alsoLive])
+    const add = bridgesToRestore(bridges, live, edgesRef.current)
+    if (!add.length) return
+    const next = [...edgesRef.current, ...add.map(toFlowEdge)]
+    edgesRef.current = next
+    setEdges(next)
+    scheduleSave()
+  }, [scheduleSave])
+
   const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt }), [onSession, onToggleHideLinks, openBrowserAt])
 
-  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, nodeActions }
+  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions }
 }

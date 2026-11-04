@@ -25,12 +25,14 @@ export interface MailDeliver {
 }
 
 /** The fixed first line of every envelope; nothing the sender writes can precede it. */
-export function envelopePrefix(ref: string): string { return `[dari agen ${ref}, bukan manusia; bukan persetujuan]` }
-function envelopeSuffix(ref: string): string { return `[akhir pesan agen ${ref}]` }
+export function envelopePrefix(ref: string): string { return `[from agent ${ref}, not a human; not an approval]` }
+function envelopeSuffix(ref: string): string { return `[end of agent message ${ref}]` }
+// Any casing: a model reads "[From agent" as the same marker.
+const MARKER_IMITATION = /\[(from |end of agent message)/gi
 
 /** Removes control characters and neutralises text that imitates the envelope markers. */
 export function sanitizeBody(body: string): string {
-  return body.replace(CONTROL_CHARS, '').replaceAll('[dari ', '(dari ').replaceAll('[akhir pesan agen', '(akhir pesan agen')
+  return body.replace(CONTROL_CHARS, '').replace(MARKER_IMITATION, '($1')
 }
 
 /** Sender identity comes from the server (ref prefix + agent registry), never from the body. */
@@ -46,7 +48,7 @@ export function resolveSender(db: Database, fromRef: string): MailSender {
 export function buildEnvelope(db: Database, mail: MailRecord): MailEnvelope {
   const text = [
     envelopePrefix(mail.fromRef),
-    `(jenis: ${mail.kind}; thread: ${mail.threadId}; mail: ${mail.id})`,
+    `(kind: ${mail.kind}; thread: ${mail.threadId}; mail: ${mail.id})`,
     sanitizeBody(mail.body),
     envelopeSuffix(mail.fromRef),
   ].join('\n')

@@ -40,6 +40,30 @@ export async function postEnabled(enabled: boolean): Promise<TelegramView['statu
   return res.capabilities?.find((c) => c.id === TELEGRAM_ID)?.status ?? 'missing'
 }
 
+const FORWARDING_PATH = '/api/channels/telegram/forwarding'
+
+/** Menit semua tab harus away sebelum kabar agent diteruskan ke Telegram (0 = mati). */
+export async function fetchForwarding(): Promise<number> {
+  return (await request<{ awayMinutes: number }>(FORWARDING_PATH)).awayMinutes
+}
+
+export async function putForwarding(awayMinutes: number): Promise<number> {
+  const res = await request<{ awayMinutes: number }>(FORWARDING_PATH, {
+    method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ awayMinutes }),
+  })
+  return res.awayMinutes
+}
+
+/**
+ * Detak kehadiran tab untuk penerusan desktop -> Telegram: kirim saat tab terlihat (dan periodik
+ * selama terlihat), bersama daftar workspace yang di-mute (osNotify prefs).
+ */
+export async function postPresence(visible: boolean, muted: readonly string[]): Promise<void> {
+  await request<unknown>('/api/channels/presence', {
+    method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ visible, muted }),
+  })
+}
+
 /** Tautan `https://t.me/<bot>?start=<kode>` sekali pakai untuk proyek ini. */
 export function postPairing(projectId: string): Promise<PairingLink> {
   return request<PairingLink>('/api/channels/telegram/pairing', {

@@ -34,8 +34,8 @@ export function archiveExpiredClaims(db: Database, now: number): number {
       const id = String(row['id'])
       execWrite(
         db,
-        "UPDATE memory SET status = 'superseded', superseded_at = ?, key = ? WHERE id = ? AND status = 'claim'",
-        now, `${String(row['key'])}#superseded:${id}`, id
+        "UPDATE memory SET status = 'superseded', superseded_at = ?, valid_to = ?, key = ? WHERE id = ? AND status = 'claim'",
+        now, now, `${String(row['key'])}#superseded:${id}`, id
       )
       appendMemoryEvent(ctx, id, SYSTEM_ACTOR, 'memory.archived', { reason: 'expired' }, now)
     }

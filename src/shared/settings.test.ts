@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_SETTINGS, mergeSettings } from './settings'
+import { DEFAULT_SETTINGS, KEYBINDINGS_LIMITS, mergeSettings, normalizeKeybindings } from './settings'
 import type { Settings } from './settings'
 
 describe('DEFAULT_SETTINGS', () => {
@@ -94,5 +94,21 @@ describe('mergeSettings', () => {
     const merged = mergeSettings({ fontSize: 99, customAgents: [{ id: 'custom:1', label: 'x', launchCmd: 'x' }] })
     merged.fontSize = 1
     expect(JSON.stringify(DEFAULT_SETTINGS)).toBe(snapshot)
+  })
+})
+
+describe('keybindings', () => {
+  it('defaults to no overrides and keeps valid id → chord | null entries', () => {
+    expect(DEFAULT_SETTINGS.keybindings).toEqual({})
+    expect(mergeSettings({ keybindings: { 'workbench.quickOpen': 'Mod+O', 'view.fit': null } }).keybindings)
+      .toEqual({ 'workbench.quickOpen': 'Mod+O', 'view.fit': null })
+  })
+
+  it('drops malformed entries and bounds the map (input arrives over HTTP)', () => {
+    const bad = { a: 7, b: '', c: { x: 1 }, ['x'.repeat(KEYBINDINGS_LIMITS.idLength + 1)]: 'Mod+K', d: 'M'.repeat(KEYBINDINGS_LIMITS.chordLength + 1), ok: 'Mod+J' }
+    expect(mergeSettings({ keybindings: bad }).keybindings).toEqual({ ok: 'Mod+J' })
+    expect(mergeSettings({ keybindings: ['Mod+K'] }).keybindings).toEqual({})
+    const many = Object.fromEntries(Array.from({ length: KEYBINDINGS_LIMITS.entries + 50 }, (_, i) => [`c${i}`, 'Mod+K']))
+    expect(Object.keys(normalizeKeybindings(many)).length).toBe(KEYBINDINGS_LIMITS.entries)
   })
 })

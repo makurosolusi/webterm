@@ -8,6 +8,7 @@ import {
   alive, assistantRecord, captureSource, deltaRecord, emitSource, initRecord, recorder, resultRecord,
   successRecords, turnInput, waitFor, writeFakeClaude,
 } from './claude.fakeBin'
+import { createCentralMcpLink } from './claudeMcp'
 
 let dir = ''
 
@@ -25,6 +26,8 @@ function runtime(executable: string, extra: Partial<ClaudeRuntimeOptions> = {}) 
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
     killGraceMs: 50,
     newSessionId: () => 'new-session-id',
+    // test-only token: keeps the process capability store (and its import graph) out of these tests
+    mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
     ...extra,
   })
 }
@@ -177,7 +180,7 @@ setInterval(() => {}, 1000)`
     const result = await runtime(join(dir, 'no-such-claude')).turn(turnInput(), emit)
     expect(result.outcome).toBe('error')
     expect(result.errorCode).toBe('runtime_unavailable')
-    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'Claude Code belum terpasang di PATH server' })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'Claude Code is not installed on the server PATH' })
   })
 
   it('honors maxTurns < 1 without spawning', async () => {

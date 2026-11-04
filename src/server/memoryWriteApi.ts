@@ -21,6 +21,7 @@ import {
   claimMemory,
   promoteMemory,
 } from './memory/memory'
+import { MemoryRejectedError } from './memory/memoryModel'
 
 /** Body JSON memory: beberapa field teks + evidence. 64 KiB jauh di atas pemakaian wajar. */
 export const MEMORY_WRITE_BODY_MAX_BYTES = 64 * 1024
@@ -61,6 +62,9 @@ function evidenceOf(value: unknown): MachineEvidence | undefined {
 function failure(err: unknown): RouteResult {
   if (err instanceof MemoryConflictError) return { status: 409, body: { error: 'memory_conflict' } }
   if (err instanceof MemoryNotFoundError) return { status: 404, body: { error: 'memory_not_found' } }
+  // Write-guard refusals (F5-a): `forgotten` (tombstone), `incognito`, `untrusted_source`. The code is a
+  // fixed vocabulary from the repository, never a raw message, so it is safe to return.
+  if (err instanceof MemoryRejectedError) return { status: 400, body: { error: 'memory_rejected', reason: err.code } }
   if (err instanceof MemoryEvidenceError || err instanceof MemoryAuthorityError) {
     return { status: 400, body: { error: 'invalid_memory' } }
   }

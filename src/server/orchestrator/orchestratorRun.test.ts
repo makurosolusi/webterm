@@ -18,7 +18,7 @@ import {
 
 async function assigned(options: SetupOptions = {}) {
   const ctx =
-    options.tx === undefined
+    options.tx === undefined && options.sealMarked === undefined
       ? setup(planOf([item()]))
       : setupWith(planOf([item()]), [worker()], options)
   const assignedPlan = ctx.orchestrator.assignTask({
@@ -353,5 +353,20 @@ describe('server-verifier evidence marker', () => {
     })
     expect(result.ok && result.value.verified).toBe(false)
     expect(ctx.ledger.tasks.get(ctx.taskId)?.status).toBe('claimed_done')
+  })
+
+  it('F4-c: a correct marker without the verifier seal never verifies (self-report ignored)', async () => {
+    // A worker/HTTP caller can type the marker string; only `toModelEvidence` seals the object.
+    const marked = { verifiedBy: SERVER_VERIFIED_BY, tests: { passed: 9, failed: 0 }, typecheck: { ok: true } } as VerificationEvidence
+    expect(evidenceVerified(marked)).toBe(false)
+    const ctx = await started({ sealMarked: false })
+    const result = await ctx.orchestrator.recordWorkerResult({
+      projectId: PROJECT, taskId: ctx.taskId, fence: ctx.fence, actor: 'w1', outcome: 'success',
+      expectedVersion: ctx.version, evidence: marked,
+    })
+    expect(result.ok && result.value.verified).toBe(false)
+    expect(ctx.ledger.tasks.get(ctx.taskId)?.status).toBe('claimed_done')
+    // JSON round-trip (ledger row / HTTP body) also drops the seal.
+    expect(evidenceVerified(JSON.parse(JSON.stringify(marked)) as VerificationEvidence)).toBe(false)
   })
 })

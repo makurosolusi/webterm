@@ -4,7 +4,8 @@
 import type { Database } from 'bun:sqlite'
 import { allRows, getRow, type Row } from '../../../ledger/ledgerCore'
 import type { ToolDef, ToolResult } from '../toolTypes'
-import { clip, isSafeId, READ_TOOLS_FLAG } from './read.shared'
+import { clip, isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
+import { obj, S } from '../../../capability/capability.schema'
 
 const SPEC_PREVIEW = 200
 const EVIDENCE_PREVIEW = 1500
@@ -30,6 +31,8 @@ const taskStatus: ToolDef = {
   tier: 'R0',
   flag: READ_TOOLS_FLAG,
   usage: '{"projectId":"<id>","taskId":"<optional task id>"}. Read-only; without taskId returns counts and the 10 latest tasks.',
+  input: obj({ taskId: S.str(MAX_ID) }),
+  output: S.keys('task', 'counts', 'total', 'recent'),
   validate(input, ctx) {
     if (input.taskId === undefined) return null
     if (!isSafeId(input.taskId)) return 'invalid_shape'
@@ -55,6 +58,8 @@ const runResult: ToolDef = {
   tier: 'R0',
   flag: READ_TOOLS_FLAG,
   usage: '{"projectId":"<id>","taskId":"<task id>"} or {"projectId":"<id>","runId":"<run id>"}. Read-only; outcome, failure label and evidence head.',
+  input: obj({ taskId: S.str(MAX_ID), runId: S.str(MAX_ID) }),
+  output: S.keys('runId', 'taskId', 'outcome', 'failureLabel', 'provider', 'model', 'startedAt', 'endedAt', 'evidence'),
   validate(input, ctx) {
     const { taskId, runId } = input
     if ((taskId === undefined) === (runId === undefined)) return 'invalid_shape'

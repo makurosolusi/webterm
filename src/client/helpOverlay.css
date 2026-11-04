@@ -66,3 +66,13 @@
 .help-shortcuts__gesture {
   color: var(--vscode-descriptionForeground, #8b8b8b);
 }
+
+/* Rebinding controls + conflict note (VS Code keybindings editor "Show Same Keybindings"). */
+.help-shortcuts__actions {
+  margin-left: 6px;
+}
+
+.help-shortcuts__conflict {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  font-size: 11px;
+}

@@ -11,6 +11,7 @@ import {
   scopeFromConversationId, type MessagePart, type TurnStatus,
 } from '../conversationModel'
 import { PERSIST_LIMITS, redactValue } from '../../redactSecrets'
+import { brokerSecretValues, maskValue } from '../runtime/runtimeEvents'
 import {
   appendConversationEvent, appendMessage, getConversation, getOrCreateConversation, getTurn,
   updateTurn, type Conversation, type Message, type Turn,
@@ -122,6 +123,8 @@ function assistantParts(state: RunState, text: string): MessagePart[] {
       ...(tool.args === undefined ? {} : { args: tool.args }),
       ...(tool.result === undefined ? {} : { result: tool.result }),
     })
+    // The chat's approval note; the decision itself happens on the ledger card (inbox / Telegram).
+    if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: 'awaiting_approval' })
   }
   return parts
 }
@@ -140,7 +143,8 @@ export function finalizeTurn(
   const text = result.text === '' ? state.text : result.text
   execWrite(
     db, 'UPDATE central_message SET parts_json = ?, state = ? WHERE id = ?',
-    JSON.stringify(redactValue(assistantParts(state, text), PERSIST_LIMITS)),
+    // Masked again as a whole: a broker value split across two text deltas only reassembles here.
+    JSON.stringify(redactValue(maskValue(assistantParts(state, text), brokerSecretValues()), PERSIST_LIMITS)),
     status === 'succeeded' ? 'complete' : status, assistantId
   )
   const turn = updateTurn(db, {

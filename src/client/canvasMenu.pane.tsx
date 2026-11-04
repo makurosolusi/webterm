@@ -29,6 +29,8 @@ export interface CanvasPaneMenuDeps {
   onAddFiles: (at?: XYPosition) => void
   /** Tidak ada = kemampuan browser mati di server; klik barisnya memunculkan tawaran "Nyalakan". */
   onAddBrowser?: (at?: XYPosition) => void
+  /** Diff node at the click point; absent = no menu row. */
+  onAddDiff?: (at?: XYPosition) => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => void
   onFit: () => void
   onSelectAll: () => void
@@ -102,7 +104,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
   const anchor = useMemo(() => (open ? ({ left: open.x, top: open.y, right: open.x, bottom: open.y, width: 0, height: 0 } as DOMRect) : null), [open])
 
   const menu = open && offering && anchor ? (
-    <VscodePopover anchor={anchor} open onOpenChange={close} ariaLabel="Nyalakan browser">
+    <VscodePopover anchor={anchor} open onOpenChange={close} ariaLabel="Turn on browser">
       <div className="w-64 p-3"><CapabilityOffer id="browser" onDone={() => offered(open.at)} /></div>
     </VscodePopover>
   ) : null
@@ -119,6 +121,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
           addTerminal: () => deps.onAddTerminal(open.at),
           addFiles: () => deps.onAddFiles(open.at),
           addBrowser: () => (onAddBrowser ? onAddBrowser(open.at) : offerBrowser()),
+          addDiff: deps.onAddDiff && (() => deps.onAddDiff?.(open.at)),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),
           fitView: deps.onFit,
           selectAll: deps.onSelectAll,

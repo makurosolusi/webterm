@@ -14,6 +14,7 @@ import {
 } from '../shared/workspace'
 import { buildClaudeFlags } from './hooks'
 import { codexInstructionsFlag } from './webtermAwareness'
+import { codexMcpFlags } from './mcp/mcp.launch'
 import { parsePort } from './serverConfig'
 
 /** Port yang ditulis ke env hook agent bila pemanggil tidak menyebutkannya. */
@@ -66,7 +67,8 @@ export function launchLine(
   }
   // codex tidak punya hook webterm: aturan rumah + identitas masuk sekali lewat `-c
   // developer_instructions` (webtermAwareness). Root option, jadi letaknya sebelum `resume`.
-  const base = capabilityAgentId(agentId) === 'codex' ? `${cmd} ${codexInstructionsFlag(msg.id)}` : cmd
+  // The webterm MCP server rides along the same way (`-c mcp_servers.webterm.*`, mcp/mcp.launch.ts).
+  const base = capabilityAgentId(agentId) === 'codex' ? `${cmd} ${codexInstructionsFlag(msg.id)} ${codexMcpFlags(msg.id, port)}` : cmd
   if (resume) {
     // Perintah client dipakai utuh sebagai program, jadi pembungkus apa pun tetap terpasang.
     return canResumeWith(agentId, sid) ? resumeCommandWith(base, agentId, sid) ?? base : base

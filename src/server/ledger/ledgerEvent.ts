@@ -121,9 +121,13 @@ export function appendEvent(ctx: LedgerContext, input: AppendEventInput): Ledger
   return toEvent(row)
 }
 
-/** Ascending-seq page of events; limit defaults to 100 and is clamped to 500. */
-export function listEvents(ctx: LedgerContext, input: ListEventsInput = {}): LedgerEvent[] {
-  const where: string[] = []
+/**
+ * Ascending-seq page of ledger audit events; limit defaults to 100 and is clamped to 500.
+ * Senses rows (hash-chained, schema v10, src/server/events/) share the `event` table and are
+ * excluded unless `includeSenses` is set; read them through the events log instead.
+ */
+export function listEvents(ctx: LedgerContext, input: ListEventsInput & { includeSenses?: boolean } = {}): LedgerEvent[] {
+  const where: string[] = input.includeSenses ? [] : ['hash IS NULL']
   const params: unknown[] = []
   if (input.projectId !== undefined) {
     where.push('project_id = ?')

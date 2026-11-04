@@ -37,7 +37,8 @@ export async function runTaskInProcess(request: RunTaskRequest, deps: Orchestrat
     const plans = deps.planStore ?? (deps.ledger ? createPlanStore(deps.ledger.db) : null)
     const current = plans?.get(request.projectId)
     if (current && current.version !== request.expectedVersion) return { ok: false, code: 'conflict', status: 409 }
-    const result = await orchestratorRunRoute(request, deps)
+    // Central's task.run is the only in-process caller: its workers belong to central (K3 lineage).
+    const result = await orchestratorRunRoute(request, { ...deps, spawnParent: 'central' })
     const body = result.body as { ok?: unknown; outcome?: WorkerRunOutcome }
     if (result.status === 200 && body.ok === true && body.outcome) return { ok: true, outcome: body.outcome }
     const code = codeOf(body)

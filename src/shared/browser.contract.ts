@@ -37,6 +37,10 @@ export const URL_MAX_CHARS = 8192
 export const VIEWPORT_MAX = 16_384
 export const TOUCH_POINTS_MAX = 10
 export const FRAME_TYPE = 1
+/** Frame yang membawa `FrameLatency` (I1-d) sesudah seq; klien lama cukup mengabaikannya. */
+export const FRAME_TYPE_TIMED = 2
+/** Input tanpa frame dalam rentang ini dianggap tak mengubah layar: sampel dibuang, bukan dicatat sebagai outlier. */
+export const INPUT_LATENCY_STALE_MS = 1000
 
 /** Bitmask modifier (§4.4): Alt=1 Ctrl=2 Meta=4 Shift=8. */
 export const MOD = { Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 } as const
@@ -75,8 +79,14 @@ export interface BrowserState {
   canBack: boolean; canForward: boolean; lease: Lease; live: LiveState; blocked?: BlockReason
 }
 
+/**
+ * Latensi input->frame (ms, jam server = jam Chromium, satu mesin) untuk frame PERTAMA yang `metadata.timestamp`
+ * (CDP `Page.ScreencastFrameMetadata`: "frame swap timestamp", detik epoch) jatuh sesudah dispatch input. `ls` =
+ * cap waktu kirim milik klien, dipantulkan apa adanya supaya klien mengukur total di jamnya sendiri.
+ */
+export interface FrameLatency { ls: number; rxToDispatch: number; dispatchToSwap: number; swapToServer: number }
 /** Satu frame screencast; `seq` uint32 diberi host dan dikembalikan klien lewat `ack`. */
-export interface Frame { seq: number; jpeg: Uint8Array }
+export interface Frame { seq: number; jpeg: Uint8Array; lat?: FrameLatency }
 
 /** Dilempar `BrowserHostApi.navigate` bila penjaga navigasi menolak; hanya hostname, tanpa URL. */
 export class BlockedError extends Error {
@@ -107,8 +117,9 @@ export interface KeyInput {
 export interface TextInput { t: 'text'; text: string }
 export interface ImeInput { t: 'ime'; text: string; start: number; end: number }
 export interface TouchInput { t: 'touch'; type: (typeof TOUCH_TYPES)[number]; points: TouchPoint[] }
-/** Input manusia yang diteruskan ke `BrowserHostApi.input` (tanpa `id`). Alias `InputEvent` = nama di PLAN. */
-export type BrowserInputEvent = MouseInput | KeyInput | TextInput | ImeInput | TouchInput
+/** Input manusia yang diteruskan ke `BrowserHostApi.input` (tanpa `id`). Alias `InputEvent` = nama di PLAN.
+ * `ls` opsional = cap waktu kirim klien (epoch ms) untuk pengukur latensi; host memantulkannya di `Frame.lat`. */
+export type BrowserInputEvent = (MouseInput | KeyInput | TextInput | ImeInput | TouchInput) & { ls?: number }
 export type { BrowserInputEvent as InputEvent }
 
 type WithId<T> = T & { id: string }

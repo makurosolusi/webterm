@@ -1,17 +1,18 @@
 import { createHash } from 'node:crypto'
-import { type Tier, type ToolDef, type ToolRegistry, defEnabled, tierWithin } from './toolTypes'
+import { toolProblems } from './toolCapability'
+import type { ToolDef, ToolRegistry } from './toolTypes'
 
-export const CATALOG_TOKEN_BUDGET = 1200
 // ponytail: chars/4 estimate, swap for a real tokenizer if the budget gets tight
 const CHARS_PER_TOKEN = 4
 
-/** Creates an empty registry that rejects duplicate tool names. */
+/** Creates an empty registry that rejects duplicate names and malformed capability declarations. */
 export function createRegistry(): ToolRegistry {
   const tools = new Map<string, ToolDef>()
   return {
     register(def) {
       if (tools.has(def.name)) throw new Error(`tool already registered: ${def.name}`)
-      if (def.summary.length > 120) throw new Error(`tool summary exceeds 120 chars: ${def.name}`)
+      const problems = toolProblems(def)
+      if (problems.length) throw new Error(`tool ${def.name} has an invalid capability declaration: ${problems.join(', ')}`)
       tools.set(def.name, def)
     },
     list: () => [...tools.values()],
@@ -29,22 +30,3 @@ export function toolsHash(registry: ToolRegistry): string {
 
 /** Estimated prompt tokens of a text. */
 export function estimateTokens(text: string): number { return Math.ceil(text.length / CHARS_PER_TOKEN) }
-
-/** Tools visible at `maxTier` with their flag on, in registration order. */
-export function activeTools(registry: ToolRegistry, maxTier: Tier, env: Record<string, string | undefined> = process.env): ToolDef[] {
-  return registry.list().filter((def) => tierWithin(def.tier, maxTier) && defEnabled(def, env))
-}
-
-/** Prompt catalog (`name usage` per tool) for tools up to `maxTier`; drops tools that would exceed the token budget. */
-export function renderCatalog(registry: ToolRegistry, maxTier: Tier, env?: Record<string, string | undefined>): string {
-  const lines: string[] = []
-  let used = 0
-  for (const def of activeTools(registry, maxTier, env)) {
-    const line = `${def.name} ${def.usage}`
-    const cost = estimateTokens(line) + 1
-    if (used + cost > CATALOG_TOKEN_BUDGET) continue
-    used += cost
-    lines.push(line)
-  }
-  return lines.join(' ')
-}

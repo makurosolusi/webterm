@@ -14,6 +14,14 @@ import { dataDir } from '../config'
 import { createFileSecretStore } from '../envSecrets.store'
 import type { Ledger } from '../ledger/ledger'
 import { CHANNEL_STORE_FILE, ChannelStore } from './channelStore'
+import { ledgerPersistence } from './channelStoreLedger'
+import { defaultWorldCounts } from './channelWorld'
+import { presence as processPresence, startAgentForwarder } from './channelPresence'
+import { describeAgentNode } from './channelPresenceDescribe'
+import { startInboxTelegramPush } from '../inbox/inboxPush'
+import { handleChannelPresenceApi } from './channelPresenceHttp'
+import { eventBus } from '../events/eventBus'
+import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import {
   ensureWebhookSecret,
   readSecretFile,
@@ -106,13 +114,19 @@ export function startChannelsRuntime(
     } else mode = 'poll' // tanpa token & tanpa secret: tunggu token diisi (hot), jangan matikan kanal
   }
   if (mode === 'poll' && resolveTelegramBotToken(env) === undefined) {
-    log.warn('channels.token_missing', 'telegram on tetapi bot token belum diset (mode poll tidak menerima update tanpa token)')
+    log.warn('channels.token_missing', 'telegram is on but no bot token is set (poll mode receives no updates without a token)')
   }
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')
 
+  // Same DB for the channel store and the inbox push (F3-a); absent with a fake ledger (node-env tests).
+  const ledgerDb = options.ledgerDb ?? activeLedgerRuntime()?.db
   let store: ChannelStore
   try {
-    store = new ChannelStore(options.storePath ?? join(dataDir(), 'channels', CHANNEL_STORE_FILE), {
+    // F2-g: the ledger row is the store (channels.json imported once). An explicit `storePath`, or
+    // no ledger DB at all (node-env tests with a fake ledger), keeps the JSON file backend.
+    const legacy = join(dataDir(), 'channels', CHANNEL_STORE_FILE)
+    const db = options.storePath === undefined ? ledgerDb : undefined
+    store = new ChannelStore(db ? ledgerPersistence(db, legacy) : (options.storePath ?? legacy), {
       ...(options.now === undefined ? {} : { now: options.now }),
     })
   } catch (err) {
@@ -138,6 +152,7 @@ export function startChannelsRuntime(
       centralChat: options.centralChat,
       pending,
       background: background.track,
+      world: options.world ?? defaultWorldCounts,
       ...(options.buttons ?? {}),
     })
   const runtime: ChannelWebhookRuntime | null = secret === undefined ? null : { secret, dispatch: ingest }
@@ -146,6 +161,18 @@ export function startChannelsRuntime(
   const sender = startChannelSenderFor(store, env, options.sender ?? {})
 
   const bots = mountBotManager(env, dataDir(), options.bots)
+  const presence = options.presence ?? processPresence
+  const stopForwarder = startAgentForwarder({
+    store,
+    presence,
+    subscribe: options.subscribe ?? ((pattern, fn) => eventBus.subscribe(pattern, fn)),
+    describe: options.describe ?? describeAgentNode,
+  })
+  // F3-a: every inbox gate goes to the bound approver chats as a card (Approve once / Deny), under
+  // the attention policy. Same env + fetch seam as the egress sender, so a test never hits Telegram.
+  const stopInboxPush = ledgerDb
+    ? startInboxTelegramPush({ db: ledgerDb, store, presence, send: { env, ...(options.sender?.fetch ? { fetch: options.sender.fetch } : {}) }, ...(options.now ? { now: options.now } : {}) })
+    : () => undefined
 
   log.info('channels.start', `telegram channel started (${mode})`, { mode, egress: sender !== null })
   return {
@@ -167,6 +194,7 @@ export function startChannelsRuntime(
       // Authorization already happened: index.ts only calls this after `allowed`.
       return (
         handleChannelPendingApi(req, res, pending) ||
+        handleChannelPresenceApi(req, res, { presence, store }) ||
         handleChannelStatusApi(req, res, { mode, env, pendingCount: () => pending.size(), readSecret }) ||
         handleChannelBindingsApi(req, res, store, undefined, pending)
       )
@@ -174,6 +202,8 @@ export function startChannelsRuntime(
     flushNow: () => flushChannelSender(sender),
     stop() {
       stopChannelSender(sender)
+      stopForwarder()
+      stopInboxPush()
       log.info('channels.stop', 'telegram channel stopped', { mode })
     },
   }

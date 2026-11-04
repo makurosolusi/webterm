@@ -1,3 +1,4 @@
+import { checkSchema } from '../../capability/capability.schema'
 import { getRow } from '../../ledger/ledgerCore'
 import type { ToolCtx, ToolDef, ToolInput, ToolValidationCode } from './toolTypes'
 
@@ -24,6 +25,8 @@ export function validateToolInput(def: ToolDef, input: ToolInput, ctx: ToolCtx):
     if (getRow(ctx.db, 'SELECT 1 AS one FROM project WHERE id = ?', projectId) === null) return { ok: false, code: 'project_not_found' }
     if (ctx.conversationId.startsWith(PROJECT_CONVERSATION_PREFIX) && ctx.conversationId.slice(PROJECT_CONVERSATION_PREFIX.length) !== projectId) return { ok: false, code: 'conversation_project_mismatch' }
   }
+  // The declared JSON Schema is enforced, not just documented; `validate` then adds the checks a schema cannot express.
+  if (def.input && checkSchema(def.input, input) !== null) return { ok: false, code: 'invalid_shape' }
   const code = def.validate(input, ctx)
   return code ? { ok: false, code } : { ok: true, projectId }
 }

@@ -7,15 +7,16 @@ import { agentControlOn, cookieImportOn } from './browser/browser.runtime.parts'
 import { centralEnabled } from './central/centralModel'
 import { autonomyEnabled } from './central/centralAutonomy'
 import { maxInflightFromEnv, reliabilityEnabled } from './central/autonomyDispatch'
-import { resolveMaxSteps } from './central/chat/toolLoop'
 import { resolveLimits } from './central/chat/turnLimits'
 import { contextWindowTokens } from './central/context/rotationPolicy'
 import { budgetLimits } from './central/guard/budgetStore'
 import { envCeiling } from './central/guard/levelStore'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import { opencodeBin, opencodeToolsAllowed } from './central/runtime/opencodeOptions'
+import { approvalButtonsOn } from './channels/channelButtons'
 import { telegramChannelEnabled } from './channels/channelsRuntime'
 import { trustProxyEnabled } from './channels/webhookPeer'
+import { agentSandboxOn } from './agentSandbox'
 import { flagOn } from './envFlag'
 import { ENV_REGISTRY, isBootstrapOnly, specFor } from './envRegistry'
 import { FILES_FLAG, filesFlagOn, filesListMax, filesUploadMaxBytes, type FilesFlag } from './envRegistry.files'
@@ -40,7 +41,6 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'propose' ? 'off' : '?'), 'central/guard/levelStore.ts:37 (off = hanya propose)'],
   ['WEBTERM_OPENCODE_BIN', () => opencodeBin(''), 'central/runtime/opencodeOptions.ts:61'],
   ['WEBTERM_OPENCODE_ALLOW_TOOLS', () => onOff(opencodeToolsAllowed('')), 'central/runtime/opencodeOptions.ts:66'],
-  ['WEBTERM_CENTRAL_MAX_STEPS', () => String(resolveMaxSteps(E)), 'central/chat/toolLoop.ts:39'],
   ['WEBTERM_CENTRAL_TURN_STEPS', () => String(resolveLimits(E).maxTurns), 'central/chat/turnLimits.ts:27'],
   ['WEBTERM_CENTRAL_TURN_WALL_MS', () => String(resolveLimits(E).maxWallMs), 'central/chat/turnLimits.ts:28'],
   ['WEBTERM_CENTRAL_TURN_TOKENS', () => String(resolveLimits(E).maxTokens), 'central/chat/turnLimits.ts:29'],
@@ -54,12 +54,15 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_RUN_REQUIRE_APPROVAL', () => onOff(orchestratorRunRequireApproval(E)), 'orchestratorRunModel.ts:42'],
   ['WEBTERM_MEMORY_FILES', () => onOff(memoryFilesEnabled(E)), 'memory/memoryFilePath.ts:23'],
   ['WEBTERM_TRUST_PROXY', () => onOff(trustProxyEnabled(E)), 'channels/webhookPeer.ts:22'],
+  ['WEBTERM_AGENT_SANDBOX', () => onOff(agentSandboxOn(E)), 'agentSandbox.ts:agentSandboxOn'],
   ['WEBTERM_LOG_BUFFER', () => String(parseCapacity(undefined)), 'logs/logBus.ts:12'],
   ['WEBTERM_BROWSER_MAX_LIVE', () => String(lifecycleConfig(E).maxLive), 'browser/browserLifecycle.service.ts:19'],
   // Default 'on' sejak impor cookie ikut menyala bersama browser (dulu FLAGON_READERS = off).
   ['WEBTERM_BROWSER_COOKIE_IMPORT', () => onOff(cookieImportOn(E)), 'browser/browser.runtime.parts.ts:cookieImportOn'],
   // Default 'on': webterm alat developer; agent yang tersambung kabel langsung bisa mengemudikan browser.
   ['WEBTERM_BROWSER_AGENT', () => onOff(agentControlOn(E)), 'browser/browser.runtime.parts.ts:agentControlOn'],
+  // Default 'on' (F3-a zero-config): every inbox gate goes to Telegram with Approve once / Deny.
+  ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', () => onOff(approvalButtonsOn(E)), 'channels/channelButtons.ts:approvalButtonsOn'],
   ['WEBTERM_BROWSER_DISCARD_MS', () => String(lifecycleConfig(E).discardMs), 'browser/browserLifecycle.service.ts:20'],
   ...(Object.entries(FILES_FLAG) as Array<[FilesFlag, string]>).map(([n, k]) => [k, files(n), 'envRegistry.files.ts:filesFlagOn'] as const),
   ['WEBTERM_FILES_LIST_MAX', () => String(filesListMax(E)), 'envRegistry.files.ts:filesListMax'],
@@ -68,7 +71,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_LEDGER', () => 'off', 'ledger/ledgerRuntime.ts:ledgerMode (kunci lama TIDAK dibaca lagi: ledger selalu hidup, KE-1; nilai = default registry legacy)'],
   ['WEBTERM_LOG_LEVEL', () => 'info', 'logs/logger.ts:34 (`?? DEFAULT_LOG_LEVEL`)'],
   ['WEBTERM_LOG_FILE', () => 'on', "logs/logger.ts:108 (`?? 'on'`)"],
-  ['WEBTERM_CENTRAL_TOOLS', () => 'read', "central/chat/turnService.ts:118 (`=== 'write'`, selain itu baca)"],
+  ['WEBTERM_CENTRAL_TOOLS', () => 'read', 'shared/featureCapabilities.ts (linked by the Worker orchestrator card; no Central chat reader since K7)'],
   ['WEBTERM_BROWSER_COOKIE_TTL_DAYS', () => '7', 'browser/browser.runtime.ts:68 (`ttl > 0 ? ttl : DEFAULT_COOKIE_TTL_DAYS`)'],
 ]
 
@@ -76,16 +79,15 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
 const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
   ['WEBTERM_CENTRAL_TELEGRAM', 'channels/telegramCentralBridge.ts:16'],
   ['WEBTERM_CENTRAL_CHAT', 'centralChatApi.ts:49'],
-  ['WEBTERM_CENTRAL_PLANNER', 'central/chat/turnService.ts:117'],
+  ['WEBTERM_CENTRAL_PLANNER', 'shared/featureCapabilities.ts (linked by the Worker orchestrator card; no Central chat reader since K7)'],
   ['WEBTERM_CENTRAL_MEMORY', 'central/chat/turnService.ts:123'],
   ['WEBTERM_CENTRAL_CHECKPOINT', 'central/context/contextAssembler.ts:87'],
   ['WEBTERM_CENTRAL_SKILLS', 'central/ca2Boot.ts:132'],
   ['WEBTERM_CENTRAL_SKILL_PROPOSE', 'central/ca2Boot.ts:132'],
   ['WEBTERM_CENTRAL_BOTS', 'channels/botManager.ts:120'],
-  ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'channels/channelButtons.ts:61'],
   ['WEBTERM_KNOWLEDGE', 'central/tools/registerAll.ts:51'],
   ['WEBTERM_AGENT_MAIL', 'central/tools/registerAll.ts:50'],
-  ['WEBTERM_CENTRAL_READ_TOOLS', 'central/chat/toolLoop.ts:36'],
+  ['WEBTERM_CENTRAL_READ_TOOLS', 'central/tools/defs/read.shared.ts:READ_TOOLS_FLAG (def.flag, toolTypes defEnabled)'],
   ['WEBTERM_BROWSER', 'browser/browser.runtime.ts:53'],
   ['WEBTERM_BROWSER_HEADLESS', 'browser/chromium.flags.ts:headlessReason'],
 ]

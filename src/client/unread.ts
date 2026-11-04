@@ -13,6 +13,8 @@
 // menaruh sesi di "Unread" sementara statusnya sendiri terbaca "Unknown": klaim tanpa bukti di
 // belakangnya. Jadi umurnya sengaja disamakan dengan umur `statuses` — satu tab, mati bersama.
 import type { AgentStatus } from '../shared/workspace'
+import { noteAttention } from './osNotify'
+import { setBadgeCount } from './osNotify.badge'
 
 const unread = new Set<string>()
 const listeners = new Set<(ids: ReadonlySet<string>) => void>()
@@ -25,6 +27,8 @@ function emit(): void {
   // Snapshot baru tiap perubahan: pembacanya state React, yang butuh identitas baru untuk render.
   const snapshot: ReadonlySet<string> = new Set(unread)
   for (const l of listeners) l(snapshot)
+  // Tab title + favicon carry the same count the sidebar's "Unread" section shows.
+  setBadgeCount(unread.size)
 }
 
 /** Snapshot awal untuk pembaca yang baru mount (kanal ini tidak memancar ulang saat disubscribe). */
@@ -80,6 +84,8 @@ function isWatching(id: string): boolean {
  * tetap tampil di section Running (lihat prioritas di `sessionStatusGroup`).
  */
 export function noteStatus(id: string, status: AgentStatus): void {
+  // OS notification has its own, stricter gate (transition-only, in-view, mute) — see `./osNotify`.
+  noteAttention(id, status, isWatching(id))
   if (status === 'working') return
   if (!isWatching(id)) markUnread(id)
 }

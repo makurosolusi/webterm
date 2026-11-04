@@ -17,6 +17,8 @@ import { InboxPanelActions, InboxPanelChrome, type InboxFilter } from './inboxPa
 import { InboxPanelDialog } from './inboxPanelDialog'
 import { InboxPanelSections } from './inboxPanelSections'
 import { InboxPanelSurface } from './inboxPanelSurface'
+import { isPermissionItemId } from './InboxPanel.permission'
+import { InboxItems } from './InboxPanel.items'
 import {
   approvalRequest,
   resumeApprovalFor,
@@ -74,7 +76,8 @@ export default function InboxPanel(props: InboxPanelProps) {
   const seq = useRef(0)
 
   const items = useMemo(
-    () => (props.items ?? fetched ?? []).filter((item) => !hidden.has(item.id)),
+    // Permission prompts render in `InboxItems` (unified inbox, F3-a) with their own buttons, never in the sections.
+    () => (props.items ?? fetched ?? []).filter((item) => !hidden.has(item.id) && !isPermissionItemId(item.id)),
     [props.items, fetched, hidden]
   )
 
@@ -361,6 +364,8 @@ export default function InboxPanel(props: InboxPanelProps) {
         onRefresh={() => setRefreshKey((key) => key + 1)} onFilter={setFilter}
         onReviewSelected={() => beginReview(selectedItems.filter((item) => reviewBlockedReason(item) === null))}
         onClearSelection={() => setSelected(new Set())} />
+
+      {props.items === undefined && props.client === undefined && <InboxItems />}
 
       <InboxPanelSections uid={uid} filter={filter} visible={visible} collapsed={collapsed}
         selected={selected} approved={approved} approvedReady={approvedReady}

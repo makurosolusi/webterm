@@ -11,15 +11,15 @@ import type { FilesSlot, FilesSlotCtx } from './filesSlots'
 import { lockedRow, offerFilesWrite, useFilesWriteEpoch, WRITE_OFFER_TEXT } from './filesWriteOffer'
 import { downloadUrl, uploadFiles, type UploadSummary } from './uploadQueue'
 
-/** Satu-satunya tempat string UI slot ini (Indonesia). */
+/** Satu-satunya tempat string UI slot ini (Inggris). */
 export const UPLOAD_TEXT = {
   menuUpload: 'Upload…',
   menuDownload: 'Download',
-  busy: 'Upload sebelumnya masih berjalan.',
-  folderSkipped: 'Folder tidak bisa diunggah, dilewati: ',
-  summary: (ok: number, fail: number) => `${ok} berhasil${fail ? `, ${fail} gagal` : ''}`,
-  progress: (i: number, n: number, pct: number) => `Mengunggah ${i}/${n} · ${pct}%`,
-  dismiss: 'Tutup ringkasan upload',
+  busy: 'A previous upload is still running.',
+  folderSkipped: 'Folders can’t be uploaded, skipped: ',
+  summary: (ok: number, fail: number) => `${ok} uploaded${fail ? `, ${fail} failed` : ''}`,
+  progress: (i: number, n: number, pct: number) => `Uploading ${i}/${n} · ${pct}%`,
+  dismiss: 'Dismiss upload summary',
 }
 
 interface Status { running: boolean; index: number; total: number; pct: number; name: string; summary: UploadSummary | null; note: string }

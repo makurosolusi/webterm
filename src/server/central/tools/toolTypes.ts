@@ -3,6 +3,7 @@
 // `toToolGuard` (guard/controlGuard.ts) is the one bridge between them, so the two shapes cannot drift.
 import type { Database } from 'bun:sqlite'
 import { flagOn } from '../../envFlag'
+import type { JsonSchema } from '../../capability/capability.schema'
 import type { Tier } from '../contracts/level.types'
 
 export type { Tier }
@@ -44,6 +45,14 @@ export interface ToolDef {
   tier: Tier
   /** Exact input schema text rendered into the prompt catalog. */
   usage: string
+  /**
+   * JSON Schema of the input, WITHOUT `projectId` (added for project-scoped tools by `toolCapability`).
+   * Checked by `validateToolInput` before `validate`. Optional only for test-local stand-ins; every
+   * production def declares it (capability.drift.test.ts).
+   */
+  input?: JsonSchema
+  /** JSON Schema of `data` on success. */
+  output?: JsonSchema
   /** Env flag name that must be `on` for the tool to exist; absent = always on. */
   flag?: string
   /** Custom env reader that replaces `flag` (e.g. a default-on flag shared with another subsystem). */

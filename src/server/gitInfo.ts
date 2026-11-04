@@ -32,6 +32,7 @@
 // kepala `fsOps.ts` (yang menjaga permukaan ini adalah bind loopback + Origin + token di
 // `src/server/auth.ts`, bukan pemagaran path).
 import { execFile } from 'node:child_process'
+import { ptyEnv } from './ptyShell'
 import { promises as fs } from 'node:fs'
 import { promisify } from 'node:util'
 import {
@@ -83,7 +84,9 @@ async function git(cwd: string, args: string[]): Promise<GitRun> {
       maxBuffer: GIT_MAX_BUFFER,
       // GIT_TERMINAL_PROMPT=0: tanpa TTY sebuah prompt kredensial tidak akan pernah dijawab, jadi
       // ia menggantung sampai timeout alih-alih gagal cepat.
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      // Env tersaring seperti PTY (`ptyEnv`): token root, bot token, dan kunci `.env` server tidak
+      // ikut ke git — hook repo (`.git/hooks/*`) berjalan dengan env ini.
+      env: { ...ptyEnv(process.env, { interactive: false }), GIT_TERMINAL_PROMPT: '0' },
     })
     return { ok: true, stdout, killed: false }
   } catch (err) {

@@ -8,6 +8,7 @@ import { AdvancedSection } from './AdvancedSection'
 import { ADVANCED_TEXT, SECTION_TEXT } from './advancedLabels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { CapabilityCard } from './CapabilityCard'
+import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
 import { matchesSearch } from './SettingsFields'
 import { TelegramCard } from './TelegramCard'
 import { TokenAccessCard } from './TokenAccessCard'
@@ -69,6 +70,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
             onStep={(kind) => onStep(view.id, kind)} />
         )
       })}
+      {query === '' || matchesSearch(`${sectionTitle} ${PROVIDER_TEXT.title} ${PROVIDER_TEXT.why} anthropic api key proxy gateway`, query) ? <ClaudeProviderCard /> : null}
       {show('token') ? <TokenAccessCard /> : null}
       {api.data && show('advanced') ? (
         <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} onRecheck={api.recheck} open={advancedOpen} onOpenChange={setAdvancedOpen} />

@@ -14,6 +14,7 @@ import { isSafeNodeId } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
 import {
   CLAUDE_HOOK_EVENTS,
+  NODE_HEADERS_ENV,
   NODE_TOKEN_ENV,
   NODE_TOKEN_HEADER,
   PERMISSION_REQUEST_HOOK_TIMEOUT_SECS,
@@ -31,6 +32,7 @@ import {
   writeClaudeSettings,
 } from './hooks'
 import { nextHookContext } from './hookContext'
+import { claudeHeadersPath } from './hooksPaths'
 
 /** Baris curl yang dibangun untuk satu node, diambil dari event `Stop` (semua event memakai baris
  *  yang sama persis — lihat test "subscribes the 11 nodeterm events"). */
@@ -147,9 +149,14 @@ const FAKE_NODE_TOKEN = 'not-a-real-node-token'
 
 /** Jalankan baris hook dengan `curl` yang di-stub; kembalikan argv yang diterima stub itu. */
 function curlArgv(cmd: string, env: Record<string, string>): string[] {
+  return curlArgvEach([cmd], env)[0]
+}
+
+/** Seperti `curlArgv`, tapi semua baris dijalankan dalam SATU `sh` (tiap baris dengan file argv
+ *  sendiri): spawn proses di macOS mahal di bawah beban suite penuh, jadi jumlahnya ditekan. */
+function curlArgvEach(cmds: string[], env: Record<string, string>): string[][] {
   const dir = mkdtempSync(join(tmpdir(), 'webterm-curl-shim-'))
   try {
-    const out = join(dir, 'argv')
     writeFileSync(join(dir, 'curl'), '#!/bin/sh\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "$ARGV_OUT"; done\n', {
       mode: 0o755,
     })
@@ -158,10 +165,10 @@ function curlArgv(cmd: string, env: Record<string, string>): string[] {
     // kalau ada yang berjalan di port 8700).
     // `</dev/null`: baris itu memuat `--data-binary @-`, dan tanpa ini stub-nya menggantung
     // menunggu stdin milik test runner.
-    execFileSync('/bin/sh', ['-c', `${cmd} </dev/null`], {
-      env: { PATH: dir, ARGV_OUT: out, ...env },
-    })
-    return readFileSync(out, 'utf8').split('\n').slice(0, -1)
+    const outs = cmds.map((_, i) => join(dir, `argv${i}`))
+    const script = cmds.map((cmd, i) => `export ARGV_OUT='${outs[i]}'; ${cmd} </dev/null`).join('\n')
+    execFileSync('/bin/sh', ['-c', script], { env: { PATH: dir, ...env } })
+    return outs.map((out) => readFileSync(out, 'utf8').split('\n').slice(0, -1))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -262,13 +269,16 @@ describe('node id di baris hook', () => {
   ]
 
   it('tidak pernah meneruskan metakarakter ke shell', () => {
-    for (const id of INJECTIONS) {
-      const cmd = commandFor(id)
-      // Shell sungguhan harus menerimanya sebagai sintaks yang sah.
-      execFileSync('sh', ['-n'], { input: cmd })
-      // Dan yang benar-benar diterima curl: SATU argumen URL, yang id-nya masih utuh saat di-decode
-      // — itu bukti id-nya sampai ke server, bukan cuma "tidak meledak".
-      const argv = curlArgv(cmd, { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+    const cmds = INJECTIONS.map(commandFor)
+    // Shell sungguhan harus menerima semuanya sebagai sintaks yang sah (`sh -n` memeriksa seluruh
+    // skrip, jadi satu panggilan cukup untuk ketujuh baris).
+    execFileSync('sh', ['-n'], { input: cmds.join('\n') })
+    // Dan yang benar-benar diterima curl: SATU argumen URL, yang id-nya masih utuh saat di-decode
+    // — itu bukti id-nya sampai ke server, bukan cuma "tidak meledak".
+    const argvs = curlArgvEach(cmds, { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+    expect(argvs).toHaveLength(INJECTIONS.length)
+    INJECTIONS.forEach((id, i) => {
+      const argv = argvs[i]
       expect(argv.filter((a) => a.startsWith('http://'))).toHaveLength(1)
       expect(new URL(argv[1]).searchParams.get('node')).toBe(id)
       // Tidak ada pecahan mentah yang lolos sebagai argumen tersendiri.
@@ -277,7 +287,7 @@ describe('node id di baris hook', () => {
       expect(argv).not.toContain('touch')
       expect(argv).not.toContain('/tmp/pwn')
       expect(argv).not.toContain('whoami')
-    }
+    })
   })
 
   it('URL tetap satu blok kutip tunggal, tanpa id mentah di dalamnya', () => {
@@ -321,17 +331,17 @@ describe('node token', () => {
 })
 
 describe('hookEnv', () => {
-  it('always carries the node token', () => {
-    expect(hookEnv('n-env')[NODE_TOKEN_ENV]).toBe(nodeToken('n-env'))
+  it('carries the PATH of the node header file, never the token value (env is readable by sibling processes)', () => {
+    const env = hookEnv('n-env')
+    expect(env[NODE_HEADERS_ENV]).toBe(claudeHeadersPath('n-env'))
+    expect(env).not.toHaveProperty(NODE_TOKEN_ENV)
+    expect(Object.values(env)).not.toContain(nodeToken('n-env'))
   })
-  it('sets NODETERM_PERM_WAIT_SECS when hook-reply approvals are on', () => {
-    expect(hookEnv('n-env', { hookReplyApprovals: true }).NODETERM_PERM_WAIT_SECS).toBe(
-      String(PERM_WAIT_SECS_INTERACTIVE)
-    )
-  })
-  it('omits NODETERM_PERM_WAIT_SECS when off (legacy behaviour, exactly)', () => {
-    expect(hookEnv('n-env', { hookReplyApprovals: false })).not.toHaveProperty('NODETERM_PERM_WAIT_SECS')
-    expect(hookEnv('n-env')).not.toHaveProperty('NODETERM_PERM_WAIT_SECS')
+  it('injects only the header path, whatever hookReplyApprovals says (the hold lives in the hook, not env)', () => {
+    const expected = { [NODE_HEADERS_ENV]: claudeHeadersPath('n-env') }
+    expect(hookEnv('n-env', { hookReplyApprovals: true })).toEqual(expected)
+    expect(hookEnv('n-env', { hookReplyApprovals: false })).toEqual(expected)
+    expect(hookEnv('n-env')).toEqual(expected)
   })
 })
 
@@ -352,8 +362,21 @@ describe('buildClaudeFlags', () => {
   // Penulis settings di-stub: test ini harus tetap bebas I/O.
   const writeSettings = () => '/tmp/x.json'
   const writeRules = () => '/tmp/rules.md'
+  const writeMcp = () => '/tmp/x.mcp.json'
+  const writePlugin = () => '/tmp/claude-plugin'
   const flags = (resume: boolean, permissionMode?: AgentPermissionMode) =>
-    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules })
+    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules, writeMcp, writePlugin })
+
+  it('loads the webterm explore subagent plugin right before the variadic --mcp-config', () => {
+    for (const resume of [false, true]) {
+      expect(flags(resume).endsWith("--plugin-dir '/tmp/claude-plugin' --mcp-config '/tmp/x.mcp.json'")).toBe(true)
+    }
+  })
+
+  it('adds the webterm MCP server config as the LAST flag (--mcp-config is variadic)', () => {
+    expect(flags(false).endsWith("--mcp-config '/tmp/x.mcp.json'")).toBe(true)
+    expect(flags(true).endsWith("--mcp-config '/tmp/x.mcp.json'")).toBe(true)
+  })
 
   it('appends the webterm house rules file to the system prompt, fresh and resumed', () => {
     expect(flags(false)).toContain("--append-system-prompt-file '/tmp/rules.md'")
@@ -394,7 +417,8 @@ describe('buildClaudeFlags', () => {
 // dengan `src/client/workspaceCommit.test.ts`. Sejak blok route dipindah ke `agentStatusApi.ts`,
 // yang di-slice adalah badan `agentStatusRoute` di sana; `api.ts` hanya menyisakan satu baris
 // dispatch, dan itu pun diuji (lihat "api.ts hanya men-dispatch").
-const apiSrc = () => readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
+// Dispatch-nya kini satu entri di tabel route (routes/control.routes.ts), bukan baris di api.ts.
+const apiSrc = () => readFileSync(fileURLToPath(new URL('./routes/control.routes.ts', import.meta.url)), 'utf8')
 const agentStatusSrc = () =>
   readFileSync(fileURLToPath(new URL('./agentStatusApi.ts', import.meta.url)), 'utf8')
 const contextLinkSrc = () =>
@@ -452,9 +476,9 @@ describe('route POST /api/agent-status', () => {
     expect(statusPathRunsFirst(OLD_ROUTE)).toBe(false)
   })
 
-  it('api.ts hanya men-dispatch satu baris ke modul route', () => {
+  it('tabel route hanya men-dispatch satu baris ke modul route', () => {
     const s = apiSrc()
-    expect(s).toContain('await agentStatusRoute(req, res, url)')
+    expect(s).toContain('agentStatusRoute(c.req, c.res, c.url)')
     // Blok lamanya tidak boleh tersisa di api.ts — dua salinan guard/payload akan menyimpang.
     expect(s).not.toContain('hookSpecificOutput')
     expect(agentStatusBlock(agentStatusSrc())).toContain('/api/agent-status')

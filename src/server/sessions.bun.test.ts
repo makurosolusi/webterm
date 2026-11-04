@@ -1,6 +1,9 @@
 // Bun-only (needs Bun.Terminal via spawnPty); runs under `bun test`, excluded
 // from vitest. Ambient types for 'bun:test' live in ./bun-test.d.ts.
 import { test, expect, afterAll } from 'bun:test'
+import { reapChildren } from './processReap.testutil'
+// No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
+afterAll(() => reapChildren())
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,6 +28,7 @@ import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
 import { codexInstructionsFlag, tomlString } from './webtermAwareness'
 import { shq } from './hooksQuote'
+import { codexMcpFlags } from './mcp/mcp.launch'
 import { SETTING_RANGES } from '../shared/settings.ranges'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
 import { resolveShell } from './ptyShell'
@@ -34,7 +38,7 @@ import {
   setCustomAgentBaseResolver,
   type AgentStatus,
 } from '../shared/workspace'
-import { NODE_TOKEN_ENV, claudeHooksSettings, nodeToken, writeClaudeSettings } from './hooks'
+import { NODE_TOKEN_ENV, claudeNodeSettings, nodeToken, writeClaudeSettings } from './hooks'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -180,9 +184,10 @@ test('launchLine mints the session id with each harness own grammar', () => {
   expect(cursor).toBe(`cursor-agent --resume ${SID}`)
 
   // codex & gemini resumable tapi BUKAN session-id-capable: tanpa flag session id. gemini tetap
-  // identik byte demi byte; codex hanya mendapat `-c developer_instructions` (aturan rumah webterm).
+  // identik byte demi byte; codex hanya mendapat `-c developer_instructions` (aturan rumah webterm)
+  // dan `-c mcp_servers.webterm.*` (server MCP webterm).
   expect(launchLine(open({ cmd: 'gemini', agentId: 'gemini', sessionId: SID }), 9999)).toBe('gemini')
-  expect(launchLine(open({ cmd: 'codex', agentId: 'codex', sessionId: SID }), 9999)).toBe(`codex ${CODEX_N1}`)
+  expect(launchLine(open({ cmd: 'codex', agentId: 'codex', sessionId: SID }), 9999)).toBe(`codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)}`)
 
   // Terminal biasa (tanpa agentId) dan agent tanpa session id: perintah apa adanya.
   expect(launchLine(open({ cmd: 'htop' }), 9999)).toBe('htop')
@@ -248,11 +253,11 @@ test('launchLine resumes with the harness resume grammar', () => {
   const r = (agentId: string, cmd: string) =>
     launchLine(open({ cmd, agentId, sessionId: SID, resume: true }), 9999)
   expect(r('claude', 'claude')).toContain(`--resume ${SID}`)
-  expect(r('codex', 'codex')).toBe(`codex ${CODEX_N1} resume ${SID}`)
+  expect(r('codex', 'codex')).toBe(`codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)} resume ${SID}`)
   expect(r('copilot', 'copilot')).toBe(`copilot --resume=${SID}`)
   expect(r('antigravity', 'agy')).toBe(`agy --conversation=${SID}`)
   // Pembungkus tetap utuh: perintah client dipakai sebagai program secara keseluruhan.
-  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex ${CODEX_N1} resume ${SID}`)
+  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)} resume ${SID}`)
   // Agent tak dikenal tanpa kapabilitas apa pun: tidak ada flag yang ditempelkan.
   expect(r('custom', 'mycli')).toBe('mycli')
 })
@@ -282,7 +287,7 @@ test('writeClaudeSettings lands the hook object in a file whose path has no colo
   const path = writeClaudeSettings('n-file', 9999)
   // Lewat JSON.parse → stringify: membuktikan file itu JSON sah DAN isinya objek hook yang sama.
   expect(JSON.stringify(JSON.parse(readFileSync(path, 'utf8')))).toBe(
-    JSON.stringify(claudeHooksSettings('n-file', 9999))
+    JSON.stringify(claudeNodeSettings('n-file', 9999))
   )
   // `:` adalah pemicu salah-tafsir pembungkus pihak ketiga (envman `slug:path`) — tidak boleh ada.
   expect(path).not.toContain(':')
@@ -345,18 +350,19 @@ test('a missing wrapper degrades to the bare command and says so once', async ()
 
 // --- Env hook ------------------------------------------------------------------------------------
 
-test('a claude session carries its hook token and loses it when the session closes', async () => {
+test('a claude session carries its header file (not the token) and the token dies when the session closes', async () => {
   const s = new Sessions()
   const a = collector()
   try {
     // Tanpa sessionId supaya perintahnya lolos apa adanya; gerbang env dipegang agentId, bukan cmd.
-    // PANJANG token yang dicetak, bukan nilainya — nilai token tidak boleh mendarat di output.
+    // Env hanya membawa PATH file header (token di env terbaca proses ber-uid sama); file itu
+    // berisi token node ini. Yang dicetak hitungan, bukan nilai.
     s.open(
-      { t: 'open', id: 'h1', cols: 80, rows: 24, cmd: `echo "tok_len:\${#${NODE_TOKEN_ENV}}"`, agentId: 'claude' },
+      { t: 'open', id: 'h1', cols: 80, rows: 24, cmd: `echo "tok_env_len:\${#${NODE_TOKEN_ENV}} hdr_has_tok:$(grep -c "${nodeToken('h1')}" "$WEBTERM_NODE_HEADERS")"`, agentId: 'claude' },
       a.send
     )
-    await pollFor(a.joined, 'tok_len:')
-    expect(a.joined()).toContain(`tok_len:${nodeToken('h1').length}`)
+    await pollFor(a.joined, 'hdr_has_tok:')
+    expect(a.joined()).toContain('tok_env_len:0 hdr_has_tok:2')
 
     // Token per-node tidak boleh tetap sah setelah sesinya mati: node id bisa dipakai ulang sesi
     // berikutnya, jadi `close` harus melupakannya dan permintaan berikut mencetak token BARU.

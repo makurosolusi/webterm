@@ -36,12 +36,12 @@ describe('SettingsPanel VS Code layout', () => {
   it('renders the search box, section sidebar, and the active section as label/control rows', () => {
     renderPanel()
 
-    expect(screen.getByRole('searchbox', { name: 'Cari setting' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaksi', 'Shell & buffer', 'Agent', 'Canvas', 'Kemampuan']
+    expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
+    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Canvas', 'Capabilities', 'Control']
     expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
-    const fontSize = screen.getByLabelText('Ukuran font') as HTMLInputElement
+    const fontSize = screen.getByLabelText('Font size') as HTMLInputElement
     expect(fontSize.value).toBe(String(DEFAULT_SETTINGS.fontSize))
     expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
   })
@@ -52,8 +52,8 @@ describe('SettingsPanel VS Code layout', () => {
     fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
 
     expect(screen.getByRole('heading', { level: 2, name: 'Canvas' })).toBeTruthy()
-    expect(screen.getByLabelText('Ukuran grid')).toBeTruthy()
-    expect(screen.queryByLabelText('Ukuran font')).toBeNull()
+    expect(screen.getByLabelText('Grid size')).toBeTruthy()
+    expect(screen.queryByLabelText('Font size')).toBeNull()
     expect(within(nav()).getByRole('button', { name: 'Canvas' }).getAttribute('aria-current')).toBe('true')
   })
 })
@@ -61,26 +61,26 @@ describe('SettingsPanel VS Code layout', () => {
 describe('SettingsPanel item placement', () => {
   it('puts scrollback lines and the app theme in Terminal, not Shell or Canvas', () => {
     renderPanel()
-    expect(screen.getByLabelText('Scrollback terminal')).toBeTruthy()
-    expect(screen.getByLabelText('Tema app')).toBeTruthy()
-    expect(screen.getByLabelText('Skema warna')).toBeTruthy()
+    expect(screen.getByLabelText('Terminal scrollback')).toBeTruthy()
+    expect(screen.getByLabelText('App theme')).toBeTruthy()
+    expect(screen.getByLabelText('Color scheme')).toBeTruthy()
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Shell & buffer' }))
-    expect(screen.queryByLabelText('Scrollback terminal')).toBeNull()
-    expect(screen.getByLabelText('Buffer replay server')).toBeTruthy()
+    expect(screen.queryByLabelText('Terminal scrollback')).toBeNull()
+    expect(screen.getByLabelText('Server replay buffer')).toBeTruthy()
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
-    expect(screen.queryByLabelText('Tema app')).toBeNull()
+    expect(screen.queryByLabelText('App theme')).toBeNull()
     expect(screen.queryByLabelText('Warna aksen')).toBeNull()
   })
 
   it('puts the Markdown preview toggle in Interaksi', () => {
     renderPanel()
-    expect(screen.queryByLabelText('Buka Markdown sebagai preview')).toBeNull()
+    expect(screen.queryByLabelText('Open Markdown as preview')).toBeNull()
 
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Interaksi' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Interaction' }))
 
-    expect(screen.getByLabelText('Buka Markdown sebagai preview')).toBeTruthy()
+    expect(screen.getByLabelText('Open Markdown as preview')).toBeTruthy()
   })
 
   it('falls back to terminal for an unknown or legacy tab id', () => {
@@ -111,7 +111,7 @@ describe('SettingsPanel persistence', () => {
   it('emits the patch for a number field change', () => {
     const { onChange } = renderPanel()
 
-    fireEvent.change(screen.getByLabelText('Ukuran font'), { target: { value: '18' } })
+    fireEvent.change(screen.getByLabelText('Font size'), { target: { value: '18' } })
 
     expect(onChange).toHaveBeenCalledWith({ fontSize: 18 })
   })
@@ -119,11 +119,11 @@ describe('SettingsPanel persistence', () => {
   it('clamps a number on commit without rewriting it per keystroke', () => {
     const { onChange, rerender } = renderPanel()
 
-    fireEvent.change(screen.getByLabelText('Ukuran font'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Font size'), { target: { value: '2' } })
     expect(onChange).toHaveBeenLastCalledWith({ fontSize: 2 })
     // Parent nyata menerapkan patch; blur membaca nilai terbaru itu, bukan nilai ketikan liar.
     rerender(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, fontSize: 2 }} onChange={onChange} onClose={vi.fn()} />)
-    fireEvent.blur(screen.getByLabelText('Ukuran font'))
+    fireEvent.blur(screen.getByLabelText('Font size'))
 
     expect(onChange).toHaveBeenLastCalledWith({ fontSize: 6 })
   })
@@ -131,7 +131,7 @@ describe('SettingsPanel persistence', () => {
   it('toggles a boolean through a native checkbox with the same accessible name', () => {
     const { onChange } = renderPanel()
 
-    const toggle = screen.getByRole('checkbox', { name: 'Kursor berkedip' }) as HTMLInputElement
+    const toggle = screen.getByRole('checkbox', { name: 'Cursor blink' }) as HTMLInputElement
     expect(toggle.checked).toBe(true)
     fireEvent.click(toggle)
 
@@ -141,11 +141,11 @@ describe('SettingsPanel persistence', () => {
   it('shows the category prefix, marks a modified item and resets it through the gear', () => {
     const { onChange } = renderPanel({ cursorBlink: false })
 
-    const field = screen.getByLabelText('Kursor berkedip').closest('[data-slot="settings-field"]') as HTMLElement
+    const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(within(field).getByText('(Modified)')).toBeTruthy()
     expect(field.querySelector('.st-category')?.textContent).toBe('Terminal: ')
 
-    fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Kursor berkedip' }))
+    fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Cursor blink' }))
 
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: DEFAULT_SETTINGS.cursorBlink })
   })
@@ -153,7 +153,7 @@ describe('SettingsPanel persistence', () => {
   it('does not show Modified or a reset gear for a default value', () => {
     renderPanel()
 
-    const field = screen.getByLabelText('Kursor berkedip').closest('[data-slot="settings-field"]') as HTMLElement
+    const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(within(field).queryByText('(Modified)')).toBeNull()
     expect(within(field).queryByRole('button', { name: /Reset Setting/ })).toBeNull()
   })
@@ -161,7 +161,7 @@ describe('SettingsPanel persistence', () => {
   it('renders every dropdown as the same native select with a codicon chevron', () => {
     const { onChange } = renderPanel()
 
-    const select = screen.getByLabelText('Bentuk kursor') as HTMLSelectElement
+    const select = screen.getByLabelText('Cursor style') as HTMLSelectElement
     expect(select.tagName).toBe('SELECT')
     expect(select.className).toBe('st-select')
     expect(select.parentElement?.querySelector('.codicon-chevron-down')).toBeTruthy()
@@ -173,7 +173,7 @@ describe('SettingsPanel persistence', () => {
   it('draws checkboxes as a codicon check inside the 18px box', () => {
     renderPanel()
 
-    const toggle = screen.getByRole('checkbox', { name: 'Kursor berkedip' })
+    const toggle = screen.getByRole('checkbox', { name: 'Cursor blink' })
     expect(toggle.nextElementSibling?.className).toBe('st-checkbox-box')
     expect(toggle.nextElementSibling?.querySelector('.codicon-check')).toBeTruthy()
   })
@@ -193,7 +193,7 @@ describe('SettingsPanel persistence', () => {
   it('closes through the header button', () => {
     const { onClose } = renderPanel()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Tutup settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -202,16 +202,16 @@ describe('SettingsPanel persistence', () => {
 describe('SettingsPanel search', () => {
   it('reports the number of matching settings and clears through the clear button', () => {
     renderPanel()
-    const search = screen.getByRole('searchbox', { name: 'Cari setting' }) as HTMLInputElement
+    const search = screen.getByRole('searchbox', { name: 'Search settings' }) as HTMLInputElement
 
     fireEvent.change(search, { target: { value: 'font' } })
     const count = document.querySelector('.st-search-count') as HTMLElement
-    expect(count.textContent).toMatch(/^\d+ setting ditemukan$/)
+    expect(count.textContent).toMatch(/^\d+ settings? found$/)
     expect(Number.parseInt(count.textContent ?? '', 10)).toBe(
       document.querySelectorAll('[data-slot="settings-field"]').length,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus pencarian' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(search.value).toBe('')
   })
 
@@ -219,29 +219,29 @@ describe('SettingsPanel search', () => {
     renderPanel()
     fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Cari setting' }), { target: { value: 'font' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), { target: { value: 'font' } })
 
     // Terminal punya field font; Canvas yang sedang aktif tidak.
-    expect(screen.getByLabelText('Ukuran font')).toBeTruthy()
+    expect(screen.getByLabelText('Font size')).toBeTruthy()
     expect(screen.getByLabelText('Font family')).toBeTruthy()
-    expect(screen.queryByLabelText('Ukuran grid')).toBeNull()
+    expect(screen.queryByLabelText('Grid size')).toBeNull()
   })
 
   it('treats space-separated tokens as AND and reports when nothing matches', () => {
     renderPanel()
-    const search = screen.getByRole('searchbox', { name: 'Cari setting' })
+    const search = screen.getByRole('searchbox', { name: 'Search settings' })
 
     fireEvent.change(search, { target: { value: 'font bold' } })
-    expect(screen.getByLabelText('Bobot teks bold')).toBeTruthy()
+    expect(screen.getByLabelText('Bold text weight')).toBeTruthy()
 
     fireEvent.change(search, { target: { value: 'tidak-ada-setting-ini' } })
-    expect(screen.queryByLabelText('Ukuran font')).toBeNull()
+    expect(screen.queryByLabelText('Font size')).toBeNull()
     expect(screen.getByText(/Tidak ada setting yang cocok/)).toBeTruthy()
   })
 
   it('clears the query on Escape instead of closing the dialog, and clears on section click', () => {
     const { onClose } = renderPanel()
-    const search = screen.getByRole('searchbox', { name: 'Cari setting' }) as HTMLInputElement
+    const search = screen.getByRole('searchbox', { name: 'Search settings' }) as HTMLInputElement
 
     fireEvent.change(search, { target: { value: 'font' } })
     fireEvent.keyDown(search, { key: 'Escape' })
@@ -283,7 +283,7 @@ describe('SettingsPanel agents', () => {
     const { onChange } = renderPanel()
     fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Tambah agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add agent' }))
 
     const patch = onChange.mock.calls[0][0] as Partial<Settings>
     expect(patch.customAgents).toHaveLength(1)
@@ -299,7 +299,7 @@ describe('SettingsPanel agents', () => {
     })
     fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
 
     expect(onChange).toHaveBeenCalledWith({
       customAgents: [],

@@ -55,7 +55,9 @@ test('project viewers see their project and global rows but never another projec
 
 test('hostile rows are never served: external trust, quarantine, superseded, expired claim, project-bound user row', () => {
   const db = fixture()
-  seedRow(db, { key: 'global.ext.one', body: 'zebra external', trust: 'external' })
+  // The write guard refuses an external fact; seed a human one and taint it in SQL (hostile legacy data).
+  seedRow(db, { key: 'global.ext.one', body: 'zebra external' })
+  db.query("UPDATE memory SET trust='external' WHERE key='global.ext.one'").run()
   seedRow(db, { key: 'global.q.one', body: 'zebra quarantined', status: 'fact' })
   db.query("UPDATE memory SET status='quarantine' WHERE key='global.q.one'").run()
   seedRow(db, { key: 'central.old.one', body: 'zebra expired', scope: 'central', status: 'claim', trust: 'agent', staleAfter: T0 - 1 })

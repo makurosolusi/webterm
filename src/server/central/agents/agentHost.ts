@@ -3,10 +3,11 @@
 // the cwd comes from the worktree allocation, and the prompt never carries free model text.
 import type { WorkerSessionPort } from '../../orchestrator/workerRuntimeSession'
 import type { WorktreeService } from '../../orchestrator/worktree'
-import { AGENT_ENVELOPE } from './agentExecutor'
+import { AGENT_ENVELOPE, spawnParentOf } from './agentExecutor'
 import type { AgentHost } from './agentExecutor'
 import type { AgentRecord, AgentRunner } from '../contracts'
 import { AGENT_KIND_UNKNOWN, type AgentCatalog } from './agentCatalog'
+import { spawnAgent } from '../../spawn/agentSpawn'
 
 /** Worker owner label stored on the worktree allocation. */
 export const AGENT_WORKTREE_OWNER = 'central'
@@ -22,7 +23,11 @@ export interface AgentHostDeps {
   catalog: AgentCatalog
   /** Optional human-set task title; only server data, never model text. */
   taskTitle?(agent: AgentRecord): string | null
+  /** The `agent.spawn` path (F2-h); default = the process-wide spawner (depth, caps, lineage, events). */
+  spawn?: typeof spawnAgent
 }
+
+export { spawnParentOf }
 
 /** Builds the host over injected sessions/worktrees (real ones in `ca2Boot`, fakes in tests). */
 export function createAgentHost(deps: AgentHostDeps): AgentHost {
@@ -48,7 +53,11 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       const entry = deps.catalog.resolve(agent.kind)
       if (!entry) throw new Error(`${AGENT_KIND_UNKNOWN}: ${agent.kind}`)
       // ponytail: PTY sessions take no env from the host (OpenMsg has no env field), so `CustomAgent.env` only reaches headless runs.
-      await deps.sessions.open({ nodeId, cwd, cmd: entry.launchLine, agentId: agent.kind })
+      const res = await (deps.spawn ?? spawnAgent)(
+        { door: 'central', mode: 'pty', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: deps.taskTitle?.(agent) ?? `${agent.role} ${agent.kind}`, pty: { cmd: entry.launchLine, agentId: agent.kind } },
+        { openPty: () => deps.sessions.open({ nodeId, cwd, cmd: entry.launchLine, agentId: agent.kind }) }
+      )
+      if (!res.ok) throw new Error(`${res.code}: ${res.message}`)
     },
     headlessArgv: (kind, prompt) => deps.catalog.resolve(kind)?.headlessArgv?.(prompt) ?? null,
     async send(nodeId, text) { deps.sessions.input(nodeId, `${text}\r`) },

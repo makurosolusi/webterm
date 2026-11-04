@@ -17,11 +17,11 @@ const mkView = (id: CapabilityId): CapabilityView => ({
   id, title: CAPABILITIES[id].title, blurb: CAPABILITIES[id].blurb,
   status: on.has(id) ? 'on' : id === 'browser' || (chainBroken && id === 'autonomy') ? 'needs-step' : 'off',
   ...(id === 'browser' ? { step: { kind: 'chromiumPath' as const, label: 'Pilih lokasi' } } : {}),
-  ...(chainBroken && id === 'autonomy' ? { step: { kind: 'fixChain' as const, label: 'Nyalakan yang dibutuhkan' } } : {}),
+  ...(chainBroken && id === 'autonomy' ? { step: { kind: 'fixChain' as const, label: 'Turn on what’s needed' } } : {}),
   ...(engineStep && id === 'central'
-    ? { status: 'needs-step' as const, step: { kind: 'agentEngine', label: 'Pasang atau login Claude Code / OpenCode' } as unknown as CapabilityView['step'] }
+    ? { status: 'needs-step' as const, step: { kind: 'agentEngine', label: 'Install or sign in to Claude Code / OpenCode' } as unknown as CapabilityView['step'] }
     : {}),
-  ...(id === 'workers' && on.has(id) ? { subs: [{ key: 'k', label: 'Minta persetujuan sebelum worker berjalan', on: true }] } : {}),
+  ...(id === 'workers' && on.has(id) ? { subs: [{ key: 'k', label: 'Ask for approval before a worker runs', on: true }] } : {}),
 })
 const fixture = (): CapabilitiesResponse => ({
   capabilities: CAPABILITY_IDS.map(mkView),
@@ -56,7 +56,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 async function openCapabilities(): Promise<HTMLElement> {
   render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} projectId="p1" />)
   const nav = screen.getByRole('navigation', { name: 'Section settings' })
-  fireEvent.click(within(nav).getByRole('button', { name: 'Kemampuan' }))
+  fireEvent.click(within(nav).getByRole('button', { name: 'Capabilities' }))
   await screen.findAllByRole('switch')
   return screen.getByRole('main', { name: 'Settings' })
 }
@@ -85,7 +85,7 @@ describe('tab Kemampuan (D8)', () => {
     // Enam kartu bersakelar; Telegram punya alur tempel-token, bukan sakelar.
     expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 1)
     expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length)
-    expect(screen.getByLabelText('Minta persetujuan sebelum worker berjalan')).toBeTruthy()
+    expect(screen.getByLabelText('Ask for approval before a worker runs')).toBeTruthy()
     expect(within(main).getAllByRole('region', { name: /Telegram/ }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Pilih lokasi' })).toBeTruthy()
   })
@@ -96,7 +96,7 @@ describe('tab Kemampuan (D8)', () => {
     const main = await openCapabilities()
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(within(details).getByText('Lanjutan')).toBeTruthy()
+    expect(within(details).getByText('Advanced')).toBeTruthy()
     expect(details.querySelectorAll(':scope > div').length).toBe(4)
     expect(within(details).getByText('/tmp/webterm-data')).toBeTruthy()
   })
@@ -105,42 +105,42 @@ describe('tab Kemampuan (D8)', () => {
     const main = await openCapabilities()
     fireEvent.click(screen.getByRole('button', { name: 'Pilih lokasi' }))
     await waitFor(() => expect((main.querySelector('details') as HTMLDetailsElement).open).toBe(true))
-    fireEvent.click(screen.getByRole('button', { name: 'Setel ulang kemampuan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reset capabilities' }))
     await waitFor(() => expect(calls).toContain('POST /api/capabilities/reset'))
   })
 
   it('pencarian mencocokkan judul bagian, judul, blurb, dan kata kunci kartu', async () => {
     const main = await openCapabilities()
-    const search = screen.getByRole('searchbox', { name: 'Cari setting' })
+    const search = screen.getByRole('searchbox', { name: 'Search settings' })
     const hits = (q: string): string[] => {
       fireEvent.change(search, { target: { value: q } })
       return [...main.querySelectorAll('[data-capability]')].map((el) => el.getAttribute('data-capability') ?? '')
     }
     expect(hits('Telegram')).toEqual(['telegram'])
-    expect(document.querySelector('.st-search-count')?.textContent).toBe('1 setting ditemukan')
+    expect(document.querySelector('.st-search-count')?.textContent).toBe('1 setting found')
     expect(hits('chrome')).toEqual(['browser'])
     expect(main.querySelector('details')).not.toBeNull() // Lanjutan (lokasi Chrome) ikut tampil
     expect(hits('cookie')).toEqual(['browser'])
     expect(hits('localhost')).toEqual(['browser'])
     expect(hits('token')).toEqual(['telegram'])
-    expect(hits('unggah')).toEqual(['filesWrite'])
-    expect(hits('zzz-tidak-ada')).toEqual([])
-    expect(hits('kemampuan')).toHaveLength(CAPABILITY_IDS.length) // judul bagian: semua tampil
+    expect(hits('upload')).toEqual(['filesWrite'])
+    expect(hits('zzz-nothing')).toEqual([])
+    expect(hits('capabilities')).toHaveLength(CAPABILITY_IDS.length) // judul bagian: semua tampil
   })
 
-  it('langkah agentEngine (Agent Pusat butuh Claude Code/OpenCode) membuka Lanjutan, bukan toggle/reset', async () => {
+  it('langkah agentEngine (Central Agent butuh Claude Code/OpenCode) membuka Lanjutan, bukan toggle/reset', async () => {
     engineStep = true
     const main = await openCapabilities()
-    fireEvent.click(screen.getByRole('button', { name: 'Pasang atau login Claude Code / OpenCode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Install or sign in to Claude Code / OpenCode' }))
     await waitFor(() => expect((main.querySelector('details') as HTMLDetailsElement).open).toBe(true))
     expect(calls.filter((c) => c.startsWith('POST'))).toEqual([])
   })
 
-  it('"Nyalakan yang dibutuhkan" menyalakan kartu itu lewat toggle, TIDAK menyetel ulang semua pilihan', async () => {
+  it('"Turn on what’s needed" menyalakan kartu itu lewat toggle, TIDAK menyetel ulang semua pilihan', async () => {
     chainBroken = true
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true) // kartu Otonomi berbahaya: menyalakan dikonfirmasi
     await openCapabilities()
-    fireEvent.click(screen.getByRole('button', { name: 'Nyalakan yang dibutuhkan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on what’s needed' }))
     expect(confirm).toHaveBeenCalledTimes(1)
     confirm.mockRestore()
     await waitFor(() => expect(calls).toContain('POST /api/capabilities/autonomy'))
@@ -151,7 +151,7 @@ describe('tab Kemampuan (D8)', () => {
   it('projectId dari SettingsPanel diteruskan ke kartu Telegram saat menautkan chat', async () => {
     telegramOn = true
     await openCapabilities()
-    fireEvent.click(await screen.findByRole('button', { name: 'Tautkan' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Link' }))
     await waitFor(() => expect(calls.some((c) => c.startsWith('POST') && c.endsWith('/bindings'))).toBe(true))
     const key = calls.find((c) => c.startsWith('POST') && c.endsWith('/bindings')) as string
     expect(JSON.parse(bodies[key] as string)).toMatchObject({ projectId: 'p1', chatId: '555' })

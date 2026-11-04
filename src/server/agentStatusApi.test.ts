@@ -25,6 +25,8 @@ import {
   TRANSCRIPT_PATH_MAX,
   type AgentStatusDeps,
 } from './agentStatusApi'
+import { eventBus } from './events/eventBus'
+import type { SenseEvent } from './events/eventModel'
 
 /** Request minimal: `readCappedBody` hanya butuh emitter 'data'/'end' + `resume`, route butuh
  *  method + headers. Body dikirim sebagai chunk Buffer, persis seperti stream node:http. */
@@ -431,12 +433,12 @@ describe('context-link tidak tersentuh', () => {
     expect(res.statusCode).toBe(0)
   })
 
-  it('api.ts tetap men-dispatch context-link seperti sebelumnya', async () => {
+  it('tabel route (routes/control.routes.ts) tetap men-dispatch context-link seperti sebelumnya', async () => {
     const { readFileSync } = await import('node:fs')
     const { fileURLToPath } = await import('node:url')
-    const src = readFileSync(fileURLToPath(new URL('./api.ts', import.meta.url)), 'utf8')
-    expect(src).toContain('await agentStatusRoute(req, res, url)')
-    expect(src).toContain('await contextLinkRoute(req, res, url)')
+    const src = readFileSync(fileURLToPath(new URL('./routes/control.routes.ts', import.meta.url)), 'utf8')
+    expect(src).toContain('agentStatusRoute(c.req, c.res, c.url)')
+    expect(src).toContain('contextLinkRoute(c.req, c.res, c.url)')
     const route = readFileSync(
       fileURLToPath(new URL('./contextLinkApi.ts', import.meta.url)),
       'utf8'
@@ -457,5 +459,22 @@ describe('STRICT_HOOK_AUTH dibaca dari env saat modul dimuat', () => {
     const on = await import('./agentStatusApi')
     expect(on.STRICT_HOOK_AUTH).toBe(true)
     delete process.env.WEBTERM_STRICT_HOOK_AUTH
+  })
+})
+
+describe('Senses producer (F1-d)', () => {
+  it('records hook.<Event>: trusted with the node token, untrusted without', async () => {
+    const seen: SenseEvent[] = []
+    const off = eventBus.subscribe('hook.*', (e) => { seen.push(e) })
+    const d = deps()
+    await agentStatusRoute(mockReq({ hook_event_name: 'Stop' }, { [NODE_TOKEN_HEADER]: TOKEN }), mockRes(), URL_FOR(NODE), { strictAuth: false, deps: d })
+    await agentStatusRoute(mockReq({ hook_event_name: 'UserPromptSubmit', prompt: 'secret plan '.repeat(50) }), mockRes(), URL_FOR(NODE), { strictAuth: false, deps: d })
+    off()
+    expect(seen.map((e) => [e.kind, e.trust, e.nodeId])).toEqual([
+      ['hook.Stop', 'trusted', NODE],
+      ['hook.UserPromptSubmit', 'untrusted', NODE],
+    ])
+    expect((seen[0].payload as { status?: string }).status).toBe('waiting')
+    expect(String((seen[1].payload as { preview?: string }).preview).length).toBeLessThanOrEqual(121)
   })
 })

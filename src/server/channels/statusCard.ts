@@ -5,6 +5,7 @@ import type { ControlLevel } from '../central/contracts'
 import { createLogger } from '../logs'
 import type { BotCall } from './botManager'
 import { PollApiError } from './telegramPollApi'
+import { TELEGRAM_HTML_PARAMS, telegramMarkdownChunks } from './telegramSend'
 
 /** Minimum gap between two edits of one card; Telegram throttles frequent edits. */
 export const STATUS_CARD_DEBOUNCE_MS = 5_000
@@ -49,7 +50,8 @@ export function createStatusCards(deps: StatusCardDeps): StatusCards {
   const cards = new Map<string, CardState>()
 
   async function apply(target: CardTarget, state: CardState): Promise<CardOutcome> {
-    const text = renderStatusCard(deps.provider(target.projectId))
+    // Same renderer as every other outgoing text; a three-line card is always one chunk.
+    const text = telegramMarkdownChunks(renderStatusCard(deps.provider(target.projectId)))[0] ?? ''
     if (state.messageId !== undefined && text === state.lastText) return 'unchanged'
     if (state.messageId !== undefined && now() - state.lastAt < debounce) {
       if (!state.timer) {
@@ -61,7 +63,7 @@ export function createStatusCards(deps: StatusCardDeps): StatusCards {
     try {
       if (state.messageId === undefined) {
         const sent = (await deps.call(target.accountId, 'sendMessage', {
-          chat_id: target.chatId, text, ...(target.threadId === undefined ? {} : { message_thread_id: target.threadId }),
+          chat_id: target.chatId, text, ...TELEGRAM_HTML_PARAMS, ...(target.threadId === undefined ? {} : { message_thread_id: target.threadId }),
         })) as { message_id?: unknown } | null
         if (!Number.isSafeInteger(sent?.message_id)) return 'failed'
         state.messageId = sent?.message_id as number
@@ -69,7 +71,7 @@ export function createStatusCards(deps: StatusCardDeps): StatusCards {
         state.lastAt = now()
         return 'sent'
       }
-      await deps.call(target.accountId, 'editMessageText', { chat_id: target.chatId, message_id: state.messageId, text })
+      await deps.call(target.accountId, 'editMessageText', { chat_id: target.chatId, message_id: state.messageId, text, ...TELEGRAM_HTML_PARAMS })
       state.lastText = text
       state.lastAt = now()
       return 'edited'

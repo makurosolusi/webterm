@@ -15,21 +15,35 @@ import CentralControlPanel, { useCentralControl } from './central/CentralControl
 import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
+import Omnibox from './Omnibox'
+import { openEditorAt, useOmnibox } from './Omnibox.open'
+import { setLspFileOpener } from './editorLsp.store'
+import { useAppCommands } from './commandRegistry.defaults'
+import { useCommandKeybindings } from './commandRegistry'
+import { useKeybindingsSync } from './keybindings.store'
+import { usePresencePing } from './presencePing'
 import OutputPanelHost from './output/outputPanelHost'
+import { usePortsStatusItems } from './PortsChip'
+import ProblemsPanel, { useProblems } from './ProblemsPanel'
+import { useTasksMenu } from './TasksMenu'
+import MorningBrief from './MorningBrief'
 import { SettingsPanel } from './SettingsPanel'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
-import { BrowserLinkOfferHost } from './browserLinkOffer'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
+import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
 import { hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
-import { useClosedHistory } from './closedHistory'
+import { useClosedHistory, type ReopenDeps } from './closedHistory'
+import { useCanvasUndo } from './canvasUndo'
+import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardCanvas from './App.canvas'
+import AppHosts from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
@@ -64,8 +78,8 @@ export default function App() {
   // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
   // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
   const [cleanView, toggleCleanView] = useCleanView()
-  const { settings, update } = useSettings()
-  const { entries: closedSessions, record: recordClosed, reopen: reopenClosed } = useClosedHistory(workspaces, nodes)
+  const { settings, update, history: settingsHistory, hydrated: settingsHydrated } = useSettings()
+  const { entries: closedSessions, record: recordClosed, reopen: reopenClosed, bridgesOf: closedBridgesOf } = useClosedHistory(workspaces, nodes)
 
   const activeWsRef = useRef<Workspace | null>(null)
   const nodesRef = useRef<Node[]>([])
@@ -98,11 +112,11 @@ export default function App() {
   } = useCanvasViewport({ rf, viewportRef, scheduleSave })
 
   // Undo/redo layout node — tumpukan terpisah dari riwayat pandangan di atas. Lihat `./layoutHistory`.
-  const { onUndo, onRedo, canUndo, canRedo, pushLayout, resetLayout } =
+  const { onUndo: onLayoutUndo, onRedo, canUndo: canLayoutUndo, canRedo, pushLayout, resetLayout } =
     useLayoutHistory({ nodesRef, setNodes, scheduleSave })
 
   const {
-    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, nodeActions,
+    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions,
   } = useBoardActions({
     rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
@@ -119,6 +133,16 @@ export default function App() {
       activeWsRef, nodesRef, edgesRef, cancelSave, rf,
     })
 
+  // Notification click → `onFocus`, which switches workspace when the node lives on another board.
+  useEffect(() => setNotifyCanvas({ focus: (id) => void onFocus(id) }), [onFocus])
+
+  const reopenDeps: ReopenDeps = { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect, addBridges: restoreBridges }
+  // Undo = layout undo + reopen-closed (with cables, across reloads). See `./canvasUndo`.
+  const { onUndo, canUndo } = useCanvasUndo({
+    nodesRef, layout: { onUndo: onLayoutUndo, canUndo: canLayoutUndo }, closed: closedSessions,
+    bridgesOf: closedBridgesOf, reopen: reopenClosed, reopenDeps, restoreBridges,
+  })
+
   const { onLogin, onLogout } = useAuthActions()
 
   // Lewat `onNodesChange`, bukan setNodes langsung: riwayat & persistensi menggantung di sana.
@@ -127,7 +151,7 @@ export default function App() {
   }, [onNodesChange])
 
   const { onPaneContextMenu, menu: paneMenu } = useCanvasPaneMenu({
-    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, onFit, onSelectAll,
+    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onFit, onSelectAll,
   })
 
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
@@ -147,6 +171,28 @@ export default function App() {
 
   const inboxReady = hydrated && !noWorkspaces
   const { inboxUnread, outputStatusItems, outputCommands } = useDockFeeds(inboxOpen, setInboxOpen, inboxReady)
+  // Senses chips: detected ports, Problems counter, Run Task (src/server/ports|problems|tasks).
+  const portItems = usePortsStatusItems(activeId, nodeActions.openBrowserAt)
+  const problems = useProblems(activeId)
+  const tasks = useTasksMenu(activeId, addFlowNode)
+  // Go to Definition into a file no editor node shows opens one (editorLsp.monaco.ts).
+  useEffect(() => setLspFileOpener((path, line, col) => openEditorAt({ nodesRef, addFlowNode, onFocus }, path, line, col)), [addFlowNode, onFocus])
+
+  // ⌘K omnibox / ⌘P Go to File / ⇧⌘F Find in Files + the command registry behind them and Help.
+  const omni = useOmnibox({
+    root: activeWs?.cwd, nodes, nodesRef, settings, extraCommands: outputCommands, addFlowNode, onFocus, onAddAgent,
+    openBrowserAt: nodeActions.openBrowserAt,
+  })
+  useAppCommands({
+    openOmnibox: () => omni.open('all'), openQuickOpen: () => omni.open('files'), openFindInFiles: () => omni.open('files', '%'),
+    openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
+    newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
+    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => setInboxOpen(!inboxOpen), toggleChat: () => setChatOpen(!chatOpen),
+    toggleBoard: () => setBoard((v) => !v),
+  })
+  useKeybindingsSync(settings.keybindings, settingsHydrated, update)
+  useCommandKeybindings()
+  usePresencePing(!authRequired)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
@@ -183,7 +229,7 @@ export default function App() {
             onNewProject={onNewProject}
             onCreateEmpty={(name) => void onCreateWorkspace(name)}
             closedSessions={closedSessions}
-            onReopen={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
+            onReopen={(id) => void reopenClosed(id, reopenDeps)}
           />
         ) : (
           <BoardCanvas
@@ -212,6 +258,7 @@ export default function App() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenHelp={() => setShowHelp(true)}
           commands={outputCommands}
+          onOpenPalette={() => omni.open('all')}
         />
       </div>
       {hydrated && !noWorkspaces && (
@@ -256,7 +303,7 @@ export default function App() {
             workspaceName={activeWs?.name}
             agentSummary={agentSummary}
             onOpenSettings={() => setShowSettings(true)}
-            extraStatusItems={outputStatusItems}
+            extraStatusItems={[...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SessionsPanel
             open={sessionsOpen}
@@ -269,8 +316,9 @@ export default function App() {
             onCloseSession={(id) => void closeSession(id)}
             onSelectWorkspace={(id) => void onSelect(id)}
             closedSessions={closedSessions}
-            onReopenSession={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
+            onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           />
+          <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Panel menutup sendiri lewat Escape (`onClose`), dan dialog persetujuan di dalamnya
               yang memegang consent. Dock/badge tidak pernah menyetujui apa pun. */}
           <InboxPanel open={inboxOpen} onClose={() => setInboxOpen(false)} pollMs={30000} />
@@ -279,17 +327,30 @@ export default function App() {
           <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} offsetForInbox={inboxOpen} />
           <CentralControlPanel open={central.open} onClose={central.close} enabled={central.enabled} />
           <OutputPanelHost />
+          <ProblemsPanel problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode} onFocus={(id) => void onFocus(id)} />
+          {tasks.menu}
+          <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
+          <AppHosts
+            workspaces={workspaces} liveNodes={liveNodes} activeWs={activeWs} onFocusNode={(id) => void onFocus(id)}
+            onCreated={(ws) => { setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}
+            onPlace={(placed, bridges) => { for (const n of placed) addFlowNode(() => n); restoreBridges(bridges, placed.map((n) => n.id)) }}
+          />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
-          <BrowserLinkOfferHost />
         </>
       )}
       {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi
           petunjuk jalan keluarnya juga tidak boleh. */}
       {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} />}
+      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} history={settingsHistory} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      {omni.state && (
+        <Omnibox
+          key={`${omni.state.scope}:${omni.state.initialQuery}`} scope={omni.state.scope} initialQuery={omni.state.initialQuery}
+          root={activeWs?.cwd} sources={omni.sources} onAction={omni.onAction} onClose={omni.close}
+        />
+      )}
     </div>
     </NodeActionsProvider>
     </SettingsProvider>

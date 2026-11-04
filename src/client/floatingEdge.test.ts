@@ -52,6 +52,23 @@ describe('canLink', () => {
     expect(canLink(br('a'), br('b'))).toBe(false)
     expect(canLink(br('a'), { id: 'b', kind: 'terminal' })).toBe(false)
   })
+  it('agent ↔ diff true both ways; diff ↔ diff, diff ↔ browser, diff ↔ terminal false', () => {
+    const df = (id: string) => ({ id, kind: 'diff' })
+    expect(canLink(ag('a'), df('d'))).toBe(true)
+    expect(canLink(df('d'), ag('a'))).toBe(true)
+    expect(canLink(df('d'), df('e'))).toBe(false)
+    expect(canLink(df('d'), br('b'))).toBe(false)
+    expect(canLink(df('d'), { id: 't', kind: 'terminal' })).toBe(false)
+  })
+  it('plan ↔ agent and plan ↔ diff (a worker) true both ways; plan ↔ plan, browser, terminal false', () => {
+    const pl = (id: string) => ({ id, kind: 'plan' })
+    expect(canLink(pl('p'), ag('a'))).toBe(true)
+    expect(canLink(ag('a'), pl('p'))).toBe(true)
+    expect(canLink(pl('p'), { id: 'd', kind: 'diff' })).toBe(true)
+    expect(canLink(pl('p'), pl('q'))).toBe(false)
+    expect(canLink(pl('p'), br('b'))).toBe(false)
+    expect(canLink(pl('p'), { id: 't', kind: 'terminal' })).toBe(false)
+  })
 })
 
 describe('bridgeExists', () => {

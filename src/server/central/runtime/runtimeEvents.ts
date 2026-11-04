@@ -12,7 +12,22 @@ import {
   type TurnResultEvent,
   zeroUsage,
 } from './centralRuntime'
-import { redactSecrets, redactValue } from '../../redactSecrets'
+import { redactValue } from '../../redactSecrets'
+import { maskSecrets } from '../../secrets/secret.redact'
+import { createBrokerStore, type BrokerStore } from '../../secrets/secret.store'
+
+/** Values held by the secret broker store; masked in everything a turn emits, persists or runs (K7-F1). */
+export function brokerSecretValues(store: BrokerStore = createBrokerStore()): string[] {
+  return store.names().map((name) => store.read(name)).filter((v): v is string => !!v)
+}
+
+/** `value` with every string masked of `values` (raw + encoded forms) and credential shapes; keys kept. */
+export function maskValue(value: unknown, values: readonly string[]): unknown {
+  if (typeof value === 'string') return maskSecrets(value, values)
+  if (Array.isArray(value)) return value.map((v) => maskValue(v, values))
+  if (value === null || typeof value !== 'object' || value instanceof Date) return value
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, maskValue(v, values)]))
+}
 
 function count(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0
@@ -27,7 +42,11 @@ export function normalizeUsage(usage: Partial<RuntimeUsage> | null | undefined):
 }
 
 /** `now` is injectable for deterministic tests. */
-export interface TurnEmitterOptions { turnId: string; emit: RuntimeEmit; now?: () => number }
+export interface TurnEmitterOptions {
+  turnId: string; emit: RuntimeEmit; now?: () => number
+  /** Known secret values to mask (tests); absent = the broker store, read once per turn. */
+  secrets?: readonly string[]
+}
 /** `text` overrides the assembled deltas (used when partial text is saved on cancel). */
 export interface TurnResultOptions {
   errorCode?: RuntimeErrorCode
@@ -57,19 +76,22 @@ export function createTurnEmitter(options: TurnEmitterOptions): TurnEmitter {
   let finalResult: RuntimeResult | null = null
   const requested = new Set<string>()
   const completed = new Set<string>()
+  const known = options.secrets ?? brokerSecretValues()
+  const scrubText = (t: string): string => maskSecrets(t, known)
+  const scrub = (v: unknown): unknown => redactValue(maskValue(v, known))
 
   function normalize(body: RuntimeEventInput): RuntimeEvent {
     const base = { turnId: options.turnId, seq: ++seq, at: at() }
     switch (body.type) {
       case 'text.delta':
-        return { ...base, type: 'text.delta', text: redactSecrets(body.text) }
+        return { ...base, type: 'text.delta', text: scrubText(body.text) }
       case 'tool.requested':
         return {
           ...base,
           type: 'tool.requested',
           toolCallId: body.toolCallId,
           name: body.name,
-          input: redactValue(body.input),
+          input: scrub(body.input),
         }
       case 'tool.completed':
         return {
@@ -78,7 +100,7 @@ export function createTurnEmitter(options: TurnEmitterOptions): TurnEmitter {
           toolCallId: body.toolCallId,
           name: body.name,
           ok: body.ok,
-          output: redactValue(body.output),
+          output: scrub(body.output),
           ...(body.errorCode === undefined ? {} : { errorCode: body.errorCode }),
           durationMs: count(body.durationMs),
         }
@@ -87,7 +109,7 @@ export function createTurnEmitter(options: TurnEmitterOptions): TurnEmitter {
           ...base,
           type: 'error',
           code: body.code,
-          message: redactSecrets(body.message),
+          message: scrubText(body.message),
           retryable: body.retryable ?? false,
         }
       case 'usage':
@@ -114,7 +136,7 @@ export function createTurnEmitter(options: TurnEmitterOptions): TurnEmitter {
   function result(outcome: TurnOutcome, opts: TurnResultOptions = {}): RuntimeResult {
     if (finalResult) return finalResult
     const resolvedUsage = normalizeUsage(opts.usage ?? usage)
-    const assembled = opts.text === undefined ? text : redactSecrets(opts.text)
+    const assembled = opts.text === undefined ? text : scrubText(opts.text)
     const event: TurnResultEvent = {
       type: 'turn.result',
       turnId: options.turnId,

@@ -4,8 +4,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { maxInflightFromEnv } from './central/autonomyDispatch'
-import { resolveMaxSteps } from './central/chat/toolLoop'
 import { resolveLimits } from './central/chat/turnLimits'
+import { READ_TOOLS_FLAG } from './central/tools/defs/read.shared'
 import { contextWindowTokens } from './central/context/rotationPolicy'
 import { budgetLimits } from './central/guard/budgetStore'
 import { CA2_ENV_SPECS } from './envRegistry.ca2'
@@ -23,7 +23,6 @@ const EMPTY: Record<string, string | undefined> = {}
  * Pengaturan memutasi process.env, envSettings.runtime.ts), lalu resolver di bawah dipanggil per turn/per cek.
  */
 const HOT_PROOF: Readonly<Record<string, string>> = {
-  WEBTERM_CENTRAL_MAX_STEPS: 'central/chat/toolLoop.ts',
   WEBTERM_CENTRAL_TURN_STEPS: 'central/chat/turnLimits.ts',
   WEBTERM_CENTRAL_TURN_WALL_MS: 'central/chat/turnLimits.ts',
   WEBTERM_CENTRAL_DAILY_TOKENS: 'central/guard/budgetStore.ts',
@@ -31,13 +30,18 @@ const HOT_PROOF: Readonly<Record<string, string>> = {
   WEBTERM_CENTRAL_DAILY_COST_MICROS: 'central/guard/budgetStore.ts',
   WEBTERM_CENTRAL_CONTEXT_WINDOW: 'central/context/rotationPolicy.ts',
   WEBTERM_AGENT_IDLE_DONE_MS: 'orchestrator/workerSignal.ts',
-  // Turunan Central: tool baca didaftarkan saat Central menyala (ca2Boot onCapabilityChange) dan dicek per turn.
-  WEBTERM_CENTRAL_READ_TOOLS: 'central/chat/toolLoop.ts',
+  // Turunan Central: tool baca didaftarkan saat Central menyala (ca2Boot onCapabilityChange) dan `def.flag` dicek
+  // per panggilan (toolTypes defEnabled). Nama kuncinya diturunkan, bukan literal: lihat DERIVED_KEY_SOURCE.
+  WEBTERM_CENTRAL_READ_TOOLS: 'central/tools/defs/read.shared.ts',
+}
+
+/** Kunci yang pembacanya memakai nama turunan (`derivedFlagKey`): teks sumber yang membuktikannya. */
+const DERIVED_KEY_SOURCE: Readonly<Record<string, string>> = {
+  WEBTERM_CENTRAL_READ_TOOLS: "derivedFlagKey('READ_TOOLS')",
 }
 
 /** Resolver publik pembaca dipanggil dengan env kosong; hasilnya harus sama dengan default registry. */
 const PARITY: Readonly<Record<string, () => number>> = {
-  WEBTERM_CENTRAL_MAX_STEPS: () => resolveMaxSteps({}),
   WEBTERM_CENTRAL_TURN_STEPS: () => resolveLimits({}).maxTurns ?? NaN,
   WEBTERM_CENTRAL_TURN_WALL_MS: () => resolveLimits({}).maxWallMs ?? NaN,
   WEBTERM_CENTRAL_TURN_TOKENS: () => resolveLimits({}).maxTokens,
@@ -85,11 +89,14 @@ describe('HOT_PROOF: hot:true hanya untuk pembaca yang membaca env saat dipakai'
   it.each(Object.entries(HOT_PROOF))('%s: pembaca ada dan memuat nama kunci', (key, file) => {
     const path = join(SERVER_DIR, file)
     expect(existsSync(path), file).toBe(true)
-    expect(readFileSync(path, 'utf8'), `${file} memuat ${key}`).toContain(key)
+    expect(readFileSync(path, 'utf8'), `${file} memuat ${key}`).toContain(DERIVED_KEY_SOURCE[key] ?? key)
+  })
+  it('nama turunan READ_TOOLS memang kunci registry itu', () => {
+    expect(READ_TOOLS_FLAG).toBe('WEBTERM_CENTRAL_READ_TOOLS')
   })
   it('resolver hot membaca env yang diberikan tiap panggilan (bukan salinan boot)', () => {
-    expect(resolveMaxSteps({ WEBTERM_CENTRAL_MAX_STEPS: '5' })).toBe(5)
-    expect(resolveMaxSteps({ WEBTERM_CENTRAL_MAX_STEPS: '7' })).toBe(7)
+    expect(resolveLimits({ WEBTERM_CENTRAL_TURN_STEPS: '5' }).maxTurns).toBe(5)
+    expect(resolveLimits({ WEBTERM_CENTRAL_TURN_STEPS: '7' }).maxTurns).toBe(7)
     const env: Record<string, string | undefined> = { WEBTERM_AGENT_IDLE_DONE_MS: '2000' }
     expect(idleDoneMs(env)).toBe(2000)
     env['WEBTERM_AGENT_IDLE_DONE_MS'] = '9000'

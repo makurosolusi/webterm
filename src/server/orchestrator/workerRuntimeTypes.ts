@@ -14,6 +14,8 @@ import type { Plan, PlanStore } from './plan'
 import type { VerifyInput, VerifyOutcome } from './verify'
 import type { WorktreeService } from './worktree'
 import type { WorkerSessionPort } from './workerRuntimeSession'
+import type { spawnAgent } from '../spawn/agentSpawn'
+import type { ReportCompletion } from '../verifier/verifier.report'
 
 export type WorkerRunErrorCode =
   | OrchestratorDenyCode
@@ -22,6 +24,7 @@ export type WorkerRunErrorCode =
   | 'lease_expired'
   | 'session_exited'
   | 'verify_failed'
+  | 'lease_violation'
 
 export interface WorkerRunOutcome {
   ok: boolean
@@ -62,10 +65,16 @@ export interface WorkerRuntimeDeps {
   sessions: WorkerSessionPort
   /** Closure server-owned: root/exec/commands diikat pemanggil, bukan payload worker. */
   verify: (input: VerifyInput) => Promise<VerifyOutcome>
+  /** Where a judged verdict goes (timeline + inbox); default `recordCompletion`. */
+  report?: ReportCompletion
   /** Opsional: cleanup manual bila `recordWorkerResult` ditolak sebelum sempat release. */
   worktrees?: WorktreeService
   cmd?: string
   agentId?: string
+  /** Principal the worker is spawned under (K3 lineage); default `human-ui` (the run route is root-token only). */
+  spawnParent?: string
+  /** The `agent.spawn` path (F2-h); default = the process-wide spawner. */
+  spawn?: typeof spawnAgent
   /** Minting id sesi baru per run; default `crypto.randomUUID` (injectable untuk test). */
   newSessionId?: () => string
   cols?: number

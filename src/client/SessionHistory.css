@@ -1,0 +1,132 @@
+/* Agent History: seksi bawah kolom sidebar. Berbagi `grid-area: sidebar` dengan `.sessions-sidebar`
+   (keduanya anak langsung `.app-shell`), jadi sidebar Sessions memendek sebesar tinggi seksi ini
+   lewat `--ah-h`, alih-alih SessionsPanel harus tahu soal panel ini. Collapsed = satu baris judul. */
+.app-shell:has(> .agent-history) {
+  --ah-h: var(--ss-title-h, 35px);
+}
+.app-shell:has(> .agent-history--open) {
+  --ah-h: 45%;
+}
+.app-shell:has(> .agent-history) > .sessions-sidebar {
+  align-self: start;
+  height: calc(100% - var(--ah-h));
+}
+
+.agent-history {
+  grid-area: sidebar;
+  align-self: end;
+  height: var(--ah-h);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--vscode-sideBar-background, var(--panel));
+  border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--border));
+  border-right: 1px solid var(--vscode-sideBar-border, var(--border));
+  color: var(--vscode-foreground, var(--text));
+  font-size: var(--vscode-font-size, 13px);
+}
+
+.agent-history__head {
+  display: flex;
+  align-items: center;
+  height: var(--ss-title-h, 35px);
+  padding: 0 8px 0 4px;
+  flex: none;
+}
+
+.agent-history__toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0 4px;
+}
+
+.agent-history__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.agent-history__count,
+.agent-history__meta {
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 11px;
+}
+
+.agent-history__count {
+  margin-left: auto;
+  padding-right: 4px;
+}
+
+.agent-history__controls {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 6px 12px;
+  flex: none;
+}
+
+.agent-history__scope {
+  display: flex;
+}
+
+.agent-history__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.agent-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-history__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 12px;
+}
+
+.agent-history__row:hover {
+  background: var(--vscode-list-hoverBackground, var(--raised));
+}
+
+.agent-history__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-history__name,
+.agent-history__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-history__search {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-history__more {
+  margin: 6px 12px 0;
+}
+
+.agent-history__empty,
+.agent-history__error {
+  margin: 4px 12px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+}
+
+.agent-history__error {
+  color: var(--vscode-errorForeground, var(--danger, #f14c4c));
+}

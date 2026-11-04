@@ -2,122 +2,124 @@
 import type { UrlRejectReason } from '../shared/browser.url'
 
 export const TOOLBAR_TEXT = {
-  group: 'Navigasi browser',
-  back: 'Mundur',
-  forward: 'Maju',
-  reload: 'Muat ulang',
-  stop: 'Hentikan pemuatan',
-  urlLabel: 'Alamat',
-  urlPlaceholder: 'Cari atau ketik alamat',
-  go: 'Buka',
-  agentControl: 'Agent boleh mengemudi',
-  agentControlHint: 'Default on: agent terminal yang tersambung kabel ke browser ini bisa langsung mengendalikannya. Hapus centang untuk mematikan.',
+  group: 'Browser navigation',
+  back: 'Back',
+  forward: 'Forward',
+  reload: 'Reload',
+  stop: 'Stop loading',
+  urlLabel: 'Address',
+  urlPlaceholder: 'Search or enter address',
+  go: 'Go',
+  agentControl: 'Let agents drive',
+  agentControlHint: 'On by default: terminal agents cabled to this browser can control it right away. Uncheck to turn this off.',
 } as const
 
 // Tawaran inline, HANYA saat user mematikan kendali agent di Pengaturan (default on). Meniru Orca BrowserUsePane "Agent Browser Use":
 // "Let coding agents drive this browser with your logins"): konfirmasi dulu karena agent memakai cookie login.
 export const AGENT_OFFER_TEXT = {
-  offer: 'Izinkan agent mengendalikan browser ini',
-  warning: 'Agent terminal yang tersambung kabel ke browser ini akan bisa mengklik, mengetik, dan membuka halaman di browser ini dengan cookie login kamu. ' +
-    'Konten halaman tidak tepercaya. Bisa dimatikan lagi di Pengaturan > Kemampuan > Browser.',
-  confirm: 'Izinkan',
-  cancel: 'Batal',
-  busy: 'Menyimpan…',
-  failed: 'Gagal mengizinkan kendali agent. Coba lagi.',
+  offer: 'Let agents drive this browser',
+  warning: 'Terminal agents cabled to this browser will be able to click, type, and open pages in it using your login cookies. ' +
+    'Page content is untrusted. You can turn this off again in Settings > Capabilities > Browser.',
+  confirm: 'Allow',
+  cancel: 'Cancel',
+  busy: 'Saving…',
+  failed: 'Could not allow agent control. Try again.',
 } as const
 
 // Tombol pemulihan di bawah pesan overlay node browser (browser.status.ts `noticeAction`).
 export const NOTICE_ACTION_TEXT = {
-  allow: (hostPort: string) => `Izinkan ${hostPort}`,
-  allowHint: 'Halaman di browser ini akan bisa menjangkau layanan di alamat itu.',
-  allowFailed: 'Gagal menyimpan izin. Coba lagi.',
-  offer: 'Atur browser',
+  allow: (hostPort: string) => `Allow ${hostPort}`,
+  allowHint: 'Pages in this browser will be able to reach services at that address.',
+  allowFailed: 'Could not save the permission. Try again.',
+  offer: 'Browser settings',
 } as const
 
 export const URL_ERROR_TEXT: Record<UrlRejectReason, string> = {
-  invalid: 'Alamat itu tidak bisa dibuka.',
-  scheme: 'Hanya alamat http dan https yang bisa dibuka.',
-  userinfo: 'Alamat berisi nama pengguna atau kata sandi tidak diizinkan.',
-  too_long: 'Alamat itu terlalu panjang.',
+  invalid: 'That address can’t be opened.',
+  scheme: 'Only http and https addresses can be opened.',
+  userinfo: 'Addresses with a username or password are not allowed.',
+  too_long: 'That address is too long.',
 }
 
 export const CHIP_TEXT = {
-  driving: 'Agent sedang mengendalikan browser ini',
-  stop: 'Hentikan',
-  stopLabel: 'Hentikan agent dan ambil alih browser ini',
+  driving: 'An agent is driving this browser',
+  stop: 'Stop',
+  stopLabel: 'Stop the agent and take over this browser',
 } as const
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
 export const COOKIE_TEXT = {
-  title: 'Cookie',
-  description: 'Impor cookie dari berkas agar browser workspace ini tetap login.',
+  title: 'Cookies',
+  description: 'Import cookies from a file so this workspace browser stays signed in.',
   warning:
-    'Cookie yang diimpor bisa membuat browser ini login ke akun kamu, dan apa pun yang mengendalikan browser (kamu atau agent) bertindak sebagai kamu. ' +
-    'Impor hanya cookie yang kamu percaya dan hanya untuk situs yang kamu pilih. Cookie disimpan terenkripsi di server ini dan kedaluwarsa otomatis.',
-  fileLabel: 'Berkas cookie',
-  formatLabel: 'Format berkas',
+    'Imported cookies can sign this browser in to your accounts, and whatever drives the browser (you or an agent) acts as you. ' +
+    'Only import cookies you trust, and only for the sites you pick. Cookies are stored encrypted on this server and expire automatically.',
+  fileLabel: 'Cookie file',
+  formatLabel: 'File format',
   formats: { storageState: 'Playwright storage state (JSON)', netscape: 'Netscape cookies.txt' },
-  preview: 'Pratinjau',
-  previewing: 'Membaca…',
-  domainsHeading: 'Pilih situs yang diimpor',
-  selectAll: 'Pilih semua',
-  sessionTag: 'sesi',
-  import: 'Impor yang dipilih',
-  importing: 'Mengimpor…',
-  cancel: 'Batal',
-  close: 'Tutup',
-  importedHeading: 'Impor selesai',
-  storedHeading: 'Cookie tersimpan',
-  storedEmpty: 'Belum ada cookie tersimpan untuk workspace ini.',
-  removeAll: 'Hapus semua',
-  loading: 'Memuat…',
-  cookieCount: (n: number) => `${n} cookie`,
+  preview: 'Preview',
+  previewing: 'Reading…',
+  domainsHeading: 'Choose sites to import',
+  selectAll: 'Select all',
+  sessionTag: 'session',
+  import: 'Import selected',
+  importing: 'Importing…',
+  cancel: 'Cancel',
+  close: 'Close',
+  importedHeading: 'Import complete',
+  storedHeading: 'Stored cookies',
+  storedEmpty: 'No cookies stored for this workspace yet.',
+  removeAll: 'Remove all',
+  loading: 'Loading…',
+  cookieCount: (n: number) => plural(n, 'cookie', 'cookies'),
   // Kebijakan Orca "Google logins aren't imported": sesi Google terikat perangkat asal.
-  googleSkipped: (n: number) => `Login Google tidak diimpor — masuk langsung ke Google di node browser (${n} cookie dilewati).`,
-  imported: (cookies: number, sites: number) => `${cookies} cookie dari ${sites} situs diimpor.`,
-  removeLabel: (domain: string) => `Hapus cookie untuk ${domain}`,
-  selectLabel: (domain: string) => `Impor cookie untuk ${domain}`,
-  tooLarge: 'Berkas itu terlalu besar.',
-  readFail: 'Berkas tidak bisa dibaca.',
+  googleSkipped: (n: number) => `Google logins aren’t imported — sign in to Google directly in the browser node (${plural(n, 'cookie', 'cookies')} skipped).`,
+  imported: (cookies: number, sites: number) => `Imported ${plural(cookies, 'cookie', 'cookies')} from ${plural(sites, 'site', 'sites')}.`,
+  removeLabel: (domain: string) => `Remove cookies for ${domain}`,
+  selectLabel: (domain: string) => `Import cookies for ${domain}`,
+  tooLarge: 'That file is too large.',
+  readFail: 'The file could not be read.',
   errors: {
-    bad_request: 'Server tidak bisa membaca berkas itu. Periksa formatnya lalu coba lagi.',
-    not_found: 'Pratinjau kedaluwarsa. Pilih berkasnya lagi.',
-    disabled: 'Impor cookie mati di server ini.',
-    payload_too_large: 'Berkas itu terlalu besar.',
-    generic: 'Terjadi kesalahan. Coba lagi.',
+    bad_request: 'The server could not read that file. Check its format and try again.',
+    not_found: 'The preview expired. Choose the file again.',
+    disabled: 'Cookie import is turned off on this server.',
+    payload_too_large: 'That file is too large.',
+    generic: 'Something went wrong. Try again.',
   },
   // Panduan ekspor dari browser milik user sendiri (RND/33: webterm tidak membaca store browser lain).
   guide: {
-    summary: 'Cara mendapatkan berkas cookie',
-    optionA: 'Opsi A: pasang ekstensi ekspor cookies.txt (format Netscape) dari Chrome Web Store, buka situsnya, lalu ekspor hanya situs yang dibutuhkan. Pilih ekstensi yang tepercaya: ekstensi cookie pihak ketiga pernah dipakai sebagai malware.',
-    optionB: 'Opsi B: jalankan di terminal komputer kamu sendiri (perlu yt-dlp; ganti <url-situs>). Berkasnya memuat semua cookie browser, jadi di langkah berikut centang hanya domain yang perlu.',
-    command: 'yt-dlp --cookies-from-browser chrome --cookies cookies.txt --skip-download <url-situs>',
-    commandLabel: 'Perintah ekspor cookie yt-dlp',
-    copy: 'Salin perintah',
-    copied: 'Tersalin',
-    formatHint: 'Lalu pilih format "Netscape cookies.txt" di atas dan unggah berkasnya.',
-    warning: 'Berkas cookie sama dengan akses login. Impor hanya domain yang perlu, dan hapus berkasnya setelah diimpor.',
-    safest: 'Paling aman: login sekali langsung di browser node ini; profilnya persisten, jadi tidak perlu berkas cookie.',
+    summary: 'How to get a cookie file',
+    optionA: 'Option A: install a cookies.txt (Netscape format) export extension from the Chrome Web Store, open the site, then export only the sites you need. Pick a trusted extension: third-party cookie extensions have been used as malware.',
+    optionB: 'Option B: run this in a terminal on your own computer (requires yt-dlp; replace <site-url>). The file contains every browser cookie, so in the next step check only the domains you need.',
+    command: 'yt-dlp --cookies-from-browser chrome --cookies cookies.txt --skip-download <site-url>',
+    commandLabel: 'yt-dlp cookie export command',
+    copy: 'Copy command',
+    copied: 'Copied',
+    formatHint: 'Then choose the "Netscape cookies.txt" format above and upload the file.',
+    warning: 'A cookie file is the same as login access. Import only the domains you need, and delete the file after importing.',
+    safest: 'Safest: sign in once directly in this browser node; its profile persists, so no cookie file is needed.',
   },
 } as const
 
 // Submenu "Import Cookies" di menu ⋯ node browser (meniru Orca browser-toolbar-menu-dropdown.tsx).
 export const COOKIE_MENU_TEXT = {
-  importCookies: 'Impor Cookie',
-  fromFile: 'Dari Berkas…',
-  googleNote: 'Login Google tidak bisa diimpor — masuk ke Google langsung di browser ini',
+  importCookies: 'Import Cookies',
+  fromFile: 'From File…',
+  googleNote: 'Google logins can’t be imported — sign in to Google directly in this browser',
 } as const
 
 export const ZOOM_TEXT = {
-  out: 'Perkecil halaman',
-  in: 'Perbesar halaman',
-  level: 'Tingkat zoom halaman',
+  out: 'Zoom out',
+  in: 'Zoom in',
+  level: 'Page zoom level',
 } as const
 
 export const START_TEXT = {
-  page: 'Halaman awal browser',
-  searchLabel: 'Cari atau ketik alamat',
-  searchPlaceholder: (engine: string) => `Cari di ${engine} atau ketik URL`,
-  shortcuts: 'Pintasan',
-  recent: 'Terbaru',
-  open: (name: string) => `Buka ${name}`,
+  page: 'Browser start page',
+  searchLabel: 'Search or enter address',
+  searchPlaceholder: (engine: string) => `Search ${engine} or enter a URL`,
+  shortcuts: 'Shortcuts',
+  recent: 'Recent',
+  open: (name: string) => `Open ${name}`,
 } as const

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { binaryExists, ptyEnv, resolveCwd, shellArgv } from './ptyShell'
 import { createLogger } from './logs'
+import { drainGuardArgv } from './ptyDrainGuard'
 
 const log = createLogger('pty')
 
@@ -85,6 +86,8 @@ export function unwrapMissingWrapper(
 /** Jeda SIGTERM → SIGKILL saat node ditutup. Meniru grace nodeterm (`pty-manager.ts:7099-7110`,
  *  30 × 50 ms): beri harness agent jendela untuk menulis transcript/resume id sebelum dipaksa. */
 const KILL_GRACE_MS = 1500
+/** Extra wait before the PTY's session leader itself is SIGKILLed (its descendants go first). */
+const LEADER_KILL_DELAY_MS = 1000
 
 /** Keturunan `pid` dari satu snapshot `ps`. Dipisah dari I/O supaya bisa diuji tanpa men-spawn
  *  apa pun (lihat `pty.test.ts`). */
@@ -155,7 +158,7 @@ function failedPty(err: unknown): Pty {
   const code = (err as { code?: unknown } | null)?.code
   log.error('pty.error', 'PTY spawn failed', { error: err instanceof Error ? err.name : 'unknown', code: typeof code === 'string' ? code : undefined })
   queueMicrotask(() => {
-    onData(`\r\n[webterm] gagal memulai shell: ${reason}\r\n`)
+    onData(`\r\n[webterm] failed to start shell: ${reason}\r\n`)
     onExit(SPAWN_FAILED_EXIT_CODE)
   })
   return { pid: -1, onData(cb) { onData = cb }, onExit(cb) { onExit = cb }, write() {}, resize() {}, kill() {} }
@@ -164,7 +167,12 @@ function failedPty(err: unknown): Pty {
 type SpawnFn = (cmd: string[], options: Parameters<typeof Bun.spawn>[1]) => Bun.Subprocess
 
 export function spawnPty(
-  opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> },
+  opts: {
+    cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string>
+    /** argv mentah (tmux client milik `ptySupervisor.ts`). Bila diisi, `cmd`/`shell` diabaikan dan
+     *  `env` dipakai APA ADANYA — pemanggil sudah menyaringnya lewat `ptyEnv`. */
+    argv?: string[]
+  },
   spawn: SpawnFn = Bun.spawn
 ): Pty {
   let onData: (data: string) => void = () => {}
@@ -177,14 +185,15 @@ export function spawnPty(
   // `proc.terminal`, bukan objek yang kita pegang sendiri.
   let proc: Bun.Subprocess
   try {
-    proc = spawn(shellArgv(opts.shell, opts.cmd), {
+    // Drain guard as the session leader (macOS): see ptyDrainGuard.ts for the exit deadlock it prevents.
+    proc = spawn(drainGuardArgv(opts.argv ?? shellArgv(opts.shell, opts.cmd)), {
       terminal: {
         cols: opts.cols,
         rows: opts.rows,
         data: (_t, bytes) => onData(decoder.decode(bytes, { stream: true })),
       },
       cwd: resolveCwd(opts.cwd),
-      env: { ...ptyEnv(process.env, { interactive: !opts.cmd }), ...(opts.env ?? {}) },
+      env: opts.argv ? opts.env : { ...ptyEnv(process.env, { interactive: !opts.cmd }), ...(opts.env ?? {}) },
     })
   } catch (err) {
     return failedPty(err)
@@ -203,7 +212,9 @@ export function spawnPty(
    * rusak. Diukur: dengan close eksplisit 2/25 putaran diam, tanpa close 0/25 pada tiga kali
    * pengulangan (probe: spawn `exit 0`, tunggu exit, lalu spawn PTY baru dan tunggu outputnya).
    */
+  let exited = false
   proc.exited.then((code) => {
+    exited = true
     onExit(code)
   })
 
@@ -261,7 +272,11 @@ export function spawnPty(
       const strays = liveDescendants(proc.pid)
       proc.kill()
       signalAll(strays, 'SIGTERM')
-      setTimeout(() => signalAll([proc.pid, ...strays], 'SIGKILL'), KILL_GRACE_MS)
+      // Descendants first; the leader (drain guard) normally exits by itself once they are gone and
+      // its tty is drained. Killing it in the same instant as a still-writing child could leave
+      // output queued at the leader's exit (ptyDrainGuard.ts), so it gets its own, later deadline.
+      setTimeout(() => signalAll(strays, 'SIGKILL'), KILL_GRACE_MS)
+      setTimeout(() => { if (!exited) signalAll([proc.pid], 'SIGKILL') }, KILL_GRACE_MS + LEADER_KILL_DELAY_MS)
     },
   }
 }

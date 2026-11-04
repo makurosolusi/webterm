@@ -23,14 +23,14 @@ export const APPROVAL_PATH = '/api/approvals'
 export { isAbortError }
 
 /** Server refused an agent credential (node token / capability) on a human-only route. */
-export const MSG_AGENT_CANNOT_APPROVE = 'Persetujuan hanya bisa dari UI webterm, bukan dari sesi agent.'
+export const MSG_AGENT_CANNOT_APPROVE = 'Approvals can only come from the webterm UI, not from an agent session.'
 /** Server refused a caller without browser fetch metadata / with a foreign Origin. */
-export const MSG_APPROVAL_BROWSER_ONLY = 'Persetujuan harus dari jendela webterm di browser.'
-export const MSG_UNAUTHORIZED = 'Token akses salah atau kedaluwarsa — buka ulang tautan berisi token.'
+export const MSG_APPROVAL_BROWSER_ONLY = 'Approvals must come from a webterm window in a browser.'
+export const MSG_UNAUTHORIZED = 'The access token is wrong or expired — reopen the link that contains the token.'
 /** Outer transport gate (`refuseRequest`): wrong/missing root token, foreign Host or Origin. */
-export const MSG_FORBIDDEN = 'Ditolak server: token akses tidak cocok atau alamat tidak diizinkan — buka ulang tautan berisi token.'
+export const MSG_FORBIDDEN = 'Refused by the server: the access token does not match or the address is not allowed — reopen the link that contains the token.'
 /** Any other 403; the code names which rule refused, there is no login to retry. */
-export const msgForbiddenCode = (code: string): string => `Ditolak server (${code}).`
+export const msgForbiddenCode = (code: string): string => `Refused by the server (${code}).`
 
 /**
  * Human-facing message for anything the client can throw. Deliberately short: the dialog shows it

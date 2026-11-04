@@ -9,7 +9,7 @@ import type { NodeActions } from './nodeActions'
 import { resetCapabilitiesCache } from './useCapabilities'
 
 const caps = (status: string) => new Response(JSON.stringify({
-  capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status }], advanced: {},
+  capabilities: [{ id: 'browser', title: 'Browser on canvas', blurb: 'Open web pages as nodes on the canvas.', status }], advanced: {},
 }))
 const actions = (openBrowserAt?: NodeActions['openBrowserAt']): NodeActions =>
   ({ onSession: vi.fn(), onToggleHideLinks: vi.fn(), openBrowserAt }) as unknown as NodeActions
@@ -25,8 +25,8 @@ describe('BrowserLinkOfferHost', () => {
     const { rerender } = render(tree(actions()))
     expect(screen.queryByRole('dialog')).toBeNull()
     act(() => requestBrowserOffer({ url: 'https://example.com/', anchorNodeId: 'n1' }))
-    expect(await screen.findByRole('dialog', { name: 'Nyalakan Browser di kanvas' })).toBeTruthy()
-    fireEvent.click(await screen.findByRole('button', { name: 'Nyalakan' }))
+    expect(await screen.findByRole('dialog', { name: 'Turn on Browser on canvas' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     const open = vi.fn(() => ({ status: 'created', nodeId: 'b1' }) as const)
     rerender(tree(actions(open)))

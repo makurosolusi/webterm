@@ -1,10 +1,10 @@
-// Semua teks UI kemampuan (Indonesia, Rule 15). Tanpa nama env var dan tanpa istilah teknis internal.
+// Semua teks UI kemampuan (Inggris, Rule 15). Tanpa nama env var dan tanpa istilah teknis internal.
 import type { CapabilityId, CapabilityStatus } from '../shared/featureCapabilities'
 
 export const CAPABILITY_STATUS_LABEL: Readonly<Record<CapabilityStatus, string>> = {
-  on: 'Aktif',
-  off: 'Mati',
-  'needs-step': 'Perlu satu langkah',
+  on: 'On',
+  off: 'Off',
+  'needs-step': 'Needs one step',
 }
 
 /**
@@ -12,20 +12,20 @@ export const CAPABILITY_STATUS_LABEL: Readonly<Record<CapabilityStatus, string>>
  * Port dari `location` halaman ini; tanpa port (mis. tunnel di 443) kalimatnya tetap benar tanpa angka.
  */
 export function forbiddenText(port: string): string {
-  const where = port ? `http://127.0.0.1:${port}` : 'alamat 127.0.0.1 di komputer yang menjalankan webterm'
-  return `Perubahan ditolak karena halaman ini tidak dibuka langsung dari komputer yang menjalankan webterm. Buka lewat ${where}, atau aktifkan token akses lalu masuk dengan token itu.`
+  const where = port ? `http://127.0.0.1:${port}` : '127.0.0.1 on the computer running webterm'
+  return `Change denied because this page was not opened directly on the computer running webterm. Open it via ${where}, or enable the access token and sign in with it.`
 }
 
 export const CAPABILITY_TEXT = {
-  alsoTurnsOn: 'Ikut menyalakan:',
-  alsoTurnsOff: 'Ikut mati:',
-  offerQuestion: 'Nyalakan sekarang?',
-  offerAction: 'Nyalakan',
-  offerTitle: (title: string): string => `Nyalakan ${title}`,
+  alsoTurnsOn: 'Also turns on:',
+  alsoTurnsOff: 'Also turns off:',
+  offerQuestion: 'Turn it on now?',
+  offerAction: 'Turn on',
+  offerTitle: (title: string): string => `Turn on ${title}`,
   confirmDangerous: (label: string): string =>
-    `${label}?\n\nIni memberi agent kendali lebih besar atas komputer ini dan akun yang sedang Anda pakai. Nyalakan hanya bila Anda memercayai agent yang berjalan.`,
-  loadFailed: 'Kemampuan belum bisa dimuat. Coba lagi sebentar.',
-  changeFailed: 'Perubahan belum berhasil. Coba lagi sebentar.',
+    `${label}?\n\nThis gives agents more control over this computer and the accounts you are signed in to. Only turn it on if you trust the agents that run.`,
+  loadFailed: 'Could not load capabilities. Try again in a moment.',
+  changeFailed: 'The change did not go through. Try again in a moment.',
   forbidden: forbiddenText(typeof location === 'undefined' ? '' : location.port),
 } as const
 
@@ -34,16 +34,16 @@ export const CAPABILITY_TEXT = {
  * Kata yang diketik orang, bukan judul: "chrome", "cookie", "token", "localhost".
  */
 export const CAPABILITY_KEYWORDS: Readonly<Record<CapabilityId | 'advanced' | 'token', readonly string[]>> = {
-  central: ['agent', 'asisten', 'pusat', 'central', 'chat', 'ai'],
-  workers: ['worker', 'orchestrator', 'perintah', 'jalankan', 'persetujuan', 'approval'],
-  autonomy: ['otonomi', 'autonomy', 'otomatis', 'mandiri'],
-  browser: ['browser', 'chrome', 'chromium', 'web', 'halaman', 'cookie', 'localhost', 'url', 'link'],
-  files: ['file', 'berkas', 'folder', 'explorer'],
-  filesWrite: ['file', 'berkas', 'unggah', 'upload', 'edit', 'hapus', 'rename'],
-  telegram: ['telegram', 'bot', 'token', 'chat', 'pesan'],
-  token: ['token', 'akses', 'keamanan', 'tunnel', 'sandi', 'login', 'perangkat lain', 'remote'],
-  advanced: ['lanjutan', 'chrome', 'chromium', 'lokasi', 'mesin', 'engine', 'claude', 'opencode', 'data', 'reset', 'setel ulang'],
+  central: ['agent', 'assistant', 'central', 'chat', 'ai'],
+  workers: ['worker', 'orchestrator', 'command', 'run', 'approval'],
+  autonomy: ['autonomy', 'automatic', 'unattended'],
+  browser: ['browser', 'chrome', 'chromium', 'web', 'page', 'cookie', 'localhost', 'url', 'link'],
+  files: ['file', 'folder', 'explorer'],
+  filesWrite: ['file', 'upload', 'edit', 'delete', 'rename'],
+  telegram: ['telegram', 'bot', 'token', 'chat', 'message'],
+  token: ['token', 'access', 'security', 'tunnel', 'password', 'login', 'other device', 'remote'],
+  advanced: ['advanced', 'chrome', 'chromium', 'location', 'engine', 'claude', 'opencode', 'data', 'reset'],
 }
 
-/** Daftar judul dipisah koma untuk baris "Ikut menyalakan/mati". */
+/** Daftar judul dipisah koma untuk baris "Also turns on/off". */
 export const joinTitles = (titles: readonly string[]): string => titles.join(', ')

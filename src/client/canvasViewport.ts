@@ -11,10 +11,11 @@
 // `zoom` dan `vpHist` DIMILIKI hook ini. `viewportRef` tetap milik App dan dipinjam apa adanya
 // (pola yang sama dengan `./workspaceLifecycle`): `scheduleSave` App membaca `.current` yang SAMA
 // dengan yang ditulis di sini, jadi ref salinan akan mem-persist viewport yang sudah basi.
-import { useCallback, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { createHistory } from './history'
+import { setNotifyCanvas } from './osNotify'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Viewport } from '../shared/workspace'
 
@@ -109,6 +110,22 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
 
   const onBack = useCallback(() => step((h) => h.undo()), [step])
   const onForward = useCallback(() => step((h) => h.redo()), [step])
+
+  // "In view" for OS notifications (`./osNotify`): a node on screen in a focused tab needs no
+  // banner. Click-to-focus is App's (`workspaceLifecycle#onFocus`): only it can switch workspace.
+  useEffect(() => setNotifyCanvas({
+    inView: (id) => {
+      const n = rf.current?.getNode(id)
+      if (!n || !rf.current) return false
+      const a = rf.current.flowToScreenPosition(n.position)
+      const b = rf.current.flowToScreenPosition({
+        x: n.position.x + (n.measured?.width ?? n.width ?? 0),
+        y: n.position.y + (n.measured?.height ?? n.height ?? 0),
+      })
+      // ponytail: window rect, not the canvas pane's — a node under a docked panel counts as visible.
+      return b.x > 0 && b.y > 0 && a.x < window.innerWidth && a.y < window.innerHeight
+    },
+  }), [rf])
 
   const resetViewport = useCallback((vp: Viewport) => {
     viewportRef.current = vp

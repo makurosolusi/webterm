@@ -26,7 +26,7 @@ describe('importDotenv klasifikasi', () => {
     const before = overrides.json
     dotenv([
       'WEBTERM_CENTRAL=on', 'WEBTERM_LEDGER=shadow', 'WEBTERM_CENTRAL_SKILLS=on', 'HOST=0.0.0.0', 'PORT=9', `WEBTERM_TOKEN=${ROOT_MARK}`,
-      'WEBTERM_CENTRAL_MAX_STEPS=999', 'NOT_IN_REGISTRY=x', 'ALSO_UNKNOWN=y',
+      'WEBTERM_CENTRAL_TURN_STEPS=999', 'NOT_IN_REGISTRY=x', 'ALSO_UNKNOWN=y',
     ])
     const r = importDotenv({ service: svc }, false)
     expect(r.status).toBe(200)
@@ -36,7 +36,7 @@ describe('importDotenv klasifikasi', () => {
     expect(keyOf(r, 'WEBTERM_LEDGER')?.action).toBe('same')
     expect(keyOf(r, 'WEBTERM_CENTRAL_SKILLS')?.action).toBe('conflict')
     for (const k of ['HOST', 'PORT', 'WEBTERM_TOKEN']) expect(keyOf(r, k)).toMatchObject({ action: 'skip', reason: 'bootstrap' })
-    expect(keyOf(r, 'WEBTERM_CENTRAL_MAX_STEPS')).toMatchObject({ action: 'skip', reason: 'invalid' })
+    expect(keyOf(r, 'WEBTERM_CENTRAL_TURN_STEPS')).toMatchObject({ action: 'skip', reason: 'invalid' })
     expect(r.body.applied).toBeUndefined()
     expect(overrides.json).toBe(before)
     expect(JSON.stringify(r.body)).not.toContain(ROOT_MARK)

@@ -17,7 +17,7 @@ describe('inboxErrorMessage auth mapping', () => {
     expect(msg(401, 'unauthorized')).toBe(MSG_UNAUTHORIZED)
     expect(msg(403, 'forbidden')).toBe(MSG_FORBIDDEN)
     expect(msg(403, 'http_403')).toBe(MSG_FORBIDDEN) // refuseRequest answers plain text
-    expect(msg(403, 'loopback_only')).toBe('Ditolak server (loopback_only).')
+    expect(msg(403, 'loopback_only')).toBe('Refused by the server (loopback_only).')
   })
 
   it('never tells the user to sign in: there is no login', () => {

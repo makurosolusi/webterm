@@ -1,0 +1,16 @@
+/* Source Control panel inside the Diff node. Tokens come from styles.css, like DiffNode.css. */
+.scm-panel { border-bottom: 1px solid var(--border); font-size: 12px; max-height: 45%; overflow: auto; }
+.scm-panel > summary { padding: 4px 8px; cursor: pointer; }
+.scm-panel__branch, .scm-panel__detail { color: var(--muted); }
+.scm-panel__msg { padding: 2px 8px; color: var(--muted); }
+.scm-panel__commit, .scm-panel__report, .scm-panel__failure { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px; }
+.scm-panel__commit textarea { min-height: 36px; resize: vertical; background: var(--sunken); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
+.scm-panel__actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.scm-panel__problem { color: var(--vscode-errorForeground, #f48771); }
+.scm-panel__group { margin: 4px 8px 0; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.scm-panel__list, .scm-panel__hunks, .scm-panel__checks { list-style: none; margin: 0; padding: 0 8px; }
+.scm-panel__row { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+.scm-panel__code { width: 12px; font-weight: 600; font-family: var(--vscode-editor-font-family, monospace); }
+.scm-panel__path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scm-panel__refused { color: var(--muted); }
+.scm-panel pre { margin: 2px 0; max-height: 160px; overflow: auto; background: var(--sunken); padding: 4px; font-size: 11px; white-space: pre-wrap; }

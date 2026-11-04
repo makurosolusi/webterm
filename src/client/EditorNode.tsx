@@ -13,6 +13,9 @@ import { ViewerHost } from './viewers/ViewerHost'
 import type { FileKind } from '../shared/fileKind'
 import type { ReadMeta } from '../shared/fsContract'
 import { editorFileKind, fileBaseName, fileExt } from './editorFile'
+import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hints'
+import { EditorRenamePreview } from './EditorRenamePreview'
+import { loadMonaco } from './lazyMonaco'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
@@ -64,6 +67,9 @@ function EditorNode({
   // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.
   const editable = kind === 'text' && !isBinary && !loadError
   const readOnly = ef.encoding === 'non-utf8'
+  // No language server for this file's language: say so, with the one command that fixes it.
+  const lspLanguage = editable ? lspLanguageIdForExt(ext) : ''
+  const lspHint = useLspHint(lspLanguage)
 
   // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
   // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
@@ -96,7 +102,7 @@ function EditorNode({
     if (isBinary)
       return (
         <div className="editor-node__placeholder">
-          <span>File biner — tidak dapat dibuka sebagai teks.</span>
+          <span>Binary file — can’t be opened as text.</span>
           <VscodeButton secondary title="Copy file path" onClick={() => void writeClipboard(filePath)}>
             Copy Path
           </VscodeButton>
@@ -155,6 +161,11 @@ function EditorNode({
                 >
                   <span className={`codicon codicon-${ef.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
                 </ToolbarButton>
+                {lspLanguage && (
+                  <ToolbarButton label="Outline" title="Go to symbol in file (⇧⌘O)" data-title="Go to symbol in file (⇧⌘O)" onClick={() => void showOutline(id)}>
+                    <span className="codicon codicon-symbol-class" aria-hidden="true" />
+                  </ToolbarButton>
+                )}
                 {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
                     yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
                 {!readOnly && (
@@ -197,6 +208,16 @@ function EditorNode({
               Bukan UTF-8 — dibuka read-only supaya byte aslinya tidak rusak.
             </div>
           )}
+          {lspHint && (
+            <div className="editor-node__banner editor-node__lsp-hint nodrag" role="status">
+              <span>{lspHint.message} Install it with <code>{lspHint.command}</code></span>
+              <VscodeButton secondary title="Copy install command" onClick={() => void writeClipboard(lspHint.command)}>Copy command</VscodeButton>
+              <ToolbarButton label="Dismiss" title="Dismiss" onClick={() => dismissLspHint(lspLanguage)}>
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </ToolbarButton>
+            </div>
+          )}
+          {editable && <EditorRenamePreview nodeId={id} />}
           {editable && ef.conflict && (
             <EditorConflictBar conflict={ef.conflict} fileName={fileName} onReload={() => void ef.reload()} onOverwrite={ef.overwrite} />
           )}
@@ -209,6 +230,14 @@ function EditorNode({
       </div>
     </>
   )
+}
+
+/** Open Monaco's symbol list (document symbols from the language server) in editor node `nodeId`. */
+async function showOutline(nodeId: string): Promise<void> {
+  const m = await loadMonaco()
+  const ed = m.editor.getEditors().find((e) => e.getModel()?.uri.fragment === nodeId)
+  ed?.focus()
+  ed?.trigger('outline', 'editor.action.quickOutline', null)
 }
 
 export default memo(EditorNode)

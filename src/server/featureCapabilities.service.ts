@@ -29,12 +29,12 @@ export interface CapCtx {
 
 const OWNER = { root: true }
 const NEEDS_LABEL = {
-  chromium: 'Pilih lokasi Chrome', telegramToken: 'Hubungkan bot', agentEngine: 'Pasang atau login Claude Code / OpenCode',
+  chromium: 'Choose Chrome location', telegramToken: 'Connect bot', agentEngine: 'Install or sign in to Claude Code / OpenCode',
 } as const
 const NEEDS_DETAIL = {
-  chromium: 'Chrome atau Chromium belum ditemukan di komputer ini.',
-  telegramToken: 'Bot Telegram belum dihubungkan.',
-  agentEngine: 'Belum ada mesin agen yang siap: Claude Code atau OpenCode belum terpasang atau belum login.',
+  chromium: 'Chrome or Chromium was not found on this computer.',
+  telegramToken: 'No Telegram bot is connected yet.',
+  agentEngine: 'No agent engine is ready: Claude Code or OpenCode is not installed or not signed in.',
 } as const
 const NEEDS_STEP = { chromium: 'chromiumPath', telegramToken: 'telegramToken', agentEngine: 'agentEngine' } as const
 /** Pengaturan yang ikut kartu tapi tak boleh menimpa nilai eksplisit dari shell/.env. */
@@ -59,7 +59,7 @@ export function viewOf(id: CapabilityId, env: NodeJS.ProcessEnv, detect: Detect)
       const subs = def.subs?.map((s) => ({
         key: subKeyOf(s.key), label: s.label, on: flagOr(env[s.key], s.defaultOn), ...(s.dangerous ? { dangerous: true } : {}),
       }))
-      const detail = id === 'telegram' && detect.telegramBot ? `Tersambung sebagai ${detect.telegramBot}` : undefined
+      const detail = id === 'telegram' && detect.telegramBot ? `Connected as ${detect.telegramBot}` : undefined
       return { ...base, status: 'on', ...(subs ? { subs } : {}), ...(detail ? { detail } : {}) }
     }
     const needs = def.needs as NonNullable<typeof def.needs>
@@ -68,8 +68,8 @@ export function viewOf(id: CapabilityId, env: NodeJS.ProcessEnv, detect: Detect)
   const missing = closure(id).filter((c) => c !== id && !isEnabled(c, env))
   const chainBroken = flagOr(env[def.primaryKey], false) && missing.length > 0
   const view: CapabilityView = chainBroken
-    ? { ...base, status: 'needs-step', step: { kind: 'fixChain', label: 'Nyalakan yang dibutuhkan' },
-        detail: `Butuh ${missing.map((m) => CAPABILITIES[m].title).join(', ')} yang masih mati.` }
+    ? { ...base, status: 'needs-step', step: { kind: 'fixChain', label: 'Turn on what’s needed' },
+        detail: `Needs ${missing.map((m) => CAPABILITIES[m].title).join(', ')}, which is still off.` }
     : { ...base, status: 'off' }
   return missing.length > 0 ? { ...view, alsoTurnsOn: missing } : view
 }

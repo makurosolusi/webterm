@@ -315,7 +315,7 @@
 }
 .chat-code__copy:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); }
 
-/* ---- widgets: proposal and tool cards (1px border, no shadow) ---------------------------- */
+/* ---- widgets: legacy proposal and tool cards (1px border, no shadow) ---------------------------- */
 .chat-proposal,
 .chat-tool {
   display: flex;
@@ -332,8 +332,7 @@
 }
 .chat-proposal__icon,
 .chat-tool__icon { flex: none; font-size: 16px; color: var(--vscode-icon-foreground, inherit); }
-.chat-proposal__label { font-weight: 600; }
-.chat-proposal__details { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.chat-proposal__detail { color: var(--vscode-descriptionForeground, #9d9d9d); }
 .chat-tool__name { font-family: var(--vscode-editor-font-family, var(--font-mono, Menlo, monospace)); font-size: 12px; }
 .chat-tool__state {
   margin-left: auto;

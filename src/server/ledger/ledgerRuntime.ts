@@ -7,7 +7,7 @@ import { dataDir } from '../config'
 import { createLedger, type Ledger } from './ledger'
 import { openLedgerDb } from './migration'
 import { ledgerMetrics } from './ledgerMetrics'
-import { setActiveLedgerRuntime } from './ledgerRuntimeState'
+import { activeLedgerRuntime, setActiveLedgerRuntime } from './ledgerRuntimeState'
 import { createLogger } from '../logs'
 import { flagOn } from '../envFlag'
 
@@ -107,6 +107,9 @@ export function startLedgerRuntime(opts: {
       db,
       ledger,
       close: () => {
+        // A closed runtime must stop being "the active one": process-wide seams (events, policy)
+        // read the handle and would otherwise hand callers a closed DB.
+        if (activeLedgerRuntime() === runtime) setActiveLedgerRuntime(null)
         ;(db as unknown as { close(): void }).close()
         log.info('ledger.stop', 'ledger runtime closed', { mode })
       },

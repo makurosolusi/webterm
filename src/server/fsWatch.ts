@@ -9,6 +9,7 @@ import type { ServerMsg } from '../shared/protocol'
 import { errnoOf } from './fsAtomic'
 import { checkFsPath } from './fsOps'
 import { createLogger } from './logs'
+import { produceFsChange } from './events/producers'
 
 const log = createLogger('fs')
 
@@ -50,6 +51,8 @@ interface Entry {
   pollTimer: ReturnType<typeof setInterval> | null
   snapshot: string | null
   flushTimer: ReturnType<typeof setTimeout> | null
+  /** Names seen in the current debounce window (empty for polling: it only sees the listing). */
+  names: Set<string>
 }
 
 /** Buat hub; opsi untuk tes (seam pemantau, jendela debounce, jeda poll, batas). */
@@ -85,6 +88,9 @@ export function createFsWatchHub(opts: WatchHubOpts = {}) {
     const gone = await fs.stat(e.key).then(() => false, (err: unknown) => GONE_ERRNO.has(errnoOf(err)))
     if (entries.get(e.key) !== e) return // dilepas selama await
     notify(e)
+    // Senses: one `fs.change` per burst (the producer debounces further per directory).
+    produceFsChange(e.key, e.names)
+    e.names = new Set()
     if (gone) dispose(e)
   }
 
@@ -116,7 +122,11 @@ export function createFsWatchHub(opts: WatchHubOpts = {}) {
   function start(e: Entry): void {
     e.closer = watchFn(
       e.key,
-      (name) => { if (!ignored(name)) schedule(e) },
+      (name) => {
+        if (ignored(name)) return
+        if (name !== null) e.names.add(name)
+        schedule(e)
+      },
       (err) => {
         if (entries.get(e.key) !== e) return
         warn('watcher died, falling back to polling', e.key, err)
@@ -140,7 +150,7 @@ export function createFsWatchHub(opts: WatchHubOpts = {}) {
       const existing = entries.get(key)
       if (existing) { existing.clients.set(send, dir); return }
       if (entries.size >= max) { log.warn('fs.watch', 'watcher limit reached, subscription ignored', { max }); return }
-      const e: Entry = { key, clients: new Map([[send, dir]]), closer: null, pollTimer: null, snapshot: null, flushTimer: null }
+      const e: Entry = { key, clients: new Map([[send, dir]]), closer: null, pollTimer: null, snapshot: null, flushTimer: null, names: new Set<string>() }
       try {
         start(e)
       } catch (err) {

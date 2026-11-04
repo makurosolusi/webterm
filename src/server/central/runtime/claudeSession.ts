@@ -30,17 +30,21 @@ export interface ClaudeTurnState {
   result: ClaudeResultEvent | null
   retries: number
   spawnError: NodeJS.ErrnoException | null
+  /** MCP tool calls requested and not yet answered: tool_use id -> name + start time. */
+  openTools: Map<string, { name: string; at: number }>
+  /** Every tool_use id already announced (partial mode repeats assistant messages). */
+  seenTools: Set<string>
 }
 
 export function newTurnState(): ClaudeTurnState {
   return { sessionRef: null, sawDelta: false, messages: new Map(), failure: null,
-    termination: null, result: null, retries: 0, spawnError: null }
+    termination: null, result: null, retries: 0, spawnError: null, openTools: new Map(), seenTools: new Set() }
 }
 
 const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
-  claude_not_found: 'Claude Code belum terpasang di PATH server',
-  claude_not_authenticated: 'Claude Code belum login: jalankan "claude auth login" di mesin server',
-  claude_check_failed: 'Claude Code tidak dapat dicek',
+  claude_not_found: 'Claude Code is not installed on the server PATH',
+  claude_not_authenticated: 'Claude Code is not signed in: run "claude auth login" on the server machine',
+  claude_check_failed: 'Claude Code could not be checked',
 }
 
 /** Stable, input-free messages: never echo the prompt or child output. */

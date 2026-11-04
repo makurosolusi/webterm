@@ -5,8 +5,8 @@ import type { OpenBrowserReq, OpenResult } from './browser.open.plan'
 import { requestBrowserOffer } from './browserLinkOffer'
 
 export const OPEN_IN_CANVAS_LABEL = 'Open in canvas browser'
-export const OPEN_IN_CANVAS_HINT = 'Buka link ini di node browser di canvas.'
-export const OPEN_IN_CANVAS_OFF_HINT = 'Browser di kanvas masih mati; klik untuk menyalakannya lalu membuka link ini.'
+export const OPEN_IN_CANVAS_HINT = 'Open this link in a browser node on the canvas.'
+export const OPEN_IN_CANVAS_OFF_HINT = 'The canvas browser is off; click to turn it on and open this link.'
 
 /** URL kanonik bila `raw` boleh dibuka di node browser, selain itu null (validasi tunggal: parseBrowserUrl). */
 export function openableLink(raw: string | null): string | null {

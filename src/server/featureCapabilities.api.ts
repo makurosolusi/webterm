@@ -7,6 +7,7 @@ import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestB
 import { dataDir } from './config'
 import { createFileSecretStore } from './envSecrets.store'
 import type { EnvSettingsApiDeps } from './envSettings.api'
+import { CONTROL_DOCTOR_PATH, CONTROL_EFFECTIVE_PATH, controlEffectiveRoute } from './envSettings.control'
 import { peerOf } from './featureCapabilities.guard'
 import type { DetectOptions } from './featureCapabilities.detect'
 import { buildResponse, connect, defaultDetect, reset, setAdvanced, setSub, toggle, type CapCtx, type Detect, type Reply } from './featureCapabilities.service'
@@ -46,6 +47,12 @@ export async function capabilitiesRoute(
   req: IncomingMessage, res: ServerResponse, method: string, path: string,
   envDeps: () => EnvSettingsApiDeps, extras: Partial<CapabilityExtras> = {},
 ): Promise<boolean> {
+  // Control panel read model (F0-c) is served here because api.ts dispatches to this route BEFORE the
+  // /api/control/* family; moving it to its own line in api.ts is a follow-up outside this WP.
+  if (path === CONTROL_EFFECTIVE_PATH || path === CONTROL_DOCTOR_PATH) {
+    controlEffectiveRoute(req, res, method, { service: envDeps().service, env: extras.env }, path === CONTROL_DOCTOR_PATH)
+    return true
+  }
   if (path !== CAPABILITIES_PATH && !path.startsWith(`${CAPABILITIES_PATH}/`)) return false
   const [seg = '', sub = ''] = path.slice(CAPABILITIES_PATH.length + 1).split('/')
   const fixed = FIXED_METHODS[`${seg}/${sub}`]

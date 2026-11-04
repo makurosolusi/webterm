@@ -204,3 +204,15 @@ describe('canvas-ui.css', () => {
     expect(body).toContain('box-shadow: var(--wt-shadow-floating)')
   })
 })
+
+describe('CanvasToolbar with the app omnibox (onOpenPalette)', () => {
+  it('the search button opens the omnibox, and ⌘K is left to the command registry', () => {
+    const onOpenPalette = vi.fn()
+    renderToolbar({ onOpenPalette })
+    fireEvent.click(screen.getByRole('button', { name: 'Command palette' }))
+    expect(onOpenPalette).toHaveBeenCalledTimes(1)
+    openWithShortcut()
+    expect(onOpenPalette).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Find node' })).toBeNull()
+  })
+})
