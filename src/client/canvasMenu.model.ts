@@ -15,7 +15,7 @@ import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 
 /** Ikon dirujuk lewat NAMA, bukan elemen React — supaya modul ini tetap bebas JSX dan bisa diuji. */
-export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'browser' | 'select-all' | 'fit'
+export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'browser' | 'diff' | 'select-all' | 'fit'
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
@@ -23,6 +23,7 @@ export const MENU_LABELS = {
   agentGroup: 'New Agent',
   files: 'New File Manager',
   browser: 'New Browser',
+  diff: 'Diff (working changes)',
   selectAll: 'Select All',
   fitView: 'Fit View',
 } as const
@@ -67,6 +68,8 @@ export interface CanvasMenuHandlers {
   addFiles: () => void
   /** Pemanggil (canvasMenu.pane) selalu memberi handler ini: saat kemampuan mati, kliknya memunculkan tawaran menyalakan. */
   addBrowser?: () => void
+  /** Diff node on the workspace cwd; absent = no row. */
+  addDiff?: () => void
   fitView: () => void
   selectAll?: () => void
 }
@@ -144,6 +147,7 @@ export function buildCanvasMenuRows(
   // nodeterm, yang isinya (open file…/new file…) butuh dialog file yang webterm belum punya.
   rows.push({ key: 'files', label: MENU_LABELS.files, icon: 'files', onClick: handlers.addFiles })
   if (handlers.addBrowser) rows.push({ key: 'browser', label: MENU_LABELS.browser, icon: 'browser', onClick: handlers.addBrowser })
+  if (handlers.addDiff) rows.push({ key: 'diff', label: MENU_LABELS.diff, icon: 'diff', onClick: handlers.addDiff })
 
   rows.push({ type: 'separator' })
 

@@ -26,6 +26,12 @@ describe('buildNodeGroups', () => {
     expect(groups.map((g) => g.kind)).toEqual(['agent', 'terminal', 'editor', 'files'])
   })
 
+  it('groups diff nodes under Changes, between browser and editor', () => {
+    const nodes = [node('e', 'editor'), node('d', 'diff'), node('a', 'agent')]
+    const groups = buildNodeGroups([ws('w1', 'makuro', nodes)], null, 'w1', '')
+    expect(groups.map((g) => g.kind)).toEqual(['agent', 'diff', 'editor'])
+  })
+
   it('urutan grup dipaku, tak peduli urutan node datang', () => {
     const nodes = [node('f', 'files'), node('e', 'editor'), node('t', 'terminal'), node('a', 'agent')]
     const groups = buildNodeGroups([ws('w1', 'makuro', nodes)], null, 'w1', '')

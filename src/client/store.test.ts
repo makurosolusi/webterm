@@ -23,6 +23,19 @@ describe('store serializer', () => {
     expect(back.agentId).toBe('claude')
   })
 
+  it('round-trips a diff node with its review notes, dropping malformed ones', () => {
+    const note = { id: 'n1', path: 'a.ts', line: 2, body: 'why?' }
+    const n: WsNode = { id: 'd', kind: 'diff', x: 0, y: 0, cwd: '/repo', diffNotes: [note] }
+    const back = toWsNode(toFlow(n))
+    expect(back.kind).toBe('diff')
+    expect(back.cwd).toBe('/repo')
+    expect(back.diffNotes).toEqual([note])
+    const flow = toFlow(n)
+    const dirty = { ...flow, data: { ...flow.data, diffNotes: [note, { id: 'x', path: '', line: -1, body: 7 }] } }
+    expect(toWsNode(dirty).diffNotes).toEqual([note])
+    expect(toWsNode(toFlow({ id: 't', kind: 'terminal', x: 0, y: 0 })).diffNotes).toBeUndefined()
+  })
+
   it('toFlow maps kind to type', () => {
     expect(toFlow({ id: 'x', kind: 'agent', x: 0, y: 0 }).type).toBe('agent')
   })

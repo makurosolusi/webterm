@@ -79,3 +79,16 @@ describe('registry', () => {
     expect(listCommands().some((c) => c.id === 'x.one')).toBe(false)
   })
 })
+
+describe('diff command', () => {
+  it('exists only when the board wires newDiff, and runs it', () => {
+    const base = {
+      openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(),
+      newTerminal: vi.fn(), newFiles: vi.fn(), fitView: vi.fn(), toggleSessions: vi.fn(), toggleInbox: vi.fn(), toggleChat: vi.fn(), toggleBoard: vi.fn(),
+    }
+    expect(appCommands(base).some((c) => c.id === 'diff.new')).toBe(false)
+    const newDiff = vi.fn()
+    appCommands({ ...base, newDiff }).find((c) => c.id === 'diff.new')?.run?.()
+    expect(newDiff).toHaveBeenCalledOnce()
+  })
+})

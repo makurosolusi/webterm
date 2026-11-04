@@ -52,6 +52,14 @@ describe('canLink', () => {
     expect(canLink(br('a'), br('b'))).toBe(false)
     expect(canLink(br('a'), { id: 'b', kind: 'terminal' })).toBe(false)
   })
+  it('agent ↔ diff true both ways; diff ↔ diff, diff ↔ browser, diff ↔ terminal false', () => {
+    const df = (id: string) => ({ id, kind: 'diff' })
+    expect(canLink(ag('a'), df('d'))).toBe(true)
+    expect(canLink(df('d'), ag('a'))).toBe(true)
+    expect(canLink(df('d'), df('e'))).toBe(false)
+    expect(canLink(df('d'), br('b'))).toBe(false)
+    expect(canLink(df('d'), { id: 't', kind: 'terminal' })).toBe(false)
+  })
 })
 
 describe('bridgeExists', () => {

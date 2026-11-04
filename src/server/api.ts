@@ -26,6 +26,7 @@ import { centralChatRoute } from './centralChatApi'
 import { ca2Route } from './central/ca2Routes'
 import { fsApiRoute, type FsApiResult } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
+import { gitDiffRoute } from './gitDiff.route'
 import { hygieneRoute } from './repoHygiene'
 import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
@@ -139,6 +140,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Batch git state for a set of node cwds; null for anything else, including a GET of this path.
   const gitRes = await gitInfoRoute(path, method, () => readBody(req))
   if (gitRes) return json(res, gitRes.status, gitRes.body)
+  const diffRes = await gitDiffRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)) // Diff node (gitDiff.route.ts)
+  if (diffRes) return json(res, diffRes.status, diffRes.body)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (await agentStatusRoute(req, res, url)) return

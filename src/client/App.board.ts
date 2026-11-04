@@ -141,6 +141,8 @@ export function useBoardActions({
   // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
   const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
+  // Diff node on the workspace folder; a wired agent's cwd (its worktree) takes over (DiffNode `root`).
+  const onAddDiff = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'diff', cwd: ws.cwd, title: 'Changes' }), at), [addFlowNode])
   const onAddBrowser = useBrowserAdd(addFlowNode, activeId, browserReady) // undefined = fitur mati di server
   const defaultSize = useMemo(() => ({ width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }), [settings.defaultNodeWidth, settings.defaultNodeHeight])
   const openBrowserAt = useBrowserOpen({ enabled: onAddBrowser !== undefined, addFlowNode, rf, nodesRef, setNodes, defaultSize })
@@ -173,5 +175,5 @@ export function useBoardActions({
 
   const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt }), [onSession, onToggleHideLinks, openBrowserAt])
 
-  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddBrowser, onAddAgent, nodeActions }
+  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions }
 }
