@@ -41,6 +41,7 @@ test('full route order snapshot', () => {
     'bakeoff',
     'evalcases',
     'replay',
+    'prreview',
   ])
 })
 

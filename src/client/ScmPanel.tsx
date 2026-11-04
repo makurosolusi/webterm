@@ -9,6 +9,7 @@ import { Button as VscodeButton } from '@/vscode/register'
 import { commitMessageProblem, type ScmArea, type ScmEntry, type ScmHunk, type ScmReport, type ScmStatus } from '../server/gitScm.types'
 import { commitStaged, fetchHunks, fetchReport, fetchStatus, generateMessage, ScmApiError, sendFixToAgent, stagePath, unstagePath } from './ScmPanel.api'
 import { ScmReportSection } from './ScmPanel.report'
+import { PrReviewSection } from './prreview/PrReviewSection'
 import './ScmPanel.css'
 
 export interface ScmPanelProps {
@@ -154,6 +155,7 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
         </ul>
       )}
       {status && <ScmReportSection root={root} status={status} report={report} onReport={setReport} onDone={(m) => { setMsg(m); void load() }} />}
+      {status && <PrReviewSection root={root} gh={status.gh} />}
     </details>
   )
 }

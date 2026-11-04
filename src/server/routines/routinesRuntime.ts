@@ -12,6 +12,7 @@ import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import { createLogger } from '../logs'
 import { startOutbox } from '../outbox/outboxRuntime'
 import { spawnAgent } from '../spawn/agentSpawn'
+import { pollPrReviews } from '../prreview/prreview.runtime'
 import { runPrecheck } from './routinePrecheck'
 import { createRoutineRunner, type KeepAwake, type RoutineRunner } from './routineRunner'
 import { createRoutineScheduler, type RoutineScheduler } from './routineScheduler'
@@ -86,6 +87,7 @@ export function ensureRoutines(): RoutinesRuntime | null {
     precheck: runPrecheck,
     cost: { gate: costGateLive, begin: beginCostRunLive, end: endCostRunLive },
     treeState: gitTreeState,
+    prReview: pollPrReviews,
   })
   const scheduler = createRoutineScheduler({ store, runner, bus: eventBus, now: Date.now })
   scheduler.start()

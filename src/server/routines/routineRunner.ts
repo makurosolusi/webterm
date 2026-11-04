@@ -39,6 +39,8 @@ export interface RunnerDeps {
     begin(input: BeginRunInput): Promise<string | null>
     end(id: string | null, outcome: { producedDiff?: boolean }): Promise<unknown>
   }
+  /** `prreview` action: reviews new open PR heads of `cwd`; the answer is the run's one-line result. */
+  prReview?(input: { repo: string; workspaceId: string | null; parent: string }): Promise<string>
   /** Fingerprint of `cwd` (HEAD + status); a change across the run = the agent produced a diff. null = not git. Never throws. */
   treeState?(cwd: string): Promise<string | null>
 }
@@ -85,6 +87,10 @@ export function createRoutineRunner(deps: RunnerDeps) {
     if (r.action.type === 'outbox') {
       const error = await deps.enqueue({ to: r.action.to, body: r.action.body, operationId: `routine:${runId}`, createdBy: `routine:${r.id}` })
       return settle(r, runId, trigger, error ? { status: 'failed', reason: error } : { status: 'ran', reason: `message queued for ${r.action.to}` })
+    }
+    if (r.action.type === 'prreview') {
+      if (!deps.prReview) return settle(r, runId, trigger, { status: 'failed', reason: 'the PR review bot is not available' })
+      return settle(r, runId, trigger, { status: 'ran', reason: await deps.prReview({ repo: cwd, workspaceId: r.workspaceId, parent: `routine:${r.id}` }) })
     }
     const before = deps.treeState ? await deps.treeState(cwd) : null
     const spawned = await deps.spawn({

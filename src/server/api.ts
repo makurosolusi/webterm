@@ -27,6 +27,7 @@ import { proxyInfoRoutes } from './routes/proxy.routes'
 import { bakeoffRoutes } from './routes/bakeoff.routes'
 import { evalCasesRoutes } from './routes/evalcases.routes'
 import { replayRoutes } from './routes/replay.routes'
+import { prReviewRoutes } from './routes/prreview.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -66,6 +67,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...bakeoffRoutes,
   ...evalCasesRoutes,
   ...replayRoutes,
+  ...prReviewRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

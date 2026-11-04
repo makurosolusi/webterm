@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { INBOX_ITEMS_PATH, InboxItems, snoozeUntil, type UnifiedItem } from './InboxPanel.items'
+import { approveLabel, INBOX_ITEMS_PATH, InboxItems, snoozeUntil, type UnifiedItem } from './InboxPanel.items'
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const base = { source: 'agent', approvalKind: null, body: null, impact: null, args: null, count: 1 }
@@ -93,5 +93,23 @@ describe('InboxItems', () => {
     const t = new Date(2026, 10, 4, 22, 30).getTime()
     expect(snoozeUntil('1h', t)).toBe(t + 3_600_000)
     expect(snoozeUntil('tomorrow', t)).toBe(new Date(2026, 10, 5, 9, 0).getTime())
+  })
+
+  it('a PR review draft is approved with a "Post review" button that approves that item only', async () => {
+    expect(approveLabel({ kind: 'gate', source: 'prreview' })).toBe('Post review')
+    expect(approveLabel({ kind: 'gate', source: 'dag' })).toBe('Approve once')
+    expect(approveLabel({ kind: 'review', source: 'routines' })).toBe('Accept')
+    const draft: UnifiedItem = { ...base, id: 'gate_pr', kind: 'gate', source: 'prreview', title: 'Post review to o/r#7: 2 findings',
+      impact: { what: 'Posts one review with 1 inline comment to o/r#7 on GitHub', tier: 'R3', rewindable: false }, actions: ['approve', 'edit', 'deny', 'ignore', 'snooze'] }
+    const posts: Array<{ url: string; body: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') { posts.push({ url, body: JSON.parse(String(init.body)) }); return json({ ok: true }) }
+      return json({ items: [draft] })
+    }))
+    render(<InboxItems pollMs={0} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Post review' }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0]).toEqual({ url: `${INBOX_ITEMS_PATH}/act`, body: { id: 'gate_pr', action: { type: 'approve' } } })
+    expect(screen.queryByRole('button', { name: 'Approve once' })).toBeNull()
   })
 })
