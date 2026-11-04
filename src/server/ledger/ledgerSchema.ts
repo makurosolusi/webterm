@@ -13,6 +13,7 @@ import { applyV11 } from './ledgerSchemaV11'
 import { applyV12 } from './ledgerSchemaV12'
 import { applyV13 } from './ledgerSchemaV13'
 import { applyV14 } from './ledgerSchemaV14'
+import { applyV16 } from './ledgerSchemaV16'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -46,4 +47,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 13, up: applyV13 },
   // v14: inbox items (F3-a); additive table, pending approvals are mirrored lazily at the first read.
   { version: 14, up: applyV14 },
+  // v16: task DAG (F4-b); additive tables. v15 is taken by the routines WP in parallel.
+  { version: 16, up: applyV16 },
 ]
