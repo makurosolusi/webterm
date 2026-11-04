@@ -22,6 +22,7 @@ import { orchestratorRoute } from './orchestratorApi'
 import { approvalHumanRoute } from './approvalHumanApi'
 import { policyRoute } from './policy/policy.api'
 import { secretsRoute } from './secrets/secret.api'
+import { proceduralRoute } from './awareness/procedural.api'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { contextLinkRoute } from './contextLinkApi'
 import { sessionHistoryDeps, sessionHistoryRoute } from './sessionHistory.route'
@@ -192,6 +193,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Policy rule amendments: UI-only (K4); agent credentials get 403 agent_cannot_grant.
   if (await policyRoute(req, res, url)) return
   if (await secretsRoute(req, res, url)) return // secret broker values: UI-only (secrets/secret.api.ts)
+  // Procedural memory ("What agents remember"): UI-only like policy; agent credentials get 403.
+  if (await proceduralRoute(req, res, url)) return
   // Memory writes (claim/promote). Body capped at 64 KiB and read lazily, so the read-only GETs
   // below never touch the stream. Authority is derived here as root human, never from the payload.
   const memoryWrite = await memoryWriteRoute(

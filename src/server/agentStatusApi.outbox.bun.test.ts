@@ -3,16 +3,18 @@
 import { afterAll, expect, test } from 'bun:test'
 import { EventEmitter } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'status-outbox-'))
 const prevDir = process.env.WEBTERM_DATA_DIR
 process.env.WEBTERM_DATA_DIR = root // db + outbox land here, never in ~/.webterm-server
+// The temp root is NOT removed: `db` and the started outbox are process singletons that outlive this
+// file in the shared `bun test` process, so deleting their sqlite file under them made every later
+// file's hook reply fail with SQLITE_IOERR. It lives under TMPDIR, which the OS cleans.
 afterAll(() => {
   if (prevDir === undefined) delete process.env.WEBTERM_DATA_DIR
   else process.env.WEBTERM_DATA_DIR = prevDir
-  rmSync(root, { recursive: true, force: true })
 })
 
 const { db } = await import('./db')
