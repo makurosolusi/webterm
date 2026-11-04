@@ -3,6 +3,7 @@ import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance,
 import type { DragEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import ContextEdge from './ContextEdge'
 import { nodeTypes } from './nodeTypes'
+import McpAppsWatcher from './mcpapps/McpAppsWatcher'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
 import { useNodeActions } from './nodeActions'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -80,6 +81,8 @@ export default function BoardCanvas({
       {settings.canvasDots && (
         <Background variant={BackgroundVariant.Dots} gap={gridSize} size={2.5} color="var(--canvas-dot)" />
       )}
+      {/* Adds an App node when an agent publishes an MCP Apps ui:// view (mcpapps/McpAppsWatcher.tsx). */}
+      <McpAppsWatcher />
       <MiniMap
         className="minimap-dock" pannable zoomable nodeColor={nodeColor}
         // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.

@@ -67,6 +67,10 @@ describe('install', () => {
     for (const c of snapshotOf().capabilities) expect(guide).toContain(`\`${c.name}\``)
   })
 
+  it('tells agents how to show an MCP Apps ui:// view (webterm MCP tool app_open)', () => {
+    expect(buildCliGuide('/x/webterm')).toMatch(/_meta\.ui\.resourceUri.*`app_open`/)
+  })
+
   it('carries no token value and no token env name', () => {
     const sh = buildWebtermCli()
     expect(sh).not.toMatch(/WEBTERM_TOKEN|NODETERM_NODE_TOKEN|wcap_/)

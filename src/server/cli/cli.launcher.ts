@@ -163,6 +163,7 @@ ${rows.join('\n')}
 
 Also: \`${cli} browser <verb>\` (skill \`webterm-browser\`) and \`${cli} context <verb>\`
 (skill \`webterm-linked-context\`). \`${cli} skills get <name>\` prints any of these guides.
+MCP Apps: when a tool you call declares \`_meta.ui.resourceUri\` (a \`ui://\` view), read that resource and pass it to the webterm MCP tool \`app_open\` (\`{uri, html}\` or \`{resource}\`, plus \`toolInput\`/\`toolResult\`) to show it as an App node next to you.
 `
 }
 
