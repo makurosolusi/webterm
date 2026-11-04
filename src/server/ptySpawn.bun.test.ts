@@ -15,7 +15,7 @@ test('spawn yang melempar menjadi pesan terbaca lalu exit, bukan throw', async (
   pty.onData((d) => { out += d })
   pty.onExit((c) => { code = c })
   await sleep(20)
-  expect(out).toContain('[webterm] gagal memulai shell: boom: no such shell')
+  expect(out).toContain('[webterm] failed to start shell: boom: no such shell')
   expect(code).toBe(127)
   pty.write('x')
   pty.resize(10, 10)

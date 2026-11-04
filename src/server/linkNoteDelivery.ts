@@ -8,9 +8,11 @@
 // each tick re-diffs what the node is wired to against what it was last told, so a queued note is
 // always the current net change and a wire+unwire before delivery says nothing.
 //
-// Driven by a 1 s poll, not by workspace saves: one loop sees edge edits, renames, the agent going
-// idle and the user clearing the input alike, without hooking into the save path.
-// ponytail: polls every workspace each second; move to a save/status event if canvases get large.
+// Event-driven (F1-d), no timer: a pass runs on `edge.change` (wire/unwire/rename, recorded by the
+// workspace save) and on the agent going idle (`hook.Stop`/`StopFailure`/`Notification`), so a wired
+// cable is typed in well under 1 s and an idle server has no tick. No safety sweep: a note refused
+// for a draft is announced by the draft's own UserPromptSubmit (additionalContext → `markTold`), or
+// typed at the next idle hook. ponytail: a draft cleared without submitting waits for that hook.
 import type { AgentStatus, Workspace } from '../shared/workspace'
 import { hasClaudeHookSettings } from '../shared/workspace'
 import { buildLinkDoc } from './contextLink'
@@ -20,6 +22,7 @@ import { buildLinkNote, linkEntries, type LinkEntry } from './linkNote'
 import { composerText, readClaudeComposer } from './linkNoteComposer'
 import { renderStyledScreen } from './linkNoteScreen'
 import { createLogger } from './logs'
+import { eventBus, type EventBus } from './events/eventBus'
 
 const log = createLogger('linkNote')
 
@@ -126,18 +129,46 @@ export class LinkNoteDelivery {
 
 let singleton: LinkNoteDelivery | undefined
 
-/** Start the process-wide loop once (idempotent). Deps imported lazily: `db`/`sessions` pull
+/** Hook events after which the agent may be idle at an empty prompt. */
+export const LINK_NOTE_IDLE_HOOKS: ReadonlySet<string> = new Set(['hook.Stop', 'hook.StopFailure', 'hook.Notification'])
+
+/**
+ * Runs `delivery.tick()` on every edge change and idle hook. Passes never overlap; an event during
+ * a pass queues exactly one more pass (an event is never lost to the re-entrancy guard). Returns
+ * the unsubscribe function and a `settled` promise for tests.
+ */
+export function subscribeLinkNotes(delivery: LinkNoteDelivery, bus: Pick<EventBus, 'subscribe'> = eventBus) {
+  let current: Promise<void> | null = null
+  let again = false
+  const kick = (): void => {
+    if (current) { again = true; return }
+    current = (async () => {
+      do {
+        again = false
+        await delivery.tick().catch((e) => log.error('linkNote.tick', 'Link note pass failed', { error: String(e) }))
+      } while (again)
+      current = null
+    })()
+  }
+  const offEdge = bus.subscribe('edge.change', kick)
+  const offHook = bus.subscribe('hook.*', (e) => { if (LINK_NOTE_IDLE_HOOKS.has(e.kind)) kick() })
+  return {
+    kick,
+    settled: (): Promise<void> => current ?? Promise.resolve(),
+    stop(): void { offEdge(); offHook() },
+  }
+}
+
+/** Start the process-wide subscriber once (idempotent). Deps imported lazily: `db`/`sessions` pull
  *  `bun:sqlite` and the PTY, which node-env tests of the hook route must never load. */
-export async function startLinkNotes(intervalMs = 1000): Promise<LinkNoteDelivery> {
+export async function startLinkNotes(): Promise<LinkNoteDelivery> {
   if (singleton) return singleton
   const [{ db }, { sessions }] = await Promise.all([import('./db'), import('./sessions')])
   if (singleton) return singleton
   const delivery = new LinkNoteDelivery({ workspaces: () => db.list(), sessions })
   singleton = delivery
-  const timer = setInterval(() => {
-    delivery.tick().catch((e) => log.error('linkNote.tick', 'Link note pass failed', { error: String(e) }))
-  }, intervalMs)
-  timer.unref?.()
+  // One pass now baselines every live PTY, so the first cable change after boot is news.
+  subscribeLinkNotes(delivery).kick()
   return delivery
 }
 
