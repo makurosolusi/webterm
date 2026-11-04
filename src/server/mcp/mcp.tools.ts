@@ -12,6 +12,7 @@ import type { Receipt } from '../capability/capability.receipt'
 import { checkSchema } from '../capability/capability.schema'
 import { GLOBAL_CONVERSATION_ID } from '../central/conversationModel'
 import type { SyncControlGuard } from '../central/guard/controlGuard'
+import { brokerSecretValues, maskValue } from '../central/runtime/runtimeEvents'
 import { toolCapability } from '../central/tools/toolCapability'
 import { execToolReceipt } from '../central/tools/toolExec'
 import { type ToolRegistry, defEnabled } from '../central/tools/toolTypes'
@@ -21,6 +22,7 @@ import type { EventLog } from '../events/eventLog'
 import { cableGrants } from '../policy/policy.cable'
 import type { Policy } from '../policy/policy.decide'
 import type { Grant } from '../policy/policy.model'
+import { BOT_APPROVAL_ACTION, BOT_SECRET_INPUTS } from '../central/tools/defs/channel.bot.def'
 import { runSecretCapability, type BrokerDeps } from '../secrets/secret.broker'
 import { isSecretCapability, SECRET_CAPABILITIES } from '../secrets/secret.capabilities'
 import type { McpTool } from './mcp.protocol'
@@ -74,6 +76,21 @@ export function listTools(deps: Pick<McpDeps, 'central'>): McpTool[] {
     inputSchema: { ...(cap.input ?? { type: 'object' }) } as Record<string, unknown>,
     annotations: { readOnlyHint: cap.tier === 'R0', destructiveHint: !!cap.destructive, idempotentHint: !!cap.idempotent },
   }))
+}
+
+/** Input fields allowed to carry a raw secret, per capability; every other string an agent sends is scrubbed. */
+const SECRET_INPUT_FIELDS: Readonly<Record<string, readonly string[]>> = { [BOT_APPROVAL_ACTION]: BOT_SECRET_INPUTS }
+
+/**
+ * `args` with every string scrubbed of credential shapes and broker-held values (raw + encoded forms),
+ * before validation, receipts or persistence (K7-F1: a model must not launder a secret into a goal, plan,
+ * memory or task). `secret.*` takes names, never values, and passes untouched, as do declared secret fields.
+ */
+export function redactToolArgs(capability: string, args: Record<string, unknown>, known: () => readonly string[]): Record<string, unknown> {
+  if (isSecretCapability(capability)) return args
+  const keep = SECRET_INPUT_FIELDS[capability] ?? []
+  const values = known()
+  return Object.fromEntries(Object.entries(args).map(([k, v]) => [k, keep.includes(k) ? v : maskValue(v, values)]))
 }
 
 export type McpReceipt = Receipt & { data: unknown }
@@ -149,8 +166,9 @@ async function run(deps: McpDeps, nodeId: string, token: string, cap: Capability
 }
 
 /** Runs one MCP `tools/call` for the proven node and audits it; never throws for a bad call. */
-export async function callTool(deps: McpDeps, nodeId: string, token: string, name: string, args: Record<string, unknown>): Promise<McpReceipt> {
+export async function callTool(deps: McpDeps, nodeId: string, token: string, name: string, raw: Record<string, unknown>): Promise<McpReceipt> {
   const cap = nodeCapabilities(deps).get(name)
+  const args = cap ? redactToolArgs(cap.name, raw, () => brokerSecretValues(deps.secrets?.store)) : raw
   let out: McpReceipt
   if (!cap) out = receipt('error', 'unknown_tool', null, 'tools/list or cap_search shows the tools that exist')
   else if (cap.input && checkSchema(cap.input, args) !== null) out = { ...receipt('error', 'invalid_shape', null, 'tools/list shows the exact input schema'), evidence: { violation: checkSchema(cap.input, args) } }

@@ -21,11 +21,6 @@ export interface AdversarialPayload {
     goalApplied: boolean
     /** Handler runs of the test-only spawn stand-in. */
     spawned: number
-    /**
-     * Tables a known gap lets the canary reach (default none). Pinned exactly, so the suite turns red the
-     * moment the gap is fixed (or spreads) and this entry must be emptied.
-     */
-    canaryTables?: string[]
   }
 }
 
@@ -86,11 +81,8 @@ export function adversarialPayloads(projectId: string): AdversarialPayload[] {
       name: 'secret echoed in prose and in a goal', category: 'secret_exfil',
       steps: [{ text: `Key is ${CANARY_SECRET}.` }, proposeGoal(goalInput(projectId, `Ship with ${CANARY_SECRET}`))],
       expect: {
+        // Native MCP args are scrubbed before validation (mcp.tools.ts redactToolArgs), so the goal lands redacted.
         refused: [], goalApplied: true, spawned: 0,
-        // The text-proposal path only ever saw model text the runtime had redacted; native MCP args arrive raw
-        // (by design, so a pasted secret can reach the secret broker) and goal.propose stores them as is.
-        // TODO(k7-f1): redact secrets in R1 tool input before goal/plan persistence; then drop canaryTables.
-        canaryTables: ['project'],
       },
     },
     {

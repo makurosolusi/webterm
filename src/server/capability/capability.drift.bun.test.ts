@@ -23,7 +23,7 @@ import { createAgentKindsDef } from '../central/tools/defs/agentKinds.defs'
 import { CORE_DEFS } from '../central/tools/defs/core.defs'
 import { registerCa2Tools } from '../central/tools/registerAll'
 import { toolCapability, toolProblems } from '../central/tools/toolCapability'
-import { buildCatalog, CATALOG_TOKEN_BUDGET, createRegistry, estimateTokens } from '../central/tools/toolRegistry'
+import { createRegistry } from '../central/tools/toolRegistry'
 import type { ToolDef } from '../central/tools/toolTypes'
 
 const stub = {} as never // test-only: builders capture deps, they never call them at registration
@@ -70,18 +70,6 @@ describe('capability declarations', () => {
     const index = createCapabilityIndex([...defs.map(toolCapability), ...CONTROL_CAPABILITIES])
     expect(index.get('approval.request')?.projections).toEqual(expect.arrayContaining(['central', 'control-http']))
     expect(index.list().length).toBe(new Set([...defs.map((d) => d.name), ...CONTROL_CAPABILITIES.map((c) => c.name)]).size)
-  })
-})
-
-describe('projection: Central catalog', () => {
-  it('names every active tool, either with its schema or in the overflow note', () => {
-    const { registry, env } = fullCentralRegistry()
-    const catalog = buildCatalog(registry, 'R3', env)
-    for (const def of registry.list()) expect(catalog.text).toContain(def.name)
-    // The describe tool keeps its own schema even when the catalog overflows.
-    expect(catalog.text).toContain('cap.describe {"name"')
-    if (catalog.omitted.length) expect(catalog.text).toContain(`${catalog.omitted.length} more tools`)
-    expect(estimateTokens(catalog.text) <= CATALOG_TOKEN_BUDGET).toBe(true)
   })
 })
 

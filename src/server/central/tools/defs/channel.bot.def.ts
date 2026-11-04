@@ -12,6 +12,8 @@ const PURPOSE_MAX = 200
 const APPROVAL_ID_RE = /^[A-Za-z0-9._:-]{1,200}$/
 /** Approval `kind`/action name a human approves for this tool. */
 export const BOT_APPROVAL_ACTION = 'channel.bot.propose'
+/** Input fields that carry a raw secret on purpose (it goes to the SecretStore); MCP input redaction skips them. */
+export const BOT_SECRET_INPUTS: readonly string[] = ['botToken']
 
 /** The exact text a human types to confirm connecting `accountId`. */
 export function botConfirmPhrase(accountId: string): string { return `connect bot ${accountId}` }

@@ -1,5 +1,5 @@
-// cap.search / cap.describe (R0): progressive disclosure over the tool registry, so a catalog over its
-// token budget never hides a tool (toolRegistry.ts `buildCatalog` points here). Both read only the
+// cap.search / cap.describe (R0): progressive disclosure over the tool registry, so no tool is hidden
+// from a model that only sees part of the list. Both read only the
 // caller's registry and report tools whose flag is on, at any tier (the tier says how it can be used).
 import { createCapabilityIndex, SEARCH_DEFAULT_LIMIT } from '../../../capability/capability.define'
 import { obj, S } from '../../../capability/capability.schema'
