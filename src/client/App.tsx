@@ -26,16 +26,12 @@ import OutputPanelHost from './output/outputPanelHost'
 import { usePortsStatusItems } from './PortsChip'
 import ProblemsPanel, { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
-import TimelineHost from './Timeline'
 import MorningBrief from './MorningBrief'
 import { SettingsPanel } from './SettingsPanel'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
-import { BrowserLinkOfferHost } from './browserLinkOffer'
-import BakeoffHost from './bakeoff/BakeoffHost'
-import ReplayHost from './replay/ReplayHost'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { setNotifyCanvas } from './osNotify'
@@ -47,6 +43,7 @@ import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardCanvas from './App.canvas'
+import AppHosts from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
@@ -333,12 +330,13 @@ export default function App() {
           <ProblemsPanel problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode} onFocus={(id) => void onFocus(id)} />
           {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
-          <TimelineHost workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} onFocusNode={(id) => void onFocus(id)} />
+          <AppHosts
+            workspaces={workspaces} liveNodes={liveNodes} activeWs={activeWs} onFocusNode={(id) => void onFocus(id)}
+            onCreated={(ws) => { setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}
+            onPlace={(placed, bridges) => { for (const n of placed) addFlowNode(() => n); restoreBridges(bridges, placed.map((n) => n.id)) }}
+          />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
-          <BrowserLinkOfferHost />
-          <BakeoffHost repo={activeWs?.cwd} workspaceId={activeId} />
-          <ReplayHost workspaceId={activeId} nodes={(activeWs?.nodes ?? []).filter((n) => n.agentId)} />
         </>
       )}
       {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi
