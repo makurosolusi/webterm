@@ -8,3 +8,7 @@ dist/
 !.env.example
 # lockfile repo ini bun.lock; package-lock.json hanya lahir kalau npm dipakai keliru
 package-lock.json
+# ekspor cookie browser = sesi login aktif, setara secret; jangan pernah ter-commit (Rule 7)
+cookies.txt
+*.cookies.txt
+*cookies*.txt
