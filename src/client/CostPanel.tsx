@@ -21,6 +21,8 @@ export const COST_TEXT = {
   spend: 'Spend',
   responses: 'Responses',
   cacheHit: 'Cache hit rate',
+  prefixReuse: 'Central prefix reuse (7 days)',
+  prefixValue: (rate: number | null, n: number) => (rate === null ? '—' : `${Math.round(rate * 100)}% of ${n} prefix${n === 1 ? '' : 'es'}`),
   unpriced: (n: number) => `${n} responses from models without a price are not counted.`,
   byWorkspace: 'By workspace',
   topSpenders: 'Top spenders',
@@ -88,10 +90,11 @@ export function CostPanel(): React.JSX.Element {
       {!data && !failed ? <p className="text-xs opacity-70">{COST_TEXT.loading}</p> : null}
       {data && s ? (
         <div className="flex flex-col gap-2">
-          <dl className="grid grid-cols-3 gap-2 text-xs">
+          <dl className="grid grid-cols-4 gap-2 text-xs">
             <div><dt className="opacity-70">{COST_TEXT.spend}</dt><dd data-testid="cost-total" className="text-base font-semibold">{formatUsd(s.costMicros)}</dd></div>
             <div><dt className="opacity-70">{COST_TEXT.responses}</dt><dd>{s.byModel.reduce((n, g) => n + g.responses, 0)}</dd></div>
             <div><dt className="opacity-70">{COST_TEXT.cacheHit}</dt><dd data-testid="cost-cache">{s.cacheHitRate === null ? '—' : `${Math.round(s.cacheHitRate * 100)}%`}</dd></div>
+            <div><dt className="opacity-70">{COST_TEXT.prefixReuse}</dt><dd data-testid="cost-prefix">{COST_TEXT.prefixValue(data.prefix?.reuseRate ?? null, data.prefix?.prefixes ?? 0)}</dd></div>
           </dl>
           {s.unpriced > 0 ? <p className="text-xs opacity-70">{COST_TEXT.unpriced(s.unpriced)}</p> : null}
           <div className="grid grid-cols-2 gap-3">

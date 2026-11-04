@@ -12,6 +12,7 @@ import { captureTranscript, syncCentralTurns } from './costCapture'
 import { beginCostRun, costGate, endCostRun, estimateCost, listCaps, median, ROI_NO_DIFF_RUNS, setCostCap, type Notice } from './costOracle'
 import { insertCostUsage, spendSummary, spentMicros } from './costStore'
 import { costRoute, type CostResponse } from './cost.route'
+import { recordPrefix } from '../central/context/promptPrefix'
 
 const T0 = Date.UTC(2026, 10, 4, 9, 0, 0) // test-only clock
 const root = mkdtempSync(join(tmpdir(), 'cost-'))
@@ -161,6 +162,13 @@ describe('costRoute', () => {
     expect(out.today.cacheHitRate).toBe(0.75)
     expect(out.labels['node:n1']).toBe('node-n1')
     expect(out.pricing.source).toContain('platform.claude.com')
+    expect(out.prefix).toEqual({ prefixes: 0, hits: 0, reuseRate: null })
+    recordPrefix(db, { projectId: null, text: 'sys', now: T0 })
+    recordPrefix(db, { projectId: null, text: 'sys', now: T0 })
+    recordPrefix(db, { projectId: null, text: 'sys', now: T0 })
+    recordPrefix(db, { projectId: null, text: 'old', now: T0 - 30 * 86_400_000 })
+    const again = (await costRoute('/api/cost', 'GET', new URLSearchParams(), none, { db, now: T0 }))!.body as CostResponse
+    expect(again.prefix).toEqual({ prefixes: 1, hits: 2, reuseRate: 2 / 3 })
     expect(spendSummary(db, 0).byNode[0]).toMatchObject({ key: 'n1', costMicros: 1500, responses: 2 })
   })
 

@@ -25,6 +25,9 @@ import type { Grant } from '../policy/policy.model'
 import { BOT_APPROVAL_ACTION, BOT_SECRET_INPUTS } from '../central/tools/defs/channel.bot.def'
 import { runSecretCapability, type BrokerDeps } from '../secrets/secret.broker'
 import { isSecretCapability, SECRET_CAPABILITIES } from '../secrets/secret.capabilities'
+import { repoRootOf } from '../gitDiff'
+import { cachedToolRead } from '../toolcache/toolCache'
+import { gitTreeVersion } from '../toolcache/toolCacheGit'
 import type { McpTool } from './mcp.protocol'
 
 type Env = Record<string, string | undefined>
@@ -144,7 +147,13 @@ async function runGitDiff(deps: McpDeps, nodeId: string, cap: CapabilitySpec, ar
   if (root !== resolve(cwd) && !root.startsWith(resolve(cwd) + sep)) return receipt('denied', 'outside_cwd', null, 'pass a root inside this node working folder')
   const q = new URLSearchParams({ root })
   for (const k of ['path', 'offset', 'limit'] as const) if (args[k] !== undefined) q.set(k, String(args[k]))
-  return fromHttp(await deps.gitDiff(q))
+  const db = deps.central?.db
+  // Not a repo (or no ledger): no version to key on, so no cache; the diff route answers the error itself.
+  const version = db ? await repoRootOf(root).then(gitTreeVersion, () => null) : null
+  if (!db || version === null) return fromHttp(await deps.gitDiff(q))
+  const { value } = await cachedToolRead(db, { tool: 'git.diff', args: Object.fromEntries(q), version }, () => deps.gitDiff(q), Date.now(),
+    (res) => !!res && res.status < 400)
+  return fromHttp(value)
 }
 
 async function run(deps: McpDeps, nodeId: string, token: string, cap: CapabilitySpec, args: Record<string, unknown>): Promise<McpReceipt> {

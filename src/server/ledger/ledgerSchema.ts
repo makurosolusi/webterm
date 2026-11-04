@@ -17,6 +17,7 @@ import { applyV15 } from './ledgerSchemaV15'
 import { applyV16 } from './ledgerSchemaV16'
 import { applyV17 } from './ledgerSchemaV17'
 import { applyV18 } from './ledgerSchemaV18'
+import { applyV19 } from './ledgerSchemaV19'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -25,8 +26,8 @@ export interface Migration {
 }
 
 /**
- * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..17}.ts`
- * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log, policy grants, agent outbox, channel store, inbox items, routines, task DAG, cost oracle); never renumber or reorder an entry.
+ * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..19}.ts`
+ * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log, policy grants, agent outbox, channel store, inbox items, routines, task DAG, cost oracle, memory intelligence, caches); never renumber or reorder an entry.
  */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, up: (db) => db.exec(DDL_V1) },
@@ -58,4 +59,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 17, up: applyV17 },
   // v18: memory intelligence (F5-a): bi-temporal columns, cognitive kind, tombstones, incognito.
   { version: 18, up: applyV18 },
+  // v19: tool_cache + embed_cache + prefix.last_used_at (F5-d); additive, caches start empty.
+  { version: 19, up: applyV19 },
 ]
