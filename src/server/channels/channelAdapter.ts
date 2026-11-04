@@ -16,7 +16,7 @@ import { CALLBACK_DATA_MAX_BYTES } from './channelCallback'
 import { DEFAULT_ACCOUNT_ID } from './channelStoreMigrate'
 import { TELEGRAM_MAX_TEXT, parseTelegramCallback, parseTelegramUpdate } from './telegram'
 import { PollApiError, callBotApi } from './telegramPollApi'
-import type { TelegramSenderFetch } from './telegramSend'
+import { TELEGRAM_HTML_PARAMS, telegramMarkdownChunks, type TelegramSenderFetch } from './telegramSend'
 import { verifyTelegramSecret } from './webhook'
 
 export const TELEGRAM_CAPS: ChannelCaps = {
@@ -28,6 +28,8 @@ export const TELEGRAM_CAPS: ChannelCaps = {
   groupMirror: false,
 }
 const BOT_API_TIMEOUT_MS = 10_000
+/** Payload key carrying the chunks after the first; `send` delivers them in order, never to the API. */
+export const CONTINUATION_KEY = 'continuation'
 
 export interface TelegramAdapterOptions {
   /** Account this adapter instance receives for (one webhook secret per bot). */
@@ -109,8 +111,10 @@ export function createTelegramAdapter(options: TelegramAdapterOptions): Telegram
     },
     render(msg: OutboundMessage): ProviderPayload {
       const head = msg.card ? `${msg.card.title}\n${msg.card.status}\n\n` : ''
-      // No parse_mode: untrusted text is delivered literally.
-      const payload: Record<string, unknown> = { text: `${head}${msg.text}`.slice(0, TELEGRAM_CAPS.maxText) }
+      // The shared renderer escapes untrusted text into Telegram HTML and splits it tag-balanced.
+      const [first = '', ...rest] = telegramMarkdownChunks(`${head}${msg.text}`)
+      const payload: Record<string, unknown> = { text: first, ...TELEGRAM_HTML_PARAMS }
+      if (rest.length > 0) payload[CONTINUATION_KEY] = rest
       if (msg.chatId !== undefined) payload['chat_id'] = msg.chatId
       if (msg.replyTo !== undefined) payload['reply_to_message_id'] = Number(msg.replyTo)
       if (msg.threadKey !== undefined) payload['message_thread_id'] = Number(msg.threadKey)
@@ -120,7 +124,18 @@ export function createTelegramAdapter(options: TelegramAdapterOptions): Telegram
       }
       return payload
     },
-    send: (accountId, payload) => call(accountId, 'sendMessage', payload),
+    async send(accountId, payload) {
+      // Buttons go on the last chunk, so they sit under the end of the text.
+      const { [CONTINUATION_KEY]: more, reply_markup: markup, ...base } = payload as Record<string, unknown>
+      const chunks = [base['text'], ...(Array.isArray(more) ? more : [])]
+      let result: SendResult = { ok: false, errorCode: 'transient' }
+      for (const [i, text] of chunks.entries()) {
+        const last = i === chunks.length - 1
+        result = await call(accountId, 'sendMessage', { ...base, text, ...(last && markup !== undefined ? { reply_markup: markup } : {}) })
+        if (!result.ok) return result
+      }
+      return result
+    },
     answerCallback: (accountId, callbackId, text) =>
       call(accountId, 'answerCallbackQuery', { callback_query_id: callbackId, text: text.slice(0, 200) }),
   }

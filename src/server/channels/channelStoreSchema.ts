@@ -11,6 +11,9 @@ export const CHANNEL_STORE_FILE = 'channels.json'
 export const CHANNEL_DEDUPE_TTL_MS = 24 * 60 * 60 * 1000
 export const CHANNEL_DEDUPE_LIMIT = 4096
 export const CHANNEL_OUTBOX_LIMIT = 500
+/** Desktop -> Telegram forwarding delay; same default as Orca DESKTOP_AWAY_SECONDS = 180. */
+export const DEFAULT_FORWARD_AWAY_MINUTES = 3
+export const MAX_FORWARD_AWAY_MINUTES = 24 * 60
 
 /** `channel:accountId:chatId`; chat ids never contain `:` so the key splits unambiguously. */
 export function bindingKey(channel: string, accountId: string, chatId: string): string {
@@ -58,6 +61,8 @@ export interface ChannelStoreState {
   /** Highest `update_id` ever claimed, for health/metrics only. Never used as a dedupe test. */
   cursor: number
   outbox: StoredReply[]
+  /** Away minutes before agent notices are forwarded (0 = off); absent = default. Additive optional, no version bump. */
+  forwardAwayMinutes?: number
 }
 
 export class StoreCorruptError extends Error {
@@ -197,7 +202,13 @@ export function parseStoreDocument(raw: string, now: number = Date.now()): { sta
     if (!reply) throw new StoreCorruptError('corrupt')
     outbox.push(reply)
   }
-  return { state: { version: CHANNEL_STORE_VERSION, accounts, bindings, processed, cursor, outbox }, migrated }
+  const away = parsed['forwardAwayMinutes']
+  if (away !== undefined && (typeof away !== 'number' || !Number.isInteger(away) || away < 0 || away > MAX_FORWARD_AWAY_MINUTES)) {
+    throw new StoreCorruptError('corrupt')
+  }
+  const state: ChannelStoreState = { version: CHANNEL_STORE_VERSION, accounts, bindings, processed, cursor, outbox }
+  if (away !== undefined) state.forwardAwayMinutes = away
+  return { state, migrated }
 }
 
 /** Strict load: any shape drift is `corrupt`, never a partial accept with defaults merged in. */

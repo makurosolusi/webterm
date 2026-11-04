@@ -1,6 +1,7 @@
 // Tipe + port ledger untuk runtime kanal Telegram; dipisah dari channelsRuntime.ts (batas Rule 8).
 // channelsRuntime.ts me-re-export semuanya, jadi import lama tetap berlaku.
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Database } from 'bun:sqlite'
 import type { SecretStore } from '../envSecrets.store'
 import type { ApprovalStatus } from '../ledger/ledgerApproval'
 import type { Ledger } from '../ledger/ledger'
@@ -12,6 +13,8 @@ import type { SecretFileRead } from './channelSecret'
 import type { SenderBootOptions } from './channelSenderBoot'
 import type { FlushResult } from './telegramSender'
 import type { TelegramMode } from './telegramMode'
+import type { WorldCountsPort } from './channelWorld'
+import type { ForwarderDeps, PresenceTracker } from './channelPresence'
 
 /** Production approval port: the real ledger, unchanged, behind the dispatcher's narrow slice. */
 export function ledgerApprovalPort(ledger: Ledger): ChannelApprovalPort {
@@ -51,19 +54,30 @@ export interface ChannelsRuntime {
 
 export interface ChannelsRuntimeOptions {
   env?: NodeJS.ProcessEnv
+  /** JSON file backend (tests); omitted = the ledger `channel_store` row. */
   storePath?: string
+  /** Ledger DB holding `channel_store`; omitted = the process ledger runtime's DB. */
+  ledgerDb?: Database
   now?: () => number
   /** Injection seam for tests; production reads the real filesystem. */
   readSecret?: (path: string) => SecretFileRead
   /** Egress pacing and transport seam; omitted in production (5s interval, global fetch). */
   sender?: SenderBootOptions
   centralChat?: TelegramCentralPort
+  /** World-view counts for `/status`; omitted = the shared read-only world view. */
+  world?: WorldCountsPort
   /** Approval-button deps (see `buildButtonDeps`); omitted = callbacks ignored. */
   buttons?: Pick<TelegramDispatchDeps, 'challenge' | 'answerCallback'> | null
   /** Test seam for the managed bots manager (secrets, registry, fetch). */
   bots?: Partial<BotManagerDeps>
   /** Secret store untuk secret webhook otomatis (KE-9); produksi: `<dataDir>/secrets`. */
   secrets?: SecretStore
+  /** Tab presence for desktop -> Telegram forwarding; omitted = the process-wide tracker. */
+  presence?: PresenceTracker
+  /** Hook-event subscription seam (tests); omitted = the Senses event bus. */
+  subscribe?: ForwarderDeps['subscribe']
+  /** Node label lookup for agent notices (tests); omitted = the workspace DB. */
+  describe?: ForwarderDeps['describe']
   /** Pending-chat list owned by the caller so it survives a runtime rebuild (telegramHot.refresh). */
   pending?: PendingChatStore
 }

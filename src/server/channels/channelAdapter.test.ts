@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createTelegramAdapter } from './channelAdapter'
-import type { TelegramSenderFetch } from './telegramSend'
+import { CONTINUATION_KEY, createTelegramAdapter } from './channelAdapter'
+import { telegramMarkdownChunks, type TelegramSenderFetch } from './telegramSend'
 
 const SECRET = 's'.repeat(40)
 const TOKEN = '123456:SECRET-TOKEN-VALUE'
@@ -29,15 +29,31 @@ describe('telegram ChannelAdapter', () => {
     expect(adapter.verify({ headers, body: 'not json' })).toBeNull()
   })
 
-  it('render cuts to maxText, drops oversize button ids, and sets no parse_mode', () => {
+  it('render uses the shared HTML renderer, splits long text, and drops oversize button ids', () => {
     const adapter = createTelegramAdapter({ secret: SECRET, tokenFor: () => TOKEN })
+    const text = `<b>not a tag</b> ${'x'.repeat(5000)}`
     const payload = adapter.render({
-      text: 'x'.repeat(5000),
+      text,
       card: { title: 'T', status: 'S', actions: [{ id: 'a:1:y', label: 'Approve' }, { id: 'z'.repeat(70), label: 'Too long' }] },
     })
-    expect((payload['text'] as string).length).toBe(4096)
-    expect(payload['parse_mode']).toBeUndefined()
+    const chunks = telegramMarkdownChunks(`T\nS\n\n${text}`)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(payload['text']).toBe(chunks[0])
+    expect(payload['text']).toContain('&lt;b&gt;not a tag&lt;/b&gt;') // untrusted markup is escaped
+    expect(payload[CONTINUATION_KEY]).toEqual(chunks.slice(1))
+    expect(payload['parse_mode']).toBe('HTML')
     expect(payload['reply_markup']).toEqual({ inline_keyboard: [[{ text: 'Approve', callback_data: 'a:1:y' }]] })
+  })
+
+  it('send delivers every chunk in order and puts the buttons on the last one only', async () => {
+    const ok = fakeFetch(200, { ok: true, result: { message_id: 3 } })
+    const adapter = createTelegramAdapter({ secret: SECRET, tokenFor: () => TOKEN, fetch: ok.fetch })
+    const payload = adapter.render({ text: 'y'.repeat(9000), chatId: '1', card: { title: 'T', status: 'S', actions: [{ id: 'a:1:y', label: 'Go' }] } })
+    expect(await adapter.send('default', payload)).toEqual({ ok: true, externalId: '3' })
+    expect(ok.calls.length).toBe(1 + (payload[CONTINUATION_KEY] as string[]).length)
+    expect(ok.calls.every((c) => c.body['parse_mode'] === 'HTML' && !(CONTINUATION_KEY in c.body))).toBe(true)
+    expect(ok.calls.slice(0, -1).every((c) => !('reply_markup' in c.body))).toBe(true)
+    expect(ok.calls.at(-1)?.body['reply_markup']).toBeDefined()
   })
 
   it('render puts chatId into the payload as chat_id and omits it otherwise', () => {
@@ -51,6 +67,7 @@ describe('telegram ChannelAdapter', () => {
     const tokens: Record<string, string> = { default: TOKEN }
     const adapter = createTelegramAdapter({ secret: SECRET, tokenFor: (id) => tokens[id], fetch: ok.fetch })
     expect(await adapter.send('default', { chat_id: '1', text: 'hi' })).toEqual({ ok: true, externalId: '12' })
+    expect(ok.calls).toHaveLength(1)
     expect(ok.calls[0]?.url).toContain('/sendMessage')
     expect(await adapter.send('other', { chat_id: '1', text: 'hi' })).toEqual({ ok: false, errorCode: 'not_configured' })
 
