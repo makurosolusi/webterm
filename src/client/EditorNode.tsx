@@ -14,6 +14,8 @@ import type { FileKind } from '../shared/fileKind'
 import type { ReadMeta } from '../shared/fsContract'
 import { editorFileKind, fileBaseName, fileExt } from './editorFile'
 import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hints'
+import { EditorRenamePreview } from './EditorRenamePreview'
+import { loadMonaco } from './lazyMonaco'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
@@ -159,6 +161,11 @@ function EditorNode({
                 >
                   <span className={`codicon codicon-${ef.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
                 </ToolbarButton>
+                {lspLanguage && (
+                  <ToolbarButton label="Outline" title="Go to symbol in file (⇧⌘O)" data-title="Go to symbol in file (⇧⌘O)" onClick={() => void showOutline(id)}>
+                    <span className="codicon codicon-symbol-class" aria-hidden="true" />
+                  </ToolbarButton>
+                )}
                 {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
                     yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
                 {!readOnly && (
@@ -210,6 +217,7 @@ function EditorNode({
               </ToolbarButton>
             </div>
           )}
+          {editable && <EditorRenamePreview nodeId={id} />}
           {editable && ef.conflict && (
             <EditorConflictBar conflict={ef.conflict} fileName={fileName} onReload={() => void ef.reload()} onOverwrite={ef.overwrite} />
           )}
@@ -222,6 +230,14 @@ function EditorNode({
       </div>
     </>
   )
+}
+
+/** Open Monaco's symbol list (document symbols from the language server) in editor node `nodeId`. */
+async function showOutline(nodeId: string): Promise<void> {
+  const m = await loadMonaco()
+  const ed = m.editor.getEditors().find((e) => e.getModel()?.uri.fragment === nodeId)
+  ed?.focus()
+  ed?.trigger('outline', 'editor.action.quickOutline', null)
 }
 
 export default memo(EditorNode)

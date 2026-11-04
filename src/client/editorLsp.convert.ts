@@ -92,3 +92,59 @@ export function applyTextEdits(text: string, edits: LspTextEdit[]): string {
     .sort((a, b) => off(b.range.start) - off(a.range.start))
     .reduce((t, e) => t.slice(0, off(e.range.start)) + e.newText + t.slice(off(e.range.end)), text)
 }
+
+type LspDoc = string | { kind: string; value: string }
+const doc = (d: LspDoc | undefined): string | Monaco.IMarkdownString | undefined => (d === undefined || typeof d === 'string' ? d : { value: d.value })
+
+export interface LspSignatureHelp {
+  signatures: { label: string; documentation?: LspDoc; parameters?: { label: string | [number, number]; documentation?: LspDoc }[]; activeParameter?: number }[]
+  activeSignature?: number
+  activeParameter?: number
+}
+
+/** SignatureHelp -> Monaco's (same shape; documentation becomes markdown, missing indexes 0). */
+export function toSignatureHelp(h: LspSignatureHelp | null): Monaco.languages.SignatureHelp | null {
+  if (!h?.signatures?.length) return null
+  return {
+    activeSignature: h.activeSignature ?? 0,
+    activeParameter: h.activeParameter ?? 0,
+    signatures: h.signatures.map((s) => ({
+      label: s.label,
+      ...(s.documentation !== undefined ? { documentation: doc(s.documentation) } : {}),
+      parameters: (s.parameters ?? []).map((p) => ({ label: p.label, ...(p.documentation !== undefined ? { documentation: doc(p.documentation) } : {}) })),
+      ...(s.activeParameter !== undefined ? { activeParameter: s.activeParameter } : {}),
+    })),
+  }
+}
+
+export interface LspDocumentSymbol { name: string; detail?: string; kind: number; tags?: number[]; range: LspRange; selectionRange: LspRange; children?: LspDocumentSymbol[] }
+export interface LspSymbolInformation { name: string; kind: number; tags?: number[]; containerName?: string; location: LspLocation }
+
+/** DocumentSymbol[] (tree) or SymbolInformation[] (flat) -> Monaco DocumentSymbol tree. LSP SymbolKind is Monaco's + 1. */
+export function toDocumentSymbols(r: (LspDocumentSymbol | LspSymbolInformation)[] | null): Monaco.languages.DocumentSymbol[] {
+  const one = (s: LspDocumentSymbol | LspSymbolInformation): Monaco.languages.DocumentSymbol => {
+    const tree = 'range' in s
+    const range = toRange(tree ? s.range : s.location.range)
+    return {
+      name: s.name, detail: tree ? s.detail ?? '' : '', kind: s.kind - 1, tags: s.tags ?? [], range,
+      selectionRange: tree ? toRange(s.selectionRange) : range,
+      ...(!tree && s.containerName ? { containerName: s.containerName } : {}),
+      ...(tree && s.children?.length ? { children: s.children.map(one) } : {}),
+    }
+  }
+  return (r ?? []).map(one)
+}
+
+export interface RenamePreviewLine { line: number; before: string; after: string }
+
+/** Lines a rename touches in `text`, before and after. ponytail: each single-line edit's line only (rename edits are single-line). */
+export function renamePreviewLines(text: string, edits: LspTextEdit[]): RenamePreviewLine[] {
+  const lines = text.split('\n')
+  const byLine = new Map<number, LspTextEdit[]>()
+  for (const e of edits) if (e.range.start.line === e.range.end.line) byLine.set(e.range.start.line, [...(byLine.get(e.range.start.line) ?? []), e])
+  const at0 = (p: LspPosition): LspPosition => ({ line: 0, character: p.character })
+  return [...byLine.entries()].sort((a, b) => a[0] - b[0]).map(([l, es]) => {
+    const before = lines[l] ?? ''
+    return { line: l + 1, before, after: applyTextEdits(before, es.map((e) => ({ newText: e.newText, range: { start: at0(e.range.start), end: at0(e.range.end) } }))) }
+  })
+}

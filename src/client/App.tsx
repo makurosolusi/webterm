@@ -16,7 +16,8 @@ import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
 import Omnibox from './Omnibox'
-import { useOmnibox } from './Omnibox.open'
+import { openEditorAt, useOmnibox } from './Omnibox.open'
+import { setLspFileOpener } from './editorLsp.store'
 import { useAppCommands } from './commandRegistry.defaults'
 import { useCommandKeybindings } from './commandRegistry'
 import { useKeybindingsSync } from './keybindings.store'
@@ -177,6 +178,8 @@ export default function App() {
   const portItems = usePortsStatusItems(activeId, nodeActions.openBrowserAt)
   const problems = useProblems(activeId)
   const tasks = useTasksMenu(activeId, addFlowNode)
+  // Go to Definition into a file no editor node shows opens one (editorLsp.monaco.ts).
+  useEffect(() => setLspFileOpener((path, line, col) => openEditorAt({ nodesRef, addFlowNode, onFocus }, path, line, col)), [addFlowNode, onFocus])
 
   // ⌘K omnibox / ⌘P Go to File / ⇧⌘F Find in Files + the command registry behind them and Help.
   const omni = useOmnibox({

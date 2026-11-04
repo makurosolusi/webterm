@@ -31,7 +31,8 @@ export async function revealFileLine(absPath: string, line: number, col = 1): Pr
   const m = await loadMonaco()
   const want = m.Uri.file(absPath).path
   for (let i = 0; i < REVEAL_TRIES; i++) {
-    const ed = m.editor.getEditors().find((e) => e.getModel()?.uri.path === want)
+    // Node models carry `#nodeId`; a peek widget's embedded editor (no fragment) is not the node.
+    const ed = m.editor.getEditors().find((e) => e.getModel()?.uri.path === want && !!e.getModel()?.uri.fragment)
     if (ed) {
       ed.setPosition({ lineNumber: line, column: col })
       ed.revealLineInCenter(line)
@@ -41,6 +42,21 @@ export async function revealFileLine(absPath: string, line: number, col = 1): Pr
     await new Promise((r) => setTimeout(r, REVEAL_EVERY_MS))
   }
   return false
+}
+
+export interface OpenEditorDeps {
+  nodesRef: MutableRefObject<Node[]>
+  addFlowNode: OmniboxDeps['addFlowNode']
+  onFocus: (id: string) => void
+}
+
+/** Focus the editor node holding `absPath` (or add one) and move it to `line`. */
+export function openEditorAt(d: OpenEditorDeps, absPath: string, line?: number, col?: number): void {
+  const existing = openEditorFor(d.nodesRef.current, absPath)
+  const id = existing ?? randomId()
+  if (!existing) d.addFlowNode(() => ({ id, kind: 'editor', filePath: absPath, title: absPath.slice(absPath.lastIndexOf('/') + 1), ...EDITOR_SIZE }))
+  setTimeout(() => d.onFocus(id), 0) // after the new node has rendered
+  if (line) void revealFileLine(absPath, line, col).catch((e: unknown) => console.warn('open editor: reveal line failed', e instanceof Error ? e.message : String(e)))
 }
 
 /** Typed text → URL only when it reads as an address; a phrase stays a palette query. */
@@ -94,11 +110,7 @@ export function useOmnibox(d: OmniboxDeps) {
     if (!d.root) return
     const abs = joinPath(d.root, rel)
     recordRecentFile(abs)
-    const existing = openEditorFor(d.nodesRef.current, abs)
-    const id = existing ?? randomId()
-    if (!existing) d.addFlowNode(() => ({ id, kind: 'editor', filePath: abs, title: rel.slice(rel.lastIndexOf('/') + 1), ...EDITOR_SIZE }))
-    setTimeout(() => d.onFocus(id), 0) // after the new node has rendered
-    if (line) void revealFileLine(abs, line, col).catch((e: unknown) => console.warn('omnibox: reveal line failed', e instanceof Error ? e.message : String(e)))
+    openEditorAt(d, abs, line, col)
   }, [d])
 
   const onAction = useCallback((a: OmniAction) => {
