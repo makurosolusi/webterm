@@ -117,4 +117,10 @@ describe('buildBrowserNotice', () => {
     expect(buildBrowserNotice('Stop', now, [])).toBeNull()
     expect(buildBrowserNotice('SessionStart', [], undefined)).toBeNull()
   })
+
+  it('a wired browser renamed since the last prompt is announced with its current title', () => {
+    const t = buildBrowserNotice('UserPromptSubmit', [{ id: 'w', title: 'makuro-browser' }], [{ id: 'w', title: 'Browser' }])
+    expect(t).toContain('renamed')
+    expect(t).toContain('"makuro-browser" (id: w)')
+  })
 })

@@ -164,6 +164,13 @@ export function nextHookContext(nodeId: string, event: string | undefined, doc: 
   return next.payload
 }
 
+/** Catat roster `doc` sebagai sudah diumumkan — `linkNote` baru saja mengetik perubahan yang sama ke
+ *  PTY, jadi `UserPromptSubmit` berikutnya tidak boleh mengulangnya lewat additionalContext. */
+export function markHookContextAnnounced(nodeId: string, doc: LinkDoc): void {
+  if (doc.links.length) lastSignatures.set(nodeId, signatureOf(doc.links))
+  else lastSignatures.delete(nodeId)
+}
+
 /** Lupakan memo sebuah node (node dihapus / sesi ditutup). */
 export function forgetHookContext(nodeId: string): void {
   lastSignatures.delete(nodeId)

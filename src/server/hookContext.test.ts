@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SKILL_NAME, type LinkDoc, type LinkDocEntry } from './contextLink'
 import { CLAUDE_HOOK_EVENTS, hookEventName } from './hooks'
-import { buildHookContext, forgetHookContext, nextHookContext } from './hookContext'
+import { buildHookContext, forgetHookContext, markHookContextAnnounced, nextHookContext } from './hookContext'
 
 const peer = (id: string, title: string, agent?: string): LinkDocEntry => ({ id, title, agent })
 const doc = (...links: LinkDocEntry[]): LinkDoc => ({ links })
@@ -279,5 +279,12 @@ describe('forgetHookContext', () => {
     forgetHookContext('n8')
     expect(nextHookContext('n9', 'UserPromptSubmit', d)).toBeNull()
     expect(nextHookContext('n8', 'UserPromptSubmit', d)).not.toBeNull()
+  })
+
+  it('markHookContextAnnounced: a roster already typed as a link note is not repeated', () => {
+    const d = doc(peer('p', 'Builder'))
+    markHookContextAnnounced('mk1', d)
+    expect(nextHookContext('mk1', 'UserPromptSubmit', d)).toBeNull()
+    expect(nextHookContext('mk1', 'UserPromptSubmit', doc(peer('p', 'Renamed')))).not.toBeNull()
   })
 })

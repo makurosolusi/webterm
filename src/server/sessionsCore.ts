@@ -85,6 +85,12 @@ export class SessionsCore {
     if (live) return live.log.text()
     return this.registry.getExit(id)?.output ?? ''
   }
+  /** Raw output log + current size of a LIVE session, so its visible screen can be rebuilt
+   *  server-side (`linkNoteScreen.ts`). `seq` changes whenever new output arrives. */
+  screenSource(id: string): { data: string; seq: number; cols: number; rows: number; pid: number } | undefined {
+    const s = this.map.get(id)
+    return s && { data: s.log.text(), seq: s.log.lastSeq(), cols: s.cols, rows: s.rows, pid: s.pty.pid }
+  }
   statusOf(id: string): AgentStatus | undefined { return this.registry.getStatus(id)?.status }
   isLive(id: string): boolean { return this.map.has(id) }
   getExit(id: string): NodeExit | undefined { return this.registry.getExit(id) }

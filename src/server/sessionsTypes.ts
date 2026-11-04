@@ -15,6 +15,9 @@ export interface Session {
   startedAt: number
   /** Agent harness sesi ini (kosong = terminal biasa); dipakai log `agent.*`. */
   agentId?: string
+  /** Current PTY size (open + every resize): the screen `screenSource` is rebuilt at. */
+  cols: number
+  rows: number
 }
 
 /** Ringkasan sesi hidup untuk endpoint/panel daftar. Tanpa tombstone: sesi yang sudah keluar tidak
