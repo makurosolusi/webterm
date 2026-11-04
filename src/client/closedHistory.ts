@@ -2,9 +2,10 @@
 // dibuka kembali, bukan lenyap tanpa bekas. Porting INTI dari nodeterm v0.4.5
 // `state/reopenHistory.ts` + `components/ClosedHistorySection.tsx`.
 //
-// IN-MEMORY, hilang saat halaman di-reload — persis nodeterm, dan alasannya sama: ini undo pendek
-// seperti "reopen closed tab" di browser, bukan arsip. Jadi nol kolom SQLite, nol endpoint, nol
-// field protokol baru.
+// DIPERSIST ke SQLite (`/api/closed-history`, tabel `closed_history`, I1-c): dulu in-memory seperti
+// nodeterm, tetapi webterm adalah board yang hidup berhari-hari dan reload/restart server yang
+// menghapus semua jejak "baru ditutup" membuat fitur ini nyaris tak pernah berguna. Klien tetap
+// pemilik daftarnya (cap, dedup, urutan); server menyimpan salinan utuh tiap kali daftar berubah.
 //
 // Yang DIBUANG dari nodeterm `lib/closedHistory.ts` (253 baris), bukan kelalaian: tab project yang
 // ditutup (webterm menghapus workspace langsung, tidak punya keadaan "closed"), transcript agent,
@@ -13,8 +14,9 @@
 //
 // Logika dipisah dari JSX dengan alasan yang sama seperti `./workspaceMenu`: vitest webterm jalan
 // di node-env tanpa DOM, jadi yang bisa di-assert harus hidup di luar komponen.
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getWorkspace, saveWorkspace } from './api'
+import { fetchClosedHistory, saveClosedHistory } from './SessionHistory.api'
 import { isSession } from './sessionList'
 import type { Workspace, WsNode } from '../shared/workspace'
 
@@ -110,11 +112,42 @@ export function takeClosed(
  *  di awal akan memaksa seluruh urutan deklarasi App dibongkar. */
 export interface ReopenDeps {
   activeId: string | null
-  /** Jalur node BARU di canvas aktif (`addFlowNode` di App): append + scheduleSave + riwayat layout. */
-  addNode: (make: (n: number, ws: Workspace) => WsNode) => void
+  /** Jalur node BARU di canvas aktif (`addFlowNode` di App): append + scheduleSave + riwayat layout.
+   *  x/y opsional: tanpa itu node lahir di titik spawn biasa (Resume dari Agent History). */
+  addNode: (make: (n: number, ws: Workspace) => PlacedNode) => void
   setWorkspaces: (fn: (prev: Workspace[]) => Workspace[]) => void
   /** Pindah ke workspace lain (`onSelect` di App). */
   selectWorkspace: (id: string) => Promise<void>
+}
+
+/** Node yang akan ditaruh: x/y boleh absen (titik spawn dipilih canvas). */
+export type PlacedNode = Omit<WsNode, 'x' | 'y'> & Partial<Pick<WsNode, 'x' | 'y'>>
+
+/** Titik jatuh node yang ditulis ke workspace NON-aktif, di mana tidak ada canvas untuk memilihkan
+ *  titik spawn. Pojok kiri atas board: selalu terlihat setelah pindah workspace + fit. */
+const OFFSCREEN_SPAWN = { x: 80, y: 80 }
+
+/**
+ * Taruh `entry.node` di workspace `entry.workspaceId`. Dipakai reopen-closed DAN Resume Agent History supaya
+ * keduanya punya satu jalur lintas-workspace. Workspace aktif: lewat `addNode` (riwayat layout +
+ * simpan). Workspace lain: tulis ke salinan TERBARU dari server lalu pindah ke sana — menambah node
+ * ke canvas yang sedang menampilkan workspace LAIN akan menaruhnya di board yang salah.
+ */
+export async function placeNode(
+  entry: { node: PlacedNode; workspaceId: string },
+  deps: ReopenDeps,
+): Promise<void> {
+  const { workspaceId } = entry
+  if (workspaceId === deps.activeId) {
+    deps.addNode(() => entry.node)
+    return
+  }
+  const fresh = await getWorkspace(workspaceId)
+  const full: WsNode = { ...OFFSCREEN_SPAWN, ...entry.node }
+  const updated: Workspace = { ...fresh, nodes: [...fresh.nodes, full], updatedAt: Date.now() }
+  await saveWorkspace(updated)
+  deps.setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
+  await deps.selectWorkspace(workspaceId)
 }
 
 export interface ClosedHistory {
@@ -140,11 +173,37 @@ export function useClosedHistory(
   // Cermin ref: `reopen` harus membaca daftar TERKINI secara sinkron (ia mengambil satu entry lalu
   // menunggu I/O), dan state React hanya terbaca per-render.
   const ref = useRef<ClosedEntry[]>([])
+  // Sebelum salinan server termuat, TIDAK ada tulis: PUT daftar parsial akan menimpa riwayat yang
+  // tersimpan dengan satu-dua entry yang kebetulan ditutup selama boot.
+  const loaded = useRef(false)
 
   const commit = useCallback((next: ClosedEntry[]) => {
     ref.current = next
     setAll(next)
+    if (!loaded.current) return
+    saveClosedHistory(next).catch((e: unknown) => {
+      // Daftar di memori tetap benar; hanya salinan tersimpannya tertinggal sampai commit berikutnya.
+      console.error(`save closed history (${next.length} entries):`, e)
+    })
   }, [])
+
+  useEffect(() => {
+    let live = true
+    fetchClosedHistory()
+      .then((stored) => {
+        if (!live) return
+        loaded.current = true
+        // Yang ditutup selama boot (di `ref`) lebih baru dari yang tersimpan, jadi ia di depan.
+        commit(pushClosed(stored, ref.current))
+      })
+      .catch((e: unknown) => {
+        // Server tak menjawab: riwayat tetap jalan in-memory untuk tab ini, tanpa menimpa apa pun.
+        console.error('load closed history:', e)
+      })
+    return () => {
+      live = false
+    }
+  }, [commit])
 
   const record = useCallback<ClosedHistory['record']>(
     (nodeIds, nodes, ws) => {
@@ -160,22 +219,12 @@ export function useClosedHistory(
       if (!entry) return
       // Dibuang DULU: dua klik cepat pada baris yang sama akan memulihkan node yang sama dua kali.
       commit(rest)
-      if (entry.workspaceId === deps.activeId) {
-        deps.addNode(() => entry.node)
-        return
-      }
-      // Workspace lain: tulis ke salinan TERBARU dari server lalu pindah ke sana. Menambah node ke
-      // canvas yang sedang menampilkan workspace LAIN akan menaruhnya di board yang salah.
       try {
-        const fresh = await getWorkspace(entry.workspaceId)
-        const updated: Workspace = { ...fresh, nodes: [...fresh.nodes, entry.node], updatedAt: Date.now() }
-        await saveWorkspace(updated)
-        deps.setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
-        await deps.selectWorkspace(entry.workspaceId)
+        await placeNode(entry, deps)
       } catch (e) {
-        // Entry dikembalikan: riwayat ini in-memory, jadi snapshot node tadi satu-satunya salinan
-        // yang tersisa dan tulis yang gagal tidak boleh ikut menghapusnya. Barisnya muncul lagi —
-        // itu sinyal yang terlihat pengguna, dan webterm belum punya permukaan toast.
+        // Entry dikembalikan: snapshot node tadi satu-satunya salinan yang bisa memulihkannya, dan
+        // tulis yang gagal tidak boleh ikut menghapusnya. Barisnya muncul lagi — itu sinyal yang
+        // terlihat pengguna, dan webterm belum punya permukaan toast.
         commit(pushClosed(ref.current, [entry]))
         console.error(`reopen closed session ${nodeId} in workspace ${entry.workspaceId}:`, e)
       }

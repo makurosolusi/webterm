@@ -20,6 +20,7 @@ import { orchestratorRoute } from './orchestratorApi'
 import { approvalHumanRoute } from './approvalHumanApi'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { contextLinkRoute } from './contextLinkApi'
+import { sessionHistoryDeps, sessionHistoryRoute } from './sessionHistory.route'
 import { centralChatRoute } from './centralChatApi'
 import { ca2Route } from './central/ca2Routes'
 import { fsApiRoute, type FsApiResult } from './fsApi'
@@ -94,6 +95,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // stream. Reader `fs`/`git` di bawah tetap TANPA cap — isi file boleh besar.
   const wsRes = await workspacesRoute(db, path, method, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES))
   if (wsRes) return json(res, wsRes.status, wsRes.body)
+
+  // Agent History: indeks transcript berhalaman + riwayat node yang ditutup (sessionHistory.route.ts).
+  const histRes = path.startsWith('/api/session-history') || path.startsWith('/api/closed-history')
+    ? await sessionHistoryRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES), await sessionHistoryDeps())
+    : null
+  if (histRes) return json(res, histRes.status, histRes.body)
 
   // /api/browser/*: hanya ada bila runtime browser hidup (flag on). Gerbang auth di index.ts sudah
   // menolak node-token (prefix ini tidak ada di allowlist node-token).

@@ -34,6 +34,7 @@ import { useLayoutHistory } from './layoutHistory'
 import { hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
 import { useClosedHistory } from './closedHistory'
+import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardCanvas from './App.canvas'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
@@ -296,6 +297,7 @@ export default function App() {
             closedSessions={closedSessions}
             onReopenSession={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
           />
+          <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Panel menutup sendiri lewat Escape (`onClose`), dan dialog persetujuan di dalamnya
               yang memegang consent. Dock/badge tidak pernah menyetujui apa pun. */}
           <InboxPanel open={inboxOpen} onClose={() => setInboxOpen(false)} pollMs={30000} />
