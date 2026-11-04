@@ -8,7 +8,9 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createLogger } from '../logs'
+import type { StructuredCall } from '../central/context/claudeStructured'
 import { buildBrief, type Brief } from './brief.model'
+import { narrateBrief, type BriefNarrative } from './brief.narrative'
 import type { BriefSource } from './brief.source'
 
 const log = createLogger('brief')
@@ -29,12 +31,16 @@ export interface BriefState {
   visitSince: number | null
   visitStartedAt: number | null
   dismissedVisit: number | null
+  /** Optional LLM paragraph over the lines; off unless the user switched it on. */
+  llm: boolean
 }
 
 export interface BriefResponse extends Brief {
   visitStartedAt: number
   /** True once the user dismissed this visit's card; ⌘K "Show morning brief" still shows it. */
   dismissed: boolean
+  /** The LLM paragraph is switched on (fetch it from `/api/brief/narrative`). */
+  llm: boolean
 }
 
 export interface BriefServiceDeps {
@@ -51,9 +57,11 @@ export interface BriefServiceDeps {
   subscribe?: (pattern: string, fn: () => void) => () => void
   /** Presence sampling period; 0 = only on brief requests (tests). */
   sampleEveryMs?: number
+  /** Model for the optional narrative (production: `claude -p` haiku); absent = narrative never generated. */
+  narrate?: StructuredCall
 }
 
-const EMPTY: BriefState = { lastActiveAt: null, visitSince: null, visitStartedAt: null, dismissedVisit: null }
+const EMPTY: BriefState = { lastActiveAt: null, visitSince: null, visitStartedAt: null, dismissedVisit: null, llm: false }
 
 function loadState(path: string): BriefState {
   let raw: string
@@ -61,7 +69,7 @@ function loadState(path: string): BriefState {
   try {
     const p = JSON.parse(raw) as Record<string, unknown>
     const num = (k: keyof BriefState): number | null => (typeof p[k] === 'number' && Number.isFinite(p[k]) ? (p[k] as number) : null)
-    return { lastActiveAt: num('lastActiveAt'), visitSince: num('visitSince'), visitStartedAt: num('visitStartedAt'), dismissedVisit: num('dismissedVisit') }
+    return { lastActiveAt: num('lastActiveAt'), visitSince: num('visitSince'), visitStartedAt: num('visitStartedAt'), dismissedVisit: num('dismissedVisit'), llm: p['llm'] === true }
   } catch (err) {
     log.warn('brief.state_unreadable', 'brief state file is not valid JSON; starting fresh', { cause: err instanceof Error ? err.message : String(err) })
     return { ...EMPTY }
@@ -74,6 +82,7 @@ export function createBriefService(deps: BriefServiceDeps) {
   let persistedAt = 0
   let cache: { key: string; at: number; brief: Brief } | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
+  let narrated: { key: string; result: Promise<BriefNarrative> } | null = null
 
   function persist(force: boolean): void {
     const t = now()
@@ -124,7 +133,7 @@ export function createBriefService(deps: BriefServiceDeps) {
   function respond(): BriefResponse {
     const since = state.visitSince ?? now() - FIRST_WINDOW_MS
     const visitStartedAt = state.visitStartedAt ?? now()
-    return { ...build(since), visitStartedAt, dismissed: state.dismissedVisit === visitStartedAt }
+    return { ...build(since), visitStartedAt, dismissed: state.dismissedVisit === visitStartedAt, llm: state.llm }
   }
 
   const unsubscribe = deps.subscribe?.('*', () => {
@@ -159,6 +168,21 @@ export function createBriefService(deps: BriefServiceDeps) {
       state.dismissedVisit = state.visitStartedAt
       persist(true)
       return respond()
+    },
+    /** Switches the LLM paragraph (persisted). */
+    setLlm(on: boolean): BriefResponse {
+      state.llm = on
+      persist(true)
+      return respond()
+    },
+    /** The paragraph for the current brief, generated once per brief (since + head seq). */
+    narrative(): Promise<BriefNarrative> {
+      if (!state.llm) return Promise.resolve({ narrative: null, reason: 'off' })
+      if (!deps.narrate) return Promise.resolve({ narrative: null, reason: 'failed' })
+      const brief = respond()
+      const key = `${brief.since}:${brief.headSeq}`
+      if (narrated?.key !== key) narrated = { key, result: narrateBrief(deps.narrate, brief) }
+      return narrated.result
     },
     state: (): Readonly<BriefState> => ({ ...state }),
     stop(): void {

@@ -1,13 +1,17 @@
 // Morning brief card (PLAN F3-e): what happened while you were away, served from the server's
 // cached deterministic brief (src/server/brief). Shown once per visit when the app opens; Dismiss
 // is persisted server-side. ⌘K "Brief: Show morning brief" brings it back. Each line is a link:
-// focus the node, open the Inbox, or open a Diff node for the workspace.
+// focus the node, open the Inbox, or open a Diff node for the workspace. Optional (F5-c): an AI paragraph
+// over the lines (off by default, server-checked against their counts) and "Continue from yesterday".
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BRIEF_CATEGORIES, briefHeading, type BriefLine, type BriefTarget } from '../server/brief/brief.model'
 import type { BriefResponse } from '../server/brief/brief.service'
+import type { BriefNarrative } from '../server/brief/brief.narrative'
 import { Button } from '@/components/ui/button'
 import { useRegisterCommands, type Command } from './commandRegistry'
 import { request } from './inboxTransport'
+import { ContinueSection, useContinue } from './MorningBriefContinue'
+import { MorningBriefLlmToggle } from './MorningBriefSettings'
 import './MorningBrief.css'
 
 export const BRIEF_PATH = '/api/brief'
@@ -16,6 +20,8 @@ export interface MorningBriefProps {
   onFocusNode: (nodeId: string) => void
   onOpenInbox: () => void
   onOpenDiff: (workspaceId: string) => void
+  /** Opens a workspace after "Continue from yesterday" so its agents resume. */
+  onOpenWorkspace?: (workspaceId: string) => void
 }
 
 const sinceText = (ts: number): string =>
@@ -33,6 +39,8 @@ export default function MorningBrief(props: MorningBriefProps): React.JSX.Elemen
   const [brief, setBrief] = useState<BriefResponse | null>(null)
   const [forced, setForced] = useState(false)
   const [hidden, setHidden] = useState(false)
+  const [narrative, setNarrative] = useState<string | null>(null)
+  const resume = useContinue(props.onOpenWorkspace)
 
   const load = useCallback((): void => {
     request<BriefResponse>(BRIEF_PATH).then(setBrief, (err: unknown) => {
@@ -41,6 +49,15 @@ export default function MorningBrief(props: MorningBriefProps): React.JSX.Elemen
     })
   }, [])
   useEffect(load, [load])
+  const llm = brief?.llm === true
+  const key = brief ? `${brief.since}:${brief.headSeq}` : ''
+  useEffect(() => {
+    setNarrative(null)
+    if (!llm) return
+    request<BriefNarrative>(`${BRIEF_PATH}/narrative`).then((r) => setNarrative(r.narrative), (err: unknown) => {
+      console.warn('[brief] GET /api/brief/narrative failed', err) // the lines are the brief; the paragraph is optional
+    })
+  }, [llm, key])
 
   const commands = useMemo<Command[]>(() => [{
     id: 'brief.show', label: 'Brief: Show morning brief', run: () => { setForced(true); setHidden(false); load() },
@@ -48,7 +65,7 @@ export default function MorningBrief(props: MorningBriefProps): React.JSX.Elemen
   useRegisterCommands(commands)
 
   if (!brief || hidden) return null
-  if (!forced && (brief.dismissed || brief.lines.length === 0)) return null
+  if (!forced && (brief.dismissed || (brief.lines.length === 0 && resume.workspaces.length === 0))) return null
 
   const close = (): void => {
     setHidden(true)
@@ -67,6 +84,7 @@ export default function MorningBrief(props: MorningBriefProps): React.JSX.Elemen
         <span className="morning-brief__since">since {sinceText(brief.since)}</span>
         <Button variant="ghost" size="icon-xs" className="morning-brief__close" onClick={close} aria-label="Dismiss morning brief" title="Dismiss">×</Button>
       </header>
+      {narrative && <p className="morning-brief__narrative" data-testid="brief-narrative">{narrative}</p>}
       {brief.lines.length === 0 && <p className="morning-brief__empty">Nothing new since you were last here.</p>}
       {BRIEF_CATEGORIES.map((c) => {
         const group = brief.lines.filter((l) => l.category === c)
@@ -84,6 +102,10 @@ export default function MorningBrief(props: MorningBriefProps): React.JSX.Elemen
           </div>
         )
       })}
+      <ContinueSection {...resume} />
+      <footer className="morning-brief__foot">
+        <MorningBriefLlmToggle on={brief.llm} onChange={setBrief} />
+      </footer>
     </section>
   )
 }

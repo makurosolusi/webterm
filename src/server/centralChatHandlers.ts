@@ -9,7 +9,7 @@ import { listConversationEvents } from './central/conversationStore'
 import { ConversationError } from './central/conversationModel'
 import { activeCa2 } from './central/ca2Active'
 import { createContextAssembler } from './central/context/contextAssembler'
-import { rollingSummarize } from './central/context/checkpointRolling'
+import { createCentralSummarize } from './central/context/checkpointLlm'
 import { MockRuntime } from './central/runtime/mockRuntime'
 import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
 import { ClaudeRuntime } from './central/runtime/claudeRuntime'
@@ -66,10 +66,10 @@ function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDep
   // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
   const ca2 = activeCa2()
   const armed = ca2 && ca2.db === db ? ca2 : null
-  // Armed: checkpoints get the deterministic rolling summarizer, so `WEBTERM_CENTRAL_CHECKPOINT` never idles
-  // silently. Tool calls are guarded where they run: Claude's MCP calls (mcp.central.ts).
+  // Armed: checkpoints get the model summarizer near rotation (rolling summary below it, deterministic fallback
+  // on failure; F5-c), so `WEBTERM_CENTRAL_CHECKPOINT` never idles. Tool calls are guarded where they run (mcp.central.ts).
   const wiring = armed
-    ? { context: createContextAssembler({ memory: armed.memory }), summarize: rollingSummarize }
+    ? { context: createContextAssembler({ memory: armed.memory }), summarize: createCentralSummarize() }
     : {}
   return { service: new TurnService({ db, runtime, stream, now, ...wiring }), stream, db }
 }

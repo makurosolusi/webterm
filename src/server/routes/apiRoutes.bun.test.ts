@@ -23,7 +23,7 @@ test('full route order snapshot', () => {
     'env-settings', 'env-import', 'capabilities', 'agent-protection', 'custom-agents-preview', 'settings',
     'fs-verbs', 'hygiene',
     'git-info', 'git-diff', 'checkpoint', 'git-scm',
-    'brief',
+    'brief', 'handoff',
     'workspace-worktree',
     'ports', 'problems', 'tasks',
     'outbox',
