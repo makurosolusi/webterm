@@ -7,6 +7,7 @@ import type { NodeProps } from '@xyflow/react'
 import BrowserNode from './BrowserNode'
 import type { BrowserSlotCtx } from './BrowserNode'
 import BrowserToolbar from './BrowserToolbar'
+import DesignModeBar from './browser/design/DesignModeBar'
 import BrowserLeaseChip from './BrowserLeaseChip'
 import BrowserCookieDialog from './BrowserCookieDialog'
 import { setAgentControl } from './browser.api'
@@ -28,7 +29,12 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
     // Server dulu: bila gagal, flag tersimpan tidak berubah dan toggle tetap menunjukkan kenyataan.
     void setAgentControl(p.id, enabled).then(() => rf.updateNodeData(p.id, { agentControl: enabled })).catch((e: unknown) => console.warn('browser.agentControl failed', e instanceof Error ? e.message : 'unknown'))
   }, [p.id, rf])
-  return <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} />
+  return (
+    <>
+      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} />
+      <DesignModeBar nodeId={p.id} />
+    </>
+  )
 }
 
 /** Sub-opsi `browserAgent` kemampuan Browser (kunci klien dari `subKeyOf('WEBTERM_BROWSER_AGENT')`). */
