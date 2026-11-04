@@ -23,6 +23,7 @@ import { centralChatRoute } from './centralChatApi'
 import { ca2Route } from './central/ca2Routes'
 import { fsApiRoute, type FsApiResult } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
+import { hygieneRoute } from './repoHygiene'
 import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
 import { BodyReadError, cappedBodyGetter, WORKSPACES_BODY_MAX_BYTES } from './cappedRequestBody'
@@ -117,6 +118,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     .catch(fsErrorResult)
   if (fsRes?.raw) return sendRaw(res, fsRes.raw)
   if (fsRes) return json(res, fsRes.status, fsRes.body)
+
+  const hygieneRes = hygieneRoute(path, method) // secrets-guard findings (repoHygiene.ts)
+  if (hygieneRes) return json(res, hygieneRes.status, hygieneRes.body)
 
   // Batch git state for a set of node cwds; null for anything else, including a GET of this path.
   const gitRes = await gitInfoRoute(path, method, () => readBody(req))

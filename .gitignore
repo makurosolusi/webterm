@@ -12,3 +12,21 @@ package-lock.json
 cookies.txt
 *.cookies.txt
 *cookies*.txt
+# Well-known secret files (Rule 7). Sources: github/gitignore Node.gitignore (.env, .env.*,
+# !.env.example) and Android.gitignore (*.jks, *.keystore); gitleaks default config rules
+# `pkcs12-file` (*.p12, *.pfx) and `private-key` (PEM keys, ssh id_*). Same list as
+# src/server/repoHygiene.ts, which guards workspace repos at runtime.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+credentials.json
+service-account*.json
+.aws/
+.gcp/
