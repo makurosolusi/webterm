@@ -4,14 +4,15 @@
 export const CAPABILITY_IDS =
   ['central', 'workers', 'autonomy', 'browser', 'files', 'filesWrite', 'telegram'] as const
 export type CapabilityId = (typeof CAPABILITY_IDS)[number]
-export interface CapabilitySub { key: string; label: string; defaultOn: boolean }
+/** `dangerous` = klien wajib minta konfirmasi sebelum menyalakan (seperti kartu Otonomi). */
+export interface CapabilitySub { key: string; label: string; defaultOn: boolean; dangerous?: boolean }
 export interface CapabilityDef {
   id: CapabilityId
   title: string // Indonesia; mis. "Agent Pusat"
   blurb: string // fungsi dalam bahasa biasa, BUKAN peringatan
   implies: readonly CapabilityId[] // prasyarat; on hanya bila semuanya on
   primaryKey: string // saklar utama di store override
-  needs?: 'telegramToken' | 'chromium'
+  needs?: 'telegramToken' | 'chromium' | 'agentEngine'
   subs?: readonly CapabilitySub[] // tampil hanya di kartu induk saat induk on
 }
 export type CapabilityStatus = 'on' | 'off' | 'needs-step'
@@ -20,10 +21,10 @@ export interface CapabilityView {
   title: string
   blurb: string
   status: CapabilityStatus
-  step?: { kind: 'fixChain' | 'telegramToken' | 'chromiumPath'; label: string }
+  step?: { kind: 'fixChain' | 'telegramToken' | 'chromiumPath' | 'agentEngine'; label: string }
   detail?: string // satu kalimat jujur bila bukan 'on'; "Tersambung sebagai @nama"
   alsoTurnsOn?: CapabilityId[] // untuk teks "ikut menyalakan: ..."
-  subs?: { key: string; label: string; on: boolean }[]
+  subs?: { key: string; label: string; on: boolean; dangerous?: boolean }[]
 }
 export interface CapabilitiesResponse {
   capabilities: CapabilityView[] // urut CAPABILITY_IDS
@@ -42,7 +43,7 @@ export interface CapabilitiesResponse {
 /** Katalog kemampuan; urutan = CAPABILITY_IDS dan sekaligus urutan topologis (prasyarat lebih dulu). */
 export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   central: {
-    id: 'central', title: 'Agent Pusat', implies: [], primaryKey: 'WEBTERM_CENTRAL',
+    id: 'central', title: 'Agent Pusat', implies: [], primaryKey: 'WEBTERM_CENTRAL', needs: 'agentEngine',
     blurb: 'Asisten yang memahami semua proyek dan node, dan bisa diajak bicara.',
   },
   workers: {
@@ -57,6 +58,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   browser: {
     id: 'browser', title: 'Browser di kanvas', implies: [], primaryKey: 'WEBTERM_BROWSER', needs: 'chromium',
     blurb: 'Buka halaman web sebagai node di kanvas.',
+    subs: [{ key: 'WEBTERM_BROWSER_AGENT', label: 'Izinkan agent mengendalikan browser', defaultOn: false, dangerous: true }],
   },
   files: {
     id: 'files', title: 'Kelola file', implies: [], primaryKey: 'WEBTERM_FILES_VIEWERS',
@@ -85,6 +87,20 @@ export const DERIVED_FLAGS: readonly { key: string; needs: readonly CapabilityId
   { key: 'WEBTERM_FILES_UPLOAD', needs: ['filesWrite'] },
 ]
 
+/**
+ * Pengaturan bernilai yang IKUT kartu (seperti sub-opsi: dibaca langsung oleh pemiliknya, bukan lewat `isEnabled`).
+ * Nilai = `on` bila semua `needs` on, selain itu `off`; kunci yang muncul dua kali: entri pertama yang terpenuhi
+ * menang. Nilai eksplisit dari shell/.env tidak ditimpa (lihat `commit` di layanan).
+ */
+export const LINKED_SETTINGS: readonly { key: string; needs: readonly CapabilityId[]; on: string; off: string }[] = [
+  // Worker on = Central boleh mengusulkan dan menjalankan worker; tiap aksi tetap lewat kartu persetujuan (propose).
+  { key: 'WEBTERM_CENTRAL_TOOLS', needs: ['workers'], on: 'write', off: 'read' },
+  { key: 'WEBTERM_CENTRAL_PLANNER', needs: ['workers'], on: 'on', off: 'off' },
+  // Tanpa kartu per aksi (auto) hanya lewat kartu Otonomi yang berbahaya; urutan ini = auto menang atas propose.
+  { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['autonomy'], on: 'auto', off: 'off' },
+  { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['workers'], on: 'propose', off: 'off' },
+]
+
 /** Id + prasyarat rekursifnya, urut topologis (prasyarat lebih dulu, id terakhir). */
 export function closure(id: CapabilityId): CapabilityId[] {
   const out: CapabilityId[] = []
@@ -110,5 +126,20 @@ export function deriveFlags(on: ReadonlySet<CapabilityId>): Record<string, strin
   const out: Record<string, string> = {}
   for (const id of CAPABILITY_IDS) out[CAPABILITIES[id].primaryKey] = flag(full.has(id))
   for (const d of DERIVED_FLAGS) out[d.key] = flag(d.needs.every((n) => full.has(n)))
+  return out
+}
+
+/** Himpunan kemampuan -> nilai `LINKED_SETTINGS` (setelah ditutup `implies`). */
+export function linkedSettings(on: ReadonlySet<CapabilityId>): Record<string, string> {
+  const full = new Set<CapabilityId>()
+  for (const id of on) for (const c of closure(id)) full.add(c)
+  const out: Record<string, string> = {}
+  const met = new Set<string>()
+  for (const l of LINKED_SETTINGS) {
+    if (met.has(l.key)) continue
+    const ok = l.needs.every((n) => full.has(n))
+    if (ok) met.add(l.key)
+    out[l.key] = ok ? l.on : l.off
+  }
   return out
 }

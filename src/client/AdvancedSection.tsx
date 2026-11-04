@@ -4,7 +4,7 @@ import type { CapabilitiesResponse } from '../shared/featureCapabilities'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ADVANCED_TEXT, ENGINE_OPTIONS } from './advancedLabels'
+import { ADVANCED_TEXT, ENGINE_OPTIONS, engineName } from './advancedLabels'
 import { callCapabilities } from './capabilitiesApi'
 import { ChromiumPathField } from './ChromiumPathField'
 import { capabilityErrorMessage } from './useCapabilities'
@@ -45,7 +45,7 @@ export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: Adv
             {ENGINE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
-        <p className="m-0 text-xs opacity-70">{ADVANCED_TEXT.engineDetected(advanced.agentEngine.detected)}</p>
+        <p className="m-0 text-xs opacity-70">{ADVANCED_TEXT.engineDetected(engineName(advanced.agentEngine.detected))}</p>
       </div>
       <ChromiumPathField chromium={advanced.chromiumPath}
         save={(chromiumPath) => run('/advanced', 'PUT', { chromiumPath })} redetect={onChanged} />

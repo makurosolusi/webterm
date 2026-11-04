@@ -9,7 +9,7 @@ const none = {}
 test('effective level is min(env ceiling, global, project)', () => {
   const db = freshDb()
   expect(effectiveLevelOf(db, 'p1', none)).toBe('propose')
-  expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('propose')
+  expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('act_gated')
   expect(setLevel(db, { scope: 'global', level: 'act_envelope', actor: HUMAN, now }).ok).toBe(true)
   expect(effectiveLevelOf(db, 'p1', none)).toBe('propose')
   expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('act_gated')
@@ -53,4 +53,11 @@ test('lowering applies at once, CAS conflicts and bad input are typed, changes a
   expect(audits.length).toBe(2)
   expect(audits[1]?.from).toBe('act_gated')
   expect(audits[1]?.to).toBe('off')
+})
+
+test('no global row inherits the ceiling up to act_gated (Worker card is enough; envelope needs a human)', () => {
+  const db = freshDb()
+  expect(effectiveLevelOf(db, null, { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('act_gated')
+  expect(effectiveLevelOf(db, null, { WEBTERM_CENTRAL_AGENTS: 'auto' })).toBe('act_gated')
+  expect(effectiveLevelOf(db, null, none)).toBe('propose')
 })

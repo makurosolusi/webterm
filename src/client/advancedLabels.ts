@@ -28,8 +28,12 @@ export const ENGINE_OPTIONS: ReadonlyArray<{ value: Engine; label: string }> = [
   { value: 'auto', label: 'Otomatis' },
   { value: 'claude', label: 'Claude' },
   { value: 'opencode', label: 'OpenCode' },
-  { value: 'mock', label: 'Simulasi' },
 ]
+
+/** Nama mesin hasil deteksi otomatis; `off` = tidak ada CLI yang ditemukan. */
+export const engineName = (kind: string): string =>
+  kind === 'off' ? 'tidak ada (pasang Claude Code atau OpenCode)'
+    : ENGINE_OPTIONS.find((o) => o.value === kind)?.label ?? kind
 
 export const SECTION_TEXT = {
   loading: 'Memuat kemampuan…',

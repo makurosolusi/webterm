@@ -17,7 +17,7 @@ function harness(fetch = fakeBotApi([]).fetch) {
   const h = setupEnv({})
   const audits: AuditEntry[] = []
   const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, {}, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
-  const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
+  const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
   const call = async (method: string, path: string, body?: unknown, opts: Opts = {}) => {
     const headers: Record<string, string> = { host: '127.0.0.1:8700' }
     if (opts.origin !== null) headers.origin = opts.origin ?? ORIGIN

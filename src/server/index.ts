@@ -30,6 +30,7 @@ import { installBrowserAgentShim } from './browserAgentShim'
 import { isSafeWorkspaceId } from './browser/profile.paths'
 import { activeBrowser, registerBrowserCapability } from './browser/browser.activate'
 import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureCapabilities.runtime'
+import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
@@ -42,10 +43,18 @@ const LOG_DIR = 'logs'
 // Berhenti di sini (PORT ngawur / berkas token rusak) sebelum PTY, kanal, atau pengaturan hidup.
 const { host: HOST, port: PORT, hosts: HOSTS } = bootWiring(process.env, process.cwd())
 // Pengaturan > env > default: terapkan override tersimpan ke process.env sebelum ledger/kanal membacanya.
-initEnvSettings()
+const envSettings = initEnvSettings()
 // After env overrides are applied: level / buffer / file sink come from WEBTERM_LOG_*.
 configureLogging({ dir: join(dataDir(), LOG_DIR) })
 const log = createLogger('server')
+// Kartu Worker/Otonomi yang sudah on sebelum nilai turunannya ada: isi sekarang, tanpa toggle ulang (zero-config).
+// Gagal (mis. Pengaturan dikunci) tidak menghentikan boot: kartu tetap bisa dimatikan-nyalakan.
+try {
+  const linked = syncLinkedSettings(envSettings, process.env)
+  if (linked.length > 0) log.info('capabilities.linked_synced', 'Applied card-linked settings for capabilities already on', { keys: linked })
+} catch (err) {
+  log.warn('capabilities.linked_sync_failed', 'Cannot apply card-linked settings at boot', { error: err instanceof Error ? err.message : String(err) })
+}
 const dev = process.env.NODE_ENV !== 'production'
 
 // Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.

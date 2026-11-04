@@ -15,8 +15,11 @@ describe('detectAgentEngine', () => {
   it('hanya opencode -> opencode', () => {
     expect(detectAgentEngine({}, only('opencode'))).toBe('opencode')
   })
-  it('tak ada CLI -> mock', () => {
-    expect(detectAgentEngine({}, only())).toBe('mock')
+  it('tak ada CLI -> off, tidak pernah mock simulasi', () => {
+    expect(detectAgentEngine({}, only())).toBe('off')
+  })
+  it('codex belum punya adapter: nilai eksplisit diabaikan, tetap deteksi', () => {
+    expect(detectAgentEngine({ WEBTERM_CENTRAL_RUNTIME: 'codex' }, only())).toBe('off')
   })
   it('WEBTERM_CENTRAL_RUNTIME eksplisit menang, termasuk off', () => {
     expect(detectAgentEngine({ WEBTERM_CENTRAL_RUNTIME: ' Mock ' }, only('claude'))).toBe('mock')

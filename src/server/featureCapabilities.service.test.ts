@@ -6,7 +6,7 @@ import { enabledSet, onCapabilityChange, reconcile } from './featureCapabilities
 import { connect, reset, setAdvanced, setSub, toggle, viewOf, type CapCtx, type Detect } from './featureCapabilities.service'
 
 // test-only: ctx murni di atas env + store in-memory; tak menyentuh home atau jaringan.
-const DETECT_OK: Detect = { chromium: true, telegramToken: false }
+const DETECT_OK: Detect = { chromium: true, telegramToken: false, agentEngine: true }
 const flag = (v: string) => ({ WEBTERM_BROWSER: v })
 
 function harness(env: NodeJS.ProcessEnv = {}, detect: Detect = DETECT_OK, fetch = fakeBotApi([]).fetch) {
@@ -33,12 +33,12 @@ describe('viewOf', () => {
     expect(v.alsoTurnsOn).toEqual(['central', 'workers'])
   })
   it('browser on tanpa Chromium = needs-step chromiumPath; dengan Chromium = on', () => {
-    expect(viewOf('browser', flag('on'), { chromium: false, telegramToken: false })).toMatchObject({ status: 'needs-step', step: { kind: 'chromiumPath' } })
+    expect(viewOf('browser', flag('on'), { chromium: false, telegramToken: false, agentEngine: true })).toMatchObject({ status: 'needs-step', step: { kind: 'chromiumPath' } })
     expect(viewOf('browser', flag('on'), DETECT_OK).status).toBe('on')
   })
   it('telegram on tanpa token = needs-step telegramToken', () => {
     expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, DETECT_OK)).toMatchObject({ status: 'needs-step', step: { kind: 'telegramToken' } })
-    expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, { chromium: true, telegramToken: true }).status).toBe('on')
+    expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, { chromium: true, telegramToken: true, agentEngine: true }).status).toBe('on')
   })
   it('rantai putus (workers on, central off) = needs-step fixChain', () => {
     expect(viewOf('workers', { WEBTERM_ORCHESTRATOR_RUN: 'on' }, DETECT_OK)).toMatchObject({ status: 'needs-step', step: { kind: 'fixChain' } })
@@ -101,11 +101,11 @@ describe('toggle', () => {
 describe('setSub', () => {
   it('400 unknown_sub, 409 parent_off, 200 menulis off', async () => {
     const h = harness()
-    expect(setSub(h.ctx, 'workers', 'nope', true).status).toBe(400)
-    expect(setSub(h.ctx, 'files', 'runRequireApproval', true).status).toBe(400)
-    expect(setSub(h.ctx, 'workers', 'runRequireApproval', false)).toMatchObject({ status: 409, body: { error: 'parent_off' } })
+    expect((await setSub(h.ctx, 'workers', 'nope', true)).status).toBe(400)
+    expect((await setSub(h.ctx, 'files', 'runRequireApproval', true)).status).toBe(400)
+    expect(await setSub(h.ctx, 'workers', 'runRequireApproval', false)).toMatchObject({ status: 409, body: { error: 'parent_off' } })
     await toggle(h.ctx, 'workers', true)
-    const r = setSub(h.ctx, 'workers', 'runRequireApproval', false)
+    const r = await setSub(h.ctx, 'workers', 'runRequireApproval', false)
     expect(r.status).toBe(200)
     expect(h.target.WEBTERM_RUN_REQUIRE_APPROVAL).toBe('off')
     expect(viewIn(r.body, 'workers')?.subs).toEqual([expect.objectContaining({ key: 'runRequireApproval', on: false })])
@@ -130,8 +130,8 @@ describe('reset', () => {
 describe('setAdvanced', () => {
   it('menulis mesin agen dan lokasi Chrome; auto menghapus override', async () => {
     const h = harness()
-    expect((await setAdvanced(h.ctx, { agentEngine: 'mock', chromiumPath: '/opt/chrome' })).status).toBe(200)
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_RUNTIME: 'mock', WEBTERM_BROWSER_BIN: '/opt/chrome' })
+    expect((await setAdvanced(h.ctx, { agentEngine: 'opencode', chromiumPath: '/opt/chrome' })).status).toBe(200)
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_RUNTIME: 'opencode', WEBTERM_BROWSER_BIN: '/opt/chrome' })
     await setAdvanced(h.ctx, { agentEngine: 'auto', chromiumPath: '' })
     expect(h.target.WEBTERM_CENTRAL_RUNTIME).toBeUndefined()
     expect(h.target.WEBTERM_BROWSER_BIN).toBeUndefined()
@@ -139,7 +139,7 @@ describe('setAdvanced', () => {
   })
   it('nilai tak valid = 400 invalid_value dengan nama field, tanpa nama env var', async () => {
     const h = harness()
-    for (const body of [{ agentEngine: 'gpt' }, { chromiumPath: 42 }]) {
+    for (const body of [{ agentEngine: 'gpt' }, { agentEngine: 'mock' }, { agentEngine: 'codex' }, { chromiumPath: 42 }]) {
       const r = await setAdvanced(h.ctx, body)
       expect(r.status).toBe(400)
       expect(r.body).toMatchObject({ error: 'invalid_value' })
