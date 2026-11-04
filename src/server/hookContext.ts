@@ -10,6 +10,7 @@
 import { SKILL_NAME, type LinkDoc, type LinkDocEntry } from './contextLink'
 import { forgetBrowserNotice } from './linkAwareness'
 import { forgetAwareness } from './webtermAwareness'
+import { forgetAwarenessCard } from './awareness/awarenessHook'
 
 export interface HookContextPayload {
   hookEventName: string
@@ -177,4 +178,5 @@ export function forgetHookContext(nodeId: string): void {
   lastSignatures.delete(nodeId)
   forgetBrowserNotice(nodeId)
   forgetAwareness(nodeId)
+  forgetAwarenessCard(nodeId)
 }
