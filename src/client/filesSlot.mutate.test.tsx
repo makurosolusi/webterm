@@ -15,12 +15,24 @@ const fs = vi.hoisted(() => ({
 const caps = vi.hoisted(() => ({ mutate: true }))
 vi.mock('./fsClient', async () => {
   const { capsWith } = await import('./filesCaps.fixture')
-  return { ...fs, capabilities: async () => capsWith({ mutate: caps.mutate }) }
+  return { ...fs, capabilities: async () => capsWith({ mutate: caps.mutate }), resetCapabilitiesCache: vi.fn() }
 })
 
 import FilesNode from './FilesNode'
 import { onFsEvent } from './fsEvents'
 import { mutateSlot } from './filesSlot.mutate'
+import { resetFilesWriteOffer } from './filesWriteOffer'
+import { resetCapabilitiesCache } from './useCapabilities'
+
+/** Respons /api/capabilities: filesWrite mati, lalu (setelah POST) menyala. */
+const capView = (status: string) => new Response(JSON.stringify({
+  capabilities: [{ id: 'filesWrite', title: 'Ubah dan unggah file', blurb: 'Edit, ganti nama, hapus, dan unggah file dari kanvas.', status }], advanced: {},
+}))
+const stubCapApi = () => {
+  const f = vi.fn().mockImplementation((_u: string, init?: RequestInit) => Promise.resolve(capView(init?.method === 'POST' || init?.body ? 'on' : 'off')))
+  vi.stubGlobal('fetch', f)
+  return f
+}
 
 const entry = (name: string, dir = false) => ({ name, dir })
 const rows = (c: HTMLElement) => [...c.querySelectorAll('.files-row')] as HTMLElement[]
@@ -46,6 +58,8 @@ let events: FsEvent[]
 let off: () => void
 beforeEach(() => {
   caps.mutate = true
+  resetFilesWriteOffer()
+  resetCapabilitiesCache()
   events = []
   off = onFsEvent((e) => events.push(e))
   vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -55,6 +69,7 @@ afterEach(() => {
   off()
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   Object.values(fs).forEach((m) => m.mockReset())
 })
 
@@ -257,7 +272,7 @@ describe('menu', () => {
 })
 
 describe('flag/capability mati', () => {
-  it('mutate:false -> F2/Delete tidak melakukan apa pun, menu tanpa baris mutasi, tidak ada dialog', async () => {
+  it('mutate:false -> F2/Delete tidak melakukan apa pun; Rename/Delete tampil terkunci dengan alasan, sisanya tersembunyi', async () => {
     caps.mutate = false
     const c = await mount()
     key(c, 'ArrowDown')
@@ -269,8 +284,49 @@ describe('flag/capability mati', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.contextMenu(rows(c)[0])
     await screen.findByText('Refresh')
-    for (const l of ['Rename…', 'Duplicate', 'Delete', 'Delete Permanently…']) expect(screen.queryByText(l)).toBeNull()
+    for (const l of [/^Rename…/, /^Delete(?! Perm)/]) {
+      expect(screen.getByRole('menuitem', { name: l }).getAttribute('title')).toBe('Terkunci: “Ubah dan unggah file” sedang mati. Klik untuk menyalakan.')
+    }
+    for (const l of ['Duplicate', 'Delete Permanently…']) expect(screen.queryByText(l)).toBeNull()
     expect(fs.remove).not.toHaveBeenCalled()
+  })
+
+  it('klik baris terkunci membuka tawaran filesWrite; Nyalakan -> POST, dialog tutup, menu kembali tak terkunci', async () => {
+    const f = stubCapApi()
+    caps.mutate = false
+    const c = await mount()
+    key(c, 'ArrowDown')
+    fireEvent.contextMenu(rows(c)[0])
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^Delete/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Nyalakan “Ubah dan unggah file”')).toBeTruthy()
+    expect(await within(dialog).findByText(/Edit, ganti nama, hapus, dan unggah file dari kanvas\. Nyalakan sekarang\?/)).toBeTruthy()
+    expect(within(dialog).queryByText(/WEBTERM_/)).toBeNull()
+    expect(fs.remove).not.toHaveBeenCalled()
+
+    caps.mutate = true // server kini menjawab hidup setelah POST
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Nyalakan' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(f.mock.calls.some(([u, init]) => u === '/api/capabilities/filesWrite' && JSON.parse(init.body).enabled === true)).toBe(true)
+    await settle()
+    fireEvent.contextMenu(rows(c)[0])
+    expect(await screen.findByText('Duplicate')).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: /^Delete(?! Perm)/ }).getAttribute('title')).toBeNull()
+  })
+
+  it('galat EDISABLED (dimatikan setelah aktif): toast punya aksi Nyalakan… yang membuka tawaran yang sama', async () => {
+    stubCapApi()
+    fs.rename.mockReturnValue(Promise.resolve({ ok: false, code: 'EDISABLED', error: 'disabled' }))
+    const c = await mount()
+    key(c, 'ArrowDown')
+    key(c, 'F2')
+    const input = await screen.findByLabelText('New name')
+    fireEvent.change(input, { target: { value: 'z.txt' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await settle()
+    expect(await screen.findByText('Gagal mengganti nama “a.txt”. Kemampuan “Ubah dan unggah file” sedang mati.')).toBeTruthy()
+    fireEvent.click(screen.getByText('Nyalakan…'))
+    expect(within(await screen.findByRole('dialog')).getByText('Nyalakan “Ubah dan unggah file”')).toBeTruthy()
   })
 
   it('slot langsung: menu() kosong dan onKey() false untuk node yang belum terbukti aktif', () => {

@@ -1,5 +1,6 @@
 // Slot upload/download file manager (WS-FM-10): menu "Upload…"/"Download", drop file OS ke node, dan
-// status progres/ringkasan di toolbar. Semua dikunci `capabilities().upload` (fail-closed).
+// status progres/ringkasan di toolbar. Semua dikunci `capabilities().upload` (fail-closed); bila server
+// menjawab filesWrite mati (`mutate` false), "Upload…" tampil terkunci dan membuka tawaran menyalakan.
 // Drop dipasang lewat `useSlot` pada elemen node React Flow (`[data-id=nodeId]`) karena kontrak
 // FilesSlot belum punya `onDrop`; integrasi nanti cukup memanggil `runUpload` dari slot itu.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -7,6 +8,7 @@ import { Button } from './components/ui/button'
 import { childPath } from './fileBrowse'
 import { capabilities } from './fsClient'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
+import { lockedRow, offerFilesWrite, useFilesWriteEpoch, WRITE_OFFER_TEXT } from './filesWriteOffer'
 import { downloadUrl, uploadFiles, type UploadSummary } from './uploadQueue'
 
 /** Satu-satunya tempat string UI slot ini (Indonesia). */
@@ -29,11 +31,13 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 let uploadEnabled = false
 /** Download memakai `raw`, yang dikunci flag VIEWERS selain UPLOAD. */
 let downloadEnabled = false
+/** Upload mati KARENA filesWrite mati (bisa dinyalakan dari tawaran); mati karena galat tetap tersembunyi. */
+let uploadLocked = false
 
 /** Status upload saat ini (untuk tes). */
 export const uploadStatus = (): Status => status
 /** Kembalikan state modul ke awal (untuk tes). */
-export function resetUploadSlot(): void { status = IDLE; uploadEnabled = false; downloadEnabled = false; subs.clear() }
+export function resetUploadSlot(): void { status = IDLE; uploadEnabled = false; downloadEnabled = false; uploadLocked = false; subs.clear() }
 
 /** Jalankan antrean upload ke `dir`; `onDone` (mis. refresh) dipanggil bila ada yang sukses. Tolak bila masih berjalan. */
 export async function runUpload(dir: string, files: readonly File[], onDone: () => void, note = ''): Promise<void> {
@@ -83,16 +87,23 @@ export function filesFromDrop(dt: DataTransfer): { files: File[]; skipped: strin
   return { files, skipped }
 }
 
-function UploadStatusView() {
+function UploadStatusView({ nodeId }: { nodeId: string }) {
   const s = useSyncExternalStore(subscribe, () => status)
   if (s.running) return <span role="status" title={s.name}>{UPLOAD_TEXT.progress(s.index, s.total, s.pct)}</span>
   if (!s.summary && !s.note) return null
   const title = [...(s.summary?.failed.map((f) => f.message) ?? []), s.note].filter(Boolean).join('\n')
   const text = s.summary ? UPLOAD_TEXT.summary(s.summary.ok.length, s.summary.failed.length) : s.note
+  // Upload ditolak EDISABLED (dimatikan setelah slot aktif): sertakan jalan keluarnya.
+  const disabled = s.summary?.failed.some((f) => f.code === 'EDISABLED')
   return (
-    <Button type="button" variant="ghost" size="icon-sm" className="files-tool" role="status" title={title} aria-label={`${text}. ${UPLOAD_TEXT.dismiss}`} onClick={() => setStatus(IDLE)}>
-      {text}
-    </Button>
+    <>
+      {disabled ? (
+        <Button type="button" variant="ghost" size="icon-sm" className="files-tool" onClick={() => offerFilesWrite(nodeId)}>{WRITE_OFFER_TEXT.enableAction}</Button>
+      ) : null}
+      <Button type="button" variant="ghost" size="icon-sm" className="files-tool" role="status" title={title} aria-label={`${text}. ${UPLOAD_TEXT.dismiss}`} onClick={() => setStatus(IDLE)}>
+        {text}
+      </Button>
+    </>
   )
 }
 
@@ -123,27 +134,28 @@ export const uploadSlot: FilesSlot = {
   id: 'upload',
   useSlot(ctx) {
     const [on, setOn] = useState(uploadEnabled)
+    const epoch = useFilesWriteEpoch()
     useEffect(() => {
       let alive = true
       // Promise.resolve().then: `capabilities` yang melempar sinkron tetap jadi penolakan, bukan merobohkan FilesNode.
       Promise.resolve().then(() => capabilities()).then((c) => {
-        uploadEnabled = c.upload; downloadEnabled = c.upload && c.viewers
+        uploadEnabled = c.upload; downloadEnabled = c.upload && c.viewers; uploadLocked = !c.mutate
         if (alive) setOn(c.upload)
       }).catch((err: unknown) => {
-        uploadEnabled = false; downloadEnabled = false // fail-closed
+        uploadEnabled = false; downloadEnabled = false; uploadLocked = false // fail-closed
         console.error('files upload slot: capabilities failed, upload disabled', err)
         if (alive) setOn(false)
       })
       return () => { alive = false }
-    }, [])
+    }, [epoch])
     useDrop(ctx, on)
   },
   menu(ctx) {
-    if (!uploadEnabled) return []
+    if (!uploadEnabled) return uploadLocked ? [lockedRow(ctx.nodeId, UPLOAD_TEXT.menuUpload)] : []
     const rows = [{ label: UPLOAD_TEXT.menuUpload, onClick: () => pickFiles((f) => { void runUpload(ctx.dir, f, ctx.refresh) }) }]
     const file = ctx.selection.length === 1 ? ctx.entries.find((e) => e.name === ctx.selection[0] && !e.dir) : undefined
     if (file && downloadEnabled) rows.push({ label: UPLOAD_TEXT.menuDownload, onClick: () => download(childPath(ctx.dir, file.name), file.name) })
     return rows
   },
-  toolbar: () => (uploadEnabled ? <UploadStatusView /> : null),
+  toolbar: (ctx) => (uploadEnabled ? <UploadStatusView nodeId={ctx.nodeId} /> : null),
 }
