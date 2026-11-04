@@ -30,6 +30,9 @@ import { adaptGatewayHost, agentControlOn, cookieImportOn } from './browser.runt
 import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
 import type { Workspace } from '../../shared/workspace'
+import { DesignMode } from './design/design.service'
+import { designRoute } from './design/design.route'
+import { OUTBOX_BODY_MAX_CHARS } from '../outbox/outbox.route'
 
 const log = createLogger('browser.runtime')
 const SWEEP_MS = 10_000
@@ -109,6 +112,12 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
     setAgentControl: (id: string, on: boolean) => { agentOverride.set(id, on) },
   }
+  // Design Mode (G11): human-UI routes under /api/browser/<id>/design, tried before the rest.
+  const design = new DesignMode({
+    cdp: (id, method, params) => host.cdp(id, method, params), workspaces: d.workspaces, shotDir: `${d.dataRoot}/design`,
+    outbox: async () => (await import('../outbox/outboxRuntime')).startOutbox(), bodyMax: OUTBOX_BODY_MAX_CHARS,
+  })
+  host.onState((s) => { if (s.live === 'discarded') design.forget(s.id) }) // page gone = its injected script is gone too
   d.onAgentUse?.() // shim + skill ada begitu browser hidup; sub-opsi off cukup ditolak handler
   let down = false
   return {
@@ -116,7 +125,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     state: (id) => host.state(id),
     listDomains: (workspaceId) => vault.listDomains(workspaceId),
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
-    api: (method, pathname, body) => handleBrowserApi(method, pathname, body, apiDeps),
+    api: async (method, pathname, body) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps),
     control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted) }),
     async shutdown() {
       if (down) return
