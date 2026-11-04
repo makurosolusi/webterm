@@ -1,5 +1,6 @@
 // Persistence of routines and their run history over the ledger (schema v15).
 import { allRows, execWrite, getRow, newId, type LedgerContext, type Row } from '../ledger/ledgerCore'
+import { addColumnIfMissing } from '../ledger/ledgerSchemaAlter'
 import { nextCronAfter } from './routineCron'
 import type { Routine, RoutineInput, RoutineRun, RunStatus, RunTrigger } from './routineModel'
 
@@ -28,7 +29,7 @@ function toRun(r: Row): RoutineRun {
     id: String(r['id']), routineId: String(r['routine_id']), trigger: r['trigger'] as RunTrigger,
     status: r['status'] as RunStatus, reason: (r['reason'] as string | null) ?? null,
     scheduledFor: num(r['scheduled_for']), startedAt: Number(r['started_at']), finishedAt: num(r['finished_at']),
-    costUsd: num(r['cost_usd']), inboxItemId: (r['inbox_item_id'] as string | null) ?? null, childId: (r['child_id'] as string | null) ?? null,
+    costUsd: num(r['cost_usd']), estimateUsd: num(r['estimate_usd']), inboxItemId: (r['inbox_item_id'] as string | null) ?? null, childId: (r['child_id'] as string | null) ?? null,
   }
 }
 
@@ -37,6 +38,9 @@ const nextSlot = (input: RoutineInput, now: number): number | null =>
 
 export function createRoutineStore(ctx: LedgerContext) {
   const { db } = ctx
+  // Cost-oracle estimate per run, added in place (idempotent, nullable, no backfill: older runs had no
+  // estimate) the same way the cost module owns its own tables, so no ledger version bump is needed.
+  addColumnIfMissing(db, 'routine_run', 'estimate_usd', 'REAL')
   const get = (id: string): Routine | null => {
     const r = getRow(db, 'SELECT * FROM routine WHERE id = ?', id)
     return r ? toRoutine(r) : null
@@ -83,10 +87,11 @@ export function createRoutineStore(ctx: LedgerContext) {
       return toRun(getRow(db, 'SELECT * FROM routine_run WHERE id = ?', id)!)
     },
 
-    finishRun(id: string, change: { status: RunStatus; reason?: string | null; costUsd?: number | null; inboxItemId?: string | null; childId?: string | null }): void {
+    finishRun(id: string, change: { status: RunStatus; reason?: string | null; costUsd?: number | null; estimateUsd?: number | null; inboxItemId?: string | null; childId?: string | null }): void {
       execWrite(db, `UPDATE routine_run SET status = ?, reason = COALESCE(?, reason), finished_at = ?, cost_usd = COALESCE(?, cost_usd),
-        inbox_item_id = COALESCE(?, inbox_item_id), child_id = COALESCE(?, child_id) WHERE id = ?`, change.status, change.reason ?? null,
-      change.status === 'running' ? null : ctx.now(), change.costUsd ?? null, change.inboxItemId ?? null, change.childId ?? null, id)
+        estimate_usd = COALESCE(?, estimate_usd), inbox_item_id = COALESCE(?, inbox_item_id), child_id = COALESCE(?, child_id) WHERE id = ?`,
+      change.status, change.reason ?? null, change.status === 'running' ? null : ctx.now(), change.costUsd ?? null, change.estimateUsd ?? null,
+      change.inboxItemId ?? null, change.childId ?? null, id)
     },
 
     runs(routineId: string, limit = 50, offset = 0): RoutineRun[] {

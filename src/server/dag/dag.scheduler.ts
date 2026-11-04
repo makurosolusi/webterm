@@ -16,6 +16,7 @@ import { evidenceVerified } from '../orchestrator/orchestratorModel'
 import type { ConfiguredCommand } from '../orchestrator/verifyCommands'
 import { claudeHeadlessArgv, type AgentSpawnRequest, type AgentSpawnResult } from '../spawn/agentSpawn'
 import type { ExecOutcome } from '../central/agents/execRunner'
+import type { BeginRunInput, GateResult } from '../cost/costOracle'
 import type { CompletionVerdict } from '../verifier/verifier.judge'
 import type { CompletionReport } from '../verifier/verifier.report'
 import {
@@ -52,6 +53,23 @@ export interface DagPorts {
   report(report: CompletionReport): void
   /** Opens the inbox gate card (ledger approval); returns the approval id. */
   openGate(input: { projectId: string; title: string; body: string; options: string[] | null; nodeId: string | null }): string
+  /** Cost oracle (costRuntime), scope `dag:<id>`: gate before each dispatch, a cost window per worker. Absent = no gate. */
+  cost?: {
+    gate(q: { kind: 'dag'; ref: string }): Promise<GateResult>
+    begin(input: BeginRunInput): Promise<string | null>
+    end(id: string | null, outcome: { producedDiff?: boolean }): Promise<unknown>
+  }
+}
+
+/**
+ * Headless Claude Code argv for one worker. `--tools` limits the built-in tools Claude can use at all;
+ * `--allowedTools` only pre-approves calls (it does NOT restrict, per code.claude.com/docs/en/cli-reference),
+ * so both are needed. `--tools` takes bare names, so `Bash(git *)` contributes `Bash` there and stays a
+ * scoped rule in `--allowedTools`.
+ */
+export function dagWorkerArgv(prompt: string, tools: string[]): string[] {
+  const names = [...new Set(tools.map((t) => t.replace(/\(.*$/s, '').trim()).filter(Boolean))]
+  return [...claudeHeadlessArgv(prompt), '--tools', names.join(','), ...(tools.length ? ['--allowedTools', tools.join(',')] : [])]
 }
 
 export type EscalationResult = 'rejected' | 'retry' | 'circuit_broken'
@@ -118,17 +136,21 @@ export function createDagScheduler(ports: DagPorts) {
     return failAttempt(dag, task, input.dispatchId, `escalated: ${input.reason}`)
   }
 
-  /** The worker process ended: signals first (they only block or fail), then the verifier decides. */
-  async function settle(dispatchId: string, outcome: ExecOutcome): Promise<void> {
+  /**
+   * The worker process ended: signals first (they only block or fail), then the verifier decides.
+   * Resolves to whether the worker produced a diff (verifier's changed files); undefined = a gate is
+   * waiting on a human, which is not a wasted run for the low-ROI pause.
+   */
+  async function settle(dispatchId: string, outcome: ExecOutcome): Promise<boolean | undefined> {
     const dispatch = store.dispatch(dispatchId)
     const task = dispatch ? store.task(dispatch.taskId) : null
     const dag = task ? store.get(task.dagId) : null
-    if (!dispatch || !task || !dag || dispatch.status !== 'running') return
+    if (!dispatch || !task || !dag || dispatch.status !== 'running') return false
     const result = outcome.lastEvent?.['result']
     const output = typeof result === 'string' ? result : outcome.tail
     const signal = parseWorkerSignal(output)
-    if (signal?.kind === 'gate') return raiseGate(dag, task, dispatch.id, dispatch.nodeId, signal.question, signal.options ?? null)
-    if (signal?.kind === 'escalate') { escalate({ taskId: task.id, dispatchId, from: dispatch.nodeId, reason: signal.reason }); return }
+    if (signal?.kind === 'gate') { raiseGate(dag, task, dispatch.id, dispatch.nodeId, signal.question, signal.options ?? null); return undefined }
+    if (signal?.kind === 'escalate') { escalate({ taskId: task.id, dispatchId, from: dispatch.nodeId, reason: signal.reason }); return false }
     let verdict: CompletionVerdict
     try {
       verdict = await ports.verify({
@@ -137,7 +159,7 @@ export function createDagScheduler(ports: DagPorts) {
       })
     } catch (err) {
       failAttempt(dag, task, dispatchId, `verifier error: ${err instanceof Error ? err.message : String(err)}`)
-      return
+      return false
     }
     ports.report({ verdict, taskId: task.id, worker: `${dag.title}: ${task.key}`, projectId: dag.projectId, nodeId: dispatch.nodeId })
     // Only sealed server evidence (verifier.seal) with the lease respected can make a task done.
@@ -148,6 +170,7 @@ export function createDagScheduler(ports: DagPorts) {
       failAttempt(dag, task, dispatchId, verdict.message)
     }
     converge(dag)
+    return verdict.filesChanged.length > 0
   }
 
   async function dispatchTask(dag: Dag, task: DagTask): Promise<void> {
@@ -167,7 +190,7 @@ export function createDagScheduler(ports: DagPorts) {
     try {
       res = await ports.spawn({
         mode: 'headless', door: 'orchestrator', parent: DAG_PARENT, cwd: alloc.path, nodeId, prompt, title: `${dag.title}: ${task.key}`,
-        headless: { argv: [...claudeHeadlessArgv(prompt), '--allowedTools', task.brief.tools.join(',')], timeoutMs: EFFORT_SCALE[task.brief.effort].timeoutMs },
+        headless: { argv: dagWorkerArgv(prompt, task.brief.tools), timeoutMs: EFFORT_SCALE[task.brief.effort].timeoutMs },
       })
     } catch (err) {
       res = { ok: false, code: 'spawn_invalid', message: err instanceof Error ? err.message : String(err) }
@@ -177,8 +200,17 @@ export function createDagScheduler(ports: DagPorts) {
       return
     }
     emit('task.running', dag, task, { dispatchId, nodeId, branch: alloc.branch, effort: task.brief.effort })
-    const done = res.handle.done
-      .then((o) => settle(dispatchId, o))
+    const handle = res.handle
+    const done = (async () => {
+      let costId: string | null = null
+      let producedDiff: boolean | undefined = false
+      try {
+        if (ports.cost) costId = await ports.cost.begin({ kind: 'dag', ref: dag.id, label: `${dag.title}: ${task.key}`, nodeId })
+        producedDiff = await settle(dispatchId, await handle.done)
+      } finally {
+        if (ports.cost) await ports.cost.end(costId, { ...(producedDiff === undefined ? {} : { producedDiff }) })
+      }
+    })()
       .catch((err: unknown) => log.error('dag.settle.failed', `settle of dispatch ${dispatchId} failed`, { cause: err instanceof Error ? err.message : String(err) }))
       .finally(() => inflight.delete(dispatchId))
     inflight.set(dispatchId, done)
@@ -234,6 +266,15 @@ export function createDagScheduler(ports: DagPorts) {
         if (behind !== null && behind > DISPATCH_STALE_THRESHOLD) {
           emit('dispatch.stale_base_refused', dag, task, { behind, threshold: DISPATCH_STALE_THRESHOLD, base: dag.baseBranch }, `dag:${task.id}:stale:${behind}`)
           continue
+        }
+      }
+      if (ports.cost) {
+        // One scope per dag, so a refusal holds every task of it; the task stays pending and retries next tick.
+        const g = await ports.cost.gate({ kind: 'dag', ref: dag.id })
+        if (!g.allowed) {
+          const code = g.reason?.startsWith('paused:') ? 'roi_paused' : 'budget'
+          emit('dispatch.cost_refused', dag, task, { reason: code, detail: g.reason, estimateMicros: g.estimate.medianMicros }, `dag:${dag.id}:cost:${code}:${Math.floor(ports.ctx.now() / 86_400_000)}`)
+          break
         }
       }
       await dispatchTask(dag, task)

@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { dataDir } from '../config'
+import { beginCostRunLive, costGateLive, endCostRunLive } from '../cost/costRuntime'
 import { recordEvent } from '../events/producers'
 import { isEnabled } from '../featureCapabilities.runtime'
 import { createGate } from '../inbox/inboxItemStore'
@@ -63,6 +64,7 @@ export function productionDagPorts(ctx: LedgerContext): DagPorts {
       return { path, branch, baseSha }
     },
     spawn: (req) => spawnAgent(req),
+    cost: { gate: costGateLive, begin: beginCostRunLive, end: endCostRunLive },
     verify: verifyTask,
     report: (r) => recordCompletion(r, () => ctx),
     openGate: (g) => createGate(ctx, {
