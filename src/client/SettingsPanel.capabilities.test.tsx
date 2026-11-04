@@ -138,8 +138,11 @@ describe('tab Kemampuan (D8)', () => {
 
   it('"Nyalakan yang dibutuhkan" menyalakan kartu itu lewat toggle, TIDAK menyetel ulang semua pilihan', async () => {
     chainBroken = true
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true) // kartu Otonomi berbahaya: menyalakan dikonfirmasi
     await openCapabilities()
     fireEvent.click(screen.getByRole('button', { name: 'Nyalakan yang dibutuhkan' }))
+    expect(confirm).toHaveBeenCalledTimes(1)
+    confirm.mockRestore()
     await waitFor(() => expect(calls).toContain('POST /api/capabilities/autonomy'))
     expect(JSON.parse(bodies['POST /api/capabilities/autonomy'] ?? '{}')).toEqual({ enabled: true })
     expect(calls).not.toContain('POST /api/capabilities/reset')

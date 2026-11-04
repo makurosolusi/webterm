@@ -68,7 +68,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
         )
       })}
       {api.data && show('advanced') ? (
-        <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} open={advancedOpen} onOpenChange={setAdvancedOpen} />
+        <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} onRecheck={api.recheck} open={advancedOpen} onOpenChange={setAdvancedOpen} />
       ) : null}
     </div>
   )

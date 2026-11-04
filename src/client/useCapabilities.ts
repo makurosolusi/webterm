@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { CapabilitiesResponse, CapabilityId } from '../shared/featureCapabilities'
 import { CapabilitiesApiError, fetchCapabilities, setCapability, setCapabilitySub } from './capabilitiesApi'
-import { CAPABILITY_TEXT } from './capabilitiesLabels'
+import { CAPABILITY_TEXT, forbiddenText } from './capabilitiesLabels'
 
 const HTTP_FORBIDDEN = 403
 
@@ -22,9 +22,13 @@ export function resetCapabilitiesCache(): void {
   for (const l of listeners) l()
 }
 
-/** Pesan Indonesia untuk galat API; tidak memuat body atau kode mentah. */
+/**
+ * Pesan Indonesia untuk galat API; tidak memuat body atau kode mentah. 403 memakai port dengar dari server
+ * (di balik tunnel `location.port` = port tunnel), jatuh ke port halaman bila server tidak menyebutnya.
+ */
 export function capabilityErrorMessage(e: unknown, fallback: string): string {
-  return e instanceof CapabilitiesApiError && e.status === HTTP_FORBIDDEN ? CAPABILITY_TEXT.forbidden : fallback
+  if (!(e instanceof CapabilitiesApiError) || e.status !== HTTP_FORBIDDEN) return fallback
+  return e.port === undefined ? CAPABILITY_TEXT.forbidden : forbiddenText(String(e.port))
 }
 
 export interface CapabilitiesApi {
@@ -34,6 +38,8 @@ export interface CapabilitiesApi {
   /** Id yang sedang diubah (untuk aria-busy), atau null. */
   busyId: CapabilityId | null
   refresh(): Promise<void>
+  /** Muat ulang dengan deteksi segar (lewati cache probe login); untuk tombol "Periksa lagi". */
+  recheck(): Promise<void>
   /** Resolve true bila server menerima; false + `error` terisi bila gagal. */
   toggle(id: CapabilityId, enabled: boolean): Promise<boolean>
   setSub(id: CapabilityId, key: string, on: boolean): Promise<boolean>
@@ -46,11 +52,12 @@ export function useCapabilities(): CapabilitiesApi {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<CapabilityId | null>(null)
 
-  const refresh = useCallback(async () => {
+  // `fresh` tak boleh menumpang muatan biasa yang sedang jalan (hasilnya masih dari cache): selalu panggilan sendiri.
+  const load = useCallback(async (fresh: boolean) => {
     setLoading(true)
     try {
-      inflight ??= fetchCapabilities().finally(() => { inflight = null })
-      publish(await inflight)
+      if (fresh) publish(await fetchCapabilities(true))
+      else publish(await (inflight ??= fetchCapabilities().finally(() => { inflight = null })))
       setError(null)
     } catch (e) {
       setError(capabilityErrorMessage(e, CAPABILITY_TEXT.loadFailed))
@@ -58,6 +65,8 @@ export function useCapabilities(): CapabilitiesApi {
       setLoading(false)
     }
   }, [])
+  const refresh = useCallback(() => load(false), [load])
+  const recheck = useCallback(() => load(true), [load])
 
   const mutate = useCallback(async (id: CapabilityId, run: () => Promise<CapabilitiesResponse>) => {
     setBusyId(id)
@@ -77,5 +86,5 @@ export function useCapabilities(): CapabilitiesApi {
 
   const toggle = useCallback((id: CapabilityId, enabled: boolean) => mutate(id, () => setCapability(id, enabled)), [mutate])
   const setSub = useCallback((id: CapabilityId, key: string, on: boolean) => mutate(id, () => setCapabilitySub(id, key, on)), [mutate])
-  return { data, loading, error, busyId, refresh, toggle, setSub }
+  return { data, loading, error, busyId, refresh, recheck, toggle, setSub }
 }
