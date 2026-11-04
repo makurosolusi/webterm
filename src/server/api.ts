@@ -22,6 +22,7 @@ import { dagRoutes } from './routes/dag.routes'
 import { knowledge2Routes } from './routes/knowledge2.routes'
 import { handoffRoutes } from './routes/handoff.routes'
 import { pushRoutes } from './routes/push.routes'
+import { claudeProviderRoutes } from './routes/claudeProvider.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -56,6 +57,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...dagRoutes,
   ...knowledge2Routes,
   ...pushRoutes,
+  ...claudeProviderRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

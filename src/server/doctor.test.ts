@@ -1,6 +1,7 @@
 // Doctor v1: pass and fail path of every check with fake dependencies, and the fix contract.
 import { describe, expect, it } from 'vitest'
 import { fixDoctor, runDoctor, type DoctorCheck, type DoctorDeps, type DoctorId } from './doctor'
+import type { ProviderView } from './claudeProvider/claudeProvider.model'
 
 function deps(over: Partial<DoctorDeps> = {}): DoctorDeps {
   return {
@@ -82,5 +83,23 @@ describe('fixDoctor', () => {
   it('refuses when the check offers no fix (healthy, or not safely fixable)', async () => {
     expect(await fixDoctor('dataDir', deps())).toEqual({ ok: false, error: 'no_fix' })
     expect(await fixDoctor('claude', deps({ claudeReady: async () => ({ ok: false, reason: 'x' }) }))).toEqual({ ok: false, error: 'no_fix' })
+  })
+})
+
+describe('Claude provider in the claude check', () => {
+  const prov = (view: Partial<ProviderView> & Pick<ProviderView, 'mode'>, lastTest: { ok: boolean; message: string } | null = null) =>
+    deps({ claudeReady: async () => ({ ok: false, reason: 'not logged in' }), claudeProvider: () => ({ view: { secretSet: false, ready: false, ...view }, lastTest }) })
+  it('login mode (also when the dependency is absent) still checks the Claude Code login', async () => {
+    expect((await byId(deps())).claude).toMatchObject({ status: 'ok', detail: 'Installed and logged in.' })
+    expect((await byId(prov({ mode: 'login', ready: true }))).claude).toMatchObject({ status: 'fail' })
+  })
+  it('a key provider replaces the login check: no key fails, untested warns, the last test decides', async () => {
+    expect((await byId(prov({ mode: 'apiKey' }))).claude).toMatchObject({ status: 'fail' })
+    const custom = { mode: 'custom' as const, baseUrl: 'https://gw.example.test/x', secretSet: true, ready: true }
+    const untested = (await byId(prov(custom))).claude
+    expect(untested).toMatchObject({ status: 'warn' })
+    expect(untested.detail).toContain('gw.example.test')
+    expect(await byId(prov(custom, { ok: false, message: 'The endpoint rejected the credential.' }))).toMatchObject({ claude: { status: 'fail' } })
+    expect(await byId(prov(custom, { ok: true, message: 'Connected.' }))).toMatchObject({ claude: { status: 'ok' } })
   })
 })

@@ -3,6 +3,7 @@
 // Pure over `DoctorDeps` so every pass/fail path is testable with fakes; real wiring: doctor.runtime.ts.
 // Never carries a secret: the Telegram check reports valid/invalid/unset, never the token.
 import type { VerifyResult } from './events/eventModel'
+import type { ProviderView } from './claudeProvider/claudeProvider.model'
 
 export type DoctorStatus = 'ok' | 'warn' | 'fail' | 'off'
 export const DOCTOR_IDS = ['claude', 'opencode', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'] as const
@@ -26,6 +27,8 @@ export type TelegramProbe = { state: 'unset' } | { state: 'ok'; name?: string } 
 export interface DoctorDeps {
   onPath(bin: string): boolean
   claudeReady(): Promise<Ready>
+  /** Saved Claude provider (never the secret) + the last Test connection of this process; absent = login. */
+  claudeProvider?(): { view: ProviderView; lastTest: { ok: boolean; message: string } | null }
   opencodeBin: string
   opencodeReady(): Promise<Ready>
   generated(): GeneratedFile[]
@@ -41,6 +44,8 @@ export interface DoctorDeps {
   verifyLedger(): VerifyResult | null
 }
 
+const hostOf = (url: string | undefined): string => { try { return new URL(url ?? '').host } catch { return '(no URL)' } }
+
 type Probe = (d: DoctorDeps) => Promise<DoctorCheck> | DoctorCheck
 const check = (id: DoctorId, title: string, status: DoctorStatus, detail: string, fix?: string): DoctorCheck =>
   ({ id, title, status, detail, ...(fix ? { fix } : {}) })
@@ -49,6 +54,14 @@ const PROBES: Record<DoctorId, Probe> = {
   async claude(d) {
     const t = 'Claude Code CLI'
     if (!d.onPath('claude')) return check('claude', t, 'warn', 'The claude command is not on PATH, so Claude agent nodes and the Claude engine cannot start. Install Claude Code, then check again.')
+    // Active Claude provider (Settings › Capabilities): a key/endpoint replaces the login, so it is checked instead.
+    const { view: v, lastTest } = d.claudeProvider?.() ?? { view: { mode: 'login', secretSet: false, ready: true }, lastTest: null }
+    if (v.mode !== 'login') {
+      const what = v.mode === 'apiKey' ? 'Anthropic API key' : `custom endpoint ${hostOf(v.baseUrl)}`
+      if (!v.ready) return check('claude', t, 'fail', `Installed; provider ${what} is selected but no key is saved, so Claude cannot start. Add it in Settings › Capabilities › Claude provider.`)
+      if (!lastTest) return check('claude', t, 'warn', `Installed; provider ${what} is saved but not tested since the server started. Press Test connection in Settings › Capabilities › Claude provider.`)
+      return check('claude', t, lastTest.ok ? 'ok' : 'fail', `Installed; provider ${what}: ${lastTest.message}`)
+    }
     const r = await d.claudeReady()
     return r.ok ? check('claude', t, 'ok', 'Installed and logged in.')
       : check('claude', t, 'fail', `Installed but not ready (${r.reason}). Open a terminal node, run claude and log in.`)

@@ -10,6 +10,8 @@
 import type { ExecOutcome } from '../central/agents/execRunner'
 import { DEFAULT_EXECUTABLES } from '../orchestrator/verifyCommands'
 import { claudeHeadlessArgv, spawnAgent } from '../spawn/agentSpawn'
+import { activeProviderEnv } from '../claudeProvider/claudeProvider.store'
+import { applyProviderEnv } from '../claudeProvider/claudeProvider.model'
 import { DAG_MAX_TASKS, DagError, EFFORT_SCALE, validateTasks, type Brief, type DagTaskKind } from './dag.model'
 import { DAG_PARENT } from './dag.scheduler'
 
@@ -94,9 +96,11 @@ export function validateDraft(raw: unknown): PlanDraft {
 
 /** Production planner: one headless Claude Code run under Central's lineage in the workspace folder. */
 export const livePlanner: Planner = async ({ intent, repo }) => {
+  // Claude provider: the exec scrub keeps only an allowlist, so the provider vars ride as overrides.
+  const pe = activeProviderEnv()
   const res = await spawnAgent({
     mode: 'headless', door: 'central', parent: DAG_PARENT, cwd: repo, title: 'Plan draft', prompt: plannerPrompt(intent),
-    headless: { argv: plannerArgv(intent), timeoutMs: PLANNER_TIMEOUT_MS },
+    headless: { argv: plannerArgv(intent), timeoutMs: PLANNER_TIMEOUT_MS, env: applyProviderEnv(process.env, { set: {}, unset: pe.unset }), overrides: pe.set },
   })
   if (!res.ok || !res.handle) throw new Error(`planner spawn failed: ${res.ok ? 'no process handle' : res.message}`)
   return plannerOutput(await res.handle.done)

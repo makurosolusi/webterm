@@ -16,6 +16,9 @@ import { createLogger } from './logs'
 import { mcpEnv } from './mcp/mcp.launch'
 import { cliPath } from './cli/cli.launcher'
 import { delimiter, dirname } from 'node:path'
+import { resolveShell } from './ptyShell'
+import { activeProviderEnv } from './claudeProvider/claudeProvider.store'
+import { wrapClaudeLaunch } from './claudeProvider/claudeProvider.launch'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -83,6 +86,9 @@ export class Sessions extends SessionsCore {
         // bermuatan rahasia, jadi ia tidak pernah dicetak maupun dikirim.
         notices.push(wrapperMissingNotice(unwrapped.missing))
       }
+      // Claude provider (Settings > Capabilities): key/base URL reach THIS claude process only, via a
+      // one-shot 0600 file, never argv or the tmux -e list (claudeProvider/claudeProvider.launch.ts).
+      if (msg.agentId && hasClaudeHookSettings(msg.agentId)) cmd = wrapClaudeLaunch(cmd, activeProviderEnv(), resolveShell(this.options.shell))
     }
     // Env sesi agent, digerbangi TERPISAH:
     //  - `WEBTERM_NODE_HEADERS` = PATH file header curl milik node ini (berisi token NODE, bukan
@@ -141,6 +147,11 @@ export class Sessions extends SessionsCore {
     // Selalu dijawab, termasuk ketika yang kita tahu adalah "tidak ada status". Senyap terbaca
     // "tidak berubah" oleh client yang menyimpan salinan status lepas dari socket (restart server).
     send({ t: 'status', id: msg.id })
+  }
+
+  /** Live Claude agent sessions started before `t` (a provider change applies to new sessions only). */
+  claudeSessionsStartedBefore(t: number): number {
+    return [...this.map.values()].filter((s) => !s.exited && s.startedAt < t && !!s.agentId && hasClaudeHookSettings(s.agentId)).length
   }
 
   /** Pesan sekali-per-proses saat sesi TIDAK bisa disupervisi (tmux absen); diisi singleton. */
