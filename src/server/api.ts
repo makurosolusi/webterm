@@ -148,6 +148,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const diffRes = await gitDiffRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)) // Diff node (gitDiff.route.ts)
   if (diffRes) return json(res, diffRes.status, diffRes.body)
   { const ck = await (await import('./checkpoint/checkpoint.route')).checkpointRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (ck) return json(res, ck.status, ck.body) } // workspace checkpoints + Rewind (checkpoint/checkpoint.route.ts)
+  { const br = await (await import('./brief/brief.route')).briefRoute(path, method); if (br) return json(res, br.status, br.body) } // morning brief card (brief/brief.route.ts)
   { const ob = await outboxRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (ob) return json(res, ob.status, ob.body) } // agent outbox (outbox/outbox.route.ts)
 
   // Hook callback from a claude session (body is the hook stdin JSON).

@@ -10,7 +10,7 @@ import { SubscriberSet } from './subscribers'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
-import { producePtyExit } from './events/producers'
+import { producePtyExit, recordEvent } from './events/producers'
 import { spawnAgent } from './spawn/agentSpawn'
 import { createLogger } from './logs'
 import { mcpEnv } from './mcp/mcp.launch'
@@ -192,6 +192,8 @@ export class Sessions extends SessionsCore {
       const history = s.history > 0 ? supervisor.capture(s.id, { escapes: true, screen: false }) : undefined
       const session = this.track(s.id, supervisor.attach(s.id, s.cols, s.rows), s.agentId, s.cols, s.rows)
       if (history) this.emit(session, history.replace(/\r?\n/g, '\r\n'))
+      // Morning brief (F3-e): an agent that kept running through the restart is reported as restored.
+      if (s.agentId) recordEvent({ kind: 'agent.restored', source: 'pty', subject: `node:${s.id}`, nodeId: s.id, trust: 'trusted', payload: { agentId: s.agentId } })
       adopted.push(s.id)
     }
     if (adopted.length || orphans.length) ptyLog.adopted(adopted.length, orphans.length)
