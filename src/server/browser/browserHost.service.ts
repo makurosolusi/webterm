@@ -10,7 +10,7 @@ import { LaunchError } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
 import { metricsParams, screencastParams, toCdpCommands } from './browserHost.input'
 import { createEventRouter } from './browserHost.events'
-import { blockOf, BrowserError, createPageTarget, mergeState, newRec, readHistory, setupConnection, TargetTable } from './browserHost.targets'
+import { blockOf, BrowserError, createPageTarget, mergeState, newRec, notePendingInput, readHistory, setupConnection, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
 export { BrowserError } from './browserHost.targets'
@@ -101,6 +101,7 @@ export class BrowserHost implements BrowserHostApi {
 
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
+    const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
@@ -108,6 +109,7 @@ export class BrowserHost implements BrowserHostApi {
     // DevTools InputModel.ts:72,89 (`void invoke_dispatchMouseEvent`): tak menunggu balasan (wheel dibalas setelah renderer
     // memprosesnya; await = burst trackpad telat detik). Urutan dijaga satu socket CDP; galat dilog `fire`.
     for (const c of toCdpCommands(ev)) this.fire(rec, c.method, c.params)
+    if (ev.ls !== undefined) notePendingInput(rec, ev.ls, rx, Date.now())
   }
 
   /** Jalur CDP generik; hanya dipanggil lewat `cdpAllowlist` (WS-07). */

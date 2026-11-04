@@ -1,6 +1,7 @@
 // Tabel target per node + operasi target tingkat rendah (buat/attach/riwayat/setup koneksi).
 // Tidak menyimpan kebijakan; `BrowserHost` yang memutuskan kapan memanggil.
-import type { BlockReason, BrowserErrorCode, BrowserState, Frame } from '../../shared/browser.contract'
+import { INPUT_LATENCY_STALE_MS } from '../../shared/browser.contract'
+import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency } from '../../shared/browser.contract'
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
 import { DEFAULT_VIEWPORT, DENIED_PERMISSIONS, windowPlacement } from './chromium.flags'
 import { CDP } from './cdp.client'
@@ -32,6 +33,8 @@ export interface NodeRec {
   /** `acks`: seq milik kita -> id ack screencast milik Chromium (dikirim hanya setelah `ackFrame`). */
   cast?: { onFrame: (f: Frame) => void; seq: number; acks: Map<number, number> }
   touch: boolean
+  /** Input bercap waktu PERTAMA yang belum terjawab frame (I1-d); `rx`/`dispatched` = jam server, ms epoch. */
+  lat?: { ls: number; rx: number; dispatched: number }
 }
 
 export function newRec(nodeId: string, workspaceId: string, url: string): NodeRec {
@@ -117,7 +120,29 @@ export function pushFrame(rec: NodeRec, p: Record<string, unknown>): void {
   if (!cast || typeof p.data !== 'string' || typeof p.sessionId !== 'number') return
   cast.seq = (cast.seq + 1) >>> 0
   cast.acks.set(cast.seq, p.sessionId)
-  cast.onFrame({ seq: cast.seq, jpeg: Buffer.from(p.data, 'base64') })
+  const jpeg = Buffer.from(p.data, 'base64')
+  const lat = rec.lat && frameLatency(rec, p.metadata, Date.now())
+  cast.onFrame(lat ? { seq: cast.seq, jpeg, lat } : { seq: cast.seq, jpeg })
+}
+
+/** Catat input bercap waktu; yang pertama dalam satu ledakan dipertahankan (Orca typing-latency: ledakan = satu sampel). */
+export function notePendingInput(rec: NodeRec, ls: number, rx: number, dispatched: number): void {
+  if (!rec.lat || rx - rec.lat.rx > INPUT_LATENCY_STALE_MS) rec.lat = { ls, rx, dispatched }
+}
+
+/**
+ * Frame pertama yang `metadata.timestamp` (detik epoch, jam Chromium = jam mesin ini) jatuh SESUDAH dispatch
+ * input tertunda -> rincian latensi, dan input dilepas. Frame lebih tua -> tetap menunggu.
+ */
+export function frameLatency(rec: NodeRec, metadata: unknown, now: number): FrameLatency | undefined {
+  const pend = rec.lat
+  const ts = (metadata as { timestamp?: unknown } | undefined)?.timestamp
+  if (!pend || typeof ts !== 'number' || !Number.isFinite(ts)) return undefined
+  const swap = ts * 1000
+  if (swap <= pend.dispatched) return undefined
+  rec.lat = undefined
+  if (swap - pend.dispatched > INPUT_LATENCY_STALE_MS) return undefined // input tanpa perubahan layar; frame ini milik hal lain
+  return { ls: pend.ls, rxToDispatch: pend.dispatched - pend.rx, dispatchToSwap: swap - pend.dispatched, swapToServer: Math.max(0, now - swap) }
 }
 
 /** State baru bila `part` mengubah sesuatu; null bila tidak ada perubahan. */

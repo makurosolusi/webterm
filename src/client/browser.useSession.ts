@@ -5,7 +5,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { DSF_MAX, RESIZE_DEBOUNCE_MS } from '../shared/browser.contract'
-import type { BrowserState, ClientMsg, ServerMsg } from '../shared/browser.contract'
+import type { BrowserState, ClientMsg, FrameLatency, ServerMsg } from '../shared/browser.contract'
+import { clientNow, createLatencyWindow, recordFrame, wantsStamp } from './browser/latency/inputLatency.window'
+import type { LatencyWindow } from './browser/latency/inputLatency.window'
 import { writeClipboard } from './browser.clipboard'
 import type { Viewport } from './browser.input'
 import { STICKY_ERRORS } from './browser.status'
@@ -34,6 +36,8 @@ export interface BrowserSession {
   connected: boolean
   send: (msg: WithoutId<ClientMsg>) => void
   closeDialog: () => void
+  /** Latensi input->frame node ini (I1-d), dibaca chip. */
+  latency: LatencyWindow
 }
 
 /** `paused` = lepas dari server (zoom kecil / collapse); kanvas tetap menampilkan frame terakhir. */
@@ -53,6 +57,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [dialog, setDialog] = useState<BrowserDialog>()
   const [cursor, setCursor] = useState('default')
   const [connected, setConnected] = useState(true)
+  const [latency] = useState(createLatencyWindow)
 
   const arm = useCallback((clear: () => void) => {
     const t = setTimeout(() => { timers.current.delete(t); clear() }, NOTICE_MS)
@@ -80,7 +85,8 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   }, [draw])
 
   useEffect(() => {
-    const paint = async (seq: number, jpeg: Uint8Array) => {
+    const paint = async (seq: number, jpeg: Uint8Array, lat?: FrameLatency) => {
+      const rxAt = lat ? clientNow() : 0
       const n = ++order.current.arrived
       try {
         const bmp = await createImageBitmap(new Blob([jpeg as BlobPart], { type: 'image/jpeg' }))
@@ -96,12 +102,13 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       } catch (err) {
         flash(`Frame decode failed: ${err instanceof Error ? err.message : String(err)}`)
       }
+      if (lat) recordFrame(latency, lat, rxAt, clientNow()) // sesudah draw (atau dibuang karena frame lebih baru sudah tergambar)
       // Ack SETELAH gambar (juga bila decode/dibuang): hanya mengatur laju kirim server ke klien ini
       // (MAX_FRAMES_IN_FLIGHT); Chromium sudah di-ack server saat frame diterima.
       if (attached.current) stream.send({ t: 'ack', id, seq })
     }
     const unsub = stream.subscribe(id, {
-      onFrame: (seq, jpeg) => { void paint(seq, jpeg) },
+      onFrame: (seq, jpeg, lat) => { void paint(seq, jpeg, lat) },
       onConnection: setConnected,
       onMsg: (m) => {
         if (m.t === 'state') { setState(m); setError(undefined) }
@@ -120,7 +127,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       for (const t of timers.current) clearTimeout(t)
       timers.current.clear()
     }
-  }, [id, stream, arm, flash, draw, endFilter])
+  }, [id, stream, arm, flash, draw, endFilter, latency])
 
   useEffect(() => {
     const host = hostRef.current
@@ -159,9 +166,13 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     }
   }, [id, paused, stream, endFilter])
 
-  const send = useCallback((msg: WithoutId<ClientMsg>) => stream.send({ ...msg, id } as ClientMsg), [id, stream])
+  const send = useCallback((msg: WithoutId<ClientMsg>) => {
+    const m = { ...msg, id } as ClientMsg
+    if (wantsStamp(m)) (m as { ls?: number }).ls = clientNow() // dipantulkan server di frame pertama sesudahnya
+    stream.send(m)
+  }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, latency,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

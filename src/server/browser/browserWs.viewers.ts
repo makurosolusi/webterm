@@ -97,7 +97,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
     host.ackFrame(nodeId, f.seq) // ack saat diterima: Chromium lanjut memproduksi tanpa menunggu klien
     const e = nodes.get(nodeId)
     if (!e || e.viewers.size === 0) return
-    const bytes = encodeFrame(nodeId, f.seq, f.jpeg)
+    const bytes = encodeFrame(nodeId, f.seq, f.jpeg, f.lat)
     for (const [v, slot] of e.viewers) {
       slot.pending = { seq: f.seq, bytes } // terbaru menimpa: klien lambat tetap melihat frame terakhir, bukan yang basi
       flush(v, slot)

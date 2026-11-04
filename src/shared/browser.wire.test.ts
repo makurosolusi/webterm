@@ -32,6 +32,24 @@ describe('encodeFrame / decodeFrameHeader', () => {
     expect(() => encodeFrame('a', 1.5, jpeg)).toThrow(/uint32/)
   })
 
+  it('frame bercap latensi: tipe 2, lat bulat-balik, jpeg utuh; terpotong -> null', () => {
+    const lat = { ls: 1_758_326_400_123.25, rxToDispatch: 0.5, dispatchToSwap: 17.25, swapToServer: 3 } // nilai pas di f32
+    const buf = encodeFrame('n1', 9, jpeg, lat)
+    expect(buf[0]).toBe(2)
+    const h = decodeFrameHeader(buf)!
+    expect(h).toMatchObject({ nodeId: 'n1', seq: 9, lat })
+    expect(Array.from(buf.subarray(h.offset))).toEqual(Array.from(jpeg))
+    expect(decodeFrameHeader(encodeFrame('n1', 9, jpeg))!.lat).toBeUndefined()
+    expect(decodeFrameHeader(buf.subarray(0, 2 + 2 + 4 + 19))).toBeNull()
+  })
+
+  it('parseClientMsg: ls opsional pada input diteruskan; ls buruk ditolak', () => {
+    expect(parseClientMsg({ t: 'text', id: 'n', text: 'a', ls: 12.5 })).toEqual({ t: 'text', id: 'n', text: 'a', ls: 12.5 })
+    expect(parseClientMsg({ t: 'text', id: 'n', text: 'a', ls: -1 })).toBeNull()
+    expect(parseClientMsg({ t: 'text', id: 'n', text: 'a', ls: 'x' })).toBeNull()
+    expect(parseClientMsg({ t: 'text', id: 'n', text: 'a' })).toEqual({ t: 'text', id: 'n', text: 'a' })
+  })
+
   it('decode: bukan frame / terpotong / id bukan utf8 -> null', () => {
     expect(decodeFrameHeader(new Uint8Array([]))).toBeNull()
     expect(decodeFrameHeader(new Uint8Array([2, 0, 0, 0, 0, 0]))).toBeNull()

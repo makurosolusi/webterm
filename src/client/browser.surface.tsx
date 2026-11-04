@@ -11,6 +11,7 @@ import { chunkText, classifyKey, keyMsg, makeClickCounter, makeMoveCoalescer, mo
 import { pastedText } from './browser.clipboard'
 import { browserNotice } from './browser.status'
 import type { BrowserSession } from './browser.useSession'
+import InputLatencyChip from './browser/latency/InputLatencyChip'
 
 const TOUCH_KIND = { down: 'start', move: 'move', up: 'end', cancel: 'cancel' } as const
 
@@ -112,6 +113,7 @@ export default function BrowserSurface({ session }: { session: BrowserSession })
         />
       </div>
       {session.state?.loading && <div className="browser-loading" role="progressbar" aria-label="Loading" />}
+      <InputLatencyChip window={session.latency} />
       {note && <div className={`browser-notice browser-notice--${session.localNotice ? 'error' : notice?.tone}`} role="status">{note}</div>}
       {session.dialog && (
         <div className="browser-dialog-layer nodrag nowheel nopan nokey">
