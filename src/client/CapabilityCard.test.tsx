@@ -23,11 +23,16 @@ describe('CapabilityCard', () => {
     expect(screen.getByRole('status').textContent).toContain('Mati')
   })
 
-  it('needs-step shows the step button and a disabled switch', () => {
+  it('needs-step shows the step button; the switch stays usable to turn the feature OFF', () => {
     const onStep = vi.fn()
-    render(<CapabilityCard view={view({ id: 'browser', status: 'needs-step', step: { kind: 'chromiumPath', label: 'Pilih lokasi' } })} onToggle={() => undefined} onStep={onStep} />)
+    const onToggle = vi.fn()
+    render(<CapabilityCard view={view({ id: 'browser', status: 'needs-step', step: { kind: 'chromiumPath', label: 'Pilih lokasi' } })} onToggle={onToggle} onStep={onStep} />)
     expect(screen.getByRole('status').textContent).toContain('Perlu satu langkah')
-    expect((screen.getByRole('switch') as HTMLButtonElement).disabled).toBe(true)
+    const sw = screen.getByRole('switch') as HTMLButtonElement
+    expect(sw.disabled).toBe(false)
+    expect(sw.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(sw)
+    expect(onToggle).toHaveBeenCalledWith(false)
     fireEvent.click(screen.getByRole('button', { name: 'Pilih lokasi' }))
     expect(onStep).toHaveBeenCalledWith('chromiumPath')
   })

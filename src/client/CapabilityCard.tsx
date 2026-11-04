@@ -26,6 +26,9 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
   const on = view.status === 'on'
   const turnsOn = on ? [] : (view.alsoTurnsOn ?? closure(view.id).filter((i) => i !== view.id && all.find((v) => v.id === i)?.status !== 'on'))
   const turnsOff = on ? dependents(view.id).filter((d) => all.find((v) => v.id === d)?.status === 'on') : []
+  // needs-step = sakelarnya sudah dinyalakan, tinggal satu langkah: tampil "nyala" supaya klik berarti
+  // MATIKAN. Mematikan selalu boleh; menyalakan yang terkunci hanya lewat tombol langkah.
+  const checked = on || view.status === 'needs-step'
   const switchId = `capability-switch-${view.id}`
   return (
     <section aria-label={view.title} aria-busy={busy} data-capability={view.id} className="flex flex-col gap-1 border-b border-(--vscode-widget-border,transparent) py-3">
@@ -33,7 +36,7 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
         <Label htmlFor={switchId} className="text-[13px] font-semibold">{view.title}</Label>
         <div className="flex items-center gap-2">
           <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view.status]}</span>
-          <Switch id={switchId} checked={on} disabled={busy || view.status === 'needs-step'} onCheckedChange={onToggle} />
+          <Switch id={switchId} checked={checked} disabled={busy} onCheckedChange={onToggle} />
         </div>
       </div>
       <p className="m-0 text-xs opacity-80">{view.blurb}</p>

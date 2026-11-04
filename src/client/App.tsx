@@ -21,6 +21,7 @@ import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
+import { BrowserLinkOfferHost } from './browserLinkOffer'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { useLayoutHistory } from './layoutHistory'
@@ -280,6 +281,7 @@ export default function App() {
           <OutputPanelHost />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
+          <BrowserLinkOfferHost />
         </>
       )}
       {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi

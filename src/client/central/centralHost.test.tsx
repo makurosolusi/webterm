@@ -109,9 +109,20 @@ describe('Dock item', () => {
     zoomPct: 100, onZoomIn: noop, onZoomOut: noop, locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
   }
 
-  it('is absent without the handler (old UI identical)', () => {
-    render(<Dock {...props} />)
-    expect(screen.queryByLabelText('Toggle central control panel')).toBeNull()
+  it('stays visible when Agent Pusat is off; clicking offers to turn it on, then opens the panel', async () => {
+    resetCapabilitiesCache()
+    const caps = (status: string) => new Response(JSON.stringify({ capabilities: [{ id: 'central', title: 'Agent Pusat', blurb: 'Asisten.', status }], advanced: {} }))
+    const f = vi.fn().mockResolvedValueOnce(caps('off')).mockResolvedValue(caps('on'))
+    vi.stubGlobal('fetch', f)
+    const { rerender } = render(<Dock {...props} />)
+    fireEvent.click(screen.getByLabelText('Toggle central control panel'))
+    expect(await screen.findByRole('dialog', { name: 'Nyalakan Agent Pusat' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Nyalakan' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nyalakan Agent Pusat' })).toBeNull())
+    expect(f.mock.calls.some(([url, init]) => url === '/api/capabilities/central' && JSON.parse(init.body).enabled === true)).toBe(true)
+    const onToggleCentral = vi.fn()
+    rerender(<Dock {...props} onToggleCentral={onToggleCentral} />) // App menerbitkan toggle setelah central on
+    expect(onToggleCentral).toHaveBeenCalledTimes(1)
   })
 
   it('toggles when the handler is given', () => {
