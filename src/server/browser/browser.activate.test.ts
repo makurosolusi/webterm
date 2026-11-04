@@ -7,7 +7,6 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ENV_BROWSER } from '../../shared/browser.contract'
 import type { Workspace } from '../../shared/workspace'
-import { CapabilityStore } from '../control/capabilities'
 import { createFileSecretStore } from '../envSecrets.store'
 import { reconcile } from '../featureCapabilities.runtime'
 import { activeBrowser, registerBrowserCapability, startBrowser, stopBrowser } from './browser.activate'
@@ -29,7 +28,7 @@ const cleanup: Array<() => Promise<void> | void> = []
 
 const deps = (over: Partial<RuntimeDeps> = {}): RuntimeDeps => ({
   env: ON, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')),
-  capabilities: new CapabilityStore(), workspaces: () => [WS],
+  workspaces: () => [WS],
   launcher: { acquire: async () => { acquires++; return fake.url }, shutdown: () => undefined },
   ...over,
 })

@@ -16,9 +16,11 @@ describe('browser tool registration', () => {
     expect(registerCa2Tools(createRegistry(), {}, ENV_ON)).toEqual([])
     expect(toolsHash(r)).toBe(toolsHash(empty))
   })
-  it('feature flag registers the status tool; agent flag adds act; toolsHash is stable and order-independent', () => {
+  it('feature flag registers the status tool; act follows the agent flag (default on, explicit off drops it); toolsHash is stable and order-independent', () => {
     const a = createRegistry()
-    expect(registerCa2Tools(a, { browser }, { [BROWSER_TOOLS_FLAG]: 'on' })).toEqual(['browser_status'])
+    expect(registerCa2Tools(a, { browser }, { [BROWSER_TOOLS_FLAG]: 'on', [BROWSER_ACT_FLAG]: 'off' })).toEqual(['browser_status'])
+    // Agent flag unset = on (agentControlOn), so Central gets browser_act exactly when wired agents may drive.
+    expect(registerCa2Tools(createRegistry(), { browser }, { [BROWSER_TOOLS_FLAG]: 'on' })).toEqual(['browser_status', 'browser_act'])
     const b = createRegistry()
     expect(registerCa2Tools(b, { browser }, ENV_ON)).toEqual(['browser_status', 'browser_act'])
     const c = createRegistry()

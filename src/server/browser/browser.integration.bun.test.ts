@@ -32,7 +32,7 @@ async function boot(env: Record<string, string> = ON, onAgentUse?: () => void, w
   const fake: FakeCdp = await startFakeCdp()
   const capabilities = new CapabilityStore()
   const rt = await startBrowserRuntime({
-    env, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), capabilities, onAgentUse,
+    env, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), onAgentUse,
     workspaces, launcher: { acquire: async () => fake.url, shutdown: () => undefined },
   })
   cleanup.push(async () => { await rt?.shutdown(); await fake.close(); rmSync(dir, { recursive: true, force: true }) })
@@ -48,7 +48,7 @@ const ctl = (rt: BrowserRuntime, store: CapabilityStore, verb: string, token?: s
 describe('flag off = tidak ada runtime', () => {
   test('startBrowserRuntime mengembalikan null untuk flag kosong/off/nilai tak dikenal (bukan on|1|true), tanpa membuka port', async () => {
     for (const v of [undefined, '', 'off', '0', 'yes']) {
-      const rt = await startBrowserRuntime({ env: v === undefined ? {} : { [ENV_BROWSER.enabled]: v }, webtermPort: 8700, dataRoot: '/nonexistent', secrets: createFileSecretStore('/nonexistent'), capabilities: new CapabilityStore(), workspaces: () => [] })
+      const rt = await startBrowserRuntime({ env: v === undefined ? {} : { [ENV_BROWSER.enabled]: v }, webtermPort: 8700, dataRoot: '/nonexistent', secrets: createFileSecretStore('/nonexistent'), workspaces: () => [] })
       expect(rt).toBeNull()
     }
     setActiveBrowser(null)

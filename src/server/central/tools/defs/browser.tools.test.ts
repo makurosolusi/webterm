@@ -60,12 +60,22 @@ function ctx(d: BrowserToolDeps, o: { maxTier?: Tier; guard?: ControlGuard; env?
 }
 
 describe('flags', () => {
-  it('execTool reports flag_off per tool when the env lacks its flag', async () => {
+  it('execTool reports flag_off for browser_status without its flag and for browser_act only on an explicit agent off', async () => {
     seedNodes()
     const d = deps(async () => ({ status: 200 }))
-    const c = ctx(d, { env: { [BROWSER_TOOLS_FLAG]: 'on' } })
-    expect(await execTool(c, 'browser_act', { projectId: 'p1', nodeId: 'b1', action: 'navigate', url: 'https://a.example/' })).toMatchObject({ ok: false, code: 'flag_off' })
+    const nav = { projectId: 'p1', nodeId: 'b1', action: 'navigate', url: 'https://a.example/' }
+    expect(await execTool(ctx(d, { env: { [BROWSER_TOOLS_FLAG]: 'on', [BROWSER_ACT_FLAG]: 'off' } }), 'browser_act', nav)).toMatchObject({ ok: false, code: 'flag_off' })
     expect(await execTool(ctx(d, { env: {} }), 'browser_status', { projectId: 'p1' })).toMatchObject({ ok: false, code: 'flag_off' })
+  })
+  it('agent flag unset = browser_act allowed (same default-on reader as wired agents), still subject to tier and guard', async () => {
+    seedNodes()
+    const d = deps(async () => ({ status: 200 }))
+    const nav = { projectId: 'p1', nodeId: 'b1', action: 'navigate', url: 'https://a.example/' }
+    const env = { [BROWSER_TOOLS_FLAG]: 'on' }
+    expect(await execTool(ctx(d, { env }), 'browser_act', nav)).toMatchObject({ ok: true })
+    expect(await execTool(ctx(d, { env, maxTier: 'R1' }), 'browser_act', nav)).toMatchObject({ ok: false, code: 'tier_denied' })
+    const deny: ControlGuard = { check: () => ({ ok: false, code: 'level_denied' }) }
+    expect(await execTool(ctx(d, { env, guard: deny }), 'browser_act', nav)).toMatchObject({ ok: false, code: 'level_denied' })
   })
 })
 

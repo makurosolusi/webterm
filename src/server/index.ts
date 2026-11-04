@@ -134,16 +134,16 @@ installContextLink()
 
 // Browser di canvas: hook kemampuan `browser` menyalakan/mematikan runtime tanpa restart; /ws/browser dan
 // /api/browser selalu terdaftar dan membaca `activeBrowser()` per panggilan. Opsi sesi PTY dihitung ulang
-// tiap perubahan (hook kedua jalan setelah hook runtime), jadi capability browser ikut hidup/mati.
-// Shim agent dipasang sekali per proses, saat browser start dengan kendali agent on ATAU saat sub `browserAgent`
-// dinyalakan belakangan (sesi agent pertama yang memakainya) — tanpa restart server.
+// tiap perubahan (hook kedua jalan setelah hook runtime). Agent terminal memakai token node-nya sendiri; node
+// browser target dicari per panggilan dari edge kabel di workspace (`workspaces`), jadi tanpa capability/restart sesi.
+// Shim + skill agent dipasang sekali per proses saat runtime start (`onAgentUse`); sub `browserAgent` off cukup ditolak handler.
 let shimInstalled = false
 const ensureAgentShim = () => { if (!shimInstalled) { installBrowserAgentShim(); shimInstalled = true } }
 registerBrowserCapability({
   env: process.env, webtermPort: PORT, loopbackBind: isLoopbackHost(HOST), onAgentUse: ensureAgentShim,
-  dataRoot: dataDir(), secrets: createFileSecretStore(join(dataDir(), 'secrets')), capabilities: capabilityStore, workspaces: () => db.list(),
+  dataRoot: dataDir(), secrets: createFileSecretStore(join(dataDir(), 'secrets')), workspaces: () => db.list(),
 })
-onCapabilityChange('browser', { start: () => { if (activeBrowser()?.status().agentEnabled) ensureAgentShim(); applyPtyOptions() }, stop: applyPtyOptions })
+onCapabilityChange('browser', { start: applyPtyOptions, stop: applyPtyOptions })
 // Semua hook sudah terpasang: boot = reconcile dari himpunan kosong ke yang on di env (hanya yang on yang jalan).
 await reconcile(new Set(), enabledSet(process.env))
 booted = true

@@ -2,6 +2,7 @@
 // the contract guard is async and keyed by action, while `execTool` needs the synchronous gate;
 // `toToolGuard` (guard/controlGuard.ts) is the one bridge between them, so the two shapes cannot drift.
 import type { Database } from 'bun:sqlite'
+import { flagOn } from '../../envFlag'
 import type { Tier } from '../contracts/level.types'
 
 export type { Tier }
@@ -45,6 +46,8 @@ export interface ToolDef {
   usage: string
   /** Env flag name that must be `on` for the tool to exist; absent = always on. */
   flag?: string
+  /** Custom env reader that replaces `flag` (e.g. a default-on flag shared with another subsystem). */
+  enabled?(env: Record<string, string | undefined>): boolean
   /** Defaults to true: input carries a `projectId` that must exist and match the conversation. */
   projectScoped?: boolean
   /** Overrides the default deep forbidden-key scan. */
@@ -54,6 +57,11 @@ export interface ToolDef {
   handler(ctx: ToolCtx, input: ToolInput, projectId: string | undefined): Promise<ToolResult> | ToolResult
   /** `data` keys copied into the audit event. */
   auditKeys?: readonly string[]
+}
+
+/** True when the def's env gate is open: `enabled` reader if set, else `flag` must be `on`, else always on. */
+export function defEnabled(def: ToolDef, env: Record<string, string | undefined>): boolean {
+  return def.enabled ? def.enabled(env) : !def.flag || flagOn(env[def.flag])
 }
 
 export interface ToolRegistry {
