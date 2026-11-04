@@ -15,6 +15,9 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { useCanvasViewport } from './canvasViewport'
+import { setNotifyCanvas } from './osNotify'
+
+vi.mock('./osNotify', () => ({ setNotifyCanvas: vi.fn(() => () => {}) }))
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Viewport } from '../shared/workspace'
 
@@ -153,5 +156,27 @@ describe('useCanvasViewport — riwayat pandangan', () => {
     expect(result.current.canForward).toBe(false)
     expect(viewportRef.current).toEqual(vp(99, 0.25))
     expect(result.current.zoom).toBe(0.25)
+  })
+})
+
+describe('useCanvasViewport — OS notification "in view"', () => {
+  it('inView is true only for nodes intersecting the window; focus is not installed here', () => {
+    const nodes: Record<string, { position: { x: number; y: number }; measured: { width: number; height: number } }> = {
+      on: { position: { x: 10, y: 10 }, measured: { width: 100, height: 100 } },
+      off: { position: { x: window.innerWidth + 50, y: 10 }, measured: { width: 100, height: 100 } },
+    }
+    const fake = Object.assign(fakeRf(), {
+      getNode: vi.fn((id: string) => nodes[id]),
+      // Identity transform: flow coords == screen coords.
+      flowToScreenPosition: vi.fn((p: { x: number; y: number }) => p),
+    })
+    const rf = { current: fake as unknown as ReactFlowInstance }
+    renderHook(() => useCanvasViewport({ rf, viewportRef: { current: DEFAULT_VIEWPORT }, scheduleSave: vi.fn() }))
+    const calls = vi.mocked(setNotifyCanvas).mock.calls
+    const target = calls[calls.length - 1][0]
+    expect(target.focus).toBeUndefined()
+    expect(target.inView!('on')).toBe(true)
+    expect(target.inView!('off')).toBe(false)
+    expect(target.inView!('missing')).toBe(false)
   })
 })

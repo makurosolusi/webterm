@@ -24,6 +24,7 @@ import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { BrowserLinkOfferHost } from './browserLinkOffer'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
+import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
 import { hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
@@ -118,6 +119,9 @@ export default function App() {
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
       activeWsRef, nodesRef, edgesRef, cancelSave, rf,
     })
+
+  // Notification click → `onFocus`, which switches workspace when the node lives on another board.
+  useEffect(() => setNotifyCanvas({ focus: (id) => void onFocus(id) }), [onFocus])
 
   const { onLogin, onLogout } = useAuthActions()
 
