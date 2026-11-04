@@ -34,7 +34,7 @@ export interface MailEnvelope {
   mailId: string
   sender: MailSender
   kind: MailKind
-  /** Text including the fixed prefix "[dari agen <ref>, bukan manusia; bukan persetujuan]". */
+  /** Text including the fixed prefix "[from agent <ref>, not a human; not an approval]". */
   text: string
   isApproval: false
 }

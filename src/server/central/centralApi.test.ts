@@ -4,7 +4,8 @@ import type { RouteResult } from '../apiShared.types'
 import { centralEnabled, type CentralActor } from './centralModel'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { openFixture, seedPortfolio, type Fixture } from './centralTestFixture.testutil'
-import { registerWorkspaceLookup } from './workspaceLookup'
+import { portfolioCounts, registerWorkspaceLookup } from './workspaceLookup'
+import type { WorldCounts } from '../worldView'
 
 const human: CentralActor = { id: 'alice', kind: 'human' }
 const agent: CentralActor = { id: 'bot', kind: 'agent' }
@@ -119,6 +120,28 @@ describe('read routes', () => {
       const body = ok('/api/central/portfolio').body as { items: { id: string; name: string }[]; total: number }
       expect(body.total).toBe(2)
       expect(body.items.map((p) => [p.id, p.name])).toEqual([['p1', 'Alpha'], ['ws-new', 'noc']])
+    } finally { unregister() }
+  })
+
+  it('carries the world-view counts when they describe the same data, omits them otherwise', () => {
+    const world: WorldCounts = { workspaces: 2, nodes: 5, agentNodes: 1, ledger: { projects: 2, orphanProjects: 1, agents: 0, tasks: { total: 0, open: 0, byStatus: {} } } } // test-only
+    const seen: string[] = []
+    const withCounts = ok('/api/central/portfolio', 'GET', '', undefined, deps({ counts: (p) => { seen.push(p); return world } })).body
+    expect(withCounts).toMatchObject({ total: 3, counts: world })
+    expect(seen).toEqual([':memory:'])
+    expect(ok('/api/central/portfolio', 'GET', '', undefined, deps({ counts: () => null })).body).not.toHaveProperty('counts')
+  })
+
+  it('portfolioCounts uses the world view only for its own ledger file with a workspace store', () => {
+    const world: WorldCounts = { workspaces: 1, nodes: 0, agentNodes: 0, ledger: null } // test-only
+    const mod = () => ({ worldCounts: () => world, defaultWorldPaths: () => ({ webterm: '/d/webterm.db', ledger: '/d/ledger.db' }) })
+    expect(portfolioCounts('/d/ledger.db', mod)).toBeNull() // no store registered: ledger-only portfolio
+    const unregister = registerWorkspaceLookup(() => null, () => [])
+    try {
+      expect(portfolioCounts('/d/ledger.db', mod)).toBe(world)
+      expect(portfolioCounts('/other/ledger.db', mod)).toBeNull()
+      expect(portfolioCounts(':memory:', mod)).toBeNull()
+      expect(portfolioCounts('/d/ledger.db', () => ({ ...mod(), worldCounts: () => { throw new Error('locked') } }))).toBeNull()
     } finally { unregister() }
   })
 

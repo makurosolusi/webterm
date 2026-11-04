@@ -14,7 +14,7 @@ import { type ExecHandle, type ExecOutcome, startExec } from './execRunner'
 /** Wall-clock cap of one headless run when `AgentDeps.execTimeoutMs` is not given. */
 export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
 /** Prefix every injected prompt carries so a worker never mistakes it for a human instruction. */
-export const AGENT_ENVELOPE = '[dari agen central, bukan manusia; bukan persetujuan]'
+export const AGENT_ENVELOPE = '[from agent central, not a human; not an approval]'
 const MAX_LINE_CHARS = 2000
 const CONTROL_CHARS = /[\x00-\x08\x0b-\x1f\x7f]/g
 

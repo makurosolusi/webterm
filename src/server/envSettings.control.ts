@@ -3,6 +3,7 @@
 //   GET               effective config (every knob: value, source, reason, UI location, lock)
 //   PUT {set, unset}  write Control-owned knobs; shell-env and locked keys are refused (409)
 //   GET ?doctor=1     Doctor checks;  POST {fix: id}  apply one safe Doctor fix
+// `/api/control/doctor` is the Doctor's own path (GET checks, POST {fix: id}); the query form above stays.
 // Root-only (`rootReader`), and mutations additionally pass the settings guard and are audited.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { CAPABILITY_HEADER, TOKEN_HEADER, tokensMatch } from './auth'
@@ -20,6 +21,7 @@ import { getTokenState } from './tokenBootstrap'
 
 const log = createLogger('settings')
 export const CONTROL_EFFECTIVE_PATH = '/api/control/effective'
+export const CONTROL_DOCTOR_PATH = '/api/control/doctor'
 const OWNER_CTX = { root: true }
 const SANDBOX_KEY = 'WEBTERM_AGENT_SANDBOX'
 
@@ -125,14 +127,14 @@ async function fix(req: IncomingMessage, res: ServerResponse, d: ControlDeps, vi
   }
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, method: string, d: ControlDeps): Promise<void> {
+async function handle(req: IncomingMessage, res: ServerResponse, method: string, d: ControlDeps, doctorPath: boolean): Promise<void> {
   const root = d.rootToken === undefined ? rootReader(req) : rootReader(req, d.rootToken ?? undefined)
   if (!root) return json(res, 403, { error: 'forbidden' })
   if (method === 'GET') {
-    const doctor = new URL(req.url ?? '/', 'http://x').searchParams.get('doctor') === '1'
+    const doctor = doctorPath || new URL(req.url ?? '/', 'http://x').searchParams.get('doctor') === '1'
     return json(res, 200, doctor ? { checks: await runDoctor(await doctorDepsOf(d, model(d))) } : model(d))
   }
-  if (method !== 'PUT' && method !== 'POST') return json(res, 405, { error: 'method_not_allowed' })
+  if (method !== 'POST' && (doctorPath || method !== 'PUT')) return json(res, 405, { error: 'method_not_allowed' })
   const verdict = (d.guard ?? ((r: IncomingMessage) => settingsGuard(r)))(req)
   if (!verdict.ok) {
     await audit(d, req, { action: 'denied', via: 'rejected', detail: verdict.reason })
@@ -141,9 +143,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, method: string,
   return method === 'PUT' ? write(req, res, d, verdict.via) : fix(req, res, d, verdict.via)
 }
 
-/** `/api/control/effective`; the returned promise settles after the response is written. */
-export function controlEffectiveRoute(req: IncomingMessage, res: ServerResponse, method: string, deps: ControlDeps): Promise<void> {
-  return handle(req, res, method, deps).catch((err: unknown) => {
+/** `/api/control/effective` (or `/api/control/doctor` with `doctorPath`); settles after the response is written. */
+export function controlEffectiveRoute(req: IncomingMessage, res: ServerResponse, method: string, deps: ControlDeps, doctorPath = false): Promise<void> {
+  return handle(req, res, method, deps, doctorPath).catch((err: unknown) => {
     log.error('control.route_failed', 'Control route failed', { method, cause: err instanceof Error ? err.message : 'error' })
     if (!res.writableEnded) json(res, 500, { error: 'internal' })
   })

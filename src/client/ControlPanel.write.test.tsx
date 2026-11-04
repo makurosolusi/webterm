@@ -26,11 +26,12 @@ function serve(env: NodeJS.ProcessEnv = {}, doctor: Partial<DoctorDeps> = {}) {
   }
   const puts: unknown[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
-    if (!url.startsWith('/api/control/effective')) return new Response('{"error":"not_found"}', { status: 404 })
+    const doctorPath = url.startsWith('/api/control/doctor')
+    if (!url.startsWith('/api/control/effective') && !doctorPath) return new Response('{"error":"not_found"}', { status: 404 })
     const method = init.method ?? 'GET'
     if (method === 'PUT') puts.push(JSON.parse(String(init.body)))
     const res = recorder()
-    await controlEffectiveRoute(Object.assign(fakeReq(method, init.body as string | undefined), { url, headers: {} }), res, method, deps)
+    await controlEffectiveRoute(Object.assign(fakeReq(method, init.body as string | undefined), { url, headers: {} }), res, method, deps, doctorPath)
     return new Response(res.body, { status: res.status })
   }))
   return { ...s, puts }

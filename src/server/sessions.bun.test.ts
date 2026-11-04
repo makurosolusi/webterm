@@ -1,6 +1,9 @@
 // Bun-only (needs Bun.Terminal via spawnPty); runs under `bun test`, excluded
 // from vitest. Ambient types for 'bun:test' live in ./bun-test.d.ts.
 import { test, expect, afterAll } from 'bun:test'
+import { reapChildren } from './processReap.testutil'
+// No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
+afterAll(() => reapChildren())
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

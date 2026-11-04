@@ -1,6 +1,9 @@
 // Bun-only: tmux client di dalam PTY Bun nyata. Socket test SENDIRI (`webterm-test-<pid>`), jadi
 // sesi `-L webterm` (pengguna) dan `-L node-terminal` (nodeterm) tidak pernah tersentuh.
 import { test, expect, afterAll } from 'bun:test'
+import { reapChildren } from './processReap.testutil'
+// No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
+afterAll(() => reapChildren())
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

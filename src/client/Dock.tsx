@@ -8,6 +8,7 @@ import type { VscodeActivityBarItem } from '@/components/vscode/vscodeActivityBa
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import { codicon } from './dockCodicon'
+import { useCommands } from './commandRegistry'
 import { CanvasStatusBar } from './Dock.statusBar'
 import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
@@ -21,6 +22,8 @@ export { ZOOM_PRESETS } from './Dock.statusBar'
 const ADD_TERMINAL_ID = 'terminal'
 const ADD_BROWSER_ID = 'browser'
 const ADD_WORKSPACE_ID = 'workspace'
+/** Id of the registered "new diff node" command (commandRegistry.defaults.ts); the Dock runs it. */
+const DIFF_COMMAND_ID = 'diff.new'
 const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
@@ -95,16 +98,19 @@ export default function Dock(props: DockProps) {
 
   // Satu daftar Quick Pick: id baris = kunci pemilihnya, jadi `onAddSelect` tak perlu menutup
   // di atas closure per-baris. Ikon seragam codicon; warna agent tidak dibawa (VS Code tidak mewarnai).
+  // Diff runs the app command (only registered while the diff feature is on), so no extra Dock prop.
+  const diffCommand = useCommands().find((c) => c.id === DIFF_COMMAND_ID && c.run)
   const addItems = useMemo<VscodeQuickPickItem[]>(() => [
     { id: ADD_TERMINAL_ID, label: 'Terminal', icon: codicon('terminal') },
     { id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') },
+    ...(diffCommand ? [{ id: DIFF_COMMAND_ID, label: 'Diff (working changes)', icon: codicon('diff') }] : []),
     ...builtins.map((a) => {
       const cfg = agentConfig(a)
       return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, detail: cfg?.notice, icon: codicon('hubot') }
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
-  ], [builtins, visibleCustoms])
+  ], [builtins, visibleCustoms, diffCommand])
 
   const onAddSelect = (id: string) => {
     if (id === ADD_TERMINAL_ID) return addTerminal()
@@ -114,6 +120,7 @@ export default function Dock(props: DockProps) {
       return setAddOpen(false)
     }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
+    if (id === DIFF_COMMAND_ID) { diffCommand?.run?.(); return setAddOpen(false) }
     if (id.startsWith(ADD_BUILTIN_PREFIX)) return addBuiltin(id.slice(ADD_BUILTIN_PREFIX.length) as BuiltinAgentId)
     const custom = visibleCustoms.find((c) => `${ADD_CUSTOM_PREFIX}${c.id}` === id)
     if (custom) addCustom(custom)

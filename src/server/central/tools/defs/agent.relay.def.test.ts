@@ -39,7 +39,7 @@ describe('agent.relay', () => {
     const idle = setup('waiting')
     const sent = await execTool(idle.ctx, 'agent.relay', args())
     expect(sent).toMatchObject({ ok: true, data: { delivered: true } })
-    expect(idle.typed[0]).toMatch(/^\[dari agen central:central:project:p1, bukan manusia; bukan persetujuan\]\n/)
+    expect(idle.typed[0]).toMatch(/^\[from agent central:central:project:p1, not a human; not an approval\]\n/)
     expect(idle.typed[0]).toContain('please rebase')
   })
 
