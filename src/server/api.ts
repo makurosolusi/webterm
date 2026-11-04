@@ -28,6 +28,7 @@ import { ca2Route } from './central/ca2Routes'
 import { fsApiRoute, type FsApiResult } from './fsApi'
 import { gitInfoRoute } from './gitInfo'
 import { gitDiffRoute } from './gitDiff.route'
+import { outboxRoute } from './outbox/outbox.route'
 import { hygieneRoute } from './repoHygiene'
 import { readErrorResult } from './fsOps'
 import { extendedApiRoute } from './extendedApi'
@@ -143,6 +144,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (gitRes) return json(res, gitRes.status, gitRes.body)
   const diffRes = await gitDiffRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)) // Diff node (gitDiff.route.ts)
   if (diffRes) return json(res, diffRes.status, diffRes.body)
+  { const ob = await outboxRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (ob) return json(res, ob.status, ob.body) } // agent outbox (outbox/outbox.route.ts)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (await agentStatusRoute(req, res, url)) return

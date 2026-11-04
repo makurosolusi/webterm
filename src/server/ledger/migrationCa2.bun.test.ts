@@ -54,16 +54,16 @@ function seedV4(): { db: Database; path: string } {
   return { db, path }
 }
 
-test('v4 -> latest (v11) migrates with a backup, keeps data, and a second run is a no-op', () => {
+test('v4 -> latest (v12) migrates with a backup, keeps data, and a second run is a no-op', () => {
   const { db, path } = seedV4()
-  expect(LATEST_VERSION).toBe(11)
-  expect(migrateWithBackup(db, path)).toBe(11)
+  expect(LATEST_VERSION).toBe(12)
+  expect(migrateWithBackup(db, path)).toBe(12)
   const backups = readdirSync(root).filter((f) => f.startsWith(`${basename(path)}.`) && f.endsWith('.v4.bak'))
   expect(backups.length).toBe(1)
   close(db)
 
   const again = openLedgerDb(path)
-  expect(userVersion(again)).toBe(11)
+  expect(userVersion(again)).toBe(12)
   expect(readdirSync(root).filter((f) => f.startsWith(`${basename(path)}.`) && f.endsWith('.bak')).length).toBe(1)
   for (const m of MIGRATIONS.filter((x) => x.version >= 5)) m.up(again) // every up() must itself be re-runnable
   expect(count(again, 'SELECT count(*) AS c FROM memory')).toBe(5)

@@ -1,12 +1,16 @@
 // End to end without mocks of the gate itself: real `Sessions` (fake PTY), real server-side screen
-// rebuild (`@xterm/xterm`) of a REAL Claude Code capture, real composer reader. Only the PTY and the
-// workspace list are fakes.
+// rebuild (`@xterm/xterm`) of a REAL Claude Code capture, real composer reader, real outbox (store on
+// the node:sqlite bridge). Only the PTY and the workspace list are fakes.
 import { describe, expect, it } from 'vitest'
 import type { Workspace } from '../shared/workspace'
 import capture from './__fixtures__/claude-composer-capture.json'
 import { FakePty } from './fakePty.testutil'
 import { LinkNoteDelivery } from './linkNoteDelivery'
 import { Sessions } from './sessions'
+import { nodeSqlite } from './nodeSqlite.testutil'
+import { DDL_V12 } from './ledger/ledgerSchemaV12'
+import { agentIn, OutboxDelivery } from './outbox/outboxDelivery'
+import { createOutboxStore } from './outbox/outboxStore'
 
 const S = capture.screens as Record<string, string>
 const PLACEHOLDER = '\x1b[2mTry "fix typecheck errors"\x1b[0m'
@@ -27,7 +31,11 @@ describe('link note, end to end on a real Claude Code screen', () => {
       nodes: [{ id: 'claude1', kind: 'agent', agentId: 'claude', title: 'Claude' }, { id: 'web1', kind: 'browser', title: 'makuro-browser' }],
       bridges: [],
     } as unknown as Workspace
-    const d = new LinkNoteDelivery({ workspaces: () => [ws], sessions, sleep: async () => {} })
+    const { db } = nodeSqlite()
+    db.exec(DDL_V12)
+    const outbox = new OutboxDelivery({ store: createOutboxStore(db), agentOf: (n) => agentIn([ws], n), sessions, record: () => {}, sleep: async () => {} })
+    const linkNotes = new LinkNoteDelivery({ workspaces: () => [ws], sessions, outbox })
+    const d = { tick: async () => { await linkNotes.tick(); await outbox.kick('claude1') } }
 
     pty.emitData(paint('half typed'))
     await d.tick() // baseline
