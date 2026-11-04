@@ -3,6 +3,7 @@
 import { Position } from '@xyflow/react'
 import { classifyLink } from '../shared/workspace'
 import type { AgentId } from '../shared/workspace'
+import { BROWSER_KIND } from '../shared/browser.contract'
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -41,9 +42,19 @@ export function floatingEdgeParams(a: Rect, b: Rect): {
   return { sx: s.x, sy: s.y, sourcePosition: s.position, tx: t.x, ty: t.y, targetPosition: t.position }
 }
 
-// A link may form only between two distinct context-capable nodes.
-export function canLink(sourceAgentId: AgentId | undefined, targetAgentId: AgentId | undefined, source: string, target: string): boolean {
-  return source !== target && classifyLink(sourceAgentId, targetAgentId) === 'context'
+/** Ujung kabel: jenis node (`kind` React Flow) + agentId-nya bila node agent. */
+export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
+
+/** Kabel boleh terbentuk antara dua node berbeda yang context-capable, ATAU antara node browser dan
+ *  node agent (semua sesi agent memegang token node yang dipakai `resolveLinkedBrowser` server).
+ *  Browser↔browser dan browser↔terminal biasa ditolak: tak ada pihak yang bisa memakai kabelnya —
+ *  pola nodeterm `classifyLink` (sticky hanya bertaut ke terminal, sticky↔sticky null). */
+export function canLink(a: LinkEnd, b: LinkEnd): boolean {
+  if (a.id === b.id) return false
+  const browsers = (a.kind === BROWSER_KIND ? 1 : 0) + (b.kind === BROWSER_KIND ? 1 : 0)
+  if (browsers === 0) return classifyLink(a.agentId, b.agentId) === 'context'
+  if (browsers === 2) return false
+  return !!(a.kind === BROWSER_KIND ? b : a).agentId
 }
 
 // Dedupe: a bridge already connects the pair in either direction.

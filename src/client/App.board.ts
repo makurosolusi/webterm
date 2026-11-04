@@ -4,6 +4,7 @@ import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
 import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
 import { toFlow, toWsNode, toFlowEdge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
+import type { LinkEnd } from './floatingEdge'
 import { spawnAt, spawnPosition } from './nodeSpawn'
 import { randomId } from './randomId'
 import { spawnSpot } from './canvasMenu.geometry'
@@ -90,11 +91,11 @@ export function useBoardActions({
 
   const onConnect = useCallback((c: Connection) => {
     if (!c.source || !c.target) return
-    const src = nodesRef.current.find((n) => n.id === c.source)
-    const tgt = nodesRef.current.find((n) => n.id === c.target)
-    const sa = (src?.data as { agentId?: AgentId })?.agentId
-    const ta = (tgt?.data as { agentId?: AgentId })?.agentId
-    if (!canLink(sa, ta, c.source, c.target)) return
+    const end = (id: string): LinkEnd => {
+      const n = nodesRef.current.find((x) => x.id === id)
+      return { id, kind: n?.type, agentId: (n?.data as { agentId?: AgentId } | undefined)?.agentId }
+    }
+    if (!canLink(end(c.source), end(c.target))) return
     if (bridgeExists(edgesRef.current, c.source, c.target)) return
     setEdges((es) => {
       const next = addEdge({ id: `bridge-${c.source}-${c.target}`, source: c.source!, target: c.target!, type: 'context' }, es)
