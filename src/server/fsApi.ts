@@ -13,6 +13,7 @@ import { createFileExclusive, makeDirChecked, writeFileChecked } from './fsOps.w
 import { gitMarks } from './fsGit'
 import { serveRaw, type RawReply } from './fsRaw'
 import { searchFiles } from './fsSearch'
+import { GREP_VERBS } from './fsGrep.route'
 import { uploadFile } from './fsUpload'
 import { createLogger } from './logs'
 
@@ -91,6 +92,8 @@ const VERBS: Record<string, Verb> = {
   },
   'git-status': { m: 'GET', flag: 'GIT_STATUS', need: ['path'], run: (a) => gitMarks(a.path) },
   search: { m: 'GET', flag: 'QUICK_OPEN', need: ['root', 'q'], run: (a, _b, _c, q) => searchFiles(a.root, a.q, Number(q.get('limit')) || undefined) },
+  // Find in Files (`grep`, `grep-cancel`): handlers + rationale in fsGrep.ts / fsGrep.route.ts.
+  ...GREP_VERBS,
   upload: { m: 'POST', flag: 'UPLOAD', need: ['dir', 'name'], body: false, run: (a, _b, c) => uploadFile(a.dir, a.name, c.stream, filesUploadMaxBytes()) },
   capabilities: {
     m: 'GET',

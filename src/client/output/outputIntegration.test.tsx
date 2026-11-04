@@ -83,7 +83,7 @@ describe('output shortcut', () => {
 
   it('is listed in the Keyboard Shortcuts table', () => {
     render(<HelpOverlay onClose={() => {}} platform="Linux" />)
-    const row = screen.getByText(/panel Output/).closest('tr') as HTMLElement
+    const row = screen.getByText(/Toggle Output/).closest('tr') as HTMLElement
     expect(Array.from(row.querySelectorAll('kbd')).map((k) => k.textContent)).toEqual(['Ctrl', 'Shift', 'U'])
   })
 })

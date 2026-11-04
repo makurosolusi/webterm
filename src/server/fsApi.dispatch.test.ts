@@ -12,6 +12,7 @@ const q = (o: Record<string, string> = {}) => new URLSearchParams(o)
 const GATED: [string, string, Record<string, string>][] = [
   ['delete', 'POST', {}], ['restore', 'POST', {}], ['rename', 'POST', {}], ['copy', 'POST', {}],
   ['raw', 'GET', { path: '/x' }], ['git-status', 'GET', { path: '/x' }], ['search', 'GET', { root: '/x', q: 'a' }], ['upload', 'POST', { dir: '/x', name: 'a' }],
+  ['grep', 'GET', { root: '/x', q: 'a' }], ['grep-cancel', 'POST', { searchId: 's' }],
 ]
 
 afterEach(() => { for (const k of [...Object.values(FILES_FLAG), 'WEBTERM_FILES_LIST_MAX']) delete process.env[k] })
@@ -30,6 +31,17 @@ describe('fsApi dispatcher', () => {
       expect(res?.body, verb).toMatchObject({ ok: false, code: 'EDISABLED' })
       expect(body, verb).not.toHaveBeenCalled()
     }
+  })
+
+  it('grep + grep-cancel are mounted from GREP_VERBS (QUICK_OPEN on by default)', async () => {
+    await writeFile(join(dir, 'g.txt'), 'alpha\nneedle beta\n')
+    const res = await fsApiRoute('/api/fs/grep', 'GET', q({ root: dir, q: 'needle', limit: '10', searchId: 'd1' }), noBody)
+    expect(res?.status).toBe(200)
+    expect(res?.body).toMatchObject({ ok: true, nextOffset: null, matches: [{ file: 'g.txt', line: 2, col: 1, text: 'needle beta' }] })
+    const cancel = await fsApiRoute('/api/fs/grep-cancel', 'POST', q(), json({ searchId: 'd1' }))
+    expect(cancel).toEqual({ status: 200, body: { ok: true, cancelled: false } })
+    const missing = await fsApiRoute('/api/fs/grep', 'GET', q({ root: dir }), noBody)
+    expect(missing?.status).toBe(400)
   })
 
   it('flag on -> handler dipanggil (git-status stub: marks kosong, 200)', async () => {
