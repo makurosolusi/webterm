@@ -20,6 +20,7 @@ import { useOmnibox } from './Omnibox.open'
 import { useAppCommands } from './commandRegistry.defaults'
 import { useCommandKeybindings } from './commandRegistry'
 import { useKeybindingsSync } from './keybindings.store'
+import { usePresencePing } from './presencePing'
 import OutputPanelHost from './output/outputPanelHost'
 import TimelineHost from './Timeline'
 import { SettingsPanel } from './SettingsPanel'
@@ -173,6 +174,7 @@ export default function App() {
   })
   useKeybindingsSync(settings.keybindings, settingsHydrated, update)
   useCommandKeybindings()
+  usePresencePing(!authRequired)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.

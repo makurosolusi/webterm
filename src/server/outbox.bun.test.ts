@@ -1,4 +1,4 @@
-// Bun-only (bun:sqlite). Outbox on a REAL ledger file: schema v12 migrates idempotently, queued
+// Bun-only (bun:sqlite). Outbox on a REAL ledger file: schema v12+ migrates idempotently, queued
 // mail survives closing and reopening the DB (a restart), and enqueue/deliver land as chained
 // Senses events. Lives at src/server/ (not outbox/) so the `src/server/*.bun.test.ts` gate runs it.
 import { afterAll, expect, test } from 'bun:test'
@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Database } from 'bun:sqlite'
-import { openLedgerDb } from './ledger/migration'
+import { LATEST_VERSION, openLedgerDb } from './ledger/migration'
 import { applyV12 } from './ledger/ledgerSchemaV12'
 import { createEventLog } from './events/eventLog'
 import { createEventBus } from './events/eventBus'
@@ -31,7 +31,7 @@ function outboxOn(db: Database, st: { status?: 'working' | 'waiting' }, writes: 
 
 test('v12 creates agent_outbox; re-applying is a no-op', () => {
   const db = openLedgerDb(':memory:')
-  expect(Number((db.query('PRAGMA user_version').get() as Record<string, unknown>)['user_version'])).toBe(12)
+  expect(Number((db.query('PRAGMA user_version').get() as Record<string, unknown>)['user_version'])).toBe(LATEST_VERSION)
   applyV12(db)
   applyV12(db)
   const cols = (db.query('PRAGMA table_info(agent_outbox)').all() as Array<Record<string, unknown>>).map((r) => String(r['name']))
