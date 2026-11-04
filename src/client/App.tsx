@@ -15,6 +15,11 @@ import CentralControlPanel, { useCentralControl } from './central/CentralControl
 import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
+import Omnibox from './Omnibox'
+import { useOmnibox } from './Omnibox.open'
+import { useAppCommands } from './commandRegistry.defaults'
+import { useCommandKeybindings } from './commandRegistry'
+import { useKeybindingsSync } from './keybindings.store'
 import OutputPanelHost from './output/outputPanelHost'
 import { SettingsPanel } from './SettingsPanel'
 import { SettingsProvider, useSettings } from './useSettings'
@@ -65,7 +70,7 @@ export default function App() {
   // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
   // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
   const [cleanView, toggleCleanView] = useCleanView()
-  const { settings, update } = useSettings()
+  const { settings, update, hydrated: settingsHydrated } = useSettings()
   const { entries: closedSessions, record: recordClosed, reopen: reopenClosed } = useClosedHistory(workspaces, nodes)
 
   const activeWsRef = useRef<Workspace | null>(null)
@@ -152,6 +157,21 @@ export default function App() {
   const inboxReady = hydrated && !noWorkspaces
   const { inboxUnread, outputStatusItems, outputCommands } = useDockFeeds(inboxOpen, setInboxOpen, inboxReady)
 
+  // ⌘K omnibox / ⌘P Go to File / ⇧⌘F Find in Files + the command registry behind them and Help.
+  const omni = useOmnibox({
+    root: activeWs?.cwd, nodes, nodesRef, settings, extraCommands: outputCommands, addFlowNode, onFocus, onAddAgent,
+    openBrowserAt: nodeActions.openBrowserAt,
+  })
+  useAppCommands({
+    openOmnibox: () => omni.open('all'), openQuickOpen: () => omni.open('files'), openFindInFiles: () => omni.open('files', '%'),
+    openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
+    newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
+    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => setInboxOpen(!inboxOpen), toggleChat: () => setChatOpen(!chatOpen),
+    toggleBoard: () => setBoard((v) => !v),
+  })
+  useKeybindingsSync(settings.keybindings, settingsHydrated, update)
+  useCommandKeybindings()
+
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
   if (authRequired) return <div className="app-shell app-shell--auth"><Login onSubmit={onLogin} /></div>
@@ -216,6 +236,7 @@ export default function App() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenHelp={() => setShowHelp(true)}
           commands={outputCommands}
+          onOpenPalette={() => omni.open('all')}
         />
       </div>
       {hydrated && !noWorkspaces && (
@@ -294,6 +315,12 @@ export default function App() {
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
       {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      {omni.state && (
+        <Omnibox
+          key={`${omni.state.scope}:${omni.state.initialQuery}`} scope={omni.state.scope} initialQuery={omni.state.initialQuery}
+          root={activeWs?.cwd} sources={omni.sources} onAction={omni.onAction} onClose={omni.close}
+        />
+      )}
     </div>
     </NodeActionsProvider>
     </SettingsProvider>

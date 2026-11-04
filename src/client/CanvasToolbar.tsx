@@ -105,6 +105,9 @@ export interface CanvasToolbarProps {
   commands?: PaletteCommand[]
   /** Hanya untuk tes/override; default dari navigator. */
   platform?: string
+  /** When set, the search button opens this (the app omnibox) instead of the built-in node
+   *  palette, and ⌘K is left to the command registry, which owns that chord. */
+  onOpenPalette?: () => void
 }
 
 export default function CanvasToolbar({
@@ -115,6 +118,7 @@ export default function CanvasToolbar({
   onOpenHelp,
   commands,
   platform,
+  onOpenPalette,
 }: CanvasToolbarProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const chip = shortcutChip(platform ?? navigator.userAgent)
@@ -144,6 +148,7 @@ export default function CanvasToolbar({
   )
 
   useEffect(() => {
+    if (onOpenPalette) return // the registry dispatches ⌘K to the omnibox
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -152,12 +157,12 @@ export default function CanvasToolbar({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [onOpenPalette])
 
   return (
     <>
       <div className="controls-cluster">
-        <Button className="cluster-search" aria-label="Command palette" title={`Command palette (${chip})`} onClick={() => setPaletteOpen(true)}>
+        <Button className="cluster-search" aria-label="Command palette" title={`Command palette (${chip})`} onClick={() => (onOpenPalette ? onOpenPalette() : setPaletteOpen(true))}>
           <span className="codicon codicon-search" aria-hidden />
           <span className="kbd">{chip}</span>
         </Button>

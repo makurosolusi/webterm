@@ -166,6 +166,12 @@ export interface Settings {
   /** Mesin pencari omnibox node browser untuk ketikan yang bukan alamat (pilihan meniru Orca).
    *  Divalidasi di titik pakai lewat `toSearchEngine`: nilai tak dikenal jatuh ke Google. */
   browserSearchEngine: SearchEngine
+
+  // --- Keyboard --------------------------------------------------------------------------------
+  /** User keybinding overrides, VS Code `keybindings.json` style: command id → chord
+   *  (`Mod+Shift+F`), or `null` to remove that command's default. Validated by
+   *  `normalizeKeybindings`; command ids live in the client registry (`commandRegistry.ts`). */
+  keybindings: Record<string, string | null>
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -212,6 +218,22 @@ export const DEFAULT_SETTINGS: Settings = {
   appTheme: 'auto',
   openMarkdownPreview: true,
   browserSearchEngine: 'google',
+  keybindings: {},
+}
+
+/** Caps for `keybindings`: it arrives over HTTP, so a hostile body cannot bloat the stored row. */
+export const KEYBINDINGS_LIMITS = { entries: 200, idLength: 128, chordLength: 64 }
+
+/** Keep only `id → chord | null` entries within `KEYBINDINGS_LIMITS`; anything else is dropped. */
+export function normalizeKeybindings(v: unknown): Record<string, string | null> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const out: Record<string, string | null> = {}
+  for (const [id, chord] of Object.entries(v)) {
+    if (Object.keys(out).length >= KEYBINDINGS_LIMITS.entries) break
+    if (!id || id.length > KEYBINDINGS_LIMITS.idLength) continue
+    if (chord === null || (typeof chord === 'string' && chord.trim() && chord.length <= KEYBINDINGS_LIMITS.chordLength)) out[id] = chord
+  }
+  return out
 }
 
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
@@ -253,6 +275,8 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   }
   // `customAgents` disaring per elemen (mode load: buang yang rusak, tak melempar, tak menulis
   // balik); `onInvalidAgents` memberi pemanggil server kesempatan `log.warn` tanpa isi.
+  // Nilai `keybindings` disaring per entri (bentuk objek saja tidak cukup: nilainya wajib string/null).
+  out.keybindings = normalizeKeybindings(src.keybindings)
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents
   if (agents.errors.length) onInvalidAgents?.(agents.errors)
