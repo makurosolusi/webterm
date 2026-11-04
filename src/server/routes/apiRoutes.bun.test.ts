@@ -25,6 +25,7 @@ test('full route order snapshot', () => {
     'git-info', 'git-diff', 'checkpoint', 'git-scm',
     'brief',
     'workspace-worktree',
+    'ports', 'problems', 'tasks',
     'outbox',
     'agent-status', 'tools', 'mcp', 'control', 'context-link',
     'generate-name', 'folder-picker',
@@ -53,6 +54,9 @@ test('auth-sensitive ordering invariants', () => {
   before('env-settings', 'settings')
   // fs verbs (/api/fs/<verb>) before the exact /api/fs folder picker.
   before('fs-verbs', 'folder-picker')
+  // Sensor families sit between worktree workspaces and the outbox; their UI-only POSTs (node
+  // token -> 403) are asserted through the real router in sensors.routes.bun.test.ts.
+  for (const s of ['ports', 'problems', 'tasks']) { before('workspace-worktree', s); before(s, 'outbox') }
   // Log API first: own body/SSE handling ahead of everything.
   expect(at('logs')).toBe(0)
 })

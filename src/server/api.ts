@@ -12,6 +12,7 @@ import { miscRoutes } from './routes/misc.routes'
 import { centralRoutes } from './routes/central.routes'
 import { policyRoutes } from './routes/policy.routes'
 import { ledgerRoutes } from './routes/ledger.routes'
+import { sensorRoutes } from './routes/sensors.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -30,6 +31,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...gitRoutes,
   ...briefRoutes,
   ...worktreeRoutes,
+  ...sensorRoutes,
   ...outboxRoutes,
   ...controlRoutes,
   ...miscRoutes,
