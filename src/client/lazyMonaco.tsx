@@ -1,6 +1,11 @@
 import type * as Monaco from 'monaco-editor'
 import { createTsWorkerReaper } from './tsWorkerReaper'
 import { defineWebtermThemes } from './monacoTheme'
+import { tokenQuery } from './api'
+import { getBrowserWorkspace } from './browser.stream'
+import * as fsClient from './fsClient'
+import { LSP_WS_PATH } from './editorLsp.client'
+import { wireEditorLsp } from './editorLsp.monaco'
 
 /**
  * Monaco di-muat MALAS, satu kali, lewat dynamic import.
@@ -56,9 +61,24 @@ export function loadMonaco(): Promise<MonacoApi> {
 
     defineWebtermThemes(monaco)
     wireTsWorkerReaper(monaco)
+    // Language servers (hover, go-to-definition, rename...) for editor-node models; see editorLsp.monaco.ts.
+    wireEditorLsp(monaco, {
+      // The workspace this tab serves (App sets it for the browser socket too).
+      workspaceId: getBrowserWorkspace,
+      open: (workspace, language) => new WebSocket(lspWsUrl(workspace, language)),
+      readMeta: fsClient.readMeta,
+      writeChecked: fsClient.writeChecked,
+    })
     return monaco
   })()
   return pending
+}
+
+function lspWsUrl(workspace: string, language: string): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  // `new WebSocket` cannot set headers, so the token (when there is one) rides in the query.
+  const q = [tokenQuery(), `workspace=${encodeURIComponent(workspace)}`, `language=${language}`].filter(Boolean).join('&')
+  return `${proto}://${location.host}${LSP_WS_PATH}?${q}`
 }
 
 /**

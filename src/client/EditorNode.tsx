@@ -13,6 +13,7 @@ import { ViewerHost } from './viewers/ViewerHost'
 import type { FileKind } from '../shared/fileKind'
 import type { ReadMeta } from '../shared/fsContract'
 import { editorFileKind, fileBaseName, fileExt } from './editorFile'
+import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hints'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
@@ -64,6 +65,9 @@ function EditorNode({
   // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.
   const editable = kind === 'text' && !isBinary && !loadError
   const readOnly = ef.encoding === 'non-utf8'
+  // No language server for this file's language: say so, with the one command that fixes it.
+  const lspLanguage = editable ? lspLanguageIdForExt(ext) : ''
+  const lspHint = useLspHint(lspLanguage)
 
   // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
   // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
@@ -195,6 +199,15 @@ function EditorNode({
           {editable && readOnly && (
             <div className="editor-node__banner nodrag" role="status">
               Bukan UTF-8 — dibuka read-only supaya byte aslinya tidak rusak.
+            </div>
+          )}
+          {lspHint && (
+            <div className="editor-node__banner editor-node__lsp-hint nodrag" role="status">
+              <span>{lspHint.message} Install it with <code>{lspHint.command}</code></span>
+              <VscodeButton secondary title="Copy install command" onClick={() => void writeClipboard(lspHint.command)}>Copy command</VscodeButton>
+              <ToolbarButton label="Dismiss" title="Dismiss" onClick={() => dismissLspHint(lspLanguage)}>
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </ToolbarButton>
             </div>
           )}
           {editable && ef.conflict && (
