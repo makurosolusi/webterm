@@ -29,7 +29,7 @@ test('full route order snapshot', () => {
     'agent-status', 'tools', 'mcp', 'control', 'context-link',
     'generate-name', 'folder-picker',
     'central-chat', 'ca2', 'extended',
-    'approval-human', 'policy', 'secrets', 'procedural',
+    'approval-human', 'policy', 'secrets', 'procedural', 'routines',
     'memory-write', 'inbox', 'memory', 'orchestrator',
   ])
 })
