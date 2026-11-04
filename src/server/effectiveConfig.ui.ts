@@ -58,6 +58,8 @@ export const ENV_ONLY_PENDING_F1: readonly string[] = [
   'WEBTERM_CONTROL_CWD_ROOTS', 'WEBTERM_LOG_LEVEL', 'WEBTERM_LOG_BUFFER', 'WEBTERM_LOG_FILE',
   'WEBTERM_BROWSER_MAX_LIVE', 'WEBTERM_BROWSER_DISCARD_MS', 'WEBTERM_BROWSER_COOKIE_IMPORT', 'WEBTERM_BROWSER_COOKIE_TTL_DAYS',
   'WEBTERM_BROWSER_HEADLESS', 'WEBTERM_FILES_LIST_MAX', 'WEBTERM_FILES_UPLOAD_MAX_MB',
+  // Agent sandbox (agentSandbox.ts): env-only until F1-f Control write adds its switch.
+  'WEBTERM_AGENT_SANDBOX',
 ]
 
 /** UI location for a registry key, or null when it is env-only. */
