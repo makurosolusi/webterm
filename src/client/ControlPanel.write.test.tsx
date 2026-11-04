@@ -46,7 +46,7 @@ describe('Control tab writes', () => {
     render(<ControlPanel />)
     await screen.findByRole('region', { name: 'Logs' })
     const owned = ENV_REGISTRY.filter((s) => rowEl(s.key)?.textContent?.includes('Managed in') !== true).map((s) => s.key)
-    expect(owned.length).toBeGreaterThanOrEqual(39) // the former ENV_ONLY_PENDING_F1 list
+    expect(owned.length).toBeGreaterThanOrEqual(38) // the former ENV_ONLY_PENDING_F1 list, minus WEBTERM_CENTRAL_MAX_STEPS (K7)
     const missing = owned.filter((k) => document.querySelector(`[data-control="${k}"]`) === null)
     expect(missing).toEqual([])
     for (const k of ['WEBTERM_AGENT_SANDBOX', 'WEBTERM_LEDGER', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'WEBTERM_CENTRAL_MODEL']) expect(owned).toContain(k)

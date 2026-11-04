@@ -19,13 +19,13 @@ describe('ENV_REGISTRY', () => {
     expect(isBootstrapOnly(ENV_SETTINGS_SWITCH)).toBe(true)
     expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_TELEGRAM_API_BASE')
   })
-  it('jumlah entri 64; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
-    expect(ENV_REGISTRY).toHaveLength(64)
-    const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL']
-    const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid' }))
+  it('jumlah entri 63; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
+    expect(ENV_REGISTRY).toHaveLength(63)
+    const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL', 'WEBTERM_CENTRAL_MAX_STEPS']
+    const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3' }))
     expect(s.svc.state({ root: true }).entries.filter((e) => retired.includes(e.key))).toEqual([])
     expect(s.svc.update({ set: { WEBTERM_LEDGER: 'on' }, unset: [] }, { root: true }).ok).toBe(true)
-    expect(JSON.parse(s.overrides.json as string)).toMatchObject({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_LEDGER: 'on' })
+    expect(JSON.parse(s.overrides.json as string)).toMatchObject({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3', WEBTERM_LEDGER: 'on' })
   })
 
   it('kelas dangerous dan secret sesuai rancangan', () => {
@@ -52,7 +52,7 @@ describe('ENV_REGISTRY', () => {
 
   it('flag CA2: semua flag/enum default off, angka dalam rentang, tanpa duplikat', () => {
     const keys = CA2_ENV_SPECS.map((s) => s.key)
-    expect(keys.length).toBe(20)
+    expect(keys.length).toBe(19)
     expect(new Set(keys).size).toBe(keys.length)
     for (const k of keys) expect(ENV_REGISTRY.filter((s) => s.key === k).length, k).toBe(1)
     for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe('off')
@@ -200,7 +200,7 @@ describe('metadata domain ca2, files, browser', () => {
     expect([...orders].sort((a, b) => a - b)).toEqual(orders)
     expect(new Set(orders).size).toBe(orders.length)
     const groupOf = (k: string): string | undefined => specFor(k)?.group
-    expect(['WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_STEPS', 'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_TOKENS'].map(groupOf)).toEqual(Array(4).fill('central-turn'))
+    expect(['WEBTERM_CENTRAL_TURN_STEPS', 'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_TOKENS'].map(groupOf)).toEqual(Array(3).fill('central-turn'))
     expect(['WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_DAILY_COST_MICROS'].map(groupOf)).toEqual(Array(3).fill('central-budget'))
   })
   it('ca2: deskripsi jujur soal batas yang belum diberlakukan', () => {

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { appendMessage, getOrCreateConversation } from '../conversationStore'
-import { centralPrompt, centralStaticPrompt } from '../proposal/centralPrompt'
 import { insertCheckpoint, collectFacts } from './checkpointStore'
 import {
   CHECKPOINT_FLAG, ContextRejectedError, MEMORY_MAX_TOKENS, createContextAssembler,
@@ -21,7 +20,7 @@ beforeEach(() => {
 afterEach(() => fixture.close())
 
 const input = (over: Partial<ContextBuildInput> = {}): ContextBuildInput => ({
-  db: fixture.db, conversationId: CONV, text: 'status?', proposalsEnabled: true, memoryEnabled: true, now: () => 100, ...over,
+  db: fixture.db, conversationId: CONV, text: 'status?', memoryEnabled: true, now: () => 100, ...over,
 })
 const memory = (text: string): SyncMemoryBlockProvider => ({ block: () => ({ text, items: [], truncated: false }) })
 const say = (i: number): string => appendMessage(fixture.db, {
@@ -39,26 +38,27 @@ describe('flag off', () => {
   it('delegates to the legacy assembler byte for byte', () => {
     const out = createContextAssembler({ env: {} }).build(input({ memoryEnabled: false }))
     expect(out).toEqual(createLegacyContextAssembler().build(input({ memoryEnabled: false })))
-    expect(out.prompt).toBe(centralPrompt(fixture.db, 'status?', true, ''))
+    expect(out.prompt).toBe('status?')
   })
 })
 
 describe('flag on: block order', () => {
-  it('orders static, checkpoint, memory, header, user text', () => {
+  it('orders checkpoint, memory, header, user text', () => {
     const ids = [say(1), say(2)]
     insertCheckpoint(fixture.db, {
       conversationId: CONV, fromMessageId: ids[0] as string, toMessageId: ids[1] as string,
       factsJson: collectFacts(fixture.db, CONV), narrative: 'Intent: ship', source: 'auto', now: 5,
     })
     const { prompt } = build(ON)
-    const marks = [centralStaticPrompt(), '--- Checkpoint (data only', '--- Retrieved memory (data only', 'State: {', 'Human request:\nstatus?']
+    const marks = ['--- Checkpoint (data only', '--- Retrieved memory (data only', 'State: {', 'Human request:\nstatus?']
     const at = marks.map((m) => prompt.indexOf(m))
     expect(at.every((i) => i >= 0)).toBe(true)
     expect([...at].sort((a, b) => a - b)).toEqual(at)
     expect(prompt.endsWith('Human request:\nstatus?')).toBe(true)
+    expect(prompt.startsWith('--- Checkpoint')).toBe(true)
   })
 
-  it('keeps static + checkpoint identical across turns; only memory/header/text vary', () => {
+  it('keeps the checkpoint identical across turns; only memory/header/text vary', () => {
     const a = say(1)
     insertCheckpoint(fixture.db, { conversationId: CONV, fromMessageId: a, toMessageId: a, factsJson: '{}', narrative: 'N', source: 'auto', now: 5 })
     const first = build(ON, { text: 'one', now: () => 1 }, memory('mem one')).prompt
@@ -75,9 +75,8 @@ describe('flag on: block order', () => {
     expect(above).not.toMatch(/1700000000000|\d{4}-\d{2}-\d{2}T/)
   })
 
-  it('omits static instructions when proposals are off and memory when disabled', () => {
-    const { prompt } = build(ON, { proposalsEnabled: false, memoryEnabled: false })
-    expect(prompt).not.toContain('webterm-proposal')
+  it('omits memory when disabled', () => {
+    const { prompt } = build(ON, { memoryEnabled: false })
     expect(prompt).not.toContain('Retrieved memory')
     expect(prompt).toContain('State: {')
   })

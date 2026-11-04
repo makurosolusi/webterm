@@ -10,7 +10,6 @@ import { ConversationError } from './central/conversationModel'
 import { activeCa2 } from './central/ca2Active'
 import { createContextAssembler } from './central/context/contextAssembler'
 import { rollingSummarize } from './central/context/checkpointRolling'
-import { toToolGuard } from './central/guard/controlGuard'
 import { MockRuntime } from './central/runtime/mockRuntime'
 import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
 import { ClaudeRuntime } from './central/runtime/claudeRuntime'
@@ -23,9 +22,6 @@ import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
 } from './central/chat/turnService'
 import { readCappedRequestBody } from './cappedRequestBody'
-import { createLogger } from './logs'
-
-const log = createLogger('central')
 
 export const CENTRAL_CHAT_BODY_MAX_BYTES = 64 * 1024
 
@@ -70,10 +66,10 @@ function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDep
   // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
   const ca2 = activeCa2()
   const armed = ca2 && ca2.db === db ? ca2 : null
-  // Armed: tool calls and applied proposals go through the real guard (halt/level/budget/doom-loop) and
-  // checkpoints get the deterministic rolling summarizer, so `WEBTERM_CENTRAL_CHECKPOINT` never idles silently.
+  // Armed: checkpoints get the deterministic rolling summarizer, so `WEBTERM_CENTRAL_CHECKPOINT` never idles
+  // silently. Tool calls are guarded where they run: Claude's MCP calls (mcp.central.ts).
   const wiring = armed
-    ? { context: createContextAssembler({ memory: armed.memory }), guard: toToolGuard(armed.guard, { onError: (err) => log.error('central.guard_error', 'control guard threw', { error: err instanceof Error ? err.name : typeof err }) }), summarize: rollingSummarize }
+    ? { context: createContextAssembler({ memory: armed.memory }), summarize: rollingSummarize }
     : {}
   return { service: new TurnService({ db, runtime, stream, now, ...wiring }), stream, db }
 }

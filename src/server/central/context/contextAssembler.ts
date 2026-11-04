@@ -1,12 +1,11 @@
 // Real context assembler (RND/23 §4, RND/29 §4.2 step 3). Prompt order, most stable first so
-// provider prefix caches survive: static -> checkpoint -> memory -> state header -> user text.
+// provider prefix caches survive: checkpoint -> memory -> state header -> user text.
 // No timestamp or id that changes per turn appears above the user text. Flag off = legacy behaviour.
 import type { Database } from 'bun:sqlite'
 import { flagOn } from '../../envFlag'
 import type { MemoryBlock, MemoryBlockProvider, MemoryBlockRequest } from '../contracts/memory.types'
 import { scopeFromConversationId } from '../conversationModel'
 import { buildMemoryContext } from '../memory/contextBuilder'
-import { centralStaticPrompt } from '../proposal/centralPrompt'
 import { createFallbackCheckpoint } from './checkpointSummarizer'
 import { latestCheckpoint, recentMessages, type Checkpoint } from './checkpointStore'
 import { buildStateHeader } from './contextHeader'
@@ -94,7 +93,6 @@ export function createContextAssembler(deps: ContextAssemblerDeps = {}): { build
       // Seed a fresh session: make sure a checkpoint covers the newest message before the prompt reads it.
       const checkpoint = rotate ? createFallbackCheckpoint(db, conversationId, input.now()) ?? latestCheckpoint(db, conversationId) : latestCheckpoint(db, conversationId)
       const parts = [
-        input.proposalsEnabled ? centralStaticPrompt() : '',
         checkpointBlock(checkpoint),
         memoryBlock(db, input, deps.memory),
         buildStateHeader(db, conversationId),

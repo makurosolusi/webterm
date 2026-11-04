@@ -7,7 +7,6 @@ import { agentControlOn, cookieImportOn } from './browser/browser.runtime.parts'
 import { centralEnabled } from './central/centralModel'
 import { autonomyEnabled } from './central/centralAutonomy'
 import { maxInflightFromEnv, reliabilityEnabled } from './central/autonomyDispatch'
-import { resolveMaxSteps } from './central/chat/toolLoop'
 import { resolveLimits } from './central/chat/turnLimits'
 import { contextWindowTokens } from './central/context/rotationPolicy'
 import { budgetLimits } from './central/guard/budgetStore'
@@ -41,7 +40,6 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'propose' ? 'off' : '?'), 'central/guard/levelStore.ts:37 (off = hanya propose)'],
   ['WEBTERM_OPENCODE_BIN', () => opencodeBin(''), 'central/runtime/opencodeOptions.ts:61'],
   ['WEBTERM_OPENCODE_ALLOW_TOOLS', () => onOff(opencodeToolsAllowed('')), 'central/runtime/opencodeOptions.ts:66'],
-  ['WEBTERM_CENTRAL_MAX_STEPS', () => String(resolveMaxSteps(E)), 'central/chat/toolLoop.ts:39'],
   ['WEBTERM_CENTRAL_TURN_STEPS', () => String(resolveLimits(E).maxTurns), 'central/chat/turnLimits.ts:27'],
   ['WEBTERM_CENTRAL_TURN_WALL_MS', () => String(resolveLimits(E).maxWallMs), 'central/chat/turnLimits.ts:28'],
   ['WEBTERM_CENTRAL_TURN_TOKENS', () => String(resolveLimits(E).maxTokens), 'central/chat/turnLimits.ts:29'],
@@ -70,7 +68,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_LEDGER', () => 'off', 'ledger/ledgerRuntime.ts:ledgerMode (kunci lama TIDAK dibaca lagi: ledger selalu hidup, KE-1; nilai = default registry legacy)'],
   ['WEBTERM_LOG_LEVEL', () => 'info', 'logs/logger.ts:34 (`?? DEFAULT_LOG_LEVEL`)'],
   ['WEBTERM_LOG_FILE', () => 'on', "logs/logger.ts:108 (`?? 'on'`)"],
-  ['WEBTERM_CENTRAL_TOOLS', () => 'read', "central/chat/turnService.ts:118 (`=== 'write'`, selain itu baca)"],
+  ['WEBTERM_CENTRAL_TOOLS', () => 'read', 'shared/featureCapabilities.ts (linked by the Worker orchestrator card; no Central chat reader since K7)'],
   ['WEBTERM_BROWSER_COOKIE_TTL_DAYS', () => '7', 'browser/browser.runtime.ts:68 (`ttl > 0 ? ttl : DEFAULT_COOKIE_TTL_DAYS`)'],
 ]
 
@@ -78,7 +76,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
 const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
   ['WEBTERM_CENTRAL_TELEGRAM', 'channels/telegramCentralBridge.ts:16'],
   ['WEBTERM_CENTRAL_CHAT', 'centralChatApi.ts:49'],
-  ['WEBTERM_CENTRAL_PLANNER', 'central/chat/turnService.ts:117'],
+  ['WEBTERM_CENTRAL_PLANNER', 'shared/featureCapabilities.ts (linked by the Worker orchestrator card; no Central chat reader since K7)'],
   ['WEBTERM_CENTRAL_MEMORY', 'central/chat/turnService.ts:123'],
   ['WEBTERM_CENTRAL_CHECKPOINT', 'central/context/contextAssembler.ts:87'],
   ['WEBTERM_CENTRAL_SKILLS', 'central/ca2Boot.ts:132'],
@@ -87,7 +85,7 @@ const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
   ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'channels/channelButtons.ts:61'],
   ['WEBTERM_KNOWLEDGE', 'central/tools/registerAll.ts:51'],
   ['WEBTERM_AGENT_MAIL', 'central/tools/registerAll.ts:50'],
-  ['WEBTERM_CENTRAL_READ_TOOLS', 'central/chat/toolLoop.ts:36'],
+  ['WEBTERM_CENTRAL_READ_TOOLS', 'central/tools/defs/read.shared.ts:READ_TOOLS_FLAG (def.flag, toolTypes defEnabled)'],
   ['WEBTERM_BROWSER', 'browser/browser.runtime.ts:53'],
   ['WEBTERM_BROWSER_HEADLESS', 'browser/chromium.flags.ts:headlessReason'],
 ]

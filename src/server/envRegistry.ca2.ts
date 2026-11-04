@@ -3,7 +3,6 @@
 // di envRegistry.parity.test.ts); sisanya boot. Rentang angka di sini batas konservatif UI, bukan batas pembaca.
 import { enumOf, flag, num, type EnvSpec } from './envRegistry.types'
 
-const DEFAULT_MAX_STEPS = 2
 const DEFAULT_TURN_WALL_MS = 120_000
 const DEFAULT_TURN_TOKENS = 60_000
 const DEFAULT_DAILY_TOKENS = 1_000_000
@@ -28,7 +27,6 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
     dangerous: true,
   }),
   flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, label: 'Conversation checkpoint', description: 'Summarize the central conversation into a checkpoint (deterministic summary, no model call).' }),
-  num('WEBTERM_CENTRAL_MAX_STEPS', 'central-turn', 1, 10, DEFAULT_MAX_STEPS, { ...C, hot: true, label: 'Max tool steps per turn', description: 'Limit on tool rounds in one central turn (1-10); re-read every turn.' }),
   num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central-turn', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, hot: true, label: 'Turn time limit (ms)', description: 'Time limit for one central turn; re-read every turn. The 1,000-600,000 ms range is a conservative Settings bound.' }),
   num('WEBTERM_CENTRAL_TURN_TOKENS', 'central-turn', 1000, MAX_NUMBER, DEFAULT_TURN_TOKENS, { ...C, label: 'Turn token limit', description: 'Recorded; not yet enforced by the production runtime.' }),
   num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, label: 'Daily token budget', description: 'Central token limit per UTC day; 0 = unlimited. Applies at the next check.' }),
@@ -47,7 +45,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL_RELIABILITY', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_AUTONOMY' }], label: 'Autonomy reliability', description: 'Autonomy uses a non-blocking dispatcher, wake, and a per-item breaker (needs autonomy).' }),
   num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, label: 'Max concurrent workers', description: 'Global limit on workers autonomy runs at once (reliability mode). Read at boot; applies after restart.' }),
   flag('WEBTERM_AGENT_MAIL', 'central', { ...C, requires: [AGENTS_ON], label: 'Agent mailbox', description: 'Central may leave messages for workers through a mailbox (needs Central agents).' }),
-  flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Central read tools', description: 'Central may read projects, nodes, and tasks through read tools and continue the turn (needs tools).' }),
+  flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Central read tools', description: 'Central may read projects, nodes, and tasks through read tools (needs tools).' }),
   num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, label: 'Context window (tokens)', description: 'Model window size for session rotation (70%) and turn rejection (85%); re-read every turn.' }),
   num('WEBTERM_CENTRAL_TURN_STEPS', 'central-turn', 1, 100, DEFAULT_TURN_STEPS, { ...C, hot: true, label: 'Max runtime steps per turn', description: 'Limit on runtime steps in one central turn; re-read every turn. The 1-100 range is a conservative Settings bound.' }),
 ]
