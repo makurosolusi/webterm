@@ -38,9 +38,9 @@ export function newTurnState(): ClaudeTurnState {
 }
 
 const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
-  claude_not_found: 'Claude Code belum terpasang di PATH server',
-  claude_not_authenticated: 'Claude Code belum login: jalankan "claude auth login" di mesin server',
-  claude_check_failed: 'Claude Code tidak dapat dicek',
+  claude_not_found: 'Claude Code is not installed on the server PATH',
+  claude_not_authenticated: 'Claude Code is not signed in: run "claude auth login" on the server machine',
+  claude_check_failed: 'Claude Code could not be checked',
 }
 
 /** Stable, input-free messages: never echo the prompt or child output. */

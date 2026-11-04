@@ -8,7 +8,7 @@ export type CapabilityId = (typeof CAPABILITY_IDS)[number]
 export interface CapabilitySub { key: string; label: string; defaultOn: boolean; dangerous?: boolean }
 export interface CapabilityDef {
   id: CapabilityId
-  title: string // Indonesia; mis. "Agent Pusat"
+  title: string // Inggris; mis. "Central Agent"
   blurb: string // fungsi dalam bahasa biasa, BUKAN peringatan
   implies: readonly CapabilityId[] // prasyarat; on hanya bila semuanya on
   primaryKey: string // saklar utama di store override
@@ -43,34 +43,34 @@ export interface CapabilitiesResponse {
 /** Katalog kemampuan; urutan = CAPABILITY_IDS dan sekaligus urutan topologis (prasyarat lebih dulu). */
 export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   central: {
-    id: 'central', title: 'Agent Pusat', implies: [], primaryKey: 'WEBTERM_CENTRAL', needs: 'agentEngine',
-    blurb: 'Asisten yang memahami semua proyek dan node, dan bisa diajak bicara.',
+    id: 'central', title: 'Central Agent', implies: [], primaryKey: 'WEBTERM_CENTRAL', needs: 'agentEngine',
+    blurb: 'An assistant that understands all your projects and nodes, and that you can talk to.',
   },
   workers: {
     id: 'workers', title: 'Worker orchestrator', implies: ['central'], primaryKey: 'WEBTERM_ORCHESTRATOR_RUN',
-    blurb: 'Izinkan agent menjalankan perintah di komputer ini.',
-    subs: [{ key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: 'Minta persetujuan sebelum worker berjalan', defaultOn: true }],
+    blurb: 'Let agents run commands on this computer.',
+    subs: [{ key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: 'Ask for approval before a worker runs', defaultOn: true }],
   },
   autonomy: {
-    id: 'autonomy', title: 'Otonomi Agent Pusat', implies: ['workers'], primaryKey: 'WEBTERM_CENTRAL_AUTONOMY',
-    blurb: 'Agent Pusat boleh melanjutkan pekerjaan sendiri tanpa diminta tiap langkah.',
+    id: 'autonomy', title: 'Central Agent autonomy', implies: ['workers'], primaryKey: 'WEBTERM_CENTRAL_AUTONOMY',
+    blurb: 'The Central Agent may continue work on its own without being asked at every step.',
   },
   browser: {
-    id: 'browser', title: 'Browser di kanvas', implies: [], primaryKey: 'WEBTERM_BROWSER', needs: 'chromium',
-    blurb: 'Buka halaman web sebagai node di kanvas.',
-    subs: [{ key: 'WEBTERM_BROWSER_AGENT', label: 'Izinkan agent mengendalikan browser', defaultOn: true, dangerous: true }],
+    id: 'browser', title: 'Browser on canvas', implies: [], primaryKey: 'WEBTERM_BROWSER', needs: 'chromium',
+    blurb: 'Open web pages as nodes on the canvas.',
+    subs: [{ key: 'WEBTERM_BROWSER_AGENT', label: 'Let agents drive the browser', defaultOn: true, dangerous: true }],
   },
   files: {
-    id: 'files', title: 'Kelola file', implies: [], primaryKey: 'WEBTERM_FILES_VIEWERS',
-    blurb: 'Telusuri dan lihat isi file proyek dari kanvas.',
+    id: 'files', title: 'Files', implies: [], primaryKey: 'WEBTERM_FILES_VIEWERS',
+    blurb: 'Browse and view project files from the canvas.',
   },
   filesWrite: {
-    id: 'filesWrite', title: 'Ubah dan unggah file', implies: ['files'], primaryKey: 'WEBTERM_FILES_MUTATE',
-    blurb: 'Edit, ganti nama, hapus, dan unggah file dari kanvas.',
+    id: 'filesWrite', title: 'Edit and upload files', implies: ['files'], primaryKey: 'WEBTERM_FILES_MUTATE',
+    blurb: 'Edit, rename, delete, and upload files from the canvas.',
   },
   telegram: {
     id: 'telegram', title: 'Telegram', implies: [], primaryKey: 'WEBTERM_TELEGRAM', needs: 'telegramToken',
-    blurb: 'Terima dan kirim pesan lewat bot Telegram.',
+    blurb: 'Receive and send messages through a Telegram bot.',
   },
 }
 

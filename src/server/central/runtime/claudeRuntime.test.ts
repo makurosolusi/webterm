@@ -177,7 +177,7 @@ setInterval(() => {}, 1000)`
     const result = await runtime(join(dir, 'no-such-claude')).turn(turnInput(), emit)
     expect(result.outcome).toBe('error')
     expect(result.errorCode).toBe('runtime_unavailable')
-    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'Claude Code belum terpasang di PATH server' })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'Claude Code is not installed on the server PATH' })
   })
 
   it('honors maxTurns < 1 without spawning', async () => {

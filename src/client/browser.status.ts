@@ -5,27 +5,27 @@ import { hostOnly } from '../shared/browser.url'
 export interface BrowserErr { code: BrowserErrorCode; hostname?: string }
 
 const BLOCK_TEXT: Record<BlockReason, string> = {
-  scheme: 'Hanya halaman http dan https yang bisa dibuka.',
-  private_host: 'Alamat ini ada di jaringan privat dan diblokir.',
-  dns_fail: 'Host ini tidak bisa ditemukan.',
-  not_allowed_port: 'Port ini tidak diizinkan.',
-  no_binary: 'Chromium belum ditemukan di server.',
-  disabled: 'Browser belum menyala.',
-  max_live: 'Terlalu banyak browser aktif. Sembunyikan salah satu dulu.',
+  scheme: 'Only http and https pages can be opened.',
+  private_host: 'This address is on a private network and is blocked.',
+  dns_fail: 'This host could not be found.',
+  not_allowed_port: 'This port is not allowed.',
+  no_binary: 'Chromium was not found on the server.',
+  disabled: 'The browser is not turned on.',
+  max_live: 'Too many browsers are active. Hide one first.',
 }
 
 const ERROR_TEXT: Record<BrowserErrorCode, string> = {
-  lease_agent: 'Agent sedang mengendalikan browser ini. Ambil alih untuk memakainya.',
-  lease_human: 'Kamu yang mengendalikan browser ini.',
-  human_active: 'Kamu sedang memakai browser ini.',
-  stale_ref: 'Halaman sudah berubah. Coba lagi.',
+  lease_agent: 'An agent is driving this browser. Take over to use it.',
+  lease_human: 'You are driving this browser.',
+  human_active: 'You are using this browser.',
+  stale_ref: 'The page has changed. Try again.',
   no_binary: BLOCK_TEXT.no_binary,
   disabled: BLOCK_TEXT.disabled,
-  blocked: 'Alamat ini diblokir.',
-  not_found: 'Sesi browser ini sudah tidak ada.',
-  too_large: 'Terlalu besar untuk dikirim.',
-  bad_request: 'Server menolak masukan itu.',
-  crashed: 'Halaman macet. Muat ulang untuk mencoba lagi.',
+  blocked: 'This address is blocked.',
+  not_found: 'This browser session no longer exists.',
+  too_large: 'Too large to send.',
+  bad_request: 'The server rejected that input.',
+  crashed: 'The page crashed. Reload to try again.',
 }
 
 /** Kode galat yang tidak hilang sendiri (butuh tindakan operator/pengguna). */
@@ -43,8 +43,8 @@ export function browserNotice(i: { state?: BrowserState; error?: BrowserErr; con
     return { tone: 'error', text: BLOCK_TEXT[state.blocked] + host(shown) }
   }
   if (error) return { tone: 'error', text: ERROR_TEXT[error.code] + host(error.code === 'blocked' ? error.hostname : undefined) }
-  if (!i.connected) return { tone: 'info', text: 'Menyambung ulang…' }
-  if (!state) return { tone: 'info', text: 'Menyambung…' }
+  if (!i.connected) return { tone: 'info', text: 'Reconnecting…' }
+  if (!state) return { tone: 'info', text: 'Connecting…' }
   return null
 }
 

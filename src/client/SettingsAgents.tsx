@@ -17,11 +17,11 @@ import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
-  { value: 'manual', label: 'manual — tanya tiap aksi' },
+  { value: 'manual', label: 'manual — ask for every action' },
   { value: 'auto', label: 'auto — default' },
-  { value: 'acceptEdits', label: 'acceptEdits — edit file langsung disetujui' },
-  { value: 'plan', label: 'plan — rencanakan dulu, jangan ubah apa pun' },
-  { value: 'bypassPermissions', label: 'bypassPermissions — tanpa prompt' },
+  { value: 'acceptEdits', label: 'acceptEdits — file edits are approved automatically' },
+  { value: 'plan', label: 'plan — plan first, change nothing' },
+  { value: 'bypassPermissions', label: 'bypassPermissions — no prompts' },
 ]
 
 export function AgentSettings({
@@ -70,7 +70,7 @@ export function AgentSettings({
         id="st-defaultAgent"
         setting="defaultAgent"
         label="Agent default"
-        hint="Agent yang diluncurkan tombol quick-add."
+        hint="The agent launched by the quick-add button."
         value={s.defaultAgent}
         options={agentOptions}
         onChange={(v) => onChange({ defaultAgent: v })}
@@ -78,8 +78,8 @@ export function AgentSettings({
       <SelectField
         id="st-claudePermissionMode"
         setting="claudePermissionMode"
-        label="Mode permission Claude"
-        hint="Dipakai sesi Claude saat START — dikirim sebagai --permission-mode saat peluncuran. Shift+Tab tetap bisa memutar mode saat runtime."
+        label="Claude permission mode"
+        hint="Used by Claude sessions at START — passed as --permission-mode at launch. Shift+Tab can still cycle modes at runtime."
         value={s.claudePermissionMode}
         options={PERMISSION_OPTIONS}
         onChange={(v) => onChange({ claudePermissionMode: v })}
@@ -87,15 +87,15 @@ export function AgentSettings({
       <ToggleField
         id="st-hookReplyApprovals"
         setting="hookReplyApprovals"
-        label="Persetujuan hook dari canvas"
-        hint="Saat on, permintaan izin dari Claude menunggu sebentar supaya kamu bisa Setujui atau Tolak langsung dari canvas. Kalau tidak dijawab, Claude bertanya seperti biasa di terminalnya. Off = Claude selalu bertanya di terminal."
+        label="Hook approvals from the canvas"
+        hint="When on, Claude permission requests wait briefly so you can Approve or Deny right from the canvas. If unanswered, Claude asks in its terminal as usual. Off = Claude always asks in the terminal."
         value={s.hookReplyApprovals}
         onChange={(v) => onChange({ hookReplyApprovals: v })}
       />
 
       <Field
-        label="Agent di menu Add"
-        hint="Matikan agent yang tidak kamu pakai supaya menu Add tetap pendek."
+        label="Agents in the Add menu"
+        hint="Turn off agents you don’t use to keep the Add menu short."
         setting="disabledAgents"
         block
       >
@@ -111,13 +111,13 @@ export function AgentSettings({
       </Field>
 
       <Field
-        label="Perintah peluncuran"
+        label="Launch command"
         setting="agentLaunchCommands"
         hint={
-          'Luncurkan agent builtin dengan perintahmu sendiri — mis. skrip wrapper yang memilih akun. ' +
-          'Dipakai di semua jalur peluncuran (sesi baru, resume, restart), dengan flag seperti --resume ' +
-          'ditempel SETELAHNYA, jadi perintahnya harus meneruskan argumennya (skrip shell diakhiri ' +
-          '`exec claude "$@"`). Kosong = default builtin.'
+          'Launch a builtin agent with your own command — e.g. a wrapper script that picks an account. ' +
+          'Used on every launch path (new session, resume, restart), with flags such as --resume ' +
+          'appended AFTER it, so the command must pass its arguments through (end a shell script with ' +
+          '`exec claude "$@"`). Empty = builtin default.'
         }
         block
       >
@@ -149,10 +149,10 @@ export function AgentSettings({
 
       <Field
         label="Agent custom"
-        hint="Bawa CLI agent sendiri, atau bungkus harness builtin (mis. Claude) untuk mengarahkan inferensi ke proxy-mu. Variabel env TIDAK tersedia di sini — settings webterm melintas HTTP, dan env adalah satu-satunya tempat kredensial akan mendarat."
+        hint="Bring your own agent CLI, or wrap a builtin harness (e.g. Claude) to route inference through your proxy. Env variables are NOT available here — webterm settings travel over HTTP, and env is the only place credentials would land."
         block
       >
-        <button type="button" className="st-button" onClick={addAgent}>Tambah agent</button>
+        <button type="button" className="st-button" onClick={addAgent}>Add agent</button>
       </Field>
       <div className="st-cards">
         {s.customAgents.map((a) => (
@@ -179,47 +179,47 @@ function CustomAgentCard({
         id={`st-ca-label-${agent.id}`}
         label="Label"
         value={agent.label}
-        placeholder="mis. Claude (proxy)"
+        placeholder="e.g. Claude (proxy)"
         onChange={(v) => onPatch(agent.id, { label: v })}
       />
       <SelectField
         id={`st-ca-base-${agent.id}`}
-        label="Harness dasar"
+        label="Base harness"
         hint={
           base
-            ? `Mewarisi kapabilitas ${base.label}: resume, context link, mode permission, minting session id.`
-            : 'Opsional. Tanpa ini agent custom hanya dapat spawn + judul terminal, tidak lebih.'
+            ? `Inherits ${base.label} capabilities: resume, context link, permission mode, session id minting.`
+            : 'Optional. Without it a custom agent only gets spawn + terminal title, nothing more.'
         }
         value={agent.baseAgent ?? ''}
         options={[
-          { value: '', label: 'Tidak ada (CLI mandiri)' },
+          { value: '', label: 'None (standalone CLI)' },
           ...BUILTIN_AGENT_IDS.map((id) => ({ value: id as string, label: AGENT_CONFIG[id].label })),
         ]}
         onChange={(v) => onPatch(agent.id, { baseAgent: (v || undefined) as BuiltinAgentId | undefined })}
       />
       <TextField
         id={`st-ca-cmd-${agent.id}`}
-        label="Perintah peluncuran"
+        label="Launch command"
         hint={
           base && !agent.launchCmd.trim()
-            ? `Kosong memakai perintah base ("${base.launchCmd}").`
+            ? `Empty uses the base command ("${base.launchCmd}").`
             : undefined
         }
         value={agent.launchCmd}
-        placeholder={base ? base.launchCmd : 'mis. aider'}
+        placeholder={base ? base.launchCmd : 'e.g. aider'}
         mono
         onChange={(v) => onPatch(agent.id, { launchCmd: v })}
       />
       <ColorField
         id={`st-ca-color-${agent.id}`}
-        label="Warna node"
+        label="Node color"
         value={agent.color || base?.color || FALLBACK_AGENT_COLOR}
         onChange={(v) => onPatch(agent.id, { color: v })}
       />
       <div className="st-card-foot">
         <code className="st-mono st-muted">{agent.id}</code>
         <button type="button" className="st-button" onClick={() => onRemove(agent.id)}>
-          Hapus
+          Remove
         </button>
       </div>
     </section>

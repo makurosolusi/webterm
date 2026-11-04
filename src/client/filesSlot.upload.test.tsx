@@ -49,7 +49,7 @@ beforeEach(() => {
   resetFilesWriteOffer()
   resetCapabilitiesCache()
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    capabilities: [{ id: 'filesWrite', title: 'Ubah dan unggah file', blurb: 'Edit, ganti nama, hapus, dan unggah file dari kanvas.', status: 'off' }], advanced: {},
+    capabilities: [{ id: 'filesWrite', title: 'Edit and upload files', blurb: 'Edit, rename, delete, and upload files from the canvas.', status: 'off' }], advanced: {},
   }))))
   FakeXhr.calls = []
   FakeXhr.replyFor = () => '{"ok":true}'
@@ -90,7 +90,7 @@ describe('capabilities', () => {
     expect(row.hint).toBe(WRITE_OFFER_TEXT.lockedHint)
     const pick = vi.spyOn(HTMLInputElement.prototype, 'click')
     act(() => row.onClick())
-    expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
+    expect(await screen.findByText(/Turn it on now\?/)).toBeTruthy()
     expect(screen.getByRole('dialog').textContent).toContain(WRITE_OFFER_TEXT.dialogTitle)
     expect(pick).not.toHaveBeenCalled()
   })
@@ -182,7 +182,7 @@ describe('drop file OS', () => {
     const s = uploadStatus().summary!
     expect(s.ok).toEqual(['new.txt'])
     expect(s.failed[0].message).toContain('dup.txt')
-    expect(s.failed[0].message).toContain('tidak ditimpa')
+    expect(s.failed[0].message).toContain('not overwritten')
     const btn = await screen.findByRole('status')
     expect(btn.getAttribute('title')).toContain('dup.txt')
     fireEvent.click(btn)
@@ -194,9 +194,9 @@ describe('drop file OS', () => {
     await settle()
     dropFiles(screen.getByTestId('node'), ['a.txt'])
     await waitFor(() => expect(uploadStatus().summary?.failed).toHaveLength(1))
-    expect(uploadStatus().summary!.failed[0].message).toBe('a.txt: kemampuan “Ubah dan unggah file” sedang mati')
+    expect(uploadStatus().summary!.failed[0].message).toBe('a.txt: the “Edit and upload files” capability is off')
     fireEvent.click(await screen.findByRole('button', { name: WRITE_OFFER_TEXT.enableAction }))
-    expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
+    expect(await screen.findByText(/Turn it on now\?/)).toBeTruthy()
   })
   it('drag non-file (path internal) tidak dicegat', async () => {
     render(<Host ctx={mkCtx()} />)

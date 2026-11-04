@@ -92,9 +92,9 @@ describe('ClaudeRuntime preflight', () => {
   const spawning = () => writeFakeClaude(dir, `fs.writeFileSync(${JSON.stringify(marker())}, '1')\n${emitSource(OK_RECORDS)}`)
 
   it.each([
-    ['claude_not_found', 'Claude Code belum terpasang di PATH server'],
-    ['claude_not_authenticated', 'Claude Code belum login: jalankan "claude auth login" di mesin server'],
-    ['claude_check_failed', 'Claude Code tidak dapat dicek'],
+    ['claude_not_found', 'Claude Code is not installed on the server PATH'],
+    ['claude_not_authenticated', 'Claude Code is not signed in: run "claude auth login" on the server machine'],
+    ['claude_check_failed', 'Claude Code could not be checked'],
   ] as const)('%s fails the turn without spawning', async (code, message) => {
     const preflight = async (): Promise<ClaudeReady> => ({ ok: false, code, hint: 'ignored' })
     const { events, emit } = recorder()

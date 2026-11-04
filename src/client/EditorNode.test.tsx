@@ -175,7 +175,7 @@ describe('EditorNode simpan aman', () => {
 describe('EditorNode biner & non-UTF-8', () => {
   it('encoding binary: Monaco tidak dimuat, tanpa Save, placeholder + Copy Path', async () => {
     mount({ meta: { content: '', version: 'v1', encoding: 'binary' } })
-    expect(await screen.findByText(/File biner/)).toBeTruthy()
+    expect(await screen.findByText(/Binary file/)).toBeTruthy()
     expect(fake.state.loadMonaco).not.toHaveBeenCalled()
     expect(screen.queryByText('Save')).toBeNull()
     fireEvent.click(screen.getByText('Copy Path'))

@@ -6,57 +6,57 @@ import { enumOf, flag, secret, type EnvSpec } from './envRegistry.types'
 export const BOT_TOKEN_SHAPE = /^\d+:[A-Za-z0-9_-]{10,}$/
 const WEBHOOK_SECRET_SHAPE = new RegExp(`^[A-Za-z0-9_-]{${MIN_WEBHOOK_SECRET_CHARS},${MAX_WEBHOOK_SECRET_CHARS}}$`)
 const TG = { owner: 'channels', section: 'Telegram' } as const
-const ON_OFF = { on: 'Aktif', off: 'Mati' }
+const ON_OFF = { on: 'On', off: 'Off' }
 const LEDGER = 'WEBTERM_LEDGER'
 const TELEGRAM = 'WEBTERM_TELEGRAM'
 const TELEGRAM_ON = { key: TELEGRAM }
 
 export const CHANNEL_ENV_SPECS: readonly EnvSpec[] = [
   enumOf(LEDGER, 'ledger', ['off', 'shadow', 'on'], 'off', {
-    owner: 'platform', section: 'Dasar', audience: 'user', restart: 'boot',
+    owner: 'platform', section: 'Basics', audience: 'user', restart: 'boot',
     label: 'Ledger',
-    description: 'Catatan proyek, task, dan approval. Bayangan mencatat tanpa memblokir; Aktif menolak boot bila ledger rusak.',
-    optionLabels: { off: 'Mati', shadow: 'Bayangan', on: 'Aktif' },
+    description: 'Record of projects, tasks, and approvals. Shadow records without blocking; On refuses to boot if the ledger is corrupt.',
+    optionLabels: { off: 'Off', shadow: 'Shadow', on: 'On' },
   }),
   enumOf('WEBTERM_CHANNELS', 'channels', ['on', 'off'], 'on', {
     ...TG, audience: 'user', restart: 'hot',
-    label: 'Kanal (saklar utama)',
-    description: 'Mati menghentikan seluruh runtime kanal walau Telegram aktif.',
+    label: 'Channels (main switch)',
+    description: 'Off stops the whole channel runtime even if Telegram is on.',
     optionLabels: ON_OFF,
   }),
   flag(TELEGRAM, 'telegram', {
     ...TG, audience: 'user', restart: 'hot',
     label: 'Telegram',
-    description: 'Aktifkan kanal Telegram (butuh kanal aktif). Berlaku langsung tanpa restart.',
-    requires: [{ key: 'WEBTERM_CHANNELS', oneOf: ['on'], note: 'Saklar kanal sedang mati.' }],
+    description: 'Enables the Telegram channel (needs channels on). Applies immediately without a restart.',
+    requires: [{ key: 'WEBTERM_CHANNELS', oneOf: ['on'], note: 'The channels switch is off.' }],
   }),
   enumOf('WEBTERM_TELEGRAM_MODE', 'telegram', ['', 'poll', 'webhook'], '', {
     ...TG, audience: 'user', restart: 'boot', allowEmpty: true,
-    label: 'Mode masuk Telegram',
-    description: 'Polling menarik pesan lewat getUpdates; webhook menerima POST dari Telegram. Otomatis = poll bila token bot ada, selain itu webhook.',
-    effectiveDefault: 'otomatis: poll bila token ada, selain itu webhook',
-    optionLabels: { '': 'Otomatis', poll: 'Polling (getUpdates)', webhook: 'Webhook' },
+    label: 'Telegram inbound mode',
+    description: 'Polling pulls messages through getUpdates; webhook receives POSTs from Telegram. Automatic = poll when a bot token exists, otherwise webhook.',
+    effectiveDefault: 'automatic: poll when a token exists, otherwise webhook',
+    optionLabels: { '': 'Automatic', poll: 'Polling (getUpdates)', webhook: 'Webhook' },
     requires: [TELEGRAM_ON],
   }),
   secret('WEBTERM_TELEGRAM_BOT_TOKEN', 'telegram', BOT_TOKEN_SHAPE, {
     ...TG, audience: 'user', restart: 'hot',
-    label: 'Token bot Telegram',
-    description: 'Write-only, tidak pernah ditampilkan lagi. Berlaku langsung tanpa restart: pengiriman dan penerimaan.',
+    label: 'Telegram bot token',
+    description: 'Write-only, never shown again. Applies immediately without a restart, for both sending and receiving.',
     requires: [TELEGRAM_ON],
   }),
   secret('WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'telegram', WEBHOOK_SECRET_SHAPE, {
     ...TG, audience: 'advanced', restart: 'boot',
-    label: 'Secret webhook Telegram',
-    description: `Write-only; ${MIN_WEBHOOK_SECRET_CHARS}-${MAX_WEBHOOK_SECRET_CHARS} karakter [A-Za-z0-9_-]. Hanya mode webhook. Alternatif: env WEBTERM_TELEGRAM_WEBHOOK_SECRET_FILE menunjuk file secret.`,
-    requires: [TELEGRAM_ON, { key: 'WEBTERM_TELEGRAM_MODE', oneOf: ['webhook', ''], note: 'Hanya mode webhook (atau otomatis).' }],
+    label: 'Telegram webhook secret',
+    description: `Write-only; ${MIN_WEBHOOK_SECRET_CHARS}-${MAX_WEBHOOK_SECRET_CHARS} characters [A-Za-z0-9_-]. Webhook mode only. Alternative: env WEBTERM_TELEGRAM_WEBHOOK_SECRET_FILE pointing to a secret file.`,
+    requires: [TELEGRAM_ON, { key: 'WEBTERM_TELEGRAM_MODE', oneOf: ['webhook', ''], note: 'Webhook mode only (or automatic).' }],
   }),
   flag('WEBTERM_CENTRAL_TELEGRAM', 'telegram', {
     ...TG, audience: 'user', hot: true,
     label: 'Central via Telegram',
-    description: 'Jembatan chat central ke Telegram (butuh Central, Central chat, runtime central).',
+    description: 'Bridges central chat to Telegram (needs Central, Central chat, and a central runtime).',
     requires: [
       TELEGRAM_ON, { key: 'WEBTERM_CENTRAL' }, { key: 'WEBTERM_CENTRAL_CHAT' },
-      { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', 'opencode', 'mock', ''], note: 'Runtime central masih mati (kosong = deteksi otomatis).' },
+      { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', 'opencode', 'mock', ''], note: 'The central runtime is still off (empty = auto-detect).' },
     ],
   }),
 ]

@@ -69,7 +69,7 @@ describe('filesMessages', () => {
     expect(failReason({ code: 'EIO', error: 'HTTP 401' }, 'x')).toContain('401')
   })
   it('restore + EEXIST bermakna tempat asal terisi; rename EEXIST menyebut nama tujuan', () => {
-    expect(failText('restore', 'a', { code: 'EEXIST', error: 'e' })).toContain('Tempat asalnya sudah terisi')
-    expect(failText('rename', 'a', { code: 'EEXIST', error: 'e' }, 'b')).toBe('Gagal mengganti nama “a”. Nama “b” sudah dipakai di folder ini.')
+    expect(failText('restore', 'a', { code: 'EEXIST', error: 'e' })).toContain('Another item already exists at the original location')
+    expect(failText('rename', 'a', { code: 'EEXIST', error: 'e' }, 'b')).toBe('Could not rename “a”. The name “b” is already taken in this folder.')
   })
 })

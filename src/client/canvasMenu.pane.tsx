@@ -102,7 +102,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
   const anchor = useMemo(() => (open ? ({ left: open.x, top: open.y, right: open.x, bottom: open.y, width: 0, height: 0 } as DOMRect) : null), [open])
 
   const menu = open && offering && anchor ? (
-    <VscodePopover anchor={anchor} open onOpenChange={close} ariaLabel="Nyalakan browser">
+    <VscodePopover anchor={anchor} open onOpenChange={close} ariaLabel="Turn on browser">
       <div className="w-64 p-3"><CapabilityOffer id="browser" onDone={() => offered(open.at)} /></div>
     </VscodePopover>
   ) : null

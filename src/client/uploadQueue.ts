@@ -7,19 +7,19 @@ import { childPath } from './fileBrowse'
 import { emitFsEvent } from './fsEvents'
 import { rawUrl } from './fsClient'
 
-/** Satu-satunya tempat string galat upload/download (Indonesia); kode tak terdaftar jatuh ke `EIO`. */
+/** Satu-satunya tempat string galat upload/download (Inggris); kode tak terdaftar jatuh ke `EIO`. */
 export const UPLOAD_MSG: Partial<Record<FsErrCode, string>> & { EIO: string } = {
-  EEXIST: 'sudah ada di folder ini (tidak ditimpa)',
-  ETOOLARGE: 'melebihi batas ukuran upload',
-  EINVAL: 'nama file tidak valid',
-  ENAMETOOLONG: 'nama file terlalu panjang',
-  ENOENT: 'folder tujuan tidak ada',
-  ENOTDIR: 'tujuan bukan folder',
-  EACCES: 'tidak punya izin menulis di folder ini',
-  EROFS: 'folder hanya-baca',
-  ENOSPC: 'disk penuh',
-  EDISABLED: 'kemampuan “Ubah dan unggah file” sedang mati',
-  EIO: 'gagal mengunggah (jaringan atau server)',
+  EEXIST: 'already exists in this folder (not overwritten)',
+  ETOOLARGE: 'exceeds the upload size limit',
+  EINVAL: 'invalid file name',
+  ENAMETOOLONG: 'file name is too long',
+  ENOENT: 'destination folder does not exist',
+  ENOTDIR: 'destination is not a folder',
+  EACCES: 'no permission to write to this folder',
+  EROFS: 'folder is read-only',
+  ENOSPC: 'disk is full',
+  EDISABLED: 'the “Edit and upload files” capability is off',
+  EIO: 'upload failed (network or server)',
 }
 
 /** Teks galat satu file: `nama: alasan`. */

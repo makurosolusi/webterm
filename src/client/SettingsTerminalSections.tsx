@@ -25,50 +25,50 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
   return (
     <>
       {query ? null : (
-        <p className="st-note">Perubahan di section ini langsung diterapkan ke terminal yang terbuka.</p>
+        <p className="st-note">Changes in this section apply immediately to open terminals.</p>
       )}
-      <NumberField setting="fontSize" id="st-fontSize" label="Ukuran font" value={s.fontSize} min={6} max={48} unit="px"
+      <NumberField setting="fontSize" id="st-fontSize" label="Font size" value={s.fontSize} min={6} max={48} unit="px"
         onChange={(v) => onChange({ fontSize: v })} />
       <TextField setting="fontFamily" id="st-fontFamily" label="Font family" value={s.fontFamily} mono
-        hint="Daftar font CSS. Font monospace saja — font proporsional merusak perataan kolom TUI."
+        hint="A CSS font list. Monospace fonts only — proportional fonts break TUI column alignment."
         onChange={(v) => onChange({ fontFamily: v })} />
-      <NumberField setting="fontWeight" id="st-fontWeight" label="Bobot teks normal" value={s.fontWeight} min={100} max={900} step={100}
-        hint="Default xterm sendiri normal (400)." onChange={(v) => onChange({ fontWeight: v })} />
-      <NumberField setting="fontWeightBold" id="st-fontWeightBold" label="Bobot teks bold" value={s.fontWeightBold} min={100} max={900} step={100}
-        hint="Default xterm sendiri bold (700). Menurunkannya adalah cara menjaga bold tetap terbaca pada font tipis yang merender 700 jadi gumpalan."
+      <NumberField setting="fontWeight" id="st-fontWeight" label="Normal text weight" value={s.fontWeight} min={100} max={900} step={100}
+        hint="xterm’s own default is normal (400)." onChange={(v) => onChange({ fontWeight: v })} />
+      <NumberField setting="fontWeightBold" id="st-fontWeightBold" label="Bold text weight" value={s.fontWeightBold} min={100} max={900} step={100}
+        hint="xterm’s own default is bold (700). Lowering it keeps bold readable on thin fonts that render 700 as a blob."
         onChange={(v) => onChange({ fontWeightBold: v })} />
-      <ToggleField setting="drawBoldTextInBrightColors" id="st-drawBold" label="Bold pakai warna bright" value={s.drawBoldTextInBrightColors}
-        hint="Default xterm, dan konvensi terminal historis. Off membuat bold murni soal bobot, sehingga warna tetap berarti apa yang program maksudkan."
+      <ToggleField setting="drawBoldTextInBrightColors" id="st-drawBold" label="Draw bold text in bright colors" value={s.drawBoldTextInBrightColors}
+        hint="The xterm default and a historical terminal convention. Off makes bold purely about weight, so colors keep the meaning the program intended."
         onChange={(v) => onChange({ drawBoldTextInBrightColors: v })} />
-      <NumberField setting="terminalLineHeight" id="st-lineHeight" label="Tinggi baris" value={s.terminalLineHeight} min={0.8} max={3} step={0.05}
-        hint="Kelipatan ukuran font. 1 = default xterm, tanpa leading tambahan."
+      <NumberField setting="terminalLineHeight" id="st-lineHeight" label="Line height" value={s.terminalLineHeight} min={0.8} max={3} step={0.05}
+        hint="A multiple of the font size. 1 = the xterm default, no extra leading."
         onChange={(v) => onChange({ terminalLineHeight: v })} />
-      <NumberField setting="terminalLetterSpacing" id="st-letterSpacing" label="Spasi antar sel" value={s.terminalLetterSpacing} min={-2} max={10} step={0.5} unit="px"
-        hint="Spasi horizontal ekstra antar sel. 0 = default xterm." onChange={(v) => onChange({ terminalLetterSpacing: v })} />
-      <SelectField setting="terminalTheme" id="st-terminalTheme" label="Skema warna" value={s.terminalTheme}
-        hint="Id tak dikenal jatuh ke tema default — nilainya bisa diedit tangan."
-        options={TERMINAL_THEMES.map((t) => ({ value: t.id, label: `${t.label}${t.dark ? '' : ' (terang)'}` }))}
+      <NumberField setting="terminalLetterSpacing" id="st-letterSpacing" label="Letter spacing" value={s.terminalLetterSpacing} min={-2} max={10} step={0.5} unit="px"
+        hint="Extra horizontal space between cells. 0 = the xterm default." onChange={(v) => onChange({ terminalLetterSpacing: v })} />
+      <SelectField setting="terminalTheme" id="st-terminalTheme" label="Color scheme" value={s.terminalTheme}
+        hint="Unknown ids fall back to the default theme — the value can be edited by hand."
+        options={TERMINAL_THEMES.map((t) => ({ value: t.id, label: `${t.label}${t.dark ? '' : ' (light)'}` }))}
         onChange={(v) => onChange({ terminalTheme: v })} />
-      <SelectField setting="appTheme" id="st-appTheme" label="Tema app" value={s.appTheme}
-        hint="Tampilan chrome app (panel, header node, menu). auto mengambilnya dari tema warna terminal, sehingga memilih tema terminal terang tidak menyisakan rangka hitam."
+      <SelectField setting="appTheme" id="st-appTheme" label="App theme" value={s.appTheme}
+        hint="The look of the app chrome (panels, node headers, menus). auto follows the terminal color scheme, so picking a light terminal theme doesn’t leave a dark frame."
         options={[
-          { value: 'auto', label: 'auto (ikut tema terminal)' },
+          { value: 'auto', label: 'auto (follow terminal theme)' },
           { value: 'dark', label: 'dark' },
           { value: 'light', label: 'light' },
         ]}
         onChange={(v) => onChange({ appTheme: v })} />
-      <NumberField setting="terminalMinContrast" id="st-minContrast" label="Kontras minimum" value={s.terminalMinContrast} min={1} max={21} step={0.5}
-        hint="Rasio kontras foreground/background. 1 (default xterm) mematikan penyesuaian sepenuhnya; 4.5 = WCAG AA, 7 = AAA, 21 memaksa hitam atau putih. Ada biaya kerja per sel di renderer, jadi tetap mati kecuali diminta."
+      <NumberField setting="terminalMinContrast" id="st-minContrast" label="Minimum contrast" value={s.terminalMinContrast} min={1} max={21} step={0.5}
+        hint="Foreground/background contrast ratio. 1 (the xterm default) turns adjustment off entirely; 4.5 = WCAG AA, 7 = AAA, 21 forces black or white. It costs work per cell in the renderer, so it stays off unless requested."
         onChange={(v) => onChange({ terminalMinContrast: v })} />
-      <SelectField setting="cursorStyle" id="st-cursorStyle" label="Bentuk kursor" value={s.cursorStyle}
+      <SelectField setting="cursorStyle" id="st-cursorStyle" label="Cursor style" value={s.cursorStyle}
         options={[
           { value: 'block', label: 'block' },
           { value: 'bar', label: 'bar' },
           { value: 'underline', label: 'underline' },
         ]}
         onChange={(v) => onChange({ cursorStyle: v })} />
-      <SelectField setting="cursorInactiveStyle" id="st-cursorInactive" label="Kursor saat tidak fokus" value={s.cursorInactiveStyle}
-        hint="outline (default xterm) itulah yang memberi tahu sekilas terminal mana di antara satu canvas penuh yang menerima ketikan."
+      <SelectField setting="cursorInactiveStyle" id="st-cursorInactive" label="Inactive cursor style" value={s.cursorInactiveStyle}
+        hint="outline (the xterm default) is what tells you at a glance which terminal on a full canvas receives your typing."
         options={[
           { value: 'outline', label: 'outline' },
           { value: 'block', label: 'block' },
@@ -77,18 +77,18 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
           { value: 'none', label: 'none' },
         ]}
         onChange={(v) => onChange({ cursorInactiveStyle: v })} />
-      <ToggleField setting="cursorBlink" id="st-cursorBlink" label="Kursor berkedip" value={s.cursorBlink}
+      <ToggleField setting="cursorBlink" id="st-cursorBlink" label="Cursor blink" value={s.cursorBlink}
         onChange={(v) => onChange({ cursorBlink: v })} />
-      <SelectField setting="terminalGpuRendering" id="st-gpu" label="Rendering GPU" value={s.terminalGpuRendering}
-        hint="auto = satu konteks WebGL per terminal, dengan fallback otomatis ke renderer DOM bila konteksnya gagal dibuat atau hilang. off mengarahkan setiap terminal ke renderer DOM."
+      <SelectField setting="terminalGpuRendering" id="st-gpu" label="GPU rendering" value={s.terminalGpuRendering}
+        hint="auto = one WebGL context per terminal, falling back to the DOM renderer automatically if the context fails or is lost. off routes every terminal to the DOM renderer."
         options={[
           { value: 'auto', label: 'auto (WebGL per terminal)' },
-          { value: 'off', label: 'off (renderer DOM)' },
+          { value: 'off', label: 'off (DOM renderer)' },
         ]}
         onChange={(v) => onChange({ terminalGpuRendering: v })} />
-      <NumberField setting="scrollbackLines" id="st-scrollbackLines" label="Scrollback terminal" value={s.scrollbackLines}
-        min={TERMINAL_SCROLLBACK_LINES_MIN} max={TERMINAL_SCROLLBACK_LINES_MAX} step={1000} unit="baris"
-        hint="Dalam BARIS: berapa jauh ke atas bisa discroll di dalam node terminal. Biayanya per node. Default 10000."
+      <NumberField setting="scrollbackLines" id="st-scrollbackLines" label="Terminal scrollback" value={s.scrollbackLines}
+        min={TERMINAL_SCROLLBACK_LINES_MIN} max={TERMINAL_SCROLLBACK_LINES_MAX} step={1000} unit="lines"
+        hint="In LINES: how far up you can scroll inside a terminal node. The cost is per node. Default 10000."
         onChange={(v) => onChange({ scrollbackLines: v })} />
     </>
   )
@@ -97,27 +97,27 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
 export function InteractionSection({ settings: s, onChange }: P): React.JSX.Element {
   return (
     <>
-      <TextField setting="terminalWordSeparator" id="st-wordSep" label="Pemisah kata" value={s.terminalWordSeparator} mono
-        hint="Karakter yang mengakhiri kata saat seleksi double-click. Default mempertahankan tanda hubung, garis bawah, slash dan titik di dalam kata supaya identifier dan path terseleksi utuh."
+      <TextField setting="terminalWordSeparator" id="st-wordSep" label="Word separators" value={s.terminalWordSeparator} mono
+        hint="Characters that end a word on double-click selection. The default keeps hyphens, underscores, slashes, and dots inside words so identifiers and paths are selected whole."
         onChange={(v) => onChange({ terminalWordSeparator: v })} />
-      <ToggleField setting="copyOnSelect" id="st-copyOnSelect" label="Salin saat seleksi" value={s.copyOnSelect}
-        hint="Salin seleksi MOUSE yang selesai ke clipboard sistem. Off secara default: mengganti isi clipboard tanpa diminta adalah kejutan yang layak dipilih sendiri."
+      <ToggleField setting="copyOnSelect" id="st-copyOnSelect" label="Copy on select" value={s.copyOnSelect}
+        hint="Copy a finished MOUSE selection to the system clipboard. Off by default: replacing the clipboard unasked is a surprise you should opt into."
         onChange={(v) => onChange({ copyOnSelect: v })} />
-      <ToggleField setting="terminalMiddleClickPaste" id="st-middleClick" label="Paste klik tengah" value={s.terminalMiddleClickPaste}
-        hint="Off berarti tombol tengah sepenuhnya inert di dalam terminal. Defaultnya mati karena paste ini paling keras terasa di dalam TUI agent: satu klik nyasar menjatuhkan apa pun yang terakhir diseleksi ke prompt agent yang sedang hidup."
+      <ToggleField setting="terminalMiddleClickPaste" id="st-middleClick" label="Middle-click paste" value={s.terminalMiddleClickPaste}
+        hint="Off means the middle button is completely inert inside the terminal. It is off by default because this paste hits hardest in agent TUIs: one stray click drops whatever was last selected into a live agent prompt."
         onChange={(v) => onChange({ terminalMiddleClickPaste: v })} />
-      <ToggleField setting="terminalFontZoomKeys" id="st-fontZoom" label="Zoom font via keyboard" value={s.terminalFontZoomKeys}
-        hint="⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang fokus. On secara default. Di luar macOS chord-nya Ctrl+= / Ctrl+− / Ctrl+0; matikan bila Ctrl+− bentrok dengan undo readline di shell."
+      <ToggleField setting="terminalFontZoomKeys" id="st-fontZoom" label="Keyboard font zoom" value={s.terminalFontZoomKeys}
+        hint="⌘+ / ⌘− / ⌘0 change the font size of the focused terminal. On by default. Outside macOS the chords are Ctrl+= / Ctrl+− / Ctrl+0; turn this off if Ctrl+− clashes with readline undo in your shell."
         onChange={(v) => onChange({ terminalFontZoomKeys: v })} />
-      <SelectField setting="terminalShortcutPolicy" id="st-shortcutPolicy" label="Prioritas shortcut" value={s.terminalShortcutPolicy}
-        hint="Siapa yang menang selagi terminal memegang fokus keyboard."
+      <SelectField setting="terminalShortcutPolicy" id="st-shortcutPolicy" label="Shortcut priority" value={s.terminalShortcutPolicy}
+        hint="Who wins while a terminal holds keyboard focus."
         options={[
-          { value: 'app-first', label: 'app-first — perintah app menyala di atas xterm' },
-          { value: 'terminal-first', label: 'terminal-first — chord diserahkan ke shell/TUI' },
+          { value: 'app-first', label: 'app-first — app commands fire over xterm' },
+          { value: 'terminal-first', label: 'terminal-first — chords go to the shell/TUI' },
         ]}
         onChange={(v) => onChange({ terminalShortcutPolicy: v })} />
-      <ToggleField setting="openMarkdownPreview" id="st-openMarkdownPreview" label="Buka Markdown sebagai preview" value={s.openMarkdownPreview}
-        hint="Buka file Markdown dalam preview terender alih-alih editor kode. Hanya menentukan tampilan saat node editor DIBUKA — toggle Preview/Edit node tetap bisa berpindah dua arah."
+      <ToggleField setting="openMarkdownPreview" id="st-openMarkdownPreview" label="Open Markdown as preview" value={s.openMarkdownPreview}
+        hint="Open Markdown files in a rendered preview instead of the code editor. Only decides the view when an editor node is OPENED — the node’s Preview/Edit toggle still switches both ways."
         onChange={(v) => onChange({ openMarkdownPreview: v })} />
     </>
   )
@@ -126,10 +126,10 @@ export function InteractionSection({ settings: s, onChange }: P): React.JSX.Elem
 export function ShellSection({ settings: s, onChange }: P): React.JSX.Element {
   return (
     <>
-      <TextField setting="defaultShell" id="st-defaultShell" label="Shell default" value={s.defaultShell} mono placeholder="(shell default sistem)"
-        hint="Kosong = pakai shell default sistem." onChange={(v) => onChange({ defaultShell: v })} />
-      <NumberField setting="scrollbackBytes" id="st-scrollback" label="Buffer replay server" value={s.scrollbackBytes} min={16 * 1024} max={64 * 1024 * 1024} step={16 * 1024} unit="byte"
-        hint="Dalam BYTE: ring buffer byte mentah PTY di server, yang diputar ulang saat tab di-reload. Default 256 KiB (262144)."
+      <TextField setting="defaultShell" id="st-defaultShell" label="Default shell" value={s.defaultShell} mono placeholder="(system default shell)"
+        hint="Empty = use the system default shell." onChange={(v) => onChange({ defaultShell: v })} />
+      <NumberField setting="scrollbackBytes" id="st-scrollback" label="Server replay buffer" value={s.scrollbackBytes} min={16 * 1024} max={64 * 1024 * 1024} step={16 * 1024} unit="bytes"
+        hint="In BYTES: a ring buffer of raw PTY bytes on the server, replayed when the tab reloads. Default 256 KiB (262144)."
         onChange={(v) => onChange({ scrollbackBytes: v })} />
     </>
   )

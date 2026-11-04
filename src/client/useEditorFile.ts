@@ -119,7 +119,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
       const meta = await a.readMeta(pathRef.current)
       const refusal = loadRefusal(meta.content, 'File', true)
       if (refusal || meta.encoding !== 'utf8') {
-        setSaveError(refusal ?? `${fileName} sekarang bukan teks UTF-8; buffer tidak diganti.`)
+        setSaveError(refusal ?? `${fileName} is no longer UTF-8 text; the buffer was not replaced.`)
         return
       }
       if (onlyIfClean && editor.getValue() !== savedRef.current) {

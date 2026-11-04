@@ -71,12 +71,12 @@ export function filesUploadMaxBytes(env: NodeJS.ProcessEnv = process.env): numbe
 const F = { owner: 'files', section: 'File manager', audience: 'advanced' } as const
 
 export const FILES_ENV_SPECS: readonly EnvSpec[] = [
-  flag(FILES_FLAG.MUTATE, 'files', { ...F, audience: 'user', label: 'Files: mutasi', description: 'Delete (trash + Undo), restore, rename, copy di node files.', hot: true }, filesDefault('MUTATE')),
-  flag(FILES_FLAG.VIEWERS, 'files', { ...F, label: 'Files: viewer', description: 'Endpoint raw + viewer gambar/audio/video/PDF. Mati: file non-teks tampil sebagai placeholder.', hot: true }, filesDefault('VIEWERS')),
-  flag(FILES_FLAG.WATCH, 'files', { ...F, label: 'Files: watcher', description: 'Sinkronisasi listing/editor saat file berubah di luar webterm.', hot: true }, filesDefault('WATCH')),
-  flag(FILES_FLAG.GIT_STATUS, 'files', { ...F, label: 'Files: status git', description: 'Dekorasi status git (M/A/U/...) pada daftar file.', hot: true }, filesDefault('GIT_STATUS')),
-  flag(FILES_FLAG.QUICK_OPEN, 'files', { ...F, label: 'Files: Quick Open', description: 'Pencarian file (Ctrl/Cmd+P) saat node files fokus.', hot: true }, filesDefault('QUICK_OPEN')),
-  flag(FILES_FLAG.UPLOAD, 'files', { ...F, label: 'Files: upload/download', description: 'Upload ke dan download dari node files.', hot: true }, filesDefault('UPLOAD')),
-  num(LIST_MAX_KEY, 'files', 100, 100000, FILES_LIST_MAX_DEFAULT, { ...F, unit: 'entri', label: 'Files: batas entri', description: 'Maks entri satu listing direktori; selebihnya dipotong (truncated).', hot: true }),
-  num(UPLOAD_MAX_KEY, 'files', 1, 10240, FILES_UPLOAD_MAX_MB_DEFAULT, { ...F, unit: 'MB', label: 'Files: batas upload (MB)', description: 'Ukuran maksimum satu file upload.', hot: true }),
+  flag(FILES_FLAG.MUTATE, 'files', { ...F, audience: 'user', label: 'Files: mutations', description: 'Delete (trash + Undo), restore, rename, and copy in files nodes.', hot: true }, filesDefault('MUTATE')),
+  flag(FILES_FLAG.VIEWERS, 'files', { ...F, label: 'Files: viewer', description: 'Raw endpoint + image/audio/video/PDF viewers. Off: non-text files show as a placeholder.', hot: true }, filesDefault('VIEWERS')),
+  flag(FILES_FLAG.WATCH, 'files', { ...F, label: 'Files: watcher', description: 'Syncs listings/editors when files change outside webterm.', hot: true }, filesDefault('WATCH')),
+  flag(FILES_FLAG.GIT_STATUS, 'files', { ...F, label: 'Files: git status', description: 'Git status decorations (M/A/U/...) in the file list.', hot: true }, filesDefault('GIT_STATUS')),
+  flag(FILES_FLAG.QUICK_OPEN, 'files', { ...F, label: 'Files: Quick Open', description: 'File search (Ctrl/Cmd+P) while a files node is focused.', hot: true }, filesDefault('QUICK_OPEN')),
+  flag(FILES_FLAG.UPLOAD, 'files', { ...F, label: 'Files: upload/download', description: 'Upload to and download from files nodes.', hot: true }, filesDefault('UPLOAD')),
+  num(LIST_MAX_KEY, 'files', 100, 100000, FILES_LIST_MAX_DEFAULT, { ...F, unit: 'entries', label: 'Files: entry limit', description: 'Max entries in one directory listing; the rest are truncated.', hot: true }),
+  num(UPLOAD_MAX_KEY, 'files', 1, 10240, FILES_UPLOAD_MAX_MB_DEFAULT, { ...F, unit: 'MB', label: 'Files: upload limit (MB)', description: 'Maximum size of one uploaded file.', hot: true }),
 ]

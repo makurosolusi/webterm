@@ -96,7 +96,7 @@ function EditorNode({
     if (isBinary)
       return (
         <div className="editor-node__placeholder">
-          <span>File biner — tidak dapat dibuka sebagai teks.</span>
+          <span>Binary file — can’t be opened as text.</span>
           <VscodeButton secondary title="Copy file path" onClick={() => void writeClipboard(filePath)}>
             Copy Path
           </VscodeButton>

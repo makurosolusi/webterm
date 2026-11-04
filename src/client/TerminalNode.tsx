@@ -22,7 +22,7 @@ const COLLAPSED_H = 40
  *  alamat LAN `http://` tidak punya `navigator.clipboard` sama sekali — sama seperti tombol mic di
  *  bawah. Barisnya tetap HADIR tapi disabled dengan alasan ini: menghilangkannya membuat pengguna
  *  mencari fitur yang tak pernah ada, membiarkannya aktif membuatnya diam-diam gagal. */
-const NO_CLIPBOARD_HINT = 'Paste butuh secure context: buka webterm lewat https atau localhost.'
+const NO_CLIPBOARD_HINT = 'Paste needs a secure context: open webterm over https or localhost.'
 
 function TerminalNode({ id, data, selected, height }: NodeProps) {
   const d = data as { cwd?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; panes?: Pane }
@@ -124,7 +124,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
     {
       label: 'Copy',
       disabled: !hasSelection(target),
-      hint: hasSelection(target) ? 'Salin teks yang dipilih ke clipboard.' : 'Pilih teks di terminal dulu.',
+      hint: hasSelection(target) ? 'Copy the selected text to the clipboard.' : 'Select text in the terminal first.',
       onClick: () => {
         const text = handles.current.get(target)?.getSelection()
         if (text) void writeClipboard(text).then((ok) => { if (!ok) console.warn(`terminal ${target}: clipboard write failed`) })
@@ -133,30 +133,30 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
     {
       label: 'Paste',
       disabled: !canPaste,
-      hint: canPaste ? 'Kirim isi clipboard ke shell, seperti mengetiknya.' : NO_CLIPBOARD_HINT,
+      hint: canPaste ? 'Send the clipboard contents to the shell, as if typed.' : NO_CLIPBOARD_HINT,
       onClick: () => paste(target),
     },
     { type: 'separator' },
     {
       label: 'Split right',
-      hint: 'Belah pane ini jadi dua berdampingan, masing-masing shell sendiri.',
+      hint: 'Split this pane into two side by side, each with its own shell.',
       onClick: () => split('h', target),
     },
     {
       label: 'Split down',
-      hint: 'Belah pane ini jadi dua bertumpuk, masing-masing shell sendiri.',
+      hint: 'Split this pane into two stacked, each with its own shell.',
       onClick: () => split('v', target),
     },
     {
       label: 'Close pane',
       danger: true,
-      hint: 'Akhiri shell pane ini; pane lain di node ini tidak tersentuh.',
+      hint: 'End this pane’s shell; other panes in this node are untouched.',
       onClick: () => closePane(target),
     },
     { type: 'separator' },
     {
       label: 'Clear',
-      hint: 'Buang scrollback terminal ini. Shell-nya tidak tersentuh.',
+      hint: 'Discard this terminal’s scrollback. The shell is untouched.',
       onClick: () => handles.current.get(target)?.clear(),
     },
   ]

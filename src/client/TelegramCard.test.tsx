@@ -53,62 +53,62 @@ const connectedRoutes = (pending: unknown[] = [], bindings: unknown[] = []): voi
   routes['GET /api/channels/telegram/bindings'] = { status: 200, body: { items: bindings } }
 }
 const submit = (): void => {
-  fireEvent.change(screen.getByLabelText('Token bot'), { target: { value: FAKE_TOKEN } })
-  fireEvent.click(screen.getByRole('button', { name: 'Hubungkan' }))
+  fireEvent.change(screen.getByLabelText('Bot token'), { target: { value: FAKE_TOKEN } })
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
 }
 
 describe('TelegramCard', () => {
   it('belum terhubung: kolom password + Hubungkan', async () => {
     render(<TelegramCard projectId={PROJECT} />)
-    const input = await screen.findByLabelText('Token bot')
+    const input = await screen.findByLabelText('Bot token')
     expect(input.getAttribute('type')).toBe('password')
-    expect(screen.getByRole('button', { name: 'Hubungkan' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy()
   })
 
   it('sukses: tersambung sebagai @nama, token tak ada di DOM, body hanya ke connect', async () => {
     routes['POST /api/capabilities/telegram/connect'] = { status: 200, body: { ok: true, bot: '@mybot' } }
     const { container } = render(<TelegramCard projectId={PROJECT} />)
-    await screen.findByLabelText('Token bot')
+    await screen.findByLabelText('Bot token')
     connectedRoutes()
     submit()
-    expect(await screen.findByText('Tersambung sebagai @mybot')).toBeTruthy()
+    expect(await screen.findByText('Connected as @mybot')).toBeTruthy()
     expect(container.innerHTML).not.toContain(FAKE_TOKEN)
-    expect(screen.getByRole('button', { name: 'Matikan bot' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Stop bot' })).toBeTruthy()
     expect(calls.find((c) => c.url.endsWith('/connect'))?.body).toContain(FAKE_TOKEN)
   })
 
-  it('menghubungkan: tampil "Memeriksa token..." selagi menunggu', async () => {
+  it('menghubungkan: tampil "Checking token..." selagi menunggu', async () => {
     let release!: (r: Response) => void
     const base = globalThis.fetch
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) =>
       url.endsWith('/connect') ? new Promise<Response>((r) => { release = r }) : base(url, init)))
     render(<TelegramCard projectId={PROJECT} />)
-    await screen.findByLabelText('Token bot')
+    await screen.findByLabelText('Bot token')
     submit()
-    expect(await screen.findByText('Memeriksa token...')).toBeTruthy()
+    expect(await screen.findByText('Checking token...')).toBeTruthy()
     release(new Response('{}', { status: 502 }))
-    await waitFor(() => expect(screen.queryByText('Memeriksa token...')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Checking token...')).toBeNull())
   })
 
   it.each([
-    [422, 'token_rejected', 'Token ditolak Telegram. Salin ulang dari @BotFather.'],
-    [502, 'unreachable', 'Tidak bisa menjangkau Telegram. Periksa koneksi internet lalu coba lagi.'],
-    [400, 'invalid_token_shape', 'Bentuk token tidak dikenali. Salin lengkap dari @BotFather.'],
+    [422, 'token_rejected', 'Telegram rejected the token. Copy it again from @BotFather.'],
+    [502, 'unreachable', 'Can’t reach Telegram. Check your internet connection and try again.'],
+    [400, 'invalid_token_shape', 'Token format not recognized. Copy the whole token from @BotFather.'],
   ])('galat %i %s: pesan + input kosong + token tak di DOM', async (status, code, text) => {
     routes['POST /api/capabilities/telegram/connect'] = { status, body: { error: code } }
     const { container } = render(<TelegramCard projectId={PROJECT} />)
-    await screen.findByLabelText('Token bot')
+    await screen.findByLabelText('Bot token')
     submit()
     expect((await screen.findByRole('alert')).textContent).toBe(text)
-    expect((screen.getByLabelText('Token bot') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Bot token') as HTMLInputElement).value).toBe('')
     expect(container.innerHTML).not.toContain(FAKE_TOKEN)
   })
 
   it('chat menunggu: privat -> owner, grup -> viewer, memakai projectId prop', async () => {
     connectedRoutes([priv, group])
     render(<TelegramCard projectId={PROJECT} />)
-    expect(await screen.findByText('Chat 555 mengirim pesan ke bot. Tautkan ke proyek Proyek Satu?')).toBeTruthy()
-    const [linkPriv, linkGroup] = screen.getAllByRole('button', { name: 'Tautkan' })
+    expect(await screen.findByText('Chat 555 messaged the bot. Link to project Proyek Satu?')).toBeTruthy()
+    const [linkPriv, linkGroup] = screen.getAllByRole('button', { name: 'Link' })
     fireEvent.click(linkPriv!)
     fireEvent.click(linkGroup!)
     await waitFor(() => expect(calls.filter((c) => c.method === 'POST' && c.url.endsWith('/bindings'))).toHaveLength(2))
@@ -120,32 +120,32 @@ describe('TelegramCard', () => {
   it('Abaikan memanggil DELETE pending', async () => {
     connectedRoutes([priv])
     render(<TelegramCard projectId={PROJECT} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Abaikan' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Ignore' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.url.endsWith('/pending/555'))).toBe(true))
   })
 
-  it('chat tertaut: daftar + Lepas tautan memanggil unbind; teks tanpa kata terlarang', async () => {
+  it('chat tertaut: daftar + Unlink memanggil unbind; teks tanpa kata terlarang', async () => {
     connectedRoutes([], [{ chatId: '555', projectId: PROJECT, role: 'owner' }])
     const { container } = render(<TelegramCard projectId={PROJECT} />)
-    expect(await screen.findByText('Chat 555 · proyek Proyek Satu')).toBeTruthy()
+    expect(await screen.findByText('Chat 555 · project Proyek Satu')).toBeTruthy()
     expect(container.textContent).not.toMatch(/webhook|polling|secret|mode/i)
-    fireEvent.click(screen.getByRole('button', { name: 'Lepas tautan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.url.includes('/bindings?chatId=555'))).toBe(true))
   })
 
-  it('Matikan bot mematikan kemampuan telegram lalu kembali ke belum terhubung', async () => {
+  it('Stop bot mematikan kemampuan telegram lalu kembali ke belum terhubung', async () => {
     connectedRoutes([priv], [{ chatId: '555', projectId: PROJECT, role: 'owner' }])
     // botTokenSet tetap true setelah Putuskan: bukan penentu tersambung.
     routes['GET /api/channels/telegram/status'] = { status: 200, body: { botTokenSet: true } }
     render(<TelegramCard projectId={PROJECT} />)
-    const btn = await screen.findByRole('button', { name: 'Matikan bot' })
+    const btn = await screen.findByRole('button', { name: 'Stop bot' })
     routes['GET /api/capabilities'] = { status: 200, body: caps('off') }
     fireEvent.click(btn)
-    expect(await screen.findByLabelText('Token bot')).toBeTruthy()
+    expect(await screen.findByLabelText('Bot token')).toBeTruthy()
     const c = calls.find((x) => x.method === 'POST' && x.url === '/api/capabilities/telegram')
     expect(JSON.parse(c?.body ?? '{}')).toEqual({ enabled: false })
-    expect(screen.getByRole('button', { name: 'Hubungkan' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Tautkan' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Link' })).toBeNull()
     expect(screen.queryByText('Chat 555')).toBeNull()
   })
 
@@ -153,8 +153,8 @@ describe('TelegramCard', () => {
     routes['GET /api/capabilities'] = { status: 200, body: caps('needs-step') }
     routes['GET /api/channels/telegram/status'] = { status: 200, body: { botTokenSet: true } }
     render(<TelegramCard projectId={PROJECT} />)
-    expect(await screen.findByLabelText('Token bot')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Matikan bot' })).toBeNull()
+    expect(await screen.findByLabelText('Bot token')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stop bot' })).toBeNull()
   })
 
   it('polling berhenti saat tab hidden dan lanjut saat visible', async () => {
@@ -181,14 +181,14 @@ describe('TelegramCard', () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<TelegramCard projectId={PROJECT} />)
-    const open = await screen.findByRole('link', { name: 'Buka di Telegram' })
+    const open = await screen.findByRole('link', { name: 'Open in Telegram' })
     expect(open.getAttribute('href')).toBe(PAIR_LINK)
-    expect(screen.getByText(/ke proyek Proyek Satu: buka tautan ini/)).toBeTruthy()
-    expect((screen.getByLabelText('Tautan pairing') as HTMLInputElement).value).toBe(PAIR_LINK)
-    expect(screen.getByText('Tersambung sebagai @my_test_bot')).toBeTruthy() // nama bot dari getMe setelah reload
-    fireEvent.click(screen.getByRole('button', { name: 'Salin' }))
+    expect(screen.getByText(/to project Proyek Satu: open this link/)).toBeTruthy()
+    expect((screen.getByLabelText('Pairing link') as HTMLInputElement).value).toBe(PAIR_LINK)
+    expect(screen.getByText('Connected as @my_test_bot')).toBeTruthy() // nama bot dari getMe setelah reload
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
     expect(writeText).toHaveBeenCalledWith(PAIR_LINK)
-    expect(await screen.findByRole('button', { name: 'Tersalin' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy()
     const post = calls.find((c) => c.method === 'POST' && c.url === '/api/channels/telegram/pairing')
     expect(JSON.parse(post?.body ?? '{}')).toEqual({ projectId: PROJECT })
   })
@@ -209,44 +209,44 @@ describe('TelegramCard', () => {
 
   it('detail server dipakai bila ada', async () => {
     connectedRoutes()
-    routes['GET /api/capabilities'] = { status: 200, body: { capabilities: [{ id: 'telegram', status: 'on', detail: 'Tersambung sebagai @dari_server' }] } }
+    routes['GET /api/capabilities'] = { status: 200, body: { capabilities: [{ id: 'telegram', status: 'on', detail: 'Connected as @dari_server' }] } }
     render(<TelegramCard projectId={PROJECT} />)
-    expect(await screen.findByText('Tersambung sebagai @dari_server')).toBeTruthy()
+    expect(await screen.findByText('Connected as @dari_server')).toBeTruthy()
   })
 
   it('tanpa workspace aktif: tak ada pairing / Tautkan, ada petunjuk', async () => {
     connectedRoutes([priv])
     render(<TelegramCard projectId="" />)
-    expect(await screen.findByText('Buka sebuah workspace dulu untuk menautkan chat ke proyeknya.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Tautkan' })).toBeNull()
+    expect(await screen.findByText('Open a workspace first to link a chat to its project.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Link' })).toBeNull()
     expect(calls.some((c) => c.url === '/api/channels/telegram/pairing')).toBe(false)
   })
 
-  it('bot mati + token tersimpan: Nyalakan lagi menyalakan tanpa meminta token', async () => {
+  it('bot mati + token tersimpan: Start again menyalakan tanpa meminta token', async () => {
     routes['GET /api/settings/env'] = { status: 200, body: envState(true) }
     routes['POST /api/capabilities/telegram'] = { status: 200, body: caps('on') }
     render(<TelegramCard projectId={PROJECT} />)
-    const btn = await screen.findByRole('button', { name: 'Nyalakan lagi' })
+    const btn = await screen.findByRole('button', { name: 'Start again' })
     connectedRoutes()
     fireEvent.click(btn)
-    expect(await screen.findByRole('button', { name: 'Matikan bot' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Stop bot' })).toBeTruthy()
     const c = calls.find((x) => x.method === 'POST' && x.url === '/api/capabilities/telegram')
     expect(JSON.parse(c?.body ?? '{}')).toEqual({ enabled: true })
   })
 
-  it('token tak tersimpan: tidak ada Nyalakan lagi', async () => {
+  it('token tak tersimpan: tidak ada Start again', async () => {
     render(<TelegramCard projectId={PROJECT} />)
-    await screen.findByLabelText('Token bot')
+    await screen.findByLabelText('Bot token')
     await waitFor(() => expect(calls.some((c) => c.url === '/api/settings/env')).toBe(true))
-    expect(screen.queryByRole('button', { name: 'Nyalakan lagi' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start again' })).toBeNull()
   })
 
-  it('Nyalakan lagi tapi server butuh token: pesan jelas, form token tetap', async () => {
+  it('Start again tapi server butuh token: pesan jelas, form token tetap', async () => {
     routes['GET /api/settings/env'] = { status: 200, body: envState(true) }
     routes['POST /api/capabilities/telegram'] = { status: 200, body: caps('needs-step') }
     render(<TelegramCard projectId={PROJECT} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Nyalakan lagi' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('Token tersimpan tidak bisa dipakai. Tempel token bot lagi.')
-    expect(screen.getByLabelText('Token bot')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Start again' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('The saved token can’t be used. Paste the bot token again.')
+    expect(screen.getByLabelText('Bot token')).toBeTruthy()
   })
 })
