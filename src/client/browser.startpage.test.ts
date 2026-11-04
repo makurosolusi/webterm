@@ -1,31 +1,6 @@
-// Murni: ketikan -> URL tujuan, dan batas zoom.
+// Murni: batas zoom (resolusi ketikan omnibox: shared/browser.omnibox.test.ts).
 import { describe, expect, it } from 'vitest'
-import { SEARCH_URL_PREFIX } from './browser.startpage.data'
-import { resolveStartInput } from './browser.startpage.resolve'
 import { ZOOM_DEFAULT, ZOOM_MAX, ZOOM_MIN, stepZoom, zoomLabel } from './browser.zoom'
-
-describe('resolveStartInput', () => {
-  it.each([
-    ['https://a.com/x?q=1', 'https://a.com/x?q=1'],
-    ['  example.com  ', 'https://example.com/'],
-    ['sub.example.co.id/path?x=1', 'https://sub.example.co.id/path?x=1'],
-    ['localhost:3000/app', 'http://localhost:3000/app'],
-    ['192.168.1.5:8080', 'http://192.168.1.5:8080/'],
-  ])('navigates for address %s', (input, url) => expect(resolveStartInput(input)).toBe(url))
-
-  it.each([
-    ['cuaca jakarta', 'cuaca%20jakarta'],
-    ['example.com/a b', 'example.com%2Fa%20b'],
-    ['javascript:alert(1)', 'javascript%3Aalert(1)'],
-    ['file:///etc/passwd', 'file%3A%2F%2F%2Fetc%2Fpasswd'],
-    ['kucing', 'kucing'],
-  ])('searches for %s', (input, q) => expect(resolveStartInput(input)).toBe(SEARCH_URL_PREFIX + q))
-
-  it('returns null for blank input', () => {
-    expect(resolveStartInput('')).toBeNull()
-    expect(resolveStartInput('   ')).toBeNull()
-  })
-})
 
 describe('zoom', () => {
   it('steps by 10% without float drift and clamps to the limits', () => {

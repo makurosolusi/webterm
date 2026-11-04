@@ -20,6 +20,7 @@
 // diredaksi di jalur HTTP — jangan tambahkan diam-diam.
 
 import { normalizeCustomAgents, type CustomAgent, type CustomAgentError } from './customAgent.schema'
+import type { SearchEngine } from './browser.omnibox'
 import { clampSetting, SETTING_RANGES, type RangedKey } from './settings.ranges'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 
@@ -160,6 +161,11 @@ export interface Settings {
    *  menentukan tampilan saat node editor DIBUKA — toggle Preview/Edit node tetap bisa berpindah
    *  dua arah. */
   openMarkdownPreview: boolean
+
+  // --- Browser ---------------------------------------------------------------------------------
+  /** Mesin pencari omnibox node browser untuk ketikan yang bukan alamat (pilihan meniru Orca).
+   *  Divalidasi di titik pakai lewat `toSearchEngine`: nilai tak dikenal jatuh ke Google. */
+  browserSearchEngine: SearchEngine
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -205,6 +211,7 @@ export const DEFAULT_SETTINGS: Settings = {
   canvasDots: true,
   appTheme: 'auto',
   openMarkdownPreview: true,
+  browserSearchEngine: 'google',
 }
 
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]

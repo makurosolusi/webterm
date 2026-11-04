@@ -1,11 +1,11 @@
-// Toolbar node browser: alamat (divalidasi `parseBrowserUrl`), back/forward/reload/stop, toggle
+// Toolbar node browser: omnibox (`resolveOmniboxInput`: alamat/pencarian, lalu guard `parseBrowserUrl`), back/forward/reload/stop, toggle
 // kendali agent. Ditempel WS-11 ke slot `renderToolbar`; tanpa state server (semua lewat props).
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
-import { parseBrowserUrl } from '../shared/browser.url'
+import { resolveOmniboxInput, type SearchEngine } from '../shared/browser.omnibox'
 import { zoomLabel } from './browser.zoom'
 import { TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 
@@ -19,12 +19,14 @@ export interface BrowserToolbarProps {
   /** Zoom halaman (1 = 100%); kontrol zoom hanya tampil bila `onZoom` diberikan. */
   zoom?: number
   onZoom?: (dir: -1 | 1) => void
+  /** Mesin pencari untuk ketikan yang bukan alamat (setting `browserSearchEngine`). */
+  searchEngine?: SearchEngine
 }
 
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
 /** Bilah alamat + tombol navigasi + toggle agent untuk satu node browser. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, zoom = 1, onZoom }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, zoom = 1, onZoom, searchEngine }: BrowserToolbarProps) {
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const stateUrl = state?.url ?? ''
@@ -34,7 +36,8 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const p = parseBrowserUrl(draft)
+    const p = resolveOmniboxInput(draft, searchEngine)
+    if (!p) return
     if (!p.ok) { setError(URL_ERROR_TEXT[p.reason]); return }
     setError(null)
     nav('go', p.url)

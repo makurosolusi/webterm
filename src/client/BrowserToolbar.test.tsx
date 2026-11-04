@@ -29,8 +29,7 @@ describe('BrowserToolbar', () => {
   })
 
   it.each([
-    ['javascript:alert(1)', 'scheme'], ['file:///etc/passwd', 'scheme'], ['example.com', 'invalid'],
-    ['https://u:p@a.com/', 'userinfo'],
+    ['javascript:alert(1)', 'scheme'], ['file:///etc/passwd', 'scheme'], ['https://u:p@a.com/', 'userinfo'],
   ] as const)('rejects %s without navigating', (value, reason) => {
     const { nav } = setup()
     fireEvent.change(address(), { target: { value } })
@@ -38,6 +37,28 @@ describe('BrowserToolbar', () => {
     expect(nav).not.toHaveBeenCalled()
     expect(screen.getByRole('alert').textContent).toBe(URL_ERROR_TEXT[reason])
     expect(address().getAttribute('aria-invalid')).toBe('true')
+  })
+
+  it.each([
+    ['github topic agent', 'https://www.google.com/search?q=github%20topic%20agent'],
+    ['github.com', 'https://github.com/'],
+    ['localhost:3000', 'http://localhost:3000/'],
+  ])('omnibox: %s -> %s', (value, url) => {
+    const { nav } = setup()
+    fireEvent.change(address(), { target: { value } })
+    fireEvent.submit(address().closest('form')!)
+    expect(nav).toHaveBeenCalledExactlyOnceWith('go', url)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('searches with the configured engine and ignores a blank submit', () => {
+    const { nav } = setup(st(), { searchEngine: 'bing' })
+    fireEvent.change(address(), { target: { value: '   ' } })
+    fireEvent.submit(address().closest('form')!)
+    expect(nav).not.toHaveBeenCalled()
+    fireEvent.change(address(), { target: { value: 'node.js tutorial' } })
+    fireEvent.submit(address().closest('form')!)
+    expect(nav).toHaveBeenCalledExactlyOnceWith('go', 'https://www.bing.com/search?q=node.js%20tutorial')
   })
 
   it('wires back/forward/reload and disables unavailable directions', () => {

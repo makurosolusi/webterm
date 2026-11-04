@@ -14,10 +14,13 @@ import { setAgentControl } from './browser.api'
 import { useBrowserStatus } from './browser.feature'
 import { getBrowserWorkspace } from './browser.stream'
 import { COOKIE_TEXT } from './browser.uxText'
+import { useLiveSettings } from './useSettings'
+import { toSearchEngine } from '../shared/browser.omnibox'
 
 function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   const rf = useReactFlow()
   const status = useBrowserStatus()
+  const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [cookiesOpen, setCookiesOpen] = useState(false)
   const agentControl = (p.data as { agentControl?: boolean }).agentControl ?? false
   const onAgentControl = useCallback((enabled: boolean) => {
@@ -26,7 +29,7 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   }, [p.id, rf])
   return (
     <>
-      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} zoom={ctx.zoom} onZoom={ctx.stepZoom} />
+      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} />
       {status?.cookieImportEnabled && (
         <>
           <Button size="xs" variant="ghost" className="nodrag self-start" onClick={() => setCookiesOpen(true)}>{COOKIE_TEXT.title}</Button>
