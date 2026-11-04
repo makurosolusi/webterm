@@ -28,6 +28,7 @@ import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
+import { lspUpgrade } from './lsp/lsp.route'
 import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import { installBrowserAgentShim } from './browserAgentShim'
@@ -233,6 +234,8 @@ server.on('upgrade', (req, socket, head) => {
     return
   }
   if (getTokenState().token !== undefined) logAuthLogin(url.pathname)
+  // Editor language servers: same gates as above; root = the workspace's stored cwd (lsp.route.ts).
+  if (route === 'lsp') return lspUpgrade(req, socket, head, url, { workspace: (id) => db.get(id) })
   if (route === 'browser') {
     // Gerbang `allowed()` di atas sama dengan /ws: root token saja, node-token ditolak (path ini tak ada di allowlist node-token).
     const workspaceId = url.searchParams.get('workspaceId')
