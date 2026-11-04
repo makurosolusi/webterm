@@ -27,6 +27,8 @@ import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenu
 import { clearOutput, toggleOutput } from './output/outputCommands'
 import { outputShortcutLabel } from './output/outputChord'
 import { isMacPlatform } from './terminalKeys'
+import { offerRemoveWorktree } from './workspaceWorktree.api'
+import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -81,6 +83,7 @@ export default function WorkspaceBar({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
+  const worktrees = useWorktreeStatuses(workspaces)
   const activeGroup = groups.find((g) => g.projectId === activeId) ?? null
 
   const commitRename = (): void => {
@@ -102,7 +105,14 @@ export default function WorkspaceBar({
     // Hapus TIDAK bisa dibatalkan (row workspace + seluruh board tersimpannya hilang), jadi ia
     // wajib lewat satu langkah konfirmasi. `confirm()` native adalah modal yang tidak bisa
     // terklik sambil lalu; browser yang menekan dialognya memulangkan `false` → tidak menghapus.
-    if (window.confirm(deleteWorkspaceMessage(projectName, sessions))) onDeleteWorkspace(projectId)
+    if (!window.confirm(deleteWorkspaceMessage(projectName, sessions))) return
+    // A worktree workspace then offers to remove its checkout too (second confirm, branch kept). A
+    // failed removal is shown and the workspace stays, so its dirty work is never orphaned silently.
+    const cwd = workspaces.find((w) => w.id === projectId)?.cwd
+    offerRemoveWorktree(cwd).then(
+      () => onDeleteWorkspace(projectId),
+      (err: unknown) => window.alert(`Workspace not deleted: ${err instanceof Error ? err.message : String(err)}`),
+    )
   }
 
   // File: New → Rename/Delete (workspace aktif) → Settings → Logout, seperti File di VS Code
@@ -143,12 +153,18 @@ export default function WorkspaceBar({
     })
   }
 
-  const tabs: VscodeEditorTab[] = groups.map((g) => ({
-    id: g.projectId,
-    label: g.projectName,
-    tooltip: workspaceTabTitle(g),
-    icon: <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />,
-  }))
+  // Worktree state on the tab: VS Code's dirty dot plus branch in the tooltip; the full badge sits
+  // next to the active workspace's name in the title bar (the tab label slot is a plain string).
+  const tabs: VscodeEditorTab[] = groups.map((g) => {
+    const wt = worktrees[g.projectId]
+    return {
+      id: g.projectId,
+      label: g.projectName,
+      tooltip: wt?.managed ? `${workspaceTabTitle(g)}\n${worktreeSummary(wt)}` : workspaceTabTitle(g),
+      icon: <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />,
+      dirty: wt?.managed === true && (wt.dirtyCount ?? 0) > 0,
+    }
+  })
 
   return (
     <>
@@ -177,7 +193,10 @@ export default function WorkspaceBar({
               onBlur={commitRename}
             />
           ) : (
-            <span className="app-titlebar__name">{activeGroup?.projectName ?? ''}</span>
+            <span className="app-titlebar__name">
+              {activeGroup?.projectName ?? ''}
+              <WorkspaceWorktreeBadge status={activeId ? worktrees[activeId] : undefined} />
+            </span>
           )}
         </div>
 
