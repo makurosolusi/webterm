@@ -21,6 +21,8 @@ import { asObject } from './control/controlTypes'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { isValidNodeToken } from './hooksTokens'
+import { decidePermission, listPendingPermissions } from './permission/permission.human'
+import { activePolicy } from './policy/policy.runtime'
 
 /** Derived audit actor for a human request; implementation lives with the handler constants. */
 export { actorForRequest } from './approvalHumanShared'
@@ -37,7 +39,7 @@ export interface HumanApprovalDeps {
 const isApprovalPath = (pathname: string): boolean =>
   pathname === '/api/approvals' || pathname.startsWith('/api/approvals/')
 
-const POST_ROUTES = ['request', 'decide', 'consume'] as const
+const POST_ROUTES = ['request', 'decide', 'consume', 'permission'] as const
 const MAX_TASK_REF = 200
 
 const isTaskKind = (kind: unknown): boolean =>
@@ -72,6 +74,7 @@ function routeOf(pathname: string, method: string): string | null {
   if (method === 'GET') {
     if (pathname === '/api/approvals') return 'list'
     if (pathname === '/api/approvals/challenge') return 'challenge'
+    if (pathname === '/api/approvals/permission') return 'permission_list'
     return null
   }
   const name = pathname.startsWith('/api/approvals/')
@@ -112,6 +115,10 @@ export async function approvalHumanRoute(
     sendJson(res, 405, { error: 'method_not_allowed' })
     return true
   }
+  if (route === 'permission_list') {
+    sendJson(res, 200, { items: listPendingPermissions(runtime.db, now) })
+    return true
+  }
   if (method === 'GET') {
     const result = route === 'list' ? listRoute(runtime, url, now) : challengeRoute(runtime, url, now)
     sendJson(res, result.status, result.body)
@@ -137,6 +144,11 @@ export async function approvalHumanRoute(
   }
   if (route === 'request' && missingTaskRef(body)) {
     sendJson(res, 400, { error: 'invalid_task_ref' })
+    return true
+  }
+  if (route === 'permission') {
+    const result = decidePermission(runtime.db, activePolicy(), body, actorForRequest(req, url), now)
+    sendJson(res, result.status, result.body)
     return true
   }
   const handler = route === 'request' ? requestRoute : route === 'decide' ? decideRoute : consumeRoute
