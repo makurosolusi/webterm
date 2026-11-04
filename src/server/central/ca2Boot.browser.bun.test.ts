@@ -11,6 +11,7 @@ import type { ControlRequest } from '../control/controlTypes'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
 import { bootCa2, setActiveCa2 } from './ca2Boot'
+import { registerWorkspaceLookup } from './workspaceLookup'
 import { BROWSER_CAP_TTL_MS } from './ca2Boot.browser'
 import { freshDb, rows, run } from './guard/controlGuard.testutil'
 import { ALLOW_ALL_GUARD, execTool } from './tools/toolExec'
@@ -21,7 +22,9 @@ import type { ToolCtx } from './tools/toolTypes'
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
 const dirs: string[] = []
 const tmp = (): string => { const d = mkdtempSync(join(tmpdir(), 'ca2-boot-br-')); dirs.push(d); return d }
+let unregister = (): void => undefined
 afterEach(() => {
+  unregister()
   setActiveCa2(null)
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
 })
@@ -47,8 +50,8 @@ function rig() {
 
 function boot(env: Record<string, string>, active: () => BrowserRuntime | null) {
   const db = freshDb()
-  run(db, 'CREATE TABLE IF NOT EXISTS workspace (id TEXT PRIMARY KEY, name TEXT NOT NULL, nodes TEXT NOT NULL)')
-  run(db, 'INSERT INTO workspace (id, name, nodes) VALUES (?, ?, ?)', 'w1', 'w1', JSON.stringify([{ id: 'b1', kind: 'browser' }]))
+  // Workspaces come from the webterm.db store, not the ledger file (production layout).
+  unregister = registerWorkspaceLookup((id) => (id === 'w1' ? { name: 'w1', nodes: [{ id: 'b1', kind: 'browser' }] } : null))
   const registry = createRegistry()
   for (const d of CORE_DEFS) registry.register(d)
   const r = rig()

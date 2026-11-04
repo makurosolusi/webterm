@@ -4,7 +4,7 @@
 import { ENV_BROWSER } from '../../../../shared/browser.contract'
 import type { BrowserState, Lease, LiveState } from '../../../../shared/browser.contract'
 import { hostOnly } from '../../../../shared/browser.url'
-import { getRow } from '../../../ledger/ledgerCore'
+import { projectWorkspace } from '../../workspaceLookup'
 import type { ToolCtx, ToolDef, ToolResult } from '../toolTypes'
 import { clip, readPage } from './read.shared'
 
@@ -27,17 +27,13 @@ export type NodeLookup = { ok: true; workspaceId: string; nodeIds: string[] } | 
 
 /** Browser node ids of the workspace that belongs to `projectId`, so a project can only see its own nodes. */
 export function browserNodesOf(ctxDb: ToolCtx['db'], projectId: string | undefined): NodeLookup {
-  if (!getRow(ctxDb, "SELECT 1 AS one FROM sqlite_master WHERE type = 'table' AND name = 'workspace'")) return { ok: false, code: 'workspace_unavailable' }
-  const row = getRow(ctxDb, 'SELECT w.id AS id, w.nodes AS nodes FROM workspace w JOIN project p ON p.workspace_id = w.id WHERE p.id = ?', projectId)
-  if (!row) return { ok: false, code: 'workspace_not_found' }
-  try {
-    const parsed: unknown = JSON.parse(String(row['nodes']))
-    if (!Array.isArray(parsed)) return { ok: false, code: 'workspace_corrupt' }
-    const nodeIds = parsed.filter((n): n is { id: string } => !!n && n.kind === 'browser' && typeof n.id === 'string').map((n) => n.id)
-    return { ok: true, workspaceId: String(row['id']), nodeIds }
-  } catch {
-    return { ok: false, code: 'workspace_corrupt' } // parse message dropped: it quotes the stored blob
-  }
+  const found = projectWorkspace(ctxDb, projectId) // workspace store (webterm.db), never a ledger JOIN
+  if (!found.ok) return found
+  const nodeIds = found.nodes.flatMap((n) => {
+    const node = n as { id?: unknown; kind?: unknown } | null
+    return node && node.kind === 'browser' && typeof node.id === 'string' ? [node.id] : []
+  })
+  return { ok: true, workspaceId: found.workspaceId, nodeIds }
 }
 
 interface NodeView { id: string; host: string | null; title: string | null; lease: Lease | null; live: LiveState | null; loading: boolean | null; blocked: string | null }

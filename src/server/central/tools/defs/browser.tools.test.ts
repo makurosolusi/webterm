@@ -5,6 +5,7 @@ import { BrowserError } from '../../../browser/browserHost.targets'
 import type { AgentVerbs } from '../../../browser/browserAgent.verbs.ctx'
 import { CapabilityStore, allows } from '../../../control/capabilities'
 import { allRows } from '../../../ledger/ledgerCore'
+import { registerWorkspaceLookup } from '../../workspaceLookup'
 import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixture.testutil'
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
@@ -13,20 +14,21 @@ import { ACT_TEXT_MAX_CHARS, BROWSER_ACT_FLAG, createBrowserDefs, createControlC
 import { BROWSER_TOOLS_FLAG, type BrowserToolDeps } from './browser.status'
 
 let f: Fixture
+let unregister = (): void => undefined
 beforeEach(() => { f = openFixture(); seedPortfolio(f.db) })
-afterEach(() => f.close())
+afterEach(() => { unregister(); f.close() })
 
 const ENV_ON = { [BROWSER_TOOLS_FLAG]: 'on', [BROWSER_ACT_FLAG]: 'on' }
 const state = (patch: Partial<BrowserState> = {}): BrowserState =>
   ({ id: 'b1', url: 'https://app.example.com/inbox?token=SECRET#frag', title: 'Inbox', loading: false, canBack: false, canForward: false, lease: 'agent', live: 'live', ...patch })
 
-function workspace(id: string, nodes: unknown): void {
-  f.db.exec('CREATE TABLE IF NOT EXISTS workspace (id TEXT PRIMARY KEY, name TEXT NOT NULL, nodes TEXT NOT NULL)')
-  f.db.query('INSERT INTO workspace (id, name, nodes) VALUES (?, ?, ?)').run(id, id, JSON.stringify(nodes))
-}
+/** Workspaces live in a separate store (webterm.db) in production, never in the ledger fixture. */
 const seedNodes = () => {
-  workspace('w-p1', [{ id: 'b1', kind: 'browser' }, { id: 't1', kind: 'terminal' }, { id: 'b2', kind: 'browser' }])
-  workspace('w-p2', [{ id: 'b9', kind: 'browser' }])
+  const store: Record<string, unknown[]> = {
+    'w-p1': [{ id: 'b1', kind: 'browser' }, { id: 't1', kind: 'terminal' }, { id: 'b2', kind: 'browser' }],
+    'w-p2': [{ id: 'b9', kind: 'browser' }],
+  }
+  unregister = registerWorkspaceLookup((id) => (store[id] ? { name: id, nodes: store[id] } : null))
 }
 const audits = () => allRows(f.db, "SELECT payload_json FROM event WHERE kind = 'central.proposal' ORDER BY seq").map((row) => JSON.parse(String(row.payload_json)) as Record<string, unknown>)
 

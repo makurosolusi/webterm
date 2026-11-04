@@ -17,6 +17,7 @@ import {
 } from '../conversationStore'
 import type { ConversationSummary } from '../centralTypes'
 import type { RuntimeResult } from '../runtime/centralRuntime'
+import { lookupWorkspace } from '../workspaceLookup'
 import { CentralChatError } from './chatErrors'
 import type { StreamHub } from './streamHub'
 import type { RunState } from './turnEvents'
@@ -54,15 +55,8 @@ export function recordEvent(
   stream.publish(conversationId, event)
 }
 
-/** Workspace store lookup (webterm.db, a different file from the ledger); registered at boot. */
-export type WorkspaceLookup = (id: string) => { name: string; cwd?: string } | null
-let lookupWorkspace: WorkspaceLookup = () => null
-
-/** Lets project ids that are workspace ids (UI bind, Telegram) resolve; returns the unregister. */
-export function registerWorkspaceLookup(lookup: WorkspaceLookup): () => void {
-  lookupWorkspace = lookup
-  return () => { lookupWorkspace = () => null }
-}
+// Project ids that are workspace ids (UI bind, Telegram) resolve through the store registered at boot.
+export { registerWorkspaceLookup, type WorkspaceLookup } from '../workspaceLookup'
 
 /**
  * Ledger project id for a project id or a workspace id. Callers (UI bind, Telegram) pass the
