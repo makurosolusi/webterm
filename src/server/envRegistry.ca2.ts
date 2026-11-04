@@ -24,7 +24,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'off', {
     ...C, dangerNote: 'Central dapat menjalankan worker nyata (shell, edit file) di mesin server; auto tanpa kartu approval per aksi.', requires: [{ key: 'WEBTERM_CENTRAL_TOOLS', oneOf: ['write'] }, { key: 'WEBTERM_CENTRAL_PLANNER' }, { key: 'WEBTERM_ORCHESTRATOR_RUN' }],
     label: 'Agen central',
-    description: 'Central boleh menjalankan worker: propose = kartu approval per aksi, auto = dalam amplop. Butuh tools=write, planner, orchestrator run.',
+    description: 'Diatur otomatis oleh kartu Worker orchestrator (propose = kartu approval per aksi) dan Otonomi (auto = dalam amplop); nilai dari .env/shell tetap menang.',
     dangerous: true,
   }),
   flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, label: 'Checkpoint percakapan', description: 'Ringkas percakapan central ke checkpoint (ringkasan deterministik, tanpa memanggil model).' }),

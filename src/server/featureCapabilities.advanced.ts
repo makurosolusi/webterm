@@ -7,8 +7,10 @@ import { detectAgentEngine } from './central/runtime/runtimeDetect'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
 import type { EnvChange } from './envSettings.service'
 
-/** Mesin yang boleh dipilih eksplisit; `auto` = hapus override. */
-const ENGINES = ['claude', 'opencode', 'mock'] as const
+/** Mesin yang boleh dipilih pengguna; `auto` = hapus override. Mock (simulasi) dan codex (tanpa adapter) tidak. */
+const ENGINES = ['claude', 'opencode'] as const
+/** Nilai tersimpan yang dilaporkan apa adanya; `mock` hanya bisa datang dari env eksplisit (tes). */
+const SHOWN = [...ENGINES, 'mock'] as const
 const AUTO = 'auto'
 /** Batas panjang path agar body tak membengkak; validasi isi tetap oleh registry. */
 const PATH_MAX_CHARS = 1024
@@ -18,7 +20,7 @@ export function advancedView(env: NodeJS.ProcessEnv, dataDir: string): Capabilit
   const chosen = (env[CENTRAL_RUNTIME_FLAG] ?? '').trim().toLowerCase()
   return {
     agentEngine: {
-      value: ENGINES.find((e) => e === chosen) ?? AUTO,
+      value: SHOWN.find((e) => e === chosen) ?? AUTO,
       detected: detectAgentEngine({ ...env, [CENTRAL_RUNTIME_FLAG]: undefined }),
     },
     chromiumPath: chromiumView(env),

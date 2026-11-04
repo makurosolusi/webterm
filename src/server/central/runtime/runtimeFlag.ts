@@ -13,7 +13,7 @@ export function parseRuntimeKind(raw: string | null | undefined): RuntimeKind {
   return SUPPORTED_RUNTIME_KINDS.has(value) ? (value as RuntimeKind) : DEFAULT_RUNTIME_KIND
 }
 
-/** Tak diset (undefined) = deteksi otomatis (claude, opencode, mock); string apa pun, termasuk kosong, di-parse fail-closed. */
+/** Tak diset (undefined) = deteksi otomatis (claude, lalu opencode, lalu off; tak pernah mock); string apa pun, termasuk kosong, di-parse fail-closed. */
 export function centralRuntimeKind(
   raw: string | undefined = process.env.WEBTERM_CENTRAL_RUNTIME,
   which?: WhichFn

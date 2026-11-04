@@ -18,7 +18,7 @@ const SECRETS_SUBDIR = 'secrets'
 const FIXED_METHODS: Record<string, string> = { '/': 'GET', 'advanced/': 'GET|PUT', 'reset/': 'POST', 'telegram/connect': 'POST' }
 
 /** Seam produksi yang bisa diganti tes. */
-export interface CapabilityExtras { env: NodeJS.ProcessEnv; detect: () => Detect; dataDir: string; secrets: CapCtx['secrets']; fetch: CapCtx['fetch'] }
+export interface CapabilityExtras { env: NodeJS.ProcessEnv; detect: () => Detect | Promise<Detect>; dataDir: string; secrets: CapCtx['secrets']; fetch: CapCtx['fetch'] }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const isCapabilityId = (v: string): v is CapabilityId => (CAPABILITY_IDS as readonly string[]).includes(v)
@@ -54,11 +54,12 @@ export async function capabilitiesRoute(
   const deps = envDeps()
   const env = extras.env ?? process.env
   const dir = extras.dataDir ?? dataDir() // lazy: tes menyuntik dir sendiri dan tak boleh menyentuh home
+  const fetch = extras.fetch ?? globalThis.fetch as unknown as CapCtx['fetch']
   const x = {
-    detect: () => defaultDetect(env), fetch: globalThis.fetch as unknown as CapCtx['fetch'], ...extras,
+    detect: () => defaultDetect(env, fetch), fetch, ...extras,
     dataDir: dir, secrets: extras.secrets ?? createFileSecretStore(join(dir, SECRETS_SUBDIR)),
   }
-  if (method === 'GET') return send(res, { status: 200, body: buildResponse(env, x.detect(), x.dataDir) })
+  if (method === 'GET') return send(res, { status: 200, body: buildResponse(env, await x.detect(), x.dataDir) })
 
   const verdict = deps.guard(req)
   const [peer, via] = [peerOf(req), verdict.ok ? verdict.via : 'rejected' as const]
@@ -80,7 +81,7 @@ export async function capabilitiesRoute(
   if (seg === 'advanced') return send(res, await setAdvanced(c, body))
   if (sub === 'connect') return typeof body.token === 'string' ? send(res, await connect(c, body.token)) : fail(res, 400, 'invalid_body')
   if (sub === 'sub') {
-    return typeof body.key === 'string' && typeof body.on === 'boolean' ? send(res, setSub(c, seg as CapabilityId, body.key, body.on)) : fail(res, 400, 'invalid_body')
+    return typeof body.key === 'string' && typeof body.on === 'boolean' ? send(res, await setSub(c, seg as CapabilityId, body.key, body.on)) : fail(res, 400, 'invalid_body')
   }
   return typeof body.enabled === 'boolean' ? send(res, await toggle(c, seg as CapabilityId, body.enabled)) : fail(res, 400, 'invalid_body')
 }

@@ -50,7 +50,7 @@ export function defaultOpencodePreflight(): Promise<OpencodeReady> {
   })()
 }
 
-/** `off` is never ready; `mock` needs no probe; `claude` and `opencode` run their (cached) preflight. */
+/** `off` is never ready; `mock` (explicit only) needs no probe; `claude` and `opencode` run their (cached) preflight; anything else has no adapter. */
 export async function runtimeReadiness(
   kind: RuntimeKind, preflight: Preflight, opencodePreflight: () => Promise<OpencodeReady> = defaultOpencodePreflight
 ): Promise<RuntimeReadiness> {
@@ -59,7 +59,8 @@ export async function runtimeReadiness(
     const ready = await opencodePreflight()
     return ready.ok ? { runtimeReady: true } : { runtimeReady: false, runtimeIssue: ready.code, runtimeHint: ready.reason }
   }
-  if (kind !== 'claude') return { runtimeReady: true }
+  if (kind === 'mock') return { runtimeReady: true }
+  if (kind !== 'claude') return { runtimeReady: false }
   try {
     const ready = await preflight()
     return ready.ok ? { runtimeReady: true } : { runtimeReady: false, runtimeIssue: ready.code }
