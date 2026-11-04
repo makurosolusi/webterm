@@ -14,6 +14,7 @@ import {
 } from './Timeline.model'
 import { useTimelineFeed } from './Timeline.stream'
 import { effectiveLevel, useTimelineStatus, type ControlSnapshot, type Integrity } from './Timeline.status'
+import { checkpointTarget, checkpointText, NotRewindableChip, rewindLabel, RewindControl } from './Timeline.checkpoint'
 import './Timeline.css'
 
 /** localStorage key for the open state. */
@@ -78,6 +79,7 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
     () => groupEvents(feed.events.filter((e) => matchesFilter(e, filter, ctx)), mode, ctx),
     [feed.events, filter, mode, ctx],
   )
+  const byKey = useMemo(() => new Map(feed.events.filter((e) => e.seq > 0).map((e) => [`s${e.seq}`, e])), [feed.events])
   const wsName = (id: string | null): string | null => (id ? workspaces.find((w) => w.id === id)?.name ?? null : null)
   const patch = (p: Partial<TimelineFilter>): void => setFilter((f) => ({ ...f, ...p }))
 
@@ -118,10 +120,15 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
             </header>
             <ul className="timeline-lines">
               {g.lines.map((l) => {
-                const body = <><time>{timeOf(l.ts)}</time> <span className="timeline-text">{l.text}</span>{l.count > 1 && <span className="timeline-count"> ×{l.count}</span>}</>
+                const ev = byKey.get(l.key)
+                const label = ev ? rewindLabel(ev, ctx) : null
+                const target = ev ? checkpointTarget(ev) : null
+                const body = <><time>{timeOf(l.ts)}</time> <span className="timeline-text">{(ev && checkpointText(ev)) ?? l.text}</span>{l.count > 1 && <span className="timeline-count"> ×{l.count}</span>}</>
                 return (
                   <li key={l.key} className="timeline-line" data-untrusted={l.untrusted ? 'true' : undefined}>
                     {l.focusId ? <button type="button" onClick={() => onFocusNode(l.focusId!)}>{body}</button> : <span>{body}</span>}
+                    {label && <NotRewindableChip label={label} />}
+                    {target && <RewindControl workspaceId={target.workspaceId} seq={target.seq} />}
                   </li>
                 )
               })}

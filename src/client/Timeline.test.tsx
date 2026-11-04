@@ -148,4 +148,15 @@ describe('TimelinePanel', () => {
     expect(server.calls).toContain('/api/events/history?limit=100&beforeSeq=2')
     expect(screen.queryByRole('button', { name: 'Load older activity' })).toBeNull()
   })
+
+  it('checkpoint lines get a Rewind button; non-git workspaces get a "not rewindable" label', async () => {
+    server.history = [
+      ev('checkpoint.created', { nodeId: 'n1', workspaceId: 'w1', payload: { seq: 2, reason: 'prompt', rewindable: true } }),
+      ev('checkpoint.unavailable', { workspaceId: 'w2', payload: { why: 'not_git', rewindable: false } }),
+    ]
+    await mount()
+    await waitFor(() => expect(lineTexts()).toEqual(expect.arrayContaining(['Checkpoint #2 before agent prompt', 'No checkpoint: workspace folder is not a git repository'])))
+    expect(screen.getAllByRole('button', { name: 'Rewind' })).toHaveLength(1)
+    expect(screen.getByText('Not rewindable: not a git repo')).toBeTruthy()
+  })
 })

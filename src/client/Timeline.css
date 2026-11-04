@@ -27,3 +27,14 @@ button.timeline-group__label:hover, .timeline-line button:hover { text-decoratio
 .timeline-line[data-untrusted='true'] .timeline-text { font-style: italic; }
 .timeline-count { opacity: 0.7; }
 .timeline-older { margin-top: 8px; font: inherit; }
+/* Checkpoints (F3-c): Rewind control, preview dialog, "not rewindable" chip. */
+.timeline-line { flex-wrap: wrap; gap: 6px; }
+.timeline-norewind { font-size: 11px; padding: 0 6px; border-radius: 8px; line-height: 16px; border: 1px solid currentColor; color: var(--vscode-editorWarning-foreground, #cca700); }
+.timeline-rewind { font: inherit; font-size: 11px; }
+.timeline-rewind-note[data-state='error'] { color: var(--vscode-errorForeground, #f48771); }
+.timeline-rewind-dialog { flex-basis: 100%; border: 1px solid rgba(128, 128, 128, 0.35); padding: 6px 8px; margin: 4px 0; }
+.timeline-rewind-dialog ul { margin: 0; padding-left: 16px; }
+.timeline-rewind-verb { opacity: 0.7; }
+.timeline-rewind-patch { max-height: 240px; overflow: auto; font-size: 11px; margin: 6px 0; }
+.timeline-rewind-warn { opacity: 0.8; font-size: 11px; }
+.timeline-rewind-actions { display: flex; gap: 6px; }
