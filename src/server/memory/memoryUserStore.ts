@@ -128,12 +128,19 @@ export async function rebuildUserMemory(db: Database, store: UserMemoryStore, no
   for (const file of files) {
     const known = getRow(db, 'SELECT 1 AS one FROM memory WHERE id = ?', file.id) !== null || findRowByKey(db, null, 'user', file.key) !== null
     if (known) { skipped += 1; continue }
-    tx(memoryContext(db, now), () => {
-      insertMemoryRow(db, { id: file.id, projectId: null, scope: 'user', key: file.key, title: file.title, body: file.body,
-        status: 'fact', kind: file.kind, trust: file.trust, sourceKind: 'user_file', sourceRef: file.sourceRef, supersedes: null,
-        contentHash: contentHash(file.title, file.body), staleAfter: null, verifiedAt: now, now })
-      appendMemoryEvent(memoryContext(db, now), file.id, 'system:rebuild', 'memory.rebuild', { from: 'file' }, now)
-    })
+    try {
+      tx(memoryContext(db, now), () => {
+        insertMemoryRow(db, { id: file.id, projectId: null, scope: 'user', key: file.key, title: file.title, body: file.body,
+          status: 'fact', kind: file.kind, trust: file.trust, sourceKind: 'user_file', sourceRef: file.sourceRef, supersedes: null,
+          contentHash: contentHash(file.title, file.body), staleAfter: null, verifiedAt: now, now })
+        appendMemoryEvent(memoryContext(db, now), file.id, 'system:rebuild', 'memory.rebuild', { from: 'file' }, now)
+      })
+    } catch (err) {
+      // A stale file of a forgotten memory must not resurrect it (tombstone); count it as skipped.
+      if (!(err instanceof MemoryRejectedError) || err.code !== 'forgotten') throw err
+      skipped += 1
+      continue
+    }
     imported += 1
   }
   return { imported, skipped, rejected: rejected.length }

@@ -36,11 +36,25 @@ export function rrfFuse(rankings: ReadonlyArray<readonly string[]>, k = RRF_K): 
   return fused
 }
 
+/**
+ * Freshness in 0..1: 1 right after the last verification, halving every kind half-life (F5-a
+ * re-verification). Preferences and decisions never decay. Below `REVIEW_FRESHNESS` a fact is
+ * surfaced for review in the memory panel.
+ */
+export function freshnessScore(kind: MemoryKind, since: number, now: number): number {
+  const halfLife = HALF_LIFE_DAYS[kind] ?? 90
+  return Number.isFinite(halfLife) ? 0.5 ** (Math.max(0, now - since) / DAY_MS / halfLife) : 1
+}
+
+/** One half-life without re-verification. */
+export const REVIEW_FRESHNESS = 0.5
+
 export interface RankInput {
   /** Raw fused RRF score of the candidate. */
   rrf: number
   /** Number of candidate lists that took part, used to normalise `rrf` into 0..1. */
   lists: number
+  /** Latest of last verification and last update: recency decays from here. */
   updatedAt: number
   now: number
   kind: MemoryKind
@@ -51,9 +65,7 @@ export interface RankInput {
 /** Final score in roughly 0..1; higher is better. */
 export function rankScore(input: RankInput): number {
   const best = Math.max(1, input.lists) / (RRF_K + 1)
-  const ageDays = Math.max(0, input.now - input.updatedAt) / DAY_MS
-  const halfLife = HALF_LIFE_DAYS[input.kind]
-  const recency = Number.isFinite(halfLife) ? 0.5 ** (ageDays / halfLife) : 1
+  const recency = freshnessScore(input.kind, input.updatedAt, input.now)
   return (
     SCORE_WEIGHTS.rrf * (input.rrf / best) +
     SCORE_WEIGHTS.recency * recency +

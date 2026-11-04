@@ -16,6 +16,7 @@ import { applyV14 } from './ledgerSchemaV14'
 import { applyV15 } from './ledgerSchemaV15'
 import { applyV16 } from './ledgerSchemaV16'
 import { applyV17 } from './ledgerSchemaV17'
+import { applyV18 } from './ledgerSchemaV18'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -55,4 +56,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 16, up: applyV16 },
   // v17: cost oracle tables + routine_run.estimate_usd, until now created by their modules; IF NOT EXISTS keeps their rows.
   { version: 17, up: applyV17 },
+  // v18: memory intelligence (F5-a): bi-temporal columns, cognitive kind, tombstones, incognito.
+  { version: 18, up: applyV18 },
 ]

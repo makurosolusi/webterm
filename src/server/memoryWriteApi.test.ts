@@ -13,6 +13,7 @@ import {
 } from './memoryWriteApi'
 import type { RouteResult } from './apiShared.types'
 import { nodeSqlite } from './nodeSqlite.testutil'
+import { normalizedTextHash } from './memory/memoryGuard'
 
 const DDL = `
 CREATE TABLE memory (
@@ -21,8 +22,15 @@ CREATE TABLE memory (
   status TEXT NOT NULL DEFAULT 'claim',
   source_kind TEXT, source_ref TEXT, supersedes TEXT, superseded_at INTEGER,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  -- v7/v18 columns the write path reads (trust for the poisoning guard, bi-temporal bookkeeping).
+  trust TEXT NOT NULL DEFAULT 'agent', valid_from INTEGER, valid_to INTEGER, superseded_by TEXT,
   UNIQUE (project_id, scope, key)
 );
+CREATE TABLE memory_tombstone (
+  text_hash TEXT NOT NULL, subject TEXT NOT NULL, memory_id TEXT, created_by TEXT NOT NULL, created_at INTEGER NOT NULL,
+  PRIMARY KEY (text_hash, subject)
+);
+CREATE TABLE memory_incognito (ref TEXT PRIMARY KEY, set_by TEXT NOT NULL, since INTEGER NOT NULL);
 CREATE TABLE memory_event (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, memory_id TEXT NOT NULL,
   ts INTEGER NOT NULL, actor TEXT NOT NULL, kind TEXT NOT NULL, payload_json TEXT
@@ -92,6 +100,18 @@ describe('POST /api/memory/claim', () => {
       kind: string
     }
     expect(event).toEqual({ actor: MEMORY_API_AUTHORITY.id, kind: 'memory.claim' })
+  })
+
+  it('maps write-guard refusals to 400 memory_rejected with the reason, and masks PII', async () => {
+    const { runtime, raw } = fixture()
+    raw.prepare("INSERT INTO memory_tombstone VALUES (?, 'p1', NULL, 'human-ui', 1)").run(normalizedTextHash('deploy uses bun'))
+    expect(await post('/api/memory/claim', claimBody(), runtime)).toEqual({ status: 400, body: { error: 'memory_rejected', reason: 'forgotten' } })
+    raw.prepare("INSERT INTO memory_incognito VALUES ('README.md', 'human-ui', 1)").run()
+    expect(await post('/api/memory/claim', claimBody({ key: 'k2', body: 'other text' }), runtime))
+      .toEqual({ status: 400, body: { error: 'memory_rejected', reason: 'incognito' } })
+    const masked = ok(await post('/api/memory/claim', claimBody({ key: 'k3', body: 'mail ops@corp.example', sourceRef: 'x' }), runtime))
+    expect(memoryOf(masked).body).toBe('mail [email]')
+    expect((raw.prepare('SELECT count(*) AS c FROM memory').get() as { c: number }).c).toBe(1)
   })
 
   it('ignores authority/actor/status injected in the payload', async () => {

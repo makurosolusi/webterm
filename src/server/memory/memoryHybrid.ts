@@ -7,7 +7,7 @@ import type { Database } from 'bun:sqlite'
 import { allRows, getRow, stmt } from '../ledger/ledgerCore'
 import { toMemory } from './memoryCore'
 import { rankScore, rrfFuse } from './memoryRrf'
-import type { MemoryAnyScope, MemoryKind, MemoryRecord, MemoryTrust } from './memoryModel'
+import type { CognitiveKind, MemoryAnyScope, MemoryKind, MemoryRecord, MemoryTrust } from './memoryModel'
 
 /** Candidates pulled from each FTS index before fusion. */
 export const CANDIDATES_PER_INDEX = 30
@@ -51,8 +51,17 @@ export function toMemoryRecord(row: Record<string, unknown>): MemoryRecord {
     staleAfter: row['stale_after'] === null ? null : Number(row['stale_after']),
     useCount: Number(row['use_count'] ?? 0),
     contentHash: row['content_hash'] === null || row['content_hash'] === undefined ? null : String(row['content_hash']),
+    cognitiveKind: String(row['cognitive_kind'] ?? 'semantic') as CognitiveKind,
+    verifiedAt: num(row['verified_at']),
+    validFrom: num(row['valid_from']),
+    validTo: num(row['valid_to']),
+    supersededBy: row['superseded_by'] === null || row['superseded_by'] === undefined ? null : String(row['superseded_by']),
+    sourceEventId: num(row['source_event_id']),
+    suppressedAt: num(row['suppressed_at']),
   }
 }
+
+const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
 
 /**
  * What a viewer may read. Facts of `user`/`global` (never project-bound), central claims or facts
@@ -70,9 +79,11 @@ function visibility(viewer: MemoryViewer, now: number): { sql: string; params: u
     params.push(viewer.projectId, viewer.projectId)
   }
   // An expired claim is dropped; an expired fact stays (flagged stale) because facts are never auto-deleted.
+  // v18: only facts valid now (bi-temporal window) and never a suppressed ("don't mention") row.
   const sql = `(${clauses.join(' OR ')}) AND m.superseded_at IS NULL AND m.trust != 'external'
-    AND (m.status = 'fact' OR m.stale_after IS NULL OR m.stale_after > ?)`
-  return { sql, params: [...params, now] }
+    AND (m.status = 'fact' OR m.stale_after IS NULL OR m.stale_after > ?)
+    AND m.suppressed_at IS NULL AND (m.valid_from IS NULL OR m.valid_from <= ?) AND (m.valid_to IS NULL OR m.valid_to > ?)`
+  return { sql, params: [...params, now, now, now] }
 }
 
 function tokensOf(query: string): string[] {
@@ -124,7 +135,7 @@ export function searchMemoryHybrid(db: Database, opts: HybridSearchOptions): Mem
   const hits = [...byId.values()].map((record): MemoryRankedHit => {
     const stale = record.staleAfter !== null && record.staleAfter <= opts.now
     const score = rankScore({
-      rrf: fused.get(record.id) ?? 0, lists: lists.length, updatedAt: record.updatedAt,
+      rrf: fused.get(record.id) ?? 0, lists: lists.length, updatedAt: Math.max(record.verifiedAt ?? 0, record.updatedAt),
       now: opts.now, kind: record.kind, scope: record.scope, stale,
     })
     return { record, score, stale, unverified: record.status === 'claim' }
