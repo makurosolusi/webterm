@@ -1,8 +1,9 @@
 // Production wiring for Telegram approval buttons (CA2 WS-19): the ledger-backed challenge lookup, the
-// Bot API spinner dismissal and a tracker for detached central turns. Off unless
-// WEBTERM_CHANNEL_APPROVAL_BUTTONS=on; without it a `callback_query` stays ignored (pre-v2 behavior).
+// Bot API spinner dismissal and a tracker for detached central turns. On by default (zero-config: the
+// inbox sends every gate as a card with Approve once / Deny, F3-a); WEBTERM_CHANNEL_APPROVAL_BUTTONS=off
+// (Settings > Channels) is the explicit off switch, after which a `callback_query` stays ignored.
 import type { Database } from 'bun:sqlite'
-import { flagOn } from '../envFlag'
+import { flagOr } from '../envFlag'
 import { getRow } from '../ledger/ledgerCore'
 import { createLogger } from '../logs'
 import type { ApprovalChallengePort } from './channelCallback'
@@ -15,6 +16,9 @@ const ANSWER_TIMEOUT_MS = 5_000
 const ANSWER_TEXT_MAX = 200
 
 export const CHANNEL_APPROVAL_BUTTONS_ENV = 'WEBTERM_CHANNEL_APPROVAL_BUTTONS'
+
+/** Buttons are processed unless explicitly switched off; a typo keeps the default (on). */
+export const approvalButtonsOn = (env: NodeJS.ProcessEnv): boolean => flagOr(env[CHANNEL_APPROVAL_BUTTONS_ENV], true)
 
 /** Reads the digest + nonce of a still-pending approval; anything else is no longer a valid card. */
 export function ledgerChallengePort(db: Database): ApprovalChallengePort {
@@ -52,13 +56,13 @@ export interface ButtonDepsOptions {
   signal?: AbortSignal
 }
 
-/** Challenge + answerCallback deps, or null when the flag is off (the dispatcher then ignores callbacks). */
+/** Challenge + answerCallback deps, or null when switched off (the dispatcher then ignores callbacks). */
 export function buildButtonDeps(
   db: Database,
   options: ButtonDepsOptions = {}
 ): Pick<TelegramDispatchDeps, 'challenge' | 'answerCallback'> | null {
   const env = options.env ?? process.env
-  if (!flagOn(env[CHANNEL_APPROVAL_BUTTONS_ENV])) return null
+  if (!approvalButtonsOn(env)) return null
   const send = options.fetch ?? (globalThis.fetch as unknown as TelegramSenderFetch)
   return {
     challenge: ledgerChallengePort(db),

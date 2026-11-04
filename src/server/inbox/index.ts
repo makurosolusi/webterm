@@ -22,3 +22,9 @@ export type {
   InboxOptions,
   InboxResult,
 } from './inboxModel'
+// Unified inbox items (F3-a): notify / question / review / gate with actions and Telegram push.
+export { createGate, createInboxItem, approvedArgsFor, getInboxItem, listInboxItems, INBOX_GATE_KIND } from './inboxItemStore'
+export { actOnItem, actOnItems } from './inboxActions'
+export { startInboxTelegramPush, sweepInboxPush } from './inboxPush'
+export { INBOX_ACTION_EVENT, INBOX_DECISION_EVENT, gateDecisionEvent, toolImpact } from './inboxItemModel'
+export type { Impact, InboxAction, InboxEntry, InboxItemKind } from './inboxItemModel'

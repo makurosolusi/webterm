@@ -18,6 +18,7 @@ import { ledgerPersistence } from './channelStoreLedger'
 import { defaultWorldCounts } from './channelWorld'
 import { presence as processPresence, startAgentForwarder } from './channelPresence'
 import { describeAgentNode } from './channelPresenceDescribe'
+import { startInboxTelegramPush } from '../inbox/inboxPush'
 import { handleChannelPresenceApi } from './channelPresenceHttp'
 import { eventBus } from '../events/eventBus'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
@@ -117,12 +118,14 @@ export function startChannelsRuntime(
   }
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')
 
+  // Same DB for the channel store and the inbox push (F3-a); absent with a fake ledger (node-env tests).
+  const ledgerDb = options.ledgerDb ?? activeLedgerRuntime()?.db
   let store: ChannelStore
   try {
     // F2-g: the ledger row is the store (channels.json imported once). An explicit `storePath`, or
     // no ledger DB at all (node-env tests with a fake ledger), keeps the JSON file backend.
     const legacy = join(dataDir(), 'channels', CHANNEL_STORE_FILE)
-    const db = options.storePath === undefined ? (options.ledgerDb ?? activeLedgerRuntime()?.db) : undefined
+    const db = options.storePath === undefined ? ledgerDb : undefined
     store = new ChannelStore(db ? ledgerPersistence(db, legacy) : (options.storePath ?? legacy), {
       ...(options.now === undefined ? {} : { now: options.now }),
     })
@@ -165,6 +168,11 @@ export function startChannelsRuntime(
     subscribe: options.subscribe ?? ((pattern, fn) => eventBus.subscribe(pattern, fn)),
     describe: options.describe ?? describeAgentNode,
   })
+  // F3-a: every inbox gate goes to the bound approver chats as a card (Approve once / Deny), under
+  // the attention policy. Same env + fetch seam as the egress sender, so a test never hits Telegram.
+  const stopInboxPush = ledgerDb
+    ? startInboxTelegramPush({ db: ledgerDb, store, presence, send: { env, ...(options.sender?.fetch ? { fetch: options.sender.fetch } : {}) }, ...(options.now ? { now: options.now } : {}) })
+    : () => undefined
 
   log.info('channels.start', `telegram channel started (${mode})`, { mode, egress: sender !== null })
   return {
@@ -195,6 +203,7 @@ export function startChannelsRuntime(
     stop() {
       stopChannelSender(sender)
       stopForwarder()
+      stopInboxPush()
       log.info('channels.stop', 'telegram channel stopped', { mode })
     },
   }

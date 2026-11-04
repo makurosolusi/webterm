@@ -1,4 +1,5 @@
-// Registry env: Central Agent v2 (RND/29-CA2-ARSITEKTUR-b.md 4.7). Data murni; semua flag default off,
+// Registry env: Central Agent v2 (RND/29-CA2-ARSITEKTUR-b.md 4.7). Data murni; flag default off kecuali
+// WEBTERM_CHANNEL_APPROVAL_BUTTONS (on, F3-a zero-config: kartu gate Telegram langsung bisa ditekan),
 // angka = batas aman. `hot` hanya untuk kunci yang pembacanya membaca process.env tiap panggilan (bukti: HOT_PROOF
 // di envRegistry.parity.test.ts); sisanya boot. Rentang angka di sini batas konservatif UI, bukan batas pembaca.
 import { enumOf, flag, num, type EnvSpec } from './envRegistry.types'
@@ -35,7 +36,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Central skills', description: 'Central reads skills from <dataDir>/central/skills (needs tools).' }),
   flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_SKILLS' }], label: 'Central skill proposals', description: 'Central may propose new skills for human approval (needs Central skills).' }),
   flag('WEBTERM_CENTRAL_BOTS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_CHANNELS', oneOf: ['on'] }], label: 'Bot per project', description: 'One bot with a topic per project (needs Telegram and WEBTERM_CHANNELS).' }),
-  flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }], label: 'Telegram approval buttons', description: 'Approve/reject buttons on Telegram approval cards are processed (needs Telegram; the ledger is always on).' }),
+  flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }], label: 'Telegram approval buttons', description: 'Approve once / Deny buttons on Telegram approval cards are processed (on by default; needs Telegram). Off ignores button presses; /approve still works.' }, 'on'),
   flag('WEBTERM_KNOWLEDGE', 'central', { ...C, label: 'Knowledge base', description: 'Project knowledge index at <dataDir>/knowledge.db.' }),
   num('WEBTERM_AGENT_IDLE_DONE_MS', 'central', 1000, 3_600_000, DEFAULT_AGENT_IDLE_DONE_MS, {
     ...C, hot: true,

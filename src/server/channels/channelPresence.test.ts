@@ -128,6 +128,23 @@ describe('presence routes', () => {
     expect((await res.done).status).toBe(405)
   })
 
+  it('a ping carries the focused node (F3-a per-node attention); bad ids are 400, a hidden tab focuses nothing', async () => {
+    const clock = { t: 0 }
+    const presence = createPresenceTracker(() => clock.t)
+    const store = { forwardAwayMinutes: 3, setForwardAwayMinutes() {} }
+    let res = fakeRes()
+    handleChannelPresenceApi(fakeReq('POST', PRESENCE_PATH, JSON.stringify({ visible: true, nodeId: 'n-1', workspaceId: 'ws-1' })), res, { presence, store })
+    expect((await res.done).status).toBe(204)
+    expect(presence.focusedNode()).toEqual({ nodeId: 'n-1', workspaceId: 'ws-1' })
+    res = fakeRes()
+    handleChannelPresenceApi(fakeReq('POST', PRESENCE_PATH, JSON.stringify({ visible: true, nodeId: 42 })), res, { presence, store })
+    expect((await res.done).status).toBe(400)
+    res = fakeRes()
+    handleChannelPresenceApi(fakeReq('POST', PRESENCE_PATH, JSON.stringify({ visible: false, nodeId: 'n-1' })), res, { presence, store })
+    expect((await res.done).status).toBe(204)
+    expect(presence.focusedNode()).toBeNull()
+  })
+
   it('reads and saves the forwarding delay, rejecting out-of-range values', async () => {
     const presence = createPresenceTracker()
     const store = { forwardAwayMinutes: 3, setForwardAwayMinutes(n: number) { this.forwardAwayMinutes = n } }

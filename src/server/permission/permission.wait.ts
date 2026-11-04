@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto'
 import { approvalDigest, consumeApproval, getApproval, requestApproval } from '../ledger/ledgerApproval'
 import type { AppendEventInput } from '../events/eventModel'
 import { execWrite } from '../ledger/ledgerCore'
+import { approvedArgsFor } from '../inbox/inboxItemStore'
 import type { Policy } from '../policy/policy.decide'
 import {
   PERMISSION_ID_PREFIX,
@@ -56,6 +57,31 @@ export interface PermissionRequestView {
   label: string
   /** Always-allow scope pattern; null = no safe pattern, so the UI offers no "always". */
   pattern: string | null
+  /**
+   * The tool input as Claude sent it, so the Inbox can offer "Edit" (F3-a); its edit comes back as
+   * `updatedInput`. Kept on the local ledger row only (never in events or Telegram); absent when the
+   * input is not an object or larger than `EDITABLE_INPUT_MAX` chars (then the gate is not editable).
+   */
+  input?: Record<string, unknown>
+}
+
+/** Largest tool input stored for editing; the inbox caps edited args at the same size. */
+export const EDITABLE_INPUT_MAX = 32 * 1024
+
+function editableInput(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  try {
+    return JSON.stringify(raw).length <= EDITABLE_INPUT_MAX ? (raw as Record<string, unknown>) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The human's edit of the tool input, or null when they approved it unchanged. */
+function editedInput(db: Database, approvalId: string, original: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  const args = approvedArgsFor(db, approvalId)
+  if (!original || !args || typeof args !== 'object' || Array.isArray(args)) return null
+  return JSON.stringify(args) === JSON.stringify(original) ? null : (args as Record<string, unknown>)
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -84,7 +110,8 @@ export async function answerPermission(deps: PermissionWaitDeps, ask: Permission
   if (!deps.projectId || deps.waitMs <= 0 || ask.signal?.aborted) return null
 
   const ctx = { db: deps.db, now }
-  const request: PermissionRequestView = { nodeId: ask.nodeId, node: ask.nodeTitle, tool: toolName(ask.body), label, pattern: suggestedPattern(ask.body) }
+  const input = editableInput(ask.body.tool_input)
+  const request: PermissionRequestView = { nodeId: ask.nodeId, node: ask.nodeTitle, tool: toolName(ask.body), label, pattern: suggestedPattern(ask.body), ...(input ? { input } : {}) }
   const id = `${PERMISSION_ID_PREFIX}${randomBytes(8).toString('hex')}`
   // TTL = the wait: the row expires (and leaves the inbox) exactly when the hook stops listening.
   requestApproval(ctx, { id, projectId: deps.projectId, kind: PERMISSION_KIND, request, ttlMs: deps.waitMs })
@@ -97,8 +124,13 @@ export async function answerPermission(deps: PermissionWaitDeps, ask: Permission
     if (a?.status === 'approved') {
       // Single use, like every other approval: a second reader can never replay this consent.
       const used = consumeApproval(ctx, id, { digest: approvalDigest(a.request) })
-      event({ approvalId: id, behavior: used ? 'allow' : 'none', by: a.approvedBy }, a.approvedBy ?? 'human-ui')
-      return used ? permissionDecision('allow') : null
+      const edited = used ? editedInput(deps.db, id, input) : null
+      event({ approvalId: id, behavior: used ? 'allow' : 'none', by: a.approvedBy, edited: edited !== null }, a.approvedBy ?? 'human-ui')
+      if (!used) return null
+      const out = permissionDecision('allow')
+      // Documented PermissionRequest field: `updatedInput` replaces the tool input before it runs.
+      if (edited) Object.assign(out.hookSpecificOutput.decision, { updatedInput: edited })
+      return out
     }
     if (a?.status === 'rejected') {
       event({ approvalId: id, behavior: 'deny', by: a.approvedBy }, a.approvedBy ?? 'human-ui')
