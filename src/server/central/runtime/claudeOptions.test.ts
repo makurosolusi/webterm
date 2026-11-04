@@ -32,7 +32,6 @@ describe('claudeArgv', () => {
       '--max-turns', '3', '--session-id', 'uuid-1',
     ])
     expect(CENTRAL_STEWARD_PROMPT).toContain('approval_required')
-    expect(CENTRAL_STEWARD_PROMPT).not.toContain('webterm-proposal')
   })
 
   it('never uses --safe-mode, which would drop the --mcp-config server', () => {

@@ -1,26 +1,23 @@
 // Bun-only (bun:sqlite). Golden G7 (RND/29-b §4.13): when a budget runs out (turn, token, spawn,
-// day) the server refuses with `budget_exhausted`, applies nothing and records the event.
-// Per-turn limits run through the real TurnService; the day/spawn caps use the stand-in guard
-// from goldenHarness (TODO(ca2-16b): swap it for the WS-07 ControlGuard).
+// day) the server refuses, applies nothing and records the event. Per-turn limits are enforced by the
+// runtime killing the fake Claude before its next MCP call; day/spawn caps by the real CA2 guard
+// behind `webterm mcp`.
 import { expect, test } from 'bun:test'
 import { getTurn } from '../../conversationStore'
 import { getGoal } from '../../goalStore'
-import { execTool } from '../../tools/toolExec'
-import { defaultRegistry } from '../../tools/defaultRegistry'
-import { createRegistry } from '../../tools/toolRegistry'
-import type { ToolCtx, ToolDef } from '../../tools/toolTypes'
-import { goalInput, proposalBlock } from '../adversarialPayloads'
-import {
-  createBudgetGuard, createHarness, DAILY_SPAWN_LIMIT, DAILY_TOKEN_LIMIT, GOLDEN_CONVERSATION, GOLDEN_PROJECT,
-  setDailyUsage, type GoldenHarness,
-} from '../goldenHarness'
-import { opencodeRecording, type RecordedStep } from '../scriptedRuntime'
+import { budgetLimits } from '../../guard/budgetStore'
+import { adversarialTools, goalInput, proposeGoal } from '../adversarialPayloads'
+import { createHarness, GOLDEN_CONVERSATION, GOLDEN_PROJECT, setDailyUsage, type GoldenHarness } from '../goldenHarness'
 
 const PROPOSAL_AUDITS = `SELECT COUNT(*) AS c FROM event WHERE kind = 'central.proposal'`
-const proposal = () => proposalBlock('goal.propose', goalInput(GOLDEN_PROJECT, 'Must not exist'))
+/** Longer than the kill ladder needs, so a call after it only happens if the runtime failed to stop the turn. */
+const AFTER_LIMIT_PAUSE_MS = 1_500
+const DAY = budgetLimits({})
+const lateCall = () => [{ pause: AFTER_LIMIT_PAUSE_MS }, proposeGoal(goalInput(GOLDEN_PROJECT, 'Must not exist'))]
 
+let msg = 0
 async function runTurn(h: GoldenHarness) {
-  const submitted = h.service.submit({ conversationId: GOLDEN_CONVERSATION, clientMessageId: 'g7', text: 'plan' })
+  const submitted = h.service.submit({ conversationId: GOLDEN_CONVERSATION, clientMessageId: `g7-${++msg}`, text: 'plan' })
   await submitted.done
   return getTurn(h.db, submitted.response.turnId)
 }
@@ -28,13 +25,11 @@ async function runTurn(h: GoldenHarness) {
 function expectNoEffect(h: GoldenHarness): void {
   expect(getGoal(h.db, GOLDEN_PROJECT) === null).toBe(true)
   expect(h.count(PROPOSAL_AUDITS)).toBe(0)
+  expect(h.receipts()).toEqual([])
 }
 
-test('G7 token budget per turn: budget_exhausted, proposal not applied, error event recorded', async () => {
-  const steps: RecordedStep[] = [
-    { kind: 'step' }, { kind: 'text', text: proposal() }, { kind: 'usage', input: 80, output: 80 },
-  ]
-  const h = await createHarness({ turns: [{ jsonl: opencodeRecording(steps) }], limitEnv: { WEBTERM_CENTRAL_TURN_TOKENS: '100' } })
+test('G7 token budget per turn: budget_exhausted, the next call never runs, error event recorded', async () => {
+  const h = await createHarness({ turns: [[{ text: 'thinking hard', tokens: 80 }, ...lateCall()]], maxTokens: 100 })
   try {
     const turn = await runTurn(h)
     expect(turn?.status).toBe('failed')
@@ -42,79 +37,60 @@ test('G7 token budget per turn: budget_exhausted, proposal not applied, error ev
     expectNoEffect(h)
     expect(h.count(`SELECT COUNT(*) AS c FROM central_event WHERE type = 'error' AND payload_json LIKE '%budget_exhausted%'`)).toBe(1)
   } finally {
-    h.cleanup()
+    await h.cleanup()
   }
-})
+}, 30_000)
 
-test('G7 step budget per turn: the round trip over the cap never runs', async () => {
-  const steps: RecordedStep[] = [
-    { kind: 'step' }, { kind: 'text', text: 'round one. ' }, { kind: 'usage', input: 1, output: 1 },
-    { kind: 'step' }, { kind: 'text', text: proposal() }, { kind: 'usage', input: 1, output: 1 },
-  ]
-  const h = await createHarness({ turns: [{ jsonl: opencodeRecording(steps) }], limitEnv: { WEBTERM_CENTRAL_TURN_STEPS: '1' } })
+test('G7 step budget per turn: the round over the cap stops the turn before its call', async () => {
+  const h = await createHarness({ turns: [[{ text: 'round one. ' }, { text: 'round two. ' }, ...lateCall()]], limitEnv: { WEBTERM_CENTRAL_TURN_STEPS: '1' } })
   try {
     const turn = await runTurn(h)
     // `max_turns` is the runtime's own code for the step cap; the golden contract is "no effect + event".
     expect(turn?.status).toBe('failed')
     expect(turn?.errorCode).toBe('max_turns')
-    expect(turn?.partialText).toBe('round one. ')
+    expect(turn?.partialText?.startsWith('round one. ')).toBe(true)
     expectNoEffect(h)
     expect(h.count(`SELECT COUNT(*) AS c FROM central_event WHERE type = 'error' AND payload_json LIKE '%max_turns%'`)).toBe(1)
   } finally {
-    h.cleanup()
+    await h.cleanup()
   }
-})
+}, 30_000)
 
-function toolCtx(h: GoldenHarness, registry: ToolCtx['registry']): ToolCtx {
-  return {
-    db: h.db, registry, guard: createBudgetGuard(h.db, h.clock, ['test.spawn']), maxTier: 'R1',
-    conversationId: GOLDEN_CONVERSATION, now: h.clock.now,
-  }
-}
-
-test('G7 day token budget: tool call refused with no effect, audited; under the cap it still works', async () => {
-  const h = await createHarness({ turns: [] })
+test('G7 day token budget: the MCP call is refused with no effect and audited; under the cap it works', async () => {
+  const h = await createHarness({
+    turns: [[proposeGoal(goalInput(GOLDEN_PROJECT, 'Over budget'))], [proposeGoal(goalInput(GOLDEN_PROJECT, 'Under budget'))]],
+  })
   try {
-    const ctx = toolCtx(h, defaultRegistry())
-    setDailyUsage(h.db, h.clock, { tokens: DAILY_TOKEN_LIMIT, spawns: 0 })
-    const denied = await execTool(ctx, 'goal.propose', goalInput(GOLDEN_PROJECT, 'Over budget'))
-    expect(denied.ok).toBe(false)
-    expect(denied.code).toBe('budget_exhausted')
+    setDailyUsage(h.db, { tokens: DAY.tokens, spawns: 0 })
+    await runTurn(h)
+    expect(h.receipts().map((r) => r.errorCode)).toEqual(['budget_exhausted'])
     expect(getGoal(h.db, GOLDEN_PROJECT) === null).toBe(true)
     expect(h.count(`SELECT COUNT(*) AS c FROM event WHERE kind = 'central.proposal' AND payload_json LIKE '%budget_exhausted%'`)).toBe(1)
 
-    setDailyUsage(h.db, h.clock, { tokens: DAILY_TOKEN_LIMIT - 1, spawns: 0 })
-    const allowed = await execTool(ctx, 'goal.propose', goalInput(GOLDEN_PROJECT, 'Under budget'))
-    expect(allowed.ok).toBe(true)
+    setDailyUsage(h.db, { tokens: DAY.tokens - 1, spawns: 0 })
+    await runTurn(h)
+    expect(h.receipts()[1]).toMatchObject({ ok: true })
     expect(getGoal(h.db, GOLDEN_PROJECT)?.version).toBe(1)
   } finally {
-    h.cleanup()
+    await h.cleanup()
   }
-})
+}, 30_000)
 
-test('G7 day spawn budget: the 21st spawn is refused and its handler never runs', async () => {
-  const h = await createHarness({ turns: [] })
+test('G7 day spawn budget: the spawn over the cap is refused and its handler never runs', async () => {
+  let spawned = 0
+  const spawn = (n: number) => [{ call: 'agent_spawn', args: { projectId: GOLDEN_PROJECT, count: n } }]
+  const h = await createHarness({ turns: [spawn(1), spawn(2)], tools: adversarialTools(() => { spawned += 1 }, '') })
   try {
-    let spawned = 0
-    const spawnTool: ToolDef = {
-      name: 'test.spawn', summary: 'Test-only spawn stand-in; counts handler runs.', tier: 'R1', usage: '{}',
-      projectScoped: false, validate: () => null,
-      handler: () => { spawned += 1; return { ok: true } },
-    }
-    const registry = createRegistry()
-    registry.register(spawnTool)
-    const ctx = toolCtx(h, registry)
-
-    setDailyUsage(h.db, h.clock, { tokens: 0, spawns: DAILY_SPAWN_LIMIT })
-    const denied = await execTool(ctx, 'test.spawn', {})
-    expect(denied.code).toBe('budget_exhausted')
+    setDailyUsage(h.db, { tokens: 0, spawns: DAY.spawns })
+    await runTurn(h)
+    expect(h.receipts().map((r) => r.errorCode)).toEqual(['spawn_daily'])
     expect(spawned).toBe(0)
-    expect(h.count(`SELECT COUNT(*) AS c FROM event WHERE kind = 'central.proposal' AND payload_json LIKE '%budget_exhausted%'`)).toBe(1)
 
-    setDailyUsage(h.db, h.clock, { tokens: 0, spawns: DAILY_SPAWN_LIMIT - 1 })
-    expect((await execTool(ctx, 'test.spawn', {})).ok).toBe(true)
+    setDailyUsage(h.db, { tokens: 0, spawns: DAY.spawns - 1 })
+    await runTurn(h)
+    expect(h.receipts()[1]).toMatchObject({ ok: true })
     expect(spawned).toBe(1)
   } finally {
-    h.cleanup()
+    await h.cleanup()
   }
-})
+}, 30_000)

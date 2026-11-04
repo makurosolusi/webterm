@@ -19,7 +19,7 @@ const config = (mock: boolean): EffectiveConfig => ({
   rows: [
     row('WEBTERM_CENTRAL', { value: 'on', source: 'settings', modified: true, ui: 'Settings › Capabilities › Central agent', editable: false }),
     row('WEBTERM_CENTRAL_RUNTIME', { value: mock ? 'mock' : 'auto (claude)', ...(mock ? { mock: true as const } : {}), ui: 'x', editable: false }),
-    row('WEBTERM_CENTRAL_MAX_STEPS', { value: '2', kind: 'number', setting: '2' }),
+    row('WEBTERM_CENTRAL_TURN_STEPS', { value: '12', kind: 'number', setting: '12' }),
     row('WEBTERM_TOKEN', { subsystem: 'Bootstrap', secret: true, set: true, value: '', ui: null, envOnly: true, editable: false, lockReason: 'Bootstrap-only by design.' }),
   ],
 })
@@ -42,7 +42,7 @@ describe('ControlPanel', () => {
     expect(within(central).getAllByRole('row')).toHaveLength(4) // header + 3
     expect(screen.getByRole('region', { name: 'Bootstrap' }).textContent).toContain('set')
     expect(document.querySelector('[data-key="WEBTERM_CENTRAL"]')?.getAttribute('data-modified')).toBe('true')
-    expect(document.querySelector('[data-key="WEBTERM_CENTRAL_MAX_STEPS"]')?.hasAttribute('data-modified')).toBe(false)
+    expect(document.querySelector('[data-key="WEBTERM_CENTRAL_TURN_STEPS"]')?.hasAttribute('data-modified')).toBe(false)
     expect(await screen.findByText('Agent protection status is not available yet.')).toBeTruthy()
     expect(screen.queryByText('MOCK')).toBeNull()
   })

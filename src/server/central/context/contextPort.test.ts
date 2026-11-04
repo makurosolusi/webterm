@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { appendMessage, getOrCreateConversation } from '../conversationStore'
-import { centralPrompt } from '../proposal/centralPrompt'
 import { HISTORY_LIMIT, createLegacyContextAssembler } from './contextPort'
 
 let fixture: Fixture
@@ -14,18 +13,12 @@ afterEach(() => fixture.close())
 
 const base = () => ({
   db: fixture.db, conversationId: 'central:global', text: 'status?',
-  proposalsEnabled: false, memoryEnabled: false, now: () => 1,
+  memoryEnabled: false, now: () => 1,
 })
 
 describe('legacy context assembler', () => {
-  it('returns the plain human text when proposals and memory are off', () => {
+  it('returns the plain human text when memory is off', () => {
     expect(createLegacyContextAssembler().build(base())).toEqual({ prompt: 'status?', history: [] })
-  })
-
-  it('returns the portfolio prompt exactly as centralPrompt does when proposals are on', () => {
-    const out = createLegacyContextAssembler().build({ ...base(), proposalsEnabled: true })
-    expect(out.prompt).toBe(centralPrompt(fixture.db, 'status?', true, ''))
-    expect(out.prompt).toContain('webterm-proposal')
   })
 
   it('caps history at the last 20 message ids, oldest first', () => {

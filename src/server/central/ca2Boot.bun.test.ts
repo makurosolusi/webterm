@@ -12,7 +12,6 @@ import { CORE_DEFS } from './tools/defs/core.defs'
 import { registerCa2Tools, toolsHash } from './tools/registerAll'
 import { createRegistry } from './tools/toolRegistry'
 import { activeTools, renderCatalog } from './tools/toolRegistry'
-import { centralStaticPrompt } from './proposal/centralPrompt'
 import { defaultRegistry } from './tools/defaultRegistry'
 
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
@@ -145,6 +144,5 @@ describe('prompt catalog', () => {
     const readName = names.find((n) => !CORE_DEFS.some((c) => c.name === n))
     expect(readName).toBeDefined()
     expect(after).toContain(readName as string)
-    expect(centralStaticPrompt()).toEqual(expect.any(String))
   })
 })
