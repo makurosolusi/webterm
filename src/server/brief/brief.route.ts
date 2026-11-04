@@ -1,6 +1,8 @@
 // HTTP for the morning brief. Root token / same-origin UI only (not in `isNodeTokenPath`):
 //   GET  /api/brief          -> BriefResponse (cached; counts as user activity)
 //   POST /api/brief/dismiss  -> BriefResponse with dismissed: true (persisted per visit)
+//   POST /api/brief/llm/on|off -> BriefResponse (the optional LLM paragraph, persisted; default off)
+//   GET  /api/brief/narrative  -> BriefNarrative (the paragraph, validated against the lines)
 import { join } from 'node:path'
 import type { RouteResult } from '../apiShared.types'
 import type { Workspace } from '../../shared/workspace'
@@ -10,6 +12,9 @@ import { renderBriefText } from './brief.model'
 
 export const BRIEF_PATH = '/api/brief'
 export const BRIEF_DISMISS_PATH = `${BRIEF_PATH}/dismiss`
+export const BRIEF_LLM_ON_PATH = `${BRIEF_PATH}/llm/on`
+export const BRIEF_LLM_OFF_PATH = `${BRIEF_PATH}/llm/off`
+export const BRIEF_NARRATIVE_PATH = `${BRIEF_PATH}/narrative`
 export const BRIEF_STATE_FILE = 'brief-state.json'
 const LABEL_TTL_MS = 5_000
 const PRESENCE_SAMPLE_MS = 60_000
@@ -49,8 +54,9 @@ let active: BriefService | null = null
 /** The process brief service, created on first use (bun:sqlite and the data dir load lazily). */
 async function productionService(): Promise<BriefService> {
   if (active) return active
-  const [{ db }, { dataDir }, { activeLedgerRuntime }, { presence }, { eventBus }] = await Promise.all([
+  const [{ db }, { dataDir }, { activeLedgerRuntime }, { presence }, { eventBus }, { createClaudeStructured }] = await Promise.all([
     import('../db'), import('../config'), import('../ledger/ledgerRuntimeState'), import('../channels/channelPresence'), import('../events/eventBus'),
+    import('../central/context/claudeStructured'),
   ])
   const labels = workspaceLabels(() => db.list())
   // The tracker starts "seen" at boot; only a later ping is real presence.
@@ -63,6 +69,7 @@ async function productionService(): Promise<BriefService> {
     lastVisibleAt: () => { const v = Date.now() - presence.awayMs(); return v > bootVisible + 1000 ? v : null },
     subscribe: (pattern, fn) => eventBus.subscribe(pattern, fn),
     sampleEveryMs: PRESENCE_SAMPLE_MS,
+    narrate: createClaudeStructured(),
   })
   return active
 }
@@ -74,9 +81,15 @@ export async function morningBriefText(): Promise<string> {
 
 /** null = not a brief path. */
 export async function briefRoute(path: string, method: string, service?: BriefService): Promise<RouteResult | null> {
-  if (path !== BRIEF_PATH && path !== BRIEF_DISMISS_PATH) return null
-  const want = path === BRIEF_PATH ? 'GET' : 'POST'
-  if (method !== want) return { status: 405, body: { error: 'method_not_allowed' } }
-  const svc = service ?? (await productionService())
-  return { status: 200, body: path === BRIEF_PATH ? svc.get() : svc.dismiss() }
+  const handlers: Record<string, [string, (svc: BriefService) => unknown]> = {
+    [BRIEF_PATH]: ['GET', (svc) => svc.get()],
+    [BRIEF_DISMISS_PATH]: ['POST', (svc) => svc.dismiss()],
+    [BRIEF_LLM_ON_PATH]: ['POST', (svc) => svc.setLlm(true)],
+    [BRIEF_LLM_OFF_PATH]: ['POST', (svc) => svc.setLlm(false)],
+    [BRIEF_NARRATIVE_PATH]: ['GET', (svc) => svc.narrative()],
+  }
+  const h = handlers[path]
+  if (!h) return null
+  if (method !== h[0]) return { status: 405, body: { error: 'method_not_allowed' } }
+  return { status: 200, body: await h[1](service ?? (await productionService())) }
 }

@@ -16,6 +16,7 @@ import { PolicySimulator } from './PolicySimulator'
 import { AgentMemory } from './AgentMemory'
 import { SecretsPanel } from './SecretsPanel'
 import { RoutinesPanel } from './RoutinesPanel'
+import { MorningBriefLlmToggle } from './MorningBriefSettings'
 import { matchesSearch, normalizeQuery } from './SettingsFields'
 import { peekToken } from './transportToken'
 
@@ -144,6 +145,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
       <AgentMemory />
       <SecretsPanel />
       <RoutinesPanel />
+      <MorningBriefLlmToggle />
 
       <div className="flex flex-wrap items-center gap-3">
         <Input type="search" aria-label={CONTROL_TEXT.search} placeholder={CONTROL_TEXT.search} value={filter}

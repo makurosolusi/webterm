@@ -18,6 +18,7 @@ import { sensorRoutes } from './routes/sensors.routes'
 import { costRoutes } from './routes/cost.routes'
 import { dagRoutes } from './routes/dag.routes'
 import { knowledge2Routes } from './routes/knowledge2.routes'
+import { handoffRoutes } from './routes/handoff.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -35,6 +36,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...fsRoutes,
   ...gitRoutes,
   ...briefRoutes,
+  ...handoffRoutes,
   ...worktreeRoutes,
   ...sensorRoutes,
   ...outboxRoutes,

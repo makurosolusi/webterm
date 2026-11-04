@@ -327,7 +327,7 @@ export default function App() {
           <OutputPanelHost />
           <ProblemsPanel problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode} onFocus={(id) => void onFocus(id)} />
           {tasks.menu}
-          <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} />
+          <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
           <TimelineHost workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} onFocusNode={(id) => void onFocus(id)} />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}

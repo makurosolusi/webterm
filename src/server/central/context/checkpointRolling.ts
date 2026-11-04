@@ -1,6 +1,6 @@
 // Production `Summarize` without a model call: carries the tail of the previous narrative forward and appends
-// the heads of the newest messages. It keeps `WEBTERM_CENTRAL_CHECKPOINT` producing real checkpoints
-// (source `auto`, model `deterministic`) until an LLM summarizer is wired through the central runtime.
+// the heads of the newest messages. Central's summarizer below rotation (checkpointLlm.createCentralSummarize)
+// (source `auto`, model `deterministic`); near rotation the model summary takes over.
 import { CHECKPOINT_NARRATIVE_MAX } from '../../ledger/ledgerSchemaV8'
 import type { Summarize } from './checkpointSummarizer'
 
