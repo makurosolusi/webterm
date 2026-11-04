@@ -30,6 +30,9 @@ export function resolveAsset(
   if (direct) {
     return { assetPath: direct, contentType: CONTENT_TYPES[path.extname(urlPath)] || 'application/octet-stream' }
   }
+  // Directory index before the SPA fallback: `/m` and `/m/` serve the /m PWA page (`m/index.html`).
+  const dirIndex = path.extname(urlPath) === '' ? assets[`${urlPath.replace(/\/+$/, '')}${INDEX}`] : undefined
+  if (dirIndex) return { assetPath: dirIndex, contentType: 'text/html' }
   const index = assets[INDEX]
   if (!index) return null
   return { assetPath: index, contentType: 'text/html' }

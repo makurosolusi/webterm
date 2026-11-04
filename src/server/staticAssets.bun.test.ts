@@ -32,3 +32,12 @@ test('manifest kosong → null', () => {
   expect(resolveAsset('/index.html', {})).toBe(null)
   expect(resolveAsset('/anything', {})).toBe(null)
 })
+
+test('direktori dengan index.html sendiri (PWA /m) dilayani sebelum fallback SPA', () => {
+  const withM = { ...manifest, '/m/index.html': '/embed/m/index.html', '/m/sw.js': '/embed/m/sw.js' }
+  for (const p of ['/m', '/m/']) expect(resolveAsset(p, withM)).toEqual({ assetPath: '/embed/m/index.html', contentType: 'text/html' })
+  expect(resolveAsset('/m/sw.js', withM)?.assetPath).toBe('/embed/m/sw.js')
+  expect(resolveAsset('/m/missing.js', withM)?.assetPath).toBe('/embed/index.html') // has an extension: no index guess
+  expect(resolveAsset('/', withM)?.assetPath).toBe('/embed/index.html')
+  expect(resolveAsset('/workspace/foo', withM)?.assetPath).toBe('/embed/index.html')
+})
