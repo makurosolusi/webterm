@@ -2,7 +2,8 @@
 // Reads the persisted workspace row; never returns cwd, launch command, session ids or comments.
 import { projectWorkspace } from '../../workspaceLookup'
 import type { ToolDef, ToolResult } from '../toolTypes'
-import { clip, READ_TOOLS_FLAG, readPage } from './read.shared'
+import { clip, MAX_PAGE, READ_TOOLS_FLAG, readPage } from './read.shared'
+import { obj, S } from '../../../capability/capability.schema'
 
 const MAX_TITLE = 80
 interface StoredNode { id?: unknown; kind?: unknown; title?: unknown; agentId?: unknown }
@@ -13,6 +14,8 @@ const nodeList: ToolDef = {
   tier: 'R0',
   flag: READ_TOOLS_FLAG,
   usage: '{"projectId":"<id>","limit":<1-50, default 20>,"offset":<default 0>}. Read-only.',
+  input: obj({ limit: S.int(1, MAX_PAGE), offset: S.int(0) }),
+  output: S.keys('workspace', 'total', 'offset', 'items', 'nextOffset'),
   validate: (input) => (readPage(input) ? null : 'invalid_shape'),
   handler(ctx, input, projectId): ToolResult {
     const { limit, offset } = readPage(input)!

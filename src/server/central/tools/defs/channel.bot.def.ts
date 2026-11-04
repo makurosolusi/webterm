@@ -5,6 +5,7 @@ import { approvalDigest } from '../../../ledger/ledgerApproval'
 import { BOT_ACCOUNT_RE } from '../../../channels/botManaged'
 import { CENTRAL_BOTS_FLAG, type BotManager } from '../../../channels/botManager'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
+import { obj, S } from '../../../capability/capability.schema'
 
 const ALLOWED_KEYS = ['accountId', 'botToken', 'purpose', 'confirm', 'approvalId'] as const
 const PURPOSE_MAX = 200
@@ -36,6 +37,8 @@ export function createChannelBotDef(deps: ChannelBotDefDeps): ToolDef {
     flag: CENTRAL_BOTS_FLAG,
     projectScoped: false,
     usage: '{"accountId":"<a-z0-9_ slug>","botToken":"<BotFather token>","purpose":"<=200 chars","confirm":"connect bot <accountId>","approvalId":"<approved channel.bot.propose approval>"}. Returns only the bot username; the token is never shown again. Web approval only.',
+    input: obj({ accountId: S.str(), botToken: S.str(), purpose: S.str(PURPOSE_MAX), confirm: S.str(), approvalId: S.str(200) }, [...ALLOWED_KEYS]),
+    output: S.anyObj('Bot id and username; never the token.'),
     auditKeys: ['accountId', 'botId', 'username', 'tokenLength'],
     validate(input: ToolInput) {
       const { accountId, botToken, purpose, confirm, approvalId } = input

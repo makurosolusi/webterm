@@ -4,12 +4,15 @@
 import type { AgentCatalog } from '../../agents/agentCatalog'
 import type { ToolDef } from '../toolTypes'
 import { flagged } from './agent.defs'
+import { obj, S } from '../../../capability/capability.schema'
 
 /** Builds the `agent.kinds` tool over the catalog. */
 export function createAgentKindsDef(catalog: AgentCatalog): ToolDef {
   return {
     name: 'agent.kinds', summary: 'List agent kinds that agent.spawn accepts (id, label, builtin, headless).', tier: 'R0', auditKeys: ['count'],
     usage: '{"projectId":"<id>"}. A custom kind always needs a human approval to spawn.',
+    input: obj({}),
+    output: S.keys('kinds', 'count'),
     validate: (input) => (Object.keys(input).every((k) => k === 'projectId') ? null : 'invalid_shape'),
     handler: flagged(() => {
       const kinds = catalog.kinds()

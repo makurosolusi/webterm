@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { CONTROL_VERBS, type ControlVerb } from '../capability/control.capabilities'
 
 /**
  * Token kapabilitas in-memory untuk kontrol node dari agent pusat.
@@ -8,35 +9,13 @@ import { createHash, randomBytes } from 'node:crypto'
  * dan sweep bisa dites tanpa menunggu jam dinding.
  */
 
-/** Verb yang boleh dimintakan lewat capability. */
-export type CapabilityVerb =
-  | 'node.spawn'
-  | 'node.prompt'
-  | 'node.wait'
-  | 'node.close'
-  | 'node.read'
-  | 'plan.read'
-  | 'approval.request'
-  | 'approval.decide'
-  | 'approval.consume'
-  | 'approval.read'
-  | 'browser.read'
-  | 'browser.act'
+/**
+ * Verb yang boleh dimintakan lewat capability. Sumber tunggalnya registry capability
+ * (`capability/control.capabilities.ts`): menambah verb = menambah satu `defineCapability` di sana.
+ */
+export type CapabilityVerb = ControlVerb
 
-export const CAPABILITY_VERBS: readonly CapabilityVerb[] = [
-  'node.spawn',
-  'node.prompt',
-  'node.wait',
-  'node.close',
-  'node.read',
-  'plan.read',
-  'approval.request',
-  'approval.decide',
-  'approval.consume',
-  'approval.read',
-  'browser.read',
-  'browser.act',
-]
+export const CAPABILITY_VERBS: readonly CapabilityVerb[] = CONTROL_VERBS
 
 /**
  * Resource sasaran: `node:<id>`, `workspace:<id>`, `project:<id>`, atau `*`.

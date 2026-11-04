@@ -8,6 +8,7 @@ import { ORCHESTRATOR_RUN_FLAG, orchestratorRunEnabled, orchestratorRunRequireAp
 import type { OrchestratorRunDeps } from '../../../orchestratorRunProduction'
 import { runTaskInProcess } from '../../../orchestrator/runTaskInProcess'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
+import { obj, S } from '../../../capability/capability.schema'
 
 const SAFE_ID = /^[A-Za-z0-9._:-]+$/
 const MAX_ID = 200
@@ -40,6 +41,8 @@ export function createTaskRunDef(resolveDeps: (ctx: ToolCtx) => Promise<Orchestr
     tier: 'R2',
     flag: ORCHESTRATOR_RUN_FLAG,
     usage: '{"projectId":"<id>","itemId":"<assigned item>","expectedVersion":<plan version>,"approvalId":"<approved worker.run approval, only when required>"}. Item must already be assigned (task.assign). Never merges.',
+    input: obj({ itemId: S.str(MAX_ID), expectedVersion: S.int(1), approvalId: S.str(MAX_ID) }, ['itemId', 'expectedVersion']),
+    output: S.keys('taskId', 'planVersion', 'nodeId'),
     auditKeys: ['taskId', 'planVersion', 'nodeId'],
     validate: (input: ToolInput) => {
       const { itemId, expectedVersion, approvalId } = input

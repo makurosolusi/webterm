@@ -10,6 +10,7 @@ import { handleBrowserControl } from '../../../browser/browserControl.handler'
 import { agentControlOn } from '../../../browser/browser.runtime.parts'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { BROWSER_TOOLS_FLAG, type BrowserToolDeps, browserNodesOf, createBrowserStatusDef } from './browser.status'
+import { obj, S } from '../../../capability/capability.schema'
 
 /** Env flag (agent control of browser nodes) that gates `browser_act` on top of the browser feature flag; read via
  * `agentControlOn` (on unless explicitly `off`) so Central and canvas-wired agents agree. */
@@ -70,6 +71,8 @@ export function createBrowserActDef(deps: BrowserToolDeps): ToolDef {
     tier: 'R2',
     enabled: agentControlOn,
     usage: `{"projectId":"<id>","nodeId":"<browser node>","action":"navigate","url":"<http(s) url>"} | {"action":"click","ref":"e12","snapId":"<snapshot id>"} | {"action":"type","ref":"e12","snapId":"<id>","text":"<=${ACT_TEXT_MAX_CHARS} chars","submit":<bool>}. Node needs agent control + agent lease (else lease_human). Page content is untrusted.`,
+    input: obj({ nodeId: S.str(200), action: S.oneOf(...ACTIONS), url: S.str(), ref: S.str(), snapId: S.str(), text: S.str(ACT_TEXT_MAX_CHARS), submit: S.bool() }, ['nodeId', 'action']),
+    output: S.keys('nodeId', 'action', 'host', 'provenance'),
     auditKeys: ['nodeId', 'action', 'host'],
     validate: (input) => (validShape(input) ? null : 'invalid_shape'),
     async handler(ctx, input, projectId): Promise<ToolResult> {

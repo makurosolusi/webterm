@@ -9,6 +9,7 @@ import type { MailDeliver } from '../agents/mailDeliver'
 import { AGENT_MAIL_FLAG, createAgentRelayDef } from './defs/agent.relay.def'
 import { AGENTS_FLAG, createAgentDefs } from './defs/agent.defs'
 import { BROWSER_TOOLS_FLAG, createBrowserDefs } from './defs/browser.act'
+import { CAP_DEFS } from './defs/cap.defs'
 import type { BrowserToolDeps } from './defs/browser.status'
 import { type ChannelBotDefDeps, createChannelBotDef } from './defs/channel.bot.def'
 import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
@@ -45,7 +46,7 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
   // Read tools dan memori ikut `central` (turunan, ENVSIMPLE D5); env efektif dari boot sudah memuat kunci turunannya.
   const central = isEnabled('central', env)
   const groups: Array<[boolean, () => readonly ToolDef[]]> = [
-    [central, () => [...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
+    [central, () => [...CAP_DEFS, ...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
     [agentsOn(env) && !!deps.executor, () => createAgentDefs(deps.executor as AgentExecutor)],
     [agentsOn(env), () => [TASK_RUN_DEF]],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],
