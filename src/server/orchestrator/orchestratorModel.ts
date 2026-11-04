@@ -5,6 +5,7 @@ import type { AgentRole, SpawnTarget } from './roles'
 import type { CapLimits, CapSnapshot, CapViolation } from './caps'
 import type { Plan, PlanItem, PlanStore } from './plan'
 import type { WorktreeService } from './worktree'
+import { isSealedEvidence } from '../verifier/verifier.seal'
 
 export interface OrchestratorDeps {
   ledger: OrchestratorLedger
@@ -125,10 +126,13 @@ export interface VerificationEvidence {
  * Verifikasi independen minimal (RND §8): evidence tanpa marker server, tanpa test, test
  * yang gagal, atau typecheck merah bukan `verified`. Scope violation selalu memblokir.
  * `verifiedBy` membuat klaim worker berhenti di `claimed_done` meski angka test-nya hijau.
+ * Marker saja tidak cukup: objek harus disegel `sealEvidence` (hanya `toModelEvidence`).
  */
 export function evidenceVerified(evidence: VerificationEvidence | undefined): boolean {
   if (!evidence) return false
   if (evidence.verifiedBy !== SERVER_VERIFIED_BY) return false
+  // F4-c: the marker string is forgeable; only an object sealed by the verifier path counts.
+  if (!isSealedEvidence(evidence)) return false
   if (Array.isArray(evidence.scopeViolations) && evidence.scopeViolations.length > 0) return false
   const tests = evidence.tests
   if (!tests || !Number.isFinite(tests.passed) || !Number.isFinite(tests.failed)) return false

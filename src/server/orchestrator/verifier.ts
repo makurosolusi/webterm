@@ -20,6 +20,7 @@ import {
   evidenceVerified,
 } from './orchestratorModel'
 import { deny } from './orchestratorSupport'
+import { sealEvidence } from '../verifier/verifier.seal'
 
 const TIMEOUT_EXIT = 124
 const EXEC_FAILURE_EXIT = 127
@@ -179,7 +180,7 @@ export function toModelEvidence(outcome: VerifyOutcome): VerifyModelEvidence {
   if (outcome.verifiedBy !== SERVER_VERIFIED_BY) {
     throw new Error('toModelEvidence requires a verdict produced by verifyWorktree')
   }
-  return {
+  return sealEvidence({
     verifiedBy: SERVER_VERIFIED_BY,
     diffStat: outcome.diffStat,
     filesChanged: outcome.changedFiles,
@@ -187,7 +188,7 @@ export function toModelEvidence(outcome: VerifyOutcome): VerifyModelEvidence {
     tests: outcome.tests,
     typecheck: outcome.typecheck,
     commands: outcome.evidence,
-  }
+  })
 }
 
 export interface VerifyWorkerDeps {

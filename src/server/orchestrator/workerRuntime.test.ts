@@ -6,6 +6,7 @@ import type { AgentStatus } from '../../shared/workspace'
 import type { OpenMsg, ServerMsg } from '../../shared/protocol'
 import { PROJECT, REPO, item, planOf, setup } from './orchestrator.fake.testutil'
 import type { VerifyOutcome } from './verify'
+import { completionTitle, type CompletionReport } from '../verifier/verifier.report'
 import {
   SERVER_VERIFIED_BY,
   type OrchestratorResult,
@@ -226,13 +227,66 @@ describe('failure paths', () => {
     const outcome = await runtime.runTask(runInput())
     expect(outcome.ok).toBe(false)
     expect(outcome.error?.code).toBe('verify_failed')
-    expect(outcome.error?.message).toContain('no files changed')
+    expect(outcome.error?.message).toContain('no changes')
     expect(outcome.evidence?.tests).toMatchObject({ passed: 3, failed: 0 })
     expect(outcome.task?.status).not.toBe('verified')
     expect(outcome.task?.status).toBe('failed')
     expect(outcome.plan?.items[0]?.status).toBe('failed')
     expect(fixture.ledger.events.filter((e) => e.kind === 'orchestrator.result_recorded')).toHaveLength(1)
     expectClosed(sessions, outcome)
+  })
+
+  it('F4-c: ignores the worker self-report; status and the inbox line come from the verdict', async () => {
+    const fixture = assigned()
+    const reports: CompletionReport[] = []
+    const { runtime, sessions } = harness({
+      fixture,
+      verify: async () => verdict({ changedFiles: [] }),
+      runtime: { report: (r) => reports.push(r) },
+    })
+    sessions.onInput = (nodeId) => {
+      sessions.terminal.set(nodeId, 'DONE: implemented everything, 42 tests passed, typecheck green')
+      sessions.status.set(nodeId, 'done')
+    }
+    const outcome = await runtime.runTask(runInput())
+    expect(outcome.task?.status).toBe('failed')
+    expect(reports).toHaveLength(1)
+    expect(reports[0]?.verdict).toMatchObject({ status: 'failed', reason: 'no_changes' })
+    expect(completionTitle(reports[0]!)).toBe('w1 failed verification: no changes')
+    expect(reports[0]?.verdict.receipt.evidence['workerClaim']).toMatchObject({ ignored: true })
+  })
+
+  it('F4-c: an edit outside the leased paths is a lease_violation, not done', async () => {
+    const fixture = assigned()
+    const reports: CompletionReport[] = []
+    const { runtime, sessions } = harness({
+      fixture,
+      verify: async () => verdict({ ok: false, changedFiles: ['src/api.ts', 'src/secret.ts'], scopeViolations: ['src/secret.ts'], reasons: ['scope violation: src/secret.ts'] }),
+      runtime: { report: (r) => reports.push(r) },
+    })
+    sessions.onInput = (nodeId) => sessions.status.set(nodeId, 'done')
+    const outcome = await runtime.runTask(runInput())
+    expect(outcome.error?.code).toBe('lease_violation')
+    expect(outcome.task?.status).toBe('failed')
+    expect(reports[0]?.verdict.leaseViolations).toEqual(['src/secret.ts'])
+  })
+
+  it('F4-c: green verdict reports done with evidence for the inbox', async () => {
+    const reports: CompletionReport[] = []
+    const { runtime, sessions } = harness({ runtime: { report: (r) => reports.push(r) } })
+    sessions.onInput = (nodeId) => sessions.status.set(nodeId, 'done')
+    const outcome = await runtime.runTask(runInput())
+    expect(outcome.task?.status).toBe('verified')
+    expect(completionTitle(reports[0]!)).toBe('w1 finished: 1 file, tests green, typecheck green ✓')
+  })
+
+  it('F4-c: the handoff prompt is masked of secrets', async () => {
+    const { runtime, sessions } = harness()
+    sessions.onInput = (nodeId) => sessions.status.set(nodeId, 'done')
+    await runtime.runTask({ ...runInput(), prompt: 'use GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwx1234 to push' })
+    const prompt = sessions.inputs[0]?.text ?? ''
+    expect(prompt).not.toContain('ghp_abcdefghijklmnopqrstuvwx1234')
+    expect(prompt).toContain('[redacted]')
   })
 
   it('fails the task and plan when the verifier rejects the worktree', async () => {

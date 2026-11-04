@@ -6,9 +6,17 @@ import { openFixture, seedPortfolio } from '../centralTestFixture.testutil'
 import { AGENT_ENVELOPE, type AgentHost, agentNodeId, createAgentExecutor, type SpawnInput } from './agentExecutor'
 import { agentReqId } from './agentStore'
 import { createAgentSpawner } from '../../spawn/agentSpawn'
+import { SERVER_VERIFIED_BY } from '../../orchestrator/orchestratorModel'
+import { judgeCompletion } from '../../verifier/verifier.judge'
+import type { VerifyAgentCompletion } from './agentVerify'
 
 const T0 = 1_700_000_000_000
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+/** Polls until `ok()` (child exit + async verify take longer than a fixed sleep on a loaded machine). */
+async function until(ok: () => boolean, ms = 15_000): Promise<void> {
+  for (const end = Date.now() + ms; !ok() && Date.now() < end;) await wait(25)
+}
+const SETTLED = ['accepted', 'rejected', 'failed']
 
 function fakeGuard(decide: (req: GuardRequest) => GuardDecision = () => ({ verdict: 'allow', level: 'act_gated' })) {
   const calls: GuardRequest[] = []
@@ -32,11 +40,18 @@ function fakeHost(over: Partial<AgentHost> = {}) {
   }
   return { host, sessions, sent, closed, opens: () => opens }
 }
-function setup(decide?: (req: GuardRequest) => GuardDecision, hostOver: Partial<AgentHost> = {}) {
+/** Fake completion verifier (test-only): the verdict a real diff/test run would produce. */
+function fakeVerdict(changedFiles: string[]): VerifyAgentCompletion {
+  return async (agent) => judgeCompletion({
+    taskId: agent.taskId ?? agent.id,
+    verdict: { verifiedBy: SERVER_VERIFIED_BY, ok: true, reasons: [], evidence: [{ command: 'npm test', exitCode: 0, durationMs: 1, outputDigest: 'd'.repeat(64), summary: 'exit 0' }], changedFiles, scopeViolations: [], tests: { passed: 2, failed: 0, command: 'npm test' } },
+  })
+}
+function setup(decide?: (req: GuardRequest) => GuardDecision, hostOver: Partial<AgentHost> = {}, verifyCompletion: VerifyAgentCompletion = fakeVerdict(['src/a.ts'])) {
   const f = openFixture(); seedPortfolio(f.db)
   const g = fakeGuard(decide)
   const h = fakeHost(hostOver)
-  const ex = createAgentExecutor({ db: f.db, guard: g.guard, host: h.host, now: () => T0 })
+  const ex = createAgentExecutor({ db: f.db, guard: g.guard, host: h.host, now: () => T0, verifyCompletion })
   const input = (over: Partial<SpawnInput> = {}): SpawnInput => ({ projectId: 'p1', kind: 'opencode', role: 'worker', title: 't', reqId: agentReqId('p1', 'r1'), owner: 'central:c1', requireApproval: false, ...over })
   const events = () => allRows(f.db, "SELECT payload_json FROM event WHERE kind = 'central.agent' ORDER BY seq").map((r) => (JSON.parse(String(r.payload_json)) as { phase: string }).phase)
   return { f, g, h, ex, input, events }
@@ -145,6 +160,13 @@ describe('crash between intent and done', () => {
 
 describe('prompt / close / read', () => {
   const spawned = async () => { const s = setup(); const r = await s.ex.spawn(s.input()); return { ...s, agent: s.ex.store.get(String(r.data?.agentId)) as AgentRecord } }
+  it('F4-c: the handoff prompt is masked of secrets before it reaches the worker', async () => {
+    const { h, ex, input } = setup()
+    const agent = ex.store.get(String((await ex.spawn(input())).data?.agentId)) as AgentRecord
+    await ex.prompt(agent, 'deploy with sk-abcdefghijklmnopqrstuvwxyz0123', 'steer')
+    expect(h.sent[0]?.[1]).not.toContain('sk-abcdefghijklmnopqrstuvwxyz0123')
+    expect(h.sent[0]?.[1]).toContain('[redacted]')
+  })
   it('wraps the text in the not-human envelope and strips terminal control bytes', async () => {
     const { ex, agent, h } = await spawned()
     const res = await ex.prompt(agent, 'hello\x1b[2J\x07 world', 'steer')
@@ -185,19 +207,22 @@ describe('prompt / close / read', () => {
   })
 })
 
-describe('exec runner agents', () => {
+describe('exec runner agents', { timeout: 20_000 }, () => {
   const headless = (script: string) => ({ worktree: async () => tmpdir(), runnerFor: () => 'exec' as const, headlessArgv: () => [process.execPath, '-e', script] as const })
-  it('runs headless, ends candidate_done on exit 0, failed otherwise, and exposes the tail', async () => {
+  it('runs headless, exit 0 goes through the verifier to accepted, failed otherwise, and exposes the tail', async () => {
     const ok = setup(undefined, headless('console.log(JSON.stringify({done:true}))'))
     const res = await ok.ex.spawn(ok.input())
     const id = String(res.data?.agentId)
     expect(res.data).toMatchObject({ state: 'working', runner: 'exec', nodeId: null })
-    await wait(500)
-    expect(ok.ex.store.get(id)?.state).toBe('candidate_done')
+    await until(() => SETTLED.includes(ok.ex.store.get(id)?.state ?? ''))
+    expect(ok.ex.store.get(id)).toMatchObject({ state: 'accepted', endReason: 'verified' })
+    expect(ok.events()).toEqual(expect.arrayContaining(['exec.exit', 'verify']))
+    const inbox = allRows(ok.f.db, "SELECT kind, title FROM inbox_item WHERE source = 'verifier'")
+    expect(inbox).toEqual([{ kind: 'review', title: `${id} finished: 1 file, tests green ✓` }])
     expect(JSON.stringify((await ok.ex.read(ok.ex.store.get(id) as AgentRecord, 5)).data)).toContain('done')
     const bad = setup(undefined, headless('process.exit(2)'))
     const id2 = String((await bad.ex.spawn(bad.input())).data?.agentId)
-    await wait(500)
+    await until(() => SETTLED.includes(bad.ex.store.get(id2)?.state ?? ''))
     expect(bad.ex.store.get(id2)).toMatchObject({ state: 'failed', endReason: 'exec_exit_2' })
   })
   it('a kind without a headless form fails the spawn instead of hanging', async () => {
@@ -216,11 +241,24 @@ describe('exec runner agents', () => {
     const lineage: [string, string][] = []
     const kinds: string[] = []
     const spawner = createAgentSpawner({ ancestors: () => [], registerSpawn: (p, c) => { lineage.push([p, c]) }, record: (e) => { kinds.push(`${e.kind}:${(e.payload as { door?: string }).door ?? ''}`) }, onPtyExit: () => {} })
-    const ex = createAgentExecutor({ db: s.f.db, guard: s.g.guard, host: s.h.host, now: () => T0, spawn: spawner.spawn })
+    const ex = createAgentExecutor({ db: s.f.db, guard: s.g.guard, host: s.h.host, now: () => T0, spawn: spawner.spawn, verifyCompletion: fakeVerdict(['src/a.ts']) })
     const id = String((await ex.spawn(s.input())).data?.agentId)
-    await wait(500)
+    await until(() => SETTLED.includes(ex.store.get(id)?.state ?? ''))
     expect(lineage).toEqual([['central', `node:${agentNodeId(id)}`]])
     expect(kinds).toEqual(['agent.spawn:central', 'agent.exit:'])
-    expect(ex.store.get(id)?.state).toBe('candidate_done')
+    expect(ex.store.get(id)?.state).toBe('accepted')
+  })
+  it('F4-c: exit 0 without a diff is rejected (no changes); the worker claim never accepts it', async () => {
+    const s = setup(undefined, headless('console.log("all done, every test passed")'), fakeVerdict([]))
+    const id = String((await s.ex.spawn(s.input())).data?.agentId)
+    await until(() => SETTLED.includes(s.ex.store.get(id)?.state ?? ''))
+    expect(s.ex.store.get(id)?.state).toBe('rejected')
+    expect(allRows(s.f.db, "SELECT kind, title FROM inbox_item WHERE source = 'verifier'")).toEqual([{ kind: 'notify', title: `${id} failed verification: no changes` }])
+  })
+  it('F4-c: a verifier crash ends failed, not accepted', async () => {
+    const s = setup(undefined, headless('process.exit(0)'), async () => { throw new Error('tool missing') })
+    const id = String((await s.ex.spawn(s.input())).data?.agentId)
+    await until(() => SETTLED.includes(s.ex.store.get(id)?.state ?? ''))
+    expect(s.ex.store.get(id)).toMatchObject({ state: 'failed', endReason: 'verifier_error' })
   })
 })
