@@ -9,6 +9,7 @@ import FilesNode from './FilesNode'
 import EditorNode from './EditorNode'
 import DiffNode from './DiffNode'
 import PlanNode from './PlanNode'
+import McpAppNode from './mcpapps/McpAppNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { useLiveSettings } from './useSettings'
 
@@ -21,6 +22,8 @@ export const nodeTypes = {
   diff: DiffNode,
   // ⌘K intent -> DAG draft, approved by a human, then the map of its workers (PlanNode.tsx, F4-f).
   plan: PlanNode,
+  // MCP Apps `ui://` view in a sandboxed frame (mcpapps/McpAppNode.tsx, F6); node id = server app id.
+  app: McpAppNode,
   // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya dari
   // context, bukan lagi dari data node — lihat `useLiveSettings`.
   //

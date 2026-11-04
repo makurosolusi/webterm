@@ -28,6 +28,7 @@ import { bakeoffRoutes } from './routes/bakeoff.routes'
 import { evalCasesRoutes } from './routes/evalcases.routes'
 import { replayRoutes } from './routes/replay.routes'
 import { prReviewRoutes } from './routes/prreview.routes'
+import { mcpAppsRoutes } from './routes/mcpapps.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -49,6 +50,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...worktreeRoutes,
   ...sensorRoutes,
   ...outboxRoutes,
+  ...mcpAppsRoutes,
   ...controlRoutes,
   ...miscRoutes,
   ...centralRoutes,

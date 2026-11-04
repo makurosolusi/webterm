@@ -27,6 +27,7 @@ test('full route order snapshot', () => {
     'workspace-worktree',
     'ports', 'problems', 'tasks',
     'outbox',
+    'mcpapps',
     'agent-status', 'tools', 'mcp', 'control', 'context-link',
     'generate-name', 'folder-picker',
     'central-chat', 'ca2', 'extended',
