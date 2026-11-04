@@ -1,4 +1,5 @@
 import { callFingerprint, createMemoryReceiptLog, type Receipt, type ReceiptLog, runOnce } from '../../capability/capability.receipt'
+import { checkpointBeforeAction } from '../../checkpoint/checkpoint.service'
 import { auditTool } from './toolAudit'
 import { type ControlGuard, type ExecResult, type ToolCtx, type ToolDef, type ToolInput, type ToolResult, defEnabled, tierWithin } from './toolTypes'
 import { validateToolInput } from './toolValidate'
@@ -32,6 +33,8 @@ async function execAudited(ctx: ToolCtx, name: string, args: ToolInput, options:
   if (!tierWithin(def.tier, ctx.maxTier)) return finish({ ok: false, code: 'tier_denied' }, projectId)
   const verdict = ctx.guard.check({ tool: name, tier: def.tier, ...(projectId ? { projectId } : {}), input: args })
   if (!verdict.ok) return finish({ ok: false, code: verdict.code || 'guard_denied' }, projectId)
+  // F3-c: snapshot the project's workspace before any effect (R1+) so Rewind can undo it; never throws.
+  await checkpointBeforeAction(ctx.db, projectId, def.tier)
   return finish(await runHandler(def, ctx, args, projectId), projectId)
 }
 
