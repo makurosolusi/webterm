@@ -25,12 +25,6 @@ export interface SessionInfo {
   status?: AgentStatus
 }
 
-/** Jembatan ke runtime browser: env capability untuk sesi baru, dan pencabutan saat sesi berakhir. */
-export interface BrowserSessionHook {
-  envFor(sessionId: string, agentId?: string): Record<string, string>
-  release(sessionId: string): void
-}
-
 /** Knob runtime yang disambungkan integrator dari store settings. Absen = default hari ini, jadi
  *  `new Sessions()` berperilaku persis seperti sebelum settings ada. */
 export interface SessionsOptions {
@@ -45,8 +39,6 @@ export interface SessionsOptions {
   /** `settings.hookReplyApprovals`. Absen/false = `NODETERM_PERM_WAIT_SECS` tidak dikirim, jadi hook
    *  permission tidak menahan apa pun — perilaku sebelum setting ini ada. */
   hookReplyApprovals?: boolean
-  /** Capability browser per sesi agent (WS-11). Absen = tidak ada env browser sama sekali — perilaku sebelum fitur ini. */
-  browser?: BrowserSessionHook
   /** Sumber PTY. Di-inject supaya test bisa memakai PTY palsu tanpa `Bun.Terminal`. */
   spawn?: typeof spawnPty
   /** Sumber waktu untuk tombstone exit. Di-inject supaya test tidak bergantung jam dinding. */

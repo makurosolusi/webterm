@@ -4,7 +4,6 @@ import type { WebSocket } from 'ws'
 import type { BrowserState, BrowserStatusResp } from '../../shared/browser.contract'
 import type { BrowserApiResult } from '../browserApi'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
-import type { BrowserSessionHook } from '../sessionsTypes'
 
 export interface BrowserRuntime {
   status(): BrowserStatusResp
@@ -18,7 +17,6 @@ export interface BrowserRuntime {
   api(method: string, pathname: string, body: () => Promise<string>): Promise<BrowserApiResult | null>
   /** `/api/control/browser/*`; null = bukan prefix itu. */
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
-  sessionHook: BrowserSessionHook
   /** Matikan proxy, koneksi CDP, timer, dan proses Chromium. Idempoten. */
   shutdown(): Promise<void>
 }

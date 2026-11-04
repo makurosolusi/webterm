@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BlockedError } from '../../shared/browser.contract'
 import type { BrowserVerb } from '../../shared/browser.contract'
 import { allows } from '../control/capabilities'
@@ -7,6 +7,10 @@ import type { ControlRequest } from '../control/controlTypes'
 import { handleBrowserControl } from './browserControl.handler'
 import type { AgentVerbs } from './browserAgent.verbs.ctx'
 import { BrowserError } from './browserHost.targets'
+import { TOKEN_HEADER } from '../auth'
+import { forgetNodeToken, nodeToken } from '../hooksTokens'
+import { resolveLinkedBrowser } from './browser.linkedTarget'
+import type { Workspace } from '../../shared/workspace'
 
 const rec = (verb: string, resource: string): CapabilityRecord =>
   ({ id: 'i', verb: verb as CapabilityRecord['verb'], resource, expiresAt: Number.MAX_SAFE_INTEGER })
@@ -39,6 +43,7 @@ describe('handleBrowserControl routing', () => {
     expect((await h(P('nope'), 'act1'))?.status).toBe(404)
     expect((await h(P('constructor'), 'act1'))?.status).toBe(404)
     expect((await h({ path: '/api/control/browser/n1' }, 'act1'))?.status).toBe(404)
+    expect((await h({ path: '/api/control/browser/status' }, 'read1'))?.status).toBe(400) // capability: node wajib di path
     expect((await h({ path: '/api/control/browser/n1/click/x' }, 'act1'))?.status).toBe(404)
     expect((await h(P('click', 'a b;x'), 'act1'))?.status).toBe(400)
     expect((await h({ ...P('click'), method: 'GET' }, 'act1'))?.status).toBe(405)
@@ -90,5 +95,42 @@ describe('handleBrowserControl success and errors', () => {
       .toEqual({ status: 403, body: { error: 'blocked', reason: 'private_host', hostname: 'intranet' } })
     const r = await setup({ navigate: async () => { throw new Error('token=abc123 boom') } })(P('navigate'), 'act1')
     expect(r).toEqual({ status: 500, body: { error: 'internal' } })
+  })
+})
+
+describe('handleBrowserControl node-token path (target from canvas cables, read live)', () => {
+  const board: Workspace = {
+    id: 'w1', name: 'w', viewport: { x: 0, y: 0, zoom: 1 }, updatedAt: 0, bridges: [],
+    nodes: [{ id: 'a1', kind: 'agent', x: 0, y: 0 }, { id: 'a2', kind: 'agent', x: 0, y: 0 }, { id: 'b1', kind: 'browser', x: 0, y: 0 }],
+  }
+  const wire = () => { board.bridges = [{ id: 'l', source: 'a1', target: 'b1', kind: 'context' }] }
+  afterEach(() => { forgetNodeToken('a1'); forgetNodeToken('a2'); board.bridges = [] })
+  const run = (who: string, path: string, allowed = true, linked = true) => {
+    const verbs = new Proxy({} as AgentVerbs, { get: () => async (id: string) => ({ id }) })
+    return handleBrowserControl(
+      { method: 'GET', path, headers: { [TOKEN_HEADER]: nodeToken(who) } },
+      { capabilities, verbs, agentAllowed: () => allowed, ...(linked ? { linked: (r: string, w?: string) => resolveLinkedBrowser([board], r, w) } : {}) },
+    )
+  }
+
+  it('wired after the session started: the next call succeeds; unwired again: denied', async () => {
+    expect(await run('a1', '/api/control/browser/status')).toMatchObject({ status: 404, body: { error: 'no_linked_browser' } })
+    wire()
+    expect(await run('a1', '/api/control/browser/status')).toMatchObject({ status: 200, body: { data: { id: 'b1' } } })
+    expect(await run('a1', '/api/control/browser/b1/status')).toMatchObject({ status: 200 })
+    board.bridges = []
+    expect(await run('a1', '/api/control/browser/b1/status')).toMatchObject({ status: 403, body: { error: 'not_linked' } })
+  })
+
+  it('an agent not wired to the browser cannot drive it, even naming it', async () => {
+    wire()
+    expect(await run('a2', '/api/control/browser/b1/status')).toMatchObject({ status: 403, body: { error: 'not_linked' } })
+  })
+
+  it('agent control off = disabled; no linked resolver or no node identity = 401', async () => {
+    wire()
+    expect(await run('a1', '/api/control/browser/status', false)).toMatchObject({ status: 403, body: { error: 'disabled' } })
+    expect((await run('a1', '/api/control/browser/status', true, false))?.status).toBe(401)
+    expect((await setup()(P('status')))?.status).toBe(401)
   })
 })

@@ -1,5 +1,6 @@
-// Handler murni `/api/control/browser/:nodeId/:verb` (PLAN b §4.6). Pola control: `{status, body} | null`
-// (null = bukan milik handler ini). Mount di api.ts dilakukan integrator (WS-08/11), bukan di sini.
+// Handler murni `/api/control/browser/[:nodeId/]:verb` (PLAN b §4.6). Pola control: `{status, body} | null`
+// (null = bukan milik handler ini). Dua jalur identitas: capability `browser.*` (Agent Pusat, node wajib di path) atau
+// token node sesi agent PTY — target lalu diselesaikan SAAT PANGGILAN dari kabel node itu (`browser.linkedTarget.ts`).
 import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP, BlockedError } from '../../shared/browser.contract'
 import type { BrowserErrorCode, BrowserVerb } from '../../shared/browser.contract'
 import { isSafeNodeId } from '../../shared/workspace'
@@ -9,6 +10,8 @@ import { createLogger } from '../logs/logger'
 import type { AgentVerbs } from './browserAgent.verbs.ctx'
 import { controlOk } from './browserAgent.wrap'
 import { BrowserError } from './browserHost.targets'
+import { requesterOf } from './browser.linkedTarget'
+import type { LinkedTarget } from './browser.linkedTarget'
 
 const log = createLogger('browser.control')
 const CAPABILITY_HEADER = 'x-webterm-capability'
@@ -18,6 +21,8 @@ export interface BrowserControlDeps {
   verbs: AgentVerbs
   /** Gabungan flag fitur + env + toggle `agentControl` node. */
   agentAllowed(nodeId: string): boolean
+  /** Browser yang terhubung kabel dengan node agent `requesterId` (dibaca live dari board). Absen = jalur token node mati. */
+  linked?(requesterId: string, wanted?: string): LinkedTarget
 }
 
 const STATUS_BY_CODE: Record<BrowserErrorCode, number> = {
@@ -40,17 +45,32 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   const prefix = `${BROWSER_CONTROL_PREFIX}/`
   if (!req.path.startsWith(prefix)) return null
   const parts = req.path.slice(prefix.length).split('/')
-  const [nodeId, verb] = parts
-  if (parts.length !== 2 || !verb || !Object.hasOwn(BROWSER_VERB_CAP, verb)) return fail(404, 'not_found')
-  if (!isSafeNodeId(nodeId)) return fail(400, 'invalid_node_id')
+  // `<verb>` saja = target dari kabel; `<nodeId>/<verb>` = target eksplisit.
+  const [wanted, verb] = parts.length === 1 ? [undefined, parts[0]] : parts
+  if (parts.length > 2 || !verb || !Object.hasOwn(BROWSER_VERB_CAP, verb)) return fail(404, 'not_found')
+  if (wanted !== undefined && !isSafeNodeId(wanted)) return fail(400, 'invalid_node_id')
   const v = verb as BrowserVerb
   if (req.method !== 'POST' && !(v === 'status' && req.method === 'GET')) return fail(405, 'method_not_allowed')
 
+  let nodeId: string
   const token = headerValue(req.headers, CAPABILITY_HEADER)
-  const record = token ? deps.capabilities.verify(token) : undefined
-  if (!record) return fail(401, 'unauthorized')
-  if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[v], `node:${nodeId}`)) return fail(403, 'forbidden')
-  if (v !== 'release' && !deps.agentAllowed(nodeId)) return fail(403, 'disabled')
+  if (token) {
+    const record = deps.capabilities.verify(token)
+    if (!record) return fail(401, 'unauthorized')
+    if (wanted === undefined) return fail(400, 'node_required')
+    if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[v], `node:${wanted}`)) return fail(403, 'forbidden')
+    nodeId = wanted
+  } else {
+    // Token node sesi agent: hanya browser yang terhubung kabel dengannya (default-deny untuk yang lain).
+    const requester = deps.linked && requesterOf(req.headers)
+    if (!requester || !deps.linked) return fail(401, 'unauthorized')
+    const target = deps.linked(requester, wanted)
+    if (!target.ok) return target.result
+    nodeId = target.nodeId
+  }
+  if (v !== 'release' && !deps.agentAllowed(nodeId)) {
+    return fail(403, 'disabled', { message: 'Agent control is off for this browser node (toolbar checkbox or Settings). Only the user can turn it on; do not retry.' })
+  }
 
   try {
     const data = await deps.verbs[v](nodeId, asObject(req.body))

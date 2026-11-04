@@ -17,14 +17,19 @@ import { readTranscriptFile, renderTranscriptLines } from './contextLinkTranscri
 
 // --- authorization: resolve the requester's link doc from its own workspace ---
 
-export function buildLinkDoc(ws: Workspace, requesterId: string): LinkDoc {
+/** Ids of the nodes wired to `requesterId` by a canvas edge (either direction). Shared with browser-agent targeting. */
+export function linkedPeerIds(ws: Workspace, requesterId: string): Set<string> {
   const peerIds = new Set<string>()
   for (const b of ws.bridges) {
     if (b.source === requesterId) peerIds.add(b.target)
     else if (b.target === requesterId) peerIds.add(b.source)
   }
+  return peerIds
+}
+
+export function buildLinkDoc(ws: Workspace, requesterId: string): LinkDoc {
   const links: LinkDocEntry[] = []
-  for (const id of peerIds) {
+  for (const id of linkedPeerIds(ws, requesterId)) {
     const n = ws.nodes.find((x) => x.id === id)
     if (n) links.push({ id: n.id, title: n.title || n.id, agent: n.agentId, sessionId: n.sessionId })
   }

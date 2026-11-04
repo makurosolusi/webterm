@@ -71,8 +71,9 @@ describe('detail dan sub', () => {
     expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, { ...DETECT, telegramBot: '@webterm_bot' }).detail).toBe('Tersambung sebagai @webterm_bot')
     expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, DETECT).detail).toBeUndefined()
   })
-  it('Browser punya sub agent berbahaya, bawaan off', () => {
-    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs).toEqual([{ key: 'browserAgent', label: 'Izinkan agent mengendalikan browser', on: false, dangerous: true }])
+  it('Browser punya sub agent berbahaya, bawaan ON (alat developer); off eksplisit tetap dihormati', () => {
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs).toEqual([{ key: 'browserAgent', label: 'Izinkan agent mengendalikan browser', on: true, dangerous: true }])
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'off' }, DETECT).subs).toEqual([expect.objectContaining({ key: 'browserAgent', on: false })])
   })
 })
 

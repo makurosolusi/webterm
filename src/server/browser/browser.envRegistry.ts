@@ -46,9 +46,9 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     requires: [BROWSER_ON],
     dangerNote: 'Agent terminal bisa mengemudikan browser (klik, ketik, navigasi) dengan sesi login yang ada; konten halaman tidak tepercaya.',
     label: 'Kendali agent',
-    description: 'Mengizinkan agent terminal mengemudikan node Browser (hanya node yang toggle-nya dinyalakan manusia). Konten halaman tidak tepercaya.',
+    description: 'Agent terminal yang tersambung kabel ke node Browser boleh mengemudikannya (default on; matikan per node lewat toggle toolbar). Konten halaman tidak tepercaya.',
     dangerous: true,
-  }),
+  }, 'on'),
   text(ENV_BROWSER.allowHosts, GROUP, {
     ...B,
     requires: [BROWSER_ON],

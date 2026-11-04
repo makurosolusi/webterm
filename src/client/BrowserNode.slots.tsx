@@ -23,7 +23,7 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   const rf = useReactFlow()
   const status = useBrowserStatus()
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
-  const agentControl = (p.data as { agentControl?: boolean }).agentControl ?? false
+  const agentControl = (p.data as { agentControl?: boolean }).agentControl !== false // default on; hanya off eksplisit
   const onAgentControl = useCallback((enabled: boolean) => {
     // Server dulu: bila gagal, flag tersimpan tidak berubah dan toggle tetap menunjukkan kenyataan.
     void setAgentControl(p.id, enabled).then(() => rf.updateNodeData(p.id, { agentControl: enabled })).catch((e: unknown) => console.warn('browser.agentControl failed', e instanceof Error ? e.message : 'unknown'))
