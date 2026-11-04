@@ -149,9 +149,14 @@ const FAKE_NODE_TOKEN = 'not-a-real-node-token'
 
 /** Jalankan baris hook dengan `curl` yang di-stub; kembalikan argv yang diterima stub itu. */
 function curlArgv(cmd: string, env: Record<string, string>): string[] {
+  return curlArgvEach([cmd], env)[0]
+}
+
+/** Seperti `curlArgv`, tapi semua baris dijalankan dalam SATU `sh` (tiap baris dengan file argv
+ *  sendiri): spawn proses di macOS mahal di bawah beban suite penuh, jadi jumlahnya ditekan. */
+function curlArgvEach(cmds: string[], env: Record<string, string>): string[][] {
   const dir = mkdtempSync(join(tmpdir(), 'webterm-curl-shim-'))
   try {
-    const out = join(dir, 'argv')
     writeFileSync(join(dir, 'curl'), '#!/bin/sh\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "$ARGV_OUT"; done\n', {
       mode: 0o755,
     })
@@ -160,10 +165,10 @@ function curlArgv(cmd: string, env: Record<string, string>): string[] {
     // kalau ada yang berjalan di port 8700).
     // `</dev/null`: baris itu memuat `--data-binary @-`, dan tanpa ini stub-nya menggantung
     // menunggu stdin milik test runner.
-    execFileSync('/bin/sh', ['-c', `${cmd} </dev/null`], {
-      env: { PATH: dir, ARGV_OUT: out, ...env },
-    })
-    return readFileSync(out, 'utf8').split('\n').slice(0, -1)
+    const outs = cmds.map((_, i) => join(dir, `argv${i}`))
+    const script = cmds.map((cmd, i) => `export ARGV_OUT='${outs[i]}'; ${cmd} </dev/null`).join('\n')
+    execFileSync('/bin/sh', ['-c', script], { env: { PATH: dir, ...env } })
+    return outs.map((out) => readFileSync(out, 'utf8').split('\n').slice(0, -1))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -264,13 +269,16 @@ describe('node id di baris hook', () => {
   ]
 
   it('tidak pernah meneruskan metakarakter ke shell', () => {
-    for (const id of INJECTIONS) {
-      const cmd = commandFor(id)
-      // Shell sungguhan harus menerimanya sebagai sintaks yang sah.
-      execFileSync('sh', ['-n'], { input: cmd })
-      // Dan yang benar-benar diterima curl: SATU argumen URL, yang id-nya masih utuh saat di-decode
-      // — itu bukti id-nya sampai ke server, bukan cuma "tidak meledak".
-      const argv = curlArgv(cmd, { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+    const cmds = INJECTIONS.map(commandFor)
+    // Shell sungguhan harus menerima semuanya sebagai sintaks yang sah (`sh -n` memeriksa seluruh
+    // skrip, jadi satu panggilan cukup untuk ketujuh baris).
+    execFileSync('sh', ['-n'], { input: cmds.join('\n') })
+    // Dan yang benar-benar diterima curl: SATU argumen URL, yang id-nya masih utuh saat di-decode
+    // — itu bukti id-nya sampai ke server, bukan cuma "tidak meledak".
+    const argvs = curlArgvEach(cmds, { [NODE_TOKEN_ENV]: FAKE_NODE_TOKEN })
+    expect(argvs).toHaveLength(INJECTIONS.length)
+    INJECTIONS.forEach((id, i) => {
+      const argv = argvs[i]
       expect(argv.filter((a) => a.startsWith('http://'))).toHaveLength(1)
       expect(new URL(argv[1]).searchParams.get('node')).toBe(id)
       // Tidak ada pecahan mentah yang lolos sebagai argumen tersendiri.
@@ -279,7 +287,7 @@ describe('node id di baris hook', () => {
       expect(argv).not.toContain('touch')
       expect(argv).not.toContain('/tmp/pwn')
       expect(argv).not.toContain('whoami')
-    }
+    })
   })
 
   it('URL tetap satu blok kutip tunggal, tanpa id mentah di dalamnya', () => {
