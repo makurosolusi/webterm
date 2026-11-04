@@ -7,6 +7,7 @@ import type { BrowserState } from '../shared/browser.contract'
 import { hostOnly } from '../shared/browser.url'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
+import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
@@ -38,6 +39,8 @@ export interface BrowserNodeProps extends NodeProps {
   renderToolbar?: (ctx: BrowserSlotCtx) => ReactNode
   /** Dirender menimpa permukaan (mis. chip "agent mengemudi"). */
   renderOverlay?: (ctx: BrowserSlotCtx) => ReactNode
+  /** Item tambahan menu "⋯" header node (mis. Import Cookies). */
+  menuItems?: VscodeMenuItem[]
 }
 
 /**
@@ -45,7 +48,7 @@ export interface BrowserNodeProps extends NodeProps {
  * input manusia. Berhenti menerima frame saat collapse atau zoom canvas < `ZOOM_PAUSE_BELOW`
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
-function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay }: BrowserNodeProps) {
+function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay, menuItems }: BrowserNodeProps) {
   const d = data as { url?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
@@ -106,6 +109,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           maximized={maximized}
           onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
+          menuItems={menuItems}
         />
         <div className="node-body browser-node">
           {renderToolbar?.(ctx)}

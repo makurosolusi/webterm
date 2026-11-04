@@ -1,5 +1,6 @@
 // Pernak-pernik perakitan runtime browser yang dipisah agar `browser.runtime.ts` tetap ramping.
-import { BlockedError } from '../../shared/browser.contract'
+import { BlockedError, ENV_BROWSER } from '../../shared/browser.contract'
+import { flagOr } from '../envFlag'
 import type { BrowserHost } from './browserHost.service'
 import type { BrowserLifecycle } from './browserLifecycle.service'
 import type { GatewayHost } from './browserWs.viewers'
@@ -23,3 +24,6 @@ export function adaptGatewayHost(host: BrowserHost, lifecycle: BrowserLifecycle)
     },
   })
 }
+
+/** Impor cookie dari berkas ikut menyala bersama browser (seperti Orca); hanya `off` eksplisit yang mematikan. */
+export const cookieImportOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.cookieImport], true)

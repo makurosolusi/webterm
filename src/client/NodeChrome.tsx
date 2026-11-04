@@ -5,6 +5,7 @@ import { Textfield, ToolbarButton } from '@/vscode/register'
 import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
+import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
 import { useNodeFullscreen } from './useNodeFullscreen'
 
@@ -30,6 +31,7 @@ export interface NodeChromeProps {
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean
   hideLinks?: boolean; onToggleHideLinks?: () => void
   extraHeader?: ReactNode         // Resume/Restart buttons for agent node (rendered just before toolbar)
+  menuItems?: VscodeMenuItem[]    // item tambahan menu More Actions (⋯) khusus tipe node
 }
 
 /** Judul yang dipakai saat node belum punya nama — nodeterm merender `data.title || 'Untitled'`. */
@@ -168,6 +170,7 @@ export default function NodeChrome(props: NodeChromeProps) {
         onAiName={props.onAiName} aiNaming={props.aiNaming}
         onBroadcast={props.onBroadcast} broadcastActive={props.broadcastActive} broadcastDisabled={props.broadcastDisabled}
         hideLinks={props.hideLinks} onToggleHideLinks={props.onToggleHideLinks}
+        extraMenuItems={props.menuItems}
       />
 
       {commentsOpen && (

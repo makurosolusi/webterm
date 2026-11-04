@@ -78,6 +78,13 @@ export const COOKIE_TEXT = {
   },
 } as const
 
+// Submenu "Import Cookies" di menu ⋯ node browser (meniru Orca browser-toolbar-menu-dropdown.tsx).
+export const COOKIE_MENU_TEXT = {
+  importCookies: 'Import Cookies',
+  fromFile: 'From File…',
+  googleNote: 'Login Google tidak bisa diimpor — masuk ke Google langsung di browser ini',
+} as const
+
 export const ZOOM_TEXT = {
   out: 'Perkecil halaman',
   in: 'Perbesar halaman',

@@ -17,6 +17,8 @@ export interface NodeToolbarProps {
   onAiName?: () => void; aiNaming?: boolean            // agent only — omit button if undefined
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean  // agent only
   hideLinks?: boolean; onToggleHideLinks?: () => void  // context-capable agent only — omit if undefined
+  /** Item khusus tipe node (mis. Import Cookies di browser), di bawah separator di menu More Actions. */
+  extraMenuItems?: VscodeMenuItem[]
 }
 
 /**
@@ -65,6 +67,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
     ...(props.onToggleHideLinks
       ? [{ type: 'item', id: 'links', label: props.hideLinks ? 'Show links' : 'Hide links', onSelect: props.onToggleHideLinks } as const]
       : []),
+    ...(props.extraMenuItems?.length ? [{ type: 'separator' } as const, ...props.extraMenuItems] : []),
   ]
 
   return (
