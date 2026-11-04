@@ -7,7 +7,6 @@ import { WebSocket, WebSocketServer } from 'ws'
 import type { AddressInfo } from 'node:net'
 import { ENV_BROWSER } from '../../shared/browser.contract'
 import type { Workspace } from '../../shared/workspace'
-import { CapabilityStore } from '../control/capabilities'
 import { createFileSecretStore } from '../envSecrets.store'
 import { startBrowserRuntime } from './browser.runtime'
 import { startFakeCdp } from './fakeCdp.testkit'
@@ -26,7 +25,7 @@ test('version absen sebelum browser hidup, terisi sekali setelah node live, koso
   fake.handle('Browser.getVersion', () => ({ product: 'Chrome/131.0.1' }))
   const rt = await startBrowserRuntime({
     env: { [ENV_BROWSER.enabled]: 'on' }, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')),
-    capabilities: new CapabilityStore(), workspaces: () => [WS], launcher: { acquire: async () => fake.url, shutdown: () => undefined },
+    workspaces: () => [WS], launcher: { acquire: async () => fake.url, shutdown: () => undefined },
   })
   if (!rt) throw new Error('runtime tidak menyala')
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })

@@ -68,8 +68,13 @@ describe('browser tools boot wiring', () => {
     expect(b.registry.get('browser_act')).toBeDefined()
   })
 
-  it('feature flag alone registers only browser_status', () => {
+  it('feature flag alone registers browser_act too (agent flag default on, same reader as wired agents)', () => {
     const b = boot({ ...BASE, WEBTERM_BROWSER: 'on' }, () => null)
+    expect(b.handle?.toolNames).toEqual(expect.arrayContaining(['browser_status', 'browser_act']))
+  })
+
+  it('explicit agent off registers only browser_status', () => {
+    const b = boot({ ...BASE, WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'off' }, () => null)
     expect(b.handle?.toolNames).toContain('browser_status')
     expect(b.handle?.toolNames).not.toContain('browser_act')
   })

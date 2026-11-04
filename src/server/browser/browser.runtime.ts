@@ -29,7 +29,6 @@ import { resolveLinkedBrowser } from './browser.linkedTarget'
 import { adaptGatewayHost, agentControlOn, cookieImportOn } from './browser.runtime.parts'
 import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
-import type { CapabilityStore } from '../control/capabilities'
 import type { Workspace } from '../../shared/workspace'
 
 const log = createLogger('browser.runtime')
@@ -44,7 +43,6 @@ export interface RuntimeDeps {
   onAgentUse?: () => void
   dataRoot: string
   secrets: SecretStore
-  capabilities: Pick<CapabilityStore, 'mint' | 'revoke'>
   workspaces(): Workspace[]
   /** Test: peluncur/CDP palsu (produksi: pool Chromium nyata). */
   launcher?: BrowserLauncher

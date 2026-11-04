@@ -9,7 +9,6 @@ import { expect, test } from 'bun:test'
 import { activeBrowser, registerBrowserCapability, stopBrowser } from './browser/browser.activate'
 import { startFakeCdp, type FakeCdp } from './browser/fakeCdp.testkit'
 import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
-import { CapabilityStore } from './control/capabilities'
 import { envSettingsApiDeps } from './envSettings.runtime'
 import { capabilitiesRoute } from './featureCapabilities.api'
 import { enabledSet, reconcile } from './featureCapabilities.runtime'
@@ -36,7 +35,7 @@ test('store kosong tidak memulai browser maupun poller; browser on lalu off tanp
   const off = [
     registerBrowserCapability({
       env: process.env, webtermPort: 8700, dataRoot: dir, secrets: { read: () => undefined, write: () => undefined, remove: () => undefined } as never,
-      capabilities: new CapabilityStore(), workspaces: () => [],
+      workspaces: () => [],
       launcher: { acquire: async () => fake.url, shutdown: () => undefined },
     }),
     registerTelegramHot(telegram),

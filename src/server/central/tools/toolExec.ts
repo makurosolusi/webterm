@@ -1,6 +1,5 @@
-import { flagOn } from '../../envFlag'
 import { auditTool } from './toolAudit'
-import { type ControlGuard, type ExecResult, type ToolCtx, type ToolDef, type ToolInput, type ToolResult, tierWithin } from './toolTypes'
+import { type ControlGuard, type ExecResult, type ToolCtx, type ToolDef, type ToolInput, type ToolResult, defEnabled, tierWithin } from './toolTypes'
 import { validateToolInput } from './toolValidate'
 
 /** Guard that permits everything, for callers whose gating happened upstream (proposal pipeline). */
@@ -18,7 +17,7 @@ export async function execTool(ctx: ToolCtx, name: string, args: ToolInput, opti
     return { ...result, tool: name, ...(projectId ? { projectId } : {}) }
   }
   if (!def) return finish({ ok: false, code: 'unknown_tool' })
-  if (def.flag && !flagOn((ctx.env ?? process.env)[def.flag])) return finish({ ok: false, code: 'flag_off' })
+  if (!defEnabled(def, ctx.env ?? process.env)) return finish({ ok: false, code: 'flag_off' })
   let projectId = trusted
   if (!options.prevalidated) {
     const checked = validateToolInput(def, args, ctx)

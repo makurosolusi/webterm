@@ -18,7 +18,7 @@ import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
 import { TASK_RUN_DEF } from './defs/task.run.def'
-import type { ToolDef, ToolRegistry } from './toolTypes'
+import { type ToolDef, type ToolRegistry, defEnabled } from './toolTypes'
 
 export { toolsHash } from './toolRegistry'
 
@@ -60,7 +60,7 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
     if (!enabled) continue
     for (const def of build()) {
       // Per-def flags (skill.propose, task.run) refine the group; a def without one follows its group.
-      if (registry.get(def.name) || (def.flag && !on(env, def.flag))) continue
+      if (registry.get(def.name) || !defEnabled(def, env)) continue
       registry.register(def)
       added.push(def.name)
     }

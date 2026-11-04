@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
-import { flagOn } from '../../envFlag'
-import { type Tier, type ToolDef, type ToolRegistry, tierWithin } from './toolTypes'
+import { type Tier, type ToolDef, type ToolRegistry, defEnabled, tierWithin } from './toolTypes'
 
 export const CATALOG_TOKEN_BUDGET = 1200
 // ponytail: chars/4 estimate, swap for a real tokenizer if the budget gets tight
@@ -33,7 +32,7 @@ export function estimateTokens(text: string): number { return Math.ceil(text.len
 
 /** Tools visible at `maxTier` with their flag on, in registration order. */
 export function activeTools(registry: ToolRegistry, maxTier: Tier, env: Record<string, string | undefined> = process.env): ToolDef[] {
-  return registry.list().filter((def) => tierWithin(def.tier, maxTier) && (!def.flag || flagOn(env[def.flag])))
+  return registry.list().filter((def) => tierWithin(def.tier, maxTier) && defEnabled(def, env))
 }
 
 /** Prompt catalog (`name usage` per tool) for tools up to `maxTier`; drops tools that would exceed the token budget. */
