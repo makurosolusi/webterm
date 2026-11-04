@@ -7,6 +7,7 @@ import TerminalNode from './TerminalNode'
 import AgentNode from './AgentNode'
 import FilesNode from './FilesNode'
 import EditorNode from './EditorNode'
+import DiffNode from './DiffNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { useLiveSettings } from './useSettings'
 
@@ -15,6 +16,8 @@ export const nodeTypes = {
   agent: AgentNode,
   files: FilesNode,
   browser: BrowserNodeType,
+  // Working-tree diff + review notes (DiffNode.tsx); cwd comes from node data or the wired agent.
+  diff: DiffNode,
   // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya dari
   // context, bukan lagi dari data node — lihat `useLiveSettings`.
   //

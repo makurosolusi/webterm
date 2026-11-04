@@ -42,6 +42,9 @@ export function floatingEdgeParams(a: Rect, b: Rect): {
   return { sx: s.x, sy: s.y, sourcePosition: s.position, tx: t.x, ty: t.y, targetPosition: t.position }
 }
 
+/** React Flow type of the Diff node (DiffNode.tsx). */
+export const DIFF_KIND = 'diff'
+
 /** Ujung kabel: jenis node (`kind` React Flow) + agentId-nya bila node agent. */
 export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
 
@@ -51,6 +54,10 @@ export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
  *  pola nodeterm `classifyLink` (sticky hanya bertaut ke terminal, sticky↔sticky null). */
 export function canLink(a: LinkEnd, b: LinkEnd): boolean {
   if (a.id === b.id) return false
+  // Diff node: same rule as browser. Its only user is the wired agent (root + notes target).
+  const diffs = (a.kind === DIFF_KIND ? 1 : 0) + (b.kind === DIFF_KIND ? 1 : 0)
+  if (diffs === 2) return false
+  if (diffs === 1) return !!(a.kind === DIFF_KIND ? b : a).agentId
   const browsers = (a.kind === BROWSER_KIND ? 1 : 0) + (b.kind === BROWSER_KIND ? 1 : 0)
   if (browsers === 0) return classifyLink(a.agentId, b.agentId) === 'context'
   if (browsers === 2) return false

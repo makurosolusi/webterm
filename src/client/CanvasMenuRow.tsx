@@ -11,6 +11,7 @@ const ICON_NAMES: Record<CanvasMenuIcon, string> = {
   agent: 'hubot',
   files: 'files',
   browser: 'globe',
+  diff: 'git-compare',
   'select-all': 'selection',
   fit: 'screen-full',
 }

@@ -10,7 +10,7 @@
 // "komponennya benar" dan "klik kanan memunculkannya" cuma bisa dijembatani DOM; lihat
 // `./canvasHarness.tsx`.
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { MENU_LABELS } from './canvasMenu.model'
 import type { WsNode } from '../shared/workspace'
@@ -229,6 +229,21 @@ describe('menu konteks canvas', () => {
 
     await waitFor(() => expect(nodePositions('files')).toHaveLength(1))
     expect(nodePositions('files')[0]).toEqual(DEFAULT_SPAWN)
+  })
+
+  it('Diff (working changes) melahirkan node diff di titik klik yang membaca diff cwd workspace', async () => {
+    await mountCanvas({ nodes: [], dirs: {}, viewport: PANNED })
+    fireEvent.contextMenu(pane(), CLICK)
+    await waitFor(() => expect(menu()).not.toBeNull())
+    fireEvent.click(await screen.findByText(MENU_LABELS.diff))
+
+    await waitFor(() => expect(nodePositions('diff')).toHaveLength(1))
+    expect(nodePositions('diff')[0]).toEqual(AT_CLICK)
+    // Workspace fixture cwd is '/': the node asks the diff API for exactly that root.
+    const askedRoot = () => vi.mocked(fetch).mock.calls
+      .map((c) => new URL(String(c[0]), 'http://localhost'))
+      .some((u) => u.pathname === '/api/git/diff' && u.searchParams.get('root') === '/')
+    await waitFor(() => expect(askedRoot()).toBe(true))
   })
 })
 

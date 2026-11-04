@@ -34,6 +34,8 @@ export interface AppCommandDeps {
   newTerminal: () => void
   newFiles: () => void
   newBrowser?: () => void
+  /** Absent until the board wires `onAddDiff`: no command without a handler. */
+  newDiff?: () => void
   fitView: () => void
   toggleSessions: () => void
   toggleInbox: () => void
@@ -52,6 +54,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
     { id: 'terminal.new', label: 'Terminal: New Terminal', defaultKey: 'Ctrl+Shift+`', run: d.newTerminal },
     { id: 'files.new', label: 'Explorer: New Files Node', run: d.newFiles },
     ...(d.newBrowser ? [{ id: 'browser.new', label: 'Browser: New Browser Node', run: d.newBrowser }] : []),
+    ...(d.newDiff ? [{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run: d.newDiff }] : []),
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
     { id: 'view.sessions', label: 'View: Toggle Sessions', run: d.toggleSessions },
     { id: 'view.inbox', label: 'View: Toggle Inbox', run: d.toggleInbox },
@@ -68,10 +71,11 @@ export function useAppCommands(deps: AppCommandDeps): void {
   const ref = useRef(deps)
   ref.current = deps
   const hasBrowser = deps.newBrowser !== undefined
+  const hasDiff = deps.newDiff !== undefined
   const list = useMemo(() => {
     const live = {} as Record<keyof AppCommandDeps, () => void>
     for (const k of Object.keys(ref.current) as (keyof AppCommandDeps)[]) live[k] = () => ref.current[k]?.()
-    return appCommands({ ...live, newBrowser: hasBrowser ? live.newBrowser : undefined })
-  }, [hasBrowser])
+    return appCommands({ ...live, newBrowser: hasBrowser ? live.newBrowser : undefined, newDiff: hasDiff ? live.newDiff : undefined })
+  }, [hasBrowser, hasDiff])
   useRegisterCommands(list)
 }

@@ -23,7 +23,7 @@ export interface BridgeLink {
   kind: 'context' | 'file'
 }
 
-export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser'
+export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff'
 
 /** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
  *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
@@ -37,6 +37,25 @@ export interface PaneSplit { dir: 'h' | 'v'; ratio: number; a: Pane; b: Pane }
 /** Pohon pane sebuah node terminal. REKURSIF, bukan daftar datar: susunan 2×2 adalah split di
  *  dalam split, dan daftar datar tidak bisa menyatakan sisi mana yang terbagi. */
 export type Pane = PaneLeaf | PaneSplit
+
+/** A review note on a line of a Diff node file (`line` 0 = the whole file); sent to the wired agent. */
+export interface DiffNoteData { id: string; path: string; line: number; body: string }
+
+/** Caps on persisted notes: the node blob lives in one SQLite column and is saved on every edit. */
+export const DIFF_NOTES_MAX = 200
+export const DIFF_NOTE_BODY_MAX = 4000
+const DIFF_NOTE_STR_MAX = 4096
+
+/** The well-formed notes of an untrusted value (persisted blob, node data); malformed entries dropped. */
+export function validDiffNotes(v: unknown): DiffNoteData[] {
+  if (!Array.isArray(v)) return []
+  const str = (x: unknown, max: number): x is string => typeof x === 'string' && x !== '' && x.length <= max
+  return v.filter((n): n is DiffNoteData => !!n && typeof n === 'object'
+    && str(n.id, DIFF_NOTE_STR_MAX) && str(n.path, DIFF_NOTE_STR_MAX) && str(n.body, DIFF_NOTE_BODY_MAX)
+    && Number.isInteger(n.line) && n.line >= 0)
+    .slice(0, DIFF_NOTES_MAX)
+    .map(({ id, path, line, body }) => ({ id, path, line, body }))
+}
 
 /** Opsi tampilan node 'files' yang dipersist per node (P-15). Absen = default (hidden tampil, nama naik). */
 export interface ViewOpts { hidden: boolean; sortKey: 'name' | 'size' | 'mtime'; sortDir: 'asc' | 'desc' }
@@ -64,6 +83,7 @@ export interface WsNode {
   viewOpts?: ViewOpts     // node 'files': opsi tampilan (hidden/sort); absen = default
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node
   url?: string            // node 'browser': URL terakhir (pemulihan setelah discard/restart)
+  diffNotes?: DiffNoteData[] // node 'diff': review notes not yet sent (validDiffNotes)
   agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
 }
 
