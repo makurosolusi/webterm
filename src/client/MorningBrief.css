@@ -1,0 +1,19 @@
+/* Morning brief card: floats over the canvas, top-right under the tab bar (VS Code notification look). */
+.morning-brief {
+  position: fixed; top: calc(var(--tabbar-h, 36px) + 12px); right: 16px; z-index: 40;
+  width: min(420px, calc(100vw - 32px)); max-height: 60vh; overflow: auto;
+  padding: 8px 12px 10px; font-size: 13px;
+  color: var(--vscode-notifications-foreground, inherit);
+  background: var(--vscode-notifications-background, #252526);
+  border: 1px solid var(--vscode-notifications-border, rgba(128, 128, 128, 0.35));
+  border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.morning-brief__head { display: flex; align-items: center; gap: 8px; }
+.morning-brief__since { opacity: 0.7; font-size: 12px; flex: 1; }
+.morning-brief__close { font-size: 16px; line-height: 1; }
+.morning-brief__empty { opacity: 0.7; margin: 8px 0 0; }
+.morning-brief__group h4 { margin: 8px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.75; }
+.morning-brief__group[data-category='stuck'] h4, .morning-brief__group[data-category='tests'] h4 { color: var(--vscode-editorWarning-foreground, #cca700); opacity: 1; }
+.morning-brief ul { list-style: none; margin: 0; padding: 0; }
+.morning-brief li { min-height: 22px; display: flex; align-items: center; }
+.morning-brief__link { padding: 0; min-height: 0; white-space: normal; text-align: left; justify-content: flex-start; cursor: pointer; }

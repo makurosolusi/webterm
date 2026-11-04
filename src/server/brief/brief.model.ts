@@ -1,0 +1,166 @@
+// Morning brief (PLAN F3-e): a deterministic digest, no LLM. Pure functions only (vitest-safe):
+// the same events + counts always give the same lines in the same order.
+//
+// Imitated: GitHub's notification digest and Linear's "Pulse" — one line per thing that changed,
+// what needs you first, each line a link to where you act on it.
+
+/** Display order: what needs you first, then what broke, then what simply happened. */
+export const BRIEF_CATEGORIES = ['stuck', 'gates', 'tests', 'restored', 'finished', 'checkpoints', 'cost'] as const
+export type BriefCategory = (typeof BRIEF_CATEGORIES)[number]
+
+/** Where a click on a line goes (client decides how: focus node / open Inbox / new Diff node). */
+export type BriefTarget = { kind: 'node'; nodeId: string } | { kind: 'inbox' } | { kind: 'diff'; workspaceId: string } | null
+
+export interface BriefLine {
+  /** Stable id (`<category>:<key>`), so the client can key rows. */
+  id: string
+  category: BriefCategory
+  text: string
+  target: BriefTarget
+}
+
+export interface Brief {
+  /** Window start (epoch ms): the user's last active time before this visit. */
+  since: number
+  generatedAt: number
+  /** Event-log head the brief was built from (cache key). */
+  headSeq: number
+  lines: BriefLine[]
+}
+
+/** The event fields the brief reads. */
+export interface BriefEvent {
+  ts: number
+  kind: string
+  nodeId: string | null
+  workspaceId: string | null
+  payload: unknown
+}
+
+export interface BriefUsage {
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  costMicros: number
+  /** Calls whose price was not known: the cost shown is then a lower bound. */
+  unpriced: number
+}
+
+export interface BriefInput {
+  since: number
+  now: number
+  headSeq: number
+  /** Ascending by ts/seq, already filtered to ts > since. */
+  events: readonly BriefEvent[]
+  inbox: { needsYou: number; review: number } | null
+  usage: BriefUsage | null
+  nodeLabel: (nodeId: string) => string
+  workspaceLabel: (workspaceId: string) => string
+}
+
+/** Kinds read by `buildBrief`; the SQL source filters on these (plus `hook.*`). */
+export const BRIEF_KINDS = ['pty.exit', 'test.fail', 'orchestrator.verify_failed', 'checkpoint.created', 'checkpoint.rewound', 'agent.restored'] as const
+
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
+const obj = (p: unknown): Record<string, unknown> => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {})
+
+/** 12345 -> "12.3k"; 1234567 -> "1.2M". */
+export function compactCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
+}
+
+/** Builds the brief lines. Deterministic: ties are broken by label, then id. */
+export function buildBrief(input: BriefInput): Brief {
+  const finished = new Map<string, number>()
+  const lastStatus = new Map<string, string>()
+  const failures = new Map<string, { count: number; code: number | null; label: string }>()
+  const checkpoints = new Map<string, { created: number; rewound: number }>()
+  const restored = new Set<string>()
+
+  for (const e of input.events) {
+    const p = obj(e.payload)
+    if (e.kind.startsWith('hook.') && e.nodeId) {
+      if (e.kind === 'hook.Stop') finished.set(e.nodeId, (finished.get(e.nodeId) ?? 0) + 1)
+      if (typeof p['status'] === 'string') lastStatus.set(e.nodeId, p['status'])
+    } else if (e.kind === 'pty.exit' && e.nodeId) {
+      lastStatus.delete(e.nodeId) // an exited node is not waiting on anyone
+      const code = typeof p['code'] === 'number' ? p['code'] : 0
+      if (p['reason'] === 'self' && code !== 0) {
+        const f = failures.get(`node:${e.nodeId}`) ?? { count: 0, code, label: input.nodeLabel(e.nodeId) }
+        failures.set(`node:${e.nodeId}`, { ...f, count: f.count + 1, code })
+      }
+    } else if (e.kind === 'test.fail' || e.kind === 'orchestrator.verify_failed') {
+      const key = e.nodeId ? `node:${e.nodeId}` : `kind:${e.kind}`
+      const label = e.nodeId ? input.nodeLabel(e.nodeId) : e.kind === 'test.fail' ? 'A test run' : 'Task verification'
+      const f = failures.get(key) ?? { count: 0, code: null, label }
+      failures.set(key, { ...f, count: f.count + 1, code: null })
+    } else if ((e.kind === 'checkpoint.created' || e.kind === 'checkpoint.rewound') && e.workspaceId) {
+      const c = checkpoints.get(e.workspaceId) ?? { created: 0, rewound: 0 }
+      if (e.kind === 'checkpoint.created') c.created += 1
+      else c.rewound += 1
+      checkpoints.set(e.workspaceId, c)
+    } else if (e.kind === 'agent.restored' && e.nodeId) {
+      restored.add(e.nodeId)
+    }
+  }
+
+  const lines: BriefLine[] = []
+  const byLabel = <T>(entries: Iterable<[string, T]>, label: (key: string, v: T) => string): Array<[string, T, string]> =>
+    [...entries].map(([k, v]): [string, T, string] => [k, v, label(k, v)]).sort((a, b) => a[2].localeCompare(b[2]) || a[0].localeCompare(b[0]))
+
+  for (const [id, status, label] of byLabel(lastStatus, (id) => input.nodeLabel(id))) {
+    if (status === 'waiting') lines.push({ id: `stuck:${id}`, category: 'stuck', text: `${label} needs your input`, target: { kind: 'node', nodeId: id } })
+    if (status === 'blocked') lines.push({ id: `stuck:${id}`, category: 'stuck', text: `${label} is waiting for permission`, target: { kind: 'node', nodeId: id } })
+  }
+  if (input.inbox && input.inbox.needsYou > 0) {
+    lines.push({ id: 'gates:needs_you', category: 'gates', text: `${plural(input.inbox.needsYou, 'approval or blocked task')} waiting in the Inbox`, target: { kind: 'inbox' } })
+  }
+  if (input.inbox && input.inbox.review > 0) {
+    lines.push({ id: 'gates:review', category: 'gates', text: `${plural(input.inbox.review, 'task')} ready for review`, target: { kind: 'inbox' } })
+  }
+  for (const [key, f] of byLabel(failures, (_k, f) => f.label)) {
+    const nodeId = key.startsWith('node:') ? key.slice(5) : null
+    const what = f.code !== null ? `exited with code ${f.code}` : 'failed'
+    lines.push({ id: `tests:${key}`, category: 'tests', text: `${f.label} ${what}${f.count > 1 ? ` (${f.count} times)` : ''}`, target: nodeId ? { kind: 'node', nodeId } : { kind: 'inbox' } })
+  }
+  for (const [id, , label] of byLabel([...restored].map((id): [string, null] => [id, null]), (id) => input.nodeLabel(id))) {
+    lines.push({ id: `restored:${id}`, category: 'restored', text: `${label} was restored after the server restart`, target: { kind: 'node', nodeId: id } })
+  }
+  for (const [id, n, label] of byLabel(finished, (id) => input.nodeLabel(id))) {
+    lines.push({ id: `finished:${id}`, category: 'finished', text: `${label} finished ${plural(n, 'turn')}`, target: { kind: 'node', nodeId: id } })
+  }
+  for (const [ws, c, label] of byLabel(checkpoints, (ws) => input.workspaceLabel(ws))) {
+    const parts = [c.created ? plural(c.created, 'checkpoint') : '', c.rewound ? plural(c.rewound, 'rewind') : ''].filter(Boolean)
+    lines.push({ id: `checkpoints:${ws}`, category: 'checkpoints', text: `${parts.join(', ')} in ${label}`, target: { kind: 'diff', workspaceId: ws } })
+  }
+  const u = input.usage
+  if (u && u.calls > 0) {
+    const cost = `$${(u.costMicros / 1_000_000).toFixed(2)}${u.unpriced > 0 ? '+ (some prices unknown)' : ''}`
+    lines.push({ id: 'cost:total', category: 'cost', text: `${compactCount(u.inputTokens)} input / ${compactCount(u.outputTokens)} output tokens across ${plural(u.calls, 'call')}, ${cost}`, target: null })
+  }
+  return { since: input.since, generatedAt: input.now, headSeq: input.headSeq, lines }
+}
+
+const HEADINGS: Record<BriefCategory, string> = {
+  stuck: 'Needs you', gates: 'Gates', tests: 'Failures', restored: 'Restored', finished: 'Finished', checkpoints: 'Checkpoints', cost: 'Usage',
+}
+
+/** Category heading shown above its lines (client and Telegram use the same words). */
+export const briefHeading = (c: BriefCategory): string => HEADINGS[c]
+
+/**
+ * Plain-text rendering for the Telegram worker (F3 channel digest): headings + "- " bullets,
+ * no markup, so the shared Telegram renderer can escape it like any other reply.
+ */
+export function renderBriefText(brief: Brief, sinceText = new Date(brief.since).toISOString().slice(0, 16).replace('T', ' ')): string {
+  if (brief.lines.length === 0) return `Morning brief: nothing new since ${sinceText}.`
+  const out = [`Morning brief since ${sinceText}`]
+  for (const c of BRIEF_CATEGORIES) {
+    const group = brief.lines.filter((l) => l.category === c)
+    if (group.length === 0) continue
+    out.push('', briefHeading(c), ...group.map((l) => `- ${l.text}`))
+  }
+  return out.join('\n')
+}
