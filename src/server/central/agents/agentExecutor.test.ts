@@ -5,6 +5,7 @@ import type { AgentRecord, ControlGuard, GuardDecision, GuardRequest, GuardUsage
 import { openFixture, seedPortfolio } from '../centralTestFixture.testutil'
 import { AGENT_ENVELOPE, type AgentHost, agentNodeId, createAgentExecutor, type SpawnInput } from './agentExecutor'
 import { agentReqId } from './agentStore'
+import { createAgentSpawner } from '../../spawn/agentSpawn'
 
 const T0 = 1_700_000_000_000
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -209,5 +210,17 @@ describe('exec runner agents', () => {
     expect((await s.ex.close(agent, 'stop', false)).data).toMatchObject({ state: 'cancelled' })
     await wait(300)
     expect(s.ex.store.get(agent.id)?.state).toBe('cancelled')
+  })
+  it('headless runs go through agent.spawn: lineage under central, agent.spawn then agent.exit', async () => {
+    const s = setup(undefined, headless('process.exit(0)'))
+    const lineage: [string, string][] = []
+    const kinds: string[] = []
+    const spawner = createAgentSpawner({ ancestors: () => [], registerSpawn: (p, c) => { lineage.push([p, c]) }, record: (e) => { kinds.push(`${e.kind}:${(e.payload as { door?: string }).door ?? ''}`) }, onPtyExit: () => {} })
+    const ex = createAgentExecutor({ db: s.f.db, guard: s.g.guard, host: s.h.host, now: () => T0, spawn: spawner.spawn })
+    const id = String((await ex.spawn(s.input())).data?.agentId)
+    await wait(500)
+    expect(lineage).toEqual([['central', `node:${agentNodeId(id)}`]])
+    expect(kinds).toEqual(['agent.spawn:central', 'agent.exit:'])
+    expect(ex.store.get(id)?.state).toBe('candidate_done')
   })
 })

@@ -14,6 +14,7 @@ import type { Plan, PlanStore } from './plan'
 import type { VerifyInput, VerifyOutcome } from './verify'
 import type { WorktreeService } from './worktree'
 import type { WorkerSessionPort } from './workerRuntimeSession'
+import type { spawnAgent } from '../spawn/agentSpawn'
 
 export type WorkerRunErrorCode =
   | OrchestratorDenyCode
@@ -66,6 +67,10 @@ export interface WorkerRuntimeDeps {
   worktrees?: WorktreeService
   cmd?: string
   agentId?: string
+  /** Principal the worker is spawned under (K3 lineage); default `human-ui` (the run route is root-token only). */
+  spawnParent?: string
+  /** The `agent.spawn` path (F2-h); default = the process-wide spawner. */
+  spawn?: typeof spawnAgent
   /** Minting id sesi baru per run; default `crypto.randomUUID` (injectable untuk test). */
   newSessionId?: () => string
   cols?: number

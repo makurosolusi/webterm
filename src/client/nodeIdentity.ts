@@ -5,6 +5,9 @@
 //    (`shared/branch-name-from-work.ts:13-21`), so no extra persisted flag is needed: a user rename
 //    leaves the pool and is never overwritten.
 import type { AgentStatus } from '../shared/workspace'
+import { uniqueTitle } from '../shared/nodeTitle'
+
+export { uniqueTitle }
 
 const ADJECTIVES = [
   'amber', 'bold', 'brisk', 'calm', 'clever', 'cosmic', 'crisp', 'eager', 'fuzzy', 'gentle',
@@ -37,16 +40,6 @@ export function pickAutoName(used: Iterable<string>, random: () => number = Math
       if (!taken.has(name)) free.push(name)
     }
     if (free.length) return free[Math.floor(random() * free.length)]
-  }
-}
-
-/** `base` if free on the board, else `base (2)`, `base (3)`… (case-insensitive). */
-export function uniqueTitle(base: string, used: Iterable<string>): string {
-  const taken = new Set([...used].map((n) => n.trim().toLowerCase()))
-  if (!taken.has(base.trim().toLowerCase())) return base
-  for (let i = 2; ; i++) {
-    const next = `${base} (${i})`
-    if (!taken.has(next.toLowerCase())) return next
   }
 }
 
