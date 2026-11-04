@@ -34,6 +34,7 @@ import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureC
 import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
+import { guardWorkspaceRepos } from './repoHygiene'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
@@ -149,6 +150,7 @@ await reconcile(new Set(), enabledSet(process.env))
 booted = true
 applyPtyOptions()
 void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE off
+void guardWorkspaceRepos(db.list()) // secrets guard: auto-.gitignore untracked secret files in workspace repos
 
 const server = http.createServer()
 
