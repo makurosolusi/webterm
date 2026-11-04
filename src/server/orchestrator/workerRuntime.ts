@@ -7,10 +7,12 @@ import { randomUUID } from 'node:crypto'
 import { createLogger } from '../logs'
 import { isSafeNodeId } from '../../shared/workspace'
 import type { VerificationEvidence } from './orchestratorModel'
-import { evidenceVerified } from './orchestratorModel'
 import type { Plan } from './plan'
 import type { VerifyOutcome } from './verify'
-import { toModelEvidence } from './verifier'
+import { judgeCompletion } from '../verifier/verifier.judge'
+import { recordCompletion } from '../verifier/verifier.report'
+import { projectChecks } from '../verifier/verifier.checks'
+import { filterHandoffContext } from '../verifier/handoff.filter'
 import { buildWorkerPrompt, capBytes, deriveNodeId, sanitizeText } from './workerRuntimePrompt'
 import { waitForSettle } from './workerRuntimeSettle'
 import { DEFAULT_AGENT_KIND, spawnAgent } from '../spawn/agentSpawn'
@@ -221,12 +223,13 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
     // `waitForSettle` yang melempar tidak boleh lolos keluar membocorkan PTY hidup + worktree
     // tertahan. Catch menutup lewat jalur gagal yang sama (record sekali, close, release).
     try {
+      // Handoff into the worker: title and extra context are masked of secrets and trimmed (F4-c).
       const prompt = buildWorkerPrompt({
-        item,
+        item: { ...item, title: filterHandoffContext(item.title) },
         worktree,
         attempt: task.attempt,
         maxBytes: maxPromptBytes,
-        extra: input.prompt,
+        ...(input.prompt !== undefined ? { extra: filterHandoffContext(input.prompt) } : {}),
       })
       try {
         deps.sessions.input(nodeId, `${prompt}\n`)
@@ -258,22 +261,28 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
       try {
         // `baseRef` ikut ke verifier supaya commit worker (worktree bersih) tetap terlihat;
         // nilainya sudah divalidasi server di `parseRunBody`, bukan perintah dari worker.
+        // Checks follow the project's own scripts (no `typecheck` script = not run, not failed).
+        const checks = projectChecks(worktree.path)
         verdict = await deps.verify({
           cwd: worktree.path,
           scope: item.scope,
           ...(input.baseRef !== undefined ? { baseRef: input.baseRef } : {}),
+          ...(checks ? { checks } : {}),
         })
       } catch (err) {
         return fail('verify_failed', `verifier error: ${messageOf(err)}`, true, output)
       }
-      const evidence = toModelEvidence(verdict)
-      if (!verdict.ok || !evidenceVerified(evidence)) {
-        const reasons = verdict.reasons.length > 0 ? verdict.reasons : ['no machine evidence']
-        return fail('verify_failed', `verification failed: ${reasons.join('; ')}`, true, output, evidence)
+      // Mandatory verifier (F4-c): the session's `done` and the terminal text are the worker's own
+      // claim; the status comes only from the judged system evidence. No diff = `no changes`
+      // (a no-op exit at a trust prompt passes green checks too).
+      const judged = judgeCompletion({ taskId: task.id, verdict, claim: output })
+      const evidence = judged.evidence
+      const report = () => (deps.report ?? recordCompletion)({ verdict: judged, taskId: task.id, worker: actor || nodeId, projectId, nodeId })
+      if (judged.status === 'failed') {
+        report()
+        const code = judged.reason === 'lease_violation' ? 'lease_violation' : 'verify_failed'
+        return fail(code, `verification failed: ${judged.message}`, true, output, evidence)
       }
-      // No-op (mis. keluar di prompt trust) bisa lolos diff kosong + test hijau; bukan hasil kerja.
-      if (verdict.changedFiles.length === 0)
-        return fail('verify_failed', 'verification failed: no files changed', true, output, evidence)
 
       const applied = await record('success', evidence)
       if (!applied.ok) {
@@ -290,6 +299,7 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
           ...(cleanupError ? { cleanupError } : {}),
         })
       }
+      report() // only once the ledger accepted it: the inbox never says "finished" for a refused record
       await cleanup(true)
       return makeOutcome({
         task: applied.value.task,

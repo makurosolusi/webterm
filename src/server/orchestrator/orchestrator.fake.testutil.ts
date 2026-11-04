@@ -3,7 +3,8 @@
 import { createOrchestrator, type Orchestrator } from './orchestrator'
 import { DEFAULT_CAPS } from './caps'
 import { PlanError, StalePlanVersionError, type Plan, type PlanItem, type PlanStore } from './plan'
-import type { OrchestratorAgent, OrchestratorLedger, OrchestratorTask } from './orchestratorModel'
+import { SERVER_VERIFIED_BY, type OrchestratorAgent, type OrchestratorLedger, type OrchestratorTask } from './orchestratorModel'
+import { sealEvidence } from '../verifier/verifier.seal'
 import { WorktreeError, type WorktreeAllocation, type WorktreeService } from './worktree'
 
 export const PROJECT = 'p1'
@@ -245,6 +246,8 @@ export function setup(initial: Plan, agents: OrchestratorAgent[] = [worker()]): 
 export interface SetupOptions {
   /** Default true: fake ledger menyediakan `tx` dengan rollback snapshot. */
   tx?: boolean
+  /** Default true: seal literal server-marked evidence as if the verifier produced it. */
+  sealMarked?: boolean
 }
 
 export function setupWith(
@@ -254,12 +257,23 @@ export function setupWith(
 ): Fixture {
   const ledger = fakeLedger(agents, options.tx ?? true)
   const worktrees = fakeWorktrees()
-  const orchestrator = createOrchestrator({
+  const real = createOrchestrator({
     ledger,
     plan: fakePlanStore(initial),
     worktrees,
     caps: DEFAULT_CAPS,
     branchPrefix: 'agent',
   })
+  // test-only: literal evidence carrying the server marker stands in for a verifier run, so tests
+  // can script outcomes without git. Production has no such wrapper (see verifier.seal.ts).
+  const orchestrator: Orchestrator = {
+    ...real,
+    recordWorkerResult: (input) =>
+      real.recordWorkerResult(
+        options.sealMarked !== false && input.evidence?.verifiedBy === SERVER_VERIFIED_BY
+          ? { ...input, evidence: sealEvidence(input.evidence) }
+          : input
+      ),
+  }
   return { orchestrator, ledger, worktrees }
 }

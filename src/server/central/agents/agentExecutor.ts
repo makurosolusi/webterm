@@ -12,6 +12,8 @@ import { type AgentStore, createAgentStore } from './agentStore'
 import { type ExecHandle, type ExecOutcome } from './execRunner'
 import type { Principal } from '../../policy/policy.model'
 import { spawnAgent } from '../../spawn/agentSpawn'
+import { filterHandoffContext } from '../../verifier/handoff.filter'
+import { settleCandidate, verifyAgentWorktree, type VerifyAgentCompletion } from './agentVerify'
 
 /** Wall-clock cap of one headless run when `AgentDeps.execTimeoutMs` is not given. */
 export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
@@ -54,6 +56,8 @@ export interface AgentDeps {
   execTimeoutMs?: number
   /** The `agent.spawn` path (F2-h) for headless runs; default = the process-wide spawner. */
   spawn?: typeof spawnAgent
+  /** Mandatory completion verifier (F4-c); default = the server verifier on the agent's worktree. */
+  verifyCompletion?: VerifyAgentCompletion
 }
 
 export interface SpawnInput {
@@ -131,11 +135,14 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const to: AgentState = outcome.timedOut ? 'timed_out' : outcome.exitCode === 0 ? 'candidate_done' : 'failed'
     const moved = tryMove(agent.id, to, { reason: outcome.timedOut ? 'exec_timeout' : `exec_exit_${outcome.exitCode ?? 'none'}` })
     if (moved) audit(moved, 'exec.exit', { to, exitCode: outcome.exitCode })
+    // Exit 0 is the worker's claim; acceptance comes only from the verifier's evidence.
+    if (moved?.state === 'candidate_done') void settleCandidate(settleDeps, moved).catch((err: unknown) => audit(moved, 'verify.error', { error: err instanceof Error ? err.name : 'unknown' }))
   }
+  const settleDeps = { verify: deps.verifyCompletion ?? verifyAgentWorktree, worktree: (a: AgentRecord) => host.worktree(a), move: tryMove, audit, ledger: () => ({ db, now }) }
 
   async function startRunner(agent: AgentRecord, cwd: string, nodeId: string): Promise<string | null> {
     if (agent.runner === 'pty') { await host.openPty(agent, cwd, nodeId); return nodeId }
-    const argv = host.headlessArgv(agent.kind, await host.initialPrompt(agent))
+    const argv = host.headlessArgv(agent.kind, filterHandoffContext(await host.initialPrompt(agent)))
     if (!argv) throw new Error(`no headless form for kind ${agent.kind}`)
     const res = await (deps.spawn ?? spawnAgent)({
       door: 'central', mode: 'headless', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: `${agent.role} ${agent.kind}`,
@@ -249,7 +256,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       if (agent.state !== 'working' && agent.state !== 'waiting_input' && agent.state !== 'candidate_done') return { ok: false, code: 'agent_not_active' }
       if (mode === 'followup' && agent.state === 'working') return { ok: false, code: 'agent_busy' }
       if (!host.hasSession(agent.nodeId)) return { ok: false, code: 'session_gone' }
-      await host.send(agent.nodeId, `${AGENT_ENVELOPE}\n${text.replace(CONTROL_CHARS, '')}`)
+      await host.send(agent.nodeId, `${AGENT_ENVELOPE}\n${filterHandoffContext(text).replace(CONTROL_CHARS, '')}`)
       const moved = agent.state === 'working' ? agent : tryMove(agent.id, 'working') ?? agent
       audit(moved, 'prompt', { mode, chars: text.length })
       return snapshot(moved)
