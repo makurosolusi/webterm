@@ -5,7 +5,8 @@
 import { createHash } from 'node:crypto'
 import type { Database } from 'bun:sqlite'
 import { appendEvent } from '../../ledger/ledgerEvent'
-import { portfolio, projectPortfolio } from '../centralProjection'
+import { projectPortfolio } from '../centralProjection'
+import { livePortfolio } from '../workspaceLookup'
 import { type PortfolioEntry } from '../centralModel'
 import { scopeFromConversationId, type ConversationScope } from '../conversationModel'
 import type { MockToolExecutor, MockToolRequest } from '../runtime/mockRuntime'
@@ -68,7 +69,7 @@ function readPortfolio(
     }
     return { ok: true, output: { scope: `project:${scope.projectId}`, project: projectSummary(entry) }, projectId: entry.id }
   }
-  const page = portfolio(db, { limit: GLOBAL_PROJECT_LIMIT, offset: 0 })
+  const page = livePortfolio(db, { limit: GLOBAL_PROJECT_LIMIT, offset: 0 })
   return {
     ok: true,
     output: {

@@ -3,8 +3,10 @@
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from 'node:fs'
 import { join } from 'node:path'
 import { getRow } from '../../../ledger/ledgerCore'
+import { scopeFromConversationId } from '../../conversationModel'
+import { livePortfolio } from '../../workspaceLookup'
 import type { ToolDef, ToolResult } from '../toolTypes'
-import { READ_TOOLS_FLAG } from './read.shared'
+import { READ_TOOLS_FLAG, readPage } from './read.shared'
 
 const MAX_ENTRIES = 60
 const DOC_BYTES = 2048
@@ -78,5 +80,31 @@ const projectRead: ToolDef = {
   },
 }
 
-/** R0 project read tool. */
-export const PROJECT_READ_DEFS: readonly ToolDef[] = [projectRead]
+const projectList: ToolDef = {
+  name: 'project.list',
+  summary: 'List every project (one per canvas workspace) with task, approval and pending plan counts, paginated.',
+  tier: 'R0',
+  flag: READ_TOOLS_FLAG,
+  projectScoped: false,
+  usage: '{"limit":<1-50, optional, default 20>,"offset":<>=0, optional>}. boundProjectId is the project this chat is bound to.',
+  validate: (input) => (readPage(input) ? null : 'invalid_shape'),
+  handler(ctx, input): ToolResult {
+    const page = livePortfolio(ctx.db, readPage(input) ?? {})
+    const scope = scopeFromConversationId(ctx.conversationId)
+    return {
+      ok: true,
+      data: {
+        total: page.total,
+        offset: page.offset,
+        boundProjectId: scope.kind === 'project' ? scope.projectId : null,
+        projects: page.items.map((p) => ({
+          id: p.id, name: p.name, status: p.status, tasks: p.taskTotal,
+          pendingApprovals: p.pendingApprovals, pendingPlanItems: p.plan?.items.pending ?? 0,
+        })),
+      },
+    }
+  },
+}
+
+/** R0 project read tools. */
+export const PROJECT_READ_DEFS: readonly ToolDef[] = [projectRead, projectList]
