@@ -5,7 +5,8 @@
 import { describe, expect, test } from 'vitest'
 import type { ServerMsg } from '../shared/protocol'
 import { Sessions, type SessionsOptions } from './sessions'
-import { NODE_TOKEN_ENV, nodeToken } from './hooks'
+import { NODE_HEADERS_ENV, NODE_TOKEN_ENV, nodeToken } from './hooks'
+import { claudeHeadersPath } from './hooksPaths'
 import { PORT } from './launchLine'
 import { EXIT_OUTPUT_LIMIT } from './nodeRegistry'
 import { ptyEnv } from './ptyShell'
@@ -577,18 +578,20 @@ describe('P0: env anak tidak mewarisi token root', () => {
     }
   }
 
-  test('agent node gets its own node token and node identity, never the root token', () => {
+  test('agent node gets the path of its own header file and its identity, never a token value', () => {
     withInheritedEnv(() => {
       const { sessions, spawns } = harness()
       sessions.open({ ...open('agent-1'), agentId: 'claude' }, recorder().send)
 
       const env = spawns[0].env
-      expect(env.WEBTERM_TOKEN).toBe(nodeToken('agent-1'))
-      expect(env.WEBTERM_TOKEN).not.toBe(ROOT)
+      // Token di env terbaca proses ber-uid sama (KERN_PROCARGS2): yang dibawa hanya PATH file header.
+      expect(env[NODE_HEADERS_ENV]).toBe(claudeHeadersPath('agent-1'))
+      expect('WEBTERM_TOKEN' in env).toBe(false)
+      expect(NODE_TOKEN_ENV in env).toBe(false)
+      expect(Object.values(env)).not.toContain(nodeToken('agent-1'))
+      expect(Object.values(env)).not.toContain(ROOT)
       expect(env.NODETERM_NODE_ID).toBe('agent-1')
       expect(env.NODETERM_PORT).toBe(String(PORT))
-      // Token jalur curl `--settings` tetap ada dan menunjuk node yang sama.
-      expect(env[NODE_TOKEN_ENV]).toBe(nodeToken('agent-1'))
     })
   })
 

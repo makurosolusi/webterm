@@ -1,7 +1,8 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { hasClaudeHookSettings, isContextCapable, isSafeNodeId } from '../shared/workspace'
 import { binaryExists, spawnPty, unwrapMissingWrapper } from './pty'
-import { forgetNodeToken, hookEnv, nodeToken } from './hooks'
+import { NODE_HEADERS_ENV, forgetNodeToken, hookEnv, writeNodeHeaders } from './hooks'
+import { claudeHeadersPath } from './hooksPaths'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { OutputLog } from './outputLog'
 import { SubscriberSet } from './subscribers'
@@ -70,15 +71,20 @@ export class Sessions extends SessionsCore {
         notices.push(wrapperMissingNotice(unwrapped.missing))
       }
     }
-    // Tiga set env var yang digerbangi TERPISAH:
-    //  - `WEBTERM_TOKEN` = token NODE (bukan token root server), untuk SEMUA sesi agent. Hook yang
-    //    kita tanam membaca `$WEBTERM_TOKEN` dari env anak, jadi tanpa ini hook agent tak bisa
-    //    mengautentikasi begitu token root tidak lagi diwarisi (`ptyShell.ts` membuang `WEBTERM_*`).
+    // Env sesi agent, digerbangi TERPISAH:
+    //  - `WEBTERM_NODE_HEADERS` = PATH file header curl milik node ini (berisi token NODE, bukan
+    //    root), untuk SEMUA sesi agent. Shim skill dan hook membaca token lewat `curl -H @file`.
+    //    Nilai token sengaja TIDAK masuk env: di macOS env proses ber-uid sama terbaca proses lain
+    //    (`KERN_PROCARGS2`, terverifikasi bahkan dari dalam sandbox claude), jadi token di env
+    //    = token yang bisa dicuri agent tetangga. File-nya dibuka sandbox claude hanya untuk node ini.
     //  - `NODETERM_NODE_ID`/`NODETERM_PORT` dibaca skill konteks-tertaut di dalam sesi agent.
-    //  - `hookEnv` membawa token node untuk jalur curl `--settings` + batas tahan hook permission.
+    //  - `hookEnv` membawa batas tahan hook permission (claude saja).
     // Terminal biasa (tanpa `agentId`) tidak mendapat satu pun: ia tidak butuh kunci apa pun.
+    // File ditulis hanya untuk spawn NYATA: spawn ter-inject (test) tidak menjalankan proses apa pun
+    // yang membacanya, dan tidak boleh menulis ke data dir pengguna.
+    if (msg.agentId && !this.options.spawn) writeNodeHeaders(msg.id)
     const env: Record<string, string> = {
-      ...(msg.agentId ? { WEBTERM_TOKEN: nodeToken(msg.id) } : {}),
+      ...(msg.agentId ? { [NODE_HEADERS_ENV]: claudeHeadersPath(msg.id) } : {}),
       ...(isContextCapable(msg.agentId)
         ? { NODETERM_NODE_ID: msg.id, NODETERM_PORT: String(PORT) }
         : {}),

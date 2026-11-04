@@ -16,6 +16,7 @@ import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import { opencodeBin, opencodeToolsAllowed } from './central/runtime/opencodeOptions'
 import { telegramChannelEnabled } from './channels/channelsRuntime'
 import { trustProxyEnabled } from './channels/webhookPeer'
+import { agentSandboxOn } from './agentSandbox'
 import { flagOn } from './envFlag'
 import { ENV_REGISTRY, isBootstrapOnly, specFor } from './envRegistry'
 import { FILES_FLAG, filesFlagOn, filesListMax, filesUploadMaxBytes, type FilesFlag } from './envRegistry.files'
@@ -54,6 +55,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_RUN_REQUIRE_APPROVAL', () => onOff(orchestratorRunRequireApproval(E)), 'orchestratorRunModel.ts:42'],
   ['WEBTERM_MEMORY_FILES', () => onOff(memoryFilesEnabled(E)), 'memory/memoryFilePath.ts:23'],
   ['WEBTERM_TRUST_PROXY', () => onOff(trustProxyEnabled(E)), 'channels/webhookPeer.ts:22'],
+  ['WEBTERM_AGENT_SANDBOX', () => onOff(agentSandboxOn(E)), 'agentSandbox.ts:agentSandboxOn'],
   ['WEBTERM_LOG_BUFFER', () => String(parseCapacity(undefined)), 'logs/logBus.ts:12'],
   ['WEBTERM_BROWSER_MAX_LIVE', () => String(lifecycleConfig(E).maxLive), 'browser/browserLifecycle.service.ts:19'],
   // Default 'on' sejak impor cookie ikut menyala bersama browser (dulu FLAGON_READERS = off).

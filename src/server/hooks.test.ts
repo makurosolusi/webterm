@@ -14,6 +14,7 @@ import { isSafeNodeId } from '../shared/workspace'
 import { TOKEN_HEADER } from './auth'
 import {
   CLAUDE_HOOK_EVENTS,
+  NODE_HEADERS_ENV,
   NODE_TOKEN_ENV,
   NODE_TOKEN_HEADER,
   PERMISSION_REQUEST_HOOK_TIMEOUT_SECS,
@@ -31,6 +32,7 @@ import {
   writeClaudeSettings,
 } from './hooks'
 import { nextHookContext } from './hookContext'
+import { claudeHeadersPath } from './hooksPaths'
 
 /** Baris curl yang dibangun untuk satu node, diambil dari event `Stop` (semua event memakai baris
  *  yang sama persis — lihat test "subscribes the 11 nodeterm events"). */
@@ -321,8 +323,11 @@ describe('node token', () => {
 })
 
 describe('hookEnv', () => {
-  it('always carries the node token', () => {
-    expect(hookEnv('n-env')[NODE_TOKEN_ENV]).toBe(nodeToken('n-env'))
+  it('carries the PATH of the node header file, never the token value (env is readable by sibling processes)', () => {
+    const env = hookEnv('n-env')
+    expect(env[NODE_HEADERS_ENV]).toBe(claudeHeadersPath('n-env'))
+    expect(env).not.toHaveProperty(NODE_TOKEN_ENV)
+    expect(Object.values(env)).not.toContain(nodeToken('n-env'))
   })
   it('sets NODETERM_PERM_WAIT_SECS when hook-reply approvals are on', () => {
     expect(hookEnv('n-env', { hookReplyApprovals: true }).NODETERM_PERM_WAIT_SECS).toBe(

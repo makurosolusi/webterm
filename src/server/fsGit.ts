@@ -1,6 +1,7 @@
 // Dekorasi git untuk node files (WS-FM-08): `git status --porcelain=v2 -z` -> mark per path.
 // execFile (argumen array, tanpa shell); hanya baca (GIT_OPTIONAL_LOCKS=0 supaya tak menyentuh index.lock).
 import { execFile } from 'node:child_process'
+import { ptyEnv } from './ptyShell'
 import npath from 'node:path'
 import { fsFail, type FsResult, type GitMark } from '../shared/fsContract'
 import { failFrom } from './fsAtomic'
@@ -24,7 +25,7 @@ type GitRun = { out: string; code: number } | 'missing' | 'timeout'
 /** Jalankan git tanpa shell (argumen array). `execFile` = ENOENT/timeout/kode keluar dibedakan jelas. */
 function runGit(dir: string, args: string[]): Promise<GitRun> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', dir, ...args], { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_OUTPUT_MAX_BYTES, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } }, (err, out) => {
+    execFile('git', ['-C', dir, ...args], { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_OUTPUT_MAX_BYTES, env: { ...ptyEnv(process.env, { interactive: false }), GIT_OPTIONAL_LOCKS: '0' } }, (err, out) => {
       const e = err as (NodeJS.ErrnoException & { killed?: boolean }) | null
       if (!e) return resolve({ out, code: 0 })
       if (e.code === 'ENOENT') return resolve('missing')

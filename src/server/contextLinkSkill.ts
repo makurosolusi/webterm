@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dataDir } from './config'
-import { TOKEN_HEADER } from './auth'
+import { NODE_HEADERS_ENV } from './hooksPaths'
 
 // --- shim + skill builders (pure strings; the installer below is the only fs part) ---
 
@@ -12,19 +12,22 @@ import { TOKEN_HEADER } from './auth'
  * The POSIX-sh thin client the skill tells an agent to run. The server does all the reading and
  * rendering; this only forwards the caller's own node id.
  *
- * The shim carries NO token value. It is written to `<dataDir>/context-links/context.sh` (0700)
- * but is readable, and runnable, by every same-UID PTY child; embedding the root transport token
- * there would hand a full-access credential to every agent session. Instead the shim expands the
- * node token from the CHILD's env at the moment curl runs: `WEBTERM_TOKEN` is injected per agent
- * session as that node's own token (`sessions.ts`), with `NODETERM_NODE_TOKEN` (the hook env) as
- * the fallback. Both are UUIDs, so the value cannot introduce shell metacharacters; the expansion
- * sits inside double quotes so it is never re-parsed by sh as syntax.
+ * The shim carries NO token value, and neither does the agent's env. It is written to
+ * `<dataDir>/context-links/context.sh` (0700) and runnable by every same-UID PTY child; curl reads
+ * the node's OWN header file (`-H @file`, path in `WEBTERM_NODE_HEADERS`, written per spawn by
+ * `sessions.ts`). The token is never in argv, never in env (env is readable by sibling processes on
+ * macOS), and the Claude sandbox opens that one file for this node only.
  */
 export function buildContextShim(): string {
   return `#!/bin/sh
 # webterm context-link shim (generated — do not edit). Thin client: the server reads & renders.
 if [ -z "$NODETERM_NODE_ID" ]; then
   echo "Not a webterm session (NODETERM_NODE_ID unset) — nothing to read."
+  exit 0
+fi
+hdr="\${${NODE_HEADERS_ENV}:-}"
+if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then
+  echo "Not a webterm agent node (no node credentials) — nothing to read."
   exit 0
 fi
 PORT="\${NODETERM_PORT:-8700}"
@@ -38,7 +41,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 curl -s --get \\
-  -H "${TOKEN_HEADER}: \${WEBTERM_TOKEN:-$NODETERM_NODE_TOKEN}" \\
+  -H "@$hdr" \\
   --data-urlencode "node=\${NODETERM_NODE_ID}" \\
   --data-urlencode "verb=\${verb}" \\
   --data-urlencode "want=\${want}" \\

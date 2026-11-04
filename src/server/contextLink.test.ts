@@ -171,11 +171,12 @@ const FAKE_NODE_TOKEN = '11111111-2222-4333-8444-555555555555' // test-only, UUI
 const FAKE_FALLBACK_TOKEN = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' // test-only, UUID alphabet
 
 describe('buildContextShim', () => {
-  it('expands the node token from the child env instead of embedding any value', () => {
+  it('hands curl the node header file named by the env, never a token value or token env', () => {
     const shim = buildContextShim()
-    expect(shim).toContain(`-H "${TOKEN_HEADER}: \${WEBTERM_TOKEN:-$NODETERM_NODE_TOKEN}"`)
-    // The header value is an expansion, never a literal token.
-    expect(shim).not.toMatch(new RegExp(`${TOKEN_HEADER}: [^"$]`))
+    expect(shim).toContain('-H "@$hdr"')
+    expect(shim).toContain('WEBTERM_NODE_HEADERS')
+    expect(shim).not.toContain(`${TOKEN_HEADER}:`)
+    expect(shim).not.toMatch(/WEBTERM_TOKEN|NODETERM_NODE_TOKEN/)
   })
   it('keeps the request shape the route parses', () => {
     const shim = buildContextShim()
@@ -217,17 +218,23 @@ function headerOf(argv: string[]): string | undefined {
 }
 
 describe('the header curl actually receives', () => {
-  it('is the node token the child env carries in WEBTERM_TOKEN', () => {
-    const argv = curlArgvOfShim(buildContextShim(), {
-      WEBTERM_TOKEN: FAKE_NODE_TOKEN,
-      NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN,
-    })
-    expect(headerOf(argv)).toBe(`${TOKEN_HEADER}: ${FAKE_NODE_TOKEN}`)
-    expect(argv.filter((a) => a === '-H')).toHaveLength(1)
+  it('is @<the node header file>, and no token value reaches argv', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'webterm-context-hdr-'))
+    try {
+      const hdr = join(dir, 'node.headers')
+      writeFileSync(hdr, `${TOKEN_HEADER}: ${FAKE_NODE_TOKEN}\n`, { mode: 0o600 })
+      const argv = curlArgvOfShim(buildContextShim(), { WEBTERM_NODE_HEADERS: hdr })
+      expect(headerOf(argv)).toBe(`@${hdr}`)
+      expect(argv.filter((a) => a === '-H')).toHaveLength(1)
+      expect(argv.join('\n')).not.toContain(FAKE_NODE_TOKEN)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
-  it('falls back to NODETERM_NODE_TOKEN when WEBTERM_TOKEN is unset', () => {
-    const argv = curlArgvOfShim(buildContextShim(), { NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN })
-    expect(headerOf(argv)).toBe(`${TOKEN_HEADER}: ${FAKE_FALLBACK_TOKEN}`)
+  it('ignores a token in env and does not call curl without a readable header file', () => {
+    for (const env of <Record<string, string>[]>[{ WEBTERM_TOKEN: FAKE_NODE_TOKEN, NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN }, { WEBTERM_NODE_HEADERS: '/nonexistent/h' }]) {
+      expect(() => curlArgvOfShim(buildContextShim(), env)).toThrow() // argv file never written
+    }
   })
 })
 
@@ -261,9 +268,9 @@ describe('installContextLink', () => {
       expect(statSync(file).mode & 0o777).toBe(0o700)
       const shim = readFileSync(file, 'utf8')
       expect(shim).not.toContain(FAKE_ROOT_TOKEN)
-      expect(shim).toContain(`-H "${TOKEN_HEADER}: \${WEBTERM_TOKEN:-$NODETERM_NODE_TOKEN}"`)
+      expect(shim).toContain('-H "@$hdr"')
       // No literal header value of any kind.
-      expect(shim).not.toMatch(new RegExp(`${TOKEN_HEADER}: (?!\\$)`))
+      expect(shim).not.toContain(`${TOKEN_HEADER}:`)
     })
   })
 })
