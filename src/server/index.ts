@@ -40,6 +40,7 @@ import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { startPortScanner } from './ports/ports.runtime'
+import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
 import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 
@@ -170,6 +171,10 @@ if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => lo
 if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
 const server = http.createServer()
+// Dev-server proxy (/proxy/<port>/, /absproxy/<port>/) lives on its OWN port = own origin, so a proxied
+// page (arbitrary npm code) cannot read the UI's token. Same bind host; PORT+1 or WEBTERM_PROXY_PORT, busy -> OS port.
+startDevProxy({ host: HOST, mainPort: PORT, allowedHosts: HOSTS, env: process.env })
+  .catch((e: unknown) => log.warn('proxy.start.failed', 'Cannot start the dev-server proxy', { cause: e instanceof Error ? e.message : String(e) }))
 
 if (dev) {
   // Vite in middleware mode shares this port, so the app and its HMR websocket
@@ -181,6 +186,7 @@ if (dev) {
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
     if (telegramHot.handle(req, res)) return
+    if (refuseProxyOnMain(req, res)) return // 404: the proxy has its own origin (proxy.routes.ts)
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
@@ -198,6 +204,7 @@ if (dev) {
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
     // before the /api gate. `handle` owns only its exact path.
     if (telegramHot.handle(req, res)) return
+    if (refuseProxyOnMain(req, res)) return // 404: the proxy has its own origin (proxy.routes.ts)
     if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
     if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
     // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
