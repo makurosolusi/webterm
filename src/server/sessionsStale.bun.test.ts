@@ -1,6 +1,9 @@
 // Bun-only: `open` butuh PTY nyata (Bun.Terminal via spawnPty) supaya ada socket yang menerima
 // pesan status. Aturan basi-nya sendiri murni dan diuji tanpa timer di `src/shared/agentStale.test.ts`.
 import { test, expect, afterAll } from 'bun:test'
+import { reapChildren } from './processReap.testutil'
+// No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
+afterAll(() => reapChildren())
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

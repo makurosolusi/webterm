@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSy
 import { type AddressInfo, connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { reapChildren } from './processReap.testutil'
 
 const ENTRY = join(import.meta.dirname, 'index.ts')
 const READY_TIMEOUT_MS = 15_000
@@ -14,8 +15,12 @@ const TOKEN_LEN = 43 // base64url 32 byte, tanpa padding
 const SENTINEL_ENV_TOKEN = 'ZENV'.repeat(10)
 const SENTINEL_BAD_FILE = 'bad token sentinel with spaces'
 const SENTINEL_BOT = 'sentinel-bot-value-xyz'
+// Covers the slowest case (Z2+Z3 boots twice), so a server that never comes up fails with its own
+// message instead of bun's 5 s default, and the child is never left running mid-test.
+const BOOT_TEST_TIMEOUT_MS = 2 * READY_TIMEOUT_MS + 5_000
 const children: ChildProcess[] = []
-afterAll(() => children.forEach((c) => c.kill()))
+// Kill AND wait: an unawaited kill leaves the server for bun's own dangling-process kill (processReap.testutil.ts).
+afterAll(() => { children.forEach((c) => c.kill()); return reapChildren() })
 
 type Boot = { proc: ChildProcess; port: number; dir: string; data: string; out: () => string }
 
@@ -88,7 +93,7 @@ test('Z1 loopback tanpa env: naik terbuka, data 0700, db 0600, tanpa berkas toke
   expect(mode(join(b.data, 'webterm.db'))).toBe(0o600)
   expect(existsSync(tokenPath(b.data))).toBe(false)
   expect(b.out()).not.toMatch(/Error|EADDRINUSE|throw/)
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 test('Z2+Z3 non-loopback: token berkas 0600/43, 401/403 tanpa token, token tak bocor; reboot memakai token sama', async () => {
   const b = await boot({ HOST: '0.0.0.0' })
@@ -105,14 +110,14 @@ test('Z2+Z3 non-loopback: token berkas 0600/43, 401/403 tanpa token, token tak b
   const again = await boot({ HOST: '0.0.0.0' }, { dir: b.dir })
   expect(readFileSync(p, 'utf8').trim()).toBe(token)
   expect(again.out()).not.toContain(token)
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 test('Z4 env menang: token env diterima, tanpa berkas token, sentinel tak muncul di keluaran', async () => {
   const b = await boot({ HOST: '0.0.0.0', WEBTERM_TOKEN: SENTINEL_ENV_TOKEN })
   expect((await api(b, { 'x-webterm-token': SENTINEL_ENV_TOKEN })).status).toBe(200)
   expect(existsSync(tokenPath(b.data))).toBe(false)
   expect(b.out()).not.toContain(SENTINEL_ENV_TOKEN)
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 test('Z5 berkas token rusak: keluar non-nol, pesan memuat path tanpa isi, berkas tak ditimpa', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zeroenv-'))
@@ -125,13 +130,13 @@ test('Z5 berkas token rusak: keluar non-nol, pesan memuat path tanpa isi, berkas
   expect(b.out()).not.toContain(SENTINEL_BAD_FILE)
   expect(readFileSync(p, 'utf8')).toBe(SENTINEL_BAD_FILE)
   // Tidak ada asersi "webterm.db belum dibuat": db.ts membuka DB saat impor, sebelum bootWiring jalan (dilaporkan sbg deviasi).
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 test('Z6 PORT invalid: keluar non-nol dan pesan menyebut PORT="abc"', async () => {
   const b = await spawnServer({ PORT: 'abc' })
   expect(await exitedWithin(b)).not.toBe(0)
   expect(b.out()).toContain('PORT="abc"')
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 test('Z7 rebinding: Host asing 403 host_not_allowed (Host tak dipantulkan), Host localhost 200', async () => {
   const b = await boot()
@@ -140,7 +145,7 @@ test('Z7 rebinding: Host asing 403 host_not_allowed (Host tak dipantulkan), Host
   expect(JSON.parse(evil.body)).toEqual({ error: 'host_not_allowed' })
   expect(evil.body).not.toContain('evil.example')
   expect((await rawGet(b.port, `localhost:${b.port}`)).status).toBe(200)
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 // Adaptasi Z8: POST /api/settings/token/enable milik EM-15 (belum ada). Efek yang sama diuji lewat token berkas:
 // begitu token ditegakkan, allowlist Host mati dan Host LAN + token benar diterima.
@@ -149,7 +154,7 @@ test('Z8 (adaptasi) token tegak => allowlist Host mati: Host 192.168.1.5 + token
   const token = readFileSync(tokenPath(b.data), 'utf8').trim()
   const ok = await rawGet(b.port, `192.168.1.5:${b.port}`, `x-webterm-token: ${token}\r\n`)
   expect(ok.status).toBe(200)
-})
+}, BOOT_TEST_TIMEOUT_MS)
 
 test('Z9 .env di cwd (tanpa --no-env-file): notis memuat nama kunci saja, sentinel tak muncul', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'zeroenv-'))
@@ -158,4 +163,4 @@ test('Z9 .env di cwd (tanpa --no-env-file): notis memuat nama kunci saja, sentin
   expect(b.out()).toContain('.env supplies registry keys')
   expect(b.out()).toContain('WEBTERM_LEDGER')
   expect(b.out()).not.toContain(SENTINEL_BOT)
-})
+}, BOOT_TEST_TIMEOUT_MS)

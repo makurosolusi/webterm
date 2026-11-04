@@ -1,7 +1,10 @@
 // Bun-only (butuh PTY nyata); dijalankan lewat `bun test`, dikecualikan dari vitest via sufiks
 // **/*.bun.test.ts. Memakai hanya toBe/toContain, matcher yang dideklarasikan di
 // src/server/bun-test.d.ts.
-import { test, expect } from 'bun:test'
+import { test, expect, afterAll } from 'bun:test'
+import { reapChildren } from './processReap.testutil'
+// No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
+afterAll(() => reapChildren())
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

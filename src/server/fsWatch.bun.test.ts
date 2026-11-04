@@ -1,6 +1,6 @@
 // Hub watcher (`fsWatch.ts`) terhadap filesystem NYATA di $TMPDIR + seam pemantau palsu untuk jalur
 // gagal. Bun-only; matcher terbatas pada yang diekspos `bun-test.d.ts` (toBe/toContain).
-import { test, expect } from 'bun:test'
+import { test, expect, afterEach } from 'bun:test'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import npath from 'node:path'
@@ -15,14 +15,26 @@ async function withDir(fn: (dir: string) => Promise<void>): Promise<void> {
   try { await fn(dir) } finally { await fs.rm(dir, { recursive: true, force: true }) }
 }
 
+// Every hub and client of a test, released after it even when an assertion threw first: a real
+// watcher (FSEvents) or poll interval left behind would keep firing into the next tests.
+const hubs: ReturnType<typeof createFsWatchHub>[] = []
+const sends: ((m: ServerMsg) => void)[] = []
+const track = <H extends ReturnType<typeof createFsWatchHub>>(hub: H): H => { hubs.push(hub); return hub }
+afterEach(() => {
+  for (const hub of hubs.splice(0)) for (const send of sends) hub.dropClient(send)
+  sends.length = 0
+})
+
 function client(): { send: (m: ServerMsg) => void; got: string[] } {
   const got: string[] = []
-  return { got, send: (m) => { if (m.t === 'fsdirty') got.push(m.dir) } }
+  const send = (m: ServerMsg) => { if (m.t === 'fsdirty') got.push(m.dir) }
+  sends.push(send)
+  return { got, send }
 }
 
 test('write -> one fsdirty after the debounce; a burst collapses to a single event', async () => {
   await withDir(async (dir) => {
-    const hub = createFsWatchHub({ debounceMs: DEBOUNCE })
+    const hub = track(createFsWatchHub({ debounceMs: DEBOUNCE }))
     const c = client()
     hub.watch(c.send, dir)
     await sleep(50) // beri watcher waktu terpasang
@@ -36,7 +48,7 @@ test('write -> one fsdirty after the debounce; a burst collapses to a single eve
 
 test('ignores .webterm-*.tmp and .git entries', async () => {
   await withDir(async (dir) => {
-    const hub = createFsWatchHub({ debounceMs: DEBOUNCE })
+    const hub = track(createFsWatchHub({ debounceMs: DEBOUNCE }))
     const c = client()
     hub.watch(c.send, dir)
     await sleep(50)
@@ -57,7 +69,7 @@ test('refcount: one watcher per dir, released only after the last client leaves;
     await fs.mkdir(sub)
     let open = 0
     const watch: WatchFn = () => { open++; return { close: () => { open-- } } }
-    const hub = createFsWatchHub({ watch })
+    const hub = track(createFsWatchHub({ watch }))
     const a = client(), b = client()
     hub.watch(a.send, dir); hub.watch(b.send, dir); hub.watch(a.send, dir)
     expect(open).toBe(1)
@@ -82,7 +94,7 @@ test('deleted directory: one dirty, then the watcher is released', async () => {
   await withDir(async (dir) => {
     const gone = npath.join(dir, 'gone')
     await fs.mkdir(gone)
-    const hub = createFsWatchHub({ debounceMs: DEBOUNCE, pollMs: 40 })
+    const hub = track(createFsWatchHub({ debounceMs: DEBOUNCE, pollMs: 40 }))
     const c = client()
     hub.watch(c.send, gone)
     await sleep(50)
@@ -96,7 +108,7 @@ test('deleted directory: one dirty, then the watcher is released', async () => {
 test('EMFILE on open falls back to polling and still reports a new entry', async () => {
   await withDir(async (dir) => {
     const watch: WatchFn = () => { throw Object.assign(new Error('too many open files'), { code: 'EMFILE' }) }
-    const hub = createFsWatchHub({ watch, debounceMs: DEBOUNCE, pollMs: 30 })
+    const hub = track(createFsWatchHub({ watch, debounceMs: DEBOUNCE, pollMs: 30 }))
     const c = client()
     hub.watch(c.send, dir)
     expect(hub.size()).toBe(1)
@@ -114,7 +126,7 @@ test('watcher error after start switches to polling and flushes; other open erro
     let fail: (e: Error) => void = () => {}
     let closed = 0
     const watch: WatchFn = (_d, _ev, onError) => { fail = onError; return { close: () => { closed++ } } }
-    const hub = createFsWatchHub({ watch, debounceMs: DEBOUNCE, pollMs: 30 })
+    const hub = track(createFsWatchHub({ watch, debounceMs: DEBOUNCE, pollMs: 30 }))
     const c = client()
     hub.watch(c.send, dir)
     fail(Object.assign(new Error('boom'), { code: 'EIO' }))
@@ -124,7 +136,7 @@ test('watcher error after start switches to polling and flushes; other open erro
     hub.dropClient(c.send)
 
     const denied: WatchFn = () => { throw Object.assign(new Error('nope'), { code: 'EACCES' }) }
-    const hub2 = createFsWatchHub({ watch: denied })
+    const hub2 = track(createFsWatchHub({ watch: denied }))
     hub2.watch(c.send, dir)
     expect(hub2.size()).toBe(0)
   })
@@ -134,7 +146,7 @@ test('cap on watched directories and invalid paths are ignored', async () => {
   await withDir(async (dir) => {
     const a = npath.join(dir, 'a'), b = npath.join(dir, 'b')
     await fs.mkdir(a); await fs.mkdir(b)
-    const hub = createFsWatchHub({ watch: () => ({ close() {} }), max: 1 })
+    const hub = track(createFsWatchHub({ watch: () => ({ close() {} }), max: 1 }))
     const c = client()
     hub.watch(c.send, a)
     hub.watch(c.send, b)

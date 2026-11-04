@@ -2,6 +2,9 @@
 // a shell spawned the way an agent is spawned must not find the root token in its env or in any
 // file webterm hands to nodes, and the Claude settings webterm writes must wall off the data dir.
 import { test, expect, afterAll } from 'bun:test'
+import { reapChildren } from './processReap.testutil'
+// No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
+afterAll(() => reapChildren())
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
