@@ -10,7 +10,7 @@ export interface LspHint { message: string; command: string }
 type Pending = { resolve(v: unknown): void; reject(e: Error): void }
 interface RpcMsg { id?: string | number | null; method?: string; params?: unknown; result?: unknown; error?: { message: string } }
 
-/** Minimal capabilities: the features this editor wires (markdown hover, snippet completion, LocationLink). */
+/** Minimal capabilities: the features this editor wires (markdown hover, snippet completion, LocationLink, signature help, symbol tree). */
 const CLIENT_CAPABILITIES = {
   textDocument: {
     synchronization: { dynamicRegistration: false },
@@ -19,6 +19,8 @@ const CLIENT_CAPABILITIES = {
     definition: { linkSupport: true },
     references: {},
     rename: { prepareSupport: false },
+    signatureHelp: { signatureInformation: { documentationFormat: ['markdown', 'plaintext'], parameterInformation: { labelOffsetSupport: true }, activeParameterSupport: true }, contextSupport: true },
+    documentSymbol: { hierarchicalDocumentSymbolSupport: true },
     publishDiagnostics: {},
   },
   workspace: { configuration: true, workspaceEdit: { documentChanges: true } },

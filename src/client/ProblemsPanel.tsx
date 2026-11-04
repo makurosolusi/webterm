@@ -1,7 +1,8 @@
 // Problems panel (VS Code Problems view, G9 step 1): the workspace's own `tsc --watch` + eslint
 // diagnostics from src/server/problems/, a status-bar counter that toggles the panel, rows that
 // open the file at the line in an Editor node, and "Fix with agent" that queues the list for an
-// agent node of this board through the outbox.
+// agent node of this board through the outbox. Live language-server diagnostics of open editor
+// nodes (editorLsp.store.ts) join the list and the counter, deduped against the run's rows.
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react'
 import type { Node, XYPosition } from '@xyflow/react'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
@@ -10,10 +11,9 @@ import type { ProblemsState } from '../server/problems/problems.service'
 import type { Workspace, WsNode } from '../shared/workspace'
 import { tokenQuery } from './api'
 import { codicon } from './dockCodicon'
-import { EDITOR_SIZE, openEditorFor } from './fileOpen'
+import { useLspProblems, type LspProblem } from './editorLsp.store'
 import { InboxPanelSurface } from './inboxPanelSurface'
-import { revealFileLine } from './Omnibox.open'
-import { randomId } from './randomId'
+import { openEditorAt } from './Omnibox.open'
 
 export const PROBLEMS_POLL_MS = 3000
 const TABS = [{ id: 'problems', label: 'Problems', closable: false }]
@@ -37,6 +37,14 @@ export const fixWithAgent = (ws: string, to: string) => call<unknown>('Send prob
 export function problemLocation(p: Pick<Problem, 'file' | 'line' | 'column'>, root?: string): string {
   const rel = root && p.file.startsWith(`${root.replace(/\/+$/, '')}/`) ? p.file.slice(root.replace(/\/+$/, '').length + 1) : p.file
   return `${rel}:${p.line}:${p.column}`
+}
+
+const problemKey = (p: LspProblem) => `${p.file}:${p.line}:${p.column}:${p.message}`
+
+/** The run's problems, then live language-server ones it does not already list. */
+export function mergeProblems(run: Problem[], lsp: LspProblem[]): LspProblem[] {
+  const seen = new Set(run.map(problemKey))
+  return [...run, ...lsp.filter((p) => !seen.has(problemKey(p)))]
 }
 
 /** Agent nodes on the board, the targets "Fix with agent" offers. */
@@ -63,14 +71,17 @@ export function useProblems(workspaceId: string | null) {
     setError(null)
     f().then(refresh, (e: unknown) => setError(e instanceof Error ? e.message : String(e)))
   }, [refresh])
-  const errors = state?.errors ?? 0
-  const warnings = state?.warnings ?? 0
+  const lsp = useLspProblems()
+  const list = useMemo(() => mergeProblems(state?.problems ?? [], lsp), [state?.problems, lsp])
+  const extra = list.slice(state?.problems.length ?? 0)
+  const errors = (state?.errors ?? 0) + extra.filter((p) => p.severity === 'error').length
+  const warnings = (state?.warnings ?? 0) + extra.filter((p) => p.severity === 'warning').length
   const statusItems = useMemo<VscodeStatusItem[]>(() => (workspaceId ? [{
     id: 'problems', label: `${errors} / ${warnings}`, icon: codicon('issues'), tone: errors > 0 ? 'error' : 'default',
     tooltip: 'Toggle Problems (type checker and linter)', ariaLabel: `Problems: ${errors} errors, ${warnings} warnings`,
     onClick: () => setOpen((v) => !v),
   }] : []), [workspaceId, errors, warnings])
-  return { workspaceId, state, open, setOpen, error, act, statusItems }
+  return { workspaceId, state, list, open, setOpen, error, act, statusItems }
 }
 
 export interface ProblemsPanelProps {
@@ -89,15 +100,9 @@ export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, add
   if (!pr.open || !pr.workspaceId) return null
   const ws = pr.workspaceId
   const s = pr.state
-  const list = s?.problems ?? []
+  const list = pr.list
 
-  const openAt = (p: Problem) => {
-    const existing = openEditorFor(nodesRef.current, p.file)
-    const id = existing ?? randomId()
-    if (!existing) addFlowNode(() => ({ id, kind: 'editor', filePath: p.file, title: p.file.slice(p.file.lastIndexOf('/') + 1), ...EDITOR_SIZE }))
-    setTimeout(() => onFocus(id), 0)
-    void revealFileLine(p.file, p.line, p.column).catch((e: unknown) => console.warn('problems: reveal line failed', e instanceof Error ? e.message : String(e)))
-  }
+  const openAt = (p: LspProblem) => openEditorAt({ nodesRef, addFlowNode, onFocus }, p.file, p.line, p.column)
 
   const actions = (
     <>
@@ -109,7 +114,7 @@ export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, add
           {agents.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
         </select>
       )}
-      <button type="button" className="vscode-panel-action" disabled={!to || list.length === 0}
+      <button type="button" className="vscode-panel-action" disabled={!to || !s?.problems.length}
         title={to ? 'Fix with agent' : 'Add an agent node to fix with'} aria-label="Fix with agent"
         onClick={() => pr.act(() => fixWithAgent(ws, to))}>{codicon('sparkle')}</button>
     </>

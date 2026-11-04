@@ -7,10 +7,11 @@ import type { Node } from '@xyflow/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 
-const reveal = vi.hoisted(() => vi.fn(async () => true))
-vi.mock('./Omnibox.open', () => ({ revealFileLine: reveal }))
+const openAt = vi.hoisted(() => vi.fn())
+vi.mock('./Omnibox.open', () => ({ openEditorAt: openAt }))
 
-import ProblemsPanel, { agentTargets, problemLocation, useProblems } from './ProblemsPanel'
+import ProblemsPanel, { agentTargets, mergeProblems, problemLocation, useProblems } from './ProblemsPanel'
+import { setLspProblems } from './editorLsp.store'
 
 const STATE = {
   ran: true, running: true, tools: ['tsc'], errors: 1, warnings: 0, updatedAt: 5, total: 1,
@@ -26,7 +27,7 @@ function stubFetch() {
   return calls
 }
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); setLspProblems('/w/src/b.ts', []) })
 
 const agents = [{ id: 'a1', type: 'agent', position: { x: 0, y: 0 }, data: { title: 'claude' } }] as Node[]
 
@@ -52,13 +53,24 @@ describe('ProblemsPanel', () => {
     expect(labels).toContain('1 / 0')
 
     fireEvent.click(row)
-    const make = add.mock.calls[0]![0] as () => { kind: string; filePath: string }
-    expect(make()).toMatchObject({ kind: 'editor', filePath: '/w/src/a.ts' })
-    expect(reveal).toHaveBeenCalledWith('/w/src/a.ts', 12, 5)
+    expect(openAt).toHaveBeenCalledWith(expect.objectContaining({ addFlowNode: add }), '/w/src/a.ts', 12, 5)
 
     fireEvent.click(screen.getByRole('button', { name: 'Fix with agent' }))
     await waitFor(() => expect(calls.some((c) => c.url.startsWith('/api/problems/fix'))).toBe(true))
     expect(calls.find((c) => c.url.startsWith('/api/problems/fix'))!.body).toEqual({ workspace: 'ws1', to: 'a1' })
+  })
+
+  it('live language-server diagnostics join the list and the counter, deduped against the run', async () => {
+    stubFetch()
+    setLspProblems('/w/src/b.ts', [{ source: 'Pyright', file: '/w/src/b.ts', line: 3, column: 1, severity: 'error', message: 'Undefined name' }])
+    const labels: string[] = []
+    render(<Harness add={() => {}} focus={() => {}} onItems={(l) => labels.push(l)} />)
+    await screen.findByRole('button', { name: /Type mismatch/ }) // the run has loaded; rows are final
+    fireEvent.click(screen.getByRole('button', { name: /Undefined name/ }))
+    expect(openAt).toHaveBeenCalledWith(expect.anything(), '/w/src/b.ts', 3, 1)
+    await waitFor(() => expect(labels.at(-1)).toBe('2 / 0'))
+    const run = STATE.problems as Parameters<typeof mergeProblems>[0]
+    expect(mergeProblems(run, [{ ...run[0]!, source: 'ts' }])).toHaveLength(1)
   })
 
   it('Stop is offered while watching and posts stop', async () => {
