@@ -27,7 +27,7 @@ const config = (mock: boolean): EffectiveConfig => ({
 function stub(mock: boolean, protection: unknown = null): void {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === CONTROL_EFFECTIVE_PATH) return new Response(JSON.stringify(config(mock)), { status: 200 })
-    if (url === `${CONTROL_EFFECTIVE_PATH}?doctor=1`) return new Response('{"checks":[]}', { status: 200 })
+    if (url === '/api/control/doctor') return new Response('{"checks":[]}', { status: 200 })
     if (url === AGENT_PROTECTION_PATH && protection) return new Response(JSON.stringify(protection), { status: 200 })
     return new Response('{"error":"not_found"}', { status: 404 })
   }))

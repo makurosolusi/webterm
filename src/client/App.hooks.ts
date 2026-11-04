@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { createElement, useCallback, useEffect, useMemo } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
 import { useOutputStatusItems } from './output/outputStatusItem'
 import { resolveTerminalTheme } from './themes'
+import { setTimelineOpen } from './Timeline'
+import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { subscribeStatus } from './ws'
 import { validateToken, storeToken, clearToken } from './api'
 import type { Settings } from '../shared/settings'
@@ -66,6 +68,12 @@ export function useAgentSummary(statuses: Record<string, AgentStatus>) {
   }, [statuses])
 }
 
+/** Status bar item that opens the Activity timeline (same store as "View: Toggle Activity"). */
+export const ACTIVITY_STATUS_ITEM: VscodeStatusItem = {
+  id: 'activity', label: 'Activity', icon: createElement('span', { className: 'codicon codicon-pulse', 'aria-hidden': true }),
+  tooltip: 'Open Activity timeline', ariaLabel: 'Open Activity timeline', onClick: () => setTimelineOpen(true),
+}
+
 /** Badge + hotkey Inbox dan item status/palette panel Output untuk Dock. */
 export function useDockFeeds(inboxOpen: boolean, setInboxOpen: (open: boolean) => void, inboxReady: boolean) {
   // Inbox + badge berbagi satu endpoint (`GET /api/inbox`), jadi hanya SATU yang memuat pada satu
@@ -76,7 +84,8 @@ export function useDockFeeds(inboxOpen: boolean, setInboxOpen: (open: boolean) =
   // Panel Output (log sistem): state-nya modul bersama, jadi menu View, palette, dan status bar
   // tak perlu prop. Lihat `./output/outputCommands`.
   useOutputToggleHotkey()
-  const outputStatusItems = useOutputStatusItems()
+  const outputItems = useOutputStatusItems()
+  const outputStatusItems = useMemo(() => [...outputItems, ACTIVITY_STATUS_ITEM], [outputItems])
   const outputCommands = useMemo(() => outputPaletteCommands(), [])
   return { inboxUnread, outputStatusItems, outputCommands }
 }

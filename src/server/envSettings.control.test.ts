@@ -19,9 +19,9 @@ function harness(env: NodeJS.ProcessEnv = {}, doctor?: Partial<DoctorDeps>) {
     guard: () => ({ ok: true, via: 'ui' }), audit: (e) => audits.push(e),
     ...(doctor ? { doctor: () => fakeDoctor(doctor) } : {}),
   }
-  const call = async (method: string, body?: unknown, url?: string) => {
+  const call = async (method: string, body?: unknown, url?: string, doctorPath = false) => {
     const res = recorder()
-    await controlEffectiveRoute(req(method, {}, body === undefined ? undefined : JSON.stringify(body), url), res, method, deps)
+    await controlEffectiveRoute(req(method, {}, body === undefined ? undefined : JSON.stringify(body), url), res, method, deps, doctorPath)
     return res
   }
   return { ...s, audits, deps, call }
@@ -146,5 +146,24 @@ describe('Doctor over the route', () => {
     expect(h.audits.at(-1)).toMatchObject({ detail: 'doctor:dataDir' })
     expect((await h.call('POST', { fix: 'dataDir' })).status).toBe(409)
     expect((await h.call('POST', { fix: 'bogus' })).status).toBe(400)
+  })
+
+  it('/api/control/doctor is its own path: GET checks, POST fix, PUT refused', async () => {
+    let tight = false
+    const h = harness({}, { looseDirs: () => (tight ? [] : ['/data']), tightenDirs: () => { tight = true } })
+    const list = await h.call('GET', undefined, '/api/control/doctor', true)
+    expect((list.json() as { checks: { id: string }[] }).checks.map((c) => c.id)).toContain('dataDir')
+    const fixed = await h.call('POST', { fix: 'dataDir' }, '/api/control/doctor', true)
+    expect(fixed.json()).toMatchObject({ id: 'dataDir', status: 'ok' })
+    expect((await h.call('PUT', { set: {}, unset: [] }, '/api/control/doctor', true)).status).toBe(405)
+  })
+
+  it('the capabilities route mounts /api/control/doctor (root-only like the effective path)', async () => {
+    const h = harness()
+    const res = recorder()
+    const handled = await capabilitiesRoute(req('GET', { 'x-webterm-capability': 'wcap_x' }, undefined, '/api/control/doctor'), res, 'GET', '/api/control/doctor', () => ({ service: h.svc, guard: () => ({ ok: true, via: 'ui' }) }), { env: {} })
+    expect(handled).toBe(true)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(res.status).toBe(403)
   })
 })

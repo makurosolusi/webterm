@@ -4,8 +4,10 @@ import type { Database } from 'bun:sqlite'
 import { homedir } from 'node:os'
 import { allRows, execWrite, getRow } from '../ledger/ledgerCore'
 import { projectRepository } from '../ledger/ledgerEntity'
+import { createLogger } from '../logs'
 import { portfolio } from './centralProjection'
 import type { PortfolioOptions, PortfolioPage } from './centralModel'
+import type { WorldCounts, WorldPaths } from '../worldView'
 
 /** The fields of a stored workspace central code reads. */
 export interface WorkspaceRecord { id?: string; name: string; cwd?: string; nodes?: unknown; updatedAt?: number }
@@ -14,6 +16,7 @@ export type WorkspaceLookup = (id: string) => WorkspaceRecord | null
 /** Every stored workspace, most recently updated first. */
 export type WorkspaceList = () => WorkspaceRecord[]
 
+const log = createLogger('central')
 let store: { get: WorkspaceLookup; list?: WorkspaceList } | null = null
 
 /** Registers the workspace store (boot); returns the unregister. */
@@ -60,6 +63,28 @@ export function syncWorkspaceProjects(ledger: Database, now: () => number = Date
 export function livePortfolio(ledger: Database, opts: PortfolioOptions = {}): PortfolioPage {
   const live = syncWorkspaceProjects(ledger)
   return portfolio(ledger, live === null ? opts : { ...opts, workspaceIds: live })
+}
+
+/** World-view module; required lazily because it needs bun:sqlite at runtime (vitest has none). */
+type WorldModule = { worldCounts(paths?: WorldPaths): WorldCounts; defaultWorldPaths(): WorldPaths }
+const loadWorld = (): WorldModule => require('../worldView') as WorldModule
+
+/**
+ * Counts from the one counting module every surface uses, or null when they would not match this
+ * portfolio: no workspace store (ledger-only), or the ledger is not the file the world view attaches.
+ */
+export function portfolioCounts(ledgerPath: string, world: () => WorldModule = loadWorld): WorldCounts | null {
+  if (listWorkspaces() === null || ledgerPath === ':memory:') return null
+  const w = world()
+  const paths = w.defaultWorldPaths()
+  if (ledgerPath !== paths.ledger) return null
+  try {
+    return w.worldCounts(paths)
+  } catch (err) {
+    // The page itself is still correct; only the shared counts are missing, so warn instead of failing it.
+    log.warn('portfolio.counts_failed', 'World-view counts unavailable for the portfolio', { cause: err instanceof Error ? err.message : 'error' })
+    return null
+  }
 }
 
 export type ProjectWorkspace =

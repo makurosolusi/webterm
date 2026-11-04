@@ -1,9 +1,9 @@
-// Doctor section of the Control tab (F1-f): the server runs the checks (GET ?doctor=1) and applies a
+// Doctor section of the Control tab (F1-f): the server runs the checks (GET /api/control/doctor) and applies a
 // safe fix (POST {fix}); this only renders status, explanation and the Fix button, then shows the re-run result.
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { controlRequest } from './ControlPanel'
+import { CONTROL_DOCTOR_PATH, controlRequest } from './ControlPanel'
 import { DOCTOR_TEXT } from './controlPanelLabels'
 
 /** Mirror of the server `DoctorCheck` (src/server/doctor.ts). */
@@ -24,7 +24,7 @@ export function ControlPanelDoctor(): React.JSX.Element {
   const load = useCallback(() => {
     setChecks(null)
     setFailed(false)
-    controlRequest('GET', undefined, '?doctor=1')
+    controlRequest('GET', undefined, '', CONTROL_DOCTOR_PATH)
       .then((v) => { if (isChecks(v)) setChecks(v.checks); else setFailed(true) })
       .catch(() => setFailed(true)) // shown as the loadFailed alert
   }, [])
@@ -34,7 +34,7 @@ export function ControlPanelDoctor(): React.JSX.Element {
     setFixing(id)
     setFixError(null)
     try {
-      const next = await controlRequest('POST', { fix: id })
+      const next = await controlRequest('POST', { fix: id }, '', CONTROL_DOCTOR_PATH)
       if (isCheck(next)) setChecks((all) => all?.map((c) => (c.id === id ? next : c)) ?? null)
     } catch {
       setFixError(id) // the explanation of the re-checked row says what is still wrong

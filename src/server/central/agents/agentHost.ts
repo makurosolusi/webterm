@@ -7,6 +7,8 @@ import { AGENT_ENVELOPE } from './agentExecutor'
 import type { AgentHost } from './agentExecutor'
 import type { AgentRecord, AgentRunner } from '../contracts'
 import { AGENT_KIND_UNKNOWN, type AgentCatalog } from './agentCatalog'
+import { activePolicy } from '../../policy/policy.runtime'
+import type { Principal } from '../../policy/policy.model'
 
 /** Worker owner label stored on the worktree allocation. */
 export const AGENT_WORKTREE_OWNER = 'central'
@@ -22,7 +24,12 @@ export interface AgentHostDeps {
   catalog: AgentCatalog
   /** Optional human-set task title; only server data, never model text. */
   taskTitle?(agent: AgentRecord): string | null
+  /** Policy lineage (K3); default = the active policy, a no-op while the ledger is off. */
+  registerSpawn?(parent: Principal, child: Principal): void
 }
+
+/** Policy principal that spawned an agent: a human at the UI, otherwise central. */
+export const spawnParentOf = (agent: Pick<AgentRecord, 'owner'>): Principal => (agent.owner === 'human' ? 'human-ui' : 'central')
 
 /** Builds the host over injected sessions/worktrees (real ones in `ca2Boot`, fakes in tests). */
 export function createAgentHost(deps: AgentHostDeps): AgentHost {
@@ -49,6 +56,9 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       if (!entry) throw new Error(`${AGENT_KIND_UNKNOWN}: ${agent.kind}`)
       // ponytail: PTY sessions take no env from the host (OpenMsg has no env field), so `CustomAgent.env` only reaches headless runs.
       await deps.sessions.open({ nodeId, cwd, cmd: entry.launchLine, agentId: agent.kind })
+      // K3: the node's decisions are capped by its spawner's (same as the control API's session spawn).
+      const register = deps.registerSpawn ?? ((parent: Principal, child: Principal) => activePolicy()?.registerSpawn(parent, child))
+      register(spawnParentOf(agent), `node:${nodeId}`)
     },
     headlessArgv: (kind, prompt) => deps.catalog.resolve(kind)?.headlessArgv?.(prompt) ?? null,
     async send(nodeId, text) { deps.sessions.input(nodeId, `${text}\r`) },

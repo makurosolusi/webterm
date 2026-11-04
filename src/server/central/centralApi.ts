@@ -10,8 +10,9 @@ import {
   clampPriority,
 } from './centralModel'
 import { pauseProject, prioritize, projectPortfolio, resumeProject } from './central'
-import { livePortfolio } from './workspaceLookup'
+import { livePortfolio, portfolioCounts } from './workspaceLookup'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
+import type { WorldCounts } from '../worldView'
 import { boundedInteger } from '../apiShared.params'
 import { LEDGER_OFF, type RouteResult } from '../apiShared.types'
 
@@ -21,6 +22,8 @@ export interface CentralRouteDeps {
   enabled?: boolean
   /** Caller-owned authorization; null/undefined (or a throw) denies. */
   authorize?: (action: CentralAction, projectId: string) => CentralActor | null | undefined
+  /** World-view counts for the portfolio; default `portfolioCounts` (null = omitted). */
+  counts?: (ledgerPath: string) => WorldCounts | null
 }
 
 const PORTFOLIO_PATH = '/api/central/portfolio'
@@ -118,13 +121,12 @@ export function centralRoute(
     const offset = boundedInteger(params.get('offset'), 0, MAX_OFFSET)
     if (offset === null) return { status: 400, body: { error: 'invalid_offset' } }
     try {
-      return {
-        status: 200,
-        body: livePortfolio(runtime.db, { // every canvas workspace, deleted ones hidden
-          ...(limit === undefined ? {} : { limit }),
-          ...(offset === undefined ? {} : { offset }),
-        }),
-      }
+      const page = livePortfolio(runtime.db, { // every canvas workspace, deleted ones hidden (syncs first)
+        ...(limit === undefined ? {} : { limit }),
+        ...(offset === undefined ? {} : { offset }),
+      })
+      const counts = (deps.counts ?? portfolioCounts)(runtime.path)
+      return { status: 200, body: counts ? { ...page, counts } : page }
     } catch (err) {
       return failure(err)
     }

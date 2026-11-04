@@ -10,10 +10,12 @@ import { TOKEN_HEADER } from './api'
 import { CONTROL_TEXT, SOURCE_LABEL } from './controlPanelLabels'
 import { ControlField } from './ControlPanelField'
 import { ControlPanelDoctor } from './ControlPanelDoctor'
+import { PolicyRules } from './PolicyRules'
 import { matchesSearch, normalizeQuery } from './SettingsFields'
 import { peekToken } from './transportToken'
 
 export const CONTROL_EFFECTIVE_PATH = '/api/control/effective'
+export const CONTROL_DOCTOR_PATH = '/api/control/doctor'
 export const AGENT_PROTECTION_PATH = '/api/agents/protection'
 
 /** Mirror of the server `EffectiveRow` (src/server/effectiveConfig.ts); only the fields rendered here. */
@@ -26,17 +28,17 @@ export interface EffectiveRow {
 export interface EffectiveConfig { mock: { active: boolean; keys: string[] }; rows: EffectiveRow[] }
 export interface AgentProtection { kind: string; level: string; reasons: string[] }
 
-/** Call `/api/control/effective` (GET read model or Doctor, PUT settings write, POST Doctor fix). Throws with the server reason. */
-export async function controlRequest(method: string, body?: unknown, query = ''): Promise<unknown> {
+/** Call `/api/control/effective` (GET read model, PUT settings write) or `path` (the Doctor's own). Throws with the server reason. */
+export async function controlRequest(method: string, body?: unknown, query = '', path = CONTROL_EFFECTIVE_PATH): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   const t = peekToken()
   if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(CONTROL_EFFECTIVE_PATH + query, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+  const res = await fetch(path + query, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)
   if (!res.ok) {
     const e = (out ?? {}) as { error?: string; reason?: string }
-    throw new Error(e.reason ?? e.error ?? `${method} ${CONTROL_EFFECTIVE_PATH} failed (${res.status})`)
+    throw new Error(e.reason ?? e.error ?? `${method} ${path} failed (${res.status})`)
   }
   return out
 }
@@ -128,6 +130,8 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
       </section>
 
       <ControlPanelDoctor />
+
+      <PolicyRules />
 
       <div className="flex flex-wrap items-center gap-3">
         <Input type="search" aria-label={CONTROL_TEXT.search} placeholder={CONTROL_TEXT.search} value={filter}
