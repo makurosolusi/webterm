@@ -50,6 +50,9 @@
 - `POST /api/settings/env/import` reads the `.env` in the boot directory. It is a dry run by default; `{"apply":true}` writes the values to Settings. Bootstrap keys are skipped and dangerous keys need the root gate.
 - Env entries in `/api/settings/env` carry `envShadowed`, true when a stored Settings value hides a different process-env value.
 - `npm run test:bun` runs the Bun-only tests with `--no-env-file`, so a developer `.env` cannot change results.
+- Chromium is now found in more places when `WEBTERM_BROWSER_BIN` is empty: Chrome, Chromium, Chrome Canary, Edge, and Brave in `/Applications` on macOS, the usual Linux paths, every `PATH` directory, and the Playwright cache (newest revision first). Settings > Capabilities > Advanced has a "Lokasi Chromium" field that shows the binary in use and whether it was chosen automatically or by you, lists every candidate found on this machine for one-click selection, and has "Deteksi ulang" (detect again) and "Pakai otomatis" (clear your path and use auto-detection).
+- Choosing "Browser" from the Dock "+" menu while the browser capability is off now offers to turn it on, the same offer the canvas menu makes, and opens the node once it is on. Before, the item was hidden.
+- The Cookies dialog of a Browser node has a guide for getting a cookie file from your own browser: a cookies.txt extension, or a copyable `yt-dlp --cookies-from-browser` command, with a warning that a cookie file is a login and a reminder that signing in once inside the node is safest, because its profile persists.
 
 ### Changed
 - Settings now exposes seven capabilities with one on/off switch each (applied immediately, no restart) instead of environment keys; the Environment and Channels tabs are removed.
@@ -72,6 +75,8 @@
 - The legacy `TELEGRAM_BOT_TOKEN` name is deprecated: it still works, warns once, and is removed in the release after 0.7.0. Use the Settings value `WEBTERM_TELEGRAM_BOT_TOKEN`.
 - The compiled binary no longer autoloads `bunfig.toml`.
 - `.env.example` now lists only the nine bootstrap keys; everything else is set in Settings > Environment.
+- On macOS a second Chrome icon appears in the Dock while Browser nodes run, because Chromium now runs as a real (minimized, unfocused) window instead of headless.
+- A `WEBTERM_BROWSER_BIN` (or Settings "Lokasi Chromium") path that does not exist is reported as invalid in Settings and the browser does not start; webterm does not silently fall back to an auto-detected Chromium. Fix the path or choose "Pakai otomatis".
 
 ### Fixed
 - A new Browser node now always loads its starting URL; before, it could stay on `about:blank`. A page that has not loaded can no longer overwrite the node's saved URL with `about:blank`.
@@ -94,6 +99,11 @@
 - Large or multi-byte saves no longer corrupt non-ASCII text, and request bodies are capped (413 instead of unbounded memory).
 - Opening audio, video, or zip files no longer loads them as editable text, where a save would have destroyed them.
 - Files watch resubscribes after a WebSocket reconnect, so listings keep updating.
+- Central chat from Telegram, or from a project bound in the UI, no longer fails with `project_not_found` on the first message. Those chats carry a workspace id, and no ledger project existed for it; the first turn now creates the ledger project from the workspace (same id, its name and folder), once.
+- Telegram chats waiting for a reply are no longer dropped when the Telegram channel is refreshed (for example after a settings change). The pending list still lives in memory and does not survive a server restart.
+- The central tools `node.list`, `browser_status`, `browser_act`, and `project.discover` no longer answer `workspace_unavailable` or an empty list. They looked for workspaces in the ledger database, but workspaces are stored in `webterm.db`.
+- The OpenCode central runtime works next to your own OpenCode. It runs `opencode run --standalone`, so it no longer collides with a running `opencode serve --service`. Its isolated home now gets the credentials of the configured model's provider, copied from your OpenCode login with `opencode auth export` and `auth import` through memory (never written to disk or logged), instead of failing every turn with `provider.no-route`. `GET /api/central/health` now checks OpenCode for real and reports `runtimeIssue` and `runtimeHint` when it is not ready, and a failed turn shows a one-line cause taken from OpenCode's stderr, with secrets redacted.
+- Google and similar sites no longer flag Browser nodes as a bot. Chromium used to run with `--headless=new`, which exposes a `HeadlessChrome` user agent and `navigator.webdriver` set to true. It now runs headful in a background window per node, without focus (minimized on macOS, off-screen on Linux and Windows), following Orca's approach. `WEBTERM_BROWSER_HEADLESS=on` brings back headless as a fallback; Linux without a display uses headless automatically and logs a warning.
 
 ### Removed
 - Four dead keys from the env registry: `WEBTERM_CENTRAL_TOOL_BRIDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_EMBED_URL`, `WEBTERM_EMBED_MODEL`. The unused `WEBTERM_CHANNEL_HMAC_SECRET` entry in log redaction is gone too.
