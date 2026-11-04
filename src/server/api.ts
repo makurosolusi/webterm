@@ -24,6 +24,7 @@ import { handoffRoutes } from './routes/handoff.routes'
 import { pushRoutes } from './routes/push.routes'
 import { claudeProviderRoutes } from './routes/claudeProvider.routes'
 import { proxyInfoRoutes } from './routes/proxy.routes'
+import { bakeoffRoutes } from './routes/bakeoff.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -60,6 +61,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...pushRoutes,
   ...claudeProviderRoutes,
   ...proxyInfoRoutes,
+  ...bakeoffRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

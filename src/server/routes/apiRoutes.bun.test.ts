@@ -38,6 +38,7 @@ test('full route order snapshot', () => {
     'push', 'mobile',
     'claude-provider',
     'proxy-info',
+    'bakeoff',
   ])
 })
 
