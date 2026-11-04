@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   listCookieDomains: vi.fn(), previewCookies: vi.fn(), commitCookies: vi.fn(), clearCookies: vi.fn(),
 }))
 vi.mock('./browser.api', async (orig) => ({ ...(await orig<typeof import('./browser.api')>()), ...api }))
+const clip = vi.hoisted(() => ({ writeClipboard: vi.fn() }))
+vi.mock('./clipboard', () => clip)
 
 import BrowserCookieDialog from './BrowserCookieDialog'
 import { BrowserApiError } from './browser.api'
@@ -21,6 +23,7 @@ beforeEach(() => {
   api.previewCookies.mockResolvedValue(PREVIEW)
   api.commitCookies.mockResolvedValue({ imported: 2, domains: ['a.com'] })
   api.clearCookies.mockResolvedValue(undefined)
+  clip.writeClipboard.mockResolvedValue(true)
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
@@ -102,5 +105,19 @@ describe('BrowserCookieDialog', () => {
     fireEvent.change(screen.getByLabelText(T.fileLabel), { target: { files: [new File(['{}'], 'c.json')] } })
     expect((await screen.findByRole('alert')).textContent).toBe(T.errors.bad_request)
     expect(document.body.innerHTML).not.toContain(CANARY)
+  })
+
+  it('shows a collapsible export guide with a copyable yt-dlp command, the warning and the safest option', async () => {
+    open()
+    const summary = screen.getByText(T.guide.summary)
+    expect(summary.closest('details')).toBeTruthy()
+    expect(screen.getByText(T.guide.optionA)).toBeTruthy()
+    expect(screen.getByText(T.guide.warning)).toBeTruthy()
+    expect(screen.getByText(T.guide.safest)).toBeTruthy()
+    expect(screen.getByLabelText(T.guide.commandLabel).textContent).toBe(T.guide.command)
+    expect(T.guide.command).toContain('--cookies-from-browser chrome --cookies cookies.txt')
+    fireEvent.click(screen.getByRole('button', { name: T.guide.copy }))
+    expect(clip.writeClipboard).toHaveBeenCalledExactlyOnceWith(T.guide.command)
+    expect(await screen.findByRole('button', { name: T.guide.copied })).toBeTruthy()
   })
 })

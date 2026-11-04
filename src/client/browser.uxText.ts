@@ -63,6 +63,19 @@ export const COOKIE_TEXT = {
     payload_too_large: 'That file is too large.',
     generic: 'Something went wrong. Try again.',
   },
+  // Panduan ekspor dari browser milik user sendiri (RND/33: webterm tidak membaca store browser lain).
+  guide: {
+    summary: 'Cara mendapatkan berkas cookie',
+    optionA: 'Opsi A: pasang ekstensi ekspor cookies.txt (format Netscape) dari Chrome Web Store, buka situsnya, lalu ekspor hanya situs yang dibutuhkan. Pilih ekstensi yang tepercaya: ekstensi cookie pihak ketiga pernah dipakai sebagai malware.',
+    optionB: 'Opsi B: jalankan di terminal komputer kamu sendiri (perlu yt-dlp; ganti <url-situs>). Berkasnya memuat semua cookie browser, jadi di langkah berikut centang hanya domain yang perlu.',
+    command: 'yt-dlp --cookies-from-browser chrome --cookies cookies.txt --skip-download <url-situs>',
+    commandLabel: 'Perintah ekspor cookie yt-dlp',
+    copy: 'Salin perintah',
+    copied: 'Tersalin',
+    formatHint: 'Lalu pilih format "Netscape cookies.txt" di atas dan unggah berkasnya.',
+    warning: 'Berkas cookie sama dengan akses login. Impor hanya domain yang perlu, dan hapus berkasnya setelah diimpor.',
+    safest: 'Paling aman: login sekali langsung di browser node ini; profilnya persisten, jadi tidak perlu berkas cookie.',
+  },
 } as const
 
 export const ZOOM_TEXT = {

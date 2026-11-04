@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { COOKIE_BODY_MAX_BYTES } from '../shared/browser.contract'
 import type { CookieDomainInfo, CookieFormat, CookiePreviewResp } from '../shared/browser.contract'
 import { BrowserApiError, clearCookies, commitCookies, listCookieDomains, previewCookies } from './browser.api'
+import { writeClipboard } from './clipboard'
 import { COOKIE_TEXT as T } from './browser.uxText'
 
 export interface BrowserCookieDialogProps {
@@ -36,6 +37,7 @@ export default function BrowserCookieDialog({ cookieImportEnabled, workspaceId, 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -90,6 +92,21 @@ export default function BrowserCookieDialog({ cookieImportEnabled, workspaceId, 
           <DialogDescription>{T.description}</DialogDescription>
         </DialogHeader>
         <p role="note" className="m-0 text-xs text-(--vscode-errorForeground)">{T.warning}</p>
+
+        <details className="text-xs">
+          <summary className="cursor-pointer font-semibold">{T.guide.summary}</summary>
+          <div className="flex flex-col gap-1 pt-1">
+            <p className="m-0">{T.guide.optionA}</p>
+            <p className="m-0">{T.guide.optionB}</p>
+            <div className="flex items-center gap-2">
+              <code aria-label={T.guide.commandLabel} className="flex-1 break-all select-all">{T.guide.command}</code>
+              <Button size="xs" variant="outline" onClick={() => void writeClipboard(T.guide.command).then(setCopied)}>{copied ? T.guide.copied : T.guide.copy}</Button>
+            </div>
+            <p className="m-0">{T.guide.formatHint}</p>
+            <p className="m-0 text-(--vscode-errorForeground)">{T.guide.warning}</p>
+            <p className="m-0">{T.guide.safest}</p>
+          </div>
+        </details>
 
         <div className="flex flex-col gap-2 text-xs">
           <label className="flex items-center gap-2">

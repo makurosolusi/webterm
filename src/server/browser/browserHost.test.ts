@@ -38,10 +38,11 @@ describe('open', () => {
     expect(callsOf(CDP.navigate)[0]).toMatchObject({ params: { url: 'https://example.com/' }, sessionId: SID })
   })
 
-  it('forces focus emulation + bringToFront on the page session so Chrome never treats it as hidden', async () => {
+  it('opens each node in its own background window without focus, and emulates focus instead of bringToFront', async () => {
     await openLive()
+    expect(callsOf(CDP.createTarget)[0].params).toMatchObject({ url: 'about:blank', newWindow: true, background: true, focus: false })
     expect(callsOf(CDP.setFocusEmulation)[0]).toMatchObject({ params: { enabled: true }, sessionId: SID })
-    expect(callsOf(CDP.bringToFront)[0].sessionId).toBe(SID)
+    expect(rig.fake.methods()).not.toContain('Page.bringToFront') // memulihkan jendela minimized + mencuri fokus di macOS
     const m = rig.fake.methods()
     expect(m.indexOf(CDP.setFocusEmulation)).toBeLessThan(m.indexOf(CDP.navigate))
   })

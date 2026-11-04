@@ -2,7 +2,7 @@
 // Tidak menyimpan kebijakan; `BrowserHost` yang memutuskan kapan memanggil.
 import type { BlockReason, BrowserErrorCode, BrowserState, Frame } from '../../shared/browser.contract'
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
-import { DENIED_PERMISSIONS } from './chromium.flags'
+import { DEFAULT_VIEWPORT, DENIED_PERMISSIONS, windowPlacement } from './chromium.flags'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import { metricsParams } from './browserHost.input'
@@ -20,7 +20,7 @@ export type HostEvent =
   | { k: 'dialog'; nodeId: string; kind: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; message: string; defaultPrompt?: string }
   | { k: 'error'; nodeId: string; code: BrowserErrorCode; hostname?: string }
 
-export const DEFAULT_VIEWPORT = { w: 1280, h: 800, dpr: 1 } as const
+export { DEFAULT_VIEWPORT }
 
 export interface NodeRec {
   nodeId: string
@@ -72,16 +72,16 @@ export async function setupConnection(cdp: CdpClient): Promise<void> {
   }
 }
 
-/** Buat tab kosong, attach (flatten), aktifkan Page, pasang viewport awal. */
+/** Buat jendela kosong di latar (windowPlacement), attach (flatten), aktifkan Page, pasang viewport awal. */
 export async function createPageTarget(cdp: CdpClient, vp: NodeRec['viewport']): Promise<{ targetId: string; sessionId: string }> {
-  const { targetId } = await cdp.send<{ targetId: string }>(CDP.createTarget, { url: 'about:blank' })
+  const { targetId } = await cdp.send<{ targetId: string }>(CDP.createTarget, { url: 'about:blank', ...windowPlacement() })
   const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })
   await cdp.send(CDP.pageEnable, {}, sessionId)
   await cdp.send(CDP.setDeviceMetrics, metricsParams(vp.w, vp.h, vp.dpr), sessionId)
-  // Tab di jendela headless tanpa fokus dianggap hidden/tak fokus oleh Chrome -> rAF, resize, dan screencast berhenti (beku).
-  // Paksa fokus + tampil agar halaman selalu dianggap terlihat selama node hidup.
+  // Jendela offscreen/minimized (atau headless fallback) tak pernah punya fokus OS; tanpa emulasi Chrome menganggap
+  // halaman tak fokus. Tab sudah aktif di jendelanya sendiri, jadi TANPA Page.bringToFront: di macOS itu memulihkan
+  // jendela minimized dan mencuri fokus (diukur).
   await cdp.send(CDP.setFocusEmulation, { enabled: true }, sessionId)
-  await cdp.send(CDP.bringToFront, {}, sessionId)
   return { targetId, sessionId }
 }
 

@@ -72,4 +72,10 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Umur cookie tersimpan (hari)',
     description: 'Cookie di vault dibuang otomatis setelah sekian hari sejak diimpor.',
   }),
+  flag(ENV_BROWSER.headless, GROUP, {
+    ...B,
+    requires: [BROWSER_ON],
+    label: 'Mode headless',
+    description: 'Paksa Chromium headless. Default mati: jendela nyata di luar layar, agar situs tidak mencapnya bot. Linux tanpa display otomatis headless.',
+  }),
 ]

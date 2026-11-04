@@ -4,7 +4,7 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { ENV_BROWSER } from '../../shared/browser.contract'
-import { buildChromiumArgs, CDP_LOOPBACK, profileDirFor } from './chromium.flags'
+import { buildChromiumArgs, CDP_LOOPBACK, headlessReason, profileDirFor } from './chromium.flags'
 import { createLogger } from '../logs'
 
 const log = createLogger('browser.launch')
@@ -15,8 +15,8 @@ const STDERR_TAIL_CHARS = 4_096
 const PROFILE_DIR_MODE = 0o700
 const ACTIVE_PORT_FILE = 'DevToolsActivePort'
 
-// Aplikasi macOS berbasis Chromium yang mendukung headless + DevToolsActivePort. Arc sengaja tidak
-// ada: tidak mendukung headless/CDP secara andal.
+// Aplikasi macOS berbasis Chromium yang mendukung CDP + DevToolsActivePort. Arc sengaja tidak
+// ada: tidak mendukung CDP secara andal.
 const MAC_APPS = ['Google Chrome', 'Chromium', 'Google Chrome Canary', 'Microsoft Edge', 'Brave Browser'] as const
 
 /** Lokasi umum macOS/Linux bila `WEBTERM_BROWSER_BIN` kosong; urutan = prioritas. */
@@ -118,9 +118,9 @@ export interface Launched { wsUrl: string; kill(): void }
 const defaultRead = (p: string): string | null => (existsSync(p) ? readFileSync(p, 'utf8') : null)
 const defaultSpawn = (bin: string, args: string[]): ChildLike => nodeSpawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
 
-/** Jalankan Chromium headless dan tunggu `DevToolsActivePort`; `onExit` dipanggil saat proses mati. */
+/** Jalankan Chromium (headful offscreen, atau headless bila `headless`) dan tunggu `DevToolsActivePort`; `onExit` dipanggil saat proses mati. */
 export async function launchChromium(
-  o: { bin: string; profileDir: string; proxyServer: string; onExit?: () => void },
+  o: { bin: string; profileDir: string; proxyServer: string; headless?: boolean; onExit?: () => void },
   deps: LaunchDeps = {},
 ): Promise<Launched> {
   const read = deps.readFile ?? defaultRead
@@ -128,7 +128,7 @@ export async function launchChromium(
   mkdirSync(o.profileDir, { recursive: true, mode: PROFILE_DIR_MODE })
   const portFile = join(o.profileDir, ACTIVE_PORT_FILE)
   rmSync(portFile, { force: true }) // berkas basi dari proses lama menipu pembacaan port
-  const child = (deps.spawn ?? defaultSpawn)(o.bin, buildChromiumArgs({ profileDir: o.profileDir, proxyServer: o.proxyServer }))
+  const child = (deps.spawn ?? defaultSpawn)(o.bin, buildChromiumArgs({ profileDir: o.profileDir, proxyServer: o.proxyServer, headless: o.headless }))
   let exited = false
   let spawnError: Error | null = null
   let stderrTail = ''
@@ -171,6 +171,7 @@ export function createChromiumPool(cfg: {
   proxyServer: () => string
   deps?: LaunchDeps
   exists?: (p: string) => boolean
+  platform?: NodeJS.Platform
 }): BrowserLauncher {
   const live = new Map<string, Promise<Launched>>()
   return {
@@ -179,8 +180,10 @@ export function createChromiumPool(cfg: {
       if (!p) {
         p = (async () => {
           const bin = resolveBinary(cfg.env, cfg.exists)
+          const headless = headlessReason(cfg.env, cfg.platform)
+          if (headless) log.warn('browser.headless', 'Chromium runs headless; sites detect it as a bot more easily', { reason: headless, ids: { workspaceId } })
           return launchChromium({
-            bin, profileDir: profileDirFor(cfg.dataRoot, workspaceId), proxyServer: cfg.proxyServer(),
+            bin, profileDir: profileDirFor(cfg.dataRoot, workspaceId), proxyServer: cfg.proxyServer(), headless: headless !== null,
             onExit: () => { live.delete(workspaceId); log.info('browser.exit', 'chromium exited', { ids: { workspaceId } }) },
           }, cfg.deps)
         })()
