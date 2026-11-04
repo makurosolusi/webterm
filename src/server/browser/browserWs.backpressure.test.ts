@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FRAME_MAX_BUFFERED_BYTES, MAX_FRAMES_IN_FLIGHT } from '../../shared/browser.contract'
 import type { ServerMsg } from '../../shared/browser.contract'
+import { decodeFrameHeader } from '../../shared/browser.wire'
 import { createFrameGate, createSerialQueue } from './browserWs.backpressure'
 import { createViewerHub } from './browserWs.viewers'
 import type { Viewer } from './browserWs.viewers'
@@ -57,14 +58,16 @@ describe('createSerialQueue', () => {
 })
 
 describe('viewer hub frame memory', () => {
-  const sinkOf = (buffered: number) => {
+  const sinkOf = (initial: number) => {
     const sent: Uint8Array[] = []
     const msgs: ServerMsg[] = []
-    const v: Viewer = { sink: { get bufferedAmount() { return buffered }, sendBinary: (b) => { sent.push(b); return true }, sendJson: (m) => { msgs.push(m) } } }
-    return { v, sent, msgs }
+    const done: Array<() => void> = []
+    const t = { buffered: initial, sent, msgs, done, v: undefined as unknown as Viewer }
+    t.v = { sink: { get bufferedAmount() { return t.buffered }, sendBinary: (b, d) => { sent.push(b); if (d) done.push(d); return true }, sendJson: (m) => { msgs.push(m) } } }
+    return t
   }
 
-  it('drops frames for a viewer whose socket buffer is full and acks the host instead of queueing', async () => {
+  it('holds frames for a viewer whose socket buffer is full and still acks the host on receipt', async () => {
     const host = new FakeHost()
     const hub = createViewerHub(host, new FakeLeases())
     const slow = sinkOf(FRAME_MAX_BUFFERED_BYTES + 1)
@@ -72,21 +75,22 @@ describe('viewer hub frame memory', () => {
     await hub.sync('n1')
     for (let s = 1; s <= 50; s++) host.emitFrame('n1', s)
     expect(slow.sent).toHaveLength(0)
-    expect(host.acks).toHaveLength(50) // tidak ada frame yang ditahan di memori
+    expect(host.acks).toHaveLength(50) // Chromium tak ditahan klien lambat
   })
 
-  it('sends to a fast viewer while a slow viewer drops, and waits only for the fast viewer ack', async () => {
+  it('sends the pending frame when the previous ws.send completes', async () => {
     const host = new FakeHost()
     const hub = createViewerHub(host, new FakeLeases())
-    const slow = sinkOf(FRAME_MAX_BUFFERED_BYTES + 1), fast = sinkOf(0)
-    hub.join('n1', slow.v)
-    hub.join('n1', fast.v)
+    const v = sinkOf(0)
+    hub.join('n1', v.v)
     await hub.sync('n1')
     host.emitFrame('n1', 1)
-    expect(fast.sent).toHaveLength(1)
-    expect(host.acks).toEqual([])
-    hub.ack('n1', fast.v, 1)
-    expect(host.acks).toEqual([['n1', 1]])
+    v.buffered = FRAME_MAX_BUFFERED_BYTES + 1 // socket penuh: frame 2 & 3 menunggu, 3 menang
+    host.emitFrame('n1', 2)
+    host.emitFrame('n1', 3)
+    v.buffered = 0
+    v.done.shift()?.() // callback `ws.send` frame 1
+    expect(v.sent.map((b) => decodeFrameHeader(b)?.seq)).toEqual([1, 3])
   })
 
   it('reports visibility transitions only on the first join and last leave', async () => {

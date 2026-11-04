@@ -7,8 +7,15 @@ export const BROWSER_KIND = 'browser'
 export const BROWSER_WS_PATH = '/ws/browser'
 export const BROWSER_REST_PREFIX = '/api/browser'
 export const BROWSER_CONTROL_PREFIX = '/api/control/browser'
+/**
+ * Frame terkirim ke SATU klien yang belum di-ack klien itu. Hanya mengatur laju kirim ke klien tersebut: host
+ * meng-ack Chromium saat frame diterima, dan frame berikutnya menunggu sebagai satu frame tertunda (terbaru menang).
+ */
 export const MAX_FRAMES_IN_FLIGHT = 2
-export const JPEG_QUALITY_DEFAULT = 60
+/** Kualitas JPEG screencast (DevTools ScreencastView.ts memakai 80). */
+export const JPEG_QUALITY_DEFAULT = 80
+/** Batas sisi frame screencast dalam piksel perangkat (DevTools ScreencastView.ts:560 `maxImageDimension`). */
+export const SCREENCAST_MAX_DIM = 2048
 export const FRAME_MAX_BUFFERED_BYTES = 1_048_576
 export const RESIZE_DEBOUNCE_MS = 150
 export const DSF_MAX = 2

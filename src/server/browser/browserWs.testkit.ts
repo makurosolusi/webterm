@@ -23,16 +23,18 @@ export class FakeHost implements GatewayHost {
   eventCbs = new Set<(e: HostEvent) => void>()
   frames = new Map<string, (f: Frame) => void>()
   fail: Record<string, Error> = {}
+  /** Tahan metode sampai promise selesai: kunci `open`, atau jenis input (`wheel`, `down`, `text`, ...). */
+  hold: Record<string, Promise<void>> = {}
   private readonly states = new Map<string, BrowserState>()
 
   private maybeFail(m: string) { if (this.fail[m]) throw this.fail[m] }
-  async open(id: string): Promise<BrowserState> { this.opens.push(id); this.maybeFail('open'); const s = stateOf(id); this.states.set(id, s); return s }
+  async open(id: string): Promise<BrowserState> { this.opens.push(id); await this.hold.open; this.maybeFail('open'); const s = stateOf(id); this.states.set(id, s); return s }
   async navigate(): Promise<void> { throw new Error('unused') }
   async setViewport(id: string, w: number, h: number, dpr: number) { this.viewports.push([id, w, h, dpr]) }
   async startScreencast(id: string, cb: (f: Frame) => void) { this.maybeFail('start'); this.starts.push(id); this.frames.set(id, cb) }
   async stopScreencast(id: string) { this.stops.push(id); this.frames.delete(id) }
   ackFrame(id: string, seq: number) { this.acks.push([id, seq]) }
-  async input(_id: string, ev: BrowserInputEvent) { this.maybeFail('input'); this.inputs.push(ev) }
+  async input(_id: string, ev: BrowserInputEvent) { await this.hold[ev.t === 'mouse' ? ev.type : ev.t]; this.maybeFail('input'); this.inputs.push(ev) }
   async cdp(): Promise<unknown> { throw new Error('unused') }
   async discard() { /* tidak dipakai gateway */ }
   state(id: string) { return this.states.get(id) }
