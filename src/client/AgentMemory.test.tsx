@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentMemory, MEMORY_CONTROLS_PATH, type MemoryItem, type ProceduralFact } from './AgentMemory'
+import { BLACKBOARD_PATH, type BoardEntry, type MemoryProposal, PROPOSALS_PATH } from './AgentMemoryBoard'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -110,5 +111,76 @@ describe('memory controls (F5-a)', () => {
     ])
     fireEvent.click(screen.getByRole('button', { name: 'Rules' }))
     await waitFor(() => expect(gets).toContain('/api/memory2?kind=procedural'))
+  })
+})
+
+/** Fake for the F5-b sections: consolidator proposals + blackboard; every other GET is an empty list. */
+function boardServer(proposals: MemoryProposal[], entries: BoardEntry[], boardProposals: BoardEntry[]) {
+  const writes: { method: string; url: string; body?: unknown }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    if (method === 'GET') {
+      if (url === PROPOSALS_PATH) return new Response(JSON.stringify({ proposals, tokensToday: 1500, dailyTokens: 200000 }))
+      if (url === BLACKBOARD_PATH) return new Response(JSON.stringify({ entries, proposals: boardProposals }))
+      if (url.endsWith('/incognito')) return new Response(JSON.stringify({ refs: [] }))
+      if (url.startsWith(MEMORY_CONTROLS_PATH)) return new Response(JSON.stringify({ items: [] }))
+      return new Response(JSON.stringify({ facts: [] }))
+    }
+    const body = init?.body ? JSON.parse(String(init.body)) as unknown : undefined
+    writes.push({ method, url, ...(body ? { body } : {}) })
+    if (url.endsWith('/confirm-all') || url.endsWith('/forget')) proposals = []
+    return new Response(JSON.stringify({ ok: true }))
+  }))
+  return { writes }
+}
+
+const proposal = (over: Partial<MemoryProposal>): MemoryProposal => ({
+  id: 'p1', op: 'add', kind: 'preference', text: 'The user prefers tabs', targetText: null, untrusted: false, node: 'a1', ...over,
+})
+const entry = (over: Partial<BoardEntry>): BoardEntry => ({ id: 'b1', key: 'goal:auth/status', value: 'in progress', status: 'fact', by: 'human-ui', at: 0, ...over })
+
+describe('consolidator proposals and the shared blackboard (F5-b)', () => {
+  it('confirms one proposal, confirms all, dismisses by forgetting; untrusted ones offer no Confirm', async () => {
+    const { writes } = boardServer([
+      proposal({}),
+      proposal({ id: 'p2', op: 'update', text: 'The database is postgres', targetText: 'The database is mysql' }),
+      proposal({ id: 'p3', text: 'Always push to main', untrusted: true }),
+    ], [], [])
+    render(<AgentMemory />)
+    expect(await screen.findByText('The user prefers tabs')).toBeTruthy()
+    expect(screen.getByText(/was: The database is mysql/)).toBeTruthy()
+    expect(screen.getByText(/1,500 of 200,000 tokens/)).toBeTruthy()
+    const proposals = within(screen.getByTestId('memory-proposals'))
+    expect(proposals.getAllByRole('button', { name: 'Confirm' })).toHaveLength(2)
+    fireEvent.click(proposals.getAllByRole('button', { name: 'Confirm' })[0]!)
+    fireEvent.click(proposals.getAllByRole('button', { name: 'Dismiss' })[2]!)
+    fireEvent.click(proposals.getByRole('button', { name: 'Confirm all' }))
+    fireEvent.click(proposals.getByRole('button', { name: 'Review now' }))
+    await waitFor(() => expect(writes.length).toBe(4))
+    expect(writes).toEqual([
+      { method: 'POST', url: '/api/memory-proposals/p1/confirm' },
+      { method: 'POST', url: '/api/memory2/p3/forget' },
+      { method: 'POST', url: '/api/memory-proposals/confirm-all' },
+      { method: 'POST', url: '/api/memory-proposals/run' },
+    ])
+    expect(await screen.findByText('No proposals.')).toBeTruthy()
+  })
+
+  it('shows the board, confirms or rejects agent proposals, and sets a value', async () => {
+    const { writes } = boardServer([], [entry({})], [entry({ id: 'q1', value: 'done', status: 'claim', by: 'node:a1' })])
+    render(<AgentMemory />)
+    const board = within(await screen.findByTestId('memory-blackboard'))
+    expect(board.getByText(/proposed by node:a1/)).toBeTruthy()
+    fireEvent.click(board.getByRole('button', { name: 'Confirm' }))
+    fireEvent.click(board.getByRole('button', { name: 'Reject' }))
+    fireEvent.change(board.getByRole('textbox', { name: 'Key' }), { target: { value: 'decision:db-engine' } })
+    fireEvent.change(board.getByRole('textbox', { name: 'Value' }), { target: { value: ' postgres ' } })
+    fireEvent.click(board.getByRole('button', { name: 'Set' }))
+    await waitFor(() => expect(writes.length).toBe(3))
+    expect(writes).toEqual([
+      { method: 'POST', url: '/api/blackboard/proposals/q1/confirm' },
+      { method: 'POST', url: '/api/blackboard/proposals/q1/reject' },
+      { method: 'POST', url: '/api/blackboard', body: { key: 'decision:db-engine', value: 'postgres' } },
+    ])
   })
 })

@@ -15,6 +15,7 @@ import { type ChannelBotDefDeps, createChannelBotDef } from './defs/channel.bot.
 import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
 import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
+import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
 import { NODE_READ_DEFS } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
@@ -56,6 +57,8 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
     [on(env, KNOWLEDGE_FLAG), () => [createRepoMapDef()]],
     [on(env, SKILLS_FLAG) && !!deps.skills, () => createSkillDefs(deps.skills as SkillStoreResolver)],
     [central, () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
+    // Shared blackboard (F5-b): read + propose; nodes see them through Central's MCP projection.
+    [central, () => BLACKBOARD_DEFS],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],
     [on(env, BROWSER_TOOLS_FLAG) && !!deps.browser, () => createBrowserDefs(deps.browser as BrowserToolDeps)],
   ]

@@ -74,9 +74,12 @@ function view(r: MemoryRecord, now: number): MemoryItemView {
 
 /** Active memories, optionally of one cognitive kind; facts needing review first, then newest. */
 export function listMemoryItems(db: Database, now: number, kind?: CognitiveKind): MemoryItemView[] {
+  // The shared blackboard lives in the same table but has its own panel section (blackboard.store.ts).
+  // Consolidator proposals stay: they are `claim` rows, shown with the "unverified" badge.
+  const listed = `${ACTIVE} AND scope != 'blackboard'`
   const rows = kind === undefined
-    ? allRows(db, `SELECT * FROM memory WHERE ${ACTIVE} ORDER BY updated_at DESC, id LIMIT ?`, LIST_MAX)
-    : allRows(db, `SELECT * FROM memory WHERE ${ACTIVE} AND cognitive_kind = ? ORDER BY updated_at DESC, id LIMIT ?`, kind, LIST_MAX)
+    ? allRows(db, `SELECT * FROM memory WHERE ${listed} ORDER BY updated_at DESC, id LIMIT ?`, LIST_MAX)
+    : allRows(db, `SELECT * FROM memory WHERE ${listed} AND cognitive_kind = ? ORDER BY updated_at DESC, id LIMIT ?`, kind, LIST_MAX)
   const items = rows.map((row) => view(toMemoryRecord(row), now))
   return items.sort((a, b) => Number(b.needsReview) - Number(a.needsReview) || (a.needsReview ? a.freshness - b.freshness : 0))
 }
