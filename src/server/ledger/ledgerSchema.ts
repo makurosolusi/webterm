@@ -8,6 +8,7 @@ import { DDL_V6 } from './ledgerSchemaV6'
 import { applyV7 } from './ledgerSchemaV7'
 import { applyV8 } from './ledgerSchemaV8'
 import { applyV9 } from './ledgerSchemaV9'
+import { applyV10 } from './ledgerSchemaV10'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -16,8 +17,8 @@ export interface Migration {
 }
 
 /**
- * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..9}.ts`
- * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit); never renumber or reorder an entry.
+ * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..10}.ts`
+ * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log); never renumber or reorder an entry.
  */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, up: (db) => db.exec(DDL_V1) },
@@ -31,4 +32,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 7, up: applyV7 },
   { version: 8, up: applyV8 },
   { version: 9, up: applyV9 },
+  // v10: Senses event columns + append-only triggers on chained rows (closes TODO(ca2-audit)).
+  { version: 10, up: applyV10 },
 ]

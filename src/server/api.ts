@@ -33,6 +33,7 @@ import { fsFail } from '../shared/fsContract'
 import { sendRaw } from './fsRaw'
 import { MEMORY_WRITE_BODY_MAX_BYTES } from './memoryWriteApi'
 import { logsRoute, startRequestLog } from './logs'
+import { eventsRoute } from './events/eventsApi'
 import { activeBrowser } from './browser/browser.state'
 import { BROWSER_BODY_MAX_BYTES } from './browserApi'
 
@@ -83,6 +84,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
   // Log API first: same /api gate as settings (applied in index.ts), own body/SSE handling.
   if (await logsRoute(req, res, url, method)) return
+  if (eventsRoute(req, res, url, method)) return // Senses log SSE + head hash (root-only: not in isNodeTokenPath)
 
   // /api/workspaces[/:id] and /api/active; returns null for anything else, including a method
   // this family does not answer, which then falls through to the 404 at the bottom.
