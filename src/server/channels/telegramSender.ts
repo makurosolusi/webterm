@@ -5,12 +5,13 @@ import { logEgressFailed, logEgressInternal, logEgressSent } from './telegramEgr
 import type { StoredReply } from './channelStoreSchema'
 import {
   TELEGRAM_SEND_TIMEOUT_MS,
-  sendTelegramMessage,
+  sendTelegramMarkdown,
   type TelegramSenderFetch,
 } from './telegramSend'
 
 export {
   TELEGRAM_SEND_TIMEOUT_MS,
+  sendTelegramMarkdown,
   sendTelegramMessage,
   type TelegramSendFailureReason,
   type TelegramSendInput,
@@ -33,7 +34,7 @@ function backoffDelayMs(attempt: number, baseMs: number, maxMs: number): number 
 export interface SenderStorePort {
   pendingReplies(): StoredReply[]
   markReplySent(key: string): boolean
-  markReplyFailed(key: string, change: { nextAt: number; error?: string; dead?: boolean }): boolean
+  markReplyFailed(key: string, change: { nextAt: number; error?: string; dead?: boolean; chunksDone?: number }): boolean
 }
 
 export interface TelegramChannelSenderOptions {
@@ -70,6 +71,8 @@ export interface FlushResult {
 interface ReplyRuntime {
   attempts: number
   nextAt: number
+  /** Accepted chunks, kept in memory too so a failed progress write still never re-sends one. */
+  chunksDone: number
 }
 
 /** Drains pending ChannelStore replies, oldest-first, with per-reply exponential backoff. */
@@ -122,6 +125,7 @@ export class TelegramChannelSender {
         const runtime = this.runtime.get(row.key) ?? {
           attempts: row.attempts,
           nextAt: row.nextAt ?? row.createdAt,
+          chunksDone: row.chunksDone ?? 0,
         }
         this.runtime.set(row.key, runtime)
         if (runtime.nextAt > now) {
@@ -129,10 +133,11 @@ export class TelegramChannelSender {
           continue
         }
 
-        const send = await sendTelegramMessage(
+        const send = await sendTelegramMarkdown(
           {
             chatId: row.chatId,
             text: row.text,
+            fromChunk: runtime.chunksDone,
             ...(row.threadId === undefined ? {} : { threadId: row.threadId }),
           },
           {
@@ -143,6 +148,7 @@ export class TelegramChannelSender {
           }
         )
         result.attempted += 1
+        runtime.chunksDone = send.chunksDone
         const fields = {
           key: row.key,
           chatId: row.chatId,
@@ -190,6 +196,7 @@ export class TelegramChannelSender {
             nextAt: runtime.nextAt,
             error: send.error,
             dead,
+            chunksDone: send.chunksDone,
           })
         )
         if (!stored) {
