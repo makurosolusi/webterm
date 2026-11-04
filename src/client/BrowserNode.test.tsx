@@ -110,14 +110,14 @@ describe('BrowserNode', () => {
     fireEvent.compositionUpdate(ime, { data: 'に' })
     fireEvent.compositionEnd(ime, { data: '日本' })
     expect(sentOf('ime')[0]).toMatchObject({ text: 'に' })
-    expect(sentOf('text')).toEqual([{ t: 'text', id: 'b1', text: '日本' }])
+    expect(sentOf('text')).toEqual([{ t: 'text', id: 'b1', text: '日本', ls: expect.any(Number) }])
   })
 
   it('paste mengirim text tanpa Clipboard API', () => {
     expect(navigator.clipboard).toBeUndefined()
     const { ime } = mount()
     fireEvent.paste(ime, { clipboardData: { getData: (k: string) => (k === 'text/plain' ? 'halo' : '') } })
-    expect(sentOf('text')).toEqual([{ t: 'text', id: 'b1', text: 'halo' }])
+    expect(sentOf('text')).toEqual([{ t: 'text', id: 'b1', text: 'halo', ls: expect.any(Number) }])
   })
 
   it('frame digambar lebih dulu, baru ack dikirim', async () => {

@@ -3,7 +3,7 @@
 // sama seperti `ws.ts`. Attach disimpan dan diputar ulang di tiap (re)connect; input yang dikirim
 // saat socket mati DIBUANG (input basi yang terlambat tiba lebih berbahaya daripada hilang).
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
-import type { ClientMsg, ServerMsg, ViewportMsg } from '../shared/browser.contract'
+import type { ClientMsg, FrameLatency, ServerMsg, ViewportMsg } from '../shared/browser.contract'
 import { decodeFrameHeader } from '../shared/browser.wire'
 import { tokenQuery } from './api'
 
@@ -11,7 +11,8 @@ const RECONNECT_MS = 1000
 const WS_OPEN = 1 // WebSocket.readyState OPEN (protokol)
 
 export interface BrowserListener {
-  onFrame: (seq: number, jpeg: Uint8Array) => void
+  /** `lat` hanya pada frame pertama sesudah input bercap waktu (I1-d). */
+  onFrame: (seq: number, jpeg: Uint8Array, lat?: FrameLatency) => void
   onMsg: (msg: ServerMsg) => void
   onConnection: (up: boolean) => void
 }
@@ -53,7 +54,7 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
     } else if (data instanceof ArrayBuffer) {
       const bytes = new Uint8Array(data)
       const h = decodeFrameHeader(bytes)
-      if (h) listeners.get(h.nodeId)?.onFrame(h.seq, bytes.subarray(h.offset))
+      if (h) listeners.get(h.nodeId)?.onFrame(h.seq, bytes.subarray(h.offset), h.lat)
     }
   }
 

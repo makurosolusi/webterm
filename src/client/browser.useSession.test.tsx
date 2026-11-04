@@ -105,3 +105,27 @@ describe('useBrowserSession paint', () => {
     expect(drawn).toEqual([RESIZE_FILTER_MAX_DROPS, 99]) // filter sudah mati
   })
 })
+
+describe('useBrowserSession input latency (I1-d)', () => {
+  it('stamps sent input with ls, and records the frame that echoes it after paint', async () => {
+    let session: ReturnType<typeof useBrowserSession> | null = null
+    function LatProbe() {
+      session = useBrowserSession('b1', false, stream)
+      return <div ref={session.hostRef}><canvas ref={session.canvasRef} /></div>
+    }
+    render(<LatProbe />)
+    resizeTo(800, 600)
+    const mouse = { t: 'mouse', x: 1, y: 1, button: 'none', buttons: 0, clickCount: 0, mods: 0, dx: 0, dy: 0 } as const
+    act(() => session!.send({ ...mouse, type: 'move' }))
+    act(() => session!.send({ ...mouse, type: 'wheel', dy: 40 }))
+    const [move, wheel] = sent.filter((m) => m.t === 'mouse') as Array<{ ls?: number }>
+    expect(move.ls).toBeUndefined()
+    expect(typeof wheel.ls).toBe('number')
+    act(() => listener?.onFrame(1, new Uint8Array([80, 60, 1]), { ls: wheel.ls!, rxToDispatch: 0, dispatchToSwap: 0, swapToServer: 0 }))
+    await settle()
+    await finish(0)
+    expect(drawn).toEqual([1])
+    expect(session!.latency.count).toBe(1)
+    expect(session!.latency.total[0]).toBeGreaterThanOrEqual(0)
+  })
+})

@@ -1,35 +1,49 @@
 // Kawat /ws/browser (§4.4): header frame biner + parser pesan klien yang ketat. Murni, tanpa side effect.
 import {
-  ID_MAX_BYTES, FRAME_TYPE, KEY_TYPES, MODS_MAX, MOUSE_BUTTONS, MOUSE_TYPES,
+  ID_MAX_BYTES, FRAME_TYPE, FRAME_TYPE_TIMED, KEY_TYPES, MODS_MAX, MOUSE_BUTTONS, MOUSE_TYPES,
   NAV_ACTIONS, TEXT_MAX_BYTES, TOUCH_POINTS_MAX, TOUCH_TYPES, URL_MAX_CHARS, VIEWPORT_MAX,
 } from './browser.contract'
-import type { ClientMsg, TouchPoint } from './browser.contract'
+import type { ClientMsg, FrameLatency, TouchPoint } from './browser.contract'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder('utf-8', { fatal: true })
 const HEADER_FIXED = 2 // type + idLen
 const SEQ_BYTES = 4
 const UINT32_MAX = 0xffff_ffff
+const LAT_BYTES = 20 // ls f64 + tiga f32 (ms; presisi f32 lebih dari cukup untuk durasi)
 
-/** Bangun frame server->klien: `[type][idLen][id utf8][seq u32 BE][jpeg]`. Melempar bila id > 255 byte / seq bukan uint32. */
-export function encodeFrame(nodeId: string, seq: number, jpeg: Uint8Array): Uint8Array {
+/**
+ * Bangun frame server->klien: `[type][idLen][id utf8][seq u32 BE][lat?][jpeg]`; `lat` hanya pada FRAME_TYPE_TIMED.
+ * Melempar bila id > 255 byte / seq bukan uint32.
+ */
+export function encodeFrame(nodeId: string, seq: number, jpeg: Uint8Array, lat?: FrameLatency): Uint8Array {
   const id = enc.encode(nodeId)
   if (id.length > ID_MAX_BYTES) throw new Error(`encodeFrame: nodeId ${id.length} bytes exceeds ${ID_MAX_BYTES}`)
   if (!Number.isInteger(seq) || seq < 0 || seq > UINT32_MAX) throw new Error(`encodeFrame: seq ${seq} is not a uint32`)
-  const out = new Uint8Array(HEADER_FIXED + id.length + SEQ_BYTES + jpeg.length)
-  out[0] = FRAME_TYPE
+  const at = HEADER_FIXED + id.length + SEQ_BYTES
+  const latLen = lat ? LAT_BYTES : 0
+  const out = new Uint8Array(at + latLen + jpeg.length)
+  out[0] = lat ? FRAME_TYPE_TIMED : FRAME_TYPE
   out[1] = id.length
   out.set(id, HEADER_FIXED)
-  new DataView(out.buffer).setUint32(HEADER_FIXED + id.length, seq, false)
-  out.set(jpeg, HEADER_FIXED + id.length + SEQ_BYTES)
+  const dv = new DataView(out.buffer)
+  dv.setUint32(at - SEQ_BYTES, seq, false)
+  if (lat) {
+    dv.setFloat64(at, lat.ls, false)
+    dv.setFloat32(at + 8, lat.rxToDispatch, false)
+    dv.setFloat32(at + 12, lat.dispatchToSwap, false)
+    dv.setFloat32(at + 16, lat.swapToServer, false)
+  }
+  out.set(jpeg, at + latLen)
   return out
 }
 
 /** Baca header frame; `offset` = awal JPEG. null bila bukan frame / terpotong / id bukan utf8. */
-export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; seq: number; offset: number } | null {
-  if (buf.length < HEADER_FIXED || buf[0] !== FRAME_TYPE) return null
+export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; seq: number; offset: number; lat?: FrameLatency } | null {
+  const timed = buf[0] === FRAME_TYPE_TIMED
+  if (buf.length < HEADER_FIXED || (buf[0] !== FRAME_TYPE && !timed)) return null
   const idEnd = HEADER_FIXED + buf[1]
-  const offset = idEnd + SEQ_BYTES
+  const offset = idEnd + SEQ_BYTES + (timed ? LAT_BYTES : 0)
   if (buf.length < offset) return null
   let nodeId: string
   try {
@@ -37,8 +51,12 @@ export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; seq: numbe
   } catch {
     return null // id bukan utf8 valid = frame rusak; pemanggil membuang frame
   }
-  const seq = new DataView(buf.buffer, buf.byteOffset, buf.byteLength).getUint32(idEnd, false)
-  return { nodeId, seq, offset }
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  const seq = dv.getUint32(idEnd, false)
+  if (!timed) return { nodeId, seq, offset }
+  const at = idEnd + SEQ_BYTES
+  const lat = { ls: dv.getFloat64(at, false), rxToDispatch: dv.getFloat32(at + 8, false), dispatchToSwap: dv.getFloat32(at + 12, false), swapToServer: dv.getFloat32(at + 16, false) }
+  return { nodeId, seq, offset, lat }
 }
 
 // ---- parseClientMsg: validasi ketat, null untuk apa pun yang janggal ----
@@ -135,7 +153,10 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       if (typeof m.accept !== 'boolean') return null
       if (m.text === undefined) return { t: 'dialog', id, accept: m.accept }
       return str(m.text, TEXT_MAX_BYTES) ? { t: 'dialog', id, accept: m.accept, text: m.text } : null
-    default:
-      return parseInput(m.t, id, m)
+    default: {
+      const ev = parseInput(m.t, id, m)
+      if (!ev || m.ls === undefined) return ev
+      return fin(m.ls) && m.ls >= 0 ? { ...ev, ls: m.ls } as ClientMsg : null // cap waktu latensi klien (I1-d)
+    }
   }
 }
