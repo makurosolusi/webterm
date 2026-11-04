@@ -5,7 +5,7 @@ import {
   type ClaudeReady, type ClaudeRuntimeOptions, type ClaudeUnavailableCode, claudeChildEnv,
 } from './central/runtime/claudeOptions'
 import { createClaudePreflight } from './central/runtime/claudePreflight'
-import { type OpencodeIssue, type OpencodeReady, createOpencodePreflight, sharedOpencodePreflight } from './central/runtime/opencodeAuth'
+import { type OpencodeIssue, type OpencodeReady, freshSharedOpencodePreflight, sharedOpencodePreflight } from './central/runtime/opencodeAuth'
 import { opencodeBin, opencodeModel } from './central/runtime/opencodeOptions'
 import { defaultOpencodeHomeDir } from './central/runtime/opencodeSession'
 import { createLogger } from './logs'
@@ -59,11 +59,9 @@ export function defaultOpencodePreflight(): Promise<OpencodeReady> {
   return sharedOpencodePreflight(opencodeDeps())()
 }
 
-// ponytail: one uncached opencode probe; the shared turn cache (opencodeAuth.ts) keeps a not-ready result up to
-// 30 s, so a following plain poll can lag. Add a reset to `sharedOpencodePreflight` if that shows up.
-/** Explicit re-check for opencode: one probe that ignores the cache. */
+/** Explicit re-check for opencode: a new probe that replaces the shared cache, so later polls see it too. */
 export function freshOpencodePreflight(): Promise<OpencodeReady> {
-  return createOpencodePreflight(opencodeDeps())()
+  return freshSharedOpencodePreflight(opencodeDeps())
 }
 
 /** `off` is never ready; `mock` (explicit only) needs no probe; `claude` and `opencode` run their (cached) preflight; anything else has no adapter. */

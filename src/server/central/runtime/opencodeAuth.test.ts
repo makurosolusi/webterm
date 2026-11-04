@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createOpencodePreflight, hasProviderCredential, providerOf, type OcRunFn } from './opencodeAuth'
+import { createOpencodePreflight, freshSharedOpencodePreflight, hasProviderCredential, providerOf, sharedOpencodePreflight, type OcRunFn } from './opencodeAuth'
 
 let dir = ''
 let userHome = ''
@@ -118,6 +118,18 @@ describe('opencode credential bridge', () => {
     t = 31_000 + 4 * 60_000
     await probe()
     expect(listed).toBe(2)
+  })
+
+  it('a fresh shared check replaces the cached not-ready result for later plain calls', async () => {
+    let present = false
+    const run: OcRunFn = async (_exe, args) =>
+      ({ code: 0, timedOut: false, stdout: args[1] === 'list' && present ? '[{"id":"opencode","connections":[{}]}]' : '' })
+    const d = { ...deps('opencode-fresh-test'), run, now: () => 0 }
+    expect((await sharedOpencodePreflight(d)()).ok).toBe(false)
+    present = true
+    expect((await sharedOpencodePreflight(d)()).ok).toBe(false) // still cached (30 s)
+    expect((await freshSharedOpencodePreflight(d)).ok).toBe(true)
+    expect((await sharedOpencodePreflight(d)()).ok).toBe(true)
   })
 })
 

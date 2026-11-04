@@ -136,14 +136,21 @@ export function createOpencodePreflight(d: OpencodePreflightDeps): () => Promise
 }
 
 const shared = new Map<string, () => Promise<OpencodeReady>>()
+const sharedKey = (d: OpencodePreflightDeps) => `${d.executable}\0${d.model}\0${d.homeDir}`
 
 /** Process-wide probe per (executable, model, home), so health and turns share one cache. */
 export function sharedOpencodePreflight(d: OpencodePreflightDeps): () => Promise<OpencodeReady> {
-  const key = `${d.executable}\0${d.model}\0${d.homeDir}`
+  const key = sharedKey(d)
   let probe = shared.get(key)
   if (!probe) {
     probe = createOpencodePreflight(d)
     shared.set(key, probe)
   }
   return probe
+}
+
+/** Explicit re-check: drop the shared cached probe so this call runs a new one, which later calls then reuse. */
+export function freshSharedOpencodePreflight(d: OpencodePreflightDeps): Promise<OpencodeReady> {
+  shared.delete(sharedKey(d))
+  return sharedOpencodePreflight(d)()
 }
