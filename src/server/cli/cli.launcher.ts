@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { dataDir } from '../config'
 import { NODE_HEADERS_ENV } from '../hooksPaths'
 import { BROWSER_COMMAND, CONTEXT_COMMAND, ESC_FN } from './cli.commands'
+import { buildEvalCommand } from './cli.eval'
 import { snapshotOf, TOOL_INDEX } from './cli.registry'
 
 export const CLI_NAME = 'webterm'
@@ -68,6 +69,7 @@ usage: webterm <command> [args]
   skills get <name> [--json]      the version-matched guide for a skill (webterm-cli, ...)
   browser <verb> [args]           drive the browser node wired to this node (alias: webterm-browser)
   context <verb> [--node X]       read a linked node's context (alias: context.sh)
+  eval run [--model fake|real]    replay promoted eval cases (user rejections) against Central
 EOF
 }
 cmd_skills() {
@@ -104,6 +106,7 @@ cmd_call() {
 }
 ${BROWSER_COMMAND}
 ${CONTEXT_COMMAND}
+${buildEvalCommand()}
 cmd="\${1:-help}"; [ "$#" -gt 0 ] && shift
 json=0
 case "$cmd" in
@@ -121,6 +124,7 @@ case "$cmd" in
   skills) cmd_skills "$@" ;;
   browser) cmd_browser "$@" ;;
   context) cmd_context "$@" ;;
+  eval) cmd_eval "$@" ;;
   *) cmd_call "$cmd" "$@" ;;
 esac
 `

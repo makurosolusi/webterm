@@ -15,6 +15,7 @@ import { PolicyRules } from './PolicyRules'
 import { PolicySimulator } from './PolicySimulator'
 import { AgentMemory } from './AgentMemory'
 import { SecretsPanel } from './SecretsPanel'
+import { EvalCasesPanel } from './evalcases/EvalCasesPanel'
 import { RoutinesPanel } from './RoutinesPanel'
 import { MorningBriefLlmToggle } from './MorningBriefSettings'
 import { matchesSearch, normalizeQuery } from './SettingsFields'
@@ -144,6 +145,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
 
       <AgentMemory />
       <SecretsPanel />
+      <EvalCasesPanel />
       <RoutinesPanel />
       <MorningBriefLlmToggle />
 

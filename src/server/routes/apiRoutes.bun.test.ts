@@ -39,6 +39,7 @@ test('full route order snapshot', () => {
     'claude-provider',
     'proxy-info',
     'bakeoff',
+    'evalcases',
   ])
 })
 
