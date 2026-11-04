@@ -23,6 +23,7 @@ import { knowledge2Routes } from './routes/knowledge2.routes'
 import { handoffRoutes } from './routes/handoff.routes'
 import { pushRoutes } from './routes/push.routes'
 import { claudeProviderRoutes } from './routes/claudeProvider.routes'
+import { bakeoffRoutes } from './routes/bakeoff.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -58,6 +59,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...knowledge2Routes,
   ...pushRoutes,
   ...claudeProviderRoutes,
+  ...bakeoffRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

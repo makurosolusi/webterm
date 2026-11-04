@@ -37,6 +37,7 @@ test('full route order snapshot', () => {
     'knowledge2',
     'push', 'mobile',
     'claude-provider',
+    'bakeoff',
   ])
 })
 

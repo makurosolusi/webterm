@@ -33,6 +33,7 @@ import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { BrowserLinkOfferHost } from './browserLinkOffer'
+import BakeoffHost from './bakeoff/BakeoffHost'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { setNotifyCanvas } from './osNotify'
@@ -332,6 +333,7 @@ export default function App() {
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
           <BrowserLinkOfferHost />
+          <BakeoffHost repo={activeWs?.cwd} workspaceId={activeId} />
         </>
       )}
       {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi

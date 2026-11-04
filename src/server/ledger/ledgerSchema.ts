@@ -18,6 +18,7 @@ import { applyV16 } from './ledgerSchemaV16'
 import { applyV17 } from './ledgerSchemaV17'
 import { applyV18 } from './ledgerSchemaV18'
 import { applyV19 } from './ledgerSchemaV19'
+import { applyV20 } from './ledgerSchemaV20'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -61,4 +62,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 18, up: applyV18 },
   // v19: tool_cache + embed_cache + prefix.last_used_at (F5-d); additive, caches start empty.
   { version: 19, up: applyV19 },
+  // v20: bake-off runs + candidates (F6); additive tables, nothing to backfill.
+  { version: 20, up: applyV20 },
 ]
