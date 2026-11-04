@@ -29,6 +29,7 @@ import { evalCasesRoutes } from './routes/evalcases.routes'
 import { replayRoutes } from './routes/replay.routes'
 import { prReviewRoutes } from './routes/prreview.routes'
 import { mcpAppsRoutes } from './routes/mcpapps.routes'
+import { templatesRoutes } from './routes/templates.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -70,6 +71,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...evalCasesRoutes,
   ...replayRoutes,
   ...prReviewRoutes,
+  ...templatesRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
