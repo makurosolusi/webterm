@@ -1,7 +1,8 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { hasClaudeHookSettings, isContextCapable, isSafeNodeId } from '../shared/workspace'
-import { binaryExists, spawnPty, unwrapMissingWrapper } from './pty'
+import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
 import { NODE_HEADERS_ENV, forgetNodeToken, hookEnv, writeNodeHeaders } from './hooks'
+import { bootSupervisor } from './ptySupervisor'
 import { claudeHeadersPath } from './hooksPaths'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { OutputLog } from './outputLog'
@@ -92,31 +93,27 @@ export class Sessions extends SessionsCore {
         ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })
         : {}),
     }
-    const spawn = this.options.spawn ?? spawnPty
-    const pty = spawn({
+    const spawnOpts = {
       cols: msg.cols,
       rows: msg.rows,
       cwd: msg.cwd,
       cmd,
       shell: this.options.shell,
       env: Object.keys(env).length ? env : undefined,
-    })
-    const session: Session = {
-      id: msg.id,
-      pty,
-      log: new OutputLog(),
-      subs: new SubscriberSet<ServerMsg>(),
-      exited: false,
-      startedAt: this.now(),
-      agentId: msg.agentId,
-      cols: msg.cols,
-      rows: msg.rows,
     }
-    this.map.set(msg.id, session)
+    // Supervisor: sesi tmux yang sudah hidup (server baru restart, adopsi belum sempat) DITEMPELI,
+    // bukan dibuat ulang — `cmd`/`env` hanya berlaku saat create.
+    const supervised = this.supervised
+    const pty = supervised
+      ? supervised.open(msg.id, { ...spawnOpts, agentId: msg.agentId })
+      : (this.options.spawn ?? spawnPty)(spawnOpts)
+    if (!supervised && this.supervisorNotice) {
+      notices.push(this.supervisorNotice)
+      this.supervisorNotice = undefined // sekali per proses: cukup untuk terlihat, tidak berisik
+    }
+    const session = this.track(msg.id, pty, msg.agentId, msg.cols, msg.rows)
     ptyLog.spawned(msg, pty.pid, this.options.shell)
     session.subs.add(send)
-    pty.onData((data) => this.emit(session, data))
-    pty.onExit((code) => this.onExit(session, code))
     for (const data of notices) this.emit(session, data)
 
     // PTY baru = hidup baru. Tombstone exit dan status milik sesi sebelumnya dengan id yang sama
@@ -126,6 +123,56 @@ export class Sessions extends SessionsCore {
     // Selalu dijawab, termasuk ketika yang kita tahu adalah "tidak ada status". Senyap terbaca
     // "tidak berubah" oleh client yang menyimpan salinan status lepas dari socket (restart server).
     send({ t: 'status', id: msg.id })
+  }
+
+  /** Pesan sekali-per-proses saat sesi TIDAK bisa disupervisi (tmux absen); diisi singleton. */
+  supervisorNotice?: string
+
+  /** Daftarkan PTY hidup sebagai sesi node dan sambungkan output/exit-nya. */
+  private track(id: string, pty: Pty, agentId: string | undefined, cols: number, rows: number): Session {
+    const session: Session = {
+      id, pty, agentId, cols, rows,
+      log: new OutputLog(),
+      subs: new SubscriberSet<ServerMsg>(),
+      exited: false,
+      startedAt: this.now(),
+    }
+    this.map.set(id, session)
+    pty.onData((data) => this.emit(session, data))
+    pty.onExit((code) => this.onExit(session, code))
+    return session
+  }
+
+  /**
+   * Boot: tempelkan lagi setiap sesi tmux yang selamat dari server sebelumnya, SEBELUM browser
+   * menyambung ulang — output terus terekam, dan agent yang memanggil hook tetap terautentikasi
+   * karena file header token-nya ditulis ulang dengan token proses ini (token hidup di memori, jadi
+   * token lama mati bersama server lama). Ukuran dipulihkan dari window tmux itu sendiri, dan
+   * history pane di-seed ke log supaya scrollback client yang menyambung ulang tetap utuh.
+   *
+   * Sesi yang node-nya tidak dikenal (`isKnown` false) ditandai yatim lewat `markOrphan` dan TIDAK
+   * ditempeli. `open` untuk node itu nanti tetap menempel ke sesinya.
+   */
+  adoptSupervised(isKnown: (id: string) => boolean = () => true): { adopted: string[]; orphans: string[] } {
+    const supervisor = this.supervised
+    const adopted: string[] = []
+    const orphans: string[] = []
+    if (!supervisor) return { adopted, orphans }
+    for (const s of supervisor.list()) {
+      if (this.map.has(s.id) || !isSafeNodeId(s.id)) continue
+      if (!isKnown(s.id)) {
+        supervisor.markOrphan(s.id, this.now())
+        orphans.push(s.id)
+        continue
+      }
+      if (s.agentId) writeNodeHeaders(s.id)
+      const history = s.history > 0 ? supervisor.capture(s.id, { escapes: true, screen: false }) : undefined
+      const session = this.track(s.id, supervisor.attach(s.id, s.cols, s.rows), s.agentId, s.cols, s.rows)
+      if (history) this.emit(session, history.replace(/\r?\n/g, '\r\n'))
+      adopted.push(s.id)
+    }
+    if (adopted.length || orphans.length) ptyLog.adopted(adopted.length, orphans.length)
+    return { adopted, orphans }
   }
 
   input(id: string, data: string): void {
@@ -182,9 +229,10 @@ export class Sessions extends SessionsCore {
       this.map.delete(id)
     }
     // Kill SESUDAH map dihapus: `onExit` digerbangi identitas, jadi gema kematian yang kita minta
-    // sendiri tidak pernah menjadi `exit` kedua.
-    
+    // sendiri tidak pernah menjadi `exit` kedua. Untuk sesi tmux, `pty.kill()` hanya melepas client;
+    // sesinya diakhiri `kill`, juga ketika tidak ada entry `map` (node yatim / belum diadopsi).
     session?.pty.kill()
+    this.supervised?.kill(id)
   }
 
   handle(msg: ClientMsg, send: (m: ServerMsg) => void): void {
@@ -197,7 +245,30 @@ export class Sessions extends SessionsCore {
   }
 }
 
-export const sessions = new Sessions()
+const boot = bootSupervisor()
+export const sessions = new Sessions({}, boot.supervisor)
+sessions.supervisorNotice = boot.notice
 // Jamnya hidup sekali per proses, di singleton — bukan di constructor, supaya `new Sessions()` di
 // test tetap bebas timer dan memilih sendiri kapan menyapu.
 sessions.startStaleSweep()
+
+/** Node id yang dikenal workspace mana pun (id pane split `node:pN` ikut node induknya). Import
+ *  dinamis: `db.ts` memakai `bun:sqlite`, dan modul ini juga dimuat test vitest. */
+async function knownNodeIds(): Promise<(id: string) => boolean> {
+  const { db } = await import('./db')
+  const ids = new Set(db.list().flatMap((w) => w.nodes.map((n) => n.id)))
+  return (id) => ids.has(id.split(':')[0] ?? id)
+}
+
+if (boot.supervisor) {
+  void knownNodeIds()
+    .catch((err: unknown) => {
+      // Tanpa daftar node, tidak ada yang boleh dicap yatim: semua sesi diadopsi.
+      ptyLog.adoptKnownFailed(err)
+      return () => true
+    })
+    .then((isKnown) => sessions.adoptSupervised(isKnown))
+    // Adopsi gagal tidak mematikan server: sesi tmux tetap hidup, dan `open` dari browser tetap
+    // menempel ke sana satu per satu.
+    .catch((err: unknown) => ptyLog.adoptFailed(err))
+}
