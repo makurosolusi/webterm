@@ -10,6 +10,8 @@ import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { CapabilityCard } from './CapabilityCard'
 import { matchesSearch } from './SettingsFields'
 import { TelegramCard } from './TelegramCard'
+import { TokenAccessCard } from './TokenAccessCard'
+import { TOKEN_TEXT } from './tokenAccessLabels'
 import { useCapabilities } from './useCapabilities'
 import './settings-capabilities.css'
 
@@ -31,12 +33,12 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
   const api = useCapabilities()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const all = api.data?.capabilities ?? []
-  const show = (key: CapabilityId | 'advanced'): boolean => {
+  const show = (key: CapabilityId | 'advanced' | 'token'): boolean => {
     if (query === '' || matchesSearch(sectionTitle, query)) return true
-    const text = key === 'advanced' ? ADVANCED_TEXT.summary : `${CAPABILITIES[key].title} ${CAPABILITIES[key].blurb}`
+    const text = key === 'advanced' ? ADVANCED_TEXT.summary : key === 'token' ? `${TOKEN_TEXT.title} ${TOKEN_TEXT.why}` : `${CAPABILITIES[key].title} ${CAPABILITIES[key].blurb}`
     return matchesSearch(`${text} ${CAPABILITY_KEYWORDS[key].join(' ')}`, query)
   }
-  const visible = all.filter((v) => show(v.id)).length + (api.data && show('advanced') ? 1 : 0)
+  const visible = all.filter((v) => show(v.id)).length + (api.data && show('advanced') ? 1 : 0) + (show('token') ? 1 : 0)
   useEffect(() => {
     onVisibleCount?.(visible)
     return () => onVisibleCount?.(0)
@@ -67,6 +69,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
             onStep={(kind) => onStep(view.id, kind)} />
         )
       })}
+      {show('token') ? <TokenAccessCard /> : null}
       {api.data && show('advanced') ? (
         <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} onRecheck={api.recheck} open={advancedOpen} onOpenChange={setAdvancedOpen} />
       ) : null}

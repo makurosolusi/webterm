@@ -1,85 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BUILTIN_AGENT_IDS, agentConfig, assembleCmd, customLaunchCmd } from '../shared/workspace'
-import type { AgentId, BuiltinAgentId } from '../shared/workspace'
+import type { BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import type { CustomAgent } from '../shared/settings'
 import { VscodeActivityBar } from '@/components/vscode/vscodeActivityBar'
 import type { VscodeActivityBarItem } from '@/components/vscode/vscodeActivityBar'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
-import { VscodeStatusBar } from '@/components/vscode/vscodeStatusBar'
-import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { CAPABILITIES } from '../shared/featureCapabilities'
-import { CapabilityOffer } from './CapabilityOffer'
-import { CAPABILITY_TEXT } from './capabilitiesLabels'
-import { resetBrowserStatusCache } from './browser.feature'
+import { codicon } from './dockCodicon'
+import { CanvasStatusBar } from './Dock.statusBar'
+import { useCapabilityOffer } from './Dock.capabilityOffer'
+import { WorkspaceDialog } from './Dock.workspaceDialog'
 
-export interface DockProps {
-  onAddTerminal: () => void
-  /** Tidak ada = kemampuan browser mati di server; memilih baris "Browser" memunculkan tawaran "Nyalakan". */
-  onAddBrowser?: () => void
-  onAddAgent: (cmd: string, agentId: AgentId, cwd?: string) => void
-  onCreateWorkspace: (name: string, cwd?: string) => void
-  onBrowse: (onPick: (p: string) => void) => void
-  onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean
-  onBack: () => void; onForward: () => void; canBack: boolean; canForward: boolean
-  onFit: () => void
-  onToggleBoard: () => void
-  /** Kanban terbuka? Hanya untuk menandai item `Board` di activity bar. */
-  boardOpen?: boolean
-  /** Panel Sessions terbuka? Item `Sessions` di activity bar mengikuti keadaan ini. */
-  sessionsOpen: boolean
-  onToggleSessions: () => void
-  /** Inbox terbuka? Item `Inbox` duduk sebaris dengan Sessions di activity bar. */
-  inboxOpen: boolean
-  onToggleInbox: () => void
-  /** Chat panel terbuka? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
-   *  itemnya hanya dirender ketika integrator menyediakan handler. */
-  chatOpen?: boolean
-  onToggleChat?: () => void
-  /** Panel kontrol Central. Item SELALU tampil; tidak ada handler = Agent Pusat mati, klik memunculkan tawaran "Nyalakan". */
-  centralOpen?: boolean
-  onToggleCentral?: () => void
-  /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;
-   *  dock tidak pernah memanggil `fetch` sendiri. */
-  inboxUnread?: number
-  zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
-  /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
-  onZoomTo?: (pct: number) => void
-  /** Kunci PANDANGAN (pan/zoom) sementara node tetap bisa digeser — semantik nodeterm, kebalikan
-   *  dari `showInteractive` bawaan React Flow yang justru mematikan drag node. Tombolnya butuh
-   *  `aria-pressed`, jadi ia dirender sendiri di bawah activity bar, bukan sebagai item primitif. */
-  locked: boolean
-  onToggleLock: () => void
-  /** Clean view menyala? Jalan keluarnya chord ⌘./Ctrl+. karena chrome ini sendiri ikut
-   *  tersembunyi (lihat `cleanView.tsx`). */
-  cleanView: boolean
-  onToggleCleanView: () => void
-  /** Nama workspace aktif untuk status bar; kosong di layar Welcome. */
-  workspaceName?: string
-  /** Ringkasan agent (`2 working`) — juga diumumkan lewat live region status bar. */
-  agentSummary?: string
-  onSave?: () => void
-  onLayouts?: () => void
-  onToggleMic?: () => void
-  /** Dari settings; tombolnya hilang dari menu Add. Prop, bukan store — integrator yang menyambung. */
-  disabledAgents?: AgentId[]
-  customAgents?: CustomAgent[]
-  /** Override perintah peluncuran per builtin (mis. skrip pemilih akun). Hanya builtin: agent
-   *  custom sudah membawa `launchCmd`-nya sendiri. */
-  agentLaunchCommands?: Partial<Record<BuiltinAgentId, string>>
-  /** Membuka dialog Settings. Tombolnya (grup bawah rail, di atas Lock view) hanya ada bila handler diberikan; ia
-   *  membuka dialog modal, jadi tidak pernah ditandai aktif oleh `activeActivityId`. */
-  onOpenSettings?: () => void
-  /** Item status bar tambahan (mis. hitungan Output); duduk di ujung kiri grup kanan. */
-  extraStatusItems?: VscodeStatusItem[]
-}
+import type { DockProps } from './Dock.types'
+export type { DockProps } from './Dock.types'
 
-/** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
-export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
+export { ZOOM_PRESETS } from './Dock.statusBar'
 
 /** Id baris Quick Pick "Add node"; agent builtin/custom diberi prefix + id agent. */
 const ADD_TERMINAL_ID = 'terminal'
@@ -88,9 +24,6 @@ const ADD_WORKSPACE_ID = 'workspace'
 const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
-
-/** Glyph codicon (font ikon VS Code, dimuat di `main.tsx`); ukurannya diatur CSS per wadah. */
-const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden />
 
 /** Id aktivitas yang sedang "terpilih". Activity bar hanya punya satu slot aktif; permukaan
  *  webterm boleh terbuka bersamaan, jadi urutannya dipaku dan sisanya tampil non-aktif. */
@@ -104,130 +37,17 @@ function activeActivityId(props: DockProps): string | null {
 }
 
 /**
- * Status bar 22px: aksi kanvas (undo/redo/back/forward/fit/zoom) plus identitas workspace.
- * Readout zoom di sini membuka dialog preset — dialognya milik komponen ini supaya Dock tidak
- * perlu merender dua baris grid sekaligus.
- */
-function CanvasStatusBar(props: DockProps) {
-  const [zoomOpen, setZoomOpen] = useState(false)
-
-  const left: VscodeStatusItem[] = []
-  if (props.workspaceName) {
-    left.push({ id: 'workspace', label: props.workspaceName, tooltip: 'Active workspace' })
-  }
-
-  const right: VscodeStatusItem[] = [
-    ...(props.extraStatusItems ?? []),
-    {
-      id: 'undo', label: '', icon: codicon('discard'), tooltip: 'Undo', ariaLabel: 'Undo',
-      onClick: props.canUndo ? props.onUndo : undefined,
-    },
-    {
-      id: 'redo', label: '', icon: codicon('redo'), tooltip: 'Redo', ariaLabel: 'Redo',
-      onClick: props.canRedo ? props.onRedo : undefined,
-    },
-    {
-      id: 'back', label: '', icon: codicon('arrow-left'), tooltip: 'Go back', ariaLabel: 'Go back',
-      onClick: props.canBack ? props.onBack : undefined,
-    },
-    {
-      id: 'forward', label: '', icon: codicon('arrow-right'), tooltip: 'Go forward', ariaLabel: 'Go forward',
-      onClick: props.canForward ? props.onForward : undefined,
-    },
-    ...(props.onSave ? [{
-      id: 'save', label: '', icon: codicon('save'), tooltip: 'Save layout', ariaLabel: 'Save layout',
-      onClick: props.onSave,
-    }] : []),
-    ...(props.onLayouts ? [{
-      id: 'layouts', label: '', icon: codicon('layout'), tooltip: 'Layouts', ariaLabel: 'Layouts',
-      onClick: props.onLayouts,
-    }] : []),
-    ...(props.onToggleMic ? [{
-      id: 'mic', label: '', icon: codicon('mic'), tooltip: 'Dictate', ariaLabel: 'Dictate',
-      onClick: props.onToggleMic,
-    }] : []),
-    {
-      id: 'fit', label: '', icon: codicon('screen-normal'), tooltip: 'Fit view', ariaLabel: 'Fit view',
-      onClick: props.onFit,
-    },
-    {
-      id: 'zoom-out', label: '', icon: codicon('zoom-out'), tooltip: 'Zoom out', ariaLabel: 'Zoom out',
-      onClick: props.onZoomOut,
-    },
-    {
-      id: 'zoom', label: `${props.zoomPct}%`, tooltip: 'Zoom presets', ariaLabel: 'Zoom presets',
-      onClick: props.onZoomTo ? () => setZoomOpen(true) : undefined,
-    },
-    {
-      id: 'zoom-in', label: '', icon: codicon('zoom-in'), tooltip: 'Zoom in', ariaLabel: 'Zoom in',
-      onClick: props.onZoomIn,
-    },
-  ]
-
-  return (
-    <>
-      <VscodeStatusBar
-        className="app-statusbar"
-        left={left}
-        right={right}
-        liveText={props.agentSummary}
-      />
-      {zoomOpen && (
-        <Dialog open onOpenChange={setZoomOpen}>
-          <DialogContent className="dock-zoom-dialog">
-            <DialogHeader><DialogTitle>Zoom</DialogTitle></DialogHeader>
-            <div className="dock-zoom-list">
-              {ZOOM_PRESETS.map((p) => (
-                <Button
-                  key={p}
-                  variant={p === props.zoomPct ? 'secondary' : 'ghost'}
-                  className="dock-action-row"
-                  onClick={() => { props.onZoomTo?.(p); setZoomOpen(false) }}
-                >
-                  <span className="dock-menu__check">{p === props.zoomPct && codicon('check')}</span>{p}%
-                </Button>
-              ))}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-    </>
-  )
-}
-
-/**
  * Chrome kiri + bawah aplikasi.
  *
  * Activity bar 48px memuat permukaan (Sessions, Inbox, Chat, Board) dan aksi Add; lock/clean view
  * adalah toggle mode sehingga dirender sendiri dengan `aria-pressed`. Status bar 22px memuat
- * aksi kanvas. Dialog Add/Workspace tetap di sini karena tombol pembukanya ada di rail.
+ * aksi kanvas (`Dock.statusBar.tsx`). Quick Pick Add tetap di sini karena tombol pembukanya ada di rail.
  */
 export default function Dock(props: DockProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
-  const [wsName, setWsName] = useState('')
-  const [wsCwd, setWsCwd] = useState('')
-  // Tawaran menyalakan kemampuan (sama dengan menu kanvas): browser untuk "Add > Browser", central
-  // untuk item Central. Aksi aslinya jalan begitu handler-nya terbit (kemampuan sudah menyala).
-  const [offer, setOffer] = useState<'browser' | 'central' | null>(null)
-  const pending = useRef<'browser' | 'central' | null>(null)
   const { onAddBrowser, onToggleCentral } = props
-  useEffect(() => {
-    if (pending.current !== 'browser' || !onAddBrowser) return
-    pending.current = null
-    onAddBrowser()
-  }, [onAddBrowser])
-  useEffect(() => {
-    if (pending.current !== 'central' || !onToggleCentral) return
-    pending.current = null
-    onToggleCentral()
-  }, [onToggleCentral])
-  const offered = () => {
-    pending.current = offer
-    if (offer === 'browser') resetBrowserStatusCache() // hook pemilik status memuat ulang lalu menerbitkan `onAddBrowser`
-    setOffer(null)
-  }
-
+  const { setOffer, dialog: offerDialog } = useCapabilityOffer(onAddBrowser, onToggleCentral)
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
   const customs = props.customAgents ?? DEFAULT_SETTINGS.customAgents
   const launchCmds = props.agentLaunchCommands ?? DEFAULT_SETTINGS.agentLaunchCommands
@@ -249,8 +69,6 @@ export default function Dock(props: DockProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [addOpen, workspaceOpen])
 
-  const close = () => setWorkspaceOpen(false)
-
   const addBuiltin = (id: BuiltinAgentId) => {
     // cwd dibiarkan undefined: server memakai cwd workspace, sama seperti nodeterm yang
     // menambah agent dengan satu klik tanpa form.
@@ -266,12 +84,6 @@ export default function Dock(props: DockProps) {
   const addCustom = (agent: CustomAgent) => {
     props.onAddAgent(customLaunchCmd(agent, launchCmds), agent.id)
     setAddOpen(false)
-  }
-
-  const createWs = () => {
-    if (!wsName.trim()) return
-    props.onCreateWorkspace(wsName.trim(), wsCwd.trim() || undefined)
-    setWsName(''); setWsCwd(''); close()
   }
 
   const openWorkspaceForm = () => {
@@ -407,33 +219,10 @@ export default function Dock(props: DockProps) {
           onSelect={onAddSelect}
         />
 
-        {offer && (
-          <Dialog open onOpenChange={(o) => { if (!o) setOffer(null) }}>
-            <DialogContent>
-              <DialogHeader><DialogTitle>{CAPABILITY_TEXT.offerTitle(CAPABILITIES[offer].title)}</DialogTitle></DialogHeader>
-              <CapabilityOffer id={offer} onDone={offered} />
-            </DialogContent>
-          </Dialog>
-        )}
+        {offerDialog}
 
-        {workspaceOpen && (
-          <Dialog open onOpenChange={setWorkspaceOpen}>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Create workspace</DialogTitle></DialogHeader>
-              <div className="dock-menu__form">
-                <Input placeholder="name" autoFocus value={wsName}
-                  onChange={(e) => setWsName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') createWs() }} />
-                <div className="dock-menu__form-row">
-                  <Input className="flex-1" placeholder="cwd (optional)" value={wsCwd}
-                    onChange={(e) => setWsCwd(e.target.value)} />
-                  <Button variant="ghost" onClick={() => props.onBrowse(setWsCwd)}>Browse</Button>
-                </div>
-                <Button onClick={createWs}>Create</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+        <WorkspaceDialog open={workspaceOpen} onOpenChange={setWorkspaceOpen}
+          onCreateWorkspace={props.onCreateWorkspace} onBrowse={props.onBrowse} />
       </div>
 
       <CanvasStatusBar {...props} />

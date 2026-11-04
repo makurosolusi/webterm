@@ -3,13 +3,14 @@
 import { randomUUID } from 'node:crypto'
 import { COOKIE_PREVIEW_TTL_MS, type CookiePreviewResp } from '../../shared/browser.contract'
 import { domainKey, type BrowserCookie } from './cookieImport.parse'
+import { partitionImportableCookies } from './cookieImportPolicy'
 
 const MAX_PREVIEWS = 16 // batas memori: maks ~16 x COOKIE_BODY_MAX_BYTES; yang tertua digusur
 
 interface Entry { workspaceId: string; cookies: BrowserCookie[]; expiresAt: number }
 
 export interface CookiePreviewStore {
-  /** Simpan hasil parse; kembalikan ringkasan domain (tanpa nilai). */
+  /** Simpan hasil parse TANPA cookie login Google; kembalikan ringkasan domain (tanpa nilai). */
   put(workspaceId: string, cookies: BrowserCookie[]): CookiePreviewResp
   /** Ambil (dan hapus) cookie subset domain; null bila id tak dikenal/kedaluwarsa/beda workspace. */
   take(previewId: string, workspaceId: string, domains: string[]): BrowserCookie[] | null
@@ -27,8 +28,10 @@ export function createCookiePreviewStore(opts: { now?: () => number; ttlMs?: num
   }
 
   return {
-    put(workspaceId, cookies) {
+    put(workspaceId, parsed) {
       sweep()
+      // Filter di sini = satu titik: commit hanya bisa `take` dari set yang sudah difilter.
+      const { importable: cookies, googleSkipped } = partitionImportableCookies(parsed)
       while (entries.size >= MAX_PREVIEWS) entries.delete(entries.keys().next().value as string)
       const previewId = randomUUID()
       const expiresAt = now() + ttlMs
@@ -41,7 +44,7 @@ export function createCookiePreviewStore(opts: { now?: () => number; ttlMs?: num
         byDomain.set(domainKey(c.domain), d)
       }
       const domains = [...byDomain].map(([domain, v]) => ({ domain, ...v })).sort((a, b) => a.domain.localeCompare(b.domain))
-      return { previewId, domains, expiresAt }
+      return { previewId, domains, expiresAt, googleSkipped }
     },
     take(previewId, workspaceId, domains) {
       sweep()

@@ -33,7 +33,7 @@ export const CAPABILITY_TEXT = {
  * Kata kunci pencarian Settings per kartu (pola indeks pencarian Orca: title + description + keywords).
  * Kata yang diketik orang, bukan judul: "chrome", "cookie", "token", "localhost".
  */
-export const CAPABILITY_KEYWORDS: Readonly<Record<CapabilityId | 'advanced', readonly string[]>> = {
+export const CAPABILITY_KEYWORDS: Readonly<Record<CapabilityId | 'advanced' | 'token', readonly string[]>> = {
   central: ['agent', 'asisten', 'pusat', 'central', 'chat', 'ai'],
   workers: ['worker', 'orchestrator', 'perintah', 'jalankan', 'persetujuan', 'approval'],
   autonomy: ['otonomi', 'autonomy', 'otomatis', 'mandiri'],
@@ -41,6 +41,7 @@ export const CAPABILITY_KEYWORDS: Readonly<Record<CapabilityId | 'advanced', rea
   files: ['file', 'berkas', 'folder', 'explorer'],
   filesWrite: ['file', 'berkas', 'unggah', 'upload', 'edit', 'hapus', 'rename'],
   telegram: ['telegram', 'bot', 'token', 'chat', 'pesan'],
+  token: ['token', 'akses', 'keamanan', 'tunnel', 'sandi', 'login', 'perangkat lain', 'remote'],
   advanced: ['lanjutan', 'chrome', 'chromium', 'lokasi', 'mesin', 'engine', 'claude', 'opencode', 'data', 'reset', 'setel ulang'],
 }
 

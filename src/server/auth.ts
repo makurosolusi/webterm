@@ -81,7 +81,8 @@ export function tokensMatch(expected: string | undefined, candidate: string | nu
  *  - Origin ABSENT means a non-browser client (curl, the CLI, the tests) — browsers always send
  *    one on a WS handshake, so the attack this gate exists for always has it. Allowed, unless the
  *    browser itself tells us otherwise via `Sec-Fetch-Site`; absent fetch metadata is allowed
- *    because older browsers omit it.
+ *    because older browsers omit it. The `/ws` PTY upgrade on a token-free bind additionally
+ *    requires the Origin to be PRESENT (`wsOrigin.ts`): there no credential backs the absence.
  */
 export function sameOrigin(headers: Headers): boolean {
   const origin = firstHeader(headers['origin'])
