@@ -3,6 +3,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RouteResult } from '../apiShared.types'
 import { cappedBodyGetter } from '../cappedRequestBody'
+import { panicSnapshotAll } from '../checkpoint/checkpoint.service'
 import { createLogger } from '../logs'
 import { activeCa2 } from './ca2Active'
 import type { Ca2Handle } from './ca2Boot'
@@ -49,7 +50,7 @@ export async function ca2Dispatch(
   }
   if (path === `${BASE}/control` || path === `${BASE}/halt`) {
     const control: ControlRequest = { method, path, query, body: method === 'GET' ? undefined : await req.body(), actor: ROOT_ACTOR }
-    return controlRoute(control, { db: h.db, now: h.now, env: h.env, onHalt: ({ reason }) => closeAllAgents(h, reason) })
+    return controlRoute(control, { db: h.db, now: h.now, env: h.env, onHalt: ({ reason }) => Promise.all([panicSnapshotAll(), closeAllAgents(h, reason)]).then(() => undefined) }) // F3-c panic snapshot alongside the kill
   }
   return null
 }
