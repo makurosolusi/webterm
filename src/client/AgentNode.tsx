@@ -12,6 +12,7 @@ import { useSpeechInput } from './useSpeechInput'
 import NodeContextMenu, { type MenuRow } from './NodeContextMenu'
 import { linkRows } from './terminalLinks'
 import { PROVENANCE_TEXT, ProvenancePanel } from './ProvenancePanel'
+import { MEMORY_TEXT, setNodeIncognito, useNodeIncognito } from './AgentMemory'
 import { EXIT_SETTLE_MS, ineligibleHint, restartEligibility, sendExitSequence } from './agentActions'
 import { send, subscribeStatus, getStatus } from './ws'
 import { unwatchNode, watchNode } from './unread'
@@ -117,6 +118,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const [menu, setMenu] = useState<{ x: number; y: number; link: string | null } | null>(null)
   const [restarting, setRestarting] = useState(false)
   const [provenanceOpen, setProvenanceOpen] = useState(false)
+  const incognito = useNodeIncognito(id)
 
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
@@ -201,6 +203,13 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
       onClick: doResume,
     },
     { label: PROVENANCE_TEXT.menu, hint: PROVENANCE_TEXT.menuHint, onClick: () => setProvenanceOpen(true) },
+    {
+      // Same switch as Settings › Control (IncognitoToggle / setNodeIncognito); a menu row cannot host a
+      // Switch, so the label flips. A failed switch is reported in the node thread, like AI naming.
+      label: incognito ? MEMORY_TEXT.leaveIncognito : MEMORY_TEXT.goIncognito,
+      hint: MEMORY_TEXT.incognitoIntro,
+      onClick: () => { setNodeIncognito(id, !incognito).catch((e: unknown) => addComment(`Incognito switch failed: ${e instanceof Error ? e.message : String(e)}`, NOTE_AUTHOR)) },
+    },
     { type: 'separator' },
     {
       label: 'New session',

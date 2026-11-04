@@ -13,6 +13,7 @@ import { centralRoutes } from './routes/central.routes'
 import { policyRoutes } from './routes/policy.routes'
 import { policySimRoutes } from './routes/policySim.routes'
 import { memory2Routes } from './routes/memory2.routes'
+import { blackboardRoutes } from './routes/blackboard.routes'
 import { ledgerRoutes } from './routes/ledger.routes'
 import { routinesRoutes } from './routes/routines.routes'
 import { sensorRoutes } from './routes/sensors.routes'
@@ -47,6 +48,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...policyRoutes,
   ...policySimRoutes,
   ...memory2Routes,
+  ...blackboardRoutes,
   ...routinesRoutes,
   ...ledgerRoutes,
   ...costRoutes,

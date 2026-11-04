@@ -3,6 +3,8 @@
 // only take effect after a Confirm click here; the server accepts these writes from this page only.
 // F5-a (ChatGPT memory controls): every remembered item by kind with Forget / Don't mention / Edit / Verify,
 // freshness ("needs review"), and incognito agent nodes. Web-page suggestions can never be confirmed.
+// F5-b: what the sleep-time consolidator proposed while agents were idle (Confirm all / per item / Dismiss),
+// and the shared blackboard (goal status, decisions) with agent proposals waiting for a click.
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { TOKEN_HEADER } from './api'
 import { peekToken } from './transportToken'
+import { BoardSection, ProposalsSection } from './AgentMemoryBoard'
 
 export const PROCEDURAL_PATH = '/api/awareness/procedural'
 export const MEMORY_CONTROLS_PATH = '/api/memory2'
@@ -47,7 +50,10 @@ export const MEMORY_TEXT = {
   incognitoIntro: 'Nothing an incognito agent says or does is stored as memory.',
   incognitoNone: 'No agent is incognito.',
   incognito: 'Incognito', leave: 'Turn off',
+  goIncognito: 'Go incognito (no memory)', leaveIncognito: 'Leave incognito',
 } as const
+
+export type MemoryAct = (what: string, method: string, path: string, body?: unknown) => Promise<void>
 
 export async function memoryRequest(method: string, path = PROCEDURAL_PATH, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
@@ -64,21 +70,46 @@ const isFacts = (v: unknown): v is { facts: ProceduralFact[] } => !!v && Array.i
 const itemsOf = (v: unknown): MemoryItem[] | null => (v && Array.isArray((v as { items?: unknown }).items) ? (v as { items: MemoryItem[] }).items : null)
 const refsOf = (v: unknown): string[] => (v && Array.isArray((v as { refs?: unknown }).refs) ? (v as { refs: string[] }).refs : [])
 const NODE_PREFIX = 'node:'
-const ctl = (id: string, action: string): string => `${MEMORY_CONTROLS_PATH}/${encodeURIComponent(id)}/${action}`
+export const ctl = (id: string, action: string): string => `${MEMORY_CONTROLS_PATH}/${encodeURIComponent(id)}/${action}`
 const INCOGNITO_PATH = `${MEMORY_CONTROLS_PATH}/incognito`
+
+// One incognito list per page, shared by the panel and every agent node's menu (one GET, not one per node).
+let incognitoList: Promise<string[]> | null = null
+const incognitoListeners = new Set<(refs: string[]) => void>()
+
+/** Turns incognito on/off for an agent node and tells every mounted reader. Rejects with the server code. */
+export async function setNodeIncognito(nodeId: string, on: boolean): Promise<string[]> {
+  const refs = refsOf(await memoryRequest('PUT', INCOGNITO_PATH, { nodeId, on }))
+  incognitoList = Promise.resolve(refs)
+  for (const l of incognitoListeners) l(refs)
+  return refs
+}
+
+/** Whether `nodeId` is incognito, kept in sync with every toggle on the page. */
+export function useNodeIncognito(nodeId: string): boolean {
+  const [refs, setRefs] = useState<string[]>([])
+  useEffect(() => {
+    incognitoListeners.add(setRefs)
+    // Ledger off or offline: shown as not incognito; the next mount asks again.
+    incognitoList ??= memoryRequest('GET', INCOGNITO_PATH).then(refsOf).catch(() => { incognitoList = null; return [] })
+    void incognitoList.then(setRefs)
+    return () => { incognitoListeners.delete(setRefs) }
+  }, [])
+  return refs.includes(`${NODE_PREFIX}${nodeId}`)
+}
 
 /** Incognito switch for one agent node; node chrome can mount it next to the agent title. */
 export function IncognitoToggle({ nodeId, on, onChange }: { nodeId: string; on: boolean; onChange?: (refs: string[]) => void }): React.JSX.Element {
   return (
     <label className="flex items-center gap-1 text-xs">
       <Switch aria-label={`${MEMORY_TEXT.incognito} ${nodeId}`} checked={on}
-        onCheckedChange={(v) => { void memoryRequest('PUT', INCOGNITO_PATH, { nodeId, on: v === true }).then((r) => onChange?.(refsOf(r))) }} />
+        onCheckedChange={(v) => { setNodeIncognito(nodeId, v === true).then((r) => onChange?.(r), (err: unknown) => console.error(`incognito switch for node ${nodeId}:`, err)) }} />
       {MEMORY_TEXT.incognito}
     </label>
   )
 }
 
-/** One remembered item with its controls. */
+
 function MemoryRow({ m, act }: { m: MemoryItem; act: (what: string, path: string, body?: unknown) => Promise<void> }): React.JSX.Element {
   const [draft, setDraft] = useState<string | null>(null)
   return (
@@ -116,6 +147,7 @@ export function AgentMemory(): React.JSX.Element {
   const [kind, setKind] = useState<MemoryKindFilter>('all')
   const [items, setItems] = useState<MemoryItem[] | null>(null)
   const [incognito, setIncognito] = useState<string[]>([])
+  const [tick, setTick] = useState(0)
 
   const load = useCallback(() => {
     memoryRequest('GET')
@@ -125,6 +157,7 @@ export function AgentMemory(): React.JSX.Element {
     memoryRequest('GET', kind === 'all' ? MEMORY_CONTROLS_PATH : `${MEMORY_CONTROLS_PATH}?kind=${kind}`)
       .then((v) => setItems(itemsOf(v))).catch(() => setItems(null))
     memoryRequest('GET', INCOGNITO_PATH).then((v) => setIncognito(refsOf(v))).catch(() => setIncognito([]))
+    setTick((t) => t + 1)
   }, [kind])
   useEffect(load, [load])
 
@@ -184,6 +217,8 @@ export function AgentMemory(): React.JSX.Element {
           )}
         </div>
       ) : null}
+      {facts ? <ProposalsSection act={act} tick={tick} /> : null}
+      {facts ? <BoardSection act={act} tick={tick} /> : null}
       {facts ? (
         <div className="mt-3 flex flex-col gap-1 text-xs" data-testid="memory-incognito">
           <h4 className="font-semibold">{MEMORY_TEXT.incognitoTitle}</h4>
