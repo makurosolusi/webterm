@@ -26,7 +26,7 @@ const REASON: Record<FsErrCode, (name: string) => string> = {
   EVERSION: () => 'Isi berubah sejak dibuka.',
   ETOOLARGE: () => 'Ukuran melewati batas.',
   EBINARY: () => 'Item ini berkas biner.',
-  EDISABLED: () => 'Pengubahan file dimatikan di server ini.',
+  EDISABLED: () => 'Kemampuan “Ubah dan unggah file” sedang mati.',
   EIO: () => 'Terjadi kesalahan saat mengakses disk atau jaringan.',
 }
 const REASON_AUTH = 'Sesi ditolak (401). Muat ulang halaman atau masuk lagi.'

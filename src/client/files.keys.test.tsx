@@ -138,11 +138,11 @@ describe('keyboard', () => {
   })
 
   it('Menu key membuka menu konteks berisi grup bawaan dan baris slot dengan pemisah + shortcut', async () => {
-    slots.push({ id: 'fake', menu: () => [{ label: 'Rename…', onClick: vi.fn() }] })
+    slots.push({ id: 'fake', menu: () => [{ label: 'Fake action', onClick: vi.fn() }] })
     const c = await mount(3)
     key(c, 'ArrowDown')
     key(c, 'ContextMenu')
-    for (const label of ['Open', 'Open in Integrated Terminal', 'New File…', 'Rename…', 'Reveal', 'Refresh', 'Copy Path', 'Copy Relative Path']) {
+    for (const label of ['Open', 'Open in Integrated Terminal', 'New File…', 'Fake action', 'Reveal', 'Refresh', 'Copy Path', 'Copy Relative Path']) {
       expect(await screen.findByText(label)).toBeTruthy()
     }
     expect(screen.getAllByRole('separator').length).toBeGreaterThanOrEqual(3)
