@@ -3,7 +3,9 @@
 // message becomes an effect, and it never touches the network or the ledger directly.
 //
 // Consent rules encoded here:
-//  - An unbound chat is denied silently; nothing is auto-enrolled from a first message.
+//  - An unbound chat is denied silently; nothing is auto-enrolled from a first message. The one
+//    exception is `/start <code>` carrying a live one-time pairing code the owner issued from the
+//    Settings card (telegramPairing.ts): the code IS the owner's consent, so that chat is bound.
 //  - Group chats are denied outright: identity is ambiguous and a group mirror must not mutate.
 //  - `/approve` needs approvalId + digest + nonce from the ledger challenge; a bare "yes" is text.
 //  - The ledger decides digest/nonce/expiry/state; this file never re-implements those checks.
@@ -27,6 +29,7 @@ import { TELEGRAM_MAX_TEXT, isCallbackUpdate, parseTelegramCallback, parseTelegr
 import { dispatchTelegramCallback, type ApprovalChallengePort } from './channelCallback'
 import { safeErrorText } from './safeErrorText'
 import type { PendingChatPort } from './channelPending'
+import { pairFromStart } from './telegramPairingDispatch'
 import { maskChatId } from './telegramEgressLog'
 import { createLogger } from '../logs'
 
@@ -48,6 +51,8 @@ export interface ChannelReply {
 /** The slice of ChannelStore the dispatcher needs; tests pass a fake. */
 export interface ChannelStorePort {
   binding(channel: string, chatId: string): ChannelBinding | undefined
+  /** Needed only for deep-link pairing; without it `/start <code>` is treated like any message. */
+  bind?(channel: string, chatId: string, binding: ChannelBinding): void
   claimUpdate(updateId: number, channel?: string): boolean
   releaseUpdate(updateId: number, channel?: string): void
   enqueueReply(input: {
@@ -98,7 +103,7 @@ export type DispatchOutcome =
   | { status: 'ignored'; reason: 'not_a_message' }
   | { status: 'duplicate'; updateId: number }
   | { status: 'denied'; reason: AuthorizationFailure | 'group_not_allowed' }
-  | { status: 'handled'; command: ChannelCommand['kind'] | 'free_text'; reply: string | null }
+  | { status: 'handled'; command: ChannelCommand['kind'] | 'free_text' | 'pair'; reply: string | null }
 
 function registryFor(identity: ChannelMessageIdentity, binding: ChannelBinding): IdentityRegistry {
   const registry = new IdentityRegistry()
@@ -223,6 +228,8 @@ async function handleClaimed(
     audit('denied', { reason: 'group_not_allowed' })
     return { status: 'denied', reason: 'group_not_allowed' }
   }
+  const paired = await pairFromStart(deps, message, (text) => replyTo(deps, message, text))
+  if (paired) return paired
   const binding = deps.store.binding(identity.channel, identity.chatId)
   if (!binding) {
     recordPending(deps, identity.chatId)

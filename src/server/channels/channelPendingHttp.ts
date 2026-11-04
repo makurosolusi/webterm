@@ -1,10 +1,13 @@
 // `/api/channels/telegram/pending`: GET lists, DELETE `/:chatId` dismisses. Authorization is the
 // caller's job (index.ts runs the root-token gate before handleApi), same as the bindings API.
+// It also fronts `/api/channels/telegram/pairing` (telegramPairingHttp.ts): the pairing codes live on
+// the same PendingChatStore, so the runtime's existing `handleApi` chain needs no new wiring.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { TELEGRAM_BINDINGS_CHANNEL } from './channelBindingsTypes'
 import { cleanId } from './channelBindingsValidation'
 import { writeJson } from './channelHttp'
 import { PENDING_CHAT_LIMIT, type PendingChatStore } from './channelPending'
+import { handleTelegramPairingApi, type PairingRouteDeps } from './telegramPairingHttp'
 
 export const TELEGRAM_PENDING_PATH = '/api/channels/telegram/pending'
 const DEFAULT_PAGE = 50
@@ -26,8 +29,10 @@ function chatIdFrom(rest: string): string | null {
 export function handleChannelPendingApi(
   req: IncomingMessage,
   res: ServerResponse,
-  pending: PendingChatStore
+  pending: PendingChatStore,
+  pairing?: PairingRouteDeps
 ): boolean {
+  if (handleTelegramPairingApi(req, res, pending.pairing, pairing)) return true
   const url = new URL(req.url || '/', 'http://x')
   const path = url.pathname
   if (path !== TELEGRAM_PENDING_PATH && !path.startsWith(`${TELEGRAM_PENDING_PATH}/`)) return false
