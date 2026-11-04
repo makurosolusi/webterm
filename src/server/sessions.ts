@@ -11,6 +11,7 @@ import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
 import { producePtyExit } from './events/producers'
+import { mcpEnv } from './mcp/mcp.launch'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -93,6 +94,9 @@ export class Sessions extends SessionsCore {
       ...(msg.agentId && hasClaudeHookSettings(msg.agentId)
         ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })
         : {}),
+      // `webterm mcp` for CLIs configured through env (opencode, gemini); claude/codex get it as flags
+      // in `launchLine`. An injected spawn writes no file (same rule as `writeNodeHeaders` above).
+      ...(msg.agentId ? mcpEnv(msg.agentId, msg.id, PORT, this.options.spawn ? () => {} : undefined) : {}),
     }
     const spawnOpts = {
       cols: msg.cols,

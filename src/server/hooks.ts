@@ -3,6 +3,7 @@ import { PERM_WAIT_SECS_INTERACTIVE, writeClaudeSettings, writeHouseRules } from
 import { NODE_HEADERS_ENV } from './hooksTokens'
 import { claudeHeadersPath } from './hooksPaths'
 import { shq } from './hooksQuote'
+import { writeClaudeMcpConfig } from './mcp/mcp.launch'
 
 // Modul ini dulu memuat SEMUANYA (token, settings, perakitan baris peluncuran). Ia sekarang
 // menyisakan bagian "apa yang dibawa sesi agent" dan MEMBAGI sisanya ke modul bersaudara
@@ -78,6 +79,8 @@ export function buildClaudeFlags(
     writeSettings?: (nodeId: string, port: number) => string
     /** Sama: penulis file aturan rumah webterm (`--append-system-prompt-file`). */
     writeRules?: () => string
+    /** Same: writer of the node's `--mcp-config` file (`webterm mcp`, mcp/mcp.launch.ts). */
+    writeMcp?: (nodeId: string, port: number) => string
   }
 ): string {
   const idFlag = resume ? `--resume ${sessionId}` : `--session-id ${sessionId}`
@@ -85,5 +88,8 @@ export function buildClaudeFlags(
   const settings = (opts?.writeSettings ?? writeClaudeSettings)(nodeId, port)
   // Bagian STABIL kesadaran webterm masuk system prompt; bagian dinamis lewat hook (webtermAwareness).
   const rules = (opts?.writeRules ?? writeHouseRules)()
-  return [idFlag, perm, `--settings ${shq(settings)}`, `--append-system-prompt-file ${shq(rules)}`].filter(Boolean).join(' ')
+  // webterm MCP server, added next to the user's own servers (no --strict-mcp-config). LAST on
+  // purpose: `--mcp-config <configs...>` is variadic and would swallow any argument after it.
+  const mcp = (opts?.writeMcp ?? writeClaudeMcpConfig)(nodeId, port)
+  return [idFlag, perm, `--settings ${shq(settings)}`, `--append-system-prompt-file ${shq(rules)}`, `--mcp-config ${shq(mcp)}`].filter(Boolean).join(' ')
 }
