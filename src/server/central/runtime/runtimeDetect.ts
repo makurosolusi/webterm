@@ -3,8 +3,11 @@ import { accessSync, constants } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import type { RuntimeKind } from './centralRuntime'
 
-/** Nilai `WEBTERM_CENTRAL_RUNTIME` yang dikenal; di luar ini = tak dikenal. */
-export const SUPPORTED_RUNTIME_KINDS: ReadonlySet<string> = new Set(['off', 'claude', 'codex', 'opencode', 'mock'])
+/**
+ * Nilai `WEBTERM_CENTRAL_RUNTIME` yang dikenal; di luar ini = tak dikenal (fail-closed ke off).
+ * `codex` sengaja tidak ada: belum punya adapter, jadi tak boleh tampil "siap".
+ */
+export const SUPPORTED_RUNTIME_KINDS: ReadonlySet<string> = new Set(['off', 'claude', 'opencode', 'mock'])
 const RUNTIME_KEY = 'WEBTERM_CENTRAL_RUNTIME'
 
 /** Penanya "adakah binary ini?"; disuntik supaya tes tak bergantung PATH nyata. */
@@ -18,9 +21,12 @@ export function onPath(bin: string, pathVar: string | undefined = process.env.PA
   })
 }
 
-/** Mesin eksplisit (`WEBTERM_CENTRAL_RUNTIME` dikenal) menang; selain itu claude, lalu opencode, lalu mock. */
+/**
+ * Mesin eksplisit (`WEBTERM_CENTRAL_RUNTIME` dikenal) menang; selain itu claude, lalu opencode, lalu `off`.
+ * Otomatis TIDAK pernah jatuh ke `mock` (mesin simulasi yang hanya menggemakan teks): mock hanya bila dipilih eksplisit.
+ */
 export function detectAgentEngine(env: NodeJS.ProcessEnv, which: WhichFn = (bin) => onPath(bin, env.PATH)): RuntimeKind {
   const explicit = (env[RUNTIME_KEY] ?? '').trim().toLowerCase()
   if (SUPPORTED_RUNTIME_KINDS.has(explicit)) return explicit as RuntimeKind
-  return which('claude') ? 'claude' : which('opencode') ? 'opencode' : 'mock'
+  return which('claude') ? 'claude' : which('opencode') ? 'opencode' : 'off'
 }

@@ -33,7 +33,7 @@ export function minLevel(...levels: ControlLevel[]): ControlLevel {
   return levels.reduce((low, next) => (levelRank(next) < levelRank(low) ? next : low))
 }
 
-/** Env ceiling from `WEBTERM_CENTRAL_AGENTS`: off = propose only, propose = act_gated, auto = act_envelope. */
+/** Ceiling ("Batas tertinggi") from `WEBTERM_CENTRAL_AGENTS` (derived from the Worker/Otonomi cards): off = propose only, propose = act_gated, auto = act_envelope. */
 export function envCeiling(env: Record<string, string | undefined>): ControlLevel {
   const mode = (env[CENTRAL_AGENTS_ENV] ?? '').trim().toLowerCase()
   if (mode === 'propose') return 'act_gated'
@@ -56,9 +56,21 @@ export function readLevel(db: Database, scope: ControlScope): StoredLevel | null
   return { scope, level: String(r.level) as ControlLevel, reason: r.reason === null ? null : String(r.reason), setBy: String(r.set_by), setAt: Number(r.set_at), version: Number(r.version) }
 }
 
-/** `min(env ceiling, global, project)` read fresh from the DB on every call. */
+/** A global scope without a row inherits the ceiling, capped here: per-action approval, never envelope by default. */
+const INHERIT_MAX: ControlLevel = 'act_gated'
+
+/** Global level in force: the stored row, else the ceiling capped at act_gated. */
+export function globalLevelOf(db: Database, env: Record<string, string | undefined>): ControlLevel {
+  return readLevel(db, 'global')?.level ?? minLevel(envCeiling(env), INHERIT_MAX)
+}
+
+/**
+ * `min(ceiling, global, project)` read fresh from the DB on every call. No global row = the ceiling up to
+ * act_gated, so turning on the Worker card is enough for Central to run workers (each run still needs an
+ * approval card); act_envelope always needs a human to raise the global level.
+ */
 export function effectiveLevelOf(db: Database, projectId: string | null, env: Record<string, string | undefined>): ControlLevel {
-  const global = readLevel(db, 'global')?.level ?? DEFAULT_GLOBAL_LEVEL
+  const global = globalLevelOf(db, env)
   const project = projectId ? readLevel(db, scopeOf(projectId))?.level ?? TOP_LEVEL : TOP_LEVEL
   return minLevel(envCeiling(env), global, project)
 }

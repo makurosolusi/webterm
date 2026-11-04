@@ -18,6 +18,11 @@ export interface CapabilityCardProps {
   onStep?(kind: NonNullable<CapabilityView['step']>['kind']): void
 }
 
+/** Kemampuan yang menyala hanya lewat konfirmasi; katalog bersama baru menandai `dangerous` di tingkat sub-opsi. */
+const DANGEROUS: readonly CapabilityId[] = ['autonomy']
+/** Konfirmasi menyalakan hal berbahaya (pola `window.confirm` WorkspaceBar.tsx:101-105; dialog ditekan = false = tetap mati). */
+const confirmOn = (label: string): boolean => window.confirm(CAPABILITY_TEXT.confirmDangerous(label))
+
 const titles = (ids: readonly CapabilityId[]): string => joinTitles(ids.map((i) => CAPABILITIES[i].title))
 
 /** Kartu kemampuan; presentasional, semua mutasi lewat callback. */
@@ -26,26 +31,44 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
   const on = view.status === 'on'
   const turnsOn = on ? [] : (view.alsoTurnsOn ?? closure(view.id).filter((i) => i !== view.id && all.find((v) => v.id === i)?.status !== 'on'))
   const turnsOff = on ? dependents(view.id).filter((d) => all.find((v) => v.id === d)?.status === 'on') : []
+  // needs-step = sakelarnya sudah dinyalakan, tinggal satu langkah: tampil "nyala" supaya klik berarti
+  // MATIKAN. Mematikan selalu boleh; menyalakan yang terkunci hanya lewat tombol langkah.
+  const checked = on || view.status === 'needs-step'
   const switchId = `capability-switch-${view.id}`
+  // Menyalakan yang berbahaya (kartu, langkah fixChain yang ikut menyalakannya, atau sub) wajib dikonfirmasi;
+  // mematikan tidak pernah ditanya.
+  const dangerous = DANGEROUS.includes(view.id)
+  const toggle = (next: boolean): void => {
+    if (next && dangerous && !confirmOn(view.title)) return
+    onToggle(next)
+  }
+  const step = (kind: NonNullable<CapabilityView['step']>['kind']): void => {
+    if (kind === 'fixChain' && dangerous && !confirmOn(view.title)) return
+    onStep?.(kind)
+  }
+  const sub = (s: NonNullable<CapabilityView['subs']>[number], next: boolean): void => {
+    if (next && s.dangerous && !confirmOn(s.label)) return
+    onSub?.(s.key, next)
+  }
   return (
     <section aria-label={view.title} aria-busy={busy} data-capability={view.id} className="flex flex-col gap-1 border-b border-(--vscode-widget-border,transparent) py-3">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor={switchId} className="text-[13px] font-semibold">{view.title}</Label>
         <div className="flex items-center gap-2">
           <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view.status]}</span>
-          <Switch id={switchId} checked={on} disabled={busy || view.status === 'needs-step'} onCheckedChange={onToggle} />
+          <Switch id={switchId} checked={checked} disabled={busy} onCheckedChange={toggle} />
         </div>
       </div>
       <p className="m-0 text-xs opacity-80">{view.blurb}</p>
       {view.detail ? <p className="m-0 text-xs opacity-70">{view.detail}</p> : null}
       {view.status === 'needs-step' && view.step ? (
-        <Button size="sm" variant="secondary" className="self-start" onClick={() => onStep?.(view.step!.kind)}>{view.step.label}</Button>
+        <Button size="sm" variant="secondary" className="self-start" onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
       ) : null}
       {turnsOn.length > 0 ? <p className="m-0 text-xs opacity-70">{CAPABILITY_TEXT.alsoTurnsOn} {titles(turnsOn)}</p> : null}
       {turnsOff.length > 0 ? <p className="m-0 text-xs opacity-70">{CAPABILITY_TEXT.alsoTurnsOff} {titles(turnsOff)}</p> : null}
       {on && view.subs?.map((s) => (
         <div key={s.key} className="flex items-center gap-2">
-          <Checkbox id={`capability-sub-${view.id}-${s.key}`} checked={s.on} disabled={busy} onCheckedChange={(v) => onSub?.(s.key, v === true)} />
+          <Checkbox id={`capability-sub-${view.id}-${s.key}`} checked={s.on} disabled={busy} onCheckedChange={(v) => sub(s, v === true)} />
           <Label htmlFor={`capability-sub-${view.id}-${s.key}`} className="text-xs">{s.label}</Label>
         </div>
       ))}

@@ -23,7 +23,7 @@ async function post(path: string, body: unknown): Promise<number> {
     method: 'POST', headers: { host: '127.0.0.1:8700', origin: ORIGIN }, socket: { remoteAddress: '127.0.0.1' },
   }) as unknown as IncomingMessage
   const res = recorder()
-  await capabilitiesRoute(req, res, 'POST', path, envSettingsApiDeps, { detect: () => ({ chromium: true, telegramToken: false }) })
+  await capabilitiesRoute(req, res, 'POST', path, envSettingsApiDeps, { detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }) })
   return res.status
 }
 

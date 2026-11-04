@@ -1,33 +1,76 @@
 // Tawaran "tanya saat dibutuhkan": satu baris untuk menyalakan kemampuan yang masih mati.
+// Langkah (needs-step) diselesaikan DI SINI, bukan dilempar ke pemanggil: Dock dan menu kanvas tidak
+// punya Settings, jadi dulu tombol "Pilih lokasi Chrome" / "Pasang atau login Claude Code" di tawaran tidak melakukan apa pun.
+import { useEffect, useRef, useState } from 'react'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
+import { callCapabilities } from './capabilitiesApi'
+import { AgentEngineField } from './AgentEngineField'
 import { CAPABILITY_TEXT } from './capabilitiesLabels'
-import { useCapabilities } from './useCapabilities'
+import { ChromiumPathField } from './ChromiumPathField'
+import { capabilityErrorMessage, useCapabilities } from './useCapabilities'
 import { Button } from '@/components/ui/button'
 
 export interface CapabilityOfferProps {
   id: CapabilityId
+  /** Dipanggil begitu kemampuan menyala (lewat "Nyalakan" atau setelah langkahnya selesai). */
   onDone?(): void
-  /** Dipanggil saat tombol langkah (needs-step) ditekan. */
+  /** Langkah yang tidak bisa diselesaikan di tawaran (token Telegram). */
   onStep?(kind: NonNullable<CapabilityView['step']>['kind']): void
 }
 
 /** Tawaran menyalakan kemampuan; tidak merender apa pun bila sudah aktif atau belum termuat. */
 export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): React.JSX.Element | null {
-  const { data, error, busyId, toggle } = useCapabilities()
+  const { data, error, busyId, toggle, refresh, recheck } = useCapabilities()
+  // Langkah yang dikerjakan di tempat: kolom lokasi Chrome atau pilihan mesin agen.
+  const [openStep, setOpenStep] = useState<'chromiumPath' | 'agentEngine' | null>(null)
+  const [stepError, setStepError] = useState<string | null>(null)
   const view = data?.capabilities.find((c) => c.id === id)
+  // Pengguna sudah bertindak (Nyalakan / langkah) dan status server jadi `on` = selesai, apa pun jalurnya.
+  const acted = useRef(false)
+  const status = view?.status
+  useEffect(() => {
+    if (status === 'on' && acted.current) { acted.current = false; onDone?.() }
+  }, [status, onDone])
   if (!view || view.status === 'on') return null
   const busy = busyId === id
-  const enable = async (): Promise<void> => { if (await toggle(id, true)) onDone?.() }
+  // onDone lewat efek status di atas, bukan hasil toggle: browser tanpa Chrome menjawab `needs-step`,
+  // dan pemanggil yang menunggu node lahir tidak boleh diberi tahu "sudah menyala".
+  const enable = async (): Promise<void> => {
+    acted.current = true
+    if (!(await toggle(id, true))) acted.current = false
+  }
+  const saveAdvanced = async (body: { chromiumPath: string } | { agentEngine: string }): Promise<void> => {
+    try {
+      await callCapabilities('/advanced', 'PUT', body)
+      setStepError(null)
+      await refresh()
+    } catch (e) {
+      setStepError(capabilityErrorMessage(e, CAPABILITY_TEXT.changeFailed))
+    }
+  }
+  const step = (kind: NonNullable<CapabilityView['step']>['kind']): void => {
+    if (kind === 'fixChain') void enable() // toggle biasa: server ikut menyalakan prasyaratnya
+    else if (kind === 'chromiumPath' || kind === 'agentEngine') { acted.current = true; setOpenStep(kind) }
+    else onStep?.(kind)
+  }
+  const shownError = error ?? stepError
   return (
     <div aria-busy={busy} data-capability-offer={id} className="flex flex-col gap-1 text-xs">
       <p className="m-0">{view.blurb} {view.status === 'off' ? CAPABILITY_TEXT.offerQuestion : null}</p>
       {view.detail ? <p className="m-0 opacity-70">{view.detail}</p> : null}
       {view.status === 'needs-step' && view.step ? (
-        <Button size="sm" variant="secondary" className="self-start" onClick={() => onStep?.(view.step!.kind)}>{view.step.label}</Button>
+        openStep === 'chromiumPath' && data ? (
+          <ChromiumPathField chromium={data.advanced.chromiumPath} save={(chromiumPath) => saveAdvanced({ chromiumPath })} redetect={refresh} />
+        ) : openStep === 'agentEngine' && data ? (
+          // Masih needs-step = mesin belum siap; begitu siap status jadi `on`, tawaran hilang dan onDone jalan.
+          <AgentEngineField engine={data.advanced.agentEngine} ready={false} save={(agentEngine) => saveAdvanced({ agentEngine })} redetect={recheck} />
+        ) : (
+          <Button size="sm" variant="secondary" className="self-start" disabled={busy} onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
+        )
       ) : (
         <Button size="sm" className="self-start" disabled={busy} onClick={() => { void enable() }}>{CAPABILITY_TEXT.offerAction}</Button>
       )}
-      {error ? <p role="alert" className="m-0 text-destructive">{error}</p> : null}
+      {shownError ? <p role="alert" className="m-0 text-destructive">{shownError}</p> : null}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fs = vi.hoisted(() => ({
   capabilities: vi.fn(),
+  resetCapabilitiesCache: vi.fn(),
   rawUrl: (p: string) => `/api/fs/raw?path=${encodeURIComponent(p)}`,
 }))
 vi.mock('./fsClient', () => fs)
@@ -13,6 +14,8 @@ vi.mock('./fsClient', () => fs)
 import type { FileMeta } from '../shared/fsContract'
 import type { FilesSlotCtx } from './filesSlots'
 import { UPLOAD_TEXT, resetUploadSlot, uploadSlot, uploadStatus } from './filesSlot.upload'
+import { FilesWriteOffer, resetFilesWriteOffer, WRITE_OFFER_TEXT } from './filesWriteOffer'
+import { resetCapabilitiesCache } from './useCapabilities'
 
 const caps = (o: object) => ({ mutate: true, viewers: true, watch: false, git: false, quickOpen: false, upload: true, listMax: 1, ...o })
 const entries: FileMeta[] = [{ name: 'a.txt', dir: false, ignored: false }, { name: 'sub', dir: true, ignored: false }]
@@ -23,7 +26,7 @@ const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => ({
 /** Meniru FilesNode: memanggil useSlot tiap render, menampilkan toolbar, dan elemen node ber-data-id. */
 function Host({ ctx }: { ctx: FilesSlotCtx }): ReactNode {
   uploadSlot.useSlot?.(ctx)
-  return <div data-id={ctx.nodeId} data-testid="node">{uploadSlot.toolbar?.(ctx)}</div>
+  return <div data-id={ctx.nodeId} data-testid="node">{uploadSlot.toolbar?.(ctx)}<FilesWriteOffer nodeId={ctx.nodeId} /></div>
 }
 
 class FakeXhr {
@@ -43,6 +46,11 @@ class FakeXhr {
 
 beforeEach(() => {
   resetUploadSlot()
+  resetFilesWriteOffer()
+  resetCapabilitiesCache()
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    capabilities: [{ id: 'filesWrite', title: 'Ubah dan unggah file', blurb: 'Edit, ganti nama, hapus, dan unggah file dari kanvas.', status: 'off' }], advanced: {},
+  }))))
   FakeXhr.calls = []
   FakeXhr.replyFor = () => '{"ok":true}'
   fs.capabilities.mockResolvedValue(caps({}))
@@ -69,6 +77,22 @@ describe('capabilities', () => {
     const ev = dropFiles(screen.getByTestId('node'), ['x.txt'])
     expect(ev.defaultPrevented).toBe(false)
     expect(FakeXhr.calls).toHaveLength(0)
+  })
+  it('filesWrite mati (mutate+upload off): "Upload…" tampil terkunci; klik membuka tawaran menyalakan', async () => {
+    fs.capabilities.mockResolvedValue(caps({ mutate: false, upload: false }))
+    render(<Host ctx={mkCtx()} />)
+    await settle()
+    const rows = uploadSlot.menu!(mkCtx())
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    if (!('onClick' in row)) throw new Error('baris Upload tidak ada')
+    expect(row.label).toBe(UPLOAD_TEXT.menuUpload)
+    expect(row.hint).toBe(WRITE_OFFER_TEXT.lockedHint)
+    const pick = vi.spyOn(HTMLInputElement.prototype, 'click')
+    act(() => row.onClick())
+    expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
+    expect(screen.getByRole('dialog').textContent).toContain(WRITE_OFFER_TEXT.dialogTitle)
+    expect(pick).not.toHaveBeenCalled()
   })
   it('capabilities melempar sinkron: slot tidak crash, galat dicatat, tanpa menu upload', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -163,6 +187,16 @@ describe('drop file OS', () => {
     expect(btn.getAttribute('title')).toContain('dup.txt')
     fireEvent.click(btn)
     expect(uploadStatus().summary).toBeNull()
+  })
+  it('upload ditolak EDISABLED: toolbar menampilkan aksi Nyalakan… yang membuka tawaran', async () => {
+    FakeXhr.replyFor = () => '{"ok":false,"code":"EDISABLED","error":"off"}'
+    render(<Host ctx={mkCtx()} />)
+    await settle()
+    dropFiles(screen.getByTestId('node'), ['a.txt'])
+    await waitFor(() => expect(uploadStatus().summary?.failed).toHaveLength(1))
+    expect(uploadStatus().summary!.failed[0].message).toBe('a.txt: kemampuan “Ubah dan unggah file” sedang mati')
+    fireEvent.click(await screen.findByRole('button', { name: WRITE_OFFER_TEXT.enableAction }))
+    expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
   })
   it('drag non-file (path internal) tidak dicegat', async () => {
     render(<Host ctx={mkCtx()} />)

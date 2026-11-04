@@ -1,11 +1,12 @@
 // HTTP seam for the human approval surface. Unlike /api/control/approval/*, this route is
-// authorized by the transport token (root/loopback), never by an agent capability: an agent must
-// not approve its own irreversible action.
+// authorized by the transport gate plus the UI-only policy in `approvalAuth.ts`: never by an agent
+// capability or node token, and only from the webterm page itself. An agent must not approve its own
+// irreversible action.
 //
 // Handlers live in `approvalHumanRoutes.ts`, the read-only SQL in `approvalQuery.ts`, the failure
 // taxonomy in `approvalFailures.ts`, and the byte-capped body reader in `approvalHttp.ts`.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { approvalAuthAllowed } from './approvalAuth'
+import { uiOnlyDenial } from './approvalAuth'
 import { APPROVAL_MAX_BODY_BYTES, readCappedBody, sendJson } from './approvalHttp'
 import { actorForRequest } from './approvalHumanShared'
 import { LEDGER_OFF } from './apiShared.types'
@@ -19,6 +20,7 @@ import {
 import { asObject } from './control/controlTypes'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
+import { isValidNodeToken } from './hooksTokens'
 
 /** Derived audit actor for a human request; implementation lives with the handler constants. */
 export { actorForRequest } from './approvalHumanShared'
@@ -27,8 +29,8 @@ export interface HumanApprovalDeps {
   /** Test seam; production uses the process runtime. */
   runtime?: LedgerRuntime | null
   now?: () => number
-  /** Test seam; production uses the transport policy in `approvalAuth.ts`. */
-  authAllowed?: () => boolean
+  /** Test seam; production asks the live node-token table. */
+  isNodeToken?: (token: string) => boolean
 }
 
 /** Exact family match: `/api/approvalsXYZ` is NOT ours and must fall through to 404. */
@@ -88,10 +90,10 @@ export async function approvalHumanRoute(
   deps: HumanApprovalDeps = {}
 ): Promise<boolean> {
   if (!isApprovalPath(url.pathname)) return false
-  // Consent is never token-free by default: a same-uid agent shell can also curl loopback.
-  // Operators may opt in explicitly for a disposable local demo.
-  if (!(deps.authAllowed ?? approvalAuthAllowed)()) {
-    sendJson(res, 403, { error: 'approval_requires_token' })
+  // Agent credentials are refused and only the webterm page may consent; zero-config on loopback.
+  const denial = uiOnlyDenial(req, url, deps.isNodeToken ?? isValidNodeToken)
+  if (denial) {
+    sendJson(res, 403, { error: denial })
     return true
   }
   const runtime = deps.runtime === undefined ? activeLedgerRuntime() : deps.runtime

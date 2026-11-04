@@ -57,7 +57,7 @@ describe('baris Browser saat kemampuan browser mati', () => {
     fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
     expect(await screen.findByText(/Nyalakan sekarang\?/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Nyalakan' }))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nyalakan browser' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Nyalakan Browser di kanvas' })).toBeNull())
     expect(f.mock.calls.some(([url, init]) => url === '/api/capabilities/browser' && JSON.parse(init.body).enabled === true)).toBe(true)
     const onAddBrowser = vi.fn()
     rerender(<Dock {...baseProps} onAddBrowser={onAddBrowser} />) // status browser termuat ulang -> App menerbitkan penambah
@@ -70,6 +70,6 @@ describe('baris Browser saat kemampuan browser mati', () => {
     press(screen.getByRole('button', { name: 'Add node' }))
     fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
     expect(onAddBrowser).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('dialog', { name: 'Nyalakan browser' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Nyalakan Browser di kanvas' })).toBeNull()
   })
 })

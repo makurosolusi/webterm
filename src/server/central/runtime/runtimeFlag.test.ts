@@ -24,7 +24,7 @@ describe('WEBTERM_CENTRAL_RUNTIME parsing', () => {
     expect(parseRuntimeKind('MOCK')).toBe('mock')
     expect(parseRuntimeKind('  Mock  ')).toBe('mock')
     expect(parseRuntimeKind('Claude')).toBe('claude')
-    expect(parseRuntimeKind(' CODEX ')).toBe('codex')
+    expect(parseRuntimeKind(' CODEX ')).toBe('off') // belum ada adapter codex
   })
 
   it('reads the process flag by default but accepts an explicit value', () => {
@@ -35,9 +35,9 @@ describe('WEBTERM_CENTRAL_RUNTIME parsing', () => {
 
   it('tak diset = deteksi otomatis; string kosong/tak dikenal tetap fail-closed', () => {
     expect(centralRuntimeKind(undefined, (bin) => bin === 'opencode')).toBe('opencode')
-    expect(centralRuntimeKind(undefined, () => false)).toBe('mock')
+    expect(centralRuntimeKind(undefined, () => false)).toBe('off')
     expect(centralRuntimeKind('', () => true)).toBe('off')
-    expect(centralRuntimeEnabled(undefined, () => false)).toBe(true)
+    expect(centralRuntimeEnabled(undefined, () => false)).toBe(false)
   })
 
   it('enables only explicitly selected adapters', () => {

@@ -24,7 +24,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'off', {
     ...C, dangerNote: 'Central dapat menjalankan worker nyata (shell, edit file) di mesin server; auto tanpa kartu approval per aksi.', requires: [{ key: 'WEBTERM_CENTRAL_TOOLS', oneOf: ['write'] }, { key: 'WEBTERM_CENTRAL_PLANNER' }, { key: 'WEBTERM_ORCHESTRATOR_RUN' }],
     label: 'Agen central',
-    description: 'Central boleh menjalankan worker: propose = kartu approval per aksi, auto = dalam amplop. Butuh tools=write, planner, orchestrator run.',
+    description: 'Diatur otomatis oleh kartu Worker orchestrator (propose = kartu approval per aksi) dan Otonomi (auto = dalam amplop); nilai dari .env/shell tetap menang.',
     dangerous: true,
   }),
   flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, label: 'Checkpoint percakapan', description: 'Ringkas percakapan central ke checkpoint (ringkasan deterministik, tanpa memanggil model).' }),
@@ -37,7 +37,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Skill central', description: 'Central membaca skill dari <dataDir>/central/skills (butuh tools).' }),
   flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_SKILLS' }], label: 'Usul skill central', description: 'Central boleh mengusulkan skill baru untuk disetujui manusia (butuh Skill central).' }),
   flag('WEBTERM_CENTRAL_BOTS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_CHANNELS', oneOf: ['on'] }], label: 'Bot per project', description: 'Satu bot dengan topic per project (butuh Telegram dan WEBTERM_CHANNELS).' }),
-  flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_LEDGER', oneOf: ['on', 'shadow'] }], label: 'Tombol approval Telegram', description: 'Tombol setuju/tolak pada kartu approval Telegram diproses (butuh Telegram dan ledger).' }),
+  flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }], label: 'Tombol approval Telegram', description: 'Tombol setuju/tolak pada kartu approval Telegram diproses (butuh Telegram; ledger selalu aktif).' }),
   flag('WEBTERM_KNOWLEDGE', 'central', { ...C, label: 'Knowledge base', description: 'Indeks pengetahuan project di <dataDir>/knowledge.db.' }),
   num('WEBTERM_AGENT_IDLE_DONE_MS', 'central', 1000, 3_600_000, DEFAULT_AGENT_IDLE_DONE_MS, {
     ...C, hot: true,

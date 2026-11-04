@@ -55,7 +55,8 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     allowEmpty: true,
     dangerNote: 'Membuka jaringan privat/localhost ke browser server; halaman bisa menjangkau layanan internal.',
     label: 'Host privat yang diizinkan',
-    description: 'Daftar host:port (dipisah koma) yang boleh dibuka walau jaringan privat/localhost. Kosong = semua jaringan privat diblokir.',
+    description: 'Daftar host:port (dipisah koma) yang boleh dibuka walau jaringan privat/localhost. Diisi juga oleh tombol "Izinkan" di node Browser. ' +
+      'Saat webterm hanya di loopback, localhost (selain port webterm) selalu boleh; jaringan privat lain tetap diblokir.',
     dangerous: true,
   }),
   flag(ENV_BROWSER.cookieImport, GROUP, {

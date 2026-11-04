@@ -68,3 +68,28 @@ describe('assert / onFrameNavigated', () => {
     expect(guard.onFrameNavigated('file:///etc/passwd').ok).toBe(false)
   })
 })
+
+describe('navigation.guard bind loopback (dev server lokal)', () => {
+  const g = createNavigationGuard({ allow: new Set(), webtermPort: SELF, allowLoopback: true })
+  it.each([
+    ['http://localhost:3000/', 'ok'], ['http://127.0.0.1:5173/', 'ok'], ['http://[::1]:8080/', 'ok'],
+    [`http://localhost:${SELF}/`, 'not_allowed_port'], [`http://127.0.0.1:${SELF}/`, 'not_allowed_port'],
+    ['http://10.0.0.1/', 'private_host'], ['http://192.168.1.5:3000/', 'private_host'], ['http://169.254.169.254/', 'private_host'],
+  ])('%s -> %s', (url, expected) => {
+    const r = g.check(url)
+    expect(r.ok ? 'ok' : r.reason).toBe(expected)
+  })
+
+  it('tanpa allowLoopback (bind terekspos) localhost tetap diblokir', () => {
+    const r = createNavigationGuard({ allow: new Set(), webtermPort: SELF }).check('http://localhost:3000/')
+    expect(r.ok ? 'ok' : r.reason).toBe('private_host')
+  })
+
+  it('allowlist getter dibaca ulang tiap cek', () => {
+    let cur: ReadonlySet<string> = new Set()
+    const live = createNavigationGuard({ allow: () => cur, webtermPort: SELF })
+    expect(live.check('http://localhost:3000/').ok).toBe(false)
+    cur = allow('localhost:3000')
+    expect(live.check('http://localhost:3000/').ok).toBe(true)
+  })
+})

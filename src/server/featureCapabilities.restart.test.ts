@@ -16,7 +16,7 @@ const ALL_KEYS = [...PRIMARY, ...SUBS, ...DERIVED]
 
 describe('registry: tak ada kunci katalog yang butuh restart', () => {
   it('semua kunci primer, sub-opsi, dan turunan ada di registry', () => {
-    expect(ALL_KEYS.length).toBe(7 + 1 + DERIVED.length)
+    expect(ALL_KEYS.length).toBe(7 + 2 + DERIVED.length)
     expect(ALL_KEYS.filter((k) => specFor(k) === undefined)).toEqual([])
   })
 
@@ -30,7 +30,7 @@ describe('GET /api/capabilities tidak memuat restart', () => {
   const ORIGIN = 'http://127.0.0.1:8700'
 
   it('service.buildResponse: tak ada istilah restart/boot/dangerous pada JSON', () => {
-    const body = JSON.stringify(buildResponse({}, { chromium: true, telegramToken: false }, '/tmp/webterm-test-data'))
+    const body = JSON.stringify(buildResponse({}, { chromium: true, telegramToken: false, agentEngine: true }, '/tmp/webterm-test-data'))
     expect(body).not.toMatch(/restart|dangerous|"boot"/i)
   })
 
@@ -39,7 +39,7 @@ describe('GET /api/capabilities tidak memuat restart', () => {
     const req = Object.assign(Readable.from([]), { method: 'GET', headers: { host: '127.0.0.1:8700', origin: ORIGIN }, socket: { remoteAddress: '127.0.0.1' } }) as unknown as IncomingMessage
     const res = recorder()
     const deps = () => ({ service: h.svc, guard: (r: IncomingMessage) => settingsGuard(r, {}, undefined), audit: () => undefined })
-    const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch: (async () => new Response('{}')) as never }
+    const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch: (async () => new Response('{}')) as never }
     const handled = await capabilitiesRoute(req, res, 'GET', '/api/capabilities', deps, extras)
     expect(handled).toBe(true)
     expect(res.status).toBe(200)

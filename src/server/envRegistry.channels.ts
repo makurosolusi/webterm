@@ -56,7 +56,7 @@ export const CHANNEL_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Jembatan chat central ke Telegram (butuh Central, Central chat, runtime central).',
     requires: [
       TELEGRAM_ON, { key: 'WEBTERM_CENTRAL' }, { key: 'WEBTERM_CENTRAL_CHAT' },
-      { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['mock', 'opencode'], note: 'Runtime central masih mati.' },
+      { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', 'opencode', 'mock', ''], note: 'Runtime central masih mati (kosong = deteksi otomatis).' },
     ],
   }),
 ]

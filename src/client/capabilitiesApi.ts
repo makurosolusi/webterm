@@ -6,9 +6,9 @@ import { peekToken } from './transportToken'
 const PATH = '/api/capabilities'
 const HTTP_BAD_GATEWAY = 502
 
-/** Galat API kemampuan: hanya status + kode statis; body mentah tidak pernah ikut. */
+/** Galat API kemampuan: hanya status + kode statis (+ port dengar server pada 403); body mentah tidak pernah ikut. */
 export class CapabilitiesApiError extends Error {
-  constructor(readonly status: number, readonly code: string) {
+  constructor(readonly status: number, readonly code: string, readonly port?: number) {
     super(`capabilities request failed (${status} ${code})`)
     this.name = 'CapabilitiesApiError'
   }
@@ -35,7 +35,8 @@ export async function callCapabilities<T = CapabilitiesResponse>(
   try { parsed = await res.json() } catch { parsed = undefined } // body bukan JSON: cukup status
   if (!res.ok) {
     const code = isObj(parsed) && typeof parsed.error === 'string' ? parsed.error : `http_${res.status}`
-    throw new CapabilitiesApiError(res.status, code)
+    const port = isObj(parsed) && typeof parsed.port === 'number' ? parsed.port : undefined
+    throw new CapabilitiesApiError(res.status, code, port)
   }
   return parsed as T
 }
@@ -46,8 +47,8 @@ async function state(suffix: string, method?: string, body?: unknown): Promise<C
   return out
 }
 
-/** Semua kemampuan + bagian Lanjutan. */
-export const fetchCapabilities = (): Promise<CapabilitiesResponse> => state('')
+/** Semua kemampuan + bagian Lanjutan; `fresh` = periksa ulang tanpa cache probe login ("Periksa lagi"). */
+export const fetchCapabilities = (fresh = false): Promise<CapabilitiesResponse> => state(fresh ? '?refresh=1' : '')
 
 /** Nyalakan/matikan satu kemampuan (server menutup prasyarat dan dependen). */
 export const setCapability = (id: CapabilityId, enabled: boolean): Promise<CapabilitiesResponse> =>

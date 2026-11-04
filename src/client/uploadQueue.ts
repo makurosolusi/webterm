@@ -18,7 +18,7 @@ export const UPLOAD_MSG: Partial<Record<FsErrCode, string>> & { EIO: string } = 
   EACCES: 'tidak punya izin menulis di folder ini',
   EROFS: 'folder hanya-baca',
   ENOSPC: 'disk penuh',
-  EDISABLED: 'upload dinonaktifkan di server',
+  EDISABLED: 'kemampuan “Ubah dan unggah file” sedang mati',
   EIO: 'gagal mengunggah (jaringan atau server)',
 }
 

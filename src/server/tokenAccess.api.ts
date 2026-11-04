@@ -2,9 +2,12 @@
 // `POST .../enable` (loopback tanpa token -> bangkitkan + simpan, nilai keluar SEKALI di respons)
 // dan `POST .../rotate`. Kontrak: PLAN/ENV-MINIMAL-b.md §3. Tidak ada `disable` (kembali terbuka =
 // hentikan server, hapus berkas token). Gerbang auth + allowlist Host sudah dijalankan index.ts
-// sebelum rute ini dipanggil.
+// sebelum rute ini dipanggil. enable/rotate hanya dari UI (`uiOnlyDenial`, approvalAuth.ts): tanpa itu
+// shell agent cukup dua curl untuk mencetak token sendiri lalu menyetujui aksinya sendiri.
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { uiOnlyDenial } from './approvalAuth'
 import { writeTokenToEnv } from './auth'
+import { isValidNodeToken } from './hooksTokens'
 import { readCappedRequestBody } from './cappedRequestBody'
 import { createLogger } from './logs'
 import { getTokenState, mintToken, persistToken, setTokenState } from './tokenBootstrap'
@@ -91,6 +94,8 @@ async function dispatch(req: IncomingMessage, res: ServerResponse, path: string,
     return json(res, 200, { enforced: token !== undefined, source, canEnable: source === 'none' && isLoopbackPeer(req) })
   }
   if (method !== 'POST') return json(res, 405, { error: 'method not allowed' })
+  const denial = uiOnlyDenial(req, new URL(req.url ?? path, 'http://x'), isValidNodeToken)
+  if (denial) return json(res, 403, { error: denial })
   return path === ENABLE_PATH ? enable(req, res, secretsDir) : rotate(req, res, secretsDir)
 }
 

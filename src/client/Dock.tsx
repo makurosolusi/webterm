@@ -12,7 +12,9 @@ import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { CAPABILITIES } from '../shared/featureCapabilities'
 import { CapabilityOffer } from './CapabilityOffer'
+import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { resetBrowserStatusCache } from './browser.feature'
 
 export interface DockProps {
@@ -38,7 +40,7 @@ export interface DockProps {
    *  itemnya hanya dirender ketika integrator menyediakan handler. */
   chatOpen?: boolean
   onToggleChat?: () => void
-  /** Panel kontrol Central (flag WEBTERM_CENTRAL_CHAT): itemnya hanya dirender bila handler ada. */
+  /** Panel kontrol Central. Item SELALU tampil; tidak ada handler = Agent Pusat mati, klik memunculkan tawaran "Nyalakan". */
   centralOpen?: boolean
   onToggleCentral?: () => void
   /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;
@@ -205,19 +207,25 @@ export default function Dock(props: DockProps) {
   const [addOpen, setAddOpen] = useState(false)
   const [wsName, setWsName] = useState('')
   const [wsCwd, setWsCwd] = useState('')
-  // Tawaran menyalakan browser (sama dengan menu kanvas); node lahir begitu `onAddBrowser` terbit.
-  const [offerBrowser, setOfferBrowser] = useState(false)
-  const pendingBrowser = useRef(false)
-  const { onAddBrowser } = props
+  // Tawaran menyalakan kemampuan (sama dengan menu kanvas): browser untuk "Add > Browser", central
+  // untuk item Central. Aksi aslinya jalan begitu handler-nya terbit (kemampuan sudah menyala).
+  const [offer, setOffer] = useState<'browser' | 'central' | null>(null)
+  const pending = useRef<'browser' | 'central' | null>(null)
+  const { onAddBrowser, onToggleCentral } = props
   useEffect(() => {
-    if (!pendingBrowser.current || !onAddBrowser) return
-    pendingBrowser.current = false
+    if (pending.current !== 'browser' || !onAddBrowser) return
+    pending.current = null
     onAddBrowser()
   }, [onAddBrowser])
-  const browserOffered = () => {
-    pendingBrowser.current = true
-    resetBrowserStatusCache() // hook pemilik status memuat ulang lalu menerbitkan `onAddBrowser`
-    setOfferBrowser(false)
+  useEffect(() => {
+    if (pending.current !== 'central' || !onToggleCentral) return
+    pending.current = null
+    onToggleCentral()
+  }, [onToggleCentral])
+  const offered = () => {
+    pending.current = offer
+    if (offer === 'browser') resetBrowserStatusCache() // hook pemilik status memuat ulang lalu menerbitkan `onAddBrowser`
+    setOffer(null)
   }
 
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
@@ -290,7 +298,7 @@ export default function Dock(props: DockProps) {
     if (id === ADD_TERMINAL_ID) return addTerminal()
     if (id === ADD_BROWSER_ID) {
       if (onAddBrowser) onAddBrowser()
-      else setOfferBrowser(true)
+      else setOffer('browser')
       return setAddOpen(false)
     }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
@@ -308,9 +316,7 @@ export default function Dock(props: DockProps) {
     ...(props.onToggleChat
       ? [{ id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion') }]
       : []),
-    ...(props.onToggleCentral
-      ? [{ id: 'central', label: 'Toggle central control panel', icon: codicon('shield') }]
-      : []),
+    { id: 'central', label: 'Toggle central control panel', icon: codicon('shield') },
     { id: 'board', label: 'Board', icon: codicon('project') },
     { id: 'add', label: 'Add node', icon: codicon('add') },
   ]
@@ -327,7 +333,8 @@ export default function Dock(props: DockProps) {
         props.onToggleChat?.()
         break
       case 'central':
-        props.onToggleCentral?.()
+        if (onToggleCentral) onToggleCentral()
+        else setOffer('central')
         break
       case 'board':
         props.onToggleBoard()
@@ -400,11 +407,11 @@ export default function Dock(props: DockProps) {
           onSelect={onAddSelect}
         />
 
-        {offerBrowser && (
-          <Dialog open onOpenChange={setOfferBrowser}>
+        {offer && (
+          <Dialog open onOpenChange={(o) => { if (!o) setOffer(null) }}>
             <DialogContent>
-              <DialogHeader><DialogTitle>Nyalakan browser</DialogTitle></DialogHeader>
-              <CapabilityOffer id="browser" onDone={browserOffered} />
+              <DialogHeader><DialogTitle>{CAPABILITY_TEXT.offerTitle(CAPABILITIES[offer].title)}</DialogTitle></DialogHeader>
+              <CapabilityOffer id={offer} onDone={offered} />
             </DialogContent>
           </Dialog>
         )}
