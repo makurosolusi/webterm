@@ -27,6 +27,8 @@ import { ControlPanel } from './ControlPanel'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
+import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
+import type { SettingsUndo } from './useSettings'
 import './settings.css'
 import './settings-controls.css'
 
@@ -54,10 +56,12 @@ interface PanelProps {
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
+  /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
+  history?: SettingsUndo
 }
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
   const [activeRaw, setActive] = useState<string>('terminal')
@@ -113,6 +117,11 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
       <DialogContent
         className="st-dialog-content"
         showCloseButton={false}
+        onKeyDown={settingsUndoKeyDown(history)}
+        // The Undo toast is portaled outside the dialog; clicking it must not count as "outside".
+        onInteractOutside={(event) => {
+          if ((event.target as Element | null)?.closest?.(`[data-slot="${SETTINGS_UNDO_TOAST_SLOT}"]`)) event.preventDefault()
+        }}
         onEscapeKeyDown={(event) => {
           // Escape mengosongkan pencarian dulu; baru Escape kedua menutup dialog.
           if (query) {
@@ -217,6 +226,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
             </SettingsSearchProvider>
           </div>
         </div>
+        <SettingsUndoToast history={history} />
       </DialogContent>
     </Dialog>
   )

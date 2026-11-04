@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { tokenQuery } from './api'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
+import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 
 export const SAVE_COALESCE_MS = 300
@@ -100,6 +101,23 @@ export interface UseSettings {
   hydrated: boolean
   /** Terapkan patch ke state sekarang; persistensi menyusul (coalesce 300 ms). */
   update(patch: Partial<Settings>): void
+  /** Undo/redo of `update` (see `./settingsHistory`). */
+  history: SettingsUndo
+}
+
+/** What happened last, for the Settings panel toast. `seq` changes on every event. */
+export interface SettingsNotice {
+  seq: number
+  kind: 'changed' | 'undone' | 'redone'
+  change: SettingsChange
+}
+
+export interface SettingsUndo {
+  undo(): void
+  redo(): void
+  canUndo: boolean
+  canRedo: boolean
+  notice: SettingsNotice | null
 }
 
 export function useSettings(): UseSettings {
@@ -141,7 +159,14 @@ export function useSettings(): UseSettings {
     return () => window.removeEventListener('beforeunload', flush)
   }, [])
 
-  const update = useCallback((patch: Partial<Settings>) => {
+  const hist = useRef<SettingsHistory | null>(null)
+  if (!hist.current) hist.current = createSettingsHistory()
+  const [notice, setNotice] = useState<SettingsNotice | null>(null)
+  const announce = useCallback((kind: SettingsNotice['kind'], change: SettingsChange | undefined) => {
+    if (change) setNotice((prev) => ({ seq: (prev?.seq ?? 0) + 1, kind, change }))
+  }, [])
+
+  const apply = useCallback((patch: Partial<Settings>) => {
     current = { ...current, ...patch }
     setSettings(current)
     // Kirim patch, bukan snapshot penuh: server me-merge-nya, jadi dua tab yang menyetel kunci
@@ -149,7 +174,27 @@ export function useSettings(): UseSettings {
     saver.current?.push(patch)
   }, [])
 
-  return { settings, hydrated, update }
+  const update = useCallback((patch: Partial<Settings>) => {
+    announce('changed', hist.current?.record(current, patch))
+    apply(patch)
+  }, [apply, announce])
+
+  const undo = useCallback(() => {
+    const c = hist.current?.undo()
+    if (c) apply(c.before)
+    announce('undone', c)
+  }, [apply, announce])
+
+  const redo = useCallback(() => {
+    const c = hist.current?.redo()
+    if (c) apply(c.after)
+    announce('redone', c)
+  }, [apply, announce])
+
+  const history: SettingsUndo = {
+    undo, redo, notice, canUndo: hist.current.canUndo(), canRedo: hist.current.canRedo(),
+  }
+  return { settings, hydrated, update, history }
 }
 
 /**

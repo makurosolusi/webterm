@@ -35,7 +35,8 @@ import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
 import { hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
-import { useClosedHistory } from './closedHistory'
+import { useClosedHistory, type ReopenDeps } from './closedHistory'
+import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardCanvas from './App.canvas'
@@ -73,8 +74,8 @@ export default function App() {
   // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
   // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
   const [cleanView, toggleCleanView] = useCleanView()
-  const { settings, update, hydrated: settingsHydrated } = useSettings()
-  const { entries: closedSessions, record: recordClosed, reopen: reopenClosed } = useClosedHistory(workspaces, nodes)
+  const { settings, update, history: settingsHistory, hydrated: settingsHydrated } = useSettings()
+  const { entries: closedSessions, record: recordClosed, reopen: reopenClosed, bridgesOf: closedBridgesOf } = useClosedHistory(workspaces, nodes)
 
   const activeWsRef = useRef<Workspace | null>(null)
   const nodesRef = useRef<Node[]>([])
@@ -107,11 +108,11 @@ export default function App() {
   } = useCanvasViewport({ rf, viewportRef, scheduleSave })
 
   // Undo/redo layout node — tumpukan terpisah dari riwayat pandangan di atas. Lihat `./layoutHistory`.
-  const { onUndo, onRedo, canUndo, canRedo, pushLayout, resetLayout } =
+  const { onUndo: onLayoutUndo, onRedo, canUndo: canLayoutUndo, canRedo, pushLayout, resetLayout } =
     useLayoutHistory({ nodesRef, setNodes, scheduleSave })
 
   const {
-    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions,
+    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions,
   } = useBoardActions({
     rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
@@ -130,6 +131,13 @@ export default function App() {
 
   // Notification click → `onFocus`, which switches workspace when the node lives on another board.
   useEffect(() => setNotifyCanvas({ focus: (id) => void onFocus(id) }), [onFocus])
+
+  const reopenDeps: ReopenDeps = { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect, addBridges: restoreBridges }
+  // Undo = layout undo + reopen-closed (with cables, across reloads). See `./canvasUndo`.
+  const { onUndo, canUndo } = useCanvasUndo({
+    nodesRef, layout: { onUndo: onLayoutUndo, canUndo: canLayoutUndo }, closed: closedSessions,
+    bridgesOf: closedBridgesOf, reopen: reopenClosed, reopenDeps, restoreBridges,
+  })
 
   const { onLogin, onLogout } = useAuthActions()
 
@@ -211,7 +219,7 @@ export default function App() {
             onNewProject={onNewProject}
             onCreateEmpty={(name) => void onCreateWorkspace(name)}
             closedSessions={closedSessions}
-            onReopen={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
+            onReopen={(id) => void reopenClosed(id, reopenDeps)}
           />
         ) : (
           <BoardCanvas
@@ -298,7 +306,7 @@ export default function App() {
             onCloseSession={(id) => void closeSession(id)}
             onSelectWorkspace={(id) => void onSelect(id)}
             closedSessions={closedSessions}
-            onReopenSession={(id) => void reopenClosed(id, { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect })}
+            onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           />
           <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Panel menutup sendiri lewat Escape (`onClose`), dan dialog persetujuan di dalamnya
@@ -319,7 +327,7 @@ export default function App() {
           petunjuk jalan keluarnya juga tidak boleh. */}
       {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} />}
+      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} history={settingsHistory} />}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       {omni.state && (
         <Omnibox

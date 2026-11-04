@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getWorkspace, saveWorkspace } from './api'
 import { fetchClosedHistory, saveClosedHistory } from './SessionHistory.api'
 import { isSession } from './sessionList'
-import type { Workspace, WsNode } from '../shared/workspace'
+import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
 
 /** Sedalam apa riwayatnya. Angka nodeterm (`HISTORY_CAP`), dan batasnya memang harus ada: tanpa
  *  itu sesi yang ditutup sepanjang hari menumpuk jadi daftar yang tak lagi berarti "baru saja". */
@@ -31,7 +31,14 @@ export interface ClosedEntry {
   workspaceId: string
   workspaceName: string
   closedAt: number
+  /** Cables that touched the node when it closed (F3-d): reopening, after a reload too, brings them
+   *  back. Absent = none, or an entry stored before this field existed. */
+  bridges?: BridgeLink[]
 }
+
+/** Workspace fields a close needs. `bridges` is the fallback cable source when the caller has no
+ *  fresher list (closing a node of a workspace that is not on the canvas). */
+export type ClosedOwner = Pick<Workspace, 'id' | 'name'> & Partial<Pick<Workspace, 'bridges'>>
 
 /**
  * Entry untuk node yang baru ditutup. `nodeIds` boleh memuat apa pun yang dihapus canvas —
@@ -44,14 +51,43 @@ export interface ClosedEntry {
 export function closedEntriesFor(
   nodeIds: readonly string[],
   nodes: readonly WsNode[],
-  ws: Pick<Workspace, 'id' | 'name'> | null,
+  ws: ClosedOwner | null,
   closedAt = Date.now(),
+  bridges: readonly BridgeLink[] = ws?.bridges ?? [],
 ): ClosedEntry[] {
   if (!ws) return []
   return nodeIds
     .map((id) => nodes.find((n) => n.id === id))
     .filter((n): n is WsNode => !!n && isSession(n))
-    .map((node) => ({ node, workspaceId: ws.id, workspaceName: ws.name, closedAt }))
+    .map((node) => {
+      const own = uniqueById(bridges.filter((b) => b.source === node.id || b.target === node.id))
+      return { node, workspaceId: ws.id, workspaceName: ws.name, closedAt, ...(own.length ? { bridges: own } : {}) }
+    })
+}
+
+function uniqueById(list: readonly BridgeLink[]): BridgeLink[] {
+  const seen = new Set<string>()
+  return list.filter((b) => !seen.has(b.id) && !!seen.add(b.id))
+}
+
+/**
+ * Cables of `entry` worth adding back: both ends must be on the board (`liveIds`; the other end
+ * may have been closed too) and the same pair must not be cabled already, in either direction.
+ */
+export function bridgesToRestore(
+  bridges: readonly BridgeLink[] | undefined,
+  liveIds: ReadonlySet<string>,
+  existing: readonly Pick<BridgeLink, 'source' | 'target'>[],
+): BridgeLink[] {
+  const pair = (a: string, b: string) => (a < b ? `${a}\0${b}` : `${b}\0${a}`)
+  const have = new Set(existing.map((e) => pair(e.source, e.target)))
+  return (bridges ?? []).filter((b) => {
+    if (!liveIds.has(b.source) || !liveIds.has(b.target)) return false
+    const k = pair(b.source, b.target)
+    if (have.has(k)) return false
+    have.add(k)
+    return true
+  })
 }
 
 /**
@@ -118,6 +154,9 @@ export interface ReopenDeps {
   setWorkspaces: (fn: (prev: Workspace[]) => Workspace[]) => void
   /** Pindah ke workspace lain (`onSelect` di App). */
   selectWorkspace: (id: string) => Promise<void>
+  /** Add cables to the ACTIVE canvas (dedup + save are the callee's); `alsoLive` = ids just added
+   *  that the board may not show yet. Absent = cables not restored. */
+  addBridges?: (bridges: readonly BridgeLink[], alsoLive?: readonly string[]) => void
 }
 
 /** Node yang akan ditaruh: x/y boleh absen (titik spawn dipilih canvas). */
@@ -134,17 +173,22 @@ const OFFSCREEN_SPAWN = { x: 80, y: 80 }
  * ke canvas yang sedang menampilkan workspace LAIN akan menaruhnya di board yang salah.
  */
 export async function placeNode(
-  entry: { node: PlacedNode; workspaceId: string },
+  entry: { node: PlacedNode; workspaceId: string; bridges?: readonly BridgeLink[] },
   deps: ReopenDeps,
 ): Promise<void> {
   const { workspaceId } = entry
   if (workspaceId === deps.activeId) {
     deps.addNode(() => entry.node)
+    if (entry.bridges?.length) deps.addBridges?.(entry.bridges, [entry.node.id])
     return
   }
   const fresh = await getWorkspace(workspaceId)
   const full: WsNode = { ...OFFSCREEN_SPAWN, ...entry.node }
-  const updated: Workspace = { ...fresh, nodes: [...fresh.nodes, full], updatedAt: Date.now() }
+  const live = new Set([...fresh.nodes.map((n) => n.id), full.id])
+  const cables = bridgesToRestore(entry.bridges, live, fresh.bridges ?? [])
+  const updated: Workspace = {
+    ...fresh, nodes: [...fresh.nodes, full], bridges: [...(fresh.bridges ?? []), ...cables], updatedAt: Date.now(),
+  }
   await saveWorkspace(updated)
   deps.setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
   await deps.selectWorkspace(workspaceId)
@@ -153,8 +197,10 @@ export async function placeNode(
 export interface ClosedHistory {
   /** Siap render: terbaru dulu, sudah disaring `visibleClosed`. */
   entries: ClosedEntry[]
-  record: (nodeIds: readonly string[], nodes: readonly WsNode[], ws: Pick<Workspace, 'id' | 'name'> | null) => void
+  record: (nodeIds: readonly string[], nodes: readonly WsNode[], ws: ClosedOwner | null, bridges?: readonly BridgeLink[]) => void
   reopen: (nodeId: string, deps: ReopenDeps) => Promise<void>
+  /** Cables stored for these node ids (a layout undo brought the nodes back, but not their edges). */
+  bridgesOf: (nodeIds: readonly string[]) => BridgeLink[]
 }
 
 /**
@@ -206,8 +252,8 @@ export function useClosedHistory(
   }, [commit])
 
   const record = useCallback<ClosedHistory['record']>(
-    (nodeIds, nodes, ws) => {
-      const add = closedEntriesFor(nodeIds, nodes, ws)
+    (nodeIds, nodes, ws, bridges) => {
+      const add = closedEntriesFor(nodeIds, nodes, ws, Date.now(), bridges ?? ws?.bridges ?? [])
       if (add.length) commit(pushClosed(ref.current, add))
     },
     [commit],
@@ -232,10 +278,15 @@ export function useClosedHistory(
     [commit],
   )
 
+  const bridgesOf = useCallback<ClosedHistory['bridgesOf']>((nodeIds) => {
+    const ids = new Set(nodeIds)
+    return ref.current.filter((e) => ids.has(e.node.id)).flatMap((e) => e.bridges ?? [])
+  }, [])
+
   const entries = useMemo(
     () => visibleClosed(all, workspaces.map((w) => w.id), (liveNodes ?? []).map((n) => n.id)),
     [all, workspaces, liveNodes],
   )
 
-  return { entries, record, reopen }
+  return { entries, record, reopen, bridgesOf }
 }

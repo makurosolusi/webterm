@@ -42,6 +42,12 @@ async function freshen(deps: HistoryDeps, force: boolean): Promise<void> {
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
+/** Cables per closed entry; a node rarely has more than a handful, so this only caps abuse. */
+const BRIDGES_MAX = 64
+const isBridge = (b: unknown): boolean =>
+  isObj(b) && typeof b.id === 'string' && typeof b.source === 'string' && typeof b.target === 'string' &&
+  (b.kind === 'context' || b.kind === 'file')
+
 /** Validasi batas input: entry yang bentuknya salah ditolak seluruh body-nya (400), bukan
  *  diam-diam disaring, supaya klien yang rusak terlihat. */
 export function parseClosedBody(raw: string): ClosedRecord[] | null {
@@ -56,7 +62,8 @@ export function parseClosedBody(raw: string): ClosedRecord[] | null {
   const ok = list.every((e) =>
     isObj(e) && isObj(e.node) && typeof e.node.id === 'string' && e.node.id !== '' &&
     typeof e.node.kind === 'string' && typeof e.workspaceId === 'string' &&
-    typeof e.workspaceName === 'string' && typeof e.closedAt === 'number')
+    typeof e.workspaceName === 'string' && typeof e.closedAt === 'number' &&
+    (e.bridges === undefined || (Array.isArray(e.bridges) && e.bridges.length <= BRIDGES_MAX && e.bridges.every(isBridge))))
   return ok ? (list as ClosedRecord[]) : null
 }
 

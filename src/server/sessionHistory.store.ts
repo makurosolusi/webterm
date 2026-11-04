@@ -1,7 +1,7 @@
 // Penyimpanan SQLite untuk panel Agent History: indeks transcript agent (`agent_session`) dan
 // riwayat node yang ditutup (`closed_history`). Bentuk `HistoryDb` struktural (pola
 // `featureCapabilities.audit.ts`) supaya modul ini tidak mengimpor bun:sqlite saat dimuat.
-import type { WsNode } from '../shared/workspace'
+import type { BridgeLink, WsNode } from '../shared/workspace'
 import { newParseState, type HistoryAgent, type SessionParseState } from './sessionHistory.parse'
 
 /** Bagian `bun:sqlite` Database yang dipakai modul ini. */
@@ -37,6 +37,11 @@ export function ensureSessionHistorySchema(db: HistoryDb): void {
     closed_at INTEGER NOT NULL,
     node TEXT NOT NULL
   );`)
+  // F3-d: the closed node's cables, so reopening after a reload brings its edges back. Nullable
+  // (rows written before this column have none). SQLite has no ADD COLUMN IF NOT EXISTS, hence the
+  // table_info check that keeps this idempotent on every boot.
+  const cols = db.query('PRAGMA table_info(closed_history)').all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'bridges')) db.exec('ALTER TABLE closed_history ADD COLUMN bridges TEXT')
 }
 
 /** Baris indeks yang tersimpan: state parse + sidik file untuk scan inkremental. */
@@ -145,6 +150,8 @@ export interface ClosedRecord {
   workspaceId: string
   workspaceName: string
   closedAt: number
+  /** Cables that touched the node when it was closed; absent on old rows. */
+  bridges?: BridgeLink[]
 }
 
 /** Batas server = `CLOSED_HISTORY_CAP` client; dijaga di sini juga supaya klien lain tak bisa
@@ -153,13 +160,14 @@ export const CLOSED_CAP = 10
 
 export function listClosed(db: HistoryDb): ClosedRecord[] {
   const rows = db.query('SELECT * FROM closed_history ORDER BY closed_at DESC LIMIT ?').all(CLOSED_CAP) as {
-    workspace_id: string; workspace_name: string; closed_at: number; node: string
+    workspace_id: string; workspace_name: string; closed_at: number; node: string; bridges: string | null
   }[]
   return rows.map((r) => ({
     node: JSON.parse(r.node) as WsNode,
     workspaceId: r.workspace_id,
     workspaceName: r.workspace_name,
     closedAt: r.closed_at,
+    ...(r.bridges ? { bridges: JSON.parse(r.bridges) as BridgeLink[] } : {}),
   }))
 }
 
@@ -169,8 +177,11 @@ export function replaceClosed(db: HistoryDb, list: readonly ClosedRecord[]): voi
   db.exec('BEGIN')
   try {
     db.exec('DELETE FROM closed_history')
-    const ins = db.query('INSERT OR REPLACE INTO closed_history (node_id, workspace_id, workspace_name, closed_at, node) VALUES (?, ?, ?, ?, ?)')
-    for (const e of list.slice(0, CLOSED_CAP)) ins.run(e.node.id, e.workspaceId, e.workspaceName, e.closedAt, JSON.stringify(e.node))
+    const ins = db.query('INSERT OR REPLACE INTO closed_history (node_id, workspace_id, workspace_name, closed_at, node, bridges) VALUES (?, ?, ?, ?, ?, ?)')
+    for (const e of list.slice(0, CLOSED_CAP)) {
+      const bridges = e.bridges?.length ? JSON.stringify(e.bridges) : null
+      ins.run(e.node.id, e.workspaceId, e.workspaceName, e.closedAt, JSON.stringify(e.node), bridges)
+    }
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
