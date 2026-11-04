@@ -29,11 +29,13 @@ export const hookEventName = (e: HookSubscription): string => (typeof e === 'str
 export const PERMISSION_REQUEST_HOOK_TIMEOUT_SECS = 600
 
 /**
- * Berapa lama hook permission menahan sebuah request menunggu Approve/Deny dari canvas sebelum
- * jatuh ke prompt interaktif claude biasa. 60 detik di bawah `PERMISSION_REQUEST_HOOK_TIMEOUT_SECS`
- * supaya hook selalu keluar dengan caranya sendiri, bukan dibunuh timeout.
+ * How long the server holds a `PermissionRequest` hook waiting for Allow/Deny from the webterm
+ * Inbox (`permission/permission.wait.ts`) before answering "no decision", which drops Claude back to
+ * its own terminal prompt. 10 s under `PERMISSION_REQUEST_HOOK_TIMEOUT_SECS` so the reply always
+ * arrives before Claude cancels the hook (a cancelled hook's output is discarded). The on/off switch
+ * is `settings.hookReplyApprovals`.
  */
-export const PERM_WAIT_SECS_INTERACTIVE = 540
+export const PERM_WAIT_SECS_INTERACTIVE = 590
 
 /**
  * Event hook Claude Code yang kita langgani. Sebelas, sama dengan `CLAUDE_HOOK_EVENTS` nodeterm

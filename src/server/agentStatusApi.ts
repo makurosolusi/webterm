@@ -24,6 +24,10 @@ import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
 import { produceHookEvent } from './events/producers'
+import { doomLoopBlock } from './permission/permission.loop'
+import { takeCheckpointSafe } from './checkpoint/checkpoint.service'
+import type { PermissionOutput } from './permission/permission.model'
+import type { PermissionAsk } from './permission/permission.wait'
 import {
   nodeTokenHeader,
   nodeTokenMismatch,
@@ -50,6 +54,8 @@ export interface AgentStatusDeps {
   setStatus(nodeId: string, status: AgentStatus): void
   setTranscript(nodeId: string, path: string): void
   workspaceFor(nodeId: string): Workspace | null | undefined
+  /** Holds a `PermissionRequest` for a human decision (F3-b); absent = no decision, Claude prompts. */
+  answerPermission?(ask: PermissionAsk): Promise<PermissionOutput | null>
 }
 
 /** Opsi test: override gerbang + dependency. Produksi memanggil route tanpa argumen keempat. */
@@ -70,7 +76,7 @@ function json(res: ServerResponse, status: number, body: unknown): void {
  * dengan dependency palsu).
  */
 async function defaultDeps(): Promise<AgentStatusDeps> {
-  const [{ db }, { sessions }] = await Promise.all([import('./db'), import('./sessions')])
+  const [{ db }, { sessions }, { answerPermissionLive }] = await Promise.all([import('./db'), import('./sessions'), import('./permission/permission.runtime')])
   // Satu-satunya titik start loop link-note: hook Claude Code pertama (SessionStart) menyalakannya,
   // jadi tidak ada flag/konfigurasi — dan test dengan deps palsu tidak pernah memuatnya.
   await startLinkNotes()
@@ -78,7 +84,18 @@ async function defaultDeps(): Promise<AgentStatusDeps> {
     setStatus: (nodeId, status) => sessions.setStatus(nodeId, status),
     setTranscript: (nodeId, path) => sessions.setTranscript(nodeId, path),
     workspaceFor: (nodeId) => findWorkspaceFor(db.list(), nodeId),
+    // Read per request: the Settings toggle applies to the very next prompt, no restart.
+    answerPermission: (ask) => answerPermissionLive(ask, db.getSettings().hookReplyApprovals !== false),
   }
+}
+
+/**
+ * F3-c: a new prompt is about to make the agent act, so its workspace is snapshotted first. Kept
+ * above the route on purpose: the route body must not carry its own event list (hooks.test.ts).
+ * `takeCheckpointSafe` never throws, so a broken checkpoint cannot fail the hook reply.
+ */
+async function checkpointBeforePrompt(event: string | undefined, ws: Workspace | null | undefined, nodeId: string): Promise<void> {
+  if (event === 'UserPromptSubmit' && ws) await takeCheckpointSafe(ws, { reason: 'prompt', nodeId })
 }
 
 /**
@@ -169,10 +186,21 @@ export async function agentStatusRoute(
   // Senses: AFTER setStatus/linkNoteTold, because the linkNote and wake subscribers read the status
   // this hook just wrote. Trusted only when the request carried this node's own token.
   produceHookEvent({ nodeId: node, workspaceId: ws?.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
+  await checkpointBeforePrompt(event, ws, node)
   const mail = outboxHookContext(node, event)
   const text = [aware, extras, peers?.additionalContext, browsers, mail].filter(Boolean).join('\n\n')
-  if (text && event) {
-    json(res, 200, { hookSpecificOutput: { hookEventName: event, additionalContext: text } })
+  const out: Record<string, unknown> = text && event ? { hookEventName: event, additionalContext: text } : {}
+  if (event === 'PreToolUse') Object.assign(out, doomLoopBlock(node, ws?.id ?? null, body))
+  if (event === 'PermissionRequest' && deps.answerPermission) {
+    // Held until a human decides or the wait ends; a vanished curl (Claude closed) stops the wait.
+    const gone = new AbortController()
+    if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone.abort() })
+    const title = ws?.nodes.find((n) => n.id === node)?.title || node
+    const answer = await deps.answerPermission({ nodeId: node, nodeTitle: title, workspaceId: ws?.id ?? null, body, signal: gone.signal })
+    if (answer) Object.assign(out, answer.hookSpecificOutput)
+  }
+  if (Object.keys(out).length > 0) {
+    json(res, 200, { hookSpecificOutput: { hookEventName: event, ...out } })
     return true
   }
   res.statusCode = 204; res.end(); return true

@@ -8,6 +8,7 @@
  */
 import type { Database } from 'bun:sqlite'
 import { allRows } from '../ledger/ledgerCore'
+import { PERMISSION_KIND } from '../permission/permission.model'
 import {
   type InboxCategory,
   type InboxCounts,
@@ -138,11 +139,22 @@ function unionSql(now: number, projectId: string | undefined): { sql: string; pa
   }
 }
 
+/** `brisk-otter wants to run: Bash(npm publish)` for a held Claude permission prompt (F3-b). */
+function permissionTitle(row: ItemRow): string | null {
+  if (row.label !== PERMISSION_KIND || !row.payload) return null
+  try {
+    const p = JSON.parse(row.payload) as { node?: unknown; label?: unknown }
+    return typeof p.label === 'string' ? oneLine(`${String(p.node ?? 'agent')} wants to run: ${p.label}`, TITLE_MAX) : null
+  } catch {
+    return null
+  }
+}
+
 function toItem(row: ItemRow, now: number): InboxItem {
   const kind = row.kind as InboxKind
   const isApproval = kind === 'approval'
   const title = isApproval
-    ? `Approval: ${row.label ?? 'request'}`
+    ? permissionTitle(row) ?? `Approval: ${row.label ?? 'request'}`
     : oneLine(row.spec ?? `Task ${row.id}`, TITLE_MAX)
   const created = Number(row.created_at)
   return {
