@@ -1,6 +1,8 @@
 // Penjaga tak terlihat untuk mutasi pengaturan/kemampuan: pengguna tidak melihat token atau dialog,
 // server tetap menolak proses lain yang bukan pemilik (token node, proxy, halaman asing).
 // Kenapa bukan token wajib: webterm untuk satu pengguna loopback; gesekan token dibuang, bukan pagarnya.
+// Penolakan selalu 403 `forbidden` generik; klien menerjemahkannya jadi sebab + jalan keluar (buka lewat
+// http://127.0.0.1:<port> atau aktifkan token akses, lihat `forbiddenText` di capabilitiesLabels.ts).
 import type { IncomingMessage } from 'node:http'
 import { CAPABILITY_HEADER, TOKEN_HEADER, sameOrigin, tokensMatch } from './auth'
 import { firstHeader } from './httpHeaders'

@@ -1,14 +1,16 @@
 // Tab Kemampuan (ENVSIMPLE D6): tujuh kartu urut katalog, satu sakelar tiap kartu, plus "Lanjutan".
-// Kartu Telegram diganti alur tempel-token; pencarian hanya mencocokkan judul bagian dan judul kartu.
+// Kartu Telegram diganti alur tempel-token. Pencarian: judul bagian, atau judul + blurb + kata kunci kartu
+// (pola indeks pencarian Orca `settings/search/settings-search.ts`: title + description + keywords).
 import { useEffect, useState } from 'react'
 import { CAPABILITIES } from '../shared/featureCapabilities'
+import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import { AdvancedSection } from './AdvancedSection'
 import { ADVANCED_TEXT, SECTION_TEXT } from './advancedLabels'
-import { callCapabilities } from './capabilitiesApi'
+import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { CapabilityCard } from './CapabilityCard'
 import { matchesSearch } from './SettingsFields'
 import { TelegramCard } from './TelegramCard'
-import { capabilityErrorMessage, useCapabilities } from './useCapabilities'
+import { useCapabilities } from './useCapabilities'
 import './settings-capabilities.css'
 
 const TELEGRAM_TOKEN_INPUT_ID = 'tg-token'
@@ -29,46 +31,43 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
   const api = useCapabilities()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const all = api.data?.capabilities ?? []
-  const show = (title: string): boolean => query === '' || matchesSearch(sectionTitle, query) || matchesSearch(title, query)
-
-  const [stepError, setStepError] = useState<string | null>(null)
-  const fixChain = async (): Promise<void> => {
-    try {
-      await callCapabilities('/reset', 'POST', {})
-      setStepError(null)
-      await api.refresh()
-    } catch (e) {
-      setStepError(capabilityErrorMessage(e, ADVANCED_TEXT.changeFailed))
-    }
+  const show = (key: CapabilityId | 'advanced'): boolean => {
+    if (query === '' || matchesSearch(sectionTitle, query)) return true
+    const text = key === 'advanced' ? ADVANCED_TEXT.summary : `${CAPABILITIES[key].title} ${CAPABILITIES[key].blurb}`
+    return matchesSearch(`${text} ${CAPABILITY_KEYWORDS[key].join(' ')}`, query)
   }
-  const visible = all.filter((v) => show(CAPABILITIES[v.id].title)).length + (api.data && show(ADVANCED_TEXT.summary) ? 1 : 0)
+  const visible = all.filter((v) => show(v.id)).length + (api.data && show('advanced') ? 1 : 0)
   useEffect(() => {
     onVisibleCount?.(visible)
     return () => onVisibleCount?.(0)
   }, [visible, onVisibleCount])
 
-  const onStep = (kind: 'fixChain' | 'telegramToken' | 'chromiumPath'): void => {
-    if (kind === 'chromiumPath') setAdvancedOpen(true)
+  // fixChain = nyalakan kartu ini lewat toggle biasa: server ikut menyalakan prasyaratnya
+  // (`closure`), pilihan kartu lain tidak disentuh. Dulu memanggil /reset yang menghapus semuanya.
+  // `kind` dilebarkan ke string: 'agentEngine' (central butuh Claude Code/OpenCode) bisa datang dari server
+  // sebelum tipe bersama memuatnya. Mesin agen dipilih di Lanjutan, sama seperti lokasi Chrome.
+  const onStep = (id: CapabilityId, kind: NonNullable<CapabilityView['step']>['kind'] | (string & {})): void => {
+    if (kind === 'chromiumPath' || kind === 'agentEngine') setAdvancedOpen(true)
     else if (kind === 'telegramToken') document.getElementById(TELEGRAM_TOKEN_INPUT_ID)?.focus()
-    else void fixChain()
+    else void api.toggle(id, true)
   }
 
   return (
     <div className="st-capabilities">
-      {api.error ?? stepError ? <p role="alert" className="text-xs text-destructive">{api.error ?? stepError}</p> : null}
+      {api.error ? <p role="alert" className="text-xs text-destructive">{api.error}</p> : null}
       {api.data === null && api.error === null ? <p role="status" className="text-xs opacity-70">{SECTION_TEXT.loading}</p> : null}
       {all.map((view) => {
-        if (!show(CAPABILITIES[view.id].title)) return null
+        if (!show(view.id)) return null
         return view.id === 'telegram' ? (
           <div key={view.id} data-capability="telegram"><TelegramCard projectId={projectId} /></div>
         ) : (
           <CapabilityCard key={view.id} view={view} all={all} busy={api.busyId === view.id}
             onToggle={(on) => void api.toggle(view.id, on)}
             onSub={(key, on) => void api.setSub(view.id, key, on)}
-            onStep={onStep} />
+            onStep={(kind) => onStep(view.id, kind)} />
         )
       })}
-      {api.data && show(ADVANCED_TEXT.summary) ? (
+      {api.data && show('advanced') ? (
         <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} open={advancedOpen} onOpenChange={setAdvancedOpen} />
       ) : null}
     </div>

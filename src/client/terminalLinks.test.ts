@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { linkRows, openableLink } from './terminalLinks'
+import { requestBrowserOffer } from './browserLinkOffer'
+
+vi.mock('./browserLinkOffer', () => ({ requestBrowserOffer: vi.fn() }))
 
 const OK = { status: 'created', nodeId: 'b1' } as const
 
@@ -13,8 +16,14 @@ describe('openableLink', () => {
 })
 
 describe('linkRows', () => {
-  it('open undefined (flag mati) -> tanpa baris', () => {
-    expect(linkRows('https://example.com', 'n1', undefined)).toEqual([])
+  it('open undefined (browser mati) -> baris tetap ada; klik meminta tawaran Nyalakan untuk link ini', () => {
+    const rows = linkRows('https://example.com/', 'n1', undefined)
+    expect(rows).toHaveLength(2)
+    const first = rows[0]
+    if ('type' in first) throw new Error('baris pertama harus item')
+    expect(first.label).toBe('Open in canvas browser')
+    first.onClick()
+    expect(requestBrowserOffer).toHaveBeenCalledWith({ url: 'https://example.com/', anchorNodeId: 'n1' })
   })
   it('link kosong/tak valid -> tanpa baris', () => {
     const open = vi.fn(() => OK)

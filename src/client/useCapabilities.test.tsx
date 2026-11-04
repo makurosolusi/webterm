@@ -3,6 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
+import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { resetCapabilitiesCache, useCapabilities } from './useCapabilities'
 
 const state = (status: 'on' | 'off'): CapabilitiesResponse =>
@@ -50,7 +51,7 @@ describe('useCapabilities', () => {
     let ok = true
     await act(async () => { ok = await result.current.toggle('files', true) })
     expect(ok).toBe(false)
-    expect(result.current.error).toBe('Perubahan ini hanya bisa dilakukan dari aplikasi ini.')
+    expect(result.current.error).toBe(CAPABILITY_TEXT.forbidden)
     expect(result.current.data?.capabilities[0].status).toBe('off')
   })
 

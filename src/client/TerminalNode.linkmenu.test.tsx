@@ -61,11 +61,11 @@ describe.each([['terminal', termNode], ['agent', agentNode]] as const)('menu lin
     expect(labels()).not.toContain(LABEL)
   })
 
-  it('flag browser mati -> baris tidak ada walau ada link', async () => {
+  it('browser mati -> baris tetap ada (memunculkan tawaran Nyalakan, lihat browserLinkOffer.test)', async () => {
     await mountCanvas({ nodes: [node], dirs: {} })
     hover(LINK)
     await openMenu(kind)
-    expect(labels()).not.toContain(LABEL)
+    expect(labels()).toContain(LABEL)
   })
 })
 
