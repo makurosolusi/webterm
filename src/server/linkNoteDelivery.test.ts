@@ -1,8 +1,10 @@
 // The delivery gate with a fake session: idle + empty input → typed then submitted once; busy or a
 // draft → queued until it clears; net-zero changes say nothing; additionalContext never repeats it.
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatus, Workspace } from '../shared/workspace'
-import { LinkNoteDelivery } from './linkNoteDelivery'
+import { LinkNoteDelivery, subscribeLinkNotes } from './linkNoteDelivery'
+import { produceEdgeChange } from './events/producers.edge'
+import { produceHookEvent } from './events/producers'
 import { nextBrowserNotice, linkedBrowsers } from './linkAwareness'
 
 const RULE = '─'.repeat(40)
@@ -149,5 +151,62 @@ describe('LinkNoteDelivery', () => {
     r.st.pid = 2
     await r.d.tick()
     expect(r.writes).toEqual([])
+  })
+})
+
+describe('subscribeLinkNotes (event-driven, F1-d)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('a wired cable is typed within 1 s of edge.change, with no timer at idle', async () => {
+    vi.useFakeTimers()
+    const r = rig()
+    const sub = subscribeLinkNotes(r.d)
+    sub.kick()
+    await sub.settled() // baseline pass
+    expect(vi.getTimerCount()).toBe(0) // idle: no poll, no sweep
+    const prev = structuredClone(r.ws)
+    r.wire()
+    produceEdgeChange(prev, r.ws) // what the workspace save does
+    await vi.advanceTimersByTimeAsync(1000)
+    await sub.settled()
+    expect(r.writes[0]).toMatch(/^\[webterm\] The user wired browser node "Browser"/)
+    expect(r.writes[1]).toBe('\r')
+    expect(vi.getTimerCount()).toBe(0)
+    sub.stop()
+  })
+
+  it('a note queued while busy goes out on the idle hook (hook.Stop), not on a poll', async () => {
+    const r = rig()
+    const sub = subscribeLinkNotes(r.d)
+    sub.kick()
+    await sub.settled()
+    r.st.status = 'working'
+    const prev = structuredClone(r.ws)
+    r.wire()
+    produceEdgeChange(prev, r.ws)
+    await sub.settled()
+    expect(r.writes).toEqual([])
+    r.st.status = 'waiting'
+    produceHookEvent({ nodeId: r.id, status: 'waiting', verified: true, body: { hook_event_name: 'PostToolUse' } })
+    await sub.settled()
+    expect(r.writes).toEqual([]) // not an idle hook
+    produceHookEvent({ nodeId: r.id, status: 'waiting', verified: true, body: { hook_event_name: 'Stop' } })
+    await sub.settled()
+    expect(r.writes).toHaveLength(2)
+    sub.stop()
+  })
+
+  it('an event during a running pass queues one more pass (never lost)', async () => {
+    const r = rig()
+    let calls = 0
+    const tick = r.d.tick.bind(r.d)
+    r.d.tick = async () => { calls++; await tick() }
+    const sub = subscribeLinkNotes(r.d)
+    sub.kick()
+    sub.kick()
+    sub.kick()
+    await sub.settled()
+    expect(calls).toBe(2)
+    sub.stop()
   })
 })

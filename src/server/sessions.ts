@@ -10,6 +10,7 @@ import { SubscriberSet } from './subscribers'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
+import { producePtyExit } from './events/producers'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -139,7 +140,12 @@ export class Sessions extends SessionsCore {
     }
     this.map.set(id, session)
     pty.onData((data) => this.emit(session, data))
-    pty.onExit((code) => this.onExit(session, code))
+    pty.onExit((code) => {
+      // Same identity gate as `onExit`: only the first exit of the live session becomes an event.
+      const live = this.map.get(id) === session && !session.exited
+      this.onExit(session, code)
+      if (live) producePtyExit({ nodeId: id, agentId, code, reason: 'self', durationMs: this.now() - session.startedAt })
+    })
     return session
   }
 
@@ -224,6 +230,7 @@ export class Sessions extends SessionsCore {
     }
     if (session) {
       ptyLog.exited(id, session.agentId, -1, 'closed', this.now() - session.startedAt)
+      if (firstClose) producePtyExit({ nodeId: id, agentId: session.agentId, code: -1, reason: 'closed', durationMs: this.now() - session.startedAt })
       session.subs.clear()
       session.exited = true
       this.map.delete(id)

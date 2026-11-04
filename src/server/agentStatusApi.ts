@@ -21,6 +21,7 @@ import { linkNoteTold, startLinkNotes } from './linkNoteDelivery'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
+import { produceHookEvent } from './events/producers'
 import {
   nodeTokenHeader,
   nodeTokenMismatch,
@@ -160,6 +161,9 @@ export async function agentStatusRoute(
   // Hook yang bisa mengumumkan sudah memberi tahu keadaan kabel sekarang: link-note yang mengantre
   // untuk perubahan yang sama tidak boleh menyusul (no double announce).
   if (ws) linkNoteTold(node, event, ws)
+  // Senses: AFTER setStatus/linkNoteTold, because the linkNote and wake subscribers read the status
+  // this hook just wrote. Trusted only when the request carried this node's own token.
+  produceHookEvent({ nodeId: node, workspaceId: ws?.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
   const text = [aware, peers?.additionalContext, browsers].filter(Boolean).join('\n\n')
   if (text && event) {
     json(res, 200, { hookSpecificOutput: { hookEventName: event, additionalContext: text } })

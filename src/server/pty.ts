@@ -155,7 +155,7 @@ function failedPty(err: unknown): Pty {
   const code = (err as { code?: unknown } | null)?.code
   log.error('pty.error', 'PTY spawn failed', { error: err instanceof Error ? err.name : 'unknown', code: typeof code === 'string' ? code : undefined })
   queueMicrotask(() => {
-    onData(`\r\n[webterm] gagal memulai shell: ${reason}\r\n`)
+    onData(`\r\n[webterm] failed to start shell: ${reason}\r\n`)
     onExit(SPAWN_FAILED_EXIT_CODE)
   })
   return { pid: -1, onData(cb) { onData = cb }, onExit(cb) { onExit = cb }, write() {}, resize() {}, kill() {} }
