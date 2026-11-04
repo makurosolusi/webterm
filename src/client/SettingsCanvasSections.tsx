@@ -2,6 +2,7 @@
 import type { Settings } from '../shared/settings'
 import { SEARCH_ENGINES, type SearchEngine } from '../shared/browser.omnibox'
 import { NumberField, SelectField, ToggleField } from './SettingsFields'
+import { NotificationRows } from './osNotify.settings'
 
 interface P {
   settings: Settings
@@ -26,6 +27,7 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
         hint="Dipakai node browser saat ketikan di bilah alamat bukan alamat web."
         options={(Object.keys(SEARCH_ENGINES) as SearchEngine[]).map((e) => ({ value: e, label: SEARCH_ENGINES[e].label }))}
         onChange={(v) => onChange({ browserSearchEngine: v })} />
+      <NotificationRows />
     </>
   )
 }
