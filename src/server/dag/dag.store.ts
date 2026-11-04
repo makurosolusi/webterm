@@ -112,6 +112,9 @@ export function createDagStore(ctx: LedgerContext) {
       return this.dispatch(d.id)!
     },
     dispatch: (id: string): DagDispatch | null => { const r = getRow(db, 'SELECT * FROM dag_dispatch WHERE id = ?', id); return r ? toDispatch(r) : null },
+    /** Every worker attempt of a dag, oldest first (the canvas wires one node per dispatch). */
+    dispatchesOf: (dagId: string): DagDispatch[] => allRows(db, `SELECT d.* FROM dag_dispatch d JOIN dag_task t ON t.id = d.task_id
+      WHERE t.dag_id = ? ORDER BY d.started_at, d.rowid LIMIT ?`, dagId, LIST_MAX * 10).map(toDispatch),
     runningDispatches: (): DagDispatch[] => allRows(db, `SELECT * FROM dag_dispatch WHERE status = 'running'`).map(toDispatch),
     endDispatch: (id: string, status: DagDispatch['status']): void => {
       execWrite(db, 'UPDATE dag_dispatch SET status = ?, ended_at = ? WHERE id = ?', status, ctx.now(), id)

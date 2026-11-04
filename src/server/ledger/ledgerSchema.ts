@@ -15,6 +15,7 @@ import { applyV13 } from './ledgerSchemaV13'
 import { applyV14 } from './ledgerSchemaV14'
 import { applyV15 } from './ledgerSchemaV15'
 import { applyV16 } from './ledgerSchemaV16'
+import { applyV17 } from './ledgerSchemaV17'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -23,8 +24,8 @@ export interface Migration {
 }
 
 /**
- * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..15}.ts`
- * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log, policy grants, agent outbox, channel store, inbox items, routines); never renumber or reorder an entry.
+ * Ordered forward-only migrations. The DDL lives in `ledgerSchemaV{1..17}.ts`
+ * (base ledger, plan, request journal, central agent, CA2 safety/agents/memory/checkpoint/audit, Senses event log, policy grants, agent outbox, channel store, inbox items, routines, task DAG, cost oracle); never renumber or reorder an entry.
  */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, up: (db) => db.exec(DDL_V1) },
@@ -52,4 +53,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 15, up: applyV15 },
   // v16: task DAG (F4-b); additive tables. v15 is taken by the routines WP in parallel.
   { version: 16, up: applyV16 },
+  // v17: cost oracle tables + routine_run.estimate_usd, until now created by their modules; IF NOT EXISTS keeps their rows.
+  { version: 17, up: applyV17 },
 ]

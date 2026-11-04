@@ -12,6 +12,7 @@ export type OmniAction =
   | { kind: 'command'; id: string }
   | { kind: 'agent'; id: string }
   | { kind: 'url'; url: string }
+  | { kind: 'plan'; intent: string }
   | { kind: 'file'; rel: string; line?: number; col?: number }
   | { kind: 'more' }
 
@@ -43,6 +44,11 @@ export const COMMAND_PREFIX = '>'
 export const SEARCH_PREFIX = '%'
 /** Rows per group; files get more room when they are the whole list (⌘P). */
 export const GROUP_CAP = { nodes: 20, commands: 40, agents: 20, urls: 6, files: 8, filesOnly: 50 }
+
+/** Longest intent a Plan row carries (server `INTENT_MAX`). */
+export const INTENT_MAX = 2000
+/** A typed phrase (two words or more) reads as an intent that can be planned; one word stays a lookup. */
+export const isIntent = (q: string): boolean => /\S\s+\S/.test(q) && q.length <= INTENT_MAX
 
 export type OmniMode = 'mixed' | 'files' | 'commands' | 'search'
 export function omniMode(query: string, scope: OmniScope): OmniMode {
@@ -90,6 +96,8 @@ export function omniboxItems(query: string, scope: OmniScope, src: OmniSources):
     ...ranked(src.nodes, q, GROUP_CAP.nodes, (n) => n).map((n): OmniItem => ({
       id: `node:${n.id}`, label: n.label, description: n.hint, icon: 'symbol-namespace', group: 'Nodes', action: { kind: 'node', id: n.id },
     })),
+    // F4-f: drafts a DAG for review on the canvas; nothing runs until the plan is approved.
+    ...(isIntent(q) ? [{ id: 'plan:typed', label: `Plan: ${q}`, description: 'Draft tasks for review, nothing runs yet', icon: 'type-hierarchy', group: 'Plan', action: { kind: 'plan', intent: q } } satisfies OmniItem] : []),
     ...(q ? fileItems(q, src, GROUP_CAP.files) : []),
     ...ranked(src.agents, q, GROUP_CAP.agents, (a) => ({ id: a.id, label: `New ${a.label} agent` })).map((a): OmniItem => ({
       id: `agent:${a.id}`, label: `New ${a.label} agent`, icon: 'hubot', group: 'Agents', action: { kind: 'agent', id: a.id },

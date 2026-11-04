@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, type MutableRefObject } from 'react'
 import type { Node, XYPosition } from '@xyflow/react'
 import { nodeTargets } from './CanvasToolbar'
 import { EDITOR_SIZE, openEditorFor } from './fileOpen'
+import { PLAN_SIZE } from './PlanNode.model'
 import { loadMonaco } from './lazyMonaco'
 import { randomId } from './randomId'
 import { loadRecent } from './browser.recent'
@@ -104,6 +105,8 @@ export function useOmnibox(d: OmniboxDeps) {
     if (a.kind === 'node') d.onFocus(a.id)
     else if (a.kind === 'command') (listCommands().find((c) => c.id === a.id)?.run ?? d.extraCommands?.find((c) => c.id === a.id)?.run)?.()
     else if (a.kind === 'url') d.openBrowserAt?.({ url: a.url })
+    // A Plan node drafts on mount (PlanNode); approval is a separate human click on the node.
+    else if (a.kind === 'plan') d.addFlowNode((_, ws) => ({ id: randomId(), kind: 'plan', title: 'Plan', ...PLAN_SIZE, plan: { intent: a.intent, workspaceId: ws.id } }))
     else if (a.kind === 'file') openFile(a.rel, a.line, a.col)
     else if (a.kind === 'agent') {
       const id = a.id as AgentId

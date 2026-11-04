@@ -61,6 +61,14 @@ describe('omnibox sources', () => {
     expect(ids('localhost:5173', src({ asUrl: () => null }))).not.toContain('url:typed') // browser feature off
   })
 
+  it('a typed phrase offers "Plan: …" (draft only); one word, commands and ⌘P do not', () => {
+    const plan = omniboxItems('add a login form', 'all', src()).find((i) => i.id === 'plan:typed')
+    expect(plan).toMatchObject({ label: 'Plan: add a login form', group: 'Plan', action: { kind: 'plan', intent: 'add a login form' } })
+    expect(ids('api')).not.toContain('plan:typed')
+    expect(ids('>fit canvas')).not.toContain('plan:typed')
+    expect(ids('add login', src(), 'files')).not.toContain('plan:typed')
+  })
+
   it('> lists only commands; ⌘P scope lists only files, recent first', () => {
     expect(ids('>find')).toEqual(['command:workbench.findInFiles'])
     const files = omniboxItems('', 'files', src({ recentFiles: ['README.md'] }))

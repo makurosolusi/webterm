@@ -60,6 +60,15 @@ describe('canLink', () => {
     expect(canLink(df('d'), br('b'))).toBe(false)
     expect(canLink(df('d'), { id: 't', kind: 'terminal' })).toBe(false)
   })
+  it('plan ↔ agent and plan ↔ diff (a worker) true both ways; plan ↔ plan, browser, terminal false', () => {
+    const pl = (id: string) => ({ id, kind: 'plan' })
+    expect(canLink(pl('p'), ag('a'))).toBe(true)
+    expect(canLink(ag('a'), pl('p'))).toBe(true)
+    expect(canLink(pl('p'), { id: 'd', kind: 'diff' })).toBe(true)
+    expect(canLink(pl('p'), pl('q'))).toBe(false)
+    expect(canLink(pl('p'), br('b'))).toBe(false)
+    expect(canLink(pl('p'), { id: 't', kind: 'terminal' })).toBe(false)
+  })
 })
 
 describe('bridgeExists', () => {

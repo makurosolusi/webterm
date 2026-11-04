@@ -44,6 +44,8 @@ export function floatingEdgeParams(a: Rect, b: Rect): {
 
 /** React Flow type of the Diff node (DiffNode.tsx). */
 export const DIFF_KIND = 'diff'
+/** React Flow type of the Plan node (PlanNode.tsx). */
+export const PLAN_KIND = 'plan'
 
 /** Ujung kabel: jenis node (`kind` React Flow) + agentId-nya bila node agent. */
 export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
@@ -54,6 +56,11 @@ export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
  *  pola nodeterm `classifyLink` (sticky hanya bertaut ke terminal, sticky↔sticky null). */
 export function canLink(a: LinkEnd, b: LinkEnd): boolean {
   if (a.id === b.id) return false
+  // Plan node (F4-f): its cables are DAG edges to the workers it dispatched (a Diff node on the worker's
+  // worktree) or to an agent node; plan↔plan and plan↔plain node carry nothing.
+  const plans = (a.kind === PLAN_KIND ? 1 : 0) + (b.kind === PLAN_KIND ? 1 : 0)
+  if (plans === 2) return false
+  if (plans === 1) { const other = a.kind === PLAN_KIND ? b : a; return !!other.agentId || other.kind === DIFF_KIND }
   // Diff node: same rule as browser. Its only user is the wired agent (root + notes target).
   const diffs = (a.kind === DIFF_KIND ? 1 : 0) + (b.kind === DIFF_KIND ? 1 : 0)
   if (diffs === 2) return false

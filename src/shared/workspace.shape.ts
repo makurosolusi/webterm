@@ -23,7 +23,7 @@ export interface BridgeLink {
   kind: 'context' | 'file'
 }
 
-export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff'
+export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan'
 
 /** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
  *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
@@ -57,6 +57,40 @@ export function validDiffNotes(v: unknown): DiffNoteData[] {
     .map(({ id, path, line, body }) => ({ id, path, line, body }))
 }
 
+/** One task of a Plan node draft; the server validates the brief (`dag.model.validateTasks`). */
+export interface PlanTaskData { key: string; kind: 'work' | 'gate'; deps: string[]; brief: Record<string, unknown> }
+
+/** Plan node (F4-f): an intent's DAG draft until a human approves it, then the dag it became. */
+export interface PlanNodeData {
+  intent: string
+  workspaceId?: string
+  /** Server draft job while the planner writes (in memory there; lost on restart). */
+  planId?: string
+  draft?: { title: string; tasks: PlanTaskData[] }
+  projectId?: string
+  repo?: string
+  /** Set once approved: from here on the node mirrors `/api/dag/:id`. */
+  dagId?: string
+  /** Dispatch ids already given a worker node, so a worker the user closed is not re-added. */
+  wired?: string[]
+  error?: string
+}
+
+/** Cap on a persisted plan blob: the node lives in one SQLite column saved on every edit. */
+export const PLAN_DATA_MAX_CHARS = 512 * 1024
+
+/** The plan of an untrusted value (persisted blob, node data); undefined when malformed or oversized. */
+export function validPlanData(v: unknown): PlanNodeData | undefined {
+  if (!v || typeof v !== 'object' || typeof (v as PlanNodeData).intent !== 'string') return undefined
+  if (JSON.stringify(v).length > PLAN_DATA_MAX_CHARS) return undefined
+  const p = v as Record<string, unknown>
+  const text = (k: string) => (typeof p[k] === 'string' ? { [k]: p[k] as string } : {})
+  const d = p['draft'] as { title?: unknown; tasks?: unknown } | undefined
+  const draft = d && typeof d.title === 'string' && Array.isArray(d.tasks) ? { draft: { title: d.title, tasks: d.tasks as PlanTaskData[] } } : {}
+  const wired = Array.isArray(p['wired']) ? { wired: (p['wired'] as unknown[]).filter((w): w is string => typeof w === 'string') } : {}
+  return { intent: p['intent'] as string, ...wired, ...text('workspaceId'), ...text('planId'), ...text('projectId'), ...text('repo'), ...text('dagId'), ...text('error'), ...draft }
+}
+
 /** Opsi tampilan node 'files' yang dipersist per node (P-15). Absen = default (hidden tampil, nama naik). */
 export interface ViewOpts { hidden: boolean; sortKey: 'name' | 'size' | 'mtime'; sortDir: 'asc' | 'desc' }
 
@@ -84,6 +118,7 @@ export interface WsNode {
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node
   url?: string            // node 'browser': URL terakhir (pemulihan setelah discard/restart)
   diffNotes?: DiffNoteData[] // node 'diff': review notes not yet sent (validDiffNotes)
+  plan?: PlanNodeData     // node 'plan': draft / approved dag (validPlanData)
   agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
 }
 

@@ -1,6 +1,5 @@
-// Persistence of routines and their run history over the ledger (schema v15).
+// Persistence of routines and their run history over the ledger (schema v15; `estimate_usd` v17).
 import { allRows, execWrite, getRow, newId, type LedgerContext, type Row } from '../ledger/ledgerCore'
-import { addColumnIfMissing } from '../ledger/ledgerSchemaAlter'
 import { nextCronAfter } from './routineCron'
 import type { Routine, RoutineInput, RoutineRun, RunStatus, RunTrigger } from './routineModel'
 
@@ -38,9 +37,6 @@ const nextSlot = (input: RoutineInput, now: number): number | null =>
 
 export function createRoutineStore(ctx: LedgerContext) {
   const { db } = ctx
-  // Cost-oracle estimate per run, added in place (idempotent, nullable, no backfill: older runs had no
-  // estimate) the same way the cost module owns its own tables, so no ledger version bump is needed.
-  addColumnIfMissing(db, 'routine_run', 'estimate_usd', 'REAL')
   const get = (id: string): Routine | null => {
     const r = getRow(db, 'SELECT * FROM routine WHERE id = ?', id)
     return r ? toRoutine(r) : null

@@ -24,6 +24,7 @@ const KIND_ICON: Record<WsNodeKind, string> = {
   files: 'folder',
   browser: 'globe',
   diff: 'git-compare',
+  plan: 'type-hierarchy',
 }
 
 /** Glyph kind (codicon) untuk header grup dan baris tab Nodes. */
