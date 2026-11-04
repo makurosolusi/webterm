@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { ClaudeRuntime } from './claudeRuntime'
 import type { ClaudeReady, ClaudeRuntimeOptions } from './claudeOptions'
 import { captureSource, emitSource, initRecord, recorder, resultRecord, turnInput, writeFakeClaude } from './claude.fakeBin'
+import { createCentralMcpLink } from './claudeMcp'
 
 let dir = ''
 let capture = ''
@@ -24,7 +25,10 @@ const captured = () => JSON.parse(readFileSync(capture, 'utf8')) as { argv: stri
 function runtime(executable: string, extra: Partial<ClaudeRuntimeOptions> = {}) {
   return new ClaudeRuntime({
     executable, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
-    killGraceMs: 50, ...extra,
+    killGraceMs: 50,
+    // test-only token: keeps the process capability store (and its import graph) out of these tests
+    mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
+    ...extra,
   })
 }
 
@@ -52,14 +56,50 @@ describe('ClaudeRuntime child isolation', () => {
     expect(argv.join('\n')).not.toContain('unique-prompt-marker')
     expect(argv[argv.indexOf('--tools') + 1]).toBe('')
     expect(argv).toEqual(expect.arrayContaining([
-      '-p', '--strict-mcp-config', '--safe-mode', '--include-partial-messages',
+      '-p', '--strict-mcp-config', '--disable-slash-commands', '--include-partial-messages',
     ]))
+    expect(argv[argv.indexOf('--allowedTools') + 1]).toBe('mcp__webterm__*')
+    expect(argv[argv.indexOf('--setting-sources') + 1]).toBe('')
     expect(argv[argv.indexOf('--permission-mode') + 1]).toBe('dontAsk')
     expect(argv[argv.indexOf('--permission-prompts') + 1]).toBe('none')
     const joined = argv.join(' ')
     expect(joined).not.toContain('bypassPermissions')
     expect(joined).not.toContain('--dangerously-skip-permissions')
     expect(JSON.stringify(events)).not.toContain('unique-prompt-marker')
+  })
+
+  it('hands Claude a 0600 webterm-only MCP config whose token lives in a header file, removed after the turn', async () => {
+    const body = `const a = process.argv.slice(2)
+const cfg = a[a.indexOf('--mcp-config') + 1]
+const mcp = JSON.parse(fs.readFileSync(cfg, 'utf8'))
+const srv = mcp.mcpServers.webterm
+const headers = srv.args[srv.args.indexOf('--headers') + 1]
+fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ cfg, servers: Object.keys(mcp.mcpServers), args: srv.args, cfgMode: fs.statSync(cfg).mode & 0o777,
+  headers, headerMode: fs.statSync(headers).mode & 0o777, header: fs.readFileSync(headers, 'utf8') }))
+${emitSource(OK_RECORDS)}`
+    const minted: string[] = []
+    const revoked: string[] = []
+    const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port: 4567, mint: (conversationId) => { minted.push(conversationId); return { token: 'wcap_test-only', revoke: () => revoked.push(conversationId) } } })
+    const result = await runtime(writeFakeClaude(dir, body), { mcp }).turn(turnInput({ conversationId: 'central:project:p1' }), recorder().emit)
+    expect(result.outcome).toBe('success')
+    const seen = JSON.parse(readFileSync(capture, 'utf8')) as { cfg: string; servers: string[]; args: string[]; cfgMode: number; headers: string; headerMode: number; header: string }
+    expect(seen.servers).toEqual(['webterm'])
+    expect(seen.args.join(' ')).not.toContain('wcap_')
+    expect(seen.args[seen.args.indexOf('--port') + 1]).toBe('4567')
+    expect(seen.header).toBe('x-webterm-capability: wcap_test-only\n')
+    expect([seen.cfgMode, seen.headerMode]).toEqual([0o600, 0o600])
+    expect(minted).toEqual(['central:project:p1'])
+    expect(revoked).toEqual(['central:project:p1'])
+    expect(existsSync(seen.cfg) || existsSync(seen.headers)).toBe(false)
+  })
+
+  it('fails the turn without spawning when the MCP wiring cannot be written', async () => {
+    const mcp = { open: async () => { throw new Error('disk full') } }
+    const { events, emit } = recorder()
+    const result = await runtime(capturing(), { mcp }).turn(turnInput(), emit)
+    expect(result).toMatchObject({ outcome: 'error', errorCode: 'runtime_error' })
+    expect(existsSync(capture)).toBe(false)
+    expect(events.map((e) => e.type)).toEqual(['error', 'usage', 'turn.result'])
   })
 
   it('runs in an empty 0700 work dir created for the child', async () => {

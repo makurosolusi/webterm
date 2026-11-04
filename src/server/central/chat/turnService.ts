@@ -68,6 +68,8 @@ export interface SubmitResult {
 }
 
 const CANCEL_GRACE_MS = 1_500
+/** Runtimes whose tool calls arrive as native MCP calls, never as reply text. */
+const NATIVE_TOOL_RUNTIMES: ReadonlySet<string> = new Set(['claude'])
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -117,10 +119,13 @@ export class TurnService {
     }
     const planner = flagOn(process.env.WEBTERM_CENTRAL_PLANNER)
     const toolsWrite = process.env.WEBTERM_CENTRAL_TOOLS === 'write'
+    // Claude calls webterm tools natively over MCP (PLAN F2-c, K7): no text catalog in its prompt and
+    // no `<webterm-proposal>` parsing of its reply. The text path stays only for the other runtimes.
+    const textTools = !NATIVE_TOOL_RUNTIMES.has(this.runtime.kind)
     let built: ReturnType<ContextAssembler['build']>
     try {
       built = this.context.build({
-        db: this.db, conversationId: conversation.id, text, proposalsEnabled: planner && toolsWrite,
+        db: this.db, conversationId: conversation.id, text, proposalsEnabled: textTools && planner && toolsWrite,
         memoryEnabled: isEnabled('central'), now: this.now,
       })
     } catch (err) {
@@ -152,7 +157,7 @@ export class TurnService {
     this.active.set(conversation.id, turn.id)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
-    const done = this.runTurn(conversation, turn, prompt, history, planner, toolsWrite, rotate)
+    const done = this.runTurn(conversation, turn, prompt, history, { planner, toolsWrite, textTools }, rotate)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -194,7 +199,7 @@ export class TurnService {
 
   private async runTurn(
     conversation: Conversation, turn: Turn, prompt: string, history: string[],
-    planner: boolean, toolsWrite: boolean, rotate: boolean
+    gates: { planner: boolean; toolsWrite: boolean; textTools: boolean }, rotate: boolean
   ): Promise<Turn> {
     const runtime = this.runtime
     if (runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
@@ -216,7 +221,7 @@ export class TurnService {
       ...(turn.sessionRef === null || rotate ? {} : { sessionRef: turn.sessionRef }),
     }
     try {
-      const loop = readToolsEnabled(this.env)
+      const loop = gates.textTools && readToolsEnabled(this.env)
       const result = loop
         ? await runToolLoop({
           runtime, db: this.db, registry: this.registry, ...(this.guard ? { guard: this.guard } : {}),
@@ -224,7 +229,7 @@ export class TurnService {
           stopped: () => !isActiveTurnStatus(getTurn(this.db, turn.id)?.status ?? 'failed'),
         }, input, emit, resolveMaxSteps(this.env))
         : await runtime.turn(input, emit)
-      if (result.outcome === 'success') await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, planner, toolsWrite, loop)
+      if (result.outcome === 'success' && gates.textTools) await this.handleProposals(conversation.id, turn.id, assistant.id, result.text, gates.planner, gates.toolsWrite, loop)
       const finished = finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
       recordTurnContext({ db: this.db, env: this.env, now: this.now, ...(this.summarize ? { summarize: this.summarize } : {}) }, conversation.id, turn.id, result)
       return finished

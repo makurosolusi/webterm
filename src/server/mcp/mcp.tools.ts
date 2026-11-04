@@ -11,6 +11,7 @@ import { registryIndex } from '../capability/capability.index'
 import type { Receipt } from '../capability/capability.receipt'
 import { checkSchema } from '../capability/capability.schema'
 import { GLOBAL_CONVERSATION_ID } from '../central/conversationModel'
+import type { SyncControlGuard } from '../central/guard/controlGuard'
 import { toolCapability } from '../central/tools/toolCapability'
 import { execToolReceipt } from '../central/tools/toolExec'
 import { type ToolRegistry, defEnabled } from '../central/tools/toolTypes'
@@ -29,7 +30,9 @@ export interface McpDeps {
   policy: Pick<Policy, 'decide'> | null
   workspaces(): readonly Workspace[]
   /** Central tool registry and the ledger it runs on; null while Central is off. */
-  central: { db: Database; registry: ToolRegistry; env: Env } | null
+  central: { db: Database; registry: ToolRegistry; env: Env; guard?: SyncControlGuard } | null
+  /** Capability-token lookup; only a record minted for Central's MCP child opens the `central` mode (mcp.central.ts). */
+  capability?: (token: string) => { mintedBy?: string } | undefined
   /** Browser control handler (`activeBrowser().control`); null while the browser runtime is off. */
   browser: ((req: ControlRequest) => Promise<ControlResult>) | null
   gitDiff(query: URLSearchParams): Promise<ControlResult>

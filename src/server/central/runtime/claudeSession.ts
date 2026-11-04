@@ -30,11 +30,15 @@ export interface ClaudeTurnState {
   result: ClaudeResultEvent | null
   retries: number
   spawnError: NodeJS.ErrnoException | null
+  /** MCP tool calls requested and not yet answered: tool_use id -> name + start time. */
+  openTools: Map<string, { name: string; at: number }>
+  /** Every tool_use id already announced (partial mode repeats assistant messages). */
+  seenTools: Set<string>
 }
 
 export function newTurnState(): ClaudeTurnState {
   return { sessionRef: null, sawDelta: false, messages: new Map(), failure: null,
-    termination: null, result: null, retries: 0, spawnError: null }
+    termination: null, result: null, retries: 0, spawnError: null, openTools: new Map(), seenTools: new Set() }
 }
 
 const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {

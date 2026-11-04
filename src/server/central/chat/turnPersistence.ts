@@ -122,6 +122,8 @@ function assistantParts(state: RunState, text: string): MessagePart[] {
       ...(tool.args === undefined ? {} : { args: tool.args }),
       ...(tool.result === undefined ? {} : { result: tool.result }),
     })
+    // The chat's approval note; the decision itself happens on the ledger card (inbox / Telegram).
+    if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: 'awaiting_approval' })
   }
   return parts
 }
