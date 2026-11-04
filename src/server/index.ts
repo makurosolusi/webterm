@@ -40,6 +40,7 @@ import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { startPortScanner } from './ports/ports.runtime'
+import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
@@ -165,6 +166,8 @@ void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE o
 void guardWorkspaceRepos(db.list()) // secrets guard: auto-.gitignore untracked secret files in workspace repos
 // Port events must exist without the UI open (otherwise the first GET /api/ports starts it); never under a test runner.
 if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => log.warn('ports.start.failed', 'Cannot start port scanner at boot', { cause: e instanceof Error ? e.message : String(e) }))
+// Web Push to the /m PWA: a gate must reach a phone that is asleep, so the loop runs without /m open.
+if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
 const server = http.createServer()
 
