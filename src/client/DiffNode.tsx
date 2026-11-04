@@ -14,9 +14,9 @@ import type { GitChange, GitChangeStatus, GitFileDiff } from '../server/gitDiff.
 import { DIFF_NOTE_BODY_MAX, DIFF_NOTES_MAX, validDiffNotes, type AgentStatus } from '../shared/workspace'
 import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
 import { useDiffEditor } from './DiffNode.editor'
-import { deliverNotes, formatDiffNotes, sendRefusal, type DiffNote } from './DiffNode.notes'
+import { enqueueNotes, sendRefusal, type DiffNote } from './DiffNode.notes'
 import { randomId } from './randomId'
-import { getStatus, send, subscribeStatus } from './ws'
+import { getStatus, subscribeStatus } from './ws'
 import './DiffNode.css'
 
 const STATUS_LETTER: Record<GitChangeStatus, string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', untracked: 'U' }
@@ -113,13 +113,14 @@ function DiffNode({ id, data, selected }: NodeProps) {
     setDraft('')
   }
   const onSend = async () => {
-    const refusal = sendRefusal(agent?.id ?? null, status, notes.length)
+    const refusal = sendRefusal(agent?.id ?? null, notes.length)
     if (refusal || !agent) { setMsg(refusal ?? ''); return }
     const batch = notes
-    await deliverNotes((data) => send({ t: 'input', id: agent.id, data }), formatDiffNotes(batch))
+    // Through the server outbox: queued while the agent is busy, typed once its turn ends.
+    try { await enqueueNotes(agent.id, batch) } catch (e) { setMsg(errText(e)); return }
     const sent = new Set(batch.map((n) => n.id))
     setNotes((ns) => ns.filter((n) => !sent.has(n.id)))
-    setMsg(`Sent ${batch.length} note${batch.length === 1 ? '' : 's'} to the agent.`)
+    setMsg(`Queued ${batch.length} note${batch.length === 1 ? '' : 's'} for the agent; it gets them as soon as its prompt is free.`)
   }
 
   const body = () => {

@@ -4,7 +4,9 @@
 
 import { describe, expect, test } from 'vitest'
 import type { ServerMsg } from '../shared/protocol'
-import { Sessions, type SessionsOptions } from './sessions'
+import { delimiter, dirname } from 'node:path'
+import { Sessions, agentPath, type SessionsOptions } from './sessions'
+import { cliPath } from './cli/cli.launcher'
 import { NODE_HEADERS_ENV, NODE_TOKEN_ENV, nodeToken } from './hooks'
 import { claudeHeadersPath } from './hooksPaths'
 import { PORT } from './launchLine'
@@ -592,6 +594,10 @@ describe('P0: env anak tidak mewarisi token root', () => {
       expect(Object.values(env)).not.toContain(ROOT)
       expect(env.NODETERM_NODE_ID).toBe('agent-1')
       expect(env.NODETERM_PORT).toBe(String(PORT))
+      // `webterm` resolves by name: its bin dir leads PATH, the inherited PATH follows untouched.
+      expect(env.PATH.split(delimiter)[0]).toBe(dirname(cliPath()))
+      expect(env.PATH).toBe(agentPath(process.env.PATH))
+      expect(agentPath(['/a', dirname(cliPath()), '', '/b'].join(delimiter))).toBe([dirname(cliPath()), '/a', '/b'].join(delimiter))
     })
   })
 
@@ -603,8 +609,9 @@ describe('P0: env anak tidak mewarisi token root', () => {
       const { opts, env } = spawns[0]
       expect('WEBTERM_TOKEN' in env).toBe(false)
       expect(Object.keys(env).filter((k) => k.startsWith('NODETERM_'))).toEqual([])
-      // Tidak ada injeksi sama sekali untuk terminal biasa.
+      // Tidak ada injeksi sama sekali untuk terminal biasa (PATH ikut: tanpa bin dir webterm).
       expect(opts.env).toBeUndefined()
+      expect(env.PATH?.split(delimiter)[0]).not.toBe(dirname(cliPath()))
     })
   })
 

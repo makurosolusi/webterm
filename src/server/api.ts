@@ -13,6 +13,7 @@ import { agentProtectionRoute } from './agentSandbox.api'
 import { workspacesRoute } from './workspacesApi'
 import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
+import { handleMcpHttp } from './mcp/mcp.route'
 import { toolsRoute } from './capability/capability.http'
 import { inboxRoute } from './inboxApi'
 import { memoryRoute } from './memoryApi'
@@ -150,6 +151,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (await agentStatusRoute(req, res, url)) return
 
   if (await toolsRoute(req, res, url, { dispatch: route })) return // /api/tools: registry for the `webterm` CLI (capability.http.ts)
+  if (await handleMcpHttp(req, res, url, () => readBody(req))) return // /api/control/mcp/*: backend of `webterm mcp` (mcp.route.ts); before the control family it nests in
   // Headless control plane (/api/control/*): false = not this family, keep falling through.
   if (await handleControlHttp(req, res, url, () => readBody(req))) return
 

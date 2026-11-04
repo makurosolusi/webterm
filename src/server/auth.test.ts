@@ -160,10 +160,12 @@ describe('authorize', () => {
 })
 
 describe('isNodeTokenPath', () => {
-  it('allows exactly the three hook-facing paths', () => {
+  it('allows exactly the hook-facing paths and the webterm CLI registry', () => {
     expect(isNodeTokenPath('/api/agent-status')).toBe(true)
     expect(isNodeTokenPath('/api/context-link')).toBe(true)
     expect(isNodeTokenPath('/api/control/approve')).toBe(true)
+    expect(isNodeTokenPath('/api/tools')).toBe(true)
+    expect(isNodeTokenPath('/api/tools/git.diff')).toBe(true)
   })
   it('does not allow anything that reaches settings, workspaces, fs, name-gen or the shell', () => {
     for (const p of [
@@ -176,6 +178,8 @@ describe('isNodeTokenPath', () => {
       '/api/agent-status/extra',
       '/api/context-link/',
       '/api/control',
+      '/api/toolsx',
+      '/api/tool',
       '/api',
       ...ROOT_ONLY_PATHS,
       // Prefix regressions: each family root and a child must stay outside the allowlist too.
@@ -193,18 +197,20 @@ describe('isNodeTokenPath', () => {
 describe('isNodeTokenPath — source guard', () => {
   // The behavioural tests above only cover the paths someone remembered to list. A future
   // `pathname.startsWith('/api/central')` addition would still pass every other test, so pin the
-  // shape of the allowlist itself: exactly one prefix arm, and only the control family.
+  // shape of the allowlist itself: exactly two prefix arms, the control family and `/api/tools/`.
   const src = fs.readFileSync(path.resolve(__dirname, 'auth.ts'), 'utf8')
   const start = src.indexOf('export function isNodeTokenPath')
   const end = src.indexOf('/** Keluarga control API')
   const body = start === -1 || end === -1 ? '' : src.slice(start, end)
 
-  it('has exactly the three allowlist arms', () => {
+  it('has exactly the allowlist arms', () => {
     expect(body).toContain("pathname === '/api/agent-status'")
     expect(body).toContain("pathname === '/api/context-link'")
     expect(body).toContain("pathname.startsWith('/api/control/')")
-    // One `startsWith` and no other prefix arms: a `startsWith('/api/central')` regression fails.
-    expect(body.match(/startsWith\(/g)).toHaveLength(1)
+    expect(body).toContain("pathname === '/api/tools'")
+    expect(body).toContain("pathname.startsWith('/api/tools/')")
+    // Exactly these two prefix arms: a `startsWith('/api/central')` regression fails.
+    expect(body.match(/startsWith\('[^']*'\)/g)).toEqual(["startsWith('/api/control/')", "startsWith('/api/tools/')"])
   })
 
   it('names no privileged family inside the allowlist', () => {
@@ -222,6 +228,9 @@ describe('authorizeRequest — node token allowlist', () => {
     expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
     expect(gate('/api/context-link', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
     expect(gate('/api/control/approve', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+    // The `webterm` CLI (curl -H @headers) reaches its registry with the node token.
+    expect(gate('/api/tools', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
+    expect(gate('/api/tools/git.diff', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
   })
   it('accepts a node token on the allowed paths from the query', () => {
     expect(gate('/api/agent-status', { queryToken: NODE })).toBe(true)
