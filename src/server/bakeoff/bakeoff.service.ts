@@ -14,6 +14,7 @@
 // gets this way; an interactive TUI has neither without idle heuristics.
 import { randomBytes } from 'node:crypto'
 import type { ExecOutcome } from '../central/agents/execRunner'
+import { bakeoffGate, beginCostRun, endCostRun } from '../cost/costOracle'
 import { dagWorkerArgv } from '../dag/dag.ports'
 import { git } from '../gitScm'
 import { createInboxItem, resolveItem } from '../inbox/inboxItemStore'
@@ -37,7 +38,7 @@ export const BAKEOFF_TIMEOUT_MS = 30 * 60_000
 export const BAKEOFF_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(git *)', 'Bash(npm *)', 'Bash(bun *)']
 export const BAKEOFF_SOURCE = 'bakeoff'
 
-export type BakeoffErrorCode = 'bad_request' | 'not_found' | 'wrong_state' | 'base_moved' | 'dirty_repo' | 'merge_conflict' | 'git_failed'
+export type BakeoffErrorCode = 'bad_request' | 'not_found' | 'wrong_state' | 'base_moved' | 'dirty_repo' | 'merge_conflict' | 'git_failed' | 'cost_cap'
 export class BakeoffError extends Error {
   constructor(readonly code: BakeoffErrorCode, message: string, options?: { cause?: unknown }) { super(message, options) }
 }
@@ -98,7 +99,7 @@ export function createBakeoffService(ports: BakeoffPorts) {
     store.setStatus(id, 'ready', { inboxItemId: item.id })
   }
 
-  async function settle(c: { id: string; bakeoffId: string; idx: number; path: string; startedAt: number }, o: ExecOutcome, baseSha: string): Promise<void> {
+  async function settle(c: { id: string; bakeoffId: string; idx: number; path: string; startedAt: number; costRunId: string }, o: ExecOutcome, baseSha: string): Promise<void> {
     let verdict: CompletionVerdict | null = null
     let verifyError: string | null = null
     try {
@@ -110,9 +111,15 @@ export function createBakeoffService(ports: BakeoffPorts) {
       verifyError = `verifier error: ${err instanceof Error ? err.message : String(err)}`
     }
     const ok = outcomeOk(o) && verifyError === null
+    const costMicros = outcomeCostMicros(o.lastEvent)
+    try {
+      endCostRun(ports.ctx.db, c.costRunId, { costMicros }, ports.ctx.now)
+    } catch (err) {
+      log.warn('bakeoff.cost_end_failed', `Cannot close cost run for candidate ${c.id}`, { cause: err instanceof Error ? err.message : String(err) })
+    }
     store.finishCandidate(c.id, {
       status: ok ? 'done' : 'failed', exitCode: o.exitCode, error: outcomeError(o) ?? verifyError,
-      costMicros: outcomeCostMicros(o.lastEvent), durationMs: ports.ctx.now() - c.startedAt,
+      costMicros, durationMs: ports.ctx.now() - c.startedAt,
       verified: verdict ? evidenceVerified(verdict.evidence) : false, verdict: verdict ? toCandidateVerdict(verdict) : null,
     })
     maybeReady(c.bakeoffId)
@@ -122,6 +129,9 @@ export function createBakeoffService(ports: BakeoffPorts) {
     const prompt = input.prompt.trim()
     if (!prompt || prompt.length > BAKEOFF_PROMPT_MAX) throw new BakeoffError('bad_request', `prompt must be 1-${BAKEOFF_PROMPT_MAX} characters`)
     if (!Number.isInteger(input.count) || input.count < BAKEOFF_MIN || input.count > BAKEOFF_MAX) throw new BakeoffError('bad_request', `count must be ${BAKEOFF_MIN}-${BAKEOFF_MAX}`)
+    // Before any worktree exists: a refused bake-off leaves nothing to clean up.
+    const gate = bakeoffGate(ports.ctx.db, { count: input.count, workspaceId: input.workspaceId ?? null }, ports.ctx.now)
+    if (!gate.allowed) throw new BakeoffError('cost_cap', gate.reason ?? 'the daily cost cap refuses this bake-off')
     const baseBranch = await gitOut(input.repo, ['rev-parse', '--abbrev-ref', 'HEAD'], 'reading the current branch')
     const baseSha = await gitOut(input.repo, ['rev-parse', 'HEAD'], 'reading HEAD')
     const id = randomBytes(8).toString('hex')
@@ -157,7 +167,8 @@ export function createBakeoffService(ports: BakeoffPorts) {
         store.finishCandidate(candId, { status: 'failed', exitCode: null, error: `spawn: ${message}`, costMicros: null, durationMs: 0, verified: false, verdict: null })
         continue
       }
-      settled.push(res.handle.done.then((o) => settle({ id: candId, bakeoffId: id, idx: i + 1, path: w.path, startedAt }, o, baseSha)))
+      const costRunId = beginCostRun(ports.ctx.db, { kind: 'bakeoff', ref: id, label: `Bake-off #${i + 1}`, workspaceId: input.workspaceId ?? null, nodeId }, () => startedAt)
+      settled.push(res.handle.done.then((o) => settle({ id: candId, bakeoffId: id, idx: i + 1, path: w.path, startedAt, costRunId }, o, baseSha)))
     }
     const all = Promise.all(settled).then(() => maybeReady(id))
       .catch((err: unknown) => log.error('bakeoff.settle_failed', `Settling bake-off ${id} failed`, { cause: err instanceof Error ? err.message : String(err) }))
