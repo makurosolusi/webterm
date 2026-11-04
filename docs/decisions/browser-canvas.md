@@ -14,20 +14,37 @@ dokumen ini mencatat *kenapa* perakitannya begini. Rencana lengkap: `PLAN/BROWSE
 
 ## Gerbang auth
 `/ws/browser` dan `/api/browser/*` BUKAN `isNodeTokenPath`, jadi token node (sesi agent) ditolak di sana;
-hanya token root yang lolos. `/api/control/browser/*` lolos gerbang lewat jalur capability, tetapi handler
-menolak dengan 401 bila tidak ada `x-webterm-capability` yang valid. Socket browser terikat ke workspace lewat
+hanya token root yang lolos. `/api/control/browser/*` lolos gerbang lewat jalur capability atau token node; handler
+menolak dengan 401 bila tidak ada `x-webterm-capability` yang valid maupun token node yang dikenal. Socket browser terikat ke workspace lewat
 query `workspaceId`.
 
 ## Capability untuk agent
 Verb `browser.read` (status, snapshot, screenshot, wait) dan `browser.act` (navigate, click, type, press,
-scroll, handoff, release) dipisah supaya agent baca-saja tidak bisa menggerakkan halaman. Jalur injeksi:
-1. Saat PTY agent dibuat, `sessions` memanggil `browser.sessionHook.envFor(sessionId, kind)` yang mencetak dua
-   capability (`WEBTERM_BROWSER_READ_CAP`, `WEBTERM_BROWSER_ACT_CAP`) dan menaruhnya di env sesi.
-   Nilainya tidak pernah dilog.
-2. `installBrowserAgentShim()` (hanya bila flag on) memasang shim yang membaca env tersebut dan memanggil
-   `/api/control/browser/:nodeId/:verb`. `WEBTERM_BROWSER_NODE_ID` memilih node default.
-3. Pembaruan capability dikerjakan `control/mount.ts`; `sessionHook.release(sessionId)` mencabutnya saat sesi tutup.
-4. `applyPtyOptions()` mengganti `sessions.options` secara utuh, jadi ia ikut membawa `browser: activeBrowser()?.sessionHook`.
+scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua jalur identitas ke
+`/api/control/browser/[:nodeId/]:verb` (`browserControl.handler.ts`):
+1. **Sesi agent PTY: token node + kabel, dibaca per panggilan.** Sesi agent tidak lagi diberi capability browser
+   di env saat spawn (model lama `WEBTERM_BROWSER_READ_CAP`/`WEBTERM_BROWSER_ACT_CAP` dihapus bersama
+   `browser.sessionCaps.ts`). Shim `webterm-browser` (`browserAgentShim.ts`, dipasang sekali saat runtime start)
+   hanya membawa token node sesi itu sendiri (`WEBTERM_TOKEN`, cadangan `NODETERM_NODE_TOKEN`) lewat `curl -K -`,
+   jadi tidak ada nilai di argv. Server memetakan token ke node agent (`requesterOf`), lalu
+   `resolveLinkedBrowser` (`browser.linkedTarget.ts`) membaca board TERSIMPAN saat panggilan itu: hanya node
+   browser yang terhubung kabel (edge, arah mana pun, `linkedPeerIds` dari `contextLinkRoute.ts`) yang boleh
+   dikemudikan. Satu kabel = otomatis; beberapa = `409 ambiguous_browser`, pilih dengan `--node <id>`;
+   nol = `404 no_linked_browser` dengan pesan yang menyuruh agent minta kabel; `--node` ke browser tak terhubung =
+   `403 not_linked`. Menyambung kabel langsung berlaku, melepasnya langsung mencabut, tanpa respawn sesi.
+2. **Agent Pusat: capability `browser.*`** di header `x-webterm-capability`, node wajib di path
+   (`400 node_required` bila tidak ada), di-scope `node:<id>`.
+
+Kedua jalur lalu melewati gerbang yang sama, `agentAllowed(nodeId)`: sub-opsi `WEBTERM_BROWSER_AGENT`
+(default `on`, `agentControlOn` di `browser.runtime.parts.ts`) DAN toggle per node `agentControl` (default on;
+hanya `false` eksplisit yang mematikan). Ditolak = `403 disabled` dengan pesan "jangan retry"; `release` selalu
+boleh supaya agent bisa melepas lease.
+
+Kenapa per panggilan, bukan env saat spawn: model env membuat izin beku sejak sesi lahir (browser yang dibuat
+belakangan tak terjangkau sampai respawn) dan, dengan satu browser di board, agent tanpa kabel ikut bisa
+mengemudikannya. Pola ini meniru Orca (`browser-command-targets.ts`: halaman dipilih per panggilan dari
+konteks pemanggil, error jelas bila tak ada) dan nodeterm (`browser-drive.ts`: gerbang dibaca LIVE saat drive,
+identitas pemanggil terverifikasi), sama dengan pola context-link yang sudah ada di repo ini.
 
 ## Hapus node
 Tidak ada pesan "discard" eksplisit di protokol. Hapus node = unmount `BrowserNode` -> detach -> timer discard
@@ -38,7 +55,6 @@ lifecycle server (`WEBTERM_BROWSER_DISCARD_MS`) membuang halamannya.
 (`cappedBodyGetter` mengembalikan `''`). Tanpa domain = hapus semua. Vault AES-256-GCM, kunci acak di SecretStore.
 
 ## Batasan yang diketahui
-- Node browser yang dibuat setelah sesi agent berjalan belum punya capability sampai sesi di-respawn.
 - Crash proses (bukan SIGINT/SIGTERM) bisa meninggalkan Chromium yatim.
 - `status.version` belum disediakan.
 - Throttle mouse-move dan keyCode 229 (IME) di sisi klien belum dikerjakan.
