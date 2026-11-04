@@ -27,6 +27,8 @@ import {
   type LinkDoc,
 } from './contextLink'
 import { linkedPeerIds } from './contextLinkRoute'
+import { CONTEXT_COMMAND } from './cli/cli.commands'
+import { buildWebtermCli, cliPath } from './cli/cli.launcher'
 
 const node = (id: string, title: string): { id: string; title: string } => ({ id, title })
 
@@ -171,24 +173,27 @@ const FAKE_NODE_TOKEN = '11111111-2222-4333-8444-555555555555' // test-only, UUI
 const FAKE_FALLBACK_TOKEN = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' // test-only, UUID alphabet
 
 describe('buildContextShim', () => {
-  it('hands curl the node header file named by the env, never a token value or token env', () => {
-    const shim = buildContextShim()
+  it('is a one-line alias of `webterm context`', () => {
+    expect(buildContextShim()).toContain(`exec '${cliPath()}' context "$@"`)
+    execFileSync('sh', ['-n'], { input: buildContextShim() })
+  })
+  it('the CLI hands curl the node header file named by the env, never a token value or token env', () => {
+    const shim = buildWebtermCli()
     expect(shim).toContain('-H "@$hdr"')
     expect(shim).toContain('WEBTERM_NODE_HEADERS')
     expect(shim).not.toContain(`${TOKEN_HEADER}:`)
     expect(shim).not.toMatch(/WEBTERM_TOKEN|NODETERM_NODE_TOKEN/)
   })
   it('keeps the request shape the route parses', () => {
-    const shim = buildContextShim()
-    for (const p of ['node=', 'verb=', 'want=', 'n=']) expect(shim).toContain(`--data-urlencode "${p}`)
-    expect(shim).toContain('/api/context-link')
+    for (const p of ['node=', 'verb=', 'want=', 'n=']) expect(CONTEXT_COMMAND).toContain(`--data-urlencode "${p}`)
+    expect(CONTEXT_COMMAND).toContain('/api/context-link')
     // Every continuation must still end in a backslash or the header breaks the curl line.
-    const lines = shim.split('\n')
+    const lines = CONTEXT_COMMAND.split('\n')
     const curl = lines.findIndex((l) => l.startsWith('curl '))
     for (let i = curl; i < lines.length - 2; i++) expect(lines[i].endsWith('\\')).toBe(true)
   })
-  it('is valid POSIX sh', () => {
-    execFileSync('sh', ['-n'], { input: buildContextShim() })
+  it('the CLI is valid POSIX sh', () => {
+    execFileSync('sh', ['-n'], { input: buildWebtermCli() })
   })
 })
 
@@ -202,9 +207,10 @@ function curlArgvOfShim(shim: string, env: Record<string, string>): string[] {
     writeFileSync(join(dir, 'curl'), '#!/bin/sh\nfor a in "$@"; do printf \'%s\\n\' "$a" >> "$ARGV_OUT"; done\n', {
       mode: 0o755,
     })
-    const script = join(dir, 'context.sh')
+    const script = join(dir, 'webterm')
     writeFileSync(script, shim, { mode: 0o755 })
-    execFileSync('/bin/sh', ['-c', `${script} </dev/null`], {
+    // The context shim is an alias of `webterm context`: run that command of the CLI itself.
+    execFileSync('/bin/sh', ['-c', `${script} context </dev/null`], {
       env: { PATH: dir, ARGV_OUT: out, NODETERM_NODE_ID: 'n-shipped', ...env },
     })
     return readFileSync(out, 'utf8').split('\n').slice(0, -1)
@@ -223,7 +229,7 @@ describe('the header curl actually receives', () => {
     try {
       const hdr = join(dir, 'node.headers')
       writeFileSync(hdr, `${TOKEN_HEADER}: ${FAKE_NODE_TOKEN}\n`, { mode: 0o600 })
-      const argv = curlArgvOfShim(buildContextShim(), { WEBTERM_NODE_HEADERS: hdr })
+      const argv = curlArgvOfShim(buildWebtermCli(), { WEBTERM_NODE_HEADERS: hdr })
       expect(headerOf(argv)).toBe(`@${hdr}`)
       expect(argv.filter((a) => a === '-H')).toHaveLength(1)
       expect(argv.join('\n')).not.toContain(FAKE_NODE_TOKEN)
@@ -233,7 +239,7 @@ describe('the header curl actually receives', () => {
   })
   it('ignores a token in env and does not call curl without a readable header file', () => {
     for (const env of <Record<string, string>[]>[{ WEBTERM_TOKEN: FAKE_NODE_TOKEN, NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN }, { WEBTERM_NODE_HEADERS: '/nonexistent/h' }]) {
-      expect(() => curlArgvOfShim(buildContextShim(), env)).toThrow() // argv file never written
+      expect(() => curlArgvOfShim(buildWebtermCli(), env)).toThrow() // argv file never written
     }
   })
 })
@@ -267,10 +273,12 @@ describe('installContextLink', () => {
       const file = contextShimPath()
       expect(statSync(file).mode & 0o777).toBe(0o700)
       const shim = readFileSync(file, 'utf8')
-      expect(shim).not.toContain(FAKE_ROOT_TOKEN)
-      expect(shim).toContain('-H "@$hdr"')
+      const cli = readFileSync(cliPath(), 'utf8')
+      expect(statSync(cliPath()).mode & 0o777).toBe(0o700)
+      expect(shim + cli).not.toContain(FAKE_ROOT_TOKEN)
+      expect(cli).toContain('-H "@$hdr"')
       // No literal header value of any kind.
-      expect(shim).not.toContain(`${TOKEN_HEADER}:`)
+      expect(shim + cli).not.toContain(`${TOKEN_HEADER}:`)
     })
   })
 })
