@@ -70,8 +70,7 @@ export function createRoutineRunner(deps: RunnerDeps) {
     }
     const spawned = await deps.spawn({
       mode: 'headless', parent: `routine:${r.id}`, cwd, prompt: r.action.prompt, title: r.name,
-      // ponytail: agentSpawn has no 'routine' door yet; 'control' is the closest API-driven door label.
-      door: 'control', ...(r.workspaceId ? { workspaceId: r.workspaceId } : {}),
+      door: 'routine', ...(r.workspaceId ? { workspaceId: r.workspaceId } : {}),
     })
     if (!spawned.ok) return settle(r, runId, trigger, { status: 'failed', reason: `${spawned.code}: ${spawned.message}` })
     children.add(spawned.nodeId)
