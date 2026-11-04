@@ -96,12 +96,12 @@ describe('tawaran saat kemampuan browser mati', () => {
     expect(screen.queryByRole('button', { name: 'Nyalakan' })).toBeNull()
   })
 
-  it('teks status browser tidak menyebut nama env var', async () => {
-    const { browserNotice } = await import('./browser.status')
+  it('teks status browser tidak menyebut nama env var; jalan keluarnya tombol tawaran, bukan teks petunjuk', async () => {
+    const { browserNotice, noticeAction } = await import('./browser.status')
     for (const blocked of ['no_binary', 'disabled'] as const) {
       const n = browserNotice({ state: { blocked } as never, connected: true })
-      expect(n?.text).toMatch(/Pengaturan > Kemampuan > Browser/)
       expect(n?.text).not.toMatch(/WEBTERM_/)
+      expect(noticeAction({ state: { blocked } as never })).toEqual({ kind: 'offer' })
     }
   })
 })

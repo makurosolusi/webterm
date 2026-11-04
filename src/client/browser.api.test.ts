@@ -1,7 +1,7 @@
 // REST pembungkus /api/browser/*: path, metode, body, header token, galat tanpa echo body.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TOKEN_HEADER } from './api'
-import { BrowserApiError, clearCookies, commitCookies, getBrowserStatus, listCookieDomains, previewCookies, setAgentControl, takeoverLease } from './browser.api'
+import { BrowserApiError, allowBrowserHosts, clearCookies, commitCookies, getBrowserStatus, listCookieDomains, previewCookies, setAgentControl, takeoverLease } from './browser.api'
 
 const calls: Array<{ url: string; init: RequestInit }> = []
 function stub(status: number, body?: unknown) {
@@ -64,5 +64,14 @@ describe('browser.api', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>', { status: 502 })))
     const err = await getBrowserStatus().catch((e: unknown) => e)
     expect((err as BrowserApiError).code).toBe('http_502')
+  })
+
+  it('allowBrowserHosts merges into the stored allowlist via the Settings PUT, without duplicates', async () => {
+    stub(200, { entries: [{ key: 'WEBTERM_BROWSER_ALLOW_HOSTS', value: 'nas.lan:8080, localhost:3000' }] })
+    await allowBrowserHosts(['localhost:3000', '127.0.0.1:3000'])
+    expect(calls.map((c) => `${c.init.method} ${c.url}`)).toEqual(['GET /api/settings/env', 'PUT /api/settings/env'])
+    expect(JSON.parse(String(calls[1]!.init.body))).toEqual({
+      set: { WEBTERM_BROWSER_ALLOW_HOSTS: 'nas.lan:8080,localhost:3000,127.0.0.1:3000' }, unset: [],
+    })
   })
 })

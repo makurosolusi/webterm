@@ -10,7 +10,9 @@ import BrowserToolbar from './BrowserToolbar'
 import BrowserLeaseChip from './BrowserLeaseChip'
 import BrowserCookieDialog from './BrowserCookieDialog'
 import { setAgentControl } from './browser.api'
-import { useBrowserStatus } from './browser.feature'
+import BrowserNoticeAction from './browser.noticeAction'
+import { setCapabilitySub } from './capabilitiesApi'
+import { resetBrowserStatusCache, useBrowserStatus } from './browser.feature'
 import { getBrowserWorkspace } from './browser.stream'
 import { COOKIE_MENU_TEXT as M } from './browser.uxText'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
@@ -26,7 +28,16 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
     // Server dulu: bila gagal, flag tersimpan tidak berubah dan toggle tetap menunjukkan kenyataan.
     void setAgentControl(p.id, enabled).then(() => rf.updateNodeData(p.id, { agentControl: enabled })).catch((e: unknown) => console.warn('browser.agentControl failed', e instanceof Error ? e.message : 'unknown'))
   }, [p.id, rf])
-  return <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} />
+  return <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} />
+}
+
+/** Sub-opsi `browserAgent` kemampuan Browser (kunci klien dari `subKeyOf('WEBTERM_BROWSER_AGENT')`). */
+const BROWSER_AGENT_SUB = 'browserAgent'
+
+/** Nyalakan kendali agent di server, lalu muat ulang status agar toggle per-node muncul di semua node. */
+async function enableAgent(): Promise<void> {
+  await setCapabilitySub('browser', BROWSER_AGENT_SUB, true)
+  resetBrowserStatusCache()
 }
 
 /** Submenu "Import Cookies ▸ From File…" + catatan Google, meniru menu ⋯ browser Orca. Satu-satunya pintu ke dialog cookie. */
@@ -53,7 +64,12 @@ export const BrowserNodeType = memo(function BrowserNodeType(p: NodeProps) {
         {...p}
         menuItems={menuItems}
         renderToolbar={(ctx) => <BrowserSlots p={p} ctx={ctx} />}
-        renderOverlay={(ctx) => <BrowserLeaseChip lease={ctx.state?.lease} onTakeover={ctx.takeover} />}
+        renderOverlay={(ctx) => (
+          <>
+            <BrowserLeaseChip lease={ctx.state?.lease} onTakeover={ctx.takeover} />
+            <BrowserNoticeAction state={ctx.state} error={ctx.error} target={ctx.target} nav={ctx.nav} />
+          </>
+        )}
       />
       {cookieOn && <BrowserCookieDialog cookieImportEnabled workspaceId={getBrowserWorkspace()} open={cookiesOpen} onClose={() => setCookiesOpen(false)} />}
     </>

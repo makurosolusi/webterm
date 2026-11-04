@@ -1,12 +1,12 @@
 /** @vitest-environment jsdom */
 // Toolbar + chip lease: validasi URL, tombol nav, toggle agent, chip Stop -> takeover.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 import type { BrowserState } from '../shared/browser.contract'
 import BrowserLeaseChip from './BrowserLeaseChip'
 import BrowserToolbar from './BrowserToolbar'
-import { CHIP_TEXT, TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
+import { AGENT_OFFER_TEXT, CHIP_TEXT, TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 
 afterEach(cleanup)
 const st = (o: Partial<BrowserState> = {}): BrowserState =>
@@ -76,13 +76,33 @@ describe('BrowserToolbar', () => {
     expect(nav).toHaveBeenCalledWith('stop')
   })
 
-  it('toggles agent control, and disables the toggle when the server has it off', () => {
+  it('toggles agent control when the server allows it', () => {
     const { onAgentControl } = setup()
     fireEvent.click(screen.getByLabelText(TOOLBAR_TEXT.agentControl))
     expect(onAgentControl).toHaveBeenCalledWith(true)
-    cleanup()
-    setup(st(), { agentEnabled: false })
-    expect((screen.getByLabelText(TOOLBAR_TEXT.agentControl) as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('server off: no dead toggle, an offer that asks for confirmation before enabling', async () => {
+    const onEnableAgent = vi.fn(async () => undefined)
+    setup(st(), { agentEnabled: false, onEnableAgent })
+    expect(screen.queryByLabelText(TOOLBAR_TEXT.agentControl)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: AGENT_OFFER_TEXT.offer }))
+    expect(screen.getByText(AGENT_OFFER_TEXT.warning)).toBeTruthy()
+    expect(onEnableAgent).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: AGENT_OFFER_TEXT.cancel }))
+    expect(screen.queryByText(AGENT_OFFER_TEXT.warning)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: AGENT_OFFER_TEXT.offer }))
+    fireEvent.click(screen.getByRole('button', { name: AGENT_OFFER_TEXT.confirm }))
+    expect(onEnableAgent).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByText(AGENT_OFFER_TEXT.warning)).toBeNull())
+  })
+
+  it('offer keeps the confirmation open with an error when enabling fails', async () => {
+    setup(st(), { agentEnabled: false, onEnableAgent: vi.fn(async () => { throw new Error('403') }) })
+    fireEvent.click(screen.getByRole('button', { name: AGENT_OFFER_TEXT.offer }))
+    fireEvent.click(screen.getByRole('button', { name: AGENT_OFFER_TEXT.confirm }))
+    expect((await screen.findByRole('alert')).textContent).toBe(AGENT_OFFER_TEXT.failed)
+    expect(screen.getByText(AGENT_OFFER_TEXT.warning)).toBeTruthy()
   })
 
   it('follows page navigation in the address box', () => {

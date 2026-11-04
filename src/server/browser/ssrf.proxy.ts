@@ -7,7 +7,8 @@ import { connect, isIP, type Socket } from 'node:net'
 import { lookup } from 'node:dns/promises'
 import { type BlockReason } from '../../shared/browser.contract'
 import { createLogger } from '../logs'
-import { isAllowed, normalizeHost, type AllowSet } from './ssrf.allowlist'
+import { isAllowed, isLocalName, normalizeHost, type AllowSet } from './ssrf.allowlist'
+import { allowNow } from './navigation.guard'
 import { classifyIp, isLoopbackOrUnspecified } from './ssrf.ip'
 
 /** Resolver DNS yang bisa diinjeksi: nama host -> daftar IP. */
@@ -16,7 +17,10 @@ export type Resolver = (host: string) => Promise<string[]>
 export type Dial = (ip: string, port: number) => Socket
 
 export interface SsrfProxyOptions {
-  allow: AllowSet
+  /** Allowlist host:port; fungsi = dibaca ulang tiap koneksi (tanpa restart). */
+  allow: AllowSet | (() => AllowSet)
+  /** Webterm bind loopback: nama lokal yang SEMUA IP-nya loopback boleh (port webterm tetap ditolak). */
+  allowLoopback?: boolean
   /** Port webterm sendiri: tak pernah boleh dituju pada loopback walau ada di allowlist. */
   webtermPort: number
   port?: number
@@ -40,7 +44,7 @@ const systemDial: Dial = (ip, port) => connect({ host: ip, port })
 
 type Decision = { ok: true; ip: string } | { ok: false; reason: BlockReason }
 
-async function decide(rawHost: string, port: number, o: Required<Pick<SsrfProxyOptions, 'allow' | 'webtermPort' | 'resolver'>>): Promise<Decision> {
+async function decide(rawHost: string, port: number, o: Required<Pick<SsrfProxyOptions, 'allow' | 'webtermPort' | 'resolver' | 'allowLoopback'>>): Promise<Decision> {
   const host = normalizeHost(rawHost)
   if (!host || !Number.isInteger(port) || port < 1 || port > PORT_MAX) return { ok: false, reason: 'not_allowed_port' }
   let ips: string[]
@@ -53,13 +57,16 @@ async function decide(rawHost: string, port: number, o: Required<Pick<SsrfProxyO
   if (ips.length === 0) return { ok: false, reason: 'dns_fail' }
   // ponytail: hard-deny memakai loopback saja; webterm yang bind ke IP LAN + allowlist IP itu belum tertangkap (tambah cek os.networkInterfaces bila perlu)
   if (port === o.webtermPort && ips.some(isLoopbackOrUnspecified)) return { ok: false, reason: 'not_allowed_port' }
-  if (!isAllowed(o.allow, host, port) && ips.some((ip) => classifyIp(ip) === 'private')) return { ok: false, reason: 'private_host' }
+  // Hanya NAMA lokal (localhost, *.localhost, IP loopback literal): nama publik yang resolve ke 127.0.0.1 tetap
+  // ditolak, kalau tidak halaman asing bisa DNS-rebinding ke dev server lokal.
+  if (o.allowLoopback && isLocalName(host) && ips.every(isLoopbackOrUnspecified)) return { ok: true, ip: ips[0] }
+  if (!isAllowed(allowNow(o.allow), host, port) && ips.some((ip) => classifyIp(ip) === 'private')) return { ok: false, reason: 'private_host' }
   return { ok: true, ip: ips[0] }
 }
 
 /** Mulai proxy di 127.0.0.1 (port acak bila `port` kosong). */
 export async function startSsrfProxy(opts: SsrfProxyOptions): Promise<SsrfProxy> {
-  const o = { allow: opts.allow, webtermPort: opts.webtermPort, resolver: opts.resolver ?? systemResolver }
+  const o = { allow: opts.allow, webtermPort: opts.webtermPort, allowLoopback: opts.allowLoopback ?? false, resolver: opts.resolver ?? systemResolver }
   const dial = opts.dial ?? systemDial
   const deny = (hostname: string, reason: BlockReason): void =>
     log.warn('browser.ssrf.block', 'blocked outbound connection', { hostname, reason })

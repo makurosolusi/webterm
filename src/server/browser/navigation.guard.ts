@@ -21,10 +21,19 @@ export interface NavigationGuard {
   onFrameNavigated(url: string): GuardResult
 }
 
-export interface GuardOptions { allow: AllowSet; webtermPort: number }
+export interface GuardOptions {
+  /** Allowlist host:port; fungsi = dibaca ulang tiap cek (allowlist Pengaturan berlaku tanpa restart). */
+  allow: AllowSet | (() => AllowSet)
+  webtermPort: number
+  /** Webterm bind loopback: localhost/127.0.0.1/::1 (dev server) boleh tanpa allowlist, KECUALI port webterm. */
+  allowLoopback?: boolean
+}
+
+/** Set tetap atau getter -> set saat ini. */
+export const allowNow = (a: AllowSet | (() => AllowSet)): AllowSet => (typeof a === 'function' ? a() : a)
 
 /** Buat penjaga navigasi; `allow` = allowlist host:port, `webtermPort` = port webterm (hard-deny pada loopback). */
-export function createNavigationGuard({ allow, webtermPort }: GuardOptions): NavigationGuard {
+export function createNavigationGuard({ allow, webtermPort, allowLoopback = false }: GuardOptions): NavigationGuard {
   const check = (raw: string): GuardResult => {
     const parsed = parseBrowserUrl(raw)
     if (!parsed.ok) return { ok: false, reason: 'scheme', hostname: hostOnly(typeof raw === 'string' ? raw : '') }
@@ -33,7 +42,9 @@ export function createNavigationGuard({ allow, webtermPort }: GuardOptions): Nav
     const portNum = port ? Number(port) : DEFAULT_PORTS[protocol]
     const block = (reason: BlockReason): GuardResult => ({ ok: false, reason, hostname: host })
     if (portNum === webtermPort && isLocalName(host)) return block('not_allowed_port')
-    if (isAllowed(allow, host, portNum)) return { ok: true, url: parsed.url }
+    if (isAllowed(allowNow(allow), host, portNum)) return { ok: true, url: parsed.url }
+    // Meniru nodeterm browserUrl.ts (localhost = dev server): di mesin sendiri tak ada batas jaringan yang dilanggar.
+    if (allowLoopback && isLocalName(host)) return { ok: true, url: parsed.url }
     if (isLocalName(host) || (isIP(host) !== 0 && classifyIp(host) === 'private')) return block('private_host')
     return { ok: true, url: parsed.url }
   }

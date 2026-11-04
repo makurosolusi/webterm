@@ -1,7 +1,7 @@
 // REST client for /api/browser/* (PLAN/BROWSER-CANVAS-b.md §4.5). Same credential as api.ts
 // (`x-webterm-token`). No response carries a cookie value; request bodies and response bodies are
 // never echoed into errors.
-import { BROWSER_REST_PREFIX } from '../shared/browser.contract'
+import { BROWSER_REST_PREFIX, ENV_BROWSER } from '../shared/browser.contract'
 import type {
   BrowserStatusResp, CookieCommitReq, CookieCommitResp, CookieDomainInfo, CookiePreviewReq, CookiePreviewResp,
 } from '../shared/browser.contract'
@@ -28,20 +28,22 @@ async function errorCode(res: Response): Promise<string> {
   return `http_${res.status}`
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const token = peekToken()
   if (token !== '') headers[TOKEN_HEADER] = token
-  const res = await fetch(`${BROWSER_REST_PREFIX}${path}`, {
+  const res = await fetch(url, {
     method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   if (!res.ok) {
     const code = await errorCode(res)
-    throw new BrowserApiError(`${method} ${BROWSER_REST_PREFIX}${path} failed (${res.status} ${code})`, res.status, code)
+    throw new BrowserApiError(`${method} ${url} failed (${res.status} ${code})`, res.status, code)
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }
+
+const request = <T>(method: string, path: string, body?: unknown): Promise<T> => call<T>(method, `${BROWSER_REST_PREFIX}${path}`, body)
 
 const seg = encodeURIComponent
 
@@ -72,3 +74,17 @@ export const commitCookies = (workspaceId: string, req: CookieCommitReq) =>
  *  path (`/cookies/<domain>`): the server never reads a DELETE body (`cappedBodyGetter`). */
 export const clearCookies = (workspaceId: string, domain?: string) =>
   request<void>('DELETE', `/${seg(workspaceId)}/cookies${domain === undefined ? '' : `/${seg(domain)}`}`)
+
+const ENV_SETTINGS_PATH = '/api/settings/env'
+
+/**
+ * Tambah `host:port` ke allowlist host privat (`WEBTERM_BROWSER_ALLOW_HOSTS`) lewat Pengaturan, bukan env:
+ * baca daftar tersimpan, gabung tanpa duplikat, tulis lewat PUT yang sama dengan halaman Pengaturan.
+ * Runtime browser membaca ulang allowlist tiap navigasi, jadi berlaku tanpa restart.
+ */
+export async function allowBrowserHosts(entries: string[]): Promise<void> {
+  const st = await call<{ entries: Array<{ key: string; value: string }> }>('GET', ENV_SETTINGS_PATH)
+  const cur = st.entries.find((e) => e.key === ENV_BROWSER.allowHosts)?.value ?? ''
+  const merged = [...new Set([...cur.split(/[\s,]+/).filter(Boolean), ...entries])].join(',')
+  await call('PUT', ENV_SETTINGS_PATH, { set: { [ENV_BROWSER.allowHosts]: merged }, unset: [] })
+}

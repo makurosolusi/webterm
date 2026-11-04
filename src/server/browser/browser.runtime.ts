@@ -39,6 +39,10 @@ const SWEEP_MS = 10_000
 export interface RuntimeDeps {
   env: Record<string, string | undefined>
   webtermPort: number
+  /** Webterm bind loopback: localhost dev server boleh dibuka tanpa allowlist (port webterm tetap ditolak). */
+  loopbackBind?: boolean
+  /** Dipanggil saat sesi agent mendapat capability browser (sub `browserAgent` on); pemasang shim agent. */
+  onAgentUse?: () => void
   dataRoot: string
   secrets: SecretStore
   capabilities: Pick<CapabilityStore, 'mint' | 'revoke'>
@@ -56,10 +60,24 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   if (!isEnabled('browser', env)) return null
   const allow = parseAllowHosts(env[ENV_BROWSER.allowHosts], d.webtermPort)
   if (!allow.ok) { log.error('browser.start', 'Browser disabled: invalid allow-hosts', { reason: allow.reason }); return null }
+  // Allowlist dibaca ulang dari env tiap cek: tombol "Izinkan host" (Pengaturan) berlaku tanpa restart.
+  // Nilai baru yang rusak = tetap pakai yang terakhir valid.
+  let allowRaw = env[ENV_BROWSER.allowHosts]
+  let allowHosts = allow.hosts
+  const allowLive = () => {
+    const raw = env[ENV_BROWSER.allowHosts]
+    if (raw === allowRaw) return allowHosts
+    allowRaw = raw
+    const next = parseAllowHosts(raw, d.webtermPort)
+    if (next.ok) allowHosts = next.hosts
+    else log.warn('browser.allow', 'Ignoring invalid allow-hosts change', { reason: next.reason })
+    return allowHosts
+  }
+  const allowLoopback = d.loopbackBind ?? false
   const now = d.now ?? Date.now
-  const proxy = await startSsrfProxy({ allow: allow.hosts, webtermPort: d.webtermPort })
+  const proxy = await startSsrfProxy({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
   const launcher = d.launcher ?? createChromiumPool({ env, dataRoot: d.dataRoot, proxyServer: () => `http://127.0.0.1:${proxy.port}`, exists: d.exists })
-  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allow.hosts, webtermPort: d.webtermPort })), connect: d.connect })
+  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })), connect: d.connect })
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })
@@ -101,7 +119,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
     api: (method, pathname, body) => handleBrowserApi(method, pathname, body, apiDeps),
     control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed }),
-    sessionHook: createBrowserSessionHook({ store: d.capabilities, agentEnabled: agentEnv, workspaces: d.workspaces }),
+    // Sub `browserAgent` bisa dinyalakan saat runtime hidup: shim dipasang saat sesi agent pertama memakainya.
+    sessionHook: createBrowserSessionHook({ store: d.capabilities, agentEnabled: () => { const on = agentEnv(); if (on) d.onAgentUse?.(); return on }, workspaces: d.workspaces }),
     async shutdown() {
       if (down) return
       down = true
