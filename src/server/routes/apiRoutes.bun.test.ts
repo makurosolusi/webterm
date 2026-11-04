@@ -33,6 +33,7 @@ test('full route order snapshot', () => {
     'approval-human', 'policy', 'secrets', 'procedural', 'routines',
     'memory-write', 'inbox', 'memory', 'orchestrator',
     'cost',
+    'dag',
   ])
 })
 

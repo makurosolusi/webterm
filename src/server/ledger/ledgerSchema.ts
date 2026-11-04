@@ -14,6 +14,7 @@ import { applyV12 } from './ledgerSchemaV12'
 import { applyV13 } from './ledgerSchemaV13'
 import { applyV14 } from './ledgerSchemaV14'
 import { applyV15 } from './ledgerSchemaV15'
+import { applyV16 } from './ledgerSchemaV16'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -49,4 +50,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 14, up: applyV14 },
   // v15: routines + run history (F4-a); additive tables, nothing to backfill.
   { version: 15, up: applyV15 },
+  // v16: task DAG (F4-b); additive tables. v15 is taken by the routines WP in parallel.
+  { version: 16, up: applyV16 },
 ]
