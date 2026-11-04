@@ -16,6 +16,7 @@ import { stateVerified } from './hooks'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
 import { linkedBrowsers, nextBrowserNotice } from './linkAwareness'
+import { nextAwareness } from './webtermAwareness'
 import { linkNoteTold, startLinkNotes } from './linkNoteDelivery'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
@@ -150,14 +151,16 @@ export async function agentStatusRoute(
   // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
   // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
   const ws = deps.workspaceFor(node)
-  // Dua sumber, satu balasan: roster peer context-link + perubahan kabel ke browser node.
+  // Tiga sumber, satu balasan: blok kesadaran webterm (siapa/di mana/apa yang bisa dipakai), roster
+  // peer context-link, dan perubahan kabel ke browser node.
   const event = body.hook_event_name
+  const aware = ws ? nextAwareness(node, event, ws) : null
   const peers = ws ? nextHookContext(node, event, buildLinkDoc(ws, node)) : null
   const browsers = ws ? nextBrowserNotice(node, event, linkedBrowsers(ws, node)) : null
   // Hook yang bisa mengumumkan sudah memberi tahu keadaan kabel sekarang: link-note yang mengantre
   // untuk perubahan yang sama tidak boleh menyusul (no double announce).
   if (ws) linkNoteTold(node, event, ws)
-  const text = [peers?.additionalContext, browsers].filter(Boolean).join('\n\n')
+  const text = [aware, peers?.additionalContext, browsers].filter(Boolean).join('\n\n')
   if (text && event) {
     json(res, 200, { hookSpecificOutput: { hookEventName: event, additionalContext: text } })
     return true

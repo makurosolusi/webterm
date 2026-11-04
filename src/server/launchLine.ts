@@ -7,11 +7,13 @@ import type { AgentPermissionMode } from '../shared/workspace'
 import {
   canResumeWith,
   hasClaudeHookSettings,
+  capabilityAgentId,
   isSafeSessionId,
   resumeCommandWith,
   withSessionId,
 } from '../shared/workspace'
 import { buildClaudeFlags } from './hooks'
+import { codexInstructionsFlag } from './webtermAwareness'
 import { parsePort } from './serverConfig'
 
 /** Port yang ditulis ke env hook agent bila pemanggil tidak menyebutkannya. */
@@ -62,9 +64,12 @@ export function launchLine(
       permissionMode: opts?.permissionMode,
     })}`
   }
+  // codex tidak punya hook webterm: aturan rumah + identitas masuk sekali lewat `-c
+  // developer_instructions` (webtermAwareness). Root option, jadi letaknya sebelum `resume`.
+  const base = capabilityAgentId(agentId) === 'codex' ? `${cmd} ${codexInstructionsFlag(msg.id)}` : cmd
   if (resume) {
     // Perintah client dipakai utuh sebagai program, jadi pembungkus apa pun tetap terpasang.
-    return canResumeWith(agentId, sid) ? resumeCommandWith(cmd, agentId, sid) ?? cmd : cmd
+    return canResumeWith(agentId, sid) ? resumeCommandWith(base, agentId, sid) ?? base : base
   }
-  return withSessionId(cmd, agentId, sid)
+  return withSessionId(base, agentId, sid)
 }

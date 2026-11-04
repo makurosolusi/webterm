@@ -1,5 +1,5 @@
 import { isPermissionMode, type AgentPermissionMode } from '../shared/workspace'
-import { PERM_WAIT_SECS_INTERACTIVE, writeClaudeSettings } from './hooksSettings'
+import { PERM_WAIT_SECS_INTERACTIVE, writeClaudeSettings, writeHouseRules } from './hooksSettings'
 import { NODE_TOKEN_ENV, nodeToken } from './hooksTokens'
 import { shq } from './hooksQuote'
 
@@ -71,10 +71,14 @@ export function buildClaudeFlags(
     permissionMode?: AgentPermissionMode
     /** Di-inject supaya test tetap bebas I/O (pola sama dengan `unwrapMissingWrapper` di pty.ts). */
     writeSettings?: (nodeId: string, port: number) => string
+    /** Sama: penulis file aturan rumah webterm (`--append-system-prompt-file`). */
+    writeRules?: () => string
   }
 ): string {
   const idFlag = resume ? `--resume ${sessionId}` : `--session-id ${sessionId}`
   const perm = permissionModeFlag(opts?.permissionMode)
   const settings = (opts?.writeSettings ?? writeClaudeSettings)(nodeId, port)
-  return [idFlag, perm, `--settings ${shq(settings)}`].filter(Boolean).join(' ')
+  // Bagian STABIL kesadaran webterm masuk system prompt; bagian dinamis lewat hook (webtermAwareness).
+  const rules = (opts?.writeRules ?? writeHouseRules)()
+  return [idFlag, perm, `--settings ${shq(settings)}`, `--append-system-prompt-file ${shq(rules)}`].filter(Boolean).join(' ')
 }

@@ -1,9 +1,10 @@
 import { writeFileSync } from 'node:fs'
 import { TOKEN_HEADER } from './auth'
 import { NODE_TOKEN_HEADER, nodeToken } from './hooksTokens'
-import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir } from './hooksPaths'
+import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir, houseRulesPath } from './hooksPaths'
 import { encodeQueryValue, shq } from './hooksQuote'
 import { createLogger } from './logs'
+import { HOUSE_RULES } from './webtermAwareness'
 
 const log = createLogger('hooks')
 
@@ -156,5 +157,23 @@ function writeClaudeHeaders(nodeId: string): string {
   // `mode` 0600 berlaku saat file dibuat; berkas ini tidak pernah ada sebelum perubahan ini, dan
   // penulisan ulang mempertahankan modenya.
   writeFileSync(path, `${lines.join('\n')}\n`, { mode: 0o600 })
+  return path
+}
+
+/**
+ * Tulis `HOUSE_RULES` ke file milik webterm dan kembalikan path-nya, untuk
+ * `--append-system-prompt-file`. Lewat FILE dengan alasan yang sama seperti `writeClaudeSettings`
+ * (pembungkus peluncuran memindai argumen; teks aturan memuat `:`). Ditulis ulang tiap peluncuran
+ * supaya teks terbaru ikut. Tidak pernah menyentuh repo user maupun `~/.claude`.
+ */
+export function writeHouseRules(): string {
+  const path = houseRulesPath()
+  try {
+    ensureNodeSettingsDir()
+    writeFileSync(path, `${HOUSE_RULES}\n`, { mode: 0o600 })
+  } catch (err) {
+    log.error('hooks.error', 'Failed to write webterm house rules', { error: err instanceof Error ? err.name : 'unknown', code: (err as { code?: unknown } | null)?.code })
+    throw err
+  }
   return path
 }
