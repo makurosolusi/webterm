@@ -150,6 +150,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (diffRes) return json(res, diffRes.status, diffRes.body)
   { const ck = await (await import('./checkpoint/checkpoint.route')).checkpointRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (ck) return json(res, ck.status, ck.body) } // workspace checkpoints + Rewind (checkpoint/checkpoint.route.ts)
   { const scm = await gitScmRoute(req, url, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (scm) return json(res, scm.status, scm.body) } // Source Control panel, POSTs UI-only (gitScm.route.ts)
+  { const wt = await (await import('./workspaceWorktree.route')).workspaceWorktreeRoute(req, url, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (wt) return json(res, wt.status, wt.body) } // worktree workspaces, POSTs UI-only (workspaceWorktree.route.ts)
   { const ob = await outboxRoute(path, method, url.searchParams, cappedBodyGetter(req, method, WORKSPACES_BODY_MAX_BYTES)); if (ob) return json(res, ob.status, ob.body) } // agent outbox (outbox/outbox.route.ts)
 
   // Hook callback from a claude session (body is the hook stdin JSON).
