@@ -98,6 +98,11 @@ export function createPolicy(deps: PolicyDeps) {
   return {
     store,
 
+    /** Same answer as `decide` without recording it (discovery: what would happen, nothing happened). */
+    evaluate(principal: Principal, capability: string, args: DecideArgs = {}): Decision {
+      return judge(principal, capability, args)
+    },
+
     /** Decides and records the decision as a `policy.decision` event. */
     decide(principal: Principal, capability: string, args: DecideArgs = {}): Decision {
       const d = judge(principal, capability, args)

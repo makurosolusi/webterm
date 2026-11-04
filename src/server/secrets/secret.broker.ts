@@ -42,12 +42,12 @@ const result = (outcome: Receipt['outcome'], detail: string, evidence: Record<st
   ({ receipt: { outcome, detail, next, evidence, operationId: null } })
 
 /** Nodes are asked by default (builtin slot: any human rule written later wins, last match). */
-const askByDefault = (principal: Principal): Grant[] => principalKind(principal) !== 'node' ? [] : [{
+export const askByDefault = (principal: Principal): Grant[] => principalKind(principal) !== 'node' ? [] : [{
   id: 'secret-ask-default', subject: principal, capability: 'secret.run', scope: '*', effect: 'ask',
   expiresAt: null, origin: 'builtin', createdBy: 'human-ui', createdAt: 0,
 }]
 /** Names only: open to every node, like MCP R0 reads (mcp.tools.ts readGrants). */
-const listByDefault = (principal: Principal): Grant[] => [{
+export const listByDefault = (principal: Principal): Grant[] => [{
   id: 'secret-list-default', subject: principal, capability: 'secret.list', scope: '*', effect: 'allow',
   expiresAt: null, origin: 'builtin', createdBy: 'human-ui', createdAt: 0,
 }]
