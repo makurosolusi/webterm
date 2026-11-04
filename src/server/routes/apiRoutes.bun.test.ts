@@ -42,6 +42,7 @@ test('full route order snapshot', () => {
     'evalcases',
     'replay',
     'prreview',
+    'templates',
   ])
 })
 
