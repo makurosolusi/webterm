@@ -11,6 +11,8 @@ import { APPROVAL_MAX_BODY_BYTES } from './approvalHttp'
 import { memoryLedgerRuntime, seedProject, seedReviewTask } from './approvalTestRuntime.testutil'
 
 const REQ = 'req-00000001'
+/** fetch() from the webterm page itself: the only caller the UI-only policy admits. */
+const BROWSER = { 'sec-fetch-site': 'same-origin' }
 
 interface FakeRes {
   statusCode: number
@@ -48,7 +50,7 @@ async function call(
   const chunks = init.body === undefined ? [] : [Buffer.isBuffer(init.body) ? init.body : Buffer.from(init.body)]
   const req = Readable.from(chunks) as unknown as IncomingMessage
   req.method = init.method ?? (init.body === undefined ? 'GET' : 'POST')
-  req.headers = init.headers ?? {}
+  req.headers = { ...BROWSER, ...init.headers }
   const res = fakeRes()
   const handled = await approvalHumanRoute(
     req,
@@ -63,13 +65,13 @@ async function call(
   }
 }
 
-function setup(opts: { auth?: boolean; ledger?: boolean } = {}) {
+function setup(opts: { ledger?: boolean } = {}) {
   const { runtime, clock } = memoryLedgerRuntime()
   seedProject(runtime)
   const deps: HumanApprovalDeps = {
     runtime: opts.ledger === false ? null : runtime,
     now: () => clock.at,
-    authAllowed: () => opts.auth ?? true,
+    isNodeToken: () => false,
   }
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     call(deps, path, { method: 'POST', body: JSON.stringify(body), headers })
@@ -332,11 +334,10 @@ describe('route matching', () => {
     expect((await f.call(f.deps, '/api/approvals')).json).toEqual({ error: 'invalid_status' })
   })
 
-  it('gates on the transport policy and answers 503 without a ledger', async () => {
-    const denied = setup({ auth: false })
-    expect((await denied.call(denied.deps, '/api/approvals/challenge?id=x')).json).toEqual({
-      error: 'approval_requires_token',
-    })
+  it('gates on the UI-only policy and answers 503 without a ledger', async () => {
+    const f = setup()
+    const curl = await f.call(f.deps, '/api/approvals/challenge?id=x', { headers: { 'sec-fetch-site': '' } })
+    expect([curl.status, curl.json]).toEqual([403, { error: 'approval_browser_only' }])
     const off = setup({ ledger: false })
     expect((await off.call(off.deps, '/api/approvals/challenge?id=x')).status).toBe(503)
   })

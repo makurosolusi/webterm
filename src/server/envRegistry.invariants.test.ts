@@ -192,13 +192,16 @@ describe('invarian 8: kunci beku', () => {
   })
   it('bootstrap-only tidak pernah ada di registry', () => {
     for (const k of BOOTSTRAP_ONLY_KEYS) expect(specFor(k), k).toBeUndefined()
-    expect(BOOTSTRAP_ONLY_KEYS).toHaveLength(11)
+    expect(BOOTSTRAP_ONLY_KEYS).toHaveLength(10)
     expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_ALLOWED_HOSTS')
+    // Dihapus (zero-config): approval kini dijaga asal UI + tolak kredensial agent, bukan flag env.
+    expect(BOOTSTRAP_ONLY_KEYS).not.toContain('WEBTERM_ALLOW_LOOPBACK_APPROVAL')
+    expect(specFor('WEBTERM_ALLOW_LOOPBACK_APPROVAL')).toBeUndefined()
   })
-  it('kunci bootstrap yang didokumentasikan ke operator tepat 9 (L1)', () => {
+  it('kunci bootstrap yang didokumentasikan ke operator tepat 8 (L1, minus ALLOW_LOOPBACK_APPROVAL)', () => {
     const operator = BOOTSTRAP_ONLY_KEYS.filter((k) => k !== 'WEBTERM_HOST' && k !== 'WEBTERM_TELEGRAM_API_BASE')
     expect([...operator].sort()).toEqual([
-      'HOST', 'PORT', 'WEBTERM_ALLOWED_HOSTS', 'WEBTERM_ALLOW_LOOPBACK_APPROVAL', 'WEBTERM_ALLOW_TOKEN_MINT',
+      'HOST', 'PORT', 'WEBTERM_ALLOWED_HOSTS', 'WEBTERM_ALLOW_TOKEN_MINT',
       'WEBTERM_DATA_DIR', 'WEBTERM_ENV_SETTINGS', 'WEBTERM_STRICT_HOOK_AUTH', 'WEBTERM_TOKEN',
     ])
   })

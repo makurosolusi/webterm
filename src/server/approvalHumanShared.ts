@@ -16,7 +16,7 @@ export { MAX_PROJECT_ID } from './apiShared.types'
 export const HUMAN_ACTOR = 'human'
 /** Derived actor when the caller proved possession of the transport root token. */
 export const ROOT_ACTOR = 'human:root'
-/** Derived actor when the surface was allowed without a token (explicit loopback opt-in). */
+/** Derived actor when no root token is enforced and the webterm page approved on loopback. */
 export const LOOPBACK_ACTOR = 'human:loopback'
 export const MAX_KIND = 128
 export const MAX_SECRET = 256
@@ -24,7 +24,7 @@ export const MAX_SECRET = 256
 /**
  * Audit identity derived from the transport credential, never from the body. `?token=` and
  * `x-webterm-token` are the only credentials this family accepts (the outer gate in `auth.ts` has
- * compared them), so either present means the root-token path; no token means the loopback opt-in.
+ * compared them), so either present means the root-token path; no token means the token-free loopback UI.
  */
 export function actorForRequest(req: IncomingMessage, url: URL): string {
   const raw = req.headers[TOKEN_HEADER]

@@ -13,7 +13,7 @@ export const ENV_SETTINGS_SWITCH = 'WEBTERM_ENV_SETTINGS'
 
 /**
  * Hanya lewat env. Kalau API bisa mengubahnya, shell agent di mesin yang sama bisa mematikan
- * pengamannya sendiri (approval/mint/hook auth), mengalihkan token bot ke host lain (API_BASE),
+ * pengamannya sendiri (mint/hook auth), mengalihkan token bot ke host lain (API_BASE),
  * atau memindahkan DB/token. Tampil read-only sebagai info (terisi/kosong saja, tanpa nilai).
  */
 export const BOOTSTRAP_ONLY_KEYS: readonly string[] = [
@@ -22,7 +22,6 @@ export const BOOTSTRAP_ONLY_KEYS: readonly string[] = [
   'WEBTERM_HOST',
   'WEBTERM_DATA_DIR',
   'WEBTERM_TOKEN',
-  'WEBTERM_ALLOW_LOOPBACK_APPROVAL',
   'WEBTERM_ALLOW_TOKEN_MINT',
   'WEBTERM_STRICT_HOOK_AUTH',
   'WEBTERM_TELEGRAM_API_BASE',
