@@ -1,6 +1,7 @@
 // Authorization + route entry for the context-link backend: resolves the requester's link
 // doc from its own workspace and renders the requested verb.
 import type { Workspace } from '../shared/workspace'
+import { BROWSER_KIND } from '../shared/browser.contract'
 import {
   type ContextLinkVerb,
   type LinkDoc,
@@ -31,7 +32,8 @@ export function buildLinkDoc(ws: Workspace, requesterId: string): LinkDoc {
   const links: LinkDocEntry[] = []
   for (const id of linkedPeerIds(ws, requesterId)) {
     const n = ws.nodes.find((x) => x.id === id)
-    if (n) links.push({ id: n.id, title: n.title || n.id, agent: n.agentId, sessionId: n.sessionId })
+    // Browser yang dikabel = target kemudi (`resolveLinkedBrowser`), bukan peer transcript/terminal.
+    if (n && n.kind !== BROWSER_KIND) links.push({ id: n.id, title: n.title || n.id, agent: n.agentId, sessionId: n.sessionId })
   }
   return { links }
 }

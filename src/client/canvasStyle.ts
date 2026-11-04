@@ -75,7 +75,7 @@ export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
 }
 
 /** React Flow menyembunyikan edge yang salah satu ujungnya tidak punya handle sama sekali
- *  (`getEdgePosition` → null, error 008). Hanya AgentNode punya `<Handle>`; node files & editor
+ *  (`getEdgePosition` → null, error 008). Hanya AgentNode & BrowserNode punya `<Handle>`; node files & editor
  *  sengaja tidak, karena kabel buka-file dibuat otomatis, bukan dengan drag. Stub ini memberi
  *  handle bounds TANPA elemen yang bisa ditarik pengguna. Koordinatnya tidak dipakai: `ContextEdge`
  *  menghitung titik sambungnya sendiri dari rect node. */

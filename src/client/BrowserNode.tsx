@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { NodeResizer, useReactFlow, useStore } from '@xyflow/react'
+import { Handle, NodeResizer, Position, useReactFlow, useStore } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { NAV_ACTIONS, ZOOM_PAUSE_BELOW } from '../shared/browser.contract'
 import type { BrowserState } from '../shared/browser.contract'
@@ -130,6 +130,10 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
             {renderOverlay?.(ctx)}
           </div>
         </div>
+        {/* Handle kabel sama dengan AgentNode: kabel agent↔browser memberi agent itu izin mengemudikan
+            browser ini (`resolveLinkedBrowser` server). Validasinya di `canLink`. */}
+        <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />
+        <Handle id="link-in"  type="target" position={Position.Left}  className="bridge-handle" />
       </div>
     </>
   )

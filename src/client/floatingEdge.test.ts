@@ -33,14 +33,24 @@ describe('floatingEdgeParams', () => {
 })
 
 describe('canLink', () => {
+  const ag = (id: string, agentId = 'claude') => ({ id, kind: 'agent', agentId })
+  const br = (id: string) => ({ id, kind: 'browser' })
   it('true for two claude ids on distinct nodes', () => {
-    expect(canLink('claude', 'claude', 'a', 'b')).toBe(true)
+    expect(canLink(ag('a'), ag('b'))).toBe(true)
   })
   it('false for claude ↔ undefined (terminal)', () => {
-    expect(canLink('claude', undefined, 'a', 'b')).toBe(false)
+    expect(canLink(ag('a'), { id: 'b', kind: 'terminal' })).toBe(false)
   })
   it('false for source === target', () => {
-    expect(canLink('claude', 'codex', 'a', 'a')).toBe(false)
+    expect(canLink(ag('a'), ag('a', 'codex'))).toBe(false)
+  })
+  it('agent ↔ browser true in both directions', () => {
+    expect(canLink(ag('a'), br('b'))).toBe(true)
+    expect(canLink(br('b'), ag('a'))).toBe(true)
+  })
+  it('browser ↔ browser and browser ↔ plain terminal false', () => {
+    expect(canLink(br('a'), br('b'))).toBe(false)
+    expect(canLink(br('a'), { id: 'b', kind: 'terminal' })).toBe(false)
   })
 })
 

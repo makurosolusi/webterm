@@ -26,6 +26,7 @@ import {
   findWorkspaceFor,
   type LinkDoc,
 } from './contextLink'
+import { linkedPeerIds } from './contextLinkRoute'
 
 const node = (id: string, title: string): { id: string; title: string } => ({ id, title })
 
@@ -143,6 +144,12 @@ describe('buildLinkDoc', () => {
   it('requester z not bridged → empty', () => {
     const w = ws([{ id: 'a' }, { id: 'b' }], [{ source: 'a', target: 'b' }])
     expect(buildLinkDoc(w, 'z').links).toEqual([])
+  })
+  it('browser yang dikabel tidak masuk daftar context-link, tapi tetap peer kabel', () => {
+    const w = ws([{ id: 'a' }, { id: 'b' }, { id: 'web' }], [{ source: 'a', target: 'b' }, { source: 'web', target: 'a' }])
+    w.nodes[2].kind = 'browser'
+    expect(buildLinkDoc(w, 'a').links.map((l) => l.id)).toEqual(['b'])
+    expect(linkedPeerIds(w, 'a').has('web')).toBe(true)
   })
 })
 
