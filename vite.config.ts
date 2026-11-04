@@ -23,6 +23,8 @@ export default defineConfig({
   // because `**` won't cross a `..` segment, so plain `**/*.bun.test.ts` misses
   // the parent-relative server bun tests.
   test: {
+    // Temp WEBTERM_DATA_DIR + HOME for the whole run (see the file's header).
+    globalSetup: [path.resolve(process.cwd(), 'src/testIsolation.setup.ts')],
     include: ['**/*.test.{ts,tsx}', '../shared/**/*.test.{ts,tsx}', '../server/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.bun.test.ts', '../**/*.bun.test.ts'],
   }
