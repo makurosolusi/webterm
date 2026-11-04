@@ -7,6 +7,7 @@ import { NodeRegistry, tailOutputBytes, type NodeExit } from './nodeRegistry'
 import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 import { ptyLog } from './sessionsLog'
+import type { TmuxSupervisor } from './ptySupervisor'
 
 /** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
  *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
@@ -22,7 +23,14 @@ export function exitOutput(log: OutputLog | undefined): string | undefined {
  * perubahan perilaku — setiap field dan urutan operasinya sama dengan versi satu-file.
  */
 export class SessionsCore {
-  constructor(public options: SessionsOptions = {}) {}
+  /** `supervisor` hidup TERPISAH dari `options`: `applyPtyOptions` (api.ts) menimpa seluruh objek
+   *  `options` pada setiap PUT settings, dan supervisor tidak boleh ikut hilang karenanya. */
+  constructor(public options: SessionsOptions = {}, public supervisor: TmuxSupervisor | null = null) {}
+
+  /** Supervisor yang benar-benar dipakai. PTY ter-inject (test) tidak pernah lewat tmux. */
+  protected get supervised(): TmuxSupervisor | null {
+    return this.options.spawn ? null : this.supervisor
+  }
 
   /** Batas scrollback efektif. Nilai settings bisa diedit tangan / datang lewat HTTP, jadi
    *  divalidasi di titik pemakaian: tak sah -> default, di luar rentang tabel -> dijepit (bukan
@@ -82,7 +90,9 @@ export class SessionsCore {
    */
   getTerminal(id: string): string {
     const live = this.map.get(id)
-    if (live) return live.log.text()
+    // Sesi tmux: log-nya berisi gambar ulang layar (posisi kursor), bukan teks berurutan, jadi
+    // teksnya dibaca dari pane — termasuk history dari sebelum server restart.
+    if (live) return this.supervised?.capture(id) ?? live.log.text()
     return this.registry.getExit(id)?.output ?? ''
   }
   /** Raw output log + current size of a LIVE session, so its visible screen can be rebuilt

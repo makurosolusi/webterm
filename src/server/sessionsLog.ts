@@ -41,4 +41,16 @@ export const ptyLog = {
   statusCleared(nodeId: string): void {
     agent.debug('agent.status.stale', 'Stale working status cleared', { ids: { nodeId } })
   },
+  /** Boot menempel ulang sesi tmux yang selamat dari server sebelumnya. */
+  adopted(adopted: number, orphans: number): void {
+    pty.info('pty.adopt', 'Re-adopted supervised sessions', { adopted, orphans })
+    if (orphans) pty.warn('pty.orphan', 'Supervised sessions without a workspace node marked orphan', { orphans })
+  },
+  /** Hanya nama galat: pesannya bisa memuat path data dir pengguna. */
+  adoptKnownFailed(err: unknown): void {
+    pty.warn('pty.adopt_known_failed', 'Workspace node list unavailable; adopting every session', { error: err instanceof Error ? err.name : 'unknown' })
+  },
+  adoptFailed(err: unknown): void {
+    pty.error('pty.adopt_failed', 'Re-adopting supervised sessions failed', { error: err instanceof Error ? err.name : 'unknown' })
+  },
 }

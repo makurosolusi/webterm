@@ -164,7 +164,12 @@ function failedPty(err: unknown): Pty {
 type SpawnFn = (cmd: string[], options: Parameters<typeof Bun.spawn>[1]) => Bun.Subprocess
 
 export function spawnPty(
-  opts: { cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string> },
+  opts: {
+    cols: number; rows: number; cwd?: string; cmd?: string; shell?: string; env?: Record<string, string>
+    /** argv mentah (tmux client milik `ptySupervisor.ts`). Bila diisi, `cmd`/`shell` diabaikan dan
+     *  `env` dipakai APA ADANYA — pemanggil sudah menyaringnya lewat `ptyEnv`. */
+    argv?: string[]
+  },
   spawn: SpawnFn = Bun.spawn
 ): Pty {
   let onData: (data: string) => void = () => {}
@@ -177,14 +182,14 @@ export function spawnPty(
   // `proc.terminal`, bukan objek yang kita pegang sendiri.
   let proc: Bun.Subprocess
   try {
-    proc = spawn(shellArgv(opts.shell, opts.cmd), {
+    proc = spawn(opts.argv ?? shellArgv(opts.shell, opts.cmd), {
       terminal: {
         cols: opts.cols,
         rows: opts.rows,
         data: (_t, bytes) => onData(decoder.decode(bytes, { stream: true })),
       },
       cwd: resolveCwd(opts.cwd),
-      env: { ...ptyEnv(process.env, { interactive: !opts.cmd }), ...(opts.env ?? {}) },
+      env: opts.argv ? opts.env : { ...ptyEnv(process.env, { interactive: !opts.cmd }), ...(opts.env ?? {}) },
     })
   } catch (err) {
     return failedPty(err)
