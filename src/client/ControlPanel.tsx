@@ -12,6 +12,7 @@ import { ControlField } from './ControlPanelField'
 import { ControlPanelDoctor } from './ControlPanelDoctor'
 import { PolicyRules } from './PolicyRules'
 import { AgentMemory } from './AgentMemory'
+import { SecretsPanel } from './SecretsPanel'
 import { matchesSearch, normalizeQuery } from './SettingsFields'
 import { peekToken } from './transportToken'
 
@@ -135,6 +136,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
       <PolicyRules />
 
       <AgentMemory />
+      <SecretsPanel />
 
       <div className="flex flex-wrap items-center gap-3">
         <Input type="search" aria-label={CONTROL_TEXT.search} placeholder={CONTROL_TEXT.search} value={filter}
