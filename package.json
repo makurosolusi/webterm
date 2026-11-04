@@ -9,7 +9,7 @@
     "build:binary": "bun run build && bun build --compile --define \"process.env.NODE_ENV='production'\" --no-compile-autoload-bunfig --external vite --outfile webterm src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:bun": "bun test --no-env-file src/server/*.bun.test.ts"
+    "test:bun": "bun test --no-env-file $(find src/server -name '*.bun.test.ts' | sort)"
   },
   "overrides": {
     "dompurify": "^3.4.17"
