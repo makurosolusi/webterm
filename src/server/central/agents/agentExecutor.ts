@@ -9,7 +9,9 @@ import { AGENT_TRANSITIONS } from '../contracts'
 import { AGENT_KIND_UNKNOWN } from './agentCatalog'
 import { AgentTransitionError, isTerminalState } from './agentStateMachine'
 import { type AgentStore, createAgentStore } from './agentStore'
-import { type ExecHandle, type ExecOutcome, startExec } from './execRunner'
+import { type ExecHandle, type ExecOutcome } from './execRunner'
+import type { Principal } from '../../policy/policy.model'
+import { spawnAgent } from '../../spawn/agentSpawn'
 
 /** Wall-clock cap of one headless run when `AgentDeps.execTimeoutMs` is not given. */
 export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
@@ -50,6 +52,8 @@ export interface AgentDeps {
   /** Source env for headless children (scrubbed); defaults to `process.env`. */
   env?: NodeJS.ProcessEnv
   execTimeoutMs?: number
+  /** The `agent.spawn` path (F2-h) for headless runs; default = the process-wide spawner. */
+  spawn?: typeof spawnAgent
 }
 
 export interface SpawnInput {
@@ -74,6 +78,8 @@ export const AGENT_STATES_FOR_FILTER = Object.keys(AGENT_TRANSITIONS) as AgentSt
 export function agentView(a: AgentRecord): Record<string, unknown> {
   return { agentId: a.id, projectId: a.projectId, kind: a.kind, role: a.role, runner: a.runner, state: a.state, owner: a.owner, taskId: a.taskId, nodeId: a.nodeId, startedAt: a.startedAt, lastEventAt: a.lastEventAt, endedAt: a.endedAt, endReason: a.endReason }
 }
+/** Policy principal that spawned an agent: a human at the UI, otherwise central. */
+export const spawnParentOf = (agent: Pick<AgentRecord, 'owner'>): Principal => (agent.owner === 'human' ? 'human-ui' : 'central')
 /** Deterministic canvas node id of an agent, so a crashed spawn can be adopted by name. */
 export function agentNodeId(agentId: string): string { return `c-${agentId}` }
 /** True when the agent belongs to a central conversation (R1 to prompt/close); false for user agents (R2). */
@@ -131,7 +137,12 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     if (agent.runner === 'pty') { await host.openPty(agent, cwd, nodeId); return nodeId }
     const argv = host.headlessArgv(agent.kind, await host.initialPrompt(agent))
     if (!argv) throw new Error(`no headless form for kind ${agent.kind}`)
-    const handle = startExec({ argv, cwd, env: deps.env, timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS, overrides: host.execEnv?.(agent.kind) })
+    const res = await (deps.spawn ?? spawnAgent)({
+      door: 'central', mode: 'headless', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: `${agent.role} ${agent.kind}`,
+      headless: { argv, env: deps.env, overrides: host.execEnv?.(agent.kind), timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS },
+    })
+    if (!res.ok || !res.handle) throw new Error(res.ok ? 'headless spawn returned no handle' : `${res.code}: ${res.message}`)
+    const handle = res.handle
     handles.set(agent.id, handle)
     void handle.done.then((outcome) => onExit(agent, outcome))
     return null

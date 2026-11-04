@@ -11,6 +11,8 @@ import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
 import { producePtyExit } from './events/producers'
+import { spawnAgent } from './spawn/agentSpawn'
+import { createLogger } from './logs'
 import { mcpEnv } from './mcp/mcp.launch'
 import { cliPath } from './cli/cli.launcher'
 import { delimiter, dirname } from 'node:path'
@@ -19,6 +21,8 @@ import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
 // menjaga kontrak itu tanpa memaksa semua pemanggil tahu file barunya.
 export { launchLine }
+
+const spawnLog = createLogger('spawn')
 
 // Keadaan sesi (map, registry, jam sweep, emit/onExit) tinggal di `sessionsCore.ts`; tipe-tipenya di
 // `sessionsTypes.ts`. Keduanya dipecah hanya karena ukuran file — kontrak publik tetap di sini.
@@ -255,9 +259,27 @@ export class Sessions extends SessionsCore {
     this.supervised?.kill(id)
   }
 
+  /**
+   * Canvas door of `agent.spawn` (F2-h): a NEW agent session opened from the canvas goes through the
+   * spawner (door `canvas`, parent `human-ui`) for lineage, events and naming. Re-attach to a live
+   * session and plain shells stay direct. The spawner calls `openPty` synchronously (no await before
+   * it), so the PTY opens within this call and a spawn error still throws to the caller as before.
+   */
+  private openFromCanvas(msg: OpenMsg, send: (m: ServerMsg) => void): void {
+    if (!msg.agentId || !isSafeNodeId(msg.id) || this.isLive(msg.id)) { this.open(msg, send); return }
+    let thrown: { err: unknown } | undefined
+    const openPty = (): void => {
+      try { this.open(msg, send) } catch (err) { thrown = { err }; throw err }
+    }
+    void spawnAgent({ door: 'canvas', mode: 'pty', kind: msg.agentId, parent: 'human-ui', nodeId: msg.id, ...(msg.cwd ? { cwd: msg.cwd } : {}) }, { openPty })
+      .then((r) => { if (!r.ok) spawnLog.warn('spawn.canvas.denied', 'canvas agent spawn refused', { code: r.code, ids: { nodeId: msg.id } }) })
+      .catch(() => { /* already rethrown synchronously below */ })
+    if (thrown) throw thrown.err
+  }
+
   handle(msg: ClientMsg, send: (m: ServerMsg) => void): void {
     switch (msg.t) {
-      case 'open': this.open(msg, send); break
+      case 'open': this.openFromCanvas(msg, send); break
       case 'input': this.input(msg.id, msg.data); break
       case 'resize': this.resize(msg.id, msg.cols, msg.rows); break
       case 'close': this.close(msg.id, send); break

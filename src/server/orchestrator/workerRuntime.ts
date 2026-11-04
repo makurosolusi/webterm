@@ -13,6 +13,7 @@ import type { VerifyOutcome } from './verify'
 import { toModelEvidence } from './verifier'
 import { buildWorkerPrompt, capBytes, deriveNodeId, sanitizeText } from './workerRuntimePrompt'
 import { waitForSettle } from './workerRuntimeSettle'
+import { DEFAULT_AGENT_KIND, spawnAgent } from '../spawn/agentSpawn'
 import type {
   WorkerRunErrorCode,
   WorkerRunInput,
@@ -197,14 +198,20 @@ export function createWorkerRuntime(deps: WorkerRuntimeDeps): WorkerRuntime {
 
     try {
       // Sesi baru per run: `launchLine` lalu bisa memasang `--settings`/hooks.
-      await deps.sessions.open({
+      const open = {
         nodeId,
         cwd: worktree.path,
         ...(deps.cmd ? { cmd: deps.cmd } : {}),
         ...(deps.agentId ? { agentId: deps.agentId, sessionId: newSessionId() } : {}),
         ...(deps.cols !== undefined ? { cols: deps.cols } : {}),
         ...(deps.rows !== undefined ? { rows: deps.rows } : {}),
-      })
+      }
+      // Thin adapter over `agent.spawn` (F2-h): depth, caps, lineage and events live there.
+      const spawned = await (deps.spawn ?? spawnAgent)(
+        { door: 'orchestrator', mode: 'pty', kind: deps.agentId ?? DEFAULT_AGENT_KIND, parent: deps.spawnParent ?? 'human-ui', nodeId, cwd: worktree.path, title: item.title, pty: open },
+        { openPty: () => deps.sessions.open(open) }
+      )
+      if (!spawned.ok) return fail('spawn_failed', boundedReason(`${spawned.code}: ${spawned.message}`))
       opened = true
     } catch (err) {
       return fail('spawn_failed', `spawn failed: ${messageOf(err)}`)

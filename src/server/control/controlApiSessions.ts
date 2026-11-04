@@ -1,7 +1,7 @@
 // Session-mutating `/api/control/*` routes: spawn, prompt, close. Split out of `controlApi.ts`.
 import npath from 'node:path'
 import { assembleCmd, isBuiltinAgent, isSafeNodeId } from '../../shared/workspace'
-import { activePolicy } from '../policy/policy.runtime'
+import { spawnAgent } from '../spawn/agentSpawn'
 import { authorize, badRequest, capabilityHolder } from './controlAuth'
 import {
   DEFAULT_COLS,
@@ -18,7 +18,7 @@ import {
 } from './controlTypes'
 import { resolveSpawnSessionId } from './spawnSession'
 
-export function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: AckStore, now: number): ControlResult {
+export async function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: AckStore, now: number): Promise<ControlResult> {
   const body = asObject(req.body)
   if (!isValidRequestId(body.requestId)) return badRequest('invalid_request_id')
   const nodeId = body.nodeId
@@ -51,21 +51,21 @@ export function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: AckStor
   if (!sid.ok) return badRequest('invalid_session_id')
 
   const cmd = assembleCmd(agentId, deps.settings().agentLaunchCommands[agentId])
-  deps.sessions.open(
+  // Thin adapter over `agent.spawn` (F2-h): depth, per-parent cap, lineage (K3) and events live there.
+  const spawned = await spawnAgent(
     {
-      t: 'open',
-      id: nodeId,
-      cols,
-      rows,
-      ...(cwd === undefined ? {} : { cwd }),
-      cmd,
-      agentId,
-      ...(sid.sessionId === undefined ? {} : { sessionId: sid.sessionId }),
+      door: 'control', mode: 'pty', kind: agentId, nodeId, parent: capabilityHolder(auth.record), ...(cwd === undefined ? {} : { cwd }),
+      pty: { cmd, agentId, cols, rows, ...(sid.sessionId === undefined ? {} : { sessionId: sid.sessionId }) },
     },
-    () => {}
+    {
+      openPty: (o) =>
+        deps.sessions.open(
+          { t: 'open', id: o.nodeId, cols, rows, ...(cwd === undefined ? {} : { cwd }), cmd, agentId, ...(o.sessionId === undefined ? {} : { sessionId: o.sessionId }) },
+          () => {}
+        ),
+    }
   )
-  // K3: the spawned node's decisions are capped by its spawner's from now on (lineage persists).
-  activePolicy()?.registerSpawn(capabilityHolder(auth.record), `node:${nodeId}`)
+  if (!spawned.ok) return { status: spawned.code === 'spawn_cap_exceeded' ? 429 : spawned.code === 'spawn_invalid' ? 400 : 403, body: { error: spawned.code, message: spawned.message } }
   const result = { status: 201, body: { ok: true, requestId: body.requestId, nodeId } }
   acks.set(key, result, now)
   return result
