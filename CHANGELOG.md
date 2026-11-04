@@ -44,7 +44,7 @@
 - `WEBTERM_FILES_LIST_MAX` (default 5000) caps entries per listing. The new `/api/fs/*` verbs and the integration flow are covered by `src/server/fileManager.integration.bun.test.ts`; design decisions are in `docs/decisions/files-manager.md`.
 - Not yet verified in a real browser or host: Monaco editing, 100 MB uploads and XHR progress, native drag-and-drop, pasting into xterm, `fs.watch` on macOS under Node, and a real WebSocket reconnect.
 - A non-loopback bind with no `WEBTERM_TOKEN` now generates one: 43 characters of base64url, stored at `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`, directory `700`). On a TTY the server prints the file path and a `?token=` URL; with any other output it prints only the path and the length. An environment `WEBTERM_TOKEN` still wins.
-- Opt-in token on loopback: `GET /api/settings/token` (state), `POST /api/settings/token/enable` (loopback peer only, the value is returned once) and `POST /api/settings/token/rotate`. There is no disable call; to go back to open loopback, stop the server, delete the secrets file and restart. There is no Settings UI for this yet, and both calls are accepted only from the webterm page (see Security). Limits: a same-uid local process can still read the file, WebSockets already open survive enable and rotate, and node tokens are unaffected.
+- Opt-in token on loopback: `GET /api/settings/token` (state), `POST /api/settings/token/enable` (loopback peer only, the value is returned once) and `POST /api/settings/token/rotate`. There is no disable call; to go back to open loopback, stop the server, delete the secrets file and restart. Both are also in Settings > Kemampuan > Token akses (see below), and both calls are accepted only from the webterm page (see Security). Limits: a same-uid local process can still read the file, WebSockets already open survive enable and rotate, and node tokens are unaffected.
 - `WEBTERM_ALLOWED_HOSTS` (CSV of `host` or `host:port`) and a Host allowlist against DNS-rebinding. It is checked only while no token is enforced; a request with another `Host` gets `403 host_not_allowed`. Loopback names and the bind address are always allowed.
 - `POST /api/settings/env/import` reads the `.env` in the boot directory. It is a dry run by default; `{"apply":true}` writes the values to Settings. Bootstrap keys are skipped and dangerous keys need the root gate.
 - Env entries in `/api/settings/env` carry `envShadowed`, true when a stored Settings value hides a different process-env value.
@@ -61,6 +61,7 @@
 - Files nodes show write actions (rename, delete, upload, and so on) even when file editing is off, as locked items. Clicking one offers to turn the capability on.
 - A blocked private address in a Browser node shows an "Izinkan host:port" button. It adds that address to the allowed hosts and reloads the page, with no restart.
 - While agents may not drive the browser, the Browser toolbar offers "Izinkan agent mengendalikan browser ini". It explains the risk, asks for confirmation, and takes effect without a restart. The same switch is a sub-option of the Browser card.
+- A "Token akses" (access token) card in Settings > Kemampuan. It shows whether the token is on, and has "Aktifkan token" (enable, from a page opened directly on this machine) and "Rotasi token" (rotate). Each asks for confirmation, then shows the link with the token once, with a copy button; this tab reloads with the new token when you press "Selesai" or close Settings. A token set in the server's environment is shown as such and cannot be changed here. The card has no off switch: to turn the token off, stop the server and delete the secrets file.
 
 ### Changed
 - Settings now exposes seven capabilities with one on/off switch each (applied immediately, no restart) instead of environment keys; the Environment and Channels tabs are removed.
@@ -92,6 +93,8 @@
 - A dangerous sub-option (such as letting agents drive the browser) asks for confirmation before it turns on, the same as the Otonomi card.
 - Browser node messages are all in one language and come with a button to fix the problem where possible ("Atur browser", "Izinkan host:port").
 - The 403 message when a settings change is refused explains why (the page was not opened directly on the machine running webterm) and names the real address to open, with this page's port.
+- Importing cookies from a file skips Google login cookies (the `google.com` family and Google's device-bound cookies such as `SIDCC` and `AEC`), following Orca's import policy (MIT). Google ties those sessions to the browser they came from, so they would not work anyway. The preview says how many were skipped and asks you to sign in to Google directly in the Browser node. YouTube cookies are still imported.
+- Browser nodes respond faster. Mouse, keyboard, and scroll input is sent to Chrome without waiting for each event to finish, frames are sized to the node's viewport (capped at 2048 px a side) instead of the full window, the server acknowledges each frame to Chrome as soon as it arrives, only the newest frame is painted, and the stale-size frames sent while a node is resized are dropped (for at most 500 ms). Measured on a trackpad scroll burst: the tail went from about 950 ms to about 25 ms, and frames from about 86 KB to about 43 KB.
 
 ### Fixed
 - A new Browser node now always loads its starting URL; before, it could stay on `about:blank`. A page that has not loaded can no longer overwrite the node's saved URL with `about:blank`.
@@ -122,6 +125,7 @@
 
 - "Nyalakan yang dibutuhkan" (turn on what is needed) turns on the missing prerequisites of that card only. Before, it reset every capability.
 - A capability that is waiting for a setup step can always be switched off. Before, its switch was disabled.
+- "Periksa lagi" for an OpenCode engine now updates the status right away. The re-check used to bypass the shared cache without replacing it, so the next status poll could still show "not ready" for up to 30 seconds.
 
 ### Removed
 - Four dead keys from the env registry: `WEBTERM_CENTRAL_TOOL_BRIDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_EMBED_URL`, `WEBTERM_EMBED_MODEL`. The unused `WEBTERM_CHANNEL_HMAC_SECRET` entry in log redaction is gone too.
@@ -131,6 +135,7 @@
 ### Security
 - Human approvals work from the webterm page with zero configuration, and agents cannot approve their own actions. `/api/approvals/*` and token enable/rotate accept a request only when it comes from the webterm page in a browser (`Sec-Fetch-Site: same-origin` and a same-origin `Origin`), and refuse any agent credential (node token or capability) with `403 agent_cannot_approve`. A root token, when enabled, is still checked first. Accepted limit: a local process running as the same user that deliberately forges these headers still passes; enable the root token to close that. Details: `docs/decisions/approval-ui-origin.md`.
 - Node tokens and capabilities do not open the human approval route, so an agent cannot approve its own irreversible action.
+- Without a root token, the terminal (`/ws`) and Browser node (`/ws/browser`) WebSockets accept only a connection that carries the webterm page's `Origin`, as a browser always sends. curl, agent shells, and other local processes without one are refused with `403 origin_required`, so they can no longer open a fresh shell or watch your browser. With a root token the token is checked as before. Accepted limit: a local process that forges `Origin` still passes; enable the root token to close that.
 
 ## [0.7.0] - 2026-10-29
 ### Added
