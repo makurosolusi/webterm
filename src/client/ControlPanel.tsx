@@ -10,6 +10,7 @@ import { TOKEN_HEADER } from './api'
 import { CONTROL_TEXT, SOURCE_LABEL } from './controlPanelLabels'
 import { ControlField } from './ControlPanelField'
 import { ControlPanelDoctor } from './ControlPanelDoctor'
+import { CostPanel } from './CostPanel'
 import { PolicyRules } from './PolicyRules'
 import { AgentMemory } from './AgentMemory'
 import { SecretsPanel } from './SecretsPanel'
@@ -132,6 +133,8 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
       </section>
 
       <ControlPanelDoctor />
+
+      <CostPanel />
 
       <PolicyRules />
 
