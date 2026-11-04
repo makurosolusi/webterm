@@ -12,6 +12,8 @@
 import { randomUUID } from 'node:crypto'
 import { uniqueTitle } from '../../shared/nodeTitle'
 import { checkSchema } from '../capability/capability.schema'
+import { applyProviderEnv, type ProviderEnv } from '../claudeProvider/claudeProvider.model'
+import { activeProviderEnv } from '../claudeProvider/claudeProvider.store'
 import { type ExecHandle, type ExecSpec, startExec } from '../central/agents/execRunner'
 import { eventBus } from '../events/eventBus'
 import { recordEvent } from '../events/producers'
@@ -75,6 +77,8 @@ export interface AgentSpawnerOptions {
   exec?(spec: ExecSpec): ExecHandle
   /** Registers the PTY exit listener; default listens for `pty.exit` on the event bus. */
   onPtyExit?(fn: (nodeId: string, code: number | null) => void): void
+  /** Claude provider env for headless Claude runs; default reads Settings > Capabilities. */
+  providerEnv?(): ProviderEnv
 }
 
 /** Claude Code non-interactive form; JSON result so `execRunner` keeps the final event. */
@@ -96,6 +100,7 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
   const register = opts.registerSpawn ?? ((parent: Principal, child: Principal) => activePolicy()?.registerSpawn(parent, child))
   const record = opts.record ?? recordEvent
   const exec = opts.exec ?? startExec
+  const providerEnvOf = opts.providerEnv ?? (() => activeProviderEnv())
   const live = new Map<Principal, Live>()
 
   /** Root = 0. A node is its live depth, else its persisted lineage; an unrecorded node (opened by hand) is 1. */
@@ -144,7 +149,12 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
         if (req.prompt) io.input?.(nodeId, `${req.prompt}\r`)
       } else {
         const h = req.headless ?? {}
-        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string), cwd: req.cwd as string, env: h.env, overrides: h.overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
+        // Claude provider, as dag.planner: the exec scrub keeps only an allowlist, so the provider vars
+        // ride as overrides (applied last, so a door override cannot clobber them) and stale ones are unset.
+        const pe = kind === DEFAULT_AGENT_KIND ? providerEnvOf() : { set: {}, unset: [] }
+        const env = pe.unset.length ? applyProviderEnv(h.env ?? process.env, { set: {}, unset: pe.unset }) : h.env
+        const overrides = { ...h.overrides, ...pe.set }
+        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
       }
     } catch (err) {
       live.delete(childId)
