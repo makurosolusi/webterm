@@ -9,6 +9,7 @@ import { CUSTOM_AGENTS_PREVIEW_PATH, customAgentsPreviewRoute } from './customAg
 import { ENV_SETTINGS_PATH, IMPORT_ENDPOINT, envImportRoute, envSettingsRoute } from './envSettings.api'
 import { envSettingsApiDeps } from './envSettings.runtime'
 import { capabilitiesRoute } from './featureCapabilities.api'
+import { agentProtectionRoute } from './agentSandbox.api'
 import { workspacesRoute } from './workspacesApi'
 import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
@@ -99,6 +100,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (path === ENV_SETTINGS_PATH) return envSettingsRoute(req, res, method, envSettingsApiDeps())
   if (path === IMPORT_ENDPOINT) return envImportRoute(req, res, method, envSettingsApiDeps())
   if (await capabilitiesRoute(req, res, method, path, envSettingsApiDeps)) return
+  if (agentProtectionRoute(req, res, path)) return
 
   if (path === CUSTOM_AGENTS_PREVIEW_PATH) return customAgentsPreviewRoute(req, res, method)
 

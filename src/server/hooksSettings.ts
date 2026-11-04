@@ -1,5 +1,7 @@
 import { writeFileSync } from 'node:fs'
+import { claudeProtectionSettings } from './agentSandbox'
 import { TOKEN_HEADER } from './auth'
+import { dataDir } from './config'
 import { NODE_TOKEN_HEADER, nodeToken } from './hooksTokens'
 import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir, houseRulesPath } from './hooksPaths'
 import { encodeQueryValue, shq } from './hooksQuote'
@@ -116,6 +118,11 @@ export function claudeHooksSettings(nodeId: string, port: number): Record<string
   return { hooks }
 }
 
+/** Whole `--settings` object of a webterm Claude node: hooks + same-uid protection (`agentSandbox`). */
+export function claudeNodeSettings(nodeId: string, port: number): Record<string, unknown> {
+  return { ...claudeHooksSettings(nodeId, port), ...claudeProtectionSettings(dataDir(), { ownHeaders: claudeHeadersPath(nodeId) }) }
+}
+
 /**
  * Tulis settings hook node ini ke file dan kembalikan path-nya.
  *
@@ -134,8 +141,8 @@ export function writeClaudeSettings(nodeId: string, port: number): string {
     ensureNodeSettingsDir()
     // Ditulis SEBELUM settings dikembalikan: baris hook menunjuk ke file ini, dan sesi agent bisa
     // langsung menjalankan hook pertamanya begitu claude hidup.
-    writeClaudeHeaders(nodeId)
-    writeFileSync(path, JSON.stringify(claudeHooksSettings(nodeId, port)), { mode: 0o600 })
+    writeNodeHeaders(nodeId)
+    writeFileSync(path, JSON.stringify(claudeNodeSettings(nodeId, port)), { mode: 0o600 })
   } catch (err) {
     log.error('hooks.error', 'Failed to write hook settings', { ids: { nodeId }, error: err instanceof Error ? err.name : 'unknown', code: (err as { code?: unknown } | null)?.code })
     throw err
@@ -145,12 +152,15 @@ export function writeClaudeSettings(nodeId: string, port: number): string {
 }
 
 /**
- * File header yang dibaca `curl -H @file` (0600). Nilai token hidup DI SINI, bukan di argv.
+ * File header yang dibaca `curl -H @file` (0600). Nilai token hidup DI SINI, bukan di argv dan
+ * bukan di env: hook claude DAN shim skill (context-link, browser) semua agent membacanya lewat
+ * path di `WEBTERM_NODE_HEADERS`. Sandbox claude hanya membuka file milik node itu sendiri.
  *
  * Ditulis ulang setiap peluncuran supaya token node yang baru (proses restarted) ikut. Setelah
  * ada, file ini hanya bisa dibaca pemiliknya.
  */
-function writeClaudeHeaders(nodeId: string): string {
+export function writeNodeHeaders(nodeId: string): string {
+  ensureNodeSettingsDir()
   const path = claudeHeadersPath(nodeId)
   const token = nodeToken(nodeId)
   const lines = [`${NODE_TOKEN_HEADER}: ${token}`, `${TOKEN_HEADER}: ${token}`]

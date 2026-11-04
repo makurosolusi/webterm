@@ -36,6 +36,12 @@ export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Root cwd control', description: 'Root tambahan untuk cwd spawn control, dipisah titik dua (Windows: titik koma).',
     dangerNote: 'Memperluas direktori yang boleh dipakai sebagai cwd shell yang di-spawn oleh control.',
   }),
+  // Read when a Claude node's settings are written (agentSandbox.ts), so it applies to the next launch.
+  flag('WEBTERM_AGENT_SANDBOX', 'control', {
+    ...CTRL, audience: 'user', hot: true,
+    label: 'Agent sandbox', description: 'Run Claude agent shell commands in the Claude Code sandbox (macOS) so they cannot read webterm secrets or other nodes\' tokens. Applies on next launch.',
+    optionLabels: { on: 'On', off: 'Off' },
+  }, 'on'),
   flag('WEBTERM_TRUST_PROXY', 'telegram', {
     ...TGC, audience: 'advanced', hot: true, dangerous: true,
     requires: [{ key: 'WEBTERM_TELEGRAM_MODE', oneOf: ['webhook', ''], note: 'Hanya relevan untuk throttle webhook.' }],

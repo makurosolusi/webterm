@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP } from '../shared/browser.contract'
-import { TOKEN_HEADER } from './auth'
+import { NODE_HEADERS_ENV } from './hooksPaths'
 import { dataDir } from './config'
 
 /** Skill directory + front-matter `name`. */
@@ -14,17 +14,17 @@ const verbsOf = (cap: 'browser.read' | 'browser.act'): string =>
   Object.entries(BROWSER_VERB_CAP).filter(([, c]) => c === cap).map(([v]) => v).join('|')
 
 /**
- * POSIX-sh thin client, same identity model as the context-link shim: it carries NO token value; the session's
- * own node token (`WEBTERM_TOKEN`, fallback `NODETERM_NODE_TOKEN`) is expanded from the child env at run time and
- * handed to curl through `-K -` (stdin), so it never shows up in `ps` argv. The server picks the target browser
+ * POSIX-sh thin client, same identity model as the context-link shim: it carries NO token value and neither does the
+ * agent env; curl reads the node's own header file (`-H @file`, path in `WEBTERM_NODE_HEADERS`), so the token is
+ * never in `ps` argv nor in the process environment (readable by sibling processes on macOS). The server picks the target browser
  * at CALL time from the canvas cables of this node (`browser.linkedTarget.ts`); `--node` picks one of several.
  */
 export function buildBrowserShim(): string {
   return `#!/bin/sh
 # webterm browser shim (generated - do not edit). Thin client for ${BROWSER_CONTROL_PREFIX}.
 usage() { echo "usage: webterm-browser <${verbsOf('browser.read')}|${verbsOf('browser.act')}> [args] [--node <browserNodeId>]" >&2; exit 2; }
-tok="\${WEBTERM_TOKEN:-\${NODETERM_NODE_TOKEN:-}}"
-if [ -z "$tok" ]; then echo "Not a webterm agent session (no node token in env)." >&2; exit 2; fi
+hdr="\${${NODE_HEADERS_ENV}:-}"
+if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
 PORT="\${NODETERM_PORT:-8700}"
 [ "$#" -gt 0 ] || usage
 verb="$1"; shift
@@ -67,7 +67,7 @@ case "$verb" in
 esac
 url="http://127.0.0.1:$PORT${BROWSER_CONTROL_PREFIX}/\${node:+$node/}$verb"
 if [ "$verb" = status ]; then method=GET; else method=POST; fi
-printf 'header = "${TOKEN_HEADER}: %s"\\n' "$tok" | curl -sS -K - -X "$method" \\
+curl -sS -H "@$hdr" -X "$method" \\
   -H "content-type: application/json" --data-binary "$body" "$url"
 echo
 `

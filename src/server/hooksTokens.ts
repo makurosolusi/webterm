@@ -13,6 +13,9 @@ export const NODE_TOKEN_HEADER = 'x-nodeterm-node-token'
 /** Nama env var tempat sesi agent menemukan token node-nya. Juga wire-protocol — jangan di-rename. */
 export const NODE_TOKEN_ENV = 'NODETERM_NODE_TOKEN'
 
+/** Re-export: the constant lives in `hooksPaths` (dependency-free, so the shims import it without a cycle). */
+export { NODE_HEADERS_ENV } from './hooksPaths'
+
 const tokens = new Map<string, string>()
 
 /**

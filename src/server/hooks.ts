@@ -1,6 +1,7 @@
 import { isPermissionMode, type AgentPermissionMode } from '../shared/workspace'
 import { PERM_WAIT_SECS_INTERACTIVE, writeClaudeSettings, writeHouseRules } from './hooksSettings'
-import { NODE_TOKEN_ENV, nodeToken } from './hooksTokens'
+import { NODE_HEADERS_ENV } from './hooksTokens'
+import { claudeHeadersPath } from './hooksPaths'
 import { shq } from './hooksQuote'
 
 // Modul ini dulu memuat SEMUANYA (token, settings, perakitan baris peluncuran). Ia sekarang
@@ -12,11 +13,14 @@ export {
   PERM_WAIT_SECS_INTERACTIVE,
   PERMISSION_REQUEST_HOOK_TIMEOUT_SECS,
   claudeHooksSettings,
+  claudeNodeSettings,
   hookEventName,
   writeClaudeSettings,
+  writeNodeHeaders,
   type HookSubscription,
 } from './hooksSettings'
 export {
+  NODE_HEADERS_ENV,
   NODE_TOKEN_ENV,
   NODE_TOKEN_HEADER,
   forgetNodeToken,
@@ -28,7 +32,8 @@ export {
 
 /**
  * Env var yang harus dibawa sebuah sesi agent. DIKEMBALIKAN, bukan ditulis: pemanggil (jalur spawn
- * PTY) yang menggabungkannya ke env proses.
+ * PTY) yang menggabungkannya ke env proses. Hanya PATH file header, tidak pernah nilai token
+ * (`NODE_HEADERS_ENV`); file-nya ditulis `writeNodeHeaders` sebelum spawn.
  *
  * `hookReplyApprovals` off ⇒ `NODETERM_PERM_WAIT_SECS` ABSEN ⇒ perilaku lama persis: hook permission
  * tidak menahan apa pun dan claude langsung menampilkan prompt interaktifnya.
@@ -36,7 +41,7 @@ export {
 export function hookEnv(nodeId: string, opts?: { hookReplyApprovals?: boolean }): Record<string, string> {
   const waitSecs = opts?.hookReplyApprovals ? PERM_WAIT_SECS_INTERACTIVE : 0
   return {
-    [NODE_TOKEN_ENV]: nodeToken(nodeId),
+    [NODE_HEADERS_ENV]: claudeHeadersPath(nodeId),
     ...(waitSecs > 0 ? { NODETERM_PERM_WAIT_SECS: String(waitSecs) } : {}),
   }
 }
