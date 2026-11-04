@@ -17,6 +17,7 @@ import { unwatchNode, watchNode } from './unread'
 import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
+import { autoTitleFromWork, claimAutoName, identityColor, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
 
 const COLLAPSED_H = 40
 
@@ -77,6 +78,27 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
 
   // Persist a freshly generated id up to App exactly once.
   useEffect(() => { if (!sessionId) onSession(id, sid) }, [])
+
+  // Identity: titles of the OTHER nodes are the uniqueness scope (one board = one React Flow).
+  const boardTitles = () => rf.getNodes()
+    .filter((n) => n.id !== id)
+    .map((n) => (n.data as { title?: string }).title)
+    .filter((t): t is string => !!t)
+  const setTitle = (t: string) => rf.updateNodeData(id, { title: uniqueTitle(t, boardTitles()) })
+  // Untitled node → unique `<adjective>-<noun>` once, persisted like the session id above.
+  useEffect(() => { if (!d.title) rf.updateNodeData(id, { title: claimAutoName(boardTitles()) }) }, [])
+  // First work (status → working) renames a still-generated name from the task; one call in flight.
+  const autoTitling = useRef(false)
+  useEffect(() => {
+    if (status !== 'working' || autoTitling.current) return
+    autoTitling.current = true
+    void autoTitleFromWork(id, {
+      getTitle: () => (rf.getNode(id)?.data as { title?: string } | undefined)?.title,
+      boardTitles,
+      setTitle: (t) => rf.updateNodeData(id, { title: t }),
+      generate: () => apiGenerateName(id),
+    }).finally(() => { autoTitling.current = false })
+  }, [status])
 
   const builtin = agentId ? agentConfig(agentId) : undefined
   const swatch = d.color ?? builtin?.color ?? '#0a84ff'
@@ -206,7 +228,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     setAiNaming(true)
     try {
       const r = await apiGenerateName(id)
-      if (r.ok) rf.updateNodeData(id, { title: r.message })
+      if (r.ok) setTitle(r.message)
       else addComment(r.message, NOTE_AUTHOR)
     } catch (e) {
       // Dilempar = tak terduga (fetch gagal / respons bukan JSON). Dilaporkan DUA kali dengan
@@ -243,7 +265,8 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
         <NodeChrome
           title={label}
           icon="hubot"
-          onRename={(t) => rf.updateNodeData(id, { title: t })}
+          onRename={setTitle}
+          identityColor={identityColor(id)}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           status={status}
@@ -254,6 +277,11 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           micActive={micActive} onToggleMic={onToggleMicProp}
           maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
+          onStop={() => { stopAgent(id, label, send) }}
+          menuItems={[{
+            type: 'item', id: 'stop-idle', label: 'Stop all idle agents on this board',
+            onSelect: () => { stopIdleAgents(rf.getNodes(), getStatus, send) },
+          }]}
           onAiName={aiName} aiNaming={aiNaming}
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
           hideLinks={d.hideLinks} onToggleHideLinks={onToggleHideLinksProp}

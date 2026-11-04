@@ -27,6 +27,9 @@ export interface NodeChromeProps {
   micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
   maximized: boolean; onToggleMaximize: () => void
   onClose: () => void
+  onStop?: () => void             // agent only: Stop button in the toolbar
+  /** Stable identity color (agent only): chip before the title, separate from the node color. */
+  identityColor?: string
   onAiName?: () => void; aiNaming?: boolean
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean
   hideLinks?: boolean; onToggleHideLinks?: () => void
@@ -132,6 +135,13 @@ export default function NodeChrome(props: NodeChromeProps) {
 
       {props.icon && <span className={cn('node-icon codicon', `codicon-${props.icon}`)} aria-hidden="true" />}
 
+      {props.identityColor && (
+        <span
+          className="node-identity" aria-hidden="true"
+          style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: props.identityColor }}
+        />
+      )}
+
       {editing ? (
         <Textfield
           ref={(node) => { titleRef.current = node }}
@@ -167,6 +177,7 @@ export default function NodeChrome(props: NodeChromeProps) {
         maximized={props.maximized} onToggleMaximize={props.onToggleMaximize}
         fullscreen={fs.isFullscreen} onToggleFullscreen={fs.toggle} fullscreenDisabled={fs.fullscreenDisabled}
         onClose={props.onClose}
+        onStop={props.onStop}
         onAiName={props.onAiName} aiNaming={props.aiNaming}
         onBroadcast={props.onBroadcast} broadcastActive={props.broadcastActive} broadcastDisabled={props.broadcastDisabled}
         hideLinks={props.hideLinks} onToggleHideLinks={props.onToggleHideLinks}
