@@ -121,14 +121,42 @@ test('agent-context: allowed flags per principal (human, cabled node, uncabled n
 
   const a1 = (await call(deps, 'GET', '/api/tools', { token: nodeToken('a1') })).body as Ctx
   expect(a1.principal).toBe('node:a1')
-  expect(allowedOf(a1)).toEqual(['browser.act', 'browser.read']) // the cable is a live browser.* grant
-  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual([])
+  expect(allowedOf(a1)).toEqual(['browser.act', 'browser.read', 'secret.list']) // the cable is a live browser.* grant
+  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['secret.list'])
 
   activePolicy()!.createGrant('human-ui', { subject: 'node:a2', capability: 'git.diff', effect: 'allow' })
-  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['git.diff'])
+  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['git.diff', 'secret.list'])
   const text = await call(deps, 'GET', '/api/tools', { token: nodeToken('a2'), accept: 'text/plain' })
   expect(text.text).toMatch(/^\d+ capabilities \(registry [0-9a-f]{12}, schema v1\) for node:a2\./)
   expect(text.text).toMatch(/git\.diff\s+R0\s+allow/)
+})
+
+test('agent-context shows the secret broker decisions: list allow, run ask by default, a broad grant allows', async () => {
+  boot()
+  const { deps } = world()
+  const decisionOf = (ctx: Ctx, name: string) => ctx.capabilities.find((c) => c.name === name)?.decision
+  const a2 = (await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx
+  expect([decisionOf(a2, 'secret.list'), decisionOf(a2, 'secret.run')]).toEqual(['allow', 'ask'])
+  const human = (await call(deps, 'GET', '/api/tools')).body as Ctx
+  expect(decisionOf(human, 'secret.run')).toBe('allow')
+
+  activePolicy()!.createGrant('human-ui', { subject: 'node:a2', capability: 'secret.run', scope: 'secret:*', effect: 'allow' })
+  expect(decisionOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx, 'secret.run')).toBe('allow')
+  activePolicy()!.createGrant('human-ui', { subject: 'node:a2', capability: 'secret.*', scope: '*', effect: 'deny' })
+  const denied = (await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx
+  expect([decisionOf(denied, 'secret.list'), decisionOf(denied, 'secret.run')]).toEqual(['deny', 'deny'])
+})
+
+test('agent-context records no policy.decision events; a real call still does', async () => {
+  boot()
+  const { deps } = world()
+  const decisions = () => (db as Database).query("SELECT COUNT(*) AS n FROM event WHERE kind = 'policy.decision'").get() as { n: number }
+  const before = decisions().n
+  await call(deps, 'GET', '/api/tools', { token: nodeToken('a1') })
+  await call(deps, 'GET', '/api/tools')
+  expect(decisions().n).toBe(before)
+  await call(deps, 'POST', '/api/tools/git.diff', { token: nodeToken('a2'), body: { root: repo } })
+  expect(decisions().n).toBe(before + 1)
 })
 
 test('without a ledger agents are denied everything and the human keeps pre-policy access', async () => {
@@ -246,7 +274,7 @@ test('end to end: the real CLI, curl and the node header file against a real ser
   try {
     const ctx = await cli('agent-context', '--json')
     expect(ctx.code).toBe(0)
-    expect(allowedOf(JSON.parse(ctx.out))).toEqual(['browser.act', 'browser.read', 'git.diff'])
+    expect(allowedOf(JSON.parse(ctx.out))).toEqual(['browser.act', 'browser.read', 'git.diff', 'secret.list'])
     const ok = await cli('git.diff', '--json', JSON.stringify({ root: repo }))
     expect(ok.code).toBe(0)
     expect(JSON.parse(ok.out).receipt.outcome).toBe('ok')

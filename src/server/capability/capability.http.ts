@@ -13,6 +13,9 @@ import { createSeenStore, type SeenStore } from '../cli/cli.seen'
 import { firstHeader } from '../httpHeaders'
 import { cableGrants } from '../policy/policy.cable'
 import { wildcardMatch, type Principal } from '../policy/policy.model'
+import { askByDefault, listByDefault } from '../secrets/secret.broker'
+import { isSecretCapability } from '../secrets/secret.capabilities'
+import { SECRET_SUBJECT_PREFIX } from '../secrets/secret.store'
 import { callFingerprint, createMemoryReceiptLog, runOnce, type Receipt } from './capability.receipt'
 
 export type { ToolsDeps }
@@ -32,15 +35,26 @@ const httpStatus = (r: Receipt): number => {
   return typeof s === 'number' && s >= 400 ? s : 400
 }
 
+/**
+ * The broker's own defaults (list open, run asks a node until a human grant) with its resource shape
+ * `secret:<NAME>:<argv>` wildcarded, so a broad human rule (`secret:*`) shows here too.
+ */
+const secretDefaults = (principal: Principal, capName: string) => capName === 'secret.list'
+  ? { resource: undefined, cable: listByDefault(principal) }
+  : { resource: `${SECRET_SUBJECT_PREFIX}*:*`, cable: askByDefault(principal) }
+
 /** Agent-context for `principal`; also records that this caller has now seen this registry version. */
 function agentContext(deps: ToolsDeps, principal: Principal, board: readonly Workspace[]) {
   const nodeId = nodeOf(principal)
   const cable = nodeId ? cableGrants(board, nodeId) : undefined
-  // ponytail: one policy.decide (and decision event) per capability per discovery call; add a
-  // non-recording evaluate to Policy if the Senses log gets noisy.
+  // Discovery evaluates without recording: no policy.decision event per capability per call.
   const ctx = buildAgentContext(principal, (cap) => {
+    if (isSecretCapability(cap.name)) {
+      const s = secretDefaults(principal, cap.name)
+      return judge(deps, principal, cap, s.resource, s.cable, false).effect
+    }
     const cabled = cable?.find((g) => wildcardMatch(g.capability, cap.name))?.scope
-    return judge(deps, principal, cap, cabled, cable).effect
+    return judge(deps, principal, cap, cabled, cable, false).effect
   })
   const seen = seenOf(deps)
   seen.saveSnapshot(snapshotOf())

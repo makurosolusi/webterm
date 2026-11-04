@@ -21,6 +21,8 @@ import type { EventLog } from '../events/eventLog'
 import { cableGrants } from '../policy/policy.cable'
 import type { Policy } from '../policy/policy.decide'
 import type { Grant } from '../policy/policy.model'
+import { runSecretCapability, type BrokerDeps } from '../secrets/secret.broker'
+import { isSecretCapability, SECRET_CAPABILITIES } from '../secrets/secret.capabilities'
 import type { McpTool } from './mcp.protocol'
 
 type Env = Record<string, string | undefined>
@@ -37,11 +39,13 @@ export interface McpDeps {
   browser: ((req: ControlRequest) => Promise<ControlResult>) | null
   gitDiff(query: URLSearchParams): Promise<ControlResult>
   events: Pick<EventLog, 'append'> | null
+  /** Secret broker store/usage overrides (tests); absent = the real broker store in the data dir. */
+  secrets?: Pick<BrokerDeps, 'store' | 'lastUsed'>
 }
 
 /** Route capabilities with an MCP executor. Control verbs node.*, approval.*, plan.read stay
  *  capability-token only (minted for Central/orchestrator), so a node never sees them here. */
-const ROUTE_TOOLS = new Set(['browser.read', 'browser.act', 'git.diff'])
+const ROUTE_TOOLS = new Set(['browser.read', 'browser.act', 'git.diff', 'secret.run', 'secret.list'])
 /** Central's project-scoped wrappers of the browser verbs; nodes use the cable-gated browser.* above. */
 const SUPERSEDED = new Set(['browser_status', 'browser_act'])
 
@@ -53,7 +57,7 @@ export function nodeCapabilities(deps: Pick<McpDeps, 'central'>): Map<string, Ca
   const c = deps.central
   const central = c ? c.registry.list().filter((d) => defEnabled(d, c.env) && !SUPERSEDED.has(d.name)).map(toolCapability) : []
   const out = new Map<string, CapabilitySpec>()
-  for (const cap of registryIndex(central).list()) {
+  for (const cap of registryIndex([...SECRET_CAPABILITIES, ...central]).list()) {
     if (!cap.projections.includes('central') && !ROUTE_TOOLS.has(cap.name)) continue
     const name = mcpName(cap.name)
     if (out.has(name)) throw new Error(`mcp tool name ${name} is claimed by two capabilities`)
@@ -130,6 +134,12 @@ async function run(deps: McpDeps, nodeId: string, token: string, cap: Capability
   const principal = `node:${nodeId}`
   if (cap.name === 'browser.read' || cap.name === 'browser.act') return runBrowser(deps, nodeId, token, cap, args)
   if (cap.name === 'git.diff') return runGitDiff(deps, nodeId, cap, args)
+  if (isSecretCapability(cap.name)) {
+    // Same broker as `/api/tools/secret.*`: it decides per secret (ask by default), runs, masks, records secret.use.
+    const broker: BrokerDeps = { policy: () => deps.policy, workspaces: deps.workspaces, events: () => deps.events, ...deps.secrets }
+    const { receipt: r, data } = await runSecretCapability(broker, cap.name, args, principal)
+    return { ...r, data: data ?? null }
+  }
   const c = deps.central
   if (!c) return receipt('error', 'central_off')
   const guard = { check: () => (decide(deps, principal, cap, typeof args.projectId === 'string' ? `project:${args.projectId}` : undefined) ? { ok: false as const, code: 'policy_denied' } : { ok: true as const }) }

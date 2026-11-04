@@ -32,7 +32,7 @@ const DENY_NEXT = 'Only the user can change this rule; do not retry. Ask your us
 export interface ToolsDeps {
   /** The API router (`api.ts` `route`); a capability's route binding is dispatched through it. */
   dispatch(req: IncomingMessage, res: ServerResponse): Promise<void>
-  policy?: () => Pick<Policy, 'decide'> | null
+  policy?: () => Pick<Policy, 'decide' | 'evaluate'> | null
   workspaces?: () => readonly Workspace[] | Promise<readonly Workspace[]>
   capabilities?: Pick<CapabilityStore, 'mint' | 'revoke'>
   receipts?: ReceiptLog
@@ -69,11 +69,14 @@ export async function boardOf(deps: ToolsDeps): Promise<readonly Workspace[]> {
   return db.list()
 }
 
-/** Policy answer for `principal`. Ledger off = no rules: fail closed for agents, the human keeps pre-policy behaviour. */
-export function judge(deps: ToolsDeps, principal: Principal, cap: CapabilitySpec, resource: string | undefined, cable?: readonly Grant[]): Decision {
+/**
+ * Policy answer for `principal`. Ledger off = no rules: fail closed for agents, the human keeps pre-policy behaviour.
+ * `record` false = `evaluate` (discovery): the same answer, no `policy.decision` event.
+ */
+export function judge(deps: ToolsDeps, principal: Principal, cap: CapabilitySpec, resource: string | undefined, cable?: readonly Grant[], record = true): Decision {
   const policy = (deps.policy ?? activePolicy)()
   if (!policy) return principal === 'human-ui' ? { effect: 'allow', reason: 'no policy (ledger off)' } : { effect: 'deny', reason: 'no policy (ledger off): agents are denied' }
-  return policy.decide(principal, cap.name, { ...(resource ? { resource } : {}), ...(cap.destructive ? { destructive: true } : {}), ...(cable ? { cable } : {}) })
+  return policy[record ? 'decide' : 'evaluate'](principal, cap.name, { ...(resource ? { resource } : {}), ...(cap.destructive ? { destructive: true } : {}), ...(cable ? { cable } : {}) })
 }
 
 /** Calls one route of the API router in-process and collects its answer. */
