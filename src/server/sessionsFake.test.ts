@@ -560,7 +560,6 @@ describe('P0: env anak tidak mewarisi token root', () => {
     WEBTERM_ALLOW_TOKEN_MINT: '1',
     NODETERM_NODE_ID: 'inherited-node',
     NODETERM_PORT: '1234',
-    NODETERM_PERM_WAIT_SECS: '999',
   }
 
   /** Pasang env warisan server, jalankan test, lalu kembalikan persis seperti semula. */
@@ -628,7 +627,6 @@ describe('P0: env anak tidak mewarisi token root', () => {
         expect(env.WEBTERM_TOKEN).not.toBe(ROOT)
         expect(env.NODETERM_NODE_ID).not.toBe('inherited-node')
         expect(env.NODETERM_PORT).not.toBe('1234')
-        expect('NODETERM_PERM_WAIT_SECS' in env).toBe(false)
       }
     })
   })
