@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bridgesToRestore,
   CLOSED_HISTORY_CAP,
   closedEntriesFor,
   pushClosed,
@@ -101,5 +102,25 @@ describe('takeClosed', () => {
     const list = [entry('a', 1)]
     takeClosed(list, 'a')
     expect(list).toHaveLength(1)
+  })
+})
+
+describe('cables of a closed node (F3-d)', () => {
+  const br = (id: string, source: string, target: string) => ({ id, source, target, kind: 'context' as const })
+
+  it('closedEntriesFor keeps only the cables touching the node; falls back to ws.bridges', () => {
+    const [e] = closedEntriesFor(['n1'], [node('n1')], ws, 1, [br('a', 'n1', 'n2'), br('b', 'n2', 'n3'), br('c', 'n3', 'n1')])
+    expect(e.bridges?.map((b) => b.id)).toEqual(['a', 'c'])
+    const [f] = closedEntriesFor(['n1'], [node('n1')], { ...ws, bridges: [br('d', 'n1', 'n9')] }, 1)
+    expect(f.bridges?.map((b) => b.id)).toEqual(['d'])
+    const [g] = closedEntriesFor(['n1'], [node('n1')], ws, 1)
+    expect(g).not.toHaveProperty('bridges')
+  })
+
+  it('bridgesToRestore needs both ends live and skips a pair already cabled (either direction)', () => {
+    const live = new Set(['n1', 'n2', 'n3'])
+    const got = bridgesToRestore([br('a', 'n1', 'n2'), br('b', 'n1', 'gone'), br('c', 'n1', 'n3'), br('d', 'n3', 'n1')], live, [{ source: 'n2', target: 'n1' }])
+    expect(got.map((b) => b.id)).toEqual(['c'])
+    expect(bridgesToRestore(undefined, live, [])).toEqual([])
   })
 })

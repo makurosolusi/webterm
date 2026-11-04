@@ -65,4 +65,24 @@ describe('useClosedHistory persistence', () => {
     expect(addNode.mock.calls[0][0]()).toEqual(agent)
     await waitFor(() => expect(server.stored).toEqual([]))
   })
+
+  it('F3-d: a closed node keeps its cables across a reload, and reopening hands them to addBridges', async () => {
+    const server = fakeServer()
+    const cable = { id: 'e1', source: 'a1', target: 'b1', kind: 'context' as const }
+    const other = { id: 'e2', source: 'x', target: 'y', kind: 'context' as const }
+    const first = renderHook(() => useClosedHistory([ws], []))
+    await waitFor(() => expect(server.puts).toBe(1))
+    act(() => first.result.current.record(['a1'], [agent], ws, [cable, other, cable]))
+    await waitFor(() => expect(server.stored[0]?.bridges).toEqual([cable])) // own cables only, deduped
+    first.unmount()
+
+    const second = renderHook(() => useClosedHistory([ws], []))
+    await waitFor(() => expect(second.result.current.entries).toHaveLength(1))
+    expect(second.result.current.bridgesOf(['a1'])).toEqual([cable])
+    const addNode = vi.fn()
+    const addBridges = vi.fn()
+    await act(() => second.result.current.reopen('a1', { activeId: 'w1', addNode, setWorkspaces: vi.fn(), selectWorkspace: vi.fn(), addBridges }))
+    expect(addNode.mock.calls[0][0]()).toEqual(agent)
+    expect(addBridges).toHaveBeenCalledWith([cable], ['a1'])
+  })
 })

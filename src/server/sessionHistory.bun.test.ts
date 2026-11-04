@@ -148,6 +148,20 @@ describe('migration', () => {
     expect((d2.query('SELECT COUNT(*) AS n FROM closed_history').get() as { n: number }).n).toBe(1)
     expect((d2.query("SELECT name FROM workspace WHERE id = 'w1'").get() as { name: string }).name).toBe('keep')
   })
+
+  it('adds the bridges column to a closed_history created before it, keeping old rows readable', async () => {
+    const file = join(base, 'migr-bridges.db')
+    const d1 = new Database(file)
+    // Exact pre-F3-d shape.
+    d1.exec('CREATE TABLE closed_history (node_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, workspace_name TEXT NOT NULL, closed_at INTEGER NOT NULL, node TEXT NOT NULL)')
+    d1.query("INSERT INTO closed_history VALUES ('n1', 'w1', 'keep', 5, '{\"id\":\"n1\",\"kind\":\"agent\",\"x\":0,\"y\":0}')").run()
+    ensureSessionHistorySchema(d1)
+    ensureSessionHistorySchema(d1) // second boot: no "duplicate column"
+    const cols = (d1.query('PRAGMA table_info(closed_history)').all() as { name: string }[]).map((c) => c.name)
+    expect(cols.filter((c) => c === 'bridges')).toHaveLength(1)
+    const got = await sessionHistoryRoute(CLOSED_HISTORY_PATH, 'GET', new URLSearchParams(), async () => '', { db: d1, roots: [], now: () => 0 })
+    expect(got?.body).toEqual({ entries: [{ node: { id: 'n1', kind: 'agent', x: 0, y: 0 }, workspaceId: 'w1', workspaceName: 'keep', closedAt: 5 }] })
+  })
 })
 
 describe('route', () => {
@@ -159,7 +173,8 @@ describe('route', () => {
     const d1 = openDb(file)
     ensureSessionHistorySchema(d1)
     const entries = [
-      { node: { id: 'a1', kind: 'agent', x: 1, y: 2, agentId: 'claude', sessionId: 'sid-1' }, workspaceId: 'w1', workspaceName: 'proj', closedAt: 20 },
+      { node: { id: 'a1', kind: 'agent', x: 1, y: 2, agentId: 'claude', sessionId: 'sid-1' }, workspaceId: 'w1', workspaceName: 'proj', closedAt: 20,
+        bridges: [{ id: 'e1', source: 'a1', target: 'b1', kind: 'context' }] },
       { node: { id: 't1', kind: 'terminal', x: 0, y: 0 }, workspaceId: 'w1', workspaceName: 'proj', closedAt: 10 },
     ]
     const put = await sessionHistoryRoute(CLOSED_HISTORY_PATH, 'PUT', new URLSearchParams(), async () => JSON.stringify({ entries }), deps(d1, []))
@@ -177,7 +192,8 @@ describe('route', () => {
 
   it('rejects malformed closed-history bodies with 400', async () => {
     const db = freshDb()
-    for (const raw of ['nope', '[]', '{"entries":[{"node":{}}]}', JSON.stringify({ entries: Array(11).fill({ node: { id: 'x', kind: 'agent' }, workspaceId: 'w', workspaceName: 'n', closedAt: 1 }) })]) {
+    for (const raw of ['nope', '[]', '{"entries":[{"node":{}}]}', JSON.stringify({ entries: Array(11).fill({ node: { id: 'x', kind: 'agent' }, workspaceId: 'w', workspaceName: 'n', closedAt: 1 }) }),
+      JSON.stringify({ entries: [{ node: { id: 'x', kind: 'agent' }, workspaceId: 'w', workspaceName: 'n', closedAt: 1, bridges: [{ id: 'e', source: 'x' }] }] })]) {
       const r = await sessionHistoryRoute(CLOSED_HISTORY_PATH, 'PUT', new URLSearchParams(), async () => raw, deps(db, []))
       expect(r?.status).toBe(400)
     }

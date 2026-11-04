@@ -5,12 +5,15 @@
 // Top-level side effect on purpose: vitest runs this in the main process before forking workers,
 // which inherit the env; bun runs a preload in the test process itself.
 //
-// HOME is Node-only: Bun resolves os.homedir() once at startup and ignores a later
-// `process.env.HOME` write (checked: `bun -e "process.env.HOME='/x'; os.homedir()"` keeps the
-// real home). Bun tests are covered by WEBTERM_DATA_DIR; redirecting HOME there needs `HOME=` in
-// the `test:bun` script itself.
+// HOME: Bun resolves os.homedir() once at startup and ignores a later `process.env.HOME` write
+// (checked: `bun -e "process.env.HOME='/x'; os.homedir()"` keeps the real home). So under Bun the
+// `test:bun` script starts the process with `HOME=$(mktemp -d)`; this file only seeds that temp
+// home and removes it afterwards (only when it really lives under the temp dir).
+// Exception: `*.real.bun.test.ts` (real headful Chrome) runs in a second `bun test` with the real
+// HOME, because Chrome on macOS under a fresh HOME hangs on Page.navigate (checked: passes with the
+// real HOME, times out with a temp one). It still gets a temp data dir and its own temp profile.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /** Env var carrying the per-run temp root. Tests read it by name: importing this file mints a new root. */
@@ -19,17 +22,29 @@ const TEST_ROOT_ENV = 'WEBTERM_TEST_ROOT'
 const root = mkdtempSync(join(tmpdir(), 'webterm-test-'))
 process.env[TEST_ROOT_ENV] = root
 process.env.WEBTERM_DATA_DIR = join(root, 'data')
-if (!process.versions.bun) {
-  const home = join(root, 'home')
-  process.env.HOME = home
-  // A typical home: tests assume ~/Documents exists (controlCwd) and that git has a global identity
-  // for commits in throwaway repos. A file, not GIT_AUTHOR_* env: env would beat repo-local
-  // identities that the server sets on purpose (memoryFileEnsure).
+
+/** A typical home: tests assume ~/Documents exists (controlCwd) and a global identity for commits
+ *  in throwaway repos. A file, not author env vars: env would beat the repo-local identities the
+ *  server sets on purpose (memoryFileEnsure). */
+function seedHome(home: string): void {
   mkdirSync(join(home, 'Documents'), { recursive: true })
   writeFileSync(join(home, '.gitconfig'), '[user]\n\tname = webterm-test\n\temail = webterm-test@example.invalid\n')
 }
 
-const cleanup = (): void => rmSync(root, { recursive: true, force: true })
+// Under Bun a HOME outside the temp dir means the script was bypassed (plain `bun test <file>`):
+// that home is left alone; WEBTERM_DATA_DIR still isolates the data dir.
+const bunTempHome = process.versions.bun && homedir().startsWith(tmpdir() + '/') ? homedir() : null
+if (!process.versions.bun) {
+  process.env.HOME = join(root, 'home')
+  seedHome(process.env.HOME)
+} else if (bunTempHome) {
+  seedHome(bunTempHome)
+}
+
+const cleanup = (): void => {
+  rmSync(root, { recursive: true, force: true })
+  if (bunTempHome) rmSync(bunTempHome, { recursive: true, force: true })
+}
 // `bun test` does not emit process 'exit' reliably (roots were left behind); a preload's
 // `afterAll` is global and runs once after the last file.
 if (process.versions.bun) (await import('bun:test')).afterAll(cleanup)
