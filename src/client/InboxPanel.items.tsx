@@ -38,6 +38,10 @@ const KIND_LABEL: Record<Kind, string> = { gate: 'Needs approval', question: 'Qu
 /** Other ledger approvals have their own consent dialog below; only Claude prompts and inbox gates render here. */
 const shownHere = (i: UnifiedItem): boolean => !(i.kind === 'gate' && i.source === 'approval' && i.approvalKind !== PERMISSION_KIND)
 
+/** A PR review draft (src/server/prreview) is approved by posting it, so its button says what happens. */
+export const approveLabel = (item: Pick<UnifiedItem, 'kind' | 'source'>): string =>
+  item.source === 'prreview' ? 'Post review' : item.kind === 'review' ? 'Accept' : 'Approve once'
+
 export function impactText(impact: Impact): string {
   return `${impact.what} · ${impact.tier} · ${impact.rewindable ? 'rewindable from a checkpoint' : 'cannot be rewound'}`
 }
@@ -129,7 +133,7 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
               <Checkbox className="inbox-check" aria-label={`Select ${item.title}`} checked={selected.has(item.id)} onCheckedChange={() => toggle(item.id)} />
               <span className={`codicon codicon-${ICON[item.kind]} inbox-state inbox-state--needs_you`} role="img" aria-label={KIND_LABEL[item.kind]} />
               <span className="inbox-item__title">{item.title}{item.count > 1 ? ` (×${item.count})` : ''}</span>
-              {can('approve') && <Button size="sm" disabled={busy} onClick={() => act(item.id, { type: 'approve' })}>{item.kind === 'review' ? 'Accept' : 'Approve once'}</Button>}
+              {can('approve') && <Button size="sm" disabled={busy} onClick={() => act(item.id, { type: 'approve' })}>{approveLabel(item)}</Button>}
               {can('deny') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(item.id, { type: 'deny' })}>Deny</Button>}
               {can('edit') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDraft({ id: item.id, mode: 'edit', text: JSON.stringify(item.args ?? null, null, 2) })}>Edit</Button>}
               {can('reply') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDraft({ id: item.id, mode: 'reply', text: '' })}>Reply</Button>}

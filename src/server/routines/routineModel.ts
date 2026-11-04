@@ -22,6 +22,8 @@ export type RoutineTrigger =
 export type RoutineAction =
   | { type: 'spawn'; prompt: string }
   | { type: 'outbox'; to: string; body: string }
+  /** PR review bot (prreview.service.ts): review open PRs with a new head, drafts land in the Inbox. */
+  | { type: 'prreview' }
 
 export interface RoutinePrecheck { command: string; timeoutSeconds: number }
 export interface RoutineBudget { maxRunsPerDay: number; maxCostUsdPerDay: number | null }
@@ -77,9 +79,9 @@ const TEXT_MAX = 32 * 1024
 const COMMAND_MAX = 4096
 const NODE_ID_RE = /^[\w.:-]{1,200}$/
 
-/** spawn = `agent.spawn` (R2); typing into a wired agent's outbox is R1. */
+/** spawn and prreview = `agent.spawn` (R2; prreview posts nothing by itself); typing into a wired agent's outbox is R1. */
 export function routineTier(action: RoutineAction): Tier {
-  return action.type === 'spawn' ? 'R2' : 'R1'
+  return action.type === 'outbox' ? 'R1' : 'R2'
 }
 
 const TIER_RANK: Record<Tier, number> = { R0: 0, R1: 1, R2: 2, R3: 3 }
@@ -122,7 +124,8 @@ function parseAction(v: unknown): RoutineAction | string {
     if (!to || !NODE_ID_RE.test(to)) return 'action.to must be a node id'
     return body ? { type: 'outbox', to, body } : 'action.body is required'
   }
-  return 'action.type must be spawn or outbox'
+  if (v.type === 'prreview') return { type: 'prreview' }
+  return 'action.type must be spawn, outbox or prreview'
 }
 
 /** Validates an API body into a routine definition; a string is the 400 reason. */
