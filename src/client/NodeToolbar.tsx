@@ -14,6 +14,7 @@ export interface NodeToolbarProps {
   maximized: boolean; onToggleMaximize: () => void; maximizeDisabled?: boolean
   fullscreen?: boolean; onToggleFullscreen?: () => void; fullscreenDisabled?: boolean  // omit onToggleFullscreen = no button
   onClose: () => void
+  onStop?: () => void                                  // agent only: kill the session, keep the node — omit if undefined
   onAiName?: () => void; aiNaming?: boolean            // agent only — omit button if undefined
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean  // agent only
   hideLinks?: boolean; onToggleHideLinks?: () => void  // context-capable agent only — omit if undefined
@@ -100,6 +101,13 @@ export default function NodeToolbar(props: NodeToolbarProps) {
             setMenuAt({ x: r.left, y: r.bottom })
           }}
         ><Codicon name="ellipsis" /></ToolbarButton>
+
+        {props.onStop && (
+          <ToolbarButton
+            label="Stop agent" title="Stop agent (keeps the node)" data-title="Stop agent"
+            onClick={props.onStop}
+          ><Codicon name="debug-stop" /></ToolbarButton>
+        )}
 
         <ToolbarButton
           label="Close (ends the session)" title="Close (ends the session)" data-title="Close (ends the session)"
