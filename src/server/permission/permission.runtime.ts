@@ -6,6 +6,8 @@ import { PERM_WAIT_SECS_INTERACTIVE } from '../hooksSettings'
 import { getRow } from '../ledger/ledgerCore'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import { activePolicy } from '../policy/policy.runtime'
+import { classifierSwitch } from '../policy/policy.classifier'
+import { classifyCard } from '../policy/policy.classifier.card'
 import { answerPermission, type PermissionAsk } from './permission.wait'
 import type { PermissionOutput } from './permission.model'
 
@@ -30,5 +32,6 @@ export async function answerPermissionLive(ask: PermissionAsk, enabled: boolean)
   return answerPermission({
     db: ledger.db, policy, projectId, record: recordEvent,
     waitMs: enabled ? PERM_WAIT_SECS_INTERACTIVE * 1000 : 0,
+    ...(classifierSwitch(ledger.db).permissions ? { classify: (a) => classifyCard({ db: ledger.db }, a) } : {}),
   }, ask)
 }
