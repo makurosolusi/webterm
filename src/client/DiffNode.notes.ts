@@ -1,9 +1,11 @@
 // Review notes on a diff and their delivery to the wired agent as ONE message.
 // Format copied from Orca `src/shared/diff-comments-format.ts` (deterministic, quote-safe).
-// Delivery uses the agent's own PTY input path (`send({t:'input'})`, as AgentNode's dictation does)
-// with the gate of `src/server/linkNoteDelivery.ts`: never into a `working` or `blocked` agent, and
-// the Enter goes in a SEPARATE write (Claude Code reads an Enter in the same burst as a line break).
+// Delivery goes through the server OUTBOX (`enqueueNotes` -> `POST /api/outbox`, src/server/outbox/):
+// queued while the agent is busy, typed at the end of its turn into a proven-empty composer, exactly
+// once per operationId even when the request is retried.
 import type { AgentStatus, DiffNoteData } from '../shared/workspace'
+import { OUTBOX_PATH, type OutboxEnqueueReply } from '../server/outbox/outbox.types'
+import { tokenQuery } from './api'
 
 export type DiffNote = DiffNoteData
 
@@ -31,7 +33,27 @@ export function sendRefusal(agentId: string | null, status: AgentStatus | undefi
   return null
 }
 
-/** Paste the batch (bracketed paste keeps newlines from submitting) then submit with a separate Enter. */
+/** Retry-safe operation id: a batch's first note is sent only once, so a retried send of the same
+ *  batch is the same operation and the server dedupes it. */
+export const notesOperationId = (agentId: string, notes: readonly DiffNote[]): string =>
+  `diff-notes:${agentId}:${notes[0]?.id ?? 'none'}:${notes.length}`
+
+/** Queue the batch for `agentId` in the server outbox. Throws naming the operation on failure. */
+export async function enqueueNotes(agentId: string, notes: readonly DiffNote[], fetchFn: typeof fetch = fetch): Promise<OutboxEnqueueReply> {
+  const q = tokenQuery()
+  const res = await fetchFn(q ? `${OUTBOX_PATH}?${q}` : OUTBOX_PATH, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: agentId, body: formatDiffNotes(notes), operationId: notesOperationId(agentId, notes) }),
+  })
+  const body = (await res.json().catch(() => ({}))) as { message?: unknown; error?: string }
+  if (!res.ok) throw new Error(`Send review notes to ${agentId}: ${typeof body.message === 'string' ? body.message : body.error ?? `HTTP ${res.status}`}`)
+  return body as OutboxEnqueueReply
+}
+
+/** Paste the batch (bracketed paste keeps newlines from submitting) then submit with a separate Enter.
+ *  TODO(outbox-diffnotes): delete once DiffNode.tsx `onSend` calls `enqueueNotes` (F2-d; that call
+ *  site is outside wkr-out-70's file ownership). */
 export async function deliverNotes(
   write: (data: string) => void, text: string, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<void> {

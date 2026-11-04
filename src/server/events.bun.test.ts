@@ -256,7 +256,7 @@ test('v10 migrates an existing v9 ledger file idempotently and keeps legacy rows
   expect(migrateWithBackup(db, path, MIGRATIONS.filter((m) => m.version <= 9))).toBe(9)
   q(db, "INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','n','/p',1,1)").run()
   q(db, "INSERT INTO event (ts, project_id, actor, kind, payload_json) VALUES (1,'p1','legacy','seed','{}')").run()
-  expect(migrateWithBackup(db, path)).toBe(11)
+  expect(migrateWithBackup(db, path)).toBe(MIGRATIONS.at(-1)!.version)
   expect(readdirSync(root).some((f) => f.endsWith('.v9.bak'))).toBe(true)
   applyV10(db) // re-running the step is a no-op
   applyV10(db)
@@ -272,7 +272,7 @@ test('v10 migrates an existing v9 ledger file idempotently and keeps legacy rows
   expect(count(db, 'SELECT count(*) AS c FROM event')).toBe(1)
   close(db)
   const reopened = openLedgerDb(path)
-  expect(Number(q(reopened, 'PRAGMA user_version').get()?.['user_version'])).toBe(11)
+  expect(Number(q(reopened, 'PRAGMA user_version').get()?.['user_version'])).toBe(MIGRATIONS.at(-1)!.version)
   close(reopened)
 })
 
