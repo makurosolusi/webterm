@@ -20,6 +20,7 @@ import { applyV18 } from './ledgerSchemaV18'
 import { applyV19 } from './ledgerSchemaV19'
 import { applyV20 } from './ledgerSchemaV20'
 import { applyV21 } from './ledgerSchemaV21'
+import { applyV22 } from './ledgerSchemaV22'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -67,4 +68,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 20, up: applyV20 },
   // v21: eval_case (F6 eval harness from user rejections); additive.
   { version: 21, up: applyV21 },
+  // v22: event(ts)/event(node_id, ts) indexes for replay; cost_run rebuilt once so kind admits 'bakeoff'.
+  { version: 22, up: applyV22 },
 ]

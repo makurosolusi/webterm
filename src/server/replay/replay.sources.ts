@@ -50,8 +50,6 @@ function senseEvent(r: Row): SenseEvent {
   }
 }
 
-// ponytail: no index on event(ts)/event(node_id) yet, so this scans the chained rows of the range;
-// add `CREATE INDEX idx_event_ts ON event(ts, seq)` in a ledger migration when replay gets slow.
 export function eventItems(db: Database, s: ReplayScope, r: ReplayRange, c: Cursor | null, limit: number): ReplayItem[] {
   const sc = scopeSql(s)
   const cu = cursorSql(c, 'event', 'seq')
