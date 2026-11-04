@@ -88,7 +88,7 @@ export function AgentSettings({
         id="st-hookReplyApprovals"
         setting="hookReplyApprovals"
         label="Persetujuan hook dari canvas"
-        hint="Saat on, sesi Claude diluncurkan dengan NODETERM_PERM_WAIT_SECS — hook permission menahan sejenak menunggu Approve/Deny dari canvas sebelum jatuh ke prompt interaktif biasa. Off = perilaku lama persis."
+        hint="Saat on, permintaan izin dari Claude menunggu sebentar supaya kamu bisa Setujui atau Tolak langsung dari canvas. Kalau tidak dijawab, Claude bertanya seperti biasa di terminalnya. Off = Claude selalu bertanya di terminal."
         value={s.hookReplyApprovals}
         onChange={(v) => onChange({ hookReplyApprovals: v })}
       />

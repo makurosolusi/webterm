@@ -2,8 +2,8 @@
 
 ## [Unreleased]
 ### Added
-- Browser node on the canvas, off by default (`WEBTERM_BROWSER=on`). It streams a server-side Chromium into a node, with a toolbar, lease chip (human or agent), optional agent control (`WEBTERM_BROWSER_AGENT`), and an encrypted cookie dialog (`WEBTERM_BROWSER_COOKIE_IMPORT`). "New Browser" appears in the Dock and canvas menu only when the feature is on; with it off nothing changes. Private networks are blocked unless listed in `WEBTERM_BROWSER_ALLOW_HOSTS`. Tested against a fake Chromium only; real-browser behaviour is not verified yet.
-- Open a Browser node from a link or a drop. Right-click an `http(s)` link in a terminal or agent node and choose "Open in canvas browser", or drag a URL onto empty canvas. The node opens beside its source (or at the drop point). Opening a URL a Browser node already shows takes you to that node instead of opening a second one, without navigating it. Cmd/Ctrl+click still opens a normal tab. Not yet available: agents opening Browser nodes on their own, and automatic localhost preview (`localhost` stays blocked unless listed in `WEBTERM_BROWSER_ALLOW_HOSTS`, matched exactly).
+- Browser node on the canvas, off by default (`WEBTERM_BROWSER=on`). It streams a server-side Chromium into a node, with a toolbar, lease chip (human or agent), optional agent control (`WEBTERM_BROWSER_AGENT`), and an encrypted cookie vault filled from the node's "⋯" menu (Import Cookies > From File…). "New Browser" appears in the Dock and canvas menu only when the feature is on; with it off nothing changes. Private networks are blocked unless listed in `WEBTERM_BROWSER_ALLOW_HOSTS`; `localhost` is allowed when webterm binds to loopback.
+- Open a Browser node from a link or a drop. Right-click an `http(s)` link in a terminal or agent node and choose "Open in canvas browser", or drag a URL onto empty canvas. The node opens beside its source (or at the drop point). Opening a URL a Browser node already shows takes you to that node instead of opening a second one, without navigating it. Cmd/Ctrl+click still opens a normal tab. Not yet available: agents opening Browser nodes on their own.
 - System log and an Output panel. The server now records tagged, structured events (PTY and agent lifecycle, workspaces and nodes, filesystem, settings, hooks, approvals, Telegram and channels, ledger, HTTP and auth errors, WebSocket connections) and browser errors, with secrets and personal data redacted. Open the Output panel from the status bar, the View menu, the command palette, or `Shift+Cmd+U` / `Ctrl+Shift+U`; it has a channel dropdown, level selector, filter, clear, auto-scroll lock, copy, and save. See "Logs and the Output panel" in the README.
 - `WEBTERM_LOG_LEVEL` (default `info`), `WEBTERM_LOG_BUFFER` (default `5000`), and `WEBTERM_LOG_FILE` (default `on`, daily files under `<data dir>/logs`, 5 MiB per file, 7 files kept), also listed in Settings.
 - Log API under the root-token gate: `GET /api/logs`, `GET /api/logs/stream`, `PUT /api/logs/level`, `POST /api/logs/client`, and `DELETE /api/logs`.
@@ -17,7 +17,6 @@
 - Inbox panel with Needs you / Review / Broken filters, a consent dialog that requires the checkbox and the literal `APPROVE`, and an unread count on the dock. Task rows carry their fence so a review decision can target the right task version.
 - Read-only ledger projections for the UI: `GET /api/inbox`, `GET /api/memory`, `GET /api/memory/search`, and `/api/orchestrator/*`.
 - `WEBTERM_LEDGER` modes `off`, `shadow`, and `on`, plus the P3/P4/P5 foundations behind them: orchestrator roles, caps, plan store, worktree service, memory claim/promote with FTS5, and Telegram webhook verification, identity, and outbox.
-- `WEBTERM_ALLOW_LOOPBACK_APPROVAL`, default `0`, as the explicit opt-in for token-free local approval demos.
 - `WEBTERM_TELEGRAM`, `WEBTERM_TELEGRAM_WEBHOOK_SECRET`, and `WEBTERM_TELEGRAM_BOT_TOKEN` for the Telegram ingress. The legacy `TELEGRAM_BOT_TOKEN` name is still accepted.
 - `.env.example` now documents the approval, ledger, Telegram, orchestrator, memory-file, and central flags, plus the fact that Bun auto-loads `.env`.
 - A root-only orchestrator control plane: `POST /api/orchestrator/bootstrap` creates the project, orchestrator agent, worker agent, and plan in one transaction, and `POST /api/orchestrator/assign` creates the ledger task and locks the plan item to it. Every plan item needs an explicit, non-empty scope, and bootstrap refuses a path that is not an absolute, existing git root. `/api/orchestrator/run` needs an assigned item, and until now only a throwaway script could produce one.
@@ -45,7 +44,7 @@
 - `WEBTERM_FILES_LIST_MAX` (default 5000) caps entries per listing. The new `/api/fs/*` verbs and the integration flow are covered by `src/server/fileManager.integration.bun.test.ts`; design decisions are in `docs/decisions/files-manager.md`.
 - Not yet verified in a real browser or host: Monaco editing, 100 MB uploads and XHR progress, native drag-and-drop, pasting into xterm, `fs.watch` on macOS under Node, and a real WebSocket reconnect.
 - A non-loopback bind with no `WEBTERM_TOKEN` now generates one: 43 characters of base64url, stored at `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`, directory `700`). On a TTY the server prints the file path and a `?token=` URL; with any other output it prints only the path and the length. An environment `WEBTERM_TOKEN` still wins.
-- Opt-in token on loopback: `GET /api/settings/token` (state), `POST /api/settings/token/enable` (loopback peer only, the value is returned once) and `POST /api/settings/token/rotate`. There is no disable call; to go back to open loopback, stop the server, delete the secrets file and restart. There is no Settings UI for this yet. Limits: a same-uid local process can still read the file, WebSockets already open survive enable and rotate, and node tokens are unaffected.
+- Opt-in token on loopback: `GET /api/settings/token` (state), `POST /api/settings/token/enable` (loopback peer only, the value is returned once) and `POST /api/settings/token/rotate`. There is no disable call; to go back to open loopback, stop the server, delete the secrets file and restart. There is no Settings UI for this yet, and both calls are accepted only from the webterm page (see Security). Limits: a same-uid local process can still read the file, WebSockets already open survive enable and rotate, and node tokens are unaffected.
 - `WEBTERM_ALLOWED_HOSTS` (CSV of `host` or `host:port`) and a Host allowlist against DNS-rebinding. It is checked only while no token is enforced; a request with another `Host` gets `403 host_not_allowed`. Loopback names and the bind address are always allowed.
 - `POST /api/settings/env/import` reads the `.env` in the boot directory. It is a dry run by default; `{"apply":true}` writes the values to Settings. Bootstrap keys are skipped and dangerous keys need the root gate.
 - Env entries in `/api/settings/env` carry `envShadowed`, true when a stored Settings value hides a different process-env value.
@@ -53,6 +52,15 @@
 - Chromium is now found in more places when `WEBTERM_BROWSER_BIN` is empty: Chrome, Chromium, Chrome Canary, Edge, and Brave in `/Applications` on macOS, the usual Linux paths, every `PATH` directory, and the Playwright cache (newest revision first). Settings > Capabilities > Advanced has a "Lokasi Chromium" field that shows the binary in use and whether it was chosen automatically or by you, lists every candidate found on this machine for one-click selection, and has "Deteksi ulang" (detect again) and "Pakai otomatis" (clear your path and use auto-detection).
 - Choosing "Browser" from the Dock "+" menu while the browser capability is off now offers to turn it on, the same offer the canvas menu makes, and opens the node once it is on. Before, the item was hidden.
 - The Cookies dialog of a Browser node has a guide for getting a cookie file from your own browser: a cookies.txt extension, or a copyable `yt-dlp --cookies-from-browser` command, with a warning that a cookie file is a login and a reminder that signing in once inside the node is safest, because its profile persists.
+
+- Browser address bar works as an omnibox: type an address or a search. Text that is not an address is searched with the engine chosen in Settings > Canvas > "Mesin pencari browser" (Google by default; DuckDuckGo, Bing, or Kagi).
+- Agent Pusat shows whether its engine is ready (Claude Code or OpenCode installed and logged in), with a "Periksa lagi" (check again) button that re-checks right away instead of using a cached result. The engine and the Chrome location can be chosen inside the "Nyalakan" offer itself, so the Dock and canvas menu can finish setup without opening Settings.
+- The Central button is always in the Dock, and "Open in canvas browser" is always in the link menu. When the capability is off, clicking them offers to turn it on.
+- Settings search matches words people type, not only card titles: for example "chrome", "cookie", "token", or "localhost".
+- Telegram: link a chat to a project with a one-time `t.me` deep link (press Start in Telegram; single use, valid 10 minutes). The card shows the bot's name ("Tersambung sebagai @bot") and has "Matikan bot", "Nyalakan lagi" (restart with the saved token), and "Lepas tautan" (unlink a chat).
+- Files nodes show write actions (rename, delete, upload, and so on) even when file editing is off, as locked items. Clicking one offers to turn the capability on.
+- A blocked private address in a Browser node shows an "Izinkan host:port" button. It adds that address to the allowed hosts and reloads the page, with no restart.
+- While agents may not drive the browser, the Browser toolbar offers "Izinkan agent mengendalikan browser ini". It explains the risk, asks for confirmation, and takes effect without a restart. The same switch is a sub-option of the Browser card.
 
 ### Changed
 - Settings now exposes seven capabilities with one on/off switch each (applied immediately, no restart) instead of environment keys; the Environment and Channels tabs are removed.
@@ -67,16 +75,23 @@
 - `.env` no longer carries `WEBTERM_TOKEN` and is kept at mode `600`. A root token must be exported explicitly, so it is not inherited by every process that reads the auto-loaded file.
 - A newly created file now opens in the editor. Files that are not UTF-8 open read-only with a banner, and binary files show a placeholder instead of loading into the editor. Audio, video, and archives are no longer treated as text.
 - Known limits: DNS-rebinding against `/api/fs/*` is not mitigated (the token is the only guard); Quick Open without `rg` or a git repo does not read `.gitignore`.
-- Boolean env flags accept `on|1|true` and `off|0|false` everywhere. `WEBTERM_X=1` used to read as off for many keys and is now on, including `WEBTERM_TRUST_PROXY`. The three security keys (`WEBTERM_ALLOW_LOOPBACK_APPROVAL`, `WEBTERM_ALLOW_TOKEN_MINT`, `WEBTERM_STRICT_HOOK_AUTH`) still need exactly `1`.
+- Boolean env flags accept `on|1|true` and `off|0|false` everywhere. `WEBTERM_X=1` used to read as off for many keys and is now on, including `WEBTERM_TRUST_PROXY`. The two security keys (`WEBTERM_ALLOW_TOKEN_MINT`, `WEBTERM_STRICT_HOOK_AUTH`) still need exactly `1`.
 - Values from a `.env` file and `TELEGRAM_BOT_TOKEN` are no longer inherited by spawned shells. The data directory is created `700` and the database `600`.
 - An invalid `PORT` now stops startup with an error instead of falling back to 8700. Known bind errors (port in use, no permission, bad address) exit 1 with one message.
 - `WEBTERM_FILES_VIEWERS`, `_WATCH`, `_GIT_STATUS` and `_QUICK_OPEN` now default to on; they are read-only. `WEBTERM_FILES_MUTATE` and `_UPLOAD` stay off.
 - The central chat panel is gated by the server flag `WEBTERM_CENTRAL_CHAT`; the build-time `VITE_WEBTERM_CENTRAL_CHAT` is gone.
 - The legacy `TELEGRAM_BOT_TOKEN` name is deprecated: it still works, warns once, and is removed in the release after 0.7.0. Use the Settings value `WEBTERM_TELEGRAM_BOT_TOKEN`.
 - The compiled binary no longer autoloads `bunfig.toml`.
-- `.env.example` now lists only the nine bootstrap keys; everything else is set in Settings > Environment.
+- `.env.example` now lists only the eight bootstrap keys; everything else is set in Settings > Environment.
 - On macOS a second Chrome icon appears in the Dock while Browser nodes run, because Chromium now runs as a real (minimized, unfocused) window instead of headless.
 - A `WEBTERM_BROWSER_BIN` (or Settings "Lokasi Chromium") path that does not exist is reported as invalid in Settings and the browser does not start; webterm does not silently fall back to an auto-detected Chromium. Fix the path or choose "Pakai otomatis".
+
+- Importing cookies into a Browser node is on whenever the browser is on. Open the node's "⋯" menu, then Import Cookies > From File…; every import still shows a preview and asks for confirmation. Nothing needs to be set; `WEBTERM_BROWSER_COOKIE_IMPORT=off` turns it off.
+- The Worker orchestrator and Otonomi cards now actually let Agent Pusat run workers. Turning on Worker lets Central propose and run workers with an approval card for each action; Otonomi allows runs without a card per action. A value you set yourself in `.env` or the shell still wins. With no level stored, Central works at "approval per action" at most; running without approval cards always needs a person to raise the level.
+- Agent Pusat never falls back to a simulated engine. When neither Claude Code nor OpenCode is found, it says so instead of answering with canned text. The demo engine is used only when chosen explicitly.
+- A dangerous sub-option (such as letting agents drive the browser) asks for confirmation before it turns on, the same as the Otonomi card.
+- Browser node messages are all in one language and come with a button to fix the problem where possible ("Atur browser", "Izinkan host:port").
+- The 403 message when a settings change is refused explains why (the page was not opened directly on the machine running webterm) and names the real address to open, with this page's port.
 
 ### Fixed
 - A new Browser node now always loads its starting URL; before, it could stay on `about:blank`. A page that has not loaded can no longer overwrite the node's saved URL with `about:blank`.
@@ -105,11 +120,16 @@
 - The OpenCode central runtime works next to your own OpenCode. It runs `opencode run --standalone`, so it no longer collides with a running `opencode serve --service`. Its isolated home now gets the credentials of the configured model's provider, copied from your OpenCode login with `opencode auth export` and `auth import` through memory (never written to disk or logged), instead of failing every turn with `provider.no-route`. `GET /api/central/health` now checks OpenCode for real and reports `runtimeIssue` and `runtimeHint` when it is not ready, and a failed turn shows a one-line cause taken from OpenCode's stderr, with secrets redacted.
 - Google and similar sites no longer flag Browser nodes as a bot. Chromium used to run with `--headless=new`, which exposes a `HeadlessChrome` user agent and `navigator.webdriver` set to true. It now runs headful in a background window per node, without focus (minimized on macOS, off-screen on Linux and Windows), following Orca's approach. `WEBTERM_BROWSER_HEADLESS=on` brings back headless as a fallback; Linux without a display uses headless automatically and logs a warning.
 
+- "Nyalakan yang dibutuhkan" (turn on what is needed) turns on the missing prerequisites of that card only. Before, it reset every capability.
+- A capability that is waiting for a setup step can always be switched off. Before, its switch was disabled.
+
 ### Removed
 - Four dead keys from the env registry: `WEBTERM_CENTRAL_TOOL_BRIDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_EMBED_URL`, `WEBTERM_EMBED_MODEL`. The unused `WEBTERM_CHANNEL_HMAC_SECRET` entry in log redaction is gone too.
+- `WEBTERM_ALLOW_LOOPBACK_APPROVAL`. Approvals from the webterm page need no configuration now (see Security).
+- Codex as an Agent Pusat engine choice: it has no adapter, so it could only ever show as ready without working.
 
 ### Security
-- Human approvals refuse token-free loopback by default. An agent shell on the same machine could otherwise request, read the nonce, approve, and consume its own action. A configured root token, or `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` for a disposable demo, is required.
+- Human approvals work from the webterm page with zero configuration, and agents cannot approve their own actions. `/api/approvals/*` and token enable/rotate accept a request only when it comes from the webterm page in a browser (`Sec-Fetch-Site: same-origin` and a same-origin `Origin`), and refuse any agent credential (node token or capability) with `403 agent_cannot_approve`. A root token, when enabled, is still checked first. Accepted limit: a local process running as the same user that deliberately forges these headers still passes; enable the root token to close that. Details: `docs/decisions/approval-ui-origin.md`.
 - Node tokens and capabilities do not open the human approval route, so an agent cannot approve its own irreversible action.
 
 ## [0.7.0] - 2026-10-29

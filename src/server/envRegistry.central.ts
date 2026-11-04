@@ -18,7 +18,7 @@ export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
   enumOf('WEBTERM_CENTRAL_RUNTIME', 'central', ['claude', 'opencode', 'mock', 'off'], DEFAULT_RUNTIME_KIND, {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
     label: 'Mesin agen central',
-    description: 'Mesin balasan chat central. Nilai tak dikenal = nonaktif. Jembatan Telegram memakai pilihan baru setelah restart.',
+    description: 'Mesin chat central. Kosong = otomatis: Claude Code, lalu OpenCode, lalu nonaktif (tak pernah Demo). Nilai tak dikenal = nonaktif.',
     optionLabels: { claude: 'Claude Code', opencode: 'OpenCode (model gratis/pihak ketiga)', mock: 'Demo (jawaban tiruan)', off: 'Nonaktif' },
   }),
   text('WEBTERM_CENTRAL_MODEL', 'central', {
