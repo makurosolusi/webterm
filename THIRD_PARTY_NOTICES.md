@@ -10,6 +10,10 @@ webterm includes portions of the following third-party software.
 - Used in webterm:
   - `src/shared/browser.omnibox.ts` (address bar / omnibox input resolution)
   - `src/shared/browser.omnibox.test.ts` (test cases adapted from `src/shared/browser-url.test.ts`)
+- Source ported: `src/main/browser/cookies/browser-cookie-import-policy.ts` (`GOOGLE_SOURCE_BOUND_COOKIE_NAMES`, `normalizeCookieDomain`, `NON_TRANSPLANTABLE_DOMAINS` / `isNonTransplantableCookieDomain`, `isGoogleSourceBoundCookie`) and the Google filter order of `browser-cookie-import-pipeline.ts` (`importValidatedCookies`) at commit `68ba160c12c0ad443cf8e24c19d496c0d46fcd62`
+- Used in webterm:
+  - `src/server/browser/cookieImportPolicy.ts` (Google login cookies are skipped on cookie file import)
+  - `src/server/browser/cookieImportPolicy.test.ts` (test cases adapted from `browser-cookie-import-policy.test.ts`)
 
 ```
 MIT License
