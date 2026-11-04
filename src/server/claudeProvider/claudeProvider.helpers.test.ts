@@ -74,12 +74,12 @@ describe('claudeEnv() reaches every Claude process', () => {
     expect(env.TERM).toBe('xterm-256color')
   })
 
-  it('DAG planner: provider vars ride as exec overrides (the exec scrub keeps only an allowlist)', async () => {
+  it('DAG planner: sends no env or overrides of its own (agentSpawn applies the provider)', async () => {
     const { livePlanner } = await import('../dag/dag.planner')
     await livePlanner({ intent: 'x', repo: dir } as never).catch(() => undefined)
-    const h = (spawnRecord.req as { headless: { overrides: Record<string, string>; env: Record<string, string>; argv: string[] } }).headless
-    expect(h.overrides).toMatchObject({ ANTHROPIC_AUTH_TOKEN: KEY, ANTHROPIC_BASE_URL: 'https://gw.example.test' })
-    expect('ANTHROPIC_API_KEY' in h.env).toBe(false)
+    const h = (spawnRecord.req as { headless: { overrides?: Record<string, string>; env?: Record<string, string>; argv: string[] } }).headless
+    expect(h.env).toBeUndefined()
+    expect(h.overrides).toBeUndefined()
     expect(h.argv.join(' ')).not.toContain(KEY)
   })
 

@@ -168,7 +168,8 @@ export class ClaudeRuntime implements CentralRuntime {
     return spawn(this.options.executable ?? DEFAULT_CLAUDE_BIN, argv, {
       cwd: ensureWorkDir(this.options.workDir),
       // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
-      env: claudeEnv(claudeChildEnv(this.options.env ?? process.env)),
+      // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
+      env: claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv }),
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
     })

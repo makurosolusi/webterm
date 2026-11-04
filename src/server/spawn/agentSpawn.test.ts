@@ -16,6 +16,7 @@ function rig(opts: AgentSpawnerOptions = {}) {
     registerSpawn: (parent, child) => { lineage.set(child, parent) },
     record: (e) => { events.push({ kind: e.kind, actor: e.actor, subject: e.subject, payload: e.payload }) },
     onPtyExit: (fn) => { fireExit = fn },
+    providerEnv: () => ({ set: {}, unset: [] }), // never read the real provider store
     ...opts,
   })
   const opened: string[] = []

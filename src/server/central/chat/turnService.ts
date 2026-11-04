@@ -113,6 +113,7 @@ export class TurnService {
     const { prompt, history } = built
     // Only the real assembler reports rotation; the legacy one never sets it.
     const rotate = (built as { rotateSession?: boolean }).rotateSession === true
+    const cacheEnv = (built as { cacheEnv?: Record<string, string> }).cacheEnv ?? {}
     const appended = appendMessage(this.db, {
       conversationId: conversation.id, role: 'human',
       // The model still gets the raw text (it may need to relay a pasted secret to a tool); history never keeps it.
@@ -135,7 +136,7 @@ export class TurnService {
     this.active.set(conversation.id, turn.id)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
-    const done = this.runTurn(conversation, turn, prompt, history, rotate)
+    const done = this.runTurn(conversation, turn, prompt, history, rotate, cacheEnv)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -176,7 +177,8 @@ export class TurnService {
   }
 
   private async runTurn(
-    conversation: Conversation, turn: Turn, prompt: string, history: string[], rotate: boolean
+    conversation: Conversation, turn: Turn, prompt: string, history: string[], rotate: boolean,
+    cacheEnv: Record<string, string>
   ): Promise<Turn> {
     const runtime = this.runtime
     if (runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
@@ -196,6 +198,7 @@ export class TurnService {
       tools: [...DEFAULT_CENTRAL_TOOLS], limits: resolveLimits(this.env),
       // A rotated conversation starts a fresh runtime session seeded from the checkpoint.
       ...(turn.sessionRef === null || rotate ? {} : { sessionRef: turn.sessionRef }),
+      ...(Object.keys(cacheEnv).length ? { cacheEnv } : {}),
     }
     try {
       const result = await runtime.turn(input, emit)

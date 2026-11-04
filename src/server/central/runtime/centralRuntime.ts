@@ -58,6 +58,8 @@ export interface TurnInput {
   limits: TurnLimits
   /** Opaque resume handle stored in the ledger; never a credential. */
   sessionRef?: string
+  /** Extra child env from the context assembler (1h prompt-cache TTL); Claude only, provider env wins. */
+  cacheEnv?: Readonly<Record<string, string>>
 }
 
 interface EventBase {
