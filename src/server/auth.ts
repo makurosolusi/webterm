@@ -114,7 +114,8 @@ export function authorize(args: {
  * Path yang boleh dilayani dengan token NODE (per sesi agent) alih-alih token root.
  *
  * Sengaja sempit: hanya jalur yang memang dipanggil hook dari dalam sesi agent — status hook,
- * context-link, dan control API. Semua yang menyentuh setelan, workspace, filesystem, generator
+ * context-link, control API, dan registry `/api/tools` milik CLI `webterm` (yang membuktikan node
+ * dari token itu sendiri dan menggerbangi tiap panggilan lewat policy). Semua yang menyentuh setelan, workspace, filesystem, generator
  * nama, atau shell (`/ws`) TETAP butuh token root: token node bocor ke disk sesi agent mana pun,
  * dan satu sesi tidak boleh bisa menyetel ulang server atau membuka PTY milik sesi lain.
  */
@@ -122,7 +123,9 @@ export function isNodeTokenPath(pathname: string): boolean {
   return (
     pathname === '/api/agent-status' ||
     pathname === '/api/context-link' ||
-    pathname.startsWith('/api/control/')
+    pathname.startsWith('/api/control/') ||
+    pathname === '/api/tools' ||
+    pathname.startsWith('/api/tools/')
   )
 }
 

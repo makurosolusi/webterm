@@ -12,6 +12,8 @@ import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
 import { producePtyExit } from './events/producers'
 import { mcpEnv } from './mcp/mcp.launch'
+import { cliPath } from './cli/cli.launcher'
+import { delimiter, dirname } from 'node:path'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -21,6 +23,10 @@ export { launchLine }
 // Keadaan sesi (map, registry, jam sweep, emit/onExit) tinggal di `sessionsCore.ts`; tipe-tipenya di
 // `sessionsTypes.ts`. Keduanya dipecah hanya karena ukuran file — kontrak publik tetap di sini.
 export type { SessionInfo, SessionsOptions }
+
+/** PATH for an agent session: the webterm-owned bin dir (`webterm` CLI) ahead of the server's PATH. */
+export const agentPath = (base: string = process.env.PATH ?? ''): string =>
+  [dirname(cliPath()), ...base.split(delimiter).filter((p) => p && p !== dirname(cliPath()))].join(delimiter)
 
 /**
  * Jalur socket di atas `SessionsCore`: buka/re-attach, input, resize, close, dan dispatch pesan
@@ -96,6 +102,9 @@ export class Sessions extends SessionsCore {
         : {}),
       // `webterm mcp` for CLIs configured through env (opencode, gemini); claude/codex get it as flags
       // in `launchLine`. An injected spawn writes no file (same rule as `writeNodeHeaders` above).
+      // `<dataDir>/bin` first on PATH so the `webterm` CLI resolves by name; it carries no token
+      // (curl reads the header file above), so this adds a command, not a credential.
+      ...(msg.agentId ? { PATH: agentPath() } : {}),
       ...(msg.agentId ? mcpEnv(msg.agentId, msg.id, PORT, this.options.spawn ? () => {} : undefined) : {}),
     }
     const spawnOpts = {

@@ -1,10 +1,10 @@
 // Control-plane verbs (`/api/control/*`) declared as capabilities. This list is the single source of
 // `CAPABILITY_VERBS` (control/capabilities.ts); the route modules stay the handlers, bound by `route`.
 // capability.drift.test.ts checks every route here resolves in the real control router.
-import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP } from '../../shared/browser.contract'
+import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP, URL_MAX_CHARS, VIEWPORT_MAX, WAIT_MAX_MS } from '../../shared/browser.contract'
 import { CONTROL_PREFIX } from '../control/controlTypes'
 import { defineCapability, type CapabilitySpec } from './capability.define'
-import { obj, S } from './capability.schema'
+import { obj, S, type JsonSchema } from './capability.schema'
 
 const nodeId = S.str(200)
 const requestId = S.str(200, { description: 'Idempotency key; a repeat with the same key replays the first answer.' })
@@ -12,6 +12,24 @@ const ack = obj({ ok: S.bool(), requestId: S.str(), nodeId: S.str() }, ['ok'])
 const verbsOf = (cap: 'browser.read' | 'browser.act'): string[] => Object.keys(BROWSER_VERB_CAP).filter((v) => BROWSER_VERB_CAP[v as keyof typeof BROWSER_VERB_CAP] === cap)
 const http = (method: 'GET' | 'POST', path: string) => ({ method, path: `${CONTROL_PREFIX}${path}` }) as const
 const browserRoute = { method: 'POST', path: `${BROWSER_CONTROL_PREFIX}/:nodeId/:verb` } as const
+// Per-verb args (shared/browser.contract.ts VerbBodies), flat: MCP clients reject a top-level anyOf, so
+// each property names the verb(s) it belongs to and the verb handler enforces which are required.
+const ref = S.str(16, { pattern: '^e\\d+$', description: 'click, type: element ref from the latest snapshot (e12).' })
+const snapId = S.str(200, { description: 'click, type: snapId of the snapshot the ref came from.' })
+const browserReadArgs: Record<string, JsonSchema> = {
+  maxWidth: { ...S.int(1, VIEWPORT_MAX), description: 'screenshot: max width in px.' },
+  ms: { ...S.int(0, WAIT_MAX_MS), description: 'wait: timeout (or plain sleep) in ms.' },
+  selectorRef: S.str(16, { pattern: '^e\\d+$', description: 'wait: until this snapshot ref is rendered.' }),
+  loaded: { type: 'boolean', const: true, description: 'wait: until the page finished loading.' },
+}
+const browserActArgs: Record<string, JsonSchema> = {
+  url: S.str(URL_MAX_CHARS, { description: 'navigate: absolute URL.' }),
+  ref, snapId,
+  text: S.str(undefined, { description: 'type: text inserted at the caret.' }),
+  submit: { ...S.bool(), description: 'type: press Enter after typing.' },
+  key: S.str(16, { description: 'press: key name (Enter, Tab, Escape, Backspace, Delete, a space, ArrowUp/Down/Left/Right, PageUp, PageDown, Home, End).' }),
+  dy: { type: 'number', description: 'scroll: vertical pixels, non-zero (negative scrolls up).' },
+}
 
 const CONTROL = [
   defineCapability({
@@ -75,13 +93,13 @@ const CONTROL = [
   defineCapability({
     name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot or wait.',
     tier: 'R0', scope: 'node', projections: ['control-http'], idempotent: true, route: browserRoute,
-    input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.read')) }, ['verb']),
+    input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.read')), ...browserReadArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
   }),
   defineCapability({
     name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, handoff or release.',
     tier: 'R1', scope: 'node', projections: ['control-http'], route: browserRoute,
-    input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.act')) }, ['verb']),
+    input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.act')), ...browserActArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
   }),
 ] as const satisfies readonly CapabilitySpec[]

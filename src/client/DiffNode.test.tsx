@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Diff node DOM: file list with status, secret files never get an editor, a wired agent supplies
-// the root and receives the notes batch. API, Monaco and the socket are faked.
+// the root and receives the notes batch through the outbox. API, Monaco, fetch and the socket are faked.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ReactFlow, ReactFlowProvider, useNodesState, type Edge, type Node } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -31,7 +31,7 @@ import DiffNode from './DiffNode'
 beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
 })
-afterEach(() => { cleanup(); vi.clearAllMocks(); monaco.created = 0 })
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); ws.getStatus.mockReturnValue(undefined); monaco.created = 0 })
 
 const LIST = {
   root: '/repo', total: 3, nextOffset: null,
@@ -77,9 +77,15 @@ describe('DiffNode', () => {
     expect(monaco.created).toBe(0)
   })
 
-  it('uses the wired agent cwd and sends the notes to it as one message', async () => {
+  it('uses the wired agent cwd and queues the notes in the outbox as one message, even while it works', async () => {
     api.fetchDiffList.mockResolvedValue(LIST)
     api.fetchFileDiff.mockResolvedValue(A_TS)
+    ws.getStatus.mockReturnValue('working' as never) // busy agent: queued, not refused
+    const posts: Array<{ url: string; body: { to: string; body: string; operationId: string } }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      posts.push({ url, body: JSON.parse(String(init.body)) })
+      return new Response(JSON.stringify({ message: { id: 'm1', status: 'queued' }, deduped: false }), { status: 202 })
+    }))
     mount({}, {
       nodes: [{ id: 'ag', type: 'agent', position: { x: 0, y: 0 }, data: { agentId: 'claude', cwd: '/repo' } }],
       edges: [{ id: 'e', source: 'ag', target: 'd1' }],
@@ -93,13 +99,26 @@ describe('DiffNode', () => {
     const saved = () => (latest.find((n) => n.id === 'd1')?.data as { diffNotes?: { path: string; line: number; body: string }[] }).diffNotes
     await waitFor(() => expect(saved()).toEqual([expect.objectContaining({ path: 'a.ts', line: 1, body: 'why y?' })]))
     fireEvent.click(await screen.findByText('Send to agent (1)'))
-    await waitFor(() => expect(ws.send).toHaveBeenCalledTimes(2))
-    const [paste, enter] = ws.send.mock.calls.map((c) => (c as unknown as [{ id: string; data: string }])[0])
-    expect(paste.id).toBe('ag')
-    expect(paste.data).toContain('File: a.ts\nLine: 1\nUser comment: "why y?"')
-    expect(enter).toEqual({ t: 'input', id: 'ag', data: '\r' })
-    await screen.findByText('Sent 1 note to the agent.')
+    await screen.findByText(/Queued 1 note for the agent/)
+    expect(posts).toHaveLength(1)
+    expect(posts[0].url).toMatch(/^\/api\/outbox/)
+    expect(posts[0].body.to).toBe('ag')
+    expect(posts[0].body.body).toContain('File: a.ts\nLine: 1\nUser comment: "why y?"')
+    expect(ws.send).not.toHaveBeenCalled() // nothing typed from the client any more
     expect(saved()).toEqual([])
+  })
+
+  it('keeps the notes and shows the reason when the outbox refuses', async () => {
+    api.fetchDiffList.mockResolvedValue(LIST)
+    api.fetchFileDiff.mockResolvedValue(A_TS)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'bad_target', message: 'node not found' }), { status: 404 })))
+    mount({ diffNotes: [{ id: 'n1', path: 'a.ts', line: 1, body: 'x' }] }, {
+      nodes: [{ id: 'ag', type: 'agent', position: { x: 0, y: 0 }, data: { agentId: 'claude', cwd: '/repo' } }],
+      edges: [{ id: 'e', source: 'ag', target: 'd1' }],
+    })
+    fireEvent.click(await screen.findByText('Send to agent (1)'))
+    await screen.findByText('Send review notes to ag: node not found')
+    expect((latest.find((n) => n.id === 'd1')?.data as { diffNotes: unknown[] }).diffNotes).toHaveLength(1)
   })
 
   it('refreshes when the wired agent ends its turn', async () => {

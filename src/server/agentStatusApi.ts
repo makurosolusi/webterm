@@ -18,6 +18,7 @@ import { nextHookContext } from './hookContext'
 import { linkedBrowsers, nextBrowserNotice } from './linkAwareness'
 import { nextAwareness } from './webtermAwareness'
 import { linkNoteTold, startLinkNotes } from './linkNoteDelivery'
+import { outboxHookContext } from './outbox/outboxRuntime'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
@@ -152,8 +153,9 @@ export async function agentStatusRoute(
   // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
   // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
   const ws = deps.workspaceFor(node)
-  // Tiga sumber, satu balasan: blok kesadaran webterm (siapa/di mana/apa yang bisa dipakai), roster
-  // peer context-link, dan perubahan kabel ke browser node.
+  // Empat sumber, satu balasan: blok kesadaran webterm (siapa/di mana/apa yang bisa dipakai), roster
+  // peer context-link, perubahan kabel ke browser node, dan surat outbox `kind: context` (diambil
+  // di sini = terkirim tepat sekali; outboxDelivery `takeHookContext` menandainya delivered).
   const event = body.hook_event_name
   const aware = ws ? nextAwareness(node, event, ws) : null
   const peers = ws ? nextHookContext(node, event, buildLinkDoc(ws, node)) : null
@@ -164,7 +166,8 @@ export async function agentStatusRoute(
   // Senses: AFTER setStatus/linkNoteTold, because the linkNote and wake subscribers read the status
   // this hook just wrote. Trusted only when the request carried this node's own token.
   produceHookEvent({ nodeId: node, workspaceId: ws?.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
-  const text = [aware, peers?.additionalContext, browsers].filter(Boolean).join('\n\n')
+  const mail = outboxHookContext(node, event)
+  const text = [aware, peers?.additionalContext, browsers, mail].filter(Boolean).join('\n\n')
   if (text && event) {
     json(res, 200, { hookSpecificOutput: { hookEventName: event, additionalContext: text } })
     return true
