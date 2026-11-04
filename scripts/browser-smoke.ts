@@ -47,7 +47,8 @@ async function main() {
   const st = await (await fetch(`${api}/api/browser/status`)).json() as Record<string, unknown>
   check('status enabled+binFound', st.enabled === true && st.binFound === true, JSON.stringify(st))
 
-  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws/browser?workspaceId=${WORKSPACE}`)
+  // Origin = halaman webterm sendiri: server menolak upgrade kanal manusia tanpa Origin saat tanpa token (wsOrigin.ts).
+  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws/browser?workspaceId=${WORKSPACE}`, { headers: { Origin: api } })
   ws.binaryType = 'arraybuffer'
   const states: Array<Record<string, unknown>> = [], errors: unknown[] = []
   const frames: Uint8Array[] = []

@@ -25,6 +25,7 @@ import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
 import { resolveAsset } from './staticAssets'
 import { upgradeRoute } from './upgradeRouting'
+import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import { installBrowserAgentShim } from './browserAgentShim'
 import { isSafeWorkspaceId } from './browser/profile.paths'
@@ -206,6 +207,13 @@ server.on('upgrade', (req, socket, head) => {
   // a PTY. Refuse before `handleUpgrade`, so an unauthorized peer never gets a socket at all.
   if (!allowed(req, url)) {
     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+    socket.destroy()
+    return
+  }
+  // Human channels (/ws PTY, /ws/browser stream), token-free bind: only a browser-sent Origin proves the caller is the web UI (wsOrigin.ts).
+  if (!humanUpgradeOriginOk(req.headers, getTokenState().token !== undefined)) {
+    logAuthReject(url.pathname, 'origin')
+    socket.write(`HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${WS_ORIGIN_REQUIRED.length}\r\n\r\n${WS_ORIGIN_REQUIRED}`)
     socket.destroy()
     return
   }
