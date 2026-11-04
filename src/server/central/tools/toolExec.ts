@@ -45,7 +45,7 @@ async function runHandler(def: ToolDef, ctx: ToolCtx, args: ToolInput, projectId
 }
 
 /** Codes meaning "not allowed" rather than "went wrong"; they map to receipt outcome `denied`. */
-const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'budget_exceeded', 'level_denied', 'breaker_open'])
+const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open'])
 /** What the caller can do next for codes that have one obvious follow-up. */
 const NEXT: Record<string, string> = {
   unknown_tool: 'cap.search {"query":"<words>"} lists the tools that exist',

@@ -137,3 +137,16 @@ test('L2: ledger dir is 0700 and db/wal/shm files are 0600', () => {
   expect(statSync(path).mode & 0o777).toBe(0o600)
   reopened!.close()
 })
+
+test('close() retires the runtime as the active one (no seam is left holding a closed DB)', () => {
+  const first = startLedgerRuntime({ mode: 'on', path: ':memory:' })
+  expect(activeLedgerRuntime()).toBe(first)
+  first?.close()
+  expect(activeLedgerRuntime()).toBe(null)
+  const a = startLedgerRuntime({ mode: 'on', path: ':memory:' })
+  const b = startLedgerRuntime({ mode: 'on', path: ':memory:' })
+  a?.close() // closing a superseded runtime leaves the newer one active
+  expect(activeLedgerRuntime()).toBe(b)
+  b?.close()
+  expect(activeLedgerRuntime()).toBe(null)
+})

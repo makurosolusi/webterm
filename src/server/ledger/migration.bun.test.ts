@@ -216,12 +216,12 @@ test('backup writes a readable copy and keeps the last 3', () => {
 })
 
 test('schema modules list forward-only migrations matching LATEST_VERSION', () => {
-  expect(MIGRATIONS.length).toBe(10)
+  expect(MIGRATIONS.length).toBe(11)
   expect(MIGRATIONS[0]?.version).toBe(1)
   expect(MIGRATIONS[1]?.version).toBe(2)
   expect(MIGRATIONS[2]?.version).toBe(3)
   expect(MIGRATIONS[3]?.version).toBe(4)
-  for (let i = 0; i < MIGRATIONS.length; i++) expect(MIGRATIONS[i]?.version).toBe(i + 1) // v5-v10 contiguous
+  for (let i = 0; i < MIGRATIONS.length; i++) expect(MIGRATIONS[i]?.version).toBe(i + 1) // v5-v11 contiguous
   expect(MIGRATIONS[MIGRATIONS.length - 1]?.version).toBe(LATEST_VERSION)
 })
 

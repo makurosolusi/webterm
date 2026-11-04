@@ -6,6 +6,8 @@
 
 import type { CapabilityRecord, CapabilityVerb } from './capabilities'
 import { headerValue, type ControlDeps, type ControlRequest, type ControlResult } from './controlTypes'
+import { principalKind } from '../policy/policy.model'
+import { activePolicy } from '../policy/policy.runtime'
 
 export type Auth = { record: CapabilityRecord } | { failure: { status: number; body: unknown } }
 
@@ -30,7 +32,18 @@ export function authorize(
   const auth = authenticate(req, deps, now)
   if ('failure' in auth) return auth
   if (!deps.capabilities.allows(auth.record, verb, resource, ctx)) return forbidden
-  return auth
+  // Token = scope, policy = rules on top (PLAN S2). Builtin rules allow `central`, so behaviour is
+  // unchanged until a human writes a rule; no ledger = no policy (pre-v11 behaviour).
+  const policy = activePolicy()
+  if (!policy) return auth
+  const d = policy.decide(capabilityHolder(auth.record), verb, { resource })
+  if (d.effect === 'allow') return auth
+  return { failure: { status: 403, body: { error: d.effect === 'ask' ? 'approval_required' : 'forbidden', reason: d.reason } } }
+}
+
+/** Principal a capability token acts for: its minter when that is a principal, else Central (the only minter today). */
+export function capabilityHolder(record: CapabilityRecord): string {
+  return record.mintedBy && principalKind(record.mintedBy) ? record.mintedBy : 'central'
 }
 
 export const badRequest = (error: string): ControlResult => ({ status: 400, body: { error } })

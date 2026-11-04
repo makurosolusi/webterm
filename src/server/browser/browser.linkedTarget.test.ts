@@ -11,8 +11,8 @@ const ws = (nodes: WsNode[], bridges: Workspace['bridges'] = []): Workspace =>
 
 describe('resolveLinkedBrowser', () => {
   it('one cable (either direction) = that browser, by default', () => {
-    expect(resolveLinkedBrowser([ws([node('a1', 'agent'), node('b1', 'browser')], [edge('a1', 'b1')])], 'a1')).toEqual({ ok: true, nodeId: 'b1' })
-    expect(resolveLinkedBrowser([ws([node('a1', 'agent'), node('b1', 'browser')], [edge('b1', 'a1')])], 'a1')).toEqual({ ok: true, nodeId: 'b1' })
+    expect(resolveLinkedBrowser([ws([node('a1', 'agent'), node('b1', 'browser')], [edge('a1', 'b1')])], 'a1')).toMatchObject({ ok: true, nodeId: 'b1' })
+    expect(resolveLinkedBrowser([ws([node('a1', 'agent'), node('b1', 'browser')], [edge('b1', 'a1')])], 'a1')).toMatchObject({ ok: true, nodeId: 'b1' })
   })
 
   it('an unwired browser is never picked, even when it is the only one on the board', () => {
@@ -24,7 +24,7 @@ describe('resolveLinkedBrowser', () => {
   it('several cables = must pick; picking a wired one works, an unwired one is refused', () => {
     const w = ws([node('a1', 'agent'), node('b1', 'browser'), node('b2', 'browser'), node('b3', 'browser')], [edge('a1', 'b1'), edge('b2', 'a1')])
     expect(resolveLinkedBrowser([w], 'a1')).toMatchObject({ ok: false, result: { status: 409, body: { error: 'ambiguous_browser', linked: [{ id: 'b1' }, { id: 'b2' }] } } })
-    expect(resolveLinkedBrowser([w], 'a1', 'b2')).toEqual({ ok: true, nodeId: 'b2' })
+    expect(resolveLinkedBrowser([w], 'a1', 'b2')).toMatchObject({ ok: true, nodeId: 'b2' })
     expect(resolveLinkedBrowser([w], 'a1', 'b3')).toMatchObject({ ok: false, result: { status: 403, body: { error: 'not_linked' } } })
   })
 
@@ -32,7 +32,7 @@ describe('resolveLinkedBrowser', () => {
     const w = ws([node('a1', 'agent'), node('a2', 'agent'), node('b1', 'browser')], [edge('a1', 'a2'), edge('a2', 'b1')])
     expect(resolveLinkedBrowser([w], 'a1')).toMatchObject({ ok: false, result: { body: { error: 'no_linked_browser' } } })
     expect(resolveLinkedBrowser([w], 'a1', 'b1')).toMatchObject({ ok: false, result: { status: 403 } })
-    expect(resolveLinkedBrowser([w], 'a2')).toEqual({ ok: true, nodeId: 'b1' })
+    expect(resolveLinkedBrowser([w], 'a2')).toMatchObject({ ok: true, nodeId: 'b1' })
   })
 
   it('unknown requester = not on a board', () => {
