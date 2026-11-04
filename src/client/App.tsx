@@ -21,6 +21,7 @@ import { useAppCommands } from './commandRegistry.defaults'
 import { useCommandKeybindings } from './commandRegistry'
 import { useKeybindingsSync } from './keybindings.store'
 import OutputPanelHost from './output/outputPanelHost'
+import TimelineHost from './Timeline'
 import { SettingsPanel } from './SettingsPanel'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
@@ -306,6 +307,7 @@ export default function App() {
           <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} offsetForInbox={inboxOpen} />
           <CentralControlPanel open={central.open} onClose={central.close} enabled={central.enabled} />
           <OutputPanelHost />
+          <TimelineHost workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} onFocusNode={(id) => void onFocus(id)} />
           {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
           {paneMenu}
           <BrowserLinkOfferHost />
