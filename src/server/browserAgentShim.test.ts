@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
+import { buildWebtermCli, cliPath, cliSkillsDir, installWebtermCli } from './cli/cli.launcher'
 
 let root: string
 const prevData = process.env.WEBTERM_DATA_DIR
@@ -25,6 +26,7 @@ function runShim(args: string[], env: Record<string, string>) {
   const curl = join(bin, 'curl')
   writeFileSync(curl, `#!/bin/sh\nprintf '%s\\n' "$@" > "${root}/argv"\ncat > "${root}/stdin"\necho '{"ok":true}'\n`)
   chmodSync(curl, 0o700)
+  installWebtermCli(join(root, 'home')) // the shim is an alias: it execs the installed CLI
   const shim = join(root, 'shim.sh')
   writeFileSync(shim, buildBrowserShim())
   const r = spawnSync('/bin/sh', [shim, ...args], { env: { PATH: `${bin}:/usr/bin:/bin`, ...env }, encoding: 'utf8' })
@@ -44,8 +46,12 @@ const lines = (r: { argv: string }) => r.argv.split('\n')
 const bodyOf = (r: { argv: string }) => JSON.parse(lines(r)[lines(r).indexOf('--data-binary') + 1])
 
 describe('artifacts', () => {
-  it('shim embeds env NAMES only, never a token value', () => {
-    const sh = buildBrowserShim()
+  it('shim is a one-line alias of the CLI browser command', () => {
+    expect(buildBrowserShim()).toContain(`exec '${cliPath()}' browser "$@"`)
+  })
+
+  it('CLI embeds env NAMES only, never a token value', () => {
+    const sh = buildWebtermCli()
     expect(sh).toContain('WEBTERM_NODE_HEADERS')
     expect(sh).not.toContain('WEBTERM_TOKEN')
     expect(sh).not.toContain('NODETERM_NODE_TOKEN')
@@ -75,6 +81,9 @@ describe('artifacts', () => {
     installBrowserAgentShim(home)
     expect([readFileSync(browserShimPath(), 'utf8'), readFileSync(skill, 'utf8')]).toEqual(first)
     expect(statSync(browserShimPath()).mode & 0o777).toBe(0o700)
+    // The CLI it aliases is installed too, and `webterm skills get webterm-browser` serves the same guide.
+    expect(statSync(cliPath()).mode & 0o777).toBe(0o700)
+    expect(readFileSync(join(cliSkillsDir(), 'webterm-browser.md'), 'utf8')).toBe(first[1])
   })
 })
 

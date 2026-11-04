@@ -28,6 +28,7 @@ import { nodeIdForToken, nodeToken, writeClaudeSettings } from './hooks'
 import { claudeHeadersPath } from './hooksPaths'
 import { buildContextShim } from './contextLinkSkill'
 import { buildBrowserShim } from './browserAgentShim'
+import { installWebtermCli } from './cli/cli.launcher'
 import { TOKEN_HEADER } from './auth'
 import { shq } from './hooksQuote'
 
@@ -114,6 +115,7 @@ test('the real shims, run inside an agent PTY, still authenticate as that node v
   try {
     const ctx = join(DATA_DIR, 'ctx.sh')
     const browser = join(DATA_DIR, 'browser.sh')
+    installWebtermCli(DATA_DIR) // both shims are aliases that exec the `webterm` CLI
     writeFileSync(ctx, buildContextShim(), { mode: 0o700 })
     writeFileSync(browser, buildBrowserShim(), { mode: 0o700 })
     const cmd = `NODETERM_PORT=${port} sh ${shq(ctx)}; echo; NODETERM_PORT=${port} sh ${shq(browser)} status; echo DONE_S`

@@ -13,6 +13,7 @@ import { agentProtectionRoute } from './agentSandbox.api'
 import { workspacesRoute } from './workspacesApi'
 import { agentStatusRoute } from './agentStatusApi'
 import { handleControlHttp } from './control/mount'
+import { toolsRoute } from './capability/capability.http'
 import { inboxRoute } from './inboxApi'
 import { memoryRoute } from './memoryApi'
 import { memoryWriteRoute } from './memoryWriteApi'
@@ -146,6 +147,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // Hook callback from a claude session (body is the hook stdin JSON).
   if (await agentStatusRoute(req, res, url)) return
 
+  if (await toolsRoute(req, res, url, { dispatch: route })) return // /api/tools: registry for the `webterm` CLI (capability.http.ts)
   // Headless control plane (/api/control/*): false = not this family, keep falling through.
   if (await handleControlHttp(req, res, url, () => readBody(req))) return
 

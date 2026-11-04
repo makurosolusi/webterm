@@ -1,75 +1,24 @@
-// Shim + skill builders and boot-time installer for agent control of a canvas browser node.
-// Pattern of `contextLinkSkill.ts`: pure string builders, one small fs writer.
+// Alias + skill builders and boot-time installer for agent control of a canvas browser node.
+// The shim is a one-line alias of `webterm browser` (plan F2-b; the body lives in `cli/cli.commands.ts`),
+// so `webterm-browser <verb>` keeps working for every skill and session that already knows it.
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP } from '../shared/browser.contract'
-import { NODE_HEADERS_ENV } from './hooksPaths'
 import { dataDir } from './config'
+import { cliPath, installWebtermCli, shQuote, writeCliGuide } from './cli/cli.launcher'
 
 /** Skill directory + front-matter `name`. */
 export const BROWSER_SKILL_NAME = 'webterm-browser'
 
-const verbsOf = (cap: 'browser.read' | 'browser.act'): string =>
-  Object.entries(BROWSER_VERB_CAP).filter(([, c]) => c === cap).map(([v]) => v).join('|')
-
 /**
- * POSIX-sh thin client, same identity model as the context-link shim: it carries NO token value and neither does the
- * agent env; curl reads the node's own header file (`-H @file`, path in `WEBTERM_NODE_HEADERS`), so the token is
- * never in `ps` argv nor in the process environment (readable by sibling processes on macOS). The server picks the target browser
- * at CALL time from the canvas cables of this node (`browser.linkedTarget.ts`); `--node` picks one of several.
+ * Alias of `webterm browser`: same verbs, flags, exit codes and identity model (curl reads the node's own
+ * header file, so no token is in argv or env). The server picks the target browser at CALL time from the
+ * canvas cables of this node (`browser.linkedTarget.ts`); `--node` picks one of several.
  */
 export function buildBrowserShim(): string {
   return `#!/bin/sh
-# webterm browser shim (generated - do not edit). Thin client for ${BROWSER_CONTROL_PREFIX}.
-usage() { echo "usage: webterm-browser <${verbsOf('browser.read')}|${verbsOf('browser.act')}> [args] [--node <browserNodeId>]" >&2; exit 2; }
-hdr="\${${NODE_HEADERS_ENV}:-}"
-if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
-PORT="\${NODETERM_PORT:-8700}"
-[ "$#" -gt 0 ] || usage
-verb="$1"; shift
-node=""; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --node) [ "$#" -ge 2 ] || usage; node="$2"; shift 2 ;;
-    --ms) [ "$#" -ge 2 ] || usage; ms="$2"; shift 2 ;;
-    --ref) [ "$#" -ge 2 ] || usage; wref="$2"; shift 2 ;;
-    --submit) submit=1; shift ;;
-    --loaded) loaded=1; shift ;;
-    *) n=$((n + 1)); case "$n" in 1) p1="$1" ;; 2) p2="$1" ;; 3) p3="$1" ;; *) usage ;; esac; shift ;;
-  esac
-done
-case "$node" in *[!A-Za-z0-9_.:-]*) echo "bad node id" >&2; exit 2 ;; esac
-num() { case "$1" in ""|*[!0-9.-]*) echo "numeric argument expected: $1" >&2; exit 2 ;; esac; }
-[ -z "$ms" ] || num "$ms"
-case "$verb" in scroll) num "$p1" ;; screenshot) [ -z "$p1" ] || num "$p1" ;; esac
-# JSON string escape: backslash, quote, tab, newlines.
-esc() { printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g' -e 's/	/\\\\t/g' | awk 'NR>1{printf "\\\\n"}{printf "%s",$0}'; }
-case "$verb" in ${verbsOf('browser.read')}|${verbsOf('browser.act')}) ;; *) usage ;; esac
-body="{}"
-case "$verb" in
-  screenshot) [ -z "$p1" ] || body="{\\"maxWidth\\":$p1}" ;;
-  wait)
-    body="{"; sep=""
-    [ -z "$ms" ] || { body="$body\${sep}\\"ms\\":$ms"; sep=","; }
-    [ -z "$wref" ] || { body="$body\${sep}\\"selectorRef\\":\\"$(esc "$wref")\\""; sep=","; }
-    [ "$loaded" = 0 ] || body="$body\${sep}\\"loaded\\":true"
-    body="$body}" ;;
-  navigate) [ -n "$p1" ] || usage; body="{\\"url\\":\\"$(esc "$p1")\\"}" ;;
-  click) [ -n "$p2" ] || usage; body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\"}" ;;
-  type)
-    [ -n "$p3" ] || usage
-    body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\",\\"text\\":\\"$(esc "$p3")\\""
-    [ "$submit" = 0 ] || body="$body,\\"submit\\":true"
-    body="$body}" ;;
-  press) [ -n "$p1" ] || usage; body="{\\"key\\":\\"$(esc "$p1")\\"}" ;;
-  scroll) [ -n "$p1" ] || usage; body="{\\"dy\\":$p1}" ;;
-esac
-url="http://127.0.0.1:$PORT${BROWSER_CONTROL_PREFIX}/\${node:+$node/}$verb"
-if [ "$verb" = status ]; then method=GET; else method=POST; fi
-curl -sS -H "@$hdr" -X "$method" \\
-  -H "content-type: application/json" --data-binary "$body" "$url"
-echo
+# webterm browser shim (generated - do not edit). Alias of \`webterm browser\`.
+exec ${shQuote(cliPath())} browser "$@"
 `
 }
 
@@ -124,8 +73,9 @@ export function browserShimPath(): string {
   return join(dataDir(), 'browser-agent', BROWSER_SKILL_NAME)
 }
 
-/** Write shim (0700) + skill; idempotent plain overwrite. `home` is injectable for tests. */
+/** Write the CLI it aliases, the shim (0700), the skill and its `skills get` guide; idempotent overwrite. `home` for tests. */
 export function installBrowserAgentShim(home: string = homedir()): void {
+  installWebtermCli(home)
   const file = browserShimPath()
   mkdirSync(join(dataDir(), 'browser-agent'), { recursive: true })
   writeFileSync(file, buildBrowserShim())
@@ -133,4 +83,5 @@ export function installBrowserAgentShim(home: string = homedir()): void {
   const skillDir = join(home, '.claude', 'skills', BROWSER_SKILL_NAME)
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(join(skillDir, 'SKILL.md'), buildBrowserSkillBody(file))
+  writeCliGuide(BROWSER_SKILL_NAME, buildBrowserSkillBody(file))
 }

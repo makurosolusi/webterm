@@ -1,52 +1,27 @@
-// Shim + skill builders and the boot-time installer for the context-link backend.
+// Alias + skill builders and the boot-time installer for the context-link backend.
 // Split out of `contextLink.ts` to keep each module under the file-health budget.
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dataDir } from './config'
-import { NODE_HEADERS_ENV } from './hooksPaths'
+import { cliPath, installWebtermCli, shQuote, writeCliGuide } from './cli/cli.launcher'
 
-// --- shim + skill builders (pure strings; the installer below is the only fs part) ---
+// --- alias + skill builders (pure strings; the installer below is the only fs part) ---
 
 /**
- * The POSIX-sh thin client the skill tells an agent to run. The server does all the reading and
- * rendering; this only forwards the caller's own node id.
+ * The shim the skill tells an agent to run: a one-line alias of `webterm context` (plan F2-b; the body
+ * lives in `cli/cli.commands.ts`). The server does all the reading and rendering; the CLI only forwards
+ * the caller's own node id.
  *
- * The shim carries NO token value, and neither does the agent's env. It is written to
- * `<dataDir>/context-links/context.sh` (0700) and runnable by every same-UID PTY child; curl reads
+ * Neither the alias nor the CLI carries a token value, and neither does the agent's env. curl reads
  * the node's OWN header file (`-H @file`, path in `WEBTERM_NODE_HEADERS`, written per spawn by
  * `sessions.ts`). The token is never in argv, never in env (env is readable by sibling processes on
  * macOS), and the Claude sandbox opens that one file for this node only.
  */
 export function buildContextShim(): string {
   return `#!/bin/sh
-# webterm context-link shim (generated — do not edit). Thin client: the server reads & renders.
-if [ -z "$NODETERM_NODE_ID" ]; then
-  echo "Not a webterm session (NODETERM_NODE_ID unset) — nothing to read."
-  exit 0
-fi
-hdr="\${${NODE_HEADERS_ENV}:-}"
-if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then
-  echo "Not a webterm agent node (no node credentials) — nothing to read."
-  exit 0
-fi
-PORT="\${NODETERM_PORT:-8700}"
-verb="\${1:-list}"; [ "$#" -gt 0 ] && shift
-want=""; n=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --node) want="$2"; shift 2 ;;
-    -n) n="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-curl -s --get \\
-  -H "@$hdr" \\
-  --data-urlencode "node=\${NODETERM_NODE_ID}" \\
-  --data-urlencode "verb=\${verb}" \\
-  --data-urlencode "want=\${want}" \\
-  --data-urlencode "n=\${n}" \\
-  "http://127.0.0.1:\${PORT}/api/context-link"
+# webterm context-link shim (generated — do not edit). Alias of \`webterm context\`.
+exec ${shQuote(cliPath())} context "$@"
 `
 }
 
@@ -107,13 +82,15 @@ export function contextShimPath(): string {
 }
 
 /**
- * Write both halves of the feature: the shim, and the skill that tells an agent it exists.
- * Idempotent — a plain overwrite every boot, since both files are generated.
+ * Write the `webterm` CLI the shim aliases, the shim, and the skill that tells an agent it exists
+ * (also served by `webterm skills get`). Runs on every boot, so this is what installs the CLI.
+ * Idempotent — a plain overwrite every boot, since every file is generated.
  *
- * The skill is the ONLY thing webterm writes outside WEBTERM_DATA_DIR, and it stays inside one
- * directory of its own so a hand-installed `get-linked-context` is never clobbered.
+ * The skills are the ONLY things webterm writes outside WEBTERM_DATA_DIR, each in a directory of its
+ * own so a hand-installed `get-linked-context` is never clobbered.
  */
 export function installContextLink(_token?: string): void {
+  installWebtermCli()
   const file = contextShimPath()
   mkdirSync(join(dataDir(), 'context-links'), { recursive: true })
   writeFileSync(file, buildContextShim())
@@ -125,4 +102,5 @@ export function installContextLink(_token?: string): void {
   const skillDir = join(homedir(), '.claude', 'skills', SKILL_NAME)
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(join(skillDir, 'SKILL.md'), buildContextLinkSkillBody(file))
+  writeCliGuide(SKILL_NAME, buildContextLinkSkillBody(file))
 }
