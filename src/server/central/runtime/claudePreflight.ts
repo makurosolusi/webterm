@@ -33,9 +33,9 @@ const EXIT_NOT_LOGGED_IN = 1
 const MAX_STDOUT_BYTES = 64 * 1024
 
 const HINTS = {
-  claude_not_found: 'CLI claude tidak ditemukan di PATH. Pasang Claude Code lalu coba lagi.',
-  claude_not_authenticated: 'Claude Code belum login. Jalankan "claude auth login" di server.',
-  claude_check_failed: 'Pengecekan status Claude Code gagal. Coba lagi sebentar lagi.',
+  claude_not_found: 'The claude CLI was not found on PATH. Install Claude Code and try again.',
+  claude_not_authenticated: 'Claude Code is not signed in. Run "claude auth login" on the server.',
+  claude_check_failed: 'Checking Claude Code status failed. Try again in a moment.',
 } as const
 
 function notReady(code: keyof typeof HINTS): ClaudeReady {

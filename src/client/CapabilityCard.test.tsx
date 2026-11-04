@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// Kartu kemampuan: satu switch, status, langkah, "Ikut menyalakan/mati", sub-opsi hanya saat aktif.
+// Kartu kemampuan: satu switch, status, langkah, "Also turns on/off", sub-opsi hanya saat aktif.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilityView } from '../shared/featureCapabilities'
@@ -15,19 +15,19 @@ describe('CapabilityCard', () => {
     render(<CapabilityCard view={view({ status: 'on' })} onToggle={() => undefined} />)
     expect(screen.getAllByRole('switch')).toHaveLength(1)
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('status').textContent).toContain('Aktif')
+    expect(screen.getByRole('status').textContent).toContain('On')
   })
 
   it('shows Mati for off', () => {
     render(<CapabilityCard view={view({})} onToggle={() => undefined} />)
-    expect(screen.getByRole('status').textContent).toContain('Mati')
+    expect(screen.getByRole('status').textContent).toContain('Off')
   })
 
   it('needs-step shows the step button; the switch stays usable to turn the feature OFF', () => {
     const onStep = vi.fn()
     const onToggle = vi.fn()
     render(<CapabilityCard view={view({ id: 'browser', status: 'needs-step', step: { kind: 'chromiumPath', label: 'Pilih lokasi' } })} onToggle={onToggle} onStep={onStep} />)
-    expect(screen.getByRole('status').textContent).toContain('Perlu satu langkah')
+    expect(screen.getByRole('status').textContent).toContain('Needs one step')
     const sw = screen.getByRole('switch') as HTMLButtonElement
     expect(sw.disabled).toBe(false)
     expect(sw.getAttribute('aria-checked')).toBe('true')
@@ -38,29 +38,29 @@ describe('CapabilityCard', () => {
   })
 
   it('lists what turns on before the click (server field)', () => {
-    render(<CapabilityCard view={view({ id: 'autonomy', title: 'Otonomi Agent Pusat', alsoTurnsOn: ['central', 'workers'] })} onToggle={() => undefined} />)
-    expect(screen.getByText(/Ikut menyalakan: Agent Pusat, Worker orchestrator/)).toBeTruthy()
+    render(<CapabilityCard view={view({ id: 'autonomy', title: 'Central Agent autonomy', alsoTurnsOn: ['central', 'workers'] })} onToggle={() => undefined} />)
+    expect(screen.getByText(/Also turns on: Central Agent, Worker orchestrator/)).toBeTruthy()
   })
 
   it('lists what turns off while on (dependents that are on)', () => {
-    const all = [view({ id: 'central', title: 'Agent Pusat', status: 'on' }), view({ status: 'on' }), view({ id: 'autonomy', status: 'off' })]
+    const all = [view({ id: 'central', title: 'Central Agent', status: 'on' }), view({ status: 'on' }), view({ id: 'autonomy', status: 'off' })]
     render(<CapabilityCard view={all[0]} all={all} onToggle={() => undefined} />)
-    expect(screen.getByText(/Ikut mati: Worker orchestrator$/)).toBeTruthy()
+    expect(screen.getByText(/Also turns off: Worker orchestrator$/)).toBeTruthy()
   })
 
   it('hides sub-options when off and shows them (not as switches) when on', () => {
-    const subs = [{ key: 'K', label: 'Minta persetujuan sebelum worker berjalan', on: true }]
+    const subs = [{ key: 'K', label: 'Ask for approval before a worker runs', on: true }]
     const { rerender } = render(<CapabilityCard view={view({ subs })} onToggle={() => undefined} />)
     expect(screen.queryByText(/Minta persetujuan/)).toBeNull()
     const onSub = vi.fn()
     rerender(<CapabilityCard view={view({ status: 'on', subs })} onToggle={() => undefined} onSub={onSub} />)
     expect(screen.getAllByRole('switch')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('checkbox', { name: /Minta persetujuan/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Ask for approval/ }))
     expect(onSub).toHaveBeenCalledWith('K', false)
   })
 
   it('sub berbahaya: menyalakan minta konfirmasi (batal = tidak berubah), mematikan tidak pernah ditanya', () => {
-    const label = 'Izinkan agent mengendalikan browser'
+    const label = 'Let agents drive the browser'
     const sub = (on: boolean) => [{ key: 'browserAgent', label, on, dangerous: true }]
     const onSub = vi.fn()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
@@ -82,15 +82,15 @@ describe('CapabilityCard', () => {
     const onToggle = vi.fn()
     const onStep = vi.fn()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true).mockReturnValueOnce(false)
-    const otonomi = (o: Partial<CapabilityView>) => view({ id: 'autonomy', title: 'Otonomi Agent Pusat', ...o })
+    const otonomi = (o: Partial<CapabilityView>) => view({ id: 'autonomy', title: 'Central Agent autonomy', ...o })
     const { rerender } = render(<CapabilityCard view={otonomi({})} onToggle={onToggle} />)
     fireEvent.click(screen.getByRole('switch'))
     expect(onToggle).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('switch'))
     expect(onToggle).toHaveBeenCalledWith(true)
-    expect(confirm.mock.calls[0][0]).toContain('Otonomi Agent Pusat')
-    rerender(<CapabilityCard view={otonomi({ status: 'needs-step', step: { kind: 'fixChain', label: 'Nyalakan yang dibutuhkan' } })} onToggle={onToggle} onStep={onStep} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Nyalakan yang dibutuhkan' }))
+    expect(confirm.mock.calls[0][0]).toContain('Central Agent autonomy')
+    rerender(<CapabilityCard view={otonomi({ status: 'needs-step', step: { kind: 'fixChain', label: 'Turn on what’s needed' } })} onToggle={onToggle} onStep={onStep} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on what’s needed' }))
     expect(onStep).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('switch')) // needs-step tampil nyala: klik = matikan, tanpa tanya
     expect(onToggle).toHaveBeenLastCalledWith(false)

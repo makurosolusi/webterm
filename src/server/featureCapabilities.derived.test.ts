@@ -55,7 +55,7 @@ describe('kunci turunan Worker/Otonomi', () => {
 describe('prasyarat mesin agen (Central)', () => {
   it('Central on tanpa mesin siap = needs-step agentEngine, bukan Aktif', () => {
     const v = viewOf('central', { WEBTERM_CENTRAL: 'on' }, { ...DETECT, agentEngine: false })
-    expect(v).toMatchObject({ status: 'needs-step', step: { kind: 'agentEngine', label: 'Pasang atau login Claude Code / OpenCode' } })
+    expect(v).toMatchObject({ status: 'needs-step', step: { kind: 'agentEngine', label: 'Install or sign in to Claude Code / OpenCode' } })
     expect(viewOf('central', { WEBTERM_CENTRAL: 'on' }, DETECT).status).toBe('on')
   })
   it('ganti mesin di Lanjutan mem-bounce Telegram yang sedang on', async () => {
@@ -67,12 +67,12 @@ describe('prasyarat mesin agen (Central)', () => {
 })
 
 describe('detail dan sub', () => {
-  it('Telegram on dengan nama bot = "Tersambung sebagai @nama"', () => {
-    expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, { ...DETECT, telegramBot: '@webterm_bot' }).detail).toBe('Tersambung sebagai @webterm_bot')
+  it('Telegram on dengan nama bot = "Connected as @nama"', () => {
+    expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, { ...DETECT, telegramBot: '@webterm_bot' }).detail).toBe('Connected as @webterm_bot')
     expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, DETECT).detail).toBeUndefined()
   })
   it('Browser punya sub agent berbahaya, bawaan ON (alat developer); off eksplisit tetap dihormati', () => {
-    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs).toEqual([{ key: 'browserAgent', label: 'Izinkan agent mengendalikan browser', on: true, dangerous: true }])
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs).toEqual([{ key: 'browserAgent', label: 'Let agents drive the browser', on: true, dangerous: true }])
     expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'off' }, DETECT).subs).toEqual([expect.objectContaining({ key: 'browserAgent', on: false })])
   })
 })

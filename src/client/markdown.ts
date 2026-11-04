@@ -17,7 +17,7 @@ export function renderMarkdown(src: string): string {
   // tidak ada — melempar dengan konteks jauh lebih baik daripada TypeError misterius, dan yang
   // penting: TIDAK ADA cabang yang mengembalikan HTML tanpa melewati sanitizer.
   if (!DOMPurify.isSupported) {
-    throw new Error('renderMarkdown: sanitizer DOMPurify tidak tersedia (butuh DOM) — render dibatalkan')
+    throw new Error('renderMarkdown: DOMPurify sanitizer unavailable (needs a DOM) — render aborted')
   }
   return DOMPurify.sanitize(html)
 }

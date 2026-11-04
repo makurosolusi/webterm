@@ -115,11 +115,11 @@ export function restartEligibility(
 export function ineligibleHint(reason: IneligibleReason): string {
   switch (reason) {
     case 'working':
-      return 'Sesi ini sedang sibuk — restart setelah turn (atau prompt permission) selesai.'
+      return 'This session is busy — restart after the turn (or permission prompt) finishes.'
     case 'no-session':
-      return 'Belum ada yang bisa di-resume — sesi ini belum melaporkan id.'
+      return 'Nothing to resume yet — this session has not reported an id.'
     case 'not-resumable':
-      return 'CLI ini tidak bisa diminta keluar lalu di-resume.'
+      return 'This CLI can’t be asked to exit and resume.'
   }
 }
 
@@ -198,7 +198,7 @@ export async function sendExitSequence(
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))
 ): Promise<void> {
   const writes = exitWrites(agentId)
-  if (!writes) throw new Error(`sendExitSequence: agent '${agentId ?? '(none)'}' tidak punya urutan exit`)
+  if (!writes) throw new Error(`sendExitSequence: agent '${agentId ?? '(none)'}' has no exit sequence`)
   for (const w of writes) {
     write(w.data)
     if (w.gapAfterMs > 0) await sleep(w.gapAfterMs)

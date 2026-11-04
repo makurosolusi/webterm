@@ -106,7 +106,7 @@ export function startChannelsRuntime(
     } else mode = 'poll' // tanpa token & tanpa secret: tunggu token diisi (hot), jangan matikan kanal
   }
   if (mode === 'poll' && resolveTelegramBotToken(env) === undefined) {
-    log.warn('channels.token_missing', 'telegram on tetapi bot token belum diset (mode poll tidak menerima update tanpa token)')
+    log.warn('channels.token_missing', 'telegram is on but no bot token is set (poll mode receives no updates without a token)')
   }
   if (!ledger) return logDisabledAndNull('ledger runtime is off (set WEBTERM_LEDGER=on or shadow)')
 

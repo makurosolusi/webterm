@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// Kartu Token akses: status off/on/env, aktifkan -> tautan sekali + Salin, rotasi tersembunyi untuk env,
+// Kartu Access token: status off/on/env, aktifkan -> tautan sekali + Salin, rotasi tersembunyi untuk env,
 // tab ini tetap jalan (token tersimpan di transport), nilai token tidak pernah masuk console.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -150,15 +150,15 @@ describe('TokenAccessCard', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(TOKEN_TEXT.loadFailed))
   })
 
-  it.each(['token', 'akses', 'keamanan', 'tunnel'])('Settings search "%s" finds the card', async (q) => {
+  it.each(['token', 'access', 'security', 'tunnel'])('Settings search "%s" finds the card', async (q) => {
     serve([OFF])
-    render(<CapabilitiesSection projectId="p1" query={q} sectionTitle="Kemampuan" />)
+    render(<CapabilitiesSection projectId="p1" query={q} sectionTitle="Capabilities" />)
     expect(await screen.findByRole('region', { name: TOKEN_TEXT.title })).toBeTruthy()
   })
 
   it('unrelated search hides the card', () => {
     serve([OFF])
-    render(<CapabilitiesSection projectId="p1" query="chromium" sectionTitle="Kemampuan" />)
+    render(<CapabilitiesSection projectId="p1" query="chromium" sectionTitle="Capabilities" />)
     expect(screen.queryByRole('region', { name: TOKEN_TEXT.title })).toBeNull()
   })
 })

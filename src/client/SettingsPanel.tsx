@@ -32,11 +32,11 @@ import './settings-controls.css'
 
 const SECTIONS = [
   { id: 'terminal', label: 'Terminal' },
-  { id: 'interaction', label: 'Interaksi' },
+  { id: 'interaction', label: 'Interaction' },
   { id: 'shell', label: 'Shell & buffer' },
   { id: 'agent', label: 'Agent' },
   { id: 'canvas', label: 'Canvas' },
-  { id: 'capabilities', label: 'Kemampuan' },
+  { id: 'capabilities', label: 'Capabilities' },
   { id: 'control', label: 'Control' },
 ] as const
 
@@ -129,7 +129,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
             <button
               type="button"
               className="st-close"
-              aria-label="Tutup settings"
+              aria-label="Close settings"
               onClick={onClose}
             >
               <span className="codicon codicon-close" aria-hidden="true" />
@@ -142,20 +142,20 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '' }
               <input
                 type="search"
                 className="st-search"
-                aria-label="Cari setting"
-                placeholder="Cari setting"
+                aria-label="Search settings"
+                placeholder="Search settings"
                 value={query}
                 autoFocus
                 onChange={(event) => setQuery(event.target.value)}
               />
               {normalized ? (
-                <span className="st-search-count" role="status">{found} setting ditemukan</span>
+                <span className="st-search-count" role="status">{found} {found === 1 ? 'setting' : 'settings'} found</span>
               ) : null}
               {query ? (
                 <button
                   type="button"
                   className="st-search-clear"
-                  aria-label="Hapus pencarian"
+                  aria-label="Clear search"
                   title="Clear Search Results"
                   onClick={() => setQuery('')}
                 >

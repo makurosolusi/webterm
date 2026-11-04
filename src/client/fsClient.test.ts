@@ -51,7 +51,7 @@ test('read throws on a malformed JSON body instead of answering empty', async ()
 
 test('read throws when the response has no content field', async () => {
   stubFetch({ body: {} })
-  await expect(read('/a.txt')).rejects.toThrow(/respons tanpa field content/)
+  await expect(read('/a.txt')).rejects.toThrow(/response has no content field/)
 })
 
 test('read returns the file contents on success', async () => {

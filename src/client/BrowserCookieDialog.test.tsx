@@ -80,7 +80,7 @@ describe('BrowserCookieDialog', () => {
     api.previewCookies.mockResolvedValue({ ...PREVIEW, googleSkipped: 3 })
     await upload()
     expect(await screen.findByText(T.googleSkipped(3))).toBeTruthy()
-    expect(T.googleSkipped(3)).toContain('Login Google tidak diimpor — masuk langsung ke Google di node browser')
+    expect(T.googleSkipped(3)).toContain('Google logins aren’t imported — sign in to Google directly in the browser node')
   })
 
   it('select-all picks every domain', async () => {

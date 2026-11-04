@@ -58,7 +58,7 @@ const mkView = (id: CapabilityId, on: ReadonlySet<CapabilityId>): CapabilityView
   id, title: CAPABILITIES[id].title, blurb: CAPABILITIES[id].blurb,
   status: on.has(id) ? 'on' : id === 'browser' ? 'needs-step' : 'off',
   ...(id === 'browser' ? { step: { kind: 'chromiumPath' as const, label: 'Pilih lokasi' } } : {}),
-  ...(id === 'workers' && on.has(id) ? { subs: [{ key: 'runRequireApproval', label: 'Minta persetujuan sebelum worker berjalan', on: true }] } : {}),
+  ...(id === 'workers' && on.has(id) ? { subs: [{ key: 'runRequireApproval', label: 'Ask for approval before a worker runs', on: true }] } : {}),
 })
 const fixture = (on: ReadonlySet<CapabilityId>): CapabilitiesResponse => ({
   capabilities: CAPABILITY_IDS.map((id) => mkView(id, on)),
@@ -70,7 +70,7 @@ async function openCapabilities(on: ReadonlySet<CapabilityId>): Promise<HTMLElem
   vi.stubGlobal('fetch', vi.fn(async (url: string) =>
     new Response(JSON.stringify(url.startsWith('/api/capabilities') ? fixture(on) : { items: [] }), { status: 200 })))
   render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} projectId="p1" />)
-  fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Kemampuan' }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Capabilities' }))
   await screen.findAllByRole('switch')
   return screen.getByRole('main', { name: 'Settings' })
 }
@@ -82,7 +82,7 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
   it('teks halaman penuh bebas kata terlarang, nama env var, dan istilah UI lama', async () => {
     await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
     const text = document.body.textContent ?? ''
-    expect(text).toContain('Agent Pusat')
+    expect(text).toContain('Central Agent')
     expect(text).not.toMatch(BANNED_WORDS)
     expect(text).not.toMatch(ENV_NAMES)
     expect(text).not.toMatch(OLD_UI)
@@ -114,9 +114,9 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
 
   it('sub-opsi worker hanya muncul saat Worker on', async () => {
     await openCapabilities(new Set<CapabilityId>(['central']))
-    expect(screen.queryByLabelText('Minta persetujuan sebelum worker berjalan')).toBeNull()
+    expect(screen.queryByLabelText('Ask for approval before a worker runs')).toBeNull()
     cleanup()
     await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
-    await waitFor(() => expect(screen.getByLabelText('Minta persetujuan sebelum worker berjalan')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Ask for approval before a worker runs')).toBeTruthy())
   })
 })

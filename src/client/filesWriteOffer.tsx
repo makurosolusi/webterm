@@ -14,9 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 const TITLE = CAPABILITIES.filesWrite.title
 export const WRITE_OFFER_TEXT = {
-  dialogTitle: `Nyalakan “${TITLE}”`,
-  lockedHint: `Terkunci: “${TITLE}” sedang mati. Klik untuk menyalakan.`,
-  enableAction: 'Nyalakan…',
+  dialogTitle: `Turn on “${TITLE}”`,
+  lockedHint: `Locked: “${TITLE}” is off. Click to turn it on.`,
+  enableAction: 'Turn on…',
 } as const
 
 /** Node yang dialog tawarannya terbuka, dan hitungan "baru dinyalakan" yang memicu slot menanya ulang. */

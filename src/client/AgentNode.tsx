@@ -186,7 +186,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
       label: 'Restart agent',
       disabled: !restartGate.ok || restarting,
       hint: restartGate.ok
-        ? 'Meminta CLI keluar lalu meluncurkannya ulang dengan --resume (percakapan yang sama).'
+        ? 'Asks the CLI to exit, then relaunches it with --resume (same conversation).'
         : ineligibleHint(restartGate.reason),
       onClick: () => { void restartAgent() },
     },
@@ -194,15 +194,15 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
       label: 'Resume session',
       disabled: !canResumeNode || restarting,
       hint: canResumeNode
-        ? 'Menyambung kembali percakapan sebelumnya di PTY baru.'
-        : 'Hanya untuk sesi yang sudah berakhir dan punya id yang bisa di-resume.',
+        ? 'Reconnects the previous conversation in a new PTY.'
+        : 'Only for sessions that have ended and have a resumable id.',
       onClick: doResume,
     },
     { type: 'separator' },
     {
       label: 'New session',
       danger: true,
-      hint: 'Membuang percakapan ini dan memulai sesi baru dengan id baru.',
+      hint: 'Discards this conversation and starts a new session with a new id.',
       onClick: newSession,
     },
   ]

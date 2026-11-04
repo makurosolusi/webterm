@@ -18,9 +18,9 @@ describe('WEBTERM_CENTRAL_RUNTIME', () => {
     expect(s.kind).toBe('enum')
     expect(s.options).toEqual(['claude', 'opencode', 'mock', 'off'])
     expect(s.optionLabels).toEqual({
-      claude: 'Claude Code', opencode: 'OpenCode (model gratis/pihak ketiga)', mock: 'Demo (jawaban tiruan)', off: 'Nonaktif',
+      claude: 'Claude Code', opencode: 'OpenCode (free/third-party models)', mock: 'Demo (canned replies)', off: 'Off',
     })
-    expect(s.label).toBe('Mesin agen central')
+    expect(s.label).toBe('Central agent engine')
   })
 
   it('default registry = DEFAULT_RUNTIME_KIND dan tiap opsi round-trip parseRuntimeKind', () => {
@@ -33,7 +33,7 @@ describe('WEBTERM_CENTRAL_RUNTIME', () => {
     const s = spec(RUNTIME)
     expect(s).toMatchObject({ restart: 'hot', restartRequired: false, owner: 'central', audience: 'user' })
     expect(s.requires?.map((r) => r.key)).toEqual(['WEBTERM_CENTRAL'])
-    expect(s.description).toContain('Nilai tak dikenal = nonaktif')
+    expect(s.description).toContain('Unknown value = off')
     expect(validateEnvValue(s, 'claude')).toEqual({ ok: true, value: 'claude' })
     expect(validateEnvValue(s, 'gpt').ok).toBe(false)
   })
@@ -44,7 +44,7 @@ describe('WEBTERM_CENTRAL_MODEL', () => {
     const s = spec('WEBTERM_CENTRAL_MODEL')
     expect(s.kind).toBe('string')
     expect(s.default ?? '').toBe('')
-    expect(s.unsetLabel).toBe('Bawaan runtime')
+    expect(s.unsetLabel).toBe('Runtime default')
     expect(s.label).toBe('Model (OpenCode / Claude)')
     expect(s.requires).toEqual([expect.objectContaining({ key: RUNTIME, oneOf: ['opencode', 'claude'] })])
   })
@@ -53,14 +53,14 @@ describe('WEBTERM_CENTRAL_MODEL', () => {
 describe('entri khusus OpenCode dan CA2 netral-runtime', () => {
   it('BIN dan ALLOW_TOOLS diawali "Hanya bila mesin = OpenCode."', () => {
     for (const k of ['WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS']) {
-      expect(spec(k).description.startsWith('Hanya bila mesin = OpenCode.'), k).toBe(true)
+      expect(spec(k).description.startsWith('Only when the engine is OpenCode.'), k).toBe(true)
     }
   })
 
   it('CHECKPOINT tanpa requires runtime dan tanpa klausa "butuh runtime opencode"', () => {
     const s = spec('WEBTERM_CENTRAL_CHECKPOINT')
     expect((s.requires ?? []).filter((r) => r.key === RUNTIME)).toEqual([])
-    expect(s.description.toLowerCase()).not.toContain('runtime opencode')
+    expect(s.description.toLowerCase()).not.toContain('opencode')
   })
 })
 

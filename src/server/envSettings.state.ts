@@ -27,13 +27,13 @@ export interface StateInput {
 }
 
 const REASON: Record<EnvKind, string> = {
-  flag: 'Bukan on/off; dibaca sebagai off.',
-  enum: 'Bukan salah satu opsi; dibaca sebagai bawaan.',
-  number: 'Bukan angka dalam rentang yang diizinkan.',
-  string: 'Nilai tidak sah.',
-  secret: 'Bentuk nilai tidak sah.',
+  flag: 'Not on/off; read as off.',
+  enum: 'Not one of the options; read as the default.',
+  number: 'Not a number in the allowed range.',
+  string: 'Invalid value.',
+  secret: 'Invalid value format.',
 }
-const REASON_ABSOLUTE = 'Harus path absolut.'
+const REASON_ABSOLUTE = 'Must be an absolute path.'
 
 const nonEmpty = (v: string | undefined): v is string => v !== undefined && v.trim() !== ''
 

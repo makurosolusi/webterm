@@ -57,7 +57,7 @@ function stubCapabilityServer(posts: string[], steps?: object): void {
   const inner = globalThis.fetch
   let on = false
   const cap = () => new Response(JSON.stringify({
-    capabilities: [{ id: 'browser', title: 'Browser di kanvas', blurb: 'Buka halaman web sebagai node di kanvas.', status: on ? 'on' : steps ? 'needs-step' : 'off', ...(!on && steps ? steps : {}) }],
+    capabilities: [{ id: 'browser', title: 'Browser on canvas', blurb: 'Open web pages as nodes on the canvas.', status: on ? 'on' : steps ? 'needs-step' : 'off', ...(!on && steps ? steps : {}) }],
     advanced: {},
   }))
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -78,13 +78,13 @@ describe('tawaran saat kemampuan browser mati', () => {
     stubCapabilityServer(posts)
     openPaneMenu()
     fireEvent.click(await screen.findByText(MENU_LABELS.browser))
-    expect(await screen.findByText(/Nyalakan sekarang\?/)).not.toBeNull()
+    expect(await screen.findByText(/Turn it on now\?/)).not.toBeNull()
     expect(screen.queryByText(MENU_LABELS.terminal)).toBeNull() // panel menu berganti isi
     expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Nyalakan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
     expect(posts.map((b) => JSON.parse(b))).toEqual([{ enabled: true }])
-    expect(screen.queryByText(/Nyalakan sekarang\?/)).toBeNull()
+    expect(screen.queryByText(/Turn it on now\?/)).toBeNull()
   })
 
   it('needs-step menampilkan langkah Chromium, bukan tombol Nyalakan', async () => {
@@ -93,7 +93,7 @@ describe('tawaran saat kemampuan browser mati', () => {
     openPaneMenu()
     fireEvent.click(await screen.findByText(MENU_LABELS.browser))
     expect(await screen.findByRole('button', { name: 'Pilih lokasi Chromium' })).not.toBeNull()
-    expect(screen.queryByRole('button', { name: 'Nyalakan' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Turn on' })).toBeNull()
   })
 
   it('teks status browser tidak menyebut nama env var; jalan keluarnya tombol tawaran, bukan teks petunjuk', async () => {

@@ -40,7 +40,7 @@ export const TELEGRAM_CHANNEL = 'telegram'
  * (`telegramMarkdownChunks`); this cap only stops a runaway reply from flooding the chat (~8 msgs).
  */
 export const CHANNEL_REPLY_MAX_CHARS = 32_000
-export const CHANNEL_REPLY_CLIPPED_SUFFIX = '\n\n… (dipotong)'
+export const CHANNEL_REPLY_CLIPPED_SUFFIX = '\n\n… (truncated)'
 
 export interface ChannelReply {
   channel: string

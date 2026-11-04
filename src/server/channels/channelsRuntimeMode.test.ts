@@ -66,9 +66,9 @@ describe('startChannelsRuntime mode gating', () => {
   it('poll mode without a bot token logs exactly one clear warning and does not crash', () => {
     const channels = start({ WEBTERM_TELEGRAM_MODE: 'poll' })
     expect(channels).not.toBeNull()
-    const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('bot token belum diset'))
+    const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('no bot token is set'))
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toContain('telegram on tetapi bot token belum diset')
+    expect(lines[0]).toContain('telegram is on but no bot token is set')
     channels?.stop()
   })
 
