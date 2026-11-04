@@ -14,6 +14,9 @@ const ISO_DAY_LENGTH = 10
 /** UTC `YYYY-MM-DD` for an epoch-ms timestamp. */
 export function utcDay(ts: number): string { return new Date(ts).toISOString().slice(0, ISO_DAY_LENGTH) }
 
+/** Epoch ms of 00:00 UTC on the day of `ts` (start of the budget day). */
+export function utcDayStart(ts: number): number { return Date.parse(`${utcDay(ts)}T00:00:00.000Z`) }
+
 function limitOf(env: Record<string, string | undefined>, key: string): number {
   const spec = CA2_ENV_SPECS.find((s) => s.key === key)
   const fallback = Number(spec?.default ?? 0)

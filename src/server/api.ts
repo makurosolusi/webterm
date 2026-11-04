@@ -14,6 +14,7 @@ import { policyRoutes } from './routes/policy.routes'
 import { ledgerRoutes } from './routes/ledger.routes'
 import { routinesRoutes } from './routes/routines.routes'
 import { sensorRoutes } from './routes/sensors.routes'
+import { costRoutes } from './routes/cost.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -40,6 +41,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...policyRoutes,
   ...routinesRoutes,
   ...ledgerRoutes,
+  ...costRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
