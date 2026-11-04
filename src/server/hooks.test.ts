@@ -351,8 +351,14 @@ describe('permissionModeFlag', () => {
 describe('buildClaudeFlags', () => {
   // Penulis settings di-stub: test ini harus tetap bebas I/O.
   const writeSettings = () => '/tmp/x.json'
+  const writeRules = () => '/tmp/rules.md'
   const flags = (resume: boolean, permissionMode?: AgentPermissionMode) =>
-    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings })
+    buildClaudeFlags('n1', 'uuid-x', 8700, resume, { permissionMode, writeSettings, writeRules })
+
+  it('appends the webterm house rules file to the system prompt, fresh and resumed', () => {
+    expect(flags(false)).toContain("--append-system-prompt-file '/tmp/rules.md'")
+    expect(flags(true)).toContain("--append-system-prompt-file '/tmp/rules.md'")
+  })
 
   it('uses --session-id for a fresh session', () => {
     const f = flags(false)

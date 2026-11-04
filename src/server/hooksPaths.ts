@@ -17,6 +17,11 @@ export function claudeHeadersPath(nodeId: string): string {
   return join(dataDir(), 'node-settings', `${hashId(nodeId)}.headers`)
 }
 
+/** Satu file aturan rumah webterm untuk semua node (isinya statis, tanpa data user/token). */
+export function houseRulesPath(): string {
+  return join(dataDir(), 'node-settings', 'webterm-house-rules.md')
+}
+
 function hashId(nodeId: string): string {
   return createHash('sha256').update(nodeId).digest('hex').slice(0, 16)
 }

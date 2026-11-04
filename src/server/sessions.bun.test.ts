@@ -23,6 +23,8 @@ afterAll(() => {
 
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { Sessions, launchLine } from './sessions'
+import { codexInstructionsFlag, tomlString } from './webtermAwareness'
+import { shq } from './hooksQuote'
 import { SETTING_RANGES } from '../shared/settings.ranges'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
 import { resolveShell } from './ptyShell'
@@ -138,6 +140,25 @@ test('open with a cmd launches it through the login shell', async () => {
 // --- Perakitan baris peluncuran (murni, tanpa PTY) -------------------------------------------
 
 const SID = '11111111-2222-3333-4444-555555555555'
+/** Flag aturan rumah codex untuk node `n1`, dihitung lewat fungsi produksi (isinya diuji terpisah). */
+const CODEX_N1 = codexInstructionsFlag('n1')
+
+test('codex developer_instructions is one colon-free, TOML-escaped, shell-quoted argument', () => {
+  expect(CODEX_N1.startsWith(`-c 'developer_instructions="You are running inside webterm`)).toBe(true)
+  // envman memindai argv untuk `slug:path`: tidak boleh ada `:` sama sekali, juga dari id pane.
+  const pane = codexInstructionsFlag('n1:p2')
+  expect(pane).not.toContain(':')
+  expect(pane).toContain('agent node n1.p2.')
+  expect(CODEX_N1).toContain('IS the explicit permission of the user to drive that browser')
+  expect(CODEX_N1.length < 1500).toBe(true)
+  // TOML basic string: kutip, backslash, kontrol, dan DEL di-escape; hasilnya terbaca kembali utuh.
+  const nasty = 'a"b\\c\nd\u007fe\u0001'
+  const t = tomlString(nasty)
+  expect(t).toBe('"a\\"b\\\\c\\nd\\u007Fe\\u0001"')
+  expect(JSON.parse(t)).toBe(nasty)
+  // Kutip tunggal di teks tidak bisa menutup quoting shell.
+  expect(shq(`developer_instructions=${tomlString("it's")}`)).toBe(`'developer_instructions="it'\\''s"'`)
+})
 const open = (over: Partial<OpenMsg>): OpenMsg =>
   ({ t: 'open', id: 'n1', cols: 80, rows: 24, ...over })
 
@@ -158,11 +179,10 @@ test('launchLine mints the session id with each harness own grammar', () => {
   const cursor = launchLine(open({ cmd: 'cursor-agent', agentId: 'cursor', sessionId: SID }), 9999)
   expect(cursor).toBe(`cursor-agent --resume ${SID}`)
 
-  // codex & gemini resumable tapi BUKAN session-id-capable: peluncuran pertama harus identik
-  // byte demi byte dengan perintah dasar.
-  for (const id of ['codex', 'gemini'] as const) {
-    expect(launchLine(open({ cmd: id, agentId: id, sessionId: SID }), 9999)).toBe(id)
-  }
+  // codex & gemini resumable tapi BUKAN session-id-capable: tanpa flag session id. gemini tetap
+  // identik byte demi byte; codex hanya mendapat `-c developer_instructions` (aturan rumah webterm).
+  expect(launchLine(open({ cmd: 'gemini', agentId: 'gemini', sessionId: SID }), 9999)).toBe('gemini')
+  expect(launchLine(open({ cmd: 'codex', agentId: 'codex', sessionId: SID }), 9999)).toBe(`codex ${CODEX_N1}`)
 
   // Terminal biasa (tanpa agentId) dan agent tanpa session id: perintah apa adanya.
   expect(launchLine(open({ cmd: 'htop' }), 9999)).toBe('htop')
@@ -228,11 +248,11 @@ test('launchLine resumes with the harness resume grammar', () => {
   const r = (agentId: string, cmd: string) =>
     launchLine(open({ cmd, agentId, sessionId: SID, resume: true }), 9999)
   expect(r('claude', 'claude')).toContain(`--resume ${SID}`)
-  expect(r('codex', 'codex')).toBe(`codex resume ${SID}`)
+  expect(r('codex', 'codex')).toBe(`codex ${CODEX_N1} resume ${SID}`)
   expect(r('copilot', 'copilot')).toBe(`copilot --resume=${SID}`)
   expect(r('antigravity', 'agy')).toBe(`agy --conversation=${SID}`)
   // Pembungkus tetap utuh: perintah client dipakai sebagai program secara keseluruhan.
-  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex resume ${SID}`)
+  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex ${CODEX_N1} resume ${SID}`)
   // Agent tak dikenal tanpa kapabilitas apa pun: tidak ada flag yang ditempelkan.
   expect(r('custom', 'mycli')).toBe('mycli')
 })
