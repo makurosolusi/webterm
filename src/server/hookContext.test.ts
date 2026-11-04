@@ -244,8 +244,22 @@ describe('nextHookContext', () => {
   it('roster jadi kosong lalu edge yang sama digambar ulang → diumumkan lagi', () => {
     const d = doc(peer('a', 'Foo'))
     expect(nextHookContext('n6', 'UserPromptSubmit', d)).not.toBeNull()
+    // Edge terakhir dilepas → diumumkan SEKALI, lalu diam.
+    expect(nextHookContext('n6', 'UserPromptSubmit', doc())?.additionalContext).toContain('no longer connected to any node')
     expect(nextHookContext('n6', 'UserPromptSubmit', doc())).toBeNull()
     expect(nextHookContext('n6', 'UserPromptSubmit', d)).not.toBeNull()
+  })
+
+  it('lepas-edge tidak ditelan event non-pengumuman (Stop) sebelum prompt berikutnya', () => {
+    expect(nextHookContext('n10', 'UserPromptSubmit', doc(peer('a', 'Foo')))).not.toBeNull()
+    expect(nextHookContext('n10', 'Stop', doc())).toBeNull()
+    expect(nextHookContext('n10', 'UserPromptSubmit', doc())).not.toBeNull()
+  })
+
+  it('SessionStart tanpa edge tetap diam walau sesi lama punya peer', () => {
+    expect(nextHookContext('n11', 'UserPromptSubmit', doc(peer('a', 'Foo')))).not.toBeNull()
+    expect(nextHookContext('n11', 'SessionStart', doc())).toBeNull()
+    expect(nextHookContext('n11', 'UserPromptSubmit', doc())).toBeNull()
   })
 })
 

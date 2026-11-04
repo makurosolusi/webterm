@@ -15,6 +15,7 @@ import { hookStatus, type HookStatusBody } from './hookStatus'
 import { stateVerified } from './hooks'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
+import { linkedBrowsers, nextBrowserNotice } from './linkAwareness'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
@@ -145,9 +146,13 @@ export async function agentStatusRoute(
   // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
   // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
   const ws = deps.workspaceFor(node)
-  const ctx = ws ? nextHookContext(node, body.hook_event_name, buildLinkDoc(ws, node)) : null
-  if (ctx) {
-    json(res, 200, { hookSpecificOutput: ctx })
+  // Dua sumber, satu balasan: roster peer context-link + perubahan kabel ke browser node.
+  const event = body.hook_event_name
+  const peers = ws ? nextHookContext(node, event, buildLinkDoc(ws, node)) : null
+  const browsers = ws ? nextBrowserNotice(node, event, linkedBrowsers(ws, node)) : null
+  const text = [peers?.additionalContext, browsers].filter(Boolean).join('\n\n')
+  if (text && event) {
+    json(res, 200, { hookSpecificOutput: { hookEventName: event, additionalContext: text } })
     return true
   }
   res.statusCode = 204; res.end(); return true

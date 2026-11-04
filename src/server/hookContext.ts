@@ -8,6 +8,7 @@
 // sendiri ketik, dan isi transcript bisa raksasa sehingga cap 10k jebol di pengumuman pertama.
 // Pembacaan isi tetap milik skill yang pull-based — jalur itu tidak disentuh di sini.
 import { SKILL_NAME, type LinkDoc, type LinkDocEntry } from './contextLink'
+import { forgetBrowserNotice } from './linkAwareness'
 
 export interface HookContextPayload {
   hookEventName: string
@@ -143,11 +144,20 @@ export function buildHookContext(
  *  benar: sesi agent pun mati bersamanya, jadi tidak ada konteks lama yang perlu dihormati. */
 const lastSignatures = new Map<string, string>()
 
+const NO_PEERS = `The context-link edges of this webterm node have changed. It is no longer connected to any node; the ${SKILL_NAME} skill has nothing to read.`
+
 /** Pembungkus ber-state di atas `buildHookContext`: menyimpan signature terakhir per node. */
 export function nextHookContext(nodeId: string, event: string | undefined, doc: LinkDoc): HookContextPayload | null {
   // Roster kosong MELUPAKAN memo, bukan cuma diam. Kalau tidak, melepas edge lalu menggambar ulang
   // edge yang sama persis akan dibaca "tidak berubah" dan node tak pernah diberi tahu lagi.
-  if (!doc.links.length) lastSignatures.delete(nodeId)
+  // Edge TERAKHIR yang dilepas tetap diumumkan sekali: tanpa itu agent terus mengira peer-nya ada.
+  // Hanya event yang bisa mengumumkan yang boleh menyentuh memo, supaya `Stop`/`PreToolUse` tidak
+  // menelan pengumuman lepas-edge sebelum prompt berikutnya.
+  if (!doc.links.length) {
+    if (!event || !ANNOUNCE_EVENTS.has(event)) return null
+    const hadPeers = lastSignatures.delete(nodeId)
+    return hadPeers && event === 'UserPromptSubmit' ? { hookEventName: event, additionalContext: NO_PEERS } : null
+  }
   const next = buildHookContext(event, doc, lastSignatures.get(nodeId))
   if (!next) return null
   lastSignatures.set(nodeId, next.signature)
@@ -157,4 +167,5 @@ export function nextHookContext(nodeId: string, event: string | undefined, doc: 
 /** Lupakan memo sebuah node (node dihapus / sesi ditutup). */
 export function forgetHookContext(nodeId: string): void {
   lastSignatures.delete(nodeId)
+  forgetBrowserNotice(nodeId)
 }
