@@ -2,7 +2,8 @@
 import { AGENT_CONFIG } from '../../shared/workspace'
 import { validateTemplate, type WebtermTemplate } from './template.model'
 
-const CLAUDE = { agentId: 'claude', cmd: AGENT_CONFIG.claude.launchCmd, color: AGENT_CONFIG.claude.color }
+// No `cmd`: a claude node gets the default launch profile at instantiation (template.instantiate.ts).
+const CLAUDE = { agentId: 'claude', color: AGENT_CONFIG.claude.color }
 const REPO = { id: 'repo', description: 'Repository folder (absolute path) the agents work in.' }
 const SIZE = { width: 640, height: 420 }
 

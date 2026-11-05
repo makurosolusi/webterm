@@ -247,7 +247,8 @@ describe('orchestrator run route', () => {
 
   it('uses the ledger project path as repo and the settings launcher as cmd', async () => {
     const run = deps(async () => outcome(), {
-      settings: () => ({ agentLaunchCommands: { claude: 'claude-work' } }),
+      settings: () => ({ agentLaunchCommands: {}, claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' }),
+      claudeOnPath: () => true,
     })
     const result = await orchestratorRunRoute(
       { ...valid, prompt: 'focus on tests', baseRef: 'main' },

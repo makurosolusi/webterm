@@ -27,7 +27,6 @@ import { usePortsStatusItems } from './PortsChip'
 import ProblemsPanel, { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
 import MorningBrief from './MorningBrief'
-import { SettingsPanel } from './SettingsPanel'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
@@ -42,9 +41,8 @@ import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
-import { useOpenSettingsEvent } from './claudeLauncher/useOpenSettingsEvent'
 import BoardCanvas from './App.canvas'
-import AppHosts from './App.hosts'
+import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
@@ -66,9 +64,6 @@ export default function App() {
   const [board, setBoard] = useState(false)
   const [picker, setPicker] = useState<{ onPick: (p: string) => void } | null>(null)
   const [showSettings, setShowSettings] = useState(false)
-  // Opened on a section by OPEN_SETTINGS_EVENT; `n` remounts an already open panel onto it.
-  const [settingsAt, setSettingsAt] = useState<{ section?: string; n: number }>({ n: 0 })
-  useOpenSettingsEvent(useCallback((section: string) => { setSettingsAt((p) => ({ section, n: p.n + 1 })); setShowSettings(true) }, []))
   const [showHelp, setShowHelp] = useState(false)
   const [locked, setLocked] = useState(false)
   // Di App, bukan di dalam panel: tombol pembukanya ada di Dock dan geseran dock ikut keadaan ini.
@@ -242,6 +237,7 @@ export default function App() {
             nodes={flowNodes}
             edges={displayEdges}
             settings={settings}
+            hydrated={settingsHydrated}
             viewport={activeWs?.viewport}
             locked={locked}
             nodeColor={nodeColor}
@@ -347,7 +343,7 @@ export default function App() {
           petunjuk jalan keluarnya juga tidak boleh. */}
       {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      {showSettings && <SettingsPanel key={settingsAt.n} initialSection={settingsAt.section} settings={settings} onChange={update} onClose={() => { setShowSettings(false); setSettingsAt((p) => ({ n: p.n })) }} projectId={activeId ?? undefined} history={settingsHistory} />}
+      <SettingsHost open={showSettings} setOpen={setShowSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       {omni.state && (
         <Omnibox

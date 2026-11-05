@@ -22,8 +22,9 @@ describe('catalog launch line (was launchLineFor)', () => {
     expect(lineOf('claude', DEFAULT_SETTINGS)).toBe(AGENT_CONFIG.claude.launchCmd)
   })
 
-  it('override agentLaunchCommands dipakai untuk builtin', () => {
-    expect(lineOf('claude', withSettings({ agentLaunchCommands: { claude: 'claude-work' } }))).toBe('claude-work')
+  it('claude memakai profil default; override agentLaunchCommands dipakai untuk builtin lain', () => {
+    expect(lineOf('claude', withSettings({ claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' }))).toBe('claude-work')
+    expect(lineOf('codex', withSettings({ agentLaunchCommands: { codex: 'codex-work' } }))).toBe('codex-work')
   })
 
   it('custom (centralSpawn): launchCmd sendiri; kosong + baseAgent => base (dengan override)', () => {
@@ -31,7 +32,7 @@ describe('catalog launch line (was launchLineFor)', () => {
       { id: 'custom:own', label: 'Own', launchCmd: 'my-proxy --tui', centralSpawn: true },
       { id: 'custom:base', label: 'Base', launchCmd: '', baseAgent: 'claude' as const, centralSpawn: true },
     ]
-    const s = withSettings({ customAgents, agentLaunchCommands: { claude: 'claude-work' } })
+    const s = withSettings({ customAgents, claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' })
     expect(lineOf('custom:own', s)).toBe('my-proxy --tui')
     expect(lineOf('custom:base', s)).toBe('claude-work')
     expect(lineOf('custom:base', withSettings({ customAgents }))).toBe(AGENT_CONFIG.claude.launchCmd)

@@ -3,7 +3,10 @@
 // settings or the filesystem, never from the request body.
 import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
-import { binaryOnPath } from './binaryOnPath'
+import { binaryExists } from './ptyShell'
+import { resolveClaudeProfileIn } from '../shared/claudeLaunch/claudeLaunch.builtin'
+import { DEFAULT_CLAUDE_PROFILE, type ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
+import { joinArgv } from '../shared/claudeLaunch/shellQuote'
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { type PlanStore } from './orchestrator/plan'
@@ -55,7 +58,7 @@ export interface OrchestratorRunDeps {
   worktrees?: WorktreeService
   sessions?: WorkerSessionPort
   verify?: (input: VerifyInput) => Promise<VerifyOutcome>
-  settings?: () => { agentLaunchCommands: Partial<Record<string, string>> }
+  settings?: () => { agentLaunchCommands: Partial<Record<string, string>> } & Partial<ClaudeLaunchSettings>
   dataDir?: () => string
   gitExec?: Exec
   /** Approval ledger port; production defaults to `ledger.ledger.approval`. */
@@ -64,7 +67,7 @@ export interface OrchestratorRunDeps {
   requireApproval?: boolean
   /** Injected clock for approval expiry checks; defaults to `Date.now()`. */
   now?: () => number
-  /** Test seam: is `claude` installed? Production probes PATH (only matters when nothing is configured). */
+  /** Test seam: is the default profile's program installed? Production probes PATH (only matters when nothing is configured). */
   claudeOnPath?: () => boolean
   /** Principal workers are spawned under (K3 lineage): `central` for Central's task.run; absent = human-ui. */
   spawnParent?: string
@@ -131,19 +134,30 @@ export function runItemTaskId(
   return stored?.items.find((candidate) => candidate.id === itemId)?.taskId ?? null
 }
 
-/** Worker kind + launch line from `settings.agentLaunchCommands` (user override wins over the builtin launcher). */
+/**
+ * Worker kind + launch line. Claude launches through the default launch profile (a non-Default
+ * profile whose program exists counts as "claude configured"); other kinds use their
+ * `agentLaunchCommands` override.
+ * The legacy `agentLaunchCommands.claude` is ignored: settings load seeds it into a profile.
+ */
 export async function workerLaunch(deps: OrchestratorRunDeps): Promise<{ agentId: string; cmd: string }> {
   let configured: Partial<Record<string, string>> = {}
+  let claude = resolveClaudeProfileIn({})
   try {
     const settings = deps.settings ? deps.settings() : (await import('./db')).db.getSettings()
-    configured = settings.agentLaunchCommands
+    const { claude: _legacy, ...others } = settings.agentLaunchCommands
+    configured = others
+    claude = resolveClaudeProfileIn(settings)
   } catch {
     // A broken settings read must not block an otherwise valid run: fall back to the default launcher.
     log.warn('orchestrator.worker.settings', 'settings unreadable; using default worker launcher', { code: 'settings_unreadable' })
   }
-  const claudeOnPath = (deps.claudeOnPath ?? (() => binaryOnPath('claude')))()
+  const claudeLine = joinArgv(claude.argv)
+  // Profile-aware: the program the profile runs first (its wrapper, else claude) must exist.
+  const claudeOnPath = (deps.claudeOnPath ?? (() => binaryExists(claude.argv[0] as string)))()
+  if (claudeOnPath && claude.profile.id !== DEFAULT_CLAUDE_PROFILE.id) configured = { ...configured, claude: claudeLine }
   const agentId = resolveWorkerKind(configured, claudeOnPath)
-  const cmd = isBuiltinAgent(agentId) ? assembleCmd(agentId, configured[agentId]) : agentId
+  const cmd = agentId === 'claude' ? claudeLine : isBuiltinAgent(agentId) ? assembleCmd(agentId, configured[agentId]) : agentId
   return { agentId, cmd }
 }
 

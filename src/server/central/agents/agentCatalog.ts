@@ -9,6 +9,7 @@ import { canonicalDefJson, type CustomAgent } from '../../../shared/customAgent.
 import type { Settings } from '../../../shared/settings'
 import { AGENT_CONFIG, assembleCmd, customLaunchCmd, type BuiltinAgentId } from '../../../shared/workspace'
 import { binaryExists } from '../../ptyShell'
+import { claudeProfileLine } from '../../../shared/claudeLaunch/claudeLaunch.builtin'
 import { shq } from '../../hooksQuote'
 import type { Tier } from '../contracts'
 
@@ -96,7 +97,8 @@ function headlessOf(launch: NonNullable<CustomAgent['launch']>): CatalogEntry['h
 function customEntry(agent: CustomAgent, s: Settings, deps: CatalogDeps): CatalogEntry | null {
   const launch = agent.launch
   if (launch && !programUsable(launch.program, deps.denyRoots?.() ?? DEFAULT_DENY_ROOTS)) return null
-  const line = launch ? argvLine(launch.program, launch.args ?? []) : customLaunchCmd(agent, s.agentLaunchCommands ?? {})
+  // A claude-based custom agent without its own command inherits the default launch profile.
+  const line = launch ? argvLine(launch.program, launch.args ?? []) : customLaunchCmd(agent, { ...s.agentLaunchCommands, claude: claudeProfileLine(s) })
   if (!line) return null
   const refs = agent.env ?? {}
   return {
@@ -123,7 +125,9 @@ export function createAgentCatalog(deps: CatalogDeps): AgentCatalog {
   function resolve(kind: string): CatalogEntry | null {
     const s = settings()
     if (Object.hasOwn(AGENT_CONFIG, kind)) {
-      return { kind, builtin: true, tier: 'R2', launchLine: assembleCmd(kind as BuiltinAgentId, s.agentLaunchCommands?.[kind as BuiltinAgentId]), headlessArgv: BUILTIN_HEADLESS[kind] ?? null, childEnv: () => ({}) }
+      // claude launches through the default launch profile; the other builtins keep their override.
+      const launchLine = kind === 'claude' ? claudeProfileLine(s) : assembleCmd(kind as BuiltinAgentId, s.agentLaunchCommands?.[kind as BuiltinAgentId])
+      return { kind, builtin: true, tier: 'R2', launchLine, headlessArgv: BUILTIN_HEADLESS[kind] ?? null, childEnv: () => ({}) }
     }
     const agent = s.customAgents?.find((c) => c.id === kind)
     return agent?.centralSpawn === true ? customEntry(agent, s, deps) : null

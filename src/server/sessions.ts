@@ -19,7 +19,8 @@ import { delimiter, dirname } from 'node:path'
 import { resolveShell } from './ptyShell'
 import { activeProviderEnv } from './claudeProvider/claudeProvider.store'
 import { wrapClaudeLaunch } from './claudeProvider/claudeProvider.launch'
-import { applyNodeClaudeProfile } from './claudeLauncher/claudeLauncher'
+import { applyNodeClaudeProfile, resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
+import { isLegacyClaudeNode } from '../shared/claudeLaunch/claudeLaunch.builtin'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -59,7 +60,10 @@ export class Sessions extends SessionsCore {
   open(raw: OpenMsg, send: (m: ServerMsg) => void): void {
     if (!isSafeNodeId(raw.id)) return
     // Recorded Claude launch profile -> the command (server/claudeLauncher); deleted = Default + note.
-    const { msg, notice: profileNotice } = applyNodeClaudeProfile(raw)
+    // A node from before profiles with the stock command launches with the default profile (the
+    // client records it, useLegacyClaudeProfiles); a customised command is left as it is.
+    const withProfile = isLegacyClaudeNode(raw) ? { ...raw, claudeProfileId: resolveClaudeLaunch().profile.id } : raw
+    const { msg, notice: profileNotice } = applyNodeClaudeProfile(withProfile)
     const existing = this.map.get(msg.id)
     if (existing) {
       ptyLog.reattached(msg.id, existing.subs.size())

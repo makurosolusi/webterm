@@ -5,6 +5,8 @@ import { isAbsolute, resolve } from 'node:path'
 import type { BridgeLink, WsNode } from '../../shared/workspace'
 import { validPlanData } from '../../shared/workspace'
 import type { RoutineAction, RoutineInput } from '../routines/routineModel'
+import { claudeLaunchLine, resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
+import { isBuiltinClaudeCmd } from '../../shared/claudeLaunch/claudeLaunch.builtin'
 import { hasControl, resolveParams, substitute, TemplateError, validateTemplate, type TemplateNode, type WebtermTemplate } from './template.model'
 
 export interface InstantiateDeps {
@@ -81,6 +83,13 @@ async function node(n: TemplateNode, id: string, cwd: string | undefined, off: {
   if (n.color) w.color = n.color
   if (n.agentId) w.agentId = n.agentId
   if (n.cmd) w.cmd = n.cmd // never substituted: validation forbids placeholders here
+  // Builtin claude with no command (or the stock one) records the default launch profile; the server
+  // builds its command from that profile on every launch. A custom command is kept as written.
+  if (n.kind === 'agent' && n.agentId === 'claude' && (!n.cmd || isBuiltinClaudeCmd(n.cmd))) {
+    const launch = resolveClaudeLaunch()
+    w.claudeProfileId = launch.profile.id
+    w.cmd = claudeLaunchLine(launch)
+  }
   if (cwd && (n.kind === 'terminal' || n.kind === 'agent' || n.kind === 'diff')) w.cwd = cwd
   if (cwd && n.kind === 'files') w.dirPath = cwd
   if (n.url) {
