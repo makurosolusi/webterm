@@ -217,7 +217,7 @@ export interface VerbData {
   snapshot: { snapId: string; content: string; truncated: boolean; url: string }
   screenshot: { mime: 'image/jpeg'; base64: string }
   wait: { ok: true }; navigate: { ok: true }; click: { ok: true }; type: { ok: true }
-  console: { content: string; count: number; dropped: number }
+  console: { content: string; count: number; dropped: number; note?: string }
   press: { ok: true }; scroll: { ok: true }
   handoff: { lease: 'agent'; ttlMs: number }
   release: { lease: 'human' }

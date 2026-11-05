@@ -13,19 +13,70 @@ const str = (value: string) => ({ type: 'string', value })
 const log = (...args: object[]) => rig.fake.emit(CDP_EVENT.consoleApiCalled, { type: 'log', args, stackTrace: { callFrames: [{ functionName: 'f', url: 'https://a.test/js/app.js?v=1', lineNumber: 11, columnNumber: 4 }] } }, SID)
 const mainNav = (url: string) => rig.fake.emit(CDP_EVENT.frameNavigated, { frame: { id: 'T1', url } }, SID)
 
-async function openLive() {
+const runtimeEnables = () => rig.fake.calls.filter((c) => c.method === CDP.runtimeEnable)
+
+/** Open n1; `capture` (default) turns console capture on like an opened drawer would. */
+async function openLive(capture = true) {
   rig = await makeHostRig()
   const deltas: ConsoleDelta[] = []
   rig.host.console.onDelta((d) => deltas.push(d))
   await rig.host.open('n1', 'w1', 'https://a.test/')
+  if (capture) await rig.host.console.command({ t: 'console', id: 'n1', op: 'open' })
   return { deltas, read: () => rig.host.console.read('n1', CONSOLE_BUFFER_MAX, 'verbose') }
 }
 
-describe('console capture', () => {
-  it('enables Runtime and Log on the page session', async () => {
-    await openLive()
-    for (const m of [CDP.runtimeEnable, CDP.logEnable]) expect(rig.fake.calls.find((c) => c.method === m)?.sessionId).toBe(SID)
+describe('lazy Runtime (anti-bot: Runtime.enable is detectable)', () => {
+  it('enables only Log when a page is attached', async () => {
+    await openLive(false)
+    expect(rig.fake.calls.find((c) => c.method === CDP.logEnable)?.sessionId).toBe(SID)
+    expect(runtimeEnables()).toEqual([])
+    expect(rig.host.console.snapshot('n1').capturing).toBe(false)
   })
+
+  it('opening the drawer enables Runtime once and streams capturing', async () => {
+    const { deltas } = await openLive(false)
+    await rig.host.console.command({ t: 'console', id: 'n1', op: 'open' })
+    await rig.host.console.command({ t: 'console', id: 'n1', op: 'open' })
+    expect(runtimeEnables().map((c) => c.sessionId)).toEqual([SID])
+    await waitFor(() => deltas.at(-1)?.capturing === true, 'capturing streamed')
+  })
+
+  it('agent read path: capture() reports true only when it switched capture on', async () => {
+    await openLive(false)
+    await expect(rig.host.console.capture('n1')).resolves.toBe(true)
+    await expect(rig.host.console.capture('n1')).resolves.toBe(false)
+    expect(runtimeEnables()).toHaveLength(1)
+    await expect(rig.host.console.capture('ghost')).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('eval enables Runtime first', async () => {
+    await openLive(false)
+    rig.fake.handle(CDP.evaluate, () => ({ result: { type: 'number', value: 2, description: '2' } }))
+    await rig.host.console.command({ t: 'console', id: 'n1', op: 'eval', expr: '1+1' })
+    const methods = rig.fake.calls.map((c) => c.method)
+    expect(methods.filter((m) => m === CDP.runtimeEnable)).toHaveLength(1)
+    expect(methods.indexOf(CDP.runtimeEnable)).toBeLessThan(methods.indexOf(CDP.evaluate))
+  })
+
+  it('stays on across navigation and is re-enabled on the recreated target after a crash', async () => {
+    await openLive()
+    mainNav('https://b.test/')
+    rig.fake.emit(CDP_EVENT.targetCrashed, { targetId: 'T1' })
+    await waitFor(() => rig.host.state('n1')?.live === 'discarded', 'crashed')
+    await rig.host.navAction('n1', 'reload')
+    expect(runtimeEnables().map((c) => c.sessionId)).toEqual([SID, 'S-T2'])
+  })
+
+  it('a node never opened stays off after its target is recreated', async () => {
+    await openLive(false)
+    rig.fake.emit(CDP_EVENT.targetCrashed, { targetId: 'T1' })
+    await waitFor(() => rig.host.state('n1')?.live === 'discarded', 'crashed')
+    await rig.host.navAction('n1', 'reload')
+    expect(runtimeEnables()).toEqual([])
+  })
+})
+
+describe('console capture', () => {
 
   it('captures console API calls, uncaught exceptions and browser log entries with level and source location', async () => {
     const { read } = await openLive()

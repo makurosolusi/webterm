@@ -38,6 +38,8 @@ export const CONSOLE_TEXT = {
   dropped: (n: number) => `${n} older message${n === 1 ? '' : 's'} dropped`,
   capped: (shown: number, total: number) => `Showing the newest ${shown} of ${total} matching messages`,
   empty: 'No messages',
+  captureStarted: 'Capturing from now on. Reload the page to see messages from page load.',
+  reload: 'Reload',
 } as const
 
 type LevelFilter = 'all' | 'error' | 'warning' | 'info'
@@ -73,10 +75,15 @@ function Row({ e }: { e: ConsoleEntry }) {
   )
 }
 
-export interface BrowserConsoleProps { view: ConsoleView; send: Send; lease?: Lease }
+export interface BrowserConsoleProps {
+  view: ConsoleView; send: Send; lease?: Lease
+  /** Capture was switched on by opening the drawer: offer a reload to catch messages from page load. */
+  hint?: boolean
+  onReload?: () => void
+}
 
 /** The drawer itself (rendered only while open). */
-export default function BrowserConsole({ view, send, lease }: BrowserConsoleProps) {
+export default function BrowserConsole({ view, send, lease, hint, onReload }: BrowserConsoleProps) {
   const [level, setLevel] = useState<LevelFilter>('all')
   const [verbose, setVerbose] = useState(false)
   const [text, setText] = useState('')
@@ -113,6 +120,12 @@ export default function BrowserConsole({ view, send, lease }: BrowserConsoleProp
         <Label className="text-xs"><Checkbox checked={verbose} onCheckedChange={(c) => setVerbose(c === true)} />{CONSOLE_TEXT.verbose}</Label>
         <Label className="text-xs"><Checkbox checked={view.preserve} onCheckedChange={(c) => send({ t: 'console', op: 'preserve', on: c === true })} />{CONSOLE_TEXT.preserve}</Label>
       </div>
+      {hint && (
+        <div role="status" className="browser-console__hint">
+          <span>{CONSOLE_TEXT.captureStarted}</span>
+          {onReload && <Button size="xs" variant="ghost" onClick={onReload}>{CONSOLE_TEXT.reload}</Button>}
+        </div>
+      )}
       <div ref={list} role="list" className="browser-console__list" onScroll={onScroll}>
         {view.dropped > 0 && <div className="browser-console__note">{CONSOLE_TEXT.dropped(view.dropped)}</div>}
         {shown.length > rows.length && <div className="browser-console__note">{CONSOLE_TEXT.capped(rows.length, shown.length)}</div>}
@@ -148,11 +161,23 @@ export interface ConsoleSlot { open: boolean; errors: number; toggle: () => void
 
 /**
  * Drawer state of one node + the ⌥⌘J shortcut while focus is inside this node (capture phase, so the key is
- * not forwarded to the page). Returns the toolbar slot and the drawer element (null while closed).
+ * not forwarded to the page). Opening the drawer asks the server to start capture (Runtime is enabled lazily) and
+ * shows the reload hint when capture was off until then. Returns the toolbar slot and the drawer element.
  */
-export function useConsoleDrawer(hostRef: RefObject<HTMLElement | null>, view: ConsoleView, send: Send, lease?: Lease): { slot: ConsoleSlot; drawer: ReactNode } {
+export function useConsoleDrawer(hostRef: RefObject<HTMLElement | null>, view: ConsoleView, send: Send, lease?: Lease, reload?: () => void): { slot: ConsoleSlot; drawer: ReactNode } {
   const [open, setOpen] = useState(false)
+  const [hint, setHint] = useState(false)
   const toggle = useCallback(() => setOpen((o) => !o), [])
+  const sendRef = useRef(send)
+  sendRef.current = send
+  // Also re-asks when the server reports capture off while open (e.g. server restarted).
+  useEffect(() => {
+    if (!open) { setHint(false); return }
+    if (view.capturing) return
+    setHint(true)
+    sendRef.current({ t: 'console', op: 'open' })
+  }, [open, view.capturing])
+  const onReload = reload && (() => { setHint(false); reload() })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const node = hostRef.current?.closest('.browser-node')
@@ -164,5 +189,5 @@ export function useConsoleDrawer(hostRef: RefObject<HTMLElement | null>, view: C
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [hostRef, toggle])
-  return { slot: { open, errors: errorCount(view), toggle }, drawer: open ? <BrowserConsole view={view} send={send} lease={lease} /> : null }
+  return { slot: { open, errors: errorCount(view), toggle }, drawer: open ? <BrowserConsole view={view} send={send} lease={lease} hint={hint} onReload={onReload} /> : null }
 }

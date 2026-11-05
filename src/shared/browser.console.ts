@@ -39,9 +39,11 @@ export interface ConsoleEntry {
 }
 
 /** Delta for one node: append `entries` (or replace the list when `reset`); `dropped` = total dropped so far. */
-export interface ConsoleDelta { id: string; entries: ConsoleEntry[]; dropped: number; preserve: boolean; reset?: true }
+/** `capturing` = Runtime (console calls, exceptions) is on for the node; off until its console is first used. */
+export interface ConsoleDelta { id: string; entries: ConsoleEntry[]; dropped: number; preserve: boolean; capturing: boolean; reset?: true }
 
 export type ConsoleClientMsg =
+  | { t: 'console'; id: string; op: 'open' }
   | { t: 'console'; id: string; op: 'eval'; expr: string }
   | { t: 'console'; id: string; op: 'clear' }
   | { t: 'console'; id: string; op: 'preserve'; on: boolean }
@@ -50,6 +52,7 @@ export type ConsoleServerMsg = { t: 'console' } & ConsoleDelta
 /** Validate a `console` client message (already known to be an object with a valid `id`); null = reject. */
 export function parseConsoleMsg(m: Record<string, unknown>, id: string): ConsoleClientMsg | null {
   switch (m.op) {
+    case 'open': return { t: 'console', id, op: 'open' }
     case 'clear': return { t: 'console', id, op: 'clear' }
     case 'preserve': return typeof m.on === 'boolean' ? { t: 'console', id, op: 'preserve', on: m.on } : null
     case 'eval':
@@ -60,14 +63,14 @@ export function parseConsoleMsg(m: Record<string, unknown>, id: string): Console
 }
 
 /** Client view of one node's console. */
-export interface ConsoleView { entries: ConsoleEntry[]; dropped: number; preserve: boolean }
-export const EMPTY_CONSOLE: ConsoleView = { entries: [], dropped: 0, preserve: false }
+export interface ConsoleView { entries: ConsoleEntry[]; dropped: number; preserve: boolean; capturing: boolean }
+export const EMPTY_CONSOLE: ConsoleView = { entries: [], dropped: 0, preserve: false, capturing: false }
 
 /** Merge a delta into the view, keeping at most `CONSOLE_BUFFER_MAX` newest entries. */
 export function applyConsoleDelta(v: ConsoleView, d: ConsoleDelta): ConsoleView {
   const last = d.reset ? 0 : (v.entries[v.entries.length - 1]?.seq ?? 0)
   const merged = d.reset ? d.entries : v.entries.concat(d.entries.filter((e) => e.seq > last)) // a delta may repeat entries the attach snapshot already had
-  return { entries: merged.length > CONSOLE_BUFFER_MAX ? merged.slice(-CONSOLE_BUFFER_MAX) : merged, dropped: d.dropped, preserve: d.preserve }
+  return { entries: merged.length > CONSOLE_BUFFER_MAX ? merged.slice(-CONSOLE_BUFFER_MAX) : merged, dropped: d.dropped, preserve: d.preserve, capturing: d.capturing }
 }
 
 /** True when `level` is at or above `min` (agent `console` verb filter). */

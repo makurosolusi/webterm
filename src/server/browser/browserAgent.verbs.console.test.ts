@@ -20,9 +20,9 @@ const ENTRIES = [ // test-only
   entry(3, 'error', 'Uncaught TypeError: boom', { source: 'exception', url: 'https://a.test/app.js', line: 12, stack: [{ fn: 'go', url: 'https://a.test/app.js', line: 12, col: 3 }] }),
 ]
 
-function verbsWith(read?: (id: string, limit: number, min: string) => { entries: ConsoleEntry[]; dropped: number }) {
+function verbsWith(read?: (id: string, limit: number, min: string) => { entries: ConsoleEntry[]; dropped: number }, capture: (id: string) => Promise<boolean> = async () => false) {
   const host = { state: () => stateOf('n1') } as unknown as BrowserHostApi
-  return createAgentVerbs({ host, leases: new LeaseService(() => 0), snapshots: new SnapshotStore(), agentAllowed: () => true, sleep: async () => undefined, now: () => 0, ...(read ? { console: { read: read as never } } : {}) })
+  return createAgentVerbs({ host, leases: new LeaseService(() => 0), snapshots: new SnapshotStore(), agentAllowed: () => true, sleep: async () => undefined, now: () => 0, ...(read ? { console: { read: read as never, capture } } : {}) })
 }
 
 describe('agent console verb', () => {
@@ -52,6 +52,17 @@ describe('agent console verb', () => {
     await expect(verbsWith().console('n1', {})).rejects.toMatchObject({ code: 'disabled' })
   })
 
+  it('starts capture before reading and notes it only on the read that switched it on', async () => {
+    const order: string[] = []
+    let on = false
+    const capture = vi.fn(async () => { order.push('capture'); const started = !on; on = true; return started })
+    const verbs = verbsWith(() => { order.push('read'); return { entries: [], dropped: 0 } }, capture)
+    expect((await verbs.console('n1', {})).note).toBe('Console capture started now; earlier messages were not recorded.')
+    expect((await verbs.console('n1', {})).note).toBeUndefined()
+    expect(order).toEqual(['capture', 'read', 'capture', 'read'])
+    expect(capture).toHaveBeenCalledWith('n1')
+  })
+
   it('does not widen the agent CDP allowlist', () => {
     for (const m of [CDP.evaluate, CDP.runtimeEnable, CDP.logEnable, CDP.releaseObjectGroup]) expect(isCdpAllowed(m, {})).toBe(false)
     expect(isCdpAllowed(CDP.evaluate, { expression: '1' })).toBe(false)
@@ -59,7 +70,8 @@ describe('agent console verb', () => {
 })
 
 describe('console wire message', () => {
-  it('parses eval/clear/preserve and rejects malformed ones', () => {
+  it('parses open/eval/clear/preserve and rejects malformed ones', () => {
+    expect(parseClientMsg({ t: 'console', id: 'n1', op: 'open' })).toEqual({ t: 'console', id: 'n1', op: 'open' })
     expect(parseClientMsg({ t: 'console', id: 'n1', op: 'eval', expr: '1+1' })).toEqual({ t: 'console', id: 'n1', op: 'eval', expr: '1+1' })
     expect(parseClientMsg({ t: 'console', id: 'n1', op: 'clear' })).toEqual({ t: 'console', id: 'n1', op: 'clear' })
     expect(parseClientMsg({ t: 'console', id: 'n1', op: 'preserve', on: true })).toEqual({ t: 'console', id: 'n1', op: 'preserve', on: true })
@@ -76,7 +88,7 @@ describe('gateway console', () => {
     const commands: ConsoleClientMsg[] = []
     Object.assign(rig.host, {
       console: {
-        snapshot: (id: string) => ({ id, entries: [entry(1, 'error', 'boom')], dropped: 0, preserve: false, reset: true }),
+        snapshot: (id: string) => ({ id, entries: [entry(1, 'error', 'boom')], dropped: 0, preserve: false, capturing: false, reset: true }),
         command: async (m: ConsoleClientMsg) => { commands.push(m) },
         onDelta: () => () => undefined,
       },
@@ -87,14 +99,15 @@ describe('gateway console', () => {
     return { c, commands }
   }
 
-  it('sends the buffer on attach and forwards clear/preserve even while an agent drives', async () => {
+  it('sends the buffer on attach and forwards open/clear/preserve even while an agent drives', async () => {
     const { c, commands } = await attached()
     expect(c.json.find((m) => m.t === 'console')).toMatchObject({ id: 'n1', reset: true, entries: [{ text: 'boom' }] })
     rig.leases.holders.set('n1', 'agent')
+    c.send({ t: 'console', id: 'n1', op: 'open' })
     c.send({ t: 'console', id: 'n1', op: 'clear' })
     c.send({ t: 'console', id: 'n1', op: 'preserve', on: true })
-    await waitFor(() => commands.length === 2, 'two commands')
-    expect(commands.map((m) => m.op)).toEqual(['clear', 'preserve'])
+    await waitFor(() => commands.length === 3, 'three commands')
+    expect(commands.map((m) => m.op)).toEqual(['open', 'clear', 'preserve'])
   })
 
   it('gates eval exactly like user input: refused with lease_agent while the agent holds the lease', async () => {

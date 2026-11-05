@@ -73,5 +73,6 @@
 .browser-console__msg { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .browser-console__frame { padding-left: 1.5em; opacity: .8; }
 .browser-console__src { flex: none; opacity: .7; text-decoration: underline; }
+.browser-console__hint { display: flex; align-items: center; gap: 6px; padding: 1px 6px; border-bottom: 1px solid var(--vscode-panel-border, #444); opacity: .85; }
 .browser-console__note { padding: 1px 6px; opacity: .7; font-style: italic; }
 .browser-console__prompt { display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-top: 1px solid var(--vscode-panel-border, #444); }

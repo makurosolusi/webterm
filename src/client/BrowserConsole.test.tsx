@@ -1,18 +1,18 @@
 /** @vitest-environment jsdom */
 // Console drawer: level/text filters (Verbose hidden by default), Clear/Preserve/eval send server commands,
 // the agent lease disables the prompt, the toolbar toggle shows the error badge only while closed.
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 import { applyConsoleDelta, EMPTY_CONSOLE } from '../shared/browser.console'
 import type { ConsoleEntry, ConsoleView } from '../shared/browser.console'
-import BrowserConsole, { BrowserConsoleToggle, CONSOLE_TEXT, errorCount } from './BrowserConsole'
+import BrowserConsole, { BrowserConsoleToggle, CONSOLE_TEXT, errorCount, useConsoleDrawer } from './BrowserConsole'
 
 afterEach(cleanup)
 const e = (seq: number, level: ConsoleEntry['level'], text: string, over: Partial<ConsoleEntry> = {}): ConsoleEntry => ({ seq, ts: 0, level, source: 'console', text, ...over })
 const VIEW: ConsoleView = { // test-only
   entries: [e(1, 'verbose', 'debug detail'), e(2, 'info', 'hello world', { url: 'https://a.test/js/app.js?v=2', line: 12 }), e(3, 'warning', 'deprecated api'), e(4, 'error', 'Uncaught boom', { source: 'exception' })],
-  dropped: 3, preserve: false,
+  dropped: 3, preserve: false, capturing: true,
 }
 const texts = () => screen.getAllByRole('listitem').map((r) => r.querySelector('.browser-console__text')?.textContent)
 
@@ -63,7 +63,7 @@ describe('BrowserConsole', () => {
   })
 
   it('a reset delta (Clear / navigation) empties the list', () => {
-    const v = applyConsoleDelta(VIEW, { id: 'n1', entries: [], dropped: 0, preserve: false, reset: true })
+    const v = applyConsoleDelta(VIEW, { id: 'n1', entries: [], dropped: 0, preserve: false, capturing: true, reset: true })
     setup(v)
     expect(screen.queryAllByRole('listitem')).toEqual([])
     expect(screen.getByText(CONSOLE_TEXT.empty)).toBeTruthy()
@@ -72,8 +72,8 @@ describe('BrowserConsole', () => {
 
 describe('console view merge', () => {
   it('appends deltas without repeating entries the snapshot already had', () => {
-    const a = applyConsoleDelta(EMPTY_CONSOLE, { id: 'n1', entries: [e(1, 'info', 'a'), e(2, 'info', 'b')], dropped: 0, preserve: false, reset: true })
-    const b = applyConsoleDelta(a, { id: 'n1', entries: [e(2, 'info', 'b'), e(3, 'error', 'c')], dropped: 1, preserve: true })
+    const a = applyConsoleDelta(EMPTY_CONSOLE, { id: 'n1', entries: [e(1, 'info', 'a'), e(2, 'info', 'b')], dropped: 0, preserve: false, capturing: true, reset: true })
+    const b = applyConsoleDelta(a, { id: 'n1', entries: [e(2, 'info', 'b'), e(3, 'error', 'c')], dropped: 1, preserve: true, capturing: true })
     expect(b.entries.map((x) => x.seq)).toEqual([1, 2, 3])
     expect(b).toMatchObject({ dropped: 1, preserve: true })
     expect(errorCount(b)).toBe(1)
@@ -90,5 +90,36 @@ describe('BrowserConsoleToggle', () => {
     expect(toggle).toHaveBeenCalledOnce()
     rerender(<BrowserConsoleToggle open errors={2} toggle={toggle} />)
     expect(within(screen.getByRole('button', { name: CONSOLE_TEXT.toggle })).queryByLabelText(CONSOLE_TEXT.errors(2))).toBeNull()
+  })
+})
+
+describe('useConsoleDrawer lazy capture', () => {
+  const hostRef = { current: null } // test-only
+  function drawer(capturing: boolean) {
+    const send = vi.fn()
+    const reload = vi.fn()
+    const hook = renderHook(({ view }) => useConsoleDrawer(hostRef, view, send, 'human', reload), { initialProps: { view: { ...EMPTY_CONSOLE, capturing } } })
+    return { send, reload, hook }
+  }
+
+  it('opening asks the server to start capture and shows the reload hint; Reload reuses the reload path', () => {
+    const { send, reload, hook } = drawer(false)
+    expect(send).not.toHaveBeenCalled() // closed drawer: nothing enabled
+    act(() => hook.result.current.slot.toggle())
+    expect(send.mock.calls.map((c) => c[0])).toEqual([{ t: 'console', op: 'open' }])
+    hook.rerender({ view: { ...EMPTY_CONSOLE, capturing: true } }) // server confirms
+    render(<>{hook.result.current.drawer}</>)
+    expect(screen.getByRole('status').textContent).toContain(CONSOLE_TEXT.captureStarted)
+    fireEvent.click(screen.getByRole('button', { name: CONSOLE_TEXT.reload }))
+    expect(reload).toHaveBeenCalledOnce()
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('no hint and no open command when capture is already on', () => {
+    const { send, hook } = drawer(true)
+    act(() => hook.result.current.slot.toggle())
+    render(<>{hook.result.current.drawer}</>)
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(send).not.toHaveBeenCalled()
   })
 })

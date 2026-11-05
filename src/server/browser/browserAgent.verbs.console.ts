@@ -1,6 +1,6 @@
 // Agent read verb `console`: the newest page console entries of a browser node (errors first of all), so an agent
-// wired to the browser can see why a page broke. Reads the host's buffer; no CDP call, so the agent CDP allowlist
-// is untouched. Text is page content: wrapped as untrusted like `snapshot`.
+// wired to the browser can see why a page broke. Reads the host's buffer (turning capture on first if needed); the
+// host does that CDP call, so the agent CDP allowlist is untouched. Text is page content: wrapped as untrusted like `snapshot`.
 import { CONSOLE_BUFFER_MAX, CONSOLE_LEVELS, sourceLabel } from '../../shared/browser.console'
 import type { ConsoleEntry, ConsoleLevel } from '../../shared/browser.console'
 import { asRecord, badRequest, stateOf } from './browserAgent.verbs.ctx'
@@ -8,6 +8,8 @@ import type { AgentCtx, AgentVerbs } from './browserAgent.verbs.ctx'
 import { wrapUntrusted } from './browserAgent.wrap'
 import { BrowserError } from './browserHost.targets'
 
+/** Note returned by the read that switched capture on (Runtime is enabled lazily, see browserHost.console.ts). */
+export const CONSOLE_CAPTURE_STARTED_NOTE = 'Console capture started now; earlier messages were not recorded.'
 /** Entries returned when the agent passes no `limit`. */
 export const CONSOLE_VERB_DEFAULT_LIMIT = 50
 
@@ -28,8 +30,9 @@ export function consoleVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'console'> {
       if (level !== undefined && !CONSOLE_LEVELS.includes(level as ConsoleLevel)) throw badRequest(`level must be one of ${CONSOLE_LEVELS.join(', ')}`)
       if (!ctx.console) throw new BrowserError('disabled', `node ${nodeId}: console capture is not running`)
       ctx.leases.touch(nodeId)
+      const started = await ctx.console.capture(nodeId)
       const r = ctx.console.read(nodeId, (limit as number | undefined) ?? CONSOLE_VERB_DEFAULT_LIMIT, (level as ConsoleLevel | undefined) ?? 'info')
-      return { content: wrapUntrusted(r.entries.map(entryLine).join('\n')), count: r.entries.length, dropped: r.dropped }
+      return { content: wrapUntrusted(r.entries.map(entryLine).join('\n')), count: r.entries.length, dropped: r.dropped, ...(started ? { note: CONSOLE_CAPTURE_STARTED_NOTE } : {}) }
     },
   }
 }

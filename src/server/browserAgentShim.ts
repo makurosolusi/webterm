@@ -43,7 +43,8 @@ One cable = used automatically. Several = pass \`--node <id>\` (the error lists 
 says so and lists the browser nodes on the board: ask your user to connect this node to one with a cable.
 
 Read verbs: \`status\`, \`snapshot\`, \`screenshot [maxWidth]\`, \`wait [--ms N] [--ref eN] [--loaded]\`,
-\`console [limit] [error|warning|info|verbose]\` (newest page console entries at or above that level; default 50, info).
+\`console [limit] [error|warning|info|verbose]\` (newest page console entries at or above that level; default 50, info;
+capture starts at the first read, so reload the page with \`navigate\` to see messages from page load).
 Act verbs: \`navigate <url>\`, \`click <ref> <snapId>\`, \`type <ref> <snapId> <text> [--submit]\`,
 \`press <key>\`, \`scroll <dy>\`, \`handoff\` (take the lease), \`release\` (give it back to the human).
 

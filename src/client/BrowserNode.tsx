@@ -78,7 +78,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
   const lastGo = useRef<string | undefined>(undefined)
-  const consoleDrawer = useConsoleDrawer(session.hostRef, session.console, send, state?.lease)
+  const consoleDrawer = useConsoleDrawer(session.hostRef, session.console, send, state?.lease, () => send({ t: 'nav', action: 'reload' }))
 
   useGoto({ want: d.url, state, send })
 

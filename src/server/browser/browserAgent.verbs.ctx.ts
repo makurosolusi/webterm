@@ -20,7 +20,7 @@ export interface AgentCtx {
   sleep(ms: number): Promise<void>
   now(): number
   /** Console buffer of the host (verb `console`); absent = the verb answers `disabled`. */
-  console?: Pick<ConsoleLog, 'read'>
+  console?: Pick<ConsoleLog, 'read' | 'capture'>
 }
 
 export type AgentVerbs = { [V in BrowserVerb]: (nodeId: string, body: unknown) => Promise<VerbData[V]> }
