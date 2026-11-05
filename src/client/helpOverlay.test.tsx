@@ -85,4 +85,13 @@ describe('HelpOverlay', () => {
     expect(chips('Go to File…')).toEqual([])
     expect(keybindingOverrides()).toEqual({ 'workbench.quickOpen': null })
   })
+
+  it('row actions are icon buttons with a visible tooltip, not a native title', () => {
+    render(<HelpOverlay onClose={() => {}} platform="Linux x86_64" />)
+    const edit = screen.getByRole('button', { name: `${HELP_TEXT.change}: Go to File…` })
+    expect(edit.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(edit)
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(HELP_TEXT.change)
+  })
 })

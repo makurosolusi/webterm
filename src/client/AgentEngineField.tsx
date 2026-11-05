@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ADVANCED_TEXT, ENGINE_OPTIONS, engineName } from './advancedLabels'
@@ -47,8 +48,10 @@ export function AgentEngineField({ engine, ready, save, redetect }: AgentEngineF
       </Select>
       <div className="flex flex-wrap items-center gap-2">
         <p role="status" className={`m-0 text-xs ${ready === false ? 'text-destructive' : 'opacity-70'}`}>{statusText(engine, ready)}</p>
-        <Button size="xs" variant="ghost" disabled={checking} title={ADVANCED_TEXT.engineRecheckHint}
-          onClick={() => void recheck()}>{checking ? ADVANCED_TEXT.engineChecking : ADVANCED_TEXT.engineRecheck}</Button>
+        <IconTooltip label={ADVANCED_TEXT.engineRecheckHint} disabled={checking} disabledReason={ADVANCED_TEXT.engineChecking}>
+          <Button size="xs" variant="ghost" disabled={checking}
+            onClick={() => void recheck()}>{checking ? ADVANCED_TEXT.engineChecking : ADVANCED_TEXT.engineRecheck}</Button>
+        </IconTooltip>
       </div>
     </div>
   )

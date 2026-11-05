@@ -91,6 +91,7 @@ describe('task fence', () => {
     expect((button as HTMLButtonElement).disabled).toBe(true)
     expect(button.hasAttribute('title')).toBe(false)
     const trigger = button.parentElement!
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(trigger)
     expect(document.querySelector('[role="tooltip"]')?.textContent).toMatch(/no fence/i)
     fireEvent.blur(trigger)

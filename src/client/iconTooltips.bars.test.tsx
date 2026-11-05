@@ -20,6 +20,7 @@ const dockProps: DockProps = {
 }
 
 const tipOf = (el: Element): string | null | undefined => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
   fireEvent.focus(el)
   const text = document.querySelector('[role="tooltip"]')?.textContent
   fireEvent.blur(el)

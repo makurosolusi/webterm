@@ -3,6 +3,7 @@
 // transform viewport React Flow.
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { fuzzyFilter } from './fuzzy'
@@ -71,13 +72,15 @@ export default function QuickOpen({ root, onOpen, onClose }: Props) {
           {loaded && 'error' in loaded && <div role="alert">{QUICK_TEXT.failed + loaded.error}</div>}
           {files && results.length === 0 && <div role="status">{QUICK_TEXT.none}</div>}
           {results.map((rel, i) => (
-            <Button
-              key={rel} id={`files-quickopen-${i}`} type="button" role="option" aria-selected={i === at}
-              variant={i === at ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start" title={rel}
-              tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => { onOpen(rel); onClose() }}
-            >
-              {rel}
-            </Button>
+            <IconTooltip key={rel} label={`Open ${rel}`} side="right">
+              <Button
+                id={`files-quickopen-${i}`} type="button" role="option" aria-selected={i === at}
+                variant={i === at ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start"
+                tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => { onOpen(rel); onClose() }}
+              >
+                {rel}
+              </Button>
+            </IconTooltip>
           ))}
           {loaded && 'truncated' in loaded && loaded.truncated && <div role="status">{QUICK_TEXT.truncated}</div>}
         </div>

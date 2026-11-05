@@ -3,7 +3,7 @@
 // Keybinding table with `kbd` chips, "Change Keybinding" records the next chord (Escape cancels),
 // overrides land in `keybindings.store.ts`, and a chord shared within one scope is flagged.
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { VscodeDialog } from '@/components/vscode/vscodeDialog'
 import { detectDialogPlatform } from '@/components/vscode/vscodeDialogButtons'
 import { chordKeys, effectiveKey, eventChord, findConflicts, useCommands, type Command } from './commandRegistry'
@@ -15,6 +15,7 @@ export const HELP_TEXT = {
   title: 'Keyboard Shortcuts',
   change: 'Change keybinding',
   reset: 'Reset',
+  resetHint: 'Reset to default keybinding',
   remove: 'Remove keybinding',
   recording: 'Press the new key combination, Escape to cancel',
   conflict: 'Also bound to: ',
@@ -102,18 +103,18 @@ export default function HelpOverlay({ onClose, platform, commands }: { onClose: 
                     : <span className="help-shortcuts__gesture">{HELP_TEXT.none}</span>}
                   {editable && recording !== cmd.id ? (
                     <span className="help-shortcuts__actions">
-                      <Button variant="ghost" size="sm" aria-label={`${HELP_TEXT.change}: ${cmd.label}`} title={HELP_TEXT.change} onClick={() => setRecording(cmd.id)}>
+                      <IconButton size="sm" label={`${HELP_TEXT.change}: ${cmd.label}`} tooltip={HELP_TEXT.change} onClick={() => setRecording(cmd.id)}>
                         <span className="codicon codicon-edit" aria-hidden />
-                      </Button>
+                      </IconButton>
                       {key ? (
-                        <Button variant="ghost" size="sm" aria-label={`${HELP_TEXT.remove}: ${cmd.label}`} title={HELP_TEXT.remove} onClick={() => setKeybinding(cmd.id, null)}>
+                        <IconButton size="sm" label={`${HELP_TEXT.remove}: ${cmd.label}`} tooltip={HELP_TEXT.remove} onClick={() => setKeybinding(cmd.id, null)}>
                           <span className="codicon codicon-close" aria-hidden />
-                        </Button>
+                        </IconButton>
                       ) : null}
                       {Object.hasOwn(overrides, cmd.id) ? (
-                        <Button variant="ghost" size="sm" aria-label={`${HELP_TEXT.reset}: ${cmd.label}`} title={HELP_TEXT.reset} onClick={() => resetKeybinding(cmd.id)}>
+                        <IconButton size="sm" label={`${HELP_TEXT.reset}: ${cmd.label}`} tooltip={HELP_TEXT.resetHint} onClick={() => resetKeybinding(cmd.id)}>
                           <span className="codicon codicon-discard" aria-hidden />
-                        </Button>
+                        </IconButton>
                       ) : null}
                     </span>
                   ) : null}

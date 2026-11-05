@@ -1,6 +1,7 @@
 // Pemilih folder (modal VS Code): daftar subfolder server-side, naik satu level, lalu pilih.
 import { useEffect, useState } from 'react'
 import { VscodeDialog } from './components/vscode/vscodeDialog'
+import { IconTooltip } from './components/ui/icon-button'
 import { arrangeDialogButtons } from './components/vscode/vscodeDialogButtons'
 import { listDir } from './api'
 import './folderPicker.css'
@@ -58,16 +59,17 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
       footer={arrangeDialogButtons([select, cancel], 1)}
     >
       <div className="fp-bar">
-        <button
-          type="button"
-          className="fp-up"
-          aria-label="Go up"
-          title="Go up"
-          onClick={() => parent && load(parent)}
-          disabled={parent === null}
-        >
-          <span className="codicon codicon-arrow-up" aria-hidden />
-        </button>
+        <IconTooltip label={parent ? `Go up to ${parent}` : 'Go up to the parent folder'} disabled={parent === null} disabledReason="already at the top folder">
+          <button
+            type="button"
+            className="fp-up"
+            aria-label="Go up"
+            onClick={() => parent && load(parent)}
+            disabled={parent === null}
+          >
+            <span className="codicon codicon-arrow-up" aria-hidden />
+          </button>
+        </IconTooltip>
         <span className="fp-path" title={path}>{path}</span>
       </div>
       {error && <div className="fp-error" role="alert">{error}</div>}

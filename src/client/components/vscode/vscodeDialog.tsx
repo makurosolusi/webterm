@@ -7,6 +7,7 @@ import {
   type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-overlay.css'
 
 const FOCUSABLE_SELECTOR = [
@@ -174,15 +175,17 @@ export function VscodeDialog({
             {title}
           </h2>
           {dismissible && (
-            <button
-              type="button"
-              className="vscode-dialog__close"
-              data-slot="vscode-dialog-close"
-              aria-label="Close dialog"
-              onClick={() => onOpenChange(false)}
-            >
-              <span className="codicon codicon-close" aria-hidden="true" />
-            </button>
+            <IconTooltip label="Close dialog" shortcut="Esc">
+              <button
+                type="button"
+                className="vscode-dialog__close"
+                data-slot="vscode-dialog-close"
+                aria-label="Close dialog"
+                onClick={() => onOpenChange(false)}
+              >
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </button>
+            </IconTooltip>
           )}
         </div>
         <div className="vscode-dialog__body" data-slot="vscode-dialog-body">

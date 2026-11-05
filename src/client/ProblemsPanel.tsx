@@ -10,6 +10,7 @@ import type { Problem } from '../server/problems/problems.parse'
 import type { ProblemsState } from '../server/problems/problems.service'
 import type { Workspace, WsNode } from '../shared/workspace'
 import { tokenQuery } from './api'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { codicon } from './dockCodicon'
 import { useLspProblems, type LspProblem } from './editorLsp.store'
 import { InboxPanelSurface } from './inboxPanelSurface'
@@ -109,16 +110,26 @@ export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, add
   const actions = (
     <>
       {s?.running
-        ? <button type="button" className="vscode-panel-action" title="Stop watching" aria-label="Stop watching" onClick={() => pr.act(() => stopProblems(ws))}>{codicon('debug-stop')}</button>
-        : <button type="button" className="vscode-panel-action" title="Run checks" aria-label="Run checks" onClick={() => pr.act(() => runProblems(ws))}>{codicon('play')}</button>}
+        ? (
+          <IconTooltip label="Watching for problems. Click to stop watching">
+            <button type="button" className="vscode-panel-action" aria-label="Stop watching" onClick={() => pr.act(() => stopProblems(ws))}>{codicon('debug-stop')}</button>
+          </IconTooltip>
+        )
+        : (
+          <IconTooltip label="Not watching. Click to run TypeScript and ESLint checks">
+            <button type="button" className="vscode-panel-action" aria-label="Run checks" onClick={() => pr.act(() => runProblems(ws))}>{codicon('play')}</button>
+          </IconTooltip>
+        )}
       {agents.length > 1 && (
         <select aria-label="Agent to fix with" value={to} onChange={(e) => setTarget(e.target.value)}>
           {agents.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
         </select>
       )}
-      <button type="button" className="vscode-panel-action" disabled={!to || !s?.problems.length}
-        title={to ? 'Fix with agent' : 'Add an agent node to fix with'} aria-label="Fix with agent"
-        onClick={() => pr.act(() => fixWithAgent(ws, to))}>{codicon('sparkle')}</button>
+      <IconTooltip label="Fix with agent" disabled={!to || !s?.problems.length}
+        disabledReason={!to ? 'add an agent node to fix with' : 'no problems to fix'}>
+        <button type="button" className="vscode-panel-action" disabled={!to || !s?.problems.length} aria-label="Fix with agent"
+          onClick={() => pr.act(() => fixWithAgent(ws, to))}>{codicon('sparkle')}</button>
+      </IconTooltip>
     </>
   )
 
@@ -135,11 +146,12 @@ export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, add
           <ul role="list" aria-label="Problems list" style={{ listStyle: 'none', margin: 0, padding: 0, overflow: 'auto' }}>
             {list.map((p, i) => (
               <li key={`${p.file}:${p.line}:${p.column}:${i}`}>
-                <button type="button" className="inbox-item" style={{ width: '100%', textAlign: 'left' }} onClick={() => openAt(p)}
-                  title={`Open ${problemLocation(p, root)}`}>
-                  {codicon(p.severity === 'error' ? 'error' : 'warning')} {p.message}{' '}
-                  <span style={{ opacity: 0.7 }}>{p.source}{p.code ? `(${p.code})` : ''} {problemLocation(p, root)}</span>
-                </button>
+                <IconTooltip label={`Open ${problemLocation(p, root)}`}>
+                  <button type="button" className="inbox-item" style={{ width: '100%', textAlign: 'left' }} onClick={() => openAt(p)}>
+                    {codicon(p.severity === 'error' ? 'error' : 'warning')} {p.message}{' '}
+                    <span style={{ opacity: 0.7 }}>{p.source}{p.code ? `(${p.code})` : ''} {problemLocation(p, root)}</span>
+                  </button>
+                </IconTooltip>
               </li>
             ))}
           </ul>

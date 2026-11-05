@@ -20,6 +20,7 @@ import { buildSessionList } from './sessionList'
 import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
 import { Input } from '@/components/ui/input'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
 import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
 import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
@@ -202,15 +203,16 @@ export default function WorkspaceBar({
 
         <div className="app-titlebar__actions">
           {showLogout && (
-            <button
-              type="button"
-              className="titlebar__action"
-              title="Logout"
-              aria-label="Logout"
-              onClick={onLogout}
-            >
-              <span className="codicon codicon-sign-out" aria-hidden />
-            </button>
+            <IconTooltip label="Log out and return to the login screen">
+              <button
+                type="button"
+                className="titlebar__action"
+                aria-label="Logout"
+                onClick={onLogout}
+              >
+                <span className="codicon codicon-sign-out" aria-hidden />
+              </button>
+            </IconTooltip>
           )}
         </div>
       </header>
@@ -223,29 +225,31 @@ export default function WorkspaceBar({
           ariaLabel="Workspaces"
         />
         <div className="app-tabs__actions">
-          <button
-            type="button"
-            className="app-tabs__action"
-            title="Workspace options"
-            aria-label="Workspace options"
-            disabled={!activeGroup}
-            onClick={(e) => {
-              // Klik kebab tidak berpindah workspace; menu ini bekerja pada workspace aktif.
-              const r = e.currentTarget.getBoundingClientRect()
-              setMenu({ x: r.left, y: r.bottom + MENU_GAP })
-            }}
-          >
-            <span className="codicon codicon-ellipsis" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="app-tabs__action"
-            title="New workspace"
-            aria-label="New workspace"
-            onClick={onNewWorkspace}
-          >
-            <span className="codicon codicon-add" aria-hidden />
-          </button>
+          <IconTooltip label="Workspace options: rename or delete the active workspace" disabled={!activeGroup} disabledReason="no workspace open">
+            <button
+              type="button"
+              className="app-tabs__action"
+              aria-label="Workspace options"
+              disabled={!activeGroup}
+              onClick={(e) => {
+                // Klik kebab tidak berpindah workspace; menu ini bekerja pada workspace aktif.
+                const r = e.currentTarget.getBoundingClientRect()
+                setMenu({ x: r.left, y: r.bottom + MENU_GAP })
+              }}
+            >
+              <span className="codicon codicon-ellipsis" aria-hidden />
+            </button>
+          </IconTooltip>
+          <IconTooltip label="New workspace: choose a folder to open">
+            <button
+              type="button"
+              className="app-tabs__action"
+              aria-label="New workspace"
+              onClick={onNewWorkspace}
+            >
+              <span className="codicon codicon-add" aria-hidden />
+            </button>
+          </IconTooltip>
         </div>
       </div>
 

@@ -132,6 +132,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
 
     const end = screen.getByLabelText('End session Build')
     expect(end.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(end)
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('End session')
     fireEvent.blur(end)

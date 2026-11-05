@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
 import { resolveOmniboxInput, type SearchEngine } from '../shared/browser.omnibox'
@@ -25,6 +26,14 @@ export interface BrowserToolbarProps {
   /** Mesin pencari untuk ketikan yang bukan alamat (setting `browserSearchEngine`). */
   searchEngine?: SearchEngine
 }
+
+/** Tooltips of the icon-only buttons: what the click does, plus why when disabled. */
+const TIP = {
+  back: 'Go back one page', backOff: 'no earlier page',
+  forward: 'Go forward one page', forwardOff: 'no later page',
+  reload: 'Reload this page', stop: 'Stop loading this page',
+  zoomOut: 'Zoom the page out', zoomIn: 'Zoom the page in',
+} as const
 
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
@@ -49,11 +58,11 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
   return (
     <div role="toolbar" aria-label={TOOLBAR_TEXT.group} className="nodrag flex flex-col gap-1 p-1">
       <div className="flex flex-wrap items-center gap-1">
-        <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.back} disabled={!state?.canBack} onClick={() => nav('back')}>{icon('arrow-left')}</Button>
-        <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.forward} disabled={!state?.canForward} onClick={() => nav('forward')}>{icon('arrow-right')}</Button>
+        <IconButton size="icon-xs" label={TOOLBAR_TEXT.back} tooltip={TIP.back} disabledReason={TIP.backOff} disabled={!state?.canBack} onClick={() => nav('back')}>{icon('arrow-left')}</IconButton>
+        <IconButton size="icon-xs" label={TOOLBAR_TEXT.forward} tooltip={TIP.forward} disabledReason={TIP.forwardOff} disabled={!state?.canForward} onClick={() => nav('forward')}>{icon('arrow-right')}</IconButton>
         {state?.loading
-          ? <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.stop} onClick={() => nav('stop')}>{icon('debug-stop')}</Button>
-          : <Button size="icon-xs" variant="ghost" aria-label={TOOLBAR_TEXT.reload} onClick={() => nav('reload')}>{icon('refresh')}</Button>}
+          ? <IconButton size="icon-xs" label={TOOLBAR_TEXT.stop} tooltip={TIP.stop} onClick={() => nav('stop')}>{icon('debug-stop')}</IconButton>
+          : <IconButton size="icon-xs" label={TOOLBAR_TEXT.reload} tooltip={TIP.reload} onClick={() => nav('reload')}>{icon('refresh')}</IconButton>}
         <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={submit}>
           <Input
             type="text" inputMode="url" spellCheck={false} autoComplete="off"
@@ -66,9 +75,9 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
         </form>
         {onZoom && (
           <div role="group" aria-label={ZOOM_TEXT.level} className="flex items-center gap-0.5 text-xs">
-            <Button size="icon-xs" variant="ghost" aria-label={ZOOM_TEXT.out} onClick={() => onZoom(-1)}>{icon('zoom-out')}</Button>
+            <IconButton size="icon-xs" label={ZOOM_TEXT.out} tooltip={TIP.zoomOut} onClick={() => onZoom(-1)}>{icon('zoom-out')}</IconButton>
             <span className="min-w-9 text-center tabular-nums">{zoomLabel(zoom)}</span>
-            <Button size="icon-xs" variant="ghost" aria-label={ZOOM_TEXT.in} onClick={() => onZoom(1)}>{icon('zoom-in')}</Button>
+            <IconButton size="icon-xs" label={ZOOM_TEXT.in} tooltip={TIP.zoomIn} onClick={() => onZoom(1)}>{icon('zoom-in')}</IconButton>
           </div>
         )}
         {agentEnabled ? (

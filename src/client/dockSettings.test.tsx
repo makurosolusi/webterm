@@ -27,6 +27,7 @@ describe('pintasan Settings di activity bar', () => {
     expect(btn.closest('[data-slot="dock-modes"]')).not.toBeNull()
     expect(btn.closest('nav')).toBeNull()
     expect(btn.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(btn)
     expect(screen.getByRole('tooltip').textContent).toContain('Settings')
     expect(btn.querySelector('.codicon-settings-gear')).not.toBeNull()

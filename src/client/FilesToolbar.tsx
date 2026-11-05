@@ -2,6 +2,7 @@
 // Opsi dipersist lewat `viewOpts` (dipegang FilesNode); komponen ini hanya melaporkan perubahan.
 import { useState } from 'react'
 import type { ViewOpts } from '../shared/workspace'
+import { IconTooltip } from './components/ui/icon-button'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 import { FILES_SLOTS, type FilesSlotCtx } from './filesSlots'
 
@@ -19,6 +20,7 @@ const KEYS: { key: ViewOpts['sortKey']; label: string }[] = [
 
 export default function FilesToolbar({ view, onChange, ctx }: Props) {
   const [sortAt, setSortAt] = useState<{ x: number; y: number } | null>(null)
+  const sortLabel = KEYS.find((k) => k.key === view.sortKey)?.label ?? KEYS[0].label
   const items: VscodeMenuItem[] = [
     ...KEYS.map(({ key, label }): VscodeMenuItem => ({
       type: 'item', id: key, label, checked: view.sortKey === key, onSelect: () => onChange({ ...view, sortKey: key }),
@@ -29,20 +31,23 @@ export default function FilesToolbar({ view, onChange, ctx }: Props) {
   ]
   return (
     <div className="files-toolbar nodrag">
-      <button
-        type="button" className="files-tool" aria-pressed={view.hidden}
-        title={view.hidden ? 'Show hidden files' : 'Hide hidden files'}
-        aria-label="Hide hidden files"
-        onClick={() => onChange({ ...view, hidden: !view.hidden })}
-      >
-        <span className={`codicon codicon-${view.hidden ? 'eye-closed' : 'eye'}`} aria-hidden="true" />
-      </button>
-      <button
-        type="button" className="files-tool" title="Sort" aria-label="Sort" aria-haspopup="menu"
-        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setSortAt({ x: r.left, y: r.bottom }) }}
-      >
-        <span className="codicon codicon-list-ordered" aria-hidden="true" />
-      </button>
+      <IconTooltip label={view.hidden ? 'Hidden files are hidden: click to show them' : 'Hidden files are shown: click to hide them'}>
+        <button
+          type="button" className="files-tool" aria-pressed={view.hidden}
+          aria-label="Hide hidden files"
+          onClick={() => onChange({ ...view, hidden: !view.hidden })}
+        >
+          <span className={`codicon codicon-${view.hidden ? 'eye-closed' : 'eye'}`} aria-hidden="true" />
+        </button>
+      </IconTooltip>
+      <IconTooltip label={`Sort files (now ${sortLabel.replace('Sort ', '').toLowerCase()}, ${view.sortDir === 'asc' ? 'ascending' : 'descending'})`}>
+        <button
+          type="button" className="files-tool" aria-label="Sort" aria-haspopup="menu"
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setSortAt({ x: r.left, y: r.bottom }) }}
+        >
+          <span className="codicon codicon-list-ordered" aria-hidden="true" />
+        </button>
+      </IconTooltip>
       {FILES_SLOTS.map((s) => {
         const node = s.toolbar?.(ctx)
         return node ? <span key={s.id} className="files-slot-tool">{node}</span> : null

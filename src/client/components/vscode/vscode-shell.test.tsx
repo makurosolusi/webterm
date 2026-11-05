@@ -86,6 +86,7 @@ describe('VscodeActivityBar', () => {
     const explorer = screen.getByRole('button', { name: 'Explorer, 3' })
     expect(explorer.getAttribute('aria-current')).toBe('page')
     expect(explorer.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(explorer)
     expect(screen.getByRole('tooltip').textContent).toBe('Explorer')
     fireEvent.blur(explorer)

@@ -8,6 +8,7 @@ import type { HandoffWorkspace } from './MorningBriefContinue'
 
 /** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
 const tipOf = (el: Element): string | null => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
   fireEvent.focus(el)
   const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
   fireEvent.blur(el)

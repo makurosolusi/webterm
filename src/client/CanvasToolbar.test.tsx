@@ -47,6 +47,7 @@ describe('CanvasToolbar chrome', () => {
     ])
     const palette = screen.getByRole('button', { name: 'Command palette' })
     expect(palette.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(palette)
     expect(screen.getByRole('tooltip').textContent).toBe('Command palette ⌘K')
   })

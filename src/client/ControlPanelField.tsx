@@ -4,6 +4,7 @@
 // policy, `@haspolicy`) shown read-only with the reason. code.visualstudio.com/docs/configure/settings
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import type { EffectiveRow } from './ControlPanel'
 import { CONTROL_TEXT } from './controlPanelLabels'
@@ -67,7 +68,9 @@ export function ControlField({ row, write }: { row: EffectiveRow; write: Control
       <span className="flex items-center gap-1">
         <Editor row={row} write={run} />
         {row.source === 'settings' ? (
-          <Button size="sm" variant="ghost" title={CONTROL_TEXT.resetTitle} onClick={() => void run(row.key, null)}>{CONTROL_TEXT.reset}</Button>
+          <IconTooltip label={CONTROL_TEXT.resetTitle}>
+            <Button size="sm" variant="ghost" onClick={() => void run(row.key, null)}>{CONTROL_TEXT.reset}</Button>
+          </IconTooltip>
         ) : null}
         {busy ? <span className="opacity-70">{CONTROL_TEXT.saving}</span> : null}
       </span>

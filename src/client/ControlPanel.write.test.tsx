@@ -4,7 +4,7 @@
 // Control tab end to end against the REAL server route + env-settings service (in memory): the A2 drift
 // check over the full registry (every Control-owned key renders an editor), a write changing the
 // effective value, the shell-env lock, and a Doctor fix.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DoctorDeps } from '../server/doctor'
 import { CONTROL_WHERE } from '../server/effectiveConfig.ui'
@@ -63,7 +63,7 @@ describe('Control tab writes', () => {
     await waitFor(() => expect(rowEl('WEBTERM_AGENT_SANDBOX').getAttribute('data-modified')).toBe('true'))
     expect(s.puts).toEqual([{ set: { WEBTERM_AGENT_SANDBOX: 'off' }, unset: [] }])
     expect(s.target['WEBTERM_AGENT_SANDBOX']).toBe('off')
-    fireEvent.click(rowEl('WEBTERM_AGENT_SANDBOX').querySelector('button[title^="Reset"]') as HTMLElement)
+    fireEvent.click(within(rowEl('WEBTERM_AGENT_SANDBOX')).getByRole('button', { name: 'Reset' }))
     await waitFor(() => expect(rowEl('WEBTERM_AGENT_SANDBOX').hasAttribute('data-modified')).toBe(false))
   })
 

@@ -3,6 +3,7 @@
 // move focus, Enter/Space activate, Home/End jump, Delete closes a closable tab.
 import { useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 
 export interface BottomPanelTab {
   id: string
@@ -61,26 +62,29 @@ export function BottomPanelTabs(props: BottomPanelTabsProps): React.JSX.Element 
         const closeable = tab.closable !== false && onClose !== undefined
         return (
           <div key={tab.id} role="presentation" className="vscode-panel-tab" data-active={active ? 'true' : 'false'}>
-            <button
-              ref={(element) => { if (element) refs.current.set(tab.id, element); else refs.current.delete(tab.id) }}
-              type="button" role="tab" className="vscode-panel-tab__button"
-              aria-selected={active} tabIndex={roving === tab.id ? 0 : -1}
-              title={tab.tooltip ?? tab.label}
-              onClick={() => { setFocusedId(tab.id); onActivate(tab.id) }}
-              onFocus={() => setFocusedId(tab.id)}
-              onKeyDown={(event) => onKeyDown(event, tab)}
-            >
-              <span className="vscode-panel-tab__label">{tab.label}</span>
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="vscode-panel-tab__badge" aria-label={`${tab.badge} items`}>{tab.badge}</span>
-              )}
-            </button>
-            {closeable && (
-              <button type="button" className="vscode-panel-tab__close" tabIndex={-1}
-                aria-label={`Close ${tab.label}`} title={`Close ${tab.label}`}
-                onClick={(event) => { event.stopPropagation(); onClose?.(tab.id) }}>
-                <span className="codicon codicon-close" aria-hidden="true" />
+            <IconTooltip label={tab.tooltip ?? tab.label}>
+              <button
+                ref={(element) => { if (element) refs.current.set(tab.id, element); else refs.current.delete(tab.id) }}
+                type="button" role="tab" className="vscode-panel-tab__button"
+                aria-selected={active} tabIndex={roving === tab.id ? 0 : -1}
+                onClick={() => { setFocusedId(tab.id); onActivate(tab.id) }}
+                onFocus={() => setFocusedId(tab.id)}
+                onKeyDown={(event) => onKeyDown(event, tab)}
+              >
+                <span className="vscode-panel-tab__label">{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className="vscode-panel-tab__badge" aria-label={`${tab.badge} items`}>{tab.badge}</span>
+                )}
               </button>
+            </IconTooltip>
+            {closeable && (
+              <IconTooltip label={`Close ${tab.label}`}>
+                <button type="button" className="vscode-panel-tab__close" tabIndex={-1}
+                  aria-label={`Close ${tab.label}`}
+                  onClick={(event) => { event.stopPropagation(); onClose?.(tab.id) }}>
+                  <span className="codicon codicon-close" aria-hidden="true" />
+                </button>
+              </IconTooltip>
             )}
           </div>
         )

@@ -24,6 +24,7 @@ const TASK: InboxItem = {
 /** Tooltip text of a row action: a blocked Review sits in a hover span, so focus its parent. */
 const tipOf = (button: Element): string | null => {
   const trigger = button.parentElement!
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
   fireEvent.focus(trigger)
   const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
   fireEvent.blur(trigger)

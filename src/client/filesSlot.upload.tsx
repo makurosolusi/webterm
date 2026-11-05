@@ -4,7 +4,7 @@
 // Drop dipasang lewat `useSlot` pada elemen node React Flow (`[data-id=nodeId]`) karena kontrak
 // FilesSlot belum punya `onDrop`; integrasi nanti cukup memanggil `runUpload` dari slot itu.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Button } from './components/ui/button'
+import { IconButton } from './components/ui/icon-button'
 import { childPath } from './fileBrowse'
 import { capabilities } from './fsClient'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
@@ -91,18 +91,19 @@ function UploadStatusView({ nodeId }: { nodeId: string }) {
   const s = useSyncExternalStore(subscribe, () => status)
   if (s.running) return <span role="status" title={s.name}>{UPLOAD_TEXT.progress(s.index, s.total, s.pct)}</span>
   if (!s.summary && !s.note) return null
-  const title = [...(s.summary?.failed.map((f) => f.message) ?? []), s.note].filter(Boolean).join('\n')
+  const details = [...(s.summary?.failed.map((f) => f.message) ?? []), s.note].filter(Boolean).join(' · ')
   const text = s.summary ? UPLOAD_TEXT.summary(s.summary.ok.length, s.summary.failed.length) : s.note
   // Upload ditolak EDISABLED (dimatikan setelah slot aktif): sertakan jalan keluarnya.
   const disabled = s.summary?.failed.some((f) => f.code === 'EDISABLED')
   return (
     <>
       {disabled ? (
-        <Button type="button" variant="ghost" size="icon-sm" className="files-tool" onClick={() => offerFilesWrite(nodeId)}>{WRITE_OFFER_TEXT.enableAction}</Button>
+        <IconButton type="button" size="icon-sm" className="files-tool" label={WRITE_OFFER_TEXT.enableAction} tooltip={`${WRITE_OFFER_TEXT.dialogTitle} to allow uploads`} onClick={() => offerFilesWrite(nodeId)}>{WRITE_OFFER_TEXT.enableAction}</IconButton>
       ) : null}
-      <Button type="button" variant="ghost" size="icon-sm" className="files-tool" role="status" title={title} aria-label={`${text}. ${UPLOAD_TEXT.dismiss}`} onClick={() => setStatus(IDLE)}>
+      <IconButton type="button" size="icon-sm" className="files-tool" role="status" label={`${text}. ${UPLOAD_TEXT.dismiss}`}
+        tooltip={details ? `${details} (click to dismiss)` : UPLOAD_TEXT.dismiss} onClick={() => setStatus(IDLE)}>
         {text}
-      </Button>
+      </IconButton>
     </>
   )
 }

@@ -94,6 +94,7 @@ describe('status bar items', () => {
     act(() => publishOutputCounts({ error: 3, warn: 1 }))
     const errors = screen.getByRole('button', { name: /3 errors/ })
     expect(errors.textContent).toContain('3')
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(errors)
     expect(screen.getByRole('tooltip').textContent).toBe(`3 errors in the log — toggle Output ${outputShortcutLabel(isMacPlatform())}`)
     fireEvent.blur(errors)

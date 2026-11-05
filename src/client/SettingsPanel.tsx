@@ -20,6 +20,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { Settings } from '../shared/settings'
 import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
@@ -135,14 +136,16 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
         <div className="st-editor">
           <header className="st-header">
             <span className="st-header-title">Settings</span>
-            <button
-              type="button"
-              className="st-close"
-              aria-label="Close settings"
-              onClick={onClose}
-            >
-              <span className="codicon codicon-close" aria-hidden="true" />
-            </button>
+            <IconTooltip label="Close settings" shortcut="Esc">
+              <button
+                type="button"
+                className="st-close"
+                aria-label="Close settings"
+                onClick={onClose}
+              >
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </button>
+            </IconTooltip>
           </header>
 
           <div className="st-searchbar">
@@ -161,15 +164,16 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
                 <span className="st-search-count" role="status">{found} {found === 1 ? 'setting' : 'settings'} found</span>
               ) : null}
               {query ? (
-                <button
-                  type="button"
-                  className="st-search-clear"
-                  aria-label="Clear search"
-                  title="Clear Search Results"
-                  onClick={() => setQuery('')}
-                >
-                  <span className="codicon codicon-close" aria-hidden="true" />
-                </button>
+                <IconTooltip label="Clear Search Results">
+                  <button
+                    type="button"
+                    className="st-search-clear"
+                    aria-label="Clear search"
+                    onClick={() => setQuery('')}
+                  >
+                    <span className="codicon codicon-close" aria-hidden="true" />
+                  </button>
+                </IconTooltip>
               ) : null}
             </div>
           </div>
