@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
 export interface VscodeEditorTab {
@@ -162,58 +163,60 @@ export function VscodeEditorTabBar({
             data-dirty={tab.dirty ? 'true' : 'false'}
             className="vscode-editor-tab"
           >
-            <button
-              ref={(element) => {
-                if (element) tabRefs.current.set(tab.id, element)
-                else tabRefs.current.delete(tab.id)
-              }}
-              type="button"
-              role="tab"
-              data-slot="vscode-editor-tab-button"
-              className="vscode-editor-tab__button"
-              aria-selected={active}
-              tabIndex={focusable ? 0 : -1}
-              title={tab.tooltip ?? tab.label}
-              onClick={() => {
-                setFocusedId(tab.id)
-                onActivate(tab.id)
-              }}
-              onDoubleClick={() => onDoubleClick?.(tab.id)}
-              // Middle button: suppress browser autoscroll on press, close on release (VS Code).
-              onMouseDown={(event) => {
-                if (event.button === 1) event.preventDefault()
-              }}
-              onAuxClick={(event) => {
-                if (event.button !== 1) return
-                event.preventDefault()
-                closeTab(tab)
-              }}
-              onFocus={() => setFocusedId(tab.id)}
-              onKeyDown={(event) => onTabKeyDown(event, tab)}
-            >
-              {tab.icon ? (
-                <span className="vscode-editor-tab__icon" aria-hidden="true">
-                  {tab.icon}
-                </span>
-              ) : null}
-              <span className="vscode-editor-tab__label">{tab.label}</span>
-            </button>
-            {closeable ? (
+            <IconTooltip label={tab.tooltip ?? tab.label}>
               <button
+                ref={(element) => {
+                  if (element) tabRefs.current.set(tab.id, element)
+                  else tabRefs.current.delete(tab.id)
+                }}
                 type="button"
-                data-slot="vscode-editor-tab-close"
-                className="vscode-editor-tab__close"
-                aria-label={`Close ${tab.label}`}
-                title={`Close ${tab.label}`}
-                tabIndex={-1}
-                onClick={(event) => {
-                  event.stopPropagation()
+                role="tab"
+                data-slot="vscode-editor-tab-button"
+                className="vscode-editor-tab__button"
+                aria-selected={active}
+                tabIndex={focusable ? 0 : -1}
+                onClick={() => {
+                  setFocusedId(tab.id)
+                  onActivate(tab.id)
+                }}
+                onDoubleClick={() => onDoubleClick?.(tab.id)}
+                // Middle button: suppress browser autoscroll on press, close on release (VS Code).
+                onMouseDown={(event) => {
+                  if (event.button === 1) event.preventDefault()
+                }}
+                onAuxClick={(event) => {
+                  if (event.button !== 1) return
+                  event.preventDefault()
                   closeTab(tab)
                 }}
+                onFocus={() => setFocusedId(tab.id)}
+                onKeyDown={(event) => onTabKeyDown(event, tab)}
               >
-                {tab.dirty ? dirtyDot : null}
-                <span className="codicon codicon-close" aria-hidden="true" />
+                {tab.icon ? (
+                  <span className="vscode-editor-tab__icon" aria-hidden="true">
+                    {tab.icon}
+                  </span>
+                ) : null}
+                <span className="vscode-editor-tab__label">{tab.label}</span>
               </button>
+            </IconTooltip>
+            {closeable ? (
+              <IconTooltip label={`Close ${tab.label}`}>
+                <button
+                  type="button"
+                  data-slot="vscode-editor-tab-close"
+                  className="vscode-editor-tab__close"
+                  aria-label={`Close ${tab.label}`}
+                  tabIndex={-1}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    closeTab(tab)
+                  }}
+                >
+                  {tab.dirty ? dirtyDot : null}
+                  <span className="codicon codicon-close" aria-hidden="true" />
+                </button>
+              </IconTooltip>
             ) : tab.dirty ? (
               <span className="vscode-editor-tab__close" aria-hidden="true">
                 {dirtyDot}

@@ -7,6 +7,7 @@ import { VscodeActivityBar } from '@/components/vscode/vscodeActivityBar'
 import type { VscodeActivityBarItem } from '@/components/vscode/vscodeActivityBar'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
+import { IconButton } from '@/components/ui/icon-button'
 import { codicon } from './dockCodicon'
 import { useCommands } from './commandRegistry'
 import { CanvasStatusBar } from './Dock.statusBar'
@@ -126,18 +127,19 @@ export default function Dock(props: DockProps) {
     if (custom) addCustom(custom)
   }
 
+  const unread = props.inboxUnread ?? 0
   const items: VscodeActivityBarItem[] = [
-    { id: 'sessions', label: 'Toggle sessions panel', icon: codicon('layout-sidebar-left') },
+    { id: 'sessions', label: 'Toggle sessions panel', icon: codicon('layout-sidebar-left'), commandId: 'view.sessions' },
     {
-      id: 'inbox', label: 'Toggle inbox panel', icon: codicon('inbox'),
-      badge: props.inboxUnread,
+      id: 'inbox', label: 'Toggle inbox panel', icon: codicon('inbox'), commandId: 'view.inbox',
+      badge: props.inboxUnread, tooltip: unread > 0 ? `Toggle inbox panel (${unread} unread)` : undefined,
     },
     ...(props.onToggleChat
-      ? [{ id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion') }]
+      ? [{ id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion'), commandId: 'view.chat' }]
       : []),
     { id: 'central', label: 'Toggle central control panel', icon: codicon('shield') },
-    { id: 'board', label: 'Board', icon: codicon('project') },
-    { id: 'add', label: 'Add node', icon: codicon('add') },
+    { id: 'board', label: 'Board', tooltip: 'Toggle Kanban board', icon: codicon('project'), commandId: 'view.board' },
+    { id: 'add', label: 'Add node', tooltip: 'Add node (terminal, browser, agent, workspace)', icon: codicon('add') },
   ]
 
   const onActivitySelect = (id: string) => {
@@ -180,38 +182,34 @@ export default function Dock(props: DockProps) {
             toggle ber-`aria-pressed`, yang tidak dimiliki item navigasi activity bar. */}
         <div className="dock__modes" data-slot="dock-modes">
           {props.onOpenSettings && (
-            <button
-              type="button"
-              className="vscode-activity-bar__item dock-btn"
-              aria-label="Settings"
-              title="Settings"
-              onClick={props.onOpenSettings}
-            >
+            <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Settings" commandId="workbench.settings"
+              side="right" onClick={props.onOpenSettings}>
               <span className="vscode-activity-bar__icon" aria-hidden>{codicon('settings-gear')}</span>
-            </button>
+            </IconButton>
           )}
 
-          <button
-            type="button"
-            className="vscode-activity-bar__item dock-btn"
-            aria-label={props.locked ? 'Unlock view' : 'Lock view'}
-            title={props.locked ? 'Unlock view (pan/zoom)' : 'Lock view (pan/zoom); nodes stay movable'}
+          <IconButton
+            className="vscode-activity-bar__item dock-btn rounded-none"
+            label={props.locked ? 'Unlock view' : 'Lock view'}
+            tooltip={props.locked ? 'View locked: pan and zoom are off. Click to unlock' : 'View unlocked. Click to lock pan and zoom; nodes stay movable'}
+            side="right"
             aria-pressed={props.locked}
             onClick={props.onToggleLock}
           >
             <span className="vscode-activity-bar__icon" aria-hidden>{codicon(props.locked ? 'lock' : 'unlock')}</span>
-          </button>
+          </IconButton>
 
-          <button
-            type="button"
-            className="vscode-activity-bar__item dock-btn"
-            aria-label="Clean view"
-            title="Clean view — hide all chrome (⌘./Ctrl+. to exit)"
+          <IconButton
+            className="vscode-activity-bar__item dock-btn rounded-none"
+            label="Clean view"
+            tooltip={props.cleanView ? 'Clean view is on. Click to show the chrome again' : 'Clean view is off. Click to hide all chrome'}
+            commandId="view.cleanView.key"
+            side="right"
             aria-pressed={props.cleanView}
             onClick={props.onToggleCleanView}
           >
             <span className="vscode-activity-bar__icon" aria-hidden>{codicon('eye-closed')}</span>
-          </button>
+          </IconButton>
         </div>
 
         <VscodeQuickPick

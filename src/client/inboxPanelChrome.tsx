@@ -2,6 +2,7 @@
 // banner, and the empty/loading status line. Split out of `InboxPanel` to keep the container
 // inside the repo's file-size budget. No state, fetching, or derived logic lives here; every
 // label, aria-label, and class name is the panel's contract with `InboxPanel.test.tsx`.
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { InboxState } from './inboxApi'
 import { SECTION_LABEL, SECTION_ORDER } from './inboxPanelModel'
 
@@ -17,10 +18,12 @@ export interface InboxPanelActionsProps {
 export function InboxPanelActions(props: InboxPanelActionsProps): React.JSX.Element {
   const { loading, onRefresh } = props
   return (
-    <button type="button" className="vscode-panel-action" aria-label="Refresh inbox" title="Refresh inbox"
-      disabled={loading} onClick={onRefresh}>
-      <span className="codicon codicon-refresh" aria-hidden="true" />
-    </button>
+    <IconTooltip label="Refresh inbox" disabled={loading} disabledReason="already loading">
+      <button type="button" className="vscode-panel-action" aria-label="Refresh inbox"
+        disabled={loading} onClick={onRefresh}>
+        <span className="codicon codicon-refresh" aria-hidden="true" />
+      </button>
+    </IconTooltip>
   )
 }
 

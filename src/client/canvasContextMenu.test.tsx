@@ -225,7 +225,7 @@ describe('menu konteks canvas', () => {
   // event-nya di situ. Tanpa `spawnSpot` node lahir di NaN: tak terlihat, tapi ikut tersimpan.
   it('tombol Explorer tetap melahirkan node files di posisi angka, bukan NaN', async () => {
     await mountCanvas({ nodes: [], dirs: { '/': [] } })
-    fireEvent.click(screen.getByLabelText('Explorer'))
+    fireEvent.click(screen.getByLabelText('New Files node'))
 
     await waitFor(() => expect(nodePositions('files')).toHaveLength(1))
     expect(nodePositions('files')[0]).toEqual(DEFAULT_SPAWN)

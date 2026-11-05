@@ -85,7 +85,11 @@ describe('VscodeActivityBar', () => {
     expect(screen.getByRole('navigation', { name: 'Activity bar' })).toBeTruthy()
     const explorer = screen.getByRole('button', { name: 'Explorer, 3' })
     expect(explorer.getAttribute('aria-current')).toBe('page')
-    expect(explorer.getAttribute('title')).toBe('Explorer')
+    expect(explorer.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(explorer)
+    expect(screen.getByRole('tooltip').textContent).toBe('Explorer')
+    fireEvent.blur(explorer)
     expect(explorer.querySelector('[data-slot="vscode-activity-bar-badge"]')?.textContent).toBe('3')
     expect(screen.getByRole('button', { name: 'Search' }).getAttribute('aria-current')).toBeNull()
   })

@@ -241,9 +241,9 @@ describe('node-chrome.css', () => {
     expect(chrome).not.toContain('--shadow-node')
   })
 
-  it('marks the selected node as the active tab with the focus border', () => {
+  it('marks the selected node as the active tab by its header only, never a focus-border frame', () => {
     const decl = (sel: string) => chrome.match(new RegExp(`\\${sel}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
-    expect(decl('.term-node--selected')).toContain('--nc-border: var(--nc-focus)')
+    expect(decl('.term-node--selected')).not.toContain('--nc-border')
     expect(chrome).toContain('.term-node--selected .node-header')
     expect(chrome).toContain('--nc-focus: var(--vscode-focusBorder')
   })

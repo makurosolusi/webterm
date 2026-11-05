@@ -2,6 +2,7 @@
 // menggambar frame tak pernah memicu render React. Tersembunyi saat idle; klik = rincian per tahap.
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { clientNow, LATENCY_BUDGET_MS, LATENCY_STAGES, summarize } from './inputLatency.window'
 import type { LatencyStage, LatencySummary, LatencyTone, LatencyWindow } from './inputLatency.window'
 
@@ -47,17 +48,21 @@ export default function InputLatencyChip({ window: w, now = clientNow }: { windo
           <dt className="col-span-2 opacity-70">p50 per stage, last {sum.count} inputs</dt>
         </dl>
       )}
-      <Button
-        size="xs"
-        variant="outline"
-        data-tone={sum.tone}
-        aria-expanded={open}
-        title={`Input to frame: p50 ${ms(sum.p50)}, p95 ${ms(sum.p95)} (budget ${LATENCY_BUDGET_MS.good}/${LATENCY_BUDGET_MS.warn} ms)`}
-        className={`tabular-nums ${TONE_CLASS[sum.tone]}`}
-        onClick={() => setOpen((o) => !o)}
+      <IconTooltip
+        side="left"
+        label={`Input to frame: p50 ${ms(sum.p50)}, p95 ${ms(sum.p95)} (budget ${LATENCY_BUDGET_MS.good}/${LATENCY_BUDGET_MS.warn} ms). Click to ${open ? 'hide' : 'show'} the per-stage breakdown`}
       >
-        {ms(sum.p50)} · p95 {ms(sum.p95)}
-      </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          data-tone={sum.tone}
+          aria-expanded={open}
+          className={`tabular-nums ${TONE_CLASS[sum.tone]}`}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {ms(sum.p50)} · p95 {ms(sum.p95)}
+        </Button>
+      </IconTooltip>
     </div>
   )
 }

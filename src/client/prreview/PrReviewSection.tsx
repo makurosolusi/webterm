@@ -3,6 +3,7 @@
 // decides the draft's Inbox gate and posts one review; approving it in the Inbox does the same.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { PRREVIEW_API, PRREVIEW_POLL_MS, PRREVIEW_TEXT as T, prReviewRequest, type DraftView, type PrReviewJob } from './prreview.client'
 
@@ -58,7 +59,9 @@ export function PrReviewSection({ root, gh, pollMs = PRREVIEW_POLL_MS }: { root:
         {drafts.map((d) => (
           <li key={d.itemId}>
             <span>{T.draft(d)}</span>
-            <Button size="sm" disabled={busy} title="Posts one review with inline comments to GitHub. Cannot be undone." onClick={() => void post(d)}>{T.post}</Button>
+            <IconTooltip label="Posts one review with inline comments to GitHub. Cannot be undone." disabled={busy} disabledReason="another action is running">
+              <Button size="sm" disabled={busy} onClick={() => void post(d)}>{T.post}</Button>
+            </IconTooltip>
           </li>
         ))}
       </ul>

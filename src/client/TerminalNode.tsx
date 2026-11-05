@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
-import { NodeResizer, useReactFlow } from '@xyflow/react'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
+import { useReactFlow } from '@xyflow/react'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import FindBar from './FindBar'
@@ -173,7 +174,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
 
   return (
     <>
-      <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
+      <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
         className={termNodeClass({ selected: !!selected, collapsed })}
         // Tanpa ini Chrome memunculkan menu bawaannya untuk `<canvas>` — "Copy Image" di atas

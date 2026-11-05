@@ -4,6 +4,7 @@
 // "Always allow" is UI-only on purpose (K4): it writes a permanent rule, Telegram can only allow once.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { APPROVAL_PATH, inboxErrorMessage, isAbortError } from './inboxApi'
 import { request } from './inboxTransport'
 
@@ -76,10 +77,11 @@ export function InboxPermissions(props: { pollMs?: number }): React.JSX.Element 
               <Button size="sm" disabled={busy === r.id} onClick={() => void decide(r.id, 'allow')}>Allow once</Button>
               <Button size="sm" variant="secondary" disabled={busy === r.id} onClick={() => void decide(r.id, 'deny')}>Deny</Button>
               {r.pattern !== null && (
-                <Button size="sm" variant="secondary" disabled={busy === r.id}
-                  title={`Saves a permanent rule: ${r.label.split('(')[0]}(${r.pattern})`} onClick={() => void decide(r.id, 'always')}>
-                  Always allow this pattern
-                </Button>
+                <IconTooltip label={`Saves a permanent rule: ${r.label.split('(')[0]}(${r.pattern})`} disabled={busy === r.id} disabledReason="saving the decision">
+                  <Button size="sm" variant="secondary" disabled={busy === r.id} onClick={() => void decide(r.id, 'always')}>
+                    Always allow this pattern
+                  </Button>
+                </IconTooltip>
               )}
             </li>
           )

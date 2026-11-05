@@ -3,6 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { InboxPermissions, isPermissionItemId, PERMISSION_PATH } from './InboxPanel.permission'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const pending = [
   { id: 'perm_1', node: 'brisk-otter', label: 'Bash(npm publish)', pattern: 'npm publish', expiresAt: 1 },
@@ -22,6 +31,9 @@ describe('InboxPermissions', () => {
     expect(await screen.findByText('brisk-otter wants to run: Bash(npm publish)')).toBeTruthy()
     // No safe pattern: no "Always allow" on the second row.
     expect(screen.getAllByText('Always allow this pattern')).toHaveLength(1)
+    const always = screen.getByRole('button', { name: 'Always allow this pattern' })
+    expect(always.hasAttribute('title')).toBe(false)
+    expect(tipOf(always)).toBe('Saves a permanent rule: Bash(npm publish)')
     fireEvent.click(screen.getAllByText('Always allow this pattern')[0])
     await waitFor(() => expect(calls.some((c) => c.init?.method === 'POST')).toBe(true))
     const post = calls.find((c) => c.init?.method === 'POST')

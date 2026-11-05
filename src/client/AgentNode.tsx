@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { NodeProps, Viewport } from '@xyflow/react'
-import { Handle, Position, NodeResizer, useReactFlow } from '@xyflow/react'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
+import { Handle, Position, useReactFlow } from '@xyflow/react'
 import { agentConfig, canResume, hasUsage, isContextCapable, mintsSessionId } from '../shared/workspace'
 import type { AgentId, AgentStatus, Comment } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
@@ -269,7 +270,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
 
   return (
     <>
-      <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
+      <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
         className={termNodeClass({ selected: !!selected, collapsed, status })}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, link: termRef.current?.hoveredLink() ?? null }) }}

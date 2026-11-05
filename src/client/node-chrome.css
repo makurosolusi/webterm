@@ -33,10 +33,11 @@
   border-radius: var(--nc-radius);
 }
 
-/* Node terpilih = tab aktif: border 1px focusBorder di semua sisi + header aktif. */
-.term-node--selected {
-  --nc-border: var(--nc-focus);
-}
+/* Node terpilih = tab aktif, ditandai HANYA lewat header aktif (`.term-node--selected .node-header`
+   di bawah). Bingkai biru focusBorder dihapus: bersama handle resize ia terbaca sebagai "mode edit"
+   pada setiap klik. Bingkai + handle kini milik mode resize eksplisit (nodeResize/). */
+.node-header > .node-resize-toggle { margin-left: auto; flex-shrink: 0; }
+.node-resize-toggle + .node-toolbar { margin-left: 0; }
 
 /* Working (agent di tengah turn): glow clay lembut — #d97757 yang sama dengan spinner — di
    BELAKANG node. Yang dianimasikan OPACITY pada pseudo-element, bukan box-shadow: menganimasikan

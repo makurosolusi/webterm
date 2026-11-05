@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { Comment } from '../shared/workspace'
 import { ToolbarButton } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 
 export interface NodeCommentsProps {
   comments: Comment[]
@@ -38,9 +39,11 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
     <div className="nodrag node-comments" role="dialog" aria-label="Comments" onKeyDown={onKeyDown}>
       <div className="node-comments__header">
         <span className="node-comments__title">Comments</span>
-        <ToolbarButton label="Close" title="Close" data-title="Close" onClick={onClose}>
-          <span className="codicon codicon-close" aria-hidden="true" />
-        </ToolbarButton>
+        <IconTooltip label="Close comments" shortcut="Esc">
+          <ToolbarButton label="Close" data-title="Close" onClick={onClose}>
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </ToolbarButton>
+        </IconTooltip>
       </div>
       <div className="node-comments__list">
         {comments.length === 0 ? (
@@ -66,7 +69,7 @@ export default function NodeComments({ comments, onAdd, onClose }: NodeCommentsP
           aria-label="Add a comment"
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button type="button" className="node-comments__submit" title="Add Comment" onClick={send}>Add Comment</button>
+        <button type="button" className="node-comments__submit" onClick={send}>Add Comment</button>
       </div>
     </div>
   )

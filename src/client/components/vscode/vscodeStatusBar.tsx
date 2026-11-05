@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
 /** Item tones mirror the `statusBarItem.*` color keys (remote, prominent, warning, error) and debugging bar. */
@@ -13,6 +14,11 @@ export interface VscodeStatusItem {
   onClick?: () => void
   tone?: VscodeStatusTone
   ariaLabel?: string
+  /** ⌘K registry command whose keybinding the tooltip shows. */
+  commandId?: string
+  /** Renders a disabled button whose tooltip appends `disabledReason`. */
+  disabled?: boolean
+  disabledReason?: string
 }
 
 export interface VscodeStatusBarProps {
@@ -40,31 +46,29 @@ function StatusItem({ item }: { item: VscodeStatusItem }) {
   )
   const className = 'vscode-status-bar__item'
 
-  if (item.onClick) {
-    return (
-      <button
-        type="button"
-        data-slot="vscode-status-bar-item"
-        data-tone={item.tone ?? 'default'}
-        className={className}
-        title={item.tooltip}
-        aria-label={item.ariaLabel ?? item.tooltip}
-        onClick={item.onClick}
-      >
-        {content}
-      </button>
-    )
-  }
-
-  return (
-    <span
+  const element = item.onClick || item.disabled ? (
+    <button
+      type="button"
       data-slot="vscode-status-bar-item"
       data-tone={item.tone ?? 'default'}
       className={className}
-      title={item.tooltip}
+      aria-label={item.ariaLabel ?? item.tooltip}
+      disabled={item.disabled}
+      onClick={item.onClick}
     >
       {content}
+    </button>
+  ) : (
+    <span data-slot="vscode-status-bar-item" data-tone={item.tone ?? 'default'} className={className}>
+      {content}
     </span>
+  )
+
+  if (!item.tooltip) return element
+  return (
+    <IconTooltip label={item.tooltip} commandId={item.commandId} side="top" disabled={item.disabled} disabledReason={item.disabledReason}>
+      {element}
+    </IconTooltip>
   )
 }
 

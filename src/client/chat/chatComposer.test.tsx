@@ -4,6 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ChatComposer, { stepHistory } from './chatComposer'
 
 afterEach(cleanup)
+
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
 const box = (): HTMLTextAreaElement => screen.getByLabelText('Message the central agent') as HTMLTextAreaElement
 
 function type(text: string): void {
@@ -68,11 +76,15 @@ describe('ChatComposer', () => {
     const onStop = vi.fn()
     const { rerender } = render(<ChatComposer busy={false} onSend={() => {}} onStop={onStop} />)
     expect(box().placeholder).toMatch(/^Ask /)
-    expect((screen.getByLabelText('Send message') as HTMLButtonElement).disabled).toBe(true)
+    const send = screen.getByLabelText('Send message') as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    expect(send.hasAttribute('title')).toBe(false)
+    expect(tipOf(send.parentElement!)).toBe('Send message (type a message first) Enter')
     rerender(<ChatComposer busy onSend={() => {}} onStop={onStop} />)
     expect(screen.queryByLabelText('Send message')).toBeNull()
     fireEvent.click(screen.getByLabelText('Stop turn'))
     expect(onStop).toHaveBeenCalledTimes(1)
+    expect(tipOf(screen.getByLabelText('Stop turn'))).toBe('Stop the running turn')
     expect(screen.getByLabelText('Stop turn').querySelector('.codicon-debug-stop')).not.toBeNull()
   })
 })

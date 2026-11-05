@@ -184,7 +184,11 @@ describe('drop file OS', () => {
     expect(s.failed[0].message).toContain('dup.txt')
     expect(s.failed[0].message).toContain('not overwritten')
     const btn = await screen.findByRole('status')
-    expect(btn.getAttribute('title')).toContain('dup.txt')
+    expect(btn.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(btn)
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('dup.txt')
+    fireEvent.blur(btn)
     fireEvent.click(btn)
     expect(uploadStatus().summary).toBeNull()
   })

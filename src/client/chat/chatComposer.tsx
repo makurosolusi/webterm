@@ -4,6 +4,7 @@
 // be a 409, so the UI offers the action that can actually make progress. A busy conversation
 // from another tab still shows Stop because the panel learns `activeTurnId` from the 409 body.
 import { useLayoutEffect, useRef, useState } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { KeyboardEvent } from 'react'
 
 export interface ChatComposerProps {
@@ -93,15 +94,18 @@ export default function ChatComposer(props: ChatComposerProps) {
           onKeyDown={onKeyDown}
         />
         {props.busy ? (
-          <button type="button" className="chat-composer__send" onClick={props.onStop}
-            aria-label="Stop turn" title="Stop turn">
-            <span className="codicon codicon-debug-stop" aria-hidden="true" />
-          </button>
+          <IconTooltip label="Stop the running turn">
+            <button type="button" className="chat-composer__send" onClick={props.onStop} aria-label="Stop turn">
+              <span className="codicon codicon-debug-stop" aria-hidden="true" />
+            </button>
+          </IconTooltip>
         ) : (
-          <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend}
-            aria-label="Send message" title="Send (Enter)">
-            <span className="codicon codicon-send" aria-hidden="true" />
-          </button>
+          <IconTooltip label="Send message" shortcut="Enter" disabled={!canSend}
+            disabledReason={props.disabled ? 'chat is disabled' : 'type a message first'}>
+            <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend} aria-label="Send message">
+              <span className="codicon codicon-send" aria-hidden="true" />
+            </button>
+          </IconTooltip>
         )}
       </div>
     </div>

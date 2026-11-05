@@ -25,20 +25,20 @@ export function CanvasStatusBar(props: DockProps) {
   const right: VscodeStatusItem[] = [
     ...(props.extraStatusItems ?? []),
     {
-      id: 'undo', label: '', icon: codicon('discard'), tooltip: 'Undo', ariaLabel: 'Undo',
-      onClick: props.canUndo ? props.onUndo : undefined,
+      id: 'undo', label: '', icon: codicon('discard'), tooltip: 'Undo last canvas change', ariaLabel: 'Undo',
+      onClick: props.onUndo, disabled: !props.canUndo, disabledReason: 'nothing to undo',
     },
     {
-      id: 'redo', label: '', icon: codicon('redo'), tooltip: 'Redo', ariaLabel: 'Redo',
-      onClick: props.canRedo ? props.onRedo : undefined,
+      id: 'redo', label: '', icon: codicon('redo'), tooltip: 'Redo last undone change', ariaLabel: 'Redo',
+      onClick: props.onRedo, disabled: !props.canRedo, disabledReason: 'nothing to redo',
     },
     {
-      id: 'back', label: '', icon: codicon('arrow-left'), tooltip: 'Go back', ariaLabel: 'Go back',
-      onClick: props.canBack ? props.onBack : undefined,
+      id: 'back', label: '', icon: codicon('arrow-left'), tooltip: 'Go back to the previous view', ariaLabel: 'Go back',
+      onClick: props.onBack, disabled: !props.canBack, disabledReason: 'no earlier view',
     },
     {
-      id: 'forward', label: '', icon: codicon('arrow-right'), tooltip: 'Go forward', ariaLabel: 'Go forward',
-      onClick: props.canForward ? props.onForward : undefined,
+      id: 'forward', label: '', icon: codicon('arrow-right'), tooltip: 'Go forward to the next view', ariaLabel: 'Go forward',
+      onClick: props.onForward, disabled: !props.canForward, disabledReason: 'no later view',
     },
     ...(props.onSave ? [{
       id: 'save', label: '', icon: codicon('save'), tooltip: 'Save layout', ariaLabel: 'Save layout',
@@ -53,15 +53,15 @@ export function CanvasStatusBar(props: DockProps) {
       onClick: props.onToggleMic,
     }] : []),
     {
-      id: 'fit', label: '', icon: codicon('screen-normal'), tooltip: 'Fit view', ariaLabel: 'Fit view',
-      onClick: props.onFit,
+      id: 'fit', label: '', icon: codicon('screen-normal'), tooltip: 'Fit all nodes in view', ariaLabel: 'Fit view',
+      commandId: 'view.fit', onClick: props.onFit,
     },
     {
       id: 'zoom-out', label: '', icon: codicon('zoom-out'), tooltip: 'Zoom out', ariaLabel: 'Zoom out',
       onClick: props.onZoomOut,
     },
     {
-      id: 'zoom', label: `${props.zoomPct}%`, tooltip: 'Zoom presets', ariaLabel: 'Zoom presets',
+      id: 'zoom', label: `${props.zoomPct}%`, tooltip: `Zoom ${props.zoomPct}% — choose a preset`, ariaLabel: 'Zoom presets',
       onClick: props.onZoomTo ? () => setZoomOpen(true) : undefined,
     },
     {

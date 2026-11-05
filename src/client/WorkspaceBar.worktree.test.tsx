@@ -37,16 +37,25 @@ async function openDelete() {
   fireEvent.click(await screen.findByText('Delete'))
 }
 
+/** Visible tooltip text of a trigger (focus opens it immediately), then closes it again. */
+const tipOf = (el: Element): string | null | undefined => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent
+  fireEvent.blur(el)
+  return text
+}
+
 describe('WorkspaceBar worktree state', () => {
   it('marks the worktree tab dirty with the branch in its tooltip and shows the badge by the active name', async () => {
     mount(statusFetch())
     await screen.findByText(/feat •/)
     const tabs = screen.getAllByRole('tab')
     const feat = tabs.find((t) => t.textContent?.includes('Feat'))!
-    await waitFor(() => expect(feat.getAttribute('title')).toContain('Worktree branch feat, 1 uncommitted change'))
+    await waitFor(() => expect(tipOf(feat)).toContain('Worktree branch feat, 1 uncommitted change'))
     expect(feat.closest('[data-dirty]')?.getAttribute('data-dirty') ?? feat.getAttribute('data-dirty')).toBe('true')
     const plain = tabs.find((t) => t.textContent?.includes('Plain'))!
-    expect(plain.getAttribute('title') ?? '').not.toContain('Worktree')
+    expect(tipOf(plain) ?? '').not.toContain('Worktree')
   })
 })
 

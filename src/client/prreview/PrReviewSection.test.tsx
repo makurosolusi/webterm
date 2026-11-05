@@ -3,6 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PrReviewSection } from './PrReviewSection'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 type Call = { url: string; method: string; body: unknown }
@@ -37,6 +46,7 @@ describe('PR review section', () => {
     expect(await screen.findByText('PR #7: 2 findings, 1 inline')).toBeTruthy()
     expect(screen.getByText('PR #7: Draft in the Inbox')).toBeTruthy()
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+    expect(tipOf(screen.getByRole('button', { name: 'Post review' }))).toBe('Posts one review with inline comments to GitHub. Cannot be undone.')
     fireEvent.click(screen.getByRole('button', { name: 'Post review' }))
     expect(await screen.findByText('Review posted: https://github.com/o/r/pull/7#pullrequestreview-1')).toBeTruthy()
     expect(calls.filter((c) => c.method === 'POST').map((c) => c.url)).toEqual(['/api/prreview/gate_1/post'])

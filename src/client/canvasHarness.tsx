@@ -33,6 +33,13 @@ const MIN_BOX = 1
  *  `setTimeout(…, 1)` dan ResizeObserver tiruan di atas lewat `setTimeout(…, 0)`. Beberapa ms,
  *  bukan nol, supaya keduanya pasti sudah lewat; bukan angka layout, jadi tidak perlu dituning. */
 const READY_FLUSH_MS = 5
+/** Budget per test for every file that imports this harness. Booting the real App costs ~0.5 s
+ *  alone, ~2 s next to another vitest run, and under a saturated full run it pushed
+ *  AgentNode.incognito past the 5 s default (5.6–9.5 s measured), while every step after the mount
+ *  stayed under 0.25 s. The default is the mount's budget, not the tests'; 20 s covers the worst
+ *  measured case twice over. Set at import time: vitest 5 applies it to the importing file only. */
+const FULL_CANVAS_TIMEOUT_MS = 20_000
+vi.setConfig({ testTimeout: FULL_CANVAS_TIMEOUT_MS })
 
 let domInstalled = false
 

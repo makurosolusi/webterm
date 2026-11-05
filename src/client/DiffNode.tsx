@@ -8,8 +8,10 @@
 // notes, and its turn ending (`waiting`/`done`) refreshes the diff.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Handle, NodeResizer, Position, useReactFlow, useStore, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, useStore, type NodeProps } from '@xyflow/react'
+import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { GitChange, GitChangeStatus, GitFileDiff } from '../server/gitDiff.types'
 import { DIFF_NOTE_BODY_MAX, DIFF_NOTES_MAX, validDiffNotes, type AgentStatus } from '../shared/workspace'
 import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
@@ -132,10 +134,12 @@ function DiffNode({ id, data, selected }: NodeProps) {
     return null
   }
   const hunks = file?.hunks.filter((h) => !kept.has(h.id)) ?? []
+  // The click's own refusal doubles as the hint, so the tooltip says what the click will do.
+  const sendTip = sendRefusal(agent?.id ?? null, notes.length) ?? 'Send all notes to the wired agent as one message'
 
   return (
     <>
-      <NodeResizer isVisible={!!selected} minWidth={420} minHeight={260} color={swatch} />
+      <NodeLayoutResizer minWidth={420} minHeight={260} color={swatch} />
       <div className={`term-node diff-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
         <div className="node-header">
           <span className="node-title diff-node__title" title={root}>
@@ -144,12 +148,19 @@ function DiffNode({ id, data, selected }: NodeProps) {
             <span className="diff-node__desc">{root ? `${total} file${total === 1 ? '' : 's'}` : ''}</span>
           </span>
           <span className="diff-node__spacer" />
+          <NodeResizeToggle />
           <ToolbarContainer className="nodrag diff-node__actions">
-            <VscodeButton secondary title={agent ? 'Send all notes to the wired agent as one message' : 'Wire an agent to send notes'} onClick={() => void onSend()}>
-              Send to agent ({notes.length})
-            </VscodeButton>
-            <ToolbarButton label="Refresh" title="Refresh" onClick={refresh}><span className="codicon codicon-refresh" aria-hidden="true" /></ToolbarButton>
-            <ToolbarButton label="Close" title="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
+            <IconTooltip label={sendTip}>
+              <VscodeButton secondary onClick={() => void onSend()}>
+                Send to agent ({notes.length})
+              </VscodeButton>
+            </IconTooltip>
+            <IconTooltip label="Reload the changed files and the open diff">
+              <ToolbarButton label="Refresh" onClick={refresh}><span className="codicon codicon-refresh" aria-hidden="true" /></ToolbarButton>
+            </IconTooltip>
+            <IconTooltip label="Remove this node from the canvas">
+              <ToolbarButton label="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
+            </IconTooltip>
           </ToolbarContainer>
         </div>
         {msg && <div className="diff-node__msg nodrag" role="status">{msg}</div>}
@@ -163,11 +174,13 @@ function DiffNode({ id, data, selected }: NodeProps) {
                 {files.length === 0 && <li className="diff-node__notice">No uncommitted changes.</li>}
                 {files.map((f) => (
                   <li key={f.path}>
-                    <button type="button" className={`diff-node__file${f.path === active ? ' diff-node__file--active' : ''}`} title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path} onClick={() => open(f.path)}>
-                      <span className={`diff-node__status diff-node__status--${f.status}`}>{STATUS_LETTER[f.status]}</span>
-                      <span className="diff-node__path">{f.path}</span>
-                      {f.sensitive && <span className="codicon codicon-lock" aria-label="Secret file, contents hidden" />}
-                    </button>
+                    <IconTooltip label={`Show changes in ${f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}`} side="right">
+                      <button type="button" className={`diff-node__file${f.path === active ? ' diff-node__file--active' : ''}`} onClick={() => open(f.path)}>
+                        <span className={`diff-node__status diff-node__status--${f.status}`}>{STATUS_LETTER[f.status]}</span>
+                        <span className="diff-node__path">{f.path}</span>
+                        {f.sensitive && <span className="codicon codicon-lock" aria-label="Secret file, contents hidden" />}
+                      </button>
+                    </IconTooltip>
                   </li>
                 ))}
                 {nextOffset !== null && <li><VscodeButton secondary onClick={() => void loadList(nextOffset)}>Load more</VscodeButton></li>}
@@ -181,8 +194,14 @@ function DiffNode({ id, data, selected }: NodeProps) {
                     {hunks.map((h) => (
                       <li key={h.id} className="diff-node__hunk">
                         <code>{h.header}</code>
-                        <VscodeButton secondary title="Keep this change (hide it from the review)" onClick={() => setKept((s) => new Set(s).add(h.id))}>Keep</VscodeButton>
-                        {file?.undoable && <VscodeButton secondary title="Undo this change in the working tree" onClick={() => void onUndo(h.id, h.header)}>Undo</VscodeButton>}
+                        <IconTooltip label="Keep this change (hide it from the review)">
+                          <VscodeButton secondary onClick={() => setKept((s) => new Set(s).add(h.id))}>Keep</VscodeButton>
+                        </IconTooltip>
+                        {file?.undoable && (
+                          <IconTooltip label="Undo this change in the working tree">
+                            <VscodeButton secondary onClick={() => void onUndo(h.id, h.header)}>Undo</VscodeButton>
+                          </IconTooltip>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -198,7 +217,9 @@ function DiffNode({ id, data, selected }: NodeProps) {
                     {notes.map((n) => (
                       <li key={n.id}>
                         <span className="diff-node__note-loc">{n.path}:{n.line}</span> {n.body}
-                        <button type="button" className="diff-node__note-del" aria-label="Remove note" onClick={() => setNotes((ns) => ns.filter((x) => x.id !== n.id))}>×</button>
+                        <IconTooltip label="Remove this note">
+                          <button type="button" className="diff-node__note-del" aria-label="Remove note" onClick={() => setNotes((ns) => ns.filter((x) => x.id !== n.id))}>×</button>
+                        </IconTooltip>
                       </li>
                     ))}
                   </ul>

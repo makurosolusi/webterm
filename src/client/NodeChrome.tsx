@@ -8,6 +8,7 @@ import NodeToolbar from './NodeToolbar'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
 import { useNodeFullscreen } from './useNodeFullscreen'
+import { NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 
 export interface NodeChromeProps {
   title: string
@@ -168,6 +169,8 @@ export default function NodeChrome(props: NodeChromeProps) {
 
       {props.pill}
       {props.extraHeader}
+
+      {!props.collapsed && <NodeResizeToggle />}
 
       <NodeToolbar
         onRefresh={props.onRefresh}

@@ -6,6 +6,7 @@
 // gates) keep their APPROVE-phrase dialog in the sections below and are not repeated here.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { APPROVAL_PATH, inboxErrorMessage, isAbortError } from './inboxApi'
@@ -137,7 +138,11 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
               {can('deny') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(item.id, { type: 'deny' })}>Deny</Button>}
               {can('edit') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDraft({ id: item.id, mode: 'edit', text: JSON.stringify(item.args ?? null, null, 2) })}>Edit</Button>}
               {can('reply') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDraft({ id: item.id, mode: 'reply', text: '' })}>Reply</Button>}
-              {can('always') && <Button size="sm" variant="secondary" disabled={busy} title="Saves a permanent rule (only from this window, never from Telegram)" onClick={() => act(item.id, { type: 'always' })}>Always allow this pattern</Button>}
+              {can('always') && (
+                <IconTooltip label="Saves a permanent rule (only from this window, never from Telegram)" disabled={busy} disabledReason="another action is running">
+                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => act(item.id, { type: 'always' })}>Always allow this pattern</Button>
+                </IconTooltip>
+              )}
               {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} for 1 hour`} onClick={() => act(item.id, { type: 'snooze', until: snoozeUntil('1h', now()) })}>Snooze 1h</Button>}
               {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} until tomorrow`} onClick={() => act(item.id, { type: 'snooze', until: snoozeUntil('tomorrow', now()) })}>Tomorrow</Button>}
               {can('ignore') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(item.id, { type: 'ignore' })}>{item.kind === 'notify' ? 'Dismiss' : 'Ignore'}</Button>}

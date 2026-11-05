@@ -6,6 +6,7 @@ import { nodeTypes } from './nodeTypes'
 import McpAppsWatcher from './mcpapps/McpAppsWatcher'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
 import { useNodeActions } from './nodeActions'
+import { useNodeResizeWiring } from './nodeResize/useNodeResizeWiring'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
@@ -36,6 +37,7 @@ export default function BoardCanvas({
 }: CanvasProps) {
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
   const { openBrowserAt } = useNodeActions()
+  useNodeResizeWiring(locked, rf)
   // Drop di atas node (mis. xterm) milik node itu, bukan pemicu node browser baru.
   const overNode = (e: DragEvent) => (e.target as HTMLElement).closest('.react-flow__node') !== null
   const onDragOver = (e: DragEvent) => {

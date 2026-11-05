@@ -130,7 +130,13 @@ describe('SessionsPanel sebagai VS Code tree', () => {
       <SessionsPanel {...baseProps()} onCloseSession={onCloseSession} onFocusNode={onFocusNode} />,
     )
 
-    fireEvent.click(screen.getByLabelText('End session Build'))
+    const end = screen.getByLabelText('End session Build')
+    expect(end.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(end)
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('End session')
+    fireEvent.blur(end)
+    fireEvent.click(end)
 
     expect(onCloseSession).toHaveBeenCalledWith('t1')
     expect(onFocusNode).not.toHaveBeenCalled()

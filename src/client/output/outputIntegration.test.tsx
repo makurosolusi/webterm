@@ -7,7 +7,7 @@ import { VscodeStatusBar } from '@/components/vscode/vscodeStatusBar'
 import CanvasToolbar from '../CanvasToolbar'
 import HelpOverlay from '../HelpOverlay'
 import WorkspaceBar from '../WorkspaceBar'
-import { terminalKeyAction } from '../terminalKeys'
+import { isMacPlatform, terminalKeyAction } from '../terminalKeys'
 import type { TerminalKeyEvent } from '../terminalKeys'
 import { isOutputToggleChord, outputShortcutLabel } from './outputChord'
 import {
@@ -94,7 +94,10 @@ describe('status bar items', () => {
     act(() => publishOutputCounts({ error: 3, warn: 1 }))
     const errors = screen.getByRole('button', { name: /3 errors/ })
     expect(errors.textContent).toContain('3')
-    expect(errors.getAttribute('title')).toMatch(/^Toggle Output \(/)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(errors)
+    expect(screen.getByRole('tooltip').textContent).toBe(`3 errors in the log — toggle Output ${outputShortcutLabel(isMacPlatform())}`)
+    fireEvent.blur(errors)
     expect(screen.getByRole('button', { name: /1 warning$/ }).textContent).toContain('1')
     fireEvent.click(errors)
     expect(screen.getByTestId('open').textContent).toBe('true')

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
 export interface VscodeBreadcrumbSegment {
@@ -93,19 +94,20 @@ export function VscodeBreadcrumbs({
       <ol className="vscode-breadcrumbs__list">
         {hidden.length > 0 ? (
           <li className="vscode-breadcrumbs__item vscode-breadcrumbs__item--overflow" role="none">
-            <button
-              ref={triggerRef}
-              type="button"
-              data-slot="vscode-breadcrumbs-overflow"
-              className="vscode-breadcrumbs__overflow"
-              aria-label={overflowLabel}
-              title={overflowLabel}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              …
-            </button>
+            <IconTooltip label={overflowLabel}>
+              <button
+                ref={triggerRef}
+                type="button"
+                data-slot="vscode-breadcrumbs-overflow"
+                className="vscode-breadcrumbs__overflow"
+                aria-label={overflowLabel}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                …
+              </button>
+            </IconTooltip>
             {menuOpen ? (
               <div
                 className="vscode-breadcrumbs__menu"
@@ -161,22 +163,23 @@ export function VscodeBreadcrumbs({
             <li key={segment.id} className="vscode-breadcrumbs__item" role="none">
               {hidden.length > 0 || index > 0 ? <Chevron /> : null}
               {interactive ? (
-                <button
-                  type="button"
-                  data-slot="vscode-breadcrumbs-segment"
-                  className="vscode-breadcrumbs__segment"
-                  data-current={last ? 'true' : 'false'}
-                  aria-current={last ? 'page' : undefined}
-                  title={segment.title ?? segment.label}
-                  onClick={() => select(segment)}
-                >
-                  {segment.icon ? (
-                    <span className="vscode-breadcrumbs__icon" aria-hidden="true">
-                      {segment.icon}
-                    </span>
-                  ) : null}
-                  {segment.label}
-                </button>
+                <IconTooltip label={segment.title ?? segment.label}>
+                  <button
+                    type="button"
+                    data-slot="vscode-breadcrumbs-segment"
+                    className="vscode-breadcrumbs__segment"
+                    data-current={last ? 'true' : 'false'}
+                    aria-current={last ? 'page' : undefined}
+                    onClick={() => select(segment)}
+                  >
+                    {segment.icon ? (
+                      <span className="vscode-breadcrumbs__icon" aria-hidden="true">
+                        {segment.icon}
+                      </span>
+                    ) : null}
+                    {segment.label}
+                  </button>
+                </IconTooltip>
               ) : (
                 <span
                   data-slot="vscode-breadcrumbs-segment"

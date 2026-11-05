@@ -123,6 +123,7 @@ button.vscode-status-bar__item:hover {
   color: var(--vscode-statusBarItem-hoverForeground);
 }
 button.vscode-status-bar__item:active { background: var(--vscode-statusBarItem-activeBackground); }
+button.vscode-status-bar__item:disabled { opacity: 0.4; background: transparent; }
 button.vscode-status-bar__item:focus-visible {
   outline: 1px solid var(--vscode-statusBarItem-focusBorder); outline-offset: -1px;
 }

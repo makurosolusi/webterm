@@ -10,6 +10,7 @@
 // menyembunyikan dirinya sendiri ketika label + hint tidak cocok. Itu membuat filter bekerja
 // untuk semua section sekaligus tanpa daftar indeks terpisah yang bisa basi.
 import { createContext, useContext, type ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Settings } from '../shared/settings'
@@ -101,15 +102,16 @@ export function Field({
         <Label className="st-label" htmlFor={htmlFor}>{highlightMatches(label, query)}</Label>
         {modified ? <span className="st-modified">(Modified)</span> : null}
         {modified && setting && onChange ? (
-          <button
-            type="button"
-            className="st-gear"
-            title="Reset Setting"
-            aria-label={`Reset Setting: ${label}`}
-            onClick={() => onChange(resetPatch(setting))}
-          >
-            <span className="codicon codicon-gear" aria-hidden="true" />
-          </button>
+          <IconTooltip label="Reset Setting">
+            <button
+              type="button"
+              className="st-gear"
+              aria-label={`Reset Setting: ${label}`}
+              onClick={() => onChange(resetPatch(setting))}
+            >
+              <span className="codicon codicon-gear" aria-hidden="true" />
+            </button>
+          </IconTooltip>
         ) : null}
       </div>
       {inline ? (

@@ -6,7 +6,8 @@
 //
 // TANPA FILE WATCHER di sini: refresh `⟳` manual menaikkan `version`; watcher adalah slot sendiri.
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
+import { useReactFlow, type NodeProps } from '@xyflow/react'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import { Textfield } from '@/vscode/register'
 import type { FileMeta } from '../shared/fsContract'
 import type { Comment, ViewOpts } from '../shared/workspace'
@@ -185,7 +186,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
   return (
     <>
-      <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
+      <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div
         className={termNodeClass({ selected: !!selected, collapsed })}
         style={{ '--node-swatch': swatch } as CSSProperties}

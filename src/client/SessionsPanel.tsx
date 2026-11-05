@@ -7,6 +7,7 @@
 // mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { Tree, VscTreeSelectEvent } from './vscode/register'
 import { VscodeMenu } from './components/vscode/vscodeMenu'
 import type { RegisterTreeTarget, TreeTarget } from './SessionRow'
@@ -219,24 +220,26 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         <span className="sessions-sidebar__count">{rowCount}</span>
         {/* Aksi view seperti toolbar judul VS Code: tampil saat view di-hover/di-fokus. */}
         <div className="sessions-sidebar__head-actions" role="toolbar" aria-label="Sessions actions">
-          <button
-            type="button"
-            className="ss-action"
-            aria-label="Collapse all"
-            title="Collapse All"
-            onClick={collapseAll}
-          >
-            <span className="codicon codicon-collapse-all" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="ss-action"
-            aria-label="Hide sessions panel"
-            title="Hide"
-            onClick={onClose}
-          >
-            <span className="codicon codicon-close" aria-hidden />
-          </button>
+          <IconTooltip label="Collapse all groups">
+            <button
+              type="button"
+              className="ss-action"
+              aria-label="Collapse all"
+              onClick={collapseAll}
+            >
+              <span className="codicon codicon-collapse-all" aria-hidden />
+            </button>
+          </IconTooltip>
+          <IconTooltip label="Hide sessions panel" commandId="view.sessions">
+            <button
+              type="button"
+              className="ss-action"
+              aria-label="Hide sessions panel"
+              onClick={onClose}
+            >
+              <span className="codicon codicon-close" aria-hidden />
+            </button>
+          </IconTooltip>
         </div>
       </div>
 

@@ -31,11 +31,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); setLspPr
 
 const agents = [{ id: 'a1', type: 'agent', position: { x: 0, y: 0 }, data: { title: 'claude' } }] as Node[]
 
-function Harness({ add, focus, onItems }: { add: (...a: unknown[]) => void; focus: (id: string) => void; onItems: (label: string) => void }) {
+function Harness({ add, focus, onItems, nodes = agents }: { add: (...a: unknown[]) => void; focus: (id: string) => void; onItems: (label: string) => void; nodes?: Node[] }) {
   const p = useProblems('ws1')
   useEffect(() => { p.setOpen(true) }, [])
   useEffect(() => { onItems(p.statusItems[0]?.label ?? '') }, [p.statusItems])
-  return <ProblemsPanel problems={p} root="/w" nodes={agents} nodesRef={{ current: agents }} addFlowNode={add} onFocus={focus} />
+  return <ProblemsPanel problems={p} root="/w" nodes={nodes} nodesRef={{ current: nodes }} addFlowNode={add} onFocus={focus} />
 }
 
 describe('ProblemsPanel', () => {
@@ -78,5 +78,19 @@ describe('ProblemsPanel', () => {
     render(<Harness add={() => {}} focus={() => {}} onItems={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Stop watching' }))
     await waitFor(() => expect(calls.some((c) => c.url.startsWith('/api/problems/stop'))).toBe(true))
+  })
+
+  it('panel actions and rows show a visible tooltip; a disabled Fix says why', async () => {
+    stubFetch()
+    render(<Harness add={() => {}} focus={() => {}} onItems={() => {}} nodes={[]} />)
+    const row = await screen.findByRole('button', { name: /Type mismatch/ })
+    const tip = (el: Element) => { fireEvent.keyDown(document, { key: 'Tab' }); fireEvent.focus(el); const t = document.querySelector('[role="tooltip"]')?.textContent; fireEvent.blur(el); return t }
+    expect(tip(row)).toBe('Open src/a.ts:12:5')
+    const stop = screen.getByRole('button', { name: 'Stop watching' })
+    expect(stop.hasAttribute('title')).toBe(false)
+    expect(tip(stop)).toBe('Watching for problems. Click to stop watching')
+    const fix = screen.getByRole('button', { name: 'Fix with agent' }) as HTMLButtonElement
+    expect(fix.disabled).toBe(true)
+    expect(tip(fix.parentElement!)).toBe('Fix with agent (add an agent node to fix with)')
   })
 })

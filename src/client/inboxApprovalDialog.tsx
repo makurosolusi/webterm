@@ -6,6 +6,7 @@
 import { useEffect } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { arrangeDialogButtons } from '@/components/vscode/vscodeDialogButtons'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import type { ApprovalChallenge } from './inboxApi'
 import './inboxApprovalDialog.css'
@@ -114,10 +115,12 @@ export function InboxApprovalDialog(props: InboxApprovalDialogProps): React.JSX.
       >
         <header className="approval-dialog__head">
           <AlertDialogTitle className="approval-dialog__title" id={`${uid}-dialog-title`}>{title}</AlertDialogTitle>
-          <button type="button" className="approval-dialog__close" aria-label="Close approval dialog"
-            disabled={pending} onClick={props.onClose}>
-            <span className="codicon codicon-close" aria-hidden="true" />
-          </button>
+          <IconTooltip label="Close approval dialog" disabled={pending} disabledReason="a decision is being sent">
+            <button type="button" className="approval-dialog__close" aria-label="Close approval dialog"
+              disabled={pending} onClick={props.onClose}>
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </button>
+          </IconTooltip>
         </header>
 
         <AlertDialogDescription className="approval-dialog__desc" id={`${uid}-dialog-desc`}>

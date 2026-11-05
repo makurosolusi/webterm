@@ -3,6 +3,7 @@
 // the server's `lastEventSeq` as the cursor; deltas are flushed per animation frame so a burst of
 // tokens causes one render, not one per token.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import ChatComposer from './chatComposer'
 import ChatMessages from './chatMessages'
 import type {
@@ -177,10 +178,12 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         <div className="chat-error" role="alert">
           <span className="codicon codicon-error" aria-hidden="true" />
           <span>{error}</span>
-          <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
-            onClick={() => dispatch({ type: 'error', error: null })}>
-            <span className="codicon codicon-close" aria-hidden="true" />
-          </button>
+          <IconTooltip label="Dismiss error">
+            <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
+              onClick={() => dispatch({ type: 'error', error: null })}>
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </button>
+          </IconTooltip>
         </div>
       )}
 

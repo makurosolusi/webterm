@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { usePortalContainer } from './portalContainer'
 import './vscode-notification.css'
 
@@ -112,15 +113,17 @@ function VscodeNotificationItem({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          className="vscode-notification__close"
-          data-slot="vscode-notification-close"
-          aria-label="Close notification"
-          onClick={onClose}
-        >
-          <span className="codicon codicon-close" aria-hidden="true" />
-        </button>
+        <IconTooltip label="Close notification">
+          <button
+            type="button"
+            className="vscode-notification__close"
+            data-slot="vscode-notification-close"
+            aria-label="Close notification"
+            onClick={onClose}
+          >
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </button>
+        </IconTooltip>
       </div>
       {hasActions && (
         <div className="vscode-notification__actions" data-slot="vscode-notification-actions">

@@ -13,6 +13,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import SessionsPanel from './SessionsPanel'
 import type { SessionsPanelProps } from './SessionsPanel'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 const props: SessionsPanelProps = {
   open: true,
   onClose: () => {},
@@ -47,6 +56,10 @@ describe('SessionsPanel terkontrol', () => {
     let closed = 0
     render(<SessionsPanel {...props} onClose={() => (closed += 1)} />)
 
+    expect(tipOf(screen.getByLabelText('Hide sessions panel'))).toBe('Hide sessions panel')
+    expect(tipOf(screen.getByLabelText('Collapse all'))).toBe('Collapse all groups')
+    fireEvent.change(screen.getByLabelText('Filter sessions'), { target: { value: 'x' } })
+    expect(tipOf(screen.getByLabelText('Clear filter'))).toBe('Clear filter Esc')
     fireEvent.click(screen.getByLabelText('Hide sessions panel'))
 
     expect(closed).toBe(1)

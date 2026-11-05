@@ -45,7 +45,11 @@ describe('CanvasToolbar chrome', () => {
       'codicon codicon-settings-gear',
       'codicon codicon-question',
     ])
-    expect(screen.getByRole('button', { name: 'Command palette' }).getAttribute('title')).toBe('Command palette (⌘K)')
+    const palette = screen.getByRole('button', { name: 'Command palette' })
+    expect(palette.hasAttribute('title')).toBe(false)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(palette)
+    expect(screen.getByRole('tooltip').textContent).toBe('Command palette ⌘K')
   })
 })
 
@@ -81,9 +85,9 @@ describe('CanvasToolbar palette', () => {
 
     expect(screen.getByRole('button', { name: 'Command palette' }).textContent).toContain('⌘K')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Explorer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New Files node' }))
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Help' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }))
     expect(props.onOpenExplorer).toHaveBeenCalledTimes(1)
     expect(props.onOpenSettings).toHaveBeenCalledTimes(1)
     expect(props.onOpenHelp).toHaveBeenCalledTimes(1)

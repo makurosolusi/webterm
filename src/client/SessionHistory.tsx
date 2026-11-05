@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './SessionHistory.css'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { placeNode, type ReopenDeps } from './closedHistory'
 import { fetchSessionPage, type AgentSession } from './SessionHistory.api'
@@ -92,9 +93,9 @@ export default function SessionHistory({ open, activeWs, workspaces, launch, dep
           {expanded && !noFolder && <span className="agent-history__count">{items.length} shown · {total}</span>}
         </Button>
         {expanded && (
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Refresh agent history" title="Refresh" onClick={() => void load(0, true)}>
+          <IconButton type="button" size="icon-sm" label="Refresh agent history" onClick={() => void load(0, true)}>
             <span className="codicon codicon-refresh" aria-hidden />
-          </Button>
+          </IconButton>
         )}
       </div>
       {expanded && (

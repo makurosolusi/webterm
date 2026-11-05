@@ -8,6 +8,7 @@ import { BRIEF_CATEGORIES, briefHeading, type BriefLine, type BriefTarget } from
 import type { BriefResponse } from '../server/brief/brief.service'
 import type { BriefNarrative } from '../server/brief/brief.narrative'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useRegisterCommands, type Command } from './commandRegistry'
 import { request } from './inboxTransport'
 import { ContinueSection, useContinue } from './MorningBriefContinue'
@@ -82,7 +83,7 @@ export default function MorningBrief(props: MorningBriefProps): React.JSX.Elemen
       <header className="morning-brief__head">
         <strong>Morning brief</strong>
         <span className="morning-brief__since">since {sinceText(brief.since)}</span>
-        <Button variant="ghost" size="icon-xs" className="morning-brief__close" onClick={close} aria-label="Dismiss morning brief" title="Dismiss">×</Button>
+        <IconButton size="icon-xs" className="morning-brief__close" onClick={close} label="Dismiss morning brief">×</IconButton>
       </header>
       {narrative && <p className="morning-brief__narrative" data-testid="brief-narrative">{narrative}</p>}
       {brief.lines.length === 0 && <p className="morning-brief__empty">Nothing new since you were last here.</p>}

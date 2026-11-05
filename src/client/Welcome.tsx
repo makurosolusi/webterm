@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { sessionLabel } from './sessionList'
@@ -15,19 +16,16 @@ interface Props {
 }
 
 function StartLink({ icon, label, onClick, disabled }: { icon: string; label: string; onClick?: () => void; disabled?: boolean }) {
+  const link = (
+    <Button type="button" variant="link" className="welcome__link" disabled={disabled} onClick={disabled ? undefined : onClick}>
+      <span className={`codicon codicon-${icon}`} aria-hidden />
+      <span>{label}</span>
+    </Button>
+  )
+  // The text already names an enabled link; only a disabled one needs a hint (why).
   return (
     <li>
-      <Button
-        type="button"
-        variant="link"
-        className="welcome__link"
-        disabled={disabled}
-        onClick={disabled ? undefined : onClick}
-        title={disabled ? 'Not available in webterm yet' : undefined}
-      >
-        <span className={`codicon codicon-${icon}`} aria-hidden />
-        <span>{label}</span>
-      </Button>
+      {disabled ? <IconTooltip label={label} disabled disabledReason="not available in webterm yet">{link}</IconTooltip> : link}
     </li>
   )
 }
@@ -81,16 +79,17 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
               <ul className="welcome__list">
                 {closed.map((e) => (
                   <li key={e.node.id}>
-                    <Button
-                      type="button"
-                      variant="link"
-                      className="welcome__link"
-                      title={e.node.cwd ?? ''}
-                      onClick={() => onReopen?.(e.node.id)}
-                    >
-                      <span>{sessionLabel(e.node)}</span>
-                      <span className="welcome__path">{e.workspaceName}</span>
-                    </Button>
+                    <IconTooltip label={e.node.cwd ? `Reopen this session in ${e.node.cwd}` : 'Reopen this session'}>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="welcome__link"
+                        onClick={() => onReopen?.(e.node.id)}
+                      >
+                        <span>{sessionLabel(e.node)}</span>
+                        <span className="welcome__path">{e.workspaceName}</span>
+                      </Button>
+                    </IconTooltip>
                   </li>
                 ))}
               </ul>

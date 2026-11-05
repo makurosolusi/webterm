@@ -1,0 +1,70 @@
+// The only place NodeResizer is used (nodeResizePolicy.test.ts enforces it). Handles show only
+// while the node is in resize mode, which the user enters on purpose with NodeResizeToggle or the
+// "Node: Resize Focused Node" command; selecting or clicking a node never shows them.
+import { useEffect } from 'react'
+import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
+import { IconButton } from '@/components/ui/icon-button'
+import { RESIZE_COMMAND_ID, exitNodeResize, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
+
+const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
+
+const nodeIdOf = (t: EventTarget | null): string | null | undefined =>
+  t instanceof Element ? t.closest('.react-flow__node')?.getAttribute('data-id') : undefined
+
+export interface NodeLayoutResizerProps extends Omit<NodeResizerProps, 'isVisible' | 'nodeId'> {
+  /** A collapsed node cannot be resized; collapsing ends resize mode. */
+  collapsed?: boolean
+}
+
+/** NodeResizer shown only in this node's resize mode; ends the mode on Esc, outside press, typing, collapse or removal. */
+export function NodeLayoutResizer({ collapsed, ...props }: NodeLayoutResizerProps) {
+  const id = useNodeId()
+  const { editingId } = useNodeResizeState()
+  const editing = id !== null && editingId === id && !collapsed
+
+  useEffect(() => { if (collapsed && id) exitNodeResize(id) }, [collapsed, id])
+  // Unmount = the node was deleted (or left the canvas): its mode must not outlive it.
+  useEffect(() => () => { if (id) exitNodeResize(id) }, [id])
+
+  useEffect(() => {
+    if (!editing || !id) return
+    // Capture phase: surfaces like xterm or Monaco stop their keys before they bubble.
+    // A press on the handles is inside the node, so dragging them keeps the mode.
+    const onPointerDown = (e: PointerEvent): void => { if (nodeIdOf(e.target) !== id) exitNodeResize(id) }
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') return exitNodeResize(id)
+      // Chords (the resize shortcut itself, copy) are not typing; neither are header controls.
+      if (e.metaKey || e.ctrlKey || e.altKey || MODIFIER_KEYS.has(e.key)) return
+      if (nodeIdOf(e.target) === id && !(e.target as Element).closest('.node-header')) exitNodeResize(id)
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [editing, id])
+
+  return <NodeResizer isVisible={editing} {...props} />
+}
+
+/** Header toggle for this node's resize mode; disabled while the view is locked. */
+export function NodeResizeToggle() {
+  const id = useNodeId()
+  const { editingId, locked } = useNodeResizeState()
+  const on = id !== null && editingId === id
+  return (
+    <IconButton
+      size="icon-xs"
+      className="nodrag node-resize-toggle"
+      label={on ? 'Done resizing' : 'Resize this node'}
+      commandId={RESIZE_COMMAND_ID}
+      aria-pressed={on}
+      disabled={locked}
+      disabledReason="the view is locked"
+      onClick={() => { if (id) toggleNodeResize(id) }}
+    >
+      <span className="codicon codicon-arrow-both" aria-hidden="true" />
+    </IconButton>
+  )
+}

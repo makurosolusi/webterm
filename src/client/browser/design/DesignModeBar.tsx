@@ -3,6 +3,7 @@
 // browser "select element" and v0/Lovable visual edit; the server half is src/server/browser/design.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { TOKEN_HEADER } from '../../api'
 import { BROWSER_REST_PREFIX } from '../../../shared/browser.contract'
@@ -10,7 +11,9 @@ import { peekToken } from '../../transportToken'
 
 export const DESIGN_TEXT = {
   toggleOn: 'Design Mode',
-  toggleHint: 'Pick elements on the page and send them to the wired agent',
+  toggleHintOff: 'Design Mode is off: click to pick elements on the page and send them to the wired agent',
+  toggleHintOn: 'Design Mode is on: click to turn it off',
+  busyReason: 'request in progress',
   comment: 'Comment for the agent',
   placeholder: 'e.g. make this button bigger',
   send: 'Send to agent',
@@ -72,9 +75,11 @@ export default function DesignModeBar({ nodeId }: { nodeId: string }) {
   return (
     <div className="nodrag flex flex-col gap-1 px-1 pb-1">
       <div className="flex items-center gap-1">
-        <Button size="xs" variant={on ? 'default' : 'ghost'} aria-pressed={on} title={DESIGN_TEXT.toggleHint} disabled={busy} onClick={() => void toggle()}>
-          {icon('inspect')}{DESIGN_TEXT.toggleOn}
-        </Button>
+        <IconTooltip label={on ? DESIGN_TEXT.toggleHintOn : DESIGN_TEXT.toggleHintOff} disabled={busy} disabledReason={DESIGN_TEXT.busyReason}>
+          <Button size="xs" variant={on ? 'default' : 'ghost'} aria-pressed={on} disabled={busy} onClick={() => void toggle()}>
+            {icon('inspect')}{DESIGN_TEXT.toggleOn}
+          </Button>
+        </IconTooltip>
         {on && <span className="text-xs opacity-70">{DESIGN_TEXT.hint}</span>}
       </div>
       {on && (

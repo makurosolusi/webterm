@@ -8,6 +8,15 @@ import type {
 } from './chat/chatTypes'
 import type { StreamFactory } from './chat/chatConversation'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 const GLOBAL: ChatConversation = {
   id: 'central:global', scope: 'global', projectId: null, activeTurnId: null,
   lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10,
@@ -189,7 +198,9 @@ describe('ChatPanel busy + errors', () => {
     })
     renderPanel(client)
 
-    expect((await screen.findByRole('alert')).textContent).toContain('runtime is off')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('runtime is off')
+    expect(tipOf(within(alert).getByRole('button', { name: 'Dismiss error' }))).toBe('Dismiss error')
   })
 
   it('G-17: a failed list shows no Loading or empty copy beside the error, and Retry refetches', async () => {

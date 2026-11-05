@@ -89,7 +89,12 @@ describe('task fence', () => {
 
     const button = await screen.findByRole('button', { name: 'Review Review task' })
     expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(button.getAttribute('title')).toMatch(/no fence/i)
+    expect(button.hasAttribute('title')).toBe(false)
+    const trigger = button.parentElement!
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
+    fireEvent.focus(trigger)
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toMatch(/no fence/i)
+    fireEvent.blur(trigger)
 
     fireEvent.click(button)
     expect(screen.queryByRole('alertdialog')).toBeNull()
