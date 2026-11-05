@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { structuredArgv, SUMMARY_MODEL } from '../../central/context/claudeStructured'
 import { claudeChildEnv } from '../../central/runtime/claudeOptions'
 import type { RunUsage } from './consolidator.store'
+import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 
 const STDOUT_MAX = 512 * 1024
 
@@ -39,7 +40,8 @@ export function parseModelAnswer(stdout: string): ModelAnswer {
 export function createClaudeConsolidatorModel(opts: { bin?: string } = {}): ConsolidatorModel {
   return (req, signal) => new Promise<ModelAnswer>((resolve, reject) => {
     if (signal.aborted) { reject(new Error('consolidator: aborted before start')); return }
-    const child = spawn(opts.bin ?? 'claude', structuredArgv(req.schema), { cwd: tmpdir(), env: claudeChildEnv(process.env), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
+    const [cmd, ...args] = opts.bin ? [opts.bin, ...structuredArgv(req.schema)] : [...centralClaudeLaunch().argv, ...structuredArgv(req.schema)]
+    const child = spawn(cmd as string, args, { cwd: tmpdir(), env: claudeChildEnv(process.env), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
     let out = ''
     const kill = (): void => { child.kill('SIGKILL') }
     signal.addEventListener('abort', kill, { once: true })

@@ -22,11 +22,14 @@ export interface DoctorCheck {
 /** A file webterm generates (shim, skill, house rules): `expected` is what the current build writes. */
 export interface GeneratedFile { label: string; path: string; expected: string }
 export type Ready = { ok: true } | { ok: false; reason: string }
+/** Claude readiness through the default launch profile: `via` names a wrapper (`envman (via profile X)`), `missing` = binary not found. */
+export type ClaudeLaunchReady = { ok: true; via?: string } | { ok: false; reason: string; via?: string; missing?: boolean }
 export type TelegramProbe = { state: 'unset' } | { state: 'ok'; name?: string } | { state: 'rejected' | 'unreachable' }
 
 export interface DoctorDeps {
   onPath(bin: string): boolean
-  claudeReady(): Promise<Ready>
+  /** Staged probe of the default Claude launch profile (wrapper/claude on PATH, then login). */
+  claudeReady(): Promise<ClaudeLaunchReady>
   /** Saved Claude provider (never the secret) + the last Test connection of this process; absent = login. */
   claudeProvider?(): { view: ProviderView; lastTest: { ok: boolean; message: string } | null }
   opencodeBin: string
@@ -53,7 +56,9 @@ const check = (id: DoctorId, title: string, status: DoctorStatus, detail: string
 const PROBES: Record<DoctorId, Probe> = {
   async claude(d) {
     const t = 'Claude Code CLI'
-    if (!d.onPath('claude')) return check('claude', t, 'warn', 'The claude command is not on PATH, so Claude agent nodes and the Claude engine cannot start. Install Claude Code, then check again.')
+    const r = await d.claudeReady()
+    const via = r.via ? ` Launch: ${r.via}.` : ''
+    if (!r.ok && r.missing) return check('claude', t, 'warn', `${r.reason || 'The claude command is not on PATH.'} Claude agent nodes and the Claude engine cannot start until it is found.${via}`)
     // Active Claude provider (Settings › Capabilities): a key/endpoint replaces the login, so it is checked instead.
     const { view: v, lastTest } = d.claudeProvider?.() ?? { view: { mode: 'login', secretSet: false, ready: true }, lastTest: null }
     if (v.mode !== 'login') {
@@ -62,9 +67,8 @@ const PROBES: Record<DoctorId, Probe> = {
       if (!lastTest) return check('claude', t, 'warn', `Installed; provider ${what} is saved but not tested since the server started. Press Test connection in Settings › Capabilities › Claude provider.`)
       return check('claude', t, lastTest.ok ? 'ok' : 'fail', `Installed; provider ${what}: ${lastTest.message}`)
     }
-    const r = await d.claudeReady()
-    return r.ok ? check('claude', t, 'ok', 'Installed and logged in.')
-      : check('claude', t, 'fail', `Installed but not ready (${r.reason}). Open a terminal node, run claude and log in.`)
+    return r.ok ? check('claude', t, 'ok', `Installed and logged in.${via}`)
+      : check('claude', t, 'fail', `Installed but not ready (${r.reason}). Open a terminal node, run claude and log in.${via}`)
   },
   async opencode(d) {
     const t = 'OpenCode CLI'

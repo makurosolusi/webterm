@@ -42,5 +42,7 @@ describe('onPath', () => {
     expect(onPath('opencode', dir)).toBe(false)
     expect(onPath('nope', dir)).toBe(false)
     expect(onPath('claude', '')).toBe(false)
+    expect(onPath(join(dir, 'claude'), '')).toBe(true) // a profile's absolute wrapper path is checked as-is
+    expect(onPath(join(dir, 'opencode'), '')).toBe(false)
   })
 })

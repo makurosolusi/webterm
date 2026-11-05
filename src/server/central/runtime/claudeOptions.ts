@@ -28,7 +28,7 @@ export type ClaudeReady =
 export type ClaudeUnavailableCode = 'claude_not_found' | 'claude_not_authenticated' | 'claude_check_failed'
 
 export interface ClaudeRuntimeOptions {
-  /** Executable; defaults to `claude` on PATH (tests: fake `.mjs`). */
+  /** Bare executable override (tests: fake `.mjs`); default is the Central launch profile's argv. */
   executable?: string
   /** Empty child cwd; defaults to `<dataDir>/central/work` (created 0700). */
   workDir?: string
@@ -48,7 +48,6 @@ export interface ClaudeRuntimeOptions {
   mcp?: CentralMcpLink
 }
 
-export const DEFAULT_CLAUDE_BIN = 'claude'
 export const DEFAULT_KILL_GRACE_MS = 2_000
 export const DEFAULT_WALL_MS = 10 * 60_000
 /** Fallback `--max-turns`; each MCP tool round trip is one more assistant turn. */

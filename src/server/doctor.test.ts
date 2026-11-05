@@ -50,7 +50,7 @@ describe('runDoctor', () => {
 
   it('off states: CLI missing, no bot, unsupported sandbox, ledger off, network down', async () => {
     const c = await byId(deps({
-      onPath: () => false, telegram: async () => ({ state: 'unset' }), sandbox: () => ({ on: false, supported: false }), verifyLedger: () => null,
+      onPath: () => false, claudeReady: async () => ({ ok: false, reason: 'The claude CLI was not found on PATH.', missing: true }), telegram: async () => ({ state: 'unset' }), sandbox: () => ({ on: false, supported: false }), verifyLedger: () => null,
     }))
     expect([c.claude.status, c.opencode.status, c.telegram.status, c.sandbox.status, c.ledger.status]).toEqual(['warn', 'off', 'off', 'off', 'off'])
     expect((await byId(deps({ telegram: async () => ({ state: 'unreachable' }) }))).telegram.status).toBe('warn')
@@ -83,6 +83,17 @@ describe('fixDoctor', () => {
   it('refuses when the check offers no fix (healthy, or not safely fixable)', async () => {
     expect(await fixDoctor('dataDir', deps())).toEqual({ ok: false, error: 'no_fix' })
     expect(await fixDoctor('claude', deps({ claudeReady: async () => ({ ok: false, reason: 'x' }) }))).toEqual({ ok: false, error: 'no_fix' })
+  })
+})
+
+describe('launch profile in the claude check', () => {
+  it('names the wrapper when ready, and reports a missing wrapper as a warning with its reason', async () => {
+    const via = 'envman (via profile Malik)'
+    expect((await byId(deps({ claudeReady: async () => ({ ok: true, via }) }))).claude)
+      .toMatchObject({ status: 'ok', detail: 'Installed and logged in. Launch: envman (via profile Malik).' })
+    const c = (await byId(deps({ claudeReady: async () => ({ ok: false, missing: true, via, reason: 'envman not found on PATH.' }) }))).claude
+    expect(c.status).toBe('warn')
+    expect(c.detail).toMatch(/^envman not found on PATH\. .*Launch: envman \(via profile Malik\)\.$/)
   })
 })
 

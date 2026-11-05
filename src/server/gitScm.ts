@@ -13,6 +13,7 @@ import { ptyEnv } from './ptyShell'
 import { redactSecrets } from './redactSecrets'
 import { sensitivePattern } from './repoHygiene'
 import { binaryOnPath } from './binaryOnPath'
+import { nameGenLine } from './nameGen'
 import { commitMessageProblem, SCM_GROUP_MAX, type ScmArea, type ScmCommitFailure, type ScmEntry, type ScmHunk, type ScmStatus } from './gitScm.types'
 
 const GIT_TIMEOUT_MS = 15_000
@@ -201,9 +202,9 @@ export function cleanCommitMessage(raw: string): string {
 
 export type AskModel = (prompt: string, cwd: string) => Promise<string>
 
-/** Same `claude -p` launch as nameGen.ts (login shell so the user's PATH finds the CLI). */
+/** Same `claude -p` launch as nameGen.ts: the Central launch profile, in a login shell so the user's PATH finds it. */
 export const askClaude: AskModel = async (prompt, cwd) => {
-  const r = await run(process.env.SHELL || 'bash', ['-l', '-c', 'claude -p'], { cwd, input: prompt, timeoutMs: AI_TIMEOUT_MS, env: { ...ptyEnv(process.env, { interactive: false }), TERM: 'xterm-256color' } })
+  const r = await run(process.env.SHELL || 'bash', ['-l', '-c', nameGenLine()], { cwd, input: prompt, timeoutMs: AI_TIMEOUT_MS, env: { ...ptyEnv(process.env, { interactive: false }), TERM: 'xterm-256color' } })
   if (r.code !== 0) throw new ScmError('ai_failed', 502, r.timedOut ? 'claude -p timed out' : 'claude -p failed; is the claude CLI on PATH?')
   return r.stdout
 }
