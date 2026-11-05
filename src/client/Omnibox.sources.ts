@@ -1,7 +1,7 @@
 // What the omnibox lists for a query — pure, so ranking and sources are testable without DOM.
 // Prefixes follow VS Code Quick Open: `>` commands, `%` text search (quick search), none = every
 // source on ⌘K (Orca Jump palette mixes worktrees/tabs/files the same way) or files only on ⌘P.
-import { targetScore, type PaletteTarget } from './CanvasToolbar'
+import { targetScore, type PaletteTarget } from './paletteTargets'
 import { rankWithHistory } from './QuickOpen.recency'
 import type { GrepMatch } from './QuickOpen.grep'
 import type { RecentItem } from './browser.recent'

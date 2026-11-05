@@ -2,7 +2,7 @@
 // browser node, open file in an editor node at a line). App only wires board actions in.
 import { useCallback, useMemo, useState, type MutableRefObject } from 'react'
 import type { Node, XYPosition } from '@xyflow/react'
-import { nodeTargets } from './CanvasToolbar'
+import { nodeTargets } from './paletteTargets'
 import { EDITOR_SIZE, openEditorFor } from './fileOpen'
 import { PLAN_SIZE } from './PlanNode.model'
 import { loadMonaco } from './lazyMonaco'

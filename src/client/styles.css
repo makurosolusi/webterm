@@ -236,6 +236,17 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* As a button (command center opens the omnibox): inherit the bar's font, space icon/name/chord. */
+button.app-titlebar__name {
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.app-titlebar__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app-titlebar__name:empty { display: none; }
 .app-titlebar__name:hover {
   background: var(--vscode-commandCenter-activeBackground);
@@ -331,7 +342,7 @@ body {
 
 /* ---- Clean view: semua chrome runtuh, canvas mengisi seluruh layar ----
    `display: none` pada chrome + baris/kolom grid dinolkan. Tanpa penolakan baris grid, tinggi
-   35px/22px tetap dicadangkan walau isinya disembunyikan. `.dock` dan `.controls-cluster` sudah
+   35px/22px tetap dicadangkan walau isinya disembunyikan. `.dock` sudah
    ditangani `cleanView.css`; yang di sini adalah chrome baru. */
 body.clean-view .app-titlebar,
 body.clean-view .app-tabs,

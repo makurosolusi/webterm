@@ -25,6 +25,8 @@ const ADD_BROWSER_ID = 'browser'
 const ADD_WORKSPACE_ID = 'workspace'
 /** Id of the registered "new diff node" command (commandRegistry.defaults.ts); the Dock runs it. */
 const DIFF_COMMAND_ID = 'diff.new'
+/** Id of the registered "new Files node" command; the Dock runs it like Diff. */
+const FILES_COMMAND_ID = 'files.new'
 const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
@@ -100,10 +102,13 @@ export default function Dock(props: DockProps) {
   // Satu daftar Quick Pick: id baris = kunci pemilihnya, jadi `onAddSelect` tak perlu menutup
   // di atas closure per-baris. Ikon seragam codicon; warna agent tidak dibawa (VS Code tidak mewarnai).
   // Diff runs the app command (only registered while the diff feature is on), so no extra Dock prop.
-  const diffCommand = useCommands().find((c) => c.id === DIFF_COMMAND_ID && c.run)
+  const commands = useCommands()
+  const diffCommand = commands.find((c) => c.id === DIFF_COMMAND_ID && c.run)
+  const filesCommand = commands.find((c) => c.id === FILES_COMMAND_ID && c.run)
   const addItems = useMemo<VscodeQuickPickItem[]>(() => [
     { id: ADD_TERMINAL_ID, label: 'Terminal', icon: codicon('terminal') },
     { id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') },
+    ...(filesCommand ? [{ id: FILES_COMMAND_ID, label: 'Files', icon: codicon('files') }] : []),
     ...(diffCommand ? [{ id: DIFF_COMMAND_ID, label: 'Diff (working changes)', icon: codicon('diff') }] : []),
     ...builtins.map((a) => {
       const cfg = agentConfig(a)
@@ -111,7 +116,7 @@ export default function Dock(props: DockProps) {
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
-  ], [builtins, visibleCustoms, diffCommand])
+  ], [builtins, visibleCustoms, diffCommand, filesCommand])
 
   const onAddSelect = (id: string) => {
     if (id === ADD_TERMINAL_ID) return addTerminal()
@@ -122,6 +127,7 @@ export default function Dock(props: DockProps) {
     }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
     if (id === DIFF_COMMAND_ID) { diffCommand?.run?.(); return setAddOpen(false) }
+    if (id === FILES_COMMAND_ID) { filesCommand?.run?.(); return setAddOpen(false) }
     if (id.startsWith(ADD_BUILTIN_PREFIX)) return addBuiltin(id.slice(ADD_BUILTIN_PREFIX.length) as BuiltinAgentId)
     const custom = visibleCustoms.find((c) => `${ADD_CUSTOM_PREFIX}${c.id}` === id)
     if (custom) addCustom(custom)
@@ -139,7 +145,7 @@ export default function Dock(props: DockProps) {
       : []),
     { id: 'central', label: 'Toggle central control panel', icon: codicon('shield') },
     { id: 'board', label: 'Board', tooltip: 'Toggle Kanban board', icon: codicon('project'), commandId: 'view.board' },
-    { id: 'add', label: 'Add node', tooltip: 'Add node (terminal, browser, agent, workspace)', icon: codicon('add') },
+    { id: 'add', label: 'Add node', tooltip: 'Add node (terminal, browser, files, agent, workspace)', icon: codicon('add') },
   ]
 
   const onActivitySelect = (id: string) => {

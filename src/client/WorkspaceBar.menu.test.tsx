@@ -1,0 +1,57 @@
+/** @vitest-environment jsdom */
+// WorkspaceBar title bar: File > New Files Node and the command center (opens the omnibox,
+// shows its Mod+K chord). These replaced the floating canvas toolbar.
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import './vscode/test-setup'
+import WorkspaceBar, { type WorkspaceBarProps } from './WorkspaceBar'
+import { registerCommands } from './commandRegistry'
+import { isMacPlatform } from './terminalKeys'
+import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
+
+const ws: Workspace = { id: 'w1', name: 'Proj', cwd: '/proj', viewport: DEFAULT_VIEWPORT, nodes: [], bridges: [], updatedAt: 0 } // test-only
+
+let unregister: () => void
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ managed: false }))))
+  unregister = registerCommands([{ id: 'workbench.omnibox', label: 'Go to Anything', defaultKey: 'Mod+K', run: () => {}, hidden: true }])
+})
+afterEach(() => { cleanup(); unregister(); vi.unstubAllGlobals() })
+
+function mount(over: Partial<WorkspaceBarProps> = {}) {
+  render(
+    <WorkspaceBar
+      workspaces={[ws]} activeId="w1" liveActiveNodes={[]} statuses={{}}
+      onSelect={vi.fn()} onNewWorkspace={vi.fn()} onRenameWorkspace={vi.fn()} onDeleteWorkspace={vi.fn()}
+      {...over}
+    />,
+  )
+}
+
+describe('File > New Files Node', () => {
+  it('is in the File menu and runs onNewFiles', () => {
+    const onNewFiles = vi.fn()
+    mount({ onNewFiles })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New Files Node' }))
+    expect(onNewFiles).toHaveBeenCalledTimes(1)
+  })
+
+  it('is absent without an open workspace', () => {
+    mount({ onNewFiles: vi.fn(), workspaces: [], activeId: null, liveActiveNodes: null })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    expect(screen.queryByRole('menuitem', { name: 'New Files Node' })).toBeNull()
+  })
+})
+
+describe('title bar command center', () => {
+  it('shows the Mod+K chord and opens the palette on click', () => {
+    const onOpenPalette = vi.fn()
+    mount({ onOpenPalette })
+    const search = screen.getByRole('button', { name: 'Search' })
+    expect(search.textContent).toContain('Proj')
+    expect(search.querySelector('.kbd')?.textContent).toBe(isMacPlatform() ? '⌘K' : 'Ctrl+K')
+    fireEvent.click(search)
+    expect(onOpenPalette).toHaveBeenCalledTimes(1)
+  })
+})

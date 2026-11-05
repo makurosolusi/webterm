@@ -7,7 +7,7 @@ import type { XYPosition } from '@xyflow/react'
  *
  * BUKAN paranoia. Titik itu sampai ke App sebagai parameter OPSIONAL TERAKHIR `onAddTerminal` /
  * `onAddFiles` — dan kedua fungsi itu juga disambung langsung ke `onClick` sebuah tombol di tempat
- * lain (`CanvasToolbar`), tempat React menitipkan event-nya di parameter pertama yang tersedia.
+ * lain (mis. File > New Files Node), tempat React menitipkan event-nya di parameter pertama yang tersedia.
  * SyntheticEvent tidak punya `.x`/`.y`, jadi tanpa gerbang ini sebuah klik tombol Explorer
  * melahirkan node di posisi NaN: tak terlihat di canvas, tapi tetap ikut tersimpan ke workspace.
  * TypeScript tidak menangkapnya — `(at?: T) => void` assignable ke `() => void`.

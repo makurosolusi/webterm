@@ -2,6 +2,7 @@ import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react
 import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance, OnMoveEnd } from '@xyflow/react'
 import type { DragEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import ContextEdge from './ContextEdge'
+import './canvas-ui.css'
 import { nodeTypes } from './nodeTypes'
 import McpAppsWatcher from './mcpapps/McpAppsWatcher'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'

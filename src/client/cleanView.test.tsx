@@ -203,7 +203,6 @@ describe('cleanView.css — penjaga teks', () => {
       '.dock',              // kolom kontrol kiri
       '.sessions-sidebar',  // panel Sessions
       '.minimap-dock',      // minimap
-      '.controls-cluster',  // toolbar kanan-atas
     ]) {
       expect(hide).toContain(`body.${CLEAN_VIEW_CLASS} ${sel}`)
     }
