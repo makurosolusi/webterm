@@ -7,6 +7,7 @@ import {
   TERMINAL_SCROLLBACK_LINES_MIN,
 } from './terminalConfig'
 import { TERMINAL_THEMES } from './themes'
+import { ProjectsFolderSetting } from './workspaceCreate/ProjectsFolderSetting'
 import {
   NumberField,
   SelectField,
@@ -131,6 +132,7 @@ export function ShellSection({ settings: s, onChange }: P): React.JSX.Element {
       <NumberField setting="scrollbackBytes" id="st-scrollback" label="Server replay buffer" value={s.scrollbackBytes} min={16 * 1024} max={64 * 1024 * 1024} step={16 * 1024} unit="bytes"
         hint="In BYTES: a ring buffer of raw PTY bytes on the server, replayed when the tab reloads. Default 256 KiB (262144)."
         onChange={(v) => onChange({ scrollbackBytes: v })} />
+      <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
     </>
   )
 }

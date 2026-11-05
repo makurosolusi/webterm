@@ -57,6 +57,19 @@ export function redactCredentials(s: string): string {
   return s.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, '$1***@')
 }
 
+/**
+ * `host/owner/repo`, lowercased, for "is this the same repo": https, ssh:// and scp-style forms and
+ * `owner/repo` shorthand all meet here; user, port, trailing `/` and `.git` are dropped. null when
+ * it does not read as a remote URL.
+ */
+export function normalizeRepoUrl(input: string): string | null {
+  const u = expandCloneUrl(input)
+  const m = u.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/\s]+@)?([^/:\s]+)(?::\d+)?\/(.+)$/i) ?? u.match(/^(?:[^@/\s]+@)?([^:/\s]+):(?!\/)(.+)$/)
+  if (!m) return null
+  const path = m[2].replace(/\/+$/, '').replace(/\.git$/i, '').replace(/^\/+/, '')
+  return path ? `${m[1]}/${path}`.toLowerCase() : null
+}
+
 export const AUTH_HINT = 'Authentication required: run `gh auth login` (or set up an SSH key), then try again.'
 const AUTH_FAILURE = /authentication failed|could not read (username|password)|terminal prompts disabled|permission denied \(publickey|repository not found|returned error: 40[13]/i
 

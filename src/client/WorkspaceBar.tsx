@@ -272,7 +272,7 @@ export default function WorkspaceBar({
           onClose={() => setAddMenu(null)}
         />
       )}
-      <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} />
+      <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
 
       {menu && activeGroup && (
         <NodeContextMenu

@@ -1,13 +1,17 @@
 // Client side of /api/workspace-create (server: src/server/workspaceCreate/workspaceCreate.route.ts).
 import { tokenQuery } from '../api'
 import type { CloneProgress } from '../../server/workspaceCreate/cloneUrl'
+import type { Preflight } from '../../server/workspaceCreate/preflight'
 
+export type { Preflight }
 const PREFIX = '/api/workspace-create'
-/** nodeterm remembers the last clone parent under `nodeterm.cloneParent`; both dialogs share ours. */
+/** nodeterm remembers the last clone parent under `nodeterm.cloneParent`; ours is the same idea. */
 export const PARENT_KEY = 'webterm.cloneParent'
+/** Last parent used by New project, kept apart from the clone one. */
+export const PROJECT_PARENT_KEY = 'webterm.projectParent'
 
-const url = (p: string): string => {
-  const q = tokenQuery()
+const url = (p: string, extra: Record<string, string> = {}): string => {
+  const q = [new URLSearchParams(extra).toString(), tokenQuery()].filter(Boolean).join('&')
   return `${PREFIX}${p}${q ? `?${q}` : ''}`
 }
 
@@ -24,19 +28,46 @@ async function failure(res: Response): Promise<CreateRequestError> {
 const post = (p: string, body: unknown): Promise<Response> =>
   fetch(url(p), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
-/** Last parent used, else the server's default (~/projects or home, as nodeterm). */
-export async function initialParent(): Promise<string> {
-  try {
-    const remembered = localStorage.getItem(PARENT_KEY)
-    if (remembered) return remembered
-  } catch { /* storage blocked: fall through to the server default */ }
-  const res = await fetch(url('/defaults'))
+async function postJson<T>(p: string, body: unknown): Promise<T> {
+  const res = await post(p, body)
   if (!res.ok) throw await failure(res)
-  return ((await res.json()) as { parent: string }).parent
+  return (await res.json()) as T
 }
 
-export function rememberParent(parent: string): void {
-  try { localStorage.setItem(PARENT_KEY, parent) } catch { /* not remembered: next open uses the default */ }
+export interface Defaults { parent: string; projectsFolder: string; builtin: string }
+
+/** Server defaults; `remembered` comes back as `parent` only while it is still a folder. */
+export async function fetchDefaults(remembered = ''): Promise<Defaults> {
+  const res = await fetch(url('/defaults', remembered ? { remembered } : {}))
+  if (!res.ok) throw await failure(res)
+  return (await res.json()) as Defaults
+}
+
+function recall(key: string): string {
+  try { return localStorage.getItem(key) ?? '' } catch { return '' /* storage blocked: no suggestion */ }
+}
+
+/** Last parent used (a suggestion the server checks still exists), else the default projects folder. */
+export async function initialParent(key: string = PARENT_KEY): Promise<string> {
+  return (await fetchDefaults(recall(key))).parent
+}
+
+export function rememberParent(parent: string, key: string = PARENT_KEY): void {
+  try { localStorage.setItem(key, parent) } catch { /* not remembered: next open uses the default */ }
+}
+
+/** Target, name taken (+ next free), wrong-place warnings and, with `url`, an existing clone. */
+export function preflight(body: { parent: string; name: string; url?: string }): Promise<Preflight> {
+  return postJson('/check', body)
+}
+
+/** Resolves when `path` may be the default projects folder; rejects with the reason otherwise. */
+export async function checkProjectsFolder(path: string): Promise<void> {
+  await postJson('/projects-folder/check', { path })
+}
+
+export async function revealPath(path: string): Promise<void> {
+  await postJson('/reveal', { path })
 }
 
 /** Runs the clone, feeding NDJSON progress lines to `onProgress`; resolves the cloned path. */
@@ -65,7 +96,5 @@ export async function cancelClone(): Promise<void> {
 }
 
 export async function createProject(body: { parent: string; name: string; gitInit: boolean }): Promise<string> {
-  const res = await post('/project', body)
-  if (!res.ok) throw await failure(res)
-  return ((await res.json()) as { path: string }).path
+  return (await postJson<{ path: string }>('/project', body)).path
 }

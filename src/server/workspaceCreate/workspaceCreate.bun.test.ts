@@ -6,7 +6,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CreateError, abortClone, cloneRepo, createProject, defaultParent } from './workspaceCreate'
+import { CreateError, abortClone, cloneRepo, createProject } from './workspaceCreate'
 import { workspaceCreateRoute } from './workspaceCreate.route'
 
 const TEST_TIMEOUT_MS = 30_000
@@ -103,10 +103,12 @@ test('new project makes the folder with .git and an initial commit; gitInit fals
   expect(existsSync(join(plain, '.git'))).toBe(false)
 }, TEST_TIMEOUT_MS)
 
-test('default parent is ~/projects when it exists, else home (nodeterm)', async () => {
-  expect(await defaultParent(tmp)).toBe(tmp)
-  mkdirSync(join(tmp, 'projects'))
-  expect(await defaultParent(tmp)).toBe(join(tmp, 'projects'))
+test('nothing is created inside the data dir, whatever the dialog said', async () => {
+  const dataDir = join(tmp, 'data')
+  expect(await codeOf(createProject({ parent: dataDir, name: 'p', gitInit: false }, { dataDir }))).toBe('bad_request')
+  expect(await codeOf(cloneRepo({ url: 'o/r', parent: join(dataDir, 'x') }, () => {}, { git: fakeGit, dataDir }))).toBe('bad_request')
+  expect(existsSync(dataDir)).toBe(false)
+  expect(existsSync(argvLog)).toBe(false)
 })
 
 // --- route ---------------------------------------------------------------------------------------
@@ -125,14 +127,21 @@ function fakeRes() {
 }
 const uiReq = (method: string, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', host: 'localhost:8700', origin: 'http://localhost:8700' }) =>
   ({ method, headers }) as unknown as IncomingMessage
+// test-only: injected HOME / data dir under tmp, so the real ~/webterm is never resolved or made.
+const env = () => ({ home: join(tmp, 'home'), dataDir: join(tmp, 'home', '.webterm-server'), configured: '' })
+let revealed: string[][] = []
 const call = async (req: IncomingMessage, path: string, body: unknown = {}) => {
   const { res, r } = fakeRes()
-  const handled = await workspaceCreateRoute(req, res, new URL(path, 'http://x'), async () => JSON.stringify(body), { git: fakeGit, isNodeToken: (t) => t === 'node-tok' })
+  const handled = await workspaceCreateRoute(req, res, new URL(path, 'http://x'), async () => JSON.stringify(body), {
+    git: fakeGit, isNodeToken: (t) => t === 'node-tok', env: async () => env(), workspaces: async () => [],
+    reveal: { platform: 'darwin', spawn: async (c, a) => { revealed.push([c, ...a]) } },
+  })
   return { handled, ...r }
 }
 
 test('agent token gets 403 on every verb; nothing is created', async () => {
-  for (const path of ['/api/workspace-create/defaults', '/api/workspace-create/project', '/api/workspace-create/clone']) {
+  for (const path of ['/api/workspace-create/defaults', '/api/workspace-create/project', '/api/workspace-create/clone',
+    '/api/workspace-create/check', '/api/workspace-create/reveal', '/api/workspace-create/projects-folder/check']) {
     const out = await call(uiReq('POST', { 'x-webterm-token': 'node-tok', 'sec-fetch-site': 'same-origin' }), path, { parent: tmp, name: 'x', url: 'o/x' })
     expect(out.statusCode).toBe(403)
     expect(out.chunks.join('')).toContain('agent_cannot_create_workspaces')
@@ -156,4 +165,34 @@ test('route: clone streams NDJSON ending in done; project answers 201; errors ke
   expect(bad.statusCode).toBe(400)
   const notOurs = await call(uiReq('GET'), '/api/workspaces')
   expect(notOurs.handled).toBe(false)
+}, TEST_TIMEOUT_MS)
+
+test('route: defaults, projects-folder check, preflight and reveal', async () => {
+  const def = await call(uiReq('GET'), `/api/workspace-create/defaults?remembered=${encodeURIComponent(join(tmp, 'gone'))}`)
+  const projects = join(tmp, 'home', 'webterm', 'projects')
+  expect(JSON.parse(def.chunks.join(''))).toEqual({ parent: projects, projectsFolder: projects, builtin: projects })
+  expect(existsSync(projects)).toBe(false) // resolved, not made
+
+  expect((await call(uiReq('POST'), '/api/workspace-create/projects-folder/check', { path: 'rel/dir' })).statusCode).toBe(400)
+  expect((await call(uiReq('POST'), '/api/workspace-create/projects-folder/check', { path: join(tmp, 'home', '.webterm-server', 'p') })).statusCode).toBe(400)
+  expect((await call(uiReq('POST'), '/api/workspace-create/projects-folder/check', { path: join(tmp, 'code') })).statusCode).toBe(200)
+
+  mkdirSync(join(tmp, 'taken'))
+  writeFileSync(join(tmp, 'taken', 'f'), '')
+  const pre = await call(uiReq('POST'), '/api/workspace-create/check', { parent: tmp, name: 'taken' })
+  expect(JSON.parse(pre.chunks.join(''))).toMatchObject({ target: join(tmp, 'taken'), taken: true, suggestion: 'taken-2' })
+  expect((await call(uiReq('POST'), '/api/workspace-create/check', { parent: tmp, name: '../x' })).statusCode).toBe(400)
+
+  // The default folder is made on first real use (mkdir -p of the parent).
+  expect((await call(uiReq('POST'), '/api/workspace-create/project', { parent: projects, name: 'one', gitInit: false })).statusCode).toBe(201)
+  expect(existsSync(join(projects, 'one'))).toBe(true)
+  const inData = await call(uiReq('POST'), '/api/workspace-create/project', { parent: join(tmp, 'home', '.webterm-server'), name: 'x', gitInit: false })
+  expect(inData.statusCode).toBe(400)
+
+  revealed = []
+  expect((await call(uiReq('POST'), '/api/workspace-create/reveal', { path: join(projects, 'one') })).statusCode).toBe(200)
+  expect(revealed).toEqual([['open', '-R', join(projects, 'one')]])
+  expect((await call(uiReq('POST'), '/api/workspace-create/reveal', { path: join(tmp, 'nope') })).statusCode).toBe(400)
+  expect((await call(uiReq('POST'), '/api/workspace-create/reveal', { path: 'relative' })).statusCode).toBe(400)
+  expect(revealed).toHaveLength(1)
 }, TEST_TIMEOUT_MS)

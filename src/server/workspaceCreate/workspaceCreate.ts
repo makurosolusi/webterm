@@ -6,9 +6,9 @@
 // run created. New project copies Orca's repos:create: safe name, absolute parent (made if
 // missing), refuse a non-empty target, `git init` + an empty "Initial commit", undo on failure.
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
-import { mkdir, readdir, rm, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { mkdir, readdir, rm } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { DATA_DIR_MESSAGE, insideDataDir } from './projectsFolder'
 import { promisify } from 'node:util'
 import { cloneErrorMessage, deriveRepoDirName, expandCloneUrl, isSafeFolderName, isValidCloneUrl, parseCloneProgress, type CloneProgress } from './cloneUrl'
 
@@ -22,15 +22,17 @@ export class CreateError extends Error {
 export interface CreateDeps {
   /** git binary; tests point it at a fake script. */
   git?: string
+  /** webterm data dir; tests inject a temp dir. Default: config `dataDir()`. */
+  dataDir?: string
 }
 
 /** No TTY to answer a credential prompt: fail fast instead of hanging (nodeterm git-env.ts). */
 const gitEnv = (): NodeJS.ProcessEnv => ({ ...process.env, GIT_TERMINAL_PROMPT: '0' })
 
-/** ~/projects when it is a folder, else home: nodeterm cloneDefaultParent(). */
-export async function defaultParent(home: string = process.env.HOME || homedir()): Promise<string> {
-  const p = join(home, 'projects')
-  return (await stat(p).then((s) => s.isDirectory(), () => false)) ? p : home
+/** Final guard behind the dialog's blocking warning: nothing is ever created inside the data dir. */
+async function refuseDataDir(target: string, deps: CreateDeps): Promise<void> {
+  const dataDir = deps.dataDir ?? (await import('../config')).dataDir()
+  if (await insideDataDir(target, dataDir)) throw new CreateError('bad_request', DATA_DIR_MESSAGE)
 }
 
 /** `parent/name`, refused unless parent is absolute and the result stays strictly inside it (Orca gzr). */
@@ -78,6 +80,7 @@ export async function cloneRepo(input: CloneInput, onProgress: (p: CloneProgress
   const name = input.name?.trim() || deriveRepoDirName(url)
   if (!name) throw new CreateError('bad_request', 'Could not derive a folder name from that URL.')
   const target = resolveTarget(input.parent, name)
+  await refuseDataDir(target, deps)
   if (activeClone) throw new CreateError('busy', 'A clone is already running.')
   // Reserve the slot before the first await so a second request cannot slip past the guard.
   const rec: ActiveClone = { child: null, aborted: false }
@@ -118,6 +121,7 @@ export interface ProjectInput { parent: string; name: string; gitInit?: boolean 
 /** mkdir parent/name, optionally `git init -b main` + empty initial commit; resolves the path. */
 export async function createProject(input: ProjectInput, deps: CreateDeps = {}): Promise<string> {
   const target = resolveTarget(input.parent, (input.name ?? '').trim())
+  await refuseDataDir(target, deps)
   const created = await claimTarget(input.parent, target)
   if (input.gitInit === false) return target
   const git = (args: string[]) => run(deps.git ?? 'git', args, { cwd: target, env: gitEnv(), timeout: 30_000 })

@@ -13,10 +13,15 @@ export function openWorkspaceCreate(kind: WorkspaceCreateKind): void {
   listeners.forEach((l) => l(kind))
 }
 
-export default function WorkspaceCreateHost({ onOpenFolder, onCreated }: {
+/** "Already cloned → Open": switch to its workspace, or make one for the folder when there is none. */
+export type OpenExisting = (path: string, workspaceId?: string) => void
+
+export default function WorkspaceCreateHost({ onOpenFolder, onCreated, onOpenWorkspace }: {
   onOpenFolder: () => void
   /** A folder now exists at `path`: make it a workspace and open it. */
   onCreated: (path: string) => void
+  /** Switch to an existing workspace. */
+  onOpenWorkspace?: (id: string) => void
 }): React.JSX.Element | null {
   const [open, setOpen] = useState<WorkspaceCreateKind | null>(null)
   // Ref, so a new callback each parent render does not re-register the commands.
@@ -33,7 +38,8 @@ export default function WorkspaceCreateHost({ onOpenFolder, onCreated }: {
   ], [])
   useRegisterCommands(commands)
   const close = () => setOpen(null)
-  if (open === 'clone') return <CloneRepoDialog onClose={close} onCreated={onCreated} />
+  const openExisting: OpenExisting = (path, id) => { if (id && onOpenWorkspace) onOpenWorkspace(id); else onCreated(path) }
+  if (open === 'clone') return <CloneRepoDialog onClose={close} onCreated={onCreated} onOpenExisting={openExisting} />
   if (open === 'project') return <NewProjectDialog onClose={close} onCreated={onCreated} />
   return null
 }
