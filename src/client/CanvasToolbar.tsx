@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import type { PaletteCommand } from './output/outputCommands'
@@ -162,19 +162,21 @@ export default function CanvasToolbar({
   return (
     <>
       <div className="controls-cluster">
-        <Button className="cluster-search" aria-label="Command palette" title={`Command palette (${chip})`} onClick={() => (onOpenPalette ? onOpenPalette() : setPaletteOpen(true))}>
+        <IconButton className="cluster-search" variant="default" size="default" label="Command palette" side="top"
+          commandId={onOpenPalette ? 'workbench.omnibox' : undefined} shortcut={chip}
+          onClick={() => (onOpenPalette ? onOpenPalette() : setPaletteOpen(true))}>
           <span className="codicon codicon-search" aria-hidden />
           <span className="kbd">{chip}</span>
-        </Button>
-        <Button aria-label="Explorer" title="Explorer" onClick={onOpenExplorer}>
+        </IconButton>
+        <IconButton label="New Files node" commandId="files.new" side="top" onClick={onOpenExplorer}>
           <span className="codicon codicon-files" aria-hidden />
-        </Button>
-        <Button aria-label="Settings" title="Settings" onClick={onOpenSettings}>
+        </IconButton>
+        <IconButton label="Settings" commandId="workbench.settings" side="top" onClick={onOpenSettings}>
           <span className="codicon codicon-settings-gear" aria-hidden />
-        </Button>
-        <Button aria-label="Help" title="Help" onClick={onOpenHelp}>
+        </IconButton>
+        <IconButton label="Keyboard shortcuts" commandId="workbench.keybindings" side="top" onClick={onOpenHelp}>
           <span className="codicon codicon-question" aria-hidden />
-        </Button>
+        </IconButton>
       </div>
       {paletteOpen && (
         <VscodeQuickPick

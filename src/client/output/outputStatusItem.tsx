@@ -3,8 +3,6 @@
 // cannot carry both). Both toggle the panel.
 import { useMemo } from 'react'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
-import { isMacPlatform } from '../terminalKeys'
-import { outputShortcutLabel } from './outputChord'
 import { toggleOutput, useOutputPanelState } from './outputCommands'
 
 const codicon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden />
@@ -15,12 +13,13 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
 export function useOutputStatusItems(): VscodeStatusItem[] {
   const { counts } = useOutputPanelState()
   return useMemo<VscodeStatusItem[]>(() => {
-    const tooltip = `Toggle Output (${outputShortcutLabel(isMacPlatform())})`
     return [
-      { id: 'output-errors', label: String(counts.error), icon: codicon('error'), tooltip,
-        ariaLabel: `${tooltip}, ${plural(counts.error, 'error')}`, onClick: toggleOutput },
-      { id: 'output-warnings', label: String(counts.warn), icon: codicon('warning'), tooltip,
-        ariaLabel: `${tooltip}, ${plural(counts.warn, 'warning')}`, onClick: toggleOutput },
+      { id: 'output-errors', label: String(counts.error), icon: codicon('error'), commandId: 'output.toggle.key',
+        tooltip: `${plural(counts.error, 'error')} in the log — toggle Output`,
+        ariaLabel: `Toggle Output, ${plural(counts.error, 'error')}`, onClick: toggleOutput },
+      { id: 'output-warnings', label: String(counts.warn), icon: codicon('warning'), commandId: 'output.toggle.key',
+        tooltip: `${plural(counts.warn, 'warning')} in the log — toggle Output`,
+        ariaLabel: `Toggle Output, ${plural(counts.warn, 'warning')}`, onClick: toggleOutput },
     ]
   }, [counts.error, counts.warn])
 }

@@ -39,6 +39,7 @@ export function problemLocation(p: Pick<Problem, 'file' | 'line' | 'column'>, ro
   return `${rel}:${p.line}:${p.column}`
 }
 
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 const problemKey = (p: LspProblem) => `${p.file}:${p.line}:${p.column}:${p.message}`
 
 /** The run's problems, then live language-server ones it does not already list. */
@@ -78,7 +79,8 @@ export function useProblems(workspaceId: string | null) {
   const warnings = (state?.warnings ?? 0) + extra.filter((p) => p.severity === 'warning').length
   const statusItems = useMemo<VscodeStatusItem[]>(() => (workspaceId ? [{
     id: 'problems', label: `${errors} / ${warnings}`, icon: codicon('issues'), tone: errors > 0 ? 'error' : 'default',
-    tooltip: 'Toggle Problems (type checker and linter)', ariaLabel: `Problems: ${errors} errors, ${warnings} warnings`,
+    tooltip: `${plural(errors, 'error')}, ${plural(warnings, 'warning')} from the type checker and linter — toggle Problems`,
+    ariaLabel: `Problems: ${errors} errors, ${warnings} warnings`,
     onClick: () => setOpen((v) => !v),
   }] : []), [workspaceId, errors, warnings])
   return { workspaceId, state, list, open, setOpen, error, act, statusItems }

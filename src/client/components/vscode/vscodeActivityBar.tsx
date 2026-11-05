@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
 /** One icon rail entry. `active` is owned by the caller through `activeId`. */
@@ -10,6 +11,10 @@ export interface VscodeActivityBarItem {
   /** Count shown bottom-right. Values over 99 render as `99+`. */
   badge?: number
   disabled?: boolean
+  /** ⌘K registry command whose keybinding the tooltip shows. */
+  commandId?: string
+  /** Tooltip text when it should say more than `label` (e.g. the unread count). */
+  tooltip?: string
 }
 
 export interface VscodeActivityBarProps {
@@ -83,31 +88,31 @@ export function VscodeActivityBar({
     const active = item.id === activeId
     const count = badgeText(item.badge)
     return (
-      <button
-        key={item.id}
-        ref={(element) => {
-          buttonRefs.current[index] = element
-        }}
-        type="button"
-        data-slot="vscode-activity-bar-item"
-        data-active={active ? 'true' : 'false'}
-        className="vscode-activity-bar__item"
-        aria-label={count ? `${item.label}, ${count}` : item.label}
-        aria-current={active ? 'page' : undefined}
-        title={item.label}
-        disabled={item.disabled}
-        onClick={() => onSelect(item.id)}
-        onKeyDown={(event) => onItemKeyDown(event, index)}
-      >
-        <span className="vscode-activity-bar__icon" data-slot="vscode-activity-bar-icon" aria-hidden="true">
-          {item.icon}
-        </span>
-        {count ? (
-          <span className="vscode-activity-bar__badge" data-slot="vscode-activity-bar-badge" aria-hidden="true">
-            {count}
+      <IconTooltip key={item.id} label={item.tooltip ?? item.label} commandId={item.commandId} side="right" disabled={item.disabled}>
+        <button
+          ref={(element) => {
+            buttonRefs.current[index] = element
+          }}
+          type="button"
+          data-slot="vscode-activity-bar-item"
+          data-active={active ? 'true' : 'false'}
+          className="vscode-activity-bar__item"
+          aria-label={count ? `${item.label}, ${count}` : item.label}
+          aria-current={active ? 'page' : undefined}
+          disabled={item.disabled}
+          onClick={() => onSelect(item.id)}
+          onKeyDown={(event) => onItemKeyDown(event, index)}
+        >
+          <span className="vscode-activity-bar__icon" data-slot="vscode-activity-bar-icon" aria-hidden="true">
+            {item.icon}
           </span>
-        ) : null}
-      </button>
+          {count ? (
+            <span className="vscode-activity-bar__badge" data-slot="vscode-activity-bar-badge" aria-hidden="true">
+              {count}
+            </span>
+          ) : null}
+        </button>
+      </IconTooltip>
     )
   }
 
