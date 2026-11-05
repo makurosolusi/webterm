@@ -8,7 +8,7 @@ import { isMacPlatform } from './terminalKeys'
 import { useKeybindingOverrides, type KeybindingOverrides } from './keybindings.store'
 
 /** Where a keybinding is live; conflicts only count inside one scope (VS Code `when`). */
-export type CommandScope = 'global' | 'editor' | 'terminal' | 'files' | 'canvas'
+export type CommandScope = 'global' | 'editor' | 'terminal' | 'files' | 'canvas' | 'browser'
 
 export interface Command {
   id: string

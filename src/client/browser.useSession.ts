@@ -16,6 +16,8 @@ import { browserStream } from './browser.stream'
 import { passesResizeFilter, RESIZE_FILTER_MAX_MS } from './browser.stream.fit'
 import type { ResizeFilter } from './browser.stream.fit'
 import type { BrowserStream } from './browser.stream'
+import { applyConsoleDelta, EMPTY_CONSOLE } from '../shared/browser.console'
+import type { ConsoleView } from '../shared/browser.console'
 
 export type BrowserDialog = Extract<ServerMsg, { t: 'dialog' }>
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
@@ -38,6 +40,8 @@ export interface BrowserSession {
   closeDialog: () => void
   /** Latensi input->frame node ini (I1-d), dibaca chip. */
   latency: LatencyWindow
+  /** Page console of this node (deltas from the server buffer). */
+  console: ConsoleView
 }
 
 /**
@@ -61,6 +65,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [cursor, setCursor] = useState('default')
   const [connected, setConnected] = useState(true)
   const [latency] = useState(createLatencyWindow)
+  const [consoleView, setConsoleView] = useState<ConsoleView>(EMPTY_CONSOLE)
   const popupRef = useRef(onPopup)
   popupRef.current = onPopup
 
@@ -122,6 +127,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
           if (!STICKY_ERRORS.has(m.code)) arm(() => setError(undefined))
         } else if (m.t === 'dialog') setDialog(m)
         else if (m.t === 'popup') popupRef.current?.(m.url)
+        else if (m.t === 'console') setConsoleView((v) => applyConsoleDelta(v, m))
         else if (m.t === 'cursor') setCursor(CURSOR_SAFE.test(m.css) ? m.css : 'default')
         else if (m.t === 'copy') {
           void writeClipboard(m.text).then((r) => { if (!r.ok) flash(r.error) })
@@ -178,7 +184,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     stream.send(m)
   }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, latency,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, latency, console: consoleView,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

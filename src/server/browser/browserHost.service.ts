@@ -14,6 +14,7 @@ import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
 import type { ShieldPolicy } from './adblock.shields'
+import { createConsoleLog } from './browserHost.console'
 import { blockOf, BrowserError, createPageTarget, mergeState, newRec, notePendingInput, readHistory, setupConnection, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
@@ -43,6 +44,7 @@ export class BrowserHost implements BrowserHostApi {
 
   private readonly route: CdpHandler
   private readonly shield: ShieldRouter
+  readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
     const patch = (r: NodeRec, p: Partial<BrowserState>) => this.patch(r, p)
@@ -222,6 +224,7 @@ export class BrowserHost implements BrowserHostApi {
     this.table.bind(rec, targetId, sessionId)
     await restoreDevice(rec, () => this.deps.initialDevice?.(nodeId), this.io(rec))
     await this.shield.enable(cdp, sessionId)
+    await this.console.enable(cdp, sessionId)
     this.patch(rec, { live: 'live', blocked: blocked?.reason, url: target, ...this.shield.pageState(target) })
     if (target && !blocked) await this.goto(rec, target)
     return { ...rec.state }
@@ -234,6 +237,7 @@ export class BrowserHost implements BrowserHostApi {
         const wsUrl = await this.deps.launcher.acquire(workspaceId)
         const cdp = await (this.deps.connect ?? ((u: string) => CdpClient.connect(u)))(wsUrl)
         cdp.on('*', this.route)
+        cdp.on('*', this.console.route)
         cdp.on(CDP_EVENT.requestPaused, (p, sid) => this.shield.paused(cdp, p, sid))
         cdp.on(CDP_EVENT.attachedToTarget, (p, sid) => this.shield.attached(cdp, p, sid))
         cdp.onClose((err) => this.onConnClosed(workspaceId, err))
@@ -302,11 +306,7 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   private safe(fn: () => void): void {
-    try {
-      fn()
-    } catch (err) {
-      log.error('browser.listener', 'listener threw', { error: errMsg(err) })
-    }
+    try { fn() } catch (err) { log.error('browser.listener', 'listener threw', { error: errMsg(err) }) }
   }
 
   private crash(rec: NodeRec): void {

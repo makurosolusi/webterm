@@ -4,6 +4,7 @@ import type { AgentCtx, AgentVerbs } from './browserAgent.verbs.ctx'
 import { stateOf } from './browserAgent.verbs.ctx'
 import { actVerbs } from './browserAgent.verbs.act'
 import { readVerbs } from './browserAgent.verbs.read'
+import { consoleVerbs } from './browserAgent.verbs.console'
 
 export type { AgentCtx, AgentVerbs, ApprovalRequest } from './browserAgent.verbs.ctx'
 
@@ -11,6 +12,7 @@ export type { AgentCtx, AgentVerbs, ApprovalRequest } from './browserAgent.verbs
 export function createAgentVerbs(ctx: AgentCtx): AgentVerbs {
   return {
     ...readVerbs(ctx),
+    ...consoleVerbs(ctx),
     ...actVerbs(ctx),
     async handoff(nodeId) {
       stateOf(ctx, nodeId)

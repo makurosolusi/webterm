@@ -5,6 +5,7 @@ import {
 } from './browser.contract'
 import type { ClientMsg, FrameLatency, TouchPoint } from './browser.contract'
 import { parseDeviceChoice } from './browser.devices'
+import { parseConsoleMsg } from './browser.console'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder('utf-8', { fatal: true })
@@ -156,6 +157,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       const device = parseDeviceChoice(m.device)
       return device === undefined ? null : { t: 'device', id, device }
     }
+    case 'console':
+      return parseConsoleMsg(m, id)
     case 'dialog':
       if (typeof m.accept !== 'boolean') return null
       if (m.text === undefined) return { t: 'dialog', id, accept: m.accept }

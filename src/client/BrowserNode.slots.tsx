@@ -31,7 +31,7 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   }, [p.id, rf])
   return (
     <>
-      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} onShields={ctx.setShields} device={ctx.device} onDevice={ctx.setDevice} />
+      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} onShields={ctx.setShields} device={ctx.device} onDevice={ctx.setDevice} console={ctx.console} />
       <DesignModeBar nodeId={p.id} />
     </>
   )

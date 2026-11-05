@@ -90,6 +90,8 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
         hub.join(id, viewer)
         const s = hub.stateMsg(id)
         if (s) sink.sendJson(s)
+        const c = host.console?.snapshot(id)
+        if (c) sink.sendJson({ t: 'console', ...c })
         await hub.sync(id)
         return
       }
@@ -119,6 +121,10 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
       case 'device':
         await host.setDevice(id, m.device)
         return
+      case 'console':
+        if (!host.console) throw new BrowserError('disabled', `console: not available for node ${id}`)
+        await host.console.command(m)
+        return
       case 'ack':
         return
       default: // mouse | key | text | ime | touch
@@ -130,8 +136,9 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
     if (m.t === 'ack') { hub.ack(m.id, viewer, m.seq); return } // sinkron: ack tak boleh menunggu antrean input
     if (m.t === 'attach') attached.add(m.id) // pesan berikutnya antre di belakang attach (urutan serial per node)
     else if (!attached.has(m.id)) { reject(m.id, 'not_found'); return }
-    if (INPUT_TYPES.has(m.t) && leases.holder(m.id) === 'agent') { reject(m.id, 'lease_agent'); return }
-    if (INPUT_TYPES.has(m.t)) leases.noteHumanInput(m.id)
+    const gated = INPUT_TYPES.has(m.t) || (m.t === 'console' && m.op === 'eval') // console eval runs code in the page: same gate as input
+    if (gated && leases.holder(m.id) === 'agent') { reject(m.id, 'lease_agent'); return }
+    if (gated) leases.noteHumanInput(m.id)
     const task = async () => {
       try { await run(m) } catch (err) { if (!closed) fail(m.id, err) }
     }

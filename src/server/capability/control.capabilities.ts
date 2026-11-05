@@ -3,6 +3,7 @@
 // capability.drift.test.ts checks every route here resolves in the real control router.
 import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP, URL_MAX_CHARS, VIEWPORT_MAX, WAIT_MAX_MS } from '../../shared/browser.contract'
 import { CONTROL_PREFIX } from '../control/controlTypes'
+import { CONSOLE_BUFFER_MAX, CONSOLE_LEVELS } from '../../shared/browser.console'
 import { defineCapability, type CapabilitySpec } from './capability.define'
 import { obj, S, type JsonSchema } from './capability.schema'
 
@@ -21,6 +22,8 @@ const browserReadArgs: Record<string, JsonSchema> = {
   ms: { ...S.int(0, WAIT_MAX_MS), description: 'wait: timeout (or plain sleep) in ms.' },
   selectorRef: S.str(16, { pattern: '^e\\d+$', description: 'wait: until this snapshot ref is rendered.' }),
   loaded: { type: 'boolean', const: true, description: 'wait: until the page finished loading.' },
+  limit: { ...S.int(1, CONSOLE_BUFFER_MAX), description: 'console: newest entries to return (default 50).' },
+  level: { ...S.oneOf(...CONSOLE_LEVELS), description: 'console: minimum level (default info).' },
 }
 const browserActArgs: Record<string, JsonSchema> = {
   url: S.str(URL_MAX_CHARS, { description: 'navigate: absolute URL.' }),
@@ -91,7 +94,7 @@ const CONTROL = [
     output: S.anyObj(),
   }),
   defineCapability({
-    name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot or wait.',
+    name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot, wait or console.',
     tier: 'R0', scope: 'node', projections: ['control-http'], idempotent: true, route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.read')), ...browserReadArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),

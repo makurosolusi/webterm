@@ -18,8 +18,12 @@ hanya token root yang lolos. `/api/control/browser/*` lolos gerbang lewat jalur 
 menolak dengan 401 bila tidak ada `x-webterm-capability` yang valid maupun token node yang dikenal. Socket browser terikat ke workspace lewat
 query `workspaceId`.
 
+Console capture malas per node: `Runtime.enable` terdeteksi skrip anti-bot (Cloudflare/DataDome), jadi Runtime baru
+dinyalakan saat drawer Console dibuka, agent memanggil `console`, atau eval; sekali nyala tetap nyala untuk node itu
+(memori saja, dinyalakan ulang saat target dibuat ulang). `Log.enable` tetap eager: tidak mengekspos objek halaman.
+
 ## Capability untuk agent
-Verb `browser.read` (status, snapshot, screenshot, wait) dan `browser.act` (navigate, click, type, press,
+Verb `browser.read` (status, snapshot, screenshot, wait, console) dan `browser.act` (navigate, click, type, press,
 scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua jalur identitas ke
 `/api/control/browser/[:nodeId/]:verb` (`browserControl.handler.ts`):
 1. **Sesi agent PTY: token node + kabel, dibaca per panggilan.** Sesi agent tidak lagi diberi capability browser

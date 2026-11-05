@@ -25,6 +25,8 @@ import { resolveDevice } from '../shared/browser.devices'
 import type { DeviceChoice } from '../shared/browser.devices'
 import BrowserDeviceHeader from './BrowserDeviceHeader'
 import { deviceStyle, useDeviceSession } from './browser.device'
+import { useConsoleDrawer } from './BrowserConsole'
+import type { ConsoleSlot } from './BrowserConsole'
 import './browser.css'
 
 const COLLAPSED_H = 40
@@ -49,6 +51,8 @@ export interface BrowserSlotCtx {
   /** Device mode saved on the node (absent = Responsive) and its setter (null = Responsive). */
   device?: DeviceChoice
   setDevice: (device: DeviceChoice | null) => void
+  /** Console drawer toggle + error badge count. */
+  console?: ConsoleSlot
 }
 
 export interface BrowserNodeProps extends NodeProps {
@@ -83,6 +87,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const lastGo = useRef<string | undefined>(undefined)
   const device = resolveDevice(d.device)
   const surfaceSession = useDeviceSession(session, device)
+  const consoleDrawer = useConsoleDrawer(session.hostRef, session.console, send, state?.lease, () => send({ t: 'nav', action: 'reload' }))
 
   useGoto({ want: d.url, state, send })
 
@@ -107,6 +112,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
     setShields: (on) => send({ t: 'shields', on }),
     device: d.device, setDevice: (dev) => { rf.updateNodeData(id, { device: dev ?? undefined }); send({ t: 'device', device: dev }) },
     zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
+    console: consoleDrawer.slot,
   }
   // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.
   const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked
@@ -148,6 +154,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
             {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
           </div>
+          {consoleDrawer.drawer}
         </div>
         {/* Handle kabel sama dengan AgentNode: kabel agent↔browser memberi agent itu izin mengemudikan
             browser ini (`resolveLinkedBrowser` server). Validasinya di `canLink`. */}

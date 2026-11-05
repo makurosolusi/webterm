@@ -27,6 +27,7 @@ export const CDP = {
   // Shields: intersep request (tahap Request) di halaman + iframe OOPIF yang di-auto-attach.
   setAutoAttach: 'Target.setAutoAttach', fetchEnable: 'Fetch.enable', continueRequest: 'Fetch.continueRequest',
   failRequest: 'Fetch.failRequest', fulfillRequest: 'Fetch.fulfillRequest',
+  runtimeEnable: 'Runtime.enable', logEnable: 'Log.enable', releaseObjectGroup: 'Runtime.releaseObjectGroup', // console panel
 } as const
 
 /** Tabel tunggal event CDP yang didengar host. */
@@ -38,6 +39,7 @@ export const CDP_EVENT = {
   frameStartedLoading: 'Page.frameStartedLoading', frameStoppedLoading: 'Page.frameStoppedLoading',
   dialogOpening: 'Page.javascriptDialogOpening',
   requestPaused: 'Fetch.requestPaused', attachedToTarget: 'Target.attachedToTarget', detachedFromTarget: 'Target.detachedFromTarget',
+  consoleApiCalled: 'Runtime.consoleAPICalled', exceptionThrown: 'Runtime.exceptionThrown', logEntryAdded: 'Log.entryAdded', // console panel
 } as const
 
 /** Versi produk browser (mis. "Chrome/131.0.6778.85") dari `Browser.getVersion`; userAgent penuh sengaja dibuang. */

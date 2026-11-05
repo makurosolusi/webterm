@@ -13,6 +13,8 @@ import BrowserAgentOffer from './browser.agentOffer'
 import BrowserShieldsChip from './BrowserShieldsChip'
 import BrowserDevicePicker from './BrowserDevicePicker'
 import type { DeviceChoice } from '../shared/browser.devices'
+import { BrowserConsoleToggle } from './BrowserConsole'
+import type { ConsoleSlot } from './BrowserConsole'
 
 export interface BrowserToolbarProps {
   state?: BrowserState
@@ -33,6 +35,8 @@ export interface BrowserToolbarProps {
   /** Device mode (button + picker shown only when given). */
   device?: DeviceChoice
   onDevice?: (device: DeviceChoice | null) => void
+  /** Console drawer toggle; shown only when given. */
+  console?: ConsoleSlot
 }
 
 /** Tooltips of the icon-only buttons: what the click does, plus why when disabled. */
@@ -46,7 +50,7 @@ const TIP = {
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
 /** Bilah alamat + tombol navigasi + toggle agent untuk satu node browser. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, searchEngine, onShields, device, onDevice }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, searchEngine, onShields, device, onDevice, console: consoleSlot }: BrowserToolbarProps) {
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const stateUrl = state?.url ?? ''
@@ -90,6 +94,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
         )}
         {onDevice && <BrowserDevicePicker value={device} onChange={onDevice} />}
         {onShields && <BrowserShieldsChip state={state} onToggle={onShields} />}
+        {consoleSlot && <BrowserConsoleToggle {...consoleSlot} />}
         {agentEnabled ? (
           <label className="flex items-center gap-1 text-xs whitespace-nowrap" title={TOOLBAR_TEXT.agentControlHint}>
             <input type="checkbox" checked={agentControl} onChange={(e) => onAgentControl(e.target.checked)} />
