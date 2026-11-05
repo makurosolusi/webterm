@@ -38,7 +38,8 @@ import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
-import BoardCanvas from './App.canvas'
+import BoardHost from './BoardHost'
+import { useAppTabs } from './App.tabs'
 import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -157,6 +158,12 @@ export default function App() {
   // memulangkan `n` itu sendiri kecuali files/editor), satu-satunya cara `memo` menggigit saat drag.
   const flowNodes = useMemo(() => nodes.map(withLinkHandles), [nodes])
 
+  // Tab mode's props + layout commands; closing a tab takes the same path as NodeChrome's close.
+  const tabsProps = useAppTabs({
+    activeId, rf, nodes: flowNodes, statuses, settings, closeNode: (id) => void closeSession(id),
+    onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent,
+  })
+
   const liveNodes = useMemo(() => nodes.map(toWsNode), [nodes])
 
   const displayEdges = useMemo(() => decorateEdges(edges, nodes), [edges, nodes])
@@ -213,22 +220,13 @@ export default function App() {
             onReopen={(id) => void reopenClosed(id, reopenDeps)}
           />
         ) : (
-          <BoardCanvas
+          <BoardHost
             key={activeId ?? 'empty'}
-            rf={rf}
-            nodes={flowNodes}
-            edges={displayEdges}
-            settings={settings}
-            hydrated={settingsHydrated}
-            viewport={activeWs?.viewport}
-            locked={locked}
-            nodeColor={nodeColor}
-            syncViewport={syncViewport}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onMoveEnd={onMoveEnd}
-            onPaneContextMenu={onPaneContextMenu}
+            tabs={tabsProps}
+            canvas={{
+              rf, nodes: flowNodes, edges: displayEdges, settings, hydrated: settingsHydrated, viewport: activeWs?.viewport, locked, nodeColor,
+              syncViewport, onNodesChange, onEdgesChange, onConnect, onMoveEnd, onPaneContextMenu,
+            }}
           />
         )}
       </div>

@@ -9,6 +9,8 @@ import type { CanvasViewport } from './canvasViewport'
 import type { useCentralControl } from './central/CentralControlPanel'
 import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
+import { useTabLayout } from './tabLayout.store'
+import { toggleLayoutMode } from './tabLayout.commands'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
@@ -92,6 +94,7 @@ export interface AppWorkspaceBarProps
 export function AppWorkspaceBar({
   liveNodes, onNewProject, onRenameWorkspace, onDeleteWorkspace, onAddFiles, omni, setShowSettings, setShowHelp, ...pass
 }: AppWorkspaceBarProps) {
+  const layoutMode = useTabLayout().mode
   return (
     <WorkspaceBar
       {...pass}
@@ -104,6 +107,8 @@ export function AppWorkspaceBar({
       onOpenHelp={() => setShowHelp(true)}
       onNewFiles={() => onAddFiles()}
       onOpenPalette={() => omni.open('all')}
+      layoutMode={layoutMode}
+      onToggleLayout={toggleLayoutMode}
     />
   )
 }

@@ -13,6 +13,7 @@ import { paneSessionIds } from './paneTree'
 import { send } from './ws'
 import { useBrowserAdd } from './useBrowserAdd'
 import { useBrowserOpen } from './useBrowserOpen'
+import { connectWorkspaceLayout } from './App.tabs'
 import { bridgesToRestore, type ClosedHistory } from './closedHistory'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
@@ -46,6 +47,8 @@ export function useBoardActions({
     // Save yang masih menggantung milik board LAMA: tulis dulu dengan payload yang sudah terkunci,
     // baru pasang board ini. Tanpa ini timer-nya menembak belakangan dan menulis board baru ke id lama.
     flushSave()
+    // Before the board commits, so the first render of the new board already reads its own layout.
+    connectWorkspaceLayout(ws, activeWsRef, scheduleSave)
     setActiveWs(ws)
     activeWsRef.current = ws
     resetViewport(ws.viewport ?? DEFAULT_VIEWPORT)
@@ -56,7 +59,7 @@ export function useBoardActions({
     edgesRef.current = fe
     setEdges(fe)
     resetLayout(flow)
-  }, [flushSave, resetViewport, resetLayout])
+  }, [flushSave, scheduleSave, resetViewport, resetLayout])
 
   // React Flow's `deleteElements` removes a node's edges BEFORE the node (edge change first, same
   // tick), so by the time `onNodesChange` sees the removal the cables are already gone from

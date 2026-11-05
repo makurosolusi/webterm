@@ -63,6 +63,9 @@ export interface WorkspaceBarProps {
   onNewFiles?: () => void
   /** Command center click: opens the omnibox (`workbench.omnibox`, Mod+K). */
   onOpenPalette?: () => void
+  /** Current board layout; with `onToggleLayout` it adds the canvas/tabs switch (button + View menu). */
+  layoutMode?: 'canvas' | 'tabs'
+  onToggleLayout?: () => void
 }
 
 export default function WorkspaceBar({
@@ -80,8 +83,11 @@ export default function WorkspaceBar({
   onOpenHelp,
   onNewFiles,
   onOpenPalette,
+  layoutMode,
+  onToggleLayout,
 }: WorkspaceBarProps) {
   const paletteKey = useCommandShortcut('workbench.omnibox')
+  const layoutKey = useCommandShortcut('view.layout.toggle')
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
   const groups = useMemo(
@@ -155,6 +161,7 @@ export default function WorkspaceBar({
   if (showLogout && onLogout) fileItems.push({ type: 'separator' }, { id: 'logout', label: 'Logout', onSelect: onLogout })
 
   const viewItems: VscodeMenuEntry[] = [
+    ...(onToggleLayout ? [{ id: 'toggle-layout', label: 'Toggle Tab Layout', keybinding: layoutKey ?? undefined, disabled: !activeGroup, onSelect: onToggleLayout }] : []),
     { id: 'output', label: 'Output', keybinding: outputShortcutLabel(isMacPlatform()), onSelect: toggleOutput },
     { id: 'clear-output', label: 'Clear Output', onSelect: () => void clearOutput() },
   ]
@@ -251,6 +258,20 @@ export default function WorkspaceBar({
           ariaLabel="Workspaces"
         />
         <div className="app-tabs__actions">
+          {onToggleLayout && (
+            <IconTooltip label={layoutMode === 'tabs' ? 'Switch to canvas layout' : 'Switch to tab layout'} commandId="view.layout.toggle" disabled={!activeGroup} disabledReason="no workspace open">
+              <button
+                type="button"
+                className="app-tabs__action"
+                aria-label="Toggle tab layout"
+                aria-pressed={layoutMode === 'tabs'}
+                disabled={!activeGroup}
+                onClick={onToggleLayout}
+              >
+                <span className={layoutMode === 'tabs' ? 'codicon codicon-graph' : 'codicon codicon-layout'} aria-hidden />
+              </button>
+            </IconTooltip>
+          )}
           <IconTooltip label="Workspace options: rename, delete or set the canvas background of the active workspace" disabled={!activeGroup} disabledReason="no workspace open">
             <button
               type="button"

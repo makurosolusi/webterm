@@ -16,6 +16,7 @@ import type { RefObject } from 'react'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { createHistory } from './history'
 import { setNotifyCanvas } from './osNotify'
+import { getTabLayout } from './tabLayout.store'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Viewport } from '../shared/workspace'
 
@@ -45,6 +46,9 @@ export interface CanvasViewport {
   resetViewport: (vp: Viewport) => void
 }
 
+// Tab mode hides the canvas: zoom/fit/history would move a viewport nobody can see.
+const inTabs = (): boolean => getTabLayout().mode === 'tabs'
+
 export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewportDeps): CanvasViewport {
   const [zoom, setZoom] = useState(DEFAULT_VIEWPORT.zoom)
   const vpHist = useRef(createHistory<Viewport>())
@@ -73,21 +77,25 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
 
   // Satu definisi untuk dua jalan masuk (Dock, menu konteks) — durasinya tidak menyimpang.
   const onFit = useCallback(() => {
+    if (inTabs()) return
     rf.current?.fitView({ duration: 300 })
     syncViewport(320)
   }, [rf, syncViewport])
 
   const onZoomIn = useCallback(() => {
+    if (inTabs()) return
     rf.current?.zoomIn({ duration: 150 })
     syncViewport(170)
   }, [rf, syncViewport])
 
   const onZoomOut = useCallback(() => {
+    if (inTabs()) return
     rf.current?.zoomOut({ duration: 150 })
     syncViewport(170)
   }, [rf, syncViewport])
 
   const onZoomTo = useCallback((pct: number) => {
+    if (inTabs()) return
     rf.current?.zoomTo(pct / 100, { duration: 150 })
     syncViewport(170)
   }, [rf, syncViewport])
@@ -98,6 +106,7 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
   // mengubah apa pun; dibiarkan tak bersyarat karena memindahkannya ke dalam cabang tak menghemat
   // apa-apa dan membuat benar/salahnya bergantung pada detail `history` yang tak terlihat di sini.
   const step = useCallback((pick: (h: typeof vpHist.current) => Viewport | undefined) => {
+    if (inTabs()) return
     const v = pick(vpHist.current)
     if (v) {
       viewportRef.current = v
