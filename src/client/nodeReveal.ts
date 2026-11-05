@@ -14,6 +14,10 @@ export const rectOfNode = (n: Node): Rect => ({
 
 type RevealRf = Pick<ReactFlowInstance, 'getViewport' | 'fitView'>
 
+/** Jadikan `nid` satu-satunya node terpilih. Seleksi saja (tidak dipersist); node yang tak berubah dipertahankan identitasnya. */
+export const selectOnly = (rf: Pick<ReactFlowInstance, 'setNodes'>, nid: string): void =>
+  rf.setNodes((prev) => prev.map((n) => (!!n.selected === (n.id === nid) ? n : { ...n, selected: n.id === nid })))
+
 /** Bawa node ke pandangan (hanya bila tidak sepenuhnya terlihat) lalu fokuskan wrapper-nya, bukan isi node. */
 export function revealNode(rf: RevealRf | null, id: string, rect: Rect): void {
   if (!rf) return
