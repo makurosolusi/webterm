@@ -4,7 +4,11 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VscodeStatusBar } from '@/components/vscode/vscodeStatusBar'
-import CanvasToolbar from '../CanvasToolbar'
+import { useMemo, useRef } from 'react'
+import type { Node } from '@xyflow/react'
+import { DEFAULT_SETTINGS } from '../../shared/settings'
+import Omnibox from '../Omnibox'
+import { useOmnibox } from '../Omnibox.open'
 import HelpOverlay from '../HelpOverlay'
 import WorkspaceBar from '../WorkspaceBar'
 import { isMacPlatform, terminalKeyAction } from '../terminalKeys'
@@ -131,12 +135,21 @@ describe('View menu', () => {
 })
 
 describe('command palette', () => {
+  // The app's real palette path: `useOmnibox` with the Output commands as extra commands.
+  function PaletteHarness({ onFocus }: { onFocus: (id: string) => void }) {
+    const nodesRef = useRef<Node[]>([])
+    const extraCommands = useMemo(() => outputPaletteCommands(false), [])
+    const omni = useOmnibox({ nodes: [], nodesRef, settings: DEFAULT_SETTINGS, extraCommands, addFlowNode: vi.fn(), onFocus, onAddAgent: vi.fn() })
+    return (
+      <>
+        <button type="button" onClick={() => omni.open('all')}>Command palette</button>
+        {omni.state && <Omnibox scope={omni.state.scope} sources={omni.sources} onAction={omni.onAction} onClose={omni.close} />}
+      </>
+    )
+  }
   function renderPalette() {
-    const props = {
-      nodes: [], onFocusNode: vi.fn(), onOpenExplorer: vi.fn(), onOpenSettings: vi.fn(), onOpenHelp: vi.fn(),
-      commands: outputPaletteCommands(false), platform: 'Linux',
-    }
-    render(<><Probe /><OutputPanelHost /><CanvasToolbar {...props} /></>)
+    const props = { onFocusNode: vi.fn() }
+    render(<><Probe /><OutputPanelHost /><PaletteHarness onFocus={props.onFocusNode} /></>)
     fireEvent.click(screen.getByRole('button', { name: 'Command palette' }))
     return props
   }

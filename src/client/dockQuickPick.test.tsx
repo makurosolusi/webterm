@@ -88,4 +88,16 @@ describe('Diff row in "Add node"', () => {
       expect(screen.queryByRole('dialog', { name: 'Add node' })).toBeNull()
     } finally { unregister() }
   })
+
+  it('offers Files while the files command is registered and runs it', async () => {
+    const run = vi.fn()
+    const unregister = registerCommands([{ id: 'files.new', label: 'Explorer: New Files Node', run }])
+    try {
+      render(<Dock {...baseProps} />)
+      press(screen.getByRole('button', { name: 'Add node' }))
+      fireEvent.click(await screen.findByRole('option', { name: /^Files/ }))
+      expect(run).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('dialog', { name: 'Add node' })).toBeNull()
+    } finally { unregister() }
+  })
 })

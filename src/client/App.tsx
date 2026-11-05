@@ -7,7 +7,6 @@ import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import Login from './Login'
-import CanvasToolbar from './CanvasToolbar'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import InboxPanel from './InboxPanel'
 import ChatPanel, { useChatOpen } from './ChatPanel'
@@ -217,6 +216,8 @@ export default function App() {
         showLogout={hasToken()}
         onOpenSettings={() => setShowSettings(true)}
         onOpenHelp={() => setShowHelp(true)}
+        onNewFiles={() => onAddFiles()}
+        onOpenPalette={() => omni.open('all')}
       />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
@@ -249,17 +250,6 @@ export default function App() {
             onPaneContextMenu={onPaneContextMenu}
           />
         )}
-        {/* Cluster kontrol editor (palette ⌘K, Explorer, Settings, Help) hidup DI DALAM sel
-            editor, bukan mengapung di atas tab bar: `top`-nya jadi jarak dari canvas. */}
-        <CanvasToolbar
-          nodes={flowNodes}
-          onFocusNode={onFocus}
-          onOpenExplorer={onAddFiles}
-          onOpenSettings={() => setShowSettings(true)}
-          onOpenHelp={() => setShowHelp(true)}
-          commands={outputCommands}
-          onOpenPalette={() => omni.open('all')}
-        />
       </div>
       {hydrated && !noWorkspaces && (
         <>

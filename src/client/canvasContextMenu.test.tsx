@@ -220,12 +220,14 @@ describe('menu konteks canvas', () => {
     await waitFor(() => expect(menu()).toBeNull())
   })
 
-  // Bukan bagian menu, tapi akibat langsung dari wiring di atas: `onAddFiles` kini punya parameter
-  // opsional `at`, dan tombol Explorer menyambungnya LANGSUNG ke `onClick` — React menitipkan
-  // event-nya di situ. Tanpa `spawnSpot` node lahir di NaN: tak terlihat, tapi ikut tersimpan.
-  it('tombol Explorer tetap melahirkan node files di posisi angka, bukan NaN', async () => {
+  // `onAddFiles` punya parameter opsional `at`; File > New Files Node (pengganti toolbar canvas
+  // yang dihapus) harus melahirkan node di posisi angka, bukan NaN dari event yang ikut terkirim.
+  it('File > New Files Node melahirkan node files di posisi angka; canvas tanpa toolbar mengapung', async () => {
     await mountCanvas({ nodes: [], dirs: { '/': [] } })
-    fireEvent.click(screen.getByLabelText('New Files node'))
+    expect(document.querySelector('.controls-cluster')).toBeNull()
+    expect(screen.queryByLabelText('Command palette')).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New Files Node' }))
 
     await waitFor(() => expect(nodePositions('files')).toHaveLength(1))
     expect(nodePositions('files')[0]).toEqual(DEFAULT_SPAWN)

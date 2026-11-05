@@ -20,7 +20,7 @@ describe('Kanban — overlay harus bisa ditutup', () => {
     expect(cls).toContain('absolute')
     expect(cls).toContain('top-[var(--tabbar-h,0px)]')
     expect(cls).not.toContain('inset-0')
-    // Harus menang atas .controls-cluster (z-index 26) dan .tabbar (30) yang menutupi baris header.
+    // Harus menang atas .tabbar (30) yang menutupi baris header.
     const z = /(?:^|\s)z-(\d+)/.exec(cls)?.[1]
     expect(Number(z)).toBeGreaterThan(30)
   })

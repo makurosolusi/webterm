@@ -89,7 +89,7 @@ describe('global keybindings', () => {
     const run = vi.fn()
     const off = registerCommands([{ id: 't.omni', label: 'Omni', defaultKey: 'Mod+K', run }])
     const outer = vi.fn()
-    window.addEventListener('keydown', outer) // e.g. CanvasToolbar's old ⌘K listener
+    window.addEventListener('keydown', outer) // any window-level listener
     render(<Keys />)
     fireEvent.keyDown(screen.getByLabelText('term'), { key: 'k', code: 'KeyK', ctrlKey: true })
     expect(run).toHaveBeenCalledTimes(1)

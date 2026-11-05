@@ -14,8 +14,7 @@
 body.clean-view .tabbar,
 body.clean-view .dock,
 body.clean-view .sessions-sidebar,
-body.clean-view .minimap-dock,
-body.clean-view .controls-cluster {
+body.clean-view .minimap-dock {
   display: none;
 }
 

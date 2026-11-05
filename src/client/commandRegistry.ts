@@ -131,7 +131,7 @@ const isEditable = (t: EventTarget | null): boolean =>
 /**
  * Global shortcut dispatcher. On `document`, bubble phase: surfaces that own a key (Monaco,
  * xterm when it sends the key to the shell, a focused Files node's ⌘P) stop it first, and a hit
- * here stops it before the older window listeners (CanvasToolbar's ⌘K) see it.
+ * here stops it before any window keydown listener sees it.
  */
 export function useCommandKeybindings(): void {
   const overrides = useKeybindingOverrides()

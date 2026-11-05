@@ -20,7 +20,7 @@ import { buildSessionList } from './sessionList'
 import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
 import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
 import { Input } from '@/components/ui/input'
-import { IconTooltip } from '@/components/ui/icon-button'
+import { IconTooltip, useCommandShortcut } from '@/components/ui/icon-button'
 import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
 import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
 import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
@@ -58,6 +58,10 @@ export interface WorkspaceBarProps {
   onOpenSettings?: () => void
   /** Help > Keyboard Shortcuts Reference: membuka overlay Help. */
   onOpenHelp?: () => void
+  /** File > New Files Node: adds a Files node to the active board. */
+  onNewFiles?: () => void
+  /** Command center click: opens the omnibox (`workbench.omnibox`, Mod+K). */
+  onOpenPalette?: () => void
 }
 
 export default function WorkspaceBar({
@@ -73,7 +77,10 @@ export default function WorkspaceBar({
   showLogout,
   onOpenSettings,
   onOpenHelp,
+  onNewFiles,
+  onOpenPalette,
 }: WorkspaceBarProps) {
+  const paletteKey = useCommandShortcut('workbench.omnibox')
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
   const groups = useMemo(
@@ -127,6 +134,7 @@ export default function WorkspaceBar({
     { id: 'clone-repository', label: 'Clone Repository…', onSelect: () => openWorkspaceCreate('clone') },
     { id: 'new-project', label: 'New Project…', onSelect: () => openWorkspaceCreate('project') },
   ]
+  if (activeGroup && onNewFiles) fileItems.push({ type: 'separator' }, { id: 'new-files', label: 'New Files Node', onSelect: onNewFiles })
   if (activeGroup) {
     fileItems.push(
       { type: 'separator' },
@@ -200,6 +208,16 @@ export default function WorkspaceBar({
               }}
               onBlur={commitRename}
             />
+          ) : onOpenPalette ? (
+            // VS Code command center: the pill opens Go to Anything and shows its chord.
+            <IconTooltip label="Go to anything: nodes, files, URLs, agents, commands" commandId="workbench.omnibox">
+              <button type="button" className="app-titlebar__name" aria-label="Search" onClick={onOpenPalette}>
+                <span className="codicon codicon-search" aria-hidden />
+                <span className="app-titlebar__label">{activeGroup?.projectName ?? 'Search'}</span>
+                <WorkspaceWorktreeBadge status={activeId ? worktrees[activeId] : undefined} />
+                {paletteKey && <span className="kbd">{paletteKey}</span>}
+              </button>
+            </IconTooltip>
           ) : (
             <span className="app-titlebar__name">
               {activeGroup?.projectName ?? ''}

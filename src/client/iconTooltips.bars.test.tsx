@@ -1,12 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-// The bars migrated to IconButton / IconTooltip: activity bar, canvas toolbar, status bar. Each
+// The bars migrated to IconButton / IconTooltip: activity bar, status bar. Each
 // icon-only control has a role-queryable name and a visible tooltip (no native `title`).
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import Dock, { type DockProps } from './Dock'
-import CanvasToolbar from './CanvasToolbar'
 
 const noop = () => {}
 const dockProps: DockProps = {
@@ -67,19 +66,5 @@ describe('status bar', () => {
       { id: 'problems', label: '0 / 2', tooltip: '0 errors, 2 warnings from the type checker and linter — toggle Problems', ariaLabel: 'Problems: 0 errors, 2 warnings', onClick: noop },
     ]} />)
     expect(tipOf(screen.getByRole('button', { name: 'Problems: 0 errors, 2 warnings' }))).toMatch(/2 warnings .* toggle Problems/)
-  })
-})
-
-describe('canvas toolbar', () => {
-  it('names each button after what its click does', () => {
-    const props = { onOpenExplorer: vi.fn(), onOpenSettings: vi.fn(), onOpenHelp: vi.fn() }
-    render(<CanvasToolbar nodes={[]} onFocusNode={noop} platform="MacIntel" {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: 'New Files node' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }))
-    expect(props.onOpenExplorer).toHaveBeenCalledTimes(1)
-    expect(props.onOpenSettings).toHaveBeenCalledTimes(1)
-    expect(props.onOpenHelp).toHaveBeenCalledTimes(1)
-    expect(tipOf(screen.getByRole('button', { name: 'Command palette' }))).toBe('Command palette ⌘K')
   })
 })

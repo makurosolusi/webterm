@@ -39,9 +39,9 @@ export default function Kanban({ nodes, statuses, onFocus, onClose }: Props) {
 
   // Overlay ini saudara .app-main (bukan anaknya) dan .app-shell static, jadi `inset-0` mengukur
   // dari atas viewport: baris header (judul + Close) tenggelam di bawah .tabbar. Turunkan setinggi
-  // --tabbar-h, pola sama seperti .controls-cluster di canvas-ui.css; kiri/bawah disisakan untuk activity bar
-  // dan status bar supaya overlay ini menutup area editor saja, seperti editor VS Code. z-40 di atas cluster kontrol
-  // (26) dan tabbar (30) supaya Close tidak tertimpa tombol mengapung kanan-atas.
+  // --tabbar-h, kiri/bawah disisakan untuk activity bar
+  // dan status bar supaya overlay ini menutup area editor saja, seperti editor VS Code. z-40 di atas
+  // tabbar (30) supaya Close tidak tertimpa tombol mengapung kanan-atas.
   return (
     <div className="absolute top-[var(--tabbar-h,0px)] right-0 bottom-[var(--status-bar-h,0px)] left-[var(--activity-bar-w,0px)] z-40 flex flex-col bg-[var(--vscode-editor-background,var(--canvas-bg))] p-4 font-[family-name:var(--font-ui)] text-[13px] text-[var(--vscode-foreground,var(--text))]">
       <div className="mb-3 flex items-center justify-between">

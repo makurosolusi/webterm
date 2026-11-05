@@ -1,4 +1,4 @@
-import { rankTargets } from '@/CanvasToolbar'
+import { rankTargets } from '@/paletteTargets'
 import type { VscodeQuickPickItem } from './vscodeQuickPick'
 
 /** Ranks items with the shared palette scorer; description and detail are searchable, the keybinding is not. */
