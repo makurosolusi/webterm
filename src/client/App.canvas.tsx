@@ -12,6 +12,8 @@ import { useRecordLegacyClaudeProfiles } from './claudeLauncher/useLegacyClaudeP
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
+import { resolveCanvasBackground } from '../shared/canvasBackground.schema'
+import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import type { Viewport } from '../shared/workspace'
 
 const edgeTypes = { context: ContextEdge }
@@ -41,7 +43,9 @@ export default function BoardCanvas({
 }: CanvasProps) {
   useRecordLegacyClaudeProfiles(nodes, hydrated, settings, rf)
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
-  const { openBrowserAt } = useNodeActions()
+  const { openBrowserAt, workspaceId } = useNodeActions()
+  // Wallpaper sits behind the pane (no pan/zoom); workspace override -> global -> default.
+  const wallpaper = useWallpaper(resolveCanvasBackground(settings, workspaceId))
   useNodeResizeWiring(locked, rf)
   // Drop di atas node (mis. xterm) milik node itu, bukan pemicu node browser baru.
   const overNode = (e: DragEvent) => (e.target as HTMLElement).closest('.react-flow__node') !== null
@@ -59,7 +63,10 @@ export default function BoardCanvas({
   // 0 / NaN / di luar rentang tak boleh sampai ke React Flow: grid 0 menghasilkan NaN saat snap.
   const gridSize = clampSetting('gridSize', settings.gridSize, DEFAULT_SETTINGS.gridSize)
   return (
+    <>
+    <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
     <ReactFlow
+      className={wallpaper.active ? 'canvas--wallpaper' : undefined}
       nodes={nodes}
       nodeTypes={nodeTypes}
       edges={edges}
@@ -86,7 +93,7 @@ export default function BoardCanvas({
       proOptions={{ hideAttribution: true }}
     >
       {settings.canvasDots && (
-        <Background variant={BackgroundVariant.Dots} gap={gridSize} size={2.5} color="var(--canvas-dot)" />
+        <Background variant={BackgroundVariant.Dots} gap={gridSize} size={2.5} color={wallpaper.dotColor} />
       )}
       {/* Adds an App node when an agent publishes an MCP Apps ui:// view (mcpapps/McpAppsWatcher.tsx). */}
       <McpAppsWatcher />
@@ -101,5 +108,6 @@ export default function BoardCanvas({
         }}
       />
     </ReactFlow>
+    </>
   )
 }

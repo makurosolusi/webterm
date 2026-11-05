@@ -28,6 +28,7 @@ import { ControlPanel } from './ControlPanel'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
+import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
 import './settings.css'
@@ -39,6 +40,7 @@ const SECTIONS = [
   { id: 'shell', label: 'Shell & buffer' },
   { id: 'agent', label: 'Agent' },
   { id: 'canvas', label: 'Canvas' },
+  { id: CANVAS_BG_SECTION, label: 'Canvas background' },
   { id: 'capabilities', label: 'Capabilities' },
   { id: 'control', label: 'Control' },
 ] as const
@@ -48,6 +50,7 @@ type SectionId = (typeof SECTIONS)[number]['id']
 /** Id tab lama `env`/`channels` mendarat di Kemampuan; id tak dikenal (mis. `preview` warisan) jatuh ke Terminal. */
 export function toSectionId(id: string): SectionId {
   if (id === 'env' || id === 'channels') return 'capabilities'
+  if (id === CANVAS_BG_WORKSPACE_SECTION) return CANVAS_BG_SECTION
   return SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
 }
 
@@ -91,6 +94,10 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
+    if (id === CANVAS_BG_SECTION) {
+      return <CanvasBackgroundSection settings={s} onChange={onChange} projectId={projectId || undefined}
+        initialScope={activeRaw === CANVAS_BG_WORKSPACE_SECTION ? 'workspace' : 'global'} />
+    }
     if (id === 'control') return <ControlPanel query={normalized} />
     return (
       <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}

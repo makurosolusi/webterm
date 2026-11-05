@@ -9,6 +9,7 @@ import { envSettingsApiDeps } from '../envSettings.runtime'
 import { capabilitiesRoute } from '../featureCapabilities.api'
 import { agentProtectionRoute } from '../agentSandbox.api'
 import type { ApiRoute } from './route.core'
+import { canvasBackgroundRoutes } from './canvasBackground.routes'
 
 /** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
 export function applyPtyOptions(): void {
@@ -40,4 +41,6 @@ export const settingsRoutes: ApiRoute[] = [
       return true
     },
   },
+  // Canvas wallpaper upload/serve; writes the same settings row.
+  ...canvasBackgroundRoutes(db),
 ]

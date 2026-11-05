@@ -31,6 +31,7 @@ import { isMacPlatform } from './terminalKeys'
 import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
+import { openWorkspaceCanvasBackground } from './CanvasBackgroundSection'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -250,7 +251,7 @@ export default function WorkspaceBar({
           ariaLabel="Workspaces"
         />
         <div className="app-tabs__actions">
-          <IconTooltip label="Workspace options: rename or delete the active workspace" disabled={!activeGroup} disabledReason="no workspace open">
+          <IconTooltip label="Workspace options: rename, delete or set the canvas background of the active workspace" disabled={!activeGroup} disabledReason="no workspace open">
             <button
               type="button"
               className="app-tabs__action"
@@ -305,6 +306,7 @@ export default function WorkspaceBar({
               label: 'Rename',
               onClick: () => startRename(activeGroup.projectId, activeGroup.projectName),
             },
+            { label: 'Canvas Background…', onClick: openWorkspaceCanvasBackground },
             {
               label: 'Delete',
               danger: true,

@@ -7,6 +7,8 @@ export type NodeActions = {
   onToggleHideLinks: (nodeId: string) => void
   /** Buka URL di node browser; undefined = flag browser mati (pemicu tidak boleh menampilkan aksi). Tanpa default. */
   openBrowserAt?: (req: OpenBrowserReq) => OpenResult
+  /** Active workspace id (canvas wallpaper resolves its per-workspace override with it). */
+  workspaceId?: string | null
 }
 
 /**

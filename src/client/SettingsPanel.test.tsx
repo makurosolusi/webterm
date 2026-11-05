@@ -37,7 +37,7 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Canvas', 'Capabilities', 'Control']
+    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Canvas', 'Canvas background', 'Capabilities', 'Control']
     expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
