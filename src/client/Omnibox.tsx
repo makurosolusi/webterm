@@ -55,8 +55,9 @@ export default function Omnibox({ scope, initialQuery = '', root, sources, onAct
   // Click outside closes, like the command palette.
   useEffect(() => {
     const onDown = (e: MouseEvent) => { if (!rootRef.current?.contains(e.target as Node)) onClose() }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    // Capture phase: d3-zoom (React Flow pane) stopImmediatePropagation()s mousedown, so a bubble listener on document never sees a canvas click.
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
   }, [onClose])
 
   const choose = (item: OmniItem | undefined) => {

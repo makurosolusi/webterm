@@ -54,6 +54,7 @@ Operator notes:
 - Opening Chat and Inbox (or Problems and Output) together no longer stacks panels on top of each other. They are now tabs of one bottom panel with a single header: opening a view selects its tab, the Chat input stays inside the panel, and "Jump to bottom" sits above the input instead of covering messages.
 - A browser node whose page crashed or disappeared now reports "crashed" instead of "not found", and Reload reopens it at its last URL.
 - Deleting a workspace now also removes its canvas background override and its uploaded image (an image still used elsewhere is kept). The workspace delete never fails because of this, and startup cleans up leftovers from workspaces that are already gone.
+- Clicking an empty spot on the canvas now closes the open popups that only closed when you clicked a node: the ⌘K / quick-open box (Omnibox), the quick pick, the menu bar menus and the breadcrumbs overflow menu. React Flow's canvas swallowed the click before those popups could see it.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).

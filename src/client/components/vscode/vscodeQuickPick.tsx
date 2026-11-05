@@ -112,8 +112,9 @@ export function VscodeQuickPick({
       if (triggerSelector && target.closest?.(triggerSelector)) return
       onClose()
     }
-    document.addEventListener('mousedown', onPointerDown)
-    return () => document.removeEventListener('mousedown', onPointerDown)
+    // Capture phase: d3-zoom (React Flow pane) stopImmediatePropagation()s mousedown, so a bubble listener on document never sees a canvas click.
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [open, onClose, triggerSelector])
 
   if (!open) return null
