@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react'
+import { recordedClaudeProfile } from './claudeLauncher/claudeLaunch.node'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
 import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
@@ -164,8 +165,11 @@ export function useBoardActions({
     // Custom tanpa warna sendiri mewarisi warna baseAgent (kontrak `CustomAgent.color`).
     const custom = settings.customAgents.find((c) => c.id === agentId)
     const color = agentConfig(agentId)?.color ?? custom?.color ?? (custom?.baseAgent && agentConfig(custom.baseAgent)?.color)
-    addFlowNode((_, ws) => ({ id: randomId(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color }), at)
-  }, [addFlowNode, settings.customAgents])
+    // Builtin claude records the default launch profile now, so later profile edits apply on its
+    // next launch and a deleted profile is noticed instead of silently changing the command.
+    const profile = recordedClaudeProfile(agentId, settings.defaultClaudeProfileId)
+    addFlowNode((_, ws) => ({ id: randomId(), kind: 'agent', cmd, agentId, cwd: cwd ?? ws.cwd, color, ...profile }), at)
+  }, [addFlowNode, settings.customAgents, settings.defaultClaudeProfileId])
 
   // A node minted its own session uuid (or restarted): persist it to that node.
   // Data-only change — not pushed to layout history (undo must not drop a live session id).

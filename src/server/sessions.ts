@@ -19,6 +19,7 @@ import { delimiter, dirname } from 'node:path'
 import { resolveShell } from './ptyShell'
 import { activeProviderEnv } from './claudeProvider/claudeProvider.store'
 import { wrapClaudeLaunch } from './claudeProvider/claudeProvider.launch'
+import { applyNodeClaudeProfile } from './claudeLauncher/claudeLauncher'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -55,8 +56,10 @@ export class Sessions extends SessionsCore {
    * client hilang — tanpa replay layar itu kosong. `add` idempoten, jadi tidak ada langganan ganda;
    * replay hanya dikirim ke `send`, bukan di-broadcast ke pelanggan lain.
    */
-  open(msg: OpenMsg, send: (m: ServerMsg) => void): void {
-    if (!isSafeNodeId(msg.id)) return
+  open(raw: OpenMsg, send: (m: ServerMsg) => void): void {
+    if (!isSafeNodeId(raw.id)) return
+    // Recorded Claude launch profile -> the command (server/claudeLauncher); deleted = Default + note.
+    const { msg, notice: profileNotice } = applyNodeClaudeProfile(raw)
     const existing = this.map.get(msg.id)
     if (existing) {
       ptyLog.reattached(msg.id, existing.subs.size())
@@ -76,7 +79,7 @@ export class Sessions extends SessionsCore {
       permissionMode: this.options.claudePermissionMode,
       resumeIsDead: deadResume,
     })
-    const notices: string[] = []
+    const notices: string[] = profileNotice ? [profileNotice] : []
     if (deadResume) notices.push(transcriptMissingNotice)
     if (cmd) {
       const unwrapped = unwrapMissingWrapper(cmd, binaryExists)

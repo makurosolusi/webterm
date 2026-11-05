@@ -48,7 +48,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
     cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
     sessionId?: string; collapsed?: boolean; comments?: Comment[]; agentModel?: string
-    hideLinks?: boolean
+    hideLinks?: boolean; claudeProfileId?: string
   }
   const { cmd, cwd, agentId, sessionId } = d
   const { onSession, onToggleHideLinks, openBrowserAt } = useNodeActions()
@@ -308,6 +308,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
             agentId={agentId}
             sessionId={resumableSid}
             resume={resume}
+            claudeProfileId={d.claudeProfileId}
           />
         </div>
         {searchOpen && (

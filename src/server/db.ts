@@ -3,6 +3,7 @@ import type { Workspace, WsNode, Viewport, BridgeLink } from '../shared/workspac
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
+import { registerClaudeLaunchSettings } from './claudeLauncher/claudeLauncher'
 import { chmodSync } from 'node:fs'
 import { dbPath, warnPermsNotTightened } from './config'
 import { ensureAuditSchema } from './featureCapabilities.audit'
@@ -141,3 +142,4 @@ export const db = new Db(openDb())
 // sekali per runtime (lihat `shared/workspace.ts`). Di sini, bukan di entry server, karena ini
 // satu-satunya modul yang memegang store settings sisi server.
 registerAgentBaseResolver(() => db.getSettings())
+registerClaudeLaunchSettings(() => db.getSettings())

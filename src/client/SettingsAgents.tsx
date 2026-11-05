@@ -15,6 +15,7 @@ import {
 import { ColorField, Field, SelectField, TextField, ToggleField } from './SettingsFields'
 import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
+import { ClaudeLaunchProfilesCard } from './claudeLauncher/ClaudeLaunchProfilesCard'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
   { value: 'manual', label: 'manual — ask for every action' },
@@ -110,6 +111,8 @@ export function AgentSettings({
         </div>
       </Field>
 
+      <ClaudeLaunchProfilesCard settings={s} onChange={onChange} />
+
       <Field
         label="Launch command"
         setting="agentLaunchCommands"
@@ -117,12 +120,12 @@ export function AgentSettings({
           'Launch a builtin agent with your own command — e.g. a wrapper script that picks an account. ' +
           'Used on every launch path (new session, resume, restart), with flags such as --resume ' +
           'appended AFTER it, so the command must pass its arguments through (end a shell script with ' +
-          '`exec claude "$@"`). Empty = builtin default.'
+          '`exec claude "$@"`). Empty = builtin default. Claude uses the launch profiles above.'
         }
         block
       >
         <div className="st-rows">
-          {BUILTIN_AGENT_IDS.map((id: BuiltinAgentId) => (
+          {BUILTIN_AGENT_IDS.filter((id) => id !== 'claude').map((id: BuiltinAgentId) => (
             <div key={id} className="st-row">
               <span className="st-row-label" style={{ '--agent-color': AGENT_CONFIG[id].color } as CSSProperties}>
                 {AGENT_CONFIG[id].label}

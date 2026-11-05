@@ -1,0 +1,166 @@
+// Staged readiness probe of one Claude launch profile: wrapper on PATH -> wrapper runs claude
+// (`--version`) -> `claude auth status`. Argv only, never a shell. Only `loggedIn`/`authMethod` are
+// read from the CLI output; the wrapper's first stderr line is shown redacted, nothing else is kept.
+// `claude auth status`: JSON, exit 0 logged in / 1 not, `authMethod` one of none|claude.ai|
+// oauth_token|api_key|api_key_helper|third_party (https://code.claude.com/docs/en/cli-reference).
+// An env credential (ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN injected by a wrapper) reports
+// loggedIn:true with authMethod api_key / oauth_token, so it counts as ready.
+import { spawn } from 'node:child_process'
+import { accessSync, constants } from 'node:fs'
+import { binaryOnPath } from '../binaryOnPath'
+import { redactSecrets } from '../redactSecrets'
+import { isClaudeToken } from '../../shared/claudeLaunch/claudeLaunch.normalize'
+import type { ResolvedClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
+
+export interface RunResult { code: number | null; stdout: string; stderr?: string; timedOut: boolean }
+/** Runs one process (argv array, no shell) and resolves with its exit code and captured output. */
+export type RunFn = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; timeoutMs: number }) => Promise<RunResult>
+
+export type LaunchStage = 'wrapper' | 'claude' | 'auth'
+export type LaunchFailure = 'wrapper_not_found' | 'wrapper_failed' | 'claude_not_found' | 'auth_failed' | 'check_failed'
+export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string }
+export interface LaunchProbe {
+  ok: boolean
+  profile: { id: string; name: string }
+  steps: StageResult[]
+  failed?: LaunchFailure
+}
+
+export interface ProbeDeps {
+  env: NodeJS.ProcessEnv
+  run?: RunFn
+  onPath?: (name: string) => boolean
+  timeoutMs?: number
+  /** Claude provider mode: a key/endpoint provider needs no Claude Code login. */
+  provider?: { mode: string; ready: boolean }
+}
+
+export const AUTH_CHECK_TIMEOUT_MS = 5_000
+/** A wrapper may fetch env from a server (envman) before claude even starts. */
+export const WRAPPED_TIMEOUT_MS = 15_000
+const MAX_OUTPUT_BYTES = 64 * 1024
+const MAX_SHOWN_CHARS = 200
+const EXIT_NOT_LOGGED_IN = 1
+const AUTH_METHODS = new Set(['none', 'claude.ai', 'oauth_token', 'api_key', 'api_key_helper', 'third_party'])
+const NOT_FOUND = /not found|no such file|cannot find/i
+
+export const PROBE_TEXT = {
+  wrapperMissing: (w: string): string => `${w} not found on PATH`,
+  wrapperMissingHint: 'Install it on the server, or fix the command in the launch profile.',
+  wrapperOk: (w: string): string => `${w} runs claude`,
+  wrapperFailed: (w: string, code: number | null, line: string): string => `${w} exited with code ${code ?? '?'}${line ? `: ${line}` : ''}`,
+  wrapperFailedHint: 'Run the same command in a terminal on the server to see the full error.',
+  wrapperTimeout: (w: string): string => `${w} did not finish in time`,
+  wrapperSpawn: (w: string): string => `${w} could not be started`,
+  claudeMissing: 'The claude CLI was not found on PATH. Install Claude Code and try again.',
+  claudeMissingWrapped: (w: string): string => `${w} could not find claude`,
+  claudeOk: (v: string): string => (v ? `claude ${v}` : 'claude found'),
+  authOk: (m: string): string => (m === 'api_key' || m === 'oauth_token' ? `Signed in with a credential from the environment (${m})` : `Signed in${m ? ` (${m})` : ''}`),
+  authProvider: 'Using the Claude provider from Settings › Capabilities',
+  authMissing: 'Claude Code is not signed in.',
+  authHint: 'Run "claude auth login" on the server.',
+  authHintWrapped: 'Run "claude auth login" on the server, or let the wrapper provide ANTHROPIC_API_KEY.',
+  providerNotReady: 'The Claude provider has no key yet. Add it in Settings › Capabilities › Claude provider.',
+  checkFailed: 'Checking Claude Code status failed. Try again in a moment.',
+}
+
+/** Default RunFn: spawn without a shell, capture capped stdout/stderr, kill on timeout. */
+export const spawnRun: RunFn = (cmd, args, { env, timeoutMs }) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { env, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    let timedOut = false
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeoutMs)
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (c: string) => { if (stdout.length < MAX_OUTPUT_BYTES) stdout += c })
+    child.stderr.on('data', (c: string) => { if (stderr.length < MAX_OUTPUT_BYTES) stderr += c })
+    child.once('error', (err) => {
+      clearTimeout(timer)
+      reject(new Error(`spawn ${cmd} failed: ${(err as NodeJS.ErrnoException).code ?? 'error'}`))
+    })
+    child.once('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, timedOut }) })
+  })
+
+const baseName = (t: string): string => t.slice(t.lastIndexOf('/') + 1)
+
+/** A path is checked as-is; a bare name is searched on the child's PATH. */
+function defaultOnPath(env: NodeJS.ProcessEnv): (name: string) => boolean {
+  return (name) => {
+    if (!name.includes('/')) return binaryOnPath(name, env['PATH'] ?? '')
+    try { accessSync(name, constants.X_OK); return true } catch { return false } // absent/not executable = the answer
+  }
+}
+
+/** First non-empty line, redacted and capped: the only wrapper output that is ever shown. */
+const firstLine = (text = ''): string =>
+  redactSecrets(text.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '').slice(0, MAX_SHOWN_CHARS)
+
+/** `authMethod` only when it is one of the documented values (never free text from the CLI). */
+function readAuth(stdout: string): { loggedIn: boolean; method: string } | null {
+  try {
+    const parsed: unknown = JSON.parse(stdout)
+    if (parsed === null || typeof parsed !== 'object') return null
+    const { loggedIn, authMethod } = parsed as { loggedIn?: unknown; authMethod?: unknown }
+    return { loggedIn: loggedIn === true, method: typeof authMethod === 'string' && AUTH_METHODS.has(authMethod) ? authMethod : '' }
+  } catch {
+    return null // malformed output: reported as check_failed by the caller; the raw text is not kept
+  }
+}
+
+/** Probe one resolved launch. Stops at the first failing stage. */
+export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDeps): Promise<LaunchProbe> {
+  const run = d.run ?? spawnRun
+  const onPath = d.onPath ?? defaultOnPath(d.env)
+  const steps: StageResult[] = []
+  const profile = { id: launch.profile.id, name: launch.profile.name }
+  const fail = (stage: LaunchStage, failed: LaunchFailure, message: string, hint?: string): LaunchProbe => {
+    steps.push({ stage, ok: false, message, ...(hint ? { hint } : {}) })
+    return { ok: false, profile, steps, failed }
+  }
+  const wrapped = launch.wrapper.length > 0
+  const timeoutMs = d.timeoutMs ?? (wrapped ? WRAPPED_TIMEOUT_MS : AUTH_CHECK_TIMEOUT_MS)
+  // Probe argv: subcommands go right after claude (its flags may not precede them); a custom script
+  // that is not claude itself keeps its own arguments.
+  const head = isClaudeToken(launch.bin) ? [...launch.wrapper, launch.bin] : launch.argv
+  const exec = (args: string[]): Promise<RunResult> => run(head[0] as string, [...head.slice(1), ...args], { env: d.env, timeoutMs })
+
+  if (wrapped) {
+    const w = baseName(launch.wrapper[0] as string)
+    if (!onPath(launch.wrapper[0] as string)) return fail('wrapper', 'wrapper_not_found', PROBE_TEXT.wrapperMissing(w), PROBE_TEXT.wrapperMissingHint)
+    let r: RunResult
+    try { r = await exec(['--version']) } catch { return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperSpawn(w), PROBE_TEXT.wrapperFailedHint) }
+    if (r.timedOut) return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperTimeout(w), PROBE_TEXT.wrapperFailedHint)
+    if (r.code !== 0) {
+      const line = firstLine(r.stderr) || firstLine(r.stdout)
+      if (NOT_FOUND.test(line) && line.includes(baseName(launch.bin))) {
+        steps.push({ stage: 'wrapper', ok: true, message: PROBE_TEXT.wrapperOk(w) })
+        return fail('claude', 'claude_not_found', PROBE_TEXT.claudeMissingWrapped(w), PROBE_TEXT.claudeMissing)
+      }
+      return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperFailed(w, r.code, line), PROBE_TEXT.wrapperFailedHint)
+    }
+    steps.push({ stage: 'wrapper', ok: true, message: PROBE_TEXT.wrapperOk(w) })
+    steps.push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk(firstLine(r.stdout).slice(0, 60)) })
+  } else {
+    if (!onPath(launch.bin)) return fail('claude', 'claude_not_found', PROBE_TEXT.claudeMissing)
+    steps.push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk('') })
+  }
+
+  if (d.provider && d.provider.mode !== 'login') {
+    if (!d.provider.ready) return fail('auth', 'auth_failed', PROBE_TEXT.providerNotReady)
+    steps.push({ stage: 'auth', ok: true, message: PROBE_TEXT.authProvider })
+    return { ok: true, profile, steps }
+  }
+  const hint = wrapped ? PROBE_TEXT.authHintWrapped : PROBE_TEXT.authHint
+  let r: RunResult
+  try { r = await exec(['auth', 'status']) } catch { return fail('auth', 'check_failed', PROBE_TEXT.checkFailed) } // detail dropped: could echo paths/env
+  if (r.timedOut) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
+  if (r.code === EXIT_NOT_LOGGED_IN) return fail('auth', 'auth_failed', PROBE_TEXT.authMissing, hint)
+  if (r.code !== 0) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
+  const auth = readAuth(r.stdout)
+  if (auth === null) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
+  if (!auth.loggedIn) return fail('auth', 'auth_failed', PROBE_TEXT.authMissing, hint)
+  steps.push({ stage: 'auth', ok: true, message: PROBE_TEXT.authOk(auth.method) })
+  return { ok: true, profile, steps }
+}

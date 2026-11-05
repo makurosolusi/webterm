@@ -11,7 +11,7 @@ const agentEngine = { value: 'auto', detected: 'claude' } // test-only
 const body = (status: string, extra: object = {}) =>
   JSON.stringify({ capabilities: [{ id: 'browser', title: 'Browser on canvas', blurb: 'Open web pages as nodes on the canvas.', status, ...extra }], advanced: { chromiumPath, agentEngine } })
 const central = (status: string) => JSON.stringify({
-  capabilities: [{ id: 'central', title: 'Central Agent', blurb: 'Asisten.', status, ...(status === 'needs-step' ? { step: { kind: 'agentEngine', label: 'Install or sign in to Claude Code / OpenCode' } } : {}) }],
+  capabilities: [{ id: 'central', title: 'Central Agent', blurb: 'Asisten.', status, ...(status === 'needs-step' ? { step: { kind: 'agentEngine', label: 'Set up Claude Code' } } : {}) }],
   advanced: { chromiumPath, agentEngine },
 })
 const pathStep = { step: { kind: 'chromiumPath', label: 'Pilih lokasi' } }
@@ -103,23 +103,30 @@ describe('CapabilityOffer', () => {
     expect(JSON.parse(f.mock.calls[1][1].body)).toEqual({ enabled: true })
   })
 
-  it('langkah agentEngine tanpa onStep: pilihan mesin + status jujur di tempat; Check again memuat ulang; onDone hanya saat on', async () => {
-    const f = vi.fn()
+  it('langkah agentEngine tanpa onStep: pilihan mesin + tahap gagal profil peluncuran; Check again memuat ulang; onDone hanya saat on', async () => {
+    const caps = vi.fn()
       .mockResolvedValueOnce(new Response(central('needs-step')))
-      .mockResolvedValueOnce(new Response(central('needs-step'))) // Check again #1: masih belum login
-      .mockResolvedValue(new Response(central('on'))) // Check again #2: sudah login
+      .mockResolvedValueOnce(new Response(central('needs-step'))) // Check again #1: masih belum siap
+      .mockResolvedValue(new Response(central('on'))) // Check again #2: siap
+    const launch = vi.fn(async () => new Response(JSON.stringify({
+      ok: false, profile: { id: 'default', name: 'Default' }, failed: 'auth_failed', warnings: [],
+      steps: [{ stage: 'claude', ok: true, message: 'claude found' }, { stage: 'auth', ok: false, message: 'Claude Code is not signed in.', hint: 'Run "claude auth login" on the server.' }],
+    })))
+    const f = vi.fn((url: string, init?: RequestInit) => (url === '/api/claude-launch/test' ? launch() : caps(url, init)))
     vi.stubGlobal('fetch', f)
     const onDone = vi.fn()
     render(<CapabilityOffer id="central" onDone={onDone} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Install or sign in to Claude Code / OpenCode' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up Claude Code' }))
     expect(screen.getByLabelText('Central Agent engine')).toBeTruthy()
-    expect(screen.getByRole('status').textContent).toBe('Claude is installed but not signed in. Sign in from a terminal, then check again.')
+    expect(await screen.findByText('Launch profile: Default')).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Launch test result' }).textContent).toContain('Claude Code is not signed in.')
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
-    await waitFor(() => expect(f).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(caps).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(launch).toHaveBeenCalledTimes(2)) // the stage check re-runs too
     expect(onDone).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
-    expect(f.mock.calls.map((c) => [c[0], c[1]?.method ?? 'GET'])).toEqual([
+    expect(caps.mock.calls.map((c) => [c[0], (c[1] as RequestInit | undefined)?.method ?? 'GET'])).toEqual([
       ['/api/capabilities', 'GET'], ['/api/capabilities?refresh=1', 'GET'], ['/api/capabilities?refresh=1', 'GET'],
     ])
   })

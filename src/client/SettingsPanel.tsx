@@ -56,15 +56,17 @@ interface PanelProps {
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
+  /** Section shown first (e.g. 'agent' from the Central card's "Edit launch profile"). */
+  initialSection?: string
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
 }
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal' }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
-  const [activeRaw, setActive] = useState<string>('terminal')
+  const [activeRaw, setActive] = useState<string>(initialSection)
   const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
   const [capabilityHits, setCapabilityHits] = useState(0)

@@ -263,20 +263,23 @@ describe('SettingsPanel agents', () => {
     const { onChange, rerender } = renderPanel()
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
-    const launch = screen.getByLabelText('Claude Code launch command')
-    fireEvent.change(launch, { target: { value: 'wrap-claude' } })
-    expect(onChange).toHaveBeenLastCalledWith({ agentLaunchCommands: { claude: 'wrap-claude' } })
+    const launch = screen.getByLabelText('Codex launch command')
+    fireEvent.change(launch, { target: { value: 'wrap-codex' } })
+    expect(onChange).toHaveBeenLastCalledWith({ agentLaunchCommands: { codex: 'wrap-codex' } })
 
     rerender(
       <SettingsPanel
-        settings={{ ...DEFAULT_SETTINGS, agentLaunchCommands: { claude: 'wrap-claude' } }}
+        settings={{ ...DEFAULT_SETTINGS, agentLaunchCommands: { codex: 'wrap-codex' } }}
         onChange={onChange}
         onClose={vi.fn()}
       />,
     )
     fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
-    fireEvent.change(screen.getByLabelText('Claude Code launch command'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Codex launch command'), { target: { value: '' } })
     expect(onChange).toHaveBeenLastCalledWith({ agentLaunchCommands: {} })
+    // Claude has no row here any more: it is configured through the launch profiles card.
+    expect(screen.queryByLabelText('Claude Code launch command')).toBeNull()
+    expect(screen.getByRole('region', { name: 'Default' })).toBeTruthy()
   })
 
   it('adds a custom agent with a stable id prefix', () => {

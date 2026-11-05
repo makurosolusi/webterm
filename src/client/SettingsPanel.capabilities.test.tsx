@@ -19,7 +19,7 @@ const mkView = (id: CapabilityId): CapabilityView => ({
   ...(id === 'browser' ? { step: { kind: 'chromiumPath' as const, label: 'Pilih lokasi' } } : {}),
   ...(chainBroken && id === 'autonomy' ? { step: { kind: 'fixChain' as const, label: 'Turn on what’s needed' } } : {}),
   ...(engineStep && id === 'central'
-    ? { status: 'needs-step' as const, step: { kind: 'agentEngine', label: 'Install or sign in to Claude Code / OpenCode' } as unknown as CapabilityView['step'] }
+    ? { status: 'needs-step' as const, step: { kind: 'agentEngine', label: 'Set up Claude Code' } as unknown as CapabilityView['step'] }
     : {}),
   ...(id === 'workers' && on.has(id) ? { subs: [{ key: 'k', label: 'Ask for approval before a worker runs', on: true }] } : {}),
 })
@@ -131,7 +131,7 @@ describe('tab Kemampuan (D8)', () => {
   it('langkah agentEngine (Central Agent butuh Claude Code/OpenCode) membuka Lanjutan, bukan toggle/reset', async () => {
     engineStep = true
     const main = await openCapabilities()
-    fireEvent.click(screen.getByRole('button', { name: 'Install or sign in to Claude Code / OpenCode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Set up Claude Code' }))
     await waitFor(() => expect((main.querySelector('details') as HTMLDetailsElement).open).toBe(true))
     expect(calls.filter((c) => c.startsWith('POST'))).toEqual([])
   })

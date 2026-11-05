@@ -23,6 +23,7 @@ import { knowledge2Routes } from './routes/knowledge2.routes'
 import { handoffRoutes } from './routes/handoff.routes'
 import { pushRoutes } from './routes/push.routes'
 import { claudeProviderRoutes } from './routes/claudeProvider.routes'
+import { claudeLauncherRoutes } from './routes/claudeLauncher.routes'
 import { proxyInfoRoutes } from './routes/proxy.routes'
 import { bakeoffRoutes } from './routes/bakeoff.routes'
 import { evalCasesRoutes } from './routes/evalcases.routes'
@@ -66,6 +67,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...knowledge2Routes,
   ...pushRoutes,
   ...claudeProviderRoutes,
+  ...claudeLauncherRoutes,
   ...proxyInfoRoutes,
   ...bakeoffRoutes,
   ...evalCasesRoutes,
