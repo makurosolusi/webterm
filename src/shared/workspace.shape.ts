@@ -1,6 +1,7 @@
 import type { AgentId } from './workspace.agents'
 import { canContextLink } from './workspace.capabilities'
 import type { DeviceChoice } from './browser.devices'
+import type { TabLayout } from './tabLayout.schema'
 
 // ---------------------------------------------------------------------------------------------
 // Bentuk workspace yang dipersist.
@@ -133,6 +134,8 @@ export interface Workspace {
   viewport: Viewport
   nodes: WsNode[]
   bridges: BridgeLink[]   // edge context-link antar node
+  /** Tab-mode view of this workspace (tabLayout.schema.ts). Server always returns one; a PUT that omits it keeps the stored one. */
+  layout?: TabLayout
   updatedAt: number
 }
 

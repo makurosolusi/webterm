@@ -7,6 +7,8 @@ import { registerClaudeLaunchSettings } from './claudeLauncher/claudeLauncher'
 import { chmodSync } from 'node:fs'
 import { dbPath, warnPermsNotTightened } from './config'
 import { ensureAuditSchema } from './featureCapabilities.audit'
+import { defaultTabLayout } from '../shared/tabLayout.schema'
+import { ensureLayoutColumn, parseLayout, serializeLayout } from './db.layout'
 
 const DB_FILE_MODE = 0o600
 
@@ -32,6 +34,7 @@ export function openDb(path: string = dbPath()): Database {
   if (!cols.some((c) => c.name === 'bridges')) {
     d.exec("ALTER TABLE workspace ADD COLUMN bridges TEXT NOT NULL DEFAULT '[]'")
   }
+  ensureLayoutColumn(d)
   ensureAuditSchema(d)
   return d
 }
@@ -44,6 +47,7 @@ interface Row {
   viewport: string
   nodes: string
   bridges: string
+  layout: string
   updated_at: number
 }
 
@@ -56,6 +60,7 @@ function toWorkspace(r: Row): Workspace {
     viewport: JSON.parse(r.viewport) as Viewport,
     nodes: JSON.parse(r.nodes) as WsNode[],
     bridges: JSON.parse(r.bridges ?? '[]') as BridgeLink[],
+    layout: parseLayout(r.layout),
     updatedAt: r.updated_at,
   }
 }
@@ -82,6 +87,7 @@ export class Db {
       viewport: DEFAULT_VIEWPORT,
       nodes: [],
       bridges: [],
+      layout: defaultTabLayout(),
       updatedAt: Date.now(),
     }
     this.d.query(
@@ -93,13 +99,14 @@ export class Db {
   save(ws: Workspace): void {
     const updatedAt = Date.now()
     this.d.query(
-      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, layout, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name=excluded.name, cwd=excluded.cwd, color=excluded.color,
          viewport=excluded.viewport, nodes=excluded.nodes, bridges=excluded.bridges,
+         layout=COALESCE(NULLIF(excluded.layout, ''), layout),
          updated_at=excluded.updated_at`
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), updatedAt)
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), updatedAt)
   }
 
   delete(id: string): void {

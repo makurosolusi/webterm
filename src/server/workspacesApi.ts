@@ -16,6 +16,7 @@ import { BodyReadError } from './cappedRequestBody'
 import { logWorkspaceSave, workspaceLog } from './workspacesLog'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { produceEdgeChange } from './events/producers.edge'
+import { normalizeTabLayout } from '../shared/tabLayout.schema'
 import { backgroundsDir } from './canvasBackground.store'
 import { dropWorkspaceBackground } from './canvasBackground.gc'
 
@@ -30,7 +31,7 @@ const TOO_LARGE = { status: 413, body: { error: 'payload_too_large' } }
 const BODY_READ_FAILED = { status: 400, body: { error: 'body_read_failed' } }
 
 type CreateBody = { name: string; cwd?: string; color?: string }
-type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[] }
+type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[]; layout?: unknown }
 
 /**
  * Body JSON yang WAJIB objek biasa, atau `null` → 400.
@@ -125,6 +126,8 @@ export async function workspacesRoute(
       const ws: Workspace = {
         id, name: b.name, cwd: b.cwd, color: b.color,
         viewport: b.viewport, nodes: b.nodes, bridges: b.bridges ?? [], updatedAt: Date.now(),
+        // Absent = keep the stored layout (old clients, partial writers); present = sanitized.
+        layout: b.layout === undefined ? undefined : normalizeTabLayout(b.layout),
       }
       const prev = store.get(id)
       guarded('save', id, () => store.save(ws))
