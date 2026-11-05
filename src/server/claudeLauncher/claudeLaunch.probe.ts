@@ -14,7 +14,7 @@ import type { ResolvedClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunc
 
 export interface RunResult { code: number | null; stdout: string; stderr?: string; timedOut: boolean }
 /** Runs one process (argv array, no shell) and resolves with its exit code and captured output. */
-export type RunFn = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; timeoutMs: number }) => Promise<RunResult>
+export type RunFn = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; timeoutMs: number; cwd?: string }) => Promise<RunResult>
 
 export type LaunchStage = 'wrapper' | 'claude' | 'auth'
 export type LaunchFailure = 'wrapper_not_found' | 'wrapper_failed' | 'claude_not_found' | 'auth_failed' | 'check_failed'
@@ -65,28 +65,34 @@ export const PROBE_TEXT = {
 }
 
 /** Default RunFn: spawn without a shell, capture capped stdout/stderr, kill on timeout. */
-export const spawnRun: RunFn = (cmd, args, { env, timeoutMs }) =>
+export const spawnRun: RunFn = (cmd, args, { env, timeoutMs, cwd }) =>
   new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { env, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+    // Own process group: a wrapper (envman, op run) execs claude as a child, and killing only the wrapper
+    // would leave that child holding the pipes open until it ends on its own.
+    const child = spawn(cmd, args, { env, cwd, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
-    let timedOut = false
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeoutMs)
+    let done = false
+    const finish = (r: RunResult): void => { if (!done) { done = true; clearTimeout(timer); resolve(r) } }
+    const timer = setTimeout(() => {
+      try { process.kill(-(child.pid as number), 'SIGKILL') } catch { child.kill('SIGKILL') } // group gone/unsupported: kill the child itself
+      finish({ code: null, stdout, stderr, timedOut: true })
+    }, timeoutMs)
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
     child.stdout.on('data', (c: string) => { if (stdout.length < MAX_OUTPUT_BYTES) stdout += c })
     child.stderr.on('data', (c: string) => { if (stderr.length < MAX_OUTPUT_BYTES) stderr += c })
     child.once('error', (err) => {
       clearTimeout(timer)
-      reject(new Error(`spawn ${cmd} failed: ${(err as NodeJS.ErrnoException).code ?? 'error'}`))
+      if (!done) { done = true; reject(new Error(`spawn ${cmd} failed: ${(err as NodeJS.ErrnoException).code ?? 'error'}`)) }
     })
-    child.once('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, timedOut }) })
+    child.once('close', (code) => finish({ code, stdout, stderr, timedOut: false }))
   })
 
 const baseName = (t: string): string => t.slice(t.lastIndexOf('/') + 1)
 
 /** A path is checked as-is; a bare name is searched on the child's PATH. */
-function defaultOnPath(env: NodeJS.ProcessEnv): (name: string) => boolean {
+export function defaultOnPath(env: NodeJS.ProcessEnv): (name: string) => boolean {
   return (name) => {
     if (!name.includes('/')) return binaryOnPath(name, env['PATH'] ?? '')
     try { accessSync(name, constants.X_OK); return true } catch { return false } // absent/not executable = the answer
@@ -147,7 +153,8 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
     steps.push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk('') })
   }
 
-  if (d.provider && d.provider.mode !== 'login') {
+  // Login and command mode both rely on Claude Code's own status (a command's wrapper supplies the credential).
+  if (d.provider && d.provider.mode !== 'login' && d.provider.mode !== 'command') {
     if (!d.provider.ready) return fail('auth', 'auth_failed', PROBE_TEXT.providerNotReady)
     steps.push({ stage: 'auth', ok: true, message: PROBE_TEXT.authProvider })
     return { ok: true, profile, steps }

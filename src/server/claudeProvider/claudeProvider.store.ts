@@ -5,6 +5,7 @@
 import { join } from 'node:path'
 import { dataDir } from '../config'
 import { createFileSecretStore, type SecretStore } from '../envSecrets.store'
+import { commandProfileExists, commandViewExtras } from './claudeProvider.command'
 import { applyProviderEnv, DEFAULT_CONFIG, isReady, providerEnv, type ProviderConfig, type ProviderEnv, type ProviderView } from './claudeProvider.model'
 
 export const PROVIDER_SUBDIR = 'claude-provider'
@@ -37,7 +38,13 @@ export function saveProvider(config: ProviderConfig, secret: string | null | und
 export function providerView(store: SecretStore = defaultStore()): ProviderView {
   const c = loadConfig(store)
   const secretSet = loadSecret(store) !== null
-  return { ...c, secretSet, ready: isReady(c, secretSet) }
+  return { ...c, secretSet, ready: isReady(c, secretSet, commandProfileExists(c)), ...commandViewExtras(c) }
+}
+
+/** Launch profile id chosen by command mode, or undefined in every other mode (the default-profile override). */
+export const commandProfileOverride = (store: SecretStore = defaultStore()): string | undefined => {
+  const c = loadConfig(store)
+  return c.mode === 'command' && c.profileId ? c.profileId : undefined
 }
 
 /** Env change for the next Claude process (login mode: none). */

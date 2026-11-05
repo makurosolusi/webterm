@@ -3,7 +3,8 @@ import type { Workspace, WsNode, Viewport, BridgeLink } from '../shared/workspac
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
-import { registerClaudeLaunchSettings } from './claudeLauncher/claudeLauncher'
+import { registerClaudeLaunchSettings, registerDefaultProfileOverride } from './claudeLauncher/claudeLauncher'
+import { commandProfileOverride } from './claudeProvider/claudeProvider.store'
 import { chmodSync } from 'node:fs'
 import { dbPath, warnPermsNotTightened } from './config'
 import { ensureAuditSchema } from './featureCapabilities.audit'
@@ -150,3 +151,4 @@ export const db = new Db(openDb())
 // satu-satunya modul yang memegang store settings sisi server.
 registerAgentBaseResolver(() => db.getSettings())
 registerClaudeLaunchSettings(() => db.getSettings())
+registerDefaultProfileOverride(() => commandProfileOverride()) // Claude provider command mode picks the default launch profile

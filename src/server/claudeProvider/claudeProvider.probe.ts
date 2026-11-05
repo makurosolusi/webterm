@@ -12,8 +12,8 @@ export const ANTHROPIC_VERSION = '2023-06-01'
 export const PROBE_MODEL = 'claude-sonnet-4-6'
 export const PROBE_TIMEOUT_MS = 10_000
 
-export type ProbeOutcome = 'ok' | 'model_rejected' | 'auth_rejected' | 'http_error' | 'unreachable' | 'not_configured'
-export interface ProbeResult { outcome: ProbeOutcome; ok: boolean; status?: number; errorType?: string; message: string }
+export type ProbeOutcome = 'ok' | 'model_rejected' | 'auth_rejected' | 'http_error' | 'unreachable' | 'not_configured' | 'command_not_found' | 'command_failed'
+export interface ProbeResult { outcome: ProbeOutcome; ok: boolean; status?: number; exitCode?: number; errorType?: string; message: string }
 
 const ERROR_TYPE = /^[a-z_]{1,60}$/
 
@@ -24,6 +24,8 @@ const MESSAGES: Record<ProbeOutcome, string> = {
   http_error: 'The endpoint answered with an error.',
   unreachable: 'The endpoint could not be reached. Check the URL and the network.',
   not_configured: 'Set a key first.',
+  command_not_found: 'The launch command could not be found on PATH.',
+  command_failed: 'The launch command did not finish successfully.',
 }
 
 const result = (outcome: ProbeOutcome, extra: Partial<ProbeResult> = {}): ProbeResult =>
