@@ -44,6 +44,7 @@ test('full route order snapshot', () => {
     'replay',
     'prreview',
     'templates',
+    'workspace-create',
   ])
 })
 

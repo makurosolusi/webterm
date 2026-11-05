@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { sessionLabel } from './sessionList'
 import type { ClosedEntry } from './closedHistory'
+import { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import './welcome.css'
 
 interface Props {
@@ -52,9 +53,9 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
           <section className="welcome__section" aria-labelledby="welcome-start">
             <h2 id="welcome-start" className="welcome__heading">Start</h2>
             <ul className="welcome__list">
-              <StartLink icon="new-folder" label="New project" onClick={onNewProject} />
-              <StartLink icon="folder-opened" label="Open folder…" onClick={onNewProject} />
-              <StartLink icon="repo-clone" label="Clone repo…" disabled />
+              <StartLink icon="new-folder" label="New project" onClick={() => openWorkspaceCreate('project')} />
+              <StartLink icon="folder-opened" label="Open folder…" onClick={() => onNewProject()} />
+              <StartLink icon="repo-clone" label="Clone repo…" onClick={() => openWorkspaceCreate('clone')} />
               <StartLink icon="remote" label="Connect over SSH…" disabled />
             </ul>
             {/* Satu-satunya jalur buat-tanpa-folder webterm; dibiarkan sebagai baris sekunder tipis. */}

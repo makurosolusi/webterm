@@ -123,7 +123,8 @@ export interface WorkspaceLifecycle {
   onRenameWorkspace: (id: string, name: string) => Promise<void>
   onDeleteWorkspace: (id: string) => Promise<void>
   onCreateWorkspace: (name: string, cwd?: string) => Promise<void>
-  onNewProject: () => void
+  /** No path: pick an existing folder. A path (just cloned/created): open it as a workspace. */
+  onNewProject: (path?: string) => void
 }
 
 export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLifecycle {
@@ -271,8 +272,10 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     applyWorkspace(ws)
   }, [applyWorkspace])
 
-  const onNewProject = useCallback(() => {
-    setPicker({ onPick: (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p) })
+  const onNewProject = useCallback((path?: string) => {
+    const open = (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p)
+    if (typeof path === 'string') open(path)
+    else setPicker({ onPick: open })
   }, [onCreateWorkspace])
 
   return { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onNewProject }
