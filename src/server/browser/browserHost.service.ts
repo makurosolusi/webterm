@@ -8,7 +8,8 @@ import { CDP, CDP_EVENT, CdpClient } from './cdp.client'
 import type { CdpHandler } from './cdp.client'
 import { LaunchError } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
-import { metricsParams, screencastParams, toCdpCommands } from './browserHost.input'
+import { screencastParams, toCdpCommands } from './browserHost.input'
+import { castViewport, resizeViewport, restoreDevice, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
@@ -29,6 +30,7 @@ export interface HostDeps {
   connect?: (wsUrl: string) => Promise<CdpClient>
   /** Shields (blokir iklan/pelacak + sakelar per situs); tanpa ini hanya batas popup yang berlaku. */
   shields?: ShieldPolicy
+  initialDevice?: (nodeId: string) => unknown // device saved on the board (`WsNode.device`): seeds a node seen first time
   now?: () => number
 }
 
@@ -78,20 +80,16 @@ export class BrowserHost implements BrowserHostApi {
 
   async setViewport(nodeId: string, w: number, h: number, dpr: number): Promise<void> {
     const rec = this.need(nodeId)
-    const prev = rec.viewport
-    rec.viewport = { w, h, dpr }
-    await this.send(rec, CDP.setDeviceMetrics, metricsParams(w, h, dpr))
-    this.fire(rec, CDP.setVisibleSize, { width: Math.round(w), height: Math.round(h) }) // Orca ...-device-metrics.ts:45-54
-    const p = screencastParams(rec.viewport) // batas frame ikut ukuran baru: restart (DevTools ScreencastView: stop/start)
-    if (!rec.cast || JSON.stringify(screencastParams(prev)) === JSON.stringify(p)) return
-    await this.send(rec, CDP.stopScreencast)
-    await this.send(rec, CDP.startScreencast, p)
+    return resizeViewport(rec, { w, h, dpr }, this.io(rec))
   }
+
+  /** Device mode (DevTools Device Toolbar): emulate a preset/custom device; null = follow the node size again. */
+  async setDevice(nodeId: string, device: DeviceChoice | null): Promise<void> { const rec = this.need(nodeId); return setDevice(rec, device, this.io(rec)) }
 
   async startScreencast(nodeId: string, onFrame: (f: Frame) => void): Promise<void> {
     const rec = this.need(nodeId)
     rec.cast = { onFrame, seq: 0, acks: new Map() }
-    await this.send(rec, CDP.startScreencast, screencastParams(rec.viewport))
+    await this.send(rec, CDP.startScreencast, screencastParams(castViewport(rec)))
   }
 
   async stopScreencast(nodeId: string): Promise<void> {
@@ -222,6 +220,7 @@ export class BrowserHost implements BrowserHostApi {
     }
     const { targetId, sessionId } = await createPageTarget(cdp, rec.viewport)
     this.table.bind(rec, targetId, sessionId)
+    await restoreDevice(rec, () => this.deps.initialDevice?.(nodeId), this.io(rec))
     await this.shield.enable(cdp, sessionId)
     this.patch(rec, { live: 'live', blocked: blocked?.reason, url: target, ...this.shield.pageState(target) })
     if (target && !blocked) await this.goto(rec, target)
@@ -279,6 +278,7 @@ export class BrowserHost implements BrowserHostApi {
     if (!rec.sessionId) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
     return (await this.cdpOf(rec)).send<T>(method, params, rec.sessionId)
   }
+  private io(rec: NodeRec): DeviceIo { return { send: (m, p) => this.send(rec, m, p), fire: (m, p) => this.fire(rec, m, p) } }
 
   /** Kirim tanpa menunggu; kegagalan dilog (mis. target sudah hilang), tidak melempar ke pemanggil. */
   private fire(rec: NodeRec, method: string, params?: object): void {

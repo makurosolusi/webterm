@@ -46,6 +46,8 @@ export class FakeHost implements GatewayHost {
   async selectionText() { return 'selected' }
   shields: string[] = []
   async setShields(id: string, on: boolean) { this.shields.push(`${id}:${on}`) }
+  devices: Array<[string, unknown]> = []
+  async setDevice(id: string, device: unknown) { this.devices.push([id, device]) }
   /** Dorong state baru ke langganan (seperti host nyata). */
   setState(s: BrowserState) { this.states.set(s.id, s); for (const cb of [...this.stateCbs]) cb({ ...s }) }
   emitFrame(id: string, seq: number) { this.frames.get(id)?.({ seq, jpeg: new Uint8Array([0xff, 0xd8, seq]) }) }

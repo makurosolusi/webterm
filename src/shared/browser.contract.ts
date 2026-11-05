@@ -2,6 +2,8 @@
 // WS lain MENGIMPOR dari sini, tidak menyalin literal. Perubahan kontrak = permintaan ke orkestrator.
 // Murni deklarasi: tanpa import client/server, tanpa side effect saat import.
 
+import type { DeviceChoice } from './browser.devices'
+
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
 export const BROWSER_WS_PATH = '/ws/browser'
@@ -137,6 +139,7 @@ export type ClientMsg =
   | { t: 'dialog'; id: string; accept: boolean; text?: string }
   | { t: 'takeover'; id: string }
   | { t: 'shields'; id: string; on: boolean }
+  | { t: 'device'; id: string; device: DeviceChoice | null } // device mode (browser.devices.ts); null = Responsive
 
 export type ServerMsg =
   | ({ t: 'state' } & BrowserState)

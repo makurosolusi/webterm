@@ -1,0 +1,18 @@
+/* Device mode: the frame is letterboxed inside the node (keeps the device aspect, centered on a neutral backdrop).
+   Container units size the canvas, so its bounding rect IS the device frame and pointer mapping stays exact. */
+.browser-zoom--device .browser-stage { container-type: size; background: var(--vscode-editorWidget-background, var(--panel)); }
+.browser-zoom--device .browser-surface { display: flex; align-items: center; justify-content: center; }
+.browser-zoom--device .browser-canvas {
+  flex: none;
+  width: min(100cqw, 100cqh * var(--device-w) / var(--device-h));
+  height: min(100cqh, 100cqw * var(--device-h) / var(--device-w));
+  background: var(--vscode-editor-background, var(--bg));
+  box-shadow: 0 0 0 1px var(--vscode-editorWidget-border, rgb(127 127 127 / 30%));
+}
+.browser-device-header {
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 4px 2px;
+  font: 11px/1.4 var(--font-ui); color: var(--vscode-descriptionForeground, var(--text)); font-variant-numeric: tabular-nums;
+}
+.browser-device-pop { display: flex; flex-direction: column; gap: 2px; width: 240px; max-height: 420px; overflow: auto; padding: 4px; }
+.browser-device-pop button { justify-content: space-between; width: 100%; }
+.browser-device-custom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding-top: 4px; }

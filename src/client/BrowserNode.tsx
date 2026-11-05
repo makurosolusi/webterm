@@ -21,6 +21,10 @@ import { ZOOM_DEFAULT, stepZoom } from './browser.zoom'
 import { randomId } from './randomId'
 import { useLiveSettings } from './useSettings'
 import { toSearchEngine } from '../shared/browser.omnibox'
+import { resolveDevice } from '../shared/browser.devices'
+import type { DeviceChoice } from '../shared/browser.devices'
+import BrowserDeviceHeader from './BrowserDeviceHeader'
+import { deviceStyle, useDeviceSession } from './browser.device'
 import './browser.css'
 
 const COLLAPSED_H = 40
@@ -42,6 +46,9 @@ export interface BrowserSlotCtx {
   stepZoom: (dir: -1 | 1) => void
   /** Nyalakan/matikan Shields untuk situs halaman ini. */
   setShields: (on: boolean) => void
+  /** Device mode saved on the node (absent = Responsive) and its setter (null = Responsive). */
+  device?: DeviceChoice
+  setDevice: (device: DeviceChoice | null) => void
 }
 
 export interface BrowserNodeProps extends NodeProps {
@@ -59,7 +66,7 @@ export interface BrowserNodeProps extends NodeProps {
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
 function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay, menuItems }: BrowserNodeProps) {
-  const d = data as { url?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
+  const d = data as { url?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
@@ -74,6 +81,8 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
   const lastGo = useRef<string | undefined>(undefined)
+  const device = resolveDevice(d.device)
+  const surfaceSession = useDeviceSession(session, device)
 
   useGoto({ want: d.url, state, send })
 
@@ -96,6 +105,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
     },
     takeover: () => send({ t: 'takeover' }),
     setShields: (on) => send({ t: 'shields', on }),
+    device: d.device, setDevice: (dev) => { rf.updateNodeData(id, { device: dev ?? undefined }); send({ t: 'device', device: dev }) },
     zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
   }
   // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.
@@ -130,9 +140,10 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
         />
         <div className="node-body browser-node">
           {renderToolbar?.(ctx)}
+          <BrowserDeviceHeader device={device} onRotate={() => d.device && ctx.setDevice({ ...d.device, landscape: !d.device.landscape })} />
           <div className="browser-body">
-            <div className="browser-zoom" style={{ '--browser-zoom': zoom } as CSSProperties}>
-              <BrowserSurface session={session} />
+            <div className={device ? 'browser-zoom browser-zoom--device' : 'browser-zoom'} style={{ '--browser-zoom': zoom, ...deviceStyle(device) } as CSSProperties}>
+              <BrowserSurface session={surfaceSession} />
             </div>
             {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}

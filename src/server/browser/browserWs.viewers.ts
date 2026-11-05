@@ -8,6 +8,7 @@ import { createLogger } from '../logs'
 import { createFrameGate } from './browserWs.backpressure'
 import type { FrameGate } from './browserWs.backpressure'
 import type { HostEvent } from './browserHost.targets'
+import type { DeviceChoice } from '../../shared/browser.devices'
 
 const log = createLogger('browser.ws')
 const errName = (e: unknown) => (e instanceof Error ? e.name : typeof e)
@@ -20,6 +21,8 @@ export interface GatewayHost extends BrowserHostApi {
   selectionText(nodeId: string): Promise<string>
   /** Sakelar Shields situs halaman node (persist per host) lalu muat ulang. */
   setShields(nodeId: string, on: boolean): Promise<void>
+  /** Device mode (browser.devices.ts); null = Responsive. */
+  setDevice(nodeId: string, device: DeviceChoice | null): Promise<void>
 }
 
 /** Ujung tulis satu klien; implementasi nyata membungkus `ws`. */
