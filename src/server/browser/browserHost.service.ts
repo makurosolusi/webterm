@@ -4,18 +4,19 @@ import { TOUCH_POINTS_MAX, BlockedError } from '../../shared/browser.contract'
 import type { BrowserHostApi, BrowserInputEvent, BrowserState, Frame, NAV_ACTIONS } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
-import { CDP, CDP_EVENT, CdpClient } from './cdp.client'
-import type { CdpHandler } from './cdp.client'
-import { LaunchError } from './chromium.launch'
+import { CDP } from './cdp.client'
+import type { CdpClient, CdpHandler } from './cdp.client'
 import type { BrowserLauncher } from './chromium.launch'
 import { screencastParams, toCdpCommands } from './browserHost.input'
-import { castViewport, resizeViewport, restoreDevice, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
+import { castViewport, resizeViewport, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
 import type { ShieldPolicy } from './adblock.shields'
 import { createConsoleLog } from './browserHost.console'
-import { blockOf, BrowserError, createPageTarget, mergeState, newRec, notePendingInput, readHistory, setupConnection, TargetTable } from './browserHost.targets'
+import { createTargetLifecycle } from './browserHost.lifecycle'
+import type { TargetLifecycle } from './browserHost.lifecycle'
+import { blockOf, BrowserError, mergeState, notePendingInput, readHistory, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
 export { BrowserError } from './browserHost.targets'
@@ -37,13 +38,12 @@ export interface HostDeps {
 
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
-  private readonly conns = new Map<string, Promise<CdpClient>>()
-  private readonly opening = new Map<string, Promise<BrowserState>>()
   private readonly stateCbs = new Set<(s: BrowserState) => void>()
   private readonly eventCbs = new Set<(e: HostEvent) => void>()
 
   private readonly route: CdpHandler
   private readonly shield: ShieldRouter
+  private readonly life: TargetLifecycle
   readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
@@ -51,22 +51,21 @@ export class BrowserHost implements BrowserHostApi {
     const emit = (e: HostEvent) => this.emit(e)
     this.shield = createShieldRouter({ table: this.table, policy: deps.shields, patch, emit, now: deps.now })
     this.route = createEventRouter({
-      table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.crash(r),
+      table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.life.crash(r),
       refresh: (r) => this.refresh(r), fire: (r, m, p) => this.fire(r, m, p),
       closeTarget: async (r, targetId) => { await (await this.cdpOf(r)).send(CDP.closeTarget, { targetId }) },
       popup: (r, url) => this.shield.popup(r, url), pageState: (url) => this.shield.pageState(url),
       detached: (p) => this.shield.detached(p),
     })
+    this.life = createTargetLifecycle({
+      table: this.table, launcher: deps.launcher, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice,
+      shield: this.shield, console: this.console, route: this.route, patch, emit,
+      io: (r) => this.io(r), goto: (r, url) => this.goto(r, url),
+    })
   }
 
   // ---- BrowserHostApi ----
-  open(nodeId: string, workspaceId: string, url?: string): Promise<BrowserState> {
-    const inflight = this.opening.get(nodeId)
-    if (inflight) return inflight
-    const p = this.doOpen(nodeId, workspaceId, url).finally(() => this.opening.delete(nodeId))
-    this.opening.set(nodeId, p)
-    return p
-  }
+  open(nodeId: string, workspaceId: string, url?: string): Promise<BrowserState> { return this.life.open(nodeId, workspaceId, url) }
 
   async navigate(nodeId: string, url: string): Promise<void> {
     const rec = this.table.nodes.get(nodeId)
@@ -127,20 +126,7 @@ export class BrowserHost implements BrowserHostApi {
     return this.send(this.need(nodeId), method, params)
   }
 
-  async discard(nodeId: string): Promise<void> {
-    const rec = this.table.nodes.get(nodeId)
-    if (!rec?.sessionId) return
-    const targetId = rec.targetId as string
-    const cdp = await this.conns.get(rec.workspaceId)
-    this.shield.forget(rec)
-    this.table.unbind(rec) // unbind dulu: targetDestroyed berikutnya bukan crash
-    this.patch(rec, { live: 'discarded', loading: false })
-    try {
-      await cdp?.send(CDP.closeTarget, { targetId })
-    } catch (err) {
-      log.warn('browser.discard', 'closeTarget failed (target may already be gone)', { ids: { nodeId }, error: errMsg(err) })
-    }
-  }
+  discard(nodeId: string): Promise<void> { return this.life.discard(nodeId) }
 
   state(nodeId: string): BrowserState | undefined {
     const rec = this.table.nodes.get(nodeId)
@@ -196,70 +182,10 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   /** Tutup semua koneksi CDP (proses Chromium dimatikan oleh `launcher.shutdown()`). */
-  async dispose(): Promise<void> {
-    const all = [...this.conns.values()]
-    this.conns.clear()
-    for (const p of all) (await p.catch(() => null))?.close() // koneksi yang gagal dibuat tidak perlu ditutup
-  }
+  dispose(): Promise<void> { return this.life.dispose() }
 
   // ---- internal ----
   private blockOf(url: string) { return blockOf(this.deps.guard, url) }
-
-  private async doOpen(nodeId: string, workspaceId: string, url?: string): Promise<BrowserState> {
-    let rec = this.table.nodes.get(nodeId)
-    if (rec?.sessionId) return { ...rec.state }
-    if (!rec) this.table.nodes.set(nodeId, (rec = newRec(nodeId, workspaceId, url ?? '')))
-    rec.workspaceId = workspaceId
-    const target = url ?? rec.state.url
-    const blocked = target ? this.blockOf(target) : null
-    let cdp: CdpClient
-    try {
-      cdp = await this.connection(workspaceId)
-    } catch (err) {
-      const noBin = err instanceof LaunchError && err.code === 'no_binary'
-      if (noBin) this.patch(rec, { blocked: 'no_binary' })
-      throw new BrowserError(noBin ? 'no_binary' : 'crashed', `open node ${nodeId} failed: ${errMsg(err)}`, undefined, err)
-    }
-    const { targetId, sessionId } = await createPageTarget(cdp, rec.viewport)
-    this.table.bind(rec, targetId, sessionId)
-    await restoreDevice(rec, () => this.deps.initialDevice?.(nodeId), this.io(rec))
-    await this.shield.enable(cdp, sessionId)
-    await this.console.enable(cdp, sessionId)
-    this.patch(rec, { live: 'live', blocked: blocked?.reason, url: target, ...this.shield.pageState(target) })
-    if (target && !blocked) await this.goto(rec, target)
-    return { ...rec.state }
-  }
-
-  private connection(workspaceId: string): Promise<CdpClient> {
-    let p = this.conns.get(workspaceId)
-    if (!p) {
-      p = (async () => {
-        const wsUrl = await this.deps.launcher.acquire(workspaceId)
-        const cdp = await (this.deps.connect ?? ((u: string) => CdpClient.connect(u)))(wsUrl)
-        cdp.on('*', this.route)
-        cdp.on('*', this.console.route)
-        cdp.on(CDP_EVENT.requestPaused, (p, sid) => this.shield.paused(cdp, p, sid))
-        cdp.on(CDP_EVENT.attachedToTarget, (p, sid) => this.shield.attached(cdp, p, sid))
-        cdp.onClose((err) => this.onConnClosed(workspaceId, err))
-        try {
-          await setupConnection(cdp)
-        } catch (err) {
-          cdp.close()
-          throw err
-        }
-        return cdp
-      })()
-      this.conns.set(workspaceId, p)
-      p.catch(() => this.conns.delete(workspaceId)) // lemparan tetap sampai ke pemanggil connection()
-    }
-    return p
-  }
-
-  private onConnClosed(workspaceId: string, err: Error): void {
-    this.conns.delete(workspaceId)
-    log.warn('browser.conn', 'cdp connection closed', { ids: { workspaceId }, error: err.message })
-    for (const rec of this.table.nodes.values()) if (rec.workspaceId === workspaceId) this.crash(rec)
-  }
 
   /**
    * Node dengan target hidup. Node dikenal yang targetnya hilang (crash/putus) = `crashed`, bukan `not_found`:
@@ -272,11 +198,7 @@ export class BrowserHost implements BrowserHostApi {
     return rec
   }
 
-  private async cdpOf(rec: NodeRec): Promise<CdpClient> {
-    const cdp = await this.conns.get(rec.workspaceId)
-    if (!cdp || cdp.closed) throw new BrowserError('crashed', `node ${rec.nodeId}: browser connection is gone`)
-    return cdp
-  }
+  private cdpOf(rec: NodeRec): Promise<CdpClient> { return this.life.cdpOf(rec) }
 
   private async send<T = Record<string, unknown>>(rec: NodeRec, method: string, params?: object): Promise<T> {
     if (!rec.sessionId) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
@@ -307,15 +229,6 @@ export class BrowserHost implements BrowserHostApi {
 
   private safe(fn: () => void): void {
     try { fn() } catch (err) { log.error('browser.listener', 'listener threw', { error: errMsg(err) }) }
-  }
-
-  private crash(rec: NodeRec): void {
-    if (!rec.sessionId) return
-    this.shield.forget(rec)
-    this.table.unbind(rec)
-    this.patch(rec, { live: 'discarded', loading: false })
-    this.emit({ k: 'error', nodeId: rec.nodeId, code: 'crashed' })
-    log.warn('browser.crash', 'browser target lost', { ids: { nodeId: rec.nodeId } })
   }
 
   private async refresh(rec: NodeRec): Promise<void> {
