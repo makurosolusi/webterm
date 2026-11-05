@@ -67,9 +67,10 @@ export function VscodeBreadcrumbs({
     const onPointerDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false)
     }
-    document.addEventListener('mousedown', onPointerDown)
+    // Capture phase: d3-zoom (React Flow pane) stopImmediatePropagation()s mousedown, so a bubble listener on document never sees a canvas click.
+    document.addEventListener('mousedown', onPointerDown, true)
     itemRefs.current[0]?.focus()
-    return () => document.removeEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [menuOpen])
 
   const select = (segment: VscodeBreadcrumbSegment) => {

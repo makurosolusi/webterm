@@ -311,8 +311,9 @@ export function VscodeMenuBar({
     const onPointerDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) onOpenChange(null)
     }
-    document.addEventListener('mousedown', onPointerDown)
-    return () => document.removeEventListener('mousedown', onPointerDown)
+    // Capture phase: d3-zoom (React Flow pane) stopImmediatePropagation()s mousedown, so a bubble listener on document never sees a canvas click.
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
   }, [openMenu, onOpenChange])
 
   // VS Code: a lone Alt press (no other key in between) moves focus to the menu bar.
