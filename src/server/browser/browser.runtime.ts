@@ -90,7 +90,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const adblockTimer = setInterval(() => { void adblock.load() }, ADBLOCK_REFRESH_MS)
   adblockTimer.unref()
   const shields = createShieldPolicy(adblock, adblockDir)
-  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })), connect: d.connect, shields, now })
+  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device })
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })

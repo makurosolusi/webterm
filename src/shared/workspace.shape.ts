@@ -1,5 +1,6 @@
 import type { AgentId } from './workspace.agents'
 import { canContextLink } from './workspace.capabilities'
+import type { DeviceChoice } from './browser.devices'
 
 // ---------------------------------------------------------------------------------------------
 // Bentuk workspace yang dipersist.
@@ -121,6 +122,7 @@ export interface WsNode {
   diffNotes?: DiffNoteData[] // node 'diff': review notes not yet sent (validDiffNotes)
   plan?: PlanNodeData     // node 'plan': draft / approved dag (validPlanData)
   agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
+  device?: DeviceChoice   // node 'browser': device mode (browser.devices.ts); absent = Responsive
 }
 
 export interface Workspace {

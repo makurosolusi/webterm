@@ -116,6 +116,9 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
       case 'shields':
         await host.setShields(id, m.on)
         return
+      case 'device':
+        await host.setDevice(id, m.device)
+        return
       case 'ack':
         return
       default: // mouse | key | text | ime | touch

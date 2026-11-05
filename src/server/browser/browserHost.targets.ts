@@ -3,6 +3,7 @@
 import { INPUT_LATENCY_STALE_MS } from '../../shared/browser.contract'
 import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency } from '../../shared/browser.contract'
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
+import type { DeviceSpec } from '../../shared/browser.devices'
 import { DEFAULT_VIEWPORT, DENIED_PERMISSIONS, windowPlacement } from './chromium.flags'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
@@ -37,6 +38,8 @@ export interface NodeRec {
   /** `acks`: seq milik kita -> id ack screencast milik Chromium (dikirim hanya setelah `ackFrame`). */
   cast?: { onFrame: (f: Frame) => void; seq: number; acks: Map<number, number> }
   touch: boolean
+  /** Device mode (browserHost.device.ts): spec = emulated device, null = Responsive, undefined = not seeded from the board yet. */
+  device?: DeviceSpec | null
   /** Input bercap waktu PERTAMA yang belum terjawab frame (I1-d); `rx`/`dispatched` = jam server, ms epoch. */
   lat?: { ls: number; rx: number; dispatched: number }
 }

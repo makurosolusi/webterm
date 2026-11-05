@@ -4,6 +4,7 @@ import {
   NAV_ACTIONS, TEXT_MAX_BYTES, TOUCH_POINTS_MAX, TOUCH_TYPES, URL_MAX_CHARS, VIEWPORT_MAX,
 } from './browser.contract'
 import type { ClientMsg, FrameLatency, TouchPoint } from './browser.contract'
+import { parseDeviceChoice } from './browser.devices'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder('utf-8', { fatal: true })
@@ -151,6 +152,10 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
     }
     case 'shields':
       return typeof m.on === 'boolean' ? { t: 'shields', id, on: m.on } : null
+    case 'device': {
+      const device = parseDeviceChoice(m.device)
+      return device === undefined ? null : { t: 'device', id, device }
+    }
     case 'dialog':
       if (typeof m.accept !== 'boolean') return null
       if (m.text === undefined) return { t: 'dialog', id, accept: m.accept }
