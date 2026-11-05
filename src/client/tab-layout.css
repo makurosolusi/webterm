@@ -13,6 +13,14 @@
 .tabs-area { flex: 1; min-width: 0; position: relative; overflow: hidden; }
 .tabs-pane { position: relative; width: 100%; height: 100%; overflow: hidden; outline: none; }
 
+/* The bottom panel (Inbox/Chat/Problems/Output) is `position: absolute` over the grid, so it would
+   cover the lower part of the panes. In tab mode it takes its space instead: while the panel host
+   is mounted, the tab area ends where the panel starts. Both are anchored to the same bottom edge
+   (the status bar) and the panel's height is `--bottom-panel-h`, so this tracks open, close,
+   resize and maximize with no JS measuring. Canvas mode has no `.tabs-view`, so it keeps the
+   overlay. The panel's left edge equals the main column's, so the width needs no adjustment. */
+.app-shell:has(> .bottom-panel-host) .tabs-view { bottom: var(--bottom-panel-h); }
+
 /* ---- Strip: 32px like Orca ---- */
 .tabs-strip {
   flex: none; height: 32px; display: flex; align-items: stretch;
