@@ -38,6 +38,8 @@ import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureC
 import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
+import { pruneCanvasBackgrounds } from './canvasBackground.gc'
+import { backgroundsDir } from './canvasBackground.store'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { startPortScanner } from './ports/ports.runtime'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
@@ -104,6 +106,8 @@ if (process.env.NODE_ENV !== 'test') {
   // Cost capture listens to agent hooks from the first session; a DAG left active by a restart resumes polling.
   startCostCapture().catch((e: unknown) => log.warn('cost.start.failed', 'Cannot start cost capture at boot', { cause: e instanceof Error ? e.message : String(e) }))
   try { armDagLoop() } catch (e) { log.warn('dag.start.failed', 'Cannot arm the DAG scheduler at boot', { cause: e instanceof Error ? e.message : String(e) }) }
+  // Wallpaper GC: overrides of deleted workspaces + image files nothing references (one readdir).
+  pruneCanvasBackgrounds(db, new Set(db.list().map((w) => w.id)), backgroundsDir()).catch((e: unknown) => log.warn('canvas-background.prune_failed', 'Cannot prune canvas backgrounds at boot', { cause: e instanceof Error ? e.message : String(e) }))
 }
 
 const API_PREFIX = '/api/'

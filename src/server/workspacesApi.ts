@@ -16,6 +16,8 @@ import { BodyReadError } from './cappedRequestBody'
 import { logWorkspaceSave, workspaceLog } from './workspacesLog'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { produceEdgeChange } from './events/producers.edge'
+import { backgroundsDir } from './canvasBackground.store'
+import { dropWorkspaceBackground } from './canvasBackground.gc'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
  *  bila path/method bukan milik modul ini. */
@@ -84,12 +86,15 @@ function guarded<T>(op: 'create' | 'save' | 'delete', id: string | undefined, ru
  *
  * `body` adalah getter, bukan string: hanya POST/PUT punya body, dan membaca stream request untuk
  * GET akan menggantung sampai timeout.
+ *
+ * `bgDir` = wallpaper dir (lazy, injectable for tests); a delete drops the workspace's override.
  */
 export async function workspacesRoute(
   store: Db,
   path: string,
   method: string,
-  body: () => Promise<string>
+  body: () => Promise<string>,
+  bgDir: () => string = backgroundsDir
 ): Promise<WorkspacesResult> {
   if (path === '/api/workspaces') {
     if (method === 'GET') return { status: 200, body: store.list() }
@@ -132,6 +137,7 @@ export async function workspacesRoute(
     if (method === 'DELETE') {
       guarded('delete', id, () => store.delete(id))
       workspaceLog.deleted(id)
+      await dropWorkspaceBackground(store, id, bgDir) // never throws: logs a warning on failure
       return { status: 204 } // tanpa kunci `body` — lihat catatan 204 di kepala file
     }
   }

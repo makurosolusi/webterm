@@ -7,11 +7,12 @@
 import type { ServerResponse } from 'node:http'
 import type { Settings } from '../../shared/settings'
 import {
-  DEFAULT_CANVAS_BACKGROUND, referencedImageIds, WORKSPACE_BACKGROUNDS_LIMITS, type CanvasBackground,
+  DEFAULT_CANVAS_BACKGROUND, WORKSPACE_BACKGROUNDS_LIMITS, type CanvasBackground,
 } from '../../shared/canvasBackground.schema'
 import {
-  backgroundsDir, deleteCanvasImage, MAX_CANVAS_IMAGE_BYTES, readBinaryBody, readCanvasImage, saveCanvasImage, sniffImage,
+  backgroundsDir, MAX_CANVAS_IMAGE_BYTES, readBinaryBody, readCanvasImage, saveCanvasImage, sniffImage,
 } from '../canvasBackground.store'
+import { deleteIfUnreferenced } from '../canvasBackground.gc'
 import { createLogger } from '../logs'
 import type { SettingsStore } from '../settingsApi'
 import { json, type ApiRoute, type RouteCtx } from './route.core'
@@ -40,7 +41,7 @@ function patchFor(s: Settings, workspace: string | null, bg: CanvasBackground): 
 /** Save `bg` for the scope, then delete `oldId` if no background references it any more. */
 async function commit(deps: CanvasBackgroundDeps, workspace: string | null, bg: CanvasBackground, oldId: string): Promise<Settings> {
   const saved = deps.store.saveSettings(patchFor(deps.store.getSettings(), workspace, bg))
-  if (oldId && !referencedImageIds(saved).has(oldId)) await deleteCanvasImage(deps.dir, oldId)
+  await deleteIfUnreferenced(deps.dir, saved, oldId)
   return saved
 }
 
