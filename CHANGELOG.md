@@ -30,6 +30,7 @@ Operator notes:
 - Each workspace can keep the global background or use its own: workspace menu > "Canvas Background…" opens the same editor for that workspace.
 
 ### Changed
+- Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
 - Nodes are resized only through the Resize toggle in the node header, or ⌘⌥R ("Node: Resize Focused Node" in ⌘K). Clicking or selecting a node no longer shows the blue resize frame. Resize mode ends on Esc, a click outside, typing in the node, collapsing or removing it, or locking the view.
 - Opening a file that is already open (for example from a second Files node) now selects only that editor, pans to it if it is not fully on screen and moves keyboard focus into it. Before, an off-screen editor was only marked selected and it looked like nothing happened. Newly opened editors get the same treatment.
 - The floating toolbar in the bottom-left of the canvas is gone; it duplicated the command palette, Files, Settings and Keyboard shortcuts and covered the canvas. "New Files Node" is now in the File menu and the activity bar "+" list, and the pill in the middle of the title bar opens Go to Anything and shows its shortcut.
@@ -38,6 +39,7 @@ Operator notes:
 - The Central Agent "Turn on" offer no longer mentions OpenCode.
 
 ### Fixed
+- Opening Chat and Inbox (or Problems and Output) together no longer stacks panels on top of each other. They are now tabs of one bottom panel with a single header: opening a view selects its tab, the Chat input stays inside the panel, and "Jump to bottom" sits above the input instead of covering messages.
 - A browser node whose page crashed or disappeared now reports "crashed" instead of "not found", and Reload reopens it at its last URL.
 - Deleting a workspace now also removes its canvas background override and its uploaded image (an image still used elsewhere is kept). The workspace delete never fails because of this, and startup cleans up leftovers from workspaces that are already gone.
 

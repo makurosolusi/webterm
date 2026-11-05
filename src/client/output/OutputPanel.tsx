@@ -16,7 +16,8 @@ export { useLogStream } from './useLogStream'
 const BOTTOM_TOLERANCE_PX = 4
 
 export interface OutputPanelProps {
-  onClose: () => void
+  /** Omit when a host tab already closes the panel; the toolbar then has no Close button. */
+  onClose?: () => void
   /** Bump to move focus to the filter box (Ctrl/Cmd+F style commands). */
   focusFilterToken?: number
 }

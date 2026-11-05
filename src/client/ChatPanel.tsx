@@ -1,5 +1,5 @@
 // Chat pane for the central agent (RND/11 §3), rendered in the VS Code bottom panel. Standalone
-// it owns a single-tab surface; `inboxChatPanel.tsx` is the two-tab Inbox/Chat mount. Mounted by
+// it owns a single-tab surface; `bottomPanelHost.tsx` is the shared tabbed mount. Mounted by
 // App, opened by the Dock button, never a canvas node. Props-driven; the default client is the
 // module `chatApi` so production wiring is one prop-free mount.
 //
@@ -7,6 +7,7 @@
 // composer with Stop, reconnect status, and error states. Approval cards are intentionally absent;
 // a tool card shows name/state only.
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { IconTooltip } from '@/components/ui/icon-button'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
@@ -64,10 +65,10 @@ export interface ChatPanelProps {
   client?: ChatClient
   /** SSE opener; injected in tests. */
   streamFactory?: StreamFactory
-  /** Stack above a standalone Inbox panel instead of overlapping it. */
-  offsetForInbox?: boolean
-  /** Render only the pane body: the combined Inbox/Chat shell owns the surface and tabs. */
+  /** Render only the pane body: the shared bottom-panel host owns the surface and tabs. */
   embedded?: boolean
+  /** Embedded only: host toolbar slot while this pane is the active tab; null while hidden. */
+  actionsHost?: HTMLElement | null
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
@@ -195,7 +196,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (props.embedded) {
     return (
       <div className="chat-panel chat-panel--embedded">
-        <div className="chat-pane-actions">{refreshButton}</div>
+        {props.actionsHost && createPortal(refreshButton, props.actionsHost)}
         {body}
       </div>
     )
@@ -203,7 +204,7 @@ export default function ChatPanel(props: ChatPanelProps) {
 
   return (
     <InboxPanelSurface
-      className={`chat-panel${props.offsetForInbox ? ' chat-panel--above-inbox' : ''}`}
+      className="chat-panel"
       ariaLabel="Chat"
       tabsLabel="Chat tabs"
       tabs={[{

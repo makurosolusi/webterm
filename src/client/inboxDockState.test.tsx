@@ -10,7 +10,7 @@
 //   3. Panel yang tertutup tidak memuat apa pun.
 //   4. `i` membuka inbox, tapi bukan saat fokus ada di kolom teks/terminal.
 import { readFileSync } from 'node:fs'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import Dock, { type DockProps } from './Dock'
 import InboxPanel from './InboxPanel'
@@ -299,6 +299,12 @@ describe('hotkey', () => {
   })
 })
 
+// Inbox is a tab of the single bottom panel now, so "mounted" means its tab exists in that strip.
+const inboxTab = (): HTMLElement | null => {
+  const strip = screen.queryByRole('tablist', { name: 'Panel tabs' })
+  return strip ? within(strip).queryByRole('tab', { name: /^Inbox/ }) : null
+}
+
 describe('App wiring', () => {
   beforeAll(installCanvasDom)
   afterEach(() => {
@@ -310,13 +316,13 @@ describe('App wiring', () => {
     await mountCanvas({ nodes: [], dirs: {} })
 
     // `useInboxOpen` default terbuka, sama seperti panel Sessions.
-    expect(screen.queryByRole('complementary', { name: 'Inbox' })).not.toBeNull()
+    expect(inboxTab()).not.toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /^Toggle inbox panel/ }))
-    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inbox' })).toBeNull())
+    await waitFor(() => expect(inboxTab()).toBeNull())
 
     fireEvent.keyDown(document.body, { key: 'i' })
-    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inbox' })).not.toBeNull())
+    await waitFor(() => expect(inboxTab()).not.toBeNull())
   })
 })
 

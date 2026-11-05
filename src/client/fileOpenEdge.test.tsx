@@ -11,6 +11,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, renderedEdgeIds, unmountCanvas } from './canvasHarness'
+import { EDGE_WIDTH, SELECTED_ARROW_STROKE } from './canvasStyle'
 import type { WsNode } from '../shared/workspace'
 
 // Monaco adalah beberapa MB JS di balik dynamic import ber-suffix `?worker` milik Vite, dan node
@@ -66,5 +67,26 @@ describe('buka file dari node files', () => {
     await screen.findByText('inner.txt')
     expect(document.querySelectorAll('.react-flow__node-editor')).toHaveLength(0)
     expect(fileOpenEdges()).toHaveLength(0)
+  })
+
+  it('kabel punya halo di BELAKANG garis utama, tak menangkap pointer; panah idle bukan penanda terpilih', async () => {
+    await mountCanvas({ nodes: [filesNode], dirs: { [DIR]: LISTING } })
+    fireEvent.doubleClick(await screen.findByText('package.json'))
+    await waitFor(() => expect(fileOpenEdges()).toHaveLength(1))
+    const edgeEl = document.querySelector('.react-flow__edge') as Element
+    const halos = edgeEl.querySelectorAll('.edge-halo')
+    expect(halos).toHaveLength(1)
+    const halo = halos[0] as SVGPathElement
+    const main = edgeEl.querySelector('.react-flow__edge-path') as SVGPathElement
+    expect(main.style.strokeWidth).toBe(`var(--edge-hover-width, ${EDGE_WIDTH}px)`)
+    expect(halo.style.pointerEvents).toBe('none')
+    expect(halo.getAttribute('d')).toBe(main.getAttribute('d'))
+    expect(Number(halo.getAttribute('stroke-width'))).toBeGreaterThan(EDGE_WIDTH)
+    // Urutan dokumen = urutan gambar: halo harus mendahului garis utama.
+    expect(halo.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Panah idle tidak boleh cocok dengan selector CSS panah terpilih.
+    const ids = Array.from(document.querySelectorAll('.react-flow__arrowhead')).map((el) => el.closest('marker')?.id ?? '')
+    expect(ids.length).toBeGreaterThan(0)
+    for (const id of ids) expect(id).not.toContain(`strokeWidth=${SELECTED_ARROW_STROKE}`)
   })
 })

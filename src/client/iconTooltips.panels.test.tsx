@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { BottomPanelTabs } from './bottomPanelTabs'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
+import { VscodeActivityBar } from './components/vscode/vscodeActivityBar'
 import { VscodeEditorTabBar } from './components/vscode/vscodeEditorTabBar'
 
 const noop = () => {}
@@ -45,5 +46,14 @@ describe('tab and breadcrumb tooltips', () => {
     expect(seg.hasAttribute('title')).toBe(false)
     expect(tipOf(seg)).toBe('/w/src/a.ts')
     expect(tipOf(screen.getByRole('button', { name: 'Show hidden path segments' }))).toBe('Show hidden path segments')
+  })
+
+  it('activity bar tooltips open to the right so they never cover the bottom panel header', () => {
+    render(<VscodeActivityBar onSelect={noop} items={[{ id: 'inbox', label: 'Toggle inbox panel', icon: null }]} />)
+    const button = screen.getByRole('button', { name: 'Toggle inbox panel' })
+    tipOf(button)
+    fireEvent.keyDown(document, { key: 'Tab' })
+    fireEvent.focus(button)
+    expect(document.querySelector('[role="tooltip"]')?.closest('[data-side]')?.getAttribute('data-side')).toBe('right')
   })
 })

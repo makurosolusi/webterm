@@ -11,6 +11,7 @@ import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
 import { useTabLayout } from './tabLayout.store'
 import { toggleLayoutMode } from './tabLayout.commands'
+import { toggleBottomView } from './bottomPanelHost'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
@@ -56,9 +57,9 @@ export default function AppDock({
       sessionsOpen={sessionsOpen}
       onToggleSessions={() => setSessionsOpen((v) => !v)}
       inboxOpen={inboxOpen}
-      onToggleInbox={() => setInboxOpen(!inboxOpen)}
+      onToggleInbox={() => toggleBottomView('inbox', inboxOpen, setInboxOpen)}
       chatOpen={chatOpen}
-      onToggleChat={() => setChatOpen(!chatOpen)}
+      onToggleChat={() => toggleBottomView('chat', chatOpen, setChatOpen)}
       centralOpen={central.open}
       onToggleCentral={central.enabled ? central.toggle : undefined}
       zoomPct={Math.round(vp.zoom * 100)}

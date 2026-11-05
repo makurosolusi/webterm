@@ -4,6 +4,7 @@
 // agent node of this board through the outbox. Live language-server diagnostics of open editor
 // nodes (editorLsp.store.ts) join the list and the counter, deduped against the run's rows.
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type { Node, XYPosition } from '@xyflow/react'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import type { Problem } from '../server/problems/problems.parse'
@@ -13,11 +14,9 @@ import { tokenQuery } from './api'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { codicon } from './dockCodicon'
 import { useLspProblems, type LspProblem } from './editorLsp.store'
-import { InboxPanelSurface } from './inboxPanelSurface'
 import { openEditorAt } from './Omnibox.open'
 
 export const PROBLEMS_POLL_MS = 3000
-const TABS = [{ id: 'problems', label: 'Problems', closable: false }]
 
 type Reply = ProblemsState & { total: number }
 
@@ -94,14 +93,17 @@ export interface ProblemsPanelProps {
   nodesRef: MutableRefObject<Node[]>
   addFlowNode: (make: (n: number, ws: Workspace) => Omit<WsNode, 'x' | 'y'>, at?: XYPosition) => void
   onFocus: (id: string) => void
+  /** Toolbar slot of the shared bottom panel while this tab is active; null while hidden. */
+  actionsHost: HTMLElement | null
 }
 
-export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, addFlowNode, onFocus }: ProblemsPanelProps) {
+/** Pane body of the Problems tab; `bottomPanelHost` owns the surface and the open state. */
+export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, addFlowNode, onFocus, actionsHost }: ProblemsPanelProps) {
   const agents = useMemo(() => agentTargets(nodes), [nodes])
   const [target, setTarget] = useState('')
   const to = agents.some((a) => a.id === target) ? target : agents[0]?.id ?? ''
-  if (!pr.open || !pr.workspaceId) return null
   const ws = pr.workspaceId
+  if (!ws) return null
   const s = pr.state
   const list = pr.list
 
@@ -136,8 +138,8 @@ export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, add
   const empty = s?.ran ? 'No problems have been detected in the workspace.' : 'Press Run to check this workspace with its TypeScript compiler and ESLint.'
 
   return (
-    <InboxPanelSurface className="problems-panel" ariaLabel="Problems" tabs={TABS.map((t) => ({ ...t, badge: list.length }))} activeId="problems"
-      onActivate={() => {}} onClosePanel={() => pr.setOpen(false)} actions={actions}>
+    <div className="problems-panel">
+      {actionsHost && createPortal(actions, actionsHost)}
       {(pr.error || s?.error) && <div role="alert" className="inbox-item">{pr.error ?? s?.error}</div>}
       {s?.ran && s.tools.length === 0 && <div className="inbox-item">No TypeScript compiler or ESLint is installed in this workspace (node_modules/.bin).</div>}
       {list.length === 0
@@ -156,6 +158,6 @@ export default function ProblemsPanel({ problems: pr, root, nodes, nodesRef, add
             ))}
           </ul>
         )}
-    </InboxPanelSurface>
+    </div>
   )
 }
