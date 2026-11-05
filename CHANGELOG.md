@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- "Clone Repository…" next to "Open Folder…" in the workspace "+" menu, the File menu, the Welcome screen and ⌘K. Paste an `https://`, `ssh://` or `git@host:path` URL, or `owner/repo` for GitHub. The clone shows its progress, can be cancelled, and opens as a new workspace. The parent folder defaults to `~/projects` (or your home folder if that doesn't exist), and the last one you used is remembered. If a private repository fails to authenticate, the error tells you to run `gh auth login` or set up an SSH key.
+- "New Project…" in the same places: it creates an empty folder under the parent you choose and opens it as a workspace. "Initialize git repository" is on by default and runs `git init` with an empty initial commit on `main`. Untick it to get a plain folder. A folder that already exists and is not empty is refused.
+
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
 
