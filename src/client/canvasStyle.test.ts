@@ -3,29 +3,56 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 import {
-  decorateEdges, EDGE_STROKE, EDGE_STROKE_SELECTED, miniMapNodeColor, MINIMAP_NODE_NEUTRAL, SELECTED_ARROW_STROKE,
+  ARROW_SIZE, decorateEdges, EDGE_INTERACTION_WIDTH, EDGE_STROKE, EDGE_STROKE_OPACITY_PCT, EDGE_STROKE_SELECTED,
+  EDGE_WIDTH, EDGE_WIDTH_SELECTED, IDLE_ARROW_STROKE, miniMapNodeColor, MINIMAP_NODE_NEUTRAL, SELECTED_ARROW_STROKE,
 } from './canvasStyle'
 
 const nodes: Node[] = [
   { id: 'a', position: { x: 0, y: 0 }, data: {} },
   { id: 'b', position: { x: 0, y: 0 }, data: {} },
 ]
+const css = readFileSync(fileURLToPath(new URL('./canvas-ui.css', import.meta.url)), 'utf8')
 const edge = (selected: boolean): Edge => ({ id: 'e', source: 'a', target: 'b', selected, data: { kind: 'context' } })
 
 describe('decorateEdges — gaya VS Code', () => {
-  it('idle: garis netral 1px, label kecil tanpa bold, tanpa warna mentah', () => {
+  it('idle: garis 2px berwarna foreground editor, label kecil tanpa bold, tanpa warna mentah', () => {
     const [e] = decorateEdges([edge(false)], nodes)
-    expect(e.style).toEqual({ stroke: EDGE_STROKE, strokeWidth: 1 })
+    expect(EDGE_WIDTH).toBe(2)
+    expect(e.style).toEqual({ stroke: EDGE_STROKE, strokeWidth: 2 })
+    expect(EDGE_STROKE).toContain('--vscode-editor-foreground')
+    expect(e.markerEnd).toMatchObject({ color: 'currentColor', width: ARROW_SIZE, height: ARROW_SIZE, strokeWidth: IDLE_ARROW_STROKE })
     expect(e.labelStyle).not.toHaveProperty('fontWeight')
     expect(JSON.stringify(e)).not.toMatch(/#[0-9a-f]{3,8}/i)
   })
 
-  it('terpilih: focusBorder 1.5px, panah memakai strokeWidth penanda CSS', () => {
+  it('terpilih: focusBorder 3px, panah memakai strokeWidth penanda CSS', () => {
     const [e] = decorateEdges([edge(true)], nodes)
-    expect(e.style).toEqual({ stroke: EDGE_STROKE_SELECTED, strokeWidth: 1.5 })
+    expect(EDGE_WIDTH_SELECTED).toBe(3)
+    expect(e.style).toEqual({ stroke: EDGE_STROKE_SELECTED, strokeWidth: 3 })
     expect(e.markerEnd).toMatchObject({ color: 'currentColor', strokeWidth: SELECTED_ARROW_STROKE })
-    const css = readFileSync(fileURLToPath(new URL('./canvas-ui.css', import.meta.url)), 'utf8')
     expect(css).toContain(`[id*='strokeWidth=${SELECTED_ARROW_STROKE}']`)
+  })
+
+  it('ukuran panah 12-14px dan area klik lebar', () => {
+    const [e] = decorateEdges([edge(false)], nodes)
+    expect(ARROW_SIZE).toBeGreaterThanOrEqual(12)
+    expect(ARROW_SIZE).toBeLessThanOrEqual(14)
+    expect(e.interactionWidth).toBe(EDGE_INTERACTION_WIDTH)
+    expect(EDGE_INTERACTION_WIDTH).toBeGreaterThanOrEqual(20)
+  })
+
+  it('id marker panah idle berbeda dari terpilih (selector CSS hanya cocok yang terpilih)', () => {
+    const [idle] = decorateEdges([edge(false)], nodes)
+    const [sel] = decorateEdges([edge(true)], nodes)
+    expect(IDLE_ARROW_STROKE).not.toBe(SELECTED_ARROW_STROKE)
+    // React Flow menyusun id marker dari semua propertinya, jadi properti beda = id beda.
+    expect(JSON.stringify(idle.markerEnd)).not.toBe(JSON.stringify(sel.markerEnd))
+  })
+
+  it('canvas-ui.css selaras: warna marker idle = EDGE_STROKE, hover = tebal terpilih', () => {
+    expect(css).toContain(`color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) ${EDGE_STROKE_OPACITY_PCT}%, transparent)`)
+    expect(EDGE_STROKE).toContain(`${EDGE_STROKE_OPACITY_PCT}%`)
+    expect(css).toMatch(new RegExp(`\\.react-flow__edge:hover\\s*\\{[^}]*--edge-hover-width:\\s*${EDGE_WIDTH_SELECTED}px`))
   })
 })
 

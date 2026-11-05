@@ -30,6 +30,7 @@ Operator notes:
 - Each workspace can keep the global background or use its own: workspace menu > "Canvas Background…" opens the same editor for that workspace.
 
 ### Changed
+- Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
 - Nodes are resized only through the Resize toggle in the node header, or ⌘⌥R ("Node: Resize Focused Node" in ⌘K). Clicking or selecting a node no longer shows the blue resize frame. Resize mode ends on Esc, a click outside, typing in the node, collapsing or removing it, or locking the view.
 - Opening a file that is already open (for example from a second Files node) now selects only that editor, pans to it if it is not fully on screen and moves keyboard focus into it. Before, an off-screen editor was only marked selected and it looked like nothing happened. Newly opened editors get the same treatment.
 - The floating toolbar in the bottom-left of the canvas is gone; it duplicated the command palette, Files, Settings and Keyboard shortcuts and covered the canvas. "New Files Node" is now in the File menu and the activity bar "+" list, and the pill in the middle of the title bar opens Go to Anything and shows its shortcut.

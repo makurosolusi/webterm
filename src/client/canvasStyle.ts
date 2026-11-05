@@ -21,17 +21,24 @@ export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>)
   return s ? STATUS_COLOR[s] : MINIMAP_NODE_NEUTRAL
 }
 
-/** Warna edge VS Code: garis netral (seperti garis nomor/indent), terpilih = `focusBorder`.
- *  Fallback ke token lama supaya tetap benar bila `--vscode-*` belum dipetakan. */
-export const EDGE_STROKE = 'var(--vscode-editorLineNumber-foreground, var(--muted))'
+/** Warna edge: foreground editor ~70% opaque supaya terbaca di atas latar kustom (gambar/gradasi/terang);
+ *  terpilih = `focusBorder`. Fallback ke token lama supaya tetap benar bila `--vscode-*` belum dipetakan.
+ *  `canvas-ui.css` memakai ekspresi yang sama untuk `.react-flow__marker` — ubah keduanya bersamaan. */
+export const EDGE_STROKE_OPACITY_PCT = 70
+export const EDGE_STROKE = `color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) ${EDGE_STROKE_OPACITY_PCT}%, transparent)`
 export const EDGE_STROKE_SELECTED = 'var(--vscode-focusBorder, var(--accent))'
-/** Tebal garis edge: 1px idle, 1.5px terpilih (kisaran VS Code 1-1.5px). */
-const EDGE_WIDTH = 1
-const EDGE_WIDTH_SELECTED = 1.5
+/** Tebal garis edge: 2px idle, 3px terpilih (juga tebal saat hover, lewat `canvas-ui.css`). */
+export const EDGE_WIDTH = 2
+export const EDGE_WIDTH_SELECTED = 3
+/** Kepala panah (px) dan `strokeWidth` panah idle. */
+export const ARROW_SIZE = 13
+export const IDLE_ARROW_STROKE = 1
+/** Area klik/hover kabel (px), jauh lebih lebar dari garisnya supaya mudah dibidik. */
+export const EDGE_INTERACTION_WIDTH = 24
 /** `strokeWidth` kepala panah terpilih. Ia masuk ke id `<marker>` (React Flow menyusun id dari
  *  semua properti marker), dan `canvas-ui.css` mewarnai panah terpilih lewat `[id*='strokeWidth=2']`
- *  — ubah keduanya bersamaan. Warna marker sendiri `currentColor`: `var()` berspasi/berkoma tak aman
- *  dijadikan bagian id elemen. */
+ *  — ubah keduanya bersamaan, dan jaga agar tetap berbeda dari `IDLE_ARROW_STROKE`. Warna marker
+ *  sendiri `currentColor`: `var()` berspasi/berkoma tak aman dijadikan bagian id elemen. */
 export const SELECTED_ARROW_STROKE = 2
 
 /** Label per jenis kabel. Kabel buka-file BUKAN context link — menyebutnya "context" adalah label
@@ -52,8 +59,8 @@ export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
   const hidden = hiddenEdgeNodeIds(nodes as { id: string; data: { hideLinks?: boolean } }[])
   return edges.map((e) => {
     const arrow = {
-      type: MarkerType.Arrow, color: 'currentColor', width: 10, height: 10,
-      strokeWidth: e.selected ? SELECTED_ARROW_STROKE : 1,
+      type: MarkerType.Arrow, color: 'currentColor', width: ARROW_SIZE, height: ARROW_SIZE,
+      strokeWidth: e.selected ? SELECTED_ARROW_STROKE : IDLE_ARROW_STROKE,
     }
     const label = EDGE_LABEL[(e.data as { kind?: BridgeLink['kind'] } | undefined)?.kind ?? 'context']
     return {
@@ -68,6 +75,7 @@ export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
         stroke: e.selected ? EDGE_STROKE_SELECTED : EDGE_STROKE,
         strokeWidth: e.selected ? EDGE_WIDTH_SELECTED : EDGE_WIDTH,
       },
+      interactionWidth: EDGE_INTERACTION_WIDTH,
       markerStart: arrow,
       markerEnd: arrow,
     }
