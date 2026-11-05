@@ -8,7 +8,8 @@
 // notes, and its turn ending (`waiting`/`done`) refreshes the diff.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Handle, NodeResizer, Position, useReactFlow, useStore, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, useStore, type NodeProps } from '@xyflow/react'
+import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { GitChange, GitChangeStatus, GitFileDiff } from '../server/gitDiff.types'
@@ -138,7 +139,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
 
   return (
     <>
-      <NodeResizer isVisible={!!selected} minWidth={420} minHeight={260} color={swatch} />
+      <NodeLayoutResizer minWidth={420} minHeight={260} color={swatch} />
       <div className={`term-node diff-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
         <div className="node-header">
           <span className="node-title diff-node__title" title={root}>
@@ -147,6 +148,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
             <span className="diff-node__desc">{root ? `${total} file${total === 1 ? '' : 's'}` : ''}</span>
           </span>
           <span className="diff-node__spacer" />
+          <NodeResizeToggle />
           <ToolbarContainer className="nodrag diff-node__actions">
             <IconTooltip label={sendTip}>
               <VscodeButton secondary onClick={() => void onSend()}>

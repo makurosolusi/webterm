@@ -4,7 +4,8 @@
 // postMessage bridge (mcpApp.bridge.ts); its tools/call goes through webterm policy as `node:<this id>`.
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { NodeLayoutResizer, NodeResizeToggle } from '../nodeResize/NodeLayoutResizer'
 import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { callAppTool, fetchAppView, type AppView } from './mcpApp.api'
 import { APP_SANDBOX, allowAttribute, createAppBridge } from './mcpApp.bridge'
@@ -60,7 +61,7 @@ function McpAppNode({ id, data, selected }: NodeProps) {
   const allow = view ? allowAttribute(view.permissions) : ''
   return (
     <>
-      <NodeResizer isVisible={!!selected} minWidth={280} minHeight={200} color={swatch} />
+      <NodeLayoutResizer minWidth={280} minHeight={200} color={swatch} />
       <div className={`term-node mcp-app-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch, display: 'flex', flexDirection: 'column' } as CSSProperties}>
         <div className="node-header">
           <span className="node-title" title={view ? `${view.uri}\nCSP: ${view.csp}` : undefined}>
@@ -68,6 +69,7 @@ function McpAppNode({ id, data, selected }: NodeProps) {
             {view?.uri ?? 'App'}
           </span>
           <span style={{ flex: 1 }} />
+          <NodeResizeToggle />
           <ToolbarContainer className="nodrag">
             <ToolbarButton label="Close" title="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
           </ToolbarContainer>

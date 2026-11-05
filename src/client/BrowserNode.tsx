@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { Handle, NodeResizer, Position, useReactFlow, useStore } from '@xyflow/react'
+import { Handle, Position, useReactFlow, useStore } from '@xyflow/react'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import type { NodeProps } from '@xyflow/react'
 import { NAV_ACTIONS, ZOOM_PAUSE_BELOW } from '../shared/browser.contract'
 import type { BrowserState } from '../shared/browser.contract'
@@ -101,7 +102,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
 
   return (
     <>
-      <NodeResizer isVisible={!!selected && !collapsed} minWidth={240} minHeight={160} color={swatch} />
+      <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div className={termNodeClass({ selected: !!selected, collapsed })} style={{ '--node-swatch': swatch } as CSSProperties}>
         <NodeChrome
           title={d.title || state?.title || DEFAULT_TITLE}

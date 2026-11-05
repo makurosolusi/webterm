@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
+import { useReactFlow, type NodeProps } from '@xyflow/react'
+import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { fileIconClass } from './fileIcon'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
@@ -134,7 +135,7 @@ function EditorNode({
 
   return (
     <>
-      <NodeResizer isVisible={!!selected} minWidth={320} minHeight={180} color={swatch} />
+      <NodeLayoutResizer minWidth={320} minHeight={180} color={swatch} />
       <div
         className={`term-node editor-node${selected ? ' term-node--selected' : ''}`}
         style={{ '--node-swatch': swatch } as CSSProperties}
@@ -150,6 +151,7 @@ function EditorNode({
             )}
           </span>
           <span className="editor-node__spacer" />
+          <NodeResizeToggle />
           <ToolbarContainer className="nodrag editor-node__actions">
             {editable && (
               <>

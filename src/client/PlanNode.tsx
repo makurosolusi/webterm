@@ -4,7 +4,8 @@
 // one worker node per dispatched task, cabled along the DAG edges (PlanNode.model `workerWiring`).
 import { memo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import type { PlanTaskData } from '../shared/workspace'
 import { approvePlan, previewPlan } from './PlanNode.api'
@@ -76,7 +77,7 @@ function PlanNode({ id, data, selected }: NodeProps) {
 
   return (
     <>
-      <NodeResizer isVisible={!!selected} minWidth={420} minHeight={240} color={swatch} />
+      <NodeLayoutResizer minWidth={420} minHeight={240} color={swatch} />
       <div className={`term-node plan-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
         <div className="node-header">
           <span className="node-title plan-node__title" title={plan.intent}>
@@ -85,6 +86,7 @@ function PlanNode({ id, data, selected }: NodeProps) {
             <span className="plan-node__desc">{view ? view.dag.status : draft ? 'draft, not running' : ''}</span>
           </span>
           <span className="plan-node__spacer" />
+          <NodeResizeToggle />
           <ToolbarContainer className="nodrag plan-node__actions">
             {draft && !view && editing === null && <VscodeButton secondary onClick={() => setEditing(JSON.stringify(draft.tasks, null, 2))}>{PLAN_TEXT.edit}</VscodeButton>}
             {editing !== null && <VscodeButton secondary onClick={() => void onApply()}>{PLAN_TEXT.apply}</VscodeButton>}
