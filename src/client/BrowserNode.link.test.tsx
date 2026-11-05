@@ -74,9 +74,11 @@ describe('kabel agent ↔ browser', () => {
   it('agent → browser menyimpan bridge yang dilihat linkedPeerIds', async () => {
     await mount([agent, browser])
     connect('agent-1', 'br-1')
-    await waitFor(() => expect(savedBridges()).toBeDefined(), { timeout: 3000 })
+    const expected: BridgeLink = { id: 'bridge-agent-1-br-1', source: 'agent-1', target: 'br-1', kind: 'context' }
+    // Wait for THE save carrying this bridge: under load an earlier save (bridges []) can land first.
+    await waitFor(() => expect(savedBridges()).toContainEqual(expected), { timeout: 3000 })
     const bridges = savedBridges()!
-    expect(bridges).toEqual([{ id: 'bridge-agent-1-br-1', source: 'agent-1', target: 'br-1', kind: 'context' }])
+    expect(bridges).toEqual([expected])
     expect(peersOf(bridges, 'agent-1').has('br-1')).toBe(true)
     await waitFor(() => expect(renderedEdgeIds()).toContain('bridge-agent-1-br-1'))
   })
@@ -84,8 +86,8 @@ describe('kabel agent ↔ browser', () => {
   it('browser → agent juga tersimpan dan terlihat dari sisi agent', async () => {
     await mount([agent, browser])
     connect('br-1', 'agent-1')
-    await waitFor(() => expect(savedBridges()).toBeDefined(), { timeout: 3000 })
-    expect(peersOf(savedBridges()!, 'agent-1').has('br-1')).toBe(true)
+    // Same as above: an earlier save without the bridge must not end the wait.
+    await waitFor(() => expect(peersOf(savedBridges() ?? [], 'agent-1').has('br-1')).toBe(true), { timeout: 3000 })
   })
 
   it('kabel yang sudah ada (arah sebaliknya) tidak diduplikasi', async () => {
