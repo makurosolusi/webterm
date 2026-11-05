@@ -5,17 +5,11 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
+import type { ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
+import { ClaudeProviderCommand } from './ClaudeProviderCommand'
+import { PROVIDER_PATH as PATH, providerCall as call, type Credential, type Mode, type State, type TestResult } from './claudeProvider.api'
 
-type Mode = 'login' | 'apiKey' | 'custom'
-type Credential = 'apiKey' | 'authToken'
-interface ProviderView { mode: Mode; baseUrl?: string; credential?: Credential; model?: string; secretSet: boolean; ready: boolean }
-interface TestResult { ok: boolean; message: string; at: number }
-interface State { provider: ProviderView; lastTest: TestResult | null; restartNeeded: number }
-
-const PATH = '/api/claude-provider'
-const MODE_LIST: Mode[] = ['login', 'apiKey', 'custom']
+const MODE_LIST: Mode[] = ['login', 'apiKey', 'custom', 'command']
 const CREDENTIAL_LIST: Credential[] = ['authToken', 'apiKey']
 
 /** One-of-N choice as a row of shadcn buttons (aria-pressed), no raw form controls. */
@@ -32,11 +26,12 @@ function Choice<T extends string>(p: { label: string; options: T[]; names: Recor
 export const PROVIDER_TEXT = {
   title: 'Claude provider',
   why: 'Used by every Claude agent node, Central and the background helpers (classifier, planner, summaries, names).',
-  modes: { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'Custom endpoint' } as Record<Mode, string>,
+  modes: { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'Custom endpoint', command: 'Custom command' } as Record<Mode, string>,
   modeHelp: {
     login: 'Default. Claude uses the account you logged in with (claude auth login). No key is stored.',
     apiKey: 'Billed per token to the Console account of the key. Claude Code asks once in each new agent node whether to use it.',
     custom: 'An Anthropic-compatible proxy or gateway (ANTHROPIC_BASE_URL) with its own key or token.',
+    command: 'Claude runs through your own command, e.g. envman -e claude:my-key -- claude, which supplies its credential.',
   } as Record<Mode, string>,
   baseUrl: 'Base URL',
   credential: 'Credential type',
@@ -57,21 +52,8 @@ export const PROVIDER_TEXT = {
   newOnly: 'New Claude sessions use this provider; running ones keep theirs until restarted.',
 }
 
-async function call(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(path, { method, headers, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
-  let data: unknown
-  try { data = await res.json() } catch { data = undefined } // non-JSON: the status is enough
-  const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
-  if (!res.ok) throw new Error(typeof obj.error === 'string' ? obj.error : `http_${res.status}`)
-  return obj
-}
-
 /** The Claude provider card; loads from the server and waits for it on every change. */
-export function ClaudeProviderCard(): React.JSX.Element {
+export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -97,11 +79,12 @@ export function ClaudeProviderCard(): React.JSX.Element {
   }, [])
 
   /** true = saved (or nothing to save). */
-  const save = async (secretOverride?: ''): Promise<boolean> => {
+  const save = async (secretOverride?: '', profileId?: string): Promise<boolean> => {
     setBusy(true); setError(null); setNotice(null)
     const s = secretOverride ?? (secret.trim() === '' ? undefined : secret)
     try {
-      adopt(await call(PATH, 'PUT', { mode, baseUrl, credential, model, ...(s === undefined ? {} : { secret: s }) }) as unknown as State)
+      adopt(await call(PATH, 'PUT', mode === 'command' ? { mode, profileId }
+        : { mode, baseUrl, credential, model, ...(s === undefined ? {} : { secret: s }) }) as unknown as State)
       setSecret('')
       setNotice(PROVIDER_TEXT.saved)
       return true
@@ -114,8 +97,7 @@ export function ClaudeProviderCard(): React.JSX.Element {
   const dirty = !!p && (mode !== p.mode || secret !== '' || model !== (p.model ?? '')
     || (mode === 'custom' && (baseUrl !== (p.baseUrl ?? '') || credential !== (p.credential ?? 'authToken'))))
   // The server tests the SAVED provider, so unsaved edits are saved first: the result matches the form.
-  const test = async (): Promise<void> => {
-    if (dirty && !(await save())) return
+  const runTest = async (): Promise<void> => {
     setBusy(true); setTesting(true); setError(null)
     try {
       const r = (await call(`${PATH}/test`, 'POST')).test as TestResult
@@ -123,6 +105,10 @@ export function ClaudeProviderCard(): React.JSX.Element {
     } catch (e) {
       setError(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
     } finally { setBusy(false); setTesting(false) }
+  }
+  const test = async (): Promise<void> => {
+    if (dirty && !(await save())) return
+    await runTest()
   }
 
   return (
@@ -134,25 +120,33 @@ export function ClaudeProviderCard(): React.JSX.Element {
         <>
           <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />
           <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
+          {mode === 'command' && p ? (
+            <ClaudeProviderCommand provider={p} busy={busy} testing={testing} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles} />
+          ) : null}
           {mode === 'custom' ? (
             <>
               <Input aria-label={PROVIDER_TEXT.baseUrl} placeholder="https://llm-gateway.example.com" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
               <Choice label={PROVIDER_TEXT.credential} options={CREDENTIAL_LIST} names={PROVIDER_TEXT.credentials} value={credential} onChange={setCredential} />
             </>
           ) : null}
-          {mode !== 'login' ? (
+          {mode !== 'login' && mode !== 'command' ? (
             <>
               <Input aria-label={PROVIDER_TEXT.key} type="password" autoComplete="off" value={secret}
                 placeholder={p?.secretSet ? PROVIDER_TEXT.keySet : PROVIDER_TEXT.keyUnset} onChange={(e) => setSecret(e.target.value)} />
               <Input aria-label={PROVIDER_TEXT.model} value={model} onChange={(e) => setModel(e.target.value)} />
             </>
           ) : null}
-          <div className="flex items-center gap-2">
+          {mode !== 'command' ? <div className="flex items-center gap-2">
             <Button size="sm" disabled={busy} onClick={() => void save()}>{PROVIDER_TEXT.save}</Button>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testing ? PROVIDER_TEXT.testing : PROVIDER_TEXT.test}</Button>
             {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
-          </div>
-          {state.lastTest ? <p role="status" className={state.lastTest.ok ? 'text-xs' : 'text-xs text-destructive'}>{state.lastTest.message}</p> : null}
+          </div> : null}
+          {testing ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.testing}</p> : null}
+          {!testing && state.lastTest ? (
+            <p role="status" className={state.lastTest.ok ? 'text-xs' : 'text-xs text-destructive'}>
+              <span className={`codicon ${state.lastTest.ok ? 'codicon-pass' : 'codicon-error'}`} aria-hidden="true" /> {state.lastTest.message}
+            </p>
+          ) : null}
           {notice ? <p role="status" className="text-xs">{notice} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p> : null}
           {!notice && state.restartNeeded > 0 ? <p className="text-xs opacity-70">{PROVIDER_TEXT.restart(state.restartNeeded)}</p> : null}
         </>

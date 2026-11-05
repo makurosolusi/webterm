@@ -101,7 +101,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     if (id === 'control') return <ControlPanel query={normalized} />
     return (
       <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
-        onVisibleCount={setCapabilityHits} />
+        onVisibleCount={setCapabilityHits} onSettingsChange={onChange} />
     )
   }
 

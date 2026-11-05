@@ -28,6 +28,9 @@ Operator notes:
 - Agents can read the same console with `webterm browser console [limit] [level]`.
 - Canvas background (Settings > Canvas background): replace the plain black canvas with a preset or custom color, a two-color gradient, or an uploaded image (png, jpeg, webp or gif, up to 10 MB) with blur, dim, gradient overlay and fit. The background stays put while you pan and zoom, and the dot grid color follows its brightness. Bright images show a contrast warning with a one-click recommended dim. Reset goes back to the default, and a missing image falls back to it too.
 - Each workspace can keep the global background or use its own: workspace menu > "Canvas Background…" opens the same editor for that workspace.
+- Claude provider: a fourth mode, "Custom command" (Settings > Capabilities > Claude provider), next to Claude Code login, Anthropic API key and Custom endpoint. Pick or create a Claude launch profile that holds your own command, for example `envman -e claude:malik-opus -- claude`. In this mode webterm does not touch any credential: your command supplies it. The profile becomes the default for new Claude agent nodes, existing nodes that did not deliberately pick a profile, the Central Agent and its helpers; a profile chosen explicitly elsewhere still wins.
+- "Test connection" in Custom command mode runs `--version`, then one short `-p "."` ping, and reports the result without showing Claude's output. The card detects wrappers on your `PATH` (envman, direnv, op, doppler) and offers an envman template. It warns when the command looks like it contains a secret, and a restart hint appears for sessions started before the change.
+- New endpoint `GET /api/claude-provider/detect` lists the detected wrappers. `PUT /api/claude-provider` accepts `{ "mode": "command", "profileId": "..." }`, and `GET /api/claude-provider` adds `profile`, `profileMissing` and `commandWarning` for this mode.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
@@ -37,6 +40,8 @@ Operator notes:
 - Some button labels changed with the tooltips: "Explorer" is now "New Files node" and "Help" is now "Keyboard shortcuts".
 - Popups in browser nodes never replace the page you are on. Popups matched by the filter lists are closed and counted by Shields; other popups open as a new browser node beside it, at most 3 every 10 seconds.
 - The Central Agent "Turn on" offer no longer mentions OpenCode.
+- If the profile chosen for Custom command mode is deleted, agents and Central launch with the Default profile and the card shows a notice, instead of failing.
+- A Claude provider test that times out now stops the whole process tree it started, not only the wrapper, so no `claude` process is left behind.
 
 ### Fixed
 - Opening Chat and Inbox (or Problems and Output) together no longer stacks panels on top of each other. They are now tabs of one bottom panel with a single header: opening a view selects its tab, the Chat input stays inside the panel, and "Jump to bottom" sits above the input instead of covering messages.
