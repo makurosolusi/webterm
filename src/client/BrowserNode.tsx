@@ -27,6 +27,7 @@ import BrowserDeviceHeader from './BrowserDeviceHeader'
 import { deviceStyle, useDeviceSession } from './browser.device'
 import { useConsoleDrawer } from './BrowserConsole'
 import type { ConsoleSlot } from './BrowserConsole'
+import { useNodeHost } from './tabLayout.context'
 import './browser.css'
 
 const COLLAPSED_H = 40
@@ -75,10 +76,12 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
   const comments = d.comments ?? []
-  const lowZoom = useStore((s) => s.transform[2] < ZOOM_PAUSE_BELOW)
+  const { inTab, visible } = useNodeHost()
+  // Canvas zoom is irrelevant in a tab pane (the node is pane-sized); a hidden tab detaches the stream.
+  const lowZoom = useStore((s) => !inTab && s.transform[2] < ZOOM_PAUSE_BELOW)
   const { openBrowserAt } = useNodeActions()
   // Popup sah (window.open / target=_blank) dari halaman ini: node baru di sebelahnya, seperti tab baru di Brave/Chrome.
-  const session = useBrowserSession(id, lowZoom || collapsed, browserStream, (url) => { openBrowserAt?.({ url, anchorNodeId: id }) })
+  const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (url) => { openBrowserAt?.({ url, anchorNodeId: id }) })
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [maximized, setMaximized] = useState(false)
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)

@@ -105,6 +105,34 @@
   50% { opacity: 1; }
 }
 
+/* Tab mode: same status glow on the pane. INSET shadow overlay instead of an outer halo, because the
+   pane clips its overflow. :where() keeps the positioning at zero specificity so the pane's own
+   rule wins if it is already positioned. */
+:where([data-tab-node]) { position: relative; }
+[data-tab-node]:has(.term-node.working)::after,
+[data-tab-node]:has(.term-node.attention)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--nc-radius);
+  pointer-events: none;
+  z-index: 1;
+}
+[data-tab-node]:has(.term-node.working)::after {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--state-working) 45%, transparent),
+    inset 0 0 12px 2px color-mix(in srgb, var(--state-working) 35%, transparent);
+  opacity: 0.7;
+  animation: nt-working-glow 2.6s ease-in-out 4;
+}
+[data-tab-node]:has(.term-node.attention)::after {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--state-attention) 55%, transparent),
+    inset 0 0 12px 2px color-mix(in srgb, var(--state-attention) 40%, transparent);
+  opacity: 0.15;
+  animation: nt-attention-glow 1.8s ease-in-out infinite;
+}
+
 /* Turn-ended (waiting): sepupu TENANG dari dua glow di atas — amber, satu ring tipis, TANPA halo
    pseudo dan tanpa animasi. Turn yang habis bukan keadaan mendesak: ia laporan. Halo merah
    berdenyut sengaja tinggal milik `blocked`, satu-satunya status yang berarti kerja MANDEG sampai
@@ -250,8 +278,9 @@
 
 /* ---- Body ---- */
 .node-body { flex: 1; min-height: 0; overflow: hidden; }
-.term-node--collapsed { height: auto !important; }
-.term-node--collapsed .node-body { display: none; }
+/* Collapse is a canvas-only layout: a tab pane (outside .react-flow__node) always shows the body. */
+.react-flow__node .term-node--collapsed { height: auto !important; }
+.react-flow__node .term-node--collapsed .node-body { display: none; }
 
 /* ---- Split pane (node terminal) ----
    ABSOLUT, bukan flex bersarang: posisi tiap pane datang dari `paneLayout` sebagai persen, karena
@@ -339,6 +368,14 @@
     animation: none;
     opacity: 0.8;
   }
+  [data-tab-node]:has(.term-node.working)::after {
+    animation: none;
+    opacity: 0.7;
+  }
+  [data-tab-node]:has(.term-node.attention)::after {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 
 /* ---- Full Screen (Fullscreen API) ----
@@ -348,3 +385,6 @@
 .react-flow__node:fullscreen { background: var(--panel); }
 .react-flow__node:fullscreen .term-node { border: 0; border-radius: 0; }
 .react-flow__node.react-flow__node.react-flow__node:fullscreen::after { display: none; }
+[data-tab-node]:fullscreen { background: var(--panel); }
+[data-tab-node]:fullscreen .term-node { border: 0; border-radius: 0; }
+[data-tab-node][data-tab-node]:fullscreen::after { display: none; }

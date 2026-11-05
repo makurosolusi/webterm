@@ -3,13 +3,13 @@
 // "Node: Resize Focused Node" command; selecting or clicking a node never shows them.
 import { useEffect } from 'react'
 import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
+import { nodeIdOf } from '../nodeRoot'
 import { IconButton } from '@/components/ui/icon-button'
 import { RESIZE_COMMAND_ID, exitNodeResize, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
 
-const nodeIdOf = (t: EventTarget | null): string | null | undefined =>
-  t instanceof Element ? t.closest('.react-flow__node')?.getAttribute('data-id') : undefined
+const targetNodeId = (t: EventTarget | null): string | undefined => (t instanceof Element ? nodeIdOf(t) : undefined)
 
 export interface NodeLayoutResizerProps extends Omit<NodeResizerProps, 'isVisible' | 'nodeId'> {
   /** A collapsed node cannot be resized; collapsing ends resize mode. */
@@ -30,12 +30,12 @@ export function NodeLayoutResizer({ collapsed, ...props }: NodeLayoutResizerProp
     if (!editing || !id) return
     // Capture phase: surfaces like xterm or Monaco stop their keys before they bubble.
     // A press on the handles is inside the node, so dragging them keeps the mode.
-    const onPointerDown = (e: PointerEvent): void => { if (nodeIdOf(e.target) !== id) exitNodeResize(id) }
+    const onPointerDown = (e: PointerEvent): void => { if (targetNodeId(e.target) !== id) exitNodeResize(id) }
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') return exitNodeResize(id)
       // Chords (the resize shortcut itself, copy) are not typing; neither are header controls.
       if (e.metaKey || e.ctrlKey || e.altKey || MODIFIER_KEYS.has(e.key)) return
-      if (nodeIdOf(e.target) === id && !(e.target as Element).closest('.node-header')) exitNodeResize(id)
+      if (targetNodeId(e.target) === id && !(e.target as Element).closest('.node-header')) exitNodeResize(id)
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeyDown, true)

@@ -12,6 +12,8 @@ export interface NodeToolbarProps {
   micActive?: boolean; onToggleMic?: () => void      // node dengan input teks saja — omit button if undefined
   commentsOpen: boolean; onToggleComments: () => void; commentCount?: number
   maximized: boolean; onToggleMaximize: () => void; maximizeDisabled?: boolean
+  /** Tab mode: Maximize fits the canvas viewport, which a tab pane does not have. */
+  hideMaximize?: boolean
   fullscreen?: boolean; onToggleFullscreen?: () => void; fullscreenDisabled?: boolean  // omit onToggleFullscreen = no button
   onClose: () => void
   onStop?: () => void                                  // agent only: kill the session, keep the node — omit if undefined
@@ -80,11 +82,13 @@ export default function NodeToolbar(props: NodeToolbarProps) {
           onClick={props.onToggleSearch}
         ><Codicon name="search" /></ToolbarButton>
 
-        <ToolbarButton
-          label={maxLabel} title={maxLabel} data-title={maxLabel}
-          aria-disabled={maximizeOff || undefined}
-          onClick={() => { if (!maximizeOff) props.onToggleMaximize() }}
-        ><Codicon name={props.maximized ? 'screen-normal' : 'screen-full'} /></ToolbarButton>
+        {!props.hideMaximize && (
+          <ToolbarButton
+            label={maxLabel} title={maxLabel} data-title={maxLabel}
+            aria-disabled={maximizeOff || undefined}
+            onClick={() => { if (!maximizeOff) props.onToggleMaximize() }}
+          ><Codicon name={props.maximized ? 'screen-normal' : 'screen-full'} /></ToolbarButton>
+        )}
 
         {props.onToggleFullscreen && (
           <ToolbarButton

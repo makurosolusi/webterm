@@ -15,6 +15,7 @@ import { clampSetting } from '../shared/settings.ranges'
 import { resolveCanvasBackground } from '../shared/canvasBackground.schema'
 import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import type { Viewport } from '../shared/workspace'
+import { closestNodeRoot } from './nodeRoot'
 
 const edgeTypes = { context: ContextEdge }
 
@@ -48,7 +49,7 @@ export default function BoardCanvas({
   const wallpaper = useWallpaper(resolveCanvasBackground(settings, workspaceId))
   useNodeResizeWiring(locked, rf)
   // Drop di atas node (mis. xterm) milik node itu, bukan pemicu node browser baru.
-  const overNode = (e: DragEvent) => (e.target as HTMLElement).closest('.react-flow__node') !== null
+  const overNode = (e: DragEvent) => closestNodeRoot(e.target as HTMLElement) !== null
   const onDragOver = (e: DragEvent) => {
     if (openBrowserAt && !overNode(e) && DROP_URL_TYPES.some((t) => e.dataTransfer.types.includes(t))) e.preventDefault()
   }

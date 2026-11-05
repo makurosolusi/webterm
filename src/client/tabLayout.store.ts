@@ -52,6 +52,12 @@ export function setFilesPanelWidth(width: number): void {
   if (w !== tabs.filesPanel.width) commit({ ...current, tabs: { ...tabs, filesPanel: { ...tabs.filesPanel, width: w } } })
 }
 
+/** Open or close the Files side panel; same value = no-op. */
+export function setFilesPanelOpen(open: boolean): void {
+  const { tabs } = current
+  if (tabs.filesPanel.open !== open) commit({ ...current, tabs: { ...tabs, filesPanel: { ...tabs.filesPanel, open } } })
+}
+
 export function toggleFilesPanel(): void {
   const { tabs } = current
   commit({ ...current, tabs: { ...tabs, filesPanel: { ...tabs.filesPanel, open: !tabs.filesPanel.open } } })

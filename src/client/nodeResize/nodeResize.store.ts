@@ -2,6 +2,8 @@
 // deliberate, short-lived mode, so a reload or a workspace switch always starts with it off.
 // One node at a time; same module-store pattern as commandRegistry.ts (useSyncExternalStore).
 import { useSyncExternalStore } from 'react'
+import { nodeIdOf } from '../nodeRoot'
+import { getTabLayout } from '../tabLayout.store'
 
 export interface NodeResizeState {
   /** Node whose resize handles are shown, or null. */
@@ -24,9 +26,10 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 /** Live resize state. */
 export const useNodeResizeState = (): NodeResizeState => useSyncExternalStore(subscribe, getNodeResizeState)
 
-/** Turns resize mode on for `id` (off when it already is); a no-op while the view is locked. */
+/** Turns resize mode on for `id` (off when it already is); a no-op while the view is locked or in tab mode. */
 export function toggleNodeResize(id: string): void {
-  if (state.locked) return
+  // Tab mode is view-only: resizing there would rewrite the canvas size of the node.
+  if (state.locked || getTabLayout().mode === 'tabs') return
   set({ editingId: state.editingId === id ? null : id })
 }
 
@@ -45,7 +48,7 @@ export function setNodeResizeLocked(locked: boolean): void {
  * selected node. Nothing to resize (none or several selected) does nothing.
  */
 export function toggleFocusedNodeResize(selectedIds: readonly string[]): void {
-  const focused = document.activeElement?.closest('.react-flow__node')?.getAttribute('data-id')
+  const focused = nodeIdOf(document.activeElement)
   const id = focused ?? (selectedIds.length === 1 ? selectedIds[0] : undefined)
   if (id) toggleNodeResize(id)
 }

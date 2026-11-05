@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FILES_PANEL_WIDTH, defaultTabLayout, type TabLayout } from '../shared/tabLayout.schema'
 import type { Workspace } from '../shared/workspace'
 import {
-  activateTab, connectTabLayout, getTabLayout, reorderTabs, setFilesPanelWidth, setMode, toggleFilesPanel,
+  activateTab, connectTabLayout, getTabLayout, reorderTabs, setFilesPanelOpen, setFilesPanelWidth, setMode, toggleFilesPanel,
 } from './tabLayout.store'
 
 const seeded = (): TabLayout => ({ ...defaultTabLayout(), tabs: { ...defaultTabLayout().tabs, order: ['a', 'b', 'c'], active: 'a' } })
@@ -58,5 +58,14 @@ describe('tabLayout.store', () => {
     expect(getTabLayout().tabs.filesPanel.open).toBe(false)
     toggleFilesPanel()
     expect(getTabLayout().tabs.filesPanel.open).toBe(true)
+  })
+
+  it('setFilesPanelOpen sets the flag explicitly and skips same-value writes', () => {
+    setFilesPanelOpen(true)
+    expect(write).not.toHaveBeenCalled()
+    setFilesPanelOpen(false)
+    expect(getTabLayout().tabs.filesPanel.open).toBe(false)
+    setFilesPanelOpen(false)
+    expect(write).toHaveBeenCalledTimes(1)
   })
 })

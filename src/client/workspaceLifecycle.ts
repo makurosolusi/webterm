@@ -17,6 +17,8 @@ import { bootWorkspaceId, nextActiveWorkspaceId } from './workspaceMenu'
 import { toBridge, toWsNode, workspaceNameFromPath } from './store'
 import { sessionIdsOf } from './paneTree'
 import { send } from './ws'
+import { revealInTabs } from './nodeReveal'
+import { getTabLayout } from './tabLayout.store'
 import type { ClosedHistory } from './closedHistory'
 import type { Viewport, Workspace } from '../shared/workspace'
 
@@ -179,7 +181,8 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     }
     const node = nodesRef.current.find((n) => n.id === id)
     if (!node) return
-    rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
+    if (getTabLayout().mode === 'tabs') revealInTabs(id, node.type)
+    else rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
     setBoard(false)
   }, [onSelect, workspaces])
 
