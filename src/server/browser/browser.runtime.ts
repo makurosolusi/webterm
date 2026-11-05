@@ -3,6 +3,7 @@
 // tak satu pun modul browser dijalankan. Tidak ada nilai cookie/token yang pernah dilog di sini.
 import { DEFAULT_COOKIE_TTL_DAYS, ENV_BROWSER } from '../../shared/browser.contract'
 import type { BrowserState } from '../../shared/browser.contract'
+import { join } from 'node:path'
 import { isEnabled } from '../featureCapabilities.runtime'
 import { createLogger } from '../logs'
 import type { CdpClient } from './cdp.client'
@@ -17,6 +18,9 @@ import { createCookiePreviewStore } from './cookieImport.preview'
 import { createCookieInjector } from './browser.cookieInjector'
 import { toHostGuard } from './browser.guardAdapter'
 import { BrowserHost } from './browserHost.service'
+import { ADBLOCK_REFRESH_MS, createAdblock } from './adblock.engine'
+import type { Adblock } from './adblock.engine'
+import { createShieldPolicy } from './adblock.shields'
 import { LeaseService } from './browserLease.service'
 import { BrowserLifecycle, lifecycleConfig } from './browserLifecycle.service'
 import { createViewerHub } from './browserWs.viewers'
@@ -53,6 +57,8 @@ export interface RuntimeDeps {
   now?: () => number
   /** Test: pemeriksa keberadaan biner Chromium (produksi: existsSync). */
   exists?: (p: string) => boolean
+  /** Test: mesin filter tanpa jaringan (produksi: daftar prebuilt, cache di `<dataRoot>/browser/adblock`). */
+  adblock?: Adblock
 }
 
 export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntime | null> {
@@ -77,7 +83,14 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const now = d.now ?? Date.now
   const proxy = await startSsrfProxy({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
   const launcher = d.launcher ?? createChromiumPool({ env, dataRoot: d.dataRoot, proxyServer: () => `http://127.0.0.1:${proxy.port}`, exists: d.exists })
-  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })), connect: d.connect })
+  // Shields: zero-config, default ON. Daftar filter dimuat di latar (tak menahan startup) dan disegarkan berkala.
+  const adblockDir = join(d.dataRoot, 'browser', 'adblock')
+  const adblock = d.adblock ?? createAdblock({ dir: adblockDir })
+  void adblock.load()
+  const adblockTimer = setInterval(() => { void adblock.load() }, ADBLOCK_REFRESH_MS)
+  adblockTimer.unref()
+  const shields = createShieldPolicy(adblock, adblockDir)
+  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })), connect: d.connect, shields, now })
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })
@@ -130,7 +143,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     async shutdown() {
       if (down) return
       down = true
-      clearInterval(sweep); unLease(); lifecycle.dispose(); versionProbe.reset()
+      clearInterval(sweep); clearInterval(adblockTimer); unLease(); lifecycle.dispose(); versionProbe.reset()
       // Tutup halaman satu per satu dulu: stop dari Settings tak boleh meninggalkan tab yatim di Chromium.
       await Promise.all([...live].map((id) => host.discard(id).catch((e) => log.warn('browser.stop', 'page close failed', { error: e instanceof Error ? e.name : typeof e }))))
       await host.dispose().catch((e) => log.warn('browser.stop', 'CDP dispose failed', { error: e instanceof Error ? e.name : typeof e }))

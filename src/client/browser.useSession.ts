@@ -40,8 +40,11 @@ export interface BrowserSession {
   latency: LatencyWindow
 }
 
-/** `paused` = lepas dari server (zoom kecil / collapse); kanvas tetap menampilkan frame terakhir. */
-export function useBrowserSession(id: string, paused: boolean, stream: BrowserStream = browserStream): BrowserSession {
+/**
+ * `paused` = lepas dari server (zoom kecil / collapse); kanvas tetap menampilkan frame terakhir.
+ * `onPopup` = halaman membuka popup sah (server sudah menyaring iklan) yang harus jadi node baru.
+ */
+export function useBrowserSession(id: string, paused: boolean, stream: BrowserStream = browserStream, onPopup?: (url: string) => void): BrowserSession {
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewport = useRef<Viewport | null>(null)
@@ -58,6 +61,8 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [cursor, setCursor] = useState('default')
   const [connected, setConnected] = useState(true)
   const [latency] = useState(createLatencyWindow)
+  const popupRef = useRef(onPopup)
+  popupRef.current = onPopup
 
   const arm = useCallback((clear: () => void) => {
     const t = setTimeout(() => { timers.current.delete(t); clear() }, NOTICE_MS)
@@ -116,6 +121,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
           setError({ code: m.code, hostname: m.hostname })
           if (!STICKY_ERRORS.has(m.code)) arm(() => setError(undefined))
         } else if (m.t === 'dialog') setDialog(m)
+        else if (m.t === 'popup') popupRef.current?.(m.url)
         else if (m.t === 'cursor') setCursor(CURSOR_SAFE.test(m.css) ? m.css : 'default')
         else if (m.t === 'copy') {
           void writeClipboard(m.text).then((r) => { if (!r.ok) flash(r.error) })

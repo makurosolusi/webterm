@@ -18,6 +18,8 @@ export interface GatewayHost extends BrowserHostApi {
   answerDialog(nodeId: string, accept: boolean, text?: string): Promise<void>
   navAction(nodeId: string, action: 'go' | 'back' | 'forward' | 'reload' | 'stop', url?: string): Promise<void>
   selectionText(nodeId: string): Promise<string>
+  /** Sakelar Shields situs halaman node (persist per host) lalu muat ulang. */
+  setShields(nodeId: string, on: boolean): Promise<void>
 }
 
 /** Ujung tulis satu klien; implementasi nyata membungkus `ws`. */
@@ -63,6 +65,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
   const broadcast = (nodeId: string, msg: ServerMsg) => {
     for (const v of nodes.get(nodeId)?.viewers.keys() ?? []) v.sink.sendJson(msg)
   }
+  const firstViewer = (nodeId: string): Viewer | undefined => nodes.get(nodeId)?.viewers.keys().next().value
   const stateMsg = (nodeId: string) => { const s = host.state(nodeId); return s ? withLease(s) : null }
 
   function subscribe() {
@@ -71,6 +74,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       host.onState((s) => onState(s)),
       host.onEvent((e) => {
         if (e.k === 'dialog') broadcast(e.nodeId, { t: 'dialog', id: e.nodeId, kind: e.kind, message: e.message, defaultPrompt: e.defaultPrompt })
+        else if (e.k === 'popup') firstViewer(e.nodeId)?.sink.sendJson({ t: 'popup', id: e.nodeId, url: e.url }) // satu klien saja: tiap klien yang menerima akan membuat node
         else broadcast(e.nodeId, { t: 'error', id: e.nodeId, code: e.code, hostname: e.hostname })
       }),
     ]

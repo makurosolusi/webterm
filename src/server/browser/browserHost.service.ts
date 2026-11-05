@@ -4,12 +4,15 @@ import { TOUCH_POINTS_MAX, BlockedError } from '../../shared/browser.contract'
 import type { BrowserHostApi, BrowserInputEvent, BrowserState, Frame, NAV_ACTIONS } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
-import { CDP, CdpClient } from './cdp.client'
+import { CDP, CDP_EVENT, CdpClient } from './cdp.client'
 import type { CdpHandler } from './cdp.client'
 import { LaunchError } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
 import { metricsParams, screencastParams, toCdpCommands } from './browserHost.input'
 import { createEventRouter } from './browserHost.events'
+import { createShieldRouter } from './browserHost.shield'
+import type { ShieldRouter } from './browserHost.shield'
+import type { ShieldPolicy } from './adblock.shields'
 import { blockOf, BrowserError, createPageTarget, mergeState, newRec, notePendingInput, readHistory, setupConnection, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
@@ -24,6 +27,9 @@ export interface HostDeps {
   guard: NavGuard
   /** Default `CdpClient.connect`; test menyuntik server CDP tiruan. */
   connect?: (wsUrl: string) => Promise<CdpClient>
+  /** Shields (blokir iklan/pelacak + sakelar per situs); tanpa ini hanya batas popup yang berlaku. */
+  shields?: ShieldPolicy
+  now?: () => number
 }
 
 export class BrowserHost implements BrowserHostApi {
@@ -34,14 +40,18 @@ export class BrowserHost implements BrowserHostApi {
   private readonly eventCbs = new Set<(e: HostEvent) => void>()
 
   private readonly route: CdpHandler
+  private readonly shield: ShieldRouter
 
   constructor(private readonly deps: HostDeps) {
+    const patch = (r: NodeRec, p: Partial<BrowserState>) => this.patch(r, p)
+    const emit = (e: HostEvent) => this.emit(e)
+    this.shield = createShieldRouter({ table: this.table, policy: deps.shields, patch, emit, now: deps.now })
     this.route = createEventRouter({
-      table: this.table, guard: deps.guard,
-      patch: (r, p) => this.patch(r, p), emit: (e) => this.emit(e), crash: (r) => this.crash(r),
+      table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.crash(r),
       refresh: (r) => this.refresh(r), fire: (r, m, p) => this.fire(r, m, p),
-      navigate: (id, url) => this.navigate(id, url),
       closeTarget: async (r, targetId) => { await (await this.cdpOf(r)).send(CDP.closeTarget, { targetId }) },
+      popup: (r, url) => this.shield.popup(r, url), pageState: (url) => this.shield.pageState(url),
+      detached: (p) => this.shield.detached(p),
     })
   }
 
@@ -122,6 +132,7 @@ export class BrowserHost implements BrowserHostApi {
     if (!rec?.sessionId) return
     const targetId = rec.targetId as string
     const cdp = await this.conns.get(rec.workspaceId)
+    this.shield.forget(rec)
     this.table.unbind(rec) // unbind dulu: targetDestroyed berikutnya bukan crash
     this.patch(rec, { live: 'discarded', loading: false })
     try {
@@ -161,12 +172,21 @@ export class BrowserHost implements BrowserHostApi {
       if (!url) throw new BrowserError('bad_request', `nav go without url for node ${nodeId}`)
       return this.navigate(nodeId, url)
     }
+    const lost = this.table.nodes.get(nodeId)
+    if (action === 'reload' && lost && !lost.sessionId) { await this.open(nodeId, lost.workspaceId, lost.state.url || undefined); return } // halaman crash: Reload memulihkan (Chrome "Aw, Snap")
     const rec = this.need(nodeId)
     if (action === 'reload') { await this.send(rec, CDP.reload); return }
     if (action === 'stop') { await this.send(rec, CDP.stopLoading); return }
     const h = await readHistory(await this.cdpOf(rec), rec.sessionId as string)
     const entryId = action === 'back' ? h.entryIds.prev : h.entryIds.next
     if (entryId !== undefined) await this.send(rec, CDP.navigateToHistoryEntry, { entryId })
+  }
+
+  /** Sakelar Shields untuk situs halaman node ini (dipersist per host), lalu muat ulang seperti Brave. */
+  async setShields(nodeId: string, on: boolean): Promise<void> {
+    const rec = this.need(nodeId)
+    this.shield.toggle(rec, on)
+    await this.send(rec, CDP.reload)
   }
 
   /** Teks seleksi halaman (untuk aksi `copy`). */
@@ -202,7 +222,8 @@ export class BrowserHost implements BrowserHostApi {
     }
     const { targetId, sessionId } = await createPageTarget(cdp, rec.viewport)
     this.table.bind(rec, targetId, sessionId)
-    this.patch(rec, { live: 'live', blocked: blocked?.reason, url: target })
+    await this.shield.enable(cdp, sessionId)
+    this.patch(rec, { live: 'live', blocked: blocked?.reason, url: target, ...this.shield.pageState(target) })
     if (target && !blocked) await this.goto(rec, target)
     return { ...rec.state }
   }
@@ -214,6 +235,8 @@ export class BrowserHost implements BrowserHostApi {
         const wsUrl = await this.deps.launcher.acquire(workspaceId)
         const cdp = await (this.deps.connect ?? ((u: string) => CdpClient.connect(u)))(wsUrl)
         cdp.on('*', this.route)
+        cdp.on(CDP_EVENT.requestPaused, (p, sid) => this.shield.paused(cdp, p, sid))
+        cdp.on(CDP_EVENT.attachedToTarget, (p, sid) => this.shield.attached(cdp, p, sid))
         cdp.onClose((err) => this.onConnClosed(workspaceId, err))
         try {
           await setupConnection(cdp)
@@ -235,9 +258,14 @@ export class BrowserHost implements BrowserHostApi {
     for (const rec of this.table.nodes.values()) if (rec.workspaceId === workspaceId) this.crash(rec)
   }
 
+  /**
+   * Node dengan target hidup. Node dikenal yang targetnya hilang (crash/putus) = `crashed`, bukan `not_found`:
+   * dulu tiap klik sesudah crash menimpa "The page crashed. Reload…" dengan "This browser session no longer exists."
+   */
   private need(nodeId: string): NodeRec {
     const rec = this.table.nodes.get(nodeId)
-    if (!rec?.sessionId) throw new BrowserError('not_found', `node ${nodeId} has no live browser target`)
+    if (!rec) throw new BrowserError('not_found', `node ${nodeId} is unknown to the browser host`)
+    if (!rec.sessionId) throw new BrowserError('crashed', `node ${nodeId} has no live browser target`)
     return rec
   }
 
@@ -248,7 +276,7 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   private async send<T = Record<string, unknown>>(rec: NodeRec, method: string, params?: object): Promise<T> {
-    if (!rec.sessionId) throw new BrowserError('not_found', `node ${rec.nodeId} has no live browser target`)
+    if (!rec.sessionId) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
     return (await this.cdpOf(rec)).send<T>(method, params, rec.sessionId)
   }
 
@@ -283,6 +311,7 @@ export class BrowserHost implements BrowserHostApi {
 
   private crash(rec: NodeRec): void {
     if (!rec.sessionId) return
+    this.shield.forget(rec)
     this.table.unbind(rec)
     this.patch(rec, { live: 'discarded', loading: false })
     this.emit({ k: 'error', nodeId: rec.nodeId, code: 'crashed' })

@@ -44,6 +44,8 @@ export class FakeHost implements GatewayHost {
   async answerDialog() { /* tidak dipakai di test */ }
   async navAction(id: string, action: string, url?: string) { this.maybeFail('nav'); this.navs.push(`${id}:${action}:${url ?? ''}`) }
   async selectionText() { return 'selected' }
+  shields: string[] = []
+  async setShields(id: string, on: boolean) { this.shields.push(`${id}:${on}`) }
   /** Dorong state baru ke langganan (seperti host nyata). */
   setState(s: BrowserState) { this.states.set(s.id, s); for (const cb of [...this.stateCbs]) cb({ ...s }) }
   emitFrame(id: string, seq: number) { this.frames.get(id)?.({ seq, jpeg: new Uint8Array([0xff, 0xd8, seq]) }) }

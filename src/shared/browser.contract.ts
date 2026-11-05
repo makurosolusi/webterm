@@ -77,6 +77,8 @@ export interface BrowserNodeFields { url?: string; agentControl?: boolean }
 export interface BrowserState {
   id: string; url: string; title: string; loading: boolean
   canBack: boolean; canForward: boolean; lease: Lease; live: LiveState; blocked?: BlockReason
+  /** Shields (ad/tracker blocking): undefined = no blocker on the server; counts reset on each page load. */
+  shieldsOff?: boolean; blockedAds?: number; blockedPopups?: number
 }
 
 /**
@@ -134,6 +136,7 @@ export type ClientMsg =
   | { t: 'copy'; id: string }
   | { t: 'dialog'; id: string; accept: boolean; text?: string }
   | { t: 'takeover'; id: string }
+  | { t: 'shields'; id: string; on: boolean }
 
 export type ServerMsg =
   | ({ t: 'state' } & BrowserState)
@@ -141,6 +144,7 @@ export type ServerMsg =
   | { t: 'cursor'; id: string; css: string }
   | { t: 'copy'; id: string; text: string }
   | { t: 'error'; id: string; code: BrowserErrorCode; hostname?: string }
+  | { t: 'popup'; id: string; url: string }
 
 /** Pembaca lease untuk gateway (WS-04), diimplementasikan WS-07. */
 export interface LeaseView {
