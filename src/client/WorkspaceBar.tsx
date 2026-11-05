@@ -29,6 +29,7 @@ import { outputShortcutLabel } from './output/outputChord'
 import { isMacPlatform } from './terminalKeys'
 import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
+import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -42,7 +43,8 @@ export interface WorkspaceBarProps {
   liveActiveNodes: WsNode[] | null
   statuses: Record<string, AgentStatus>
   onSelect: (id: string) => void
-  onNewWorkspace: () => void
+  /** No path: pick an existing folder. A path (cloned / new project): open it as a workspace. */
+  onNewWorkspace: (path?: string) => void
   /** Nama sudah dinormalkan (trim, tidak pernah kosong) sebelum sampai ke sini. */
   onRenameWorkspace: (id: string, name: string) => void
   /** Sudah dikonfirmasi pengguna di sini — pemanggil langsung menghapus. */
@@ -79,6 +81,7 @@ export default function WorkspaceBar({
   )
 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -118,7 +121,11 @@ export default function WorkspaceBar({
   // File: New → Rename/Delete (workspace aktif) → Settings → Logout, seperti File di VS Code
   // (aksi dokumen, lalu Preferences, lalu keluar). Delete tidak diberi warna bahaya: VS Code tak
   // mewarnai item menu, dan konfirmasi `window.confirm` sudah menjaga aksinya.
-  const fileItems: VscodeMenuEntry[] = [{ id: 'new-workspace', label: 'New Workspace', onSelect: onNewWorkspace }]
+  const fileItems: VscodeMenuEntry[] = [
+    { id: 'new-workspace', label: 'New Workspace', onSelect: () => onNewWorkspace() },
+    { id: 'clone-repository', label: 'Clone Repository…', onSelect: () => openWorkspaceCreate('clone') },
+    { id: 'new-project', label: 'New Project…', onSelect: () => openWorkspaceCreate('project') },
+  ]
   if (activeGroup) {
     fileItems.push(
       { type: 'separator' },
@@ -242,12 +249,30 @@ export default function WorkspaceBar({
             className="app-tabs__action"
             title="New workspace"
             aria-label="New workspace"
-            onClick={onNewWorkspace}
+            onClick={(e) => {
+              // Three ways in, as nodeterm's Welcome cards: open a folder, clone, or start a new project.
+              const r = e.currentTarget.getBoundingClientRect()
+              setAddMenu({ x: r.left, y: r.bottom + MENU_GAP })
+            }}
           >
             <span className="codicon codicon-add" aria-hidden />
           </button>
         </div>
       </div>
+
+      {addMenu && (
+        <NodeContextMenu
+          x={addMenu.x}
+          y={addMenu.y}
+          rows={[
+            { label: 'Open Folder…', onClick: () => onNewWorkspace() },
+            { label: 'Clone Repository…', onClick: () => openWorkspaceCreate('clone') },
+            { label: 'New Project…', onClick: () => openWorkspaceCreate('project') },
+          ]}
+          onClose={() => setAddMenu(null)}
+        />
+      )}
+      <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
 
       {menu && activeGroup && (
         <NodeContextMenu

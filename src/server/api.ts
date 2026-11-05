@@ -30,6 +30,7 @@ import { replayRoutes } from './routes/replay.routes'
 import { prReviewRoutes } from './routes/prreview.routes'
 import { mcpAppsRoutes } from './routes/mcpapps.routes'
 import { templatesRoutes } from './routes/templates.routes'
+import { workspaceCreateRoutes } from './routes/workspaceCreate.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -72,6 +73,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...replayRoutes,
   ...prReviewRoutes,
   ...templatesRoutes,
+  ...workspaceCreateRoutes,
 ]
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {

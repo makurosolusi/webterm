@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- "Clone Repository…" next to "Open Folder…" in the workspace "+" menu, the File menu, the Welcome screen and ⌘K. Paste an `https://`, `ssh://` or `git@host:path` URL, or `owner/repo` for GitHub. The clone shows its progress, can be cancelled, and opens as a new workspace. The parent folder defaults to `~/webterm/projects`, which is created the first time something is cloned or created there. The last parent you used is suggested next time, and if that folder is gone the default is used instead. If a private repository fails to authenticate, the error tells you to run `gh auth login` or set up an SSH key.
+- "New Project…" in the same places: it creates an empty folder under the parent you choose and opens it as a workspace. "Initialize git repository" is on by default and runs `git init` with an empty initial commit on `main`. Untick it to get a plain folder. A folder that already exists and is not empty is refused.
+- Settings > Shell & buffer > "Default projects folder" sets where clones and new projects go. Browse to pick a folder, or Reset to default to go back to `~/webterm/projects`. Relative paths, files and folders inside the webterm data folder are rejected. A folder that doesn't exist yet is fine.
+- Both dialogs show the full path before you create anything. Afterwards you get "Reveal in Finder" (on Linux it opens the file manager) and "Copy path".
+- If the folder name is already taken, the dialog says so and offers the next free name (`name-2`, `name-3`, ...) in one click.
+- Before cloning, webterm checks whether the repository is already cloned: in an existing workspace, in the default projects folder, or in the parent you chose. https, ssh and `owner/repo` forms of the same URL count as one repository. If it finds a match you can open that folder, or choose "Clone again anyway". When the check takes too long it is skipped and the clone goes ahead.
+- A warning appears when the target is inside another git repository or directly in your home folder, and "Create anyway" lets you continue. A target inside the webterm data folder is always refused.
+
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
 

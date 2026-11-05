@@ -17,16 +17,17 @@ describe('Welcome', () => {
     }
   })
 
-  it('klik "New project" memanggil onNewProject', () => {
+  it('klik "Open folder…" memanggil onNewProject (pemilih folder)', () => {
     const onNewProject = vi.fn()
     render(<Welcome onNewProject={onNewProject} onCreateEmpty={noop} />)
-    fireEvent.click(screen.getByText('New project'))
+    fireEvent.click(screen.getByText('Open folder…'))
     expect(onNewProject).toHaveBeenCalledTimes(1)
   })
 
-  it('kartu Clone dan SSH disabled (tak ada backend webterm)', () => {
+  // New project / Clone membuka dialognya: lihat workspaceCreate/workspaceCreate.test.tsx.
+  it('hanya kartu SSH yang disabled (belum ada backend webterm)', () => {
     render(<Welcome onNewProject={noop} onCreateEmpty={noop} />)
-    expect(screen.getByText('Clone repo…').closest('button')?.disabled).toBe(true)
+    expect(screen.getByText('Clone repo…').closest('button')?.disabled).toBe(false)
     expect(screen.getByText('Connect over SSH…').closest('button')?.disabled).toBe(true)
     expect(screen.getByText('New project').closest('button')?.disabled).toBe(false)
   })

@@ -172,6 +172,12 @@ export interface Settings {
    *  (`Mod+Shift+F`), or `null` to remove that command's default. Validated by
    *  `normalizeKeybindings`; command ids live in the client registry (`commandRegistry.ts`). */
   keybindings: Record<string, string | null>
+
+  // --- Projects --------------------------------------------------------------------------------
+  /** Where Clone repository / New project put folders. Empty = `~/webterm/projects`. Validated on
+   *  the server at use (absolute, not inside the data dir, not a file); an invalid value falls back
+   *  to the default instead of failing a clone. */
+  defaultProjectsFolder: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -219,6 +225,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openMarkdownPreview: true,
   browserSearchEngine: 'google',
   keybindings: {},
+  defaultProjectsFolder: '',
 }
 
 /** Caps for `keybindings`: it arrives over HTTP, so a hostile body cannot bloat the stored row. */
