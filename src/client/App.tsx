@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Node, Edge, ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import WorkspaceBar from './WorkspaceBar'
-import Dock from './Dock'
+import AppDock, { AppWorkspaceBar } from './App.chrome'
 import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
@@ -34,7 +33,6 @@ import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
-import { hasToken } from './api'
 import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
 import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
@@ -104,10 +102,8 @@ export default function App() {
   // `viewportRef` dipinjam ke sana, jadi `scheduleSave` di atas mem-persist viewport yang
   // ditulis hook itu, bukan salinan yang sudah basi. Dideklarasikan SEBELUM `applyWorkspace`
   // karena pemasangan board memanggil `resetViewport`.
-  const {
-    zoom, syncViewport, onMoveEnd, onFit, onZoomIn, onZoomOut, onZoomTo,
-    onBack, onForward, canBack, canForward, resetViewport,
-  } = useCanvasViewport({ rf, viewportRef, scheduleSave })
+  const vp = useCanvasViewport({ rf, viewportRef, scheduleSave })
+  const { syncViewport, onMoveEnd, onFit, resetViewport } = vp
 
   // Undo/redo layout node — tumpukan terpisah dari riwayat pandangan di atas. Lihat `./layoutHistory`.
   const { onUndo: onLayoutUndo, onRedo, canUndo: canLayoutUndo, canRedo, pushLayout, resetLayout } =
@@ -203,22 +199,7 @@ export default function App() {
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
-      <WorkspaceBar
-        workspaces={workspaces}
-        activeId={activeId}
-        liveActiveNodes={liveNodes}
-        statuses={statuses}
-        onSelect={onSelect}
-        onNewWorkspace={onNewProject}
-        onRenameWorkspace={(id, name) => void onRenameWorkspace(id, name)}
-        onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
-        onLogout={onLogout}
-        showLogout={hasToken()}
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenHelp={() => setShowHelp(true)}
-        onNewFiles={() => onAddFiles()}
-        onOpenPalette={() => omni.open('all')}
-      />
+      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, onAddFiles, omni, setShowSettings, setShowHelp }} />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
@@ -253,46 +234,9 @@ export default function App() {
       </div>
       {hydrated && !noWorkspaces && (
         <>
-          <Dock
-            onAddTerminal={onAddTerminal}
-            onAddBrowser={onAddBrowser}
-            onAddAgent={onAddAgent}
-            onCreateWorkspace={onCreateWorkspace}
-            onBrowse={(onPick) => setPicker({ onPick })}
-            onUndo={onUndo}
-            onRedo={onRedo}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            onBack={onBack}
-            onForward={onForward}
-            canBack={canBack}
-            canForward={canForward}
-            onFit={onFit}
-            onToggleBoard={() => setBoard((v) => !v)}
-            boardOpen={board}
-            sessionsOpen={sessionsOpen}
-            onToggleSessions={() => setSessionsOpen((v) => !v)}
-            inboxOpen={inboxOpen}
-            onToggleInbox={() => setInboxOpen(!inboxOpen)}
-            inboxUnread={inboxUnread}
-            chatOpen={chatOpen}
-            onToggleChat={() => setChatOpen(!chatOpen)}
-            centralOpen={central.open}
-            onToggleCentral={central.enabled ? central.toggle : undefined}
-            zoomPct={Math.round(zoom * 100)}
-            onZoomIn={onZoomIn}
-            onZoomOut={onZoomOut}
-            onZoomTo={onZoomTo}
-            locked={locked}
-            onToggleLock={() => setLocked((v) => !v)}
-            cleanView={cleanView}
-            onToggleCleanView={toggleCleanView}
-            disabledAgents={settings.disabledAgents}
-            customAgents={settings.customAgents}
-            agentLaunchCommands={settings.agentLaunchCommands}
-            workspaceName={activeWs?.name}
-            agentSummary={agentSummary}
-            onOpenSettings={() => setShowSettings(true)}
+          <AppDock
+            {...{ vp, settings, activeWs, central, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, chatOpen, setChatOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
+            {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, inboxUnread, agentSummary }}
             extraStatusItems={[...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SessionsPanel
