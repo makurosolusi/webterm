@@ -5,7 +5,7 @@
    1px TOP border on the active tab, a 16px count badge, a 4px sash on the top edge, and 22px
    list rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
 
-   The panel is flush: no radius, no shadow, sitting on top of the status bar. It starts after
+   The panel is flush: no radius, no shadow, sitting on top of the status bar. One surface hosts every view (bottomPanelHost.tsx). It starts after
    the activity bar (and the 300px sidebar column while that is open). Height comes from
    `--bottom-panel-h`, which `bottomPanelHeight.ts` sets on <html> once the user resizes. */
 
@@ -202,35 +202,22 @@
 }
 .vscode-bottom-panel__pane[hidden] { display: none; }
 
-/* Embedded panes keep a compact refresh row; the combined shell's title row belongs to the
-   tab strip. */
-.inbox-pane-actions,
-.chat-pane-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  min-height: 24px;
-  padding: 1px 8px;
-  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cccccc));
+/* The active pane's own actions are portaled here, so the host shows one toolbar. */
+.vscode-bottom-panel__slot {
+  display: contents;
 }
 
-/* Embedded panels drop their own surface box and fill the pane instead. */
+/* Embedded panes are flex columns that fill the pane; their content scrolls inside, never out. */
 .inbox-panel--embedded,
-.chat-panel--embedded {
-  position: static;
-  height: 100%;
-  max-height: none;
+.chat-panel--embedded,
+.problems-panel {
+  flex: 1 1 0;
   min-height: 0;
-  width: auto;
-  border: 0;
-  background: transparent;
 }
-
-/* Standalone Chat next to a standalone Inbox: stack instead of overlapping. */
-.chat-panel--above-inbox {
-  bottom: calc(var(--status-bar-h, 22px) + var(--bottom-panel-h));
+.problems-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
 }
 
 @media (max-width: 640px) {

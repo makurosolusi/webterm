@@ -50,7 +50,7 @@ export interface OutputToolbarProps {
   onClear: () => void
   onCopy: () => void
   onSave: () => void
-  onClose: () => void
+  onClose?: () => void
 }
 
 /** Toolbar row above the log. */
@@ -83,7 +83,7 @@ export function OutputToolbar(props: OutputToolbarProps): React.JSX.Element {
           icon={props.autoScroll ? 'unlock' : 'lock'} pressed={!props.autoScroll} onClick={props.onToggleAutoScroll} />
         <ActionButton label="Copy All" icon="copy" disabled={!props.hasEntries} onClick={props.onCopy} />
         <ActionButton label="Save As..." icon="save" disabled={!props.hasEntries} onClick={props.onSave} />
-        <ActionButton label="Close Panel" icon="close" onClick={props.onClose} />
+        {props.onClose && <ActionButton label="Close Panel" icon="close" onClick={props.onClose} />}
       </div>
     </div>
   )

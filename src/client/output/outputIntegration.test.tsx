@@ -19,7 +19,8 @@ import {
   useOutputPanelState, useOutputToggleHotkey,
 } from './outputCommands'
 import { useOutputStatusItems } from './outputStatusItem'
-import OutputPanelHost from './outputPanelHost'
+import OutputPanelHost, { useOutputView } from './outputPanelHost'
+import BottomPanelHost from '../bottomPanelHost'
 
 const stream = vi.hoisted(() => ({
   value: {
@@ -29,7 +30,7 @@ const stream = vi.hoisted(() => ({
 }))
 vi.mock('./useLogStream', () => ({ useLogStream: () => stream.value }))
 vi.mock('./OutputPanel', () => ({
-  default: (p: { onClose: () => void }) => <div data-testid="output-body"><button onClick={p.onClose}>close-body</button></div>,
+  default: () => <div data-testid="output-body" />,
 }))
 
 const chord = (over: Partial<TerminalKeyEvent> = {}): TerminalKeyEvent => ({
@@ -182,14 +183,18 @@ describe('command palette', () => {
   })
 })
 
+function OutputTab() {
+  return <BottomPanelHost views={[useOutputView()]} />
+}
+
 describe('OutputPanelHost', () => {
-  it('shows an OUTPUT tab with the panel only while open, and closes from the panel', () => {
-    render(<><Probe /><OutputPanelHost /><StatusHarness /></>)
+  it('shows an OUTPUT tab with the panel only while open, and closes from the tab', () => {
+    render(<><Probe /><OutputPanelHost /><OutputTab /><StatusHarness /></>)
     expect(screen.queryByTestId('output-body')).toBeNull()
     fireEvent.click(screen.getAllByRole('button', { name: /Toggle Output/ })[0]!)
     expect(screen.getByTestId('output-body')).not.toBeNull()
     expect(screen.getByRole('tab', { name: /Output/ })).not.toBeNull()
-    fireEvent.click(screen.getByText('close-body'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close Output' }))
     expect(screen.queryByTestId('output-body')).toBeNull()
     expect(localStorage.getItem(OUTPUT_OPEN_KEY)).toBe('0')
   })

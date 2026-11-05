@@ -5,7 +5,7 @@
 // Panel rows (`.inbox-item`, `.chat-list-item`) are 22px tall; those live in the panels' own
 // sheets, which scope every selector under the panel class so an embedded pane inherits the
 // metrics without the surface chrome.
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { togglePanelMaximized, usePanelHeight } from './bottomPanelHeight'
 import { BottomPanelSash } from './bottomPanelSash'
@@ -21,6 +21,8 @@ export interface InboxPanelSurfaceProps {
   onClosePanel?: () => void
   /** Extra title-bar controls placed before maximize/close (refresh, ...). */
   actions?: ReactNode
+  /** Mount point in the toolbar for the active pane's own actions (portal target of a shared host). */
+  actionsSlotRef?: Ref<HTMLSpanElement>
   children: ReactNode
   className?: string
   ariaLabel: string
@@ -32,7 +34,7 @@ export interface InboxPanelSurfaceProps {
  * surface chrome only; tab content and data stay in the panel components.
  */
 export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Element {
-  const { tabs, activeId, onActivate, onClose, onClosePanel, actions, children, className, ariaLabel } = props
+  const { tabs, activeId, onActivate, onClose, onClosePanel, actions, actionsSlotRef, children, className, ariaLabel } = props
   const { maximized } = usePanelHeight()
   const maximizeLabel = maximized ? 'Restore Panel Size' : 'Maximize Panel Size'
   const maximizeTip = maximized ? 'Panel maximized. Click to restore its size' : 'Click to maximize the panel'
@@ -53,6 +55,7 @@ export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Elem
           ariaLabel={props.tabsLabel ?? `${ariaLabel} tabs`}
         />
         <div className="vscode-bottom-panel__actions" role="toolbar" aria-label={`${ariaLabel} actions`}>
+          {actionsSlotRef && <span ref={actionsSlotRef} className="vscode-bottom-panel__slot" />}
           {actions}
           <IconTooltip label={maximizeTip}>
             <button type="button" className="vscode-panel-action" aria-label={maximizeLabel}

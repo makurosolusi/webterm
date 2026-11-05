@@ -39,6 +39,7 @@ Operator notes:
 - The Central Agent "Turn on" offer no longer mentions OpenCode.
 
 ### Fixed
+- Opening Chat and Inbox (or Problems and Output) together no longer stacks panels on top of each other. They are now tabs of one bottom panel with a single header: opening a view selects its tab, the Chat input stays inside the panel, and "Jump to bottom" sits above the input instead of covering messages.
 - A browser node whose page crashed or disappeared now reports "crashed" instead of "not found", and Reload reopens it at its last URL.
 - Deleting a workspace now also removes its canvas background override and its uploaded image (an image still used elsewhere is kept). The workspace delete never fails because of this, and startup cleans up leftovers from workspaces that are already gone.
 

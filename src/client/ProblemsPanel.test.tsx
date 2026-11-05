@@ -35,7 +35,7 @@ function Harness({ add, focus, onItems, nodes = agents }: { add: (...a: unknown[
   const p = useProblems('ws1')
   useEffect(() => { p.setOpen(true) }, [])
   useEffect(() => { onItems(p.statusItems[0]?.label ?? '') }, [p.statusItems])
-  return <ProblemsPanel problems={p} root="/w" nodes={nodes} nodesRef={{ current: nodes }} addFlowNode={add} onFocus={focus} />
+  return <ProblemsPanel problems={p} root="/w" nodes={nodes} nodesRef={{ current: nodes }} addFlowNode={add} onFocus={focus} actionsHost={document.body} />
 }
 
 describe('ProblemsPanel', () => {

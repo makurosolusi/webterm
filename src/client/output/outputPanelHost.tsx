@@ -1,20 +1,16 @@
-// Mounts the Output panel as a bottom panel and owns the log stream that feeds the status bar
-// counts and the clear / set-level commands. The panel body itself is `OutputPanel`.
+// Owns the log stream that feeds the status bar counts and the clear / set-level commands, and
+// describes Output as a tab of the shared bottom panel (`bottomPanelHost`). The body is `OutputPanel`.
 import { useEffect, useRef } from 'react'
 import type { LogLevel } from '../../shared/logEntry'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
-import { InboxPanelSurface } from '../inboxPanelSurface'
-import type { BottomPanelTab } from '../bottomPanelTabs'
+import type { BottomPanelView } from '../bottomPanelHost'
 import OutputPanel from './OutputPanel'
 import { useLogStream } from './useLogStream'
 import {
   closeLevelPicker, closeOutput, publishOutputCounts, registerOutputActions, setOutputLevel,
   useOutputPanelState,
 } from './outputCommands'
-import './outputHost.css'
-
-const TABS: BottomPanelTab[] = [{ id: 'output', label: 'Output', closable: false, tooltip: 'Output' }]
 
 /** Level picker rows; labels follow VS Code's "Set Log Level…" quick pick. */
 const LEVEL_ITEMS: ReadonlyArray<{ level: LogLevel; label: string }> = [
@@ -25,11 +21,18 @@ const LEVEL_ITEMS: ReadonlyArray<{ level: LogLevel; label: string }> = [
   { level: 'error', label: 'Error' },
 ]
 
-const noop = (): void => {}
+/** Output as a bottom-panel tab; the tab's close button replaces the toolbar's. */
+export function useOutputView(): BottomPanelView {
+  const { open, focusToken } = useOutputPanelState()
+  return {
+    id: 'output', label: 'Output', tooltip: 'Output', open, onClose: closeOutput,
+    render: () => <OutputPanel focusFilterToken={focusToken} />,
+  }
+}
 
-/** Always-mounted host; renders the panel only while Output is open. */
+/** Always-mounted: keeps the log stream alive and renders the log-level picker. */
 export default function OutputPanelHost(): React.JSX.Element {
-  const { open, focusToken, levelPickerOpen } = useOutputPanelState()
+  const { levelPickerOpen } = useOutputPanelState()
   const stream = useLogStream()
   const streamRef = useRef(stream)
   streamRef.current = stream
@@ -49,11 +52,6 @@ export default function OutputPanelHost(): React.JSX.Element {
 
   return (
     <>
-      {open && (
-        <InboxPanelSurface className="output-panel-host" ariaLabel="Output" tabs={TABS} activeId="output" onActivate={noop}>
-          <OutputPanel onClose={closeOutput} focusFilterToken={focusToken} />
-        </InboxPanelSurface>
-      )}
       {levelPickerOpen && (
         <VscodeQuickPick
           open
