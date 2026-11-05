@@ -3,8 +3,11 @@
 // cloud provider flags > ANTHROPIC_AUTH_TOKEN (Bearer) > ANTHROPIC_API_KEY (x-api-key) > apiKeyHelper >
 // CLAUDE_CODE_OAUTH_TOKEN > /login. So a mode sets its own variable AND clears every one that would
 // outrank it, or an inherited ANTHROPIC_AUTH_TOKEN would silently win over the key chosen here.
+// Command mode touches no credential at all: the user's own launch command (a launch profile) injects it.
+import { CLAUDE_PROFILE_LIMITS } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 
-export type ProviderMode = 'login' | 'apiKey' | 'custom'
+
+export type ProviderMode = 'login' | 'apiKey' | 'custom' | 'command'
 /** Header the custom endpoint reads: `apiKey` = x-api-key (ANTHROPIC_API_KEY), `authToken` = Bearer (ANTHROPIC_AUTH_TOKEN). */
 export type CredentialKind = 'apiKey' | 'authToken'
 
@@ -16,18 +19,30 @@ export interface ProviderConfig {
   credential?: CredentialKind
   /** Optional ANTHROPIC_MODEL override (both key modes). */
   model?: string
+  /** Command mode only: id of the Claude launch profile (Settings › Agent) that carries the user's own launch command. */
+  profileId?: string
   /** Epoch ms of the last change: sessions started before it show a restart hint. */
   updatedAt?: number
 }
 
 /** What the API/UI may see: never the secret, only whether one is stored. */
-export interface ProviderView extends ProviderConfig { secretSet: boolean; ready: boolean }
+export interface ProviderView extends ProviderConfig {
+  secretSet: boolean
+  ready: boolean
+  /** Command mode: the resolved launch profile (the command is the user's own text, shown as stored). */
+  profile?: { id: string; name: string; command: string }
+  /** Command mode: the chosen profile was deleted (launches fall back to Default). */
+  profileMissing?: true
+  /** Command mode: the command looks like it holds a secret (value never returned). */
+  commandWarning?: 'looks_like_secret'
+}
 
 /** Env change for one Claude process: `set` wins, `unset` is removed from the inherited env. */
 export interface ProviderEnv { set: Record<string, string>; unset: string[] }
 
 export const DEFAULT_CONFIG: ProviderConfig = { mode: 'login' }
-export const MODES: readonly ProviderMode[] = ['login', 'apiKey', 'custom']
+export const MODES: readonly ProviderMode[] = ['login', 'apiKey', 'custom', 'command']
+export const PROFILE_ID_MAX = CLAUDE_PROFILE_LIMITS.id
 export const MODEL_MAX = 200
 export const SECRET_MIN = 8
 export const SECRET_MAX = 8 * 1024
@@ -48,16 +63,17 @@ export function normalizeBaseUrl(raw: string): string | null {
   return `${u.origin}${u.pathname.replace(/\/+$/, '').replace(/\/v1$/, '')}`
 }
 
-export const isReady = (c: ProviderConfig, secretSet: boolean): boolean =>
-  c.mode === 'login' || (secretSet && (c.mode === 'apiKey' || !!c.baseUrl))
+/** `profileExists`: command mode is ready when its launch profile still exists. */
+export const isReady = (c: ProviderConfig, secretSet: boolean, profileExists = false): boolean =>
+  c.mode === 'login' || (c.mode === 'command' ? profileExists : secretSet && (c.mode === 'apiKey' || !!c.baseUrl))
 
 /**
- * Env for one Claude process. Login mode changes nothing (Claude Code uses its own login). Key modes
+ * Env for one Claude process. Login and command mode change nothing (Claude Code uses its own login). Key modes
  * set exactly one credential variable, clear the others and the cloud flags, and turn on the
  * subprocess scrub so the agent's own tools do not inherit the key.
  */
 export function providerEnv(c: ProviderConfig, secret: string | null): ProviderEnv {
-  if (c.mode === 'login' || !secret || !isReady(c, true)) return { set: {}, unset: [] }
+  if (c.mode === 'login' || c.mode === 'command' || !secret || !isReady(c, true)) return { set: {}, unset: [] }
   const credVar = c.mode === 'custom' && c.credential === 'authToken' ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY'
   const set: Record<string, string> = { [credVar]: secret, [SCRUB_VAR]: '1' }
   if (c.mode === 'custom' && c.baseUrl) set.ANTHROPIC_BASE_URL = c.baseUrl
@@ -76,7 +92,7 @@ export function applyProviderEnv(base: Record<string, string | undefined>, pe: P
 export type ParseResult = { ok: true; config: ProviderConfig; secret?: string | null } | { ok: false; error: string }
 
 /**
- * Validates a PUT body `{ mode, baseUrl?, credential?, model?, secret? }`. `secret` absent = keep the
+ * Validates a PUT body `{ mode, baseUrl?, credential?, model?, secret? }` (command mode: `{ mode, profileId }`). `secret` absent = keep the
  * stored one, `''` = remove it. Errors are static codes: the body (which may hold a key) is never echoed.
  */
 export function parseUpdate(body: unknown): ParseResult {
@@ -84,6 +100,11 @@ export function parseUpdate(body: unknown): ParseResult {
   const b = body as Record<string, unknown>
   if (typeof b.mode !== 'string' || !(MODES as readonly string[]).includes(b.mode)) return { ok: false, error: 'invalid_mode' }
   const config: ProviderConfig = { mode: b.mode as ProviderMode }
+  if (config.mode === 'command') {
+    // Only the profile id is taken: credential fields are ignored and a stored secret is kept (undefined), so switching back loses nothing.
+    if (typeof b.profileId !== 'string' || b.profileId === '' || b.profileId.length > PROFILE_ID_MAX) return { ok: false, error: 'invalid_profile_id' }
+    return { ok: true, config: { mode: 'command', profileId: b.profileId } }
+  }
   if (config.mode === 'custom') {
     const url = typeof b.baseUrl === 'string' ? normalizeBaseUrl(b.baseUrl) : null
     if (!url) return { ok: false, error: 'invalid_base_url' }
