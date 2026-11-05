@@ -15,6 +15,7 @@ import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
 
 import type { DockProps } from './Dock.types'
+import { useTabLayout } from './tabLayout.store'
 export type { DockProps } from './Dock.types'
 
 export { ZOOM_PRESETS } from './Dock.statusBar'
@@ -52,6 +53,7 @@ function activeActivityId(props: DockProps): string | null {
 export default function Dock(props: DockProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const canvasMode = useTabLayout().mode !== 'tabs'
   const { onAddBrowser, onToggleCentral } = props
   const { setOffer, dialog: offerDialog } = useCapabilityOffer(onAddBrowser, onToggleCentral)
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
@@ -194,16 +196,18 @@ export default function Dock(props: DockProps) {
             </IconButton>
           )}
 
-          <IconButton
-            className="vscode-activity-bar__item dock-btn rounded-none"
-            label={props.locked ? 'Unlock view' : 'Lock view'}
-            tooltip={props.locked ? 'View locked: pan and zoom are off. Click to unlock' : 'View unlocked. Click to lock pan and zoom; nodes stay movable'}
-            side="right"
-            aria-pressed={props.locked}
-            onClick={props.onToggleLock}
-          >
-            <span className="vscode-activity-bar__icon" aria-hidden>{codicon(props.locked ? 'lock' : 'unlock')}</span>
-          </IconButton>
+          {canvasMode && (
+            <IconButton
+              className="vscode-activity-bar__item dock-btn rounded-none"
+              label={props.locked ? 'Unlock view' : 'Lock view'}
+              tooltip={props.locked ? 'View locked: pan and zoom are off. Click to unlock' : 'View unlocked. Click to lock pan and zoom; nodes stay movable'}
+              side="right"
+              aria-pressed={props.locked}
+              onClick={props.onToggleLock}
+            >
+              <span className="vscode-activity-bar__icon" aria-hidden>{codicon(props.locked ? 'lock' : 'unlock')}</span>
+            </IconButton>
+          )}
 
           <IconButton
             className="vscode-activity-bar__item dock-btn rounded-none"
