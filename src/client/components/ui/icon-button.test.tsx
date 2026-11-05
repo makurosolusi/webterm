@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chordLabel, registerCommands } from '@/commandRegistry'
 import { setKeybinding, resetKeybinding } from '@/keybindings.store'
 import { isMacPlatform } from '@/terminalKeys'
+import { VscodeDialog } from '@/components/vscode/vscodeDialog'
 import { IconButton, LONG_PRESS_MS } from './icon-button'
 import { TOOLTIP_DELAY_MS, TooltipProvider } from './tooltip'
 
@@ -41,6 +42,7 @@ describe('IconButton', () => {
     const unregister = registerCommands([{ id: 'test.rebound', label: 'Test', defaultKey: 'Mod+J', run: () => {} }])
     setKeybinding('test.rebound', 'Mod+Alt+J')
     render(<IconButton label="Rebound" commandId="test.rebound"><span /></IconButton>)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(screen.getByRole('button', { name: 'Rebound' }))
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(`Rebound ${chordLabel('Mod+Alt+J', isMacPlatform())}`)
     resetKeybinding('test.rebound')
@@ -49,6 +51,7 @@ describe('IconButton', () => {
 
   it('opens at once on keyboard focus', () => {
     render(<IconButton label="Settings" shortcut="⌘,"><span /></IconButton>)
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(screen.getByRole('button', { name: 'Settings' }))
     expect(tooltip()?.textContent).toBe('Settings ⌘,')
   })
@@ -89,5 +92,32 @@ describe('IconButton', () => {
     fireEvent.pointerUp(btn, { pointerType: 'touch' })
     act(() => { vi.advanceTimersByTime(LONG_PRESS_MS) })
     expect(tooltip()).toBeNull()
+  })
+
+  it('does not open on script focus, nor on focus after a pointer press or a non-navigation key', () => {
+    render(<IconButton label="Settings"><span /></IconButton>)
+    const btn = screen.getByRole('button', { name: 'Settings' })
+    fireEvent.pointerDown(document.body)
+    act(() => { btn.focus() })
+    expect(tooltip()).toBeNull()
+    act(() => { btn.blur() })
+    fireEvent.keyDown(document, { key: 'Enter' }) // e.g. the shortcut that opened this surface
+    act(() => { btn.focus() })
+    expect(tooltip()).toBeNull()
+  })
+})
+
+describe('IconTooltip in a VscodeDialog', () => {
+  it('stays closed when the dialog autofocuses its close button, opens when Tab reaches it', () => {
+    fireEvent.pointerDown(document.body) // the click that opens the dialog
+    render(<VscodeDialog open onOpenChange={() => {}} title="Rename"><input aria-label="Name" /></VscodeDialog>)
+    const close = screen.getByRole('button', { name: 'Close dialog' })
+    expect(document.activeElement).toBe(close)
+    expect(tooltip()).toBeNull()
+
+    act(() => { screen.getByRole('textbox', { name: 'Name' }).focus() })
+    fireEvent.keyDown(document, { key: 'Tab' })
+    act(() => { close.focus() })
+    expect(tooltip()?.textContent).toBe('Close dialog Esc')
   })
 })

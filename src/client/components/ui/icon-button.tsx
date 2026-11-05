@@ -17,6 +17,19 @@ export function useCommandShortcut(commandId: string | undefined): string | unde
   return key ? chordLabel(key, isMacPlatform()) : undefined
 }
 
+// Focus opens a tooltip only when it came from keyboard navigation (VS Code shows hovers for
+// keyboard focus, never for a dialog's autofocus). `:focus-visible` cannot decide this: jsdom
+// treats it as plain `:focus`, and browsers also match it for script focus after any keypress
+// (a shortcut that opens a dialog). So the last input is tracked instead: a navigation key arms
+// keyboard modality, any other key or a pointer press disarms it.
+const NAV_KEYS = new Set(['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'])
+let keyboardModality = false
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', (e) => { keyboardModality = NAV_KEYS.has(e.key) }, true)
+  document.addEventListener('pointerdown', () => { keyboardModality = false }, true)
+  document.addEventListener('mousedown', () => { keyboardModality = false }, true)
+}
+
 export interface IconTooltipProps {
   /** Tooltip text; for IconButton also the accessible name. */
   label: string
@@ -33,9 +46,9 @@ export interface IconTooltipProps {
 }
 
 /**
- * VS Code-style hover hint around one trigger: hover (after the provider delay) or focus opens
- * it, a touch long-press opens it too. A disabled trigger is wrapped in a focusable span, since
- * disabled buttons fire no pointer events (shadcn "Disabled Button" pattern).
+ * VS Code-style hover hint around one trigger: hover (after the provider delay) or keyboard
+ * focus opens it (not script or mouse focus), a touch long-press opens it too. A disabled
+ * trigger is wrapped in a focusable span, since disabled buttons fire no pointer events (shadcn "Disabled Button" pattern).
  */
 export function IconTooltip({ label, shortcut, commandId, side, disabled, disabledReason, children }: IconTooltipProps) {
   const fromRegistry = useCommandShortcut(commandId)
@@ -65,6 +78,8 @@ export function IconTooltip({ label, shortcut, commandId, side, disabled, disabl
             setOpen(true)
           }, LONG_PRESS_MS)
         }}
+        // Radix opens on every focus; a handler that prevents default stops it (composeEventHandlers).
+        onFocus={(e) => { if (!keyboardModality) e.preventDefault() }}
         onPointerUp={cancel}
         onPointerCancel={cancel}
         // The release after a long-press is a hint request, not a click: swallow it before the button sees it.
