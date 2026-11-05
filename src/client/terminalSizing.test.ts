@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OPEN_SIZE_FALLBACK_MS, canOpenSession, coalesceFrames, sizeChanged } from './terminalSizing'
+import { OPEN_SIZE_FALLBACK_MS, canOpenSession, coalesceFrames, sizeChanged, watchVisible } from './terminalSizing'
 
 describe('sizeChanged', () => {
   it('always sends the first size', () => {
@@ -54,5 +54,51 @@ describe('coalesceFrames', () => {
     c.cancel()
     f.flush()
     expect(fn).not.toHaveBeenCalled()
+  })
+})
+
+describe('watchVisible', () => {
+  // Fake IntersectionObserver: the test drives the entries by hand.
+  function fakeIO() {
+    const inst: { cb: IntersectionObserverCallback; observed: Element[]; disconnected: boolean }[] = []
+    class IO {
+      constructor(cb: IntersectionObserverCallback) { inst.push({ cb, observed: [], disconnected: false }) }
+      observe(el: Element) { inst[inst.length - 1].observed.push(el) }
+      disconnect() { inst[inst.length - 1].disconnected = true }
+    }
+    const fire = (isIntersecting: boolean) =>
+      inst[0].cb([{ isIntersecting } as IntersectionObserverEntry], inst[0] as unknown as IntersectionObserver)
+    return { IO: IO as unknown as typeof IntersectionObserver, inst, fire }
+  }
+
+  it('starts visible, tracks entries, and calls onShown only on the hidden -> visible edge', () => {
+    const { IO, inst, fire } = fakeIO()
+    const el = ({}) as Element
+    const onShown = vi.fn()
+    const w = watchVisible(el, onShown, IO)
+    expect(inst[0].observed).toEqual([el])
+    expect(w.visible).toBe(true)
+    fire(true) // already visible: not an edge
+    expect(onShown).not.toHaveBeenCalled()
+    fire(false)
+    expect(w.visible).toBe(false)
+    expect(onShown).not.toHaveBeenCalled()
+    fire(true)
+    expect(w.visible).toBe(true)
+    expect(onShown).toHaveBeenCalledTimes(1)
+  })
+
+  it('stop() disconnects the observer', () => {
+    const { IO, inst } = fakeIO()
+    watchVisible(({}) as Element, () => {}, IO).stop()
+    expect(inst[0].disconnected).toBe(true)
+  })
+
+  it('without IntersectionObserver it stays visible and never throws', () => {
+    const onShown = vi.fn()
+    const w = watchVisible(({}) as Element, onShown, undefined)
+    expect(w.visible).toBe(true)
+    w.stop()
+    expect(onShown).not.toHaveBeenCalled()
   })
 })

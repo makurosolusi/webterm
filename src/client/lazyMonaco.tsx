@@ -6,6 +6,7 @@ import { getBrowserWorkspace } from './browser.stream'
 import * as fsClient from './fsClient'
 import { LSP_WS_PATH } from './editorLsp.client'
 import { wireEditorLsp } from './editorLsp.monaco'
+import { forwardTabChords } from './editorChords'
 
 /**
  * Monaco di-muat MALAS, satu kali, lewat dynamic import.
@@ -61,6 +62,8 @@ export function loadMonaco(): Promise<MonacoApi> {
 
     defineWebtermThemes(monaco)
     wireTsWorkerReaper(monaco)
+    // Tab-layout chords must reach the app from inside every editor (editor nodes and diff sides).
+    forwardTabChords(monaco)
     // Language servers (hover, go-to-definition, rename...) for editor-node models; see editorLsp.monaco.ts.
     wireEditorLsp(monaco, {
       // The workspace this tab serves (App sets it for the browser socket too).

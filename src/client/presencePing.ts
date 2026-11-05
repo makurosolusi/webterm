@@ -6,6 +6,8 @@ import { useEffect } from 'react'
 import { readNotifyPrefs } from './osNotify.prefs'
 import { InboxApiError } from './inboxTypes'
 import { request } from './inboxTransport'
+import { closestNodeRoot } from './nodeRoot'
+import { getTabLayout } from './tabLayout.store'
 
 /** Interval detak selama tab terlihat; jauh di bawah ambang "away" server (menit). */
 export const PRESENCE_PING_MS = 30_000
@@ -18,8 +20,12 @@ export const FOCUS_PING_GAP_MS = 2000
  */
 export function focusedNodeId(): string | null {
   if (!document.hasFocus()) return null
-  const active = document.activeElement?.closest?.('.react-flow__node') ?? document.querySelector('.react-flow__node.selected')
-  return active?.getAttribute('data-id') ?? null
+  const focused = closestNodeRoot(document.activeElement)?.dataset.id
+  if (focused) return focused
+  // Tab mode: the visible tab is what the user is looking at; canvas selection is hidden.
+  const { mode, tabs } = getTabLayout()
+  if (mode === 'tabs') return tabs.active
+  return document.querySelector('.react-flow__node.selected')?.getAttribute('data-id') ?? null
 }
 
 function ping(): void {

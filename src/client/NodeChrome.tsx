@@ -9,6 +9,7 @@ import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
 import { useNodeFullscreen } from './useNodeFullscreen'
 import { NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
+import { useNodeHost } from './tabLayout.context'
 
 export interface NodeChromeProps {
   title: string
@@ -78,7 +79,7 @@ export function statusChip(status?: AgentStatus): { cls: string; label: string; 
  * className untuk elemen `.term-node`.
  *
  * `working`/`attention` sengaja TANPA prefiks: glow node digantung pada
- * `.react-flow__node:has(.term-node.working)::after` (pseudo-nya harus hidup di luar `.term-node`
+ * `.react-flow__node:has(.term-node.working)::after` (dan padanannya `[data-tab-node]` di tab; pseudo-nya harus hidup di luar `.term-node`
  * yang `overflow: hidden`), dan selector itu disalin apa adanya dari nodeterm.
  *
  * `waiting` dapat kelasnya SENDIRI, dengan alasan yang sama dengan pecahnya chip di atas: halo
@@ -104,6 +105,8 @@ export default function NodeChrome(props: NodeChromeProps) {
   const titleRef = useRef<HTMLElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
   const fs = useNodeFullscreen(headerRef)
+  // Tab mode is view-only: collapse/resize/maximize would rewrite the node's canvas layout.
+  const { inTab } = useNodeHost()
 
   const beginEdit = () => { setDraft(props.title); setEditing(true) }
   const commit = () => {
@@ -124,13 +127,15 @@ export default function NodeChrome(props: NodeChromeProps) {
 
   return (
     <div ref={headerRef} className="node-header relative">
-      <ToolbarButton
-        label={props.collapsed ? 'Expand' : 'Collapse'}
-        className="nodrag"
-        title={props.collapsed ? 'Expand' : 'Collapse'}
-        data-title={props.collapsed ? 'Expand' : 'Collapse'}
-        onClick={props.onToggleCollapse}
-      ><span className={cn('codicon', props.collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down')} /></ToolbarButton>
+      {!inTab && (
+        <ToolbarButton
+          label={props.collapsed ? 'Expand' : 'Collapse'}
+          className="nodrag"
+          title={props.collapsed ? 'Expand' : 'Collapse'}
+          data-title={props.collapsed ? 'Expand' : 'Collapse'}
+          onClick={props.onToggleCollapse}
+        ><span className={cn('codicon', props.collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down')} /></ToolbarButton>
+      )}
 
       <NodeColorSwatch color={props.color} onColor={props.onColor} />
 
@@ -170,14 +175,14 @@ export default function NodeChrome(props: NodeChromeProps) {
       {props.pill}
       {props.extraHeader}
 
-      {!props.collapsed && <NodeResizeToggle />}
+      {!props.collapsed && !inTab && <NodeResizeToggle />}
 
       <NodeToolbar
         onRefresh={props.onRefresh}
         searchOpen={props.searchOpen} onToggleSearch={props.onToggleSearch}
         micActive={props.micActive} onToggleMic={props.onToggleMic}
         commentsOpen={commentsOpen} onToggleComments={() => setCommentsOpen((o) => !o)} commentCount={props.comments.length}
-        maximized={props.maximized} onToggleMaximize={props.onToggleMaximize}
+        maximized={props.maximized} onToggleMaximize={props.onToggleMaximize} hideMaximize={inTab}
         fullscreen={fs.isFullscreen} onToggleFullscreen={fs.toggle} fullscreenDisabled={fs.fullscreenDisabled}
         onClose={props.onClose}
         onStop={props.onStop}

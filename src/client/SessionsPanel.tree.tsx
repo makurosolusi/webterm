@@ -17,7 +17,7 @@ import type { WsNodeKind } from '../shared/workspace'
 /** Codicon per kind untuk branch tab Nodes. Baris di sana tidak punya status, jadi slot ikonnya
  *  kosong — dan bentuk adalah satu-satunya pembeda yang terbaca tanpa membaca: judul kustom
  *  ("notes", "scratch") sama-sama mungkin milik editor, terminal, atau folder. */
-const KIND_ICON: Record<WsNodeKind, string> = {
+export const KIND_ICON: Record<WsNodeKind, string> = {
   agent: 'hubot',
   terminal: 'terminal',
   editor: 'file',

@@ -13,7 +13,7 @@ vi.mock('./ws', async (importOriginal) => {
   return { ...real, send: (m: { t: string; id: string }) => { sent.push(m) } }
 })
 // Rekam instance xterm sungguhan (tanpa mengganti perilakunya) supaya test bisa membaca `options`.
-const { terms } = vi.hoisted(() => ({ terms: [] as { options: { fontSize?: number } }[] }))
+const { terms } = vi.hoisted(() => ({ terms: [] as { options: { fontSize?: number }; refresh(a: number, b: number): void }[] }))
 vi.mock('@xterm/xterm', async (importOriginal) => {
   const real = await importOriginal<typeof import('@xterm/xterm')>()
   class Recorded extends real.Terminal {
@@ -83,6 +83,46 @@ describe('TerminalCore', () => {
 
     await waitFor(() => expect(ofType('open')).toHaveLength(1), { timeout: 3000 })
     expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
+  })
+
+  it('no refit while the host is hidden (xterm renderer paused); refits once it is shown again', async () => {
+    hostSize = 400
+    // Fake IntersectionObserver per observed element + a ResizeObserver spy so the test can poke both.
+    const ios: { target?: Element; cb: IntersectionObserverCallback }[] = []
+    class FakeIO {
+      private rec: { target?: Element; cb: IntersectionObserverCallback }
+      constructor(cb: IntersectionObserverCallback) { this.rec = { cb }; ios.push(this.rec) }
+      observe(el: Element) { this.rec.target = el }
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal('IntersectionObserver', FakeIO)
+    const RealRO = globalThis.ResizeObserver
+    const ros: { cb: ResizeObserverCallback; self: ResizeObserver }[] = []
+    class SpyRO extends RealRO { constructor(cb: ResizeObserverCallback) { super(cb); ros.push({ cb, self: this }) } }
+    vi.stubGlobal('ResizeObserver', SpyRO)
+    try {
+      await mountCanvas({ nodes: [termNode], dirs: {} })
+      await waitFor(() => expect(ofType('open')).toHaveLength(1))
+      await new Promise((r) => setTimeout(r, OBSERVER_SETTLE_MS))
+      const ours = ios.find((o) => o.target?.classList.contains('nowheel'))!
+      expect(ours).toBeDefined()
+      const setVisible = (v: boolean) => ours.cb([{ isIntersecting: v } as IntersectionObserverEntry], {} as IntersectionObserver)
+      const poke = () => ros.forEach((r) => r.cb([], r.self))
+      // `refresh` runs right after `fit.fit()` in refit, so it counts refits regardless of whether the grid changed.
+      const refresh = vi.spyOn(terms[0], 'refresh')
+
+      setVisible(false)
+      hostSize = 900 // ResizeObserver fires while the renderer is still paused: must not refit
+      poke()
+      await new Promise((r) => setTimeout(r, OBSERVER_SETTLE_MS))
+      expect(refresh).not.toHaveBeenCalled()
+
+      setVisible(true) // edge -> scheduled refit picks up the new size
+      await waitFor(() => expect(refresh).toHaveBeenCalled())
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('⌘+ menaikkan font xterm (settings default), ⌘0 mereset', async () => {

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { RefObject } from 'react'
+import { NODE_ROOT } from './nodeRoot'
 
-/** Selector wrapper node React Flow: elemen yang di-fullscreen (UA `:fullscreen` menimpa transform/ukuran inline-nya). */
-export const FULLSCREEN_TARGET = '.react-flow__node'
+/** Elemen yang di-fullscreen: wrapper node React Flow, atau pane tab (UA `:fullscreen` menimpa transform/ukuran inline-nya). */
+export const FULLSCREEN_TARGET = NODE_ROOT
 
 /** Fullscreen sungguhan (Fullscreen API) untuk wrapper node yang memuat `anchor`; state dibaca dari `document.fullscreenElement`. */
 export function useNodeFullscreen(anchor: RefObject<HTMLElement | null>) {

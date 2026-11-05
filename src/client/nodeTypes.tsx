@@ -1,7 +1,6 @@
 // Peta tipe node React Flow. Konstanta MODUL, bukan objek yang dibentuk saat render: React Flow
 // me-remount setiap node ketika identitas map ini berubah, dan remount terminal berarti kehilangan
 // seluruh scrollback-nya.
-import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import TerminalNode from './TerminalNode'
 import AgentNode from './AgentNode'
@@ -12,26 +11,27 @@ import PlanNode from './PlanNode'
 import McpAppNode from './mcpapps/McpAppNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { useLiveSettings } from './useSettings'
+import { withTabPortal } from './tabLayout.portal'
 
 export const nodeTypes = {
-  terminal: TerminalNode,
-  agent: AgentNode,
-  files: FilesNode,
-  browser: BrowserNodeType,
+  terminal: withTabPortal(TerminalNode),
+  agent: withTabPortal(AgentNode),
+  files: withTabPortal(FilesNode),
+  browser: withTabPortal(BrowserNodeType),
   // Working-tree diff + review notes (DiffNode.tsx); cwd comes from node data or the wired agent.
-  diff: DiffNode,
+  diff: withTabPortal(DiffNode),
   // ⌘K intent -> DAG draft, approved by a human, then the map of its workers (PlanNode.tsx, F4-f).
-  plan: PlanNode,
+  plan: withTabPortal(PlanNode),
   // MCP Apps `ui://` view in a sandboxed frame (mcpapps/McpAppNode.tsx, F6); node id = server app id.
-  app: McpAppNode,
+  app: withTabPortal(McpAppNode),
   // Editor menerima fs lewat prop (webterm tidak punya preload Electron); settings-nya dari
   // context, bukan lagi dari data node — lihat `useLiveSettings`.
   //
-  // Wrapper-nya ikut di-`memo`: inilah komponen yang dipanggil React Flow, jadi hanya di sini
+  // `withTabPortal` sudah `memo`: inilah komponen yang dipanggil React Flow, jadi hanya di sini
   // re-render karena prop bisa dihentikan sebelum masuk subtree. `memo` di EditorNode sendiri
-  // menutup jalur yang lain — perubahan settings menembus `memo` wrapper (langganan context ada
+  // menutup jalur yang lain — perubahan settings menembus wrapper (langganan context ada
   // di dalamnya) tapi berhenti di EditorNode kalau `openMarkdownPreview` tidak ikut berubah.
-  editor: memo(function EditorNodeType(p: NodeProps) {
+  editor: withTabPortal(function EditorNodeType(p: NodeProps) {
     const settings = useLiveSettings()
     return (
       <EditorNode

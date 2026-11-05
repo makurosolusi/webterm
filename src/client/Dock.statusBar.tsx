@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { DockProps } from './Dock.types'
 import { codicon } from './dockCodicon'
+import { useTabLayout } from './tabLayout.store'
 
 /** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
 export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
@@ -16,6 +17,8 @@ export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
  */
 export function CanvasStatusBar(props: DockProps) {
   const [zoomOpen, setZoomOpen] = useState(false)
+  // Tab mode has no canvas viewport, so these controls would do nothing.
+  const canvasMode = useTabLayout().mode !== 'tabs'
 
   const left: VscodeStatusItem[] = []
   if (props.workspaceName) {
@@ -32,6 +35,7 @@ export function CanvasStatusBar(props: DockProps) {
       id: 'redo', label: '', icon: codicon('redo'), tooltip: 'Redo last undone change', ariaLabel: 'Redo',
       onClick: props.onRedo, disabled: !props.canRedo, disabledReason: 'nothing to redo',
     },
+    ...(canvasMode ? [
     {
       id: 'back', label: '', icon: codicon('arrow-left'), tooltip: 'Go back to the previous view', ariaLabel: 'Go back',
       onClick: props.onBack, disabled: !props.canBack, disabledReason: 'no earlier view',
@@ -40,6 +44,7 @@ export function CanvasStatusBar(props: DockProps) {
       id: 'forward', label: '', icon: codicon('arrow-right'), tooltip: 'Go forward to the next view', ariaLabel: 'Go forward',
       onClick: props.onForward, disabled: !props.canForward, disabledReason: 'no later view',
     },
+    ] : []),
     ...(props.onSave ? [{
       id: 'save', label: '', icon: codicon('save'), tooltip: 'Save layout', ariaLabel: 'Save layout',
       onClick: props.onSave,
@@ -52,6 +57,7 @@ export function CanvasStatusBar(props: DockProps) {
       id: 'mic', label: '', icon: codicon('mic'), tooltip: 'Dictate', ariaLabel: 'Dictate',
       onClick: props.onToggleMic,
     }] : []),
+    ...(canvasMode ? [
     {
       id: 'fit', label: '', icon: codicon('screen-normal'), tooltip: 'Fit all nodes in view', ariaLabel: 'Fit view',
       commandId: 'view.fit', onClick: props.onFit,
@@ -68,6 +74,7 @@ export function CanvasStatusBar(props: DockProps) {
       id: 'zoom-in', label: '', icon: codicon('zoom-in'), tooltip: 'Zoom in', ariaLabel: 'Zoom in',
       onClick: props.onZoomIn,
     },
+    ] : []),
   ]
 
   return (
@@ -78,7 +85,7 @@ export function CanvasStatusBar(props: DockProps) {
         right={right}
         liveText={props.agentSummary}
       />
-      {zoomOpen && (
+      {zoomOpen && canvasMode && (
         <Dialog open onOpenChange={setZoomOpen}>
           <DialogContent className="dock-zoom-dialog">
             <DialogHeader><DialogTitle>Zoom</DialogTitle></DialogHeader>

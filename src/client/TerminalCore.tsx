@@ -9,7 +9,7 @@ import '@xterm/xterm/css/xterm.css'
 import { send, subscribe } from './ws'
 import { writeClipboard } from './clipboard'
 import { lineEditSeq } from './terminalLineEdit'
-import { OPEN_SIZE_FALLBACK_MS, canOpenSession, coalesceFrames, sizeChanged } from './terminalSizing'
+import { OPEN_SIZE_FALLBACK_MS, canOpenSession, coalesceFrames, sizeChanged, watchVisible } from './terminalSizing'
 import type { TermSize } from './terminalSizing'
 import { canClaimFocus, exitMessage, openLinkOnModifiedClick } from './terminalSession'
 import { applyLiveOptions, xtermOptionsFromSettings } from './terminalConfig'
@@ -104,6 +104,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   const searchRef = useRef<SearchAddon | null>(null)
   const webglRef = useRef<WebglAddon | null>(null)
   const linkRef = useRef<string | null>(null)
+  const shownRef = useRef<{ readonly visible: boolean } | null>(null)
   // `last` = ukuran terakhir yang dikirim (via `open` atau `resize`); dedupe SIGWINCH bertumpu padanya.
   const session = useRef<{ opened: boolean; last: TermSize | null; open: () => void }>({
     opened: false,
@@ -126,6 +127,12 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const term = termRef.current
     const fit = fitRef.current
     const el = elRef.current
+    // Un-hiding (tab switch, canvas<->tabs) fires the ResizeObserver BEFORE xterm's renderer resumes;
+    // resizing then scrolls the buffer to the top (see `watchVisible`). The visibility watcher refits
+    // once xterm is live again, so skipping here loses nothing. A not-yet-opened session still goes on:
+    // its `open` must not wait for visibility. (Kept above the size gate so `hasSize` stays adjacent
+    // to the fit call, which terminalFit.test.ts enforces.)
+    if (session.current.opened && shownRef.current?.visible === false) return
     if (!term || !fit || !el || !hasSize(el)) return
     fit.fit()
     term.refresh(0, term.rows - 1)
@@ -296,12 +303,17 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const frames = coalesceFrames(refit)
     const ro = new ResizeObserver(frames.schedule)
     ro.observe(el)
+    // After `term.open` on purpose: must be notified after xterm's own IntersectionObserver.
+    const shown = watchVisible(el, frames.schedule)
+    shownRef.current = shown
 
     return () => {
       clearTimeout(fallback)
       frames.cancel()
       s.opened = false
       ro.disconnect()
+      shown.stop()
+      shownRef.current = null
       titleSub.dispose()
       detachMiddle()
       detachCopy()

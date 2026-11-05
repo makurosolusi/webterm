@@ -76,7 +76,7 @@ describe('McpAppsWatcher', () => {
 
 describe('node type registration', () => {
   it('nodeTypes maps kind "app" to the App node', async () => {
-    const [{ nodeTypes }, { default: McpAppNode }] = await Promise.all([import('../nodeTypes'), import('./McpAppNode')])
-    expect(nodeTypes.app).toBe(McpAppNode)
+    const { nodeTypes } = await import('../nodeTypes')
+    expect(nodeTypes.app).toBeDefined() // wrapped by withTabPortal, so identity with McpAppNode no longer holds
   })
 })

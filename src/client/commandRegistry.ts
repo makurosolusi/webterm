@@ -71,11 +71,13 @@ export function normalizeChord(chord: string): string {
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
 
+const BRACKETS: Record<string, string> = { BracketLeft: '[', BracketRight: ']' } // Shift turns `key` into { }
+
 /** Chord of a keydown, platform resolved (`Mod` = ⌘ on macOS, Ctrl elsewhere); '' for a bare modifier. */
 export function eventChord(e: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, isMac: boolean): string {
   if (MODIFIER_KEYS.has(e.key)) return ''
-  // Letters/digits by physical code: Alt/Shift change `key` (⌥P = π) but not the chord.
-  const key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : /^Digit\d$/.test(e.code) ? e.code.slice(5) : e.key
+  // Letters/digits/brackets by physical code: Alt/Shift change `key` (⌥P = π) but not the chord.
+  const key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : /^Digit\d$/.test(e.code) ? e.code.slice(5) : BRACKETS[e.code] ?? e.key
   const mods = [
     (isMac ? e.metaKey : e.ctrlKey) && 'Mod',
     isMac && e.ctrlKey && 'Ctrl',

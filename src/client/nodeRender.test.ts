@@ -73,8 +73,9 @@ describe('memo pada komponen node', () => {
     expect(memoized('export default function TerminalNode() {}\n', 'TerminalNode')).toBe(false)
   })
 
-  it('wrapper editor ikut ter-memo — itu komponen yang dipanggil React Flow', () => {
-    expect(src('nodeTypes.tsx')).toMatch(/editor: memo\(function EditorNodeType/)
+  it('wrapper editor ikut ter-memo (withTabPortal = memo) — itu komponen yang dipanggil React Flow', () => {
+    expect(src('nodeTypes.tsx')).toMatch(/editor: withTabPortal\(function EditorNodeType/)
+    expect(src('tabLayout.portal.tsx')).toMatch(/return memo\(function TabPortal/)
   })
 
   it('nodeTypes tetap konstanta modul', () => {

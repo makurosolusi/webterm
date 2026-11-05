@@ -1,6 +1,7 @@
 import type { TerminalShortcutPolicy } from '../shared/settings'
 import { SETTING_RANGES } from '../shared/settings.ranges'
 import { isOutputToggleChord } from './output/outputChord'
+import { isTabLayoutChord } from './tabLayout.keys'
 import { hostPlatform, isMacPlatform, type KeyPlatform } from './terminalKeys.platform'
 
 export { isMacPlatform, isWindowsPlatform, type KeyPlatform } from './terminalKeys.platform'
@@ -191,6 +192,8 @@ export function terminalKeyAction(
   if (isCleanViewChord(e, platform.isMac)) return 'bubble'
   // Toggle Output, same reasoning: without this Ctrl+Shift+U reaches the shell as Ctrl+U.
   if (isOutputToggleChord(e, platform.isMac)) return 'bubble'
+  // Tab-layout chords (toggle, prev/next, close): same reasoning, Ctrl+Shift+L would reach the shell as Ctrl+L.
+  if (isTabLayoutChord(e, platform.isMac)) return 'bubble'
   if (policy === 'app-first' && isDigitChord(e, platform.isMac)) return 'bubble'
   return 'pass'
 }
