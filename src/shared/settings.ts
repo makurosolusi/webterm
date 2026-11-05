@@ -24,6 +24,7 @@ import type { SearchEngine } from './browser.omnibox'
 import { clampSetting, SETTING_RANGES, type RangedKey } from './settings.ranges'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 import { normalizeClaudeProfiles, seedClaudeProfiles, type ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
+import { DEFAULT_CANVAS_BACKGROUND, normalizeCanvasBackground, normalizeWorkspaceBackgrounds, type CanvasBackground } from './canvasBackground.schema'
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
 export type TerminalCursorInactiveStyle = TerminalCursorStyle | 'outline' | 'none'
@@ -166,6 +167,10 @@ export interface Settings {
    *  terminal, sehingga memilih tema terminal terang tidak menyisakan rangka hitam; `dark`/`light`
    *  memakunya. */
   appTheme: AppTheme
+  /** Canvas wallpaper (default / color / gradient / image). See `canvasBackground.schema.ts`. */
+  canvasBackground: CanvasBackground
+  /** Per-workspace wallpaper overrides by workspace id; absent = same as global. */
+  canvasBackgroundByWorkspace: Record<string, CanvasBackground>
 
   // --- Preview ---------------------------------------------------------------------------------
   /** Buka file Markdown (.md, .markdown, …) dalam preview terender alih-alih editor kode. Hanya
@@ -236,6 +241,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultNodeHeight: 440,
   canvasDots: true,
   appTheme: 'auto',
+  canvasBackground: DEFAULT_CANVAS_BACKGROUND,
+  canvasBackgroundByWorkspace: {},
   openMarkdownPreview: true,
   browserSearchEngine: 'google',
   keybindings: {},
@@ -299,6 +306,9 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   // Nilai `keybindings` disaring per entri (bentuk objek saja tidak cukup: nilainya wajib string/null).
   out.keybindings = normalizeKeybindings(src.keybindings)
   out.claudeLaunchProfiles = normalizeClaudeProfiles(src.claudeLaunchProfiles)
+  // Nested object with a non-empty default: normalized field by field, never shallow-taken.
+  out.canvasBackground = normalizeCanvasBackground(src.canvasBackground)
+  out.canvasBackgroundByWorkspace = normalizeWorkspaceBackgrounds(src.canvasBackgroundByWorkspace)
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents

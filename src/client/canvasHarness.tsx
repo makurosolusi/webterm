@@ -17,7 +17,7 @@ import { vi } from 'vitest'
 // harness ini menutup semua test canvas yang kini merender chrome VS Code (tombol editor, dsb).
 import './vscode/test-setup'
 import App from './App'
-import { DEFAULT_SETTINGS } from '../shared/settings'
+import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
 import type { BrowserStatusResp } from '../shared/browser.contract'
@@ -152,6 +152,8 @@ export interface CanvasFixture {
   delay?: number
   /** Jawaban `GET /api/browser/status`. Tanpa ini rute itu 404, persis server dengan flag browser mati. */
   browserStatus?: BrowserStatusResp
+  /** Keys merged over `DEFAULT_SETTINGS` in `GET /api/settings` (e.g. a canvas background). */
+  settings?: Partial<Settings>
 }
 
 export const HARNESS_WS_ID = 'ws-harness'
@@ -189,7 +191,7 @@ function routeFetch(fx: CanvasFixture) {
     const url = new URL(String(input), 'http://localhost')
     const path = url.pathname
     const arg = url.searchParams.get('path') ?? ''
-    if (path === '/api/settings') return reply(DEFAULT_SETTINGS)
+    if (path === '/api/settings') return reply({ ...DEFAULT_SETTINGS, ...fx.settings })
     if (path === '/api/workspaces') return reply(all)
     if (path.startsWith('/api/workspaces/')) {
       // Dicari per id, bukan selalu fixture utama: test pindah-board membaca board KEDUA dari sini,

@@ -37,3 +37,22 @@
   border: 1px solid var(--vscode-editorWidget-border);
   border-radius: 0;
 }
+
+/* ---- Canvas wallpaper (CanvasBackgroundLayer.tsx) ----
+   Fixed layer behind the pane: it never pans/zooms. The pane turns transparent only while a
+   wallpaper is painted; nodes keep their own opaque surfaces. */
+.canvas-wallpaper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.canvas-wallpaper__base,
+.canvas-wallpaper__fill {
+  position: absolute;
+  inset: 0;
+}
+.react-flow.canvas--wallpaper {
+  --xy-background-color: transparent;
+  background: transparent;
+}

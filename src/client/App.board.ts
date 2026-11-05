@@ -199,7 +199,7 @@ export function useBoardActions({
     scheduleSave()
   }, [scheduleSave])
 
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt }), [onSession, onToggleHideLinks, openBrowserAt])
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId }), [onSession, onToggleHideLinks, openBrowserAt, activeId])
 
   return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions }
 }
