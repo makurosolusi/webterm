@@ -19,139 +19,24 @@
 // (PUT -> 400). Kalau nanti ada kunci yang bisa memuat rahasia, ia WAJIB ditandai di sini dan
 // diredaksi di jalur HTTP — jangan tambahkan diam-diam.
 
-import { normalizeCustomAgents, type CustomAgent, type CustomAgentError } from './customAgent.schema'
+import { normalizeCustomAgents, type CustomAgentError } from './customAgent.schema'
 import type { SearchEngine } from './browser.omnibox'
 import { clampSetting, SETTING_RANGES, type RangedKey } from './settings.ranges'
-import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
-import { normalizeClaudeProfiles, seedClaudeProfiles, type ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
+import { normalizeClaudeProfiles, seedClaudeProfiles } from './claudeLaunch/claudeLaunch.profiles'
 import { DEFAULT_CANVAS_BACKGROUND, normalizeCanvasBackground, normalizeWorkspaceBackgrounds, type CanvasBackground } from './canvasBackground.schema'
+import type { AppTheme, TerminalSettings } from './settings.terminal'
+import type { AgentSettings } from './settings.agent'
+import { normalizeKeybindings } from './settings.keybindings'
 
-export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
-export type TerminalCursorInactiveStyle = TerminalCursorStyle | 'outline' | 'none'
-export type TerminalShortcutPolicy = 'app-first' | 'terminal-first'
-/**
- * Rendering terminal lewat GPU. `off` mengarahkan setiap terminal ke renderer DOM xterm. `auto`
- * (default) = satu konteks WebGL PER TERMINAL, dengan fallback otomatis ke DOM bila konteksnya
- * gagal dibuat atau hilang.
- *
- * Nilai `'shared'` milik nodeterm TIDAK disertakan: ia renderer glyphgrid bespoke (satu konteks
- * canvas-wide) yang webterm tidak punya. Menyertakan nilainya berarti menawarkan mode yang tidak
- * ada implementasinya.
- */
-export type TerminalGpuRendering = 'off' | 'auto'
-export type AppTheme = 'auto' | 'dark' | 'light'
+export type { TerminalCursorStyle, TerminalCursorInactiveStyle, TerminalShortcutPolicy, TerminalGpuRendering, AppTheme } from './settings.terminal'
+export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
 
 // `CustomAgent` (BYO CLI) hidup di `customAgent.schema.ts`; `baseAgent` membuatnya MEWARISI
 // kapabilitas harness builtin lewat `capabilityAgentId` (tanpa itu hanya spawn + judul terminal).
 export type { CustomAgent, CustomAgentLaunch } from './customAgent.schema'
 
-export interface Settings {
-  // --- Visual xterm (live-apply: perubahan langsung diterapkan ke terminal yang terbuka) -------
-  fontSize: number
-  fontFamily: string
-  /** Bobot teks normal. Default xterm sendiri `normal` (400). */
-  fontWeight: number
-  /** Bobot teks BOLD. Default xterm sendiri `bold` (700). Menurunkannya adalah cara menjaga bold
-   *  tetap terbaca pada font tipis yang merender 700 jadi gumpalan. */
-  fontWeightBold: number
-  /** Render teks bold dengan warna BRIGHT dari palet (default xterm, dan konvensi terminal
-   *  historis). Off membuat bold murni soal bobot, sehingga warna tetap berarti apa yang program
-   *  maksudkan. */
-  drawBoldTextInBrightColors: boolean
-  /** Tinggi baris sebagai kelipatan ukuran font (1 = default xterm, tanpa leading tambahan). */
-  terminalLineHeight: number
-  /** Spasi horizontal ekstra antar sel, dalam piksel CSS (0 = default xterm). */
-  terminalLetterSpacing: number
-  /** Skema warna terminal — id dari tabel tema client. Resolusi harus toleran (nilai bisa
-   *  diedit tangan): id tak dikenal jatuh ke tema default. */
-  terminalTheme: string
-  /** Rasio kontras minimum foreground/background, 1–21. 1 (default xterm) mematikan penyesuaian
-   *  sepenuhnya; 4.5 = WCAG AA, 7 = AAA, 21 memaksa hitam atau putih. Ada biaya kerja per sel di
-   *  renderer, jadi tetap mati kecuali diminta. */
-  terminalMinContrast: number
-  cursorStyle: TerminalCursorStyle
-  /** Bentuk kursor saat terminal TIDAK fokus. `outline` (default xterm sendiri) itulah yang
-   *  memberi tahu sekilas terminal mana di antara satu canvas penuh yang menerima ketikan. */
-  cursorInactiveStyle: TerminalCursorInactiveStyle
-  cursorBlink: boolean
-  terminalGpuRendering: TerminalGpuRendering
-
-  // --- Interaksi -------------------------------------------------------------------------------
-  /** Karakter yang mengakhiri kata saat seleksi double-click xterm. */
-  terminalWordSeparator: string
-  /** Salin seleksi MOUSE yang selesai ke clipboard sistem. OFF secara default: mengganti isi
-   *  clipboard tanpa diminta adalah kejutan yang layak dipilih sendiri. */
-  copyOnSelect: boolean
-  /** Izinkan KLIK TENGAH di dalam terminal mem-paste (praktisnya Linux). OFF secara default, dan
-   *  OFF berarti tombol tengah sepenuhnya INERT di dalam terminal. Defaultnya mati karena paste
-   *  ini paling keras terasa di dalam TUI agent: satu klik nyasar menjatuhkan apa pun yang terakhir
-   *  diseleksi ke prompt agent yang sedang hidup. */
-  terminalMiddleClickPaste: boolean
-  /** ⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang FOKUS. ON secara default. Di luar macOS
-   *  chord-nya Ctrl+= / Ctrl+− / Ctrl+0 — Ctrl+− biasanya undo readline, jadi matikan bila bentrok. */
-  terminalFontZoomKeys: boolean
-  /** Siapa yang menang selagi terminal memegang fokus keyboard: `app-first` (default) membiarkan
-   *  perintah app menyala di atas xterm; `terminal-first` menyimpan setiap chord selain milik
-   *  terminal sendiri (find, copy) untuk shell/TUI. */
-  terminalShortcutPolicy: TerminalShortcutPolicy
-
-  // --- Shell & buffer --------------------------------------------------------------------------
-  /** String kosong = pakai shell default sistem. */
-  defaultShell: string
-  /**
-   * Scrollback dalam BYTE, bukan baris.
-   *
-   * Pilihan satuan ini disengaja dan perlu dicatat: nodeterm menyimpan `tmuxScrollback: 50000`
-   * dalam BARIS karena yang membatasi di sana adalah history tmux. webterm tidak punya tmux —
-   * yang membatasi adalah ring buffer byte mentah PTY di `src/server/sessions.ts`
-   * (`SCROLLBACK_BYTES`), satu-satunya konsumen nyata. Satuannya karena itu byte, dan defaultnya
-   * 256 KiB = nilai konstanta yang berjalan hari ini, jadi mengangkatnya ke settings tidak
-   * mengubah perilaku apa pun.
-   *
-   * Batas sisi client punya kunci TERPISAH, `scrollbackLines`. Jangan diam-diam mengubah arti
-   * kunci ini menjadi baris.
-   */
-  scrollbackBytes: number
-  /**
-   * Scrollback xterm sisi CLIENT dalam BARIS — kunci terpisah dari `scrollbackBytes` karena
-   * satuan dan konsumennya berbeda: yang ini mendarat di opsi `scrollback` xterm (xterm menghitung
-   * baris grid), sedangkan `scrollbackBytes` membatasi ring buffer byte mentah PTY di server.
-   * Satu nilai tidak bisa melayani keduanya — byte yang dipakai sebagai baris memberi xterm
-   * ratusan ribu baris buffer per node, dan biayanya per node (`cols × 12 B` per baris) sementara
-   * satu canvas memuat banyak node.
-   */
-  scrollbackLines: number
-
-  // --- Agent -----------------------------------------------------------------------------------
-  /** Agent yang diluncurkan tombol quick-add. */
-  defaultAgent: AgentId
-  /** Override perintah peluncuran per agent builtin. Nilainya mengganti nama CLI polos di mana
-   *  pun baris peluncuran dibangun — sesi baru, relaunch, restart in-place — dengan flag yang biasa
-   *  (`--resume`, prompt) ditempelkan setelahnya, sehingga skrip wrapper yang memilih akun ikut
-   *  berjalan. Kosong/absen = default builtin. Hanya builtin: agent custom sudah punya
-   *  `launchCmd`-nya sendiri.
-   *  CLAUDE: superseded by `claudeLaunchProfiles` (a stored `claude` entry is seeded once as the
-   *  "Custom" profile). Still read for back-compat by paths not yet routed through
-   *  `server/claudeLauncher` and by the other builtins. */
-  agentLaunchCommands: Partial<Record<BuiltinAgentId, string>>
-  /** User Claude launch profiles (`envman -e p:e -- claude`, ...). The built-in Default (`claude`)
-   *  is implicit, never stored, never deletable. Resolve via `server/claudeLauncher`. */
-  claudeLaunchProfiles: ClaudeLaunchProfile[]
-  /** Profile new Claude agent nodes record at creation (`'default'` = bare `claude`). */
-  defaultClaudeProfileId: string
-  /** Profile Central's Claude uses; '' = same as `defaultClaudeProfileId`. */
-  centralClaudeProfileId: string
-  customAgents: CustomAgent[]
-  /** Id agent yang disembunyikan dari menu Add. */
-  disabledAgents: AgentId[]
-  /** Mode permission yang dipakai sesi Claude saat START — dikirim sebagai `--permission-mode`
-   *  saat peluncuran; Shift+Tab tetap bisa memutar mode saat runtime. */
-  claudePermissionMode: AgentPermissionMode
-  /** Persetujuan hook yang deterministik: saat on (default), hook PermissionRequest menahan sampai
-   *  `PERM_WAIT_SECS_INTERACTIVE` menunggu Approve/Deny dari canvas sebelum jatuh ke prompt
-   *  interaktif biasa (permission/permission.runtime.ts). Off ⇒ tanpa penahanan, langsung ke prompt interaktif. */
-  hookReplyApprovals: boolean
-
+/** Full settings shape: terminal + agent slices (own files) plus the canvas/app keys below. */
+export interface Settings extends TerminalSettings, AgentSettings {
   // --- Canvas ----------------------------------------------------------------------------------
   gridSize: number
   /** Snap saat drag: selagi ON, menggeser node membulatkan posisinya ke grid. */
@@ -249,20 +134,6 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultProjectsFolder: '',
 }
 
-/** Caps for `keybindings`: it arrives over HTTP, so a hostile body cannot bloat the stored row. */
-export const KEYBINDINGS_LIMITS = { entries: 200, idLength: 128, chordLength: 64 }
-
-/** Keep only `id → chord | null` entries within `KEYBINDINGS_LIMITS`; anything else is dropped. */
-export function normalizeKeybindings(v: unknown): Record<string, string | null> {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
-  const out: Record<string, string | null> = {}
-  for (const [id, chord] of Object.entries(v)) {
-    if (Object.keys(out).length >= KEYBINDINGS_LIMITS.entries) break
-    if (!id || id.length > KEYBINDINGS_LIMITS.idLength) continue
-    if (chord === null || (typeof chord === 'string' && chord.trim() && chord.length <= KEYBINDINGS_LIMITS.chordLength)) out[id] = chord
-  }
-  return out
-}
 
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
 
