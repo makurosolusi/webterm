@@ -1,5 +1,5 @@
 // Operator inbox + blocking approval queue, rendered in the VS Code bottom panel. Standalone it
-// owns a single-tab surface; `inboxChatPanel.tsx` is the two-tab Inbox/Chat mount. Props-driven:
+// owns a single-tab surface; `bottomPanelHost.tsx` is the shared tabbed mount. Props-driven:
 // mount from App, open from Dock.
 //
 //   const [open, setOpen] = useInboxOpen()
@@ -11,6 +11,7 @@
 // server challenge; this file never hashes anything. Consume is offered only after the decision
 // came back `approved`. Reject is a first-class decision, not "close and forget".
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { inboxApi, inboxErrorMessage, isAbortError, type InboxClient, type InboxItem, type InboxState } from './inboxApi'
 import { CONFIRM_PHRASE, type ReviewState } from './inboxApprovalDialog'
 import { InboxPanelActions, InboxPanelChrome, type InboxFilter } from './inboxPanelChrome'
@@ -46,8 +47,10 @@ export interface InboxPanelProps {
   pollMs?: number
   /** Recorded on approve/reject decisions when the server wants an actor id. */
   actor?: string
-  /** Render only the pane body: the combined Inbox/Chat shell owns the surface and tabs. */
+  /** Render only the pane body: the shared bottom-panel host owns the surface and tabs. */
   embedded?: boolean
+  /** Embedded only: host toolbar slot while this pane is the active tab; null while hidden. */
+  actionsHost?: HTMLElement | null
 }
 
 export default function InboxPanel(props: InboxPanelProps) {
@@ -165,14 +168,14 @@ export default function InboxPanel(props: InboxPanelProps) {
   useInboxDialogKeys({ open: dialogOpen, dialogRef, pending, onClose: closeDialog })
   // Panel-level Escape (only when no dialog owns the key).
   useEffect(() => {
-    if (!open || props.embedded || !props.onClose) return
+    if (!open || !props.onClose || (props.embedded && !props.actionsHost)) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || dialogRef.current) return
       props.onClose?.()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, props.embedded, props.onClose, dialogOpen])
+  }, [open, props.embedded, props.actionsHost, props.onClose, dialogOpen])
 
   // ---- review flow ------------------------------------------------------------------------
   const beginReview = (queue: InboxItem[], index = 0): void => {
@@ -386,10 +389,10 @@ export default function InboxPanel(props: InboxPanelProps) {
   if (props.embedded) {
     return (
       <div className="inbox-panel inbox-panel--embedded">
-        <div className="inbox-pane-actions" role="toolbar" aria-label="Inbox actions">
-          <InboxPanelActions loading={loading}
-            onRefresh={() => setRefreshKey((key) => key + 1)} />
-        </div>
+        {props.actionsHost && createPortal(
+          <InboxPanelActions loading={loading} onRefresh={() => setRefreshKey((key) => key + 1)} />,
+          props.actionsHost,
+        )}
         {body}
       </div>
     )

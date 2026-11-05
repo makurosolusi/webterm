@@ -172,10 +172,10 @@
 
 /* ---- thread (flat turns) ----------------------------------------------------------------- */
 .chat-thread-wrap {
-  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
 }
 .chat-thread {
   flex: 1;
@@ -192,10 +192,11 @@
   color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
   text-align: center;
 }
+/* In-flow row between the scroll area and the composer: it never covers a message or card. */
 .chat-jump {
-  position: absolute;
-  right: 20px;
-  bottom: 8px;
+  flex: none;
+  align-self: flex-end;
+  margin: 4px 20px 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;

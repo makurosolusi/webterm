@@ -1,5 +1,0 @@
-/* The Output panel takes the same bottom slot as Inbox / Chat and sits above them, so opening it
-   behaves like switching to its tab; the other panels stay mounted underneath. */
-.output-panel-host {
-  z-index: 14;
-}

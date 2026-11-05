@@ -8,8 +8,9 @@ import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import Login from './Login'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
-import InboxPanel from './InboxPanel'
-import ChatPanel, { useChatOpen } from './ChatPanel'
+import AppBottomPanel from './App.bottomPanel'
+import { toggleBottomView } from './bottomPanelHost'
+import { useChatOpen } from './ChatPanel'
 import CentralControlPanel, { useCentralControl } from './central/CentralControlPanel'
 import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
@@ -23,7 +24,7 @@ import { useKeybindingsSync } from './keybindings.store'
 import { usePresencePing } from './presencePing'
 import OutputPanelHost from './output/outputPanelHost'
 import { usePortsStatusItems } from './PortsChip'
-import ProblemsPanel, { useProblems } from './ProblemsPanel'
+import { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
 import MorningBrief from './MorningBrief'
 import { SettingsProvider, useSettings } from './useSettings'
@@ -185,7 +186,7 @@ export default function App() {
     openOmnibox: () => omni.open('all'), openQuickOpen: () => omni.open('files'), openFindInFiles: () => omni.open('files', '%'),
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
     newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
-    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => setInboxOpen(!inboxOpen), toggleChat: () => setChatOpen(!chatOpen),
+    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => toggleBottomView('inbox', inboxOpen, setInboxOpen), toggleChat: () => toggleBottomView('chat', chatOpen, setChatOpen),
     toggleBoard: () => setBoard((v) => !v),
   })
   useKeybindingsSync(settings.keybindings, settingsHydrated, update)
@@ -273,10 +274,10 @@ export default function App() {
             sessionsOpen={sessionsOpen}
             onToggleSessions={() => setSessionsOpen((v) => !v)}
             inboxOpen={inboxOpen}
-            onToggleInbox={() => setInboxOpen(!inboxOpen)}
+            onToggleInbox={() => toggleBottomView('inbox', inboxOpen, setInboxOpen)}
             inboxUnread={inboxUnread}
             chatOpen={chatOpen}
-            onToggleChat={() => setChatOpen(!chatOpen)}
+            onToggleChat={() => toggleBottomView('chat', chatOpen, setChatOpen)}
             centralOpen={central.open}
             onToggleCentral={central.enabled ? central.toggle : undefined}
             zoomPct={Math.round(zoom * 100)}
@@ -309,15 +310,13 @@ export default function App() {
             onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           />
           <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
-          {/* Panel menutup sendiri lewat Escape (`onClose`), dan dialog persetujuan di dalamnya
-              yang memegang consent. Dock/badge tidak pernah menyetujui apa pun. */}
-          <InboxPanel open={inboxOpen} onClose={() => setInboxOpen(false)} pollMs={30000} />
-          {/* Panel menutup sendiri lewat tombol X-nya. Saat Inbox terbuka, Chat minggir ke kiri
-              supaya dua permukaan itu tidak saling menimpa. */}
-          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} offsetForInbox={inboxOpen} />
+          {/* Inbox, Chat, Problems, dan Output satu permukaan bertab: tepat satu view tampil. Panel
+              menutup lewat Escape/X tab-nya; dialog persetujuan Inbox yang memegang consent. */}
+          <AppBottomPanel inboxOpen={inboxOpen} setInboxOpen={setInboxOpen} chatOpen={chatOpen} setChatOpen={setChatOpen}
+            problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
+            onFocus={(id) => void onFocus(id)} />
           <CentralControlPanel open={central.open} onClose={central.close} enabled={central.enabled} />
           <OutputPanelHost />
-          <ProblemsPanel problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode} onFocus={(id) => void onFocus(id)} />
           {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
           <AppHosts
