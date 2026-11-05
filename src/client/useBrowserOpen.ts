@@ -5,9 +5,8 @@ import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Node, ReactFlowInstance } from '@xyflow/react'
 import type { Workspace, WsNode } from '../shared/workspace'
 import { planBrowserOpen, type OpenBrowserReq, type OpenResult, type PlanNode } from './browser.open.plan'
-import {
-  ANCHOR_FALLBACK_SIZE, FIT_DURATION_MS, FIT_MAX_ZOOM, FIT_MIN_ZOOM, FIT_PADDING, rectInView, type Rect, type Size,
-} from './browser.open.place'
+import type { Size } from './browser.open.place'
+import { rectOfNode, revealNode as reveal } from './nodeReveal'
 import { randomId } from './randomId'
 
 type AddFlowNode = (make: (n: number, ws: Workspace) => Omit<WsNode, 'x' | 'y'>, at?: { x: number; y: number }) => void
@@ -20,24 +19,6 @@ export interface BrowserOpenDeps {
   setNodes: Dispatch<SetStateAction<Node[]>>
   /** Ukuran BAWAAN settings: `addFlowNode` menghitung kiri-atas dari ini, bukan dari ukuran `make`. */
   defaultSize: Size
-}
-
-const rectOfNode = (n: Node): Rect => ({
-  ...n.position,
-  width: n.measured?.width ?? n.width ?? ANCHOR_FALLBACK_SIZE.width,
-  height: n.measured?.height ?? n.height ?? ANCHOR_FALLBACK_SIZE.height,
-})
-
-/** Bawa node ke pandangan (hanya bila tidak sepenuhnya terlihat) lalu fokuskan wrapper-nya, bukan permukaan browser. */
-function reveal(rf: ReactFlowInstance | null, id: string, rect: Rect): void {
-  if (!rf) return
-  const screen = { width: window.innerWidth, height: window.innerHeight }
-  if (!rectInView(rect, rf.getViewport(), screen)) {
-    void rf.fitView({ nodes: [{ id }], padding: FIT_PADDING, minZoom: FIT_MIN_ZOOM, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS })
-  }
-  // Dicari per atribut (bukan selector) agar id apa pun aman tanpa CSS.escape; ketikan tak langsung masuk halaman jauh.
-  const el = Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node')).find((e) => e.dataset.id === id)
-  el?.focus({ preventScroll: true })
 }
 
 /** Pintu pembuka node browser untuk `NodeActions`; `undefined` bila fitur mati. Identitas stabil antar render. */
