@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { nodeRowLabel } from './nodeList'
 import { KIND_ICON } from './SessionsPanel.tree'
-import { placeNodeHost } from './tabLayout.dom'
+import { parkNodeHost, placeNodeHost } from './tabLayout.dom'
 import { activateTab, applyReconciled, getTabLayout, reorderTabs, setMode, toggleFilesPanel, useTabLayout } from './tabLayout.store'
 import TabStrip, { type TabItem } from './tabLayout.strip'
 import FilesDock from './tabLayout.filesDock'
@@ -29,7 +29,8 @@ const kindOf = (n: Node): WsNodeKind => (n.type as WsNodeKind | undefined) ?? 't
 const titleOf = (n: Node): string => nodeRowLabel({ ...(n.data as Partial<WsNode>), id: n.id, kind: kindOf(n) } as WsNode)
 
 function TabPane({ id, active }: { id: string; active: boolean }) {
-  const ref = useCallback((el: HTMLDivElement | null) => { if (el) placeNodeHost(id, el) }, [id])
+  // Ref detach runs in React's mutation phase before the pane leaves the DOM, so parking keeps the host connected.
+  const ref = useCallback((el: HTMLDivElement | null) => { if (el) placeNodeHost(id, el); else parkNodeHost(id) }, [id])
   // tabIndex lets the shortcut layer hand keyboard focus to the visible tab.
   return <div ref={ref} className="tabs-pane" data-tab-node="" data-id={id} style={{ display: active ? undefined : 'none' }} tabIndex={active ? -1 : undefined} />
 }

@@ -3,6 +3,7 @@
 // toggling modes never remounts nodes; TabsView covers it and shows the same nodes as tabs.
 import type { ComponentProps } from 'react'
 import BoardCanvas from './App.canvas'
+import { setParkingEl } from './tabLayout.dom'
 import TabsView, { type TabsViewProps } from './tabLayout.view'
 import { useTabLayout } from './tabLayout.store'
 import './tab-layout.css'
@@ -20,6 +21,7 @@ export default function BoardHost({ canvas, tabs }: BoardHostProps) {
         <BoardCanvas {...canvas} />
       </div>
       {tabMode && <TabsView {...tabs} />}
+      <div ref={setParkingEl} className="tab-parking" aria-hidden="true" />
     </>
   )
 }

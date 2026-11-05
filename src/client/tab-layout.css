@@ -82,3 +82,6 @@
 .tabs-empty p { margin: 0; }
 .tabs-empty--panel { position: static; flex: 1; padding: 12px; text-align: center; }
 .tabs-empty__actions { display: flex; gap: 8px; }
+
+/* Always-mounted holding area for node hosts between a tab pane unmounting and the canvas slot taking them. */
+.tab-parking { position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
