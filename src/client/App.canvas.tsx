@@ -7,6 +7,7 @@ import McpAppsWatcher from './mcpapps/McpAppsWatcher'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
 import { useNodeActions } from './nodeActions'
 import { useNodeResizeWiring } from './nodeResize/useNodeResizeWiring'
+import { useRecordLegacyClaudeProfiles } from './claudeLauncher/useLegacyClaudeProfiles'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
@@ -19,6 +20,8 @@ interface CanvasProps {
   nodes: Node[]
   edges: Edge[]
   settings: Settings
+  /** Settings loaded: legacy Claude nodes can record the default launch profile. */
+  hydrated: boolean
   viewport: Viewport | undefined
   locked: boolean
   nodeColor: (n: Node) => string
@@ -32,9 +35,10 @@ interface CanvasProps {
 
 /** Canvas React Flow board aktif beserta background dan minimap-nya. */
 export default function BoardCanvas({
-  rf, nodes, edges, settings, viewport, locked, nodeColor, syncViewport,
+  rf, nodes, edges, settings, hydrated, viewport, locked, nodeColor, syncViewport,
   onNodesChange, onEdgesChange, onConnect, onMoveEnd, onPaneContextMenu,
 }: CanvasProps) {
+  useRecordLegacyClaudeProfiles(nodes, hydrated, settings, rf)
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
   const { openBrowserAt } = useNodeActions()
   useNodeResizeWiring(locked, rf)

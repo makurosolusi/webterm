@@ -23,6 +23,7 @@ import { normalizeCustomAgents, type CustomAgent, type CustomAgentError } from '
 import type { SearchEngine } from './browser.omnibox'
 import { clampSetting, SETTING_RANGES, type RangedKey } from './settings.ranges'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
+import { normalizeClaudeProfiles, seedClaudeProfiles, type ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
 export type TerminalCursorInactiveStyle = TerminalCursorStyle | 'outline' | 'none'
@@ -127,8 +128,18 @@ export interface Settings {
    *  pun baris peluncuran dibangun — sesi baru, relaunch, restart in-place — dengan flag yang biasa
    *  (`--resume`, prompt) ditempelkan setelahnya, sehingga skrip wrapper yang memilih akun ikut
    *  berjalan. Kosong/absen = default builtin. Hanya builtin: agent custom sudah punya
-   *  `launchCmd`-nya sendiri. */
+   *  `launchCmd`-nya sendiri.
+   *  CLAUDE: superseded by `claudeLaunchProfiles` (a stored `claude` entry is seeded once as the
+   *  "Custom" profile). Still read for back-compat by paths not yet routed through
+   *  `server/claudeLauncher` and by the other builtins. */
   agentLaunchCommands: Partial<Record<BuiltinAgentId, string>>
+  /** User Claude launch profiles (`envman -e p:e -- claude`, ...). The built-in Default (`claude`)
+   *  is implicit, never stored, never deletable. Resolve via `server/claudeLauncher`. */
+  claudeLaunchProfiles: ClaudeLaunchProfile[]
+  /** Profile new Claude agent nodes record at creation (`'default'` = bare `claude`). */
+  defaultClaudeProfileId: string
+  /** Profile Central's Claude uses; '' = same as `defaultClaudeProfileId`. */
+  centralClaudeProfileId: string
   customAgents: CustomAgent[]
   /** Id agent yang disembunyikan dari menu Add. */
   disabledAgents: AgentId[]
@@ -211,6 +222,9 @@ export const DEFAULT_SETTINGS: Settings = {
   scrollbackLines: 10_000,
   defaultAgent: 'claude',
   agentLaunchCommands: {},
+  claudeLaunchProfiles: [],
+  defaultClaudeProfileId: 'default',
+  centralClaudeProfileId: '',
   customAgents: [],
   disabledAgents: [],
   claudePermissionMode: 'auto',
@@ -284,6 +298,8 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   // balik); `onInvalidAgents` memberi pemanggil server kesempatan `log.warn` tanpa isi.
   // Nilai `keybindings` disaring per entri (bentuk objek saja tidak cukup: nilainya wajib string/null).
   out.keybindings = normalizeKeybindings(src.keybindings)
+  out.claudeLaunchProfiles = normalizeClaudeProfiles(src.claudeLaunchProfiles)
+  Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents
   if (agents.errors.length) onInvalidAgents?.(agents.errors)

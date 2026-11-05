@@ -27,7 +27,6 @@ import { usePortsStatusItems } from './PortsChip'
 import ProblemsPanel, { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
 import MorningBrief from './MorningBrief'
-import { SettingsPanel } from './SettingsPanel'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
@@ -43,7 +42,7 @@ import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardCanvas from './App.canvas'
-import AppHosts from './App.hosts'
+import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
@@ -238,6 +237,7 @@ export default function App() {
             nodes={flowNodes}
             edges={displayEdges}
             settings={settings}
+            hydrated={settingsHydrated}
             viewport={activeWs?.viewport}
             locked={locked}
             nodeColor={nodeColor}
@@ -343,7 +343,7 @@ export default function App() {
           petunjuk jalan keluarnya juga tidak boleh. */}
       {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      {showSettings && <SettingsPanel settings={settings} onChange={update} onClose={() => setShowSettings(false)} projectId={activeId ?? undefined} history={settingsHistory} />}
+      <SettingsHost open={showSettings} setOpen={setShowSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
       {omni.state && (
         <Omnibox

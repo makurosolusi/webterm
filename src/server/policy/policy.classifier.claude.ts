@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { claudeChildEnv } from '../central/runtime/claudeOptions'
 import { claudeEnv } from '../claudeProvider/claudeProvider.store'
 import type { Classifier, ClassifierInput, ClassifierVerdict } from './policy.classifier'
+import { centralClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 
 export const CLASSIFIER_MODEL = 'haiku'
 export const CLASSIFIER_BUDGET_USD = 0.05
@@ -59,7 +60,8 @@ export function createClaudeClassifier(opts: { bin?: string; now?: () => number 
     while (calls.length && at - calls[0]! >= HOUR_MS) calls.shift()
     if (calls.length >= CLASSIFIER_MAX_PER_HOUR) { reject(new Error('hourly classifier cap reached')); return }
     calls.push(at)
-    const child = spawn(opts.bin ?? 'claude', classifierArgv(), { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
+    const [cmd, ...args] = opts.bin ? [opts.bin, ...classifierArgv()] : [...centralClaudeLaunch().argv, ...classifierArgv()]
+    const child = spawn(cmd as string, args, { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
     let out = ''
     const kill = (): void => { child.kill('SIGKILL') }
     signal.addEventListener('abort', kill, { once: true })

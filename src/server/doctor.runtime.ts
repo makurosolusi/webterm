@@ -6,7 +6,12 @@ import { join } from 'node:path'
 import { AGENT_SANDBOX_ENV, agentSandboxOn, claudeSandboxSupported } from './agentSandbox'
 import { binaryOnPath } from './binaryOnPath'
 import { BROWSER_SKILL_NAME, browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
-import { claudePreflightOf, defaultOpencodePreflight } from './centralChatHealth'
+import { defaultOpencodePreflight } from './centralChatHealth'
+import { resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
+import { probeClaudeLaunch } from './claudeLauncher/claudeLaunch.probe'
+import { claudeChildEnv } from './central/runtime/claudeOptions'
+import { toClaudeReady } from './central/runtime/claudePreflight'
+import { launchLabel } from './central/runtime/runtimeDetect'
 import { opencodeBin } from './central/runtime/opencodeOptions'
 import { callBotApi, PollApiError } from './channels/telegramPollApi'
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './channels/telegramSend'
@@ -65,9 +70,13 @@ export function doctorDeps(i: DoctorRuntimeInput): DoctorDeps {
   const env = i.env
   return {
     onPath: (bin) => binaryOnPath(bin, env['PATH'] ?? ''),
+    // Default launch profile (what new agent nodes run), probed stage by stage with Central's scrubbed env.
     claudeReady: async () => {
-      const r = await claudePreflightOf()()
-      return r.ok ? { ok: true } : { ok: false, reason: r.hint || r.code }
+      const launch = resolveClaudeLaunch()
+      const via = launch.wrapper.length > 0 ? { via: launchLabel(launch) } : {}
+      const r = toClaudeReady(await probeClaudeLaunch(launch, { env: claudeChildEnv(env), provider: providerView() }))
+      if (r.ok) return { ok: true, ...via }
+      return { ok: false, reason: r.hint || r.code, missing: r.failed === 'wrapper_not_found' || r.failed === 'claude_not_found', ...via }
     },
     claudeProvider: () => ({ view: providerView(), lastTest: lastProviderTest() }),
     opencodeBin: opencodeBin(),

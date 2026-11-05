@@ -23,6 +23,7 @@ import { principalKind, type Principal } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
 import { createPolicyStore } from '../policy/policy.store'
 import { AGENT_SPAWN_CAPABILITY, type AgentSpawnMode } from './agentSpawn.capability'
+import { claudeCommand } from '../claudeLauncher/claudeLauncher'
 
 /** Deepest allowed generation: root (0) -> its agents (1) -> their sub-agents (2). */
 export const SPAWN_MAX_DEPTH_DEFAULT = 2
@@ -51,8 +52,8 @@ export interface AgentSpawnRequest {
   door: SpawnDoor
   /** PTY launch, resolved by the door from server data (settings, catalog). */
   pty?: { cmd?: string; agentId?: string; sessionId?: string; cols?: number; rows?: number }
-  /** Headless launch; `argv` absent = Claude Code print mode with `prompt`. */
-  headless?: { argv?: readonly string[]; env?: NodeJS.ProcessEnv; overrides?: Record<string, string>; timeoutMs?: number }
+  /** Headless launch; `argv` absent = Claude Code print mode with `prompt`, through `claudeProfileId` (absent = default profile). */
+  headless?: { argv?: readonly string[]; claudeProfileId?: string; env?: NodeJS.ProcessEnv; overrides?: Record<string, string>; timeoutMs?: number }
 }
 
 export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agentId?: string; sessionId?: string; cols?: number; rows?: number }
@@ -81,8 +82,8 @@ export interface AgentSpawnerOptions {
   providerEnv?(): ProviderEnv
 }
 
-/** Claude Code non-interactive form; JSON result so `execRunner` keeps the final event. */
-export const claudeHeadlessArgv = (prompt: string): string[] => ['claude', '-p', prompt, '--output-format', 'json']
+/** Claude Code non-interactive form via the launch profile (absent = default); JSON result so `execRunner` keeps the final event. */
+export const claudeHeadlessArgv = (prompt: string, profileId?: string): string[] => claudeCommand(['-p', prompt, '--output-format', 'json'], profileId)
 
 const isRoot = (p: Principal): boolean => principalKind(p) !== 'node'
 
@@ -154,7 +155,7 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
         const pe = kind === DEFAULT_AGENT_KIND ? providerEnvOf() : { set: {}, unset: [] }
         const env = pe.unset.length ? applyProviderEnv(h.env ?? process.env, { set: {}, unset: pe.unset }) : h.env
         const overrides = { ...h.overrides, ...pe.set }
-        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
+        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string, h.claudeProfileId), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
       }
     } catch (err) {
       live.delete(childId)

@@ -9,7 +9,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { placeNode, type ReopenDeps } from './closedHistory'
 import { fetchSessionPage, type AgentSession } from './SessionHistory.api'
-import { relativeTime, resumeNode, targetWorkspace } from './SessionHistory.model'
+import { relativeTime, resumeNode, resumeProfile, targetWorkspace } from './SessionHistory.model'
+import { useLiveSettings } from './useSettings'
 import { randomId } from './randomId'
 import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
@@ -28,6 +29,7 @@ const SEARCH_DEBOUNCE_MS = 250
 const AGENT_LABEL: Record<AgentSession['agent'], string> = { claude: 'Claude', codex: 'Codex' }
 
 export default function SessionHistory({ open, activeWs, workspaces, launch, deps }: SessionHistoryProps) {
+  const settings = useLiveSettings()
   const [expanded, setExpanded] = useState(true)
   const [scope, setScope] = useState<Scope>('workspace')
   const [query, setQuery] = useState('')
@@ -70,7 +72,7 @@ export default function SessionHistory({ open, activeWs, workspaces, launch, dep
   }, [open, expanded, noFolder, load])
 
   const resume = (s: AgentSession) => {
-    const node = resumeNode(s, launch, randomId)
+    const node = resumeNode(s, launch, randomId, resumeProfile(s, workspaces, settings))
     const wsId = targetWorkspace(s, workspaces, activeWs?.id ?? null)
     if (!node || !wsId) {
       setError('This session cannot be resumed.')

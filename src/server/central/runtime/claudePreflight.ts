@@ -1,25 +1,29 @@
-// Cached readiness probe for the `claude` CLI: binary on PATH + `claude auth status`.
-// Only the `loggedIn` boolean is ever read from the CLI output; nothing else is returned or logged.
-import { spawn } from 'node:child_process'
-import { binaryOnPath } from '../../binaryOnPath'
+// Cached readiness probe for Central's Claude: runs through the Central launch profile
+// (server/claudeLauncher), so a wrapper such as `envman -e p:e -- claude` that injects the
+// credential is part of the check. Stages and their redaction live in claudeLaunch.probe.ts.
 import { providerView } from '../../claudeProvider/claudeProvider.store'
 import type { ProviderView } from '../../claudeProvider/claudeProvider.model'
+import { centralClaudeLaunch, DEFAULT_CLAUDE_PROFILE, type ResolvedClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
+import {
+  AUTH_CHECK_TIMEOUT_MS, probeClaudeLaunch, spawnRun,
+  type LaunchFailure, type LaunchProbe, type LaunchStage, type RunFn, type RunResult,
+} from '../../claudeLauncher/claudeLaunch.probe'
+
+export { AUTH_CHECK_TIMEOUT_MS, spawnRun, type RunFn, type RunResult }
 
 export type ClaudeReady =
   | { ok: true }
-  | { ok: false; code: 'claude_not_found' | 'claude_not_authenticated' | 'claude_check_failed'; hint: string }
-
-export interface RunResult {
-  code: number | null
-  stdout: string
-  timedOut: boolean
-}
-/** Runs one process (argv array, no shell) and resolves with its exit code and captured stdout. */
-export type RunFn = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; timeoutMs: number }) => Promise<RunResult>
+  | {
+    ok: false; code: 'claude_not_found' | 'claude_not_authenticated' | 'claude_check_failed'; hint: string
+    /** Which stage failed and for which profile (the UI names both). */
+    stage?: LaunchStage; failed?: LaunchFailure; profile?: LaunchProbe['profile']
+  }
 
 export interface PreflightDeps {
   env: NodeJS.ProcessEnv
+  /** Bare binary override (tests); otherwise the Central launch profile. */
   executable?: string
+  launch?: () => ResolvedClaudeLaunch
   run?: RunFn
   onPath?: (name: string) => boolean
   now?: () => number
@@ -30,81 +34,33 @@ export interface PreflightDeps {
 }
 
 export const READY_TTL_MS = 30_000
-export const AUTH_CHECK_TIMEOUT_MS = 5_000
-const CLAUDE_BIN = 'claude'
-const AUTH_STATUS_ARGS = ['auth', 'status']
-const EXIT_NOT_LOGGED_IN = 1
-const MAX_STDOUT_BYTES = 64 * 1024
 
-const HINTS = {
-  claude_not_found: 'The claude CLI was not found on PATH. Install Claude Code and try again.',
-  claude_not_authenticated: 'Claude Code is not signed in. Run "claude auth login" on the server.',
-  claude_check_failed: 'Checking Claude Code status failed. Try again in a moment.',
-} as const
-
-const PROVIDER_NOT_READY = 'The Claude provider has no key yet. Add it in Settings › Capabilities › Claude provider.'
-
-function notReady(code: keyof typeof HINTS): ClaudeReady {
-  return { ok: false, code, hint: HINTS[code] }
+const CODE: Record<LaunchFailure, Exclude<ClaudeReady, { ok: true }>['code']> = {
+  wrapper_not_found: 'claude_check_failed',
+  wrapper_failed: 'claude_check_failed',
+  claude_not_found: 'claude_not_found',
+  auth_failed: 'claude_not_authenticated',
+  check_failed: 'claude_check_failed',
 }
 
-/** Default RunFn: spawn without a shell, capture capped stdout, kill on timeout. */
-export const spawnRun: RunFn = (cmd, args, { env, timeoutMs }) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { env, shell: false, stdio: ['ignore', 'pipe', 'ignore'] })
-    let stdout = ''
-    let timedOut = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill('SIGKILL')
-    }, timeoutMs)
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => {
-      if (stdout.length < MAX_STDOUT_BYTES) stdout += chunk
-    })
-    child.once('error', (err) => {
-      clearTimeout(timer)
-      reject(new Error(`spawn ${cmd} failed: ${(err as NodeJS.ErrnoException).code ?? 'error'}`))
-    })
-    child.once('close', (code) => {
-      clearTimeout(timer)
-      resolve({ code, stdout, timedOut })
-    })
-  })
+const bare = (exe: string): ResolvedClaudeLaunch => ({ argv: [exe], profile: DEFAULT_CLAUDE_PROFILE, wrapper: [], bin: exe, flags: [], warnings: [] })
 
-/** Reads only `loggedIn` from the status JSON; null when the output is not a JSON object. */
-function readLoggedIn(stdout: string): boolean | null {
-  try {
-    const parsed: unknown = JSON.parse(stdout)
-    if (parsed === null || typeof parsed !== 'object') return null
-    return (parsed as { loggedIn?: unknown }).loggedIn === true
-  } catch {
-    // Malformed output is reported by the caller as claude_check_failed; the raw text is never kept.
-    return null
-  }
+/** Probe result -> the ClaudeReady every Central consumer already understands. */
+export function toClaudeReady(p: LaunchProbe): ClaudeReady {
+  if (p.ok || !p.failed) return { ok: true }
+  const step = p.steps[p.steps.length - 1]
+  const sentence = (t: string): string => (/[.!?]$/.test(t) ? t : `${t}.`)
+  const hint = step ? [step.message, step.hint].filter((t): t is string => !!t).map(sentence).join(' ') : ''
+  return { ok: false, code: CODE[p.failed], hint, stage: step?.stage, failed: p.failed, profile: p.profile }
 }
 
 async function check(d: PreflightDeps): Promise<ClaudeReady> {
-  const exe = d.executable ?? CLAUDE_BIN
-  const onPath = d.onPath ?? ((name: string) => binaryOnPath(name, d.env['PATH'] ?? ''))
-  if (!onPath(CLAUDE_BIN)) return notReady('claude_not_found')
-  // A key/endpoint provider needs no Claude Code login: `auth status` would report the login, not the
-  // key webterm injects. Whether the key works is what "Test connection" proves.
-  const p = (d.provider ?? providerView)()
-  if (p.mode !== 'login') return p.ready ? { ok: true } : { ok: false, code: 'claude_not_authenticated', hint: PROVIDER_NOT_READY }
-  let result: RunResult
-  try {
-    result = await (d.run ?? spawnRun)(exe, AUTH_STATUS_ARGS, { env: d.env, timeoutMs: d.timeoutMs ?? AUTH_CHECK_TIMEOUT_MS })
-  } catch {
-    // Spawn failure: the detail is deliberately dropped (could echo paths/env); the code is the signal.
-    return notReady('claude_check_failed')
-  }
-  if (result.timedOut) return notReady('claude_check_failed')
-  if (result.code === EXIT_NOT_LOGGED_IN) return notReady('claude_not_authenticated')
-  if (result.code !== 0) return notReady('claude_check_failed')
-  const loggedIn = readLoggedIn(result.stdout)
-  if (loggedIn === null) return notReady('claude_check_failed')
-  return loggedIn ? { ok: true } : notReady('claude_not_authenticated')
+  const launch = d.executable ? bare(d.executable) : (d.launch ?? centralClaudeLaunch)()
+  const provider = (d.provider ?? providerView)()
+  return toClaudeReady(await probeClaudeLaunch(launch, {
+    env: d.env, ...(d.run ? { run: d.run } : {}), ...(d.onPath ? { onPath: d.onPath } : {}),
+    ...(d.timeoutMs !== undefined ? { timeoutMs: d.timeoutMs } : {}), provider,
+  }))
 }
 
 /** Builds the lazy preflight: concurrent calls share one probe and the result is cached for `ttlMs`. */

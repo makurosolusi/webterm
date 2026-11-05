@@ -109,6 +109,7 @@ export interface WsNode {
   agentId?: AgentId
   color?: string
   sessionId?: string      // UUID dicetak saat peluncuran; memungkinkan resume
+  claudeProfileId?: string // builtin claude node: launch profile recorded at creation (server/claudeLauncher)
   collapsed?: boolean     // chrome node diringkas jadi header saja
   hideLinks?: boolean     // edge context disembunyikan dari node ini
   comments?: Comment[]    // thread aktivitas/catatan per node

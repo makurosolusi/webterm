@@ -7,8 +7,22 @@ const launch = (agentLaunchCommands: Partial<Record<string, string>>, claudeOnPa
 
 describe('workerLaunch', () => {
   it('uses the configured override as the launch line of the configured kind', async () => {
-    expect(await launch({ claude: 'claude-work' })).toEqual({ agentId: 'claude', cmd: 'claude-work' })
     expect(await launch({ codex: 'codex --profile ci' })).toEqual({ agentId: 'codex', cmd: 'codex --profile ci' })
+  })
+
+  it('claude launches through the default profile; a chosen profile counts as configured, the legacy override does not', async () => {
+    const profiles = { claudeLaunchProfiles: [{ id: 'm', name: 'M', command: 'envman -e claude:m --' }], defaultClaudeProfileId: 'm' }
+    const withProfile = (claudeOnPath: boolean) =>
+      workerLaunch({ ledger: null, settings: () => ({ agentLaunchCommands: { codex: 'codex' }, ...profiles }), claudeOnPath: () => claudeOnPath })
+    expect(await withProfile(true)).toEqual({ agentId: 'claude', cmd: 'envman -e claude:m -- claude' })
+    expect(await withProfile(false)).toEqual({ agentId: 'codex', cmd: 'codex' })
+    expect(await launch({ claude: 'claude-work' })).toEqual({ agentId: 'claude', cmd: 'claude' })
+  })
+
+  it('probes the program the default profile runs first, not a bare claude', async () => {
+    const run = (command: string) => workerLaunch({ ledger: null, settings: () => ({ agentLaunchCommands: {}, claudeLaunchProfiles: [{ id: 'p', name: 'P', command }], defaultClaudeProfileId: 'p' }) })
+    expect(await run('/nonexistent/wt-wrapper --')).toEqual({ agentId: 'opencode', cmd: 'opencode' })
+    expect(await run('/bin/echo --')).toEqual({ agentId: 'claude', cmd: '/bin/echo -- claude' })
   })
 
   it('keeps the builtin launcher for legacy installs and picks opencode when claude is missing (P3)', async () => {

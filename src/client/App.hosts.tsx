@@ -7,6 +7,9 @@ import ReplayHost from './replay/ReplayHost'
 import TemplatesHost, { type TemplatesHostProps } from './templates/TemplatesHost'
 import type { Workspace, WsNode } from '../shared/workspace'
 
+// Settings panel host (claudeLauncher/SettingsHost): re-exported here so App.tsx imports one hosts module.
+export { default as SettingsHost } from './claudeLauncher/SettingsHost'
+
 export interface AppHostsProps extends Pick<TemplatesHostProps, 'onCreated' | 'onPlace'> {
   workspaces: Workspace[]
   liveNodes: WsNode[]

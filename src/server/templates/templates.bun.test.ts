@@ -10,6 +10,8 @@ import { BUILTIN_TEMPLATES } from './template.builtins'
 import { templatesRoute, type TemplatesDeps } from './template.route'
 import { createTemplateStore } from './template.store'
 import { substitute, validateTemplate, type WebtermTemplate } from './template.model'
+import { registerClaudeLaunchSettings } from '../claudeLauncher/claudeLauncher'
+import { DEFAULT_SETTINGS } from '../../shared/settings'
 
 const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' } // test-only
 const HOSTILE = '$(rm -rf ~) `id` ; echo pwned\nsecond line {{repo}}'
@@ -182,4 +184,22 @@ test('instantiate into an existing workspace places nodes beside it and does not
   expect(res.body.nodes[0].cwd).toBe('/home/me/repo')
   expect(res.body.nodes[2].url).toBe('https://github.com/acme/app/pull/42')
   expect(res.body.routines.created).toBe(1)
+})
+
+test('claude template nodes record the default launch profile at instantiation; built-ins bake in no command', async () => {
+  for (const t of BUILTIN_TEMPLATES) for (const n of t.nodes) if (n.agentId === 'claude') expect(n.cmd).toBe(undefined)
+  registerClaudeLaunchSettings(() => ({ claudeLaunchProfiles: [{ id: 'm', name: 'M', command: 'envman -e claude:m --' }], defaultClaudeProfileId: 'm', centralClaudeProfileId: '' }))
+  try {
+    const res = (await call('POST', '/api/templates/plan-worktree-workers/instantiate', { params: { repo: '/r', task: 't' } })) as { body: { workspace: Workspace } }
+    const agents = res.body.workspace.nodes.filter((n) => n.agentId === 'claude')
+    expect(agents.map((n) => [n.claudeProfileId, n.cmd])).toEqual([['m', 'envman -e claude:m -- claude'], ['m', 'envman -e claude:m -- claude']])
+    // A template node with its own command keeps it and records no profile.
+    const own = { format: 'webterm-template', version: 1, id: 'own-cmd', name: 'Own', nodes: [{ key: 'a', kind: 'agent', x: 0, y: 0, agentId: 'claude', cmd: 'my-claude --fast' }] }
+    expect((await call('POST', '/api/templates/import', own))!.status).toBe(201)
+    const mine = (await call('POST', '/api/templates/own-cmd/instantiate', {})) as { body: { workspace: Workspace } }
+    expect(mine.body.workspace.nodes[0]).toMatchObject({ cmd: 'my-claude --fast' })
+    expect(mine.body.workspace.nodes[0].claudeProfileId).toBe(undefined)
+  } finally {
+    registerClaudeLaunchSettings(() => DEFAULT_SETTINGS)
+  }
 })

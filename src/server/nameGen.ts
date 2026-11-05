@@ -4,6 +4,7 @@
 // Bun.spawn is typed locally (a narrow slice) because @types/bun reddens
 // unrelated files — same reason pty.ts declares its own Bun types.
 import { claudeEnv } from './claudeProvider/claudeProvider.store'
+import { centralClaudeLaunch, claudeLaunchLine } from './claudeLauncher/claudeLauncher'
 
 export function clipTerminal(content: string): string {
   const trimmed = content.trim()
@@ -65,6 +66,9 @@ export function cleanEnv(): Record<string, string> {
   return { ...claudeEnv(process.env), TERM: 'xterm-256color' }
 }
 
+/** Login-shell line of the naming call: the Central launch profile (e.g. `envman -e p -- claude`) in print mode. */
+export const nameGenLine = (): string => `${claudeLaunchLine(centralClaudeLaunch())} -p`
+
 /**
  * Title for a node. The first task in the node's claude transcript wins (what Orca names from on
  * first work, `main/agent-hooks/first-work-branch-rename.ts:123-129`); the terminal buffer is the
@@ -81,7 +85,7 @@ export async function generateName(nodeId: string): Promise<{ ok: boolean; messa
   const fallback = firstPrompt ? titleFromPrompt(firstPrompt) : ''
   try {
     const shell = process.env.SHELL || 'bash'
-    const proc = Bun.spawn([shell, '-l', '-c', 'claude -p'], {
+    const proc = Bun.spawn([shell, '-l', '-c', nameGenLine()], {
       stdin: firstPrompt ? buildTaskNamePrompt(firstPrompt) : buildNamePrompt(clip),
       stdout: 'pipe',
       cwd: process.env.HOME || process.cwd(),

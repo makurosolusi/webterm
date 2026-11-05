@@ -13,7 +13,7 @@ import {
 import { createTurnEmitter, type TurnEmitter } from './runtimeEvents'
 import { applyClaudeEvent, parseClaudeLine } from './claudeEvents'
 import {
-  type ClaudeRuntimeOptions, DEFAULT_CLAUDE_BIN, DEFAULT_KILL_GRACE_MS, DEFAULT_MAX_TURNS,
+  type ClaudeRuntimeOptions, DEFAULT_KILL_GRACE_MS, DEFAULT_MAX_TURNS,
   DEFAULT_WALL_MS, MICROS_PER_USD, claudeArgv, claudeChildEnv, claudeModelArg, createLineReader,
 } from './claudeOptions'
 import {
@@ -23,6 +23,7 @@ import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './cla
 import { CENTRAL_MODEL_FLAG } from './opencodeOptions'
 import { createLogger } from '../../logs'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
+import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 
 const log = createLogger('central')
 
@@ -165,7 +166,9 @@ export class ClaudeRuntime implements CentralRuntime {
       maxTurns: input.limits.maxTurns ?? DEFAULT_MAX_TURNS,
       ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
     })
-    return spawn(this.options.executable ?? DEFAULT_CLAUDE_BIN, argv, {
+    // Central launch profile (e.g. `envman -e p -- claude`) read per turn, so a profile edit reaches the next turn.
+    const [cmd, ...args] = this.options.executable ? [this.options.executable, ...argv] : [...centralClaudeLaunch().argv, ...argv]
+    return spawn(cmd as string, args, {
       cwd: ensureWorkDir(this.options.workDir),
       // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
       // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.

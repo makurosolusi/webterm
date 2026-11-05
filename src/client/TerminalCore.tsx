@@ -52,6 +52,8 @@ export interface TerminalCoreProps {
   agentId?: AgentId
   sessionId?: string
   resume?: boolean
+  /** Launch profile of a builtin claude node; the server resolves it to the launch command. */
+  claudeProfileId?: string
   /** Judul yang dilaporkan terminal (OSC 0/2) — nama proses foreground di shell biasa. */
   onTitle?: (title: string) => void
 }
@@ -285,6 +287,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
         ...(p.agentId ? { agentId: p.agentId } : {}),
         ...(p.sessionId ? { sessionId: p.sessionId } : {}),
         ...(p.resume ? { resume: true } : {}),
+        ...(p.claudeProfileId ? { claudeProfileId: p.claudeProfileId } : {}),
       })
     }
     if (canOpenSession(hasSize(el), false)) s.open()

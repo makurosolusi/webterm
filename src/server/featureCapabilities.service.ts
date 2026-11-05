@@ -29,12 +29,12 @@ export interface CapCtx {
 
 const OWNER = { root: true }
 const NEEDS_LABEL = {
-  chromium: 'Choose Chrome location', telegramToken: 'Connect bot', agentEngine: 'Install or sign in to Claude Code / OpenCode',
+  chromium: 'Choose Chrome location', telegramToken: 'Connect bot', agentEngine: 'Set up Claude Code',
 } as const
 const NEEDS_DETAIL = {
   chromium: 'Chrome or Chromium was not found on this computer.',
   telegramToken: 'No Telegram bot is connected yet.',
-  agentEngine: 'No agent engine is ready: Claude Code or OpenCode is not installed or not signed in.',
+  agentEngine: 'Claude Code cannot start for Central yet. The check below shows which step fails.',
 } as const
 const NEEDS_STEP = { chromium: 'chromiumPath', telegramToken: 'telegramToken', agentEngine: 'agentEngine' } as const
 /** Pengaturan yang ikut kartu tapi tak boleh menimpa nilai eksplisit dari shell/.env. */

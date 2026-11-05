@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { relativeTime, resumeNode, targetWorkspace } from './SessionHistory.model'
+import { relativeTime, resumeNode, resumeProfile, targetWorkspace } from './SessionHistory.model'
 import type { AgentSession } from './SessionHistory.api'
 
 const session = (over: Partial<AgentSession> = {}): AgentSession => ({
@@ -16,8 +16,9 @@ describe('resumeNode', () => {
     })
   })
 
-  it('claude: honours the user launch-command override', () => {
-    expect(resumeNode(session(), { claude: 'envman -e work -- claude' }, id)?.cmd).toBe('envman -e work -- claude')
+  it('claude: carries the launch profile (the server builds the command from it), not the legacy override', () => {
+    const n = resumeNode(session(), { claude: 'envman -e work -- claude' }, id, 'm')
+    expect(n).toMatchObject({ cmd: 'claude', claudeProfileId: 'm' })
   })
 
   it('codex: resume lives in the command, no sessionId', () => {
@@ -33,6 +34,20 @@ describe('resumeNode', () => {
 
   it('omits cwd when the transcript had none (node falls back to the workspace cwd)', () => {
     expect(resumeNode(session({ cwd: null }), {}, id)).not.toHaveProperty('cwd')
+  })
+})
+
+describe('resumeProfile', () => {
+  const S = { claudeLaunchProfiles: [{ id: 'm', name: 'M', command: 'envman -e m --' }], defaultClaudeProfileId: 'm' }
+  const sid = session().id
+  it('the original node\'s profile when a board node is on that transcript', () => {
+    const wss = [{ nodes: [] }, { nodes: [{ id: 'a', kind: 'agent' as const, x: 0, y: 0, agentId: 'claude' as const, sessionId: sid, claudeProfileId: 'w' }] }]
+    expect(resumeProfile(session(), wss, S)).toBe('w')
+  })
+  it('else the default profile; codex gets none', () => {
+    expect(resumeProfile(session(), [{ nodes: [] }], S)).toBe('m')
+    expect(resumeProfile(session(), [], {})).toBe('default')
+    expect(resumeProfile(session({ agent: 'codex' }), [], S)).toBeUndefined()
   })
 })
 

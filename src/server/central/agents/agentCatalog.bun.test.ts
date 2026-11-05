@@ -29,10 +29,11 @@ const catalogOf = (agents: CustomAgent[], over: Partial<Settings> = {}, env: Nod
   createAgentCatalog({ settings: () => ({ ...DEFAULT_SETTINGS, customAgents: agents, ...over }), env: () => env, denyRoots: () => denyRoots })
 
 describe('builtin kinds', () => {
-  it('keep tier R2 and the settings launch override', () => {
-    const c = createAgentCatalog({ settings: () => ({ ...DEFAULT_SETTINGS, agentLaunchCommands: { claude: 'claude-work' } }) })
-    expect(c.resolve('claude')).toMatchObject({ builtin: true, tier: 'R2', launchLine: 'claude-work', headlessArgv: null })
-    expect(c.resolve('codex')?.launchLine).toBe(AGENT_CONFIG.codex.launchCmd)
+  it('keep tier R2; claude launches through the default profile, others through their override', () => {
+    const c = createAgentCatalog({ settings: () => ({ ...DEFAULT_SETTINGS, agentLaunchCommands: { claude: 'ignored-legacy', codex: 'codex --ci' }, claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'envman -e w --' }], defaultClaudeProfileId: 'w' }) })
+    expect(c.resolve('claude')).toMatchObject({ builtin: true, tier: 'R2', launchLine: 'envman -e w -- claude', headlessArgv: null })
+    expect(c.resolve('codex')?.launchLine).toBe('codex --ci')
+    expect(createAgentCatalog({ settings: () => DEFAULT_SETTINGS }).resolve('codex')?.launchLine).toBe(AGENT_CONFIG.codex.launchCmd)
     expect(c.resolve('opencode')?.headlessArgv?.('hi')).toEqual(['opencode', 'run', 'hi'])
     expect(c.resolve('claude')?.childEnv()).toEqual({})
   })
@@ -74,7 +75,7 @@ describe('custom kinds', () => {
   })
 
   it('legacy launchCmd / baseAgent entries launch through customLaunchCmd', () => {
-    const c = catalogOf([agent({ id: 'custom:own', launch: undefined, launchCmd: 'my-proxy --tui' }), agent({ id: 'custom:base', launch: undefined, baseAgent: 'claude' })], { agentLaunchCommands: { claude: 'claude-work' } })
+    const c = catalogOf([agent({ id: 'custom:own', launch: undefined, launchCmd: 'my-proxy --tui' }), agent({ id: 'custom:base', launch: undefined, baseAgent: 'claude' })], { claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' })
     expect(c.resolve('custom:own')?.launchLine).toBe('my-proxy --tui')
     expect(c.resolve('custom:base')?.launchLine).toBe('claude-work')
     expect(c.resolve('custom:base')?.tier).toBe('R3')

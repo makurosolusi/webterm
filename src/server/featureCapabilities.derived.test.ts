@@ -55,7 +55,7 @@ describe('kunci turunan Worker/Otonomi', () => {
 describe('prasyarat mesin agen (Central)', () => {
   it('Central on tanpa mesin siap = needs-step agentEngine, bukan Aktif', () => {
     const v = viewOf('central', { WEBTERM_CENTRAL: 'on' }, { ...DETECT, agentEngine: false })
-    expect(v).toMatchObject({ status: 'needs-step', step: { kind: 'agentEngine', label: 'Install or sign in to Claude Code / OpenCode' } })
+    expect(v).toMatchObject({ status: 'needs-step', step: { kind: 'agentEngine', label: 'Set up Claude Code' } })
     expect(viewOf('central', { WEBTERM_CENTRAL: 'on' }, DETECT).status).toBe('on')
   })
   it('ganti mesin di Lanjutan mem-bounce Telegram yang sedang on', async () => {

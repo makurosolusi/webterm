@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { claudeChildEnv } from '../runtime/claudeOptions'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
+import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 
 export const SUMMARY_MODEL = 'haiku'
 export const SUMMARY_BUDGET_USD = 0.05
@@ -43,7 +44,8 @@ export function createClaudeStructured(opts: { bin?: string; now?: () => number 
     if (calls.length >= SUMMARY_MAX_PER_HOUR) { reject(new Error('hourly summary cap reached')); return }
     if (signal.aborted) { reject(new Error('aborted before start')); return }
     calls.push(at)
-    const child = spawn(opts.bin ?? 'claude', structuredArgv(req.schema), { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
+    const [cmd, ...args] = opts.bin ? [opts.bin, ...structuredArgv(req.schema)] : [...centralClaudeLaunch().argv, ...structuredArgv(req.schema)]
+    const child = spawn(cmd as string, args, { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
     let out = ''
     const kill = (): void => { child.kill('SIGKILL') }
     signal.addEventListener('abort', kill, { once: true })

@@ -2,6 +2,7 @@
 import npath from 'node:path'
 import { assembleCmd, isBuiltinAgent, isSafeNodeId } from '../../shared/workspace'
 import { spawnAgent } from '../spawn/agentSpawn'
+import { claudeProfileLine } from '../../shared/claudeLaunch/claudeLaunch.builtin'
 import { authorize, badRequest, capabilityHolder } from './controlAuth'
 import {
   DEFAULT_COLS,
@@ -50,7 +51,9 @@ export async function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: A
   const sid = resolveSpawnSessionId(agentId, body.sessionId)
   if (!sid.ok) return badRequest('invalid_session_id')
 
-  const cmd = assembleCmd(agentId, deps.settings().agentLaunchCommands[agentId])
+  // claude launches through the default launch profile; the other builtins keep their override.
+  const settings = deps.settings()
+  const cmd = agentId === 'claude' ? claudeProfileLine(settings) : assembleCmd(agentId, settings.agentLaunchCommands[agentId])
   // Thin adapter over `agent.spawn` (F2-h): depth, per-parent cap, lineage (K3) and events live there.
   const spawned = await spawnAgent(
     {

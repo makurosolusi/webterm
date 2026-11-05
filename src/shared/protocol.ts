@@ -4,7 +4,7 @@
 
 import type { AgentId, AgentStatus } from './workspace'
 
-export interface OpenMsg { t: 'open'; id: string; cols: number; rows: number; cwd?: string; cmd?: string; agentId?: AgentId; sessionId?: string; resume?: boolean }
+export interface OpenMsg { t: 'open'; id: string; cols: number; rows: number; cwd?: string; cmd?: string; agentId?: AgentId; sessionId?: string; resume?: boolean; claudeProfileId?: string }
 export interface InputMsg { t: 'input'; id: string; data: string }
 export interface ResizeMsg { t: 'resize'; id: string; cols: number; rows: number }
 export interface CloseMsg { t: 'close'; id: string }
