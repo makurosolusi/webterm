@@ -61,3 +61,17 @@
 .browser-start-item { flex-direction: column; align-items: flex-start; width: 100%; padding: 6px 8px; text-align: left; }
 .browser-start-title, .browser-start-host { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-start-host { font-size: 11px; opacity: 0.7; }
+
+/* Console drawer (BrowserConsole.tsx): fixed ~35% of the node, Chrome DevTools-like rows. */
+.browser-console { flex: 0 0 35%; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--vscode-panel-border, #444); background: var(--vscode-panel-background, var(--vscode-editor-background)); font-family: var(--vscode-editor-font-family, ui-monospace, monospace); font-size: 12px; }
+.browser-console__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 4px; border-bottom: 1px solid var(--vscode-panel-border, #444); font-family: var(--vscode-font-family, sans-serif); }
+.browser-console__list { flex: 1; min-height: 0; overflow: auto; }
+.browser-console__row { display: flex; align-items: flex-start; gap: 4px; padding: 1px 6px; border-bottom: 1px solid var(--vscode-editorGroup-border, rgba(128,128,128,.2)); }
+.browser-console__row.is-error { color: var(--vscode-errorForeground, #f48771); background: var(--vscode-inputValidation-errorBackground, rgba(255,0,0,.08)); }
+.browser-console__row.is-warning { color: var(--vscode-editorWarning-foreground, #cca700); background: var(--vscode-inputValidation-warningBackground, rgba(255,200,0,.08)); }
+.browser-console__row.is-verbose, .browser-console__row.src-system { opacity: .7; }
+.browser-console__msg { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.browser-console__frame { padding-left: 1.5em; opacity: .8; }
+.browser-console__src { flex: none; opacity: .7; text-decoration: underline; }
+.browser-console__note { padding: 1px 6px; opacity: .7; font-style: italic; }
+.browser-console__prompt { display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-top: 1px solid var(--vscode-panel-border, #444); }

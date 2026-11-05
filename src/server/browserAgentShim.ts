@@ -42,7 +42,8 @@ every call: wiring a browser after this session started works at once; removing 
 One cable = used automatically. Several = pass \`--node <id>\` (the error lists them). None = the reply
 says so and lists the browser nodes on the board: ask your user to connect this node to one with a cable.
 
-Read verbs: \`status\`, \`snapshot\`, \`screenshot [maxWidth]\`, \`wait [--ms N] [--ref eN] [--loaded]\`.
+Read verbs: \`status\`, \`snapshot\`, \`screenshot [maxWidth]\`, \`wait [--ms N] [--ref eN] [--loaded]\`,
+\`console [limit] [error|warning|info|verbose]\` (newest page console entries at or above that level; default 50, info).
 Act verbs: \`navigate <url>\`, \`click <ref> <snapId>\`, \`type <ref> <snapId> <text> [--submit]\`,
 \`press <key>\`, \`scroll <dy>\`, \`handoff\` (take the lease), \`release\` (give it back to the human).
 

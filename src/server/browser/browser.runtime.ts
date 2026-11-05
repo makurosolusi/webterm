@@ -109,7 +109,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   // Default ON (alat developer): hanya `off` eksplisit di sub-opsi atau toggle node yang mematikan.
   const agentEnv = () => agentControlOn(env)
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
-  const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now })
+  const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console })
   const live = new Set<string>()
   const versionProbe = createVersionProbe({ acquire: (w) => launcher.acquire(w), connect: d.connect })
   host.onState((s: BrowserState) => {

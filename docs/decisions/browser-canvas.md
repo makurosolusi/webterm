@@ -19,7 +19,7 @@ menolak dengan 401 bila tidak ada `x-webterm-capability` yang valid maupun token
 query `workspaceId`.
 
 ## Capability untuk agent
-Verb `browser.read` (status, snapshot, screenshot, wait) dan `browser.act` (navigate, click, type, press,
+Verb `browser.read` (status, snapshot, screenshot, wait, console) dan `browser.act` (navigate, click, type, press,
 scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua jalur identitas ke
 `/api/control/browser/[:nodeId/]:verb` (`browserControl.handler.ts`):
 1. **Sesi agent PTY: token node + kabel, dibaca per panggilan.** Sesi agent tidak lagi diberi capability browser

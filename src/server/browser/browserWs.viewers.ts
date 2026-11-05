@@ -8,6 +8,7 @@ import { createLogger } from '../logs'
 import { createFrameGate } from './browserWs.backpressure'
 import type { FrameGate } from './browserWs.backpressure'
 import type { HostEvent } from './browserHost.targets'
+import type { ConsoleLog } from './browserHost.console'
 
 const log = createLogger('browser.ws')
 const errName = (e: unknown) => (e instanceof Error ? e.name : typeof e)
@@ -20,6 +21,8 @@ export interface GatewayHost extends BrowserHostApi {
   selectionText(nodeId: string): Promise<string>
   /** Sakelar Shields situs halaman node (persist per host) lalu muat ulang. */
   setShields(nodeId: string, on: boolean): Promise<void>
+  /** Console panel buffer (absent in hosts without it). */
+  console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
 }
 
 /** Ujung tulis satu klien; implementasi nyata membungkus `ws`. */
@@ -77,6 +80,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
         else if (e.k === 'popup') firstViewer(e.nodeId)?.sink.sendJson({ t: 'popup', id: e.nodeId, url: e.url }) // satu klien saja: tiap klien yang menerima akan membuat node
         else broadcast(e.nodeId, { t: 'error', id: e.nodeId, code: e.code, hostname: e.hostname })
       }),
+      ...(host.console ? [host.console.onDelta((d) => broadcast(d.id, { t: 'console', ...d }))] : []),
     ]
   }
   function unsubscribeIfIdle() {

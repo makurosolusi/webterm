@@ -5,6 +5,7 @@ import { callAllowed } from './browserAgent.cdpAllowlist'
 import type { SnapshotStore } from './browserAgent.snapshot'
 import { BrowserError } from './browserHost.targets'
 import type { LeaseService } from './browserLease.service'
+import type { ConsoleLog } from './browserHost.console'
 
 export interface ApprovalRequest { nodeId: string; verb: 'click'; hostname: string }
 
@@ -18,6 +19,8 @@ export interface AgentCtx {
   approve?(req: ApprovalRequest): Promise<boolean>
   sleep(ms: number): Promise<void>
   now(): number
+  /** Console buffer of the host (verb `console`); absent = the verb answers `disabled`. */
+  console?: Pick<ConsoleLog, 'read'>
 }
 
 export type AgentVerbs = { [V in BrowserVerb]: (nodeId: string, body: unknown) => Promise<VerbData[V]> }

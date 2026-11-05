@@ -12,6 +12,7 @@ export const FIXED_COMMANDS: Command[] = [
   { id: 'terminal.fontZoomOut', label: 'Terminal: Zoom Out Font', defaultKey: 'Mod+-', scope: 'terminal', fixed: true },
   { id: 'terminal.fontZoomReset', label: 'Terminal: Reset Font Size', defaultKey: 'Mod+0', scope: 'terminal', fixed: true },
   { id: 'terminal.newline', label: 'Terminal: Insert Newline Without Sending', defaultKey: 'Shift+Enter', scope: 'terminal', fixed: true },
+  { id: 'browser.toggleConsole', label: 'Browser: Toggle Console (focused browser node)', defaultKey: 'Mod+Alt+J', scope: 'browser', fixed: true },
   { id: 'files.quickOpen', label: 'Files: Go to File in This Folder (focused Files node)', defaultKey: 'Mod+P', scope: 'files', fixed: true },
   { id: 'output.toggle.key', label: 'View: Toggle Output', defaultKey: 'Mod+Shift+U', fixed: true, hidden: true },
   { id: 'view.cleanView.key', label: 'View: Toggle Clean View', defaultKey: 'Mod+.', fixed: true, hidden: true },

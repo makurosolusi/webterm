@@ -21,6 +21,8 @@ import { ZOOM_DEFAULT, stepZoom } from './browser.zoom'
 import { randomId } from './randomId'
 import { useLiveSettings } from './useSettings'
 import { toSearchEngine } from '../shared/browser.omnibox'
+import { useConsoleDrawer } from './BrowserConsole'
+import type { ConsoleSlot } from './BrowserConsole'
 import './browser.css'
 
 const COLLAPSED_H = 40
@@ -42,6 +44,8 @@ export interface BrowserSlotCtx {
   stepZoom: (dir: -1 | 1) => void
   /** Nyalakan/matikan Shields untuk situs halaman ini. */
   setShields: (on: boolean) => void
+  /** Console drawer toggle + error badge count. */
+  console?: ConsoleSlot
 }
 
 export interface BrowserNodeProps extends NodeProps {
@@ -74,6 +78,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
   const lastGo = useRef<string | undefined>(undefined)
+  const consoleDrawer = useConsoleDrawer(session.hostRef, session.console, send, state?.lease)
 
   useGoto({ want: d.url, state, send })
 
@@ -97,6 +102,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
     takeover: () => send({ t: 'takeover' }),
     setShields: (on) => send({ t: 'shields', on }),
     zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
+    console: consoleDrawer.slot,
   }
   // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.
   const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked
@@ -137,6 +143,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
             {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
           </div>
+          {consoleDrawer.drawer}
         </div>
         {/* Handle kabel sama dengan AgentNode: kabel agent↔browser memberi agent itu izin mengemudikan
             browser ini (`resolveLinkedBrowser` server). Validasinya di `canLink`. */}

@@ -33,11 +33,16 @@ done
 case "$node" in *[!A-Za-z0-9_.:-]*) echo "bad node id" >&2; exit 2 ;; esac
 num() { case "$1" in ""|*[!0-9.-]*) echo "numeric argument expected: $1" >&2; exit 2 ;; esac; }
 [ -z "$ms" ] || num "$ms"
-case "$verb" in scroll) num "$p1" ;; screenshot) [ -z "$p1" ] || num "$p1" ;; esac
+case "$verb" in scroll) num "$p1" ;; screenshot|console) [ -z "$p1" ] || num "$p1" ;; esac
 case "$verb" in ${verbsOf('browser.read')}|${verbsOf('browser.act')}) ;; *) usage ;; esac
 body="{}"
 case "$verb" in
   screenshot) [ -z "$p1" ] || body="{\\"maxWidth\\":$p1}" ;;
+  console)
+    body="{"; sep=""
+    [ -z "$p1" ] || { body="$body\${sep}\\"limit\\":$p1"; sep=","; }
+    [ -z "$p2" ] || body="$body\${sep}\\"level\\":\\"$(esc "$p2")\\""
+    body="$body}" ;;
   wait)
     body="{"; sep=""
     [ -z "$ms" ] || { body="$body\${sep}\\"ms\\":$ms"; sep=","; }

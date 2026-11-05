@@ -1,6 +1,7 @@
 // Kontrak node browser di canvas (PLAN/BROWSER-CANVAS-b.md §4). Sumber tunggal konstanta + tipe:
 // WS lain MENGIMPOR dari sini, tidak menyalin literal. Perubahan kontrak = permintaan ke orkestrator.
 // Murni deklarasi: tanpa import client/server, tanpa side effect saat import.
+import type { ConsoleClientMsg, ConsoleLevel, ConsoleServerMsg } from './browser.console'
 
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
@@ -137,6 +138,7 @@ export type ClientMsg =
   | { t: 'dialog'; id: string; accept: boolean; text?: string }
   | { t: 'takeover'; id: string }
   | { t: 'shields'; id: string; on: boolean }
+  | ConsoleClientMsg
 
 export type ServerMsg =
   | ({ t: 'state' } & BrowserState)
@@ -145,6 +147,7 @@ export type ServerMsg =
   | { t: 'copy'; id: string; text: string }
   | { t: 'error'; id: string; code: BrowserErrorCode; hostname?: string }
   | { t: 'popup'; id: string; url: string }
+  | ConsoleServerMsg
 
 /** Pembaca lease untuk gateway (WS-04), diimplementasikan WS-07. */
 export interface LeaseView {
@@ -190,7 +193,7 @@ export interface CookieCommitResp { imported: number; domains: string[] }
 export const BROWSER_CAPS = { read: 'browser.read', act: 'browser.act' } as const
 export type BrowserCap = (typeof BROWSER_CAPS)[keyof typeof BROWSER_CAPS]
 export const BROWSER_VERB_CAP = {
-  status: 'browser.read', snapshot: 'browser.read', screenshot: 'browser.read', wait: 'browser.read',
+  status: 'browser.read', snapshot: 'browser.read', screenshot: 'browser.read', wait: 'browser.read', console: 'browser.read',
   navigate: 'browser.act', click: 'browser.act', type: 'browser.act', press: 'browser.act',
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
 } as const satisfies Record<string, BrowserCap>
@@ -201,6 +204,7 @@ export interface VerbBodies {
   status: Record<string, never>; snapshot: Record<string, never>
   screenshot: { maxWidth?: number }
   wait: { ms?: number; selectorRef?: string; loaded?: true }
+  console: { limit?: number; level?: ConsoleLevel }
   navigate: { url: string }
   click: { ref: string; snapId: string }
   type: { ref: string; snapId: string; text: string; submit?: boolean }
@@ -213,6 +217,7 @@ export interface VerbData {
   snapshot: { snapId: string; content: string; truncated: boolean; url: string }
   screenshot: { mime: 'image/jpeg'; base64: string }
   wait: { ok: true }; navigate: { ok: true }; click: { ok: true }; type: { ok: true }
+  console: { content: string; count: number; dropped: number }
   press: { ok: true }; scroll: { ok: true }
   handoff: { lease: 'agent'; ttlMs: number }
   release: { lease: 'human' }
