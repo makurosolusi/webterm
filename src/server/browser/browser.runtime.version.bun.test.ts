@@ -9,7 +9,7 @@ import { ENV_BROWSER } from '../../shared/browser.contract'
 import type { Workspace } from '../../shared/workspace'
 import { createFileSecretStore } from '../envSecrets.store'
 import { startBrowserRuntime } from './browser.runtime'
-import { startFakeCdp } from './fakeCdp.testkit'
+import { startFakeCdp, offlineAdblock } from './fakeCdp.testkit'
 
 const WS: Workspace = {
   id: 'w1', name: 'w', cwd: '/', viewport: { x: 0, y: 0, zoom: 1 }, bridges: [], updatedAt: 0,
@@ -25,7 +25,7 @@ test('version absen sebelum browser hidup, terisi sekali setelah node live, koso
   fake.handle('Browser.getVersion', () => ({ product: 'Chrome/131.0.1' }))
   const rt = await startBrowserRuntime({
     env: { [ENV_BROWSER.enabled]: 'on' }, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')),
-    workspaces: () => [WS], launcher: { acquire: async () => fake.url, shutdown: () => undefined },
+    workspaces: () => [WS], launcher: { acquire: async () => fake.url, shutdown: () => undefined }, adblock: offlineAdblock(),
   })
   if (!rt) throw new Error('runtime tidak menyala')
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })

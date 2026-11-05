@@ -13,7 +13,7 @@ import { activeBrowser, registerBrowserCapability, startBrowser, stopBrowser } f
 import type { RuntimeDeps } from './browser.runtime'
 import { setActiveBrowser } from './browser.state'
 import { detectChromium } from './chromium.launch'
-import { startFakeCdp } from './fakeCdp.testkit'
+import { startFakeCdp, offlineAdblock } from './fakeCdp.testkit'
 import type { FakeCdp } from './fakeCdp.testkit'
 
 const WS: Workspace = {
@@ -29,7 +29,7 @@ const cleanup: Array<() => Promise<void> | void> = []
 const deps = (over: Partial<RuntimeDeps> = {}): RuntimeDeps => ({
   env: ON, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')),
   workspaces: () => [WS],
-  launcher: { acquire: async () => { acquires++; return fake.url }, shutdown: () => undefined },
+  launcher: { acquire: async () => { acquires++; return fake.url }, shutdown: () => undefined }, adblock: offlineAdblock(),
   ...over,
 })
 const until = async (cond: () => boolean) => { for (let i = 0; i < 300 && !cond(); i++) await new Promise((r) => setTimeout(r, 10)); expect(cond()).toBe(true) }

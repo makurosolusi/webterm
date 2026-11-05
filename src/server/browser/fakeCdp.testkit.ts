@@ -4,7 +4,9 @@ import type { WebSocket } from 'ws'
 import type { AddressInfo } from 'node:net'
 import type { BlockReason } from '../../shared/browser.contract'
 import { BrowserHost } from './browserHost.service'
+import type { HostDeps } from './browserHost.service'
 import type { NavGuard } from './browserHost.targets'
+import type { Adblock } from './adblock.engine'
 
 export interface FakeCall { id: number; method: string; params: Record<string, unknown>; sessionId?: string }
 type Reply = Record<string, unknown> | { __error: { code: number; message: string } } | typeof SILENT
@@ -77,9 +79,12 @@ export async function waitFor(cond: () => boolean, what: string, timeoutMs = 200
 }
 
 /** Host + server CDP tiruan + peluncur palsu (`acquire` selalu mengembalikan URL tiruan). */
-export async function makeHostRig(guard: NavGuard & { navigated: string[] } = stubGuard()) {
+export async function makeHostRig(guard: NavGuard & { navigated: string[] } = stubGuard(), extra: Partial<HostDeps> = {}) {
   const fake = await startFakeCdp()
   const launcher = { acquire: async () => fake.url, shutdown: () => undefined }
-  const host = new BrowserHost({ launcher, guard })
+  const host = new BrowserHost({ launcher, guard, ...extra })
   return { fake, host, guard, async stop() { await host.dispose(); await fake.close() } }
 }
+
+/** Mesin filter tanpa jaringan untuk test runtime: tak pernah memblokir, `load` tak mengunduh. Hanya untuk test. */
+export const offlineAdblock = (): Adblock => ({ check: () => ({ block: false }), load: async () => undefined, ready: () => false })

@@ -10,6 +10,7 @@ import { resolveOmniboxInput, type SearchEngine } from '../shared/browser.omnibo
 import { zoomLabel } from './browser.zoom'
 import { TOOLBAR_TEXT, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 import BrowserAgentOffer from './browser.agentOffer'
+import BrowserShieldsChip from './BrowserShieldsChip'
 
 export interface BrowserToolbarProps {
   state?: BrowserState
@@ -25,6 +26,8 @@ export interface BrowserToolbarProps {
   onZoom?: (dir: -1 | 1) => void
   /** Mesin pencari untuk ketikan yang bukan alamat (setting `browserSearchEngine`). */
   searchEngine?: SearchEngine
+  /** Sakelar Shields situs ini; chip hanya tampil bila diberikan dan server menjalankan Shields. */
+  onShields?: (on: boolean) => void
 }
 
 /** Tooltips of the icon-only buttons: what the click does, plus why when disabled. */
@@ -38,7 +41,7 @@ const TIP = {
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
 /** Bilah alamat + tombol navigasi + toggle agent untuk satu node browser. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, searchEngine }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, searchEngine, onShields }: BrowserToolbarProps) {
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const stateUrl = state?.url ?? ''
@@ -80,6 +83,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
             <IconButton size="icon-xs" label={ZOOM_TEXT.in} tooltip={TIP.zoomIn} onClick={() => onZoom(1)}>{icon('zoom-in')}</IconButton>
           </div>
         )}
+        {onShields && <BrowserShieldsChip state={state} onToggle={onShields} />}
         {agentEnabled ? (
           <label className="flex items-center gap-1 text-xs whitespace-nowrap" title={TOOLBAR_TEXT.agentControlHint}>
             <input type="checkbox" checked={agentControl} onChange={(e) => onAgentControl(e.target.checked)} />

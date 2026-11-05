@@ -12,6 +12,8 @@ import NodeChrome, { termNodeClass } from './NodeChrome'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
+import { browserStream } from './browser.stream'
+import { useNodeActions } from './nodeActions'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
@@ -38,6 +40,8 @@ export interface BrowserSlotCtx {
   /** Zoom halaman (1 = 100%) dan langkahnya; murni klien, lihat browser.zoom.ts. */
   zoom: number
   stepZoom: (dir: -1 | 1) => void
+  /** Nyalakan/matikan Shields untuk situs halaman ini. */
+  setShields: (on: boolean) => void
 }
 
 export interface BrowserNodeProps extends NodeProps {
@@ -61,7 +65,9 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const swatch = d.color ?? '#0a84ff'
   const comments = d.comments ?? []
   const lowZoom = useStore((s) => s.transform[2] < ZOOM_PAUSE_BELOW)
-  const session = useBrowserSession(id, lowZoom || collapsed)
+  const { openBrowserAt } = useNodeActions()
+  // Popup sah (window.open / target=_blank) dari halaman ini: node baru di sebelahnya, seperti tab baru di Brave/Chrome.
+  const session = useBrowserSession(id, lowZoom || collapsed, browserStream, (url) => { openBrowserAt?.({ url, anchorNodeId: id }) })
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [maximized, setMaximized] = useState(false)
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
@@ -89,6 +95,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
       send({ t: 'nav', action, ...(url === undefined ? {} : { url }) })
     },
     takeover: () => send({ t: 'takeover' }),
+    setShields: (on) => send({ t: 'shields', on }),
     zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
   }
   // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.

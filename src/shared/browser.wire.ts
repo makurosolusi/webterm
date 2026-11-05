@@ -149,6 +149,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       if (m.url === undefined) return m.action === 'go' ? null : { t: 'nav', id, action: m.action }
       return str(m.url, URL_MAX_CHARS) ? { t: 'nav', id, action: m.action, url: m.url } : null
     }
+    case 'shields':
+      return typeof m.on === 'boolean' ? { t: 'shields', id, on: m.on } : null
     case 'dialog':
       if (typeof m.accept !== 'boolean') return null
       if (m.text === undefined) return { t: 'dialog', id, accept: m.accept }

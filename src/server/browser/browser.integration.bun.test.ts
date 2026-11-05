@@ -15,7 +15,7 @@ import { forgetNodeToken, nodeToken } from '../hooksTokens'
 import { startBrowserRuntime } from './browser.runtime'
 import { activeBrowser, setActiveBrowser } from './browser.state'
 import type { BrowserRuntime } from './browser.state'
-import { startFakeCdp } from './fakeCdp.testkit'
+import { startFakeCdp, offlineAdblock } from './fakeCdp.testkit'
 import type { FakeCdp } from './fakeCdp.testkit'
 
 const WS: Workspace = {
@@ -33,7 +33,7 @@ async function boot(env: Record<string, string> = ON, onAgentUse?: () => void, w
   const capabilities = new CapabilityStore()
   const rt = await startBrowserRuntime({
     env, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), onAgentUse,
-    workspaces, launcher: { acquire: async () => fake.url, shutdown: () => undefined },
+    workspaces, launcher: { acquire: async () => fake.url, shutdown: () => undefined }, adblock: offlineAdblock(),
   })
   cleanup.push(async () => { await rt?.shutdown(); await fake.close(); rmSync(dir, { recursive: true, force: true }) })
   return { rt, fake, capabilities }

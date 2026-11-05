@@ -113,6 +113,9 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
       case 'nav':
         await host.navAction(id, m.action, m.url)
         return
+      case 'shields':
+        await host.setShields(id, m.on)
+        return
       case 'ack':
         return
       default: // mouse | key | text | ime | touch

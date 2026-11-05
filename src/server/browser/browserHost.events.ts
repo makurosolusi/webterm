@@ -1,6 +1,5 @@
 // Routing event CDP -> perubahan state node (navigasi, loading, dialog, crash, popup, frame screencast).
 // Dipisah dari `browserHost.service.ts` (Rule 8); semua efek lewat `RouterOps` yang disediakan host.
-import { BlockedError } from '../../shared/browser.contract'
 import type { BrowserState } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
@@ -20,8 +19,12 @@ export interface RouterOps {
   crash(rec: NodeRec): void
   refresh(rec: NodeRec): Promise<void>
   fire(rec: NodeRec, method: string, params?: object): void
-  navigate(nodeId: string, url: string): Promise<void>
   closeTarget(opener: NodeRec, targetId: string): Promise<void>
+  /** Popup sah/terblokir diputuskan Shields; pembuka TIDAK pernah dinavigasi ke URL popup. */
+  popup(opener: NodeRec, url: string): void
+  /** State Shields untuk halaman baru (hitungan direset per muat halaman, seperti Brave). */
+  pageState(url: string): Partial<BrowserState>
+  detached(p: Record<string, unknown>): void
 }
 
 /** Pembuat handler `'*'` untuk satu koneksi CDP; popup yang belum punya URL diingat per router. */
@@ -44,11 +47,14 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       log.warn('browser.block', 'frame navigation blocked', { ids: { nodeId: rec.nodeId }, host: hostOnly(f.url), reason })
       return
     }
-    ops.patch(rec, { url: f.url, blocked: undefined })
+    ops.patch(rec, { url: f.url, blocked: undefined, ...ops.pageState(f.url) })
     void ops.refresh(rec)
   }
 
-  /** Popup (`window.open`) -> navigasi di node pembuka (P-8); judul node ikut `targetInfoChanged`. */
+  /**
+   * Popup (`window.open`/`target=_blank`) -> ditutup, lalu Shields memutuskan: blokir+hitung atau node baru.
+   * Dulu pembuka dinavigasi ke URL popup: iklan popunder menimpa halaman pengguna (laporan retrogames.cc).
+   */
   const onTargetInfo = (p: Record<string, unknown>, created: boolean) => {
     const info = p.targetInfo as { targetId: string; type: string; title: string; url: string; openerId?: string } | undefined
     if (!info) return
@@ -62,9 +68,7 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
     const nodeId = pop.opener.nodeId
     ops.closeTarget(pop.opener, info.targetId)
       .catch((err) => log.warn('browser.popup', 'closing popup failed', { ids: { nodeId }, error: errMsg(err) }))
-    ops.navigate(nodeId, pop.url).catch((err) => {
-      if (!(err instanceof BlockedError)) log.warn('browser.popup', 'popup navigation failed', { ids: { nodeId }, error: errMsg(err) })
-    })
+    ops.popup(pop.opener, pop.url)
   }
 
   return (p, sessionId, method) => {
@@ -89,6 +93,7 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
         return crashTarget(p.targetId)
       case CDP_EVENT.targetCreated: return onTargetInfo(p, true)
       case CDP_EVENT.targetInfoChanged: return onTargetInfo(p, false)
+      case CDP_EVENT.detachedFromTarget: return ops.detached(p)
     }
   }
 }

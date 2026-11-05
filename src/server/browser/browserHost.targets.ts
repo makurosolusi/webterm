@@ -16,10 +16,14 @@ export class BrowserError extends Error {
   }
 }
 
-/** Event di luar `BrowserHostApi`: dialog JS (jawab lewat `answerDialog`) dan galat tingkat node (mis. crash). */
+/**
+ * Event di luar `BrowserHostApi`: dialog JS (jawab lewat `answerDialog`), galat tingkat node (mis. crash), dan
+ * popup sah yang harus dibuka klien sebagai node browser baru di sebelah pembukanya.
+ */
 export type HostEvent =
   | { k: 'dialog'; nodeId: string; kind: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; message: string; defaultPrompt?: string }
   | { k: 'error'; nodeId: string; code: BrowserErrorCode; hostname?: string }
+  | { k: 'popup'; nodeId: string; url: string }
 
 export { DEFAULT_VIEWPORT }
 

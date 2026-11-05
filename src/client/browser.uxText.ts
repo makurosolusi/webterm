@@ -14,6 +14,14 @@ export const TOOLBAR_TEXT = {
   agentControlHint: 'On by default: terminal agents cabled to this browser can control it right away. Uncheck to turn this off.',
 } as const
 
+/** Shields chip (ad/tracker and popup blocking, like Brave Shields). */
+export const SHIELDS_TEXT = {
+  label: 'Shields',
+  on: (ads: number, popups: number, host: string) =>
+    `Shields are on for ${host}: ${ads} ${ads === 1 ? 'ad or tracker' : 'ads and trackers'} and ${popups} ${popups === 1 ? 'popup' : 'popups'} blocked on this page. Click to turn Shields off for this site.`,
+  off: (host: string) => `Shields are off for ${host}. Click to turn them back on.`,
+} as const
+
 // Tawaran inline, HANYA saat user mematikan kendali agent di Pengaturan (default on). Meniru Orca BrowserUsePane "Agent Browser Use":
 // "Let coding agents drive this browser with your logins"): konfirmasi dulu karena agent memakai cookie login.
 export const AGENT_OFFER_TEXT = {

@@ -145,21 +145,25 @@ describe('navigation', () => {
     await expect(rig.host.navAction('n1', 'go')).rejects.toMatchObject({ code: 'bad_request' })
   })
 
-  it('a popup (window.open) is closed and its url opened in the opener node', async () => {
-    await openLive()
+  it('a popup (window.open) is closed and announced as a new node; the opener page is NOT navigated', async () => {
+    const { events } = await openLive()
     const info = { targetId: 'P1', type: 'page', title: '', url: 'https://pop.example/x', openerId: 'T1' }
     rig.fake.emit(CDP_EVENT.targetCreated, { targetInfo: info })
-    await waitFor(() => callsOf(CDP.navigate).some((c) => c.params.url === 'https://pop.example/x'), 'popup navigation')
+    await waitFor(() => events.some((e) => e.k === 'popup'), 'popup event')
+    expect(events).toContainEqual({ k: 'popup', nodeId: 'n1', url: 'https://pop.example/x' })
+    await waitFor(() => callsOf(CDP.closeTarget).length === 1, 'popup closed')
     expect(callsOf(CDP.closeTarget)[0].params).toEqual({ targetId: 'P1' })
-    expect(callsOf(CDP.createTarget)).toHaveLength(1) // tidak ada node baru
+    expect(callsOf(CDP.navigate).map((c) => c.params.url)).toEqual(['https://example.com/']) // pembuka tetap di halamannya
+    expect(rig.host.state('n1')?.url).toBe('https://example.com/')
   })
 
   it('a popup that gets its url later is handled on targetInfoChanged', async () => {
-    await openLive()
+    const { events } = await openLive()
     const base = { targetId: 'P2', type: 'page', title: '', openerId: 'T1' }
     rig.fake.emit(CDP_EVENT.targetCreated, { targetInfo: { ...base, url: '' } })
     rig.fake.emit(CDP_EVENT.targetInfoChanged, { targetInfo: { ...base, url: 'https://late.example/' } })
-    await waitFor(() => callsOf(CDP.navigate).some((c) => c.params.url === 'https://late.example/'), 'late popup navigation')
+    await waitFor(() => events.some((e) => e.k === 'popup'), 'late popup event')
+    expect(events).toContainEqual({ k: 'popup', nodeId: 'n1', url: 'https://late.example/' })
   })
 })
 
@@ -235,7 +239,19 @@ describe('lifecycle and extras', () => {
     await waitFor(() => events.length === 1, 'crash event')
     expect(events[0]).toEqual({ k: 'error', nodeId: 'n1', code: 'crashed' })
     expect(rig.host.state('n1')?.live).toBe('discarded')
-    await expect(rig.host.input('n1', { t: 'text', text: 'x' })).rejects.toMatchObject({ code: 'not_found' })
+    // Regresi: input sesudah crash dulu `not_found` ("This browser session no longer exists.") dan menimpa pesan crash.
+    await expect(rig.host.input('n1', { t: 'text', text: 'x' })).rejects.toMatchObject({ code: 'crashed' })
+  })
+
+  it('Reload after a crash reopens the page at its last url instead of failing', async () => {
+    const { events } = await openLive()
+    rig.fake.emit(CDP_EVENT.targetCrashed, { targetId: 'T1' })
+    await waitFor(() => events.length === 1, 'crash event')
+    await rig.host.navAction('n1', 'reload')
+    expect(rig.host.state('n1')?.live).toBe('live')
+    expect(callsOf(CDP.createTarget)).toHaveLength(2)
+    expect(callsOf(CDP.navigate).at(-1)).toMatchObject({ params: { url: 'https://example.com/' }, sessionId: 'S-T2' })
+    await expect(rig.host.input('n1', { t: 'text', text: 'x' })).resolves.toBeUndefined()
   })
 
   it('a dropped CDP socket marks all nodes of that workspace as crashed', async () => {
