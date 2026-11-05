@@ -5,7 +5,7 @@ import type { Node } from '@xyflow/react'
 import { useReactFlow } from '@xyflow/react'
 import { childOnPath, childPath, fileOpenTarget, folderTitle } from './fileBrowse'
 import { EDITOR_SIZE, planFileOpen } from './fileOpen'
-import { rectOfNode, revealNode } from './nodeReveal'
+import { rectOfNode, revealNode, selectOnly } from './nodeReveal'
 import { randomId } from './randomId'
 
 interface Args {
@@ -37,10 +37,6 @@ export function useFilesOpen({ id, cwd, title, swatch, setNotice, pendingSel }: 
     return position
   }
 
-  /** Jadikan `nid` satu-satunya node terpilih. Seleksi saja (tidak dipersist), sama seperti reuse di useBrowserOpen. */
-  const selectOnly = (nid: string) =>
-    rf.setNodes((prev) => prev.map((n) => (!!n.selected === (n.id === nid) ? n : { ...n, selected: n.id === nid })))
-
   const openFile = (p: string, name: string) => {
     // Tab browser tidak bisa menyerahkan file ke OS mesin server — katakan, jangan buka buffer sampah.
     if (fileOpenTarget(p) !== 'canvas') { setNotice(`${name} needs an application on the server to open.`); return }
@@ -49,11 +45,11 @@ export function useFilesOpen({ id, cwd, title, swatch, setNotice, pendingSel }: 
     // tanpa kamera + fokus, editor yang sudah ada di luar layar terasa "tidak terjadi apa-apa".
     if (plan.focus) {
       const hit = rf.getNode(plan.nodeId)
-      selectOnly(plan.nodeId)
+      selectOnly(rf, plan.nodeId)
       if (hit) revealNode(rf, plan.nodeId, rectOfNode(hit))
     } else {
       const position = addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: name }, EDITOR_SIZE)
-      selectOnly(plan.nodeId)
+      selectOnly(rf, plan.nodeId)
       // Node baru belum ada di DOM sampai commit; rect-nya sudah diketahui dari posisi + EDITOR_SIZE.
       requestAnimationFrame(() => revealNode(rf, plan.nodeId, { ...position, ...EDITOR_SIZE }))
     }

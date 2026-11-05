@@ -17,6 +17,7 @@ import { editorFileKind, fileBaseName, fileExt } from './editorFile'
 import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hints'
 import { EditorRenamePreview } from './EditorRenamePreview'
 import { loadMonaco } from './lazyMonaco'
+import { ShowInFilesButton } from './ShowInFilesButton'
 import './editor.css'
 
 export interface EditorNodeProps extends NodeProps {
@@ -151,6 +152,7 @@ function EditorNode({
             )}
           </span>
           <span className="editor-node__spacer" />
+          <ShowInFilesButton editorId={id} />
           <NodeResizeToggle />
           <ToolbarContainer className="nodrag editor-node__actions">
             {editable && (
