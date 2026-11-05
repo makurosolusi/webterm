@@ -6,6 +6,14 @@ import { listCommands } from './commandRegistry'
 import type { BriefResponse } from '../server/brief/brief.service'
 import type { HandoffWorkspace } from './MorningBriefContinue'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 const T0 = 1_700_000_000_000
 const brief = (over: Partial<BriefResponse> = {}): BriefResponse => ({
   since: T0, generatedAt: T0 + 1, headSeq: 3, visitStartedAt: T0 + 1, dismissed: false, llm: false,
@@ -62,6 +70,9 @@ test('dismiss hides the card and persists it server-side', async () => {
   respond(brief())
   render(<MorningBrief {...props} />)
   await screen.findByRole('dialog')
+  const close = screen.getByRole('button', { name: 'Dismiss morning brief' })
+  expect(close.hasAttribute('title')).toBe(false)
+  expect(tipOf(close)).toBe('Dismiss morning brief')
   respond(brief({ dismissed: true }))
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss morning brief' })) })
   expect(screen.queryByRole('dialog')).toBeNull()

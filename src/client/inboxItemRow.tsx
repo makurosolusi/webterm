@@ -3,9 +3,10 @@
 // already-matched resume approval, readiness of the approved list, and the selection callbacks.
 //
 // Gating rule while the approved list is still loading: a task row's Review action is disabled
-// (title "Checking existing approvals…") because minting consent before we know whether an
+// (tooltip "Checking existing approvals…") because minting consent before we know whether an
 // approved-but-unconsumed one exists is exactly the duplicate-approval bug (QC B4). Approval-kind
 // rows and non-task rows are never gated.
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { ApprovedApproval, InboxItem, InboxState } from './inboxApi'
 import { SECTION_LABEL, formatAge, reviewBlockedReason } from './inboxPanelModel'
 
@@ -41,6 +42,7 @@ export function InboxItemRow(props: InboxItemRowProps): React.JSX.Element {
   const blocked = reviewBlockedReason(item)
   const checking = item.kind === 'task' && !ready
   const description = describe(item)
+  const reviewBlocked = checking ? 'Checking existing approvals…' : blocked
   return (
     <li className="inbox-item" data-row-key={`r:${item.id}`} data-selected={selected ? 'true' : 'false'}
       tabIndex={tabIndex} title={description}>
@@ -56,12 +58,20 @@ export function InboxItemRow(props: InboxItemRowProps): React.JSX.Element {
           aria-label={`Finish approval for ${item.title}`} onClick={onOpen}>
           Finish approval
         </button>
+      ) : reviewBlocked !== null ? (
+        // Own hover span instead of `disabled`: IconTooltip's disabled wrapper is a tab stop, and
+        // row actions stay out of the tab order (the list is driven by arrow keys).
+        <IconTooltip label={reviewBlocked}>
+          <span data-slot="icon-tooltip-disabled" className="inline-flex [&>*]:pointer-events-none">
+            <button type="button" className="inbox-action" tabIndex={-1} data-inbox-open
+              aria-label={`Review ${item.title}`} disabled onClick={onOpen}>
+              Review
+            </button>
+          </span>
+        </IconTooltip>
       ) : (
         <button type="button" className="inbox-action" tabIndex={-1} data-inbox-open
-          aria-label={`Review ${item.title}`}
-          title={checking ? 'Checking existing approvals…' : blocked ?? undefined}
-          disabled={checking || blocked !== null}
-          onClick={onOpen}>
+          aria-label={`Review ${item.title}`} onClick={onOpen}>
           Review
         </button>
       )}

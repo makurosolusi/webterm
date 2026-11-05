@@ -21,6 +21,15 @@ const TASK: InboxItem = {
   fence: 7,
 }
 
+/** Tooltip text of a row action: a blocked Review sits in a hover span, so focus its parent. */
+const tipOf = (button: Element): string | null => {
+  const trigger = button.parentElement!
+  fireEvent.focus(trigger)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(trigger)
+  return text
+}
+
 const APPROVED: ApprovedApproval = {
   id: 'ap-approved',
   projectId: 'proj-a',
@@ -181,7 +190,8 @@ describe('approved-but-unconsumed resume', () => {
     expect(await screen.findByText('Review task')).toBeDefined()
     const review = screen.getByRole('button', { name: 'Review Review task' })
     expect(isDisabled(review)).toBe(true)
-    expect(review.getAttribute('title')).toBe('Checking existing approvals…')
+    expect(review.hasAttribute('title')).toBe(false)
+    expect(tipOf(review)).toBe('Checking existing approvals…')
     fireEvent.click(review)
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(client.requestApproval).not.toHaveBeenCalled()
@@ -190,7 +200,7 @@ describe('approved-but-unconsumed resume', () => {
     await waitFor(() =>
       expect(isDisabled(screen.getByRole('button', { name: 'Review Review task' }))).toBe(false)
     )
-    expect(screen.getByRole('button', { name: 'Review Review task' }).getAttribute('title')).toBeNull()
+    expect(tipOf(screen.getByRole('button', { name: 'Review Review task' }))).toBeNull()
   })
 
   it('leaves non-task rows reviewable while the approved list is pending', async () => {
@@ -202,7 +212,7 @@ describe('approved-but-unconsumed resume', () => {
 
     const review = await screen.findByRole('button', { name: 'Review Deploy main' })
     expect(isDisabled(review)).toBe(false)
-    expect(review.getAttribute('title')).toBeNull()
+    expect(tipOf(review)).toBeNull()
   })
 
   it('re-gates a task row when the panel is closed and reopened', async () => {
@@ -224,7 +234,7 @@ describe('approved-but-unconsumed resume', () => {
     view.rerender(<InboxPanel client={reopened} now={() => NOW} open />)
     const gated = await screen.findByRole('button', { name: 'Review Review task' })
     expect(isDisabled(gated)).toBe(true)
-    expect(gated.getAttribute('title')).toBe('Checking existing approvals…')
+    expect(tipOf(gated)).toBe('Checking existing approvals…')
     fireEvent.click(gated)
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(reopened.requestApproval).not.toHaveBeenCalled()

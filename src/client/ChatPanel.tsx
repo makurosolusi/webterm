@@ -8,6 +8,7 @@
 // a tool card shows name/state only.
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { IconTooltip } from '@/components/ui/icon-button'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
@@ -116,10 +117,12 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (!open) return null
 
   const refreshButton = (
-    <button type="button" className="vscode-panel-action" aria-label="Refresh conversations"
-      title="Refresh conversations" onClick={() => setRefreshKey((key) => key + 1)}>
-      <span className="codicon codicon-refresh" aria-hidden="true" />
-    </button>
+    <IconTooltip label="Refresh conversations">
+      <button type="button" className="vscode-panel-action" aria-label="Refresh conversations"
+        onClick={() => setRefreshKey((key) => key + 1)}>
+        <span className="codicon codicon-refresh" aria-hidden="true" />
+      </button>
+    </IconTooltip>
   )
   const current = conversations?.find((row) => row.id === selected) ?? null
 
@@ -133,10 +136,12 @@ export default function ChatPanel(props: ChatPanelProps) {
             onClick={() => setRefreshKey((key) => key + 1)}>
             Retry
           </button>
-          <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
-            onClick={() => setListError(null)}>
-            <span className="codicon codicon-close" aria-hidden="true" />
-          </button>
+          <IconTooltip label="Dismiss error">
+            <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
+              onClick={() => setListError(null)}>
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </button>
+          </IconTooltip>
         </div>
       )}
 

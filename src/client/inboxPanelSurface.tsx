@@ -6,6 +6,7 @@
 // sheets, which scope every selector under the panel class so an embedded pane inherits the
 // metrics without the surface chrome.
 import type { ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { togglePanelMaximized, usePanelHeight } from './bottomPanelHeight'
 import { BottomPanelSash } from './bottomPanelSash'
 import { BottomPanelTabs, type BottomPanelTab } from './bottomPanelTabs'
@@ -34,6 +35,7 @@ export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Elem
   const { tabs, activeId, onActivate, onClose, onClosePanel, actions, children, className, ariaLabel } = props
   const { maximized } = usePanelHeight()
   const maximizeLabel = maximized ? 'Restore Panel Size' : 'Maximize Panel Size'
+  const maximizeTip = maximized ? 'Panel maximized. Click to restore its size' : 'Click to maximize the panel'
   return (
     <section
       className={['vscode-bottom-panel', className].filter(Boolean).join(' ')}
@@ -52,15 +54,18 @@ export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Elem
         />
         <div className="vscode-bottom-panel__actions" role="toolbar" aria-label={`${ariaLabel} actions`}>
           {actions}
-          <button type="button" className="vscode-panel-action" aria-label={maximizeLabel}
-            title={maximizeLabel} aria-pressed={maximized} onClick={togglePanelMaximized}>
-            <span className={`codicon codicon-chevron-${maximized ? 'down' : 'up'}`} aria-hidden="true" />
-          </button>
-          {onClosePanel !== undefined && (
-            <button type="button" className="vscode-panel-action" aria-label="Close Panel"
-              title="Close Panel" onClick={onClosePanel}>
-              <span className="codicon codicon-close" aria-hidden="true" />
+          <IconTooltip label={maximizeTip}>
+            <button type="button" className="vscode-panel-action" aria-label={maximizeLabel}
+              aria-pressed={maximized} onClick={togglePanelMaximized}>
+              <span className={`codicon codicon-chevron-${maximized ? 'down' : 'up'}`} aria-hidden="true" />
             </button>
+          </IconTooltip>
+          {onClosePanel !== undefined && (
+            <IconTooltip label="Close Panel">
+              <button type="button" className="vscode-panel-action" aria-label="Close Panel" onClick={onClosePanel}>
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </button>
+            </IconTooltip>
           )}
         </div>
       </div>

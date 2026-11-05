@@ -10,6 +10,14 @@ import { InboxPanelSurface } from './inboxPanelSurface'
 
 const WINDOW_HEIGHT = 1000
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 beforeEach(() => {
   vi.stubGlobal('innerHeight', WINDOW_HEIGHT)
   localStorage.clear()
@@ -91,7 +99,9 @@ describe('InboxPanelSurface chrome', () => {
 
   it('maximize toggles the panel and the label follows', () => {
     renderSurface()
+    expect(tipOf(screen.getByRole('button', { name: 'Maximize Panel Size' }))).toBe('Click to maximize the panel')
     fireEvent.click(screen.getByRole('button', { name: 'Maximize Panel Size' }))
+    expect(tipOf(screen.getByRole('button', { name: 'Restore Panel Size' }))).toBe('Panel maximized. Click to restore its size')
     expect(document.querySelector('.vscode-bottom-panel')?.getAttribute('data-maximized')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Restore Panel Size' }))
     expect(document.querySelector('.vscode-bottom-panel')?.getAttribute('data-maximized')).toBe('false')
@@ -99,6 +109,8 @@ describe('InboxPanelSurface chrome', () => {
 
   it('closes the panel from the toolbar and a tab from its close button', () => {
     const { onClosePanel, onClose } = renderSurface()
+    expect(screen.getByRole('button', { name: 'Close Panel' }).hasAttribute('title')).toBe(false)
+    expect(tipOf(screen.getByRole('button', { name: 'Close Panel' }))).toBe('Close Panel')
     fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }))
     expect(onClosePanel).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Close Chat' }))

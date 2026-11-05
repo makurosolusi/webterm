@@ -1,4 +1,5 @@
 // Kotak filter sidebar: input VS Code (24px) dengan tombol hapus codicon. Esc mengosongkan filter.
+import { IconTooltip } from '@/components/ui/icon-button'
 import { sidebarFilterKeyAction } from './sessionList'
 
 export interface SessionsFilterProps {
@@ -24,15 +25,16 @@ export function SessionsFilter({ value, onChange }: SessionsFilterProps) {
         }}
       />
       {value !== '' && (
-        <button
-          type="button"
-          className="ss-search__clear"
-          aria-label="Clear filter"
-          title="Clear filter (Esc)"
-          onClick={() => onChange('')}
-        >
-          <span className="codicon codicon-close" aria-hidden />
-        </button>
+        <IconTooltip label="Clear filter" shortcut="Esc">
+          <button
+            type="button"
+            className="ss-search__clear"
+            aria-label="Clear filter"
+            onClick={() => onChange('')}
+          >
+            <span className="codicon codicon-close" aria-hidden />
+          </button>
+        </IconTooltip>
       )}
     </div>
   )

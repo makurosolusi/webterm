@@ -3,6 +3,7 @@
 // live in ./Timeline.model; the live feed in ./Timeline.stream; level + integrity in ./Timeline.status.
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import type { Workspace, WsNode } from '../shared/workspace'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { VscodeTooltip } from './components/vscode/vscodeTooltip'
 import { LEVEL_NAMES } from './central/centralLabels'
 import { useRegisterCommands, type Command } from './commandRegistry'
@@ -112,7 +113,7 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
           <section key={g.key} className="timeline-group" data-group={g.key} data-running={g.running ? 'true' : undefined}>
             <header className="timeline-group__head">
               {g.focusId
-                ? <button type="button" className="timeline-group__label" onClick={() => onFocusNode(g.focusId!)} title="Focus node">{g.label}</button>
+                ? <IconTooltip label="Focus this node on the canvas"><button type="button" className="timeline-group__label" onClick={() => onFocusNode(g.focusId!)}>{g.label}</button></IconTooltip>
                 : <span className="timeline-group__label">{g.label}</span>}
               {g.running && <span className="timeline-running">running</span>}
               {mode !== 'workspace' && wsName(g.workspaceId) && <span className="timeline-ws">{wsName(g.workspaceId)}</span>}

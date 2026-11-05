@@ -3,6 +3,7 @@
 // layar. Yang tinggal di sini hanya BENTUK baris: judulnya, glyph status, slot ikon, dan tombol
 // akhiri sesi. Logika pengelompokan tetap di `./sessionList` (bebas DOM, dites di node-env).
 import { useEffect, useRef, type ReactNode } from 'react'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { TreeItem } from './vscode/register'
 import { rowMeta, type SessionRowVM, type SignalCounts } from './sessionList'
 
@@ -57,16 +58,17 @@ function EndSessionButton({ label, onEnd }: { label: string; onEnd: () => void }
     return () => el.removeEventListener('click', handler)
   }, [])
   return (
-    <button
-      ref={ref}
-      type="button"
-      slot="actions"
-      className="ss-tree__end"
-      aria-label={`End session ${label}`}
-      title="End session"
-    >
-      <span className="codicon codicon-trash" aria-hidden />
-    </button>
+    <IconTooltip label="End session">
+      <button
+        ref={ref}
+        type="button"
+        slot="actions"
+        className="ss-tree__end"
+        aria-label={`End session ${label}`}
+      >
+        <span className="codicon codicon-trash" aria-hidden />
+      </button>
+    </IconTooltip>
   )
 }
 

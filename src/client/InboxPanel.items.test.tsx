@@ -3,6 +3,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { approveLabel, INBOX_ITEMS_PATH, InboxItems, snoozeUntil, type UnifiedItem } from './InboxPanel.items'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const base = { source: 'agent', approvalKind: null, body: null, impact: null, args: null, count: 1 }
 const ITEMS: UnifiedItem[] = [
@@ -40,6 +48,7 @@ describe('InboxItems', () => {
     expect(screen.queryByText('Approval: task.review')).toBeNull()
     expect(screen.getAllByText('Approve once')).toHaveLength(2)
     expect(screen.getAllByText('Always allow this pattern')).toHaveLength(1)
+    expect(tipOf(screen.getByRole('button', { name: 'Always allow this pattern' }))).toBe('Saves a permanent rule (only from this window, never from Telegram)')
     expect(screen.getByText('Dismiss')).toBeTruthy()
   })
 

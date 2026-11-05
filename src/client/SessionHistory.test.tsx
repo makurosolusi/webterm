@@ -7,6 +7,14 @@ import SessionHistory from './SessionHistory'
 import type { AgentSession } from './SessionHistory.api'
 import type { Workspace } from '../shared/workspace'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 const ws = (id: string, cwd?: string): Workspace => ({ id, name: id, cwd, viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], bridges: [], updatedAt: 0 })
 const s = (i: number, over: Partial<AgentSession> = {}): AgentSession => ({
   agent: 'claude', id: `sess-${i}`, cwd: '/repo', title: `Prompt ${i}`, startedAt: 0, endedAt: 0, messageCount: 2, ...over,
@@ -40,6 +48,7 @@ describe('SessionHistory panel', () => {
 
     await screen.findByText('Prompt 1')
     expect(calls[0]).toContain('cwd=%2Frepo')
+    expect(tipOf(screen.getByRole('button', { name: 'Refresh agent history' }))).toBe('Refresh agent history')
     fireEvent.click(screen.getByText('Load more'))
     await screen.findByText('Prompt 2')
     expect(calls[1]).toContain('offset=1')

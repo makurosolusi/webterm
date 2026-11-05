@@ -5,6 +5,14 @@ import type { Workspace } from '../shared/workspace'
 import { TimelinePanel } from './Timeline'
 import type { TimelineEvent } from './Timeline.model'
 
+/** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
+const tipOf = (el: Element): string | null => {
+  fireEvent.focus(el)
+  const text = document.querySelector('[role="tooltip"]')?.textContent ?? null
+  fireEvent.blur(el)
+  return text
+}
+
 // test-only fakes: a controllable EventSource and an in-memory /api/events + /api/central server.
 class FakeES {
   static all: FakeES[] = []
@@ -123,6 +131,7 @@ describe('TimelinePanel', () => {
     fireEvent.click(screen.getByText('calm-heron finished a turn'))
     expect(onFocus).toHaveBeenLastCalledWith('n2')
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'node' } })
+    expect(tipOf(screen.getByRole('button', { name: 'calm-heron' }))).toBe('Focus this node on the canvas')
     fireEvent.click(screen.getByRole('button', { name: 'calm-heron' }))
     expect(onFocus).toHaveBeenCalledTimes(2)
   })
