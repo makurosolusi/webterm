@@ -39,6 +39,10 @@ export {
 
 import { DEFAULT_ACCOUNT_ID } from './channelStoreMigrate'
 import { PersistError, filePersistence, type ChannelStorePersistence } from './channelStorePersist'
+import { recordEgress } from './channelStatus'
+import { createLogger } from '../logs'
+
+const log = createLogger('channels')
 
 export { DEFAULT_ACCOUNT_ID, STORE_V1_BACKUP_SUFFIX, type ChannelAccount } from './channelStoreMigrate'
 
@@ -82,6 +86,8 @@ export class ChannelStore {
   private readonly dedupeLimit: number
   private readonly outboxLimit: number
   private state: ChannelStoreState
+  /** Replies refused because the outbox was full of pending rows, since this store was opened. */
+  private droppedReplies = 0
 
   constructor(store: string | ChannelStorePersistence, options: ChannelStoreOptions = {}) {
     if (typeof store === 'string' && !store.trim()) throw new ChannelStoreError('read_failed', '<empty>')
@@ -184,6 +190,9 @@ export class ChannelStore {
     const key = bindingKey(channel, accountId, String(updateId))
     if (!(key in this.state.processed)) return
     delete this.state.processed[key]
+    // claimUpdate advanced the persisted cursor; roll it back so a restart re-fetches this update
+    // instead of skipping it. Over-rewinding is safe: re-fetched later updates hit the dedupe.
+    this.state.cursor = Math.max(0, Math.min(this.state.cursor, updateId - 1))
     this.save()
   }
 
@@ -195,7 +204,15 @@ export class ChannelStore {
     if (this.state.outbox.length >= this.outboxLimit) {
       // Sent and dead rows are reclaimable; pending rows are never silently dropped.
       this.state.outbox = this.state.outbox.filter((row) => row.state === 'pending')
-      if (this.state.outbox.length >= this.outboxLimit) return 'full'
+      if (this.state.outbox.length >= this.outboxLimit) {
+        // Never silent: log it and put it on the egress status so the channel panel shows the backlog.
+        this.droppedReplies += 1
+        const pending = this.state.outbox.length
+        const message = `${input.channel} reply queue full (${pending} pending): reply dropped, ${this.droppedReplies} since start`
+        log.warn('channel.outbox_full', message, { channel: input.channel, pending, dropped: this.droppedReplies })
+        recordEgress({ ok: false, at: this.clock(), error: message })
+        return 'full'
+      }
     }
     this.state.outbox.push({
       key: input.key,

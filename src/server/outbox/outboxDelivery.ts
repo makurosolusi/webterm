@@ -51,6 +51,11 @@ const SUBMIT_POLL_MS = 100
 const SUBMIT_POLLS = 20
 /** Non-Claude agents have no readable composer: same fixed gap the Diff-notes path used. */
 export const SUBMIT_GAP_MS = 150
+/** Ctrl-U: kill to line start, the clear-line every agent TUI honours (client agentActions KILL_LINE). */
+const KILL_LINE = '\x15'
+/** Wait before the one re-type of a batch whose text never showed up on screen. */
+export const OUTBOX_RETYPE_BACKOFF_MS = 2_000
+const UNCONFIRMED = 'typed but not confirmed on screen; Enter withheld'
 const PASTE_START = '\x1b[200~'
 const PASTE_END = '\x1b[201~'
 
@@ -75,6 +80,8 @@ export class OutboxDelivery {
   private busy = new Map<string, Promise<void>>()
   private again = new Set<string>()
   private hooks: Array<{ prefix: string; hook: DeliveryHook }> = []
+  /** Message ids already re-typed once after an unconfirmed type (in memory: a restart grants one more). */
+  private retyped = new Set<string>()
 
   constructor(private deps: OutboxDeps) {}
 
@@ -175,7 +182,7 @@ export class OutboxDelivery {
   private async type(nodeId: string, batch: OutboxMessage[], claude: boolean): Promise<void> {
     const text = batch.map((m) => m.body).join('\n\n')
     this.deps.sessions.input(nodeId, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}` : text)
-    const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    const sleep = this.sleep()
     let landed = !claude
     if (claude) {
       for (let i = 0; i < SUBMIT_POLLS && !landed; i++) {
@@ -186,10 +193,38 @@ export class OutboxDelivery {
       }
     } else await sleep(SUBMIT_GAP_MS)
     // Typed but never seen on screen: the Enter is withheld (it could submit something else).
-    if (!landed) { this.fail(batch, 'pty', 'typed but not confirmed on screen; Enter withheld'); return }
+    if (!landed) { await this.unconfirmed(nodeId, batch, text); return }
     for (const m of batch) for (const h of this.hooksFor(m)) h.beforeSubmit?.(m)
     this.settle(batch, 'pty')
     this.deps.sessions.input(nodeId, '\r')
+  }
+
+  private sleep(): (ms: number) => Promise<void> {
+    return this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  }
+
+  /**
+   * Undo the side effect first: the typed text may still be in the composer, where the next message
+   * would be appended to it. Clear it (Ctrl-U per typed line, one write each so the TUI sees each
+   * key), then re-queue each message once after a backoff; a second miss, or a composer that will
+   * not clear, fails the message (re-typing onto leftover text would garble it).
+   */
+  private async unconfirmed(nodeId: string, batch: OutboxMessage[], text: string): Promise<void> {
+    const sleep = this.sleep()
+    for (let i = 0; i < text.split('\n').length; i++) {
+      this.deps.sessions.input(nodeId, KILL_LINE)
+      await sleep(SUBMIT_POLL_MS)
+    }
+    const src = this.deps.sessions.screenSource(nodeId)
+    const cleared = !!src && readClaudeComposer(await this.screen(src)) === 'empty'
+    const fresh = cleared ? batch.filter((m) => !this.retyped.has(m.id)) : []
+    const done = batch.filter((m) => !fresh.includes(m))
+    if (done.length) this.fail(done, 'pty', cleared ? UNCONFIRMED : `${UNCONFIRMED}; composer could not be cleared`)
+    if (!fresh.length) return
+    for (const m of fresh) this.retyped.add(m.id)
+    log.info('outbox.retype', 'Outbox text not confirmed on screen; composer cleared, re-typing once', { ids: { nodeId }, count: fresh.length })
+    await sleep(OUTBOX_RETYPE_BACKOFF_MS)
+    this.again.add(nodeId) // the per-node pass loops once more and re-checks every gate
   }
 
   private hooksFor(m: OutboxMessage): DeliveryHook[] {
@@ -206,11 +241,13 @@ export class OutboxDelivery {
   }
 
   private settle(items: OutboxMessage[], transport: OutboxTransport): void {
+    for (const m of items) this.retyped.delete(m.id)
     this.deps.store.markDelivered(items.map((m) => m.id), transport)
     for (const m of items) this.event('outbox.deliver', { ...m, transport })
   }
 
   private fail(items: OutboxMessage[], transport: OutboxTransport | null, error: string): void {
+    for (const m of items) this.retyped.delete(m.id)
     this.deps.store.markFailed(items.map((m) => m.id), transport, error)
     for (const m of items) this.event('outbox.fail', { ...m, transport, error })
     log.warn('outbox.fail', 'Outbox delivery failed', { ids: { nodeId: items[0]?.to }, count: items.length, error })
