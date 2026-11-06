@@ -20,6 +20,12 @@ export const APPROVALS_PATH = `${CENTRAL_API}/approvals`
 export const SKILLS_PATH = `${CENTRAL_API}/skills`
 export const MEMORY_PATH = `${CENTRAL_API}/memory`
 
+/** Server codes for a family whose feature is off (503); the tab shows an off state, not an error. */
+export const SKILLS_OFF = 'skills_off'
+export const AGENTS_OFF = 'agents_off'
+/** Sub-option of the Central capability that switches skills (`WEBTERM_CENTRAL_SKILLS`). */
+export const CENTRAL_SKILLS_SUB = 'centralSkills'
+
 /** Rows per page for list endpoints (the server caps lists at 200). */
 export const CENTRAL_PAGE_SIZE = 50
 const JSON_HEADERS = { 'Content-Type': 'application/json' }

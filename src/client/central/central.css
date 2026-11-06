@@ -4,6 +4,8 @@
 .ccp-section h3 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
 .ccp-privacy { margin: 0 0 8px; padding: 4px 8px; border-left: 3px solid var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); }
 .ccp-error { color: var(--vscode-errorForeground); margin: 4px 0; }
+.ccp-off { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px 0; }
+.ccp-off p { margin: 0; }
 .ccp-ok { color: var(--vscode-testing-iconPassed, var(--vscode-foreground)); margin: 4px 0; }
 .ccp-kv { display: grid; grid-template-columns: max-content 1fr; gap: 0 12px; margin: 4px 0; }
 .ccp-kv dt { color: var(--vscode-descriptionForeground); }

@@ -14,6 +14,8 @@ import { lintSkill } from './skills/skillLint'
 import { confirmPhrase } from './skills/skillLifecycle'
 import type { SkillStatus } from './contracts/skill.types'
 
+/** A feature that is switched off answers 503 `<feature>_off`, like `ledger_off` / `central_off`. */
+export const FEATURE_OFF = 503
 const DEFAULT_PAGE = 50
 const MAX_PAGE = 200
 const MAX_OFFSET = 1_000_000
@@ -49,6 +51,7 @@ export function statusView(h: Ca2Handle): RouteResult {
 
 /** Agents newest first, one query (no per-row lookups). */
 export function agentsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
+  if (!h.executor) return fail(FEATURE_OFF, 'agents_off')
   const page = pageOf(q)
   if (!page) return fail(400, 'invalid_page')
   const rows = allRows(h.db, 'SELECT id, project_id, kind, role, runner, state, owner FROM central_agents ORDER BY started_at DESC, id LIMIT ? OFFSET ?', page.limit, page.offset)
@@ -116,8 +119,9 @@ function activeText(h: Ca2Handle, name: string): string | null {
 
 /** Skills awaiting review, with lint findings and a line diff against the active version (all-added when none). */
 export function skillsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
+  if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   const page = pageOf(q)
-  if (!page || !h.skills) return fail(h.skills ? 400 : 404, h.skills ? 'invalid_page' : 'skills_off')
+  if (!page) return fail(400, 'invalid_page')
   const records = REVIEW_STATUSES.flatMap((s) => h.skills?.list(s, { limit: page.limit, offset: page.offset }) ?? [])
   const items = records.slice(0, page.limit).map((record) => {
     const text = draftText(h.skillsRoot, record.name, record.version)

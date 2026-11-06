@@ -1,5 +1,7 @@
 // Mounts the Central Agent v2 control-panel endpoints (WS-19). Nothing answers while CA2 is inert
-// (`activeCa2()` is null), so with every flag off these paths keep falling through to 404.
+// (`activeCa2()` is null), so with Central off these paths keep falling through to 404 (the panel only
+// opens while Central is on). With Central on, a family whose feature is off (agents, skills) answers
+// 503 `agents_off` / `skills_off`, the same `<feature>_off` shape as `ledger_off` / `central_off`.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RouteResult } from '../apiShared.types'
 import { cappedBodyGetter } from '../cappedRequestBody'
@@ -27,7 +29,7 @@ export const isCa2Path = (path: string): boolean =>
 const notAllowed: RouteResult = { status: 405, body: { error: 'method_not_allowed' } }
 const decode = (s: string): string | null => { try { return decodeURIComponent(s) } catch { return null } }
 
-/** Pure dispatcher: `null` = not a CA2 path (or a family that is off); tests call this without HTTP. */
+/** Pure dispatcher: `null` = not a CA2 path; tests call this without HTTP. */
 export async function ca2Dispatch(
   h: Ca2Handle, req: { method: string; path: string; query: URLSearchParams; body: () => Promise<unknown> }, actor = ROOT_HUMAN,
 ): Promise<RouteResult | null> {
@@ -35,7 +37,7 @@ export async function ca2Dispatch(
   if (!isCa2Path(path)) return null
   const reads: Record<string, () => RouteResult> = {
     '/status': () => statusView(h), '/approvals': () => approvalsView(h, query), '/memory': () => memoryView(h, query),
-    ...(h.executor ? { '/agents': () => agentsView(h, query) } : {}), ...(h.skills ? { '/skills': () => skillsView(h, query) } : {}),
+    '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query),
   }
   const read = reads[path.slice(BASE.length)]
   if (read) return method === 'GET' ? read() : notAllowed

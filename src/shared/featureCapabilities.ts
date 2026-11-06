@@ -45,6 +45,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   central: {
     id: 'central', title: 'Central Agent', implies: [], primaryKey: 'WEBTERM_CENTRAL', needs: 'agentEngine',
     blurb: 'An assistant that understands all your projects and nodes, and that you can talk to.',
+    subs: [{ key: 'WEBTERM_CENTRAL_SKILLS', label: 'Let Central use skills you review and approve', defaultOn: false }],
   },
   workers: {
     id: 'workers', title: 'Worker orchestrator', implies: ['central'], primaryKey: 'WEBTERM_ORCHESTRATOR_RUN',

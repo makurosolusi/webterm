@@ -3,11 +3,10 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
-import { inboxErrorMessage } from '../inboxApi'
 import { CL, LEVEL_NAMES } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
 import type { BudgetView, CentralControlClient, StatusView } from './centralControlTypes'
-import { useLoad } from './centralLoad'
+import { centralErrorMessage, useLoad } from './centralLoad'
 
 export interface LevelPanelProps {
   client?: CentralControlClient
@@ -49,7 +48,7 @@ export default function LevelPanel({ client = centralControlApi, onStatus }: Lev
       setMsg({ ok: true, text: CL.haltDone })
       control.reload()
     } catch (err) {
-      setMsg({ ok: false, text: inboxErrorMessage(err) })
+      setMsg({ ok: false, text: centralErrorMessage(err, CL.actionFailed) })
     }
     setConfirming(false)
   }

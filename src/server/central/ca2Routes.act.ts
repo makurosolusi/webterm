@@ -3,6 +3,7 @@
 import type { RouteResult } from '../apiShared.types'
 import { redactSecrets } from '../redactSecrets'
 import type { Ca2Handle } from './ca2Boot'
+import { FEATURE_OFF } from './ca2Routes.read'
 import { confirmPhrase } from './skills/skillLifecycle'
 import { SkillError } from './skills/skillIndex'
 import type { ToolResult } from './tools/toolTypes'
@@ -31,7 +32,7 @@ function fromTool(res: ToolResult): RouteResult {
 /** `POST /agents/:id/relay` — types a message into a live pty agent. */
 export async function relayAgent(h: Ca2Handle, id: string, raw: unknown): Promise<RouteResult> {
   const message = bodyOf(raw).message
-  if (!h.executor) return fail(404, 'agents_off')
+  if (!h.executor) return fail(FEATURE_OFF, 'agents_off')
   if (typeof message !== 'string' || message.trim() === '' || message.length > MAX_MESSAGE) return fail(400, 'invalid_message')
   const agent = h.executor.store.get(id)
   if (!agent) return fail(404, 'agent_not_found')
@@ -42,7 +43,7 @@ export async function relayAgent(h: Ca2Handle, id: string, raw: unknown): Promis
 
 /** `POST /agents/:id/close` — stops an agent; closing only reduces risk, so no approval is asked. */
 export async function closeAgent(h: Ca2Handle, id: string): Promise<RouteResult> {
-  if (!h.executor) return fail(404, 'agents_off')
+  if (!h.executor) return fail(FEATURE_OFF, 'agents_off')
   const agent = h.executor.store.get(id)
   if (!agent) return fail(404, 'agent_not_found')
   return fromTool(await h.executor.close(agent, UI_CLOSE_REASON, true))
@@ -65,7 +66,7 @@ function skillFailure(err: unknown): RouteResult {
 
 /** `POST /skills/:name/approve` and `/rollback`; both need a `human:*` actor. */
 export function skillAction(h: Ca2Handle, name: string, action: 'approve' | 'rollback', raw: unknown, actor: string): RouteResult {
-  if (!h.skills) return fail(404, 'skills_off')
+  if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   if (!actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
   try {
     if (action === 'rollback') { h.skills.rollback(name, actor); return { status: 200, body: { status: 'done' } } }

@@ -3,12 +3,11 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
-import { inboxErrorMessage } from '../inboxApi'
 import { CONFIRM_PHRASE } from '../inboxApprovalDialog'
 import { CL } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
 import type { ApprovalCard, CentralControlClient } from './centralControlTypes'
-import { useLoad } from './centralLoad'
+import { centralErrorMessage, useLoad } from './centralLoad'
 
 export interface ApprovalCardProps {
   card: ApprovalCard
@@ -33,7 +32,7 @@ export default function ApprovalCardR2({ card, onDecide, now = Date.now }: Appro
     try {
       await onDecide(card, approve)
     } catch (err) {
-      setError(inboxErrorMessage(err))
+      setError(centralErrorMessage(err, CL.actionFailed))
       setBusy(false)
     }
   }
