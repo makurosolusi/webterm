@@ -35,6 +35,8 @@ describe('vscode-overlay.css metrics', () => {
     expect(block('.vscode-tooltip')).toContain('max-width: 500px')
     expect(block('.vscode-tooltip')).toContain('padding: 2px 8px')
     expect(block('.vscode-tooltip')).toContain('line-height: 19px')
+    // workbench hover = 13px/19px (platform/hover/browser/hover.css); 12px is only the compact hover.
+    expect(block('.vscode-tooltip')).toContain('font-size: var(--ui-font-size, 13px)')
     expect(block('.vscode-tooltip')).toContain('--vscode-cornerRadius-large')
     expect(block('.vscode-tooltip')).toContain('--vscode-editorHoverWidget-border')
     expect(block('.vscode-tooltip')).toContain('--vscode-editorHoverWidget-background')
@@ -48,7 +50,7 @@ describe('vscode-menu.css metrics', () => {
     expect(block('.vscode-menu')).toContain('min-width: 160px')
     expect(block('.vscode-menu')).toContain('--vscode-cornerRadius-large')
     expect(block('.vscode-menu')).toContain('--wt-shadow-floating')
-    expect(block('.vscode-menu__row')).toContain('height: 24px')
+    expect(block('.vscode-menu__row')).toContain('height: var(--menu-row-h, 24px)')
     expect(block('.vscode-menu__row')).toContain('margin: 0 4px')
     expect(block('.vscode-menu__row')).toContain('--vscode-cornerRadius-medium')
     expect(block('.vscode-menu__icon')).toContain('width: 26px')

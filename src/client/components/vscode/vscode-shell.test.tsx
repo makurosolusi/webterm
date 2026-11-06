@@ -33,41 +33,42 @@ function cssBlock(selector: string): string {
 
 describe('vscode-shell.css metrics', () => {
   it('keeps the menu bar and menu rows at 35px and 22px', () => {
-    expect(cssBlock('.vscode-menu-bar')).toContain('height: 35px')
+    expect(cssBlock('.vscode-menu-bar')).toContain('height: var(--title-bar-h, 35px)')
     expect(cssBlock('.vscode-menu-bar__item')).toContain('padding: 0 8px')
-    expect(cssBlock('.vscode-menu__item')).toContain('height: 24px')
+    expect(cssBlock('.vscode-menu__item')).toContain('height: var(--menu-row-h, 24px)')
   })
 
   it('keeps a 48px activity bar with 48px items, 24px icons and a 2px active edge', () => {
     const bar = cssBlock('.vscode-activity-bar')
     const item = cssBlock('.vscode-activity-bar__item')
-    expect(bar).toContain('width: 48px')
-    expect(item).toContain('width: 48px')
-    expect(item).toContain('height: 48px')
+    expect(bar).toContain('width: var(--activity-bar-w, 48px)')
+    expect(item).toContain('width: var(--activity-bar-w, 48px)')
+    expect(item).toContain('height: var(--activity-bar-w, 48px)')
     expect(item).toContain('border-left: 2px')
-    expect(cssBlock('.vscode-activity-bar__icon')).toContain('width: 24px')
+    expect(cssBlock('.vscode-activity-bar__icon')).toContain('width: var(--activity-icon-size, 24px)')
+    expect(cssBlock('.vscode-activity-bar__icon > .codicon')).toContain('font-size: var(--activity-icon-size, 24px)')
     expect(cssBlock(".vscode-activity-bar__item[data-active='true']")).toContain('border-left-color')
   })
 
   it('keeps the editor tab strip at 35px with a 1px active top border and 16px close', () => {
-    expect(cssBlock('.vscode-editor-tabs')).toContain('height: 35px')
-    expect(cssBlock('.vscode-editor-tab')).toContain('height: 35px')
+    expect(cssBlock('.vscode-editor-tabs')).toContain('height: var(--editor-tabs-h, 35px)')
+    expect(cssBlock('.vscode-editor-tab')).toContain('height: var(--editor-tabs-h, 35px)')
     expect(cssBlock(".vscode-editor-tab[data-active='true']")).toContain('border-top-color')
-    expect(cssBlock('.vscode-editor-tab__close')).toContain('width: 16px')
+    expect(cssBlock('.vscode-editor-tab__close')).toContain('width: var(--ui-icon-size, 16px)')
     expect(cssBlock('.vscode-editor-tab__dirty')).toContain('width: 7px')
   })
 
   it('keeps the status bar 22px / 12px and items padded 0 5px', () => {
     const bar = cssBlock('.vscode-status-bar')
-    expect(bar).toContain('height: 22px')
-    expect(bar).toContain('font-size: 12px')
+    expect(bar).toContain('height: var(--status-bar-h, 22px)')
+    expect(bar).toContain('font-size: var(--status-font-size, 12px)')
     expect(cssBlock('.vscode-status-bar__item')).toContain('padding: 0 5px')
   })
 
   it('keeps breadcrumbs 22px / 12px and a 4px split sash', () => {
     const crumbs = cssBlock('.vscode-breadcrumbs')
     expect(crumbs).toContain('height: 22px')
-    expect(crumbs).toContain('font-size: 12px')
+    expect(crumbs).toContain('font-size: var(--ui-font-size-small, 12px)')
     expect(cssBlock(".vscode-split-view[data-orientation='horizontal']")).toContain('4px')
     expect(cssBlock('.vscode-split-view__sash')).toContain('width: 100%')
   })

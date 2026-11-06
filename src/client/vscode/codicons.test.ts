@@ -23,6 +23,13 @@ describe('installCodicons', () => {
     expect(a.rel).toBe('stylesheet')
     expect(document.querySelectorAll(`#${CODICON_STYLESHEET_ID}`)).toHaveLength(1)
   })
+
+  it('lands before the app stylesheets so equal-specificity chrome sizes (24px activity icon) win', () => {
+    const doc = document.implementation.createHTMLDocument('t')
+    doc.head.appendChild(doc.createElement('style'))
+    const link = installCodicons(doc)
+    expect(doc.head.firstElementChild).toBe(link)
+  })
 })
 
 describe('vscode-theme.css palette', () => {

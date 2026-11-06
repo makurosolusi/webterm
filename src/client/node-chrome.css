@@ -156,7 +156,7 @@
   padding: 0 6px 0 4px;
   background: var(--nc-tab-inactive-bg);
   color: var(--nc-tab-inactive-fg);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   cursor: default;
   user-select: none;
 }
@@ -166,7 +166,7 @@
 }
 
 /* Ikon tipe node (codicon) di depan judul, seperti ikon file pada tab. */
-.node-icon { flex-shrink: 0; font-size: 16px; }
+.node-icon { flex-shrink: 0; font-size: var(--ui-icon-size); }
 
 /* Judul sebagai teks; hanya namanya yang bisa diklik untuk rename. Tanpa `flex: 1` — yang mendorong
    toolbar ke kanan adalah `.node-toolbar { margin-left: auto }`, dan judul yang melar membuat chip
@@ -178,7 +178,7 @@
   white-space: nowrap;
   padding: 0 2px;
   color: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 400;
   cursor: default;
 }
@@ -188,7 +188,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--ui-font-size-small);
   opacity: 0.7;
 }
 /* Input rename: bentuk yang sama, hanya tanpa chrome field — judul tidak boleh bergeser saat
@@ -232,7 +232,7 @@
   gap: 4px;
   margin-left: 4px;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--ui-font-size-label);
   font-weight: 400;
   color: var(--state-success);
 }
