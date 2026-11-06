@@ -1,6 +1,7 @@
 // Canvas door of `agent.spawn` (F2-h): a new agent session opened over the socket goes through the
 // spawner; re-attach and plain shells do not. Fake PTY, rigged spawner.
 import { afterEach, describe, expect, it } from 'vitest'
+import type { ServerMsg } from '../shared/protocol'
 import { Sessions } from './sessions'
 import { FakePty } from './fakePty.testutil'
 import { createAgentSpawner, resetAgentSpawnerForTest } from './spawn/agentSpawn'
@@ -46,12 +47,18 @@ describe('canvas open routes through agent.spawn', () => {
     expect(r.events.filter((e) => e.kind === 'agent.spawn')).toHaveLength(1)
   })
 
-  it('a PTY that fails to start still throws to the caller and records nothing', async () => {
+  it('a PTY that fails to start records nothing and the node hears exactly one failed exit (A1)', async () => {
     const r = rig()
     r.failNext()
-    expect(() => r.sessions.handle(openAgent('n2'), send)).toThrow('pty refused')
+    const seen: ServerMsg[] = []
+    r.sessions.handle(openAgent('n2'), (m) => { seen.push(m) })
     await settle()
     expect(r.events).toEqual([])
     expect(r.lineage).toEqual([])
+    expect(seen.filter((m) => m.t === 'exit')).toEqual([{ t: 'exit', id: 'n2', code: -1, reason: 'failed' }])
+    expect(seen.some((m) => m.t === 'output' && m.data.includes('could not start: pty refused'))).toBe(true)
+    expect(seen).toContainEqual({ t: 'status', id: 'n2', status: 'failed' })
+    expect(r.sessions.statusOf('n2')).toBe('failed')
+    expect(r.sessions.getExit('n2')?.reason).toBe('failed')
   })
 })

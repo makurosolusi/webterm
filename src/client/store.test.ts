@@ -146,6 +146,12 @@ describe('groupByStatus', () => {
     expect(g.working[1].label).toBe('claude')
     expect(g.done[0].label).toBe('cccccccc')
   })
+
+  it('a failed agent lands in Blocked and a stopped one in Done (no columns of their own)', () => {
+    const g = groupByStatus([{ id: 'f', data: { kind: 'agent' } }, { id: 's', data: { kind: 'agent' } }], { f: 'failed', s: 'stopped' })
+    expect(g.blocked.map((c) => c.id)).toEqual(['f'])
+    expect(g.done.map((c) => c.id)).toEqual(['s'])
+  })
 })
 
 describe('workspaceNameFromPath', () => {

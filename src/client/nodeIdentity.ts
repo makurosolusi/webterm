@@ -61,6 +61,11 @@ export function idleAgentIds(
   return nodes.filter((n) => n.type === 'agent' && IDLE.has(statusOf(n.id))).map((n) => n.id)
 }
 
+/** Statuses after which the session is over and its conversation can be resumed: it finished, or
+ *  the user stopped it (A5). `failed` is excluded: it offers Retry, which resumes when it can. */
+const RESUMABLE_AFTER: ReadonlySet<AgentStatus | undefined> = new Set<AgentStatus | undefined>(['done', 'stopped'])
+export const canResumeAfter = (status: AgentStatus | undefined): boolean => RESUMABLE_AFTER.has(status)
+
 type SendClose = (msg: { t: 'close'; id: string }) => void
 type Confirm = (question: string) => boolean
 const browserConfirm: Confirm = (q) => window.confirm(q)

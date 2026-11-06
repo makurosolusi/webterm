@@ -13,6 +13,8 @@ const STATUS_COLOR: Record<AgentStatus, string> = {
   waiting: 'var(--state-warning)',
   blocked: 'var(--state-attention)',
   done: MINIMAP_NODE_NEUTRAL,
+  failed: 'var(--state-attention)',
+  stopped: MINIMAP_NODE_NEUTRAL,
 }
 
 /** Warna satu node di MiniMap: status agent berwarna (selesai = netral), selain itu netral. */

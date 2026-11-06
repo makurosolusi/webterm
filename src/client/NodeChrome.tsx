@@ -71,6 +71,8 @@ export function statusChip(status?: AgentStatus): { cls: string; label: string; 
     return { cls: 'node-status--attention', label: 'NEEDS YOU', title: 'Blocked — waiting for your approval' }
   if (status === 'waiting')
     return { cls: 'node-status--waiting', label: 'TURN ENDED', title: 'Turn ended — nothing is blocked' }
+  if (status === 'failed') return { cls: 'node-status--failed', label: 'FAILED', title: 'The agent failed to start or exited with an error' }
+  if (status === 'stopped') return { cls: 'node-status--stopped', label: 'STOPPED', title: 'Stopped — Resume continues the session' }
   return null
 }
 

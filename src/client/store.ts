@@ -59,6 +59,8 @@ export function toBridge(e: Edge): BridgeLink {
 }
 
 export const KANBAN_COLUMNS: AgentStatus[] = ['working', 'waiting', 'blocked', 'done']
+/** Statuses with no column of their own: a failed agent needs attention, a stopped one is over. */
+const KANBAN_FOLD: Partial<Record<AgentStatus, AgentStatus>> = { failed: 'blocked', stopped: 'done' }
 
 // Group agent nodes by their live status. Nodes without a status are omitted.
 export function groupByStatus(
@@ -66,12 +68,12 @@ export function groupByStatus(
   statuses: Record<string, AgentStatus>,
 ): Record<AgentStatus, { id: string; label: string }[]> {
   const out: Record<AgentStatus, { id: string; label: string }[]> =
-    { working: [], waiting: [], blocked: [], done: [] }
+    { working: [], waiting: [], blocked: [], done: [], failed: [], stopped: [] }
   for (const n of nodes) {
     if (n.data?.kind !== 'agent' && n.data?.agentId == null) continue
     const s = statuses[n.id]
     if (!s) continue
-    out[s].push({ id: n.id, label: n.data.title ?? n.data.agentId ?? n.id.slice(0, 8) })
+    out[KANBAN_FOLD[s] ?? s].push({ id: n.id, label: n.data.title ?? n.data.agentId ?? n.id.slice(0, 8) })
   }
   return out
 }
