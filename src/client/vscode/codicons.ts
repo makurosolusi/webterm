@@ -13,7 +13,9 @@ export function installCodicons(doc: Document = document): HTMLLinkElement {
   link.href = codiconHref
   // Paling depan di <head>: aturan codicon.css `.codicon[class*='codicon-'] { font: … 16px/1 }` (0,2,0) harus
   // kalah dari aturan chrome bertingkat sama (`.vscode-activity-bar__icon > .codicon` 24px); dipasang di
-  // belakang, ia menang urutan dan semua ikon terkunci 16px.
+  // belakang, ia menang urutan dan semua ikon terkunci 16px. Urutan saja TIDAK cukup: Monaco membawa salinan
+  // aturan yang sama di chunk malasnya, disisipkan paling belakang saat node editor mount — ukuran chrome yang
+  // bukan 16px wajib spesifisitas > (0,2,0), mis. `.x > .codicon[class*='codicon-']` (codicons.test.ts).
   doc.head.prepend(link)
   return link
 }

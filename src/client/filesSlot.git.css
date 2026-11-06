@@ -10,4 +10,4 @@
 /* Footer: branch + sync, VS Code status-bar items (icon + label). */
 .files-git-foot { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .files-git-foot__item { display: inline-flex; align-items: center; gap: 3px; }
-.files-git-foot .codicon { font-size: 12px; }
+.files-git-foot .codicon[class*='codicon-'] { font-size: 12px; }

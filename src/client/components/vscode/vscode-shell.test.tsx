@@ -46,7 +46,7 @@ describe('vscode-shell.css metrics', () => {
     expect(item).toContain('height: var(--activity-bar-w, 48px)')
     expect(item).toContain('border-left: 2px')
     expect(cssBlock('.vscode-activity-bar__icon')).toContain('width: var(--activity-icon-size, 24px)')
-    expect(cssBlock('.vscode-activity-bar__icon > .codicon')).toContain('font-size: var(--activity-icon-size, 24px)')
+    expect(cssBlock(".vscode-activity-bar__icon > .codicon[class*='codicon-']")).toContain('font-size: var(--activity-icon-size, 24px)')
     expect(cssBlock(".vscode-activity-bar__item[data-active='true']")).toContain('border-left-color')
   })
 
