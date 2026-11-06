@@ -90,7 +90,9 @@ async function node(n: TemplateNode, id: string, cwd: string | undefined, off: {
     w.claudeProfileId = launch.profile.id
     w.cmd = claudeLaunchLine(launch)
   }
-  if (cwd && (n.kind === 'terminal' || n.kind === 'agent' || n.kind === 'diff')) w.cwd = cwd
+  // Agent Chat is always Claude and records the profile like a builtin claude agent; it has no command line.
+  if (n.kind === 'agentChat') { w.agentId = 'claude'; w.claudeProfileId = resolveClaudeLaunch().profile.id }
+  if (cwd && (n.kind === 'terminal' || n.kind === 'agent' || n.kind === 'agentChat' || n.kind === 'diff')) w.cwd = cwd
   if (cwd && n.kind === 'files') w.dirPath = cwd
   if (n.url) {
     const url = httpUrl(sub(n.url))

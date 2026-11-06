@@ -11,6 +11,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useShownBottomView } from './bottomPanelHost'
 import { codicon } from './dockCodicon'
 import { useCommands } from './commandRegistry'
+import { AGENT_CHAT_COMMAND_ID } from './agentChat.add'
 import { CanvasStatusBar } from './Dock.statusBar'
 import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
@@ -113,13 +114,14 @@ export default function Dock(props: DockProps) {
     { id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') },
     ...(filesCommand ? [{ id: FILES_COMMAND_ID, label: 'Files', icon: codicon('files') }] : []),
     ...(diffCommand ? [{ id: DIFF_COMMAND_ID, label: 'Diff (working changes)', icon: codicon('diff') }] : []),
+    ...(commands.some((c) => c.id === AGENT_CHAT_COMMAND_ID && c.run) ? [{ id: AGENT_CHAT_COMMAND_ID, label: 'Agent Chat', icon: codicon('comment-discussion') }] : []),
     ...builtins.map((a) => {
       const cfg = agentConfig(a)
       return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, detail: cfg?.notice, icon: codicon('hubot') }
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
-  ], [builtins, visibleCustoms, diffCommand, filesCommand])
+  ], [builtins, visibleCustoms, diffCommand, filesCommand, commands])
 
   const onAddSelect = (id: string) => {
     if (id === ADD_TERMINAL_ID) return addTerminal()
@@ -129,8 +131,7 @@ export default function Dock(props: DockProps) {
       return setAddOpen(false)
     }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()
-    if (id === DIFF_COMMAND_ID) { diffCommand?.run?.(); return setAddOpen(false) }
-    if (id === FILES_COMMAND_ID) { filesCommand?.run?.(); return setAddOpen(false) }
+    if (id === DIFF_COMMAND_ID || id === FILES_COMMAND_ID || id === AGENT_CHAT_COMMAND_ID) { commands.find((c) => c.id === id)?.run?.(); return setAddOpen(false) }
     if (id.startsWith(ADD_BUILTIN_PREFIX)) return addBuiltin(id.slice(ADD_BUILTIN_PREFIX.length) as BuiltinAgentId)
     const custom = visibleCustoms.find((c) => `${ADD_CUSTOM_PREFIX}${c.id}` === id)
     if (custom) addCustom(custom)

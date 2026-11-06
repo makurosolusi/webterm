@@ -33,6 +33,7 @@ export interface AppTabsDeps {
   onAddFiles: () => void
   onAddDiff: () => void
   onAddBrowser?: () => void
+  onAddAgentChat?: () => void
   onAddAgent: (cmd: string, agentId: AgentId) => void
 }
 
@@ -68,9 +69,10 @@ export function useAppTabs(d: AppTabsDeps): TabsViewProps {
   }, [onAddAgent, settings.disabledAgents, settings.agentLaunchCommands])
 
   // Arrow wrappers: the menu/empty-state handlers receive a click event, which `addFlowNode` would read as a position.
-  const { onAddTerminal, onAddBrowser, onAddDiff } = d
+  const { onAddTerminal, onAddBrowser, onAddDiff, onAddAgentChat } = d
   return useMemo(() => ({
     nodes, statuses: d.statuses, onCloseNode: closeNode, onRenameNode, onAddAgent: addAgent,
     onAddTerminal: () => onAddTerminal(), onAddBrowser: onAddBrowser && (() => onAddBrowser()), onAddDiff: () => onAddDiff(), onAddFiles: () => onAddFiles(),
-  }), [nodes, d.statuses, closeNode, onRenameNode, addAgent, onAddTerminal, onAddBrowser, onAddDiff, onAddFiles])
+    onAddAgentChat: onAddAgentChat && (() => onAddAgentChat()),
+  }), [nodes, d.statuses, closeNode, onRenameNode, addAgent, onAddTerminal, onAddBrowser, onAddDiff, onAddFiles, onAddAgentChat])
 }

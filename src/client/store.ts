@@ -1,7 +1,7 @@
 // Pure serializers between React Flow nodes and persisted WsNodes.
 // The DB (via api.ts) is the source of truth; these functions carry no DOM/IO.
 import type { Node, Edge } from '@xyflow/react'
-import { validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
+import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
 
 export function toFlow(n: WsNode): Node {
   return {
@@ -10,7 +10,7 @@ export function toFlow(n: WsNode): Node {
     position: { x: n.x, y: n.y },
     width: n.width ?? 400,
     height: n.height ?? 300,
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, viewOpts: n.viewOpts, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, diffNotes: n.diffNotes, plan: n.plan },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, viewOpts: n.viewOpts, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode },
   }
 }
 
@@ -40,6 +40,8 @@ export function toWsNode(n: Node): WsNode {
     url: d.url,
     agentControl: d.agentControl,
     device: d.device,
+    chatSessionId: d.chatSessionId,
+    permissionMode: isPermissionMode(d.permissionMode) ? d.permissionMode : undefined,
     // Validated on the way out: node data is written by the Diff node and must not persist junk.
     diffNotes: d.diffNotes === undefined ? undefined : validDiffNotes(d.diffNotes),
     plan: d.plan === undefined ? undefined : validPlanData(d.plan),
