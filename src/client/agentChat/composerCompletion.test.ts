@@ -105,6 +105,16 @@ describe('agentChatCompletion', () => {
     expect(loadCommands).toHaveBeenCalledTimes(3)
   })
 
+  it('adds the host local commands to the catalog and to the fallback, never twice', async () => {
+    const local = [cmd('model'), cmd('deploy')]
+    const loadCommands = vi.fn().mockResolvedValueOnce([cmd('deploy')]).mockRejectedValueOnce(new Error('down'))
+    let clock = 0
+    const c = agentChatCompletion({ loadCommands, searchFiles, localCommands: local }, () => (clock += CATALOG_REUSE_MS + 1))
+    const t = completionTriggerAt('/', 1)!
+    expect((await c.provider(t)).map((i) => i.value).sort()).toEqual(['deploy', 'model'])
+    expect((await c.provider(t)).map((i) => i.value).sort()).toEqual([...FALLBACK_COMMANDS.map((f) => f.name), 'deploy', 'model'].sort())
+  })
+
   it('reuses a loaded catalog for CATALOG_REUSE_MS', async () => {
     let clock = 0
     const loadCommands = vi.fn(async () => [cmd('a')])

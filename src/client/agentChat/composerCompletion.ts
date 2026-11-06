@@ -3,7 +3,7 @@
 // (`/command` at the start of the message, `@path` at the start of any word), how a list is ranked,
 // and what accepting an item does to the draft. Accepting only INSERTS text; sending stays the
 // composer's own Enter. `agentChatCompletion` is the factory the Agent Chat node passes to ChatComposer.
-import type { AgentChatCommand } from '../../shared/agentChat.wire'
+import { AGENT_CHAT_FALLBACK_COMMANDS, type AgentChatCommand } from '../../shared/agentChat.wire'
 import { fuzzyFilter } from '../fuzzy'
 
 export type CompletionKind = 'slash' | 'file'
@@ -138,18 +138,10 @@ export function rankFiles(entries: readonly FileEntry[], query: string, limit = 
 }
 
 /**
- * Claude Code built-ins offered when the server catalog is empty or failed. Ported from nodeterm's
- * measured table (claude 2.1.285), only the commands that run at once with no TUI dialog: a chat
- * view cannot show `/model`'s or `/resume`'s picker, so those are left to the catalog to offer.
+ * Built-ins offered when the server catalog is empty or failed: the server's own fallback list
+ * (`GET catalog` answers 409/503 with it), so the client never shows a second, different list.
  */
-export const FALLBACK_COMMANDS: readonly AgentChatCommand[] = Object.freeze([
-  { name: 'clear', description: 'Start over with an empty context', builtin: true },
-  { name: 'compact', description: 'Summarize the conversation to free context', argumentHint: '[instructions]', builtin: true },
-  { name: 'init', description: 'Create the project instruction file', builtin: true },
-  { name: 'recap', description: 'Summarize the session in one line', builtin: true },
-  { name: 'reload-skills', description: 'Pick up skills changed on disk', builtin: true },
-  { name: 'security-review', description: 'Security review of pending changes', builtin: true },
-])
+export const FALLBACK_COMMANDS: readonly AgentChatCommand[] = AGENT_CHAT_FALLBACK_COMMANDS
 
 /** How long a loaded catalog is reused before the next `/` asks again (not a poll: only typing asks). */
 export const CATALOG_REUSE_MS = 30_000
@@ -158,17 +150,21 @@ export interface AgentChatCompletionSources {
   loadCommands: () => Promise<AgentChatCommand[]>
   /** Called with the typed query on each change; may return the whole index, the result is ranked here. */
   searchFiles: (query: string) => Promise<FileEntry[]>
+  /** Commands the host answers itself (e.g. `/model`), added to the catalog or the fallback unless already listed. */
+  localCommands?: readonly AgentChatCommand[]
 }
 
 /** Completion for the Agent Chat composer: `/` lists Claude Code commands, `@` lists files and folders. */
 export function agentChatCompletion(src: AgentChatCompletionSources, now: () => number = Date.now): ComposerCompletion {
   let catalog: { at: number; list: Promise<AgentChatCommand[]> } | null = null
+  const withLocal = (l: AgentChatCommand[]): AgentChatCommand[] =>
+    [...l, ...(src.localCommands ?? []).filter((c) => !l.some((x) => x.name === c.name))]
   const commands = (): Promise<AgentChatCommand[]> => {
     if (!catalog || now() - catalog.at > CATALOG_REUSE_MS) {
       // A failed or empty catalog falls back to the built-ins, and is asked again on the next `/`.
       const list = src.loadCommands().then(
-        (l) => { if (!l.length) catalog = null; return l.length ? l : [...FALLBACK_COMMANDS] },
-        () => { catalog = null; return [...FALLBACK_COMMANDS] },
+        (l) => { if (!l.length) catalog = null; return withLocal(l.length ? l : [...FALLBACK_COMMANDS]) },
+        () => { catalog = null; return withLocal([...FALLBACK_COMMANDS]) },
       )
       catalog = { at: now(), list }
       return list

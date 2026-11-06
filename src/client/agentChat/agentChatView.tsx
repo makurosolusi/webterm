@@ -1,37 +1,43 @@
 // Body of one agent chat node (PLAN/AGENT-CHAT.md W2): live SSE timeline, status line with Stop,
-// composer, mode / cost / context footer. One reducer per mounted view; the stream closes on unmount.
+// todo panel, composer with "/" and "@" completion, and the footer (mode, model, effort, history,
+// context, cost); the controls live in useAgentChatControls. One reducer per mounted view; the stream
+// closes on unmount.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import ChatComposer from '../chat/chatComposer'
 import type { ComposerImage } from '../chat/chatAttach'
 import { agentChatAttach } from './agentChatAttach'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
-import { chatErrorMessage, isAbortError } from '../chat/chatTransport'
+import { isAbortError } from '../chat/chatTransport'
 import type { ChatStreamStatus } from '../chat/chatTypes'
 import { AGENT_CHAT_TEXT_MAX, type AgentChatEvent } from '../../shared/agentChat.wire'
+import type { AgentChatNodeConfig } from '../../shared/agentChat.shape'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import { agentChatReducer, initialAgentChatState, isBusyStatus, runningToolName, type AgentChatState } from './agentChatStore'
-import { AgentChatApiError, createAgentChatTransport, type AgentChatTransport } from './agentChatTransport'
+import { createAgentChatTransport, type AgentChatTransport } from './agentChatTransport'
 import { AgentChatThread, type ThreadActions } from './agentChatThread'
 import { ModePicker } from './modePicker'
+import { AgentChatFooter } from './agentChatFooter'
+import { TodoPanel } from './todoPanel'
+import { useAgentChatControls, why, type AgentChatPatch } from './useAgentChatControls'
+import { useAgentChatAttention } from './useAgentChatAttention'
 import '../chat/chat.css'
 import './agentChat.css'
 
 /** Distance from the bottom (px) that still counts as "pinned" for auto-scroll. */
 const NEAR_BOTTOM_PX = 80
 const DEFAULT_MODE: AgentPermissionMode = 'manual'
-const COST_DIGITS = 4
 
-/** User text of a failed request (agent chat errors carry their own; anything else gets the shared text). */
-const why = (err: unknown): string => (err instanceof AgentChatApiError ? err.message : chatErrorMessage(err))
-
-export type AgentChatPatch = { chatSessionId?: string; permissionMode?: AgentPermissionMode }
+export type { AgentChatPatch }
 
 export interface AgentChatViewProps {
   nodeId: string
+  /** The node's folder (the server resolves it; `init` reports the result). */
+  cwd?: string
   chatSessionId?: string
   permissionMode?: AgentPermissionMode
-  /** Persists session id / mode into the node's data (rf.updateNodeData). */
+  chatConfig?: AgentChatNodeConfig
+  /** Persists session id / mode / config into the node's data (rf.updateNodeData). */
   onNodeData: (patch: AgentChatPatch) => void
   /** Test seam; defaults to the HTTP + SSE transport of `nodeId`. */
   transport?: AgentChatTransport
@@ -77,7 +83,7 @@ function useBatchedEvents(apply: (events: AgentChatEvent[]) => void) {
   return useMemo(() => ({ push, cancel }), [push, cancel])
 }
 
-export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeData, transport: injected }: AgentChatViewProps) {
+export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, onNodeData, transport: injected }: AgentChatViewProps) {
   const transport = useMemo(() => injected ?? createAgentChatTransport(nodeId), [injected, nodeId])
   const [state, dispatch] = useReducer(agentChatReducer, nodeId, initialAgentChatState)
   const [stream, setStream] = useState<ChatStreamStatus>('connecting')
@@ -92,7 +98,10 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
   const keepFromBottom = useRef<number | null>(null)
   const historyAbort = useRef<AbortController | null>(null)
 
-  const apply = useCallback((events: AgentChatEvent[]) => dispatch({ type: 'events', events }), [])
+  const controls = useAgentChatControls({ transport, state, stream, cwd, chatSessionId, permissionMode, chatConfig, onNodeData })
+  useAgentChatAttention(nodeId, state)
+  const noteEvents = controls.noteEvents
+  const apply = useCallback((events: AgentChatEvent[]) => { noteEvents(events); dispatch({ type: 'events', events }) }, [noteEvents])
   const batch = useBatchedEvents(apply)
 
   useEffect(() => {
@@ -125,11 +134,6 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
     return () => historyAbort.current?.abort()
   }, [opened, loadHistory])
 
-  // Persist what the server told us, once per change, so a reload resumes the same session and mode.
-  const sessionId = state.session?.sessionId
-  useEffect(() => { if (sessionId && sessionId !== chatSessionId) onNodeData({ chatSessionId: sessionId }) }, [sessionId, chatSessionId, onNodeData])
-  useEffect(() => { if (state.mode && state.mode !== permissionMode) onNodeData({ permissionMode: state.mode }) }, [state.mode, permissionMode, onNodeData])
-
   // Pinned to the bottom unless the user scrolled up; a prepended history page keeps the view still.
   useLayoutEffect(() => {
     const el = scrollRef.current
@@ -140,6 +144,7 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
 
   const busy = isBusyStatus(state.status)
   const send = (text: string, images: ComposerImage[] = []): void => {
+    if (controls.intercept(text, images.length > 0)) return
     setSendError(null)
     setSending(true)
     const wire = images.map(({ mediaType, data }) => ({ mediaType, data }))
@@ -243,25 +248,28 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
         </div>
       )}
 
+      {controls.error && (
+        <div className="chat-error" role="alert">
+          <span className="codicon codicon-error" aria-hidden="true" />
+          <span>{controls.error}</span>
+          <IconButton label="Dismiss error" size="icon-xs" onClick={controls.dismissError}>
+            <span className="codicon codicon-close" aria-hidden="true" />
+          </IconButton>
+        </div>
+      )}
+
       {sending && (
         <div className="agent-chat-sending" role="status">
           <span className="chat-progress" aria-hidden="true" />
           <span>Sending…</span>
         </div>
       )}
-      <ChatComposer busy={false} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
-        placeholder={busy ? 'Claude is working. Your message runs next…' : 'Ask Claude, or paste / drop images and files…'} maxLength={AGENT_CHAT_TEXT_MAX} />
+      <TodoPanel todos={state.todos} />
+      <ChatComposer busy={false} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
+        completion={controls.completion} maxLength={AGENT_CHAT_TEXT_MAX}
+        placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : 'Ask Claude, / for commands, @ for files…'} />
 
-      <footer className="agent-chat-footer">
-        <ModePicker mode={mode} onChange={(m) => transport.setMode(m)} />
-        {state.session?.model && <span className="agent-chat-footer__item" title="Model">{state.session.model}</span>}
-        {state.costUsd !== undefined && <span className="agent-chat-footer__item" title="Session cost">{`$${state.costUsd.toFixed(COST_DIGITS)}`}</span>}
-        {state.tokens && (
-          <span className="agent-chat-footer__item" title="Tokens of the last turn (input incl. cache / output)">
-            {`${state.tokens.input.toLocaleString('en-US')} in · ${state.tokens.output.toLocaleString('en-US')} out`}
-          </span>
-        )}
-      </footer>
+      <AgentChatFooter modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} />} {...controls.footer} />
     </section>
   )
 }

@@ -7,7 +7,7 @@ import { AGENT_CHAT_FALLBACK_COMMANDS } from '../../shared/agentChat.wire'
 import { createLogger } from '../logs'
 import { json } from '../routes/route.core'
 import { AGENT_CHAT_SESSIONS_MAX, parseConfigPatch, sessionSummaries, toCommand, toModel } from './agentChat.controls'
-import type { AgentChatPool } from './agentChat.pool'
+import { AGENT_CHAT_BUSY_SWITCH_REASON, type AgentChatPool } from './agentChat.pool'
 import type { AgentChatSession } from './agentChat.session'
 import { bad, fail, ok, readObject, type Ctx } from './agentChat.route.core'
 
@@ -66,6 +66,7 @@ export async function controlVerb(c: Ctx, deps: ControlDeps, nodeId: string, ver
     target = id
   }
   const r = deps.pool.switchTo(nodeId, target)
-  if (r && !r.ok) return fail(c, { status: r.status, error: 'session_locked', reason: r.reason })
+  // `busy` lets the client say why without echoing the body (agentChatErrorMessage).
+  if (r && !r.ok) return fail(c, { status: r.status, error: r.reason === AGENT_CHAT_BUSY_SWITCH_REASON ? 'busy' : 'session_locked', reason: r.reason })
   return ok(c)
 }

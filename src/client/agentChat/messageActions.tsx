@@ -1,6 +1,7 @@
 // Per-message actions in the agent chat timeline (Claude Code VS Code view: Copy on hover/focus).
 // CopyButton is shared with the command output block so every copy control behaves the same.
 import { useEffect, useState } from 'react'
+import { IconButton } from '@/components/ui/icon-button'
 import { writeClipboard } from '../clipboard'
 import type { ChatMessageView } from './agentChatStore'
 import './agentChatTimeline.css'
@@ -17,17 +18,17 @@ export function CopyButton({ text, label }: { text: () => string; label: string 
   }, [state])
   const note = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : ''
   return (
-    <button
-      type="button"
+    <IconButton
+      label={label}
+      tooltip={note || label}
+      size="icon-xs"
       className="act-copy"
-      aria-label={label}
-      title={note || label}
       data-state={state}
       onClick={() => void writeClipboard(text()).then((ok) => setState(ok ? 'copied' : 'failed'))}
     >
       <span className={`codicon codicon-${state === 'copied' ? 'check' : state === 'failed' ? 'error' : 'copy'}`} aria-hidden="true" />
       {note && <span className="act-copy__note" role="status">{note}</span>}
-    </button>
+    </IconButton>
   )
 }
 

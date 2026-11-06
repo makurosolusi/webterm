@@ -54,6 +54,8 @@ async function readError(res: Response): Promise<{ code: string; activeTurnId: s
   try {
     const body: unknown = await res.json()
     const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined
+    // The agent chat routes answer `{ error: '<code>', reason }` (a string code, see agentChat.route.core).
+    if (typeof error === 'string' && error !== '') return { code: error, activeTurnId: null }
     if (error && typeof error === 'object') {
       const row = error as Record<string, unknown>
       return {

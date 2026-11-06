@@ -1,5 +1,5 @@
 // Conversation history of the agent chat footer (Claude Code VS Code "Past conversations").
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Popover } from 'radix-ui'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
@@ -18,10 +18,12 @@ export interface SessionPickerProps {
   disabled?: boolean
   /** Icon-only trigger for narrow nodes. */
   compact?: boolean
+  /** Bump to open the list from outside (the `/resume` command); ignored while disabled. */
+  openRequest?: number
 }
 
 /** "History" popover: search, New conversation, resume a past one; closes once the action succeeds. */
-export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact }: SessionPickerProps) {
+export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact, openRequest }: SessionPickerProps) {
   const [open, setOpen] = useState(false)
   const [sessions, setSessions] = useState<AgentChatSessionSummary[]>()
   const [loading, setLoading] = useState(false)
@@ -47,6 +49,8 @@ export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact
     setActionError(undefined)
     try { await fn(); setOpen(false) } catch (e) { setActionError(`Could not ${what}: ${errorText(e)}`) } finally { setBusy(undefined) }
   }
+  // Only a new request opens it; `openChange` is rebuilt every render, so it is not a dependency.
+  useEffect(() => { if (openRequest && !disabled) openChange(true) }, [openRequest])
   const q = query.trim().toLowerCase()
   const shown = sessions?.filter((s) => s.title.toLowerCase().includes(q))
 

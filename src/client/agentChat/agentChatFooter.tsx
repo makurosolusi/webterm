@@ -30,6 +30,8 @@ export interface AgentChatFooterProps {
   onNewSession: () => Promise<void>
   /** Disables model, effort and history (e.g. while disconnected). */
   disabled?: boolean
+  /** Opens the model or history picker from outside (`/model`, `/resume`); bump `n` for each request. */
+  openPicker?: { which: 'model' | 'history'; n: number }
 }
 
 /** True while `ref`'s element is narrower than `px`. */
@@ -69,9 +71,11 @@ export function AgentChatFooter(props: AgentChatFooterProps) {
   return (
     <footer ref={ref} className={`agent-chat-footer act-footer${compact ? ' act-footer--compact' : ''}`} data-compact={compact || undefined}>
       {modePicker}
-      <ModelPicker loadModels={load} models={models} value={modelValue} onChange={(model) => onConfigChange({ model })} disabled={disabled} compact={compact} />
+      <ModelPicker loadModels={load} models={models} value={modelValue} onChange={(model) => onConfigChange({ model })} disabled={disabled} compact={compact}
+        openRequest={props.openPicker?.which === 'model' ? props.openPicker.n : undefined} />
       <EffortPicker levels={levels} effort={config?.effort} thinking={config?.thinking ?? false} onChange={onConfigChange} disabled={disabled} compact={compact} />
-      <SessionPicker loadSessions={props.loadSessions} onResume={props.onResumeSession} onNew={props.onNewSession} disabled={disabled} compact={compact} />
+      <SessionPicker loadSessions={props.loadSessions} onResume={props.onResumeSession} onNew={props.onNewSession} disabled={disabled} compact={compact}
+        openRequest={props.openPicker?.which === 'history' ? props.openPicker.n : undefined} />
       <span className="act-footer__end">
         <ContextMeter context={context} compact={compact} />
         {costUsd !== undefined && <span className="agent-chat-footer__item" title="Session cost">{`$${costUsd.toFixed(COST_DIGITS)}`}</span>}

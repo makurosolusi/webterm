@@ -39,6 +39,7 @@ export function agentChatErrorMessage(op: AgentChatOperation, error: unknown): s
   const s = error.status
   if (s === 401 || s === 403) return 'Not allowed. Reload and sign in again.'
   if (s === 404) return op === 'tool result' ? 'The full output is not in the transcript.' : 'This chat is not on the server yet. Wait for the board to save, then retry.'
+  if (s === 409 && error.code === 'busy') return 'Claude is working in this chat. Stop the turn or wait for it to end, then try again.'
   if (s === 409 && op === 'resume') return 'That conversation is open in another chat node. Close it there first.'
   if (s === 409 && (op === 'catalog' || op === 'models')) return 'Too many Claude sessions are open. Send a message or close another chat to load this list.'
   if (s === 503 && (op === 'catalog' || op === 'models')) return 'Claude could not start to list these. Showing built-in commands only.'

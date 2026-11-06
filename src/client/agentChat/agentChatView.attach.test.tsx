@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentChatEvent } from '../../shared/agentChat.wire'
-import { AgentChatApiError, type AgentChatStreamOptions, type AgentChatTransport } from './agentChatTransport'
+import { AgentChatApiError } from './agentChatTransport'
+import { fakeAgentChatTransport } from './agentChatTransport.fake'
 import { AgentChatView } from './agentChatView'
 
 afterEach(cleanup)
@@ -11,20 +11,8 @@ const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAY
 const png = (name = 'shot.png'): File => new File([Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0))], name, { type: 'image/png' })
 
 function setup() {
-  let opts: AgentChatStreamOptions | null = null
-  const t = {
-    stream: vi.fn((o: AgentChatStreamOptions) => { opts = o; return { close: vi.fn() } }),
-    send: vi.fn(async () => undefined),
-    interrupt: vi.fn(async () => undefined),
-    answer: vi.fn(async () => undefined),
-    setMode: vi.fn(async () => undefined),
-    history: vi.fn(async () => ({ items: [], next: null })),
-    toolResult: vi.fn(async () => ''),
-    upload: vi.fn(async (_f: File, name: string) => `/data/agent-chat-uploads/n1/x-${name}`),
-    imageUrl: (ref: string) => `/api/agent-chat/n1/history?image=${ref}`,
-  } satisfies AgentChatTransport
+  const { t, emit } = fakeAgentChatTransport()
   const view = render(<AgentChatView nodeId="n1" onNodeData={() => {}} transport={t} />)
-  const emit = (...events: AgentChatEvent[]): void => act(() => { opts?.onStatus('open'); for (const e of events) opts?.onEvent(e) })
   return { t, emit, section: view.container.querySelector('section') as HTMLElement }
 }
 const box = () => screen.getByLabelText('Message Claude') as HTMLTextAreaElement

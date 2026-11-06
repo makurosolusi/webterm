@@ -1,5 +1,6 @@
 // Sticky todo list of the agent chat (latest TodoWrite input), placed above the composer by the view.
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import type { AgentChatTodo } from '../../shared/agentChat.wire'
 import './agentChatTimeline.css'
 
@@ -16,12 +17,12 @@ export function TodoPanel({ todos }: { todos: AgentChatTodo[] }) {
   const current = todos.find((t) => t.status === 'in_progress')
   return (
     <section className="act-todos" aria-label="Todo list">
-      <button type="button" className="act-todos__head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <Button variant="ghost" className="act-todos__head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className={`codicon codicon-chevron-${open ? 'down' : 'right'}`} aria-hidden="true" />
         <span className="act-todos__title">Todos</span>
         <span className="act-todos__progress" aria-label={`${done} of ${todos.length} done`}>{`${done}/${todos.length}`}</span>
         {!open && current && <span className="act-todos__current">{current.activeForm || current.content}</span>}
-      </button>
+      </Button>
       {open && (
         <ul className="act-todos__list">
           {todos.map((t, n) => (

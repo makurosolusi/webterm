@@ -16,6 +16,8 @@ import type { ComposerCompletion } from '../agentChat/composerCompletion'
 
 export interface ChatComposerProps {
   busy: boolean
+  /** A turn runs but sending stays allowed (it queues): Escape still stops the turn. */
+  running?: boolean
   disabled?: boolean
   /** `images` is always [] without `attach`. */
   onSend: (text: string, images: ComposerImage[]) => void
@@ -95,7 +97,7 @@ export default function ChatComposer(props: ChatComposerProps) {
       event.stopPropagation()
       return
     }
-    if (event.key === 'Escape' && props.busy) {
+    if (event.key === 'Escape' && (props.busy || props.running)) {
       event.preventDefault()
       event.stopPropagation()
       props.onStop()

@@ -133,7 +133,9 @@ describe('agent chat control verbs', () => {
 
   test('POST resume switches the conversation; a locked or invalid id is refused', async () => {
     expect((await post('chat/resume', { sessionId: '../x' })).status).toBe(400)
-    expect((await post('chat/resume', { sessionId: 's-term' })).status).toBe(409)
+    const locked = await post('chat/resume', { sessionId: 's-term' })
+    expect(locked.status).toBe(409)
+    expect(((await locked.json()) as { error: string }).error).toBe('session_locked')
     pool.send('old', 'hi') // 'old' holds s-old
     expect((await post('chat/resume', { sessionId: 's-old' })).status).toBe(409)
     const r = await post('chat/resume', { sessionId: 's-7' })
@@ -145,7 +147,9 @@ describe('agent chat control verbs', () => {
 
   test('resume / new are refused while a turn runs; new starts a fresh session and frees the old id', async () => {
     pool.send('old', 'hi')
-    expect((await post('old/new', {})).status).toBe(409)
+    const busy = await post('old/new', {})
+    expect(busy.status).toBe(409)
+    expect(((await busy.json()) as { error: string }).error).toBe('busy')
     opens[0]?.fq.emit(fx.result())
     await tick()
     expect((await post('old/new', {})).status).toBe(200)

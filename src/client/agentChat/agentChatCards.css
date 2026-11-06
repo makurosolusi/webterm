@@ -84,11 +84,6 @@
 .acc-diff__line--add { background: var(--vscode-diffEditor-insertedLineBackground, rgba(155, 185, 85, 0.2)); }
 .acc-diff__line--del { background: var(--vscode-diffEditor-removedLineBackground, rgba(255, 0, 0, 0.2)); }
 
-.acc-todos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
-.acc-todos__item { display: flex; align-items: center; gap: 6px; }
-.acc-todos__item[data-status='completed'] span:last-child { text-decoration: line-through; color: var(--vscode-descriptionForeground, #9d9d9d); }
-.acc-todos__item[data-status='in_progress'] { font-weight: 600; }
-
 /* Permission / question / plan */
 .acc-permission__head { display: flex; align-items: center; gap: 6px; }
 .acc-permission__title { font-weight: 600; }

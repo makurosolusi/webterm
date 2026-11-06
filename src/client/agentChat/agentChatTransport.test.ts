@@ -150,6 +150,8 @@ describe('agent chat transport: control verbs', () => {
     expect(await t.setConfig({ effort: 'x' }).catch((e: unknown) => e)).toMatchObject({ operation: 'config', message: 'That model or effort level is not available.' })
     fetchMock.mockResolvedValueOnce(reply({ error: 'x' }, 409))
     expect(await t.newConversation().catch((e: unknown) => e)).toMatchObject({ operation: 'new conversation', message: 'The new conversation request failed. Try again.' })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'busy', reason: 'Claude is working' }, 409))
+    expect(await t.newConversation().catch((e: unknown) => e)).toMatchObject({ code: 'busy', message: expect.stringContaining('Stop the turn or wait') })
   })
 
   it('accepts the new event kinds in SSE frames', () => {

@@ -1,38 +1,15 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentChatEvent } from '../../shared/agentChat.wire'
-import type { AgentChatStreamOptions, AgentChatTransport } from './agentChatTransport'
 import { AgentChatApiError } from './agentChatTransport'
+import { fakeAgentChatTransport, initEvent } from './agentChatTransport.fake'
 import { AgentChatView, statusLabel } from './agentChatView'
 import { initialAgentChatState } from './agentChatStore'
 
 afterEach(cleanup)
 
-function fakeTransport() {
-  let opts: AgentChatStreamOptions | null = null
-  const close = vi.fn()
-  const t = {
-    stream: vi.fn((o: AgentChatStreamOptions) => { opts = o; return { close } }),
-    send: vi.fn(async () => undefined),
-    interrupt: vi.fn(async () => undefined),
-    answer: vi.fn(async () => undefined),
-    setMode: vi.fn(async () => undefined),
-    history: vi.fn(async () => ({ items: [], next: null })),
-    toolResult: vi.fn(async () => ''),
-    upload: vi.fn(async (_f: File, name: string) => `/data/${name}`),
-    imageUrl: (ref: string) => `/img/${ref}`,
-  } satisfies AgentChatTransport
-  const emit = (...events: AgentChatEvent[]): void => act(() => {
-    opts?.onStatus('open')
-    for (const e of events) opts?.onEvent(e)
-  })
-  const status = (st: 'reconnecting' | 'open'): void => act(() => opts?.onStatus(st))
-  return { t, emit, close, status }
-}
-
 const setup = (props: { chatSessionId?: string } = {}) => {
-  const f = fakeTransport()
+  const f = fakeAgentChatTransport()
   const onNodeData = vi.fn()
   const view = render(<AgentChatView nodeId="n1" onNodeData={onNodeData} transport={f.t} {...props} />)
   return { ...f, onNodeData, view }
@@ -50,14 +27,14 @@ describe('AgentChatView', () => {
 
   it('writes chatSessionId and the node mode from init into node data', async () => {
     const { emit, onNodeData } = setup()
-    emit({ seq: 1, t: 'init', sessionId: 'sess-9', model: 'claude-x', mode: 'default', commands: [], capabilities: [], cliVersion: '1' })
+    emit(initEvent(1, 'sess-9'))
     await waitFor(() => expect(onNodeData).toHaveBeenCalledWith({ chatSessionId: 'sess-9' }))
     expect(onNodeData).toHaveBeenCalledWith({ permissionMode: 'manual' })
   })
 
   it('does not rewrite a session id the node already has', async () => {
     const { emit, onNodeData } = setup({ chatSessionId: 'sess-9' })
-    emit({ seq: 1, t: 'init', sessionId: 'sess-9', model: 'm', mode: 'plan', commands: [], capabilities: [], cliVersion: '1' })
+    emit(initEvent(1, 'sess-9', { mode: 'plan' }))
     await waitFor(() => expect(onNodeData).toHaveBeenCalledWith({ permissionMode: 'plan' }))
     expect(onNodeData).not.toHaveBeenCalledWith({ chatSessionId: 'sess-9' })
   })

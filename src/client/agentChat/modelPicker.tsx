@@ -1,6 +1,6 @@
 // Model dropdown of the agent chat footer (Claude Code VS Code "model" picker), plus the
 // pending/failure pattern the footer's other pickers share.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DropdownMenu } from 'radix-ui'
 import { Button } from '@/components/ui/button'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
@@ -46,10 +46,12 @@ export interface ModelPickerProps {
   disabled?: boolean
   /** Icon-only trigger for narrow nodes. */
   compact?: boolean
+  /** Bump to open the menu from outside (the `/model` command); ignored while disabled. */
+  openRequest?: number
 }
 
 /** Model dropdown: loads on open (loading / error + Retry), checks the current model, reverts on a failed change. */
-export function ModelPicker({ loadModels, models: known, value, onChange, disabled, compact }: ModelPickerProps) {
+export function ModelPicker({ loadModels, models: known, value, onChange, disabled, compact, openRequest }: ModelPickerProps) {
   const [loaded, setLoaded] = useState<AgentChatModel[]>()
   const models = known ?? loaded
   const [loading, setLoading] = useState(false)
@@ -60,13 +62,20 @@ export function ModelPicker({ loadModels, models: known, value, onChange, disabl
     setLoadError(undefined)
     try { setLoaded(await loadModels()) } catch (e) { setLoadError(errorText(e)) } finally { setLoading(false) }
   }
+  const [open, setOpen] = useState(false)
+  const openChange = (next: boolean): void => {
+    setOpen(next)
+    if (next && !models && !loading) void load()
+  }
+  // Only a new request opens it; `openChange` is rebuilt every render, so it is not a dependency.
+  useEffect(() => { if (openRequest && !disabled && !pending) openChange(true) }, [openRequest])
   const shown = pending ? pending.value : value
   const nameOf = (v?: string) => models?.find((m) => m.value === (v ?? DEFAULT_MODEL))?.displayName ?? v ?? 'Default model'
   const name = nameOf(shown)
 
   return (
     <span className="act-picker">
-      <DropdownMenu.Root modal={false} onOpenChange={(open) => { if (open && !models && !loading) void load() }}>
+      <DropdownMenu.Root modal={false} open={open} onOpenChange={openChange}>
         <IconTooltip label={`Model: ${name}`} disabled={disabled || !!pending} disabledReason={pending ? 'switching model' : undefined}>
           <DropdownMenu.Trigger asChild disabled={disabled || !!pending}>
             <button type="button" className="act-trigger" aria-label={`Model: ${name}`}>

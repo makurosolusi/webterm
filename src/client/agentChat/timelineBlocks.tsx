@@ -1,6 +1,7 @@
 // Non-message timeline entries of the agent chat: slash-command output (`c:` keys), compaction
 // dividers (`k:` keys) and the queued badge of a user message sent while Claude is busy.
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { CopyButton } from './messageActions'
 import './agentChatTimeline.css'
 
@@ -18,9 +19,9 @@ export function CommandOutputBlock({ text }: { text: string }) {
         <span className="codicon codicon-terminal" aria-hidden="true" />
         <span className="act-cmd__title">Command output</span>
         {long && (
-          <button type="button" className="act-cmd__toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <Button variant="link" size="xs" className="act-cmd__toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             {open ? 'Show less' : 'Show all'}
-          </button>
+          </Button>
         )}
         <CopyButton text={() => text} label="Copy command output" />
       </div>

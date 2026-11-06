@@ -25,6 +25,8 @@
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+  width: auto; /* IconButton is a fixed square; the "Copied" note widens it */
+  min-width: 20px;
 }
 .act-copy:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); color: var(--vscode-foreground, inherit); }
 .act-copy:focus-visible,
@@ -110,6 +112,8 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  justify-content: flex-start; /* shadcn Button centres its content */
+  height: auto;
   cursor: pointer;
 }
 .act-todos__title { font-weight: 600; }
