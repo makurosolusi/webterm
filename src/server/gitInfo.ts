@@ -32,6 +32,7 @@
 // kepala `fsOps.ts` (yang menjaga permukaan ini adalah bind loopback + Origin + token di
 // `src/server/auth.ts`, bukan pemagaran path).
 import { execFile } from 'node:child_process'
+import { BodyReadError } from './cappedRequestBody'
 import { gitCommand } from './gitExec'
 import { promises as fs } from 'node:fs'
 import { promisify } from 'node:util'
@@ -195,27 +196,37 @@ export async function gitInfoRoute(
   body: () => Promise<string>
 ): Promise<GitApiResult> {
   if (path !== GIT_INFO_PATH || method !== 'POST') return null
+  let raw: string
+  try {
+    raw = await body()
+  } catch (err) {
+    // Cap / stream refusal from the route body reader (route.core ROUTE_BODY_MAX_BYTES).
+    if (!(err instanceof BodyReadError)) throw err
+    return err.reason === 'too_large'
+      ? { status: 413, body: { error: 'payload_too_large', message: 'Request body is too large for git info.' } }
+      : { status: 400, body: { error: 'body_read_failed' } }
+  }
   let parsed: unknown
   try {
-    parsed = JSON.parse(await body())
+    parsed = JSON.parse(raw)
   } catch {
-    return { status: 400, body: { error: 'bad json' } }
+    return { status: 400, body: { error: 'bad json' } } // malformed JSON is the answer, not a failure
   }
   // `null`, angka, string, dan array semuanya JSON yang sah — jadi bentuknya diperiksa, bukan
   // cuma hasil parse-nya.
-  const raw =
+  const paths =
     parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as { paths?: unknown }).paths
       : undefined
-  if (!Array.isArray(raw)) return { status: 400, body: { error: 'paths must be an array' } }
-  if (raw.length > GIT_INFO_MAX_PATHS) {
+  if (!Array.isArray(paths)) return { status: 400, body: { error: 'paths must be an array' } }
+  if (paths.length > GIT_INFO_MAX_PATHS) {
     return { status: 400, body: { error: `at most ${GIT_INFO_MAX_PATHS} paths` } }
   }
   // Entry yang bukan string non-kosong ditolak, tidak disaring: sebuah jawaban yang entry-nya
   // lebih sedikit daripada yang diminta akan membuat client salah memasangkan per indeks.
-  if (!raw.every((p) => typeof p === 'string' && p.trim() !== '')) {
+  if (!paths.every((p) => typeof p === 'string' && p.trim() !== '')) {
     return { status: 400, body: { error: 'paths must be non-empty strings' } }
   }
-  const res: GitInfoResponse = { results: await collectGitInfo(raw as string[]) }
+  const res: GitInfoResponse = { results: await collectGitInfo(paths as string[]) }
   return { status: 200, body: res }
 }

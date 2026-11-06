@@ -151,5 +151,9 @@ export function listDir(path?: string): Promise<{ path: string; parent: string |
 }
 
 export function generateName(nodeId: string): Promise<{ ok: boolean; message: string }> {
-  return jsonFetch(`/api/generate-name?node=${encodeURIComponent(nodeId)}`)
+  return jsonFetch('/api/generate-name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ node: nodeId }),
+  })
 }

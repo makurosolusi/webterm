@@ -9,7 +9,7 @@
 //    kosong dengan bertanya ke direktori INDUK, justru karena `list` tidak pernah throw.
 //    (`listDirV2`/`statMeta` di bawah verb baru, boleh berkode galat.)
 //
-// 2. PEMBACAAN ISI (`readText`, `readBinary`, `readTextMeta`) MELEMPAR. Untuk isi file, kosong adalah
+// 2. PEMBACAAN ISI (`readBinary`, `readTextMeta`) MELEMPAR. Untuk isi file, kosong adalah
 //    jawaban yang SAH, jadi file tak-terbaca tak boleh tampak kosong: editor yang membuka buffer
 //    kosong lalu Save akan MENIMPA file aslinya. Kegagalan harus sampai ke browser sebagai non-2xx
 //    lewat `readErrorResult`. Sentinel too-large (`src/shared/fsLimits.ts`) BUKAN kegagalan.
@@ -20,7 +20,7 @@
 // yang bisa menjangkau endpoint ini sudah bisa men-spawn PTY lewat `/ws`. Yang NYATA menjaga ada di
 // transport (loopback + Origin + token, `src/server/auth.ts`). Modul ini: `path.resolve` tiap input,
 // batas ukuran `fsLimits.ts`, dan `checkFsPath` untuk verb v2. Isi file TIDAK PERNAH di-log.
-import { promises as fs, type Dirent, type Stats } from 'node:fs'
+import { constants as fsc, promises as fs, type BigIntStats, type Dirent, type Stats } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { gitCommand } from './gitExec'
 import { homedir } from 'node:os'
@@ -129,7 +129,7 @@ const READ_FAILURES = new Map<string, [number, string]>([
 ])
 
 /**
- * Status HTTP + body untuk Error dari `readText`/`readBinary`. Bentuknya sengaja cocok dengan
+ * Status HTTP + body untuk Error dari `readBinary`/`readTextMeta`. Bentuknya sengaja cocok dengan
  * `FsApiResult` supaya route hanya perlu `.catch(readErrorResult)`.
  *
  * Pesannya generik dan tanpa path: body respons bukan tempat stack trace, isi file, atau detail
@@ -140,27 +140,33 @@ export function readErrorResult(err: unknown): { status: number; body: { error: 
   return { status, body: { error } }
 }
 
-/** Isi UTF-8 sebuah file; sentinel too-large di atas cap. MELEMPAR bila file tidak terbaca — `''`
- *  hanya berarti file yang memang kosong. Lihat kontrak di kepala file. */
-export async function readText(filePath: string): Promise<string> {
-  const target = resolveFsPath(filePath)
+/** O_NONBLOCK: opening a FIFO with no writer returns at once instead of hanging (it is then refused). */
+const READ_FLAGS = fsc.O_RDONLY | fsc.O_NONBLOCK
+
+/** Regular-file guard + cap judged on the OPENED handle (sec-208-5): a path stat says size 0 for pipes
+ *  and devices (`/dev/zero` read forever, a fed FIFO bypassed the cap) and left a swap window before
+ *  open. `bytes` is null when the file is over `max`. */
+async function readRegular(target: string, max: number): Promise<{ st: BigIntStats; bytes: Buffer | null }> {
+  const fh = await fs.open(target, READ_FLAGS)
   try {
-    const { size } = await fs.stat(target)
-    if (size > FS_READ_MAX_BYTES) return tooLargeSentinel(size)
-    return await fs.readFile(target, 'utf-8')
-  } catch (err) {
-    throw readFailed('read', target, err)
+    const st = await fh.stat({ bigint: true })
+    if (!st.isFile()) throw Object.assign(new Error('not a regular file'), { code: st.isDirectory() ? 'EISDIR' : 'EINVAL' })
+    if (st.size > BigInt(max)) return { st, bytes: null }
+    const buf = Buffer.alloc(Number(st.size))
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0)
+    return { st, bytes: buf.subarray(0, bytesRead) }
+  } finally {
+    await fh.close()
   }
 }
 
 /** Isi file sebagai base64 (preview gambar/biner). Sentinel di atas cap — cap-nya lebih besar tapi
- *  base64 masih menggelembungkan payload 1.33×. MELEMPAR bila file tidak terbaca. */
+ *  base64 masih menggelembungkan payload 1.33×. MELEMPAR bila file tidak terbaca / bukan file reguler. */
 export async function readBinary(filePath: string): Promise<string> {
   const target = resolveFsPath(filePath)
   try {
-    const { size } = await fs.stat(target)
-    if (size > FS_READ_BINARY_MAX_BYTES) return tooLargeSentinel(size)
-    return (await fs.readFile(target)).toString('base64')
+    const { st, bytes } = await readRegular(target, FS_READ_BINARY_MAX_BYTES)
+    return bytes === null ? tooLargeSentinel(Number(st.size)) : bytes.toString('base64')
   } catch (err) {
     throw readFailed('read-binary', target, err)
   }
@@ -175,7 +181,6 @@ export async function pathExists(p: string): Promise<boolean> {
     return false
   }
 }
-
 
 // ---- API v2 (file manager): hasil berkode `FsResult`; kegagalan TIDAK fail-open ----
 
@@ -250,21 +255,18 @@ export async function listDirV2(dirPath: string, limit = FILES_LIST_MAX_DEFAULT)
 }
 
 /**
- * `readText` + metadata: versi (stat SEBELUM baca, jadi salah-arahnya hanya konflik palsu, tak
+ * Isi teks + metadata: versi (fstat handle SEBELUM baca, jadi salah-arahnya hanya konflik palsu, tak
  * pernah timpa diam-diam), encoding hasil sniff (`binary` = ada NUL, konten kosong; `non-utf8` =
- * byte tak sah, konten decode lossy untuk tampilan read-only). MELEMPAR seperti `readText`
- * (kontrak 2); sentinel too-large tetap sukses.
+ * byte tak sah, konten decode lossy untuk tampilan read-only). MELEMPAR (kontrak 2); sentinel
+ * too-large tetap sukses.
  */
 export async function readTextMeta(filePath: string): Promise<ReadMeta> {
   const target = checkFsPath(filePath)
   if (typeof target !== 'string') throw readFailed('read', filePath, Object.assign(new Error(target.error), { code: target.code }))
   try {
-    const st = await fs.stat(target, { bigint: true })
-    // FIFO/socket: open() akan menggantung; hanya file reguler yang dibaca.
-    if (!st.isFile()) throw Object.assign(new Error('not a regular file'), { code: st.isDirectory() ? 'EISDIR' : 'EINVAL' })
+    const { st, bytes } = await readRegular(target, FS_READ_MAX_BYTES)
     const version = versionOf(st)
-    if (st.size > BigInt(FS_READ_MAX_BYTES)) return { content: tooLargeSentinel(Number(st.size)), version, encoding: 'utf8' }
-    const bytes = await fs.readFile(target)
+    if (bytes === null) return { content: tooLargeSentinel(Number(st.size)), version, encoding: 'utf8' }
     if (sniffBinary(bytes)) return { content: '', version, encoding: 'binary' }
     const text = decodeStrict(bytes)
     return text === null
