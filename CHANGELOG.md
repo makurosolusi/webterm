@@ -62,6 +62,9 @@ Operator notes:
 - Maximize on a node now fills the canvas area, like VS Code's "Maximize Editor Group", instead of zooming the canvas to it. The activity bar, dock and panels stay visible, and the separate Full Screen button (which took over the whole screen) is gone. Restore, or double-clicking the node header, puts the node back exactly where it was; its position, size and the canvas view are never changed. Only one node is maximized at a time, and switching workspace or to tab layout restores it. "View: Toggle Maximize Node" in ⌘K does the same for the focused or selected node.
 - On Agent nodes the Stop button only appears while the agent is working, is red, and sits after a separator, so it can no longer be mistaken for Maximize.
 - On a narrow node, header buttons that don't fit move into the "…" (More) menu, so Close always stays visible.
+- File, board and folder-picker endpoints (such as `/api/fs` and `/api/workspaces`) now answer only the webterm page or a request carrying the root token. A plain `curl` or script without the root token gets 403 "Files and workspaces are available to the webterm UI only."
+- Agent status hooks now require the node's token. The hooks webterm installs for Claude already send it, so agent nodes are unaffected. A hook from a node that is on no board no longer records anything.
+- The Control panel shows the Claude Code sandbox as "mitigation" instead of "protected" and says why: it stops shell commands from reading webterm's data files directly, but the webterm API on 127.0.0.1 is still reachable from inside it.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -80,6 +83,15 @@ Operator notes:
 - ⌘S / Ctrl+S saves the editor you are typing in. Before, it saved the most recently opened editor.
 - Middle-clicking a session closes it once. Before, it could close several times after the list re-rendered.
 - Session History no longer hangs on a named pipe, a link to `/dev/zero` or a huge transcript. A scan stops after 30 seconds and shows what it found so far.
+- Git commands webterm runs in your repositories (git marks, Changes, checkpoints, worktrees, clone and create) no longer run the repository's fsmonitor, hooks or custom diff drivers, so opening an untrusted repository cannot run its code.
+- Interrupted Central turns are reconciled once when the server starts, not again every time autonomy is toggled.
+- A verify command that times out or prints too much is stopped together with every process it started.
+- When the Claude runtime behind Central exits, the error now includes the end of its stderr, so the cause is visible.
+- Unexpected Central and orchestrator errors are logged with their cause instead of a bare "internal" answer, and a worker's worktree is released if leasing its task fails.
+- Telegram: an update that keeps failing is skipped after a few tries (logged and shown on the channel) so later messages still arrive, an update not yet handled is fetched again after a restart, and a full outgoing queue is logged and shown in the channel panel.
+- Inbox items that cannot be delivered yet no longer hold back later items from push delivery; they are delivered once their project is bound.
+- Web push backs off from an endpoint that keeps failing and honours Retry-After, instead of retrying it on every sweep.
+- Messages typed into agent nodes: a delivery queue that failed to start is retried, and an unconfirmed message is re-typed once into a cleared input, so text is never doubled or appended to leftovers.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
