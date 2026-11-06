@@ -92,6 +92,17 @@ test('workspace override gets its own image; global file kept while still refere
   expect(await files()).toEqual([globalId])
 })
 
+test('two concurrent uploads to one scope leave exactly one file for it (GC deletes what it really replaced)', async () => {
+  const globalId = store.getSettings().canvasBackground.imageId
+  const [a, b] = await Promise.all([upload(PNG, '?workspace=ws-2'), upload(JPG, '?workspace=ws-2')])
+  expect([a.status, b.status]).toEqual([200, 200])
+  const current = store.getSettings().canvasBackgroundByWorkspace['ws-2']?.imageId ?? ''
+  expect(current).not.toBe('')
+  expect(await files()).toEqual([globalId, current].sort())
+  await fetch(`${base}?workspace=ws-2`, { method: 'DELETE' })
+  expect(await files()).toEqual([globalId])
+})
+
 test('serve refuses traversal and unknown ids; missing file is 404', async () => {
   await fs.writeFile(join(dir, '..', 'wt-canvasbg-secret.txt'), 'secret').catch(() => undefined)
   for (const bad of ['..%2Fwt-canvasbg-secret.txt', '../wt-canvasbg-secret.txt', 'x.png', '00000000-0000-0000-0000-000000000000.svg']) {
