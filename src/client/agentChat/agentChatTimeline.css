@@ -1,0 +1,131 @@
+/* Agent chat timeline extras: message actions, command output, compact divider, queued badge, todo panel. */
+.chat-message { position: relative; }
+
+/* Message actions: hidden until the message is hovered or keyboard focus is inside it. */
+.act-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.chat-message:hover .act-row,
+.chat-message:focus-within .act-row,
+.act-row:has([data-state='copied'], [data-state='failed']) { opacity: 1; }
+
+.act-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.act-copy:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); color: var(--vscode-foreground, inherit); }
+.act-copy:focus-visible,
+.act-cmd__toggle:focus-visible,
+.act-todos__head:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }
+.act-copy[data-state='copied'] .codicon { color: var(--vscode-testing-iconPassed, #73c991); }
+.act-copy[data-state='failed'] .codicon { color: var(--vscode-errorForeground, #f48771); }
+
+/* Slash-command output. */
+.act-cmd {
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background, rgba(10, 10, 10, 0.25));
+}
+.act-cmd__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
+  font-size: 12px;
+}
+.act-cmd__title { flex: 1; }
+.act-cmd__toggle {
+  border: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground, #3794ff);
+  font: inherit;
+  cursor: pointer;
+}
+.act-cmd__body {
+  margin: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--vscode-editor-font-family, ui-monospace, Menlo, monospace);
+  font-size: 12px;
+}
+.act-cmd[data-open='false'] .act-cmd__body { max-height: 12em; overflow-y: hidden; mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+
+/* Compaction divider. */
+.act-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
+  font-size: 12px;
+}
+.act-compact::before,
+.act-compact::after { content: ''; flex: 1; border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); }
+.act-compact__label { display: inline-flex; align-items: center; gap: 6px; }
+.act-compact__detail { opacity: 0.8; }
+
+/* Queued badge on a user message. */
+.act-queued {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #fff);
+  font-size: 11px;
+}
+
+/* Sticky todo panel (mounted above the composer by the view). */
+.act-todos {
+  margin: 0 12px 4px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  background: var(--vscode-sideBar-background, transparent);
+  font-size: 12px;
+}
+.act-todos__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.act-todos__title { font-weight: 600; }
+.act-todos__progress { color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d)); font-variant-numeric: tabular-nums; }
+.act-todos__current { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d)); }
+.act-todos__list {
+  margin: 0;
+  padding: 0 6px 4px 22px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 9.5em;
+  overflow-y: auto;
+}
+.act-todos__item { display: flex; align-items: center; gap: 6px; }
+.act-todos__item[data-status='completed'] .act-todos__text { text-decoration: line-through; color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d)); }
+.act-todos__item[data-status='completed'] .codicon { color: var(--vscode-testing-iconPassed, #73c991); }
+.act-todos__item[data-status='in_progress'] .act-todos__text { font-weight: 600; }

@@ -63,12 +63,13 @@ describe('ToolCard', () => {
     expect(screen.getByLabelText('Diff').textContent).toBe('- old+ new')
   })
 
-  it('TodoWrite renders a checklist', () => {
-    const todos = [{ content: 'A', status: 'completed', activeForm: 'Doing A' }, { content: 'B', status: 'in_progress', activeForm: 'Doing B' }]
+  it('TodoWrite is a one-line progress summary (the sticky TodoPanel shows the list)', () => {
+    const todos = [{ content: 'A', status: 'completed' }, { content: 'B', status: 'in_progress', activeForm: 'Doing B' }, { content: 'C', status: 'pending' }]
     render(<ToolCard tool={tool({ name: 'TodoWrite', state: 'done', input: { todos }, result: 'ok' })} loadFull={noLoad} />)
-    const items = screen.getByRole('list', { name: 'Todo list' }).querySelectorAll('li')
-    expect([...items].map((li) => [li.dataset.status, li.textContent])).toEqual([['completed', 'A'], ['in_progress', 'Doing B']])
+    expect(screen.getByText('Updated todos: 1/3 done')).toBeTruthy()
+    expect(screen.queryByRole('list')).toBeNull()
     expect(screen.queryByLabelText('Tool output')).toBeNull()
+    expect(toolSummary('TodoWrite', { todos: 'nope' })).toBe('Updated todos: 0/0 done')
   })
 
   it('Task shows a subagent header and nests children', () => {

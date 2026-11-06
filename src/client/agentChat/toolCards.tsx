@@ -42,7 +42,11 @@ export function toolSummary(name: string, input: unknown): string {
     case 'Edit': case 'MultiEdit': case 'Write': case 'NotebookEdit': return str(i.file_path) || str(i.notebook_path)
     case 'Read': return [str(i.file_path), readRange(input)].filter(Boolean).join(' · ')
     case 'Grep': case 'Glob': return clip([str(i.pattern), str(i.path) && `in ${str(i.path)}`].filter(Boolean).join(' '))
-    case 'TodoWrite': return `${Array.isArray(i.todos) ? i.todos.length : 0} todos`
+    case 'TodoWrite': {
+      // The sticky TodoPanel shows the list; the card only says how far along it is.
+      const todos = Array.isArray(i.todos) ? i.todos.map(rec) : []
+      return `Updated todos: ${todos.filter((t) => t.status === 'completed').length}/${todos.length} done`
+    }
     case 'WebFetch': return str(i.url)
     case 'WebSearch': return clip(str(i.query))
     default:
@@ -102,29 +106,13 @@ function Diff({ lines }: { lines: DiffLine[] }) {
   )
 }
 
-function Todos({ input }: { input: unknown }) {
-  const todos = Array.isArray(rec(input).todos) ? (rec(input).todos as unknown[]).map(rec) : []
-  const glyph = (s: string): string => (s === 'completed' ? 'pass-filled' : s === 'in_progress' ? 'circle-large-filled' : 'circle-large-outline')
-  return (
-    <ul className="acc-todos" aria-label="Todo list">
-      {todos.map((t, n) => (
-        <li key={n} className="acc-todos__item" data-status={str(t.status)}>
-          <span className={`codicon codicon-${glyph(str(t.status))}`} aria-hidden="true" />
-          <span>{str(t.status) === 'in_progress' ? str(t.activeForm) || str(t.content) : str(t.content)}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 /** The tool's own input, per tool name; output is rendered separately below it. */
 function ToolInput({ tool }: { tool: ToolEvent }) {
   const i = rec(tool.input)
   switch (tool.name) {
     case 'Bash': return <pre className="acc-code acc-code--cmd">{`$ ${str(i.command)}`}</pre>
     case 'Edit': case 'MultiEdit': case 'Write': return <Diff lines={editDiff(tool.name, tool.input)} />
-    case 'Read': case 'Grep': case 'Glob': return null
-    case 'TodoWrite': return <Todos input={tool.input} />
+    case 'Read': case 'Grep': case 'Glob': case 'TodoWrite': return null
     default:
       if (isTask(tool.name)) return str(i.subagent_type) ? <div className="acc-muted">{`Subagent: ${str(i.subagent_type)}`}</div> : null
       return <pre className="acc-code">{json(tool.input)}</pre>
