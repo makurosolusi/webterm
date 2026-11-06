@@ -10,6 +10,7 @@
 // `WEBTERM_RUN_REQUIRE_APPROVAL=on` makes approval mandatory; otherwise a named one is consumed.
 import { createPlanStore, type Plan } from './orchestrator/plan'
 import { LEDGER_OFF } from './apiShared.types'
+import { createLogger } from './logs'
 import type { WorkerRunOutcome } from './orchestrator/workerRuntime'
 import {
   ORCHESTRATOR_REQUIRE_APPROVAL_FLAG,
@@ -46,6 +47,9 @@ export {
 }
 export type { OrchestratorRunDeps, RuntimeCompose }
 
+const log = createLogger('orchestrator')
+const cause = (err: unknown): string => (err instanceof Error ? err.message : String(err))
+
 /** POST /api/orchestrator/run. `{ok,outcome}` at 200, typed errors at 409, 500 only unexpected. */
 export async function orchestratorRunRoute(
   body: unknown,
@@ -65,7 +69,8 @@ export async function orchestratorRunRoute(
   let paused: boolean | null
   try {
     paused = projectPaused(ledger.db, request.projectId)
-  } catch {
+  } catch (err) {
+    log.error('orchestrator.run_pause_check_failed', 'reading the project pause state failed', { projectId: request.projectId, error: cause(err) })
     return { status: 500, body: { error: 'internal' } }
   }
   if (paused === true) {
@@ -81,7 +86,8 @@ export async function orchestratorRunRoute(
   let repo: string | null
   try {
     repo = projectRepo(ledger.db, request.projectId)
-  } catch {
+  } catch (err) {
+    log.error('orchestrator.run_repo_failed', 'reading the project repo failed', { projectId: request.projectId, error: cause(err) })
     return { status: 500, body: { error: 'internal' } }
   }
   if (repo === null) {
@@ -97,7 +103,8 @@ export async function orchestratorRunRoute(
   let stored: Plan | null = null
   try {
     stored = plan.get(request.projectId)
-  } catch {
+  } catch (err) {
+    log.warn('orchestrator.run_plan_read_failed', 'plan read failed; closed-plan gate skipped', { projectId: request.projectId, error: cause(err) })
     stored = null
   }
   if (stored !== null && (stored.status === 'completed' || stored.status === 'abandoned')) {
@@ -142,8 +149,10 @@ export async function orchestratorRunRoute(
           outcome,
         },
       }
-    } catch {
-      // Never echo the exception: it can quote absolute worktree paths or worker output.
+    } catch (err) {
+      // Never echo the exception to the client: it can quote absolute worktree paths or worker output.
+      // The log keeps the cause (redacted by the log gate) so the 500 is diagnosable.
+      log.error('orchestrator.run_failed', 'orchestrator run failed', { projectId: request.projectId, itemId: request.itemId, error: cause(err) })
       return {
         status: 500,
         body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } },

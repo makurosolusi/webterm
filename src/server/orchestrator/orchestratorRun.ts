@@ -77,7 +77,15 @@ export async function startWorker(
     return worktreeDeny(err)
   }
 
-  const leased = ctx.deps.ledger.task.leaseTask(task.id, { owner: agent.id, ttlMs: leaseMs })
+  // The worktree is held from here on: every exit path below must release it (DisposableStore order).
+  let leased
+  try {
+    leased = ctx.deps.ledger.task.leaseTask(task.id, { owner: agent.id, ttlMs: leaseMs })
+  } catch (err) {
+    const releaseError = await releaseQuietly(ctx, task.id)
+    const why = err instanceof Error ? err.message : String(err)
+    throw new Error(`lease task ${task.id} failed: ${why}${releaseError ? `; worktree release also failed: ${releaseError}` : ''}`, { cause: err })
+  }
   if (!leased) {
     await releaseQuietly(ctx, task.id)
     return deny('lease_denied', `task ${task.id} could not be leased (attempt ${task.attempt})`)

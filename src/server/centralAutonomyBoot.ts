@@ -86,8 +86,9 @@ async function runItem(
         : { ok: true }
     }
     return { ok: false, code: errorCode(result.body) }
-  } catch {
-    // Never surface exception text: it can quote worktree paths or worker output.
+  } catch (err) {
+    // Never surface exception text in the result: it can quote worktree paths or worker output. The log keeps the cause.
+    logger.error('autonomy.run_failed', 'autonomous orchestrator run failed', { projectId, itemId, error: err instanceof Error ? err.message : String(err) })
     return { ok: false, code: 'internal' }
   }
 }
