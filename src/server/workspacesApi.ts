@@ -19,6 +19,7 @@ import { produceEdgeChange } from './events/producers.edge'
 import { normalizeTabLayout } from '../shared/tabLayout.schema'
 import { backgroundsDir } from './canvasBackground.store'
 import { dropWorkspaceBackground } from './canvasBackground.gc'
+import { closeRemovedAgentChats, closeWorkspaceAgentChats } from './agentChat/agentChat.pool'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
  *  bila path/method bukan milik modul ini. */
@@ -133,11 +134,13 @@ export async function workspacesRoute(
       guarded('save', id, () => store.save(ws))
       const saved = store.get(id)
       if (saved) logWorkspaceSave(prev, saved)
+      if (saved) closeRemovedAgentChats(prev, saved) // removed chat nodes stop their Claude process
       if (saved) produceEdgeChange(prev, saved) // linkNote + wake subscribe to this, not a poll
       if (saved && saved.cwd !== prev?.cwd) void guardWorkspaceRepos([saved]) // cwd changed: guard the new repo
       return saved ? { status: 200, body: saved } : NOT_FOUND
     }
     if (method === 'DELETE') {
+      closeWorkspaceAgentChats(store.get(id)) // its chat nodes stop their Claude process (lazily recreated if the delete fails)
       guarded('delete', id, () => store.delete(id))
       workspaceLog.deleted(id)
       await dropWorkspaceBackground(store, id, bgDir) // never throws: logs a warning on failure

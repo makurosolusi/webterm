@@ -45,6 +45,7 @@ import { startPortScanner } from './ports/ports.runtime'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
 import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
+import { activeAgentChatPool } from './agentChat/agentChat.pool'
 
 // Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
 declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
@@ -304,6 +305,7 @@ process.on('exit', (code) => { log.info('server.stop', 'webterm stopping', { cod
 for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
   // Chromium + proxy dimatikan bersih (batas 5 dtk) sebelum proses keluar; tanpa runtime browser = perilaku lama.
   process.on(signal, () => {
+    activeAgentChatPool()?.closeAll() // aborts every chat Query: no Claude child outlives the server
     const rt = activeBrowser()
     if (!rt) return process.exit(exitCode)
     Promise.race([rt.shutdown(), new Promise((r) => setTimeout(r, 5000))]).finally(() => process.exit(exitCode))

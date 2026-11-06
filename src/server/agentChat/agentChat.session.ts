@@ -89,6 +89,18 @@ export class AgentChatSession {
   status(): AgentChatStatus { return this.st }
   busy(): boolean { return this.running }
   lastActivity(): number { return this.last }
+  /** A Query (one Claude process) is open right now. */
+  live(): boolean { return this.q !== undefined }
+
+  /** Close the Query only, as the idle timer does (pool cap eviction); the next send resumes. Never a busy one. */
+  suspend(): void {
+    if (this.running || this.closed || !this.q) return
+    this.closeQuery()
+    this.emit({ t: 'status', status: 'idle' })
+  }
+
+  /** Append a notice from outside the session (pool cap, session lock). */
+  notify(level: 'info' | 'warn' | 'error', text: string): void { this.emit({ t: 'notice', level, text }) }
 
   /** Queue a user turn; opens the Query if needed. While a turn runs the message is queued as 'next'. */
   send(text: string, priority?: 'now' | 'next'): void {

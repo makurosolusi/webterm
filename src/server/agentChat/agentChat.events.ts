@@ -25,7 +25,7 @@ export interface AgentChatMapper {
 const parentOf = (p: string | null | undefined): { parentId?: string } => (p ? { parentId: p } : {})
 
 /** Plain text of a tool_result `content` (string or block array; images are skipped). */
-function resultText(content: unknown): string {
+export function resultText(content: unknown): string {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return ''
   return content.map((b: ContentBlock) => (b && b.type === 'text' && typeof b.text === 'string' ? b.text : '')).filter(Boolean).join('\n')
