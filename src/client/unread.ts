@@ -83,9 +83,10 @@ function isWatching(id: string): boolean {
  * `working` tidak pernah menandai — turn yang baru mulai belum punya hasil untuk dibaca, dan ia
  * tetap tampil di section Running (lihat prioritas di `sessionStatusGroup`).
  */
-export function noteStatus(id: string, status: AgentStatus): void {
+export function noteStatus(id: string, status: AgentStatus, opts: { quiet?: boolean } = {}): void {
   // OS notification has its own, stricter gate (transition-only, in-view, mute) — see `./osNotify`.
-  noteAttention(id, status, isWatching(id))
+  // `quiet` (nodeterm completionAlert.ts): no banner or chime, the unread mark still lands.
+  if (!opts.quiet) noteAttention(id, status, isWatching(id))
   if (status === 'working') return
   if (!isWatching(id)) markUnread(id)
 }

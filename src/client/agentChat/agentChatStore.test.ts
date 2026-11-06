@@ -6,7 +6,7 @@ const run = (events: AgentChatEvent[], s: AgentChatState = initialAgentChatState
   agentChatReducer(s, { type: 'events', events })
 
 const init = (seq: number, sessionId = 'sess-1', mode = 'default'): AgentChatEvent =>
-  ({ seq, t: 'init', sessionId, model: 'claude-x', mode, commands: [], capabilities: [], cliVersion: '1.0.0' })
+  ({ seq, t: 'init', sessionId, model: 'claude-x', mode, commands: [], capabilities: [], cliVersion: '1.0.0', cwd: '/w' })
 const perm = (seq: number, requestId = 'r1'): AgentChatEvent =>
   ({ seq, t: 'permission', requestId, kind: 'tool', toolName: 'Bash', toolUseId: 'tu1', input: { command: 'ls' } })
 const result = (seq: number, costUsd: number): AgentChatEvent =>
@@ -112,5 +112,70 @@ describe('agentChatReducer', () => {
     const b = initialAgentChatState('b')
     expect(a.session?.sessionId).toBe('A')
     expect(b.session).toBeUndefined()
+  })
+})
+
+describe('agentChatReducer: controls, commands and conversation events', () => {
+  const user = (seq: number, id: string): AgentChatEvent => ({ seq, t: 'message', messageId: id, role: 'user', parts: [{ k: 'text', text: id }] })
+
+  it('starts with empty todos, outputs, compacts and catalogVersion 0; init carries cwd', () => {
+    const s0 = initialAgentChatState('n1')
+    expect(s0).toMatchObject({ todos: [], commandOutputs: {}, compacts: {}, catalogVersion: 0 })
+    expect(run([init(1)]).session?.cwd).toBe('/w')
+  })
+
+  it('stores config and context from their events', () => {
+    const s = run([
+      { seq: 1, t: 'config', config: { model: 'opus', effort: 'high', thinking: false } },
+      { seq: 2, t: 'context', context: { used: 1200, window: 200_000 } },
+    ])
+    expect(s.config).toEqual({ model: 'opus', effort: 'high', thinking: false })
+    expect(s.context).toEqual({ used: 1200, window: 200_000 })
+  })
+
+  it('appends commandOutput (c:) and compact (k:) to the timeline once per id', () => {
+    const s = run([
+      { seq: 1, t: 'commandOutput', id: 'o1', text: 'Total cost: $0' },
+      { seq: 2, t: 'compact', id: 'k1', trigger: 'auto', preTokens: 150_000 },
+      { seq: 3, t: 'commandOutput', id: 'o1', text: 'Total cost: $1' },
+      { seq: 4, t: 'compact', id: 'k2', trigger: 'manual' },
+    ])
+    expect(s.order).toEqual(['c:o1', 'k:k1', 'k:k2'])
+    expect(s.commandOutputs.o1).toEqual({ text: 'Total cost: $1' })
+    expect(s.compacts).toEqual({ k1: { trigger: 'auto', preTokens: 150_000 }, k2: { trigger: 'manual' } })
+  })
+
+  it('todos follow the latest TodoWrite input and ignore malformed items or other tools', () => {
+    const todo = (seq: number, todos: unknown, name = 'TodoWrite'): AgentChatEvent => ({ seq, t: 'tool', id: `t${seq}`, name, input: { todos }, state: 'running' })
+    let s = run([todo(1, [{ content: 'a', status: 'pending', activeForm: 'Doing a' }, { content: 'b', status: 'bogus' }, null])])
+    expect(s.todos).toEqual([{ content: 'a', status: 'pending', activeForm: 'Doing a' }])
+    s = run([todo(2, [{ content: 'a', status: 'completed' }]), todo(3, [{ content: 'x', status: 'pending' }], 'Bash'), todo(4, 'nope')], s)
+    expect(s.todos).toEqual([{ content: 'a', status: 'completed' }])
+  })
+
+  it('queued marks a known user message and is ignored for an unknown one', () => {
+    let s = run([user(1, 'u1'), { seq: 2, t: 'queued', messageId: 'u1', queued: true }, { seq: 3, t: 'queued', messageId: 'zz', queued: true }])
+    expect(s.messages.u1?.queued).toBe(true)
+    expect(s.messages.zz).toBeUndefined()
+    s = run([{ seq: 4, t: 'queued', messageId: 'u1', queued: false }], s)
+    expect(s.messages.u1?.queued).toBe(false)
+  })
+
+  it('reset clears the conversation but keeps config, mode and the cursor', () => {
+    let s = run([
+      init(1), { seq: 2, t: 'config', config: { thinking: true, model: 'opus' } }, { seq: 3, t: 'mode', mode: 'plan' },
+      user(4, 'u1'), perm(5), { seq: 6, t: 'notice', level: 'info', text: 'hi' }, { seq: 7, t: 'commandOutput', id: 'o', text: 'x' },
+      { seq: 8, t: 'compact', id: 'k', trigger: 'manual' }, { seq: 9, t: 'tool', id: 't', name: 'TodoWrite', input: { todos: [{ content: 'a', status: 'pending' }] }, state: 'done' },
+    ])
+    s = agentChatReducer(s, { type: 'history', items: [], next: 3 })
+    s = run([{ seq: 10, t: 'reset', sessionId: 'sess-9' }], s)
+    expect(s).toMatchObject({ order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [], lastSeq: 10, mode: 'plan', config: { thinking: true, model: 'opus' } })
+    expect(s.historyNext).toBeUndefined()
+    expect(s.session?.sessionId).toBe('sess-9')
+  })
+
+  it('commandsChanged bumps catalogVersion', () => {
+    const s = run([{ seq: 1, t: 'commandsChanged' }, { seq: 2, t: 'commandsChanged' }])
+    expect(s.catalogVersion).toBe(2)
   })
 })

@@ -88,7 +88,7 @@ describe('createAgentChatTransport', () => {
     expect(first.url).toBe(`${AGENT_CHAT_PATH}/n1/stream`)
     first.emit({ seq: 5, t: 'status', status: 'idle' })
     first.emit({ seq: 5, t: 'status', status: 'idle' }) // duplicate: dropped
-    first.emit({ seq: 2, t: 'init', sessionId: 's', model: 'm', mode: 'default', commands: [], capabilities: [], cliVersion: '1' })
+    first.emit({ seq: 2, t: 'init', sessionId: 's', model: 'm', mode: 'default', commands: [], capabilities: [], cliVersion: '1', cwd: '/w' })
     first.emit({ seq: 3, t: 'permission', requestId: 'r', kind: 'tool', toolName: 'Bash', toolUseId: 'u', input: {} })
     expect(events).toEqual([5, 2, 3])
     first.onerror?.(new Event('error'))
@@ -107,5 +107,58 @@ describe('parseAgentChatFrame', () => {
     expect(parseAgentChatFrame('not json')).toBeNull()
     expect(parseAgentChatFrame('{"seq":"1","t":"mode"}')).toBeNull()
     expect(parseAgentChatFrame('{"seq":1,"t":"future"}')).toBeNull()
+  })
+})
+
+describe('agent chat transport: control verbs', () => {
+  const base = `${AGENT_CHAT_PATH}/n1`
+
+  it('GETs catalog / models / sessions and keeps only well-formed rows', async () => {
+    const t = createAgentChatTransport('n1')
+    fetchMock.mockResolvedValueOnce(reply({ commands: [{ name: 'clear', description: 'Clear', builtin: true }, { nope: 1 }] }))
+    expect(await t.catalog()).toEqual([{ name: 'clear', description: 'Clear', builtin: true }])
+    fetchMock.mockResolvedValueOnce(reply({ models: [{ value: 'opus', displayName: 'Opus', efforts: ['low'] }, 'bad'] }))
+    expect(await t.models()).toEqual([{ value: 'opus', displayName: 'Opus', efforts: ['low'] }])
+    fetchMock.mockResolvedValueOnce(reply({ sessions: [{ sessionId: 's1', title: 'T', updatedAt: 1, current: true }] }))
+    expect(await t.sessions()).toEqual([{ sessionId: 's1', title: 'T', updatedAt: 1, current: true }])
+    fetchMock.mockResolvedValueOnce(reply({}))
+    expect(await t.sessions()).toEqual([])
+    expect([0, 1, 2].map((i) => call(i).url)).toEqual([`${base}/catalog`, `${base}/models`, `${base}/sessions`])
+  })
+
+  it('POSTs config / resume / new with their bodies', async () => {
+    const t = createAgentChatTransport('n1')
+    await t.setConfig({ model: 'opus', thinking: false })
+    await t.resume('s-7')
+    await t.newConversation()
+    expect([0, 1, 2].map((i) => call(i).url)).toEqual([`${base}/config`, `${base}/resume`, `${base}/new`])
+    expect([0, 1, 2].map((i) => JSON.parse(call(i).init.body as string))).toEqual([{ model: 'opus', thinking: false }, { sessionId: 's-7' }, {}])
+    expect(call(2).init.method).toBe('POST')
+  })
+
+  it('maps control failures to operation-specific messages', async () => {
+    const t = createAgentChatTransport('n1')
+    fetchMock.mockResolvedValueOnce(reply({ error: 'unavailable' }, 409))
+    expect(await t.catalog().catch((e: unknown) => e)).toMatchObject({ operation: 'catalog', status: 409, message: expect.stringContaining('Too many Claude sessions') })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'claude_unavailable' }, 503))
+    expect(await t.models().catch((e: unknown) => e)).toMatchObject({ operation: 'models', status: 503, message: expect.stringContaining('could not start') })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'session_locked' }, 409))
+    const err = await t.resume('s').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(AgentChatApiError)
+    expect(err).toMatchObject({ operation: 'resume', message: expect.stringContaining('open in another chat node') })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'bad_request' }, 400))
+    expect(await t.setConfig({ effort: 'x' }).catch((e: unknown) => e)).toMatchObject({ operation: 'config', message: 'That model or effort level is not available.' })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'x' }, 409))
+    expect(await t.newConversation().catch((e: unknown) => e)).toMatchObject({ operation: 'new conversation', message: 'The new conversation request failed. Try again.' })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'busy', reason: 'Claude is working' }, 409))
+    expect(await t.newConversation().catch((e: unknown) => e)).toMatchObject({ code: 'busy', message: expect.stringContaining('Stop the turn or wait') })
+  })
+
+  it('accepts the new event kinds in SSE frames', () => {
+    for (const e of [
+      { seq: 1, t: 'config', config: { thinking: true } }, { seq: 2, t: 'context', context: { used: 1, window: 2 } },
+      { seq: 3, t: 'commandOutput', id: 'o', text: 'x' }, { seq: 4, t: 'compact', id: 'k', trigger: 'auto' },
+      { seq: 5, t: 'reset', sessionId: 's' }, { seq: 6, t: 'commandsChanged' }, { seq: 7, t: 'queued', messageId: 'm', queued: true },
+    ]) expect(parseAgentChatFrame(JSON.stringify(e))).toEqual(e)
   })
 })

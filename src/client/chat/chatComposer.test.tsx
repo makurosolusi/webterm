@@ -87,4 +87,26 @@ describe('ChatComposer', () => {
     expect(tipOf(screen.getByLabelText('Stop turn'))).toBe('Stop the running turn')
     expect(screen.getByLabelText('Stop turn').querySelector('.codicon-debug-stop')).not.toBeNull()
   })
+
+  it('without `completion` it stays a plain textarea: no menu on "/" or "@", Enter sends', () => {
+    const onSend = vi.fn()
+    render(<ChatComposer busy={false} onSend={onSend} onStop={() => {}} />)
+    type('/help')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(box().hasAttribute('role')).toBe(false)
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(onSend).toHaveBeenCalledWith('/help', [])
+    type('@src')
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('Escape stops a running turn, and does nothing when idle', () => {
+    const onStop = vi.fn()
+    const { rerender } = render(<ChatComposer busy={false} onSend={() => {}} onStop={onStop} />)
+    fireEvent.keyDown(box(), { key: 'Escape' })
+    expect(onStop).not.toHaveBeenCalled()
+    rerender(<ChatComposer busy onSend={() => {}} onStop={onStop} />)
+    fireEvent.keyDown(box(), { key: 'Escape' })
+    expect(onStop).toHaveBeenCalledTimes(1)
+  })
 })

@@ -39,13 +39,14 @@ describe('store serializer', () => {
   it('round-trips an agentChat node with every chat field, dropping a junk permission mode', () => {
     const n: WsNode = {
       id: 'c', kind: 'agentChat', x: 3, y: 4, cwd: '/w', agentId: 'claude', title: 'Agent Chat',
-      claudeProfileId: 'prof-1', chatSessionId: 'sess-1', permissionMode: 'plan',
+      claudeProfileId: 'prof-1', chatSessionId: 'sess-1', permissionMode: 'plan', chatConfig: { model: 'opus', thinking: false },
     }
     const back = toWsNode(toFlow(n))
     expect(back).toMatchObject(n)
     expect(toFlow(n).type).toBe('agentChat')
     const flow = toFlow(n)
     expect(toWsNode({ ...flow, data: { ...flow.data, permissionMode: 'yolo' } }).permissionMode).toBeUndefined()
+    expect(toWsNode({ ...flow, data: { ...flow.data, chatConfig: { model: 3, effort: 'low' } } }).chatConfig).toEqual({ effort: 'low' })
   })
 
   it('an agentChat node joins the kanban through its agentId', () => {

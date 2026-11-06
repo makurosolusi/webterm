@@ -9,7 +9,9 @@ import { mkdirSync } from 'node:fs'
 import {
   query, type CanUseTool, type Options, type PermissionMode, type Query, type SDKUserMessage, type SpawnOptions, type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentChatConfig } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
+import { configOptions } from './agentChat.controls'
 import { missingProfileNotice, resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import { writeClaudeSettings, writeHouseRules } from '../hooksSettings'
 import { writeClaudeMcpConfig } from '../mcp/mcp.launch'
@@ -38,6 +40,8 @@ export interface AgentChatOptionsInput {
   profileId?: string
   mode: AgentPermissionMode
   resume?: string
+  /** Model / effort / thinking picked in the node; absent = Claude Code's defaults. */
+  config?: AgentChatConfig
   canUseTool: CanUseTool
   abort: AbortController
   parentEnv?: NodeJS.ProcessEnv
@@ -67,6 +71,7 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     settingSources: AGENT_CHAT_SETTING_SOURCES,
     includePartialMessages: true,
     ...(i.resume ? { resume: i.resume } : {}),
+    ...(i.config ? configOptions(i.config) : {}),
     canUseTool: i.canUseTool,
     abortController: i.abort,
     settings: writeClaudeSettings(i.nodeId, i.port),
@@ -97,6 +102,8 @@ export interface AgentChatOpenInput {
   prompt: AsyncIterable<SDKUserMessage>
   /** Mode picked in this session (setMode); absent = the node's configured mode. */
   mode?: AgentPermissionMode
+  /** Model / effort / thinking of this session (setConfig). */
+  config?: AgentChatConfig
   notice(text: string): void
   stderr(chunk: string): void
 }
@@ -106,7 +113,7 @@ export type AgentChatOpen = (resumeId: string | undefined, canUseTool: CanUseToo
 /** Production opener: SDK `query()` in streaming-input mode, options rebuilt from the profile on every open. */
 export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode }): AgentChatOpen {
   return (resumeId, canUseTool, abort, input) => {
-    const { options, notice } = buildAgentChatOptions({ ...cfg, mode: input.mode ?? cfg.mode, resume: resumeId, canUseTool, abort, stderr: input.stderr })
+    const { options, notice } = buildAgentChatOptions({ ...cfg, mode: input.mode ?? cfg.mode, ...(input.config ? { config: input.config } : {}), resume: resumeId, canUseTool, abort, stderr: input.stderr })
     if (notice) input.notice(notice)
     return query({ prompt: input.prompt, options })
   }

@@ -8,7 +8,7 @@ describe('createAgentChatMapper', () => {
   test('init is emitted only when session, model or mode changes', () => {
     const m = createAgentChatMapper()
     expect(m.map(fx.init())).toEqual([{
-      t: 'init', sessionId: 's-1', model: 'claude-test', mode: 'default', commands: ['compact'], capabilities: ['interrupt'], cliVersion: '2.1.300',
+      t: 'init', sessionId: 's-1', model: 'claude-test', mode: 'default', commands: ['compact'], capabilities: ['interrupt'], cliVersion: '2.1.300', cwd: '/work',
     }])
     expect(m.map(fx.init())).toEqual([])
     expect(m.map(fx.init('s-1', 'claude-test', 'plan'))).toHaveLength(1)

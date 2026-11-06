@@ -5,7 +5,7 @@
 // Cursor rule (server re-sends live state on every connect): an event with `seq > lastSeq` applies
 // normally; an `init` / `permission` at or below the cursor applies idempotently and never lowers
 // it; anything else at or below the cursor is a duplicate and is dropped.
-import type { AgentChatEvent, AgentChatEventBody, AgentChatPart, AgentChatStatus } from '../../shared/agentChat.wire'
+import type { AgentChatConfig, AgentChatContext, AgentChatEvent, AgentChatEventBody, AgentChatPart, AgentChatStatus, AgentChatTodo } from '../../shared/agentChat.wire'
 import { isPermissionMode, type AgentPermissionMode } from '../../shared/workspace.capabilities'
 import type { PermissionEvent, PermissionOutcome, ToolEvent } from './agentChatCards.types'
 
@@ -22,19 +22,29 @@ export interface ChatMessageView {
   fromHistory?: boolean
   /** Transcript id of the copy this live user message absorbed (dedupe, see `applyHistory`). */
   absorbed?: string
+  /** Waiting behind the running turn (server `queued` event). */
+  queued?: boolean
 }
 
-export interface SessionInfo { sessionId: string; model: string; commands: string[]; capabilities: string[]; cliVersion: string }
+export interface SessionInfo { sessionId: string; model: string; commands: string[]; capabilities: string[]; cliVersion: string; cwd: string }
 
 export interface AgentChatState {
   nodeId: string
   lastSeq: number
-  /** Timeline keys in render order: `m:<messageId>`, `p:<requestId>`, `n:<id>`. */
+  /** Timeline keys in render order: `m:<messageId>`, `p:<requestId>`, `n:<id>`, `c:<commandOutputId>`, `k:<compactId>`. */
   order: string[]
   messages: Record<string, ChatMessageView>
   tools: Record<string, ToolEvent>
   permissions: Record<string, { request: PermissionEvent; outcome: PermissionOutcome }>
   notices: Record<string, { level: 'info' | 'warn' | 'error'; text: string }>
+  commandOutputs: Record<string, { text: string }>
+  compacts: Record<string, { trigger: 'manual' | 'auto'; preTokens?: number }>
+  /** Items of the latest TodoWrite tool input; [] until Claude writes one. */
+  todos: AgentChatTodo[]
+  config?: AgentChatConfig
+  context?: AgentChatContext
+  /** Bumped on `commandsChanged`: the view refetches the "/" catalog when it changes. */
+  catalogVersion: number
   status: AgentChatStatus
   statusDetail?: string
   session?: SessionInfo
@@ -59,7 +69,7 @@ const BUSY: readonly AgentChatStatus[] = ['starting', 'thinking', 'tool', 'await
 export const isBusyStatus = (s: AgentChatStatus): boolean => BUSY.includes(s)
 
 export function initialAgentChatState(nodeId: string): AgentChatState {
-  return { nodeId, lastSeq: 0, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, status: 'idle' }
+  return { nodeId, lastSeq: 0, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [], catalogVersion: 0, status: 'idle' }
 }
 
 /** SDK permission mode -> node mode ('default' is the node's 'manual'); undefined for modes the node has no name for. */
@@ -74,6 +84,15 @@ function tokensOf(usage: unknown): AgentChatState['tokens'] {
   if (!usage || typeof usage !== 'object') return undefined
   const u = usage as Record<string, unknown>
   return { input: num(u.input_tokens) + num(u.cache_read_input_tokens) + num(u.cache_creation_input_tokens), output: num(u.output_tokens) }
+}
+
+const TODO_STATUS = new Set(['pending', 'in_progress', 'completed'])
+/** `todos` of a TodoWrite input; undefined when the input is not a todo list (malformed or partial). */
+export function todosOf(input: unknown): AgentChatTodo[] | undefined {
+  const list = input && typeof input === 'object' ? (input as { todos?: unknown }).todos : undefined
+  if (!Array.isArray(list)) return undefined
+  return list.filter((t): t is AgentChatTodo => !!t && typeof t === 'object' && typeof t.content === 'string' && TODO_STATUS.has(t.status))
+    .map((t) => ({ content: t.content, status: t.status, ...(typeof t.activeForm === 'string' ? { activeForm: t.activeForm } : {}) }))
 }
 
 const userText = (m: ChatMessageView): string => m.parts.map((p) => (p.k === 'text' ? p.text : '')).join('')
@@ -102,7 +121,7 @@ function applyOne(s: AgentChatState, e: AgentChatEvent): AgentChatState {
       return { ...st, status: e.status, statusDetail: e.detail }
     case 'init': {
       const mode = nodeMode(e.mode)
-      const session = { sessionId: e.sessionId, model: e.model, commands: e.commands, capabilities: e.capabilities, cliVersion: e.cliVersion }
+      const session = { sessionId: e.sessionId, model: e.model, commands: e.commands, capabilities: e.capabilities, cliVersion: e.cliVersion, cwd: e.cwd }
       return { ...st, session, ...(mode ? { mode } : {}) }
     }
     case 'mode': {
@@ -118,7 +137,8 @@ function applyOne(s: AgentChatState, e: AgentChatEvent): AgentChatState {
         () => ({ id: e.messageId, role: e.role, parts: [], draft: [], ...(e.parentId ? { parentId: e.parentId } : {}) }))
     case 'tool': {
       const { seq: _seq, ...tool } = e
-      return { ...st, tools: { ...st.tools, [e.id]: tool } }
+      const todos = e.name === 'TodoWrite' ? todosOf(e.input) : undefined
+      return { ...st, tools: { ...st.tools, [e.id]: tool }, ...(todos ? { todos } : {}) }
     }
     case 'permission': {
       if (st.permissions[e.requestId]) return st // replayed on reconnect: already known
@@ -134,6 +154,33 @@ function applyOne(s: AgentChatState, e: AgentChatEvent): AgentChatState {
     case 'notice': {
       const id = `s${e.seq}`
       return { ...st, order: [...st.order, `n:${id}`], notices: { ...st.notices, [id]: { level: e.level, text: e.text } } }
+    }
+    case 'config':
+      return { ...st, config: e.config }
+    case 'context':
+      return { ...st, context: e.context }
+    case 'commandOutput': {
+      const known = e.id in st.commandOutputs
+      return { ...st, order: known ? st.order : [...st.order, `c:${e.id}`], commandOutputs: { ...st.commandOutputs, [e.id]: { text: e.text } } }
+    }
+    case 'compact': {
+      const known = e.id in st.compacts
+      const c = { trigger: e.trigger, ...(e.preTokens !== undefined ? { preTokens: e.preTokens } : {}) }
+      return { ...st, order: known ? st.order : [...st.order, `k:${e.id}`], compacts: { ...st.compacts, [e.id]: c } }
+    }
+    case 'reset': {
+      // /clear: a new conversation. Config and mode belong to the node, not the conversation.
+      const session = st.session ? { ...st.session, sessionId: e.sessionId } : undefined
+      return {
+        ...st, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [],
+        historyNext: undefined, context: undefined, costUsd: undefined, tokens: undefined, ...(session ? { session } : {}),
+      }
+    }
+    case 'commandsChanged':
+      return { ...st, catalogVersion: st.catalogVersion + 1 }
+    case 'queued': {
+      const m = st.messages[e.messageId]
+      return m ? { ...st, messages: { ...st.messages, [e.messageId]: { ...m, queued: e.queued } } } : st
     }
     default:
       return st

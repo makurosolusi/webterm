@@ -1,5 +1,6 @@
 // Timeline rendering of the agent chat view: messages (Markdown, collapsed thinking, tool cards with
-// nested subagent content), permission / question / plan cards, and notices. Pure props -> markup;
+// nested subagent content), permission / question / plan cards, notices, slash-command output and
+// compaction dividers. Pure props -> markup;
 // state lives in agentChatStore, requests in the view.
 import type { ReactNode } from 'react'
 import ChatMarkdown from '../chat/chatMarkdown'
@@ -10,6 +11,8 @@ import { ToolCard } from './toolCards'
 import { PermissionCard } from './permissionCard'
 import { QuestionCard } from './questionCard'
 import { PlanCard } from './planCard'
+import { MessageActions } from './messageActions'
+import { CommandOutputBlock, CompactDivider, QueuedBadge } from './timelineBlocks'
 
 export interface ThreadActions {
   answer: (a: AgentChatPermissionAnswer) => Promise<void>
@@ -93,8 +96,10 @@ function MessageRow({ ctx, message }: { ctx: Ctx; message: ChatMessageView }) {
         <span className={`chat-message__icon codicon codicon-${user ? 'account' : 'sparkle'}`} aria-hidden="true" />
         <span className="chat-message__role">{user ? 'You' : 'Claude'}</span>
         {streaming && <span className="chat-message__live">streaming</span>}
+        {user && message.queued && <QueuedBadge />}
       </div>
       <MessageBody ctx={ctx} message={message} />
+      {!streaming && <MessageActions message={message} />}
     </div>
   )
 }
@@ -129,6 +134,15 @@ export function AgentChatThread({ state, actions }: Ctx) {
         const id = key.slice(2)
         if (key.startsWith('p:')) return <Permission key={key} ctx={ctx} id={id} />
         if (key.startsWith('n:')) return <Notice key={key} ctx={ctx} id={id} />
+        if (key.startsWith('c:')) {
+          const c = state.commandOutputs[id]
+          return c ? <CommandOutputBlock key={key} text={c.text} /> : null
+        }
+        if (key.startsWith('k:')) {
+          const k = state.compacts[id]
+          return k ? <CompactDivider key={key} trigger={k.trigger} preTokens={k.preTokens} /> : null
+        }
+        if (!key.startsWith('m:')) return null
         const m = state.messages[id]
         return m && !m.parentId ? <MessageRow key={key} ctx={ctx} message={m} /> : null
       })}
