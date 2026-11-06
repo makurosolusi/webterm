@@ -2,6 +2,8 @@
 // composer, mode / cost / context footer. One reducer per mounted view; the stream closes on unmount.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import ChatComposer from '../chat/chatComposer'
+import type { ComposerImage } from '../chat/chatAttach'
+import { agentChatAttach } from './agentChatAttach'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { chatErrorMessage, isAbortError } from '../chat/chatTransport'
@@ -79,7 +81,10 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
   const transport = useMemo(() => injected ?? createAgentChatTransport(nodeId), [injected, nodeId])
   const [state, dispatch] = useReducer(agentChatReducer, nodeId, initialAgentChatState)
   const [stream, setStream] = useState<ChatStreamStatus>('connecting')
-  const [sendError, setSendError] = useState<{ text: string; message: string } | null>(null)
+  const [sendError, setSendError] = useState<{ text: string; images: ComposerImage[]; message: string } | null>(null)
+  const [sending, setSending] = useState(false)
+  const attach = useMemo(() => agentChatAttach(transport), [transport])
+  const sectionRef = useRef<HTMLElement | null>(null)
   const [stopError, setStopError] = useState<string | null>(null)
   const [history, setHistory] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
   const [atBottom, setAtBottom] = useState(true)
@@ -134,9 +139,14 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
   }, [state, atBottom])
 
   const busy = isBusyStatus(state.status)
-  const send = (text: string): void => {
+  const send = (text: string, images: ComposerImage[] = []): void => {
     setSendError(null)
-    transport.send(text, busy ? 'next' : undefined).catch((err: unknown) => setSendError({ text, message: why(err) }))
+    setSending(true)
+    const wire = images.map(({ mediaType, data }) => ({ mediaType, data }))
+    transport.send(text, busy ? 'next' : undefined, wire).then(
+      () => setSending(false),
+      (err: unknown) => { setSending(false); setSendError({ text, images, message: why(err) }) },
+    )
   }
   const stop = (): void => {
     setStopError(null)
@@ -146,6 +156,7 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
     answer: (a) => transport.answer(a),
     setMode: (m) => transport.setMode(m),
     loadFull: (id) => transport.toolResult(id),
+    imageUrl: (ref) => transport.imageUrl(ref),
   }), [transport])
 
   const jump = (): void => {
@@ -163,7 +174,7 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
   const mode = state.mode ?? permissionMode ?? DEFAULT_MODE
 
   return (
-    <section className="agent-chat nodrag nowheel" aria-label="Agent chat">
+    <section className="agent-chat nodrag nowheel" aria-label="Agent chat" ref={sectionRef}>
       {stream === 'reconnecting' && opened && (
         <div className="agent-chat-banner" role="status">
           <span className="chat-progress" aria-hidden="true" />
@@ -215,8 +226,8 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
       {sendError && (
         <div className="chat-error" role="alert">
           <span className="codicon codicon-error" aria-hidden="true" />
-          <span>{`Not sent: ${sendError.message}`}</span>
-          <Button variant="secondary" size="xs" onClick={() => send(sendError.text)}>Retry</Button>
+          <span>{`Not sent${sendError.images.length ? ` (with ${sendError.images.length} image${sendError.images.length === 1 ? '' : 's'})` : ''}: ${sendError.message}`}</span>
+          <Button variant="secondary" size="xs" disabled={sending} onClick={() => send(sendError.text, sendError.images)}>Retry</Button>
           <IconButton label="Dismiss error" size="icon-xs" onClick={() => setSendError(null)}>
             <span className="codicon codicon-close" aria-hidden="true" />
           </IconButton>
@@ -232,8 +243,14 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
         </div>
       )}
 
-      <ChatComposer busy={false} onSend={send} onStop={stop} label="Message Claude"
-        placeholder={busy ? 'Claude is working. Your message runs next…' : 'Ask Claude…'} maxLength={AGENT_CHAT_TEXT_MAX} />
+      {sending && (
+        <div className="agent-chat-sending" role="status">
+          <span className="chat-progress" aria-hidden="true" />
+          <span>Sending…</span>
+        </div>
+      )}
+      <ChatComposer busy={false} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
+        placeholder={busy ? 'Claude is working. Your message runs next…' : 'Ask Claude, or paste / drop images and files…'} maxLength={AGENT_CHAT_TEXT_MAX} />
 
       <footer className="agent-chat-footer">
         <ModePicker mode={mode} onChange={(m) => transport.setMode(m)} />

@@ -3,7 +3,7 @@
 // state lives in agentChatStore, requests in the view.
 import type { ReactNode } from 'react'
 import ChatMarkdown from '../chat/chatMarkdown'
-import type { AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
+import type { AgentChatPart, AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import { isBusyStatus, type AgentChatState, type ChatMessageView, type DraftSegment } from './agentChatStore'
 import { ToolCard } from './toolCards'
@@ -15,6 +15,8 @@ export interface ThreadActions {
   answer: (a: AgentChatPermissionAnswer) => Promise<void>
   setMode: (m: AgentPermissionMode) => Promise<void>
   loadFull: (toolUseId: string) => Promise<string>
+  /** URL of a transcript image (history `image` part reference). */
+  imageUrl: (ref: string) => string
 }
 
 interface Ctx { state: AgentChatState; actions: ThreadActions }
@@ -49,10 +51,27 @@ function Draft({ seg }: { seg: DraftSegment }) {
   return seg.kind === 'thinking' ? <Thinking text={seg.text} live /> : <ChatMarkdown source={seg.text} />
 }
 
+type ImagePart = Extract<AgentChatPart, { k: 'image' }>
+
+/** A user image: live bytes, else the transcript copy by reference, else a placeholder (bytes dropped from the replay log). */
+function UserImage({ ctx, part }: { ctx: Ctx; part: ImagePart }) {
+  const src = part.data ? `data:${part.mediaType};base64,${part.data}` : part.ref ? ctx.actions.imageUrl(part.ref) : undefined
+  if (!src) return <span className="agent-chat-muted">[image]</span>
+  // Opens full size in a new tab only when it is a server URL (browsers block top-level data: navigation).
+  const img = <img className="agent-chat-image" src={src} alt="Attached image" loading="lazy" />
+  return part.data ? img : <a href={src} target="_blank" rel="noreferrer" title="Open full size">{img}</a>
+}
+
 function MessageBody({ ctx, message }: { ctx: Ctx; message: ChatMessageView }) {
   if (message.role === 'user') {
     const text = message.parts.map((p) => (p.k === 'text' ? p.text : '')).join('')
-    return <p className="chat-text chat-text--plain">{text}</p>
+    const images = message.parts.filter((p): p is ImagePart => p.k === 'image')
+    return (
+      <>
+        {images.length > 0 && <div className="agent-chat-images">{images.map((p, i) => <UserImage key={`${message.id}-i${i}`} ctx={ctx} part={p} />)}</div>}
+        {text && <p className="chat-text chat-text--plain">{text}</p>}
+      </>
+    )
   }
   const parts: ReactNode[] = message.parts.map((p, i) => {
     const key = `${message.id}-${i}`

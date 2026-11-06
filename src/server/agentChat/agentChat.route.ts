@@ -13,6 +13,7 @@ import { isPermissionMode, isSafeNodeId } from '../../shared/workspace'
 import type { AgentChatPool } from './agentChat.pool'
 import type { AgentChatSession } from './agentChat.session'
 import { historyPage, loadTranscript, toolResultText, type LoadTranscript } from './agentChat.history'
+import { AGENT_CHAT_SEND_BODY_MAX_BYTES, imageVerb, parseSend, uploadVerb } from './agentChat.route.attach'
 
 const log = createLogger('agent-chat')
 
@@ -23,14 +24,15 @@ export const AGENT_CHAT_BODY_MAX_BYTES = 1024 * 1024
 export const AGENT_CHAT_SSE_EVENT = 'agent-chat'
 
 const PATH = /^\/api\/agent-chat\/([^/]+)\/([a-z]+)$/
-const VERB_METHOD: Record<string, 'GET' | 'POST'> = { stream: 'GET', history: 'GET', send: 'POST', interrupt: 'POST', permission: 'POST', mode: 'POST' }
-const PRIORITIES = new Set(['now', 'next'])
+const VERB_METHOD: Record<string, 'GET' | 'POST'> = { stream: 'GET', history: 'GET', send: 'POST', upload: 'POST', interrupt: 'POST', permission: 'POST', mode: 'POST' }
 const UINT = /^\d+$/
 
 export interface AgentChatRouteDeps {
   pool: AgentChatPool
   load?: LoadTranscript
   heartbeatMs?: number
+  /** Root of staged uploads (default `<data dir>/agent-chat-uploads`); tests pass a temp dir. */
+  uploadsDir?: string
 }
 
 type Ctx = Pick<RouteCtx, 'req' | 'res' | 'url' | 'path' | 'method' | 'body'>
@@ -57,14 +59,14 @@ function decodeNodeId(raw: string): string | undefined {
 }
 
 /** JSON object body under the cap; anything else is a Fail. */
-async function readObject(c: Ctx): Promise<{ body: Body } | { fail: Fail }> {
+async function readObject(c: Ctx, max = AGENT_CHAT_BODY_MAX_BYTES): Promise<{ body: Body } | { fail: Fail }> {
   let raw: string
   try {
-    raw = await c.body(AGENT_CHAT_BODY_MAX_BYTES)()
+    raw = await c.body(max)()
   } catch (err) {
     if (!(err instanceof BodyReadError)) throw err
     return { fail: err.reason === 'too_large'
-      ? { status: 413, error: 'too_large', reason: `Request body is over ${AGENT_CHAT_BODY_MAX_BYTES} bytes.` }
+      ? { status: 413, error: 'too_large', reason: `Request body is over ${max} bytes.` }
       : bad('Request body could not be read.') }
   }
   let v: unknown
@@ -133,7 +135,7 @@ async function history(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, s: Agen
   if (before === null || limit === null) return fail(c, bad('before and limit must be non-negative integers.'))
   const sessionId = deps.pool.sessionId(nodeId)
   if (!sessionId) {
-    if (tool) return fail(c, { status: 404, error: 'not_found', reason: 'This chat has no transcript yet.' })
+    if (tool || c.url.searchParams.get('image')) return fail(c, { status: 404, error: 'not_found', reason: 'This chat has no transcript yet.' })
     json(c.res, 200, { items: [], next: null })
     return true
   }
@@ -144,6 +146,8 @@ async function history(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, s: Agen
     log.error('agent_chat.history_failed', 'agent chat transcript read failed', { ids: { nodeId }, operation: 'history', error: err instanceof Error ? err.name : typeof err })
     return fail(c, { status: 502, error: 'transcript_unreadable', reason: 'The Claude transcript of this chat could not be read.' })
   }
+  const image = c.url.searchParams.get('image')
+  if (image) return imageVerb(c, msgs, image)
   if (tool) {
     const text = toolResultText(msgs, tool)
     if (text === undefined) return fail(c, { status: 404, error: 'not_found', reason: `No result for tool ${tool} in this transcript.` })
@@ -159,14 +163,14 @@ async function post(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, verb: stri
     await s.interrupt()
     return ok(c)
   }
-  const read = await readObject(c)
+  if (verb === 'upload') return uploadVerb(c, nodeId, deps.uploadsDir)
+  const read = await readObject(c, verb === 'send' ? AGENT_CHAT_SEND_BODY_MAX_BYTES : AGENT_CHAT_BODY_MAX_BYTES)
   if ('fail' in read) return fail(c, read.fail)
   const b = read.body
   if (verb === 'send') {
-    if (typeof b.text !== 'string' || !b.text.trim()) return fail(c, bad('text must be a non-empty string.'))
-    if (b.text.length > AGENT_CHAT_TEXT_MAX) return fail(c, bad(`text is over ${AGENT_CHAT_TEXT_MAX} characters.`))
-    if (b.priority !== undefined && !PRIORITIES.has(b.priority as string)) return fail(c, bad('priority must be "now" or "next".'))
-    const r = deps.pool.send(nodeId, b.text, b.priority as 'now' | 'next' | undefined)
+    const m = parseSend(b)
+    if ('reason' in m) return fail(c, bad(m.reason))
+    const r = deps.pool.send(nodeId, m.text, m.priority, m.images)
     if (r && !r.ok) return fail(c, { status: r.status, error: 'session_locked', reason: r.reason })
     return ok(c)
   }

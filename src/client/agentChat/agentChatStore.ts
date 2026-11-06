@@ -77,6 +77,10 @@ function tokensOf(usage: unknown): AgentChatState['tokens'] {
 }
 
 const userText = (m: ChatMessageView): string => m.parts.map((p) => (p.k === 'text' ? p.text : '')).join('')
+/** Fallback identity of a user message: its text plus its images' count and types (two image-only messages differ by those). */
+const userKey = (m: ChatMessageView): string => `${m.parts.filter((p) => p.k === 'image').map((p) => p.mediaType).join(',')}\n${userText(m)}`
+/** A live image whose bytes the server's replay log dropped: the transcript copy can show it by reference. */
+const lostImage = (m: ChatMessageView): boolean => m.parts.some((p) => p.k === 'image' && !p.data && !p.ref)
 
 function upsertMessage(s: AgentChatState, id: string, patch: (m: ChatMessageView) => ChatMessageView, fresh: () => ChatMessageView): AgentChatState {
   const cur = s.messages[id]
@@ -150,11 +154,15 @@ function applyHistory(s: AgentChatState, items: HistoryItem[], next: number | nu
   const keys: string[] = []
   for (const it of items) {
     if (it.t === 'message') {
-      if (messages[it.messageId] || Object.values(messages).some((m) => m.absorbed === it.messageId)) continue
+      const same = messages[it.messageId]
+      // Same id = the live echo of this turn (the server streams its SDK uuid as messageId).
+      if (same) { if (it.role === 'user' && lostImage(same)) messages[it.messageId] = { ...same, parts: it.parts }; continue }
+      if (Object.values(messages).some((m) => m.absorbed === it.messageId)) continue
       const view: ChatMessageView = { id: it.messageId, role: it.role, parts: it.parts, draft: [], fromHistory: true, ...(it.parentId ? { parentId: it.parentId } : {}) }
       if (it.role === 'user') {
-        const text = userText(view)
-        const twin = Object.values(messages).find((m) => m.role === 'user' && !m.fromHistory && !m.absorbed && userText(m) === text)
+        // Transcripts written before the shared id (or a CLI that ignores the streamed uuid): match by content.
+        const key = userKey(view)
+        const twin = Object.values(messages).find((m) => m.role === 'user' && !m.fromHistory && !m.absorbed && userKey(m) === key)
         if (twin) { messages[twin.id] = { ...twin, absorbed: it.messageId }; continue }
       }
       messages[it.messageId] = view

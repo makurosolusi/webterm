@@ -20,6 +20,8 @@ function fakeTransport() {
     setMode: vi.fn(async () => undefined),
     history: vi.fn(async () => ({ items: [], next: null })),
     toolResult: vi.fn(async () => ''),
+    upload: vi.fn(async (_f: File, name: string) => `/data/${name}`),
+    imageUrl: (ref: string) => `/img/${ref}`,
   } satisfies AgentChatTransport
   const emit = (...events: AgentChatEvent[]): void => act(() => {
     opts?.onStatus('open')
@@ -76,7 +78,7 @@ describe('AgentChatView', () => {
     expect(box().disabled).toBe(false)
     fireEvent.change(box(), { target: { value: 'also this' } })
     fireEvent.keyDown(box(), { key: 'Enter' })
-    expect(t.send).toHaveBeenCalledWith('also this', 'next')
+    expect(t.send).toHaveBeenCalledWith('also this', 'next', [])
   })
 
   it('a turn stopped mid-stream keeps its text but is no longer marked streaming', async () => {
@@ -95,7 +97,7 @@ describe('AgentChatView', () => {
     fireEvent.keyDown(box(), { key: 'Enter' })
     expect(await screen.findByText('Not sent: Open elsewhere.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(t.send).toHaveBeenLastCalledWith('hello', undefined)
+    expect(t.send).toHaveBeenLastCalledWith('hello', undefined, [])
     await waitFor(() => expect(screen.queryByText('Not sent: Open elsewhere.')).toBeNull())
   })
 

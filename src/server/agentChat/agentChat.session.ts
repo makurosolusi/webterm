@@ -2,12 +2,13 @@
 // `Query` (streaming input), opened lazily on the first send, closed after an idle period and reopened
 // with `resume`. Keeps the in-memory event log replayed to reconnecting clients. Permission prompts are
 // handed to the injected gate (server-io's broker); this class never answers one itself.
-import type { CanUseTool, PermissionResult, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { randomUUID } from 'node:crypto'
-import type { AgentChatEvent, AgentChatEventBody, AgentChatStatus } from '../../shared/agentChat.wire'
+import type { CanUseTool, PermissionResult, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentChatEvent, AgentChatEventBody, AgentChatImage, AgentChatStatus } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
 import { createLogger } from '../logs'
+import { capLogImages, userTurn } from './agentChat.attach'
 import { createAgentChatMapper } from './agentChat.events'
+import { Inbox } from './agentChat.inbox'
 import { agentChatPermissionMode, createStderrTail, type AgentChatOpen } from './agentChat.options'
 
 const log = createLogger('agent-chat')
@@ -33,23 +34,6 @@ export interface AgentChatSessionDeps {
   now?: () => number
   /** Test override of AGENT_CHAT_IDLE_CLOSE_MS. */
   idleMs?: number
-}
-
-/** Pushable async iterable of user turns (the Query's streaming input). */
-class Inbox implements AsyncIterable<SDKUserMessage> {
-  private q: SDKUserMessage[] = []
-  private wake?: () => void
-  private done = false
-  push(m: SDKUserMessage): void { this.q.push(m); this.wake?.() }
-  end(): void { this.done = true; this.wake?.() }
-  async *[Symbol.asyncIterator](): AsyncGenerator<SDKUserMessage> {
-    for (;;) {
-      while (this.q.length) yield this.q.shift() as SDKUserMessage
-      if (this.done) return
-      await new Promise<void>((r) => { this.wake = r })
-      this.wake = undefined
-    }
-  }
 }
 
 const permissionKind = (toolName: string): 'tool' | 'question' | 'plan' =>
@@ -101,14 +85,15 @@ export class AgentChatSession {
   notify(level: 'info' | 'warn' | 'error', text: string): void { this.emit({ t: 'notice', level, text }) }
 
   /** Queue a user turn; opens the Query if needed. While a turn runs the message is queued as 'next'. */
-  send(text: string, priority?: 'now' | 'next'): void {
+  send(text: string, priority?: 'now' | 'next', images: readonly AgentChatImage[] = []): void {
     if (this.closed) throw new Error(`agent chat send: session for node ${this.nodeId} is closed`)
     this.touch()
     const opening = !this.q
     if (opening) this.openQuery()
     const p = this.running ? priority ?? 'next' : priority
-    this.inbox?.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, ...(p ? { priority: p } : {}) })
-    this.emit({ t: 'message', messageId: randomUUID(), role: 'user', parts: [{ k: 'text', text }] })
+    const turn = userTurn(text, images, p)
+    this.inbox?.push(turn.message)
+    this.emit({ t: 'message', messageId: turn.id, role: 'user', parts: turn.parts })
     if (!this.running) this.emit({ t: 'status', status: opening ? 'starting' : 'thinking' })
     this.running = true
   }
@@ -295,6 +280,7 @@ export class AgentChatSession {
     const e = { ...body, seq: ++this.seq } as AgentChatEvent
     this.log.push(e)
     if (this.log.length > AGENT_CHAT_EVENT_LOG_MAX) this.log.shift()
+    if (e.t === 'message' && e.parts.some((x) => x.k === 'image')) capLogImages(this.log)
     for (const fn of this.subs) fn(e)
   }
 }

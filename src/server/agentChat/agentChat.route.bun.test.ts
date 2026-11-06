@@ -10,6 +10,14 @@ import { FakeQuery, fx } from './agentChat.fakeQuery'
 import { AgentChatPool } from './agentChat.pool'
 import { AGENT_CHAT_BODY_MAX_BYTES, AGENT_CHAT_TEXT_MAX, agentChatRoute, type AgentChatRouteDeps } from './agentChat.route'
 import { AGENT_CHAT_EVENT_LOG_MAX, type AgentChatSession } from './agentChat.session'
+import { AGENT_CHAT_SEND_BODY_MAX_BYTES } from './agentChat.route.attach'
+import { AGENT_CHAT_IMAGES_MAX, AGENT_CHAT_IMAGE_MAX_B64 } from '../../shared/agentChat.wire'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' // test-only 1x1
+const uploads = mkdtempSync(join(tmpdir(), 'agent-chat-up-'))
 
 const HEARTBEAT_MS = 20
 const CYCLES = 8
@@ -24,7 +32,7 @@ const opens: Array<{ fq: FakeQuery; canUseTool: CanUseTool }> = []
 let transcript: SessionMessage[] | Error = []
 let pool: AgentChatPool
 const deps = (): AgentChatRouteDeps => ({
-  pool, heartbeatMs: HEARTBEAT_MS,
+  pool, heartbeatMs: HEARTBEAT_MS, uploadsDir: uploads,
   load: async () => { if (transcript instanceof Error) throw transcript; return transcript },
 })
 
@@ -35,7 +43,7 @@ const server: Server = createServer((req, res) => {
 })
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
 const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/agent-chat`
-afterAll(() => { server.close() })
+afterAll(() => { server.close(); rmSync(uploads, { recursive: true, force: true }) })
 afterEach(() => { pool.closeAll(); opens.length = 0; transcript = [] })
 // A fresh pool per test; deps() reads `pool` per request so it always sees the current one.
 beforeEach(() => {
@@ -98,7 +106,8 @@ describe('agent chat route', () => {
     expect((await post('chat/send', { text: 'hi', priority: 'later' })).status).toBe(400)
     expect((await post('chat/send', 'not json')).status).toBe(400)
     expect((await post('chat/send', [1])).status).toBe(400)
-    expect((await post('chat/send', { text: 'y'.repeat(AGENT_CHAT_BODY_MAX_BYTES) })).status).toBe(413)
+    expect((await post('chat/send', { text: 'y'.repeat(AGENT_CHAT_SEND_BODY_MAX_BYTES) })).status).toBe(413)
+    expect((await post('chat/mode', { mode: 'y'.repeat(AGENT_CHAT_BODY_MAX_BYTES) })).status).toBe(413)
     expect(opens).toHaveLength(0)
     const r = await post('chat/send', { text: 'hello' })
     expect(r.status).toBe(200)
@@ -222,5 +231,59 @@ describe('agent chat route', () => {
     const body = await r.json() as { error: string; reason: string }
     expect(body.error).toBe('session_locked')
     expect(body.reason).toContain('already open')
+  })
+
+  test('send with images: validated at the boundary, then image blocks + text reach the Query', async () => {
+    const img = (o: Record<string, unknown> = {}) => ({ mediaType: 'image/png', data: PNG, ...o })
+    const refused = async (body: unknown): Promise<string> => {
+      const r = await post('chat/send', body)
+      expect(r.status).toBe(400)
+      return ((await r.json()) as { reason: string }).reason
+    }
+    expect(await refused({ text: '' })).toContain('text or at least one image')
+    expect(await refused({ text: '', images: [] })).toContain('text or at least one image')
+    expect(await refused({ text: 'x', images: 'no' })).toContain('array')
+    expect(await refused({ text: 'x', images: [img({ mediaType: 'image/svg+xml' })] })).toContain('PNG, JPEG, GIF or WebP')
+    expect(await refused({ text: 'x', images: [img({ data: 'not base64!' })] })).toContain('base64')
+    expect(await refused({ text: 'x', images: [img({ data: 'QUJDRA==' })] })).toContain('is not a PNG')
+    expect(await refused({ text: 'x', images: [img({ data: 'A'.repeat(AGENT_CHAT_IMAGE_MAX_B64 + 4) })] })).toContain('is over')
+    expect(await refused({ text: 'x', images: Array.from({ length: AGENT_CHAT_IMAGES_MAX + 1 }, () => img()) })).toContain(`At most ${AGENT_CHAT_IMAGES_MAX}`)
+    expect(opens).toHaveLength(0)
+    // A declared type that lies is corrected to the sniffed one (the API refuses a mismatch).
+    expect((await post('chat/send', { text: '', images: [img({ mediaType: 'image/jpeg' })] })).status).toBe(200)
+    expect((await post('chat/send', { text: 'what is this?', images: [img()] })).status).toBe(200)
+    await tick()
+    const block = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG } }
+    expect(opens[0]?.fq.prompts.map((p) => p.message.content)).toEqual([[block], [block, { type: 'text', text: 'what is this?' }]])
+  })
+
+  test('upload stages a non-image file under the node folder with a safe unique name', async () => {
+    const up = (name: string, body: string) => fetch(`${base}/chat/upload?name=${encodeURIComponent(name)}`, { method: 'POST', body })
+    const r = await up('../../etc/my notes.txt', 'hello file')
+    expect(r.status).toBe(200)
+    const { path } = await r.json() as { path: string }
+    expect(path.startsWith(join(uploads, 'chat') + '/')).toBe(true)
+    expect(path.slice(join(uploads, 'chat').length + 1)).toMatch(/^[a-z0-9]+-[0-9a-f]{8}-__\.\._etc_my_notes\.txt$/)
+    expect(readFileSync(path, 'utf8')).toBe('hello file')
+    const again = await (await up('../../etc/my notes.txt', 'second')).json() as { path: string }
+    expect(again.path).not.toBe(path)
+    expect((await up('', 'x')).status).toBe(400)
+    expect((await fetch(`${base}/chat/upload?name=a.txt`)).status).toBe(405)
+  })
+
+  test('history maps transcript images to references and serves their bytes', async () => {
+    expect((await fetch(`${base}/chat/history?image=u1:0`)).status).toBe(404)
+    transcript = [{
+      type: 'user', uuid: 'u1', session_id: 's-old', parent_tool_use_id: null, parent_agent_id: null,
+      message: { role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG } }, { type: 'text', text: 'see' }] },
+    }]
+    const page = await (await fetch(`${base}/old/history`)).json() as { items: Array<{ parts?: unknown[] }> }
+    expect(page.items[0]?.parts).toEqual([{ k: 'image', mediaType: 'image/png', ref: 'u1:0' }, { k: 'text', text: 'see' }])
+    const img = await fetch(`${base}/old/history?image=u1:0`)
+    expect(img.status).toBe(200)
+    expect(img.headers.get('content-type')).toBe('image/png')
+    expect(Buffer.from(await img.arrayBuffer()).equals(Buffer.from(PNG, 'base64'))).toBe(true)
+    expect((await fetch(`${base}/old/history?image=u1:1`)).status).toBe(404)
+    expect((await fetch(`${base}/old/history?image=nope`)).status).toBe(404)
   })
 })
