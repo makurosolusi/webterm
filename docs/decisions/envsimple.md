@@ -47,15 +47,17 @@ API: `GET /api/capabilities`, `POST /api/capabilities/:id` (`{enabled}`), `POST 
 `settingsGuard(req)` melindungi mutasi `PUT /api/settings/env`, `POST /api/settings/env/import`, dan semua `POST|PUT /api/capabilities*`; `GET` tidak. Lolos bila:
 
 - (A) token root valid lewat `x-webterm-token` (token node/capability ditolak), atau
-- (B) tidak ada token yang ditegakkan DAN peer socket loopback DAN tanpa header `Forwarded`/`X-Forwarded-*` DAN `Host` lolos allowlist DAN header `Origin` ADA dan sama-origin.
+- (B) tanpa header token/capability sama sekali DAN cookie `wt_ui` hidup (halaman webterm yang sudah sign-in) DAN header `Origin` ADA dan sama-origin.
 
-Selain itu: 403 `{error:'forbidden'}` dan satu baris di tabel `capability_audit` dengan alasan generik (`forwarded|origin|token_kind|peer|host`), tanpa isi header, tanpa nilai. Tabel dibatasi 1000 baris (terlama dihapus), dibuat idempoten oleh `ensureAuditSchema` dari `openDb` (KE-2). Sengaja lebih ketat dari `sameOrigin` biasa, yang mengizinkan Origin absen: browser selalu mengirim Origin pada POST/PUT.
+Diperbarui 2026-11-07: jalur B lama (tanpa token ditegakkan + peer loopback + tanpa `Forwarded`) mati sejak token root selalu dicetak saat boot, dan UI cookie-only kena 403 di Settings. Cookie hanya dicetak untuk token root atau kode buka sekali pakai (`ui-session-cookie.md`), jadi setara token root: tanpa cek peer/forwarded, karena web channel remote dan reverse proxy adalah kasus normal. `/api/control/effective` memakai penjaga yang sama untuk baca (`purpose: 'read'`, tanpa syarat Origin karena GET sama-origin tak membawanya). Kunci: `featureCapabilities.guard.http.bun.test.ts`.
+
+Selain itu: 403 `{error:'forbidden'}` dan satu baris di tabel `capability_audit` dengan alasan generik (`origin|token_kind|session`), tanpa isi header, tanpa nilai. Tabel dibatasi 1000 baris (terlama dihapus), dibuat idempoten oleh `ensureAuditSchema` dari `openDb` (KE-2). Sengaja lebih ketat dari `sameOrigin` biasa, yang mengizinkan Origin absen: browser selalu mengirim Origin pada POST/PUT.
 
 Batas jujur (a §7), jangan dikesankan lebih:
 
 - Loopback tanpa token tidak lagi dibendung oleh persetujuan manual. Proses sesama user (termasuk shell PTY dan agent) dapat menyalakan Worker/Otonomi lewat API. Ini sebelumnya juga mungkin (`token/enable` lalu `PUT`), jadi bukan kemampuan teknis baru, tetapi gesekan satu langkah hilang.
 - Penjaga TIDAK menghentikan `curl` dari proses sesama user yang menambahkan header `Origin` palsu. Itu batas yang diterima user.
-- Pengganti yang nyata: pemeriksaan peer/Host/Origin/forwarded, penolakan token node dan capability, tes bahwa tool Central tak bisa memanggil rute settings, audit tiap grant/revoke, dan token wajib untuk akses non-loopback.
+- Pengganti yang nyata: cookie sesi UI + Origin, penolakan token node dan capability, tes bahwa tool Central tak bisa memanggil rute settings, audit tiap grant/revoke, dan token wajib untuk akses non-loopback.
 - Mencabut kemampuan menghentikan pemicu BARU, bukan worker/PTY yang sedang berjalan (KE-5).
 - Jawaban 403 hanya `{error:'forbidden'}`; ia belum menyebut bahwa skrip bisa memakai token (lihat Hutang).
 

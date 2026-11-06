@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { CapabilitiesResponse, CapabilityId } from '../shared/featureCapabilities'
 import { CapabilitiesApiError, fetchCapabilities, setCapability, setCapabilitySub } from './capabilitiesApi'
-import { CAPABILITY_TEXT, forbiddenText } from './capabilitiesLabels'
+import { CAPABILITY_TEXT } from './capabilitiesLabels'
 
 const HTTP_FORBIDDEN = 403
 
@@ -22,13 +22,10 @@ export function resetCapabilitiesCache(): void {
   for (const l of listeners) l()
 }
 
-/**
- * Pesan Indonesia untuk galat API; tidak memuat body atau kode mentah. 403 memakai port dengar dari server
- * (di balik tunnel `location.port` = port tunnel), jatuh ke port halaman bila server tidak menyebutnya.
- */
+/** User-facing message for an API error; never the raw body or code. 403 = the UI session ended. */
 export function capabilityErrorMessage(e: unknown, fallback: string): string {
   if (!(e instanceof CapabilitiesApiError) || e.status !== HTTP_FORBIDDEN) return fallback
-  return e.port === undefined ? CAPABILITY_TEXT.forbidden : forbiddenText(String(e.port))
+  return CAPABILITY_TEXT.forbidden
 }
 
 export interface CapabilitiesApi {

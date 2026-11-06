@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { CAPABILITIES, CAPABILITY_IDS, DERIVED_FLAGS } from '../shared/featureCapabilities'
 import { ENV_REGISTRY, specFor } from './envRegistry'
 import { settingsGuard } from './featureCapabilities.guard'
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url))
 const SRC_DIR = join(SERVER_DIR, '..')
@@ -49,19 +50,18 @@ describe('identifier gerbang lama (D3-REV)', () => {
 describe('pagar V4/V6 ES-02 tetap ada', () => {
   const guardTest = readFileSync(join(SERVER_DIR, 'featureCapabilities.guard.test.ts'), 'utf8')
 
-  it('berkas tes penjaga masih memuat kasus V4 statis dan header Forwarded', () => {
+  it('berkas tes penjaga masih memuat kasus V4 statis dan kasus cookie session', () => {
     expect(guardTest).toContain("describe('statis V4'")
-    expect(guardTest).toMatch(/x-forwarded-for/)
-    expect(guardTest).toMatch(/forwarded: 'for=/)
-    expect(guardTest).toMatch(/reason: 'forwarded'/)
+    expect(guardTest).toMatch(/reason: 'session'/)
+    expect(guardTest).toMatch(/reason: 'origin'/)
   })
 
-  it('penjaga hidup menolak header Forwarded/X-Forwarded-For walau Origin dan Host sah', () => {
+  it('penjaga hidup: Origin dan Host sah tanpa cookie UI ditolak, juga dari loopback; header Forwarded tak memberi apa pun', () => {
     const mk = (extra: Record<string, string>): IncomingMessage =>
       ({ method: 'POST', headers: { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', ...extra }, socket: { remoteAddress: '127.0.0.1' } }) as unknown as IncomingMessage
-    expect(settingsGuard(mk({}), {}, undefined)).toMatchObject({ ok: true })
-    expect(settingsGuard(mk({ 'x-forwarded-for': '1.2.3.4' }), {}, undefined)).toEqual({ ok: false, reason: 'forwarded' })
-    expect(settingsGuard(mk({ forwarded: 'for=1.2.3.4' }), {}, undefined)).toEqual({ ok: false, reason: 'forwarded' })
+    expect(settingsGuard(mk({}), undefined)).toEqual({ ok: false, reason: 'session' })
+    expect(settingsGuard(mk({ 'x-forwarded-for': '127.0.0.1' }), undefined)).toEqual({ ok: false, reason: 'session' })
+    expect(settingsGuard(mk({ cookie: TEST_UI_COOKIE }), undefined)).toEqual({ ok: true, via: 'ui' })
   })
 
   it('def tool central tidak mengimpor modul settings/capabilities (V4)', () => {

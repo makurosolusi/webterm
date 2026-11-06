@@ -1,6 +1,5 @@
 // `/auth/*`: the entry points that hand the webterm UI its `wt_ui` session cookie. Routed BEFORE
-// the /api credential gate (index.ts) because they are how a browser gets a credential; each checks
-// the Host allowlist itself. Pattern: Jupyter (redirect file + token -> cookie) and VS Code server
+// the /api credential gate (index.ts) because they are how a browser gets a credential. Pattern: Jupyter (redirect file + token -> cookie) and VS Code server
 // (cookie set, then 303 to a clean URL). Secrets never appear in a response body or a log line.
 //   GET  /auth/open?code=   one-time code (uiOpen.ts) -> Set-Cookie + 303 `/`
 //   GET  /auth/me           { signedIn } (polled by a signed-out tab)
@@ -8,7 +7,7 @@
 //   POST /auth/login        { token } root token -> Set-Cookie (remote / headless sign-in)
 //   POST /auth/logout       revokes the caller's session and clears the cookie
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { type AllowedHostsArg, UI_SESSION_COOKIE, hostOk, readCookie, sameOrigin, tokensMatch } from '../auth'
+import { UI_SESSION_COOKIE, readCookie, sameOrigin, tokensMatch } from '../auth'
 import { readCappedRequestBody } from '../cappedRequestBody'
 import { firstHeader } from '../httpHeaders'
 import { createLogger } from '../logs'
@@ -29,7 +28,6 @@ const INVALID_CODE_TEXT = 'This sign-in link is invalid or has expired. Open web
 export interface UiAuthDeps {
   sessions: () => UiSessionStore
   opener: UiOpener
-  hosts?: AllowedHostsArg
   /** Root token in force (every boot mints one; undefined only before boot, when /auth/login refuses). */
   token: () => string | undefined
   now?: () => number
@@ -90,7 +88,6 @@ export function createUiAuthRoute(d: UiAuthDeps): (req: IncomingMessage, res: Se
 
   const dispatch = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> => {
     const route = `${req.method ?? 'GET'} ${url.pathname}`
-    if (!hostOk(req.headers, d.hosts)) return reply(res, 403, { error: 'host_not_allowed' })
     if (route === 'GET /auth/open') return open(req, res, url)
     if (route === 'GET /auth/me') {
       const raw = callerSession(req)

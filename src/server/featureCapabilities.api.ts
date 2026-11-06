@@ -12,7 +12,6 @@ import { peerOf } from './featureCapabilities.guard'
 import type { DetectOptions } from './featureCapabilities.detect'
 import { buildResponse, connect, defaultDetect, reset, setAdvanced, setSub, toggle, type CapCtx, type Detect, type Reply } from './featureCapabilities.service'
 import { createLogger } from './logs'
-import { resolveHostPort } from './serverConfig'
 
 const log = createLogger('capabilities')
 export const CAPABILITIES_PATH = '/api/capabilities'
@@ -82,8 +81,7 @@ export async function capabilitiesRoute(
   }
   if (!verdict.ok) {
     note({ capability: isCapabilityId(seg) ? seg : 'advanced', action: 'denied', detail: verdict.reason })
-    // Port dengar server asli: di balik tunnel/proxy `location.port` klien = port tunnel, bukan yang harus dibuka.
-    return send(res, { status: 403, body: { error: 'forbidden', port: resolveHostPort(env).port } })
+    return send(res, { status: 403, body: { error: 'forbidden' } })
   }
   if (!fixed && !isCapabilityId(seg)) return fail(res, 404, 'unknown_capability')
 

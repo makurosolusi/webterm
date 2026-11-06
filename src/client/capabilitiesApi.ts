@@ -4,9 +4,9 @@ import type { CapabilitiesResponse, CapabilityId } from '../shared/featureCapabi
 const PATH = '/api/capabilities'
 const HTTP_BAD_GATEWAY = 502
 
-/** Galat API kemampuan: hanya status + kode statis (+ port dengar server pada 403); body mentah tidak pernah ikut. */
+/** Capabilities API error: status + static code only; the raw body is never carried. */
 export class CapabilitiesApiError extends Error {
-  constructor(readonly status: number, readonly code: string, readonly port?: number) {
+  constructor(readonly status: number, readonly code: string) {
     super(`capabilities request failed (${status} ${code})`)
     this.name = 'CapabilitiesApiError'
   }
@@ -31,8 +31,7 @@ export async function callCapabilities<T = CapabilitiesResponse>(
   try { parsed = await res.json() } catch { parsed = undefined } // body bukan JSON: cukup status
   if (!res.ok) {
     const code = isObj(parsed) && typeof parsed.error === 'string' ? parsed.error : `http_${res.status}`
-    const port = isObj(parsed) && typeof parsed.port === 'number' ? parsed.port : undefined
-    throw new CapabilitiesApiError(res.status, code, port)
+    throw new CapabilitiesApiError(res.status, code)
   }
   return parsed as T
 }

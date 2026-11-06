@@ -61,10 +61,10 @@ own actions or enabled a token it then knew (sec-208-1). Tokens in URLs also end
   That is out of scope, as before.
 - macOS `open` runs outside the Claude sandbox. The short-lived, single-use code limits what webterm adds
   to that general escape.
-- `WEBTERM_ALLOWED_HOSTS` (the Host allowlist against DNS rebinding) was active only while no token was
-  enforced. Every boot now enforces one, so the allowlist is never active. A rebinding page has no
-  credential for this origin and gets 403. The allowlist is kept for now and needs a separate decision:
-  remove it, or make it always active on loopback binds.
+- The Host allowlist against DNS rebinding (`WEBTERM_ALLOWED_HOSTS`) was active only while no token was
+  enforced. Every boot now enforces one, so it could never switch on; it was removed (2026-11-06). DNS
+  rebinding stays closed by the credential: a rebinding page has no root token header and no `wt_ui`
+  cookie for this origin, so it gets 403.
 - There is no `webterm open` operator command. Headless setups paste the token from the file the boot
   line names; its value is never printed.
 

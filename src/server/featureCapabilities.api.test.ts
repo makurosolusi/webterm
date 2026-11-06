@@ -7,21 +7,23 @@ import { setupEnv, recorder } from './envSettings.testutil'
 import { capabilitiesRoute } from './featureCapabilities.api'
 import type { AuditEntry } from './featureCapabilities.audit'
 import { settingsGuard } from './featureCapabilities.guard'
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { onCapabilityChange } from './featureCapabilities.runtime'
 
-// test-only: server nyata untuk semua hal kecuali jaringan; guard asli dengan env kosong (port bawaan, tanpa token).
+// test-only: server nyata untuk semua hal kecuali jaringan; guard asli, pemanggil = halaman webterm bercookie (kecuali `cookie: false`).
 const ORIGIN = 'http://127.0.0.1:8700'
-interface Opts { origin?: string | null; remote?: boolean; query?: string }
+interface Opts { origin?: string | null; remote?: boolean; cookie?: false; query?: string }
 
 function harness(fetch = fakeBotApi([]).fetch) {
   const h = setupEnv({})
   const audits: AuditEntry[] = []
-  const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, {}, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
+  const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
   const detectCalls: Array<{ fresh?: boolean } | undefined> = []
   const extras = { env: h.target, detect: (o?: { fresh?: boolean }) => { detectCalls.push(o); return { chromium: true, telegramToken: false, agentEngine: true } }, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
   const call = async (method: string, path: string, body?: unknown, opts: Opts = {}) => {
     const headers: Record<string, string> = { host: '127.0.0.1:8700' }
     if (opts.origin !== null) headers.origin = opts.origin ?? ORIGIN
+    if (opts.cookie !== false) headers.cookie = TEST_UI_COOKIE
     const raw = body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]
     const socket = { remoteAddress: opts.remote ? '203.0.113.9' : '127.0.0.1' }
     const req = Object.assign(Readable.from(raw), { method, headers, socket, url: path + (opts.query ?? '') }) as unknown as IncomingMessage
@@ -64,10 +66,11 @@ describe('POST /:id', () => {
     expect(on.status).toBe(200)
     expect(on.json?.capabilities.find((c: { id: string }) => c.id === 'autonomy')).toMatchObject({ status: 'on' })
     expect(h.target.WEBTERM_CENTRAL).toBe('on')
-    expect((await h.call('POST', '/api/capabilities/central', { enabled: false })).json?.capabilities.find((c: { id: string }) => c.id === 'autonomy').status).toBe('off')
+    // A remote web channel signed in with the cookie is the normal case, not a denial.
+    expect((await h.call('POST', '/api/capabilities/central', { enabled: false }, { remote: true })).json?.capabilities.find((c: { id: string }) => c.id === 'autonomy').status).toBe('off')
     expect(h.audits).toEqual([
       { peer: 'loopback', via: 'ui', capability: 'autonomy', action: 'grant', detail: 'central,workers,autonomy' },
-      { peer: 'loopback', via: 'ui', capability: 'central', action: 'revoke', detail: 'central,workers,autonomy' },
+      { peer: 'remote', via: 'ui', capability: 'central', action: 'revoke', detail: 'central,workers,autonomy' },
     ])
   })
   it('respons menyebut alsoTurnsOn untuk kemampuan yang ikut menyala', async () => {
@@ -81,28 +84,22 @@ describe('POST /:id', () => {
     expect((await h.call('POST', '/api/capabilities/bogus', { enabled: true })).json).toEqual({ error: 'unknown_capability' })
     expect((await h.call('POST', '/api/capabilities/advanced/sub', { key: 'x', on: true })).status).toBe(404)
   })
-  it('403 tanpa Origin, Origin asing, atau peer remote; tidak ada yang berubah dan denied dicatat', async () => {
+  it('403 tanpa Origin, Origin asing, atau tanpa cookie UI; tidak ada yang berubah dan denied dicatat', async () => {
     const h = harness()
     const blocked = [
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: null }),
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: 'http://evil.example' }),
-      await h.call('POST', '/api/capabilities/central', { enabled: true }, { remote: true }),
+      await h.call('POST', '/api/capabilities/central', { enabled: true }, { cookie: false }),
     ]
-    expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden', port: 8700 }]))
+    expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden' }]))
     expect(h.target.WEBTERM_CENTRAL).toBeUndefined()
-    expect(h.audits.map((a) => [a.action, a.via, a.detail])).toEqual([['denied', 'rejected', 'origin'], ['denied', 'rejected', 'origin'], ['denied', 'rejected', 'peer']])
+    expect(h.audits.map((a) => [a.action, a.via, a.detail])).toEqual([['denied', 'rejected', 'origin'], ['denied', 'rejected', 'origin'], ['denied', 'rejected', 'session']])
   })
   it('GET ?refresh=1 meminta deteksi segar; GET biasa tetap memakai cache', async () => {
     const h = harness()
     expect((await h.call('GET', '/api/capabilities')).status).toBe(200)
     expect((await h.call('GET', '/api/capabilities', undefined, { query: '?refresh=1' })).status).toBe(200)
     expect(h.detectCalls).toEqual([{ fresh: false }, { fresh: true }])
-  })
-  it('403 memuat port dengar server (PORT), bukan port tunnel yang dilihat halaman', async () => {
-    const h = harness()
-    h.target.PORT = '9123' // test-only
-    const r = await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: null })
-    expect([r.status, r.json]).toEqual([403, { error: 'forbidden', port: 9123 }])
   })
   it('dua POST bersamaan konsisten dan tiap hook start/stop tepat sekali', async () => {
     offs.push(onCapabilityChange('files', { start: () => { events.push('start') }, stop: () => { events.push('stop') } }))

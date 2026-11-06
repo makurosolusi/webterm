@@ -17,10 +17,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { request as httpRequest } from 'node:http'
 import { connect, type Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
-import { CAPABILITY_HEADER, TOKEN_HEADER, TOKEN_PARAM, UI_SESSION_COOKIE, readCookie, tokensMatch, type AllowedHostsArg } from '../auth'
+import { CAPABILITY_HEADER, TOKEN_HEADER, TOKEN_PARAM, UI_SESSION_COOKIE, readCookie, tokensMatch } from '../auth'
 import { isLoopbackOrUnspecified } from '../browser/ssrf.ip'
 import { firstHeader } from '../httpHeaders'
-import { hostAllowed } from '../hostAllow'
 import { createLogger } from '../logs'
 
 const log = createLogger('proxy')
@@ -35,7 +34,6 @@ const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-connection', 'proxy-authe
 const WEBTERM_HEADERS = [TOKEN_HEADER, CAPABILITY_HEADER]
 
 export interface ProxyDeps {
-  allowedHosts?: AllowedHostsArg
   /** Root token in force right now. */
   token(): string | undefined
   /** Verifier of the `wt_ui` cookie: the signed-in UI's browser sends it to this port too. */
@@ -103,16 +101,11 @@ export function proxyOriginOk(headers: IncomingMessage['headers'], mainPort: num
   }
 }
 
-function hostOk(headers: IncomingMessage['headers'], arg: AllowedHostsArg | undefined): boolean {
-  const list = typeof arg === 'function' ? arg() : arg
-  return list === undefined || hostAllowed(headers.host, list)
-}
-
-/** Host allowlist + `proxyOriginOk`; credential = root token header (as /api, never the query), a live
+/** `proxyOriginOk`; credential = root token header (as /api, never the query), a live
  *  `wt_ui` session, or the proxy cookie. */
 function gate(req: IncomingMessage, token: string | undefined, deps: ProxyDeps, upgrade: boolean): Gate {
   const root = tokensMatch(token, firstHeader(req.headers[TOKEN_HEADER]))
-  if (!hostOk(req.headers, deps.allowedHosts) || !proxyOriginOk(req.headers, deps.mainPort, upgrade && !root)) return { ok: false }
+  if (!proxyOriginOk(req.headers, deps.mainPort, upgrade && !root)) return { ok: false }
   if (root) return { ok: true, setCookie: true }
   const cookies = firstHeader(req.headers.cookie)
   const session = readCookie(cookies, UI_SESSION_COOKIE)

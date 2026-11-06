@@ -16,6 +16,9 @@ export function acceptUiSessions(check: (raw: string) => boolean): void {
   uiSessionChecks.add(check)
 }
 const signedIn = (raw: string | undefined): boolean => raw !== undefined && [...uiSessionChecks].some((check) => check(raw))
+/** true when these request headers carry a live `wt_ui` session cookie (the signed-in webterm page). */
+export const hasUiSession = (headers: IncomingMessage['headers'] | undefined): boolean =>
+  signedIn(readCookie(firstHeader(headers?.cookie), UI_SESSION_COOKIE))
 
 /**
  * `null` = allowed; otherwise the 403 error code.
@@ -42,6 +45,6 @@ export function uiOnlyDenial(
   const token = firstHeader(headers[TOKEN_HEADER])?.trim()
   if (token && isNodeToken(token)) return AGENT_CANNOT_APPROVE
   if (firstHeader(headers['sec-fetch-site']) !== 'same-origin' || !sameOrigin(headers)) return APPROVAL_BROWSER_ONLY
-  if (!signedIn(readCookie(firstHeader(headers.cookie), UI_SESSION_COOKIE))) return APPROVAL_BROWSER_ONLY
+  if (!hasUiSession(headers)) return APPROVAL_BROWSER_ONLY
   return null
 }
