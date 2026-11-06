@@ -126,7 +126,8 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
-        className="st-dialog-content"
+        // inset-0 + translate-*-0 replace the shadcn centering utilities (tailwind-merge) so the page fills the viewport.
+        className="st-dialog-content inset-0 translate-x-0 translate-y-0"
         showCloseButton={false}
         onKeyDown={settingsUndoKeyDown(history)}
         // The Undo toast is portaled outside the dialog; clicking it must not count as "outside".
