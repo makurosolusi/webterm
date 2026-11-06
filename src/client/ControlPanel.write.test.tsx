@@ -4,7 +4,7 @@
 // Control tab end to end against the REAL server route + env-settings service (in memory): the A2 drift
 // check over the full registry (every Control-owned key renders an editor), a write changing the
 // effective value, the shell-env lock, and a Doctor fix.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DoctorDeps } from '../server/doctor'
 import { CONTROL_WHERE } from '../server/effectiveConfig.ui'
@@ -25,7 +25,8 @@ function serve(env: NodeJS.ProcessEnv = {}, doctor: Partial<DoctorDeps> = {}) {
     }),
   }
   const puts: unknown[] = []
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+  const inflight: Promise<Response>[] = []
+  const route = async (url: string, init: RequestInit = {}): Promise<Response> => {
     const doctorPath = url.startsWith('/api/control/doctor')
     if (!url.startsWith('/api/control/effective') && !doctorPath) return new Response('{"error":"not_found"}', { status: 404 })
     const method = init.method ?? 'GET'
@@ -33,8 +34,12 @@ function serve(env: NodeJS.ProcessEnv = {}, doctor: Partial<DoctorDeps> = {}) {
     const res = recorder()
     await controlEffectiveRoute(Object.assign(fakeReq(method, init.body as string | undefined), { url, headers: {} }), res, method, deps, doctorPath)
     return new Response(res.body, { status: res.status })
-  }))
-  return { ...s, puts }
+  }
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => { const p = route(url, init); inflight.push(p); return p }))
+  // The real route does the work behind each request; its run time grows with machine load. Awaiting it
+  // as an event leaves `waitFor`'s wall-clock window only the render that follows the response.
+  const settled = () => act(async () => { while (inflight.length > 0) await inflight.shift() })
+  return { ...s, puts, settled }
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -68,17 +73,20 @@ describe('Control tab writes', () => {
   })
 
   it('a number is committed on Enter; a boot knob says it needs a server restart; bad input is reported', async () => {
-    serve()
+    const s = serve()
     render(<ControlPanel />)
+    await s.settled()
     await screen.findByRole('region', { name: 'Logs' })
     const input = rowEl('WEBTERM_LOG_BUFFER').querySelector('input') as HTMLInputElement
     expect(rowEl('WEBTERM_LOG_BUFFER').textContent).toContain('Needs a restart of the webterm server.')
     fireEvent.change(input, { target: { value: '900' } })
     fireEvent.keyDown(input, { key: 'Enter' })
+    await s.settled()
     await waitFor(() => expect(rowEl('WEBTERM_LOG_BUFFER').textContent).toContain('Saved; restart the webterm server to apply.'))
     const max = rowEl('WEBTERM_FILES_LIST_MAX').querySelector('input') as HTMLInputElement
     fireEvent.change(max, { target: { value: '-5' } })
     fireEvent.blur(max)
+    await s.settled()
     expect((await screen.findByRole('alert')).textContent).toContain('Not saved')
   })
 

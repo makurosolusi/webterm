@@ -183,6 +183,9 @@ describe('osNotify', () => {
   it('permission not yet decided → visible in-app prompt; Allow requests permission', async () => {
     FakeNotification.permission = 'default'
     const { noteStatus, COALESCE_MS } = await load()
+    // Warm the module the gate lazy-imports: a cold transform + load of it can outlast `vi.waitFor`'s
+    // window on a loaded machine. The gate's own `import()` still runs; it just resolves from cache.
+    await import('./osNotify.prompt')
     endTurn(noteStatus, 'n1')
     await vi.advanceTimersByTimeAsync(COALESCE_MS)
     await vi.waitFor(() => expect(screen.getByText('An agent needs your attention')).toBeTruthy())

@@ -8,10 +8,11 @@
 // node-env, tapi yang diminta pengguna adalah DUA TERMINAL DI SATU NODE. Yang bisa salah tanpa
 // membuat satu test model pun merah: pohonnya benar tapi tidak pernah dirender, pane barunya lahir
 // tanpa PTY, bentuknya tidak ikut tersimpan, atau menutup node hanya mematikan satu shell dari empat.
-import { act, fireEvent, waitFor } from '@testing-library/react'
+import { fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas, HARNESS_WS_ID } from './canvasHarness'
 import type { WsNode } from '../shared/workspace'
+import { holdSaveTimer } from './workspaceSave.testutil'
 
 // `send` dicatat, SISA modulnya asli: `subscribe`/`subscribeStatus` tetap kode produksi, jadi
 // terminal tiap pane benar-benar lahir seperti di browser. Mengganti seluruh modul akan membuat
@@ -21,9 +22,6 @@ vi.mock('./ws', async (importOriginal) => {
   const real = await importOriginal<typeof import('./ws')>()
   return { ...real, send: (m: { t: string; id: string }) => { sent.push(m) } }
 })
-
-/** Lebih lama dari debounce 400ms `scheduleSave` di App. */
-const SAVE_FLUSH_MS = 480
 
 const termNode: WsNode = {
   id: 'term-1', kind: 'terminal', x: 0, y: 0, width: 420, height: 320, cwd: '/', title: 'shell',
@@ -219,10 +217,11 @@ describe('split pane node terminal', () => {
 
   it('bentuk split IKUT TERSIMPAN, jadi board 2×2 bertahan lintas reload', async () => {
     await mountCanvas({ nodes: [termNode], dirs: {} })
+    const save = holdSaveTimer()
     await splitVia('Split right')
     await splitVia('Split down')
 
-    await act(() => new Promise<void>((r) => setTimeout(r, SAVE_FLUSH_MS)))
+    await save.fire()
 
     // Pohon bersarang yang persis, bukan cuma "ada field panes": `toWsNode` yang menjatuhkan
     // `panes` membuat setiap split hilang saat reload.
@@ -347,6 +346,7 @@ describe('split pane node terminal', () => {
 
   it('pembatas tidak menggeser canvas dan rasio hasil geseran ikut tersimpan', async () => {
     await mountCanvas({ nodes: [termNode], dirs: {} })
+    const save = holdSaveTimer()
     await splitVia('Split down')
 
     stubHostRect()
@@ -365,7 +365,7 @@ describe('split pane node terminal', () => {
     await waitFor(() => expect(rect('term-1')).toBe('0% 0% 100% 20%'))
     fireEvent.pointerUp(bar)
 
-    await act(() => new Promise<void>((r) => setTimeout(r, SAVE_FLUSH_MS)))
+    await save.fire()
     expect(savedNodes()[0].panes).toEqual({
       dir: 'v', ratio: 0.2, a: { id: 'term-1' }, b: { id: 'term-1:p2' },
     })

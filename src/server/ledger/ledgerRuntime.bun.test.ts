@@ -92,11 +92,16 @@ test('shadow swallows a broken ledger instead of blocking boot', () => {
 test('reaper ticks sweep expired leases and survive a throwing tick', async () => {
   let swept = 0
   let errors = 0
+  // Wait on the tick after the throwing one instead of a wall-clock sleep: a loaded event loop
+  // can stretch a 5ms interval well past any fixed sleep, so counting ticks is the only stable clock.
+  let survived!: () => void
+  const thirdTick = new Promise<void>((resolve) => { survived = resolve })
   const fake = {
     task: {
       sweepExpiredLeases: () => {
         swept += 1
         if (swept === 2) throw new Error('boom')
+        if (swept === 3) survived()
         return []
       },
     },
@@ -104,9 +109,9 @@ test('reaper ticks sweep expired leases and survive a throwing tick', async () =
   const stop = startLedgerReaper(fake, 5, () => {
     errors += 1
   })
-  await new Promise((resolve) => setTimeout(resolve, 30))
+  await thirdTick
   stop()
-  expect(swept >= 2).toBe(true)
+  expect(swept).toBe(3)
   expect(errors).toBe(1)
 })
 

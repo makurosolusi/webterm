@@ -158,16 +158,27 @@ describe('sweepWebPush', () => {
 describe('hookPushListener', () => {
   const ev = (nodeId: string, status: string, seq: number): SenseEvent =>
     ({ seq, ts: seq, kind: 'hook.Stop', nodeId, workspaceId: 'ws1', payload: { status, preview: SECRET } }) as unknown as SenseEvent
-  const settle = () => new Promise((r) => setTimeout(r, 50))
 
   it('pushes a transition to waiting once, never while the tab is on that node', async () => {
     const t = setup({ watching: (i) => i.nodeId === 'watched' })
-    const on = hookPushListener({ ...t.deps, label: (id) => `Claude ${id}` })
+    // Count pushes by their start and wait for their delivery, not for a wall-clock sleep: the
+    // encrypt + fetch chain can outlast any fixed sleep on a loaded machine.
+    let started = 0
+    let delivered!: () => void
+    const sentOne = new Promise<void>((resolve) => { delivered = resolve })
+    const on = hookPushListener({
+      ...t.deps,
+      label: (id) => `Claude ${id}`,
+      keys: async () => { started += 1; return keys },
+      fetch: (async (...a: Parameters<typeof fetch>) => { const res = await t.rec.fetch(...a); delivered(); return res }) as typeof fetch,
+    })
     on(ev('n1', 'working', 1))
     on(ev('n1', 'waiting', 2))
     on(ev('n1', 'waiting', 3)) // repeat: not news
     on(ev('watched', 'waiting', 4))
-    await settle()
+    // `keys()` is the first await of every push the listener starts, so `started` is final here.
+    expect(started).toBe(1)
+    await sentOne
     expect(t.rec.sent).toHaveLength(1)
     const payload = await browser.decrypt(t.rec.sent[0]!.body)
     expect(payload).toEqual({ id: 'agent:n1:2', kind: 'agent', title: 'Claude n1 needs input', url: '/m/#agents' })
