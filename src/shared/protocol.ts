@@ -25,7 +25,8 @@ export interface OutputMsg { t: 'output'; id: string; data: string; seq?: number
 // untuk kompatibilitas wire: client yang belum membacanya cukup memakai `code`.
 // `kind_mismatch` = the open was refused: the live session under this id is a different kind
 // (agent vs plain terminal), so attaching would show someone else's process.
-export interface ExitMsg { t: 'exit'; id: string; code: number; reason?: 'self' | 'closed' | 'kind_mismatch' }
+// `failed` = the server could not start the session at all (agent-211-A1); its notice came first.
+export interface ExitMsg { t: 'exit'; id: string; code: number; reason?: 'self' | 'closed' | 'kind_mismatch' | 'failed' }
 // Sent before a FULL replay: the client clears its screen and restarts its seq at 0 for `epoch`.
 export interface ResetMsg { t: 'reset'; id: string; epoch: string }
 // `status` ABSEN = "tidak ada status lagi" (sapuan basi, lihat `agentStale.ts`), bukan "tidak

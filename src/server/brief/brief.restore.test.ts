@@ -30,6 +30,6 @@ test('adoptSupervised records agent.restored per adopted agent session', () => {
   const seen: SenseEvent[] = []
   off = eventBus.subscribe('agent.restored', (e) => { seen.push(e) })
   const res = new Sessions({}, supervisor).adoptSupervised((id) => id !== 'gone1')
-  expect(res).toEqual({ adopted: ['agent1', 'shell1'], orphans: ['gone1'] })
+  expect(res).toEqual({ adopted: ['agent1', 'shell1'], orphans: ['gone1'], reaped: [] })
   expect(seen.map((e) => [e.kind, e.nodeId, e.payload])).toEqual([['agent.restored', 'agent1', { agentId: 'claude' }]])
 })

@@ -53,4 +53,12 @@ export const ptyLog = {
   adoptFailed(err: unknown): void {
     pty.error('pty.adopt_failed', 'Re-adopting supervised sessions failed', { error: err instanceof Error ? err.name : 'unknown' })
   },
+  /** An `open` threw before any process ran (A1). Error name and errno code only, like the rest. */
+  openFailed(nodeId: string, err: unknown): void {
+    pty.error('pty.open_failed', 'Session open failed', { ids: { nodeId }, error: err instanceof Error ? err.name : 'unknown', code: (err as NodeJS.ErrnoException | undefined)?.code })
+  },
+  /** Canvas sessions orphaned longer than the grace, ended at boot (ops-212-3). */
+  reaped(count: number): void {
+    pty.warn('pty.orphan_reaped', 'Ended supervised sessions orphaned past the grace period', { reaped: count })
+  },
 }

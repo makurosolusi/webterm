@@ -28,6 +28,10 @@ const log = createLogger('pty')
 const PREFIX = 'wt-'
 const AGENT_OPT = '@webterm-agent'
 const ORPHAN_OPT = '@webterm-orphan'
+/** Who created the session. Only `canvas` sessions belong to a workspace node, so only they can be
+ *  reaped as orphans (`SessionsAdopt.adoptSupervised`); central agents and workers carry no tag. */
+const OWNER_OPT = '@webterm-owner'
+export const CANVAS_OWNER = 'canvas'
 /** Baris history tmux per pane. Scrollback sesudah restart datang dari sini (lihat `history`). */
 const HISTORY_LINES = 10000
 const TMUX_TIMEOUT_MS = 5000
@@ -79,6 +83,10 @@ export interface SupervisedSession {
   rows: number
   agentId?: string
   orphan: boolean
+  /** When the session was first marked orphan (ms), from `@webterm-orphan`. */
+  orphanAt?: number
+  /** `@webterm-owner`: `canvas` for a workspace node's session, absent otherwise. */
+  owner?: string
   /** Baris history di atas layar; 0 = tidak ada yang perlu di-seed. */
   history: number
 }
@@ -91,6 +99,8 @@ export interface SupervisedOpen {
   shell?: string
   env?: Record<string, string>
   agentId?: string
+  /** Stored as `@webterm-owner` on create; only the canvas door sets it. */
+  owner?: string
 }
 
 export class TmuxSupervisor {
@@ -145,16 +155,20 @@ export class TmuxSupervisor {
   list(): SupervisedSession[] {
     let out: string
     try {
-      out = this.run(['list-sessions', '-F', `#{session_name}\t#{window_width}\t#{window_height}\t#{${AGENT_OPT}}\t#{${ORPHAN_OPT}}\t#{history_size}`])
+      out = this.run(['list-sessions', '-F', `#{session_name}\t#{window_width}\t#{window_height}\t#{${AGENT_OPT}}\t#{${ORPHAN_OPT}}\t#{history_size}\t#{${OWNER_OPT}}`])
     } catch {
       return [] // "no server running": belum ada satu sesi pun
     }
     const found: SupervisedSession[] = []
     for (const line of out.split('\n')) {
-      const [name = '', w, h, agentId, orphan, history] = line.split('\t')
+      const [name = '', w, h, agentId, orphan, history, owner] = line.split('\t')
       const id = nodeIdOf(name)
       if (!id) continue
-      found.push({ id, cols: Number(w) || 80, rows: Number(h) || 24, agentId: agentId || undefined, orphan: !!orphan, history: Number(history) || 0 })
+      const orphanAt = orphan ? Number(orphan) : NaN
+      found.push({
+        id, cols: Number(w) || 80, rows: Number(h) || 24, agentId: agentId || undefined, orphan: !!orphan,
+        ...(Number.isFinite(orphanAt) ? { orphanAt } : {}), ...(owner ? { owner } : {}), history: Number(history) || 0,
+      })
     }
     return found
   }
@@ -191,6 +205,7 @@ export class TmuxSupervisor {
     this.run(chain)
     // Agent id disimpan DI sesi supaya boot berikutnya tahu node mana yang butuh file header token.
     if (opts.agentId) this.run(['set-option', '-t', `=${name}:`, AGENT_OPT, opts.agentId])
+    if (opts.owner) this.run(['set-option', '-t', `=${name}:`, OWNER_OPT, opts.owner])
   }
 
   /** tmux client dalam PTY Bun. Membunuh Pty ini hanya men-DETACH: server tmux bukan keturunannya. */
@@ -224,6 +239,15 @@ export class TmuxSupervisor {
       this.run(['set-option', '-t', `=${supervisedName(id)}:`, ORPHAN_OPT, String(now)])
     } catch {
       // Sesi keluar di antara `list` dan sini — tak ada lagi yang perlu ditandai.
+    }
+  }
+
+  /** Drop the orphan mark of a session a stored node owns again. */
+  clearOrphan(id: string): void {
+    try {
+      this.run(['set-option', '-u', '-t', `=${supervisedName(id)}:`, ORPHAN_OPT])
+    } catch {
+      // Sesi keluar di antara `list` dan sini — tak ada lagi yang perlu dibersihkan.
     }
   }
 

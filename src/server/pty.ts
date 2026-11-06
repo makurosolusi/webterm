@@ -45,7 +45,7 @@ export interface Pty {
 /** Nama binary yang (mungkin) dipakai sebuah baris perintah: token pertama, hanya bila ia nama
  *  binary POLOS. Mengembalikan null untuk apa pun yang butuh interpretasi shell — prefix assignment
  *  env (`FOO=1 claude`), quoting, substitusi, pipe — karena di situ token pertama bukan program. */
-function leadingBinary(cmd: string): string | null {
+export function leadingBinary(cmd: string): string | null {
   const bin = cmd.trim().split(/\s+/)[0] ?? ''
   if (!bin) return null
   return /^[\w.\-/]+$/.test(bin) ? bin : null

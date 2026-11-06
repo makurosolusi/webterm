@@ -67,6 +67,8 @@ export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
 const AGENT_STATE_LABEL: Partial<Record<AgentStatus, string>> = {
   blocked: 'Blocked — waiting for your approval',
   waiting: 'Turn ended — nothing is blocked',
+  failed: 'Failed — the agent did not start or exited with an error',
+  stopped: 'Stopped — can be resumed',
 }
 
 export function stateLabelOf(status: AgentStatus | undefined): string {
@@ -89,7 +91,10 @@ export function sessionStatusKind(state: AgentStatus | undefined): StatusKind {
     case 'waiting':
     case 'blocked':
       return 'attention'
+    case 'failed':
+      return 'attention'
     case 'done':
+    case 'stopped':
       return 'done'
     default:
       return 'unknown'
