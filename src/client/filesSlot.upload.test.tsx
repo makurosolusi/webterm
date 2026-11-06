@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
-// Slot upload (WS-FM-10): menu terkunci capabilities, download tanpa tab baru, drop file OS, status toolbar.
+// Upload slot (WS-FM-10): capability gating, menu/Download, toolbar icon, and the per-node FIFO queue
+// reported through the footer notice + progress bar (never the toolbar).
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fs = vi.hoisted(() => ({
@@ -11,204 +11,196 @@ const fs = vi.hoisted(() => ({
 }))
 vi.mock('./fsClient', () => fs)
 
-import type { FileMeta } from '../shared/fsContract'
-import type { FilesSlotCtx } from './filesSlots'
-import { UPLOAD_TEXT, resetUploadSlot, uploadSlot, uploadStatus } from './filesSlot.upload'
-import { FilesWriteOffer, resetFilesWriteOffer, WRITE_OFFER_TEXT } from './filesWriteOffer'
+import { noticesOf, resetFilesNotices } from './filesNotice'
+import { NOTICE_TEXT } from './FilesNoticeLine'
+import { UPLOAD_NOTICE, UPLOAD_TEXT, resetUploadSlot, uploadSlot } from './filesSlot.upload'
+import { FakeXhr, Host, dropFiles, mkCtx, sent, settle } from './filesSlot.upload.harness'
+import { resetFilesWriteOffer, WRITE_OFFER_TEXT } from './filesWriteOffer'
 import { resetCapabilitiesCache } from './useCapabilities'
 
 const caps = (o: object) => ({ mutate: true, viewers: true, watch: false, git: false, quickOpen: false, upload: true, listMax: 1, ...o })
-const entries: FileMeta[] = [{ name: 'a.txt', dir: false, ignored: false }, { name: 'sub', dir: true, ignored: false }]
-const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => ({
-  cwd: '/p', dir: '/p', entries, selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', ...o,
-})
-
-/** Meniru FilesNode: memanggil useSlot tiap render, menampilkan toolbar, dan elemen node ber-data-id. */
-function Host({ ctx }: { ctx: FilesSlotCtx }): ReactNode {
-  uploadSlot.useSlot?.(ctx)
-  return <div data-id={ctx.nodeId} data-testid="node">{uploadSlot.toolbar?.(ctx)}<FilesWriteOffer nodeId={ctx.nodeId} /></div>
-}
-
-class FakeXhr {
-  static calls: Array<{ url: string; sent: unknown }> = []
-  static replyFor: (name: string) => string = () => '{"ok":true}'
-  upload: { onprogress?: (e: unknown) => void } = {}
-  onload?: () => void
-  status = 200; responseText = ''; url = ''
-  open(_m: string, u: string) { this.url = u }
-  send(b: unknown) {
-    FakeXhr.calls.push({ url: this.url, sent: b })
-    this.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 })
-    this.responseText = FakeXhr.replyFor(new URL(this.url, 'http://x').searchParams.get('name') ?? '')
-    queueMicrotask(() => this.onload?.())
-  }
-}
 
 beforeEach(() => {
   resetUploadSlot()
+  resetFilesNotices()
   resetFilesWriteOffer()
   resetCapabilitiesCache()
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
     capabilities: [{ id: 'filesWrite', title: 'Edit and upload files', blurb: 'Edit, rename, delete, and upload files from the canvas.', status: 'off' }], advanced: {},
   }))))
-  FakeXhr.calls = []
-  FakeXhr.replyFor = () => '{"ok":true}'
+  FakeXhr.reset()
   fs.capabilities.mockResolvedValue(caps({}))
   vi.stubGlobal('XMLHttpRequest', FakeXhr)
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-const settle = () => act(async () => {})
-const dropFiles = (el: Element, names: string[]) => {
-  const files = names.map((n) => new File(['x'], n))
-  const dt = { types: ['Files'], files, items: [] as unknown[], dropEffect: '' }
-  const ev = new Event('drop', { bubbles: true, cancelable: true })
-  Object.assign(ev, { dataTransfer: dt })
-  act(() => { el.dispatchEvent(ev) })
-  return ev
-}
+const foot = () => screen.getByTestId('foot').textContent
+const mount = async (ctx = mkCtx()) => { render(<Host ctx={ctx} />); await settle(); return ctx }
 
 describe('capabilities', () => {
-  it('upload off: tanpa menu, tanpa toolbar, drop diabaikan', async () => {
+  it('upload off: no menu, no toolbar button, drop ignored', async () => {
     fs.capabilities.mockResolvedValue(caps({ upload: false }))
-    render(<Host ctx={mkCtx({ selection: ['a.txt'] })} />)
-    await settle()
+    await mount(mkCtx({ selection: ['a.txt'] }))
     expect(uploadSlot.menu?.(mkCtx({ selection: ['a.txt'] }))).toEqual([])
+    expect(screen.getByTestId('toolbar').children).toHaveLength(0)
     const ev = dropFiles(screen.getByTestId('node'), ['x.txt'])
     expect(ev.defaultPrevented).toBe(false)
-    expect(FakeXhr.calls).toHaveLength(0)
+    expect(FakeXhr.all).toHaveLength(0)
   })
-  it('filesWrite mati (mutate+upload off): "Upload…" tampil terkunci; klik membuka tawaran menyalakan', async () => {
+  it('filesWrite off (mutate+upload off): "Upload…" shows locked and opens the turn-on offer', async () => {
     fs.capabilities.mockResolvedValue(caps({ mutate: false, upload: false }))
-    render(<Host ctx={mkCtx()} />)
-    await settle()
+    await mount()
     const rows = uploadSlot.menu!(mkCtx())
     expect(rows).toHaveLength(1)
     const row = rows[0]
-    if (!('onClick' in row)) throw new Error('baris Upload tidak ada')
+    if (!('onClick' in row)) throw new Error('no Upload row')
     expect(row.label).toBe(UPLOAD_TEXT.menuUpload)
     expect(row.hint).toBe(WRITE_OFFER_TEXT.lockedHint)
     const pick = vi.spyOn(HTMLInputElement.prototype, 'click')
     act(() => row.onClick())
     expect(await screen.findByText(/Turn it on now\?/)).toBeTruthy()
-    expect(screen.getByRole('dialog').textContent).toContain(WRITE_OFFER_TEXT.dialogTitle)
     expect(pick).not.toHaveBeenCalled()
   })
-  it('capabilities melempar sinkron: slot tidak crash, galat dicatat, tanpa menu upload', async () => {
+  it('capabilities throwing synchronously: slot does not crash, error logged, no upload menu', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    fs.capabilities.mockImplementation(() => { throw new Error('mock tanpa export') })
-    render(<Host ctx={mkCtx({ selection: ['a.txt'] })} />)
-    await settle()
+    fs.capabilities.mockImplementation(() => { throw new Error('mock without export') })
+    await mount(mkCtx({ selection: ['a.txt'] }))
     expect(screen.getByTestId('node')).toBeTruthy()
     expect(uploadSlot.menu?.(mkCtx({ selection: ['a.txt'] }))).toEqual([])
     expect(err).toHaveBeenCalled()
   })
-  it('capabilities gagal (fail-closed) -> sama dengan off', async () => {
-    fs.capabilities.mockResolvedValue(caps({ upload: false, viewers: false }))
-    render(<Host ctx={mkCtx()} />)
-    await settle()
-    expect(uploadSlot.menu?.(mkCtx())).toEqual([])
-  })
 })
 
-describe('menu', () => {
-  it('upload on: "Upload…" selalu; "Download" hanya untuk satu file terpilih (bukan folder / multi / kosong)', async () => {
-    render(<Host ctx={mkCtx()} />)
-    await settle()
+describe('menu and toolbar', () => {
+  it('"Upload…" always; "Download" only for exactly one selected file', async () => {
+    await mount()
     const labels = (sel: string[]) => uploadSlot.menu!(mkCtx({ selection: sel })).flatMap((r) => ('label' in r ? [r.label] : []))
     expect(labels([])).toEqual([UPLOAD_TEXT.menuUpload])
     expect(labels(['sub'])).toEqual([UPLOAD_TEXT.menuUpload])
     expect(labels(['a.txt', 'sub'])).toEqual([UPLOAD_TEXT.menuUpload])
     expect(labels(['a.txt'])).toEqual([UPLOAD_TEXT.menuUpload, UPLOAD_TEXT.menuDownload])
   })
-  it('viewers off: Download hilang (raw dikunci VIEWERS), Upload tetap', async () => {
+  it('viewers off: Download hidden (raw is gated by VIEWERS), Upload kept', async () => {
     fs.capabilities.mockResolvedValue(caps({ viewers: false }))
-    render(<Host ctx={mkCtx()} />)
-    await settle()
+    await mount()
     expect(uploadSlot.menu!(mkCtx({ selection: ['a.txt'] }))).toHaveLength(1)
   })
-  it('Download: tautan sementara ke raw?download=1 dengan atribut download, tanpa tab baru', async () => {
-    render(<Host ctx={mkCtx()} />)
-    await settle()
+  it('Download: temporary link to raw?download=1 with the download attribute, no new tab', async () => {
+    await mount()
     const open = vi.spyOn(window, 'open')
     let clicked: HTMLAnchorElement | undefined
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { clicked = this })
     const row = uploadSlot.menu!(mkCtx({ selection: ['a.txt'] })).find((r) => 'label' in r && r.label === UPLOAD_TEXT.menuDownload)
-    if (!row || !('onClick' in row)) throw new Error('baris Download tidak ada')
+    if (!row || !('onClick' in row)) throw new Error('no Download row')
     row.onClick()
     expect(clicked?.getAttribute('href')).toBe('/api/fs/raw?path=%2Fp%2Fa.txt&download=1')
     expect(clicked?.download).toBe('a.txt')
-    expect(clicked?.target).toBe('')
     expect(open).not.toHaveBeenCalled()
     expect(document.querySelector('a[download]')).toBeNull()
   })
-  it('Upload…: input file tersembunyi `multiple`; pilihan diunggah berurutan lalu refresh', async () => {
-    render(<Host ctx={mkCtx()} />)
-    await settle()
+  it('toolbar holds only the Upload icon button, which opens a hidden multiple file input', async () => {
+    const ctx = await mount()
+    const tb = screen.getByTestId('toolbar')
+    expect(tb.textContent?.trim()).toBe('')
     let input: HTMLInputElement | undefined
     vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) { input = this })
-    const ctx = mkCtx()
-    const row = uploadSlot.menu!(ctx)[0]
-    if (!('onClick' in row)) throw new Error('baris Upload tidak ada')
-    row.onClick()
+    fireEvent.click(screen.getByRole('button', { name: UPLOAD_TEXT.toolbarUpload }))
     expect(input?.type).toBe('file')
     expect(input?.multiple).toBe(true)
     expect(input?.hidden).toBe(true)
     Object.defineProperty(input, 'files', { value: [new File(['1'], 'one.txt'), new File(['2'], 'two.txt')] })
-    await act(async () => { input?.onchange?.(new Event('change')); await new Promise((r) => setTimeout(r, 10)) })
-    expect(FakeXhr.calls.map((c) => new URL(c.url, 'http://x').searchParams.get('name'))).toEqual(['one.txt', 'two.txt'])
+    act(() => { input?.onchange?.(new Event('change')) })
+    await waitFor(() => expect(foot()).toBe(UPLOAD_TEXT.done(2, 0)))
+    expect(sent()).toEqual(['one.txt', 'two.txt'])
     expect(ctx.refresh).toHaveBeenCalledTimes(1)
+    expect(tb.textContent?.trim()).toBe('')
   })
 })
 
-describe('drop file OS', () => {
-  it('drop meng-upload ke ctx.dir, refresh sekali, ringkasan tampil di toolbar', async () => {
-    const ctx = mkCtx({ dir: '/p/x' })
-    render(<Host ctx={ctx} />)
+describe('queue + footer notice', () => {
+  it('a drop while an upload runs joins the queue (not rejected); footer shows "Uploading i of n · name"', async () => {
+    FakeXhr.hold = true
+    const ctx = await mount()
+    dropFiles(screen.getByTestId('node'), ['a.bin'])
     await settle()
-    const ev = dropFiles(screen.getByTestId('node'), ['a.bin', 'b.bin'])
-    expect(ev.defaultPrevented).toBe(true)
-    await waitFor(() => expect(uploadStatus().summary?.ok).toEqual(['a.bin', 'b.bin']))
-    expect(FakeXhr.calls.map((c) => new URL(c.url, 'http://x').searchParams.get('dir'))).toEqual(['/p/x', '/p/x'])
+    expect(foot()).toBe(UPLOAD_TEXT.progress(1, 1, 'a.bin'))
+    dropFiles(screen.getByTestId('node'), ['b.bin'])
+    await settle()
+    expect(foot()).toBe(UPLOAD_TEXT.progress(1, 2, 'a.bin'))
+    act(() => FakeXhr.all[0].reply())
+    await settle()
+    expect(foot()).toBe(UPLOAD_TEXT.progress(2, 2, 'b.bin'))
+    act(() => FakeXhr.all[1].reply())
+    await settle()
+    expect(foot()).toBe('2 files uploaded')
+    expect(noticesOf('n1').find((n) => n.id === UPLOAD_NOTICE)?.kind).toBe('info')
     expect(ctx.refresh).toHaveBeenCalledTimes(1)
-    await screen.findByText(UPLOAD_TEXT.summary(2, 0))
   })
-  it('bentrok nama: galat jelas per file, file lain tetap naik, tanpa overwrite diam-diam', async () => {
-    FakeXhr.replyFor = (n) => (n === 'dup.txt' ? '{"ok":false,"code":"EEXIST","error":"e"}' : '{"ok":true}')
-    render(<Host ctx={mkCtx()} />)
+  it('progress bar is byte-based over the whole batch and goes away when done', async () => {
+    FakeXhr.hold = true
+    await mount()
+    dropFiles(screen.getByTestId('node'), ['a.bin', 'b.bin']) // 2 bytes each
     await settle()
-    dropFiles(screen.getByTestId('node'), ['dup.txt', 'new.txt'])
-    await waitFor(() => expect(uploadStatus().summary).not.toBeNull())
-    const s = uploadStatus().summary!
-    expect(s.ok).toEqual(['new.txt'])
-    expect(s.failed[0].message).toContain('dup.txt')
-    expect(s.failed[0].message).toContain('not overwritten')
-    const btn = await screen.findByRole('status')
-    expect(btn.hasAttribute('title')).toBe(false)
-    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
-    fireEvent.focus(btn)
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('dup.txt')
-    fireEvent.blur(btn)
-    fireEvent.click(btn)
-    expect(uploadStatus().summary).toBeNull()
+    act(() => FakeXhr.all[0].progress(1, 2))
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25')
+    act(() => FakeXhr.all[0].reply())
+    await settle()
+    act(() => FakeXhr.all[1].progress(1, 2))
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('75')
+    act(() => FakeXhr.all[1].reply())
+    await settle()
+    expect(screen.queryByRole('progressbar')).toBeNull()
   })
-  it('upload ditolak EDISABLED: toolbar menampilkan aksi Nyalakan… yang membuka tawaran', async () => {
-    FakeXhr.replyFor = () => '{"ok":false,"code":"EDISABLED","error":"off"}'
-    render(<Host ctx={mkCtx()} />)
+  it('Cancel aborts the current request and drops the rest of the queue', async () => {
+    FakeXhr.hold = true
+    await mount()
+    dropFiles(screen.getByTestId('node'), ['a.bin', 'b.bin', 'c.bin'])
     await settle()
+    fireEvent.click(screen.getByRole('button', { name: NOTICE_TEXT.cancel }))
+    await settle()
+    expect(FakeXhr.all).toHaveLength(1)
+    expect(FakeXhr.all[0].aborted).toBe(true)
+    expect(foot()).toBe(UPLOAD_TEXT.cancelled(0))
+  })
+  it('failure stays until dismissed, names each file + reason; Retry re-sends the failed files only', async () => {
+    FakeXhr.replyFor = (n) => (n === 'bad.txt' ? '{"ok":false,"code":"ETOOLARGE","error":"big"}' : '{"ok":true}')
+    await mount()
+    dropFiles(screen.getByTestId('node'), ['ok.txt', 'bad.txt'])
+    await settle()
+    expect(foot()).toBe('1 of 2 files failed — bad.txt: exceeds the upload size limit')
+    expect(noticesOf('n1').find((n) => n.id === UPLOAD_NOTICE)?.kind).toBe('error')
+    FakeXhr.replyFor = () => '{"ok":true}'
+    fireEvent.click(screen.getByRole('button', { name: UPLOAD_TEXT.retry }))
+    await settle()
+    expect(sent()).toEqual(['ok.txt', 'bad.txt', 'bad.txt'])
+    expect(foot()).toBe('1 file uploaded')
+  })
+  it('Dismiss clears a failure and the footer returns to the count', async () => {
+    FakeXhr.replyFor = () => '{"ok":false,"code":"EACCES","error":"no"}'
+    await mount()
     dropFiles(screen.getByTestId('node'), ['a.txt'])
-    await waitFor(() => expect(uploadStatus().summary?.failed).toHaveLength(1))
-    expect(uploadStatus().summary!.failed[0].message).toBe('a.txt: the “Edit and upload files” capability is off')
-    fireEvent.click(await screen.findByRole('button', { name: WRITE_OFFER_TEXT.enableAction }))
+    await settle()
+    expect(foot()).toContain('a.txt: no permission to write to this folder')
+    fireEvent.click(screen.getByRole('button', { name: NOTICE_TEXT.dismiss }))
+    expect(foot()).toBe('2 of 2')
+  })
+  it('EDISABLED: the failure notice offers "Turn on…", which opens the offer', async () => {
+    FakeXhr.replyFor = () => '{"ok":false,"code":"EDISABLED","error":"off"}'
+    await mount()
+    dropFiles(screen.getByTestId('node'), ['a.txt'])
+    await settle()
+    expect(foot()).toContain('a.txt: the “Edit and upload files” capability is off')
+    fireEvent.click(screen.getByRole('button', { name: WRITE_OFFER_TEXT.enableAction }))
     expect(await screen.findByText(/Turn it on now\?/)).toBeTruthy()
   })
-  it('drag non-file (path internal) tidak dicegat', async () => {
-    render(<Host ctx={mkCtx()} />)
+  it('queues are per node: an upload on n1 never shows on n2', async () => {
+    FakeXhr.hold = true
+    render(<><Host ctx={mkCtx()} /><Host ctx={mkCtx({ nodeId: 'n2' })} /></>)
     await settle()
-    const ev = new Event('drop', { bubbles: true, cancelable: true })
-    Object.assign(ev, { dataTransfer: { types: ['application/x-webterm-path'], files: [], items: [] } })
-    act(() => { screen.getByTestId('node').dispatchEvent(ev) })
-    expect(ev.defaultPrevented).toBe(false)
-    expect(FakeXhr.calls).toHaveLength(0)
+    dropFiles(screen.getAllByTestId('node')[0], ['a.bin'])
+    await settle()
+    const [f1, f2] = screen.getAllByTestId('foot').map((f) => f.textContent)
+    expect(f1).toBe(UPLOAD_TEXT.progress(1, 1, 'a.bin'))
+    expect(f2).toBe('2 of 2')
   })
 })

@@ -1,9 +1,10 @@
-// Dekorasi git untuk node files (WS-FM-08): `git status --porcelain=v2 -z` -> mark per path.
+// Dekorasi git untuk node files (WS-FM-08): `git status --porcelain=v2 -z --branch --ignored=matching`
+// -> mark per path + branch/ahead/behind (footer). `resolveGitDir` feeds the gitdir watch in fsWatch.ts.
 // execFile (argumen array, tanpa shell); hanya baca (GIT_OPTIONAL_LOCKS=0 supaya tak menyentuh index.lock).
 import { execFile } from 'node:child_process'
-import { ptyEnv } from './ptyShell'
+import { gitCommand } from './gitExec'
 import npath from 'node:path'
-import { fsFail, type FsResult, type GitMark } from '../shared/fsContract'
+import { fsFail, type FsResult, type GitBranch, type GitMark, type GitStatus } from '../shared/fsContract'
 import { failFrom } from './fsAtomic'
 import { checkFsPath } from './fsOps'
 import { createLogger } from './logs'
@@ -11,21 +12,24 @@ import { createLogger } from './logs'
 const log = createLogger('fs')
 
 const GIT_TIMEOUT_MS = 5000
-/** Batas record status yang diparse; selebihnya diabaikan (repo raksasa tak boleh membengkakkan respons). */
 /** Batas keluaran git yang diterima (byte); lebih dari ini = galat bercontext, bukan memori tak terbatas. */
 const GIT_OUTPUT_MAX_BYTES = 64 * 1024 * 1024
+/** Batas record status yang diparse (ignored ikut dihitung; git mencetaknya terakhir, jadi yang terpotong duluan). */
 const GIT_MARKS_MAX = 5000
+/** Detached HEAD label length: VS Code `headLabel` shows the first 8 chars of the commit. */
+const DETACHED_OID_LEN = 8
 /** git: "bukan repo" / fatal umum. */
 const GIT_FATAL_EXIT = 128
 /** Kuat -> lemah; indeks kecil menang saat rollup folder. */
-const MARK_PRIORITY: readonly GitMark[] = ['C', 'D', 'M', 'A', 'R', 'U']
+const MARK_PRIORITY: readonly GitMark[] = ['C', 'D', 'M', 'A', 'R', 'U', 'I']
 
 type GitRun = { out: string; code: number } | 'missing' | 'timeout'
 
 /** Jalankan git tanpa shell (argumen array). `execFile` = ENOENT/timeout/kode keluar dibedakan jelas. */
 function runGit(dir: string, args: string[]): Promise<GitRun> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', dir, ...args], { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_OUTPUT_MAX_BYTES, env: { ...ptyEnv(process.env, { interactive: false }), GIT_OPTIONAL_LOCKS: '0' } }, (err, out) => {
+    const g = gitCommand(['-C', dir, ...args], { env: { GIT_OPTIONAL_LOCKS: '0' } })
+    execFile(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_OUTPUT_MAX_BYTES, env: g.env }, (err, out) => {
       const e = err as (NodeJS.ErrnoException & { killed?: boolean }) | null
       if (!e) return resolve({ out, code: 0 })
       if (e.code === 'ENOENT') return resolve('missing')
@@ -66,6 +70,7 @@ export function parseStatus(out: string): Array<[string, GitMark]> {
   for (let i = 0; i < rec.length && res.length < GIT_MARKS_MAX; i++) {
     const r = rec[i]
     if (r.startsWith('? ')) { res.push([r.slice(2), 'U']); continue }
+    if (r.startsWith('! ')) { res.push([r.slice(2), 'I']); continue }
     const kind = r[0]
     // Kolom sebelum path: `1` = 8, `2` = 9 (+ skor rename), `u` = 10.
     const fields = kind === '1' ? splitFields(r, 8) : kind === '2' ? splitFields(r, 9) : kind === 'u' ? splitFields(r, 10) : []
@@ -75,18 +80,47 @@ export function parseStatus(out: string): Array<[string, GitMark]> {
   return res
 }
 
+/** Branch headers (`# branch.*`) of porcelain v2 -z; null when absent (not a repo / no `--branch`). */
+export function parseBranch(out: string): GitBranch | null {
+  let info: GitBranch | null = null
+  for (const r of out.split('\0')) {
+    if (!r.startsWith('# branch.')) continue
+    info ??= { branch: null, head: '', upstream: null, ahead: 0, behind: 0 }
+    const [, key, v = '', w = ''] = r.split(' ')
+    if (key === 'branch.oid') info.head = v === '(initial)' ? '' : v.slice(0, DETACHED_OID_LEN)
+    else if (key === 'branch.head') info.branch = v === '(detached)' ? null : v
+    else if (key === 'branch.upstream') info.upstream = v
+    // `+2 -0`: abs() also turns `-0` into 0.
+    else if (key === 'branch.ab') { info.ahead = Math.abs(Number(v)) || 0; info.behind = Math.abs(Number(w)) || 0 }
+  }
+  return info
+}
+
 function stronger(a: GitMark | undefined, b: GitMark): GitMark {
   return a && MARK_PRIORITY.indexOf(a) <= MARK_PRIORITY.indexOf(b) ? a : b
 }
 
-/** Mark git per path relatif ke `dir` (folder = mark terkuat anaknya). Bukan repo / tanpa git / timeout -> `{}`. */
-export async function gitMarks(dirPath: string): Promise<FsResult<{ marks: Record<string, GitMark> }>> {
+/** `gitDir`: per-worktree gitdir (linked worktree -> `.git/worktrees/<name>`); `commonDir`: shared `.git` (refs, packed-refs). */
+export interface GitDirs { gitDir: string; commonDir: string }
+
+/** Absolute gitdir + common dir of the repo containing `dir`; null when none. */
+export async function resolveGitDir(dir: string): Promise<GitDirs | null> {
+  const r = await runGit(dir, ['rev-parse', '--absolute-git-dir', '--git-common-dir'])
+  if (typeof r !== 'object' || r.code !== 0) return null
+  const [gitDir, common] = r.out.split('\n')
+  // `--git-common-dir` may print a path relative to the cwd (`.git`), so resolve it against `dir`.
+  return gitDir && common ? { gitDir, commonDir: npath.resolve(dir, common) } : null
+}
+
+/** Mark git per path relatif ke `dir` (folder = mark terkuat anaknya; ignored tak di-rollup) + branch.
+ *  Bukan repo / tanpa git / timeout -> `{ marks: {} }` tanpa `branch`. */
+export async function gitMarks(dirPath: string): Promise<FsResult<GitStatus>> {
   const dir = checkFsPath(dirPath)
   if (typeof dir !== 'string') return dir
   const none = { ok: true as const, marks: {} }
   try {
     const [status, prefix] = await Promise.all([
-      runGit(dir, ['status', '--porcelain=v2', '-z', '--untracked-files=normal', '--', '.']),
+      runGit(dir, ['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=normal', '--ignored=matching', '--', '.']),
       runGit(dir, ['rev-parse', '--show-prefix']),
     ])
     if (status === 'missing' || prefix === 'missing') return none
@@ -102,12 +136,14 @@ export async function gitMarks(dirPath: string): Promise<FsResult<{ marks: Recor
     for (const [p, m] of parseStatus(status.out)) {
       if (!p.startsWith(root)) continue
       const segs = p.slice(root.length).split('/').filter(Boolean)
-      for (let n = 1; n <= segs.length; n++) {
+      // VS Code: ignored is a leaf-only colour, never bubbled to the parent folder.
+      for (let n = m === 'I' ? segs.length : 1; n <= segs.length; n++) {
         const key = segs.slice(0, n).join('/')
         marks[key] = stronger(marks[key], m)
       }
     }
-    return { ok: true, marks }
+    const branch = parseBranch(status.out)
+    return branch ? { ok: true, marks, branch } : { ok: true, marks }
   } catch (err) {
     return failFrom('git status', dir, err)
   }

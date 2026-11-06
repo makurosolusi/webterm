@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react'
+import { memo, useCallback, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
@@ -22,7 +22,6 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? agentConfig('claude')?.color ?? FALLBACK_AGENT_COLOR
   const comments = d.comments ?? []
-  const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? DEFAULT_H)
 
   const toggleCollapse = () => {
@@ -46,8 +45,6 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           // No refresh or search in the chat shell yet; the buttons stay because NodeToolbar is shared.
           onRefresh={() => undefined}
           searchOpen={false} onToggleSearch={() => undefined}
-          maximized={maximized}
-          onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
         <div className="node-body">

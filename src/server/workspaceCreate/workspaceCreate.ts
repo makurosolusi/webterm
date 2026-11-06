@@ -9,6 +9,7 @@ import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { DATA_DIR_MESSAGE, insideDataDir } from './projectsFolder'
+import { gitCommand } from '../gitExec'
 import { promisify } from 'node:util'
 import { cloneErrorMessage, deriveRepoDirName, expandCloneUrl, isSafeFolderName, isValidCloneUrl, parseCloneProgress, type CloneProgress } from './cloneUrl'
 
@@ -26,8 +27,11 @@ export interface CreateDeps {
   dataDir?: string
 }
 
-/** No TTY to answer a credential prompt: fail fast instead of hanging (nodeterm git-env.ts). */
-const gitEnv = (): NodeJS.ProcessEnv => ({ ...process.env, GIT_TERMINAL_PROMPT: '0' })
+/** gitExec.ts argv/env (filtered env, no prompt); the user's own clone/new project keeps hooks. */
+const userGit = (args: string[], deps: CreateDeps) => {
+  const g = gitCommand(args, { userHooks: true })
+  return { file: deps.git ?? g.file, args: g.args, env: g.env }
+}
 
 /** Final guard behind the dialog's blocking warning: nothing is ever created inside the data dir. */
 async function refuseDataDir(target: string, deps: CreateDeps): Promise<void> {
@@ -90,9 +94,8 @@ export async function cloneRepo(input: CloneInput, onProgress: (p: CloneProgress
     created = await claimTarget(input.parent, target)
     const { code, tail } = await new Promise<{ code: number | null; tail: string }>((done) => {
       // detached = own session, no controlling TTY: ssh cannot sit on a passphrase/host-key prompt.
-      const child = spawn(deps.git ?? 'git', ['-c', 'protocol.file.allow=never', '-c', 'protocol.ext.allow=never', 'clone', '--progress', '--', url, target], {
-        cwd: input.parent, env: gitEnv(), stdio: ['ignore', 'ignore', 'pipe'], detached: true,
-      })
+      const g = userGit(['-c', 'protocol.file.allow=never', '-c', 'protocol.ext.allow=never', 'clone', '--progress', '--', url, target], deps)
+      const child = spawn(g.file, g.args, { cwd: input.parent, env: g.env, stdio: ['ignore', 'ignore', 'pipe'], detached: true })
       rec.child = child
       if (rec.aborted) abortClone()
       let tail = ''
@@ -124,7 +127,7 @@ export async function createProject(input: ProjectInput, deps: CreateDeps = {}):
   await refuseDataDir(target, deps)
   const created = await claimTarget(input.parent, target)
   if (input.gitInit === false) return target
-  const git = (args: string[]) => run(deps.git ?? 'git', args, { cwd: target, env: gitEnv(), timeout: 30_000 })
+  const git = (args: string[]) => { const g = userGit(args, deps); return run(g.file, g.args, { cwd: target, env: g.env, timeout: 30_000 }) }
   let step: 'init' | 'commit' = 'init'
   try {
     await git(['init', '-b', 'main'])

@@ -10,6 +10,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fsErrCode, fsFail, type FsFail, type FsResult } from '../shared/fsContract'
 import { checkFsPath } from './fsOps'
+import { childEnv } from './childEnv'
 import { SEARCH_MATCH_ALL, searchFiles } from './fsSearch'
 
 /** Matches per page when the caller sends no `limit`; the hard cap is GREP_PAGE_MAX. */
@@ -86,7 +87,7 @@ function viaRg(root: string, q: string, page: ReturnType<typeof pager>, env: Env
   const args = ['--no-config', '--json', '--hidden', '--glob', '!.git', '--max-filesize', `${MAX_FILE_MB}M`,
     '--ignore-case', '--fixed-strings', '--sort', 'path', '--', q, '.']
   return new Promise((done) => {
-    const proc = spawn('rg', args, { cwd: root, env: env as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'ignore'] })
+    const proc = spawn('rg', args, { cwd: root, env: childEnv({}, env), stdio: ['ignore', 'pipe', 'ignore'] }) // sec-208-7: filtered
     let rest = ''
     let outcome: Outcome = 'done'
     let missing = false

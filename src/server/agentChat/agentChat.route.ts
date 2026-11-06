@@ -1,6 +1,6 @@
 // HTTP surface of the agent chat node (PLAN/AGENT-CHAT.md D6, D7): `/api/agent-chat/:nodeId/<verb>`.
-// Root-only through the shared `/api/*` gate in index.ts (node tokens never reach it: not in
-// `isNodeTokenPath`). SSE replays the session log after `?after=` / Last-Event-ID, then goes live,
+// UI-only: its entry is wrapped in `uiOnly` (routes/agentChat.routes.ts); node tokens never reach
+// it (not in `isNodeTokenPath`). SSE replays the session log after `?after=` / Last-Event-ID, then goes live,
 // framed and heartbeated like centralChatSse.
 import type { RouteCtx } from '../routes/route.core'
 import { json } from '../routes/route.core'

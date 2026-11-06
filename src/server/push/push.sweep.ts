@@ -9,8 +9,8 @@ import type { SenseEvent } from '../events/eventModel'
 import type { InboxEntry } from '../inbox/inboxItemModel'
 import { attentionFor, type AttentionContext } from '../inbox/inboxAttention'
 import { createLogger } from '../logs'
-import { buildPayload, sendPush, type PushKind, type PushPayload, type SendOutcome } from './push.send'
-import { readPushState, writePushState, type PushState } from './push.store'
+import { buildPayload, sendPush, type PushKind, type PushPayload, type SendResult } from './push.send'
+import { readPushState, writePushState, type PushRetry, type PushState } from './push.store'
 import type { VapidKeys } from './webPush.crypto'
 
 const log = createLogger('push')
@@ -20,6 +20,10 @@ export const BRIEF_AWAY_MS = 30 * 60_000
 /** No "brief ready" ping in the small hours. */
 export const BRIEF_EARLIEST_HOUR = 7
 const BRIEF_RECHECK_MS = 10 * 60_000
+/** Delivery attempts for one item while every device fails, then it is given up (telegramSender pattern). */
+export const WEB_PUSH_MAX_ATTEMPTS = 5
+export const WEB_PUSH_RETRY_BASE_MS = 30_000
+export const WEB_PUSH_RETRY_MAX_MS = 30 * 60_000
 
 export interface WebPushDeps {
   statePath: string
@@ -39,14 +43,48 @@ const localDay = (t: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-/** Sends one payload to every subscription; drops the ones the push service says are gone. */
-export async function fanOut(deps: WebPushDeps, state: PushState, payload: PushPayload, urgency: 'normal' | 'high'): Promise<{ state: PushState; sent: number }> {
-  if (state.subs.length === 0) return { state, sent: 0 }
+export interface FanOutResult {
+  state: PushState
+  sent: number
+  failed: number
+  /** First failure's host + status/cause; never the endpoint path. */
+  reason?: string
+  /** Longest `Retry-After` any push service asked for. */
+  retryAfterMs?: number
+}
+
+/** Sends one payload to every subscription; drops the ones the push service says are gone. Never logs. */
+export async function fanOut(deps: WebPushDeps, state: PushState, payload: PushPayload, urgency: 'normal' | 'high'): Promise<FanOutResult> {
+  if (state.subs.length === 0) return { state, sent: 0, failed: 0 }
   const keys = await deps.keys()
-  const outcomes: SendOutcome[] = []
-  for (const sub of state.subs) outcomes.push(await sendPush(sub, payload, keys, { fetch: deps.fetch, nowSec: Math.floor(deps.now() / 1000), urgency }))
-  const subs = state.subs.filter((_, i) => outcomes[i] !== 'gone')
-  return { state: { ...state, subs }, sent: outcomes.filter((o) => o === 'sent').length }
+  const results: SendResult[] = []
+  for (const sub of state.subs) results.push(await sendPush(sub, payload, keys, { fetch: deps.fetch, nowSec: Math.floor(deps.now() / 1000), urgency }))
+  const subs = state.subs.filter((_, i) => results[i]!.outcome !== 'gone')
+  const failures = results.filter((r) => r.outcome === 'failed')
+  const waits = failures.map((r) => r.retryAfterMs).filter((ms): ms is number => ms !== undefined)
+  return {
+    state: { ...state, subs },
+    sent: results.filter((r) => r.outcome === 'sent').length,
+    failed: failures.length,
+    ...(failures[0]?.reason === undefined ? {} : { reason: failures[0].reason }),
+    ...(waits.length === 0 ? {} : { retryAfterMs: Math.max(...waits) }),
+  }
+}
+
+/**
+ * Next retry record after every device failed for `itemId`. Logs only on a state change: the first
+ * failure and the give-up, never once per attempt.
+ */
+function recordFailure(itemId: string, prev: PushRetry | undefined, r: FanOutResult, now: number): PushRetry {
+  const attempts = (prev?.attempts ?? 0) + 1
+  const fields = { itemId, attempts, reason: r.reason }
+  if (attempts >= WEB_PUSH_MAX_ATTEMPTS) {
+    log.error('push.gave_up', `Web Push gave up on an item after ${attempts} attempts`, fields)
+    return { attempts, nextAt: now, gaveUp: true }
+  }
+  const delay = Math.max(r.retryAfterMs ?? 0, Math.min(WEB_PUSH_RETRY_MAX_MS, WEB_PUSH_RETRY_BASE_MS * 2 ** (attempts - 1)))
+  if (attempts === 1) log.warn('push.send_failed', `Web Push failed on every device; retrying with backoff`, { ...fields, retryInMs: delay })
+  return { attempts, nextAt: now + delay }
 }
 
 let briefCheckedAt = -Infinity
@@ -62,19 +100,29 @@ export async function sweepWebPush(deps: WebPushDeps): Promise<{ pushed: string[
   if (items) {
     const open = new Set(items.map((i) => i.id))
     const sent = new Set(state.sent.filter((id) => open.has(id)))
+    // Pruned to open items like `sent`, so a resurfacing item starts with a fresh budget.
+    const retry = Object.fromEntries(Object.entries(state.retry ?? {}).filter(([id]) => open.has(id)))
+    const now = deps.now()
     for (const item of items) {
       if (sent.has(item.id)) continue
       const verdict = attentionFor(item, deps.attention)
       if (verdict === 'hold') { held.push(item.id); continue }
       if (verdict === 'push') {
+        const prev = retry[item.id]
+        if (prev && (prev.gaveUp || prev.nextAt > now)) continue
         const r = await fanOut(deps, state, buildPayload(item.id, item.kind as PushKind, item.title), item.kind === 'gate' ? 'high' : 'normal')
         state = r.state
-        if (r.sent === 0) continue // every device failed: retry next sweep
+        if (r.sent === 0) {
+          if (r.failed > 0) retry[item.id] = recordFailure(item.id, prev, r, now)
+          continue // every device failed (or was gone): retry once the backoff allows
+        }
+        if (prev) log.info('push.recovered', 'Web Push delivered after earlier failures', { itemId: item.id, attempts: prev.attempts })
+        delete retry[item.id]
         pushed.push(item.id)
       }
       sent.add(item.id)
     }
-    state = { ...state, sent: [...sent] }
+    state = { ...state, sent: [...sent], retry }
   }
   state = await maybeBrief(deps, state)
   if (JSON.stringify(state) !== before) writePushState(deps.statePath, state)
@@ -121,6 +169,8 @@ export function hookPushListener(deps: HookPushDeps): (event: SenseEvent) => voi
       const state = readPushState(deps.statePath)
       if (state.subs.length === 0) return
       const r = await fanOut({ ...deps, items: () => null, awayMs: () => 0 }, state, buildPayload(`agent:${nodeId}:${event.seq}`, 'agent', `${deps.label(nodeId)} needs input`), 'high')
+      // One-shot by design (a stale "needs input" is worse than none): one warn, no retry.
+      if (r.sent === 0 && r.failed > 0) log.warn('push.hook_failed', 'needs-input push failed on every device', { nodeId, reason: r.reason })
       if (r.state.subs.length !== state.subs.length) writePushState(deps.statePath, { ...readPushState(deps.statePath), subs: r.state.subs })
     })().catch((err: unknown) => log.warn('push.hook_failed', 'needs-input push failed', { cause: err instanceof Error ? err.message : String(err) }))
   }

@@ -16,6 +16,7 @@
 // di node-env tanpa DOM, jadi yang bisa di-assert harus hidup di luar komponen.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getWorkspace, saveWorkspace } from './api'
+import { reportActionError } from './workspaceActionError'
 import { fetchClosedHistory, saveClosedHistory } from './SessionHistory.api'
 import { isSession } from './sessionList'
 import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
@@ -186,9 +187,8 @@ export async function placeNode(
   const full: WsNode = { ...OFFSCREEN_SPAWN, ...entry.node }
   const live = new Set([...fresh.nodes.map((n) => n.id), full.id])
   const cables = bridgesToRestore(entry.bridges, live, fresh.bridges ?? [])
-  const updated: Workspace = {
-    ...fresh, nodes: [...fresh.nodes, full], bridges: [...(fresh.bridges ?? []), ...cables], updatedAt: Date.now(),
-  }
+  // `fresh.updatedAt` rides along as the save's precondition (409 if another window wrote since).
+  const updated: Workspace = { ...fresh, nodes: [...fresh.nodes, full], bridges: [...(fresh.bridges ?? []), ...cables] }
   await saveWorkspace(updated)
   deps.setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
   await deps.selectWorkspace(workspaceId)
@@ -269,10 +269,10 @@ export function useClosedHistory(
         await placeNode(entry, deps)
       } catch (e) {
         // Entry dikembalikan: snapshot node tadi satu-satunya salinan yang bisa memulihkannya, dan
-        // tulis yang gagal tidak boleh ikut menghapusnya. Barisnya muncul lagi — itu sinyal yang
-        // terlihat pengguna, dan webterm belum punya permukaan toast.
+        // tulis yang gagal tidak boleh ikut menghapusnya. The row comes back and the failure is
+        // reported with a Retry that runs this reopen again.
         commit(pushClosed(ref.current, [entry]))
-        console.error(`reopen closed session ${nodeId} in workspace ${entry.workspaceId}:`, e)
+        reportActionError('reopen the closed session', `${nodeId} in workspace ${entry.workspaceId}`, e, () => void reopen(nodeId, deps))
       }
     },
     [commit],

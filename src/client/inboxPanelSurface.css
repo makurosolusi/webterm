@@ -14,7 +14,7 @@
   --bottom-panel-h: 40vh;
   --bottom-panel-min-h: 77px;
   --bottom-panel-title-h: 35px;
-  --bottom-panel-row-h: 22px;
+  --bottom-panel-row-h: var(--list-row-h, 22px);
   --bottom-panel-sash-h: 4px;
   --bottom-panel-sidebar-w: 300px;
 }

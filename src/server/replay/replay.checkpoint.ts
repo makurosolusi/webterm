@@ -2,6 +2,7 @@
 // checkpoint N-1 (read-only `git diff-tree` between the two stored trees). Listing and rewinding
 // stay in checkpoint/ (this module never writes a ref, the index or a file).
 import { execFile } from 'node:child_process'
+import { gitCommand } from '../gitExec'
 import { promisify } from 'node:util'
 import { listCheckpoints, PREVIEW_PATCH_MAX, repoOf, type Checkpoint, type FileChange } from '../checkpoint/checkpoint.git'
 import { resolveFsPath } from '../fsOps'
@@ -22,9 +23,8 @@ export interface CheckpointAt {
 
 async function git(root: string, args: string[]): Promise<string> {
   try {
-    const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }
-    for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete env[k]
-    return (await run('git', ['-C', root, ...args], { env, timeout: GIT_TIMEOUT_MS, maxBuffer: 4 * PREVIEW_PATCH_MAX })).stdout
+    const g = gitCommand(['-C', root, ...args], { env: { GIT_OPTIONAL_LOCKS: '0' } })
+    return (await run(g.file, g.args, { env: g.env, timeout: GIT_TIMEOUT_MS, maxBuffer: 4 * PREVIEW_PATCH_MAX })).stdout
   } catch (err) {
     throw new Error(`replay: git ${args[0]} failed in ${root}`, { cause: err })
   }

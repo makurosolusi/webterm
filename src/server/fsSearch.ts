@@ -3,6 +3,8 @@
 // tidak pernah menjadi argumen proses. Path/isi tidak di-log (Rule 12). Memakai node:child_process,
 // bukan Bun.spawn/Bun.Glob: tsc proyek tidak punya tipe Bun (lihat nameGen.ts), dan hasilnya sama.
 import { spawn } from 'node:child_process'
+import { gitCommand } from './gitExec'
+import { childEnv } from './childEnv'
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { fsErrCode, fsFail, type FsResult } from '../shared/fsContract'
@@ -66,10 +68,12 @@ function spawnLines(cmd: string[], cwd: string, env: Env, accept: (rel: string) 
 }
 
 const viaRg: Source = (root, accept, env) =>
-  spawnLines(['rg', '--files', '--hidden', '--null', '--glob', '!.git'], root, env, accept)
+  spawnLines(['rg', '--files', '--hidden', '--null', '--glob', '!.git'], root, childEnv({}, env), accept) // sec-208-7
 
-const viaGit: Source = (root, accept, env) =>
-  spawnLines(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], root, env, accept)
+const viaGit: Source = (root, accept, env) => {
+  const g = gitCommand(['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { source: env as NodeJS.ProcessEnv })
+  return spawnLines([g.file, ...g.args], root, g.env, accept)
+}
 
 /** Telusuri `dir` (relatif `root`) tanpa mengikuti symlink; false = `accept` meminta berhenti. */
 async function walk(root: string, dir: string, accept: (rel: string) => boolean): Promise<boolean> {

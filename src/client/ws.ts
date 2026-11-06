@@ -1,6 +1,7 @@
 // One shared WebSocket multiplexing many terminals by id.
-// Survives refresh/reconnect: each subscriber's `open` params are retained and
-// re-sent on every (re)connect so the server re-attaches the PTY and replays scrollback.
+// Survives refresh/reconnect: each subscriber's `open` params are retained and re-sent on every
+// (re)connect with `since` (the last seq it drew), so the server re-attaches the PTY and replays
+// only the gap, or `reset` + the whole scrollback when it cannot (pty-207-9).
 // A subscriber whose session has exited is NOT replayed: its `open` would make the server spawn
 // a fresh PTY and wipe the final scrollback the user is looking at.
 import { emitFsEvent } from './fsEvents'
@@ -10,6 +11,7 @@ import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
 import { tokenQuery } from './api'
 import { noteStatus } from './unread'
+import { reconnectDelay, setConnection } from './ws.connection'
 
 interface Sub {
   onOutput: (data: string) => void
@@ -18,6 +20,9 @@ interface Sub {
   open?: ClientMsg & { t: 'open' } // last open sent for this id; replayed on reconnect
   /** PTY sudah berhenti: jangan putar ulang `open` (itu men-spawn PTY baru) atau antre input. */
   exited?: boolean
+  /** Session log this xterm is drawing (from the server's `reset`) and the last seq it drew. */
+  epoch?: string
+  seq: number
 }
 
 /**
@@ -58,8 +63,12 @@ export function subscribeStatus(cb: (id: string, status: AgentStatus | undefined
 export function getStatus(id: string): AgentStatus | undefined { return statuses.get(id) }
 let ws: WebSocket | null = null
 let everConnected = false
-let queue: ClientMsg[] = []
+// Messages that wait for the socket, keyed so the queue stays bounded: the latest resize per
+// terminal, one close per terminal, the latest watch state per dir. Input is NEVER queued: keys
+// typed during an outage are dropped, not replayed into the shell minutes later (pty-207-5).
+const queue = new Map<string, ClientMsg>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let attempts = 0
 
 const reconnectListeners = new Set<() => void>()
 
@@ -79,21 +88,41 @@ function url(): string {
   return `${proto}://${location.host}${WS_PATH}${q === '' ? '' : `?${q}`}`
 }
 
+const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
+
+function scheduleReconnect(): void {
+  if (reconnectTimer) return
+  const delay = reconnectDelay(attempts++)
+  setConnection({ phase: everConnected ? 'reconnecting' : 'connecting', retryAt: Date.now() + delay })
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; connect() }, delay)
+}
+
+/** Skip the backoff wait ("Retry now"). No-op while a socket exists. */
+export function reconnectNow(): void {
+  if (ws) return
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  connect()
+}
+
 function connect() {
+  setConnection({ phase: everConnected ? 'reconnecting' : 'connecting' })
   ws = new WebSocket(url())
   ws.onopen = () => {
-    // A reconnect re-attaches to live PTYs and the server replays their scrollback. The xterm
-    // still holds what it showed before the drop, so replaying onto it duplicates every line
-    // (the macOS login banner piling up while idle). Reset first so replay reproduces the buffer
-    // once. Skipped on the first connect: terminals are freshly mounted and empty.
-    // Terminal yang sudah keluar tidak di-reset: layarnya memuat notice exit, dan tidak ada
-    // scrollback yang akan diputar ulang untuknya.
+    // A reconnect re-attaches to live PTYs. The xterm still holds what it showed before the drop,
+    // so its open carries `since`: the server sends only what came after, or `reset` first (the
+    // xterm clears) when the gap is gone or the session is a different one. Without that, replay
+    // onto the old screen duplicated every line (the macOS login banner piling up while idle).
+    // Exited terminals are not replayed: their screen holds the exit notice.
     const wasReconnect = everConnected
-    if (wasReconnect) for (const sub of subs.values()) if (!sub.exited) sub.onReset?.()
     everConnected = true
-    for (const sub of subs.values()) if (sub.open && !sub.exited) ws!.send(JSON.stringify(sub.open))
-    const pending = queue
-    queue = []
+    attempts = 0
+    setConnection({ phase: 'connected' })
+    for (const sub of subs.values()) {
+      if (sub.open && !sub.exited) ws!.send(JSON.stringify(sub.epoch ? { ...sub.open, since: { epoch: sub.epoch, seq: sub.seq } } : sub.open))
+    }
+    const pending = [...queue.values()]
+    queue.clear()
     for (const m of pending) ws!.send(JSON.stringify(m))
     if (wasReconnect) for (const cb of [...reconnectListeners]) {
       try { cb() } catch (err) { console.warn('ws: onReconnect listener gagal', err) }
@@ -103,7 +132,8 @@ function connect() {
     let msg: ServerMsg
     try {
       msg = JSON.parse(ev.data)
-    } catch {
+    } catch (err) {
+      console.warn('ws: ignoring a frame that is not JSON', err)
       return
     }
     if (msg.t === 'status') {
@@ -125,15 +155,25 @@ function connect() {
     if (msg.t === 'fsdirty') { emitFsEvent({ kind: 'dirty', path: msg.dir, origin: 'remote' }); return }
     const sub = subs.get(msg.id)
     if (!sub) return
-    if (msg.t === 'output') sub.onOutput(msg.data)
-    else if (msg.t === 'exit') {
+    if (msg.t === 'reset') {
+      sub.epoch = msg.epoch
+      sub.seq = 0
+      sub.onReset?.()
+    } else if (msg.t === 'output') {
+      // seq at or below the last drawn = a chunk this xterm already shows (overlapping replay).
+      if (msg.seq !== undefined) {
+        if (msg.seq <= sub.seq) return
+        sub.seq = msg.seq
+      }
+      sub.onOutput(msg.data)
+    } else if (msg.t === 'exit') {
       sub.exited = true
       sub.onExit(msg.code, exitReasonFor(msg.id, msg.reason))
     }
   }
   ws.onclose = () => {
     ws = null
-    if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connect() }, 1000)
+    scheduleReconnect()
   }
   ws.onerror = () => ws?.close()
 }
@@ -175,11 +215,14 @@ export function send(msg: ClientMsg) {
     // Dicatat SEBELUM dikirim: `exit` bisa tiba sebelum jawaban apa pun.
     closedByUs.add(msg.id)
   }
-  if (msg.t === 'input' && subs.get(msg.id)?.exited) {
-    // Sesi ini sudah mati. Antrean reconnect hanya akan memuntahkan ketikan ke PTY berikutnya
-    // yang memakai id sama, jadi input-nya dibuang, bukan ditunda.
+  if (msg.t === 'input' && (subs.get(msg.id)?.exited || !isOpen())) {
+    // Dead session, or no socket: input is dropped, never queued. Queued keys would land in the
+    // next PTY with this id, or in the shell long after the user stopped typing (the banner in
+    // TerminalCore.offline.tsx says typing is paused).
     return
   }
+  // Detach only matters to a live socket: a socket that closed already dropped every subscription.
+  if (msg.t === 'detach' && !isOpen()) return
   if (msg.t === 'resize') {
     // `open` yang diingat ikut dibarui, kalau tidak ia membawa ukuran SAAT NODE LAHIR selamanya.
     // Selama PTY-nya hidup ukuran basi itu tak berakibat (re-attach mengabaikan `cols`/`rows`), tapi
@@ -190,8 +233,12 @@ export function send(msg: ClientMsg) {
     // Disalin, bukan dimutasi: `replayOpen` bisa mengembalikan objek pemanggil apa adanya.
     if (sub?.open && !sub.exited) sub.open = { ...sub.open, cols: msg.cols, rows: msg.rows }
   }
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
-  else queue.push(msg)
+  if (isOpen()) ws!.send(JSON.stringify(msg))
+  else if (msg.t !== 'input' && msg.t !== 'detach') {
+    const key = 'dir' in msg ? `fs:${msg.dir}` : `${msg.t}:${msg.id}`
+    queue.delete(key) // re-inserted at the end: the latest one keeps its place in send order
+    queue.set(key, msg)
+  }
 }
 
 export function subscribe(
@@ -203,7 +250,15 @@ export function subscribe(
   // Remount = id ini hidup lagi dari sudut client: lepaskan memori close lama supaya `exit`
   // yang tertinggal tidak tersenyapkan, dan mulai tanpa `open` (mount baru mengirim miliknya).
   closedByUs.delete(id)
-  subs.set(id, { onOutput, onExit, onReset })
-  if (!ws) connect()
-  return () => { subs.delete(id) }
+  const sub: Sub = { onOutput, onExit, onReset, seq: 0 }
+  subs.set(id, sub)
+  // A pending reconnect timer will connect; connecting now as well would leave two sockets.
+  if (!ws && !reconnectTimer) connect()
+  return () => {
+    if (subs.get(id) !== sub) return // a newer mount owns this id now
+    subs.delete(id)
+    // Unmounted view: the server stops streaming this terminal to us; the session keeps running
+    // and a remount re-opens and replays (pty-207-8).
+    if (!sub.exited) send({ t: 'detach', id })
+  }
 }

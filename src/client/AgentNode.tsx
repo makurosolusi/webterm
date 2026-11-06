@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import type { NodeProps, Viewport } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import { agentConfig, canResume, hasUsage, isContextCapable, mintsSessionId } from '../shared/workspace'
@@ -20,7 +20,8 @@ import { unwatchNode, watchNode } from './unread'
 import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
-import { autoTitleFromWork, claimAutoName, identityColor, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
+import { autoTitleFromWork, canResumeAfter, claimAutoName, identityColor, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
+import { AgentFailedBar } from './AgentFailedBar'
 
 const COLLAPSED_H = 40
 
@@ -114,7 +115,6 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const usageModel = agentId && hasUsage(agentId) ? d.agentModel : undefined
 
   const [searchOpen, setSearchOpen] = useState(false)
-  const [maximized, setMaximized] = useState(false)
   const [aiNaming, setAiNaming] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; link: string | null } | null>(null)
   const [restarting, setRestarting] = useState(false)
@@ -124,7 +124,6 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
   const expandedH = useRef(height ?? 300)
-  const savedVp = useRef<Viewport | null>(null)
 
   // Dideklarasikan SEBELUM `useSpeechInput` di bawah, yang memakainya sebagai permukaan error.
   const addComment = (text: string, author?: string) =>
@@ -184,7 +183,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   }
 
   const restartGate = restartEligibility(agentId, status, resumableSid)
-  const canResumeNode = !!agentId && canResume(agentId) && !!resumableSid && status === 'done'
+  const canResumeNode = !!agentId && canResume(agentId) && !!resumableSid && canResumeAfter(status)
   const menuRows: MenuRow[] = [
     ...linkRows(menu?.link ?? null, id, openBrowserAt),
     {
@@ -224,11 +223,6 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     if (!collapsed) { expandedH.current = height ?? 300; rf.updateNode(id, { height: COLLAPSED_H }) }
     else rf.updateNode(id, { height: expandedH.current })
     rf.updateNodeData(id, { collapsed: !collapsed })
-  }
-
-  const toggleMaximize = () => {
-    if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }
-    else { if (savedVp.current) rf.setViewport(savedVp.current, { duration: 200 }); setMaximized(false) }
   }
 
   /**
@@ -288,9 +282,9 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           onRefresh={() => termRef.current?.refit()}
           searchOpen={searchOpen} onToggleSearch={() => setSearchOpen((o) => !o)}
           micActive={micActive} onToggleMic={onToggleMicProp}
-          maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
-          onStop={() => { stopAgent(id, label, send) }}
+          // VS Code shows Stop only while something runs: a working or blocked (mid-turn) agent.
+          onStop={status === 'working' || status === 'blocked' ? () => { stopAgent(id, label, send) } : undefined}
           menuItems={[{
             type: 'item', id: 'stop-idle', label: 'Stop all idle agents on this board',
             onSelect: () => { stopIdleAgents(rf.getNodes(), getStatus, send) },
@@ -299,7 +293,9 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
           hideLinks={d.hideLinks} onToggleHideLinks={onToggleHideLinksProp}
         />
-        <div className="node-body">
+        <div className="node-body relative">
+          {/* A1/A2: Retry resumes the conversation when there is one, else launches it afresh. */}
+          {status === 'failed' && <AgentFailedBar onRetry={() => { setResume(!!resumableSid); setGen((g) => g + 1) }} />}
           <TerminalCore
             key={gen}
             ref={termRef}

@@ -2,7 +2,7 @@
 // `claude -p --output-format stream-json` without a shell or PTY, writes the prompt to
 // stdin, and maps the JSONL stdout onto the central runtime port. No built-in tools; webterm's
 // registry arrives as native MCP tools through a per-turn `--mcp-config` (claudeMcp.ts, PLAN F2-c);
-// no logging of the prompt or child output.
+// never logs the prompt or stdout; stderr only as a redacted one-line failure cause.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
@@ -21,11 +21,16 @@ import {
 } from './claudeSession'
 import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
 import { CENTRAL_MODEL_FLAG } from './opencodeOptions'
+import { stderrReason } from './opencodeSession'
 import { createLogger } from '../../logs'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 
 const log = createLogger('central')
+/** Only the tail of stderr is kept, in memory, for the failure reason. */
+const MAX_STDERR_CHARS = 8 * 1024
+/** Child env names whose values are redacted out of the stderr reason. */
+const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|AUTH/i
 
 interface ActiveTurn {
   token: CancelToken
@@ -52,11 +57,13 @@ export class ClaudeRuntime implements CentralRuntime {
     const startedAt = this.now()
     const state = newTurnState()
     const sessionId = (this.options.newSessionId ?? randomUUID)()
-    const finish = (): RuntimeResult => finishTurn(emitter, {
+    const finish = (exitReason?: string): RuntimeResult => finishTurn(emitter, {
       state, elapsedMs: this.now() - startedAt, fallbackSessionRef: input.sessionRef ?? sessionId,
+      ...(exitReason === undefined ? {} : { exitReason }),
     })
     let child: ChildProcess | null = null
     let link: OpenedMcp | null = null
+    let secrets: string[] = []
     let ladder: ReturnType<typeof createKillLadder> | null = null
     let wallTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -89,7 +96,7 @@ export class ClaudeRuntime implements CentralRuntime {
       }
       if (token.cancelled) return this.cancelled(state, finish)
       try {
-        child = this.spawnChild(input, sessionId, link.configPath)
+        ;({ child, secrets } = this.spawnChild(input, sessionId, link.configPath))
       } catch (err) {
         state.spawnError = err instanceof Error ? err : new Error('claude spawn failed')
         return finish()
@@ -97,8 +104,9 @@ export class ClaudeRuntime implements CentralRuntime {
       const live = child
       ladder = createKillLadder(live, this.options.killGraceMs ?? DEFAULT_KILL_GRACE_MS)
       const kill = (): void => ladder?.start()
+      let exit: { code: number | null; signal: NodeJS.Signals | null } = { code: null, signal: null }
       const closed = new Promise<void>((resolve) => {
-        live.once('close', () => resolve())
+        live.once('close', (code: number | null, signal: NodeJS.Signals | null) => { exit = { code, signal }; resolve() })
         live.once('error', (err) => {
           state.spawnError = err
           resolve()
@@ -116,7 +124,12 @@ export class ClaudeRuntime implements CentralRuntime {
       }
       await closed
       if (state.retries > 0) log.info('central.claude_retries', 'claude api retried', { retries: state.retries })
-      return finish()
+      if (state.result !== null || state.failure !== null || state.termination !== null || state.spawnError !== null) return finish()
+      // Ended without a result event (broken profile, auth, wrapper crash): the exit status and stderr are the only cause.
+      const status = exit.code !== null ? `exit ${exit.code}` : `signal ${exit.signal ?? 'unknown'}`
+      const reason = stderrReason(state.stderrTail, secrets) || status
+      log.error('central.claude_exit_failed', 'claude exited without a result', { turnId: input.turnId, exitCode: exit.code, signal: exit.signal, reason })
+      return finish(reason === status ? status : `${status}: ${reason}`)
     } finally {
       if (wallTimer !== undefined) clearTimeout(wallTimer)
       ladder?.clear()
@@ -156,7 +169,7 @@ export class ClaudeRuntime implements CentralRuntime {
     }
   }
 
-  private spawnChild(input: TurnInput, sessionId: string, mcpConfig: string): ChildProcess {
+  private spawnChild(input: TurnInput, sessionId: string, mcpConfig: string): { child: ChildProcess; secrets: string[] } {
     const model = claudeModelArg(this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
     const argv = claudeArgv({
       mcpConfig,
@@ -168,17 +181,15 @@ export class ClaudeRuntime implements CentralRuntime {
     })
     // Central launch profile (e.g. `envman -e p -- claude`) read per turn, so a profile edit reaches the next turn.
     const [cmd, ...args] = this.options.executable ? [this.options.executable, ...argv] : [...centralClaudeLaunch().argv, ...argv]
-    return spawn(cmd as string, args, {
-      cwd: ensureWorkDir(this.options.workDir),
-      // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
-      // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
-      env: claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv }),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: false,
-    })
+    // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
+    // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
+    const env = claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv })
+    const secrets = Object.entries(env).filter(([name, value]) => SECRET_ENV_NAME.test(name) && typeof value === 'string').map(([, value]) => value as string)
+    const child = spawn(cmd as string, args, { cwd: ensureWorkDir(this.options.workDir), env, stdio: ['pipe', 'pipe', 'pipe'], shell: false })
+    return { child, secrets }
   }
 
-  /** Wires stdin (prompt then EOF), stdout (JSONL to events) and drains stderr unread. */
+  /** Wires stdin (prompt then EOF), stdout (JSONL to events) and keeps a bounded stderr tail for the failure cause. */
   private pump(child: ChildProcess, input: TurnInput, emitter: TurnEmitter, state: ClaudeTurnState, kill: () => void): void {
     const reader = createLineReader()
     const maxTurns = input.limits.maxTurns ?? DEFAULT_MAX_TURNS
@@ -192,7 +203,10 @@ export class ClaudeRuntime implements CentralRuntime {
     child.stdout?.setEncoding('utf8')
     child.stdout?.on('data', (chunk: string | Buffer) => apply(reader.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'))))
     child.stdout?.on('end', () => apply(reader.end()))
-    child.stderr?.resume()
+    child.stderr?.setEncoding('utf8')
+    child.stderr?.on('data', (chunk: string | Buffer) => {
+      state.stderrTail = (state.stderrTail + (typeof chunk === 'string' ? chunk : chunk.toString('utf8'))).slice(-MAX_STDERR_CHARS)
+    })
     child.stdin?.on('error', (err: NodeJS.ErrnoException) => {
       // EPIPE when the child exits before reading the prompt; its exit path reports the failure.
       log.warn('central.claude_stdin_failed', 'claude stdin write failed', { code: err.code ?? 'unknown' })

@@ -33,6 +33,15 @@ describe('styles.css — token sheet', () => {
       '--status-bar-h: 22px',
       // Alias warisan untuk sheet yang belum ikut migrasi: tinggi chrome di atas canvas.
       '--tabbar-h: calc(var(--title-bar-h) + var(--editor-tabs-h))',
+      // Ukuran chrome = default workbench VS Code; satu sumber yang dibaca semua sheet chrome.
+      '--ui-font-size: var(--vscode-font-size)',
+      '--ui-font-size-small: 12px',
+      '--ui-font-size-label: 11px',
+      '--ui-icon-size: 16px',
+      '--activity-icon-size: 24px',
+      '--status-font-size: var(--ui-font-size-small)',
+      '--list-row-h: 22px',
+      '--menu-row-h: 24px',
     ]) {
       expect(tokens).toContain(tok)
     }
@@ -219,11 +228,12 @@ describe('node-chrome.css', () => {
     expect(header).toContain('cursor: default')
     const title = chrome.slice(chrome.indexOf('.node-title {'), chrome.indexOf('.node-description'))
     expect(title).toContain('max-width: 220px')
-    expect(title).toContain('font-size: 13px')
+    expect(title).toContain('font-size: var(--ui-font-size)')
     expect(title).toContain('font-weight: 400')
     // Judul tidak boleh melar: toolbar yang didorong `margin-left: auto`, bukan judul.
     expect(title).not.toContain('flex: 1')
-    expect(chrome).toContain('.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }')
+    // Block host with min-width 0, so a narrow header can shrink the toolbar (nodeToolbar.overflow).
+    expect(chrome).toContain('.node-toolbar { display: block; min-width: 0; margin-left: auto; }')
     expect(chrome).not.toContain('.node-toolbar__count')
     expect(chrome).not.toContain('.pane-split-btns')
     // Tombol header memakai `vscode-toolbar-button`; kelas status lama dan merah "danger" sudah tidak ada.
@@ -250,7 +260,7 @@ describe('node-chrome.css', () => {
 
   it('styles the status chip without text-transform (nodeterm labels are literal)', () => {
     const chip = chrome.slice(chrome.indexOf('.node-status {'), chrome.indexOf('@keyframes nt-pulse'))
-    expect(chip).toContain('font-size: 11px')
+    expect(chip).toContain('font-size: var(--ui-font-size-label)')
     expect(chip).toContain('font-weight: 400')
     expect(chip).not.toContain('letter-spacing')
     expect(chip).toContain('.node-status-dot')

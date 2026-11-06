@@ -33,6 +33,16 @@ function renderPanel(overrides: Partial<Settings> = {}) {
 const nav = () => screen.getByRole('navigation', { name: 'Section settings' })
 
 describe('SettingsPanel VS Code layout', () => {
+  it('fills the viewport without the shadcn centering utilities (prod minifier drops a CSS translate reset)', () => {
+    renderPanel()
+
+    const classes = [...document.querySelector('.st-dialog-content')!.classList]
+    for (const centering of ['translate-x-[-50%]', 'translate-y-[-50%]', 'top-[50%]', 'left-[50%]']) {
+      expect(classes).not.toContain(centering)
+    }
+    expect(classes).toEqual(expect.arrayContaining(['inset-0', 'translate-x-0', 'translate-y-0']))
+  })
+
   it('renders the search box, section sidebar, and the active section as label/control rows', () => {
     renderPanel()
 

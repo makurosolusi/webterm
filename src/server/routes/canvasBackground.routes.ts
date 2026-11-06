@@ -6,6 +6,7 @@
 // the replaced file is removed once nothing in settings references it any more.
 import type { ServerResponse } from 'node:http'
 import type { Settings } from '../../shared/settings'
+import type { SettingsPatch } from '../../shared/settings.patch'
 import {
   DEFAULT_CANVAS_BACKGROUND, WORKSPACE_BACKGROUNDS_LIMITS, type CanvasBackground,
 } from '../../shared/canvasBackground.schema'
@@ -33,15 +34,22 @@ function scopeBackground(s: Settings, workspace: string | null): CanvasBackgroun
   return s.canvasBackgroundByWorkspace[workspace] ?? s.canvasBackground ?? DEFAULT_CANVAS_BACKGROUND
 }
 
-function patchFor(s: Settings, workspace: string | null, bg: CanvasBackground): Partial<Settings> {
-  if (!workspace) return { canvasBackground: bg }
-  return { canvasBackgroundByWorkspace: { ...s.canvasBackgroundByWorkspace, [workspace]: bg } }
+/** One-entry patch for the scope (`settings.patch.ts`): other workspaces' overrides are not sent. */
+function patchFor(workspace: string | null, bg: CanvasBackground): SettingsPatch {
+  return workspace ? { canvasBackgroundByWorkspace: { [workspace]: bg } } : { canvasBackground: bg }
 }
 
-/** Save `bg` for the scope, then delete `oldId` if no background references it any more. */
-async function commit(deps: CanvasBackgroundDeps, workspace: string | null, bg: CanvasBackground, oldId: string): Promise<Settings> {
-  const saved = deps.store.saveSettings(patchFor(deps.store.getSettings(), workspace, bg))
-  await deleteIfUnreferenced(deps.dir, saved, oldId)
+/**
+ * Save `next(current)` for the scope, then delete the image it replaced unless still referenced.
+ * `current` is read HERE, after the caller's awaits (body read, file write), never before them: a
+ * concurrent upload to the same scope may have committed meanwhile, and the GC must delete the
+ * image this write actually replaces, or that one is orphaned. Read and save are synchronous, so
+ * nothing interleaves between them.
+ */
+async function commit(deps: CanvasBackgroundDeps, workspace: string | null, next: (current: CanvasBackground) => CanvasBackground): Promise<Settings> {
+  const before = scopeBackground(deps.store.getSettings(), workspace)
+  const saved = deps.store.saveSettings(patchFor(workspace, next(before)))
+  await deleteIfUnreferenced(deps.dir, saved, before.imageId)
   return saved
 }
 
@@ -58,23 +66,19 @@ export async function canvasBackgroundRoute(c: Pick<RouteCtx, 'req' | 'res' | 'u
   if (c.path !== CANVAS_IMAGE_PATH) return false
   const workspace = c.url.searchParams.get('workspace') || null
   if (workspace && workspace.length > WORKSPACE_BACKGROUNDS_LIMITS.idLength) { json(res, 400, { error: 'invalid workspace' }); return true }
-  const current = deps.store.getSettings()
-  const before = scopeBackground(current, workspace)
-
   if (c.method === 'POST') {
     const body = await readBinaryBody(c.req, MAX_CANVAS_IMAGE_BYTES)
     if (body === 'too_large') { json(res, 413, { error: 'payload_too_large', maxBytes: MAX_CANVAS_IMAGE_BYTES }); return true }
     const ext = sniffImage(body)
     if (!ext) { json(res, 415, { error: 'unsupported_image', accepted: ['png', 'jpeg', 'webp', 'gif'] }); return true }
     const id = await saveCanvasImage(deps.dir, body, ext)
-    const saved = await commit(deps, workspace, { ...before, mode: 'image', imageId: id }, before.imageId)
+    const saved = await commit(deps, workspace, (b) => ({ ...b, mode: 'image', imageId: id }))
     log.info('canvas-background.upload', 'Canvas background image stored', { bytes: body.length, ext, scope: workspace ? 'workspace' : 'global' })
     json(res, 200, saved)
     return true
   }
   if (c.method === 'DELETE') {
-    const mode = before.mode === 'image' ? 'default' : before.mode
-    const saved = await commit(deps, workspace, { ...before, mode, imageId: '' }, before.imageId)
+    const saved = await commit(deps, workspace, (b) => ({ ...b, mode: b.mode === 'image' ? 'default' : b.mode, imageId: '' }))
     json(res, 200, saved)
     return true
   }

@@ -10,6 +10,7 @@
 import { spawn } from 'node:child_process'
 import { parseHunks, checkRelPath, GitDiffError } from './gitDiff'
 import { ptyEnv } from './ptyShell'
+import { gitCommand } from './gitExec'
 import { redactSecrets } from './redactSecrets'
 import { sensitivePattern } from './repoHygiene'
 import { binaryOnPath } from './binaryOnPath'
@@ -59,8 +60,11 @@ export function run(cmd: string, args: string[], opts: { cwd: string; input?: st
   })
 }
 
-export const git = (root: string, args: string[], input?: string, timeoutMs = GIT_TIMEOUT_MS) =>
-  run('git', ['--no-optional-locks', '--literal-pathspecs', '-C', root, ...args], { cwd: root, input, timeoutMs })
+/** One git call in `root` via gitExec.ts; `userHooks` only for the user's explicit commit/push. */
+export const git = (root: string, args: string[], input?: string, timeoutMs = GIT_TIMEOUT_MS, userHooks = false) => {
+  const g = gitCommand(['--no-optional-locks', '--literal-pathspecs', '-C', root, ...args], { userHooks })
+  return run(g.file, g.args, { cwd: root, input, timeoutMs, env: g.env })
+}
 
 async function gitOk(root: string, args: string[], what: string, input?: string): Promise<string> {
   const r = await git(root, args, input)
@@ -253,7 +257,7 @@ export async function commit(root: string, message: string): Promise<{ ok: true;
   if (!staged.length) throw new GitDiffError('not_changed', 'nothing is staged')
   const secret = staged.find((e) => e.sensitive)
   if (secret) throw new GitDiffError('sensitive', `Refused: ${secret.path} is staged and matches the secret pattern "${secret.sensitivePattern}". Unstage it first.`)
-  const r = await git(root, ['commit', '-F', '-'], message.trim() + '\n', COMMIT_TIMEOUT_MS)
+  const r = await git(root, ['commit', '-F', '-'], message.trim() + '\n', COMMIT_TIMEOUT_MS, true)
   if (r.code === 0) return { ok: true, head: (await gitOk(root, ['rev-parse', 'HEAD'], 'git rev-parse')).trim() }
   // Hook/GPG failures use stderr; nothing-to-commit output can be on stdout (Orca runCommit).
   const output = tail([r.stderr, r.stdout].filter((s) => s.trim()).join('\n') || (r.timedOut ? 'commit timed out' : 'commit failed'))

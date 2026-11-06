@@ -1,55 +1,108 @@
-// Slot upload/download file manager (WS-FM-10): menu "Upload…"/"Download", drop file OS ke node, dan
-// status progres/ringkasan di toolbar. Semua dikunci `capabilities().upload` (fail-closed); bila server
-// menjawab filesWrite mati (`mutate` false), "Upload…" tampil terkunci dan membuka tawaran menyalakan.
-// Drop dipasang lewat `useSlot` pada elemen node React Flow (`[data-id=nodeId]`) karena kontrak
-// FilesSlot belum punya `onDrop`; integrasi nanti cukup memanggil `runUpload` dari slot itu.
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+// Slot upload/download file manager (WS-FM-10): menu "Upload…"/"Download", an Upload icon in the
+// toolbar, OS file drop onto the node (filesSlot.upload.drop), one FIFO queue per node (uploadQueue),
+// the "already exists" prompt (filesSlot.upload.conflict). Progress and results go through
+// `ctx.notify` (footer + progress bar), never the toolbar. Everything is gated by
+// `capabilities().upload` (fail-closed); with filesWrite off "Upload…" shows locked and offers to turn it on.
+import { useEffect, useState } from 'react'
 import { IconButton } from './components/ui/icon-button'
 import { childPath } from './fileBrowse'
 import { capabilities } from './fsClient'
+import type { NoticeAction } from './filesNotice'
+import { UploadConflictDialog, askConflict, resetUploadConflicts, skipUploadConflict } from './filesSlot.upload.conflict'
+import { filesFromDrop, useUploadDrop } from './filesSlot.upload.drop'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
 import { lockedRow, offerFilesWrite, useFilesWriteEpoch, WRITE_OFFER_TEXT } from './filesWriteOffer'
-import { downloadUrl, uploadFiles, type UploadSummary } from './uploadQueue'
+import { createUploadQueue, downloadUrl, type UploadOutcome, type UploadQueue } from './uploadQueue'
+
+const nFiles = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`
 
 /** Satu-satunya tempat string UI slot ini (Inggris). */
 export const UPLOAD_TEXT = {
   menuUpload: 'Upload…',
   menuDownload: 'Download',
-  busy: 'A previous upload is still running.',
+  toolbarUpload: 'Upload Files…',
   folderSkipped: 'Folders can’t be uploaded, skipped: ',
-  summary: (ok: number, fail: number) => `${ok} uploaded${fail ? `, ${fail} failed` : ''}`,
-  progress: (i: number, n: number, pct: number) => `Uploading ${i}/${n} · ${pct}%`,
-  dismiss: 'Dismiss upload summary',
+  progress: (i: number, n: number, name: string) => `Uploading ${i} of ${n} · ${name}`,
+  done: (ok: number, skipped: number) =>
+    ok ? `${nFiles(ok)} uploaded${skipped ? `, ${skipped} skipped` : ''}` : `${nFiles(skipped)} skipped`,
+  failed: (failed: number, total: number, reasons: readonly string[]) => `${failed} of ${nFiles(total)} failed — ${reasons.join('; ')}`,
+  cancelled: (ok: number) => (ok ? `Upload cancelled · ${nFiles(ok)} uploaded` : 'Upload cancelled'),
+  retry: 'Retry Failed Uploads',
+  dropHint: (folder: string) => `Drop to upload to ${folder}`,
 }
 
-interface Status { running: boolean; index: number; total: number; pct: number; name: string; summary: UploadSummary | null; note: string }
-const IDLE: Status = { running: false, index: 0, total: 0, pct: 0, name: '', summary: null, note: '' }
-let status: Status = IDLE
-const subs = new Set<() => void>()
-const setStatus = (s: Status) => { status = s; subs.forEach((f) => f()) }
-const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
+/** Notice ids of this slot: the running/finished batch, and the "folders skipped" note of a drop. */
+export const UPLOAD_NOTICE = 'upload'
+export const FOLDERS_NOTICE = 'upload-folders'
+
 let uploadEnabled = false
 /** Download memakai `raw`, yang dikunci flag VIEWERS selain UPLOAD. */
 let downloadEnabled = false
 /** Upload mati KARENA filesWrite mati (bisa dinyalakan dari tawaran); mati karena galat tetap tersembunyi. */
 let uploadLocked = false
+/** Per node: its queue, and the latest ctx (refresh/notify of the node as it is now). */
+const queues = new Map<string, UploadQueue>()
+const latest = new Map<string, FilesSlotCtx>()
 
-/** Status upload saat ini (untuk tes). */
-export const uploadStatus = (): Status => status
 /** Kembalikan state modul ke awal (untuk tes). */
-export function resetUploadSlot(): void { status = IDLE; uploadEnabled = false; downloadEnabled = false; uploadLocked = false; subs.clear() }
+export function resetUploadSlot(): void {
+  queues.forEach((q) => q.cancel())
+  resetUploadConflicts()
+  queues.clear(); latest.clear()
+  uploadEnabled = false; downloadEnabled = false; uploadLocked = false
+}
 
-/** Jalankan antrean upload ke `dir`; `onDone` (mis. refresh) dipanggil bila ada yang sukses. Tolak bila masih berjalan. */
-export async function runUpload(dir: string, files: readonly File[], onDone: () => void, note = ''): Promise<void> {
-  if (status.running) { setStatus({ ...status, note: UPLOAD_TEXT.busy }); return }
-  if (files.length === 0) { if (note) setStatus({ ...IDLE, note }); return }
-  setStatus({ ...IDLE, running: true, total: files.length, name: files[0].name, note })
-  const summary = await uploadFiles(dir, files, {
-    onStart: (i, name, total) => setStatus({ ...status, index: i + 1, total, name, pct: 0 }),
-    onProgress: (_i, loaded, total) => setStatus({ ...status, pct: total ? Math.round((loaded / total) * 100) : 0 }),
-  })
-  setStatus({ ...IDLE, summary, note })
-  if (summary.ok.length) onDone()
+/**
+ * Node `nodeId` is gone: abort its running upload, answer its open conflict Skip, drop its queue.
+ * `latest` goes first, so the cancelled batch's progress/done callbacks post nothing afterwards.
+ */
+export function forgetUploads(nodeId: string): void {
+  latest.delete(nodeId)
+  queues.get(nodeId)?.cancel()
+  queues.delete(nodeId)
+  skipUploadConflict(nodeId)
+}
+
+function finish(nodeId: string, o: UploadOutcome): void {
+  const ctx = latest.get(nodeId)
+  if (!ctx) return
+  if (o.ok.length) ctx.refresh()
+  if (o.failed.length) {
+    const actions: NoticeAction[] = [{ label: UPLOAD_TEXT.retry, icon: 'refresh', run: () => queueFor(nodeId).add(o.failed.map((f) => f.job)) }]
+    // Rejected EDISABLED (turned off after the slot loaded): offer the way out next to Retry.
+    if (o.failed.some((f) => f.code === 'EDISABLED')) actions.unshift({ label: WRITE_OFFER_TEXT.enableAction, icon: 'unlock', run: () => offerFilesWrite(nodeId) })
+    const reasons = o.failed.map((f) => f.message)
+    const total = o.ok.length + o.skipped.length + o.failed.length
+    ctx.notify({ id: UPLOAD_NOTICE, kind: 'error', text: UPLOAD_TEXT.failed(o.failed.length, total, reasons), detail: reasons.join('\n'), actions })
+  } else if (o.cancelled) {
+    ctx.notify({ id: UPLOAD_NOTICE, kind: 'info', text: UPLOAD_TEXT.cancelled(o.ok.length) })
+  } else if (o.ok.length || o.skipped.length) {
+    ctx.notify({ id: UPLOAD_NOTICE, kind: 'info', text: UPLOAD_TEXT.done(o.ok.length, o.skipped.length) })
+  } else {
+    ctx.dismiss(UPLOAD_NOTICE)
+  }
+}
+
+function queueFor(nodeId: string): UploadQueue {
+  let q = queues.get(nodeId)
+  if (!q) {
+    q = createUploadQueue({
+      onProgress: (p) => latest.get(nodeId)?.notify({
+        id: UPLOAD_NOTICE, kind: 'progress', text: UPLOAD_TEXT.progress(p.index, p.total, p.name),
+        progress: p.bytes ? p.loaded / p.bytes : 0, onCancel: () => queueFor(nodeId).cancel(),
+      }),
+      ask: (c) => askConflict(nodeId, c),
+      onDone: (o) => finish(nodeId, o),
+    })
+    queues.set(nodeId, q)
+  }
+  return q
+}
+
+/** Queue `picked` for upload into `dir` on node `ctx.nodeId`; joins a running batch, never rejected. */
+export function runUpload(ctx: FilesSlotCtx, dir: string, picked: readonly File[]): void {
+  latest.set(ctx.nodeId, ctx)
+  queueFor(ctx.nodeId).add(picked.map((file) => ({ dir, file })))
 }
 
 function pickFiles(onPick: (files: File[]) => void): void {
@@ -72,68 +125,18 @@ function download(path: string, name: string): void {
   a.remove()
 }
 
-/** File dari event drop OS; folder (entri direktori) dilewati dan namanya dikembalikan terpisah. */
-export function filesFromDrop(dt: DataTransfer): { files: File[]; skipped: string[] } {
-  const files: File[] = []
-  const skipped: string[] = []
-  const items = [...(dt.items ?? [])].filter((it) => it.kind === 'file')
-  if (items.length === 0) return { files: [...dt.files], skipped }
-  for (const it of items) {
-    const f = it.getAsFile()
-    if (!f) continue
-    if (it.webkitGetAsEntry?.()?.isDirectory) skipped.push(f.name)
-    else files.push(f)
-  }
-  return { files, skipped }
+function onDrop(ctx: FilesSlotCtx, dir: string, dt: DataTransfer): void {
+  const { files: dropped, skipped } = filesFromDrop(dt)
+  if (skipped.length) ctx.notify({ id: FOLDERS_NOTICE, kind: 'error', text: UPLOAD_TEXT.folderSkipped + skipped.join(', ') })
+  runUpload(ctx, dir, dropped)
 }
 
-function UploadStatusView({ nodeId }: { nodeId: string }) {
-  const s = useSyncExternalStore(subscribe, () => status)
-  if (s.running) return <span role="status" title={s.name}>{UPLOAD_TEXT.progress(s.index, s.total, s.pct)}</span>
-  if (!s.summary && !s.note) return null
-  const details = [...(s.summary?.failed.map((f) => f.message) ?? []), s.note].filter(Boolean).join(' · ')
-  const text = s.summary ? UPLOAD_TEXT.summary(s.summary.ok.length, s.summary.failed.length) : s.note
-  // Upload ditolak EDISABLED (dimatikan setelah slot aktif): sertakan jalan keluarnya.
-  const disabled = s.summary?.failed.some((f) => f.code === 'EDISABLED')
-  return (
-    <>
-      {disabled ? (
-        <IconButton type="button" size="icon-sm" className="files-tool" label={WRITE_OFFER_TEXT.enableAction} tooltip={`${WRITE_OFFER_TEXT.dialogTitle} to allow uploads`} onClick={() => offerFilesWrite(nodeId)}>{WRITE_OFFER_TEXT.enableAction}</IconButton>
-      ) : null}
-      <IconButton type="button" size="icon-sm" className="files-tool" role="status" label={`${text}. ${UPLOAD_TEXT.dismiss}`}
-        tooltip={details ? `${details} (click to dismiss)` : UPLOAD_TEXT.dismiss} onClick={() => setStatus(IDLE)}>
-        {text}
-      </IconButton>
-    </>
-  )
-}
-
-/** Pasang drop file OS pada node; hanya bereaksi pada drag yang membawa `Files` (DnD path internal lewat). */
-function useDrop(ctx: FilesSlotCtx, on: boolean): void {
-  const live = useRef(ctx)
-  live.current = ctx
-  useEffect(() => {
-    const el = on ? document.querySelector<HTMLElement>(`[data-id="${CSS.escape(ctx.nodeId)}"]`) : null
-    if (!el) return
-    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
-    const over = (e: DragEvent) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'copy' } }
-    const drop = (e: DragEvent) => {
-      if (!hasFiles(e) || !e.dataTransfer) return
-      e.preventDefault()
-      e.stopPropagation()
-      const { files, skipped } = filesFromDrop(e.dataTransfer)
-      const c = live.current
-      void runUpload(c.dir, files, c.refresh, skipped.length ? UPLOAD_TEXT.folderSkipped + skipped.join(', ') : '')
-    }
-    el.addEventListener('dragover', over)
-    el.addEventListener('drop', drop)
-    return () => { el.removeEventListener('dragover', over); el.removeEventListener('drop', drop) }
-  }, [on, ctx.nodeId])
-}
+const pickInto = (ctx: FilesSlotCtx) => pickFiles((f) => runUpload(ctx, ctx.dir, f))
 
 export const uploadSlot: FilesSlot = {
   id: 'upload',
   useSlot(ctx) {
+    latest.set(ctx.nodeId, ctx)
     const [on, setOn] = useState(uploadEnabled)
     const epoch = useFilesWriteEpoch()
     useEffect(() => {
@@ -149,14 +152,22 @@ export const uploadSlot: FilesSlot = {
       })
       return () => { alive = false }
     }, [epoch])
-    useDrop(ctx, on)
+    // Unmount = node removed: the tab-layout portal (withTabPortal) keeps this subtree mounted across
+    // canvas/tab moves, so this runs only when the node leaves the board (same as mutate's clearUi).
+    useEffect(() => () => forgetUploads(ctx.nodeId), [ctx.nodeId])
+    useUploadDrop(ctx, on, UPLOAD_TEXT.dropHint, onDrop)
   },
   menu(ctx) {
     if (!uploadEnabled) return uploadLocked ? [lockedRow(ctx.nodeId, UPLOAD_TEXT.menuUpload)] : []
-    const rows = [{ label: UPLOAD_TEXT.menuUpload, onClick: () => pickFiles((f) => { void runUpload(ctx.dir, f, ctx.refresh) }) }]
+    const rows = [{ label: UPLOAD_TEXT.menuUpload, onClick: () => pickInto(ctx) }]
     const file = ctx.selection.length === 1 ? ctx.entries.find((e) => e.name === ctx.selection[0] && !e.dir) : undefined
     if (file && downloadEnabled) rows.push({ label: UPLOAD_TEXT.menuDownload, onClick: () => download(childPath(ctx.dir, file.name), file.name) })
     return rows
   },
-  toolbar: (ctx) => (uploadEnabled ? <UploadStatusView nodeId={ctx.nodeId} /> : null),
+  toolbar: (ctx) => (uploadEnabled ? (
+    <IconButton type="button" size="icon-sm" className="files-tool" label={UPLOAD_TEXT.toolbarUpload} onClick={() => pickInto(ctx)}>
+      <span className="codicon codicon-cloud-upload" aria-hidden="true" />
+    </IconButton>
+  ) : null),
+  overlay: (ctx) => <UploadConflictDialog nodeId={ctx.nodeId} />,
 }

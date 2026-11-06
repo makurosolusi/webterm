@@ -126,7 +126,7 @@ export async function push(root: string, acknowledge: boolean): Promise<{ ok: tr
     if ((await git(root, ['remote', 'get-url', 'origin'])).code !== 0) throw new ScmError('no_remote', 400, 'This repo has no "origin" remote.')
     args = ['push', '-u', 'origin', 'HEAD']
   }
-  const r = await git(root, args, undefined, PUSH_TIMEOUT_MS)
+  const r = await git(root, args, undefined, PUSH_TIMEOUT_MS, true)
   const output = redactSecrets([r.stdout, r.stderr].filter((x) => x.trim()).join('\n').slice(-OUTPUT_TAIL))
   if (r.code !== 0) throw new ScmError('push_failed', 409, r.timedOut ? 'git push timed out.' : `git push failed: ${output}`)
   return { ok: true, output }

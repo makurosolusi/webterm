@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { DEFAULT_CANVAS_BACKGROUND, type CanvasBackground } from '../shared/canvasBackground.schema'
 import { RECOMMENDED_IMAGE_DIM } from './canvasBackground.style'
 import { CanvasBackgroundSection } from './CanvasBackgroundSection'
+import { applySettingsPatch } from '../shared/settings.patch'
 
 const IMG = '0f8b1c2a-1111-4222-8333-444455556666.png' // test-only
 const bg = (p: Partial<CanvasBackground>): CanvasBackground => ({ ...DEFAULT_CANVAS_BACKGROUND, ...p })
@@ -28,7 +29,7 @@ function Host({ initial, projectId, initialScope }: { initial: Partial<Settings>
   const [s, setS] = useState<Settings>({ ...DEFAULT_SETTINGS, ...initial })
   latest = s
   return <CanvasBackgroundSection settings={s} projectId={projectId} initialScope={initialScope}
-    onChange={(p) => setS((prev) => { latest = { ...prev, ...p }; return latest })} />
+    onChange={(p) => setS((prev) => { latest = applySettingsPatch(prev, p); return latest })} />
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })

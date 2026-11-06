@@ -94,13 +94,16 @@ const VERBS: Record<string, Verb> = {
   search: { m: 'GET', flag: 'QUICK_OPEN', need: ['root', 'q'], run: (a, _b, _c, q) => searchFiles(a.root, a.q, Number(q.get('limit')) || undefined) },
   // Find in Files (`grep`, `grep-cancel`): handlers + rationale in fsGrep.ts / fsGrep.route.ts.
   ...GREP_VERBS,
-  upload: { m: 'POST', flag: 'UPLOAD', need: ['dir', 'name'], body: false, run: (a, _b, c) => uploadFile(a.dir, a.name, c.stream, filesUploadMaxBytes()) },
+  upload: { m: 'POST', flag: 'UPLOAD', need: ['dir', 'name'], body: false, run: (a, _b, c, q) => uploadFile(a.dir, a.name, c.stream, filesUploadMaxBytes(), q.get('overwrite') === '1') },
   capabilities: {
     m: 'GET',
     run: async () => ({ ok: true, mutate: filesFlagOn('MUTATE'), viewers: filesFlagOn('VIEWERS'), watch: filesFlagOn('WATCH'),
       git: filesFlagOn('GIT_STATUS'), quickOpen: filesFlagOn('QUICK_OPEN'), upload: filesFlagOn('UPLOAD'), listMax: filesListMax() }),
   },
 }
+
+/** `[verb, method]` of every `/api/fs/<verb>` (the UI-only policy test probes each). */
+export const FS_VERB_METHODS: readonly (readonly [string, string])[] = Object.entries(VERBS).map(([name, v]) => [name, v.m])
 
 function reply(code: FsErrCode, error: string): FsApiResult {
   return { status: FS_ERR_STATUS[code], body: fsFail(code, error) }

@@ -4,6 +4,7 @@
 // Runner proses + helper hasil worker ada di `verifier.ts`; tabel command server-owned ada di
 // `verifyCommands.ts`. Tiap modul tetap < 300 baris.
 import { isAbsolute, resolve } from 'node:path'
+import { gitCommand } from '../gitExec'
 import { realPathInsideRoot } from './safePath'
 import { isInsideRoot } from './worktree'
 import { SERVER_VERIFIED_BY, type ServerVerifiedBy } from './orchestratorModel'
@@ -249,7 +250,8 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
   const runs = new Map<string, RawRun>()
   const gitReasons: string[] = []
   for (const [id, args] of Object.entries(GIT_COMMANDS)) {
-    const run = await runCommand({ file: 'git', args: [...args] }, cwd, options.exec, limits, now)
+    const g = gitCommand(args)
+    const run = await runCommand({ file: g.file, args: g.args }, cwd, options.exec, limits, now)
     runs.set(id, run)
     evidence.push(run.evidence)
     if (run.evidence.exitCode !== 0) gitReasons.push(`git ${args.join(' ')} exited ${run.evidence.exitCode}`)
@@ -264,7 +266,8 @@ export async function verifyWorktree(options: VerifyOptions, input: VerifyInput)
    * parent (root commit) or unknown ref is NOT fatal: the base diff is simply empty.
    */
   for (const [id, args] of Object.entries(baseDiffCommands(base.ref))) {
-    const run = await runCommand({ file: 'git', args: [...args] }, cwd, options.exec, limits, now)
+    const g = gitCommand(args)
+    const run = await runCommand({ file: g.file, args: g.args }, cwd, options.exec, limits, now)
     runs.set(id, run)
     evidence.push(run.evidence)
   }

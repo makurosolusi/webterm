@@ -88,7 +88,8 @@ function ptyPid(s: Sessions, id: string): number {
  *  otomatis, dan tanpa `detach` setiap probe menumpuk jadi pelanggan permanen. */
 function stored(s: Sessions, id: string): string[] {
   const probe = recorder()
-  s.open({ t: 'open', id, cols: 80, rows: 24 }, probe.send)
+  // Same kind as the agent sessions below: a plain open on an agent id is refused (pty-207-6).
+  s.open({ t: 'open', id, cols: 80, rows: 24, agentId: 'claude' }, probe.send)
   s.detach(probe.send)
   return probe.seen
 }
@@ -126,10 +127,10 @@ test('the socket that asked for the close hears the withdrawal', () => {
 
   const before = r.seen.length
   s.close('cl2', r.send)
-  // Tepat satu pesan, dan isinya pencabutan: client menyimpan salinan statusnya lepas dari apakah
-  // terminalnya ter-mount, jadi senyap di sini meninggalkan 'done' di browser selamanya.
+  // Exactly one message, and it replaces 'done': the client keeps its own copy of the status, so
+  // silence here would leave 'done' in the browser forever. Stopping a live agent says 'stopped' (A5).
   expect(r.seen.length).toBe(before + 1)
-  expect(r.seen[before]).toBe('NONE')
+  expect(r.seen[before]).toBe('stopped')
   expect(r.seen[before]).not.toBe(OLD_STATUS_AFTER_CLOSE)
 }, 90_000)
 

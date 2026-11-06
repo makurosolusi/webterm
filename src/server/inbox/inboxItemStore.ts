@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { requestApproval } from '../ledger/ledgerApproval'
 import { allRows, execWrite, getRow, newId, type LedgerContext, type Row } from '../ledger/ledgerCore'
 import { PERMISSION_KIND } from '../permission/permission.model'
+import { INBOX_KIND_RANK, decodeInboxCursor, encodeInboxCursor, kindRank } from './inboxCursor'
 import { allowedActions, toolImpact, type Impact, type InboxEntry, type InboxItemKind, type InboxItemStatus } from './inboxItemModel'
 
 /** Ledger approval kind of a gate created through the inbox (producer reads the final args back). */
@@ -203,22 +204,63 @@ export function ensureDailyDigest(ctx: LedgerContext): InboxEntry | null {
   return createInboxItem(ctx, { kind: 'notify', source: 'digest', title: `Daily digest: ${news.length} update${news.length === 1 ? '' : 's'}`, body: lines.join('\n'), dedupeKey: key })
 }
 
-/** Open, un-snoozed items (snoozed ones resurface by themselves once `until` passes). */
-export function listInboxItems(ctx: LedgerContext, opts: { projectId?: string; limit?: number } = {}): InboxEntry[] {
+/** Most items one page returns. */
+export const INBOX_PAGE_MAX = LIST_MAX
+
+export interface InboxPage {
+  items: InboxEntry[]
+  /** Pass back as `cursor` for the next page; null on the last page. */
+  nextCursor: string | null
+}
+
+/**
+ * One page of open, un-snoozed items (snoozed ones resurface by themselves once `until` passes),
+ * keyset-paged on (kind rank, created_at, id) so every open item is reachable. Throws
+ * InboxCursorError on a malformed cursor.
+ */
+export function pageInboxItems(ctx: LedgerContext, opts: { projectId?: string; limit?: number; cursor?: string } = {}): InboxPage {
   syncApprovalGates(ctx)
   syncDiffNoteReviews(ctx)
   ensureDailyDigest(ctx)
-  const limit = Math.min(LIST_MAX, Math.max(1, opts.limit ?? LIST_MAX))
+  const limit = Math.min(INBOX_PAGE_MAX, Math.max(1, opts.limit ?? INBOX_PAGE_MAX))
+  const after = opts.cursor === undefined ? null : decodeInboxCursor(opts.cursor)
   const scope = opts.projectId === undefined ? '' : ' AND i.project_id = ?'
-  return allRows(ctx.db, `${SELECT} WHERE i.status = 'open' AND (i.snooze_until IS NULL OR i.snooze_until <= ?)${scope}
-    ORDER BY CASE i.kind WHEN 'gate' THEN 0 WHEN 'question' THEN 1 WHEN 'review' THEN 2 ELSE 3 END, i.created_at ASC, i.id ASC LIMIT ?`,
-  ctx.now(), ...(opts.projectId === undefined ? [] : [opts.projectId]), limit).map(toEntry)
+  const keyset = after === null ? '' : ` AND (${INBOX_KIND_RANK}, i.created_at, i.id) > (?, ?, ?)`
+  const rows = allRows(ctx.db, `${SELECT} WHERE i.status = 'open' AND (i.snooze_until IS NULL OR i.snooze_until <= ?)${scope}${keyset}
+    ORDER BY ${INBOX_KIND_RANK}, i.created_at ASC, i.id ASC LIMIT ?`,
+  ctx.now(), ...(opts.projectId === undefined ? [] : [opts.projectId]),
+  ...(after === null ? [] : [after.rank, after.createdAt, after.id]), limit + 1).map(toEntry)
+  const items = rows.slice(0, limit)
+  const last = items[items.length - 1]
+  const nextCursor = rows.length > limit && last ? encodeInboxCursor({ rank: kindRank(last.kind), createdAt: last.createdAt, id: last.id }) : null
+  return { items, nextCursor }
 }
 
-/** Open items whose Telegram card has not gone out yet (the push sweep's work list). */
-export function unpushedItems(ctx: LedgerContext): InboxEntry[] {
-  return allRows(ctx.db, `${SELECT} WHERE i.status = 'open' AND i.pushed_at IS NULL AND (i.snooze_until IS NULL OR i.snooze_until <= ?)
-    ORDER BY i.created_at ASC LIMIT ?`, ctx.now(), LIST_MAX).map(toEntry)
+/** First page of open items (callers that only need the head of the inbox). */
+export function listInboxItems(ctx: LedgerContext, opts: { projectId?: string; limit?: number } = {}): InboxEntry[] {
+  return pageInboxItems(ctx, opts).items
+}
+
+/** Page size of `unpushedItems`. */
+export const UNPUSHED_PAGE = LIST_MAX
+
+/** Where a card can go right now: projects with a bound approver chat, and project-less items. */
+export interface PushScope { projectIds: string[]; unscoped: boolean }
+
+/**
+ * Open items whose Telegram card has not gone out yet AND that can be delivered (the push sweep's
+ * work list), in insertion order, keyset-paged by rowid. Undeliverable items are left unpushed (not
+ * marked), so a later binding still gets them, but they never occupy the window. `nextSeq` is null
+ * on the last page.
+ */
+export function unpushedItems(ctx: LedgerContext, scope: PushScope, afterSeq = 0): { items: InboxEntry[]; nextSeq: number | null } {
+  const found = allRows(ctx.db, `SELECT i.rowid AS push_seq, ${SELECT.slice('SELECT '.length)}
+    WHERE i.status = 'open' AND i.pushed_at IS NULL AND (i.snooze_until IS NULL OR i.snooze_until <= ?)
+    AND (i.project_id IN (SELECT value FROM json_each(?)) OR (i.project_id IS NULL AND ?)) AND i.rowid > ?
+    ORDER BY i.rowid ASC LIMIT ?`,
+  ctx.now(), JSON.stringify(scope.projectIds), scope.unscoped ? 1 : 0, afterSeq, UNPUSHED_PAGE)
+  const last = found.length < UNPUSHED_PAGE ? undefined : found[found.length - 1]
+  return { items: found.map(toEntry), nextSeq: last ? Number(last['push_seq']) : null }
 }
 
 export function markPushed(ctx: LedgerContext, id: string): void {

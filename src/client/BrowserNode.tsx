@@ -76,14 +76,13 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
   const comments = d.comments ?? []
-  const { inTab, visible } = useNodeHost()
-  // Canvas zoom is irrelevant in a tab pane (the node is pane-sized); a hidden tab detaches the stream.
-  const lowZoom = useStore((s) => !inTab && s.transform[2] < ZOOM_PAUSE_BELOW)
+  const { inTab, visible, maximized } = useNodeHost()
+  // Canvas zoom is irrelevant in a tab pane or maximized (1:1 either way); a hidden tab detaches the stream.
+  const lowZoom = useStore((s) => !inTab && !maximized && s.transform[2] < ZOOM_PAUSE_BELOW)
   const { openBrowserAt } = useNodeActions()
   // Popup sah (window.open / target=_blank) dari halaman ini: node baru di sebelahnya, seperti tab baru di Brave/Chrome.
   const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (url) => { openBrowserAt?.({ url, anchorNodeId: id }) })
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
-  const [maximized, setMaximized] = useState(false)
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
@@ -142,8 +141,6 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
           onRefresh={() => ctx.nav('reload')}
           // Browser tidak punya pencarian di node; tombolnya tetap ada karena NodeToolbar milik bersama.
           searchOpen={false} onToggleSearch={() => undefined}
-          maximized={maximized}
-          onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
           menuItems={menuItems}
         />

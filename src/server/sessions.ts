@@ -1,33 +1,37 @@
 import type { ClientMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { hasClaudeHookSettings, isContextCapable, isSafeNodeId } from '../shared/workspace'
-import { binaryExists, spawnPty, unwrapMissingWrapper, type Pty } from './pty'
-import { NODE_HEADERS_ENV, forgetNodeToken, hookEnv, writeNodeHeaders } from './hooks'
-import { bootSupervisor } from './ptySupervisor'
+import { binaryExists, leadingBinary, spawnPty, unwrapMissingWrapper } from './pty'
+import { NODE_HEADERS_ENV, hookEnv, writeNodeHeaders } from './hooks'
+import { CANVAS_OWNER, bootSupervisor } from './ptySupervisor'
 import { claudeHeadersPath } from './hooksPaths'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
-import { OutputLog } from './outputLog'
-import { SubscriberSet } from './subscribers'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
-import { SessionsCore, exitOutput } from './sessionsCore'
+import { SessionsAdopt } from './sessionsAdopt'
 import { ptyLog } from './sessionsLog'
-import { producePtyExit, recordEvent } from './events/producers'
 import { spawnAgent } from './spawn/agentSpawn'
 import { createLogger } from './logs'
 import { mcpEnv } from './mcp/mcp.launch'
 import { cliPath } from './cli/cli.launcher'
-import { delimiter, dirname } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { resolveShell } from './ptyShell'
 import { activeProviderEnv } from './claudeProvider/claudeProvider.store'
 import { wrapClaudeLaunch } from './claudeProvider/claudeProvider.launch'
 import { applyNodeClaudeProfile, resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
 import { isLegacyClaudeNode } from '../shared/claudeLaunch/claudeLaunch.builtin'
-import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
+import type { SessionInfo, SessionsOptions } from './sessionsTypes'
+import { refuseKind, replay, sameKind } from './sessionsAttach'
+import { NODE_STATUS_FILE, StatusStore } from './sessionsStatusStore'
+import { missingBinaryText } from './sessionsNotices'
+import { locateBinary } from './loginShellPath'
+import { dataDir } from './config'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
 // menjaga kontrak itu tanpa memaksa semua pemanggil tahu file barunya.
 export { launchLine }
 
 const spawnLog = createLogger('spawn')
+/** Shell builtins/keywords a launch line may start with: never on PATH, so never probed (A2). */
+const SHELL_WORDS = new Set(['exit', 'exec', 'cd', 'true', 'false', 'echo', 'printf', 'read', 'test', 'eval', 'export', 'set', 'source', '.', 'command', 'builtin', 'if', 'for', 'while', 'until', 'case', 'trap', 'wait', 'ulimit', 'umask'])
 
 // Keadaan sesi (map, registry, jam sweep, emit/onExit) tinggal di `sessionsCore.ts`; tipe-tipenya di
 // `sessionsTypes.ts`. Keduanya dipecah hanya karena ukuran file — kontrak publik tetap di sini.
@@ -38,11 +42,10 @@ export const agentPath = (base: string = process.env.PATH ?? ''): string =>
   [dirname(cliPath()), ...base.split(delimiter).filter((p) => p && p !== dirname(cliPath()))].join(delimiter)
 
 /**
- * Jalur socket di atas `SessionsCore`: buka/re-attach, input, resize, close, dan dispatch pesan
- * client. Setiap perilaku (replay scrollback, tombstone exit, gerbang identitas `onExit`) sama
- * persis dengan versi satu-file; yang berubah hanya letak kodenya.
+ * Jalur socket di atas `SessionsCore` → `SessionsEnd` (close) → `SessionsAdopt` (boot): buka/
+ * re-attach, input, resize, dan dispatch pesan client. Dipecah hanya karena ukuran file.
  */
-export class Sessions extends SessionsCore {
+export class Sessions extends SessionsAdopt {
   /**
    * Buka/re-attach sesi untuk sebuah intent `open`.
    *
@@ -52,12 +55,12 @@ export class Sessions extends SessionsCore {
    * pintu masuk membuat keduanya tidak pernah melihat nilai berbahaya (`hooks.ts` mengutip sendiri
    * sebagai lapis kedua).
    *
-   * SEMUA pelanggan menerima seluruh scrollback lalu snapshot status, termasuk `send` yang sudah
-   * terdaftar. Alasannya: remount meng-dispose dan membuat ulang xterm-nya, jadi buffer di sisi
-   * client hilang — tanpa replay layar itu kosong. `add` idempoten, jadi tidak ada langganan ganda;
-   * replay hanya dikirim ke `send`, bukan di-broadcast ke pelanggan lain.
+   * Each attach replays to `send` only (never broadcast): the gap after `msg.since` when the client
+   * still holds the rest, otherwise reset + the whole log (a remount has a fresh, empty xterm), then
+   * a status snapshot. `add` is idempotent. An open of another kind is refused (`sessionsAttach.ts`).
+   * `owner` tags a NEW tmux session (`CANVAS_OWNER` from the canvas door) for the orphan reaper.
    */
-  open(raw: OpenMsg, send: (m: ServerMsg) => void): void {
+  open(raw: OpenMsg, send: (m: ServerMsg) => void, owner?: string): void {
     if (!isSafeNodeId(raw.id)) return
     // Recorded Claude launch profile -> the command (server/claudeLauncher); deleted = Default + note.
     // A node from before profiles with the stock command launches with the default profile (the
@@ -66,15 +69,17 @@ export class Sessions extends SessionsCore {
     const { msg, notice: profileNotice } = applyNodeClaudeProfile(withProfile)
     const existing = this.map.get(msg.id)
     if (existing) {
+      if (!sameKind(existing.agentId, msg.agentId)) return refuseKind(msg.id, existing.agentId, msg.agentId, send)
       ptyLog.reattached(msg.id, existing.subs.size())
       const status = this.registry.getStatus(msg.id)?.status
       existing.subs.add(send)
-      for (const chunk of existing.log.since(0)) {
-        send({ t: 'output', id: msg.id, data: chunk.data, seq: chunk.seq })
-      }
+      replay(existing, send, msg.since)
       send({ t: 'status', id: msg.id, status })
       return
     }
+    // A tmux session not adopted yet carries its kind in `@webterm-agent`: same gate before attach.
+    const held = this.supervised?.holder(msg.id)
+    if (held && !sameKind(held.agentId, msg.agentId)) return refuseKind(msg.id, held.agentId, msg.agentId, send)
 
     // Diprobe SEKALI (filesystem), lalu dipakai dua kali: menjatuhkan `--resume` dan memberi tahu
     // pengguna. Hanya transcript yang TERBUKTI tidak ada yang menjatuhkannya — `transcriptPresence.ts`.
@@ -93,6 +98,11 @@ export class Sessions extends SessionsCore {
         // bermuatan rahasia, jadi ia tidak pernah dicetak maupun dikirim.
         notices.push(wrapperMissingNotice(unwrapped.missing))
       }
+      // A2: an agent program missing from PATH fails the open with the preflight's words, before
+      // anything spawns. Plain names only (a path or env prefix is left to the shell); a held tmux
+      // session ignores `cmd`; an injected spawn (test) runs no program. Login-shell PATH on a miss.
+      const bin = msg.agentId && !held && !this.options.spawn ? leadingBinary(cmd) : null
+      if (bin && !bin.includes('/') && !SHELL_WORDS.has(bin) && !locateBinary(bin, agentPath())) throw new Error(missingBinaryText(bin))
       // Claude provider (Settings > Capabilities): key/base URL reach THIS claude process only, via a
       // one-shot 0600 file, never argv or the tmux -e list (claudeProvider/claudeProvider.launch.ts).
       if (msg.agentId && hasClaudeHookSettings(msg.agentId)) cmd = wrapClaudeLaunch(cmd, activeProviderEnv(), resolveShell(this.options.shell))
@@ -136,7 +146,7 @@ export class Sessions extends SessionsCore {
     // bukan dibuat ulang — `cmd`/`env` hanya berlaku saat create.
     const supervised = this.supervised
     const pty = supervised
-      ? supervised.open(msg.id, { ...spawnOpts, agentId: msg.agentId })
+      ? supervised.open(msg.id, { ...spawnOpts, agentId: msg.agentId, owner })
       : (this.options.spawn ?? spawnPty)(spawnOpts)
     if (!supervised && this.supervisorNotice) {
       notices.push(this.supervisorNotice)
@@ -145,6 +155,7 @@ export class Sessions extends SessionsCore {
     const session = this.track(msg.id, pty, msg.agentId, msg.cols, msg.rows)
     ptyLog.spawned(msg, pty.pid, this.options.shell)
     session.subs.add(send)
+    replay(session, send)
     for (const data of notices) this.emit(session, data)
 
     // PTY baru = hidup baru. Tombstone exit dan status milik sesi sebelumnya dengan id yang sama
@@ -164,62 +175,11 @@ export class Sessions extends SessionsCore {
   /** Pesan sekali-per-proses saat sesi TIDAK bisa disupervisi (tmux absen); diisi singleton. */
   supervisorNotice?: string
 
-  /** Daftarkan PTY hidup sebagai sesi node dan sambungkan output/exit-nya. */
-  private track(id: string, pty: Pty, agentId: string | undefined, cols: number, rows: number): Session {
-    const session: Session = {
-      id, pty, agentId, cols, rows,
-      log: new OutputLog(),
-      subs: new SubscriberSet<ServerMsg>(),
-      exited: false,
-      startedAt: this.now(),
-    }
-    this.map.set(id, session)
-    pty.onData((data) => this.emit(session, data))
-    pty.onExit((code) => {
-      // Same identity gate as `onExit`: only the first exit of the live session becomes an event.
-      const live = this.map.get(id) === session && !session.exited
-      this.onExit(session, code)
-      if (live) producePtyExit({ nodeId: id, agentId, code, reason: 'self', durationMs: this.now() - session.startedAt })
-    })
-    return session
-  }
-
-  /**
-   * Boot: tempelkan lagi setiap sesi tmux yang selamat dari server sebelumnya, SEBELUM browser
-   * menyambung ulang — output terus terekam, dan agent yang memanggil hook tetap terautentikasi
-   * karena file header token-nya ditulis ulang dengan token proses ini (token hidup di memori, jadi
-   * token lama mati bersama server lama). Ukuran dipulihkan dari window tmux itu sendiri, dan
-   * history pane di-seed ke log supaya scrollback client yang menyambung ulang tetap utuh.
-   *
-   * Sesi yang node-nya tidak dikenal (`isKnown` false) ditandai yatim lewat `markOrphan` dan TIDAK
-   * ditempeli. `open` untuk node itu nanti tetap menempel ke sesinya.
-   */
-  adoptSupervised(isKnown: (id: string) => boolean = () => true): { adopted: string[]; orphans: string[] } {
-    const supervisor = this.supervised
-    const adopted: string[] = []
-    const orphans: string[] = []
-    if (!supervisor) return { adopted, orphans }
-    for (const s of supervisor.list()) {
-      if (this.map.has(s.id) || !isSafeNodeId(s.id)) continue
-      if (!isKnown(s.id)) {
-        supervisor.markOrphan(s.id, this.now())
-        orphans.push(s.id)
-        continue
-      }
-      if (s.agentId) writeNodeHeaders(s.id)
-      const history = s.history > 0 ? supervisor.capture(s.id, { escapes: true, screen: false }) : undefined
-      const session = this.track(s.id, supervisor.attach(s.id, s.cols, s.rows), s.agentId, s.cols, s.rows)
-      if (history) this.emit(session, history.replace(/\r?\n/g, '\r\n'))
-      // Morning brief (F3-e): an agent that kept running through the restart is reported as restored.
-      if (s.agentId) recordEvent({ kind: 'agent.restored', source: 'pty', subject: `node:${s.id}`, nodeId: s.id, trust: 'trusted', payload: { agentId: s.agentId } })
-      adopted.push(s.id)
-    }
-    if (adopted.length || orphans.length) ptyLog.adopted(adopted.length, orphans.length)
-    return { adopted, orphans }
-  }
-
+  /** Every viewer's input converges here, so the DA gate covers replay, reconnect and multi-tab. */
   input(id: string, data: string): void {
-    this.map.get(id)?.pty.write(data)
+    const session = this.map.get(id)
+    const kept = session?.daReplies.filterInput(data, this.now())
+    if (kept) session?.pty.write(kept)
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -231,54 +191,6 @@ export class Sessions extends SessionsCore {
     session.pty.resize(cols, rows)
   }
 
-  /** `send` = socket PEMANGGIL close, bukan socket sesi. Opsional supaya pemanggil non-socket tetap
-   *  bisa membersihkan node tanpa punya tujuan pengiriman. */
-  close(id: string, send?: (m: ServerMsg) => void): void {
-    // Token hook, status dan transcript terikat pada NODE, bukan pada PTY — jadi ketiganya dilepas
-    // SEBELUM gerbang sesi. Agent yang keluar sendiri sudah dihapus dari `map` oleh `onExit`,
-    // sehingga `close` yang menyusul tetap harus membersihkannya.
-    forgetNodeToken(id)
-    this.registry.deleteStatus(id)
-    this.registry.deleteTranscript(id)
-    const session = this.map.get(id)
-    // `self` menang: proses yang terbukti keluar sendiri tidak boleh ditimpa `closed`. `closed` hanya
-    // mengisi slot kosong — tombol Close pada node yang sudah keluar tidak memancarkan `exit` kedua.
-    const firstClose = !this.registry.getExit(id)
-    // Output diambil SEBELUM `map.delete`: `OutputLog` hidup di dalam `Session`, dan tombstoneyalah
-    // satu-satunya tempat ia bertahan sesudah sesi dibuang.
-    if (firstClose) {
-      this.registry.setExit(id, {
-        code: -1,
-        reason: 'closed',
-        at: this.now(),
-        output: exitOutput(session?.log),
-      })
-    }
-    const status: ServerMsg = { t: 'status', id }
-    const exit: ServerMsg = { t: 'exit', id, code: -1, reason: 'closed' }
-    session?.subs.send(status)
-    if (firstClose) session?.subs.send(exit)
-    // Pencabutan harus sampai ke socket PEMANGGIL juga: kasus restart tidak punya entry `map`.
-    // Bila ia sudah jadi pelanggan, broadcast di atas sudah mengirimnya — jangan gandakan.
-    const callerHeard = session !== undefined && send !== undefined && session.subs.has(send)
-    if (!callerHeard) {
-      send?.(status)
-      if (firstClose) send?.(exit)
-    }
-    if (session) {
-      ptyLog.exited(id, session.agentId, -1, 'closed', this.now() - session.startedAt)
-      if (firstClose) producePtyExit({ nodeId: id, agentId: session.agentId, code: -1, reason: 'closed', durationMs: this.now() - session.startedAt })
-      session.subs.clear()
-      session.exited = true
-      this.map.delete(id)
-    }
-    // Kill SESUDAH map dihapus: `onExit` digerbangi identitas, jadi gema kematian yang kita minta
-    // sendiri tidak pernah menjadi `exit` kedua. Untuk sesi tmux, `pty.kill()` hanya melepas client;
-    // sesinya diakhiri `kill`, juga ketika tidak ada entry `map` (node yatim / belum diadopsi).
-    session?.pty.kill()
-    this.supervised?.kill(id)
-  }
-
   /**
    * Canvas door of `agent.spawn` (F2-h): a NEW agent session opened from the canvas goes through the
    * spawner (door `canvas`, parent `human-ui`) for lineage, events and naming. Re-attach to a live
@@ -286,10 +198,10 @@ export class Sessions extends SessionsCore {
    * it), so the PTY opens within this call and a spawn error still throws to the caller as before.
    */
   private openFromCanvas(msg: OpenMsg, send: (m: ServerMsg) => void): void {
-    if (!msg.agentId || !isSafeNodeId(msg.id) || this.isLive(msg.id)) { this.open(msg, send); return }
+    if (!msg.agentId || !isSafeNodeId(msg.id) || this.isLive(msg.id)) { this.open(msg, send, CANVAS_OWNER); return }
     let thrown: { err: unknown } | undefined
     const openPty = (): void => {
-      try { this.open(msg, send) } catch (err) { thrown = { err }; throw err }
+      try { this.open(msg, send, CANVAS_OWNER) } catch (err) { thrown = { err }; throw err }
     }
     void spawnAgent({ door: 'canvas', mode: 'pty', kind: msg.agentId, parent: 'human-ui', nodeId: msg.id, ...(msg.cwd ? { cwd: msg.cwd } : {}) }, { openPty })
       .then((r) => { if (!r.ok) spawnLog.warn('spawn.canvas.denied', 'canvas agent spawn refused', { code: r.code, ids: { nodeId: msg.id } }) })
@@ -299,10 +211,12 @@ export class Sessions extends SessionsCore {
 
   handle(msg: ClientMsg, send: (m: ServerMsg) => void): void {
     switch (msg.t) {
-      case 'open': this.openFromCanvas(msg, send); break
+      // A throw here used to leave the node blank and re-run on every reconnect (A1).
+      case 'open': try { this.openFromCanvas(msg, send) } catch (err) { this.failOpen(msg, send, err) } break
       case 'input': this.input(msg.id, msg.data); break
       case 'resize': this.resize(msg.id, msg.cols, msg.rows); break
       case 'close': this.close(msg.id, send); break
+      case 'detach': this.map.get(msg.id)?.subs.remove(send); break
     }
   }
 }
@@ -310,6 +224,8 @@ export class Sessions extends SessionsCore {
 const boot = bootSupervisor()
 export const sessions = new Sessions({}, boot.supervisor)
 sessions.supervisorNotice = boot.notice
+// Only with tmux: without it no session outlives the server, so there is nothing to re-seed (A4).
+if (boot.supervisor) sessions.statusStore = new StatusStore(join(dataDir(), NODE_STATUS_FILE))
 // Jamnya hidup sekali per proses, di singleton — bukan di constructor, supaya `new Sessions()` di
 // test tetap bebas timer dan memilih sendiri kapan menyapu.
 sessions.startStaleSweep()

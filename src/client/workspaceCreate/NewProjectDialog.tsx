@@ -58,7 +58,7 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
             {flow.notice && (
               <CreateNotice notice={flow.notice} verb="Create" onUseName={edit(setName)} onProceed={(ack) => void flow.submit(ack)} />
             )}
-            {(flow.error || loadError) && <p className="text-red-600" role="alert">{flow.error || loadError}</p>}
+            {(flow.error || loadError) && <p className="text-(--vscode-errorForeground)" role="alert">{flow.error || loadError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={flow.busy} onClick={onClose}>Cancel</Button>
               <Button type="submit" disabled={!canCreate}>{flow.busy ? 'Creating…' : 'Create project'}</Button>

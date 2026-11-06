@@ -5,9 +5,11 @@ import type { ExitReason } from './ws'
  * close (pengguna menekan close / node dibuang), jadi tidak ada kabar yang perlu dicetak.
  * `peer-closed` berarti client LAIN yang menutupnya: dari sini prosesnya cuma hilang, jadi
  * beri notice netral tanpa menyalahkan kode exit. Tanpa `reason` `code` selalu dicetak.
+ * `kind_mismatch` / `failed` (the open threw, A1): the server already wrote its own notice before
+ * the exit, so nothing is added.
  */
 export function exitMessage(code: number, reason?: ExitReason): string {
-  if (reason === 'closed') return ''
+  if (reason === 'closed' || reason === 'kind_mismatch' || reason === 'failed') return ''
   if (reason === 'peer-closed') return '\r\n[session closed]'
   return `\r\n[process exited with code ${code}]`
 }

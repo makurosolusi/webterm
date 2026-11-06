@@ -24,6 +24,8 @@ const VERB: Record<Exclude<AgentStatus, 'working'>, string> = {
   done: 'finished',
   waiting: 'needs input',
   blocked: 'is blocked',
+  failed: 'failed',
+  stopped: 'was stopped',
 }
 
 interface CanvasHooks {

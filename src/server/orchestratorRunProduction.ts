@@ -4,6 +4,7 @@
 import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 import { binaryExists } from './ptyShell'
+import { gitCommand } from './gitExec'
 import { resolveClaudeProfileIn } from '../shared/claudeLaunch/claudeLaunch.builtin'
 import { DEFAULT_CLAUDE_PROFILE, type ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { joinArgv } from '../shared/claudeLaunch/shellQuote'
@@ -216,10 +217,11 @@ export async function productionRuntime(
 
 function signalProbe(deps: OrchestratorRunDeps): GitProbe {
   const runExec = createProcessExec()
-  return async (cwd, args) =>
-    deps.gitExec
-      ? await deps.gitExec('git', ['-C', cwd, ...args])
-      : await runExec('git', args, { cwd, timeoutMs: SIGNAL_GIT_TIMEOUT_MS, maxOutputBytes: SIGNAL_GIT_OUTPUT_BYTES })
+  return async (cwd, args) => {
+    if (deps.gitExec) { const g = gitCommand(['-C', cwd, ...args]); return await deps.gitExec(g.file, g.args) }
+    const g = gitCommand(args)
+    return await runExec(g.file, g.args, { cwd, timeoutMs: SIGNAL_GIT_TIMEOUT_MS, maxOutputBytes: SIGNAL_GIT_OUTPUT_BYTES })
+  }
 }
 
 export function worktreeRoot(deps: OrchestratorRunDeps): string {

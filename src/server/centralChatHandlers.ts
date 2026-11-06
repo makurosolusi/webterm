@@ -22,6 +22,7 @@ import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
 } from './central/chat/turnService'
 import { readCappedRequestBody } from './cappedRequestBody'
+import { createLogger } from './logs'
 
 export const CENTRAL_CHAT_BODY_MAX_BYTES = 64 * 1024
 
@@ -48,6 +49,7 @@ export interface ChatService {
 }
 
 /** One service/hub per database + runtime kind, so turns and subscribers share state. */
+const log = createLogger('central')
 const cache = new WeakMap<object, Map<string, ChatService>>()
 
 function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDeps, 'now' | 'claudeOptions'>): ChatService {
@@ -112,6 +114,8 @@ export function failFromError(res: ServerResponse, err: unknown): void {
     failJson(res, code, err.message)
     return
   }
+  // Unexpected: the client gets a stable code, the log keeps the cause (redacted by the log gate).
+  log.error('central.chat_failed', 'central chat request failed', { error: err instanceof Error ? err.message : String(err) })
   failJson(res, 'central_chat_internal', 'central chat failed')
 }
 

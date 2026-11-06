@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SenseEvent } from '../events/eventModel'
 import type { InboxEntry } from '../inbox/inboxItemModel'
 import { parseSubscription, readPushState, writePushState } from './push.store'
-import { hookPushListener, resetBriefThrottle, sweepWebPush, type WebPushDeps } from './push.sweep'
+import { hookPushListener, resetBriefThrottle, sweepWebPush, WEB_PUSH_MAX_ATTEMPTS, WEB_PUSH_RETRY_BASE_MS, type WebPushDeps } from './push.sweep'
+import { logBus } from '../logs'
 import { fakeBrowser, recordingFetch, type FakeBrowser } from './push.testutil'
 import { generateVapidKeys, type VapidKeys } from './webPush.crypto'
 
@@ -20,22 +21,22 @@ const item = (over: Partial<InboxEntry>): InboxEntry => ({
   actions: ['approve', 'deny'], createdAt: 1, updatedAt: 1, ...over,
 })
 
-function setup(opts: { items?: InboxEntry[]; watching?: (i: { nodeId: string | null }) => boolean; muted?: string[]; status?: (url: string) => number; hour?: number; away?: number; brief?: string } = {}) {
+function setup(opts: { items?: InboxEntry[]; watching?: (i: { nodeId: string | null }) => boolean; muted?: string[]; status?: (url: string) => number; hour?: number; away?: number; brief?: string; headers?: Record<string, string> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'wt-push-'))
   const statePath = join(dir, 'push-subscriptions.json')
   const sub = parseSubscription(browser.subscription())!
   writePushState(statePath, { subs: [sub], sent: [], briefDay: null })
-  const rec = recordingFetch(opts.status)
+  const rec = recordingFetch(opts.status, opts.headers)
   let items = opts.items ?? []
-  const now = new Date(2026, 10, 5, opts.hour ?? 10, 0, 0).getTime()
+  const clock = { now: new Date(2026, 10, 5, opts.hour ?? 10, 0, 0).getTime() }
   const deps: WebPushDeps = {
-    statePath, keys: async () => keys, fetch: rec.fetch, now: () => now,
+    statePath, keys: async () => keys, fetch: rec.fetch, now: () => clock.now,
     items: () => items,
     attention: { watching: opts.watching ?? (() => false), muted: (ws) => (opts.muted ?? []).includes(ws) },
     awayMs: () => opts.away ?? 0,
     ...(opts.brief === undefined ? {} : { briefText: async () => opts.brief! }),
   }
-  return { deps, rec, statePath, sub, setItems: (next: InboxEntry[]) => { items = next } }
+  return { deps, rec, statePath, sub, clock, setItems: (next: InboxEntry[]) => { items = next } }
 }
 
 beforeEach(async () => {
@@ -97,6 +98,34 @@ describe('sweepWebPush', () => {
     const t = setup({ items: [item({})], status: () => 410 })
     expect((await sweepWebPush(t.deps)).pushed).toEqual([])
     expect(readPushState(t.statePath).subs).toEqual([])
+  })
+
+  it('a failing endpoint is retried at most K times with increasing delay', async () => {
+    const t = setup({ items: [item({})], status: () => 503 })
+    const before = logBus.query({}).length
+    const attemptsAt: number[] = []
+    const start = t.clock.now
+    // Ten minutes per step of the 3 s sweep is plenty to cover the whole backoff ladder.
+    for (let step = 0; step < 1200 && attemptsAt.length <= WEB_PUSH_MAX_ATTEMPTS; step += 1) {
+      const sentBefore = t.rec.sent.length
+      expect((await sweepWebPush(t.deps)).pushed).toEqual([])
+      if (t.rec.sent.length > sentBefore) attemptsAt.push(t.clock.now - start)
+      t.clock.now += 3_000
+    }
+    expect(attemptsAt).toHaveLength(WEB_PUSH_MAX_ATTEMPTS)
+    const gaps = attemptsAt.slice(1).map((at, i) => at - attemptsAt[i]!)
+    expect(gaps[0]).toBeGreaterThanOrEqual(WEB_PUSH_RETRY_BASE_MS)
+    for (let i = 1; i < gaps.length; i += 1) expect(gaps[i]!).toBeGreaterThan(gaps[i - 1]!)
+    const logs = logBus.query({}).slice(before).filter((e) => e.event.startsWith('push.'))
+    expect(logs.map((e) => e.event)).toEqual(['push.send_failed', 'push.gave_up'])
+    expect(JSON.stringify(logs)).not.toContain(t.sub.endpoint)
+    expect(readPushState(t.statePath).retry?.['gate_1']).toMatchObject({ attempts: WEB_PUSH_MAX_ATTEMPTS, gaveUp: true })
+  })
+
+  it('honours Retry-After when it is longer than the backoff', async () => {
+    const t = setup({ items: [item({})], status: () => 429, headers: { 'Retry-After': '3600' } })
+    await sweepWebPush(t.deps)
+    expect(readPushState(t.statePath).retry?.['gate_1']?.nextAt).toBe(t.clock.now + 3_600_000)
   })
 
   it('does nothing at all without subscriptions', async () => {

@@ -6,6 +6,7 @@ import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import Login from './Login'
+import BootScreen from './BootScreen'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import AppBottomPanel from './App.bottomPanel'
 import { toggleBottomView } from './bottomPanelHost'
@@ -34,13 +35,15 @@ import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
-import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
+import { useWorkspaceLifecycle } from './workspaceLifecycle'
+import { useWorkspaceSaver } from './workspaceSaver'
 import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardHost from './BoardHost'
 import { useAppTabs } from './App.tabs'
+import { toggleMaximizeTarget } from './nodeMaximize.store'
 import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -92,7 +95,8 @@ export default function App() {
   // Payload dikunci di `scheduleSave`, bukan dibaca ulang saat timer menembak: board bisa berpindah
   // workspace dalam 400ms debounce. Lihat `useWorkspaceSaver` — termasuk kenapa `flushSave` wajib
   // dipanggil `applyWorkspace` sebelum board baru dipasang.
-  const { scheduleSave, flushSave, cancelSave } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer })
+  const applyRef = useRef<((ws: Workspace) => void) | null>(null) // set below, once `applyWorkspace` exists
+  const { scheduleSave, flushSave, cancelSave, saveStatusItems } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces })
 
   // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
   // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
@@ -117,19 +121,21 @@ export default function App() {
     rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
   })
+  applyRef.current = applyWorkspace // a save another window beat reloads the stored board through it
 
 
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
   // jadi `scheduleSave` dan canvas tetap membaca ref yang SAMA dengan yang ditulis di sana.
-  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onNewProject } =
+  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onCreateReported, onNewProject, boot, retryBoot } =
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
       activeWsRef, nodesRef, edgesRef, cancelSave, rf,
     })
 
-  // Notification click → `onFocus`, which switches workspace when the node lives on another board.
+  // Notification click → `onFocus`, which switches workspace when the node lives on another board
+  // (found in `workspaces`, kept current by every save and switch).
   useEffect(() => setNotifyCanvas({ focus: (id) => void onFocus(id) }), [onFocus])
 
   const reopenDeps: ReopenDeps = { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect, addBridges: restoreBridges }
@@ -189,6 +195,7 @@ export default function App() {
     openOmnibox: () => omni.open('all'), openQuickOpen: () => omni.open('files'), openFindInFiles: () => omni.open('files', '%'),
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
     newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
+    toggleMaximizeNode: () => toggleMaximizeTarget(nodesRef.current),
     toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => toggleBottomView('inbox', inboxOpen, setInboxOpen), toggleChat: () => toggleBottomView('chat', chatOpen, setChatOpen),
     toggleBoard: () => setBoard((v) => !v),
   })
@@ -213,10 +220,10 @@ export default function App() {
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
           .app-main akan menghitung tinggi header dua kali. */}
       <div className="app-main">
-        {!hydrated ? null : noWorkspaces ? (
+        {!hydrated ? <BootScreen boot={boot} onRetry={retryBoot} /> : noWorkspaces ? (
           <Welcome
             onNewProject={onNewProject}
-            onCreateEmpty={(name) => void onCreateWorkspace(name)}
+            onCreateEmpty={(name) => void onCreateReported(name)}
             closedSessions={closedSessions}
             onReopen={(id) => void reopenClosed(id, reopenDeps)}
           />
@@ -236,7 +243,7 @@ export default function App() {
           <AppDock
             {...{ vp, settings, activeWs, central, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, chatOpen, setChatOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
             {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, inboxUnread, agentSummary }}
-            extraStatusItems={[...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
+            extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SessionsPanel
             open={sessionsOpen}

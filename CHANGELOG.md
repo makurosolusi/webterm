@@ -38,6 +38,9 @@ Operator notes:
 - Tab layout shortcuts, active only in tab layout: ⌘1 to ⌘9 jump to a tab, ⌘⇧[ and ⌘⇧] go to the previous or next tab (wrapping around), and ⌘W closes the active tab. On Windows and Linux (Ctrl in place of ⌘) closing is Ctrl+Alt+W, because Ctrl+W belongs to the shell and the browser. The toggle and tab shortcuts also work while typing in a terminal or an editor, where ⌘⇧L and ⌘⇧[ / ] used to mean "select all occurrences" and fold / unfold. In an editor the fold shortcuts still work in canvas layout.
 - Tab layout only changes how nodes are shown. Cables, node positions, sizes and the viewport are not touched, so switching back to canvas restores the board exactly as it was. Terminals, editors and browsers are not reloaded when you switch: scrollback, unsaved editor changes and the page in a browser node are kept. A terminal that was scrolled to the bottom is still at the bottom afterwards.
 - The dock hides the zoom, fit view and view lock buttons in tab layout, since they only apply to the canvas. The bottom panel (Inbox, Chat, Problems, Output) takes its own space below the active tab instead of covering it.
+- Terminals show a banner while the connection to the webterm server is lost: "Connection to the webterm server lost. Reconnecting in 5s… Typing is paused." with a "Retry now" button. Reconnect attempts back off from 1 to 10 seconds.
+- The Inbox shows its items a page at a time, with a "Load more" button at the end of the list.
+- If the app fails to load at startup, an error screen says what went wrong and offers Retry, instead of a blank page.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
@@ -52,6 +55,28 @@ Operator notes:
 - Activity and Central now open as tabs of the single bottom panel next to Inbox, Chat, Problems and Output, instead of separate panels stacked on top of each other. Clicking an item whose tab is hidden brings it to the front; clicking the visible one closes it.
 - The bottom panel is docked in canvas mode too: the canvas (and Welcome screen) now shrink to sit above it instead of being covered.
 - The activity bar icon and status bar item of the view that is actually shown are highlighted (an open-but-hidden view is no longer highlighted).
+- Text and icons around the canvas now use VS Code's sizes: 13px UI text, 16px icons, 24px activity bar icons, 22px list rows, 24px menu rows and 12px status bar text. Tooltips grew from 12px to 13px, and tab strip titles in tab layout from 12px to 13px with 16px icons. Node contents on the canvas are not affected; they still follow the canvas zoom.
+- Uploading a file that already exists in a Files node's folder now asks "Replace it?" with Replace, Keep Both and Skip, instead of failing. Keep Both saves the upload as "name copy.ext" (then "copy 2", and so on). With more files queued, "Apply to all remaining conflicts" uses the same answer for the rest. Closing the dialog or pressing Esc counts as Skip. Replace swaps the file in one step, so it is never left half-written, and keeps its permissions.
+- Each Files node has its own upload queue: files added while an upload runs join it, the footer shows "Uploading 2 of 5 · name" with a progress bar on top of the list, and Cancel stops the current file and drops the rest.
+- Dragging files from your computer over a Files node outlines the node and shows "Drop to upload to <folder>". A folder row under the pointer is highlighted and becomes the target; anywhere else means the current folder. Esc cancels the drag.
+- A Files node shows its messages (upload progress and results, reveal and copy failures) in one line in the footer. Success messages disappear after 4 seconds. Errors stay until you dismiss them and say why each file failed, for example "a.txt: no permission to write to this folder", with Retry Failed Uploads where it applies.
+- Git marks in Files nodes use VS Code's colors and letters: modified (M), added (A), deleted (D), renamed (R), untracked (U) and conflict (!). Ignored entries are shown in the ignored color without a letter, instead of being faded. Folders get a dot in the color of their strongest change, with a tooltip such as "Contains modified items".
+- The Files node footer shows the current branch (or the commit when HEAD is detached) and, when there is an upstream, commits behind and ahead as "2↓ 1↑", with a tooltip such as "Push 1 commits to origin/main".
+- Maximize on a node now fills the canvas area, like VS Code's "Maximize Editor Group", instead of zooming the canvas to it. The activity bar, dock and panels stay visible, and the separate Full Screen button (which took over the whole screen) is gone. Restore, or double-clicking the node header, puts the node back exactly where it was; its position, size and the canvas view are never changed. Only one node is maximized at a time, and switching workspace or to tab layout restores it. "View: Toggle Maximize Node" in ⌘K does the same for the focused or selected node.
+- On Agent nodes the Stop button only appears while the agent is working, is red, and sits after a separator, so it can no longer be mistaken for Maximize.
+- On a narrow node, header buttons that don't fit move into the "…" (More) menu, so Close always stays visible.
+- File, board and folder-picker endpoints (such as `/api/fs` and `/api/workspaces`) now answer only the webterm page or a request carrying the root token. A plain `curl` or script without the root token gets 403 "Files and workspaces are available to the webterm UI only."
+- Agent status hooks now require the node's token. The hooks webterm installs for Claude already send it, so agent nodes are unaffected. A hook from a node that is on no board no longer records anything.
+- The Control panel shows the Claude Code sandbox as "mitigation" instead of "protected" and says why: it stops shell commands from reading webterm's data files directly, but the webterm API on 127.0.0.1 is still reachable from inside it.
+- Keys typed while a terminal is disconnected are dropped instead of being sent to the shell once the connection comes back.
+- After a reconnect a terminal receives only the output it missed, instead of clearing its screen and replaying the whole scrollback. It still clears and replays everything when the missed part is no longer stored or the session is a new one.
+- A terminal view that is taken off the page stops receiving output from the server; the session keeps running and is replayed when the terminal is shown again.
+- The "tmux not found" notice in terminals is now in English.
+- Ledger and event history older than 30 days (or past a size cap) is pruned automatically in the background. The event chain can still be verified after pruning.
+- Boards are checked when they are saved and when they are loaded. A malformed board is refused with an error and the stored copy is left untouched, and a damaged board only affects itself, not the rest of your workspaces.
+- The production build serves the UI from the built files, with compressed text assets and cache headers, so pages load faster.
+- Requests with an oversized body are refused with 413 and a message saying why, instead of being read in full.
+- Setup scripts, prechecks and helper processes webterm starts no longer inherit the server's secrets; they get the same filtered environment as terminals.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -60,6 +85,42 @@ Operator notes:
 - Deleting a workspace now also removes its canvas background override and its uploaded image (an image still used elsewhere is kept). The workspace delete never fails because of this, and startup cleans up leftovers from workspaces that are already gone.
 - Clicking an empty spot on the canvas now closes the open popups that only closed when you clicked a node: the ⌘K / quick-open box (Omnibox), the quick pick, the menu bar menus and the breadcrumbs overflow menu. React Flow's canvas swallowed the click before those popups could see it.
 - Browser node failures that show as "crashed" now log their real cause on the server (message and underlying cause) instead of only the error class name, so a failing Chromium connection can be diagnosed.
+- The file manager's "Reveal" menu item now shows the file in your system file manager ("Reveal in Finder" on macOS, "Reveal in File Explorer" on Windows, "Open Containing Folder" elsewhere; ⌥⌘R) instead of doing nothing. If revealing fails, the reason appears in the Files footer.
+- Icons were all drawn at 16px no matter where they were used, so activity bar icons looked too small. They now take the size of the place they are in, such as 24px in the activity bar.
+- Git marks in Files nodes now update after a commit, `git add`, checkout, reset, fetch, pull or push, not only when a file in the folder changes. Before, marks stayed on files you had already committed.
+- Removing a Files node, or switching workspace, cancels its running upload, answers any open "already exists" question with Skip and clears its messages, so nothing is left running or reappears later.
+- A save from a window that is out of date no longer overwrites a newer board saved from another window. The window reloads the latest version instead and shows "This workspace changed in another window. Reloaded the latest version."
+- A workspace deleted in another window is no longer brought back by a late save. A notice says it was deleted and that changes are no longer saved.
+- A missing web asset (for example after a rebuild under a running server) now fails only that request instead of crashing the server. Unexpected errors are logged with their cause and the server exits with a failure code, instead of looking like a clean stop.
+- ⌘S / Ctrl+S saves the editor you are typing in. Before, it saved the most recently opened editor.
+- Middle-clicking a session closes it once. Before, it could close several times after the list re-rendered.
+- Session History no longer hangs on a named pipe, a link to `/dev/zero` or a huge transcript. A scan stops after 30 seconds and shows what it found so far.
+- Git commands webterm runs in your repositories (git marks, Changes, checkpoints, worktrees, clone and create) no longer run the repository's fsmonitor, hooks or custom diff drivers, so opening an untrusted repository cannot run its code.
+- Interrupted Central turns are reconciled once when the server starts, not again every time autonomy is toggled.
+- A verify command that times out or prints too much is stopped together with every process it started.
+- When the Claude runtime behind Central exits, the error now includes the end of its stderr, so the cause is visible.
+- Unexpected Central and orchestrator errors are logged with their cause instead of a bare "internal" answer, and a worker's worktree is released if leasing its task fails.
+- Telegram: an update that keeps failing is skipped after a few tries (logged and shown on the channel) so later messages still arrive, an update not yet handled is fetched again after a restart, and a full outgoing queue is logged and shown in the channel panel.
+- Inbox items that cannot be delivered yet no longer hold back later items from push delivery; they are delivered once their project is bound.
+- Web push backs off from an endpoint that keeps failing and honours Retry-After, instead of retrying it on every sweep.
+- Messages typed into agent nodes: a delivery queue that failed to start is retried, and an unconfirmed message is re-typed once into a cleared input, so text is never doubled or appended to leftovers.
+- Terminal answers such as `1;2c0;276;0c` no longer get typed into the shell or an agent's prompt when scrollback is replayed or a session is open in several tabs. Each terminal query now gets exactly one answer.
+- Closing a terminal and reopening it right away no longer attaches to the session that is still shutting down and exits at once.
+- A browser tab that stops reading (for example a frozen background tab) no longer makes the server's memory grow: its terminal output is paused and replayed once the tab catches up. A connection that stops answering is detected within a minute and closed.
+- A plain terminal never attaches to an agent's session under the same node id, or the other way round. The terminal explains that the session is already running something else and suggests adding a new node.
+- tmux is now found on your login shell's `PATH` too, so when webterm is started as a service or from the Dock, Homebrew's tmux is used and sessions still survive a server restart.
+- Changing one setting no longer overwrites a setting changed at the same time elsewhere, and settings webterm does not recognise are kept instead of dropped. A canvas background image uploaded while settings change is no longer deleted by the cleanup.
+- Board changes are saved when you close or leave the tab. A save that fails keeps the board marked unsaved and offers Retry, instead of looking saved.
+- Switching workspaces quickly always ends on the last workspace you picked, not on whichever one finished loading last.
+- The create-workspace dialog stays open until the workspace is created and shows the error inside the dialog if it fails.
+- Stopping the server closes its databases cleanly.
+- An unreadable Claude provider config is shown as an error with a reset action, instead of silently falling back to Claude Code login.
+- The Settings page fills the window in the production build instead of sitting in a narrow centered box.
+- AI-generated node names work again, and a naming request that hangs is stopped after a timeout.
+- Opening a special or oversized binary file in an editor no longer tries to read it; only regular files under the size limit are read.
+- An agent that failed or was stopped now says so, with Retry or Resume, instead of showing a blank node or "Done".
+- Agent status survives a server restart.
+- Deleting a workspace ends its terminals, and terminals left behind by nodes that no longer exist on any board are cleaned up after a day.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).

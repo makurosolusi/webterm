@@ -4,6 +4,10 @@
 .files-git--D, .files-git--D .files-badge { color: var(--vscode-gitDecoration-deletedResourceForeground); }
 .files-git--U, .files-git--U .files-badge { color: var(--vscode-gitDecoration-untrackedResourceForeground); }
 .files-git--C, .files-git--C .files-badge { color: var(--vscode-gitDecoration-conflictingResourceForeground); }
-.files-git--R, .files-git--R .files-badge {
-  color: var(--vscode-gitDecoration-renamedResourceForeground, var(--vscode-gitDecoration-addedResourceForeground));
-}
+.files-git--R, .files-git--R .files-badge { color: var(--vscode-gitDecoration-renamedResourceForeground); }
+.files-git--I { color: var(--vscode-gitDecoration-ignoredResourceForeground); }
+
+/* Footer: branch + sync, VS Code status-bar items (icon + label). */
+.files-git-foot { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.files-git-foot__item { display: inline-flex; align-items: center; gap: 3px; }
+.files-git-foot .codicon { font-size: 12px; }

@@ -127,27 +127,45 @@ export function startLedgerRuntime(opts: {
   }
 }
 
+/** What the reaper needs: lease sweep and, optionally, the throttled retention registry. */
+export interface ReaperLedger {
+  task: { sweepExpiredLeases(limit?: number, now?: number): unknown }
+  retention?: { tick(now?: number): { changed: Record<string, number>; more: boolean } | null }
+}
+
 /**
  * Periodic reaper. Unref'd so a ledger sweep never keeps the process alive; errors are reported
- * and swallowed because one bad tick must not kill the timer.
+ * and swallowed because one bad tick must not kill the timer. Lease sweep and retention fail
+ * independently, so a broken retention sweep never stops expired leases from being reclaimed.
  */
 export function startLedgerReaper(
-  ledger: { task: { sweepExpiredLeases(limit?: number, now?: number): unknown } },
+  ledger: ReaperLedger,
   intervalMs = 30_000,
   onError: (err: unknown) => void = (err) => {
     const reason = err instanceof Error ? err.message : String(err)
-    log.error('ledger.reaper.error', `ledger reaper tick failed: ${reason}`)
+    const cause = err instanceof Error && err.cause instanceof Error ? `: ${err.cause.message}` : ''
+    log.error('ledger.reaper.error', `ledger reaper tick failed: ${reason}${cause}`)
   }
 ): () => void {
   log.info('ledger.reaper.start', 'ledger reaper started', { intervalMs })
-  const timer = setInterval(() => {
-    ledgerMetrics.inc('reaper_tick')
+  const guarded = (fn: () => void): void => {
     try {
-      ledger.task.sweepExpiredLeases()
+      fn()
     } catch (err) {
       ledgerMetrics.inc('reaper_error')
       onError(err)
     }
+  }
+  const timer = setInterval(() => {
+    ledgerMetrics.inc('reaper_tick')
+    guarded(() => ledger.task.sweepExpiredLeases())
+    guarded(() => {
+      const report = ledger.retention?.tick()
+      if (!report || Object.keys(report.changed).length === 0) return
+      const rows = Object.values(report.changed).reduce((a, b) => a + b, 0)
+      ledgerMetrics.inc('retention_rows', rows)
+      log.info('ledger.retention', 'ledger retention swept old rows', { ...report.changed, backlog: report.more })
+    })
   }, intervalMs)
   ;(timer as unknown as { unref?: () => void }).unref?.()
   return () => {

@@ -130,6 +130,14 @@ describe('startWorker', () => {
     expect(ctx.worktrees.allocations.length).toBe(0)
   })
 
+  it('releases the worktree and rethrows with context when leasing throws', async () => {
+    const ctx = await assigned()
+    ctx.ledger.task.leaseTask = () => { throw new Error('database is locked') }
+    const start = ctx.orchestrator.startWorker({ projectId: PROJECT, itemId: 'i1', expectedVersion: ctx.version, repo: REPO })
+    await expect(start).rejects.toThrow(`lease task ${ctx.taskId} failed: database is locked`)
+    expect(ctx.worktrees.releases).toEqual([ctx.taskId])
+  })
+
   it('refuses to start an item that was never assigned', async () => {
     const ctx = setup(planOf([item()]))
     const result = await ctx.orchestrator.startWorker({

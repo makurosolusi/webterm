@@ -18,7 +18,8 @@ const port = (server.address() as { port: number }).port
 /** POST chunked; tiap elemen `chunks` jadi satu write terpisah dengan jeda, supaya tiba sebagai chunk sendiri. */
 function post(path: string, chunks: Buffer[]): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (res) => {
+    // Sent as the webterm page would (routes/route.uiOnly.ts).
+    const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin' } }, (res) => {
       let body = ''
       res.on('data', (c) => { body += c })
       res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))

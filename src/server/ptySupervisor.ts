@@ -1,6 +1,7 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { binaryExists, ptyEnv, resolveCwd, shellArgv } from './ptyShell'
+import { ptyEnv, resolveCwd, shellArgv } from './ptyShell'
+import { locateBinary } from './loginShellPath'
 import { spawnPty, type Pty } from './pty'
 import { createLogger } from './logs'
 
@@ -27,6 +28,10 @@ const log = createLogger('pty')
 const PREFIX = 'wt-'
 const AGENT_OPT = '@webterm-agent'
 const ORPHAN_OPT = '@webterm-orphan'
+/** Who created the session. Only `canvas` sessions belong to a workspace node, so only they can be
+ *  reaped as orphans (`SessionsAdopt.adoptSupervised`); central agents and workers carry no tag. */
+const OWNER_OPT = '@webterm-owner'
+export const CANVAS_OWNER = 'canvas'
 /** Baris history tmux per pane. Scrollback sesudah restart datang dari sini (lihat `history`). */
 const HISTORY_LINES = 10000
 const TMUX_TIMEOUT_MS = 5000
@@ -78,6 +83,10 @@ export interface SupervisedSession {
   rows: number
   agentId?: string
   orphan: boolean
+  /** When the session was first marked orphan (ms), from `@webterm-orphan`. */
+  orphanAt?: number
+  /** `@webterm-owner`: `canvas` for a workspace node's session, absent otherwise. */
+  owner?: string
   /** Baris history di atas layar; 0 = tidak ada yang perlu di-seed. */
   history: number
 }
@@ -90,6 +99,8 @@ export interface SupervisedOpen {
   shell?: string
   env?: Record<string, string>
   agentId?: string
+  /** Stored as `@webterm-owner` on create; only the canvas door sets it. */
+  owner?: string
 }
 
 export class TmuxSupervisor {
@@ -117,6 +128,19 @@ export class TmuxSupervisor {
     })
   }
 
+  /** Kind of the live tmux session for `id` (`@webterm-agent`), or null when there is none. */
+  holder(id: string): { agentId?: string } | null {
+    try {
+      // The name is read back: with no such session, display-message may still answer (empty).
+      const [name, agentId] = this.run(['display-message', '-p', '-t', `=${supervisedName(id)}:`, `#{session_name}\t#{${AGENT_OPT}}`]).trim().split('\t')
+      return name === supervisedName(id) ? { agentId: agentId || undefined } : null
+    } catch (err) {
+      // Exit 1 = no such session (or no server yet): the answer. Anything else is worth a line.
+      if (exitStatus(err) !== 1) log.warn('pty.supervisor_holder_failed', 'tmux display-message failed', { ids: { nodeId: id }, code: exitStatus(err) })
+      return null
+    }
+  }
+
   has(id: string): boolean {
     try {
       this.run(['has-session', '-t', `=${supervisedName(id)}`])
@@ -131,16 +155,20 @@ export class TmuxSupervisor {
   list(): SupervisedSession[] {
     let out: string
     try {
-      out = this.run(['list-sessions', '-F', `#{session_name}\t#{window_width}\t#{window_height}\t#{${AGENT_OPT}}\t#{${ORPHAN_OPT}}\t#{history_size}`])
+      out = this.run(['list-sessions', '-F', `#{session_name}\t#{window_width}\t#{window_height}\t#{${AGENT_OPT}}\t#{${ORPHAN_OPT}}\t#{history_size}\t#{${OWNER_OPT}}`])
     } catch {
       return [] // "no server running": belum ada satu sesi pun
     }
     const found: SupervisedSession[] = []
     for (const line of out.split('\n')) {
-      const [name = '', w, h, agentId, orphan, history] = line.split('\t')
+      const [name = '', w, h, agentId, orphan, history, owner] = line.split('\t')
       const id = nodeIdOf(name)
       if (!id) continue
-      found.push({ id, cols: Number(w) || 80, rows: Number(h) || 24, agentId: agentId || undefined, orphan: !!orphan, history: Number(history) || 0 })
+      const orphanAt = orphan ? Number(orphan) : NaN
+      found.push({
+        id, cols: Number(w) || 80, rows: Number(h) || 24, agentId: agentId || undefined, orphan: !!orphan,
+        ...(Number.isFinite(orphanAt) ? { orphanAt } : {}), ...(owner ? { owner } : {}), history: Number(history) || 0,
+      })
     }
     return found
   }
@@ -177,6 +205,7 @@ export class TmuxSupervisor {
     this.run(chain)
     // Agent id disimpan DI sesi supaya boot berikutnya tahu node mana yang butuh file header token.
     if (opts.agentId) this.run(['set-option', '-t', `=${name}:`, AGENT_OPT, opts.agentId])
+    if (opts.owner) this.run(['set-option', '-t', `=${name}:`, OWNER_OPT, opts.owner])
   }
 
   /** tmux client dalam PTY Bun. Membunuh Pty ini hanya men-DETACH: server tmux bukan keturunannya. */
@@ -213,13 +242,29 @@ export class TmuxSupervisor {
     }
   }
 
-  /** Tutup node = akhiri sesinya. Async: `close` tidak boleh menunggu tmux. */
+  /** Drop the orphan mark of a session a stored node owns again. */
+  clearOrphan(id: string): void {
+    try {
+      this.run(['set-option', '-u', '-t', `=${supervisedName(id)}:`, ORPHAN_OPT])
+    } catch {
+      // Sesi keluar di antara `list` dan sini — tak ada lagi yang perlu dibersihkan.
+    }
+  }
+
+  /** Close a node = end its session. SYNCHRONOUS (~5 ms, the cost of `has`): with an async kill an
+   *  open right after close still saw the dying session, attached to it and exited (pty-207-2).
+   *  nodeterm orders it the same way: kill-session before any create. */
   kill(id: string): void {
-    execFile(this.bin, ['-L', this.socket, 'kill-session', '-t', `=${supervisedName(id)}`], { env: this.env(false) }, () => {
-      // Galat = sesi sudah tidak ada (keluar sendiri / tak pernah dibuat) — hasil yang diminta.
-    })
+    try {
+      this.run(['kill-session', '-t', `=${supervisedName(id)}`])
+    } catch (err) {
+      // Exit 1 = the session is already gone (exited by itself / never created): the asked-for result.
+      if (exitStatus(err) !== 1) log.warn('pty.supervisor_kill_failed', 'tmux kill-session failed', { ids: { nodeId: id }, code: exitStatus(err) })
+    }
   }
 }
+
+const exitStatus = (err: unknown): number | undefined => (err as { status?: number }).status
 
 /** Socket per data dir: dua instance webterm dengan data dir berbeda (dev vs test) tidak berbagi
  *  sesi. Data dir default = `webterm` polos supaya mudah diperiksa (`tmux -L webterm ls`). */
@@ -228,18 +273,21 @@ export function supervisorSocket(dataDir: string | undefined): string {
 }
 
 export const TMUX_MISSING_NOTICE =
-  '\r\n[webterm] tmux tidak ditemukan: sesi ini akan berhenti saat server webterm restart. Pasang tmux (mis. `brew install tmux`) supaya sesi bertahan.\r\n'
+  '\r\n[webterm] tmux not found: this session will end when the webterm server restarts. Install tmux (e.g. `brew install tmux`) so sessions survive.\r\n'
 
 /** Supervisor proses ini. Mati di bawah test (`NODE_ENV=test`, di-set bun test dan vitest) dan di
  *  luar Bun: test tidak boleh menempel ke sesi tmux milik pengguna. */
 export function bootSupervisor(
   env: NodeJS.ProcessEnv = process.env,
-  exists: (bin: string) => boolean = binaryExists
+  locate: (bin: string) => string | undefined = (bin) => locateBinary(bin, env.PATH)
 ): { supervisor: TmuxSupervisor | null; notice?: string } {
   if (env.NODE_ENV === 'test' || !process.versions.bun) return { supervisor: null }
-  if (!exists('tmux')) {
+  // Absolute path: the probe may find tmux only on the login shell's PATH (ops-212-4), which every
+  // later tmux call (run/attach) does not search.
+  const tmux = locate('tmux')
+  if (!tmux) {
     log.warn('pty.supervisor_missing', 'tmux not found; sessions will not survive a server restart')
     return { supervisor: null, notice: TMUX_MISSING_NOTICE }
   }
-  return { supervisor: new TmuxSupervisor(supervisorSocket(env.WEBTERM_DATA_DIR)) }
+  return { supervisor: new TmuxSupervisor(supervisorSocket(env.WEBTERM_DATA_DIR), tmux) }
 }

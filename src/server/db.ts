@@ -1,8 +1,12 @@
 import { Database } from 'bun:sqlite'
-import type { Workspace, WsNode, Viewport, BridgeLink } from '../shared/workspace'
+import type { Workspace } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import { normalizeWorkspace } from '../shared/workspace.schema'
+import type { WorkspaceSummaryPage } from '../shared/workspace.summary'
+import { workspaceLog } from './workspacesLog'
+import { decodeSummaryCursor, encodeSummaryCursor, toSummary } from './db.summary'
 import type { Settings } from '../shared/settings'
-import { nextSettings, parseStored, registerAgentBaseResolver } from './settingsStore'
+import { nextSettingsDocument, parseStored, registerAgentBaseResolver } from './settingsStore'
 import { registerClaudeLaunchSettings, registerDefaultProfileOverride } from './claudeLauncher/claudeLauncher'
 import { commandProfileOverride } from './claudeProvider/claudeProvider.store'
 import { chmodSync } from 'node:fs'
@@ -36,6 +40,9 @@ export function openDb(path: string = dbPath()): Database {
     d.exec("ALTER TABLE workspace ADD COLUMN bridges TEXT NOT NULL DEFAULT '[]'")
   }
   ensureLayoutColumn(d)
+  // Keyset index for the paged summary list (Db.listSummaries). IF NOT EXISTS = idempotent on
+  // every boot; building it on an existing table needs no backfill.
+  d.exec('CREATE INDEX IF NOT EXISTS workspace_updated_id ON workspace (updated_at DESC, id DESC)')
   ensureAuditSchema(d)
   return d
 }
@@ -52,19 +59,30 @@ interface Row {
   updated_at: number
 }
 
-function toWorkspace(r: Row): Workspace {
-  return {
-    id: r.id,
-    name: r.name,
-    cwd: r.cwd ?? undefined,
-    color: r.color ?? undefined,
-    viewport: JSON.parse(r.viewport) as Viewport,
-    nodes: JSON.parse(r.nodes) as WsNode[],
-    bridges: JSON.parse(r.bridges ?? '[]') as BridgeLink[],
-    layout: parseLayout(r.layout),
-    updatedAt: r.updated_at,
+/** Column text -> value; unparsable -> `null`, which the schema then reports and replaces. */
+function parseColumn(raw: string | null | undefined, absent: string): unknown {
+  try {
+    return JSON.parse(raw ?? absent)
+  } catch {
+    return null // a truncated/hand-edited blob: normalizeWorkspace turns it into a default + an issue
   }
 }
+
+/**
+ * Row -> workspace through the shared schema, so one bad blob or node degrades THAT board (dropped
+ * node, default viewport, warning with the id) instead of throwing out of `list()` for every board.
+ */
+function toWorkspace(r: Row): Workspace {
+  const { board, issues } = normalizeWorkspace({
+    name: r.name, cwd: r.cwd, color: r.color,
+    viewport: parseColumn(r.viewport, ''), nodes: parseColumn(r.nodes, ''), bridges: parseColumn(r.bridges, '[]'),
+  })
+  if (issues.length > 0) workspaceLog.repaired(r.id, issues)
+  return { id: r.id, ...board, name: r.name, layout: parseLayout(r.layout), updatedAt: r.updated_at }
+}
+
+/** Result of `Db.save`: written, refused because the stored board is newer, or no such row. */
+export type SaveOutcome = 'saved' | 'stale' | 'missing'
 
 export class Db {
   constructor(private d: Database) {}
@@ -72,6 +90,21 @@ export class Db {
   list(): Workspace[] {
     const rows = this.d.query('SELECT * FROM workspace ORDER BY updated_at DESC').all() as Row[]
     return rows.map(toWorkspace)
+  }
+
+  /**
+   * One page of the sidebar view, newest first. Keyset order (`updated_at DESC, id DESC`, both in
+   * the cursor) is stable while rows are saved between pages: no skipped or repeated rows from
+   * OFFSET drift. `limit` is clamped by the caller (route).
+   */
+  listSummaries(limit: number, cursor?: string): WorkspaceSummaryPage {
+    const after = cursor ? decodeSummaryCursor(cursor) : null
+    const rows = (after
+      ? this.d.query('SELECT * FROM workspace WHERE updated_at < ?1 OR (updated_at = ?1 AND id < ?2) ORDER BY updated_at DESC, id DESC LIMIT ?3').all(after.updatedAt, after.id, limit + 1)
+      : this.d.query('SELECT * FROM workspace ORDER BY updated_at DESC, id DESC LIMIT ?1').all(limit + 1)) as Row[]
+    const items = rows.slice(0, limit).map((r) => toSummary(toWorkspace(r)))
+    const last = items[items.length - 1]
+    return rows.length > limit && last ? { items, nextCursor: encodeSummaryCursor(last) } : { items }
   }
 
   get(id: string): Workspace | null {
@@ -97,17 +130,22 @@ export class Db {
     return ws
   }
 
-  save(ws: Workspace): void {
-    const updatedAt = Date.now()
-    this.d.query(
-      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, layout, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name=excluded.name, cwd=excluded.cwd, color=excluded.color,
-         viewport=excluded.viewport, nodes=excluded.nodes, bridges=excluded.bridges,
-         layout=COALESCE(NULLIF(excluded.layout, ''), layout),
-         updated_at=excluded.updated_at`
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), updatedAt)
+  /**
+   * Update an EXISTING board; never creates one (creation is `create`), so a save that lands after
+   * a delete cannot resurrect the row. `base` = the `updatedAt` the writer last saw: when the
+   * stored row is newer the write is refused ('stale') instead of replacing another window's board.
+   * Check and write are one statement, so two racing writers cannot both pass. `updated_at` is
+   * strictly increasing per row (MAX with +1): two saves in the same millisecond still differ.
+   * `base` absent = unconditional (server-side writers such as templates).
+   */
+  save(ws: Workspace, base?: number): SaveOutcome {
+    const r = this.d.query(
+      `UPDATE workspace SET name=?1, cwd=?2, color=?3, viewport=?4, nodes=?5, bridges=?6,
+         layout=COALESCE(NULLIF(?7, ''), layout), updated_at=MAX(?8, updated_at + 1)
+       WHERE id=?9 AND (?10 IS NULL OR updated_at <= ?10)`
+    ).run(ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), Date.now(), ws.id, base ?? null)
+    if (r.changes > 0) return 'saved'
+    return this.d.query('SELECT 1 FROM workspace WHERE id = ?').get(ws.id) ? 'stale' : 'missing'
   }
 
   delete(id: string): void {
@@ -132,16 +170,19 @@ export class Db {
     return parseStored(row ? row.value : null)
   }
 
-  /** Merge `patch` di atas yang tersimpan, tulis, kembalikan snapshot hasilnya. Sinkron dari ujung
+  /** Patch the RAW stored document (`nextSettingsDocument`), write it, return the normalized view. Sinkron dari ujung
    *  ke ujung — lihat catatan di `settingsStore.ts` soal kenapa tidak ada rantai tulis. */
   saveSettings(patch: unknown): Settings {
     const row = this.d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string } | null
-    const next = nextSettings(row ? row.value : null, patch)
+    const next = nextSettingsDocument(row ? row.value : null, patch)
     this.d.query(
       "INSERT INTO app (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
-    ).run(JSON.stringify(next))
-    return next
+    ).run(JSON.stringify(next.doc))
+    return next.settings
   }
+
+  /** Shutdown only (index.ts exit hook): later calls on this store throw. Cast like ledgerRuntime.ts: the local bun:sqlite type omits close. */
+  close(): void { (this.d as unknown as { close(): void }).close() }
 }
 
 export const db = new Db(openDb())

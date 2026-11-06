@@ -139,14 +139,18 @@ describe('LinkNoteDelivery', () => {
     expect(r.writes).toEqual([])
   })
 
-  it('an Enter is withheld when the typed note never shows on screen (outbox marks it failed)', async () => {
+  it('an Enter is withheld when the typed note never shows on screen (cleared, re-typed once, then failed)', async () => {
     const r = rig()
     await r.tick()
     r.st.echo = false // the PTY swallows the text: the composer stays empty
     r.wire()
     await r.tick()
-    expect(r.writes).toHaveLength(1)
-    expect(r.writes[0]).toContain('[webterm]')
+    const note = r.writes[0] as string
+    expect(note).toContain('[webterm]')
+    expect(note).not.toContain('\n') // one line: one Ctrl-U clears it
+    // Type, clear (Ctrl-U), re-type once after the backoff, clear again; the second miss fails it.
+    expect(r.writes).toEqual([note, '\x15', note, '\x15'])
+    expect(r.writes).not.toContain('\r')
     expect(r.outbox.list(r.id)[0]).toMatchObject({ status: 'failed' })
   })
 

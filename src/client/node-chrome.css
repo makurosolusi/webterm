@@ -36,8 +36,6 @@
 /* Node terpilih = tab aktif, ditandai HANYA lewat header aktif (`.term-node--selected .node-header`
    di bawah). Bingkai biru focusBorder dihapus: bersama handle resize ia terbaca sebagai "mode edit"
    pada setiap klik. Bingkai + handle kini milik mode resize eksplisit (nodeResize/). */
-.node-header > .node-resize-toggle { margin-left: auto; flex-shrink: 0; }
-.node-resize-toggle + .node-toolbar { margin-left: 0; }
 
 /* Working (agent di tengah turn): glow clay lembut — #d97757 yang sama dengan spinner — di
    BELAKANG node. Yang dianimasikan OPACITY pada pseudo-element, bukan box-shadow: menganimasikan
@@ -156,7 +154,7 @@
   padding: 0 6px 0 4px;
   background: var(--nc-tab-inactive-bg);
   color: var(--nc-tab-inactive-fg);
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   cursor: default;
   user-select: none;
 }
@@ -166,7 +164,7 @@
 }
 
 /* Ikon tipe node (codicon) di depan judul, seperti ikon file pada tab. */
-.node-icon { flex-shrink: 0; font-size: 16px; }
+.node-icon { flex-shrink: 0; font-size: var(--ui-icon-size); }
 
 /* Judul sebagai teks; hanya namanya yang bisa diklik untuk rename. Tanpa `flex: 1` — yang mendorong
    toolbar ke kanan adalah `.node-toolbar { margin-left: auto }`, dan judul yang melar membuat chip
@@ -178,7 +176,7 @@
   white-space: nowrap;
   padding: 0 2px;
   color: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size);
   font-weight: 400;
   cursor: default;
 }
@@ -188,7 +186,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--ui-font-size-small);
   opacity: 0.7;
 }
 /* Input rename: bentuk yang sama, hanya tanpa chrome field — judul tidak boleh bergeser saat
@@ -232,7 +230,7 @@
   gap: 4px;
   margin-left: 4px;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--ui-font-size-label);
   font-weight: 400;
   color: var(--state-success);
 }
@@ -253,6 +251,9 @@
    ini. Dot-nya DIAM dengan sengaja: gerak dicadangkan untuk yang masih berubah (RUNNING) atau yang
    memblokir (NEEDS YOU), jadi diam adalah bagian dari pesannya, bukan gaya yang terlupa. */
 .node-status--waiting { color: var(--state-warning); }
+/* FAILED red but still: the process is gone, nothing is changing. STOPPED neutral: the user ended it. */
+.node-status--failed { color: var(--state-attention); }
+.node-status--stopped { color: var(--state-queued); }
 
 @keyframes nt-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -262,8 +263,21 @@
 /* ---- Toolbar header ----
    `vscode-toolbar-container` merender flex di dalam shadow DOM; aturan host ini menjaga toolbar
    tetap terdorong ke kanan dan menempel rapat. Aksi primer saja (Search, Maximize, More Actions…,
-   Close); sisanya di menu. Ikon adalah codicon 16px yang di-slot ke tombol. */
-.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+   separator, Stop, Close); sisanya di menu. Ikon adalah codicon 16px yang di-slot ke tombol. */
+/* Block, not flex: the host's only box is the shadow flex div, and as a flex item its min-content
+   (every button) stopped the header from shrinking it, so Close was pushed out of a narrow node. */
+.node-toolbar { display: block; min-width: 0; margin-left: auto; }
+/* Narrow header (nodeToolbar.overflow): Search/Maximize/resize sit in one clipping group that shrinks
+   last; items past the edge are hidden (their box stays, so measuring never feeds back) and offered
+   in the "…" menu. "…", Stop and Close are outside the group and never hide. */
+.node-toolbar__overflow { position: relative; display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
+.node-toolbar__item { display: inline-flex; flex-shrink: 0; }
+.node-toolbar__item[data-overflow] { visibility: hidden; }
+/* Shrink order (flex-shrink is weighted by size, so these ratios make it near-sequential): the
+   description first, then the title down to a minimum with its ellipsis, then the action group. */
+:root { --nc-title-min-w: 48px; }
+.node-header > .node-description { flex-shrink: 1000000; }
+.node-header > .node-title { flex-shrink: 1000; min-width: var(--nc-title-min-w); }
 
 /* vscode-toolbar-button v2.4.0 tidak punya properti `disabled`; `aria-disabled` di host adalah
    kontrak kita sendiri. Opacity .4 + pointer mati seperti state disabled VS Code. */
@@ -271,6 +285,11 @@
   opacity: 0.4;
   pointer-events: none;
 }
+
+/* VS Code action-bar separator (1px x 16px): keeps destructive Stop/Close apart from the layout actions. */
+.node-toolbar__separator { width: 1px; height: 16px; margin: 0 4px; flex-shrink: 0; background: var(--vscode-menu-separatorBackground); }
+/* Stop in the VS Code debug-toolbar red, so it never reads as a layout square. */
+.node-toolbar__stop .codicon { color: var(--vscode-debugIcon-stopForeground); }
 
 /* ---- Find bar (terminal/agent) ---- */
 .node-find__field { width: 140px; }
@@ -377,14 +396,3 @@
     opacity: 0.8;
   }
 }
-
-/* ---- Full Screen (Fullscreen API) ----
-   Elemen fullscreen = wrapper React Flow; UA `:fullscreen` sudah memaksa position:fixed, inset 0,
-   100% x 100% dan transform:none, jadi pan/zoom canvas tak berpengaruh. Di sini hanya: latar solid
-   (backdrop UA hitam, node tak boleh tembus) dan tepi node dilepas karena sudah memenuhi layar. */
-.react-flow__node:fullscreen { background: var(--panel); }
-.react-flow__node:fullscreen .term-node { border: 0; border-radius: 0; }
-.react-flow__node.react-flow__node.react-flow__node:fullscreen::after { display: none; }
-[data-tab-node]:fullscreen { background: var(--panel); }
-[data-tab-node]:fullscreen .term-node { border: 0; border-radius: 0; }
-[data-tab-node][data-tab-node]:fullscreen::after { display: none; }

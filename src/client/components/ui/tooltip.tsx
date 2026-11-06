@@ -59,7 +59,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-[1400] w-fit max-w-[500px] origin-(--radix-tooltip-content-transform-origin) rounded-(--vscode-cornerRadius-large) border border-(--vscode-editorHoverWidget-border) bg-(--vscode-editorHoverWidget-background) px-2 py-0.5 text-xs leading-[19px] text-(--vscode-editorHoverWidget-foreground) shadow-(--wt-shadow-floating)",
+          "z-[1400] w-fit max-w-[500px] origin-(--radix-tooltip-content-transform-origin) rounded-(--vscode-cornerRadius-large) border border-(--vscode-editorHoverWidget-border) bg-(--vscode-editorHoverWidget-background) px-2 py-0.5 text-(length:--ui-font-size) leading-[19px] text-(--vscode-editorHoverWidget-foreground) shadow-(--wt-shadow-floating)",
           className
         )}
         {...props}

@@ -7,12 +7,14 @@ import { TOKEN_HEADER } from './auth'
 import { firstHeader } from './httpHeaders'
 
 /**
- * Gerbang identitas hook, dibaca SEKALI saat modul dimuat. Default MATI: perilaku lama fail-open
- * (hook tanpa token tetap memperbarui status) dipertahankan persis. `WEBTERM_STRICT_HOOK_AUTH=1`
- * membalik endpoint menjadi tertutup: token node wajib, dan `transcript_path` wajib berada di
- * bawah root transcript claude / data dir webterm.
+ * Hook identity gate, read ONCE at module load. ON by default (data-209-1): the node token is
+ * required, and a `transcript_path` outside the claude transcript root / webterm data dir is not
+ * stored. Safe as a default because the only hook caller, the managed curl line
+ * (`claudeHooksSettings`, hooksSettings.ts), always sends the node's header file written by
+ * `writeNodeHeaders` before every launch and re-adopt. Exactly `0` is the only off value, so a typo
+ * stays closed; nothing requires setting it.
  */
-export const STRICT_HOOK_AUTH = process.env.WEBTERM_STRICT_HOOK_AUTH === '1'
+export const STRICT_HOOK_AUTH = process.env.WEBTERM_STRICT_HOOK_AUTH !== '0'
 
 /** Header token node, apa adanya dari request (Node menurunkan nama header ke lowercase). */
 export const nodeTokenHeader = (req: IncomingMessage): string | string[] | undefined =>

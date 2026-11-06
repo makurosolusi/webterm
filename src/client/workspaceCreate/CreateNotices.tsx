@@ -31,7 +31,7 @@ export function CreateNotice({ notice, verb, onOpenExisting, onUseName, onProcee
   const { pre } = notice
   const name = pre.target.split('/').pop() ?? ''
   return (
-    <div className="flex flex-col gap-2 rounded border border-amber-500/50 p-2" role="status" data-testid={`notice-${notice.kind}`}>
+    <div className="flex flex-col gap-2 rounded border border-(--vscode-inputValidation-warningBorder) bg-(--vscode-inputValidation-warningBackground) p-2" role="status" data-testid={`notice-${notice.kind}`}>
       {notice.kind === 'existing' && pre.existing && onOpenExisting && (
         <>
           <p className="m-0 [overflow-wrap:anywhere]">Already cloned at <code>{pre.existing.path}</code> — Open it?</p>

@@ -16,7 +16,7 @@
   box-shadow: var(--wt-shadow-floating, 0 0 12px rgba(0, 0, 0, 0.14));
   color: var(--vscode-menu-foreground, var(--vscode-foreground, #cccccc));
   font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   outline: none;
 }
 
@@ -25,7 +25,7 @@
   align-items: center;
   box-sizing: border-box;
   width: calc(100% - 8px);
-  height: 24px;
+  height: var(--menu-row-h, 24px);
   margin: 0 4px;
   padding: 0;
   border: 0;
@@ -34,7 +34,7 @@
   color: inherit;
   cursor: default;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   text-align: left;
   white-space: nowrap;
 }
@@ -68,8 +68,8 @@
   align-items: center;
   justify-content: center;
   width: 26px;
-  height: 16px;
-  font-size: 16px;
+  height: var(--ui-icon-size, 16px);
+  font-size: var(--ui-icon-size, 16px);
 }
 
 .vscode-menu__label {
@@ -91,7 +91,7 @@
   align-items: center;
   margin-left: auto;
   padding-right: 8px;
-  font-size: 16px;
+  font-size: var(--ui-icon-size, 16px);
   opacity: 0.7;
 }
 
@@ -105,9 +105,9 @@
 .vscode-menu__header {
   overflow: hidden;
   box-sizing: border-box;
-  height: 24px;
+  height: var(--menu-row-h, 24px);
   padding: 5px 26px 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size, 13px);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;

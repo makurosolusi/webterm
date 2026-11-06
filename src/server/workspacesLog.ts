@@ -5,6 +5,7 @@ import type { Workspace } from '../shared/workspace'
 import { createLogger } from './logs'
 
 const log = createLogger('workspace')
+const MAX_LOGGED_ISSUES = 5
 
 /** Bandingkan `prev` (null = baru) dengan `next` lalu catat create/rename/node/layout/save. */
 export function logWorkspaceSave(prev: Workspace | null, next: Workspace): void {
@@ -33,6 +34,22 @@ export const workspaceLog = {
   },
   activated(workspaceId: string): void {
     log.debug('workspace.activate', 'Active workspace set', { ids: { workspaceId } })
+  },
+  /** A save refused: the stored board is newer than the writer's base, or the row is gone. */
+  refused(workspaceId: string, reason: 'stale' | 'missing'): void {
+    log.info('workspace.save.refused', `Workspace save refused: ${reason}`, { ids: { workspaceId } })
+  },
+  /** A stored row needed the schema's repair on read (bad blob/node dropped). Issues name fields only, never values. */
+  repaired(workspaceId: string, issues: string[]): void {
+    log.warn('workspace.row.repaired', 'Stored workspace row failed validation; served a repaired board', {
+      ids: { workspaceId }, issues: issues.slice(0, MAX_LOGGED_ISSUES), issueCount: issues.length,
+    })
+  },
+  /** A post-commit side effect (log/event/guard) threw; the write already succeeded and keeps its status. */
+  sideEffectFailed(step: string, workspaceId: string, err: unknown): void {
+    log.error('workspace.sideeffect.error', `Workspace ${step} after commit failed`, {
+      ids: { workspaceId }, error: err instanceof Error ? err.name : 'unknown',
+    })
   },
   /** Gagal menyimpan ke SQLite; error asal tetap dilempar ulang oleh pemanggil. */
   failed(op: 'create' | 'save' | 'delete', workspaceId: string | undefined, err: unknown): void {

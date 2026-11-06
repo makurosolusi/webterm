@@ -40,7 +40,7 @@ beforeEach(() => {
     workspaces: {
       get: (id) => workspaces.get(id) ?? null,
       create: (name, cwd) => { const ws: Workspace = { id: `ws${++seq}`, name, cwd, viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], bridges: [], updatedAt: 0 }; workspaces.set(ws.id, ws); return ws },
-      save: (ws) => { workspaces.set(ws.id, ws) },
+      save: (ws) => { workspaces.set(ws.id, ws); return 'saved' },
       delete: (id) => { workspaces.delete(id) },
     },
     routines: () => routineStore,

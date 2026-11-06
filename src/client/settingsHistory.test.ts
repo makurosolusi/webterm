@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
+import { applySettingsPatch, type SettingsPatch } from '../shared/settings.patch'
 import { createSettingsHistory, settingsKeyLabel } from './settingsHistory'
 
 /** Apply patches like `useSettings` does, recording each one first. */
@@ -11,9 +12,9 @@ function harness(opts: { cap?: number; coalesceMs?: number } = {}) {
     h,
     get s() { return s },
     tick(ms: number) { t += ms },
-    edit(patch: Partial<Settings>) { h.record(s, patch); s = { ...s, ...patch } },
-    undo() { const c = h.undo(); if (c) s = { ...s, ...c.before }; return c },
-    redo() { const c = h.redo(); if (c) s = { ...s, ...c.after }; return c },
+    edit(patch: SettingsPatch) { h.record(s, patch); s = applySettingsPatch(s, patch) },
+    undo() { const c = h.undo(); if (c) s = applySettingsPatch(s, c.before); return c },
+    redo() { const c = h.redo(); if (c) s = applySettingsPatch(s, c.after); return c },
   }
 }
 
@@ -28,6 +29,18 @@ describe('createSettingsHistory', () => {
     x.redo()
     expect(x.s.fontSize).toBe(20)
     expect(x.h.canRedo()).toBe(false)
+  })
+
+  it('undo of one workspace entry deletes only that entry and keeps the others', () => {
+    const x = harness()
+    const bg = DEFAULT_SETTINGS.canvasBackground
+    x.edit({ canvasBackgroundByWorkspace: { w1: bg } })
+    x.tick(5000)
+    x.edit({ canvasBackgroundByWorkspace: { w2: { ...bg, mode: 'gradient' } } })
+    x.undo()
+    expect(Object.keys(x.s.canvasBackgroundByWorkspace)).toEqual(['w1'])
+    x.undo()
+    expect(x.s.canvasBackgroundByWorkspace).toEqual({})
   })
 
   it('a slider drag (same key, inside the window) is ONE step back to the start value', () => {

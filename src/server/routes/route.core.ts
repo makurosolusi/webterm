@@ -15,7 +15,7 @@ export interface RouteCtx {
   method: string
   /** Lazy body reader capped at `max` bytes; read only for POST/PUT (see cappedBodyGetter). */
   body(max: number): () => Promise<string>
-  /** Uncapped body read (routes that never had a cap keep none). */
+  /** Body read capped at ROUTE_BODY_MAX_BYTES; rejects with `BodyReadError` ('too_large' -> 413). */
   readBody(): Promise<string>
   /** Ledger handle, read once per request the first time a route asks for it. */
   ledger(): Ledger
@@ -46,24 +46,20 @@ export function send(res: ServerResponse, result: { status: number; body?: unkno
   return true
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', (chunk) => { data += chunk })
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
-}
+/** Cap of `ctx.readBody` (sec-208-4: it used to buffer any size). git-info, its only real reader,
+ *  sends at most GIT_INFO_MAX_PATHS (64) paths; 64 x PATH_MAX (4096) plus JSON fits in 256 KiB. */
+export const ROUTE_BODY_MAX_BYTES = 256 * 1024
 
 /** Builds the per-request context; `dispatch` is the router itself. */
 export function routeCtx(req: IncomingMessage, res: ServerResponse, dispatch: RouteCtx['dispatch']): RouteCtx {
   const url = new URL(req.url || '/', 'http://x')
   const method = req.method || 'GET'
   let ledger: Ledger | undefined
+  const readBody = cappedBodyGetter(req, method, ROUTE_BODY_MAX_BYTES)
   return {
     req, res, url, path: url.pathname, method, dispatch,
     body: (max) => cappedBodyGetter(req, method, max),
-    readBody: () => readBody(req),
+    readBody,
     ledger: () => (ledger === undefined ? (ledger = activeLedgerRuntime()) : ledger),
   }
 }

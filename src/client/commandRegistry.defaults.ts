@@ -38,6 +38,8 @@ export interface AppCommandDeps {
   /** Absent until the board wires `onAddDiff`: no command without a handler. */
   newDiff?: () => void
   fitView: () => void
+  /** Maximize/restore the focused (or the one selected) node inside the canvas area. */
+  toggleMaximizeNode: () => void
   toggleSessions: () => void
   toggleInbox: () => void
   toggleChat: () => void
@@ -57,6 +59,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
     ...(d.newBrowser ? [{ id: 'browser.new', label: 'Browser: New Browser Node', run: d.newBrowser }] : []),
     ...(d.newDiff ? [{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run: d.newDiff }] : []),
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
+    { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },
     { id: 'view.sessions', label: 'View: Toggle Sessions', run: d.toggleSessions },
     { id: 'view.inbox', label: 'View: Toggle Inbox', run: d.toggleInbox },
     { id: 'view.chat', label: 'View: Toggle Chat', run: d.toggleChat },

@@ -23,11 +23,14 @@ import {
   EMPTY_SEL, indexOfName, nfcName, selectAll, selectedNames, selectOne, selectRange, toggleName, type Sel,
 } from './filesSelection'
 import { FILES_SLOTS, type FilesSlotCtx } from './filesSlots'
+import { dismissNotice, forgetFilesNotices, notify } from './filesNotice'
+import { FilesNoticeLine, FilesProgressBar } from './FilesNoticeLine'
 import { applyView, needsMeta, relativePath, viewOf } from './filesView'
 import { randomId } from './randomId'
 import { useFilesInput } from './useFilesInput'
 import { useFilesListing } from './useFilesListing'
 import { useFilesOpen } from './useFilesOpen'
+import { revealPath } from './workspaceCreate/workspaceCreate.api'
 import './files.css'
 
 const COLLAPSED_H = 40
@@ -35,6 +38,8 @@ const COLLAPSED_H = 40
 const ROW_H = 22
 /** Segmen breadcrumb terlihat sebelum sisanya masuk menu "…". */
 const CRUMBS_MAX_VISIBLE = 4
+/** Notice id of the node's own messages (reveal/copy/create/open); one at a time, cleared on cd. */
+const NODE_NOTICE = 'node'
 
 type Menu = { x: number; y: number; entry: FileMeta | null }
 
@@ -62,10 +67,9 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [query, setQuery] = useState('')
   const [version, setVersion] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
-  const [notice, setNotice] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
-  const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? 300)
+  const setNotice = (text: string) => { if (text) notify(id, { id: NODE_NOTICE, kind: 'error', text }); else dismissNotice(id, NODE_NOTICE) }
 
   const { entries, loading, verdict } = useFilesListing(cwd, version, needsMeta(view), () => {
     const want = pendingSel.current
@@ -76,7 +80,9 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
   // Filter dan seleksi (juga input nama, di `useFilesInput`) adalah pertanyaan tentang SATU direktori; membawanya ke direktori
   // berikutnya membuat folder tampak kosong karena kotak yang sudah tidak dilihat pengguna.
-  useEffect(() => { setQuery(''); setNotice(''); setSel(EMPTY_SEL) }, [cwd])
+  useEffect(() => { setQuery(''); dismissNotice(id, NODE_NOTICE); setSel(EMPTY_SEL) }, [cwd, id])
+  // Unmount = node removed (the tab portal keeps the subtree mounted across layout moves).
+  useEffect(() => () => forgetFilesNotices(id), [id])
 
   const shown = useMemo(
     () => filterEntries(applyView(entries, view), query),
@@ -92,12 +98,13 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     cwd, dir: cwd, entries, selection: selectedNames(entries, sel), open, nodeId: id,
     refresh: (select) => { if (select) pendingSel.current = select; refresh() },
     startInput: input.start,
+    notify: (n) => notify(id, n), dismiss: (nid) => dismissNotice(id, nid),
   }
   // Urutan FILES_SLOTS tetap, jadi jumlah hook per render konstan.
   for (const s of FILES_SLOTS) s.useSlot?.(ctx)
   const decorate = (e: FileMeta) => decorateEntry(FILES_SLOTS, e, ctx)
 
-  // Gulirkan kursor ke dalam pandangan setiap kali ia pindah (keyboard, klik, Reveal).
+  // Gulirkan kursor ke dalam pandangan setiap kali ia pindah (keyboard, klik).
   // `scrollIntoView` juga menggulirkan ancestor — di canvas itu menyeret seluruh pane React Flow.
   useEffect(() => {
     const box = listRef.current
@@ -113,6 +120,12 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     const text = relative ? relativePath(rootRef.current, target) : target
     // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
     navigator.clipboard?.writeText(text).catch(() => setNotice('Could not copy the path.'))
+  }
+
+  /** Show the entry in the OS file manager (Finder / File Explorer); the server runs it. */
+  const reveal = (entry: FileMeta) => {
+    revealPath(childPath(cwd, entry.name)).catch((e: unknown) =>
+      setNotice(`Could not reveal “${entry.name}”: ${e instanceof Error ? e.message : String(e)}`))
   }
 
   const startCreate = (dir: boolean) => {
@@ -149,6 +162,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       case 'select': if (at) setSel(act.extend ? selectRange(sel, shown, act.index) : selectOne(at.name)); break
       case 'selectAll': setSel(selectAll(sel, shown)); break
       case 'copyPath': copy(shown[cursor] ?? null, act.relative); break
+      case 'reveal': if (shown[cursor]) reveal(shown[cursor]); break
       case 'menu': {
         const rect = (treeRef.current?.children[cursor] ?? listRef.current)?.getBoundingClientRect()
         setMenu({ x: rect?.left ?? 0, y: rect?.bottom ?? 0, entry: shown[cursor] ?? null })
@@ -201,8 +215,6 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           onRefresh={refresh}
           searchOpen={filterOpen} onToggleSearch={() => setFilterOpen((o) => !o)}
-          maximized={maximized}
-          onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
 
@@ -231,6 +243,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             />
           )}
 
+          <FilesProgressBar nodeId={id} />
           <FilesList
             nodeId={id} cwd={cwd} shown={shown} total={entries.length} sel={sel}
             loading={loading} verdict={verdict} query={query} decorate={decorate}
@@ -242,7 +255,8 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
           {/* Wilayah live: notice (mis. "Sudah ada: x") dibacakan pembaca layar tanpa memindahkan fokus. */}
           <div className="files-foot" role="status" aria-live="polite">
-            {notice || `${shown.length} of ${entries.length}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`}
+            <FilesNoticeLine nodeId={id} fallback={`${shown.length} of ${entries.length}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`} />
+            {FILES_SLOTS.map((s) => s.footer && <Fragment key={s.id}>{s.footer(ctx)}</Fragment>)}
           </div>
         </div>
       </div>
@@ -259,7 +273,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             terminal: () => addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }),
             newEntry: startCreate,
             refresh,
-            reveal: (e) => { setQuery(''); setSel(selectOne(e.name)); listRef.current?.focus() },
+            reveal,
             copyPath: (relative) => copy(menu.entry, relative),
           }}
         />

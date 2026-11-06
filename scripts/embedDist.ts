@@ -1,25 +1,20 @@
-// Codegen: tulis src/server/distAssets.generated.ts dari isi dist/. Tiap file dapat satu import
-// `with { type: 'file' }` — Bun meng-embed-nya ke binary `--compile` dan di runtime mengembalikan
-// path yang bisa dibaca. Dijalankan di bawah Bun oleh `bun run build` sesudah `vite build`.
+// Codegen: write src/server/distAssets.generated.ts (gitignored) from dist/. Each file gets one
+// `with { type: 'file' }` import: Bun embeds it into the `--compile` binary and returns a readable
+// path at runtime. Run under Bun by `bun run build` after `vite build`. A plain `bun src/server/index.ts`
+// serves dist/ from disk and ignores this file (staticAssets.ts loadAssetManifest).
 import fs from 'node:fs'
 import path from 'node:path'
+import { listDistFiles } from '../src/server/staticAssets'
 
 const DIST = path.resolve(import.meta.dir, '../dist')
 const OUT = path.resolve(import.meta.dir, '../src/server/distAssets.generated.ts')
 
 if (!fs.existsSync(DIST)) {
-  console.error('dist/ tidak ada — jalankan `vite build` dulu.')
+  console.error('dist/ is missing: run `vite build` first.')
   process.exit(1)
 }
 
-function walk(dir: string): string[] {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const full = path.join(dir, e.name)
-    return e.isDirectory() ? walk(full) : [full]
-  })
-}
-
-const files = walk(DIST).map((abs) => path.relative(DIST, abs).split(path.sep).join('/'))
+const files = listDistFiles(DIST)
 
 const imports = files.map((rel, i) => `import a${i} from "../../dist/${rel}" with { type: "file" }`)
 const entries = files.map((rel, i) => `  "/${rel}": a${i},`)
@@ -34,4 +29,4 @@ const body = [
 ].join('\n')
 
 fs.writeFileSync(OUT, body)
-console.log(`distAssets.generated.ts: ${files.length} aset di-embed`)
+console.log(`distAssets.generated.ts: embedded ${files.length} assets`)

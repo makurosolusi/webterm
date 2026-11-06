@@ -1,6 +1,6 @@
 // Kejadian log inti (pty/agent/workspace/fs/settings/env) tercatat di `logBus` dengan tag stabil,
 // dan TIDAK membawa isi terminal, nilai env/secret, atau path penuh.
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -118,7 +118,11 @@ describe('workspace dan node', () => {
 
   it('create, rename, node.create/delete, layout.save, delete', async () => {
     const store = fakeStore()
-    await workspacesRoute(store, '/api/workspaces', 'POST', body({ name: 'MyPrivateName', cwd: '/Users/secretname/proj' }))
+    // Create requires an existing directory: a real temp path that still carries a private segment.
+    const root = await mkdtemp(join(tmpdir(), 'wt-wslog-'))
+    const cwd = join(root, 'secretname', 'proj')
+    await mkdir(cwd, { recursive: true })
+    await workspacesRoute(store, '/api/workspaces', 'POST', body({ name: 'MyPrivateName', cwd }))
     expect(find('workspace.create')).toMatchObject({ channel: 'workspace', ids: { workspaceId: 'ws1' }, data: { cwd: 'proj' } })
 
     const save = (name: string, nodes: unknown[], zoom = 1) =>
@@ -134,6 +138,7 @@ describe('workspace dan node', () => {
     await workspacesRoute(store, '/api/workspaces/ws1', 'DELETE', body({}))
     expect(find('workspace.delete')?.ids).toEqual({ workspaceId: 'ws1' })
     expect(dump()).not.toMatch(/MyPrivateName|Renamed|secretname/)
+    await rm(root, { recursive: true, force: true })
   })
 
   it('kegagalan simpan DB dicatat sebagai error lalu dilempar ulang', async () => {

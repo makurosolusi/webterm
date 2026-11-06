@@ -145,11 +145,15 @@ const OWN_TOKEN = 'Its node token lives in a file only this node may read, never
 export function agentProtection(platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): AgentProtection[] {
   return BUILTIN_AGENT_IDS.map((kind): AgentProtection => {
     if (kind === 'claude' && claudeSandboxSupported(platform) && agentSandboxOn(env)) {
+      // 'mitigation', not 'protected' (sec-208-1): the sandbox walls off the data dir files, but the
+      // webterm API stays reachable from inside it and the UI-only check on file/board routes
+      // (routes/route.uiOnly.ts) rests on a forgeable fetch-metadata header.
       return {
         kind,
-        level: 'protected',
+        level: 'mitigation',
         reasons: [
-          'Claude Code sandbox blocks every shell command from reading the webterm data dir and the tokens of other nodes.',
+          'Claude Code sandbox blocks shell commands from reading the webterm data dir files and the tokens of other nodes directly.',
+          'The webterm API on 127.0.0.1 stays reachable from the sandbox; file and board routes answer only the webterm page or the root token, a check a deliberate script can still forge.',
           'Permission rules block Claude file tools on webterm secrets and .env files (templates stay readable).',
           'Running a command outside the sandbox asks for your approval.',
           'gh, docker, brew, op, security, ssh and git push/pull/fetch/clone run outside the sandbox so keychain and sockets keep working.',
