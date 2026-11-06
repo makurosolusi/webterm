@@ -34,6 +34,10 @@ export const workspaceLog = {
   activated(workspaceId: string): void {
     log.debug('workspace.activate', 'Active workspace set', { ids: { workspaceId } })
   },
+  /** A save refused: the stored board is newer than the writer's base, or the row is gone. */
+  refused(workspaceId: string, reason: 'stale' | 'missing'): void {
+    log.info('workspace.save.refused', `Workspace save refused: ${reason}`, { ids: { workspaceId } })
+  },
   /** Gagal menyimpan ke SQLite; error asal tetap dilempar ulang oleh pemanggil. */
   failed(op: 'create' | 'save' | 'delete', workspaceId: string | undefined, err: unknown): void {
     log.error('workspace.db.error', `Workspace ${op} failed`, {

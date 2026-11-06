@@ -186,9 +186,8 @@ export async function placeNode(
   const full: WsNode = { ...OFFSCREEN_SPAWN, ...entry.node }
   const live = new Set([...fresh.nodes.map((n) => n.id), full.id])
   const cables = bridgesToRestore(entry.bridges, live, fresh.bridges ?? [])
-  const updated: Workspace = {
-    ...fresh, nodes: [...fresh.nodes, full], bridges: [...(fresh.bridges ?? []), ...cables], updatedAt: Date.now(),
-  }
+  // `fresh.updatedAt` rides along as the save's precondition (409 if another window wrote since).
+  const updated: Workspace = { ...fresh, nodes: [...fresh.nodes, full], bridges: [...(fresh.bridges ?? []), ...cables] }
   await saveWorkspace(updated)
   deps.setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
   await deps.selectWorkspace(workspaceId)

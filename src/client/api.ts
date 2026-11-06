@@ -80,11 +80,19 @@ function withToken(headers?: Record<string, string>): Record<string, string> | u
   return { ...headers, [TOKEN_HEADER]: token }
 }
 
+const HTTP_CONFLICT = 409
+
+/** Thrown on non-2xx. `body` is set only for 409, whose body (e.g. a stale save's `current`
+ *  board) is what the caller needs to recover. */
+export type HttpError = Error & { status: number; body?: unknown }
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: withToken(init?.headers as Record<string, string>) })
   if (!res.ok) {
-    const e = new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}`)
-    ;(e as { status?: number }).status = res.status
+    const e = new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}`) as HttpError
+    e.status = res.status
+    // A non-JSON 409 body leaves `body` unset; the status still reports the conflict.
+    if (res.status === HTTP_CONFLICT) e.body = await res.json().catch(() => undefined)
     throw e
   }
   return res.json() as Promise<T>
@@ -106,6 +114,8 @@ export function getWorkspace(id: string): Promise<Workspace> {
   return jsonFetch(`/api/workspaces/${encodeURIComponent(id)}`)
 }
 
+/** PUT a board. `ws.updatedAt` must be the version the caller last got from the server: a newer
+ *  stored board answers 409 (`body.current`), a deleted one 404. */
 export function saveWorkspace(ws: Workspace): Promise<Workspace> {
   return jsonFetch(`/api/workspaces/${encodeURIComponent(ws.id)}`, {
     method: 'PUT',

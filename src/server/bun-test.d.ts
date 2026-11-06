@@ -38,7 +38,8 @@ declare module 'bun:sqlite' {
     query(sql: string): {
       all(...params: unknown[]): unknown[]
       get(...params: unknown[]): unknown
-      run(...params: unknown[]): void
+      /** `changes` = rows a write touched (Db.save's precondition check reads it). */
+      run(...params: unknown[]): { changes: number }
     }
   }
 }

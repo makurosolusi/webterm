@@ -31,7 +31,8 @@ const TOO_LARGE = { status: 413, body: { error: 'payload_too_large' } }
 const BODY_READ_FAILED = { status: 400, body: { error: 'body_read_failed' } }
 
 type CreateBody = { name: string; cwd?: string; color?: string }
-type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[]; layout?: unknown }
+/** `updatedAt` = the version the writer last saw (precondition, see `Db.save`), not a timestamp. */
+type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[]; layout?: unknown; updatedAt?: unknown }
 
 /**
  * Body JSON yang WAJIB objek biasa, atau `null` → 400.
@@ -130,7 +131,13 @@ export async function workspacesRoute(
         layout: b.layout === undefined ? undefined : normalizeTabLayout(b.layout),
       }
       const prev = store.get(id)
-      guarded('save', id, () => store.save(ws))
+      const base = typeof b.updatedAt === 'number' && Number.isFinite(b.updatedAt) ? b.updatedAt : undefined
+      const outcome = guarded('save', id, () => store.save(ws, base))
+      // PUT only updates: an unknown id (deleted in another window) is 404, never a re-create.
+      if (outcome === 'missing') { workspaceLog.refused(id, outcome); return NOT_FOUND }
+      // Another writer saved after this one's base: hand back the current board so the client
+      // reloads it (VS Code "file changed on disk") instead of silently overwriting it.
+      if (outcome === 'stale') { workspaceLog.refused(id, outcome); return { status: 409, body: { code: 'stale', current: store.get(id) } } }
       const saved = store.get(id)
       if (saved) logWorkspaceSave(prev, saved)
       if (saved) produceEdgeChange(prev, saved) // linkNote + wake subscribe to this, not a poll
