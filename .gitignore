@@ -30,3 +30,5 @@ credentials.json
 service-account*.json
 .aws/
 .gcp/
+# Written by scripts/embedDist.ts on every `bun run build`; a fresh tree uses distAssets.generated.d.ts
+src/server/distAssets.generated.ts
