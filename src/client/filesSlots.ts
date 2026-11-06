@@ -3,6 +3,7 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { FileMeta } from '../shared/fsContract'
 import type { MenuItem, MenuRow } from './NodeContextMenu'
+import type { NoticeInput } from './filesNotice'
 import { dndSlot } from './filesSlot.dnd'
 import { gitSlot } from './filesSlot.git'
 import { mutateSlot } from './filesSlot.mutate'
@@ -30,6 +31,10 @@ export interface FilesSlotCtx {
   startInput(req: InputRequest): void
   open(entry: FileMeta): void
   nodeId: string
+  /** Show a notice in the node footer (the only text surface; upsert by `id`); returns its id. */
+  notify(n: NoticeInput): string
+  /** Remove notice `id` from the footer. */
+  dismiss(id: string): void
 }
 export interface Decoration { badge?: string; title?: string; className?: string }
 
@@ -39,7 +44,10 @@ export interface FilesSlot {
   /** true = tombol ditangani slot (FilesNode berhenti memproses). */
   onKey?(e: KeyboardEvent, ctx: FilesSlotCtx): boolean
   decorate?(entry: FileMeta, ctx: FilesSlotCtx): Decoration | undefined
+  /** Icon controls only (no visible text; filesToolbarPolicy.test locks this). Messages go to `ctx.notify`. */
   toolbar?(ctx: FilesSlotCtx): ReactNode
+  /** Rendered right-aligned in the node footer, after the notice/count text, in FILES_SLOTS order. */
+  footer?(ctx: FilesSlotCtx): ReactNode
   /** Dirender di samping node (dialog/toast); komponen sendiri yang memutuskan kapan terlihat. */
   overlay?(ctx: FilesSlotCtx): ReactNode
   /** Hook dipanggil tiap render FilesNode (urutan tetap, jadi aman untuk aturan hooks). */

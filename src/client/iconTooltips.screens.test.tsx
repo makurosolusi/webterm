@@ -43,7 +43,7 @@ describe('BrowserToolbar tooltips', () => {
 })
 
 describe('FilesToolbar tooltips', () => {
-  const ctx = { cwd: '/p', dir: '/p', entries: [], selection: [], refresh() {}, startInput() {}, open() {}, nodeId: 'f1' } as FilesSlotCtx
+  const ctx = { cwd: '/p', dir: '/p', entries: [], selection: [], refresh() {}, startInput() {}, open() {}, notify: () => '', dismiss() {}, nodeId: 'f1' } as FilesSlotCtx
   it('states the hidden-files state and the current sort', () => {
     const view = { hidden: true, sortKey: 'mtime', sortDir: 'desc' } as ViewOpts
     render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} />)

@@ -12,7 +12,7 @@ import { DND_MIME, DND_TEXT, dndSlot, dragNames, resetDndSlot, shellQuote, shell
 
 const caps = (o: object) => ({ mutate: false, viewers: false, watch: false, git: false, quickOpen: true, upload: false, listMax: 1, ...o })
 const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => ({
-  cwd: '/p', dir: '/p', entries: [], selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', ...o,
+  cwd: '/p', dir: '/p', entries: [], selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(), ...o,
 })
 const NASTY = ["it's.txt", 'with space.txt', '$HOME', '`id`', 'say "hi"', 'line\nbreak', 'ünïcödé 日本語.md', "''", 'a;b&c|d', '*.{js,ts}', '\\n']
 
