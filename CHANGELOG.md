@@ -7,6 +7,7 @@ Operator notes:
 - New files in the data dir: `<data dir>/browser/adblock/` (filter cache), `shields-off.json` (sites where Shields is turned off) and `<data dir>/backgrounds/` (uploaded canvas background images).
 - A stored `agentLaunchCommands.claude` is moved into a Claude launch profile named "Custom" on first load (see below); nothing to do by hand.
 - The workspace table gets a `layout` column (the tab-layout view, JSON) on first start; existing databases are upgraded in place and every workspace starts in canvas mode.
+- New dependency `@anthropic-ai/claude-agent-sdk` 0.3.318 (Anthropic commercial terms) for the Agent Chat node, with its peers `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk` and `zod`, all pinned. It drives the `claude` you have installed; no bundled Claude binary is used.
 
 ### Added
 - "Clone Repository…" next to "Open Folder…" in the workspace "+" menu, the File menu, the Welcome screen and ⌘K. Paste an `https://`, `ssh://` or `git@host:path` URL, or `owner/repo` for GitHub. The clone shows its progress, can be cancelled, and opens as a new workspace. The parent folder defaults to `~/webterm/projects`, which is created the first time something is cloned or created there. The last parent you used is suggested next time, and if that folder is gone the default is used instead. If a private repository fails to authenticate, the error tells you to run `gh auth login` or set up an SSH key.
@@ -44,6 +45,10 @@ Operator notes:
 - Signing in without setup: the first start opens your default browser already signed in, through a one-time code (single use, 60 s) in a file only you can read. The browser keeps an HttpOnly session cookie for 30 days of inactivity, and a restart opens nothing and keeps open tabs working.
 - A sign-in screen for a browser that is not signed in: "Open signed-in window" opens a signed-in window on the computer running webterm (at most one per 10 s), or paste the access token. The tab reloads by itself once it is signed in elsewhere.
 - Sign out in the workspace bar. Rotating the access token signs every other browser out.
+- Agent Chat node: Claude Code without a terminal, shown as a chat. Replies stream as Markdown, tools show as cards (commands with their output, file edits as diffs, reads, todo lists, subagents), and the footer shows the model, the cost of the last turn and the tokens used. Add one from the Dock, "Add node", the canvas menu, the tab-layout "+" menu or "Agent Chat: New Agent Chat" in ⌘K. The terminal agent node is unchanged and still there.
+- In an Agent Chat, Claude asks before it runs a tool: Allow once, Always allow or Deny right in the chat. Questions from Claude show as a small form, and a plan shows as a card you approve or send back. Pick the permission mode per node, press Stop to end a turn, and type while Claude works to queue your next message.
+- An Agent Chat keeps its Claude session: the server keeps it running while the tab is closed, closes it after 10 idle minutes, and resumes it on your next message, also after a server restart. A page left open while the server restarts keeps receiving new messages. If Claude crashes, the chat says so and your next message picks up the same session; a message that could not be sent shows "Not sent" with Retry.
+- An Agent Chat refuses to open a Claude session that is already open in another chat node or in a terminal agent node of the same workspace, and says where it is open, so two windows never write the same transcript.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.

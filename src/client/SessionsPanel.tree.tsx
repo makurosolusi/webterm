@@ -19,6 +19,7 @@ import type { WsNodeKind } from '../shared/workspace'
  *  ("notes", "scratch") sama-sama mungkin milik editor, terminal, atau folder. */
 export const KIND_ICON: Record<WsNodeKind, string> = {
   agent: 'hubot',
+  agentChat: 'comment-discussion',
   terminal: 'terminal',
   editor: 'file',
   files: 'folder',

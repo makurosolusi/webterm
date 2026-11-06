@@ -36,6 +36,23 @@ describe('store serializer', () => {
     expect(toWsNode(toFlow({ id: 't', kind: 'terminal', x: 0, y: 0 })).diffNotes).toBeUndefined()
   })
 
+  it('round-trips an agentChat node with every chat field, dropping a junk permission mode', () => {
+    const n: WsNode = {
+      id: 'c', kind: 'agentChat', x: 3, y: 4, cwd: '/w', agentId: 'claude', title: 'Agent Chat',
+      claudeProfileId: 'prof-1', chatSessionId: 'sess-1', permissionMode: 'plan',
+    }
+    const back = toWsNode(toFlow(n))
+    expect(back).toMatchObject(n)
+    expect(toFlow(n).type).toBe('agentChat')
+    const flow = toFlow(n)
+    expect(toWsNode({ ...flow, data: { ...flow.data, permissionMode: 'yolo' } }).permissionMode).toBeUndefined()
+  })
+
+  it('an agentChat node joins the kanban through its agentId', () => {
+    const g = groupByStatus([{ id: 'c', data: { kind: 'agentChat', agentId: 'claude', title: 'Chat' } }], { c: 'working' })
+    expect(g.working).toEqual([{ id: 'c', label: 'Chat' }])
+  })
+
   it('toFlow maps kind to type', () => {
     expect(toFlow({ id: 'x', kind: 'agent', x: 0, y: 0 }).type).toBe('agent')
   })

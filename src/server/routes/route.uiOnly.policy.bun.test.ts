@@ -24,7 +24,7 @@ const { TELEGRAM_WEBHOOK_PATH } = await import('../channels/channelsRuntime')
 const { TOKEN_ACCESS_PATH, tokenAccessRoute } = await import('../tokenAccess.api')
 
 /** Route entries wrapped in `uiOnly` (route.uiOnly.ts) or gated the same way in their handler. */
-const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name']
+const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name', 'agent-chat']
 /** Answer without the webterm page: the channel webhook (own provider secret, routed before /api)
  *  and the node-token surfaces (`isNodeTokenPath`) the CLI, browser skill and hooks call. */
 const ALLOWLIST = ['/api/agent-status', '/api/context-link', '/api/control/browser/navigate', '/api/tools', '/api/tools/x']
@@ -43,6 +43,8 @@ const PROBES: [string, string][] = [
   ['POST', '/api/git/info'],
   ['GET', '/api/workspace-create/defaults'], ['POST', '/api/workspace-create/project'],
   ['POST', '/api/generate-name'],
+  ['GET', '/api/agent-chat/n1/stream'], ['GET', '/api/agent-chat/n1/history'], ['POST', '/api/agent-chat/n1/send'],
+  ['POST', '/api/agent-chat/n1/interrupt'], ['POST', '/api/agent-chat/n1/permission'], ['POST', '/api/agent-chat/n1/mode'],
 ]
 
 const SRC = join(import.meta.dirname, '..', '..')

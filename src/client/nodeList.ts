@@ -11,6 +11,7 @@ import type { Workspace, WsNode, WsNodeKind } from '../shared/workspace'
 export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   terminal: 'Terminal',
   agent: 'Agent',
+  agentChat: 'Agent Chat',
   files: 'Files',
   editor: 'Editor',
   browser: 'Browser',
@@ -25,6 +26,7 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
 const NODE_KIND_PLURAL: Record<WsNodeKind, string> = {
   terminal: 'Terminals',
   agent: 'Agents',
+  agentChat: 'Agent Chats',
   files: 'Files',
   editor: 'Editors',
   browser: 'Browsers',
@@ -36,7 +38,7 @@ const NODE_KIND_PLURAL: Record<WsNodeKind, string> = {
 /** Urutan seksi dipaku, bukan mengikuti isi board: node agent paling sering ditindaklanjuti,
  *  terminal berikutnya, editor/files cuma artefak statis. Urutan yang bergeser mengikuti isi
  *  memaksa mata mencari ulang tiap kali ada node baru. */
-const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'plan', 'terminal', 'browser', 'app', 'diff', 'editor', 'files']
+const NODE_KIND_ORDER: WsNodeKind[] = ['agent', 'agentChat', 'plan', 'terminal', 'browser', 'app', 'diff', 'editor', 'files']
 
 export interface NodeRowVM {
   id: string

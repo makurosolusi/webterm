@@ -32,6 +32,7 @@ import { prReviewRoutes } from './routes/prreview.routes'
 import { mcpAppsRoutes } from './routes/mcpapps.routes'
 import { templatesRoutes } from './routes/templates.routes'
 import { workspaceCreateRoutes } from './routes/workspaceCreate.routes'
+import { agentChatRoutes } from './routes/agentChat.routes'
 
 export { applyPtyOptions } from './routes/settings.routes'
 
@@ -45,6 +46,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...logEventRoutes,
   ...workspaceRoutes,
   ...browserRoutes,
+  ...agentChatRoutes,
   ...settingsRoutes,
   ...fsRoutes,
   ...gitRoutes,

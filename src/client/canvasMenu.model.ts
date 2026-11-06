@@ -15,12 +15,13 @@ import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 
 /** Ikon dirujuk lewat NAMA, bukan elemen React — supaya modul ini tetap bebas JSX dan bisa diuji. */
-export type CanvasMenuIcon = 'terminal' | 'agent' | 'files' | 'browser' | 'diff' | 'select-all' | 'fit'
+export type CanvasMenuIcon = 'terminal' | 'agent' | 'agentChat' | 'files' | 'browser' | 'diff' | 'select-all' | 'fit'
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
   terminal: 'New Terminal',
   agentGroup: 'New Agent',
+  agentChat: 'New Agent Chat',
   files: 'New File Manager',
   browser: 'New Browser',
   diff: 'Diff (working changes)',
@@ -70,6 +71,8 @@ export interface CanvasMenuHandlers {
   addBrowser?: () => void
   /** Diff node on the workspace cwd; absent = no row. */
   addDiff?: () => void
+  /** Claude chat node (no terminal); absent = Claude disabled, no row. */
+  addAgentChat?: () => void
   fitView: () => void
   selectAll?: () => void
 }
@@ -134,6 +137,7 @@ export function buildCanvasMenuRows(
     { key: 'terminal', label: MENU_LABELS.terminal, icon: 'terminal', onClick: handlers.addTerminal },
     ...promoted.map((a) => builtinItem(a, 'New ', handlers, ctx.agentLaunchCommands)),
   ]
+  if (handlers.addAgentChat) rows.push({ key: 'agentChat', label: MENU_LABELS.agentChat, icon: 'agentChat', onClick: handlers.addAgentChat })
 
   const grouped = [
     ...rest.map((a) => builtinItem(a, '', handlers, ctx.agentLaunchCommands)),

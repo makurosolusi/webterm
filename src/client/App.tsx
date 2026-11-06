@@ -116,7 +116,7 @@ export default function App() {
     useLayoutHistory({ nodesRef, setNodes, scheduleSave })
 
   const {
-    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions,
+    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, nodeActions,
   } = useBoardActions({
     rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
@@ -153,7 +153,7 @@ export default function App() {
   }, [onNodesChange])
 
   const { onPaneContextMenu, menu: paneMenu } = useCanvasPaneMenu({
-    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onFit, onSelectAll,
+    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onFit, onSelectAll,
   })
 
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
@@ -168,7 +168,7 @@ export default function App() {
   // Tab mode's props + layout commands; closing a tab takes the same path as NodeChrome's close.
   const tabsProps = useAppTabs({
     activeId, rf, nodes: flowNodes, statuses, settings, closeNode: (id) => void closeSession(id),
-    onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent,
+    onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat,
   })
 
   const liveNodes = useMemo(() => nodes.map(toWsNode), [nodes])

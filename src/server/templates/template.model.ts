@@ -29,7 +29,9 @@ const PARAM_VALUE_MAX = 1000
 const MAX_PARAMS = 20
 const MAX_NOTES = 20
 const MAX_ROUTINES = 10
-const KINDS: readonly WsNodeKind[] = ['terminal', 'agent', 'files', 'editor', 'browser', 'diff', 'plan']
+/** Kinds a template may hold; `app` is left out (an app node is placed by an agent's published MCP view, not by hand). */
+export const TEMPLATE_KINDS: readonly WsNodeKind[] = ['terminal', 'agent', 'agentChat', 'files', 'editor', 'browser', 'diff', 'plan']
+const KINDS = TEMPLATE_KINDS
 /** Warp argument name rule. */
 const PARAM_ID_RE = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/
 const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/
@@ -155,6 +157,7 @@ function node(v: unknown, i: number): TemplateNode {
   const agentId = text(v.agentId, `${f}.agentId`, 80); if (agentId !== undefined) n.agentId = agentId
   const cmd = command(v.cmd, `${f}.cmd`); if (cmd !== undefined) n.cmd = cmd
   const url = text(v.url, `${f}.url`, 2000); if (url !== undefined) n.url = url
+  if (n.kind === 'agentChat' && (n.cmd !== undefined || (n.agentId ?? 'claude') !== 'claude')) bad(`${f}: an agentChat node runs Claude and takes no cmd`)
   if (v.notes !== undefined) {
     if (!Array.isArray(v.notes) || v.notes.length > MAX_NOTES) bad(`${f}.notes must be at most ${MAX_NOTES} strings`)
     n.notes = (v.notes as unknown[]).map((t, j) => text(t, `${f}.notes[${j}]`, TEXT_MAX, true)!)

@@ -8,6 +8,8 @@ dist/
 !.env.example
 # lockfile repo ini bun.lock; package-lock.json hanya lahir kalau npm dipakai keliru
 package-lock.json
+# git worktrees created by agent tooling; the rest of .claude/ may hold shared project settings
+.claude/worktrees/
 # ekspor cookie browser = sesi login aktif, setara secret; jangan pernah ter-commit (Rule 7)
 cookies.txt
 *.cookies.txt

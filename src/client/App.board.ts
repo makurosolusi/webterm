@@ -12,6 +12,7 @@ import { spawnSpot } from './canvasMenu.geometry'
 import { paneSessionIds } from './paneTree'
 import { send } from './ws'
 import { useBrowserAdd } from './useBrowserAdd'
+import { useAgentChatAdd } from './agentChat.add'
 import { useBrowserOpen } from './useBrowserOpen'
 import { connectWorkspaceLayout } from './App.tabs'
 import { bridgesToRestore, type ClosedHistory } from './closedHistory'
@@ -157,6 +158,7 @@ export function useBoardActions({
   // Diff node on the workspace folder; a wired agent's cwd (its worktree) takes over (DiffNode `root`).
   const onAddDiff = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'diff', cwd: ws.cwd, title: 'Changes' }), at), [addFlowNode])
   const onAddBrowser = useBrowserAdd(addFlowNode, activeId, browserReady) // undefined = fitur mati di server
+  const onAddAgentChat = useAgentChatAdd(addFlowNode, settings) // undefined = Claude disabled in settings
   const defaultSize = useMemo(() => ({ width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }), [settings.defaultNodeWidth, settings.defaultNodeHeight])
   const openBrowserAt = useBrowserOpen({ enabled: onAddBrowser !== undefined, addFlowNode, rf, nodesRef, setNodes, defaultSize })
 
@@ -204,5 +206,5 @@ export function useBoardActions({
 
   const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId }), [onSession, onToggleHideLinks, openBrowserAt, activeId])
 
-  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, nodeActions }
+  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, nodeActions }
 }

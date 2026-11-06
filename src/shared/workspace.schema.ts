@@ -6,7 +6,7 @@
 // blob never blanks the app or fails the whole list.
 import { DEFAULT_VIEWPORT, validDiffNotes, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
 
-const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true }
+const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true }
 
 /** The persisted board fields of a workspace (identity, version and layout are handled elsewhere). */
 export interface WorkspaceBoard { name: string; cwd?: string; color?: string; viewport: Viewport; nodes: WsNode[]; bridges: BridgeLink[] }

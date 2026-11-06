@@ -12,6 +12,11 @@ export interface ChatComposerProps {
   disabled?: boolean
   onSend: (text: string) => void
   onStop: () => void
+  /** Accessible name of the textarea (default: the central agent's). */
+  label?: string
+  placeholder?: string
+  /** Chars a message may have; longer text cannot be sent and shows why. */
+  maxLength?: number
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -31,7 +36,8 @@ export default function ChatComposer(props: ChatComposerProps) {
   const history = useRef<string[]>([])
   const slot = useRef<number | null>(null)
   const draft = useRef('')
-  const canSend = text.trim() !== '' && !props.busy && !props.disabled
+  const tooLong = props.maxLength !== undefined && text.length > props.maxLength
+  const canSend = text.trim() !== '' && !props.busy && !props.disabled && !tooLong
 
   // Auto-grow: measure from `auto` so the box also shrinks after a send or a deletion.
   useLayoutEffect(() => {
@@ -85,8 +91,8 @@ export default function ChatComposer(props: ChatComposerProps) {
         <textarea
           ref={area}
           className="chat-composer__input"
-          aria-label="Message the central agent"
-          placeholder={props.busy ? 'Turn running. Stop or wait…' : 'Ask the central agent…'}
+          aria-label={props.label ?? 'Message the central agent'}
+          placeholder={props.placeholder ?? (props.busy ? 'Turn running. Stop or wait…' : 'Ask the central agent…')}
           rows={1}
           value={text}
           disabled={props.disabled}
@@ -101,13 +107,18 @@ export default function ChatComposer(props: ChatComposerProps) {
           </IconTooltip>
         ) : (
           <IconTooltip label="Send message" shortcut="Enter" disabled={!canSend}
-            disabledReason={props.disabled ? 'chat is disabled' : 'type a message first'}>
+            disabledReason={props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : 'type a message first'}>
             <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend} aria-label="Send message">
               <span className="codicon codicon-send" aria-hidden="true" />
             </button>
           </IconTooltip>
         )}
       </div>
+      {tooLong && (
+        <p className="chat-composer__limit" role="alert">
+          {`Message is ${text.length.toLocaleString('en-US')} characters; the limit is ${props.maxLength?.toLocaleString('en-US')}. Shorten it to send.`}
+        </p>
+      )}
     </div>
   )
 }

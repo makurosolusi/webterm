@@ -86,6 +86,12 @@ Nothing to configure. On the first `bun run dev` webterm opens your default brow
 - Sign out from the workspace bar. Rotating the token signs every other browser out.
 - Scripts and agents never use the cookie: scripts send the root token in `x-webterm-token`, and agent sessions use their own node token (the `webterm` CLI reads it from the node's header file).
 
+## Agent Chat node
+
+An Agent Chat node runs Claude Code without a terminal and shows it as a chat: streamed Markdown, tool cards, permission prompts (Allow once, Always allow, Deny), questions, plan review, a mode picker, Stop, and the cost of the last turn. It sits next to the terminal agent node, which is unchanged. Add one from the Dock, "Add node" > Agent Chat, the canvas menu, the tab-layout "+" menu, or "Agent Chat: New Agent Chat" in ⌘K. It is offered while Claude is enabled and needs no configuration: it uses the installed `claude`, the node's launch profile and the default permission mode, like a terminal agent.
+
+The server owns the Claude process: it starts on the first message, keeps running if the tab closes, closes after 10 idle minutes (the next message resumes the session), and stops when the node or its workspace is deleted. With more than 3 running, the one idle longest is closed (it resumes on its next message); a busy one never is. History comes from Claude's own transcript, so a chat survives a server restart, but a turn running at that moment is cut off. The `/api/agent-chat/*` routes accept only the webterm page, never an agent's node token. Design and limits: `docs/decisions/agent-chat.md`.
+
 ## `webterm` CLI
 
 Agent sessions get a `webterm` CLI on `PATH` (written to `<data dir>/bin/webterm` on every boot, plus a `webterm-cli` skill stub under `~/.claude/skills/`). It carries no token; it reads the node's own header file. Commands: `webterm agent-context`, `webterm <tool> --json '{...}'` (a capability call over `/api/tools`), `webterm skills get <name>`, `webterm whats-new [--since <version>]`, `webterm browser ...`, `webterm context ...`, and `webterm eval run [--model fake|real] [--json]`, which replays the eval cases collected from rejected approvals, dismissed memory proposals and checkpoint rewinds (exit 0 all pass, 1 a failure, 2 bad usage). Separately, each agent CLI (Claude, Codex, OpenCode, Gemini) is configured at spawn with a `webterm` stdio MCP server, through webterm-owned files and per-process flags only, never your global CLI config.

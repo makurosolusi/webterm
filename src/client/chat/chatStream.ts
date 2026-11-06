@@ -1,11 +1,12 @@
-// SSE client for one conversation (RND/11 §4).
+// SSE client for one conversation (RND/11 §4), generic over the feed so the agent chat node
+// (PLAN/AGENT-CHAT.md D10) reuses the same cursor + backoff instead of a copy.
 //
 // Reconnect is manual on purpose: the browser's automatic retry cannot be told which cursor to
 // resume from, and a silent duplicate replay would fight the store's dedupe. Here every attempt
 // carries `?after=<lastSeq>` (the server treats it like `Last-Event-ID`), and the `id:` line is
 // also read as the cursor. EventSource cannot set headers; it needs none: the browser sends the
 // HttpOnly `wt_ui` cookie, and the server never reads a token from the query.
-import type { ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
+import type { ChatEvent, ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
 import { CHAT_EVENT_TYPES, CHAT_PATH } from './chatTransport'
 import { parseEventFrame } from './chatWire'
 
@@ -13,7 +14,18 @@ import { parseEventFrame } from './chatWire'
 const RETRY_BASE_MS = 1_000
 const RETRY_MAX_MS = 10_000
 
-export function openChatStream(conversationId: string, opts: ChatStreamOptions): ChatStream {
+/** What differs between SSE feeds: the URL, the `event:` names and the frame parser. */
+export interface SseFeed<E extends { seq: number }> {
+  path: string
+  eventTypes: readonly string[]
+  parse: (type: string, data: string, lastEventId: string) => E | null
+  /** A frame at or below the cursor that still applies (state the server re-sends on connect). */
+  reapply?: (event: E) => boolean
+}
+
+export type SseStreamOptions<E> = Omit<ChatStreamOptions, 'onEvent'> & { onEvent: (event: E) => void }
+
+export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts: SseStreamOptions<E>): ChatStream {
   const create =
     opts.createSource ?? ((url: string) => new EventSource(url) as unknown as ChatEventSource)
   const handlers = new Map<string, (event: MessageEvent) => void>()
@@ -30,8 +42,7 @@ export function openChatStream(conversationId: string, opts: ChatStreamOptions):
   const url = (): string => {
     const query: string[] = []
     if (lastSeq > 0) query.push(`after=${lastSeq}`)
-    const base = `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/stream`
-    return query.length === 0 ? base : `${base}?${query.join('&')}`
+    return query.length === 0 ? feed.path : `${feed.path}?${query.join('&')}`
   }
 
   const cleanup = (): void => {
@@ -54,9 +65,13 @@ export function openChatStream(conversationId: string, opts: ChatStreamOptions):
   }
 
   const applyFrame = (type: string, event: MessageEvent): void => {
-    const parsed = parseEventFrame(type, event.data ?? '', event.lastEventId ?? '', conversationId)
+    const parsed = feed.parse(type, event.data ?? '', event.lastEventId ?? '')
     if (!parsed) return
-    if (parsed.seq <= lastSeq) return // duplicate replay frame
+    if (parsed.seq <= lastSeq) {
+      // Duplicate replay frame, unless the feed says it is re-sent state (never moves the cursor back).
+      if (feed.reapply?.(parsed)) opts.onEvent(parsed)
+      return
+    }
     lastSeq = parsed.seq
     opts.onEvent(parsed)
     // `done` ends the TURN, not the subscription: the next message in this conversation must
@@ -91,7 +106,7 @@ export function openChatStream(conversationId: string, opts: ChatStreamOptions):
       status('open')
     }
     next.onerror = () => reconnect()
-    for (const type of CHAT_EVENT_TYPES) {
+    for (const type of feed.eventTypes) {
       // Server-sent `error` frames are MessageEvents; transport failures arrive on onerror and
       // carry no data. Splitting on that keeps a failed turn distinct from a dead socket.
       const handler = (event: MessageEvent): void => {
@@ -108,4 +123,12 @@ export function openChatStream(conversationId: string, opts: ChatStreamOptions):
 
   connect()
   return { close: () => close('closed') }
+}
+
+export function openChatStream(conversationId: string, opts: ChatStreamOptions): ChatStream {
+  return openSseStream<ChatEvent>({
+    path: `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/stream`,
+    eventTypes: CHAT_EVENT_TYPES,
+    parse: (type, data, lastEventId) => parseEventFrame(type, data, lastEventId, conversationId),
+  }, opts)
 }
