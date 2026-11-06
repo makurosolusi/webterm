@@ -17,7 +17,7 @@ export const workspaceRoutes: ApiRoute[] = [
   uiOnly({
     name: 'workspaces',
     match: (c) => c.path === WORKSPACES_PATH || c.path.startsWith(`${WORKSPACES_PATH}/`) || c.path === ACTIVE_PATH,
-    handle: async (c) => send(c.res, await workspacesRoute(db, c.path, c.method, c.body(WORKSPACES_BODY_MAX_BYTES))),
+    handle: async (c) => send(c.res, await workspacesRoute(db, c.path, c.method, c.body(WORKSPACES_BODY_MAX_BYTES), undefined, c.url.searchParams)),
   }),
   // Paged transcript index + history of closed nodes (sessionHistory.route.ts).
   {

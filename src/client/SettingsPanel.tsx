@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { Settings } from '../shared/settings'
+import type { SettingsPatch } from '../shared/settings.patch'
 import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { ControlPanel } from './ControlPanel'
@@ -56,7 +57,7 @@ export function toSectionId(id: string): SectionId {
 
 interface PanelProps {
   settings: Settings
-  onChange: (patch: Partial<Settings>) => void
+  onChange: (patch: SettingsPatch) => void
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string

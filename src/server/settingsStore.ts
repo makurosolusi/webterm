@@ -15,11 +15,15 @@
 //    belum pernah merilis settings tersimpan, jadi tidak ada satu pun file yang bisa memicunya.
 
 import { normalizeCustomAgents, type CustomAgentError } from '../shared/customAgent.schema'
-import { mergeSettings, type Settings } from '../shared/settings'
+import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
+import { applySettingsPatch } from '../shared/settings.patch'
+import { seedClaudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 import { createLogger } from './logs'
 
 const log = createLogger('settings')
+/** Key of the settings row in the `app` table (see `db.ts`). */
+const SETTINGS_ROW_KEY = 'settings'
 
 /** Galat validasi `PUT /api/settings` per field; rute memetakannya ke HTTP 400. */
 export class SettingsValidationError extends Error {
@@ -40,29 +44,67 @@ function warnDropped(errors: CustomAgentError[]): void {
 /** Baca baris `app.settings`. JSON rusak / baris absen jatuh ke default, tidak melempar: settings
  *  tidak boleh menjadi alasan server gagal start. */
 export function parseStored(json: string | null): Settings {
-  if (!json) return mergeSettings(null)
+  // mergeSettings({}) equals mergeSettings(null) (pinned by a test), so a corrupt row gets defaults.
+  return json ? mergeSettings(storedDocument(json), warnDropped) : mergeSettings(null)
+}
+
+/** The last corrupt row value already warned about: getSettings runs on every GET, so one
+ *  unreadable row logs once, not once per request. Kept in memory only, never logged. */
+let warnedCorruptRow: string | null = null
+
+/** Stored row -> raw document. Absent or corrupt -> {} (reads then fall back to defaults). */
+function storedDocument(json: string | null): Record<string, unknown> {
+  if (!json) return {}
   try {
-    return mergeSettings(JSON.parse(json), warnDropped)
-  } catch {
-    return mergeSettings(null)
+    return asRecord(JSON.parse(json))
+  } catch (err) {
+    if (json === warnedCorruptRow) return {}
+    warnedCorruptRow = json
+    // The next patch rewrites the unreadable row from {}: leave a trace (message only, never content).
+    log.warn('settings.read.corrupt', 'Stored settings row is not valid JSON; using an empty document', {
+      operation: 'settings read',
+      key: SETTINGS_ROW_KEY,
+      cause: err instanceof Error ? err.message : String(err),
+    })
+    return {}
   }
 }
 
+/** A patched value is written only when it is a known key with the default's basic shape. */
+function acceptsShape(key: string, v: unknown): boolean {
+  if (!(key in DEFAULT_SETTINGS) || v === null || v === undefined) return false
+  const d = DEFAULT_SETTINGS[key as keyof Settings]
+  return typeof v === typeof d && Array.isArray(v) === Array.isArray(d)
+}
+
 /**
- * Snapshot berikutnya: `patch` di-merge di atas yang tersimpan. Satu-satunya tempat bentuk input
- * diperiksa adalah `mergeSettings` — ia sekaligus batas input HTTP (cocokkan typeof + array-ness,
- * buang kunci tak dikenal), jadi `patch` boleh berupa body mentah dari jaringan. Pengecualian:
- * `patch.customAgents` divalidasi mode `strict` dan MELEMPAR `SettingsValidationError` bila ada
- * galat, supaya PUT yang rusak ditolak (400) alih-alih diam-diam dibuang.
+ * The next stored document and its normalized view. The RAW stored document is the source of
+ * truth: only the patched keys are validated and written (in normalized form), every other stored
+ * key stays as it was, including keys this build does not know and entries that fail today's
+ * validation (a rollback or a newer build must not lose them). Reference: VS Code keeps unknown
+ * settings in settings.json untouched. Unknown or wrong-shaped PATCH keys are dropped, so the
+ * HTTP input cannot add junk. Entry keys (`settings.patch.ts`) merge one entry, `null` deletes.
+ * `patch.customAgents` is validated `strict` and THROWS `SettingsValidationError`, so a broken PUT
+ * is refused (400) instead of silently dropped.
  */
-export function nextSettings(storedJson: string | null, patch: unknown): Settings {
+export function nextSettingsDocument(storedJson: string | null, patch: unknown): { doc: Record<string, unknown>; settings: Settings } {
   const p = asRecord(patch)
-  // Bukan array = salah bentuk: jatuh ke `mergeSettings` (dibuang), sama seperti kunci lain.
   if (Array.isArray(p.customAgents)) {
     const { errors } = normalizeCustomAgents(p.customAgents, 'strict')
     if (errors.length) throw new SettingsValidationError(errors)
   }
-  return mergeSettings({ ...parseStored(storedJson), ...p })
+  const accepted = Object.fromEntries(Object.entries(p).filter(([k, v]) => acceptsShape(k, v)))
+  const doc = applySettingsPatch(storedDocument(storedJson), accepted)
+  const settings = mergeSettings(doc, warnDropped)
+  for (const k of Object.keys(accepted)) doc[k] = settings[k as keyof Settings]
+  // The one-time load migration (legacy claude command -> profile) is persisted with the write.
+  Object.assign(doc, seedClaudeProfiles(doc, settings.agentLaunchCommands.claude))
+  return { doc, settings }
+}
+
+/** The normalized snapshot after `patch` (see `nextSettingsDocument`). */
+export function nextSettings(storedJson: string | null, patch: unknown): Settings {
+  return nextSettingsDocument(storedJson, patch).settings
 }
 
 function asRecord(v: unknown): Record<string, unknown> {

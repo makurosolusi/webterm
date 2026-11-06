@@ -26,9 +26,7 @@ export async function dropWorkspaceBackground(store: SettingsStore, workspaceId:
     const current = store.getSettings()
     const old = current.canvasBackgroundByWorkspace[workspaceId]
     if (!old) return
-    const rest = { ...current.canvasBackgroundByWorkspace }
-    delete rest[workspaceId]
-    const saved = store.saveSettings({ canvasBackgroundByWorkspace: rest })
+    const saved = store.saveSettings({ canvasBackgroundByWorkspace: { [workspaceId]: null } }) // entry patch: null deletes
     await deleteIfUnreferenced(dir(), saved, old.imageId)
   } catch (err) {
     log.warn('canvas-background.gc_failed', `Cannot clean canvas background of deleted workspace ${workspaceId}`, { cause: (err as Error)?.message ?? String(err) })
@@ -45,8 +43,7 @@ export async function pruneCanvasBackgrounds(store: SettingsStore, workspaceIds:
   const byWs = settings.canvasBackgroundByWorkspace
   const stale = Object.keys(byWs).filter((id) => !workspaceIds.has(id))
   if (stale.length) {
-    const kept = Object.fromEntries(Object.entries(byWs).filter(([id]) => workspaceIds.has(id)))
-    settings = store.saveSettings({ canvasBackgroundByWorkspace: kept })
+    settings = store.saveSettings({ canvasBackgroundByWorkspace: Object.fromEntries(stale.map((id) => [id, null])) })
   }
   let names: string[]
   try {

@@ -10,8 +10,12 @@
 //
 // Otorisasi TIDAK terjadi di sini: `src/server/index.ts` sudah menggerbangi SELURUH `/api/*`
 // dengan `authorize()` (Origin + token) sebelum `handleApi` dipanggil.
-import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
+import { stat } from 'node:fs/promises'
+import type { Workspace } from '../shared/workspace'
+import { normalizeWorkspace } from '../shared/workspace.schema'
 import type { Db } from './db'
+import { decodeSummaryCursor, parseSummaryLimit } from './db.summary'
+import { expandHomePath } from './fsOps'
 import { BodyReadError } from './cappedRequestBody'
 import { logWorkspaceSave, workspaceLog } from './workspacesLog'
 import { guardWorkspaceRepos } from './repoHygiene'
@@ -30,9 +34,51 @@ const BAD_ID = { status: 400, body: { error: 'id must be a non-empty string' } }
 const TOO_LARGE = { status: 413, body: { error: 'payload_too_large' } }
 const BODY_READ_FAILED = { status: 400, body: { error: 'body_read_failed' } }
 
-type CreateBody = { name: string; cwd?: string; color?: string }
+const BAD_NAME = { status: 400, body: { error: 'name must be a non-empty string' } }
+const BAD_CWD = { status: 400, body: { error: 'cwd must be an existing directory' } }
+const BAD_COLOR = { status: 400, body: { error: 'color must be a string' } }
+const BAD_LIMIT = { status: 400, body: { error: 'limit must be an integer from 1 to 200' } }
+const BAD_CURSOR = { status: 400, body: { error: 'cursor is not valid' } }
+
 /** `updatedAt` = the version the writer last saw (precondition, see `Db.save`), not a timestamp. */
-type SaveBody = CreateBody & { viewport: Viewport; nodes: WsNode[]; bridges?: BridgeLink[]; layout?: unknown; updatedAt?: unknown }
+type SaveBody = Record<string, unknown> & { layout?: unknown; updatedAt?: unknown }
+
+/** True when `cwd` (`~` expanded, like the PTY does) is a directory this process can stat. */
+async function isDirectory(cwd: string): Promise<boolean> {
+  try {
+    return (await stat(expandHomePath(cwd))).isDirectory()
+  } catch {
+    return false // ENOENT/ENOTDIR/EACCES: all mean "a shell cannot start there" -> 400, not 500
+  }
+}
+
+/** Create body -> fields, or the 400 that names the first bad one (values never echoed). */
+async function createFields(b: Record<string, unknown>): Promise<{ name: string; cwd?: string; color?: string } | { status: number; body: unknown }> {
+  const name = typeof b.name === 'string' ? b.name.trim() : ''
+  if (!name) return BAD_NAME
+  const cwd = b.cwd === undefined || b.cwd === null || b.cwd === '' ? undefined : b.cwd
+  if (cwd !== undefined && (typeof cwd !== 'string' || !(await isDirectory(cwd)))) return BAD_CWD
+  if (b.color !== undefined && b.color !== null && typeof b.color !== 'string') return BAD_COLOR
+  return { name, cwd, color: typeof b.color === 'string' ? b.color : undefined }
+}
+
+/** Run a post-commit side effect: the write already succeeded, so a throw is logged, never a 500. */
+function afterCommit(step: string, id: string, run: () => void): void {
+  try {
+    run()
+  } catch (err) {
+    workspaceLog.sideEffectFailed(step, id, err)
+  }
+}
+
+/** `GET /api/workspaces?summary=1`: one page of `WorkspaceSummaryPage` (limit/cursor checked here). */
+function summaryPage(store: Db, query: URLSearchParams): WorkspacesResult {
+  const limit = parseSummaryLimit(query.get('limit'))
+  if (limit === null) return BAD_LIMIT
+  const cursor = query.get('cursor') || undefined
+  if (cursor && !decodeSummaryCursor(cursor)) return BAD_CURSOR
+  return { status: 200, body: store.listSummaries(limit, cursor) }
+}
 
 /**
  * Body JSON yang WAJIB objek biasa, atau `null` → 400.
@@ -90,23 +136,27 @@ function guarded<T>(op: 'create' | 'save' | 'delete', id: string | undefined, ru
  * GET akan menggantung sampai timeout.
  *
  * `bgDir` = wallpaper dir (lazy, injectable for tests); a delete drops the workspace's override.
+ * `query` = the request's search params (`?summary=1&limit&cursor` on the list).
  */
 export async function workspacesRoute(
   store: Db,
   path: string,
   method: string,
   body: () => Promise<string>,
-  bgDir: () => string = backgroundsDir
+  bgDir: () => string = backgroundsDir,
+  query: URLSearchParams = new URLSearchParams()
 ): Promise<WorkspacesResult> {
   if (path === '/api/workspaces') {
-    if (method === 'GET') return { status: 200, body: store.list() }
+    if (method === 'GET') return query.get('summary') === '1' ? summaryPage(store, query) : { status: 200, body: store.list() }
     if (method === 'POST') {
       const read = await bodyOrFailure(body)
       if (!read.ok) return read.result
-      const b = parseObjectBody<CreateBody>(read.raw)
+      const b = parseObjectBody<Record<string, unknown>>(read.raw)
       if (!b) return BAD_JSON
-      const created = guarded('create', undefined, () => store.create(b.name, b.cwd, b.color))
-      workspaceLog.created(created)
+      const f = await createFields(b)
+      if (!('name' in f)) return f
+      const created = guarded('create', undefined, () => store.create(f.name, f.cwd, f.color))
+      afterCommit('create log', created.id, () => workspaceLog.created(created))
       void guardWorkspaceRepos([created]) // secrets guard without a restart; never throws per repo
       return { status: 201, body: created }
     }
@@ -124,9 +174,12 @@ export async function workspacesRoute(
       if (!read.ok) return read.result
       const b = parseObjectBody<SaveBody>(read.raw)
       if (!b) return BAD_JSON
+      // Shared schema (also used on read): refuse rather than store a board that needed repair, so
+      // a bad writer gets a 400 naming the fields and the stored row stays exactly as it was.
+      const { board, issues } = normalizeWorkspace(b)
+      if (issues.length > 0) return { status: 400, body: { error: 'invalid workspace', issues } }
       const ws: Workspace = {
-        id, name: b.name, cwd: b.cwd, color: b.color,
-        viewport: b.viewport, nodes: b.nodes, bridges: b.bridges ?? [], updatedAt: Date.now(),
+        id, ...board, updatedAt: Date.now(),
         // Absent = keep the stored layout (old clients, partial writers); present = sanitized.
         layout: b.layout === undefined ? undefined : normalizeTabLayout(b.layout),
       }
@@ -139,10 +192,12 @@ export async function workspacesRoute(
       // reloads it (VS Code "file changed on disk") instead of silently overwriting it.
       if (outcome === 'stale') { workspaceLog.refused(id, outcome); return { status: 409, body: { code: 'stale', current: store.get(id) } } }
       const saved = store.get(id)
-      if (saved) logWorkspaceSave(prev, saved)
-      if (saved) produceEdgeChange(prev, saved) // linkNote + wake subscribe to this, not a poll
-      if (saved && saved.cwd !== prev?.cwd) void guardWorkspaceRepos([saved]) // cwd changed: guard the new repo
-      return saved ? { status: 200, body: saved } : NOT_FOUND
+      if (!saved) return NOT_FOUND
+      // Committed: log + event never change the answer (a throw there used to turn a stored save into a 500).
+      afterCommit('save log', id, () => logWorkspaceSave(prev, saved))
+      afterCommit('edge event', id, () => produceEdgeChange(prev, saved)) // linkNote + wake subscribe to this, not a poll
+      if (saved.cwd !== prev?.cwd) void guardWorkspaceRepos([saved]) // cwd changed: guard the new repo
+      return { status: 200, body: saved }
     }
     if (method === 'DELETE') {
       guarded('delete', id, () => store.delete(id))

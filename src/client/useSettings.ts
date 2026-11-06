@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { tokenQuery } from './api'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
+import { applySettingsPatch, mergeSettingsPatches, type SettingsPatch } from '../shared/settings.patch'
 import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 
@@ -75,7 +76,7 @@ export function settingsUrl(): string {
   return q ? `/api/settings?${q}` : '/api/settings'
 }
 
-async function putSettings(patch: Partial<Settings>): Promise<void> {
+async function putSettings(patch: SettingsPatch): Promise<void> {
   const res = await fetch(settingsUrl(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -100,7 +101,7 @@ export interface UseSettings {
   /** True setelah GET pertama selesai, supaya logika first-run bisa menunggu. */
   hydrated: boolean
   /** Terapkan patch ke state sekarang; persistensi menyusul (coalesce 300 ms). */
-  update(patch: Partial<Settings>): void
+  update(patch: SettingsPatch): void
   /** Undo/redo of `update` (see `./settingsHistory`). */
   history: SettingsUndo
 }
@@ -123,10 +124,10 @@ export interface SettingsUndo {
 export function useSettings(): UseSettings {
   const [settings, setSettings] = useState<Settings>(current)
   const [hydrated, setHydrated] = useState(false)
-  const saver = useRef<Coalescer<Partial<Settings>> | null>(null)
+  const saver = useRef<Coalescer<SettingsPatch> | null>(null)
   if (!saver.current) {
     saver.current = createCoalescer(putSettings, {
-      merge: (pending, next) => ({ ...pending, ...next }),
+      merge: mergeSettingsPatches, // entry keys keep both patches' entries
     })
   }
 
@@ -166,15 +167,15 @@ export function useSettings(): UseSettings {
     if (change) setNotice((prev) => ({ seq: (prev?.seq ?? 0) + 1, kind, change }))
   }, [])
 
-  const apply = useCallback((patch: Partial<Settings>) => {
-    current = { ...current, ...patch }
+  const apply = useCallback((patch: SettingsPatch) => {
+    current = applySettingsPatch(current, patch)
     setSettings(current)
     // Kirim patch, bukan snapshot penuh: server me-merge-nya, jadi dua tab yang menyetel kunci
     // berbeda tidak saling menimpa kunci yang tidak mereka sentuh.
     saver.current?.push(patch)
   }, [])
 
-  const update = useCallback((patch: Partial<Settings>) => {
+  const update = useCallback((patch: SettingsPatch) => {
     announce('changed', hist.current?.record(current, patch))
     apply(patch)
   }, [apply, announce])
