@@ -1,31 +1,27 @@
 // HTTP surface of the agent chat node (PLAN/AGENT-CHAT.md D6, D7): `/api/agent-chat/:nodeId/<verb>`.
 // UI-only: its entry is wrapped in `uiOnly` (routes/agentChat.routes.ts); node tokens never reach
-// it (not in `isNodeTokenPath`). SSE replays the session log after `?after=` / Last-Event-ID, then goes live,
-// framed and heartbeated like centralChatSse.
-import type { RouteCtx } from '../routes/route.core'
+// it (not in `isNodeTokenPath`). Verbs live in agentChat.route.{stream,attach,controls}.ts; this file
+// dispatches and keeps send / permission / mode / interrupt / history.
 import { json } from '../routes/route.core'
-import { BodyReadError } from '../cappedRequestBody'
-import { DEFAULT_HEARTBEAT_MS, formatSseFrame } from '../central/chat/streamHub'
-import { firstHeader } from '../httpHeaders'
 import { createLogger } from '../logs'
-import { AGENT_CHAT_TEXT_MAX, type AgentChatEvent, type AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
+import { AGENT_CHAT_TEXT_MAX, type AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
 import { isPermissionMode, isSafeNodeId } from '../../shared/workspace'
 import type { AgentChatPool } from './agentChat.pool'
 import type { AgentChatSession } from './agentChat.session'
 import { historyPage, loadTranscript, toolResultText, type LoadTranscript } from './agentChat.history'
 import { AGENT_CHAT_SEND_BODY_MAX_BYTES, imageVerb, parseSend, uploadVerb } from './agentChat.route.attach'
+import { CONTROL_VERBS, controlVerb, type ListSessions } from './agentChat.route.controls'
+import { AGENT_CHAT_BODY_MAX_BYTES, bad, fail, ok, readObject, uint, type Body, type Ctx, type Fail } from './agentChat.route.core'
+import { AGENT_CHAT_SSE_EVENT, streamVerb } from './agentChat.route.stream'
 
 const log = createLogger('agent-chat')
 
-export { AGENT_CHAT_TEXT_MAX } // shared with the client composer
-/** Bytes of one POST body (a permission answer can carry an edited tool input). */
-export const AGENT_CHAT_BODY_MAX_BYTES = 1024 * 1024
-/** SSE `event:` name of every agent chat frame. */
-export const AGENT_CHAT_SSE_EVENT = 'agent-chat'
+export { AGENT_CHAT_BODY_MAX_BYTES, AGENT_CHAT_SSE_EVENT, AGENT_CHAT_TEXT_MAX } // TEXT_MAX: shared with the client composer
 
 const PATH = /^\/api\/agent-chat\/([^/]+)\/([a-z]+)$/
-const VERB_METHOD: Record<string, 'GET' | 'POST'> = { stream: 'GET', history: 'GET', send: 'POST', upload: 'POST', interrupt: 'POST', permission: 'POST', mode: 'POST' }
-const UINT = /^\d+$/
+const VERB_METHOD: Record<string, 'GET' | 'POST'> = {
+  stream: 'GET', history: 'GET', send: 'POST', upload: 'POST', interrupt: 'POST', permission: 'POST', mode: 'POST', ...CONTROL_VERBS,
+}
 
 export interface AgentChatRouteDeps {
   pool: AgentChatPool
@@ -33,20 +29,8 @@ export interface AgentChatRouteDeps {
   heartbeatMs?: number
   /** Root of staged uploads (default `<data dir>/agent-chat-uploads`); tests pass a temp dir. */
   uploadsDir?: string
-}
-
-type Ctx = Pick<RouteCtx, 'req' | 'res' | 'url' | 'path' | 'method' | 'body'>
-type Fail = { status: number; error: string; reason: string }
-type Body = Record<string, unknown>
-
-const fail = (c: Ctx, f: Fail): true => { json(c.res, f.status, { error: f.error, reason: f.reason }); return true }
-const ok = (c: Ctx): true => { json(c.res, 200, { ok: true }); return true }
-const bad = (reason: string): Fail => ({ status: 400, error: 'bad_request', reason })
-
-/** Non-negative integer query value; undefined = absent, null = invalid. */
-function uint(raw: string | null | undefined): number | undefined | null {
-  if (raw === null || raw === undefined) return undefined
-  return UINT.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : null
+  /** SDK `listSessions` (GET sessions); tests inject a fake. */
+  listSessions?: ListSessions
 }
 
 function decodeNodeId(raw: string): string | undefined {
@@ -56,27 +40,6 @@ function decodeNodeId(raw: string): string | undefined {
     if (err instanceof URIError) return undefined // malformed escape = not a node id
     throw err
   }
-}
-
-/** JSON object body under the cap; anything else is a Fail. */
-async function readObject(c: Ctx, max = AGENT_CHAT_BODY_MAX_BYTES): Promise<{ body: Body } | { fail: Fail }> {
-  let raw: string
-  try {
-    raw = await c.body(max)()
-  } catch (err) {
-    if (!(err instanceof BodyReadError)) throw err
-    return { fail: err.reason === 'too_large'
-      ? { status: 413, error: 'too_large', reason: `Request body is over ${max} bytes.` }
-      : bad('Request body could not be read.') }
-  }
-  let v: unknown
-  try {
-    v = JSON.parse(raw || '{}')
-  } catch (err) {
-    if (!(err instanceof SyntaxError)) throw err
-    return { fail: bad('Request body is not valid JSON.') }
-  }
-  return v && typeof v === 'object' && !Array.isArray(v) ? { body: v as Body } : { fail: bad('Request body must be a JSON object.') }
 }
 
 function parseAnswer(b: Body): { answer: AgentChatPermissionAnswer } | Fail {
@@ -90,42 +53,6 @@ function parseAnswer(b: Body): { answer: AgentChatPermissionAnswer } | Fail {
   if (input !== undefined && (!input || typeof input !== 'object' || Array.isArray(input))) return bad('updatedInput must be an object.')
   if (b.always !== undefined && typeof b.always !== 'boolean') return bad('always must be a boolean.')
   return { answer: { requestId: b.requestId, behavior: 'allow', ...(input ? { updatedInput: input as Record<string, unknown> } : {}), ...(b.always ? { always: true } : {}) } }
-}
-
-function stream(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, s: AgentChatSession): true {
-  const after = uint(firstHeader(c.req.headers['last-event-id']) ?? c.url.searchParams.get('after'))
-  if (after === null) return fail(c, bad('after / Last-Event-ID must be a non-negative integer.'))
-  const from = after ?? 0
-  const res = c.res
-  res.statusCode = 200
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache, no-transform')
-  res.setHeader('Connection', 'keep-alive')
-  res.setHeader('X-Accel-Buffering', 'no')
-  res.flushHeaders()
-  const write = (e: AgentChatEvent): void => {
-    if (!res.writableEnded) res.write(formatSseFrame({ kind: 'event', id: e.seq, event: AGENT_CHAT_SSE_EVENT, data: e }))
-  }
-  // seq restarts at 1 with the server; without this a page open across a restart drops every new event.
-  s.resumeAfter(from)
-  const replay = s.events(from)
-  const oldest = replay[0]?.seq ?? Number.POSITIVE_INFINITY
-  // The init the log cap dropped (the client needs its session id), then prompts still waiting for an
-  // answer that the client's cursor already passed, then the regular replay.
-  const init = deps.pool.lastInit(nodeId)
-  if (init && init.seq > from && init.seq < oldest) write(init)
-  const open = new Set(deps.pool.gate.pending(nodeId).map((r) => r.requestId))
-  for (const e of s.events(0)) if (e.t === 'permission' && e.seq <= from && open.has(e.requestId)) write(e)
-  for (const e of replay) write(e)
-  const off = s.subscribe(write)
-  const beat = setInterval(() => { if (!res.writableEnded) res.write(formatSseFrame({ kind: 'heartbeat' })) }, deps.heartbeatMs ?? DEFAULT_HEARTBEAT_MS)
-  beat.unref?.() // never hold the process open for a heartbeat
-  // Both res and req emit close on a disconnect; unsubscribe exactly once.
-  let done = false
-  const cleanup = (): void => { if (done) return; done = true; off(); clearInterval(beat) }
-  res.once('close', cleanup)
-  c.req.once('close', cleanup)
-  return true
 }
 
 async function history(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, s: AgentChatSession): Promise<true> {
@@ -199,7 +126,8 @@ export async function agentChatRoute(c: Ctx, deps: AgentChatRouteDeps): Promise<
   const s = nodeId && isSafeNodeId(nodeId) ? deps.pool.session(nodeId) : undefined
   if (!nodeId || !s) return fail(c, { status: 404, error: 'not_found', reason: 'No agent chat node with this id.' })
   if (c.method !== want) return fail(c, { status: 405, error: 'method_not_allowed', reason: `${verb} takes ${want}.` })
-  if (verb === 'stream') return stream(c, deps, nodeId, s)
+  if (verb === 'stream') return streamVerb(c, deps, nodeId, s)
+  if (verb in CONTROL_VERBS) return controlVerb(c, deps, nodeId, verb, s)
   if (verb === 'history') return history(c, deps, nodeId, s)
   return post(c, deps, nodeId, verb, s)
 }

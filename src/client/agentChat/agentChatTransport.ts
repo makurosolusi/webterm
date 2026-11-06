@@ -4,7 +4,7 @@
 import { ChatApiError, chatErrorMessage, isAbortError, requestJson } from '../chat/chatTransport'
 import { openSseStream } from '../chat/chatStream'
 import type { ChatEventSource, ChatStream, ChatStreamStatus } from '../chat/chatTypes'
-import type { AgentChatEvent, AgentChatImage, AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
+import type { AgentChatCommand, AgentChatConfig, AgentChatEvent, AgentChatImage, AgentChatModel, AgentChatPermissionAnswer, AgentChatSessionSummary } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import type { HistoryItem } from './agentChatStore'
 
@@ -14,9 +14,11 @@ export const AGENT_CHAT_SSE_EVENT = 'agent-chat'
 /** Items per history page ("Load earlier"). */
 export const AGENT_CHAT_HISTORY_PAGE = 50
 
-const EVENT_TYPES = new Set<string>(['status', 'init', 'delta', 'message', 'tool', 'permission', 'permissionResolved', 'result', 'notice', 'mode'])
+const EVENT_TYPES = new Set<string>(['status', 'init', 'delta', 'message', 'tool', 'permission', 'permissionResolved', 'result', 'notice', 'mode',
+  'config', 'context', 'commandOutput', 'compact', 'reset', 'commandsChanged', 'queued'])
 
 export type AgentChatOperation = 'send' | 'interrupt' | 'permission' | 'mode' | 'history' | 'tool result' | 'upload'
+  | 'catalog' | 'models' | 'config' | 'sessions' | 'resume' | 'new conversation'
 
 /** A failed agent chat request: `message` is user-facing; operation, node and status are for code. */
 export class AgentChatApiError extends ChatApiError {
@@ -37,6 +39,10 @@ export function agentChatErrorMessage(op: AgentChatOperation, error: unknown): s
   const s = error.status
   if (s === 401 || s === 403) return 'Not allowed. Reload and sign in again.'
   if (s === 404) return op === 'tool result' ? 'The full output is not in the transcript.' : 'This chat is not on the server yet. Wait for the board to save, then retry.'
+  if (s === 409 && op === 'resume') return 'That conversation is open in another chat node. Close it there first.'
+  if (s === 409 && (op === 'catalog' || op === 'models')) return 'Too many Claude sessions are open. Send a message or close another chat to load this list.'
+  if (s === 503 && (op === 'catalog' || op === 'models')) return 'Claude could not start to list these. Showing built-in commands only.'
+  if (s === 400 && op === 'config') return 'That model or effort level is not available.'
   if (s === 409 && op === 'send') return 'This Claude session is open somewhere else. See the notice in the chat.'
   if (s === 409 && op === 'permission') return 'This request was already answered or has expired.'
   if (s === 413) return op === 'upload' ? 'The file is over the upload limit.' : 'The request is too large.'
@@ -66,6 +72,17 @@ export interface AgentChatTransport {
   setMode(mode: AgentPermissionMode): Promise<void>
   history(q: { before?: number; limit?: number }, signal?: AbortSignal): Promise<AgentChatHistoryPage>
   toolResult(toolUseId: string): Promise<string>
+  /** Slash commands of the "/" menu (built-ins, skills, custom and MCP prompts). */
+  catalog(): Promise<AgentChatCommand[]>
+  models(): Promise<AgentChatModel[]>
+  /** Change model / effort / thinking; the server answers with a `config` event. */
+  setConfig(patch: Partial<AgentChatConfig>): Promise<void>
+  /** Past conversations of this node's working directory, newest first. */
+  sessions(): Promise<AgentChatSessionSummary[]>
+  /** Switch this node to a past conversation. */
+  resume(sessionId: string): Promise<void>
+  /** Start a fresh conversation (the old one stays resumable). */
+  newConversation(): Promise<void>
 }
 
 /** One SSE frame -> event; null for anything malformed or of an unknown kind (newer server). */
@@ -87,6 +104,11 @@ function historyPage(body: unknown): AgentChatHistoryPage {
   const b = body && typeof body === 'object' ? (body as { items?: unknown; next?: unknown }) : {}
   const items = Array.isArray(b.items) ? (b.items as HistoryItem[]).filter((i) => i && typeof i === 'object' && typeof i.t === 'string' && typeof i.cursor === 'number') : []
   return { items, next: typeof b.next === 'number' ? b.next : null }
+}
+
+const listOf = <T>(body: unknown, key: string, ok: (v: Record<string, unknown>) => boolean): T[] => {
+  const list = body && typeof body === 'object' ? (body as Record<string, unknown>)[key] : undefined
+  return Array.isArray(list) ? (list.filter((v) => v && typeof v === 'object' && ok(v)) as T[]) : []
 }
 
 export function createAgentChatTransport(nodeId: string, createSource?: (url: string) => ChatEventSource): AgentChatTransport {
@@ -131,5 +153,11 @@ export function createAgentChatTransport(nodeId: string, createSource?: (url: st
       const body = await call<{ result?: unknown }>('tool result', `history?tool=${encodeURIComponent(toolUseId)}`)
       return typeof body?.result === 'string' ? body.result : ''
     },
+    catalog: async () => listOf<AgentChatCommand>(await call<unknown>('catalog', 'catalog'), 'commands', (c) => typeof c.name === 'string'),
+    models: async () => listOf<AgentChatModel>(await call<unknown>('models', 'models'), 'models', (m) => typeof m.value === 'string'),
+    setConfig: (patch) => post('config', 'config', patch),
+    sessions: async () => listOf<AgentChatSessionSummary>(await call<unknown>('sessions', 'sessions'), 'sessions', (x) => typeof x.sessionId === 'string'),
+    resume: (sessionId) => post('resume', 'resume', { sessionId }),
+    newConversation: () => post('new conversation', 'new', {}),
   }
 }

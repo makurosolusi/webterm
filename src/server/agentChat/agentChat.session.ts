@@ -1,49 +1,35 @@
 // One agent chat node's live Claude session (PLAN/AGENT-CHAT.md D4, D6, D7): owns at most one SDK
-// `Query` (streaming input), opened lazily on the first send, closed after an idle period and reopened
-// with `resume`. Keeps the in-memory event log replayed to reconnecting clients. Permission prompts are
-// handed to the injected gate (server-io's broker); this class never answers one itself.
-import type { CanUseTool, PermissionResult, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentChatEvent, AgentChatEventBody, AgentChatImage, AgentChatStatus } from '../../shared/agentChat.wire'
+// `Query` (streaming input), opened lazily on the first send (or `warm()` for the "/" catalog), closed
+// after an idle period and reopened with `resume`. Keeps the in-memory event log replayed to
+// reconnecting clients. Permission prompts go through agentChat.permission.ts to the injected gate.
+import type { CanUseTool, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentChatConfig, AgentChatEvent, AgentChatEventBody, AgentChatImage, AgentChatStatus } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
 import { createLogger } from '../logs'
 import { capLogImages, userTurn } from './agentChat.attach'
+import { AGENT_CHAT_DEFAULT_CONFIG, applyConfigLive, mergeConfig, type AgentChatConfigPatch } from './agentChat.controls'
 import { createAgentChatMapper } from './agentChat.events'
 import { Inbox } from './agentChat.inbox'
 import { agentChatPermissionMode, createStderrTail, type AgentChatOpen } from './agentChat.options'
+import { createCanUseTool, type PermissionGate } from './agentChat.permission'
+
+export type { PermissionGate }
 
 const log = createLogger('agent-chat')
 
 export const AGENT_CHAT_IDLE_CLOSE_MS = 10 * 60_000
 export const AGENT_CHAT_EVENT_LOG_MAX = 2_000
-const CANCELLED_MESSAGE = 'The permission request was cancelled before an answer arrived.'
-
-export interface PermissionGate {
-  request(nodeId: string, req: {
-    requestId: string; toolName: string; toolUseId: string; input: Record<string, unknown>
-    suggestions?: unknown[]; title?: string; description?: string; signal: AbortSignal
-  }): Promise<PermissionResult>
-}
-
 export interface AgentChatSessionDeps {
   nodeId: string
   /** Opens the Query; production = `agentChatQueryOpener(...)` (agentChat.options.ts), tests inject a fake. */
   open: AgentChatOpen
   gate: PermissionGate
-  /** First init carrying a new session_id: server-io persists it to the node. */
+  /** A new session_id (first init, /clear reset): the pool re-locks it, the client persists it. */
   onSessionId(id: string): void
   now?: () => number
   /** Test override of AGENT_CHAT_IDLE_CLOSE_MS. */
   idleMs?: number
 }
-
-const permissionKind = (toolName: string): 'tool' | 'question' | 'plan' =>
-  toolName === 'AskUserQuestion' ? 'question' : toolName === 'ExitPlanMode' ? 'plan' : 'tool'
-
-const aborted = (signal: AbortSignal): Promise<never> => new Promise((_, reject) => {
-  const fail = (): void => reject(new Error('permission request aborted'))
-  if (signal.aborted) fail()
-  else signal.addEventListener('abort', fail, { once: true })
-})
 
 export class AgentChatSession {
   readonly nodeId: string
@@ -54,6 +40,7 @@ export class AgentChatSession {
   private running = false
   private closed = false
   private mode?: AgentPermissionMode
+  private config: AgentChatConfig = AGENT_CHAT_DEFAULT_CONFIG
   private seq = 0
   private log: AgentChatEvent[] = []
   private subs = new Set<(e: AgentChatEvent) => void>()
@@ -62,10 +49,15 @@ export class AgentChatSession {
   private stderr = createStderrTail()
   private idleTimer?: ReturnType<typeof setTimeout>
   private last: number
+  private readonly canUseTool: CanUseTool
 
   constructor(private readonly deps: AgentChatSessionDeps, private sessionId?: string) {
     this.nodeId = deps.nodeId
     this.last = this.now()
+    this.canUseTool = createCanUseTool({
+      nodeId: deps.nodeId, gate: deps.gate, pending: this.pending,
+      emit: (e) => this.emit(e), denied: (id) => this.mapper.denied(id), fail: (op, err) => this.fail(op, err), running: () => this.running,
+    })
   }
 
   status(): AgentChatStatus { return this.st }
@@ -94,6 +86,7 @@ export class AgentChatSession {
     const turn = userTurn(text, images, p)
     this.inbox?.push(turn.message)
     this.emit({ t: 'message', messageId: turn.id, role: 'user', parts: turn.parts })
+    if (this.running) { this.mapper.queue(turn.id); this.emit({ t: 'queued', messageId: turn.id, queued: true }) }
     if (!this.running) this.emit({ t: 'status', status: opening ? 'starting' : 'thinking' })
     this.running = true
   }
@@ -113,6 +106,39 @@ export class AgentChatSession {
     const sdkMode = agentChatPermissionMode(mode)
     if (this.q) await this.q.setPermissionMode(sdkMode)
     this.emit({ t: 'mode', mode: sdkMode })
+  }
+
+  /** Merge a config change: live on an open Query, else stored for the next open. Emits `config`. */
+  async setConfig(patch: AgentChatConfigPatch): Promise<void> {
+    const next = mergeConfig(this.config, patch)
+    if (this.q) await applyConfigLive(this.q, this.config, next)
+    this.config = next
+    this.emit({ t: 'config', config: next })
+  }
+
+  /** Open the Query without a turn (the "/" catalog before the first message); closes on idle as usual. */
+  warm(): void {
+    if (this.closed) throw new Error(`agent chat warm: session for node ${this.nodeId} is closed`)
+    if (this.q) return
+    this.openQuery()
+    this.armIdle()
+  }
+
+  /** Run a control request on the open Query (`warm()` first). */
+  control<T>(fn: (q: Query) => Promise<T>): Promise<T> {
+    if (!this.q) return Promise.reject(new Error(`agent chat control: no open Query for node ${this.nodeId}`))
+    this.touchIdle()
+    return fn(this.q)
+  }
+
+  /** Follow another conversation (resume) or a fresh one (undefined); the timeline starts over. Never while busy. */
+  switchTo(sessionId: string | undefined): void {
+    if (this.running) throw new Error(`agent chat switch: node ${this.nodeId} is running a turn`)
+    this.closeQuery()
+    this.sessionId = sessionId
+    this.mapper = createAgentChatMapper()
+    this.emit({ t: 'reset', sessionId: sessionId ?? '' })
+    this.emit({ t: 'status', status: 'idle' })
   }
 
   /** A client cursor past this log means the server restarted under an open page: number on after it. */
@@ -143,6 +169,9 @@ export class AgentChatSession {
     this.idleTimer = undefined
   }
 
+  /** Restart the idle close of a warm (turnless) Query on activity. */
+  private touchIdle(): void { if (!this.running) this.armIdle() }
+
   private openQuery(): void {
     const abort = new AbortController()
     const inbox = new Inbox()
@@ -150,6 +179,7 @@ export class AgentChatSession {
     this.inbox = inbox
     const q = this.deps.open(this.sessionId, this.canUseTool, abort, {
       prompt: inbox,
+      config: this.config,
       ...(this.mode ? { mode: this.mode } : {}),
       notice: (text) => this.emit({ t: 'notice', level: 'warn', text }),
       stderr: (chunk) => this.stderr.push(chunk),
@@ -173,16 +203,18 @@ export class AgentChatSession {
 
   private handle(m: SDKMessage): void {
     this.last = this.now()
-    if (m.type === 'system' && m.subtype === 'init' && m.session_id !== this.sessionId) {
-      this.sessionId = m.session_id
-      this.deps.onSessionId(m.session_id)
-    }
-    if (m.type !== 'result') this.running = true
-    else this.running = false
+    // Turn frames only: a warm Query's system frames (commands_changed, ...) are no turn.
+    if (m.type === 'result') this.running = false
+    else if (m.type !== 'system') this.running = true
     for (const e of this.mapper.map(m)) {
       // canUseTool runs as soon as the SDK reads the request, often before the tool_use is mapped here: keep 'awaiting'.
       if (e.t === 'status' && this.pending.size > 0 && (e.status === 'tool' || e.status === 'thinking')) continue
+      if ((e.t === 'init' || e.t === 'reset') && e.sessionId !== this.sessionId) {
+        this.sessionId = e.sessionId
+        this.deps.onSessionId(e.sessionId)
+      }
       this.emit(e)
+      if (e.t === 'init') this.emit({ t: 'config', config: this.config })
     }
     if (m.type === 'result') this.armIdle()
   }
@@ -194,42 +226,6 @@ export class AgentChatSession {
       this.closeQuery()
       this.emit({ t: 'status', status: 'idle' })
     }, this.deps.idleMs ?? AGENT_CHAT_IDLE_CLOSE_MS)
-  }
-
-  private readonly canUseTool: CanUseTool = async (toolName, input, opts) => {
-    const requestId = opts.requestId
-    const local = new AbortController()
-    opts.signal.addEventListener('abort', () => local.abort(), { once: true })
-    this.pending.set(requestId, local)
-    this.emit({ t: 'status', status: 'awaiting' })
-    this.emit({
-      t: 'permission', requestId, kind: permissionKind(toolName), toolName, toolUseId: opts.toolUseID, input,
-      ...(opts.suggestions ? { suggestions: opts.suggestions } : {}), ...(opts.title ? { title: opts.title } : {}), ...(opts.description ? { description: opts.description } : {}),
-    })
-    let outcome: 'allow' | 'deny' | 'cancelled' = 'cancelled'
-    try {
-      const res = await Promise.race([
-        this.deps.gate.request(this.nodeId, {
-          requestId, toolName, toolUseId: opts.toolUseID, input, ...(opts.suggestions ? { suggestions: opts.suggestions } : {}),
-          ...(opts.title ? { title: opts.title } : {}), ...(opts.description ? { description: opts.description } : {}), signal: local.signal,
-        }),
-        aborted(local.signal),
-      ])
-      outcome = res.behavior
-      if (res.behavior === 'deny') this.mapper.denied(opts.toolUseID)
-      // CLIs before v2.1.207 reject an allow without updatedInput, so it is always echoed.
-      return res.behavior === 'allow' ? { ...res, updatedInput: res.updatedInput ?? input } : res
-    } catch (err) {
-      if (!local.signal.aborted) this.fail('permission', err)
-      this.mapper.denied(opts.toolUseID)
-      return { behavior: 'deny', message: CANCELLED_MESSAGE }
-    } finally {
-      // close() already reported this request as 'expired' and removed it.
-      if (this.pending.delete(requestId)) {
-        this.emit({ t: 'permissionResolved', requestId, outcome })
-        if (this.pending.size === 0 && this.running) this.emit({ t: 'status', status: outcome === 'allow' ? 'tool' : 'thinking' })
-      }
-    }
   }
 
   /** Query failed: status error + notice with context; the next send reopens with resume. */
@@ -261,6 +257,7 @@ export class AgentChatSession {
       ctl.abort()
       this.emit({ t: 'permissionResolved', requestId, outcome: 'expired' })
     }
+    for (const id of this.mapper.dropQueued()) this.emit({ t: 'queued', messageId: id, queued: false })
     const q = this.q
     this.abort?.abort()
     this.inbox?.end()

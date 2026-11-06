@@ -26,5 +26,10 @@ export class AgentChatLock {
     for (const [id, owner] of this.owners) if (owner === nodeId) this.owners.delete(id)
   }
 
+  /** Drop one id if `nodeId` holds it (the node switched conversations). */
+  drop(sessionId: string, nodeId: string): void {
+    if (this.owners.get(sessionId) === nodeId) this.owners.delete(sessionId)
+  }
+
   owner(sessionId: string): string | undefined { return this.owners.get(sessionId) }
 }
