@@ -65,11 +65,12 @@ export type ListKeyAction =
   | { kind: 'delete'; permanent: boolean }
   | { kind: 'menu' }
   | { kind: 'copyPath'; relative: boolean }
+  | { kind: 'reveal' }
   | null
 
 export interface ListKeyEvent {
   key: string
-  /** `KeyboardEvent.code`: dipakai ⌥⌘C karena `key` di macOS menjadi "ç" saat Alt ditekan. */
+  /** `KeyboardEvent.code`: dipakai ⌥⌘C/⌥⌘R karena `key` di macOS menjadi "ç" saat Alt ditekan. */
   code?: string
   alt?: boolean
   meta?: boolean
@@ -94,6 +95,7 @@ export function listKeyAction(
   const cmd = e.meta || e.ctrl
   if (cmd && !e.alt && e.key.toLowerCase() === 'a') return count > 0 ? { kind: 'selectAll' } : null
   if (cmd && e.alt && e.code === 'KeyC') return { kind: 'copyPath', relative: !!e.shift }
+  if (cmd && e.alt && !e.shift && e.code === 'KeyR') return { kind: 'reveal' }
   if (e.ctrl) return null
   if (e.key === 'ContextMenu' || (e.shift && e.key === 'F10')) return { kind: 'menu' }
   if (e.key === 'ArrowUp' && (e.alt || e.meta)) return { kind: 'up' }

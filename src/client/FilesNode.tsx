@@ -28,6 +28,7 @@ import { randomId } from './randomId'
 import { useFilesInput } from './useFilesInput'
 import { useFilesListing } from './useFilesListing'
 import { useFilesOpen } from './useFilesOpen'
+import { revealPath } from './workspaceCreate/workspaceCreate.api'
 import './files.css'
 
 const COLLAPSED_H = 40
@@ -97,7 +98,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   for (const s of FILES_SLOTS) s.useSlot?.(ctx)
   const decorate = (e: FileMeta) => decorateEntry(FILES_SLOTS, e, ctx)
 
-  // Gulirkan kursor ke dalam pandangan setiap kali ia pindah (keyboard, klik, Reveal).
+  // Gulirkan kursor ke dalam pandangan setiap kali ia pindah (keyboard, klik).
   // `scrollIntoView` juga menggulirkan ancestor — di canvas itu menyeret seluruh pane React Flow.
   useEffect(() => {
     const box = listRef.current
@@ -113,6 +114,12 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     const text = relative ? relativePath(rootRef.current, target) : target
     // Clipboard API menolak di konteks tak aman / tanpa izin; katakan, jangan diam.
     navigator.clipboard?.writeText(text).catch(() => setNotice('Could not copy the path.'))
+  }
+
+  /** Show the entry in the OS file manager (Finder / File Explorer); the server runs it. */
+  const reveal = (entry: FileMeta) => {
+    revealPath(childPath(cwd, entry.name)).catch((e: unknown) =>
+      setNotice(`Could not reveal “${entry.name}”: ${e instanceof Error ? e.message : String(e)}`))
   }
 
   const startCreate = (dir: boolean) => {
@@ -149,6 +156,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
       case 'select': if (at) setSel(act.extend ? selectRange(sel, shown, act.index) : selectOne(at.name)); break
       case 'selectAll': setSel(selectAll(sel, shown)); break
       case 'copyPath': copy(shown[cursor] ?? null, act.relative); break
+      case 'reveal': if (shown[cursor]) reveal(shown[cursor]); break
       case 'menu': {
         const rect = (treeRef.current?.children[cursor] ?? listRef.current)?.getBoundingClientRect()
         setMenu({ x: rect?.left ?? 0, y: rect?.bottom ?? 0, entry: shown[cursor] ?? null })
@@ -259,7 +267,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             terminal: () => addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }),
             newEntry: startCreate,
             refresh,
-            reveal: (e) => { setQuery(''); setSel(selectOne(e.name)); listRef.current?.focus() },
+            reveal,
             copyPath: (relative) => copy(menu.entry, relative),
           }}
         />
