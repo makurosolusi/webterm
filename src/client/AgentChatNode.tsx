@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
@@ -8,14 +8,17 @@ import { randomId } from './randomId'
 import { AGENT_CHAT_TITLE } from './agentChat.add'
 import { agentConfig, FALLBACK_AGENT_COLOR } from '../shared/workspace'
 import type { Comment } from '../shared/workspace'
+import type { AgentChatData } from '../shared/agentChat.shape'
+import { AgentChatView, type AgentChatPatch } from './agentChat/agentChatView'
 
 const COLLAPSED_H = 40
 const DEFAULT_H = 400
 
 /** Canvas shell of an Agent Chat node: chrome, cable handles and resizer around the chat body. */
 function AgentChatNode({ id, data, selected, height }: NodeProps) {
-  const d = data as { color?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
+  const d = data as { color?: string; title?: string; collapsed?: boolean; comments?: Comment[] } & Pick<AgentChatData, 'chatSessionId' | 'permissionMode'>
   const rf = useReactFlow()
+  const onNodeData = useCallback((patch: AgentChatPatch) => rf.updateNodeData(id, patch), [rf, id])
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? agentConfig('claude')?.color ?? FALLBACK_AGENT_COLOR
   const comments = d.comments ?? []
@@ -47,9 +50,8 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
-        <div className="node-body flex items-center justify-center text-sm opacity-70">
-          {/* Chat body is mounted by AgentChatView (PLAN/AGENT-CHAT.md W2). */}
-          Agent chat
+        <div className="node-body">
+          <AgentChatView nodeId={id} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} onNodeData={onNodeData} />
         </div>
         {/* Same cable handles as AgentNode: `agentId: 'claude'` makes it a context-link end (`canLink`). */}
         <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />
