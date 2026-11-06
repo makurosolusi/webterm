@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Readable } from 'node:stream'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { FS_ERR_STATUS } from '../shared/fsContract'
 import { FILES_FLAG } from './envRegistry.files'
@@ -110,6 +111,19 @@ describe('fsApi dispatcher', () => {
     expect((await fsApiRoute('/api/fs/mkdir', 'POST', q(), json({ path: join(dir, 'sub') })))?.body).toEqual({ ok: true, created: false })
     expect((await fsApiRoute('/api/fs/stat', 'GET', q({ path: f }), noBody))?.body).toMatchObject({ ok: true, meta: { name: 'legacy.txt', dir: false } })
     expect((await fsApiRoute('/api/fs/stat', 'GET', q({ path: join(dir, 'nope') }), noBody))?.status).toBe(404)
+  })
+
+  it('upload: existing name -> 409 EEXIST unless overwrite=1, which replaces it', async () => {
+    process.env[FILES_FLAG.MUTATE] = 'on' // upload hangs off filesWrite (MUTATE) + its own key
+    process.env[FILES_FLAG.UPLOAD] = 'on'
+    const f = join(dir, 'up.txt')
+    await writeFile(f, 'ORIGINAL')
+    const send = (extra: Record<string, string>) => fsApiRoute('/api/fs/upload', 'POST', q({ dir, name: 'up.txt', ...extra }), noBody, { headers: {}, stream: Readable.from([Buffer.from('NEW')]) })
+    expect((await send({}))?.status).toBe(FS_ERR_STATUS.EEXIST)
+    expect((await send({ overwrite: '0' }))?.status).toBe(FS_ERR_STATUS.EEXIST)
+    expect(await readFile(f, 'utf8')).toBe('ORIGINAL')
+    expect(await send({ overwrite: '1' })).toEqual({ status: 200, body: { ok: true, version: expect.stringMatching(/^\d+-3$/) } })
+    expect(await readFile(f, 'utf8')).toBe('NEW')
   })
 
   it('list-v2 dipotong di LIST_MAX dan menandai truncated', async () => {

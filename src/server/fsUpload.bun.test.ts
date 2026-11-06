@@ -100,3 +100,82 @@ test('missing directory, file as directory, missing body, relative dir', async (
     expect((await fs.readdir(dir)).join(',')).toBe('f')
   })
 })
+
+test('overwrite replaces an existing file atomically; no tmp left', async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(npath.join(dir, 'a.txt'), 'ORIGINAL')
+    const r = await uploadFile(dir, 'a.txt', body('NEW'), MAX, true)
+    expect(code(r)).toBe('ok')
+    expect(await fs.readFile(npath.join(dir, 'a.txt'), 'utf8')).toBe('NEW')
+    expect((await fs.readdir(dir)).join(',')).toBe('a.txt')
+  })
+})
+
+test('overwrite with no existing file just creates it', async () => {
+  await withDir(async (dir) => {
+    expect(code(await uploadFile(dir, 'new.txt', body('x'), MAX, true))).toBe('ok')
+    expect(await fs.readFile(npath.join(dir, 'new.txt'), 'utf8')).toBe('x')
+  })
+})
+
+test('overwrite onto a directory or a symlink to one: EISDIR, both untouched, no tmp', async () => {
+  await withDir(async (dir) => {
+    await fs.mkdir(npath.join(dir, 'sub'))
+    await fs.writeFile(npath.join(dir, 'sub', 'keep'), 'K')
+    await fs.symlink(npath.join(dir, 'sub'), npath.join(dir, 'link'))
+    expect(code(await uploadFile(dir, 'sub', body('x'), MAX, true))).toBe('EISDIR')
+    expect(code(await uploadFile(dir, 'link', body('x'), MAX, true))).toBe('EISDIR')
+    expect((await fs.lstat(npath.join(dir, 'link'))).isSymbolicLink()).toBe(true)
+    expect((await fs.readdir(npath.join(dir, 'sub'))).join(',')).toBe('keep')
+    expect((await fs.readdir(dir)).sort().join(',')).toBe('link,sub')
+  })
+})
+
+test('overwrite onto a symlink to a file outside replaces the link, never the outside target', async () => {
+  await withDir(async (outside) => {
+    await withDir(async (dir) => {
+      const target = npath.join(outside, 'secret')
+      await fs.writeFile(target, 'OUTSIDE')
+      await fs.symlink(target, npath.join(dir, 'ln'))
+      expect(code(await uploadFile(dir, 'ln', body('NEW'), MAX, true))).toBe('ok')
+      expect(await fs.readFile(target, 'utf8')).toBe('OUTSIDE')
+      expect((await fs.lstat(npath.join(dir, 'ln'))).isFile()).toBe(true)
+      expect(await fs.readFile(npath.join(dir, 'ln'), 'utf8')).toBe('NEW')
+    })
+  })
+})
+
+test('capped or aborted overwrite: original untouched, tmp removed', async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(npath.join(dir, 'a.txt'), 'ORIGINAL')
+    expect(code(await uploadFile(dir, 'a.txt', body('a'.repeat(MAX + 1)), MAX, true))).toBe('ETOOLARGE')
+    const s = new PassThrough()
+    const p = uploadFile(dir, 'a.txt', s, MAX, true)
+    s.write('partial')
+    await new Promise((r) => setTimeout(r, 30))
+    s.destroy(new Error('client went away'))
+    expect(code(await p)).toBe('EIO')
+    expect(await fs.readFile(npath.join(dir, 'a.txt'), 'utf8')).toBe('ORIGINAL')
+    expect((await fs.readdir(dir)).join(',')).toBe('a.txt')
+  })
+})
+
+test('overwrite keeps the replaced file permission bits (executable stays executable)', async () => {
+  await withDir(async (dir) => {
+    const f = npath.join(dir, 'run.sh')
+    await fs.writeFile(f, 'OLD')
+    await fs.chmod(f, 0o755)
+    expect(code(await uploadFile(dir, 'run.sh', body('#!/bin/sh'), MAX, true))).toBe('ok')
+    expect(((await fs.stat(f)).mode & 0o7777).toString(8)).toBe('755')
+    expect(await fs.readFile(f, 'utf8')).toBe('#!/bin/sh')
+  })
+})
+
+test('overwrite where the target cannot be inspected: error reported, nothing written', async () => {
+  await withDir(async (dir) => {
+    await fs.symlink('loop', npath.join(dir, 'loop')) // stat through a self-loop fails with ELOOP, not ENOENT
+    expect(code(await uploadFile(dir, 'loop', body('x'), MAX, true))).toBe('EIO')
+    expect((await fs.lstat(npath.join(dir, 'loop'))).isSymbolicLink()).toBe(true)
+    expect((await fs.readdir(dir)).join(',')).toBe('loop')
+  })
+})

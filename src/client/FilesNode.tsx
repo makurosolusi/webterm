@@ -23,6 +23,8 @@ import {
   EMPTY_SEL, indexOfName, nfcName, selectAll, selectedNames, selectOne, selectRange, toggleName, type Sel,
 } from './filesSelection'
 import { FILES_SLOTS, type FilesSlotCtx } from './filesSlots'
+import { dismissNotice, forgetFilesNotices, notify } from './filesNotice'
+import { FilesNoticeLine, FilesProgressBar } from './FilesNoticeLine'
 import { applyView, needsMeta, relativePath, viewOf } from './filesView'
 import { randomId } from './randomId'
 import { useFilesInput } from './useFilesInput'
@@ -36,6 +38,8 @@ const COLLAPSED_H = 40
 const ROW_H = 22
 /** Segmen breadcrumb terlihat sebelum sisanya masuk menu "…". */
 const CRUMBS_MAX_VISIBLE = 4
+/** Notice id of the node's own messages (reveal/copy/create/open); one at a time, cleared on cd. */
+const NODE_NOTICE = 'node'
 
 type Menu = { x: number; y: number; entry: FileMeta | null }
 
@@ -63,10 +67,10 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [query, setQuery] = useState('')
   const [version, setVersion] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
-  const [notice, setNotice] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? 300)
+  const setNotice = (text: string) => { if (text) notify(id, { id: NODE_NOTICE, kind: 'error', text }); else dismissNotice(id, NODE_NOTICE) }
 
   const { entries, loading, verdict } = useFilesListing(cwd, version, needsMeta(view), () => {
     const want = pendingSel.current
@@ -77,7 +81,9 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
   // Filter dan seleksi (juga input nama, di `useFilesInput`) adalah pertanyaan tentang SATU direktori; membawanya ke direktori
   // berikutnya membuat folder tampak kosong karena kotak yang sudah tidak dilihat pengguna.
-  useEffect(() => { setQuery(''); setNotice(''); setSel(EMPTY_SEL) }, [cwd])
+  useEffect(() => { setQuery(''); dismissNotice(id, NODE_NOTICE); setSel(EMPTY_SEL) }, [cwd, id])
+  // Unmount = node removed (the tab portal keeps the subtree mounted across layout moves).
+  useEffect(() => () => forgetFilesNotices(id), [id])
 
   const shown = useMemo(
     () => filterEntries(applyView(entries, view), query),
@@ -93,6 +99,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     cwd, dir: cwd, entries, selection: selectedNames(entries, sel), open, nodeId: id,
     refresh: (select) => { if (select) pendingSel.current = select; refresh() },
     startInput: input.start,
+    notify: (n) => notify(id, n), dismiss: (nid) => dismissNotice(id, nid),
   }
   // Urutan FILES_SLOTS tetap, jadi jumlah hook per render konstan.
   for (const s of FILES_SLOTS) s.useSlot?.(ctx)
@@ -239,6 +246,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             />
           )}
 
+          <FilesProgressBar nodeId={id} />
           <FilesList
             nodeId={id} cwd={cwd} shown={shown} total={entries.length} sel={sel}
             loading={loading} verdict={verdict} query={query} decorate={decorate}
@@ -250,7 +258,8 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
           {/* Wilayah live: notice (mis. "Sudah ada: x") dibacakan pembaca layar tanpa memindahkan fokus. */}
           <div className="files-foot" role="status" aria-live="polite">
-            {notice || `${shown.length} of ${entries.length}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`}
+            <FilesNoticeLine nodeId={id} fallback={`${shown.length} of ${entries.length}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`} />
+            {FILES_SLOTS.map((s) => s.footer && <Fragment key={s.id}>{s.footer(ctx)}</Fragment>)}
           </div>
         </div>
       </div>

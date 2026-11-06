@@ -43,8 +43,6 @@
 /* Warna baris terpilih datang dari `:host([selected]) .wrapper` (VS Code); ikon di dalam slot
    tidak ikut aturan `::slotted(vscode-icon)`, jadi ia mengikuti warna teks secara eksplisit. */
 .files-row--sel .files-icon { color: inherit; }
-/* Entry gitignored diredamkan, bukan disembunyikan — `node_modules` masih perlu bisa dibuka. */
-.files-row--ignored { opacity: 0.45; }
 
 .files-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -63,9 +61,36 @@
   background: var(--vscode-sideBarSectionHeader-background, var(--panel-header));
   color: var(--vscode-descriptionForeground, var(--muted-2));
   font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 22px;
+}
+/* Footer = the node's one text surface (filesNotice): text fills, slot/notice icons sit right. */
+.files-foot-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-foot .files-tool { width: 16px; height: 16px; }
+.files-notice--error { color: var(--vscode-errorForeground, var(--state-warning)); }
+
+/* Thin determinate progress line on top of the list (VS Code view progress). */
+.files-progress { flex: none; position: relative; z-index: 1; height: 2px; margin-bottom: -2px; overflow: hidden; }
+.files-progress-bit { height: 100%; background: var(--vscode-progressBar-background, var(--accent)); transition: width 0.1s linear; }
+
+/* OS file drop (filesSlot.upload.drop): the node outlines; the background marks the target only,
+   the whole node for the current folder or just the folder row under the pointer. */
+.files-node { position: relative; }
+.files-node[data-upload-drop] { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+.files-node[data-upload-drop="node"],
+.files-node vscode-tree-item[data-upload-drop-row] {
+  background: var(--vscode-list-dropBackground);
+}
+.files-node[data-drop-hint]::after {
+  content: attr(data-drop-hint);
+  position: absolute; left: 50%; bottom: 32px; transform: translateX(-50%);
+  max-width: calc(100% - 16px); padding: 2px 8px; border-radius: 4px; pointer-events: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
+  color: var(--vscode-editorWidget-foreground, var(--text));
+  background: var(--vscode-editorWidget-background, var(--raised));
+  border: 1px solid var(--vscode-widget-border, var(--border));
 }
 
 /* Bilah di bawah header: breadcrumb mengisi sisa lebar, toggle tampilan di kanan. */

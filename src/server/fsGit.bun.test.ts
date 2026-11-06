@@ -3,8 +3,8 @@ import { afterAll, expect, test as it } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { gitMarks, parseStatus } from './fsGit'
+import { basename as npathBase, join } from 'node:path'
+import { gitMarks, parseBranch, parseStatus, resolveGitDir } from './fsGit'
 
 let root = ''
 const git = (...a: string[]) => execFileSync('git', ['-C', root, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { stdio: 'pipe' })
@@ -73,4 +73,79 @@ it('parseStatus: konflik u -> C, rename 2 memakan path asal, cap entri', () => {
   expect(JSON.stringify(parseStatus(out))).toBe(JSON.stringify([['conflict file.txt', 'C'], ['to new.txt', 'R'], ['x y.txt', 'M'], ['u.txt', 'U']]))
   const many = Array.from({ length: 6000 }, (_, i) => `? f${i}`).join('\0')
   expect(parseStatus(many).length).toBe(5000)
+})
+
+/** Fresh repo with one commit on `main`; returns its path and a git runner bound to it. */
+function freshRepo(prefix: string) {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
+  const run = (...a: string[]) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { stdio: 'pipe' }).toString()
+  run('init', '-q', '-b', 'main')
+  return { dir, run }
+}
+
+it('ignored: files and folders get I, folders never roll up an ignored child', async () => {
+  const { dir, run } = freshRepo('fsgit-ign-')
+  try {
+    writeFileSync(join(dir, '.gitignore'), '*.log\nbuild/\n')
+    mkdirSync(join(dir, 'build')); writeFileSync(join(dir, 'build/out.js'), 'x')
+    mkdirSync(join(dir, 'logs')); writeFileSync(join(dir, 'logs/a.log'), 'x'); writeFileSync(join(dir, 'logs/keep.txt'), 'x')
+    writeFileSync(join(dir, 'top.log'), 'x')
+    run('add', '-A'); run('commit', '-q', '-m', 'init')
+    const r = await gitMarks(dir)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.marks['top.log']).toBe('I')
+    expect(r.marks['build']).toBe('I')
+    expect(r.marks['logs/a.log']).toBe('I')
+    expect(r.marks['logs']).toBe(undefined) // clean folder with only an ignored child: no dot
+    writeFileSync(join(dir, 'logs/keep.txt'), 'changed')
+    const r2 = await gitMarks(dir)
+    if (!r2.ok) throw new Error(r2.error)
+    expect(r2.marks['logs']).toBe('M') // a real change still rolls up past the ignored sibling
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+it('branch headers: name, upstream ahead/behind, detached short oid; absent outside a repo', async () => {
+  const { dir, run } = freshRepo('fsgit-br-')
+  try {
+    writeFileSync(join(dir, 'a.txt'), '1'); run('add', '-A'); run('commit', '-q', '-m', 'one')
+    run('branch', 'base')
+    writeFileSync(join(dir, 'a.txt'), '2'); run('commit', '-qam', 'two')
+    writeFileSync(join(dir, 'a.txt'), '3'); run('commit', '-qam', 'three')
+    run('branch', '--set-upstream-to=base')
+    const r = await gitMarks(dir)
+    if (!r.ok) throw new Error(r.error)
+    expect(JSON.stringify(r.branch && { ...r.branch, head: r.branch.head.length })).toBe(JSON.stringify({ branch: 'main', head: 8, upstream: 'base', ahead: 2, behind: 0 }))
+    run('checkout', '-q', '--detach', 'base')
+    const d = await gitMarks(dir)
+    if (!d.ok) throw new Error(d.error)
+    expect(d.branch?.branch).toBe(null)
+    expect(run('rev-parse', 'HEAD').startsWith(d.branch?.head ?? '-')).toBe(true)
+    const plain = realpathSync(mkdtempSync(join(tmpdir(), 'fsgit-nobr-')))
+    try {
+      const n = await gitMarks(plain)
+      expect(n.ok && n.branch).toBe(undefined)
+    } finally { rmSync(plain, { recursive: true, force: true }) }
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+it('parseStatus: ! record -> I; parseBranch reads -z headers', () => {
+  expect(JSON.stringify(parseStatus(['! node_modules/', '? u.txt', ''].join('\0')))).toBe(JSON.stringify([['node_modules/', 'I'], ['u.txt', 'U']]))
+  const out = ['# branch.oid 0123456789abcdef', '# branch.head feat', '# branch.upstream origin/feat', '# branch.ab +3 -4', '? x', ''].join('\0')
+  expect(JSON.stringify(parseBranch(out))).toBe(JSON.stringify({ branch: 'feat', head: '01234567', upstream: 'origin/feat', ahead: 3, behind: 4 }))
+  expect(parseBranch('? x\0')).toBe(null)
+})
+
+it('resolveGitDir: main repo -> .git, linked worktree (.git file) -> .git/worktrees/<name> sharing the main .git, plain dir -> null', async () => {
+  const { dir, run } = freshRepo('fsgit-wt-')
+  const wt = `${dir}-linked`
+  try {
+    writeFileSync(join(dir, 'a.txt'), '1'); run('add', '-A'); run('commit', '-q', '-m', 'one')
+    run('worktree', 'add', '-q', wt)
+    const git = join(dir, '.git')
+    expect(JSON.stringify(await resolveGitDir(dir))).toBe(JSON.stringify({ gitDir: git, commonDir: git }))
+    mkdirSync(join(dir, 'sub'))
+    expect(JSON.stringify(await resolveGitDir(join(dir, 'sub')))).toBe(JSON.stringify({ gitDir: git, commonDir: git })) // relative common dir resolved
+    expect(JSON.stringify(await resolveGitDir(wt))).toBe(JSON.stringify({ gitDir: join(git, 'worktrees', npathBase(wt)), commonDir: git }))
+    expect(await resolveGitDir(tmpdir())).toBe(null)
+  } finally { rmSync(wt, { recursive: true, force: true }); rmSync(dir, { recursive: true, force: true }) }
 })

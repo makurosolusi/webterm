@@ -1,11 +1,13 @@
 // Hub watcher (`fsWatch.ts`) terhadap filesystem NYATA di $TMPDIR + seam pemantau palsu untuk jalur
 // gagal. Bun-only; matcher terbatas pada yang diekspos `bun-test.d.ts` (toBe/toContain).
 import { test, expect, afterEach } from 'bun:test'
-import { promises as fs } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { promises as fs, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import npath from 'node:path'
 import type { ServerMsg } from '../shared/protocol'
 import { createFsWatchHub, type WatchFn } from './fsWatch'
+import { gitMarks, resolveGitDir } from './fsGit'
 
 const DEBOUNCE = 100
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -156,3 +158,148 @@ test('cap on watched directories and invalid paths are ignored', async () => {
     hub.dropClient(c.send)
   })
 })
+
+const REPO = { gitDir: '/repo/.git', commonDir: '/repo/.git' }
+
+test('git watchers: one gitdir + one recursive refs per repo, shared by its dirs and worktrees, counted against max, closed with the last dir', async () => {
+  await withDir(async (dir) => {
+    const a = npath.join(dir, 'a'), b = npath.join(dir, 'b'), wt = npath.join(dir, 'wt'), other = npath.join(dir, 'other')
+    for (const d of [a, b, wt, other]) await fs.mkdir(d)
+    const opened: string[] = []
+    const watch: WatchFn = (d, _ev, _err, rec) => { opened.push(`${d}${rec ? ' -r' : ''}`); return { close: () => { opened.splice(opened.indexOf(`${d}${rec ? ' -r' : ''}`), 1) } } }
+    const gitDir = async (d: string) => (d === other ? null : d === wt ? { gitDir: '/repo/.git/worktrees/wt', commonDir: '/repo/.git' } : REPO)
+    const hub = track(createFsWatchHub({ watch, gitDir, max: 6 }))
+    const c = client()
+    hub.watch(c.send, a); hub.watch(c.send, b)
+    await sleep(10)
+    expect(hub.gitSize()).toBe(2)
+    expect(opened.filter((d) => d.startsWith('/repo')).sort().join('|')).toBe('/repo/.git|/repo/.git/refs -r')
+    hub.watch(c.send, wt) // own gitdir, shares the main repo's refs watcher
+    await sleep(10)
+    expect(hub.gitSize()).toBe(3)
+    hub.watch(c.send, other) // 3 dirs + 3 git watchers = max: refused
+    expect(hub.size()).toBe(3)
+    hub.unwatch(c.send, wt)
+    expect(hub.gitSize()).toBe(2)
+    hub.unwatch(c.send, a)
+    expect(hub.gitSize()).toBe(2)
+    hub.unwatch(c.send, b)
+    expect(hub.gitSize()).toBe(0)
+    expect(opened.length).toBe(0)
+  })
+})
+
+test('git events: only gitdir state files and any refs change mark every dir of the repo dirty', async () => {
+  await withDir(async (dir) => {
+    const a = npath.join(dir, 'a'), b = npath.join(dir, 'b')
+    await fs.mkdir(a); await fs.mkdir(b)
+    const fire: Record<string, (name: string | null) => void> = {}
+    const watch: WatchFn = (d, onEvent) => { fire[d] = onEvent; return { close() {} } }
+    const hub = track(createFsWatchHub({ watch, gitDir: async () => REPO, debounceMs: DEBOUNCE }))
+    const c = client()
+    hub.watch(c.send, a); hub.watch(c.send, b)
+    await sleep(10)
+    fire['/repo/.git']('objects'); fire['/repo/.git']('index.lock'); fire['/repo/.git']('logs')
+    await sleep(DEBOUNCE * 3)
+    expect(c.got.length).toBe(0)
+    for (const n of ['index', 'HEAD', 'FETCH_HEAD', 'ORIG_HEAD', 'packed-refs']) {
+      c.got.length = 0
+      fire['/repo/.git'](n)
+      await sleep(DEBOUNCE * 2)
+      expect(`${n}:${c.got.sort().join('|')}`).toBe(`${n}:${[a, b].sort().join('|')}`)
+    }
+    c.got.length = 0
+    fire['/repo/.git/refs']('remotes/origin/main')
+    await sleep(DEBOUNCE * 2)
+    expect(c.got.length).toBe(2)
+  })
+})
+
+const gitIn = (cwd: string, ...a: string[]) =>
+  execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { stdio: 'pipe' }).toString()
+
+test('real repo: our git status never dirties (no loop); a commit does, and the M mark disappears', async () => {
+  await withDir(async (raw) => {
+    const dir = realpathSync(raw)
+    gitIn(dir, 'init', '-q'); await fs.writeFile(npath.join(dir, 'a.txt'), '1'); gitIn(dir, 'add', '-A'); gitIn(dir, 'commit', '-qm', 'one')
+    await fs.writeFile(npath.join(dir, 'a.txt'), '2')
+    const hub = track(createFsWatchHub({ debounceMs: DEBOUNCE, gitDir: resolveGitDir }))
+    const c = client()
+    hub.watch(c.send, dir)
+    await sleep(300) // gitdir lookup + watchers armed; the write above is settled
+    c.got.length = 0
+    const marks = async () => { const r = await gitMarks(dir); if (!r.ok) throw new Error(r.error); return r.marks }
+    for (let i = 0; i < 3; i++) expect((await marks())['a.txt']).toBe('M')
+    await sleep(DEBOUNCE * 4)
+    expect(c.got.length).toBe(0)
+    expect(hub.gitSize()).toBe(2) // gitdir + refs
+    gitIn(dir, 'commit', '-qam', 'two')
+    await sleep(DEBOUNCE * 4)
+    expect(c.got.length > 0).toBe(true)
+    expect((await marks())['a.txt']).toBe(undefined)
+    hub.dropClient(c.send)
+    expect(hub.gitSize()).toBe(0)
+  })
+})
+
+test('real linked worktree (.git is a file): commit inside it dirties the watched worktree dir', async () => {
+  await withDir(async (raw) => {
+    const main = npath.join(realpathSync(raw), 'main'), wt = npath.join(realpathSync(raw), 'wt')
+    await fs.mkdir(main)
+    gitIn(main, 'init', '-q'); await fs.writeFile(npath.join(main, 'a.txt'), '1'); gitIn(main, 'add', '-A'); gitIn(main, 'commit', '-qm', 'one')
+    gitIn(main, 'worktree', 'add', '-q', wt)
+    const hub = track(createFsWatchHub({ debounceMs: DEBOUNCE, gitDir: resolveGitDir }))
+    const c = client()
+    hub.watch(c.send, wt)
+    await sleep(300)
+    c.got.length = 0
+    await fs.writeFile(npath.join(wt, 'a.txt'), '2')
+    gitIn(wt, 'add', 'a.txt')
+    await sleep(DEBOUNCE * 4)
+    c.got.length = 0 // the write itself dirtied the dir; what follows only touches the worktree gitdir
+    gitIn(wt, 'commit', '-qm', 'two')
+    await sleep(DEBOUNCE * 4)
+    expect(c.got[0]).toBe(wt)
+  })
+})
+
+/** Repo `work` cloned from a bare `origin`, plus a second clone `peer` that can push behind its back. */
+async function withOrigin(fn: (p: { work: string; peer: string; git: typeof gitIn }) => Promise<void>): Promise<void> {
+  await withDir(async (raw) => {
+    const root = realpathSync(raw), origin = npath.join(root, 'origin.git'), work = npath.join(root, 'work'), peer = npath.join(root, 'peer')
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin])
+    gitIn(root, 'clone', '-q', origin, work)
+    await fs.writeFile(npath.join(work, 'a.txt'), '1'); gitIn(work, 'add', '-A'); gitIn(work, 'commit', '-qm', 'one'); gitIn(work, 'push', '-q', '-u', 'origin', 'main')
+    gitIn(root, 'clone', '-q', origin, peer)
+    await fn({ work, peer, git: gitIn })
+  })
+}
+
+test('real origin: empty commit, push and fetch each dirty via refs/FETCH_HEAD and the footer counts follow', async () => {
+  await withOrigin(async ({ work, peer, git }) => {
+    const hub = track(createFsWatchHub({ debounceMs: DEBOUNCE, gitDir: resolveGitDir }))
+    const c = client()
+    hub.watch(c.send, work)
+    await sleep(300)
+    const branch = async () => { const r = await gitMarks(work); if (!r.ok) throw new Error(r.error); return r.branch }
+    const step = async (label: string, run: () => void) => {
+      c.got.length = 0
+      run()
+      await sleep(DEBOUNCE * 4)
+      expect(`${label}:${c.got.length > 0}`).toBe(`${label}:true`)
+    }
+    await step('empty commit', () => git(work, 'commit', '-q', '--allow-empty', '-m', 'empty'))
+    expect((await branch())?.ahead).toBe(1)
+    c.got.length = 0
+    await branch(); await sleep(DEBOUNCE * 4)
+    expect(c.got.length).toBe(0) // our own status run still does not loop
+    await step('push', () => git(work, 'push', '-q'))
+    expect((await branch())?.ahead).toBe(0)
+    git(peer, 'pull', '-q'); git(peer, 'commit', '-q', '--allow-empty', '-m', 'remote'); git(peer, 'push', '-q')
+    await step('fetch', () => git(work, 'fetch', '-q'))
+    expect((await branch())?.behind).toBe(1)
+    hub.dropClient(c.send)
+    expect(hub.gitSize()).toBe(0)
+    expect(hub.size()).toBe(0)
+  })
+}, 20_000) // ~12 real git runs + debounce windows exceed bun's 5s default

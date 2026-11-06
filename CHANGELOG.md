@@ -53,6 +53,12 @@ Operator notes:
 - The bottom panel is docked in canvas mode too: the canvas (and Welcome screen) now shrink to sit above it instead of being covered.
 - The activity bar icon and status bar item of the view that is actually shown are highlighted (an open-but-hidden view is no longer highlighted).
 - Text and icons around the canvas now use VS Code's sizes: 13px UI text, 16px icons, 24px activity bar icons, 22px list rows, 24px menu rows and 12px status bar text. Tooltips grew from 12px to 13px, and tab strip titles in tab layout from 12px to 13px with 16px icons. Node contents on the canvas are not affected; they still follow the canvas zoom.
+- Uploading a file that already exists in a Files node's folder now asks "Replace it?" with Replace, Keep Both and Skip, instead of failing. Keep Both saves the upload as "name copy.ext" (then "copy 2", and so on). With more files queued, "Apply to all remaining conflicts" uses the same answer for the rest. Closing the dialog or pressing Esc counts as Skip. Replace swaps the file in one step, so it is never left half-written, and keeps its permissions.
+- Each Files node has its own upload queue: files added while an upload runs join it, the footer shows "Uploading 2 of 5 · name" with a progress bar on top of the list, and Cancel stops the current file and drops the rest.
+- Dragging files from your computer over a Files node outlines the node and shows "Drop to upload to <folder>". A folder row under the pointer is highlighted and becomes the target; anywhere else means the current folder. Esc cancels the drag.
+- A Files node shows its messages (upload progress and results, reveal and copy failures) in one line in the footer. Success messages disappear after 4 seconds. Errors stay until you dismiss them and say why each file failed, for example "a.txt: no permission to write to this folder", with Retry Failed Uploads where it applies.
+- Git marks in Files nodes use VS Code's colors and letters: modified (M), added (A), deleted (D), renamed (R), untracked (U) and conflict (!). Ignored entries are shown in the ignored color without a letter, instead of being faded. Folders get a dot in the color of their strongest change, with a tooltip such as "Contains modified items".
+- The Files node footer shows the current branch (or the commit when HEAD is detached) and, when there is an upstream, commits behind and ahead as "2↓ 1↑", with a tooltip such as "Push 1 commits to origin/main".
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -63,6 +69,8 @@ Operator notes:
 - Browser node failures that show as "crashed" now log their real cause on the server (message and underlying cause) instead of only the error class name, so a failing Chromium connection can be diagnosed.
 - The file manager's "Reveal" menu item now shows the file in your system file manager ("Reveal in Finder" on macOS, "Reveal in File Explorer" on Windows, "Open Containing Folder" elsewhere; ⌥⌘R) instead of doing nothing. If revealing fails, the reason appears in the Files footer.
 - Icons were all drawn at 16px no matter where they were used, so activity bar icons looked too small. They now take the size of the place they are in, such as 24px in the activity bar.
+- Git marks in Files nodes now update after a commit, `git add`, checkout, reset, fetch, pull or push, not only when a file in the folder changes. Before, marks stayed on files you had already committed.
+- Removing a Files node, or switching workspace, cancels its running upload, answers any open "already exists" question with Skip and clears its messages, so nothing is left running or reappears later.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).

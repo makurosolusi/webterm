@@ -145,6 +145,7 @@
   --vscode-keybindingLabel-bottomBorder: #bbbbbb66;
 
   --vscode-list-hoverBackground: #f2f2f2;
+  --vscode-list-dropBackground: #d6ebff;
   --vscode-list-hoverForeground: #3b3b3b;
   --vscode-list-activeSelectionBackground: #e8e8e8;
   --vscode-list-activeSelectionForeground: #000000;
@@ -187,4 +188,13 @@
   --vscode-editorHoverWidget-border: #c8c8c8;
   --vscode-minimapSlider-background: #64646433;
   --vscode-button-secondaryBorder: #0000001a;
+
+  /* git decorations: defaults contributed by extensions/git/package.json (Light Modern does not override) */
+  --vscode-gitDecoration-addedResourceForeground: #587c0c;
+  --vscode-gitDecoration-modifiedResourceForeground: #895503;
+  --vscode-gitDecoration-deletedResourceForeground: #ad0707;
+  --vscode-gitDecoration-renamedResourceForeground: #007100;
+  --vscode-gitDecoration-untrackedResourceForeground: #007100;
+  --vscode-gitDecoration-ignoredResourceForeground: #8e8e90;
+  --vscode-gitDecoration-conflictingResourceForeground: #ad0707;
 }

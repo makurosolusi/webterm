@@ -47,10 +47,16 @@ it('dnd (nyata, WS-FM-09): useSlot + menu, tanpa toolbar/onKey/decorate/overlay'
   expect(s?.overlay).toBeUndefined()
 })
 
-it('upload (nyata, WS-FM-10): punya menu + toolbar, tanpa decorate/onKey', () => {
+it('upload (WS-FM-10): menu + toolbar icon + conflict overlay + useSlot (drop), no decorate/onKey', () => {
   const s = slot('upload')
   expect(s?.menu).toBeTypeOf('function')
   expect(s?.toolbar).toBeTypeOf('function')
+  expect(s?.overlay).toBeTypeOf('function')
+  expect(s?.useSlot).toBeTypeOf('function')
   expect(s?.decorate).toBeUndefined()
   expect(s?.onKey).toBeUndefined()
+})
+
+it('footer (C2) is optional; when a slot has one it is a function', () => {
+  for (const s of FILES_SLOTS) if (s.footer !== undefined) expect(s.footer, s.id).toBeTypeOf('function')
 })
