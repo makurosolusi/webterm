@@ -32,6 +32,34 @@ describe('installCodicons', () => {
   })
 })
 
+// Monaco membawa codicon.css-nya sendiri (`.codicon[class*='codicon-'] { font: 16px/1 codicon }`) di chunk
+// malasnya; Vite menyisipkannya PALING BELAKANG di <head> saat node editor pertama mount, setelah sheet chrome.
+const fromRoot = (rel: string) => [path.resolve(rel), path.resolve('../..', rel)].find(existsSync)!
+const read = (rel: string) => readFileSync(fromRoot(rel), 'utf8')
+
+describe('chrome codicon sizes vs Monaco codicon.css loaded last', () => {
+  it.each([
+    ['src/client/components/vscode/vscode-shell.css', 'vscode-activity-bar__icon', 'var(--activity-icon-size, 24px)'],
+    ['src/client/dock.css', 'dock-menu__check', '13px'],
+    ['src/client/filesSlot.git.css', 'files-git-foot', '12px'],
+  ])('%s keeps .%s icons at %s', (sheet, parent, size) => {
+    // getComputedStyle hanya membaca sheet milik `document` global, bukan dokumen buatan createHTMLDocument.
+    const styles = [
+      read('node_modules/@vscode/codicons/dist/codicon.css'), // installCodicons: first in <head>
+      read(sheet),
+      read('node_modules/monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css'), // lazy, last
+    ].map((css) => document.head.appendChild(Object.assign(document.createElement('style'), { textContent: css })))
+    const host = Object.assign(document.createElement('span'), { className: parent })
+    host.innerHTML = '<span class="codicon codicon-check"></span>'
+    document.body.appendChild(host)
+    try {
+      expect(getComputedStyle(host.firstElementChild!).fontSize).toBe(size)
+    } finally {
+      for (const el of [...styles, host]) el.remove()
+    }
+  })
+})
+
 describe('vscode-theme.css palette', () => {
   it('carries the official Dark Modern values', () => {
     for (const tok of [

@@ -10,7 +10,7 @@
 // tanpa PTY, bentuknya tidak ikut tersimpan, atau menutup node hanya mematikan satu shell dari empat.
 import { fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { installCanvasDom, mountCanvas, unmountCanvas, HARNESS_WS_ID } from './canvasHarness'
+import { confirmNodeCloseDialog, installCanvasDom, mountCanvas, unmountCanvas, HARNESS_WS_ID } from './canvasHarness'
 import type { WsNode } from '../shared/workspace'
 import { holdSaveTimer } from './workspaceSave.testutil'
 
@@ -283,6 +283,7 @@ describe('split pane node terminal', () => {
 
     await openMenuOn('term-1')
     fireEvent.click(menuRow('Close pane'))
+    await confirmNodeCloseDialog()
 
     await waitFor(() => expect(document.querySelector('.react-flow__node-terminal')).toBeNull())
     // Satu `close` saja: dirutekan ke `deleteElements`, bukan dikirim di sini LALU sekali lagi di App.
@@ -296,6 +297,7 @@ describe('split pane node terminal', () => {
     sent.length = 0
 
     fireEvent.click(headerBtn('Close (ends the session)'))
+    await confirmNodeCloseDialog()
 
     await waitFor(() => expect(document.querySelector('.react-flow__node-terminal')).toBeNull())
     // Inilah kebocorannya: dulu hanya `term-1` yang dikirim dan dua shell sisanya hidup tanpa

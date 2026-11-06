@@ -5,7 +5,7 @@ import { act, fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultTabLayout } from '../shared/tabLayout.schema'
 import type { BridgeLink, WsNode } from '../shared/workspace'
-import { installCanvasDom, mountCanvas, renderedEdgeIds, renderedViewport, unmountCanvas } from './canvasHarness'
+import { confirmNodeCloseDialog, installCanvasDom, mountCanvas, renderedEdgeIds, renderedViewport, unmountCanvas } from './canvasHarness'
 import { getTabLayout, connectTabLayout, setMode } from './tabLayout.store'
 
 vi.mock('./ws', async (importOriginal) => {
@@ -74,6 +74,7 @@ describe('tab layout on the real App', () => {
     const close = document.querySelector('.react-flow__node-files button[title^="Close"], .react-flow__node-files vscode-toolbar-button[data-title^="Close"]')
     if (!close) throw new Error('no close button on the Files node')
     fireEvent.click(close)
+    await confirmNodeCloseDialog()
     await waitFor(() => expect(document.querySelector('.react-flow__node-files')).toBeNull())
     act(() => setMode('tabs'))
     await act(() => new Promise<void>((r) => setTimeout(r, 50)))
