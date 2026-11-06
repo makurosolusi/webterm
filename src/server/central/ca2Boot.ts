@@ -127,6 +127,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let kb: Database | null = null
   let timer: ReturnType<typeof setInterval> | null = null
   let armed = false
+  // Crash recovery runs once per process: a re-arm (Central off -> on) must not sweep turns this process is still running.
+  let turnsReconciled = false
   let built: ReturnType<typeof buildExecutor> | undefined
   const registry = opts.registry ?? defaultRegistry()
   const handle: Ca2Handle = {
@@ -161,8 +163,10 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     // `agent.kinds` is registered here (not in registerAll) because it needs the catalog built with the executor.
     if (built && !registry.get('agent.kinds')) { registry.register(createAgentKindsDef(built.catalog)); handle.toolNames.push('agent.kinds') }
     handle.toolsHash = toolsHash(registry)
+    const reconcileBoot = !turnsReconciled
+    turnsReconciled = true
     handle.ready = (async () => {
-      try { reconcileTurns(db, now()) } catch (err) { log.error('ca2.turns_reconcile_failed', 'turn reconcile failed', { error: err instanceof Error ? err.message : String(err) }) }
+      if (reconcileBoot) try { reconcileTurns(db, now()) } catch (err) { log.error('ca2.turns_reconcile_failed', 'turn reconcile failed', { error: err instanceof Error ? err.message : String(err) }) }
       try { await executor?.reconcile() } catch (err) { log.error('ca2.agents_reconcile_failed', 'agent reconcile failed', { error: err instanceof Error ? err.message : String(err) }) }
     })()
     if (executor && !opts.noTimer) {
