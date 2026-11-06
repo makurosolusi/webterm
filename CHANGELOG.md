@@ -59,6 +59,9 @@ Operator notes:
 - A Files node shows its messages (upload progress and results, reveal and copy failures) in one line in the footer. Success messages disappear after 4 seconds. Errors stay until you dismiss them and say why each file failed, for example "a.txt: no permission to write to this folder", with Retry Failed Uploads where it applies.
 - Git marks in Files nodes use VS Code's colors and letters: modified (M), added (A), deleted (D), renamed (R), untracked (U) and conflict (!). Ignored entries are shown in the ignored color without a letter, instead of being faded. Folders get a dot in the color of their strongest change, with a tooltip such as "Contains modified items".
 - The Files node footer shows the current branch (or the commit when HEAD is detached) and, when there is an upstream, commits behind and ahead as "2↓ 1↑", with a tooltip such as "Push 1 commits to origin/main".
+- Maximize on a node now fills the canvas area, like VS Code's "Maximize Editor Group", instead of zooming the canvas to it. The activity bar, dock and panels stay visible, and the separate Full Screen button (which took over the whole screen) is gone. Restore, or double-clicking the node header, puts the node back exactly where it was; its position, size and the canvas view are never changed. Only one node is maximized at a time, and switching workspace or to tab layout restores it. "View: Toggle Maximize Node" in ⌘K does the same for the focused or selected node.
+- On Agent nodes the Stop button only appears while the agent is working, is red, and sits after a separator, so it can no longer be mistaken for Maximize.
+- On a narrow node, header buttons that don't fit move into the "…" (More) menu, so Close always stays visible.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -71,6 +74,12 @@ Operator notes:
 - Icons were all drawn at 16px no matter where they were used, so activity bar icons looked too small. They now take the size of the place they are in, such as 24px in the activity bar.
 - Git marks in Files nodes now update after a commit, `git add`, checkout, reset, fetch, pull or push, not only when a file in the folder changes. Before, marks stayed on files you had already committed.
 - Removing a Files node, or switching workspace, cancels its running upload, answers any open "already exists" question with Skip and clears its messages, so nothing is left running or reappears later.
+- A save from a window that is out of date no longer overwrites a newer board saved from another window. The window reloads the latest version instead and shows "This workspace changed in another window. Reloaded the latest version."
+- A workspace deleted in another window is no longer brought back by a late save. A notice says it was deleted and that changes are no longer saved.
+- A missing web asset (for example after a rebuild under a running server) now fails only that request instead of crashing the server. Unexpected errors are logged with their cause and the server exits with a failure code, instead of looking like a clean stop.
+- ⌘S / Ctrl+S saves the editor you are typing in. Before, it saved the most recently opened editor.
+- Middle-clicking a session closes it once. Before, it could close several times after the list re-rendered.
+- Session History no longer hangs on a named pipe, a link to `/dev/zero` or a huge transcript. A scan stops after 30 seconds and shows what it found so far.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
