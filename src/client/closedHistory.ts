@@ -16,6 +16,7 @@
 // di node-env tanpa DOM, jadi yang bisa di-assert harus hidup di luar komponen.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getWorkspace, saveWorkspace } from './api'
+import { reportActionError } from './workspaceActionError'
 import { fetchClosedHistory, saveClosedHistory } from './SessionHistory.api'
 import { isSession } from './sessionList'
 import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
@@ -268,10 +269,10 @@ export function useClosedHistory(
         await placeNode(entry, deps)
       } catch (e) {
         // Entry dikembalikan: snapshot node tadi satu-satunya salinan yang bisa memulihkannya, dan
-        // tulis yang gagal tidak boleh ikut menghapusnya. Barisnya muncul lagi — itu sinyal yang
-        // terlihat pengguna, dan webterm belum punya permukaan toast.
+        // tulis yang gagal tidak boleh ikut menghapusnya. The row comes back and the failure is
+        // reported with a Retry that runs this reopen again.
         commit(pushClosed(ref.current, [entry]))
-        console.error(`reopen closed session ${nodeId} in workspace ${entry.workspaceId}:`, e)
+        reportActionError('reopen the closed session', `${nodeId} in workspace ${entry.workspaceId}`, e, () => void reopen(nodeId, deps))
       }
     },
     [commit],

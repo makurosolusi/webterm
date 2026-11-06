@@ -8,8 +8,9 @@ export interface NodeStatusEntry {
   updatedAt: number
 }
 
-/** Kenapa node berhenti: prosesnya keluar SENDIRI, atau kita yang menutupnya. */
-export type NodeExitReason = 'self' | 'closed'
+/** Kenapa node berhenti: prosesnya keluar SENDIRI, atau kita yang menutupnya. `failed` = the open
+ *  itself threw before any process ran (agent-211-A1); like `closed` it only fills an empty slot. */
+export type NodeExitReason = 'self' | 'closed' | 'failed'
 
 /** Tombstone exit per node. Disimpan supaya client yang menyambung ulang tetap bisa merender
  *  `[process exited]` walaupun PTY-nya sudah lama hilang dari memori. */
@@ -87,13 +88,22 @@ export class NodeRegistry {
   private statuses = new Map<string, NodeStatusEntry>()
   private transcripts = new Map<string, string>()
   private exits = new Map<string, NodeExit>()
+  /** Called after every status write, delete or sweep: the one hook the durable store needs (A4). */
+  onStatusChange?: () => void
 
   /** `now` di-inject supaya sweep bisa dites tanpa jam dinding; pemanggil nyata melewatkannya. */
   setStatus(id: string, status: AgentStatus, now: number = Date.now()): void {
     // Jamnya dimundurkan pada SETIAP penulisan, termasuk `working` berulang — itulah yang membuat
     // turn panjang yang sah tidak pernah tersapu: tiap tool call menulis ulang `working`.
+    const changed = this.statuses.get(id)?.status !== status
     this.statuses.set(id, { status, updatedAt: now })
     evictInsertionOrder(this.statuses, MAX_NODE_STATE)
+    if (changed) this.onStatusChange?.()
+  }
+
+  /** Every stored status (a copy), for the durable snapshot. */
+  statusEntries(): [string, NodeStatusEntry][] {
+    return [...this.statuses].map(([id, e]) => [id, { ...e }])
   }
 
   getStatus(id: string): NodeStatusEntry | undefined {
@@ -103,7 +113,7 @@ export class NodeRegistry {
   }
 
   deleteStatus(id: string): void {
-    this.statuses.delete(id)
+    if (this.statuses.delete(id)) this.onStatusChange?.()
   }
 
   /**
@@ -119,6 +129,7 @@ export class NodeRegistry {
       this.statuses.delete(id)
       swept.push(id)
     }
+    if (swept.length) this.onStatusChange?.()
     return swept
   }
 
@@ -156,7 +167,7 @@ export class NodeRegistry {
   /** Lupakan semua fakta tentang satu node. Dipakai `close`/restart supaya id yang dipakai ulang
    *  tidak mewarisi status, transcript, maupun tombstone milik sesi mati. */
   forget(id: string): void {
-    this.statuses.delete(id)
+    this.deleteStatus(id)
     this.transcripts.delete(id)
     this.exits.delete(id)
   }

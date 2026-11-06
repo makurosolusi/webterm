@@ -27,8 +27,9 @@ import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
-import { resolveAsset, serveAsset } from './staticAssets'
+import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
 import { onUnhandledRejection } from './processCrash'
+import { closeStores } from './shutdown'
 import { upgradeRoute } from './upgradeRouting'
 import { lspUpgrade } from './lsp/lsp.route'
 import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
@@ -67,7 +68,8 @@ try {
 }
 const dev = process.env.NODE_ENV !== 'production'
 
-// Flag off by default. `shadow` never blocks boot; `on` refuses to start on a broken ledger.
+// Always started (`on`, or `shadow` under WEBTERM_LEDGER_SHADOW). Boot passes no explicit mode, so a ledger
+// that cannot open is logged as an error and boot goes on without it (null) instead of refusing to start.
 const ledgerRuntime = startLedgerRuntime()
 // Workspaces live in webterm.db, never the ledger file: project chats, node.list, browser tools and
 // project.discover resolve them through this store.
@@ -110,6 +112,8 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 const API_PREFIX = '/api/'
+/** Vite's outDir, relative to this file (src/server), not the cwd: `bun src/server/index.ts` runs from anywhere. */
+const DIST_DIR = join(import.meta.dirname, '../../dist')
 
 function reqUrl(req: http.IncomingMessage): URL {
   return new URL(req.url || '/', 'http://x')
@@ -198,10 +202,9 @@ if (dev) {
     vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
 } else {
-  // Aset di-embed ke binary saat build (bun `with { type: 'file' }`), bukan dibaca dari dist/ di
-  // disk — jadi binary hasil `--compile` jalan sendiri tanpa dist/ di sampingnya. Import dinamis:
-  // modul generated ini mungkin belum dibangun di checkout segar / jalur dev tak boleh memaksanya.
-  const { assets } = await import('./distAssets.generated')
+  // dist/ on disk first (plain `vite build`), else the manifest embedDist.ts embeds into a `--compile`
+  // binary. The generated module is gitignored, so a fresh tree has none: only that case is absorbed.
+  const { assets } = await loadAssetManifest(DIST_DIR, () => import('./distAssets.generated').then((m) => m.assets, noEmbeddedAssets))
   server.on('request', (req, res) => {
     const url = reqUrl(req)
     // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
@@ -215,7 +218,7 @@ if (dev) {
     if (handleApi(req, res)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
-    void serveAsset(res, hit) // never rejects: a missing file is a 404 for this request only
+    void serveAsset(res, hit, req.headers['accept-encoding']) // never rejects: a missing file is a 404 for this request only
   })
 }
 
@@ -280,7 +283,11 @@ server.listen(PORT, HOST, () => {
 process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
 // Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
 process.on('unhandledRejection', onUnhandledRejection(log))
-process.on('exit', (code) => { log.info('server.stop', 'webterm stopping', { code }); flushLogsSync() })
+process.on('exit', (code) => {
+  closeStores([['webterm.db', () => db.close()], ...(ledgerRuntime ? [['ledger.db', () => ledgerRuntime.close()] as const] : [])], log)
+  log.info('server.stop', 'webterm stopping', { code })
+  flushLogsSync()
+})
 for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
   // Chromium + proxy dimatikan bersih (batas 5 dtk) sebelum proses keluar; tanpa runtime browser = perilaku lama.
   process.on(signal, () => {

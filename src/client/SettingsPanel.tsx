@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { Settings } from '../shared/settings'
+import type { SettingsPatch } from '../shared/settings.patch'
 import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { ControlPanel } from './ControlPanel'
@@ -56,7 +57,7 @@ export function toSectionId(id: string): SectionId {
 
 interface PanelProps {
   settings: Settings
-  onChange: (patch: Partial<Settings>) => void
+  onChange: (patch: SettingsPatch) => void
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
@@ -125,7 +126,8 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
-        className="st-dialog-content"
+        // inset-0 + translate-*-0 replace the shadcn centering utilities (tailwind-merge) so the page fills the viewport.
+        className="st-dialog-content inset-0 translate-x-0 translate-y-0"
         showCloseButton={false}
         onKeyDown={settingsUndoKeyDown(history)}
         // The Undo toast is portaled outside the dialog; clicking it must not count as "outside".

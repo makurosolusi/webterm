@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
-import { PROVIDER_PATH as PATH, providerCall as call, type Credential, type Mode, type State, type TestResult } from './claudeProvider.api'
+import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State, type TestResult } from './claudeProvider.api'
 
 const MODE_LIST: Mode[] = ['login', 'apiKey', 'custom', 'command']
 const CREDENTIAL_LIST: Credential[] = ['authToken', 'apiKey']
@@ -50,6 +50,10 @@ export const PROVIDER_TEXT = {
   saveFailed: (code: string): string => `Could not save (${code}).`,
   restart: (n: number): string => `New Claude sessions use this provider. ${n} running Claude session${n === 1 ? '' : 's'} keep${n === 1 ? 's' : ''} the previous one until restarted.`,
   newOnly: 'New Claude sessions use this provider; running ones keep theirs until restarted.',
+  damaged: 'The saved Claude provider settings are damaged, so Claude starts with the Claude Code login. Reset them, or choose a provider and Save. A copy of the damaged file is kept as CONFIG_BAK.',
+  reset: 'Reset to Claude Code login',
+  resetting: 'Resetting…',
+  resetFailed: (code: string): string => `Could not reset (${code}). Try again.`,
 }
 
 /** The Claude provider card; loads from the server and waits for it on every change. */
@@ -93,6 +97,16 @@ export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: Claud
       return false
     } finally { setBusy(false) }
   }
+  const [resetting, setResetting] = useState(false)
+  const reset = async (): Promise<void> => {
+    setBusy(true); setResetting(true); setError(null); setNotice(null)
+    try {
+      adopt(await call(RESET_PATH, 'POST') as unknown as State)
+      setNotice(PROVIDER_TEXT.saved)
+    } catch (e) {
+      setError(PROVIDER_TEXT.resetFailed(e instanceof Error ? e.message : 'error'))
+    } finally { setBusy(false); setResetting(false) }
+  }
   const p = state?.provider
   const dirty = !!p && (mode !== p.mode || secret !== '' || model !== (p.model ?? '')
     || (mode === 'custom' && (baseUrl !== (p.baseUrl ?? '') || credential !== (p.credential ?? 'authToken'))))
@@ -116,6 +130,12 @@ export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: Claud
       <h3>{PROVIDER_TEXT.title}</h3>
       <p className="text-xs opacity-70">{PROVIDER_TEXT.why}</p>
       {state === null && error === null ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.loading}</p> : null}
+      {p?.configError ? (
+        <div role="alert" className="flex flex-col items-start gap-2 rounded border border-[var(--vscode-inputValidation-errorBorder,var(--vscode-errorForeground))] bg-[var(--vscode-inputValidation-errorBackground)] p-2 text-xs">
+          <p><span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.damaged}</p>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void reset()}>{resetting ? PROVIDER_TEXT.resetting : PROVIDER_TEXT.reset}</Button>
+        </div>
+      ) : null}
       {state ? (
         <>
           <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />

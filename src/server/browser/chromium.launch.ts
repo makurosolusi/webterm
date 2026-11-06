@@ -6,6 +6,7 @@ import { delimiter, join } from 'node:path'
 import { ENV_BROWSER } from '../../shared/browser.contract'
 import { buildChromiumArgs, CDP_LOOPBACK, headlessReason, profileDirFor } from './chromium.flags'
 import { createLogger } from '../logs'
+import { childEnv } from '../childEnv'
 
 const log = createLogger('browser.launch')
 export const START_TIMEOUT_MS = 20_000
@@ -116,7 +117,8 @@ export interface LaunchDeps {
 export interface Launched { wsUrl: string; kill(): void }
 
 const defaultRead = (p: string): string | null => (existsSync(p) ? readFileSync(p, 'utf8') : null)
-const defaultSpawn = (bin: string, args: string[]): ChildLike => nodeSpawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
+// Filtered env (sec-208-7): the browser and anything it launches never inherit the server's secrets.
+const defaultSpawn = (bin: string, args: string[]): ChildLike => nodeSpawn(bin, args, { env: childEnv(), stdio: ['ignore', 'ignore', 'pipe'] })
 
 /** Jalankan Chromium (headful offscreen, atau headless bila `headless`) dan tunggu `DevToolsActivePort`; `onExit` dipanggil saat proses mati. */
 export async function launchChromium(

@@ -17,8 +17,12 @@ export interface EventAnchor extends ChainHead {
   at: number
 }
 
-/** `match`: anchored row still has the anchored hash. `rewritten`: same seq, different hash. `truncated`: anchored row is gone. */
-export type AnchorStatus = 'no_anchor' | 'match' | 'rewritten' | 'truncated'
+/**
+ * `match`: anchored row still has the anchored hash. `rewritten`: same seq, different hash.
+ * `truncated`: anchored row is gone. `pruned`: anchored row was dropped by retention (seq at or below
+ * the chain base), which is expected and not a divergence.
+ */
+export type AnchorStatus = 'no_anchor' | 'match' | 'rewritten' | 'truncated' | 'pruned'
 
 export const ANCHOR_FILE = 'event-anchor.json'
 export const ANCHOR_INTERVAL_MS = 30_000
@@ -53,11 +57,11 @@ export function readAnchor(file: string): EventAnchor | null {
   return { seq: parsed.seq as number, hash: parsed.hash, at: parsed.at as number }
 }
 
-/** Compares an anchor with the log via the stored hash of the anchored row. */
-export function anchorStatus(anchor: EventAnchor | null, hashAt: (seq: number) => string | null): AnchorStatus {
+/** Compares an anchor with the log via the stored hash of the anchored row; `prunedThrough` is the log's retention base seq. */
+export function anchorStatus(anchor: EventAnchor | null, hashAt: (seq: number) => string | null, prunedThrough = 0): AnchorStatus {
   if (anchor === null) return 'no_anchor'
   const stored = hashAt(anchor.seq)
-  if (stored === null) return 'truncated'
+  if (stored === null) return anchor.seq <= prunedThrough ? 'pruned' : 'truncated'
   return stored === anchor.hash ? 'match' : 'rewritten'
 }
 

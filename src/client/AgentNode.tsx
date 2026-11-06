@@ -20,7 +20,8 @@ import { unwatchNode, watchNode } from './unread'
 import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
-import { autoTitleFromWork, claimAutoName, identityColor, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
+import { autoTitleFromWork, canResumeAfter, claimAutoName, identityColor, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
+import { AgentFailedBar } from './AgentFailedBar'
 
 const COLLAPSED_H = 40
 
@@ -182,7 +183,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   }
 
   const restartGate = restartEligibility(agentId, status, resumableSid)
-  const canResumeNode = !!agentId && canResume(agentId) && !!resumableSid && status === 'done'
+  const canResumeNode = !!agentId && canResume(agentId) && !!resumableSid && canResumeAfter(status)
   const menuRows: MenuRow[] = [
     ...linkRows(menu?.link ?? null, id, openBrowserAt),
     {
@@ -292,7 +293,9 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
           hideLinks={d.hideLinks} onToggleHideLinks={onToggleHideLinksProp}
         />
-        <div className="node-body">
+        <div className="node-body relative">
+          {/* A1/A2: Retry resumes the conversation when there is one, else launches it afresh. */}
+          {status === 'failed' && <AgentFailedBar onRetry={() => { setResume(!!resumableSid); setGen((g) => g + 1) }} />}
           <TerminalCore
             key={gen}
             ref={termRef}

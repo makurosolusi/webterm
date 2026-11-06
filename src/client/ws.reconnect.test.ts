@@ -110,6 +110,25 @@ test('unmounting a live view sends detach; an exited one has nothing to detach',
   expect(sock.msgs()).toEqual([{ t: 'detach', id: 't5' }])
 })
 
+test('a failed open is not replayed on reconnect (A1); a live sibling is, and an explicit open retries', async () => {
+  const { subscribe, send, RECONNECT_BASE_MS } = await fresh()
+  subscribe('tf', () => {}, () => {})
+  subscribe('tl', () => {}, () => {})
+  const first = last()
+  first.up()
+  send({ t: 'open', id: 'tf', cols: 80, rows: 24, agentId: 'claude' })
+  send({ t: 'open', id: 'tl', cols: 80, rows: 24 })
+  first.push({ t: 'exit', id: 'tf', code: -1, reason: 'failed' })
+
+  first.drop()
+  vi.advanceTimersByTime(RECONNECT_BASE_MS)
+  const second = last()
+  second.up()
+  expect(second.msgs().filter((m) => m.t === 'open').map((m) => m.id)).toEqual(['tl'])
+  send({ t: 'open', id: 'tf', cols: 80, rows: 24, agentId: 'claude' }) // Retry
+  expect(second.msgs().filter((m) => m.t === 'open').map((m) => m.id)).toEqual(['tl', 'tf'])
+})
+
 test('backoff doubles up to the cap; the banner state says reconnecting; Retry now skips the wait', async () => {
   const { subscribe, getConnection, reconnectNow, RECONNECT_BASE_MS, RECONNECT_MAX_MS } = await fresh()
   subscribe('t7', () => {}, () => {})

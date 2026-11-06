@@ -5,6 +5,7 @@
 //   POST /api/claude-provider/test  probe the SAVED provider (login mode: `claude auth status`;
 //                                   command mode: run the launch profile headless, claudeProvider.commandProbe.ts)
 //   GET  /api/claude-provider/detect  { wrappers: [{ name, installed, version? }] } for the command-mode card
+//   POST /api/claude-provider/reset back to the login; a damaged config is kept as CONFIG_BAK (view.configError)
 import type { IncomingMessage } from 'node:http'
 import { AGENT_CANNOT_APPROVE, uiOnlyDenial } from '../approvalAuth'
 import { readCappedRequestBody } from '../cappedRequestBody'
@@ -15,10 +16,11 @@ import { probeCommand } from './claudeProvider.commandProbe'
 import { detectWrappers } from './claudeProvider.detect'
 import { parseUpdate } from './claudeProvider.model'
 import { probeProvider, type ProbeResult } from './claudeProvider.probe'
-import { loadConfig, loadSecret, providerView, saveProvider } from './claudeProvider.store'
+import { loadConfig, loadSecret, providerView, resetProviderConfig, saveProvider } from './claudeProvider.store'
 
 export const PROVIDER_PATH = '/api/claude-provider'
 export const DETECT_PATH = `${PROVIDER_PATH}/detect`
+export const RESET_PATH = `${PROVIDER_PATH}/reset`
 const BODY_MAX_BYTES = 16 * 1024
 
 export type LastTest = ProbeResult & { at: number }
@@ -63,6 +65,11 @@ export async function handleProviderApi(req: IncomingMessage, url: URL, raw: str
     lastTest = null // the old result described another provider
     return { status: 200, body: view(deps) }
   }
+  if (url.pathname === RESET_PATH && method === 'POST') {
+    resetProviderConfig()
+    lastTest = null
+    return { status: 200, body: view(deps) }
+  }
   if (url.pathname === DETECT_PATH && method === 'GET') {
     const wrappers = await detectWrappers({ env: deps.env ?? claudeChildEnv(process.env), ...(deps.run ? { run: deps.run } : {}), ...(deps.onPath ? { onPath: deps.onPath } : {}) })
     return { status: 200, body: { wrappers } }
@@ -90,7 +97,7 @@ export async function handleProviderApi(req: IncomingMessage, url: URL, raw: str
 
 /** Route entry for api.ts: false = not ours. */
 export async function providerRoute(req: IncomingMessage, url: URL, deps: ProviderApiDeps): Promise<Result | null> {
-  if (url.pathname !== PROVIDER_PATH && url.pathname !== `${PROVIDER_PATH}/test` && url.pathname !== DETECT_PATH) return null
+  if (url.pathname !== PROVIDER_PATH && url.pathname !== `${PROVIDER_PATH}/test` && url.pathname !== DETECT_PATH && url.pathname !== RESET_PATH) return null
   let raw = ''
   if (req.method === 'PUT' || req.method === 'POST') {
     const read = await readCappedRequestBody(req, BODY_MAX_BYTES)

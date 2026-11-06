@@ -114,7 +114,7 @@ test('sesi tanpa node workspace ditandai yatim dan tidak ditempeli', async () =>
 
   const after = supervised()
   const res = after.adoptSupervised((id) => id === 'k1')
-  expect(res).toEqual({ adopted: ['k1'], orphans: ['o1'] })
+  expect(res).toEqual({ adopted: ['k1'], orphans: ['o1'], reaped: [] })
   expect(after.isLive('o1')).toBe(false)
   expect(sup.list().find((x) => x.id === 'o1')?.orphan).toBe(true)
   expect(sup.list().find((x) => x.id === 'k1')?.orphan).toBe(false)

@@ -251,6 +251,9 @@
    ini. Dot-nya DIAM dengan sengaja: gerak dicadangkan untuk yang masih berubah (RUNNING) atau yang
    memblokir (NEEDS YOU), jadi diam adalah bagian dari pesannya, bukan gaya yang terlupa. */
 .node-status--waiting { color: var(--state-warning); }
+/* FAILED red but still: the process is gone, nothing is changing. STOPPED neutral: the user ended it. */
+.node-status--failed { color: var(--state-attention); }
+.node-status--stopped { color: var(--state-queued); }
 
 @keyframes nt-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }

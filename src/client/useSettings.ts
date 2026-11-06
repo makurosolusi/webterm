@@ -5,8 +5,9 @@
 // 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
 // update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { tokenQuery } from './api'
+import { fitsKeepalive, SETTINGS_KEEPALIVE_MAX_BYTES, tokenQuery } from './api'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
+import { applySettingsPatch, mergeSettingsPatches, type SettingsPatch } from '../shared/settings.patch'
 import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 
@@ -75,11 +76,14 @@ export function settingsUrl(): string {
   return q ? `/api/settings?${q}` : '/api/settings'
 }
 
-async function putSettings(patch: Partial<Settings>): Promise<void> {
+async function putSettings(patch: SettingsPatch): Promise<void> {
+  const body = JSON.stringify(patch)
+  // `keepalive`: a flush on pagehide must outlive the document (see `fitsKeepalive`).
   const res = await fetch(settingsUrl(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
+    body,
+    keepalive: fitsKeepalive(body, SETTINGS_KEEPALIVE_MAX_BYTES),
   })
   if (!res.ok) throw new Error(`PUT /api/settings -> ${res.status}`)
 }
@@ -100,7 +104,7 @@ export interface UseSettings {
   /** True setelah GET pertama selesai, supaya logika first-run bisa menunggu. */
   hydrated: boolean
   /** Terapkan patch ke state sekarang; persistensi menyusul (coalesce 300 ms). */
-  update(patch: Partial<Settings>): void
+  update(patch: SettingsPatch): void
   /** Undo/redo of `update` (see `./settingsHistory`). */
   history: SettingsUndo
 }
@@ -123,10 +127,10 @@ export interface SettingsUndo {
 export function useSettings(): UseSettings {
   const [settings, setSettings] = useState<Settings>(current)
   const [hydrated, setHydrated] = useState(false)
-  const saver = useRef<Coalescer<Partial<Settings>> | null>(null)
+  const saver = useRef<Coalescer<SettingsPatch> | null>(null)
   if (!saver.current) {
     saver.current = createCoalescer(putSettings, {
-      merge: (pending, next) => ({ ...pending, ...next }),
+      merge: mergeSettingsPatches, // entry keys keep both patches' entries
     })
   }
 
@@ -152,11 +156,19 @@ export function useSettings(): UseSettings {
     return () => { alive = false }
   }, [])
 
-  // Reload/tutup tab di dalam jendela coalesce tidak boleh menjatuhkan edit terakhir.
+  // Reload/close/hide inside the coalesce window must not drop the last edit. `pagehide` and
+  // `visibilitychange` too: mobile browsers and the bfcache skip `beforeunload` (data-209-4).
   useEffect(() => {
     const flush = (): void => saver.current?.flush()
+    const onVisibility = (): void => { if (document.visibilityState === 'hidden') flush() }
     window.addEventListener('beforeunload', flush)
-    return () => window.removeEventListener('beforeunload', flush)
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   const hist = useRef<SettingsHistory | null>(null)
@@ -166,15 +178,15 @@ export function useSettings(): UseSettings {
     if (change) setNotice((prev) => ({ seq: (prev?.seq ?? 0) + 1, kind, change }))
   }, [])
 
-  const apply = useCallback((patch: Partial<Settings>) => {
-    current = { ...current, ...patch }
+  const apply = useCallback((patch: SettingsPatch) => {
+    current = applySettingsPatch(current, patch)
     setSettings(current)
     // Kirim patch, bukan snapshot penuh: server me-merge-nya, jadi dua tab yang menyetel kunci
     // berbeda tidak saling menimpa kunci yang tidak mereka sentuh.
     saver.current?.push(patch)
   }, [])
 
-  const update = useCallback((patch: Partial<Settings>) => {
+  const update = useCallback((patch: SettingsPatch) => {
     announce('changed', hist.current?.record(current, patch))
     apply(patch)
   }, [apply, announce])

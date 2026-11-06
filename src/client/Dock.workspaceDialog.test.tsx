@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// Create-workspace dialog: plain create unchanged; "New branch (worktree)" prefills the repo from the
+// Create-workspace dialog: plain create closes only once the workspace exists, else shows the error inline; "New branch (worktree)" prefills the repo from the
 // active workspace, creates the worktree, opens the workspace at the worktree path and shows the
 // setup log. Plus the delete-time worktree offer and the tab badge. API is faked.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -31,13 +31,40 @@ function renderDialog() {
 }
 
 describe('WorkspaceDialog', () => {
-  it('plain create passes name + cwd and closes', () => {
+  it('plain create passes name + cwd and closes once the workspace exists', async () => {
     const { onCreateWorkspace, onOpenChange } = renderDialog()
+    let created!: () => void
+    onCreateWorkspace.mockReturnValue(new Promise<void>((r) => { created = r }))
     fireEvent.change(screen.getByPlaceholderText('name'), { target: { value: 'Docs' } })
     fireEvent.change(screen.getByPlaceholderText('cwd (optional)'), { target: { value: '/repo' } })
     fireEvent.click(screen.getByText('Create'))
     expect(onCreateWorkspace).toHaveBeenCalledWith('Docs', '/repo')
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(screen.getByText('Creating…')).toBeTruthy()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    created()
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  it('plain create failure keeps the dialog open with the server message inline', async () => {
+    const { onCreateWorkspace, onOpenChange } = renderDialog()
+    onCreateWorkspace.mockRejectedValue(Object.assign(new Error('POST /api/workspaces -> 400: cwd does not exist'), {
+      status: 400, serverMessage: 'cwd does not exist',
+    }))
+    fireEvent.change(screen.getByPlaceholderText('name'), { target: { value: 'Docs' } })
+    fireEvent.change(screen.getByPlaceholderText('cwd (optional)'), { target: { value: '/nope' } })
+    fireEvent.click(screen.getByText('Create'))
+    expect((await screen.findByRole('alert')).textContent).toBe('cwd does not exist')
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect((screen.getByPlaceholderText('name') as HTMLInputElement).value).toBe('Docs') // input kept for a fix
+    expect((screen.getByText('Create') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('Create stays disabled while the name is blank', () => {
+    const { onCreateWorkspace } = renderDialog()
+    fireEvent.change(screen.getByPlaceholderText('name'), { target: { value: '   ' } })
+    expect((screen.getByText('Create') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.keyDown(screen.getByPlaceholderText('name'), { key: 'Enter' })
+    expect(onCreateWorkspace).not.toHaveBeenCalled()
   })
 
   it('worktree create: repo from active workspace, workspace cwd = worktree, setup log shown', async () => {

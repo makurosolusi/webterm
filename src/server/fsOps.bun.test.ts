@@ -7,7 +7,10 @@ import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import npath from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { listDir, pathExists, readBinary, readErrorResult, readText, readTextMeta } from './fsOps'
+import { listDir, pathExists, readBinary, readErrorResult, readTextMeta } from './fsOps'
+
+/** The text verb's content (the old content-only `readText` was dead in production and is gone). */
+const readText = (p: string): Promise<string> => readTextMeta(p).then((m) => m.content)
 
 /** Fixture di direktori temporer sendiri, dibereskan apa pun hasil `fn`. Tidak ada tulisan di
  *  luar `$TMPDIR` — lihat catatan `sun_path`/TMPDIR di CLAUDE.md. */

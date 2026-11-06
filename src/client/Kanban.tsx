@@ -4,7 +4,7 @@ import type { AgentStatus } from '../shared/workspace'
 import { groupByStatus, KANBAN_COLUMNS } from './store'
 import { Button } from '@/vscode/register'
 
-const TITLE: Record<AgentStatus, string> = { working: 'Working', waiting: 'Waiting', blocked: 'Blocked', done: 'Done' }
+const TITLE: Record<AgentStatus, string> = { working: 'Working', waiting: 'Waiting', blocked: 'Blocked', done: 'Done', failed: 'Failed', stopped: 'Stopped' }
 // Token warna per status dipetakan ke kelas Tailwind, bukan ke nilai `var(...)` inline: kelasnya
 // statis, jadi ikut ter-scan build dan tetap terbaca sebagai satu sumber warna bersama CSS.
 const DOT: Record<AgentStatus, string> = {
@@ -12,6 +12,8 @@ const DOT: Record<AgentStatus, string> = {
   waiting: 'text-[var(--state-warning)]',
   blocked: 'text-[var(--state-attention)]',
   done: 'text-[var(--state-queued)]',
+  failed: 'text-[var(--state-attention)]',
+  stopped: 'text-[var(--state-queued)]',
 }
 
 interface Props {

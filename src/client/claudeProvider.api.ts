@@ -12,12 +12,15 @@ export interface ProviderView {
   mode: Mode; baseUrl?: string; credential?: Credential; model?: string; secretSet: boolean; ready: boolean
   profileId?: string; profile?: { id: string; name: string; command: string }; profileMissing?: boolean
   commandWarning?: 'looks_like_secret'
+  /** The stored config file is damaged; Claude starts with the login until it is reset or saved again. */
+  configError?: 'unreadable'
 }
 export interface TestResult { ok: boolean; message: string; at: number; outcome?: string }
 export interface State { provider: ProviderView; lastTest: TestResult | null; restartNeeded: number }
 export interface DetectedWrapper { name: string; installed: boolean; version?: string }
 
 export const PROVIDER_PATH = '/api/claude-provider'
+export const RESET_PATH = `${PROVIDER_PATH}/reset`
 
 /** JSON call to the provider API; throws the server's error code (or http_<status>), never the body. */
 export async function providerCall(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {

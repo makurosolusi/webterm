@@ -78,6 +78,19 @@ test('saveSettings drops unknown keys and wrong-shaped values', () => {
   expect('nope' in (got as unknown as Record<string, unknown>)).toBe(false)
 })
 
+test('saveSettings keeps keys of a newer build and other workspaces\' entries in the raw row', () => {
+  const d = openDb(':memory:')
+  const db = new Db(d)
+  const bg = DEFAULT_SETTINGS.canvasBackground
+  d.query("INSERT INTO app (key, value) VALUES ('settings', ?)").run(JSON.stringify({ futureKey: { v: 2 }, canvasBackgroundByWorkspace: { w1: bg } }))
+  db.saveSettings({ canvasBackgroundByWorkspace: { w2: { ...bg, mode: 'gradient' } } })
+  db.saveSettings({ fontSize: 18 })
+  const raw = JSON.parse((d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string }).value)
+  expect(raw.futureKey).toEqual({ v: 2 })
+  expect(Object.keys(raw.canvasBackgroundByWorkspace).sort()).toEqual(['w1', 'w2'])
+  expect(raw.fontSize).toBe(18)
+})
+
 test('settings and the active-workspace id share the app table without colliding', () => {
   const db = freshDb()
   const ws = db.create('proj')

@@ -20,7 +20,9 @@ export type BuiltinAgentId =
 // begitu ditutup, agent custom tidak bisa lagi menunjuk base harness.
 export type AgentId = BuiltinAgentId | (string & {})
 
-export type AgentStatus = 'working' | 'waiting' | 'blocked' | 'done'
+// `failed` = the agent never started or exited non-zero (agent-211-A2); `stopped` = the user ended
+// the session with Stop/close and it can be resumed (agent-211-A5). Only the server sets either.
+export type AgentStatus = 'working' | 'waiting' | 'blocked' | 'done' | 'failed' | 'stopped'
 
 export interface AgentConfig {
   /** Label menu + judul node, mis. 'Claude Code'. */

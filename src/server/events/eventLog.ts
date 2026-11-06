@@ -97,13 +97,24 @@ export function createEventLog(db: Database, opts: EventLogOptions = {}) {
   const ctx = { db, now: opts.now ?? Date.now }
   const windowMs = opts.dedupeWindowMs ?? DEFAULT_DEDUPE_WINDOW_MS
 
+  /** Where the chain starts: the last pruned row (v23 event_chain_base), or genesis when nothing was pruned. */
+  function base(): ChainHead | null {
+    const row = getRow(db, 'SELECT seq, hash FROM event_chain_base WHERE id = 1')
+    return row ? { seq: Number(row['seq']), hash: String(row['hash']) } : null
+  }
+
   function head(): ChainHead | null {
     const row = getRow(db, 'SELECT seq, hash FROM event WHERE hash IS NOT NULL ORDER BY seq DESC LIMIT 1')
-    return row ? { seq: Number(row['seq']), hash: String(row['hash']) } : null
+    return row ? { seq: Number(row['seq']), hash: String(row['hash']) } : base()
   }
 
   return {
     head,
+
+    /** Highest seq dropped by retention (0 = none); an anchor at or below it is pruned, not truncated. */
+    prunedThrough(): number {
+      return base()?.seq ?? 0
+    },
 
     /**
      * Appends one chained event (BEGIN IMMEDIATE, so head read + insert are atomic) and then
@@ -185,16 +196,17 @@ export function createEventLog(db: Database, opts: EventLogOptions = {}) {
     },
 
     /**
-     * Walks the whole chain in pages and reports the first broken row: a row whose prev_hash is
+     * Walks the whole chain in pages, from the retention base (or genesis), and reports the first broken row: a row whose prev_hash is
      * not the previous row's hash (deleted/reordered/inserted row) or whose own hash does not
      * match its columns (edited row). Truncation of the newest rows is only visible against the
      * external anchor (eventAnchor.ts).
      */
     verifyChain(): VerifyResult {
-      let expectedPrev = GENESIS_HASH
+      const origin = base()
+      let expectedPrev = origin?.hash ?? GENESIS_HASH
       let checked = 0
-      let after = 0
-      let last: ChainHead | null = null
+      let after = origin?.seq ?? 0
+      let last: ChainHead | null = origin
       for (;;) {
         const rows = allRows(
           db,

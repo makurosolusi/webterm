@@ -2,6 +2,7 @@
 // (zero tokens). After Orca `src/main/automations/precheck-runner.ts:131-189`: `shell: true`, own
 // process group so a timeout kills the whole tree, output tail capped, never rejects.
 import { spawn } from 'node:child_process'
+import { childEnv } from '../childEnv'
 
 /** Orca MAX_AUTOMATION_PRECHECK_OUTPUT_CHARS. */
 export const PRECHECK_OUTPUT_MAX = 4000
@@ -23,7 +24,8 @@ export function runPrecheck(command: string, cwd: string, timeoutSeconds: number
     let output = ''
     let timedOut = false
     let settled = false
-    const child = spawn(command, { cwd, shell: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
+    // env filtered like a PTY (sec-208-7): the precheck is user code and must not see server secrets.
+    const child = spawn(command, { cwd, env: childEnv(), shell: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
     const killGroup = (signal: NodeJS.Signals): void => {
       try {
         if (child.pid && process.platform !== 'win32') process.kill(-child.pid, signal)

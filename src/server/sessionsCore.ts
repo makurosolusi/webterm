@@ -1,4 +1,9 @@
 import type { ServerMsg } from '../shared/protocol'
+import type { Pty } from './pty'
+import { SubscriberSet } from './subscribers'
+import { DA_REPLY_TTL_OTHER_MS, DA_REPLY_TTL_TMUX_MS, DaReplyGate } from './daReplyGate'
+import { producePtyExit } from './events/producers'
+import type { StatusStore } from './sessionsStatusStore'
 import type { AgentStatus } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
@@ -8,7 +13,7 @@ import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 import { ptyLog } from './sessionsLog'
 import type { TmuxSupervisor } from './ptySupervisor'
-import { replay } from './sessionsAttach'
+import { nextEpoch, replay } from './sessionsAttach'
 
 /** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
  *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
@@ -26,7 +31,13 @@ export function exitOutput(log: OutputLog | undefined): string | undefined {
 export class SessionsCore {
   /** `supervisor` hidup TERPISAH dari `options`: `applyPtyOptions` (api.ts) menimpa seluruh objek
    *  `options` pada setiap PUT settings, dan supervisor tidak boleh ikut hilang karenanya. */
-  constructor(public options: SessionsOptions = {}, public supervisor: TmuxSupervisor | null = null) {}
+  constructor(public options: SessionsOptions = {}, public supervisor: TmuxSupervisor | null = null) {
+    this.registry.onStatusChange = () => this.statusStore?.save(this.registry.statusEntries())
+  }
+
+  /** Durable last status per node (A4). Set by the singleton only, like `supervisor` it lives outside
+   *  `options`, so `new Sessions()` in a test writes nothing unless it hands in a tmp-path store. */
+  statusStore?: StatusStore
 
   /** Supervisor yang benar-benar dipakai. PTY ter-inject (test) tidak pernah lewat tmux. */
   protected get supervised(): TmuxSupervisor | null {
@@ -149,15 +160,39 @@ export class SessionsCore {
     session.subs.send({ t: 'output', id: session.id, data, seq })
   }
 
+  /** Daftarkan PTY hidup sebagai sesi node dan sambungkan output/exit-nya. */
+  protected track(id: string, pty: Pty, agentId: string | undefined, cols: number, rows: number): Session {
+    const session: Session = {
+      id, pty, agentId, cols, rows, epoch: nextEpoch(),
+      daReplies: new DaReplyGate(this.supervised ? DA_REPLY_TTL_TMUX_MS : DA_REPLY_TTL_OTHER_MS),
+      log: new OutputLog(),
+      subs: new SubscriberSet<ServerMsg>(),
+      exited: false,
+      startedAt: this.now(),
+    }
+    this.map.set(id, session)
+    pty.onData((data) => this.emit(session, data))
+    pty.onExit((code) => {
+      // Same identity gate as `onExit`: only the first exit of the live session becomes an event.
+      const live = this.map.get(id) === session && !session.exited
+      this.onExit(session, code)
+      if (live) producePtyExit({ nodeId: id, agentId, code, reason: 'self', durationMs: this.now() - session.startedAt })
+    })
+    return session
+  }
+
   /** PTY keluar SENDIRI. Gerbang identitas: gema dari `close` tidak boleh menulis status/exit. */
   protected onExit(session: Session, code: number): void {
     if (this.map.get(session.id) !== session || session.exited) return
     session.exited = true
     const at = this.now()
     ptyLog.exited(session.id, session.agentId, code, 'self', at - session.startedAt)
-    // `done` DULU, tombstone exit sesudahnya: `setStatus` mengabaikan node yang sudah punya
-    // tombstone (lihat guard di sana), jadi urutan sebaliknya membuat `done` hilang.
-    this.setStatus(session.id, 'done', at)
+    // An agent that exits non-zero failed: it is never shown as Done with Resume offered (A2). Under
+    // tmux the attach client always exits 0, so there `open` probes the program before spawning.
+    const failed = !!session.agentId && code !== 0
+    // Status DULU, tombstone exit sesudahnya: `setStatus` mengabaikan node yang sudah punya
+    // tombstone (lihat guard di sana), jadi urutan sebaliknya membuat statusnya hilang.
+    this.setStatus(session.id, failed ? 'failed' : 'done', at)
     this.registry.setExit(session.id, {
       code,
       reason: 'self',

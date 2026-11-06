@@ -15,11 +15,13 @@ import {
   pathExists,
   readBinary,
   readErrorResult,
-  readText,
   readTextMeta,
   resolveFsPath,
   statMeta,
 } from './fsOps'
+
+/** The text verb's content (the old content-only `readText` was dead in production and is gone). */
+const readText = (p: string): Promise<string> => readTextMeta(p).then((m) => m.content)
 
 let root = ''
 

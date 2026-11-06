@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
+import type { SettingsPatch } from '../shared/settings.patch'
 import { CANVAS_BG_MODES, DEFAULT_CANVAS_BACKGROUND, type CanvasBackground, type CanvasBackgroundMode } from '../shared/canvasBackground.schema'
 import { removeCanvasImage, uploadCanvasImage } from './canvasBackground.api'
 import { needsContrastWarning } from './canvasBackground.style'
@@ -27,7 +28,7 @@ type Scope = 'global' | 'workspace'
 
 interface Props {
   settings: Settings
-  onChange: (patch: Partial<Settings>) => void
+  onChange: (patch: SettingsPatch) => void
   /** Active workspace; without one only the global background can be edited. */
   projectId?: string
   initialScope?: Scope
@@ -45,31 +46,31 @@ export function CanvasBackgroundSection({ settings: s, onChange, projectId, init
   // While searching, only matching fields show; the preview and actions would be noise.
   const searching = useSettingsSearch() !== ''
 
-  const write = (next: CanvasBackground, map = s.canvasBackgroundByWorkspace): void =>
-    onChange(ws ? { canvasBackgroundByWorkspace: { ...map, [ws]: next } } : { canvasBackground: next })
+  // Workspace scope sends ONLY its own entry (`settings.patch.ts`; null = back to global), so a tab
+  // with a stale copy of the map never overwrites other workspaces' overrides.
+  const write = (next: CanvasBackground | null): void =>
+    onChange(ws ? { canvasBackgroundByWorkspace: { [ws]: next } } : { canvasBackground: next ?? DEFAULT_CANVAS_BACKGROUND })
   const set = (patch: Partial<CanvasBackground>): void => write({ ...bg, ...patch })
   const fromServer = (saved: Settings): void =>
-    onChange({ canvasBackground: saved.canvasBackground, canvasBackgroundByWorkspace: saved.canvasBackgroundByWorkspace })
+    write(ws ? saved.canvasBackgroundByWorkspace[ws] ?? null : saved.canvasBackground)
   const attempt = (op: () => Promise<void>): void => {
     setError('')
     op().catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
   }
   // An image is removed through the server first, so its file is deleted, not orphaned.
-  const dropImage = async (): Promise<Settings | null> => (bg.imageId ? removeCanvasImage(ws) : null)
+  const dropImage = async (): Promise<void> => { if (bg.imageId) await removeCanvasImage(ws) }
 
   const reset = (): void => attempt(async () => {
-    const saved = await dropImage()
-    write(DEFAULT_CANVAS_BACKGROUND, saved?.canvasBackgroundByWorkspace)
+    await dropImage()
+    write(DEFAULT_CANVAS_BACKGROUND)
   })
   const setInherit = (inherit: boolean): void => {
     if (!ws) return
     // Starts as a copy of global; a shared image id is safe (the server deletes only unreferenced files).
     if (!inherit) { write({ ...s.canvasBackground }); return }
     attempt(async () => {
-      const saved = await dropImage()
-      const rest = { ...(saved?.canvasBackgroundByWorkspace ?? s.canvasBackgroundByWorkspace) }
-      delete rest[ws]
-      onChange({ canvasBackgroundByWorkspace: rest })
+      await dropImage()
+      write(null)
     })
   }
 

@@ -30,6 +30,7 @@ import {
   pragmaInt,
 } from './ledgerInvariants'
 import { migrate } from './migration'
+import { createRetention, type Retention } from './ledgerRetention'
 import {
   claimDone,
   failTask,
@@ -162,6 +163,8 @@ export interface Ledger {
   deleteProject(id: string): boolean
   /** Deletes every project owned by a workspace; returns how many projects were removed. */
   deleteProjectsForWorkspace(workspaceId: string): number
+  /** Table retention registry (ledgerRetention.policy.ts), ticked by the ledger reaper. */
+  retention: Retention
   /** Runs `fn` inside one BEGIN IMMEDIATE transaction (nested calls join it). */
   tx<T>(fn: () => T): T
   now(): number
@@ -185,6 +188,7 @@ export function createLedger(db: Database, options: LedgerOptions = {}): Ledger 
   return {
     project,
     agent,
+    retention: createRetention(ctx),
     task: {
       createTask: (input) =>
         tx(ctx, () => {

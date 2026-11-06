@@ -8,6 +8,7 @@ export type MetricName =
   | 'stale_fence'
   | 'reaper_tick'
   | 'reaper_error'
+  | 'retention_rows'
 
 export interface MetricSnapshot {
   counters: Record<string, number>

@@ -23,7 +23,7 @@ export interface TabStripProps {
   children?: ReactNode
 }
 
-const STATUS_LABEL: Partial<Record<AgentStatus, string>> = { working: 'Working', waiting: 'Turn ended', blocked: 'Needs you' }
+const STATUS_LABEL: Partial<Record<AgentStatus, string>> = { working: 'Working', waiting: 'Turn ended', blocked: 'Needs you', failed: 'Failed' }
 
 /** Order after dropping `from` on the left or right half of `to`. */
 export function movedOrder(order: readonly string[], from: string, to: string, side: 'left' | 'right'): string[] {

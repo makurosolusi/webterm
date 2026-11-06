@@ -10,6 +10,7 @@
 // Coalescing mirrors VS Code's text undo grouping: repeated edits to the same key set inside a
 // short window (a slider drag, typing in a number box) collapse into one step.
 import type { Settings } from '../shared/settings'
+import { mergeSettingsPatches, settingsPatchBefore, type SettingsPatch } from '../shared/settings.patch'
 
 /** How many changes can be undone. */
 export const SETTINGS_HISTORY_CAP = 20
@@ -18,14 +19,14 @@ export const SETTINGS_COALESCE_MS = 1000
 
 export interface SettingsChange {
   keys: (keyof Settings)[]
-  before: Partial<Settings>
-  after: Partial<Settings>
+  before: SettingsPatch
+  after: SettingsPatch
   at: number
 }
 
 export interface SettingsHistory {
   /** Record `patch` applied on top of `current` (the state BEFORE the patch). No-op patches are dropped. */
-  record(current: Settings, patch: Partial<Settings>): SettingsChange | undefined
+  record(current: Settings, patch: SettingsPatch): SettingsChange | undefined
   /** The step to revert, or undefined. Apply `change.before` without recording it. */
   undo(): SettingsChange | undefined
   /** The step to re-apply, or undefined. Apply `change.after` without recording it. */
@@ -47,19 +48,22 @@ export function createSettingsHistory(opts: { cap?: number; coalesceMs?: number;
 
   return {
     record(current, patch) {
-      const keys = (Object.keys(patch) as (keyof Settings)[]).filter((k) => !same(current[k], patch[k]))
+      // Entry keys (settings.patch.ts) record per-entry before values, absent = null, so an undo deletes what the step added.
+      const value = (k: keyof Settings): unknown => (patch as Record<string, unknown>)[k]
+      const keys = (Object.keys(patch) as (keyof Settings)[]).filter((k) => !same(settingsPatchBefore(current, k, value(k)), value(k)))
       if (!keys.length) return undefined
-      const before: Partial<Settings> = {}
-      const after: Partial<Settings> = {}
+      const before: SettingsPatch = {}
+      const after: SettingsPatch = {}
       for (const k of keys) {
-        Object.assign(before, { [k]: current[k] })
-        Object.assign(after, { [k]: patch[k] })
+        Object.assign(before, { [k]: settingsPatchBefore(current, k, value(k)) })
+        Object.assign(after, { [k]: value(k) })
       }
       const at = now()
       items.splice(done) // a new edit drops the redo tail
       const top = items[items.length - 1]
       if (top && sameKeys(top.keys, keys) && at - top.at < coalesceMs) {
-        top.after = after
+        top.before = mergeSettingsPatches(before, top.before) // entry keys: the earliest before of each entry wins
+        top.after = mergeSettingsPatches(top.after, after)
         top.at = at
         // Dragged back to where it started: the step is gone, not a no-op entry.
         if (same(top.before, top.after)) { items.pop(); done = items.length; return undefined }
