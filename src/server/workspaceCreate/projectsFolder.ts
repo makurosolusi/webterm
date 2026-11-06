@@ -8,6 +8,7 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { childEnv } from '../childEnv'
 
 export const DATA_DIR_MESSAGE = 'This is inside the webterm data folder, which holds its database. Pick another folder.'
 
@@ -128,7 +129,8 @@ export interface RevealDeps {
 }
 
 const spawnDetached = (cmd: string, args: string[]): Promise<void> => new Promise((done, fail) => {
-  const child = nodeSpawn(cmd, args, { stdio: 'ignore', detached: true })
+  // Filtered env (sec-208-7): the file manager it opens must not inherit the server's secrets.
+  const child = nodeSpawn(cmd, args, { env: childEnv(), stdio: 'ignore', detached: true })
   child.once('spawn', () => { child.unref(); done() })
   child.once('error', (e) => fail(new Error(`Could not run ${cmd}: ${e.message}`)))
 })

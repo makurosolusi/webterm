@@ -8,6 +8,7 @@
 // a base branch whose .gitignore lacks `.env` can never turn the copied secret into a stageable file.
 import { execFile, spawn } from 'node:child_process'
 import { gitCommand } from './gitExec'
+import { childEnv } from './childEnv'
 import { promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -119,11 +120,11 @@ export async function readSetupScript(worktree: string): Promise<{ source: strin
 export async function runSetupScript(primary: string, worktree: string, timeoutMs = SETUP_TIMEOUT_MS): Promise<SetupResult> {
   const found = await readSetupScript(worktree)
   if (!found) return { source: null, ran: false, ok: true, timedOut: false, exitCode: null, output: '' }
-  const env = {
-    ...process.env,
+  // Filtered like a PTY (sec-208-7): repo code must not read the server's token or bot secrets.
+  const env = childEnv({
     ORCA_ROOT_PATH: primary, ORCA_WORKTREE_PATH: worktree, ORCA_WORKSPACE_NAME: basename(worktree),
     WEBTERM_ROOT_PATH: primary, WEBTERM_WORKTREE_PATH: worktree,
-  }
+  })
   return new Promise((resolve) => {
     let output = ''
     let timedOut = false
