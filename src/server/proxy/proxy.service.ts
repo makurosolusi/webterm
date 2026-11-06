@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { request as httpRequest } from 'node:http'
 import { connect, type Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
-import { CAPABILITY_HEADER, TOKEN_HEADER, TOKEN_PARAM, tokensMatch, type AllowedHostsArg } from '../auth'
+import { CAPABILITY_HEADER, TOKEN_HEADER, TOKEN_PARAM, UI_SESSION_COOKIE, readCookie, tokensMatch, type AllowedHostsArg } from '../auth'
 import { isLoopbackOrUnspecified } from '../browser/ssrf.ip'
 import { firstHeader } from '../httpHeaders'
 import { hostAllowed } from '../hostAllow'
@@ -70,17 +70,13 @@ const safeDecode = (s: string): string => { try { return decodeURIComponent(s) }
 
 const cookieValue = (token: string): string => crypto.createHmac('sha256', token).update('webterm-proxy-cookie').digest('base64url')
 
-function readCookie(header: string | undefined, name: string): string | undefined {
-  for (const part of (header ?? '').split(';')) {
-    const i = part.indexOf('=')
-    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim()
-  }
-  return undefined
-}
+/** webterm's own cookies: the proxy's and the UI session (cookies ignore ports, RFC 6265, so the
+ *  browser sends `wt_ui` here too; an agent-started dev server must never receive it). */
+const WEBTERM_COOKIES: ReadonlySet<string> = new Set([PROXY_COOKIE, UI_SESSION_COOKIE])
 
-/** Cookie header minus webterm's own cookie; undefined when nothing is left. */
+/** Cookie header minus webterm's own cookies; undefined when nothing is left. */
 function stripWebtermCookie(header: string | undefined): string | undefined {
-  const kept = (header ?? '').split(';').map((p) => p.trim()).filter((p) => p !== '' && p.split('=')[0]!.trim() !== PROXY_COOKIE)
+  const kept = (header ?? '').split(';').map((p) => p.trim()).filter((p) => p !== '' && !WEBTERM_COOKIES.has(p.split('=')[0]!.trim()))
   return kept.length ? kept.join('; ') : undefined
 }
 

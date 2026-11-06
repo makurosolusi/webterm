@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AGENT_PROTECTION_PATH, agentProtectionRoute } from './agentSandbox.api'
-import { SANDBOX_EXCLUDED_COMMANDS, UNSANDBOXED_RETRY_RULE, agentProtection, agentSandboxOn, claudeProtectionSettings } from './agentSandbox'
+import { BROWSER_PROFILE_DIRS, SANDBOX_EXCLUDED_COMMANDS, UNSANDBOXED_RETRY_RULE, agentProtection, agentSandboxOn, claudeProtectionSettings } from './agentSandbox'
 import { forgetNodeToken, nodeToken } from './hooksTokens'
 import { nodeTokenMismatch, requesterNodeId } from './agentStatusAuth'
 import { BUILTIN_AGENT_IDS } from '../shared/workspace'
@@ -43,7 +43,7 @@ describe('claudeProtectionSettings', () => {
   it('on macOS enables the sandbox: whole data dir unreadable except shims/worktrees, secrets unwritable, network unchanged', () => {
     const sandbox = (claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings).sandbox!
     expect(sandbox.enabled).toBe(true)
-    expect(sandbox.filesystem.denyRead).toEqual([DIR])
+    expect(sandbox.filesystem.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS])
     expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/worktrees`])
     expect(sandbox.filesystem.allowWrite).toEqual(['~/'])
     expect(sandbox.filesystem.denyWrite).toEqual(expect.arrayContaining([
@@ -63,7 +63,17 @@ describe('claudeProtectionSettings', () => {
     const sandbox = (claudeProtectionSettings(DIR, { platform: 'darwin', env: {}, ownHeaders: own }) as Settings).sandbox!
     expect(sandbox.filesystem.allowRead).toContain(own)
     expect(sandbox.filesystem.allowRead.filter((p) => p.includes('node-settings'))).toEqual([own])
-    expect(sandbox.filesystem.denyRead).toEqual([DIR])
+    expect(sandbox.filesystem.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS])
+  })
+
+  it('walls off the sign-in redirect dir and the browser cookie stores (wt_ui on disk)', () => {
+    const s = claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings
+    expect(s.permissions.deny).toContain(`Read(/${DIR}/run/**)`)
+    expect(s.sandbox!.filesystem.denyWrite).toContain(`${DIR}/run`)
+    for (const p of ['~/Library/Application Support/Google/Chrome', '~/Library/Application Support/Firefox', '~/Library/Cookies']) {
+      expect(s.sandbox!.filesystem.denyRead).toContain(p)
+      expect(s.permissions.deny).toContain(`Read(${p}/**)`)
+    }
   })
 
   it('WEBTERM_AGENT_SANDBOX=off drops the sandbox block but keeps the permission rules', () => {

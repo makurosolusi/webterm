@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
-import { authorizeRequest } from '../auth'
+import { UI_SESSION_COOKIE, authorizeRequest } from '../auth'
 import { parseProxyUrl, PROXY_COOKIE, type ProxyDeps } from './proxy.service'
 import { preferredProxyPort, startProxyListener, type ProxyListener } from './proxy.listener'
 
@@ -105,6 +105,12 @@ describe('HTTP', () => {
     expect(body.headers['x-keep']).toBe('k')
     expect(res.headers.get('keep-alive')).not.toBe('timeout=77') // the front server may add its own
     expect(res.headers.get('x-hop')).toBeNull()
+  })
+
+  test('the UI session cookie never reaches upstream (cookies ignore ports)', async () => {
+    const { body } = await echo(`/proxy/${up}/h`, { Cookie: `${UI_SESSION_COOKIE}=s3ss; app=1; ${PROXY_COOKIE}=abc` })
+    expect(body.headers.cookie).toBe('app=1')
+    expect((await echo(`/proxy/${up}/h`, { Cookie: `${UI_SESSION_COOKIE}=s3ss` })).body.headers.cookie).not.toBeDefined()
   })
 
   test('port the sensor has not seen is refused', async () => {

@@ -26,6 +26,9 @@ export const TOKEN_PARAM = 'token'
 /** Header that carries a per-node capability token (`wcap_*`) to the control API. Root and
  *  node tokens never travel in this header, and it is never read from the query string. */
 export const CAPABILITY_HEADER = 'x-webterm-capability'
+/** HttpOnly session cookie of the webterm UI (routes/auth.routes.ts). Root-equivalent: the proxy
+ *  strips it before a dev server sees the request, and it is never accepted cross-origin. */
+export const UI_SESSION_COOKIE = 'wt_ui'
 
 export const DEFAULT_HOST = '127.0.0.1'
 
@@ -33,7 +36,8 @@ type Headers = Record<string, string | string[] | undefined>
 /** Allowlist Host; fungsi dievaluasi per request, `undefined` = gerbang mati. */
 export type AllowedHostsArg = HostAllowlist | (() => HostAllowlist | undefined)
 
-function hostOk(headers: Headers, arg: AllowedHostsArg | undefined): boolean {
+/** Host allowlist check (DNS rebinding); a list that resolves to `undefined` lets every Host through. */
+export function hostOk(headers: Headers, arg: AllowedHostsArg | undefined): boolean {
   const list = typeof arg === 'function' ? arg() : arg
   return list === undefined || hostAllowed(headers['host'], list)
 }
@@ -70,6 +74,15 @@ export function tokensMatch(expected: string | undefined, candidate: string | nu
   if (expected === undefined) return true // no token configured: nothing to prove
   if (typeof candidate !== 'string' || candidate.length !== expected.length) return false
   return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected))
+}
+
+/** Value of cookie `name` in a `Cookie` header; undefined when absent. */
+export function readCookie(header: string | undefined, name: string): string | undefined {
+  for (const part of (header ?? '').split(';')) {
+    const i = part.indexOf('=')
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim()
+  }
+  return undefined
 }
 
 /**
@@ -150,12 +163,18 @@ export function authorizeRequest(args: {
   /** Validator capability token (`wcap_*`). Tidak wajib: tanpa ini control API tetap
    *  root/node-only, yang merupakan perilaku aman bawaan. */
   isCapabilityToken?: (token: string) => boolean
+  /** Validator of the `wt_ui` session cookie value. Optional: without it no cookie is accepted. */
+  isUiSession?: (value: string) => boolean
   allowedHosts?: AllowedHostsArg
 }): boolean {
   // Host ditolak menutup semua jalur, termasuk token node/capability.
   if (!hostOk(args.headers, args.allowedHosts)) return false
   if (authorize(args)) return true
   if (!sameOrigin(args.headers)) return false
+  // Cookies ignore ports (RFC 6265): a page on the proxy port carries `wt_ui` too, so the cookie only
+  // counts after the same-origin check above (Origin host = Host, no `Sec-Fetch-Site: same-site`).
+  const session = readCookie(firstHeader(args.headers['cookie']), UI_SESSION_COOKIE)
+  if (session && args.isUiSession?.(session)) return true
   if (isNodeTokenPath(args.pathname)) {
     const candidate = firstHeader(args.headers[TOKEN_HEADER]) ?? args.queryToken
     if (typeof candidate === 'string' && candidate !== '' && args.isNodeToken(candidate)) return true

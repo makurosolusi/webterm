@@ -45,7 +45,7 @@ afterEach(() => {
 interface Reply { res: RecordedRes; json: Record<string, any> }
 
 /** Satu panggilan rute; selesai saat respons ditulis (rute berjalan async di balik boolean). */
-function call(method: string, path: string, opts: { peer?: string; body?: string; dir?: string; headers?: Record<string, string> } = {}): Promise<Reply> {
+function call(method: string, path: string, opts: { peer?: string; body?: string; dir?: string; headers?: Record<string, string>; installed?: (req: IncomingMessage) => void } = {}): Promise<Reply> {
   const req = Object.assign(fakeReq(method, opts.body), {
     socket: { remoteAddress: opts.peer ?? LOOPBACK },
     headers: opts.headers ?? BROWSER,
@@ -56,7 +56,7 @@ function call(method: string, path: string, opts: { peer?: string; body?: string
       if (chunk) res.body += chunk
       resolve({ res, json: res.body ? (res.json() as Record<string, any>) : {} })
     }) as typeof res.end
-    expect(tokenAccessRoute(req, res, path, opts.dir ?? secretsDir)).toBe(true)
+    expect(tokenAccessRoute(req, res, path, opts.dir ?? secretsDir, opts.installed)).toBe(true)
   })
 }
 
@@ -157,6 +157,17 @@ describe('POST /api/settings/token/rotate', () => {
     expect(gate(json.token)).toBe(true)
     expect(readFileSync(tokenFilePath(secretsDir), 'utf8')).toBe(json.token)
     expect(process.env.WEBTERM_TOKEN).toBe(json.token)
+  })
+
+  it('a new token signs other UI sessions out: the hook runs once per install, never on a refusal', async () => {
+    const seen: IncomingMessage[] = []
+    const installed = (req: IncomingMessage) => { seen.push(req) }
+    await call('POST', ENABLE, { installed })
+    await call('POST', ROTATE, { installed })
+    expect(seen.length).toBe(2)
+    setTokenState({ token: 'e'.repeat(40), source: 'env', created: false })
+    await call('POST', ROTATE, { installed })
+    expect(seen.length).toBe(2)
   })
 
   it('source env: 409 env_managed dan berkas tidak dibuat', async () => {

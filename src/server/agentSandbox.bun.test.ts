@@ -33,6 +33,7 @@ import { buildContextShim } from './contextLinkSkill'
 import { buildBrowserShim } from './browserAgentShim'
 import { installWebtermCli } from './cli/cli.launcher'
 import { TOKEN_HEADER } from './auth'
+import { BROWSER_PROFILE_DIRS } from './agentSandbox'
 import { shq } from './hooksQuote'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -95,7 +96,7 @@ test('the settings file a Claude node is launched with walls off the data dir', 
   expect(s.permissions.deny).toContain('Read(**/.env)')
   if (process.platform === 'darwin') {
     expect(s.sandbox.enabled).toBe(true)
-    expect(s.sandbox.filesystem.denyRead).toEqual([DATA_DIR])
+    expect(s.sandbox.filesystem.denyRead).toEqual([DATA_DIR, ...BROWSER_PROFILE_DIRS])
     expect(s.sandbox.filesystem.denyWrite).toContain(join(DATA_DIR, 'secrets'))
   }
   // The file never carries a token value, root or node.
@@ -139,6 +140,6 @@ test("node A's sandbox opens only A's header file; node B's stays under the deni
   expect(allow).toContain(claudeHeadersPath('node-x'))
   expect(allow).not.toContain(claudeHeadersPath('node-y'))
   expect(allow.some((p) => p === join(DATA_DIR, 'node-settings'))).toBe(false)
-  expect(a.sandbox.filesystem.denyRead).toEqual([DATA_DIR])
+  expect(a.sandbox.filesystem.denyRead).toEqual([DATA_DIR, ...BROWSER_PROFILE_DIRS])
   expect(claudeHeadersPath('node-y').startsWith(`${DATA_DIR}/`)).toBe(true)
 })

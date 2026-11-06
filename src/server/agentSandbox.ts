@@ -35,9 +35,21 @@ export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'worktr
  * `*` is a gitignore glob in permission rules; the sandbox gets the whole data dir instead.
  */
 export const AGENT_SECRET_ENTRIES = [
-  'secrets', 'node-settings', 'node-tokens', 'codex-bin', 'channels', 'browser', 'central', 'relay', 'sock', 'memory', 'logs',
+  'secrets', 'node-settings', 'node-tokens', 'codex-bin', 'channels', 'browser', 'central', 'relay', 'sock', 'memory', 'logs', 'run',
   'webterm.db*', 'ledger.db*', 'auth.json', 'node-auth-key.bin', 'settings.json', 'sessions.json',
   'agent-status.json', 'integration-receipts.json',
+] as const
+
+/**
+ * The user's own browser profiles (macOS). HttpOnly keeps the `wt_ui` UI session cookie from page JS,
+ * not from disk: Firefox `cookies.sqlite` is plaintext, so a sandboxed shell must not read the store.
+ * Safari's container is already TCC-protected. `~/` paths: Claude Code expands them in sandbox and rules.
+ */
+export const BROWSER_PROFILE_DIRS = [
+  '~/Library/Application Support/Google/Chrome', '~/Library/Application Support/Chromium',
+  '~/Library/Application Support/BraveSoftware', '~/Library/Application Support/Microsoft Edge',
+  '~/Library/Application Support/Arc', '~/Library/Application Support/Vivaldi',
+  '~/Library/Application Support/Firefox', '~/Library/Cookies',
 ] as const
 
 /** The shims agents execute: readable, but replacing one would run code inside every other agent. */
@@ -102,6 +114,7 @@ export function claudeProtectionSettings(dataDirPath: string, opts: ProtectionOp
     ...AGENT_EXEC_ENTRIES.map((e) => `Edit(${abs(e)}/**)`),
     `Bash(cat ${dir}/*)`,
     ...SECRET_DOTENV_FILES.map((f) => `Read(**/${f})`),
+    ...(platform === 'darwin' ? BROWSER_PROFILE_DIRS.map((p) => `Read(${p}/**)`) : []),
   ]
   const permissions = { deny, ask: [UNSANDBOXED_RETRY_RULE] }
   if (!claudeSandboxSupported(platform) || !agentSandboxOn(env)) return { permissions }
@@ -118,7 +131,7 @@ export function claudeProtectionSettings(dataDirPath: string, opts: ProtectionOp
         // Home stays writable (caches, other repos, ~/.config): the sandbox is here to wall off
         // the data dir, not to change what a developer's agent can do elsewhere.
         allowWrite: ['~/'],
-        denyRead: [dir],
+        denyRead: [dir, ...BROWSER_PROFILE_DIRS],
         // Narrower path wins for reads (docs + verified): another node's header file stays denied.
         allowRead: [...AGENT_READABLE_ENTRIES.map((e) => join(dir, e)), ...(ownHeaders ? [real(ownHeaders)] : [])],
         denyWrite: writeDenied,
