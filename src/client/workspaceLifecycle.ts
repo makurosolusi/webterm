@@ -9,18 +9,18 @@
 //
 // Logika dipisah dari JSX dengan alasan yang sama seperti `./closedHistory`: vitest webterm jalan di
 // node-env tanpa DOM, jadi yang bisa di-assert harus hidup di luar komponen.
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
 import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
 import { bootWorkspaceId, nextActiveWorkspaceId } from './workspaceMenu'
-import { toBridge, toWsNode, workspaceNameFromPath } from './store'
+import { workspaceNameFromPath } from './store'
 import { sessionIdsOf } from './paneTree'
 import { send } from './ws'
 import { revealInTabs } from './nodeReveal'
 import { getTabLayout } from './tabLayout.store'
 import type { ClosedHistory } from './closedHistory'
-import type { Viewport, Workspace } from '../shared/workspace'
+import type { Workspace } from '../shared/workspace'
 
 /** Yang dibutuhkan hook ini dari App. Setter & ref dipinjam APA ADANYA — ref harus ref yang sama
  *  yang dibaca `scheduleSave`/canvas, bukan salinan baru yang dibuat di sini. */
@@ -43,79 +43,9 @@ export interface WorkspaceLifecycleDeps {
   activeWsRef: RefObject<Workspace | null>
   nodesRef: RefObject<Node[]>
   edgesRef: RefObject<Edge[]>
-  /** Batalkan debounce `scheduleSave` yang menggantung TANPA menulis (lihat `useWorkspaceSaver`). */
+  /** Batalkan debounce `scheduleSave` yang menggantung TANPA menulis (lihat `useWorkspaceSaver` di `./workspaceSaver`). */
   cancelSave: () => void
   rf: RefObject<ReactFlowInstance | null>
-}
-
-/** Jeda persistensi board aktif: cukup untuk menelan rentetan geser node, cukup pendek agar
- *  penyimpanan tidak terasa tertunda. */
-export const SAVE_DEBOUNCE_MS = 400
-
-export interface WorkspaceSaverDeps {
-  activeWsRef: RefObject<Workspace | null>
-  nodesRef: RefObject<Node[]>
-  edgesRef: RefObject<Edge[]>
-  viewportRef: RefObject<Viewport>
-  saveTimer: RefObject<ReturnType<typeof setTimeout> | null>
-}
-
-export interface WorkspaceSaver {
-  scheduleSave: () => void
-  /** Tulis SEKARANG payload yang sudah terkunci, lalu batalkan timernya. No-op bila tak ada. */
-  flushSave: () => void
-  /** Buang debounce yang menggantung tanpa menulis. */
-  cancelSave: () => void
-}
-
-/**
- * Debounce penyimpanan board aktif. Payload (workspace + nodes/edges/viewport) DIKUNCI saat
- * `scheduleSave` dipanggil, bukan dibaca ulang saat timer menembak: workspace bisa berpindah dalam
- * 400ms itu (`onSelect`/`onCreateWorkspace`/`onDeleteWorkspace` memanggil `applyWorkspace`), dan
- * membaca ref saat itu menulis board BARU ke id workspace LAMA.
- */
-export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer }: WorkspaceSaverDeps): WorkspaceSaver {
-  // Fungsi tulis yang payload-nya sudah tertangkap. Satu-satunya sumber `flushSave`. Disimpan di
-  // ref, bukan di state: menembakkannya tidak boleh memicu render.
-  const pending = useRef<(() => void) | null>(null)
-
-  const cancelSave = useCallback(() => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = null
-    pending.current = null
-  }, [saveTimer])
-
-  const scheduleSave = useCallback(() => {
-    const ws = activeWsRef.current
-    if (!ws) return
-    const payload: Workspace = {
-      ...ws,
-      nodes: nodesRef.current.map(toWsNode),
-      bridges: edgesRef.current.map(toBridge),
-      viewport: { ...viewportRef.current },
-    }
-    const fire = () => {
-      saveTimer.current = null
-      pending.current = null
-      const updated: Workspace = { ...payload, updatedAt: Date.now() }
-      // `activeWsRef` adalah sumber payload save BERIKUTNYA. Menimpanya dengan board lama (timer
-      // yang menembak setelah pengguna pindah) akan menyimpan board lama itu di workspace baru.
-      if (activeWsRef.current?.id === updated.id) activeWsRef.current = updated
-      void saveWorkspace(updated)
-    }
-    cancelSave()
-    pending.current = fire
-    saveTimer.current = setTimeout(fire, SAVE_DEBOUNCE_MS)
-  }, [activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, cancelSave])
-
-  const flushSave = useCallback(() => {
-    const fire = pending.current
-    if (!fire) return
-    cancelSave() // satu jalur pembersihan untuk timer + penanda
-    fire()
-  }, [cancelSave])
-
-  return { scheduleSave, flushSave, cancelSave }
 }
 
 export interface WorkspaceLifecycle {
@@ -202,7 +132,8 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     for (const sid of sessionIdsOf(owner.nodes.find((n) => n.id === id)?.panes, id)) send({ t: 'close', id: sid })
     const fresh = await getWorkspace(owner.id)
     recordClosed([id], fresh.nodes, fresh)
-    const updated: Workspace = { ...fresh, nodes: fresh.nodes.filter((n) => n.id !== id), updatedAt: Date.now() }
+    // `fresh.updatedAt` rides along as the save's precondition (409 if another window wrote since).
+    const updated: Workspace = { ...fresh, nodes: fresh.nodes.filter((n) => n.id !== id) }
     await saveWorkspace(updated)
     setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
   }, [recordClosed, workspaces])
@@ -227,7 +158,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi PUT dari sana akan
     // mengembalikan node/viewport workspace itu ke keadaan lama.
     const fresh = await getWorkspace(id)
-    const updated: Workspace = { ...fresh, name, updatedAt: Date.now() }
+    const updated: Workspace = { ...fresh, name } // fresh.updatedAt = the save's precondition
     await saveWorkspace(updated)
     setWorkspaces((prev) => prev.map((w) => (w.id === id ? updated : w)))
   }, [scheduleSave])
@@ -235,9 +166,9 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   // Hapus workspace (sudah dikonfirmasi di header). Tidak bisa dibatalkan: row + board tersimpan.
   const onDeleteWorkspace = useCallback(async (id: string) => {
     if (id === activeId) {
-      // Debounce yang masih menggantung akan PUT id ini SETELAH row-nya hilang dan menghidupkannya
-      // kembali (PUT = upsert). Hanya untuk workspace aktif: timer itu selalu milik board aktif,
-      // membatalkannya saat menghapus workspace lain berarti membuang save yang sah.
+      // A pending debounce would PUT this id after its row is gone: a pointless 404 (the server no
+      // longer re-creates it). Active board only: the timer always belongs to the active board,
+      // cancelling it while deleting another workspace would drop a legitimate save.
       cancelSave()
     }
     // Sesi PTY tidak mati sendiri saat row-nya hilang — node yang unmount sengaja TIDAK menutup
