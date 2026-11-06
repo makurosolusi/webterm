@@ -99,6 +99,7 @@ Operator notes:
 - Browser node failures that show as "crashed" now log their real cause on the server (message and underlying cause) instead of only the error class name, so a failing Chromium connection can be diagnosed.
 - The file manager's "Reveal" menu item now shows the file in your system file manager ("Reveal in Finder" on macOS, "Reveal in File Explorer" on Windows, "Open Containing Folder" elsewhere; ⌥⌘R) instead of doing nothing. If revealing fails, the reason appears in the Files footer.
 - Icons were all drawn at 16px no matter where they were used, so activity bar icons looked too small. They now take the size of the place they are in, such as 24px in the activity bar.
+- Activity bar icons no longer shrink shortly after the page loads on boards that contain an editor or diff node.
 - Git marks in Files nodes now update after a commit, `git add`, checkout, reset, fetch, pull or push, not only when a file in the folder changes. Before, marks stayed on files you had already committed.
 - Removing a Files node, or switching workspace, cancels its running upload, answers any open "already exists" question with Skip and clears its messages, so nothing is left running or reappears later.
 - A save from a window that is out of date no longer overwrites a newer board saved from another window. The window reloads the latest version instead and shows "This workspace changed in another window. Reloaded the latest version."
