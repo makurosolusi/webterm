@@ -4,11 +4,15 @@
 // be a 409, so the UI offers the action that can actually make progress. A busy conversation
 // from another tab still shows Stop because the panel learns `activeTurnId` from the 409 body.
 // With `attach` the composer also takes files (chatComposerAttach): an image-only message may be sent.
+// With `completion` it opens a `/` command and `@` file menu (agentChat/completionMenu). Escape while
+// a turn runs stops it, unless a menu is open (then Escape only closes the menu).
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
 import type { KeyboardEvent, RefObject } from 'react'
 import type { ComposerImage } from './chatAttach'
 import { AttachTray, useComposerAttach, type AttachFiles } from './chatComposerAttach'
+import { useComposerCompletion } from '../agentChat/completionMenu'
+import type { ComposerCompletion } from '../agentChat/composerCompletion'
 
 export interface ChatComposerProps {
   busy: boolean
@@ -25,6 +29,8 @@ export interface ChatComposerProps {
   attach?: AttachFiles
   /** Where files may be dropped (default: the composer itself). */
   dropZone?: RefObject<HTMLElement | null>
+  /** Opt-in `/` and `@` completion menu; absent = plain composer (the Central chat). */
+  completion?: ComposerCompletion
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -48,6 +54,7 @@ export default function ChatComposer(props: ChatComposerProps) {
   const picker = useRef<HTMLInputElement | null>(null)
   const insert = useCallback((add: string) => setText((cur) => (cur && !/\s$/.test(cur) ? `${cur} ${add}` : `${cur}${add}`)), [])
   const files = useComposerAttach(props.attach, !!props.disabled, insert, props.dropZone ?? root)
+  const complete = useComposerCompletion(props.completion, text, setText, area)
   const tooLong = props.maxLength !== undefined && text.length > props.maxLength
   const hasContent = text.trim() !== '' || files.images.length > 0
   const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy
@@ -82,6 +89,18 @@ export default function ChatComposer(props: ChatComposerProps) {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     // IME composition: Enter confirms a candidate, it must not send the message.
     if (event.nativeEvent.isComposing) return
+    // The menu owns its keys; none of them may reach the canvas (arrows pan, Escape deselects).
+    if (complete.onKeyDown(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    if (event.key === 'Escape' && props.busy) {
+      event.preventDefault()
+      event.stopPropagation()
+      props.onStop()
+      return
+    }
     const el = event.currentTarget
     const modified = event.shiftKey || event.altKey || event.ctrlKey || event.metaKey
     if (event.key === 'ArrowUp' && !modified && el.selectionStart === 0 && el.selectionEnd === 0 && recall(-1)) {
@@ -99,7 +118,8 @@ export default function ChatComposer(props: ChatComposerProps) {
   }
 
   return (
-    <div className="chat-composer" ref={root}>
+    <div className={props.completion ? 'chat-composer chat-composer--completion' : 'chat-composer'} ref={root}>
+      {complete.menu}
       <AttachTray a={files} />
       <div className="chat-composer__box">
         {props.attach && (
@@ -124,7 +144,15 @@ export default function ChatComposer(props: ChatComposerProps) {
           rows={1}
           value={text}
           disabled={props.disabled}
-          onChange={(event) => { slot.current = null; setText(event.target.value) }}
+          onChange={(event) => { slot.current = null; setText(event.target.value); complete.sync(event.target) }}
+          // Caret moves (Home/End, arrows outside the menu) re-read the token; the menu's own keys do not.
+          onKeyUp={(event) => {
+            const menuKey = ['Enter', 'Tab', 'Escape'].includes(event.key) || (complete.open && /^Arrow(Up|Down)$/.test(event.key))
+            if (!menuKey) complete.sync(event.currentTarget)
+          }}
+          onClick={(event) => complete.sync(event.currentTarget)}
+          onBlur={complete.close}
+          {...complete.inputProps}
           onKeyDown={onKeyDown}
           onPaste={files.onPaste}
         />
