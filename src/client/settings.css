@@ -20,10 +20,10 @@
 }
 
 .st-dialog-content {
-  /* Full-screen editor, bukan modal tengah: VS Code membuka Settings sebagai page. */
-  inset: 0;
-  top: 0;
-  left: 0;
+  /* Full-screen editor, bukan modal tengah: VS Code membuka Settings sebagai page. Posisi
+     (inset-0, translate 0) dioverride lewat className di SettingsPanel lewat tailwind-merge,
+     bukan reset `translate: none !important` di sini: minifier produksi melebur reset itu jadi
+     `transform:translate(0,0)` sehingga properti `translate` utilitas Tailwind lolos. */
   display: flex;
   width: 100vw;
   height: 100vh;
@@ -32,8 +32,6 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  transform: none !important;
-  translate: none !important;
   animation: none;
   background: var(--vscode-editor-background, var(--bg));
   color: var(--vscode-foreground, var(--text));
