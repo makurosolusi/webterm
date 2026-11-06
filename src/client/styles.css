@@ -58,6 +58,19 @@
   /* Alias warisan untuk sheet yang belum ikut migrasi (`canvas-ui.css`, `Kanban.tsx`):
      tinggi chrome di atas canvas = title bar + editor tabs. */
   --tabbar-h: calc(var(--title-bar-h) + var(--editor-tabs-h));
+  /* Ukuran chrome workbench, satu sumber untuk semua sheet chrome (nilai = default VS Code):
+     teks 13px (workbench/browser/media/style.css), kecil 12px (window title, status bar,
+     breadcrumbs), label 11px (judul panel/seksi uppercase), ikon 16px, ikon activity bar 24px
+     (activityaction.css), baris list 22px (explorer/paneview), baris menu 24px (menu.ts).
+     Isi node di canvas TIDAK memakainya: ia ikut zoom canvas. */
+  --ui-font-size: var(--vscode-font-size);
+  --ui-font-size-small: 12px;
+  --ui-font-size-label: 11px;
+  --ui-icon-size: 16px;
+  --activity-icon-size: 24px;
+  --status-font-size: var(--ui-font-size-small);
+  --list-row-h: 22px;
+  --menu-row-h: 24px;
 
   /* type: stack dan ukuran milik jembatan VS Code */
   --font-ui: var(--vscode-font-family);
@@ -89,7 +102,7 @@ body {
   background: var(--canvas-bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: var(--vscode-font-size);
+  font-size: var(--ui-font-size);
   -webkit-font-smoothing: antialiased;
   /* Chrome VS Code memakai kursor default; pointer hanya untuk link. */
   cursor: default;
@@ -199,11 +212,11 @@ body {
   white-space: nowrap;
 }
 .brand__mark {
-  font-size: 16px;
+  font-size: var(--ui-icon-size);
   color: var(--accent);
 }
 .brand__name {
-  font-size: 12px;
+  font-size: var(--ui-font-size);
   color: var(--vscode-titleBar-activeForeground);
 }
 
@@ -232,7 +245,7 @@ body {
   border: 1px solid var(--vscode-commandCenter-border);
   border-radius: 5px;
   color: var(--vscode-commandCenter-foreground);
-  font-size: 12px;
+  font-size: var(--ui-font-size-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -240,7 +253,7 @@ body {
 button.app-titlebar__name {
   gap: 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-small);
   cursor: pointer;
 }
 .app-titlebar__label {
@@ -261,7 +274,7 @@ button.app-titlebar__name {
   border-radius: 4px;
   color: var(--vscode-input-foreground);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--ui-font-size-small);
   outline: none;
 }
 
@@ -282,7 +295,7 @@ button.app-titlebar__name {
   border: none;
   border-radius: 4px;
   color: var(--vscode-icon-foreground);
-  font-size: 16px;
+  font-size: var(--ui-icon-size);
   cursor: default;
 }
 .titlebar__action:hover { background: var(--vscode-toolbar-hoverBackground); }
@@ -323,7 +336,7 @@ button.app-titlebar__name {
   background: transparent;
   border: none;
   color: var(--vscode-tab-inactiveForeground);
-  font-size: 16px;
+  font-size: var(--ui-icon-size);
   cursor: default;
 }
 .app-tabs__action:hover:not(:disabled) {

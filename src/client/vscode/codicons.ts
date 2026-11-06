@@ -11,6 +11,9 @@ export function installCodicons(doc: Document = document): HTMLLinkElement {
   link.id = CODICON_STYLESHEET_ID
   link.rel = 'stylesheet'
   link.href = codiconHref
-  doc.head.appendChild(link)
+  // Paling depan di <head>: aturan codicon.css `.codicon[class*='codicon-'] { font: … 16px/1 }` (0,2,0) harus
+  // kalah dari aturan chrome bertingkat sama (`.vscode-activity-bar__icon > .codicon` 24px); dipasang di
+  // belakang, ia menang urutan dan semua ikon terkunci 16px.
+  doc.head.prepend(link)
   return link
 }

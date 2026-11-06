@@ -15,7 +15,7 @@
   /* View title VS Code: 35px, teks 11px uppercase. */
   --ss-title-h: 35px;
   /* Satu baris pohon = 22px. Dipakai juga oleh header seksi supaya ritmenya satu. */
-  --ss-row-h: 22px;
+  --ss-row-h: var(--list-row-h, 22px);
   /* Tombol toolbar VS Code: 22px, ikon 16px, radius 4px (cornerRadius-small). */
   --ss-action-size: 22px;
   /* Badge hitungan VS Code (`monaco-count-badge`): 17px, 11px, radius 2px, token `badge-*`. */

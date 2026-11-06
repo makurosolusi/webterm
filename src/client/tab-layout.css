@@ -33,7 +33,7 @@
 .tabs-tab {
   position: relative; flex: 0 0 auto; width: 180px; min-width: 72px;
   display: flex; align-items: center; gap: 6px; padding: 0 6px;
-  font-size: 12px; cursor: pointer; user-select: none;
+  font-size: var(--ui-font-size); cursor: pointer; user-select: none;
   background: var(--vscode-tab-inactiveBackground);
   color: var(--vscode-tab-inactiveForeground);
   border-right: 1px solid var(--vscode-tab-border);
@@ -54,9 +54,9 @@
 .tabs-tab[data-drop='left'] { box-shadow: inset 2px 0 0 var(--vscode-tab-dragAndDropBorder, var(--vscode-focusBorder)); }
 .tabs-tab[data-drop='right'] { box-shadow: inset -2px 0 0 var(--vscode-tab-dragAndDropBorder, var(--vscode-focusBorder)); }
 
-.tabs-tab__icon { flex: none; font-size: 12px; opacity: 0.8; }
+.tabs-tab__icon { flex: none; font-size: var(--ui-icon-size); opacity: 0.8; }
 .tabs-tab__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tabs-tab__edit { flex: 1; min-width: 72px; height: 20px; font-size: 12px; }
+.tabs-tab__edit { flex: 1; min-width: 72px; height: 20px; font-size: var(--ui-font-size); }
 .tabs-tab__status { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .tabs-tab__status--working { background: var(--state-working); }
 .tabs-tab__status--waiting { background: var(--state-warning); }
@@ -75,7 +75,7 @@
 .tabs-files__handle:hover, .tabs-files__handle:focus-visible { background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder)); outline: none; }
 .tabs-files__header {
   flex: none; height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: var(--ui-font-size-label); text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--vscode-sideBarTitle-foreground, var(--vscode-foreground));
   border-bottom: 1px solid var(--vscode-tab-border);
 }
@@ -84,7 +84,7 @@
 /* ---- Empty states ---- */
 .tabs-empty {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  font-size: 13px; color: var(--vscode-descriptionForeground);
+  font-size: var(--ui-font-size); color: var(--vscode-descriptionForeground);
 }
 .tabs-empty p { margin: 0; }
 .tabs-empty--panel { position: static; flex: 1; padding: 12px; text-align: center; }
