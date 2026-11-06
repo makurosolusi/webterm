@@ -72,7 +72,7 @@
   flex-shrink: 0;
   color: var(--vscode-foreground);
 }
-.dock-menu__check > .codicon { font-size: 13px; }
+.dock-menu__check > .codicon[class*='codicon-'] { font-size: 13px; }
 
 /* Form workspace baru: baris input, bukan baris tombol. */
 .dock-menu__form {
