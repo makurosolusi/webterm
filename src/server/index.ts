@@ -54,9 +54,9 @@ import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 import { activeAgentChatPool } from './agentChat/agentChat.pool'
 
 const LOG_DIR = 'logs'
-// Host/port, provenance .env, dataDir, token (env > berkas > bangkitkan), allowlist Host — urutannya di bootWiring.ts.
+// Host/port, provenance .env, dataDir, token (env > berkas > bangkitkan) — urutannya di bootWiring.ts.
 // Berhenti di sini (PORT ngawur / berkas token rusak) sebelum PTY, kanal, atau pengaturan hidup.
-const { host: HOST, port: PORT, hosts: HOSTS } = bootWiring(process.env, process.cwd())
+const { host: HOST, port: PORT } = bootWiring(process.env, process.cwd())
 // Pengaturan > env > default: terapkan override tersimpan ke process.env sebelum ledger/kanal membacanya.
 const envSettings = initEnvSettings()
 // After env overrides are applied: level / buffer / file sink come from WEBTERM_LOG_*.
@@ -140,14 +140,13 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
     headers: req.headers,
     expectedToken,
     pathname: url.pathname,
-    allowedHosts: HOSTS,
     isNodeToken: isValidNodeToken,
     // Capability (wcap_*) hanya diterima authorizeRequest pada keluarga /api/control/*.
     // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
     isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
     isUiSession: (v) => uiSessions().verify(v),
   })
-  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken, HOSTS), req.headers.host)
+  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken))
   return ok
 }
 
@@ -182,7 +181,7 @@ if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => lo
 if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
 const uiOpener = createUiOpener({ runDir: join(dataDir(), RUN_SUBDIR), bindHost: HOST, port: PORT })
-const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, opener: uiOpener, hosts: HOSTS, token: () => getTokenState().token })
+const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, opener: uiOpener, token: () => getTokenState().token })
 const onTokenInstalled = revokeOtherSessions(uiSessions) // token enable/rotate signs every other tab out
 
 /** Every non-asset route, shared by dev and prod; true = the request is answered. */
@@ -191,7 +190,7 @@ function routeApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL)
   if (telegramHot.handle(req, res)) return true
   if (refuseProxyOnMain(req, res)) return true // 404: the proxy has its own origin (proxy.routes.ts)
   if (uiAuthRoute(req, res, url)) return true // before the gate: this is how a browser gets a credential
-  if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(req, res, HOSTS); return true }
+  if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(res); return true }
   if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'), onTokenInstalled)) return true
   return telegramHot.handleApi(req, res) || handleApi(req, res) // root-only, after the gate: per-node tokens never reach it
 }
@@ -199,7 +198,7 @@ function routeApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL)
 const server = http.createServer()
 // Dev-server proxy (/proxy/<port>/, /absproxy/<port>/) lives on its OWN port = own origin, so a proxied
 // page (arbitrary npm code) cannot read the UI's token. Same bind host; PORT+1 or WEBTERM_PROXY_PORT, busy -> OS port.
-startDevProxy({ host: HOST, mainPort: PORT, allowedHosts: HOSTS, env: process.env })
+startDevProxy({ host: HOST, mainPort: PORT, env: process.env })
   .catch((e: unknown) => log.warn('proxy.start.failed', 'Cannot start the dev-server proxy', { cause: e instanceof Error ? e.message : String(e) }))
 
 if (dev) {

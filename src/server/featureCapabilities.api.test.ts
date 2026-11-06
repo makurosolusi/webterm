@@ -16,7 +16,7 @@ interface Opts { origin?: string | null; remote?: boolean; query?: string }
 function harness(fetch = fakeBotApi([]).fetch) {
   const h = setupEnv({})
   const audits: AuditEntry[] = []
-  const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, {}, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
+  const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
   const detectCalls: Array<{ fresh?: boolean } | undefined> = []
   const extras = { env: h.target, detect: (o?: { fresh?: boolean }) => { detectCalls.push(o); return { chromium: true, telegramToken: false, agentEngine: true } }, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
   const call = async (method: string, path: string, body?: unknown, opts: Opts = {}) => {

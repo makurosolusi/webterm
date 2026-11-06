@@ -1,7 +1,7 @@
 // Opt-in token akses root untuk bind loopback: `GET /api/settings/token` (status tanpa nilai),
 // `POST .../enable` (loopback tanpa token -> bangkitkan + simpan, nilai keluar SEKALI di respons)
 // dan `POST .../rotate`. Kontrak: PLAN/ENV-MINIMAL-b.md §3. Tidak ada `disable` (kembali terbuka =
-// hentikan server, hapus berkas token). Gerbang auth + allowlist Host sudah dijalankan index.ts
+// hentikan server, hapus berkas token). Gerbang auth sudah dijalankan index.ts
 // sebelum rute ini dipanggil. enable/rotate hanya dari UI (`uiOnlyDenial`, approvalAuth.ts): tanpa itu
 // shell agent cukup dua curl untuk mencetak token sendiri lalu menyetujui aksinya sendiri.
 import type { IncomingMessage, ServerResponse } from 'node:http'

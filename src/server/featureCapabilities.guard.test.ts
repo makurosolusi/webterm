@@ -12,11 +12,11 @@ const GOOD = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700' }
 function req(headers: Record<string, string>, peer = '127.0.0.1'): IncomingMessage {
   return { headers, socket: { remoteAddress: peer } } as unknown as IncomingMessage
 }
-const guard = (headers: Record<string, string>, opts: { peer?: string; token?: string; env?: NodeJS.ProcessEnv } = {}) =>
-  settingsGuard(req(headers, opts.peer), opts.env ?? {}, opts.token)
+const guard = (headers: Record<string, string>, opts: { peer?: string; token?: string } = {}) =>
+  settingsGuard(req(headers, opts.peer), opts.token)
 
 describe('jalur B (tanpa token ditegakkan)', () => {
-  it('loopback + Host sah + Origin sama lolos sebagai ui', () => {
+  it('loopback + Origin sama lolos sebagai ui', () => {
     expect(guard(GOOD)).toEqual({ ok: true, via: 'ui' })
     expect(guard(GOOD, { peer: '::ffff:127.0.0.1' })).toEqual({ ok: true, via: 'ui' })
   })
@@ -34,12 +34,6 @@ describe('jalur B (tanpa token ditegakkan)', () => {
 
   it('peer non-loopback tanpa token ditolak', () => {
     expect(guard(GOOD, { peer: '10.0.0.5' })).toEqual({ ok: false, reason: 'peer' })
-  })
-
-  it('Host di luar allowlist ditolak; entri WEBTERM_ALLOWED_HOSTS diterima', () => {
-    const odd = { host: 'rebind.example:8700', origin: 'http://rebind.example:8700' }
-    expect(guard(odd)).toEqual({ ok: false, reason: 'host' })
-    expect(guard(odd, { env: { WEBTERM_ALLOWED_HOSTS: 'rebind.example:8700' } })).toEqual({ ok: true, via: 'ui' })
   })
 
   it('token node/capability tanpa root ditegakkan ditolak sebagai token_kind', () => {

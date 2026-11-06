@@ -1,12 +1,11 @@
 // Kabel boot in-process: env palsu + WEBTERM_DATA_DIR tmp; process.env/token state dipulihkan tiap tes.
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { ServerResponse } from 'node:http'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeTokenToEnv } from './auth'
-import { bootWiring, HOST_DENIED_ERROR, onListenError, refuseRequest } from './bootWiring'
-import { buildAllowedHosts } from './hostAllow'
+import { bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState, setTokenState } from './tokenBootstrap'
 
 // Logger dipalsukan: sink konsol/file tak terjamin aktif di vitest, yang diuji adalah apa yang DIKIRIM ke logger.
@@ -35,26 +34,11 @@ afterEach(() => {
   setTokenState({ token: undefined, source: 'none', created: false })
 })
 
-const fakeRes = () => {
-  const r = { statusCode: 0, headers: {} as Record<string, string>, body: '', setHeader(k: string, v: string) { r.headers[k] = v }, end(b: string) { r.body = b } }
-  return r
-}
-const refuse = (headers: Record<string, string>, hosts: Parameters<typeof refuseRequest>[2]) => {
-  const res = fakeRes()
-  refuseRequest({ headers } as unknown as IncomingMessage, res as unknown as ServerResponse, hosts)
-  return res
-}
-
 describe('refuseRequest', () => {
-  it('Host ditolak => 403 JSON host_not_allowed tanpa memantulkan Host', () => {
-    const res = refuse({ host: 'evil.example:9000' }, buildAllowedHosts({ host: '127.0.0.1', port: 9000, env: {} }))
-    expect(res.statusCode).toBe(403)
-    expect(JSON.parse(res.body)).toEqual({ error: HOST_DENIED_ERROR })
-    expect(res.body).not.toContain('evil.example')
-  })
-
-  it('penolakan selain Host => 403 plain forbidden', () => {
-    expect(refuse({ host: 'localhost:9000' }, () => undefined).body).toBe('forbidden')
+  it('403 plain forbidden', () => {
+    const res = { statusCode: 0, body: '', end(b: string) { res.body = b } }
+    refuseRequest(res as unknown as ServerResponse)
+    expect(res).toMatchObject({ statusCode: 403, body: 'forbidden' })
   })
 })
 
@@ -86,14 +70,6 @@ describe('bootWiring', () => {
     expect(out).toContain(join(dir, 'data', 'secrets', 'WEBTERM_TOKEN'))
     expect(out).toContain(`"len":${(token as string).length}`)
     expect(out + written).not.toContain(token as string)
-  })
-
-  it('WEBTERM_ALLOWED_HOSTS rusak => satu warn berisi JUMLAH, bukan isinya', () => {
-    bootWiring({ PORT: '9000', WEBTERM_ALLOWED_HOSTS: 'ok.example,bad host!' }, dir)
-    const warns = logged.filter((a) => a[0] === 'hosts.ignored')
-    expect(warns).toHaveLength(1)
-    expect(warns[0][2]).toEqual({ count: 1 })
-    expect(JSON.stringify(logged)).not.toContain('bad host!')
   })
 
   it('PORT ngawur melempar sebelum menyentuh disk', () => {

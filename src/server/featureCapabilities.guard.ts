@@ -6,15 +6,10 @@
 import type { IncomingMessage } from 'node:http'
 import { CAPABILITY_HEADER, TOKEN_HEADER, sameOrigin, tokensMatch } from './auth'
 import { firstHeader } from './httpHeaders'
-import { buildAllowedHosts, hostAllowed } from './hostAllow'
-import { createLogger } from './logs'
-import { resolveHostPort } from './serverConfig'
 import { getTokenState } from './tokenBootstrap'
 
-const log = createLogger('capabilities')
-
 /** Alasan penolakan; generik, tidak pernah memuat isi header. */
-export type GuardReason = 'forwarded' | 'origin' | 'token_kind' | 'peer' | 'host'
+export type GuardReason = 'forwarded' | 'origin' | 'token_kind' | 'peer'
 /** `token` = token root valid; `ui` = jalur tanpa token (loopback, sama-origin). */
 export type GuardResult = { ok: true; via: 'token' | 'ui' } | { ok: false; reason: GuardReason }
 
@@ -32,16 +27,6 @@ export function peerOf(req: IncomingMessage): 'loopback' | 'remote' {
 const forwarded = (req: IncomingMessage): boolean =>
   Object.keys(req.headers ?? {}).some((h) => h === FORWARDED_HEADER || h.startsWith(FORWARDED_PREFIX))
 
-/** Host lolos allowlist yang sama dengan boot (loopback + bind + WEBTERM_ALLOWED_HOSTS); gagal baca konfigurasi = ditolak. */
-function hostOk(req: IncomingMessage, env: NodeJS.ProcessEnv): boolean {
-  try {
-    return hostAllowed(req.headers?.host, buildAllowedHosts({ ...resolveHostPort(env), env }))
-  } catch (err) {
-    log.warn('guard.host_config', 'Cannot resolve host allowlist for settings guard', { cause: err instanceof Error ? err.name : 'error' })
-    return false
-  }
-}
-
 /** Origin WAJIB ada dan sama-origin: browser selalu mengirimnya pada PUT/POST; skrip tanpa Origin ditolak. */
 const originPresentAndSame = (req: IncomingMessage): boolean => {
   const origin = firstHeader(req.headers?.origin)
@@ -50,9 +35,9 @@ const originPresentAndSame = (req: IncomingMessage): boolean => {
 
 /**
  * Putuskan apakah mutasi boleh lanjut. (A) token root valid; (B) tanpa token ditegakkan DAN peer loopback,
- * tanpa header forwarded, Host lolos allowlist, Origin ada dan sama. Token node/capability selalu ditolak.
+ * tanpa header forwarded, Origin ada dan sama. Token node/capability selalu ditolak.
  */
-export function settingsGuard(req: IncomingMessage, env: NodeJS.ProcessEnv = process.env, rootToken: string | undefined = getTokenState().token): GuardResult {
+export function settingsGuard(req: IncomingMessage, rootToken: string | undefined = getTokenState().token): GuardResult {
   const presented = firstHeader(req.headers?.[TOKEN_HEADER]) || undefined
   const capability = firstHeader(req.headers?.[CAPABILITY_HEADER]) || undefined
   if (rootToken !== undefined) {
@@ -63,7 +48,6 @@ export function settingsGuard(req: IncomingMessage, env: NodeJS.ProcessEnv = pro
   if (presented !== undefined || capability !== undefined) return { ok: false, reason: 'token_kind' }
   if (forwarded(req)) return { ok: false, reason: 'forwarded' }
   if (peerOf(req) !== 'loopback') return { ok: false, reason: 'peer' }
-  if (!hostOk(req, env)) return { ok: false, reason: 'host' }
   if (!originPresentAndSame(req)) return { ok: false, reason: 'origin' }
   return { ok: true, via: 'ui' }
 }

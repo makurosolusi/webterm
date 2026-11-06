@@ -2,7 +2,6 @@
 // origin); the main server only (1) answers 404 on /proxy + /absproxy and (2) tells the UI where the
 // proxy lives via `GET /api/proxy-info` (UI-only: `uiOnlyDenial`, path not in `isNodeTokenPath`).
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { AllowedHostsArg } from '../auth'
 import { startPortScanner } from '../ports/ports.runtime'
 import { parseProxyUrl } from '../proxy/proxy.service'
 import { preferredProxyPort, startProxyListener } from '../proxy/proxy.listener'
@@ -13,11 +12,11 @@ import { json, type ApiRoute } from './route.core'
 let proxyPort: number | undefined
 
 /** Boot: start the proxy listener next to the main server (same host). */
-export async function startDevProxy(o: { host: string; mainPort: number; allowedHosts: AllowedHostsArg; env: NodeJS.ProcessEnv }): Promise<void> {
+export async function startDevProxy(o: { host: string; mainPort: number; env: NodeJS.ProcessEnv }): Promise<void> {
   const l = await startProxyListener({
     host: o.host, port: preferredProxyPort(o.env, o.mainPort),
     deps: {
-      allowedHosts: o.allowedHosts, mainPort: o.mainPort,
+      mainPort: o.mainPort,
       token: () => getTokenState().token,
       isUiSession: (raw) => uiSessions().verify(raw),
       listening: async () => (await startPortScanner()).list(),

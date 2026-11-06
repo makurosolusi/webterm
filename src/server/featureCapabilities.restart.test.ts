@@ -38,7 +38,7 @@ describe('GET /api/capabilities tidak memuat restart', () => {
     const h = setupEnv({})
     const req = Object.assign(Readable.from([]), { method: 'GET', headers: { host: '127.0.0.1:8700', origin: ORIGIN }, socket: { remoteAddress: '127.0.0.1' } }) as unknown as IncomingMessage
     const res = recorder()
-    const deps = () => ({ service: h.svc, guard: (r: IncomingMessage) => settingsGuard(r, {}, undefined), audit: () => undefined })
+    const deps = () => ({ service: h.svc, guard: (r: IncomingMessage) => settingsGuard(r, undefined), audit: () => undefined })
     const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch: (async () => new Response('{}')) as never }
     const handled = await capabilitiesRoute(req, res, 'GET', '/api/capabilities', deps, extras)
     expect(handled).toBe(true)

@@ -59,9 +59,9 @@ describe('pagar V4/V6 ES-02 tetap ada', () => {
   it('penjaga hidup menolak header Forwarded/X-Forwarded-For walau Origin dan Host sah', () => {
     const mk = (extra: Record<string, string>): IncomingMessage =>
       ({ method: 'POST', headers: { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', ...extra }, socket: { remoteAddress: '127.0.0.1' } }) as unknown as IncomingMessage
-    expect(settingsGuard(mk({}), {}, undefined)).toMatchObject({ ok: true })
-    expect(settingsGuard(mk({ 'x-forwarded-for': '1.2.3.4' }), {}, undefined)).toEqual({ ok: false, reason: 'forwarded' })
-    expect(settingsGuard(mk({ forwarded: 'for=1.2.3.4' }), {}, undefined)).toEqual({ ok: false, reason: 'forwarded' })
+    expect(settingsGuard(mk({}), undefined)).toMatchObject({ ok: true })
+    expect(settingsGuard(mk({ 'x-forwarded-for': '1.2.3.4' }), undefined)).toEqual({ ok: false, reason: 'forwarded' })
+    expect(settingsGuard(mk({ forwarded: 'for=1.2.3.4' }), undefined)).toEqual({ ok: false, reason: 'forwarded' })
   })
 
   it('def tool central tidak mengimpor modul settings/capabilities (V4)', () => {

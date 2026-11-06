@@ -253,7 +253,7 @@ describe('efek ke kunci dangerous (settingsGuard)', () => {
     const res = recorder()
     const body = JSON.stringify({ set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } })
     const req = Object.assign(fakeReq('PUT', body), { headers, socket: { remoteAddress: LOOPBACK } }) as unknown as IncomingMessage
-    await envSettingsRoute(req, res, 'PUT', { service: s.svc, guard: (r) => settingsGuard(r, {}) })
+    await envSettingsRoute(req, res, 'PUT', { service: s.svc, guard: (r) => settingsGuard(r) })
     return res
   }
 
