@@ -114,8 +114,53 @@ describe('outbox', () => {
     })
     ob.enqueue(msg('lost'))
     await ob.kick('a1')
-    expect(r.writes).toEqual(['hello lost'])
+    // Typed, cleared, re-typed once, cleared again: never an Enter.
+    expect(r.writes).toEqual(['hello lost', '\x15', 'hello lost', '\x15'])
     expect(ob.list('a1')[0]).toMatchObject({ status: 'failed', error: expect.stringContaining('Enter withheld') })
+  })
+
+  /** Fake PTY whose composer holds what was typed but whose screen only shows it once `visible`
+   *  (or from the `showOnType`-th typed text on). */
+  function hiddenComposer(showOnType = Infinity) {
+    const r = rig()
+    const st = { composer: '', visible: false, typed: 0 }
+    const ob = new OutboxDelivery({
+      store: createOutboxStore(r.db), agentOf: () => 'claude', record: () => {},
+      sessions: {
+        statusOf: () => undefined,
+        screenSource: () => ({ data: '', seq: 1, cols: 80, rows: 24, pid: 1 }),
+        input: (_i, x) => {
+          r.writes.push(x)
+          if (x === '\x15' || x === '\r') { st.composer = ''; return }
+          st.composer += x
+          if ((st.typed += 1) >= showOnType) st.visible = true
+        },
+      },
+      render: async () => box(st.visible && st.composer ? st.composer : undefined), sleep: async () => {},
+    })
+    return { r, st, ob }
+  }
+
+  it('failed confirm leaves composer empty', async () => {
+    const { r, st, ob } = hiddenComposer()
+    ob.enqueue(msg('lost'))
+    await ob.kick('a1')
+    expect(st.composer).toBe('')
+    expect(r.writes).not.toContain('\r')
+    expect(ob.list('a1')[0]).toMatchObject({ status: 'failed' })
+    // The next message starts from an empty composer, not appended to the leftover.
+    st.visible = true
+    ob.enqueue(msg('next'))
+    await ob.kick('a1')
+    expect(r.writes.slice(-2)).toEqual(['hello next', '\r'])
+  })
+
+  it('re-types once after a miss and delivers when the text then shows', async () => {
+    const { r, ob } = hiddenComposer(2)
+    ob.enqueue(msg('again'))
+    await ob.kick('a1')
+    expect(r.writes).toEqual(['hello again', '\x15', 'hello again', '\r'])
+    expect(ob.list('a1')[0]).toMatchObject({ status: 'delivered', transport: 'pty' })
   })
 
   it('transport: channel > hook (context-only, Claude) > typed PTY', () => {
