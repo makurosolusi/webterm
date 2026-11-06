@@ -95,6 +95,26 @@ describe('telegram poller', () => {
     expect(logs.join('\n')).not.toContain(TEST_TOKEN)
   })
 
+  it('a throwing handler for update N does not block N+1 and is dead-lettered after K attempts', async () => {
+    const batch = (): ReturnType<typeof ok> => ok([msg(5), msg(6)])
+    const api = fakeBotApi([ok(true), batch(), batch(), batch()])
+    const seen: number[] = []
+    const dispatch = vi.fn(async (u: unknown) => {
+      const id = (u as { update_id: number }).update_id
+      seen.push(id)
+      if (id === 5) throw new Error(`poison ${TEST_TOKEN}`)
+    })
+    const statuses: TelegramPollStatus[] = []
+    const { sleeps } = start({ fetch: api.fetch, dispatch, maxUpdateAttempts: 3, onStatus: (s) => statuses.push(s) })
+    await flush()
+    expect(seen).toEqual([5, 5, 5, 6])
+    expect(api.calls.at(-1)?.params['offset']).toBe(7)
+    expect(sleeps).toHaveLength(2)
+    expect(statuses.find((s) => s.error?.includes('update 5 dead-lettered after 3 attempts'))).toBeDefined()
+    expect(logs.join('\n')).toContain('dead-lettered')
+    expect(logs.join('\n')).not.toContain(TEST_TOKEN)
+  })
+
   it('stops on 401 with exactly one error log and no further calls', async () => {
     const api = fakeBotApi([{ status: 401, body: { ok: false, description: 'Unauthorized' } }])
     const statuses: TelegramPollStatus[] = []

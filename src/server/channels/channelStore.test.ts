@@ -9,6 +9,8 @@ import {
   ChannelStoreError,
 } from './channelStore'
 import { parseStoreState } from './channelStoreSchema'
+import { getChannelStatus, resetChannelStatus } from './channelStatus'
+import { logBus } from '../logs'
 
 const dirs: string[] = []
 
@@ -72,6 +74,16 @@ describe('ChannelStore persistence', () => {
     expect(store.claimUpdate(9)).toBe(true)
   })
 
+  it('release after claim leaves cursor so restart re-fetches N', () => {
+    const path = tempStorePath()
+    const store = new ChannelStore(path)
+    expect(store.claimUpdate(3)).toBe(true)
+    expect(store.claimUpdate(5)).toBe(true)
+    store.releaseUpdate(5)
+    // The poller resumes at cursor + 1, so a reloaded store must point back at update 5.
+    expect(new ChannelStore(path).snapshot().cursor + 1).toBe(5)
+  })
+
   it('expires dedupe entries after the TTL', () => {
     const path = tempStorePath()
     let now = 1_000
@@ -91,6 +103,18 @@ describe('ChannelStore persistence', () => {
     expect(store.markReplySent('k1')).toBe(true)
     expect(store.enqueueReply({ key: 'k3', channel: 'telegram', chatId: '1', text: 'c' })).toBe('queued')
     expect(store.pendingReplies().map((row) => row.key)).toEqual(['k2', 'k3'])
+  })
+
+  it('enqueue on a full queue logs and reports the drop', () => {
+    resetChannelStatus()
+    const before = logBus.query({}).length
+    const store = new ChannelStore(tempStorePath(), { outboxLimit: 1 })
+    expect(store.enqueueReply({ key: 'k1', channel: 'telegram', chatId: '1', text: 'a' })).toBe('queued')
+    expect(store.enqueueReply({ key: 'k2', channel: 'telegram', chatId: '1', text: 'b' })).toBe('full')
+    const entry = logBus.query({}).slice(before).find((e) => e.event === 'channel.outbox_full')
+    expect(entry?.level).toBe('warn')
+    expect(entry?.data).toMatchObject({ channel: 'telegram', pending: 1, dropped: 1 })
+    expect(getChannelStatus().egress.lastError?.message).toContain('reply queue full (1 pending)')
   })
 
   it('persists retry backoff and a dead letter, and reloads both', () => {
