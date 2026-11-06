@@ -35,6 +35,8 @@ export interface ProviderView extends ProviderConfig {
   profileMissing?: true
   /** Command mode: the command looks like it holds a secret (value never returned). */
   commandWarning?: 'looks_like_secret'
+  /** The stored config file is damaged: launches use the login until Settings resets or saves it. */
+  configError?: 'unreadable'
 }
 
 /** Env change for one Claude process: `set` wins, `unset` is removed from the inherited env. */

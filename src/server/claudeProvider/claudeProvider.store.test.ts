@@ -3,7 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { activeProviderEnv, claudeEnv, loadConfig, providerDir, providerView, saveProvider } from './claudeProvider.store'
+import { activeProviderEnv, BACKUP_KEY, claudeEnv, loadConfig, providerDir, providerView, readConfig, resetProviderConfig, saveProvider } from './claudeProvider.store'
+import { logBus } from '../logs'
 import { STALE_LAUNCH_MS, wrapClaudeLaunch } from './claudeProvider.launch'
 import { providerEnv } from './claudeProvider.model'
 
@@ -49,10 +50,41 @@ describe('provider store', () => {
     expect(activeProviderEnv()).toEqual({ set: {}, unset: [] })
   })
 
-  it('a hand-broken config falls back to the login', () => {
+  // agent-211-A6: the fallback to the login is explicit — error flag in the view, one warning, a backup.
+  it('a hand-broken config falls back to the login, flagged in the view and warned once', () => {
     saveProvider({ mode: 'apiKey' }, KEY)
     writeFileSync(join(providerDir(), 'CONFIG'), '{not json', { mode: 0o600 })
+    const before = logBus.query({}).length
     expect(loadConfig()).toEqual({ mode: 'login' })
+    expect(readConfig()).toMatchObject({ config: { mode: 'login' }, error: 'unreadable' })
+    expect(providerView()).toMatchObject({ mode: 'login', configError: 'unreadable', secretSet: true })
+    const warns = logBus.query({}).slice(before).filter((e) => e.event === 'claude_provider.config_unreadable')
+    expect(warns).toHaveLength(1)
+    expect(JSON.stringify(warns)).not.toContain('{not json')
+  })
+
+  it('an unknown mode is damage too, not a config', () => {
+    saveProvider({ mode: 'login' }, undefined)
+    writeFileSync(join(providerDir(), 'CONFIG'), JSON.stringify({ mode: 'bogus' }), { mode: 0o600 })
+    expect(providerView().configError).toBe('unreadable')
+  })
+
+  it('reset keeps the damaged file as CONFIG_BAK, keeps the secret, and clears the error', () => {
+    saveProvider({ mode: 'apiKey' }, KEY)
+    writeFileSync(join(providerDir(), 'CONFIG'), '{not json', { mode: 0o600 })
+    resetProviderConfig()
+    expect(readFileSync(join(providerDir(), BACKUP_KEY), 'utf8')).toBe('{not json')
+    expect(statSync(join(providerDir(), BACKUP_KEY)).mode & 0o777).toBe(0o600)
+    expect(existsSync(join(providerDir(), 'CONFIG'))).toBe(false)
+    expect(providerView()).toEqual({ mode: 'login', secretSet: true, ready: true })
+  })
+
+  it('saving over a damaged config backs it up first', () => {
+    saveProvider({ mode: 'login' }, undefined)
+    writeFileSync(join(providerDir(), 'CONFIG'), 'garbage', { mode: 0o600 })
+    saveProvider({ mode: 'apiKey' }, KEY)
+    expect(readFileSync(join(providerDir(), BACKUP_KEY), 'utf8')).toBe('garbage')
+    expect(providerView().configError).toBeUndefined()
   })
 })
 

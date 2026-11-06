@@ -5,7 +5,7 @@ import { send, type ApiRoute } from './route.core'
 export const claudeProviderRoutes: ApiRoute[] = [
   {
     name: 'claude-provider',
-    match: (c) => c.path === '/api/claude-provider' || c.path === '/api/claude-provider/test' || c.path === '/api/claude-provider/detect',
+    match: (c) => c.path === '/api/claude-provider' || c.path === '/api/claude-provider/test' || c.path === '/api/claude-provider/detect' || c.path === '/api/claude-provider/reset',
     handle: async (c) => {
       const [{ providerRoute }, { isValidNodeToken }, { sessions }, { freshClaudePreflight }] = await Promise.all([
         import('../claudeProvider/claudeProvider.api'), import('../hooksTokens'), import('../sessions'), import('../centralChatHealth'),

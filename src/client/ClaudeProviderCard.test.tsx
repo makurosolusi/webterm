@@ -8,6 +8,7 @@ import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
 type Call = { url: string; method: string; body?: string }
 let calls: Call[] = []
+let resetFails = 0
 
 function serve(view: Record<string, unknown>, test = { ok: false, message: 'The endpoint rejected the credential.', at: 1 }): void {
   let current = { provider: view, lastTest: null, restartNeeded: 0 }
@@ -19,12 +20,17 @@ function serve(view: Record<string, unknown>, test = { ok: false, message: 'The 
       current = { provider: { mode: b.mode, baseUrl: b.baseUrl, credential: b.credential, secretSet: !!b.secret, ready: !!b.secret }, lastTest: null, restartNeeded: 1 }
       return new Response(JSON.stringify(current), { status: 200 })
     }
+    if (method === 'POST' && url.endsWith('/reset')) {
+      if (resetFails-- > 0) return new Response(JSON.stringify({ error: 'write_failed' }), { status: 500 })
+      current = { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }
+      return new Response(JSON.stringify(current), { status: 200 })
+    }
     if (method === 'POST') return new Response(JSON.stringify({ test }), { status: 200 })
     return new Response(JSON.stringify(current), { status: 200 })
   }))
 }
 
-beforeEach(() => { calls = [] })
+beforeEach(() => { calls = []; resetFails = 0 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('ClaudeProviderCard', () => {
@@ -42,6 +48,21 @@ describe('ClaudeProviderCard', () => {
     expect(input.value).toBe('')
     expect(input.type).toBe('password')
     expect(input.placeholder).toBe(PROVIDER_TEXT.keySet)
+  })
+
+  // agent-211-A6: a damaged config is a sticky alert with a fix action, never a silent login default.
+  it('a damaged config shows an alert; Reset failing keeps it with a retry, succeeding clears it', async () => {
+    serve({ mode: 'login', secretSet: false, ready: true, configError: 'unreadable' })
+    resetFails = 1
+    render(<ClaudeProviderCard />)
+    expect(await screen.findByText(new RegExp(PROVIDER_TEXT.damaged.slice(0, 40)))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.reset }))
+    expect(await screen.findByText(PROVIDER_TEXT.resetFailed('write_failed'))).toBeTruthy()
+    expect(screen.getByText(new RegExp(PROVIDER_TEXT.damaged.slice(0, 40)))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.reset }))
+    await waitFor(() => expect(screen.queryByText(new RegExp(PROVIDER_TEXT.damaged.slice(0, 40)))).toBeNull())
+    expect(screen.queryByText(PROVIDER_TEXT.resetFailed('write_failed'))).toBeNull()
+    expect(calls.filter((c) => c.url.endsWith('/reset')).map((c) => c.method)).toEqual(['POST', 'POST'])
   })
 
   it('custom endpoint: Test saves the form first, then shows the honest result and the restart hint', async () => {
