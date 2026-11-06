@@ -9,17 +9,24 @@
 //
 // Logika dipisah dari JSX dengan alasan yang sama seperti `./closedHistory`: vitest webterm jalan di
 // node-env tanpa DOM, jadi yang bisa di-assert harus hidup di luar komponen.
-import { useCallback, useEffect } from 'react'
+//
+// Every action returned here except `onCreateWorkspace` never rejects: a failure is reported with
+// its cause and a Retry (`./workspaceActionError`), so App's `void onSelect(id)` call sites cannot
+// lose one silently. `onCreateWorkspace` rejects on purpose: the create dialog shows the error.
+import { useCallback, useMemo } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
-import { fetchWorkspaces, getActive, setActive, getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
-import { bootWorkspaceId, nextActiveWorkspaceId } from './workspaceMenu'
+import { getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
+import { nextActiveWorkspaceId } from './workspaceMenu'
 import { workspaceNameFromPath } from './store'
 import { sessionIdsOf } from './paneTree'
 import { send } from './ws'
 import { revealInTabs } from './nodeReveal'
 import { getTabLayout } from './tabLayout.store'
 import type { ClosedHistory } from './closedHistory'
+import { useWorkspaceBoot, type BootState } from './workspaceLifecycle.boot'
+import { useLatestSelect } from './workspaceLifecycle.select'
+import { reported } from './workspaceActionError'
 import type { Workspace } from '../shared/workspace'
 
 /** Yang dibutuhkan hook ini dari App. Setter & ref dipinjam APA ADANYA — ref harus ref yang sama
@@ -54,9 +61,14 @@ export interface WorkspaceLifecycle {
   closeSession: (id: string) => Promise<void>
   onRenameWorkspace: (id: string, name: string) => Promise<void>
   onDeleteWorkspace: (id: string) => Promise<void>
+  /** Rejects on failure (the create dialog shows it); every other action reports its own. */
   onCreateWorkspace: (name: string, cwd?: string) => Promise<void>
   /** No path: pick an existing folder. A path (just cloned/created): open it as a workspace. */
   onNewProject: (path?: string) => void
+  /** `onCreateWorkspace` for fire-and-forget callers (Welcome): a failure is reported. */
+  onCreateReported: (name: string, cwd?: string) => Promise<void>
+  boot: BootState
+  retryBoot: () => void
 }
 
 export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLifecycle {
@@ -66,38 +78,11 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     activeWsRef, nodesRef, edgesRef, cancelSave, rf,
   } = deps
 
-  // Board diambil LENGKAP sebelum satu pun state di-commit. React Flow membaca `defaultViewport`
-  // hanya saat mount, jadi commit `activeId` lebih dulu me-mount canvas dengan viewport default dan
-  // tanpa node — board tersimpan baru menyusul di render berikutnya.
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
-        const id = bootWorkspaceId(list.map((w) => w.id), active)
-        const ws = id ? await getWorkspace(id) : null
-        if (id && id !== active) await setActive(id)
-        setWorkspaces(list)
-        if (ws) applyWorkspace(ws)
-        setHydrated(true)
-      } catch (e) {
-        // 403 = gate server menolak token: pakai ulang fetch boot ini sebagai probe auth, jadi tak
-        // ada ronde jaringan terpisah. `hydrated` tetap dinaikkan — tanpa itu App menahan render di
-        // `null` dan layar Login tidak pernah muncul. Error lain diteruskan: blank screen lama
-        // tetap menjadi sinyal bahwa boot benar-benar gagal, bukan sekadar belum login.
-        if ((e as { status?: number }).status === 403) { setAuthRequired(true); setHydrated(true) }
-        else throw e
-      }
-    })()
-  }, [applyWorkspace])
+  const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired })
 
   // Save yang menggantung ditulis oleh `applyWorkspace` (flush, lihat `useWorkspaceSaver`) SEBELUM
   // board baru dipasang — bukan dibatalkan di sini, karena itu membuang edit terakhir pengguna.
-  const onSelect = useCallback(async (id: string) => {
-    if (!id || id === activeId) return
-    const ws = await getWorkspace(id)
-    await setActive(id)
-    applyWorkspace(ws)
-  }, [activeId, applyWorkspace])
+  const { onSelect, cancelSelect, setActiveInOrder } = useLatestSelect({ activeWsRef, applyWorkspace, setWorkspaces })
 
   // Baris sidebar bisa milik workspace LAIN yang nodenya tidak ter-mount, kelas jebakan yang sama
   // dengan `closeSession` di bawah: dulu `if (!node) return` menelan klik itu diam-diam. Node dicari
@@ -117,9 +102,8 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   }, [onSelect, workspaces])
 
   // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di
-  // canvas yang ter-mount. Yang di luar canvas dibuang dari salinan TERBARU di server: snapshot
-  // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi menulis ulang dari sana
-  // akan mengembalikan layout workspace itu ke keadaan lama.
+  // canvas yang ter-mount. The owner is found in the client store (fed by every save and switch),
+  // but the write starts from the server's LATEST copy: another window may have changed it.
   const closeSession = useCallback(async (id: string) => {
     if (nodesRef.current.some((n) => n.id === id)) {
       await rf.current?.deleteElements({ nodes: [{ id }] })
@@ -154,9 +138,8 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
       scheduleSave()
       return
     }
-    // Workspace lain: ambil salinan TERBARU dari server, ubah satu field, kirim itu. Snapshot
-    // `workspaces` di client hanya di-refresh saat workspace dibuat, jadi PUT dari sana akan
-    // mengembalikan node/viewport workspace itu ke keadaan lama.
+    // Workspace lain: ambil salinan TERBARU dari server, ubah satu field, kirim itu: the client
+    // store can lag a write from another window, and a PUT from it would revert that write.
     const fresh = await getWorkspace(id)
     const updated: Workspace = { ...fresh, name } // fresh.updatedAt = the save's precondition
     await saveWorkspace(updated)
@@ -166,6 +149,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   // Hapus workspace (sudah dikonfirmasi di header). Tidak bisa dibatalkan: row + board tersimpan.
   const onDeleteWorkspace = useCallback(async (id: string) => {
     if (id === activeId) {
+      cancelSelect() // this delete mounts the replacement board; a switch still loading must not land after it
       // A pending debounce would PUT this id after its row is gone: a pointless 404 (the server no
       // longer re-creates it). Active board only: the timer always belongs to the active board,
       // cancelling it while deleting another workspace would drop a legitimate save.
@@ -182,7 +166,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     // Board pengganti diambil sebelum daftar tab dikecilkan supaya hilangnya tab dan datangnya
     // board baru mendarat dalam SATU render, bukan dua.
     const ws = next && next !== activeId ? await getWorkspace(next) : null
-    if (ws) await setActive(ws.id)
+    if (ws) await setActiveInOrder(ws.id)
     setWorkspaces((prev) => prev.filter((w) => w.id !== id))
     if (next === activeId) return // yang dihapus bukan yang aktif: board di layar tidak tersentuh
     if (ws) {
@@ -197,20 +181,31 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     edgesRef.current = []
     setNodes([])
     setEdges([])
-  }, [activeId, applyWorkspace, cancelSave, workspaces])
+  }, [activeId, applyWorkspace, cancelSave, cancelSelect, setActiveInOrder, workspaces])
 
   const onCreateWorkspace = useCallback(async (name: string, cwd?: string) => {
     const ws = await createWorkspace(name, cwd)
-    await setActive(ws.id)
+    cancelSelect()
+    await setActiveInOrder(ws.id)
     setWorkspaces((prev) => [...prev, ws])
     applyWorkspace(ws)
-  }, [applyWorkspace])
+  }, [applyWorkspace, cancelSelect, setActiveInOrder])
 
+  const safe = useMemo(() => ({
+    onSelect: reported('switch workspace', onSelect),
+    onFocus: reported('show the session', onFocus),
+    closeSession: reported('close the session', closeSession),
+    onRenameWorkspace: reported('rename workspace', onRenameWorkspace),
+    onDeleteWorkspace: reported('delete workspace', onDeleteWorkspace),
+    onCreateReported: reported('create workspace', onCreateWorkspace),
+  }), [onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace])
+
+  const { onCreateReported } = safe
   const onNewProject = useCallback((path?: string) => {
-    const open = (p: string) => void onCreateWorkspace(workspaceNameFromPath(p), p)
+    const open = (p: string) => void onCreateReported(workspaceNameFromPath(p), p)
     if (typeof path === 'string') open(path)
     else setPicker({ onPick: open })
-  }, [onCreateWorkspace])
+  }, [onCreateReported])
 
-  return { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onNewProject }
+  return { ...safe, onCreateWorkspace, onNewProject, boot, retryBoot }
 }
