@@ -2,11 +2,12 @@
 // pernah disentuh (roots di-inject).
 import { afterAll, describe, expect, it } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, truncateSync, writeFileSync, openSync, writeSync, closeSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, truncateSync, writeFileSync, openSync, writeSync, closeSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { openDb } from './db'
-import { scanSessions, type ScanRoot } from './sessionHistory.scan'
+import { SCAN_LINE_MAX_BYTES, scanSessions, type ScanRoot } from './sessionHistory.scan'
 import { ensureSessionHistorySchema, getIndexed, listSessions } from './sessionHistory.store'
 import { CLOSED_HISTORY_PATH, SESSION_HISTORY_PATH, sessionHistoryRoute, type HistoryDeps } from './sessionHistory.route'
 
@@ -32,6 +33,18 @@ function claudeSession(root: string, project: string, id: string, cwd: string, p
   const p = join(root, project, `${id}.jsonl`)
   writeFileSync(p, user(prompt, cwd, ts) + asst(ts))
   return p
+}
+
+/** Resolves 'TIMEOUT' if `p` has not settled within `ms`: a hang must fail the test, not stall it. */
+const HANG_MS = 2000
+const within = <T>(p: Promise<T>): Promise<T | 'TIMEOUT'> =>
+  Promise.race([p, new Promise<'TIMEOUT'>((r) => setTimeout(() => r('TIMEOUT'), HANG_MS))])
+
+/** A FIFO and a symlink to `/dev/zero`, both named like transcripts: reading either never ends. */
+function hostileTranscripts(root: string, project: string): void {
+  mkdirSync(join(root, project), { recursive: true })
+  execFileSync('mkfifo', [join(root, project, 'fifo.jsonl')])
+  symlinkSync('/dev/zero', join(root, project, 'zero.jsonl'))
 }
 
 const freshDb = (): Database => {
@@ -97,6 +110,37 @@ describe('scan', () => {
     writeFileSync(p, user('new start', '/w', '2026-04-01T10:00:00Z'))
     await scanSessions(db, f.roots)
     expect(getIndexed(db, p)).toMatchObject({ title: 'new start', messageCount: 1 })
+  })
+
+  it('skips a FIFO and a symlink to /dev/zero and still indexes the regular transcript', async () => {
+    const f = fixture()
+    hostileTranscripts(f.claude, 'proj')
+    claudeSession(f.claude, 'proj', 'ok', '/w', 'regular')
+    const db = freshDb()
+    expect(await within(scanSessions(db, f.roots))).toBe(undefined)
+    expect(listSessions(db, {}).items.map((i) => i.id)).toEqual(['ok'])
+  })
+
+  it('skips a line longer than SCAN_LINE_MAX_BYTES without buffering it, and keeps the lines after it', async () => {
+    const f = fixture()
+    const p = claudeSession(f.claude, 'proj', 'big', '/w', 'before')
+    appendFileSync(p, `${'x'.repeat(SCAN_LINE_MAX_BYTES + 1)}\n${asst('2026-03-05T10:00:00Z')}`)
+    const db = freshDb()
+    await scanSessions(db, f.roots)
+    const row = getIndexed(db, p)!
+    expect(row).toMatchObject({ title: 'before', messageCount: 3, endedAt: Date.parse('2026-03-05T10:00:00Z') })
+    expect(row.parsedBytes).toBe(row.size)
+  })
+
+  it('an aborted scan rejects and prunes nothing', async () => {
+    const f = fixture()
+    const p = claudeSession(f.claude, 'proj', 'keep', '/w', 'kept')
+    const db = freshDb()
+    await scanSessions(db, f.roots)
+    rmSync(p)
+    const err = await scanSessions(db, f.roots, AbortSignal.abort()).then(() => null, (e: unknown) => e)
+    expect((err as Error | null)?.name).toBe('AbortError')
+    expect(listSessions(db, {}).total).toBe(1)
   })
 
   it('prunes sessions whose transcript was deleted', async () => {
@@ -216,5 +260,16 @@ describe('route', () => {
     expect(page.items).toHaveLength(1)
     expect(page.nextOffset).toBeNull()
     expect(await sessionHistoryRoute('/api/other', 'GET', new URLSearchParams(), noBody, d)).toBeNull()
+  })
+
+  it('a hostile transcript root never sticks the single-flight: GET answers and a later refresh scans again', async () => {
+    const f = fixture()
+    hostileTranscripts(f.claude, 'p')
+    claudeSession(f.claude, 'p', 'h1', '/w', 'one')
+    const d = deps(freshDb(), f.roots, () => 0)
+    const get = (qs: string) => within(sessionHistoryRoute(SESSION_HISTORY_PATH, 'GET', new URLSearchParams(qs), noBody, d))
+    expect(((await get('')) as { body: { total: number } }).body.total).toBe(1)
+    claudeSession(f.claude, 'p', 'h2', '/w', 'two')
+    expect(((await get('refresh=1')) as { body: { total: number } }).body.total).toBe(2)
   })
 })
