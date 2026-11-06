@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { getActive, getWorkspace } from './api'
+import { getActive, getWorkspace, type HttpError } from './api'
 import { createWorktree, type CreatedWorktree } from './workspaceWorktree.api'
 import { WorktreeResult } from './Dock.workspaceDialog.result'
 
@@ -13,6 +13,10 @@ interface WorkspaceDialogProps {
   onCreateWorkspace: (name: string, cwd?: string) => void | Promise<void>
   onBrowse: (onPick: (p: string) => void) => void
 }
+
+/** The server's own message (a 400 says what is wrong with the input) before the generic one. */
+const createErrorText = (err: unknown): string =>
+  (err as Partial<HttpError>).serverMessage ?? (err instanceof Error ? err.message : String(err))
 
 /**
  * Form "Create workspace" dari Add > Workspace…; tetap ter-mount saat tertutup supaya isian bertahan.
@@ -47,21 +51,22 @@ export function WorkspaceDialog(props: WorkspaceDialogProps) {
   const createWs = async () => {
     const name = wsName.trim()
     if (!name || busy) return
-    if (!worktree) {
-      props.onCreateWorkspace(name, wsCwd.trim() || undefined)
-      close()
-      return
-    }
-    if (!wsCwd.trim()) { setError('Pick the repository folder to branch from.'); return }
+    if (worktree && !wsCwd.trim()) { setError('Pick the repository folder to branch from.'); return }
     setBusy(true); setError(null)
     try {
+      if (!worktree) {
+        // Closed only once the workspace exists: a failure stays here, next to the input it is about.
+        await props.onCreateWorkspace(name, wsCwd.trim() || undefined)
+        close()
+        return
+      }
       const created = await createWorktree({
         repo: wsCwd.trim(), title: name, branch: branch.trim() || undefined, base: base.trim() || undefined, runSetup,
       })
       await props.onCreateWorkspace(name, created.path)
       setResult(created) // keep the dialog open on the setup log until the user closes it
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(createErrorText(err))
     } finally {
       setBusy(false)
     }
@@ -96,7 +101,7 @@ export function WorkspaceDialog(props: WorkspaceDialogProps) {
               </>
             )}
             {error && <div role="alert" className="text-(--vscode-errorForeground)">{error}</div>}
-            <Button onClick={() => void createWs()} disabled={busy}>{busy ? 'Creating worktree…' : 'Create'}</Button>
+            <Button onClick={() => void createWs()} disabled={busy || !wsName.trim()}>{busy ? (worktree ? 'Creating worktree…' : 'Creating…') : 'Create'}</Button>
           </div>
         )}
       </DialogContent>
