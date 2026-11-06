@@ -8,7 +8,7 @@ import { BodyReadError } from '../cappedRequestBody'
 import { DEFAULT_HEARTBEAT_MS, formatSseFrame } from '../central/chat/streamHub'
 import { firstHeader } from '../httpHeaders'
 import { createLogger } from '../logs'
-import type { AgentChatEvent, AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
+import { AGENT_CHAT_TEXT_MAX, type AgentChatEvent, type AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
 import { isPermissionMode, isSafeNodeId } from '../../shared/workspace'
 import type { AgentChatPool } from './agentChat.pool'
 import type { AgentChatSession } from './agentChat.session'
@@ -16,8 +16,7 @@ import { historyPage, loadTranscript, toolResultText, type LoadTranscript } from
 
 const log = createLogger('agent-chat')
 
-/** Chars of one user message. */
-export const AGENT_CHAT_TEXT_MAX = 100_000
+export { AGENT_CHAT_TEXT_MAX } // shared with the client composer
 /** Bytes of one POST body (a permission answer can carry an edited tool input). */
 export const AGENT_CHAT_BODY_MAX_BYTES = 1024 * 1024
 /** SSE `event:` name of every agent chat frame. */

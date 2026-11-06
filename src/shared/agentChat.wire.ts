@@ -28,5 +28,8 @@ export type AgentChatPermissionAnswer =
   | { requestId: string; behavior: 'allow'; updatedInput?: Record<string, unknown>; always?: boolean }
   | { requestId: string; behavior: 'deny'; message: string }
 
+/** Chars of one user message (the server refuses longer; the composer says so before sending). */
+export const AGENT_CHAT_TEXT_MAX = 100_000
+
 /** Chars of a tool result sent live; longer results are cut (`truncated: true`), the full text comes from history. */
 export const AGENT_CHAT_TOOL_RESULT_MAX = 16_000
