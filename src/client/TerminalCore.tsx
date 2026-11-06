@@ -8,6 +8,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { send, subscribe } from './ws'
 import { writeClipboard } from './clipboard'
+import { TerminalOffline } from './TerminalCore.offline'
 import { lineEditSeq } from './terminalLineEdit'
 import { OPEN_SIZE_FALLBACK_MS, canOpenSession, coalesceFrames, sizeChanged, watchVisible } from './terminalSizing'
 import type { TermSize } from './terminalSizing'
@@ -361,7 +362,12 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     }
   }, [id, settings, fontZoom, refit])
 
-  return <div ref={elRef} className="nodrag nowheel size-full" />
+  return (
+    <div className="relative size-full">
+      <div ref={elRef} className="nodrag nowheel size-full" />
+      <TerminalOffline />
+    </div>
+  )
 })
 
 export default TerminalCore
