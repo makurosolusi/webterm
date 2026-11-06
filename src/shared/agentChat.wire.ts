@@ -1,11 +1,16 @@
 // Server -> client event contract of the agent chat node (PLAN/AGENT-CHAT.md §4, D6/D7).
-// Types only plus one limit: the server maps Claude Agent SDK messages into these events
+// Types plus the limits both sides check: the server maps Claude Agent SDK messages into these events
 // (server/agentChat/agentChat.events.ts) and the client renders them.
 
 export type AgentChatStatus = 'idle' | 'starting' | 'thinking' | 'tool' | 'awaiting' | 'retry' | 'interrupted' | 'error' | 'closed'
 export type AgentChatToolState = 'running' | 'awaiting_approval' | 'done' | 'error' | 'denied'
 
-export type AgentChatPart = { k: 'text'; text: string } | { k: 'thinking'; text: string } | { k: 'tool'; id: string } | { k: 'image'; mediaType: string }
+/**
+ * `image`: `data` = base64 bytes (a live user message, while the session's log budget keeps them);
+ * `ref` = transcript reference served by `history?image=<ref>` (history). Neither = placeholder.
+ */
+export type AgentChatPart = { k: 'text'; text: string } | { k: 'thinking'; text: string } | { k: 'tool'; id: string }
+  | { k: 'image'; mediaType: string; data?: string; ref?: string }
 
 /** One event of a session's log; `seq` is strictly increasing per session (replay with `after=<seq>`). */
 export type AgentChatEvent = { seq: number } & (
@@ -33,3 +38,17 @@ export const AGENT_CHAT_TEXT_MAX = 100_000
 
 /** Chars of a tool result sent live; longer results are cut (`truncated: true`), the full text comes from history. */
 export const AGENT_CHAT_TOOL_RESULT_MAX = 16_000
+
+/** One image of a user message: base64 bytes (no data: prefix) of a type in AGENT_CHAT_IMAGE_TYPES. */
+export interface AgentChatImage { mediaType: string; data: string }
+
+/** Image types the Claude API takes as a base64 image block (Base64ImageSource.media_type). */
+export const AGENT_CHAT_IMAGE_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+/** Images per message: above 20 the API applies a stricter per-image pixel limit to the whole request. */
+export const AGENT_CHAT_IMAGES_MAX = 20
+/** Base64 chars of one image: 5 MB, the lowest per-image limit across Claude platforms (Bedrock, Vertex). */
+export const AGENT_CHAT_IMAGE_MAX_B64 = 5 * 1024 * 1024
+/** Base64 chars of all images of one message. */
+export const AGENT_CHAT_IMAGES_TOTAL_B64 = 20 * 1024 * 1024
+/** Long edge (px) the composer downscales an image to; Claude downsizes larger images anyway. */
+export const AGENT_CHAT_IMAGE_MAX_EDGE = 2000
