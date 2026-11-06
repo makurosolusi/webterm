@@ -23,12 +23,25 @@ const SENT_MAX = 500
 const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^web\.push\.apple\.com$/, /\.push\.apple\.com$/, /\.notify\.windows\.com$/]
 
 export interface PushSubscriptionRecord { endpoint: string; p256dh: string; auth: string; createdAt: number }
-export interface PushState { subs: PushSubscriptionRecord[]; sent: string[]; briefDay: string | null }
+/** Per-item delivery failures: backoff promise (`nextAt`) or a give-up (`gaveUp`) that is never retried. */
+export interface PushRetry { attempts: number; nextAt: number; gaveUp?: true }
+export interface PushState { subs: PushSubscriptionRecord[]; sent: string[]; briefDay: string | null; retry?: Record<string, PushRetry> }
+
+function parseRetry(raw: unknown): Record<string, PushRetry> {
+  const out: Record<string, PushRetry> = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+    const r = v as Partial<PushRetry> | null
+    if (!r || !Number.isInteger(r.attempts) || typeof r.nextAt !== 'number' || !Number.isFinite(r.nextAt)) continue
+    out[id] = { attempts: r.attempts as number, nextAt: r.nextAt, ...(r.gaveUp === true ? { gaveUp: true as const } : {}) }
+  }
+  return out
+}
 
 export const pushStatePath = (dataDir: string): string => join(dataDir, PUSH_STATE_FILE)
 
 export function readPushState(path: string): PushState {
-  if (!existsSync(path)) return { subs: [], sent: [], briefDay: null }
+  if (!existsSync(path)) return { subs: [], sent: [], briefDay: null, retry: {} }
   let raw: unknown
   try { raw = JSON.parse(readFileSync(path, 'utf8')) } catch (err) {
     throw new Error(`push store: cannot read ${PUSH_STATE_FILE} (${err instanceof Error ? err.message : String(err)})`)
@@ -38,6 +51,7 @@ export function readPushState(path: string): PushState {
     subs: Array.isArray(r.subs) ? r.subs.filter((s) => parseSubscription(s) !== null) : [],
     sent: Array.isArray(r.sent) ? r.sent.filter((s): s is string => typeof s === 'string').slice(-SENT_MAX) : [],
     briefDay: typeof r.briefDay === 'string' ? r.briefDay : null,
+    retry: parseRetry(r.retry),
   }
 }
 
