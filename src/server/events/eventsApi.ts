@@ -78,7 +78,7 @@ function headBody(rt: EventsRuntime, verify: boolean): unknown {
   let anchorError: string | undefined
   try {
     anchor = readAnchor(rt.anchorFile)
-    status = anchorStatus(anchor, (seq) => rt.log.hashAt(seq))
+    status = anchorStatus(anchor, (seq) => rt.log.hashAt(seq), rt.log.prunedThrough())
   } catch (err) {
     // A malformed anchor is reported, not hidden: it is itself a divergence signal.
     status = 'unreadable'

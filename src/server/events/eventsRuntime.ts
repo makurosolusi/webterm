@@ -15,7 +15,7 @@ const log = createLogger('events')
 export interface EventsRuntime {
   log: EventLog
   anchorFile: string
-  /** Anchor status found when this runtime started; anything but match/no_anchor is a divergence. */
+  /** Anchor status found when this runtime started; anything but match/no_anchor/pruned is a divergence. */
   startStatus: AnchorStatus | 'unreadable'
   /** Where the divergent anchor was preserved, if any. */
   divergedAnchorFile: string | null
@@ -35,7 +35,7 @@ export function startEventsRuntime(db: Database, anchorFile = join(dataDir(), AN
   }, undefined, now)
   let startStatus: EventsRuntime['startStatus']
   try {
-    startStatus = anchorStatus(readAnchor(anchorFile), (seq) => eventLog.hashAt(seq))
+    startStatus = anchorStatus(readAnchor(anchorFile), (seq) => eventLog.hashAt(seq), eventLog.prunedThrough())
   } catch (err) {
     startStatus = 'unreadable'
     log.error('events.anchor.unreadable', `event anchor unreadable: ${err instanceof Error ? err.message : String(err)}`)
