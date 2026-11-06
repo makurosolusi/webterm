@@ -39,6 +39,8 @@ Operator notes:
 - Tab layout only changes how nodes are shown. Cables, node positions, sizes and the viewport are not touched, so switching back to canvas restores the board exactly as it was. Terminals, editors and browsers are not reloaded when you switch: scrollback, unsaved editor changes and the page in a browser node are kept. A terminal that was scrolled to the bottom is still at the bottom afterwards.
 - The dock hides the zoom, fit view and view lock buttons in tab layout, since they only apply to the canvas. The bottom panel (Inbox, Chat, Problems, Output) takes its own space below the active tab instead of covering it.
 - Terminals show a banner while the connection to the webterm server is lost: "Connection to the webterm server lost. Reconnecting in 5s… Typing is paused." with a "Retry now" button. Reconnect attempts back off from 1 to 10 seconds.
+- The Inbox shows its items a page at a time, with a "Load more" button at the end of the list.
+- If the app fails to load at startup, an error screen says what went wrong and offers Retry, instead of a blank page.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
@@ -70,6 +72,11 @@ Operator notes:
 - After a reconnect a terminal receives only the output it missed, instead of clearing its screen and replaying the whole scrollback. It still clears and replays everything when the missed part is no longer stored or the session is a new one.
 - A terminal view that is taken off the page stops receiving output from the server; the session keeps running and is replayed when the terminal is shown again.
 - The "tmux not found" notice in terminals is now in English.
+- Ledger and event history older than 30 days (or past a size cap) is pruned automatically in the background. The event chain can still be verified after pruning.
+- Boards are checked when they are saved and when they are loaded. A malformed board is refused with an error and the stored copy is left untouched, and a damaged board only affects itself, not the rest of your workspaces.
+- The production build serves the UI from the built files, with compressed text assets and cache headers, so pages load faster.
+- Requests with an oversized body are refused with 413 and a message saying why, instead of being read in full.
+- Setup scripts, prechecks and helper processes webterm starts no longer inherit the server's secrets; they get the same filtered environment as terminals.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -102,6 +109,18 @@ Operator notes:
 - A browser tab that stops reading (for example a frozen background tab) no longer makes the server's memory grow: its terminal output is paused and replayed once the tab catches up. A connection that stops answering is detected within a minute and closed.
 - A plain terminal never attaches to an agent's session under the same node id, or the other way round. The terminal explains that the session is already running something else and suggests adding a new node.
 - tmux is now found on your login shell's `PATH` too, so when webterm is started as a service or from the Dock, Homebrew's tmux is used and sessions still survive a server restart.
+- Changing one setting no longer overwrites a setting changed at the same time elsewhere, and settings webterm does not recognise are kept instead of dropped. A canvas background image uploaded while settings change is no longer deleted by the cleanup.
+- Board changes are saved when you close or leave the tab. A save that fails keeps the board marked unsaved and offers Retry, instead of looking saved.
+- Switching workspaces quickly always ends on the last workspace you picked, not on whichever one finished loading last.
+- The create-workspace dialog stays open until the workspace is created and shows the error inside the dialog if it fails.
+- Stopping the server closes its databases cleanly.
+- An unreadable Claude provider config is shown as an error with a reset action, instead of silently falling back to Claude Code login.
+- The Settings page fills the window in the production build instead of sitting in a narrow centered box.
+- AI-generated node names work again, and a naming request that hangs is stopped after a timeout.
+- Opening a special or oversized binary file in an editor no longer tries to read it; only regular files under the size limit are read.
+- An agent that failed or was stopped now says so, with Retry or Resume, instead of showing a blank node or "Done".
+- Agent status survives a server restart.
+- Deleting a workspace ends its terminals, and terminals left behind by nodes that no longer exist on any board are cleaned up after a day.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
