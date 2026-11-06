@@ -112,6 +112,20 @@ describe('setSub', () => {
   })
 })
 
+describe('setSub central skills', () => {
+  it('writes WEBTERM_CENTRAL_SKILLS and restarts Central so it applies without a server restart', async () => {
+    const h = harness()
+    spy(['central'])
+    await toggle(h.ctx, 'central', true)
+    events.length = 0
+    const r = await setSub(h.ctx, 'central', 'centralSkills', true)
+    expect(r.status).toBe(200)
+    expect(h.target.WEBTERM_CENTRAL_SKILLS).toBe('on')
+    expect(events).toEqual(['stop:central', 'start:central'])
+    expect(viewIn(r.body, 'central')?.subs).toEqual([expect.objectContaining({ key: 'centralSkills', on: true })])
+  })
+})
+
 describe('reset', () => {
   it('menghapus override katalog, menjalankan stop hook, dan tidak menyentuh token', async () => {
     spy(['central'])

@@ -33,6 +33,8 @@ const HOT_PROOF: Readonly<Record<string, string>> = {
   // Turunan Central: tool baca didaftarkan saat Central menyala (ca2Boot onCapabilityChange) dan `def.flag` dicek
   // per panggilan (toolTypes defEnabled). Nama kuncinya diturunkan, bukan literal: lihat DERIVED_KEY_SOURCE.
   WEBTERM_CENTRAL_READ_TOOLS: 'central/tools/defs/read.shared.ts',
+  // Sub-switch of the Central card: setSub restarts Central, whose start re-reads the key and builds or drops the skill store.
+  WEBTERM_CENTRAL_SKILLS: 'featureCapabilities.service.ts',
 }
 
 /** Kunci yang pembacanya memakai nama turunan (`derivedFlagKey`): teks sumber yang membuktikannya. */

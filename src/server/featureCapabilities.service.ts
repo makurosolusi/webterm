@@ -28,6 +28,7 @@ export interface CapCtx {
 }
 
 const OWNER = { root: true }
+const CENTRAL_SKILLS_KEY = 'WEBTERM_CENTRAL_SKILLS'
 const NEEDS_LABEL = {
   chromium: 'Choose Chrome location', telegramToken: 'Connect bot', agentEngine: 'Set up Claude Code',
 } as const
@@ -154,6 +155,8 @@ export async function setSub(c: CapCtx, id: CapabilityId, key: string, on: boole
   if (!isEnabled(id, c.env)) return { status: 409, body: { error: 'parent_off' } }
   const r = c.settings.update({ set: { [sub.key]: on ? 'on' : 'off' }, unset: [] }, OWNER)
   if (!r.ok) return { status: r.status, body: { error: r.error } }
+  // Central reads its skills switch at start: restart it so the change applies without a server restart.
+  if (sub.key === CENTRAL_SKILLS_KEY) await exclusive(() => bounce(c, 'central'))
   c.audit({ capability: id, action: 'sub', detail: key })
   return { status: 200, body: await snap(c) }
 }

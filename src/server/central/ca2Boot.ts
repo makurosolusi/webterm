@@ -146,7 +146,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     const eff = effectiveEnv(env)
     if (AGENT_MODES.includes((eff.WEBTERM_CENTRAL_AGENTS ?? '').trim().toLowerCase())) built ??= buildExecutor(opts, db, guard, eff, now, dir)
     handle.executor = built?.executor ?? null
-    if (flagOn(eff.WEBTERM_CENTRAL_SKILLS) || flagOn(eff.WEBTERM_CENTRAL_SKILL_PROPOSE)) handle.skills ??= buildSkills(db, handle.skillsRoot, now)
+    // Re-read on every (re)start: the Settings switch for Central skills bounces Central, so on and off both apply live.
+    handle.skills = flagOn(eff.WEBTERM_CENTRAL_SKILLS) || flagOn(eff.WEBTERM_CENTRAL_SKILL_PROPOSE) ? handle.skills ?? buildSkills(db, handle.skillsRoot, now) : null
     const { executor, skills } = handle
     const browser = createBrowserToolDeps(eff, opts.browser ?? { store: capabilityStore })
     handle.toolNames.push(...registerCa2Tools(registry, {
