@@ -5,8 +5,6 @@
 // files only) and Claude Code `/rewind` ("restore code"); the honesty labels follow rnd/04: effects
 // outside the file system (web, MCP, browser, channels) and non-git folders cannot be rewound.
 import { useState } from 'react'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 import { VscodeTooltip } from './components/vscode/vscodeTooltip'
 import { getJson } from './Timeline.status'
 import type { TimelineContext, TimelineEvent } from './Timeline.model'
@@ -67,10 +65,9 @@ interface Preview { files: FileChange[]; patch: string; truncated: boolean }
 const VERB: Record<FileChange['status'], string> = { A: 'restore', M: 'revert', T: 'revert', D: 'delete' }
 
 async function postRewind(workspaceId: string, seq: number): Promise<{ written: number; deleted: number; undoSeq: number }> {
-  const token = peekToken()
   const res = await fetch(`${CHECKPOINTS_URL}/rewind`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(token === '' ? {} : { [TOKEN_HEADER]: token }) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspace: workspaceId, seq }),
   })
   if (!res.ok) throw new Error(`POST ${CHECKPOINTS_URL}/rewind -> ${res.status}`)

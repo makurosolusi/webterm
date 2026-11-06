@@ -3,10 +3,9 @@
 // Imitates Orca automations and Claude Code Desktop scheduled tasks (list, Run now, history).
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { fetchWorkspaces, TOKEN_HEADER } from './api'
+import { fetchWorkspaces } from './api'
 import { EMPTY_ROUTINE, RoutinesForm, type RoutineDef } from './RoutinesForm'
 import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
-import { peekToken } from './transportToken'
 
 export const ROUTINES_PATH = '/api/routines'
 
@@ -30,8 +29,6 @@ const T = ROUTINES_TEXT
 
 async function request(method: string, path = ROUTINES_PATH, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)

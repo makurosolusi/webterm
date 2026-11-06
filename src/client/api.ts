@@ -1,88 +1,7 @@
 // Thin same-origin REST wrappers for the workspace API. JSON in/out; throw on non-2xx.
 import type { Workspace } from '../shared/workspace'
-import { TOKEN_KEY, TOKEN_PARAM } from './transportToken'
-
-/** Must match TOKEN_HEADER / TOKEN_PARAM in src/server/auth.ts. */
-export const TOKEN_HEADER = 'x-webterm-token'
-
-/**
- * The transport token, when the server asked for one (non-loopback bind). It arrives once in
- * the page URL — `?token=…` — and is moved straight into sessionStorage so it does not sit in
- * the address bar to be screenshotted, bookmarked or pasted into a chat. sessionStorage, not
- * local: the token should not outlive the tab.
- *
- * Returns '' on the loopback default, where no token exists and nothing about the client's
- * behaviour changes.
- */
-function sessionStore(): Storage | null {
-  // Private mode and blocked site data make even *touching* sessionStorage throw; a token read
-  // from the URL must still work there, it just will not survive a reload.
-  try {
-    return typeof sessionStorage === 'undefined' ? null : sessionStorage
-  } catch {
-    return null
-  }
-}
-
-function readToken(): string {
-  if (typeof location === 'undefined' || typeof location.href !== 'string') return '' // non-browser
-  const store = sessionStore()
-  const url = new URL(location.href)
-  const fromUrl = url.searchParams.get(TOKEN_PARAM)
-  if (fromUrl === null || fromUrl === '') return store?.getItem(TOKEN_KEY) ?? ''
-  try {
-    store?.setItem(TOKEN_KEY, fromUrl)
-  } catch {
-    // Safari private mode allows the read but throws on write (quota 0). The token still works
-    // for this page load; only persistence across a reload is lost.
-  }
-  url.searchParams.delete(TOKEN_PARAM)
-  if (typeof history !== 'undefined') history.replaceState(null, '', url.pathname + url.search + url.hash)
-  return fromUrl
-}
-
-const token = readToken()
-
-/** Whether this page load carries a token (URL or sessionStorage). */
-export function hasToken(): boolean {
-  return token !== ''
-}
-
-// `token` above is captured at import, so a freshly typed token only takes effect after a reload:
-// the login flow stores it here, then App reloads the page and readToken() picks it up next load.
-export function storeToken(t: string): void {
-  try {
-    sessionStore()?.setItem(TOKEN_KEY, t)
-  } catch {
-    // Storage refused (private mode): the typed token is lost on reload and Login asks again.
-  }
-}
-
-export function clearToken(): void {
-  try {
-    sessionStore()?.removeItem(TOKEN_KEY)
-  } catch {
-    // Storage unreachable (private mode): there is no stored token to clear.
-  }
-}
-
-/** Probe /api/workspaces with a candidate token; true when the server accepts it. */
-export async function validateToken(t: string): Promise<boolean> {
-  const res = await fetch('/api/workspaces', { headers: { [TOKEN_HEADER]: t } })
-  return res.ok
-}
-
-/** Query suffix carrying the token, or '' when there is none. For the WebSocket URL, which
- *  cannot carry headers. Caller supplies the leading separator. */
-export function tokenQuery(): string {
-  return token === '' ? '' : `${TOKEN_PARAM}=${encodeURIComponent(token)}`
-}
-
-/** Request headers plus the token header when there is one — absent entirely otherwise. */
-function withToken(headers?: Record<string, string>): Record<string, string> | undefined {
-  if (token === '') return headers
-  return { ...headers, [TOKEN_HEADER]: token }
-}
+// No credential is attached here: every same-origin request carries the HttpOnly `wt_ui` session
+// cookie (fetch defaults to `credentials: 'same-origin'`). See transportToken.ts for sign-in.
 
 /** Thrown on non-2xx. `body` is the parsed JSON error body when there is one (a stale save's 409
  *  carries the `current` board); `serverMessage` is its human-readable `error`/`message`. */
@@ -97,7 +16,7 @@ function serverMessageOf(body: unknown): string | undefined {
 }
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, headers: withToken(init?.headers as Record<string, string>) })
+  const res = await fetch(url, init)
   if (!res.ok) {
     // A non-JSON error body leaves `body` unset; the status still says what went wrong.
     const body: unknown = await Promise.resolve().then(() => res.json()).catch(() => undefined)
@@ -156,7 +75,6 @@ export function saveWorkspace(ws: Workspace): Promise<Workspace> {
 export async function deleteWorkspace(id: string): Promise<void> {
   const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: withToken(),
   })
   if (!res.ok) throw new Error(`DELETE /api/workspaces/${id} -> ${res.status}`)
 }
@@ -169,7 +87,7 @@ export async function getActive(): Promise<string | null> {
 export async function setActive(id: string): Promise<void> {
   const res = await fetch('/api/active', {
     method: 'PUT',
-    headers: withToken({ 'Content-Type': 'application/json' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
   })
   if (!res.ok) throw new Error(`PUT /api/active -> ${res.status}`)

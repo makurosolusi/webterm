@@ -3,7 +3,6 @@
 // the source is closed and reopened after a backoff with the highest seq received, so nothing is
 // replayed twice and nothing is missed. Same reconnect shape as output/logStreamStore.ts.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { tokenQuery } from './api'
 import { mergeEvents, type TimelineEvent } from './Timeline.model'
 import { getJson } from './Timeline.status'
 
@@ -87,8 +86,7 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
         retry()
         return
       }
-      const token = tokenQuery()
-      const next = new EventSource(`${STREAM_URL}?afterSeq=${lastSeq}${token === '' ? '' : `&${token}`}`)
+      const next = new EventSource(`${STREAM_URL}?afterSeq=${lastSeq}`)
       source = next
       next.onopen = () => { if (stopped) return; attempts = 0; setError(null); setConnection('open'); setEpoch((n) => n + 1) }
       next.addEventListener('sense', (msg) => {

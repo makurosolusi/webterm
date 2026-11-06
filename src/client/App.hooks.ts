@@ -1,4 +1,4 @@
-import { createElement, useCallback, useEffect, useMemo } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
@@ -7,7 +7,7 @@ import { resolveTerminalTheme } from './themes'
 import { toggleTimeline } from './Timeline'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { subscribeStatus } from './ws'
-import { validateToken, storeToken, clearToken } from './api'
+import { fetchSignedIn, isAbortError, logout } from './transportToken'
 import type { Settings } from '../shared/settings'
 import type { AgentStatus } from '../shared/workspace'
 
@@ -41,17 +41,23 @@ export function useAppTheme(settings: Pick<Settings, 'appTheme' | 'terminalTheme
   }, [settings.appTheme, settings.terminalTheme])
 }
 
-/** Login (simpan token lalu reload) dan logout (hapus token lalu reload). */
+/** Whether this browser holds a UI session (drives the Logout entry), and sign-out. */
 export function useAuthActions() {
-  // Token disimpan lalu halaman di-reload: `api.ts` menangkap token sekali saat import, jadi hanya
-  // load berikutnya yang membacanya kembali — reload adalah cara termalas yang benar, bukan membuat
-  // modul token bisa dimutasi hidup-hidup.
-  const onLogin = useCallback(async (t: string) => {
-    if (await validateToken(t)) { storeToken(t); location.reload(); return true }
-    return false
+  // A token-free loopback server needs no session, so `signedIn` stays false there and Logout hides.
+  const [signedIn, setSignedIn] = useState(false)
+  useEffect(() => {
+    const ac = new AbortController()
+    fetchSignedIn(ac.signal).then(setSignedIn, (error: unknown) => {
+      if (!isAbortError(error)) console.warn('[webterm] checking the UI session failed', error)
+    })
+    return () => ac.abort()
   }, [])
-  const onLogout = useCallback(() => { clearToken(); location.reload() }, [])
-  return { onLogin, onLogout }
+  // Reload either way: after a sign-out the boot fetch is refused and App shows SignInScreen; after
+  // a failed one the page shows the still-signed-in board, which is the truth.
+  const onLogout = useCallback(() => {
+    logout().catch((error: unknown) => console.warn('[webterm] sign out failed', error)).finally(() => location.reload())
+  }, [])
+  return { signedIn, onLogout }
 }
 
 /** Kalimat ringkas jumlah agent working/blocked untuk status bar. */

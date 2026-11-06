@@ -73,8 +73,7 @@ describe('createCoalescer', () => {
   })
 })
 
-// `tokenQuery` (in api.ts) reads the token ONCE at module import, so each case must set up
-// location/sessionStorage then import useSettings FRESH (mirrors ws.test.ts).
+// Each case sets up location, then imports useSettings fresh (mirrors ws.test.ts).
 function setLocation(href: string, host: string) {
   ;(globalThis as any).location = { protocol: new URL(href).protocol, host, href }
 }
@@ -89,17 +88,11 @@ describe('settingsUrl', () => {
     expect(settingsUrl()).toBe('/api/settings')
   })
 
-  it('carries the token from the page URL as a query param', async () => {
+  it('never copies a ?token= from the page URL into the settings URL', async () => {
     vi.useRealTimers()
-    const stored = new Map<string, string>()
-    ;(globalThis as any).sessionStorage = {
-      getItem: (k: string) => stored.get(k) ?? null,
-      setItem: (k: string, v: string) => void stored.set(k, v),
-    }
-    ;(globalThis as any).history = { replaceState: (_s: unknown, _t: string, _u: string) => {} }
     setLocation('http://10.0.0.5:8700/?token=s3cret', '10.0.0.5:8700')
     vi.resetModules()
     const { settingsUrl } = await import('./useSettings')
-    expect(settingsUrl()).toBe('/api/settings?token=s3cret')
+    expect(settingsUrl()).toBe('/api/settings')
   })
 })

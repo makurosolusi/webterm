@@ -6,6 +6,7 @@
 //   GET  /auth/me           { signedIn } (polled by a signed-out tab)
 //   POST /auth/request-open server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS
 //   POST /auth/login        { token } root token -> Set-Cookie (remote / headless sign-in)
+//   POST /auth/logout       revokes the caller's session and clears the cookie
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type AllowedHostsArg, UI_SESSION_COOKIE, hostOk, readCookie, sameOrigin, tokensMatch } from '../auth'
 import { readCappedRequestBody } from '../cappedRequestBody'
@@ -99,6 +100,11 @@ export function createUiAuthRoute(d: UiAuthDeps): (req: IncomingMessage, res: Se
     if (!sameOrigin(req.headers)) return reply(res, 403, { error: 'origin' })
     if (route === 'POST /auth/request-open') return requestOpen(req, res)
     if (route === 'POST /auth/login') return login(req, res)
+    if (route === 'POST /auth/logout') {
+      const raw = callerSession(req)
+      if (raw !== undefined) d.sessions().revoke(raw)
+      return reply(res, 204, undefined, { 'Set-Cookie': sessionCookie(req, '').replace(/Max-Age=\d+/, 'Max-Age=0') })
+    }
     reply(res, 404, { error: 'not_found' })
   }
 

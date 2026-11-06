@@ -1,5 +1,5 @@
 // Human transport client for the central control panel. Same credential as the rest of the client
-// (`x-webterm-token`, via `request`); never a node capability. Paths mirror server handlers:
+// (the `wt_ui` session cookie, via `request`); never a node capability. Paths mirror server handlers:
 // CONTROL/HALT exist (guard/haltApi.ts); STATUS, AGENTS, APPROVALS, SKILLS, MEMORY are the
 // contract this panel expects and are mounted by WS-19. Malformed rows are dropped, not thrown.
 import { useCapabilities } from '../useCapabilities'

@@ -5,7 +5,6 @@
 // once per operationId even when the request is retried.
 import type { DiffNoteData } from '../shared/workspace'
 import { OUTBOX_PATH, type OutboxEnqueueReply } from '../server/outbox/outbox.types'
-import { tokenQuery } from './api'
 
 export type DiffNote = DiffNoteData
 
@@ -34,8 +33,7 @@ export const notesOperationId = (agentId: string, notes: readonly DiffNote[]): s
 
 /** Queue the batch for `agentId` in the server outbox. Throws naming the operation on failure. */
 export async function enqueueNotes(agentId: string, notes: readonly DiffNote[], fetchFn: typeof fetch = fetch): Promise<OutboxEnqueueReply> {
-  const q = tokenQuery()
-  const res = await fetchFn(q ? `${OUTBOX_PATH}?${q}` : OUTBOX_PATH, {
+  const res = await fetchFn(OUTBOX_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: agentId, body: formatDiffNotes(notes), operationId: notesOperationId(agentId, notes) }),

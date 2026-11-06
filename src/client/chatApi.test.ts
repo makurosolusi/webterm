@@ -90,14 +90,14 @@ afterEach(() => {
 })
 
 describe('chat fetch client', () => {
-  it('lists conversations with the transport token and normalizes rows', async () => {
+  it('lists conversations without a token header and normalizes rows', async () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN)
     fetchMock.mockResolvedValue(response({ items: [conversation, { bogus: true }] }))
 
     const rows = await listConversations()
 
     expect(fetchMock.mock.calls[0][0]).toBe(`${CHAT_PATH}/conversations?limit=50`)
-    expect(headersOf(0)[TOKEN_HEADER]).toBe(TOKEN)
+    expect(headersOf(0) ?? {}).not.toHaveProperty(TOKEN_HEADER) // the session cookie is the credential
     expect(rows).toEqual([conversation])
   })
 

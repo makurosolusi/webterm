@@ -4,7 +4,6 @@
 // `createUploadQueue` is one FIFO per Files node: jobs added while a batch runs join that batch, an
 // EEXIST asks Replace / Skip / Keep Both, Cancel aborts the current request and drops the rest.
 import { fsFail, type FsErrCode, type FsFail, type FsResult } from '../shared/fsContract'
-import { tokenQuery } from './api'
 import { childPath } from './fileBrowse'
 import { copyName } from './filesName'
 import { emitFsEvent } from './fsEvents'
@@ -47,7 +46,7 @@ function parseBody(text: string): Body {
 export const xhrUpload: UploadSender = (dir, name, file, onProgress, opts = {}) =>
   new Promise((resolve) => {
     const params = new URLSearchParams({ dir, name, ...(opts.overwrite ? { overwrite: '1' } : {}) })
-    const q = [params.toString(), tokenQuery()].filter(Boolean).join('&')
+    const q = params.toString()
     const xhr = new XMLHttpRequest()
     const fail = (why: string) => resolve(fsFail('EIO', `fs upload ${name}: ${why}`))
     if (opts.signal?.aborted) { fail('aborted'); return }

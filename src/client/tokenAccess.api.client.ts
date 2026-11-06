@@ -1,8 +1,7 @@
 // Klien REST tipis untuk /api/settings/token (server: tokenAccess.api.ts). Token transport hanya di header;
 // nilai token baru hanya dikembalikan ke pemanggil, tidak pernah ditulis ke log atau pesan galat.
-import { TOKEN_HEADER } from './api'
 import { TOKEN_TEXT } from './tokenAccessLabels'
-import { TOKEN_PARAM, peekToken } from './transportToken'
+import { TOKEN_PARAM } from './transportToken'
 
 const PATH = '/api/settings/token'
 
@@ -21,8 +20,6 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 
 async function call(suffix: string, method: string): Promise<Record<string, unknown>> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   const res = await fetch(PATH + suffix, { method, headers, cache: 'no-store' })
   let body: unknown
   try { body = await res.json() } catch { body = undefined } // body bukan JSON: cukup status
@@ -51,7 +48,7 @@ export const enableToken = (): Promise<string> => mint('/enable')
 /** Ganti token berbasis berkas; nilai token keluar sekali. */
 export const rotateToken = (): Promise<string> => mint('/rotate')
 
-/** Tautan masuk sekali pakai, format yang dibaca api.ts (`?token=`). */
+/** One-time sign-in link; transportToken.exchangeLandingToken trades its `?token=` for the session cookie. */
 export const tokenLink = (origin: string, token: string): string => `${origin}/?${TOKEN_PARAM}=${encodeURIComponent(token)}`
 
 /** Kode galat -> kalimat jujur untuk pengguna. */

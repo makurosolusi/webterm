@@ -4,8 +4,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 
 export const SECRETS_PATH = '/api/secrets'
 
@@ -29,8 +27,6 @@ const NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/
 
 async function secretsRequest(method: string, path = SECRETS_PATH, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)

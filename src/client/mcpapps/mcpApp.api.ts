@@ -1,13 +1,11 @@
 // Same-origin client of `/api/mcpapps` (src/server/mcpapps/mcpApp.route.ts) for the App node. Every
 // failure throws one Error naming the operation and the server's reason.
-import { tokenQuery } from '../api'
 
 const PATH = '/api/mcpapps'
-const withToken = (path: string): string => { const q = tokenQuery(); return q ? `${path}?${q}` : path }
 
 async function call<T>(op: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit | undefined = body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-  const res = await fetch(withToken(path), init)
+  const res = await fetch(path, init)
   const out = (await res.json().catch(() => ({}))) as T & { error?: string }
   if (!res.ok) {
     const e = new Error(`${op}: ${out.error ?? `HTTP ${res.status}`}`)

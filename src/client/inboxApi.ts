@@ -1,8 +1,8 @@
 // Client for the operator inbox and the blocking approval queue.
 //
-// This is the HUMAN surface: every request carries the transport token (`x-webterm-token`). It
+// This is the HUMAN surface: every request carries the `wt_ui` session cookie. It
 // never uses a node capability (`x-webterm-capability`): an agent must not be able to approve its
-// own irreversible action. Transport details (token lookup, fetch wrapper, response mapping) live
+// own irreversible action. Transport details (fetch wrapper, response mapping) live
 // in `./inboxTransport` and are re-exported here so importers have one entry point.
 //
 // Response contracts (the server mounts these under /api; P3 wiring):

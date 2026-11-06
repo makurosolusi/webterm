@@ -1,6 +1,4 @@
 // Client side of /api/prreview (src/server/prreview/prreview.api.ts): request helper and product text.
-import { TOKEN_HEADER } from '../api'
-import { peekToken } from '../transportToken'
 import type { DraftView, PrReviewJob } from '../../server/prreview/prreview.service'
 
 export type { DraftView, PrReviewJob }
@@ -22,8 +20,6 @@ export const PRREVIEW_TEXT = {
 /** JSON request; a non-2xx answer throws with the server's message. */
 export async function prReviewRequest<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)

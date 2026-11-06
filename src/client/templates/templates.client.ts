@@ -1,7 +1,5 @@
 // Client side of /api/templates (src/server/templates/template.route.ts): product text, the request
 // helper and what the instantiate form must show before anything runs.
-import { TOKEN_HEADER } from '../api'
-import { peekToken } from '../transportToken'
 import type { BridgeLink, Workspace, WsNode } from '../../shared/workspace'
 import type { WebtermTemplate } from '../../server/templates/template.model'
 
@@ -42,8 +40,6 @@ export const TEMPLATES_TEXT = {
 /** JSON request; a non-2xx answer throws with the server's message. */
 export async function templatesRequest<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = res.status === 204 ? null : await res.json().catch(() => null)

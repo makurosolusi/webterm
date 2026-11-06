@@ -4,8 +4,6 @@
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 
 export const PROVENANCE_PATH = '/api/knowledge2/provenance'
 
@@ -41,8 +39,6 @@ export const PROVENANCE_TEXT = {
 /** GET the provenance of `nodeId`; throws with the server error code. */
 export async function fetchProvenance(nodeId: string): Promise<ProvenanceView> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   const res = await fetch(`${PROVENANCE_PATH}?nodeId=${encodeURIComponent(nodeId)}`, { headers })
   const out: unknown = await res.json().catch(() => null)
   if (!res.ok) throw new Error((out as { error?: string } | null)?.error ?? `HTTP ${res.status}`)

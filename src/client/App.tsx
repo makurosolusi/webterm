@@ -5,7 +5,7 @@ import AppDock, { AppWorkspaceBar } from './App.chrome'
 import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
-import Login from './Login'
+import SignInScreen from './SignInScreen'
 import BootScreen from './BootScreen'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import AppBottomPanel from './App.bottomPanel'
@@ -54,7 +54,7 @@ export default function App() {
   // "Belum tahu" vs "memang tidak ada": sebelum fetch pertama selesai keduanya sama-sama daftar
   // kosong, dan `Welcome` yang dirender atas dasar itu selalu berkelebat sekejap.
   const [hydrated, setHydrated] = useState(false)
-  // Dinaikkan saat boot fetch menjawab 403 (lihat workspaceLifecycle): render Login, bukan board.
+  // Dinaikkan saat boot fetch menjawab 403 (lihat workspaceLifecycle): render SignInScreen, bukan board.
   const [authRequired, setAuthRequired] = useState(false)
   const [activeWs, setActiveWs] = useState<Workspace | null>(null)
   // Diturunkan, bukan state sendiri: id dan board-nya pernah di-commit terpisah, dan tiap jeda
@@ -145,7 +145,7 @@ export default function App() {
     bridgesOf: closedBridgesOf, reopen: reopenClosed, reopenDeps, restoreBridges,
   })
 
-  const { onLogin, onLogout } = useAuthActions()
+  const { signedIn, onLogout } = useAuthActions()
 
   // Lewat `onNodesChange`, bukan setNodes langsung: riwayat & persistensi menggantung di sana.
   const onSelectAll = useCallback(() => {
@@ -204,8 +204,8 @@ export default function App() {
   usePresencePing(!authRequired)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
-  // Login tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
-  if (authRequired) return <div className="app-shell app-shell--auth"><Login onSubmit={onLogin} /></div>
+  // SignInScreen tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
+  if (authRequired) return <div className="app-shell app-shell--auth"><SignInScreen /></div>
 
   return (
     <SettingsProvider value={settings}>
@@ -214,7 +214,7 @@ export default function App() {
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
-      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, onAddFiles, omni, setShowSettings, setShowHelp }} />
+      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, showLogout: signedIn, onAddFiles, omni, setShowSettings, setShowHelp }} />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam

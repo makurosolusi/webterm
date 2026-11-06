@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import Dock from './Dock'
 import WorkspaceBar from './WorkspaceBar'
-import { hasToken } from './api'
 import type { DockProps } from './Dock'
 import type { WorkspaceBarProps } from './WorkspaceBar'
 import type { useOmnibox } from './Omnibox.open'
@@ -80,7 +79,7 @@ export default function AppDock({
 }
 
 export interface AppWorkspaceBarProps
-  extends Pick<WorkspaceBarProps, 'workspaces' | 'activeId' | 'statuses' | 'onSelect' | 'onLogout'> {
+  extends Pick<WorkspaceBarProps, 'workspaces' | 'activeId' | 'statuses' | 'onSelect' | 'onLogout' | 'showLogout'> {
   liveNodes: WorkspaceBarProps['liveActiveNodes']
   onNewProject: WorkspaceBarProps['onNewWorkspace']
   onRenameWorkspace: (id: string, name: string) => Promise<unknown>
@@ -103,7 +102,6 @@ export function AppWorkspaceBar({
       onNewWorkspace={onNewProject}
       onRenameWorkspace={(id, name) => void onRenameWorkspace(id, name)}
       onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
-      showLogout={hasToken()}
       onOpenSettings={() => setShowSettings(true)}
       onOpenHelp={() => setShowHelp(true)}
       onNewFiles={() => onAddFiles()}

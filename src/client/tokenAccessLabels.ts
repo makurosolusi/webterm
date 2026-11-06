@@ -20,7 +20,8 @@ export const TOKEN_TEXT = {
   copy: 'Copy',
   copied: 'Copied',
   copyFailed: 'Could not copy. Select the link text and copy it manually.',
-  reloadHint: 'This tab already uses the new token and will reload when you press Done or close Settings.',
+  reloadHint: 'This tab is already signed in with the new token and will reload when you press Done or close Settings.',
+  signInFailed: 'The token changed, but this tab could not sign in with it. Copy the link above and open it to sign in again.',
   done: 'Done',
   // Kode 403/409/500 dari tokenAccess.api.ts -> kalimat jujur (sebab + jalan keluar).
   agentCannot: 'Denied: the access token can only be changed from a webterm window, not from an agent session.',

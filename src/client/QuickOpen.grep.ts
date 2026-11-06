@@ -3,7 +3,6 @@
 // two-sided, like VS Code's search cancellation token: the fetch is aborted AND the server is told
 // to kill rg (`grep-cancel`), since an aborted HTTP request does not stop the process by itself.
 import { fsFail, type FsResult } from '../shared/fsContract'
-import { tokenQuery } from './api'
 
 export interface GrepMatch { file: string; line: number; col: number; text: string }
 export interface GrepPage { matches: GrepMatch[]; nextOffset: number | null; engine: 'rg' | 'fallback'; cancelled: boolean }
@@ -12,8 +11,7 @@ export interface GrepPage { matches: GrepMatch[]; nextOffset: number | null; eng
 export const GREP_PAGE_SIZE = 100
 
 function url(verb: string, params: Record<string, string>): string {
-  const token = tokenQuery()
-  return `/api/fs/${verb}?${new URLSearchParams(params).toString()}${token ? `&${token}` : ''}`
+  return `/api/fs/${verb}?${new URLSearchParams(params).toString()}`
 }
 
 /** One page of matches for `q` under `root`. `searchId` lets a newer page supersede this one server-side. */

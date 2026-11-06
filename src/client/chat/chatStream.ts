@@ -5,7 +5,6 @@
 // carries `?after=<lastSeq>` (the server treats it like `Last-Event-ID`), and the `id:` line is
 // also read as the cursor. EventSource cannot set headers, so a token-protected deployment passes
 // the token in the query exactly like the PTY WebSocket URL; loopback carries none.
-import { tokenQuery } from '../api'
 import type { ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
 import { CHAT_EVENT_TYPES, CHAT_PATH } from './chatTransport'
 import { parseEventFrame } from './chatWire'
@@ -31,8 +30,6 @@ export function openChatStream(conversationId: string, opts: ChatStreamOptions):
   const url = (): string => {
     const query: string[] = []
     if (lastSeq > 0) query.push(`after=${lastSeq}`)
-    const token = tokenQuery()
-    if (token !== '') query.push(token)
     const base = `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/stream`
     return query.length === 0 ? base : `${base}?${query.join('&')}`
   }

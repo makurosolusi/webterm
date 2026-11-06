@@ -1,6 +1,5 @@
 // REST pembungkus /api/browser/*: path, metode, body, header token, galat tanpa echo body.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TOKEN_HEADER } from './api'
 import { BrowserApiError, allowBrowserHosts, clearCookies, commitCookies, getBrowserStatus, listCookieDomains, previewCookies, setAgentControl, takeoverLease } from './browser.api'
 
 const calls: Array<{ url: string; init: RequestInit }> = []
@@ -10,7 +9,7 @@ function stub(status: number, body?: unknown) {
     return new Response(status === 204 ? null : JSON.stringify(body ?? {}), { status })
   }))
 }
-afterEach(() => { vi.unstubAllGlobals(); calls.length = 0; sessionStorage.clear() })
+afterEach(() => { vi.unstubAllGlobals(); calls.length = 0 })
 
 describe('browser.api', () => {
   it('maps each call to its §4.5 route and body', async () => {
@@ -41,13 +40,6 @@ describe('browser.api', () => {
     ])
     expect(calls[0]!.init.body).toBe(JSON.stringify({ holder: 'human' }))
     expect(calls[2]!.init.body).toBe(JSON.stringify({ previewId: 'p', domains: ['a.com'] }))
-  })
-
-  it('sends the transport token header when one exists', async () => {
-    sessionStorage.setItem('webterm.token', 'tok')
-    stub(200, {})
-    await getBrowserStatus()
-    expect((calls[0]!.init.headers as Record<string, string>)[TOKEN_HEADER]).toBe('tok')
   })
 
   it('throws a contextual error with the server code and never echoes the body', async () => {

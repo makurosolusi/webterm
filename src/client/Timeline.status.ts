@@ -1,8 +1,6 @@
 // Status surfaces of the Activity timeline: per-workspace autonomy level badge and the event-chain
 // integrity indicator. Pure parsers plus the two fetches (same credential as the rest of the UI).
 import { useEffect, useState } from 'react'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 import { CONTROL_LEVELS, type ControlLevel } from '../server/central/contracts/level.types'
 
 type Rec = Record<string, unknown>
@@ -12,10 +10,9 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? 
 export const CONTROL_URL = '/api/central/control?limit=200'
 export const HEAD_URL = '/api/events/head?verify=1'
 
-/** GET with the transport token; throws with the path + status on a non-2xx answer. */
+/** GET (the session cookie rides along); throws with the path + status on a non-2xx answer. */
 export async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
-  const token = peekToken()
-  const res = await fetch(path, { headers: { Accept: 'application/json', ...(token === '' ? {} : { [TOKEN_HEADER]: token }) }, signal })
+  const res = await fetch(path, { headers: { Accept: 'application/json' }, signal })
   if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`)
   return res.json()
 }

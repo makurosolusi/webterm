@@ -51,9 +51,9 @@ export interface WorkspaceBarProps {
   onRenameWorkspace: (id: string, name: string) => void
   /** Sudah dikonfirmasi pengguna di sini — pemanggil langsung menghapus. */
   onDeleteWorkspace: (id: string) => void
-  /** Buang token lalu reload ke layar Login. Hanya dirender bila `showLogout`. */
+  /** Sign out (POST /auth/logout) then reload to SignInScreen. Rendered only when `showLogout`. */
   onLogout?: () => void
-  /** Ada token tersimpan → tampilkan tombol logout. Loopback tanpa token: tak ada yang di-logout. */
+  /** This browser holds a UI session. A token-free loopback has none, so there is nothing to sign out of. */
   showLogout?: boolean
   /** File > Settings…: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
   onOpenSettings?: () => void

@@ -1,7 +1,5 @@
 // Klien REST tipis untuk /api/capabilities (kontrak ENVSIMPLE-b §1). Token hanya di header.
 import type { CapabilitiesResponse, CapabilityId } from '../shared/featureCapabilities'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 
 const PATH = '/api/capabilities'
 const HTTP_BAD_GATEWAY = 502
@@ -28,8 +26,6 @@ export async function callCapabilities<T = CapabilitiesResponse>(
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   const res = await fetch(PATH + suffix, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   let parsed: unknown
   try { parsed = await res.json() } catch { parsed = undefined } // body bukan JSON: cukup status

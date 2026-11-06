@@ -5,8 +5,6 @@
 // failure hook replaces it), drops a batch whose POST fails, and then stays quiet for a backoff
 // window. No path from "could not send logs" back to "log something".
 import type { ClientLogInput, LogLevel } from '../../shared/logEntry'
-import { TOKEN_HEADER } from '../api'
-import { peekToken } from '../transportToken'
 
 /** Server accepts at most 20 entries per request (SPEC-LOG, POST /api/logs/client). */
 export const CLIENT_LOG_BATCH_MAX = 20
@@ -112,8 +110,6 @@ export function installClientLogger(): () => void {
   const logger = createClientLogger({
     send: async (entries) => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      const token = peekToken()
-      if (token !== '') headers[TOKEN_HEADER] = token
       const res = await realFetch(LOG_ENDPOINT, { method: 'POST', headers, body: JSON.stringify({ entries }) })
       if (!res.ok) throw new Error(`POST ${LOG_ENDPOINT} -> ${res.status}`)
     },

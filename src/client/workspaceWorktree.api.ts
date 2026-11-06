@@ -2,7 +2,6 @@
 // shape of ScmPanel.api.ts: the browser's `Sec-Fetch-Site: same-origin` lets the UI-only POSTs in.
 import type { CreatedWorktree, RemoveWorktreeResult, WorktreeStatus } from '../server/workspaceWorktree'
 import { WORKTREE_CREATE_PATH, WORKTREE_REMOVE_PATH, WORKTREE_STATUS_PATH } from '../server/workspaceWorktree.types'
-import { tokenQuery } from './api'
 
 export type { CreatedWorktree, WorktreeStatus }
 
@@ -13,8 +12,7 @@ export class WorktreeApiError extends Error {
 }
 
 function url(path: string, params: Record<string, string> = {}): string {
-  const q = new URLSearchParams(params).toString()
-  return `${path}?${[q, tokenQuery()].filter(Boolean).join('&')}`
+  return `${path}?${new URLSearchParams(params).toString()}`
 }
 
 async function call<T>(op: string, input: string, body?: unknown): Promise<T> {

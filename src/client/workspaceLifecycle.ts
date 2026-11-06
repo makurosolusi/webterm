@@ -41,7 +41,7 @@ export interface WorkspaceLifecycleDeps {
   setWorkspaces: Dispatch<SetStateAction<Workspace[]>>
   setActiveWs: Dispatch<SetStateAction<Workspace | null>>
   setHydrated: Dispatch<SetStateAction<boolean>>
-  /** Dinaikkan saat boot fetch menjawab 403: token hilang/salah → render layar Login. */
+  /** Dinaikkan saat boot fetch menjawab 403: browser belum punya sesi UI → render SignInScreen. */
   setAuthRequired: Dispatch<SetStateAction<boolean>>
   setNodes: Dispatch<SetStateAction<Node[]>>
   setEdges: Dispatch<SetStateAction<Edge[]>>

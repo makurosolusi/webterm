@@ -6,7 +6,6 @@ import {
   SCM_COMMIT_PATH, SCM_HUNKS_PATH, SCM_MESSAGE_PATH, SCM_PR_PATH, SCM_PUSH_PATH, SCM_REPORT_PATH, SCM_STAGE_PATH,
   SCM_STATUS_PATH, SCM_UNSTAGE_PATH, type ScmHunk, type ScmReport, type ScmStatus,
 } from '../server/gitScm.types'
-import { tokenQuery } from './api'
 
 export class ScmApiError extends Error {
   constructor(message: string, readonly body: Record<string, unknown>) {
@@ -15,8 +14,7 @@ export class ScmApiError extends Error {
 }
 
 function url(path: string, params: Record<string, string> = {}): string {
-  const q = new URLSearchParams(params).toString()
-  return `${path}?${[q, tokenQuery()].filter(Boolean).join('&')}`
+  return `${path}?${new URLSearchParams(params).toString()}`
 }
 
 async function call<T>(op: string, input: string, body?: unknown): Promise<T> {

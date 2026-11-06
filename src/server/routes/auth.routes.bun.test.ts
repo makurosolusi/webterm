@@ -168,6 +168,22 @@ describe('POST /auth/login: root token -> cookie (remote sign-in)', () => {
   })
 })
 
+describe('POST /auth/logout: sign out ends this session only', () => {
+  test('revokes the caller, clears the cookie, leaves other sessions; cross-origin 403', async () => {
+    const mine = store.create()
+    const other = store.create()
+    expect((await call('POST', '/auth/logout', { origin: 'http://evil.test', cookie: `${UI_SESSION_COOKIE}=${mine}` })).status).toBe(403)
+    expect(store.verify(mine)).toBe(true)
+    const r = await call('POST', '/auth/logout', withCookie(mine))
+    expect(r.status).toBe(204)
+    const set = r.headers['set-cookie']![0]!
+    expect(set.startsWith(`${UI_SESSION_COOKIE}=;`)).toBe(true)
+    expect(set).toContain('Max-Age=0')
+    expect(store.verify(mine)).toBe(false)
+    expect(store.verify(other)).toBe(true)
+  })
+})
+
 describe('autoOpenAtBoot: one tab on a data dir with no session, never from a non-TTY', () => {
   const spy = () => {
     let calls = 0

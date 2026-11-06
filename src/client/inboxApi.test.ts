@@ -62,7 +62,7 @@ afterEach(() => {
 })
 
 describe('listInbox', () => {
-  it('GETs /api/inbox with the session token header and parses { items }', async () => {
+  it('GETs /api/inbox with no token header and parses { items }', async () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN)
     fetchMock.mockResolvedValue(response({ items: [item] }))
 
@@ -70,7 +70,7 @@ describe('listInbox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0][0]).toBe(INBOX_PATH)
     expect(initOf(0).method).toBe('GET')
-    expect(headersOf(0)['x-webterm-token']).toBe(TOKEN)
+    expect(headersOf(0)).not.toHaveProperty('x-webterm-token') // a stale stored token is never sent; the cookie is
     expect(headersOf(0).Accept).toBe('application/json')
   })
 
@@ -81,13 +81,14 @@ describe('listInbox', () => {
     expect(headersOf(0)).not.toHaveProperty('x-webterm-token')
   })
 
-  it('prefers a one-time ?token= from the URL over sessionStorage', async () => {
+  it('never copies a ?token= from the page URL into the request', async () => {
     sessionStorage.setItem(TOKEN_KEY, 'stale')
     window.history.replaceState(null, '', '/?token=url-token')
     fetchMock.mockResolvedValue(response({ items: [] }))
 
     await listInbox()
-    expect(headersOf(0)['x-webterm-token']).toBe('url-token')
+    expect(headersOf(0)).not.toHaveProperty('x-webterm-token')
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('url-token')
   })
 
   it('never puts the token in the request URL', async () => {
@@ -207,7 +208,7 @@ describe('approval calls', () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`${APPROVAL_PATH}/request`)
     expect(initOf(0).method).toBe('POST')
     expect(headersOf(0)['Content-Type']).toBe('application/json')
-    expect(headersOf(0)['x-webterm-token']).toBe(TOKEN)
+    expect(headersOf(0)).not.toHaveProperty('x-webterm-token') // a stale stored token is never sent; the cookie is
     const sent = JSON.parse(String(initOf(0).body)) as Record<string, unknown>
     expect(sent).toMatchObject({ kind: 'deploy', projectId: 'proj-a', request: { branch: 'main' } })
     expect(String(sent.requestId)).toMatch(/^[A-Za-z0-9_-]{8,128}$/)
@@ -343,14 +344,14 @@ describe('listApproved', () => {
     expiresAt: 1_700_000_900_000,
   }
 
-  it('GETs the approved, unconsumed page with the token header', async () => {
+  it('GETs the approved, unconsumed page with no token header', async () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN)
     fetchMock.mockResolvedValue(response({ items: [approved], total: 1, limit: 50, offset: 0 }))
 
     await expect(listApproved()).resolves.toEqual([approved])
     expect(fetchMock.mock.calls[0][0]).toBe(`${APPROVAL_PATH}?status=approved&limit=50`)
     expect(initOf(0).method).toBe('GET')
-    expect(headersOf(0)['x-webterm-token']).toBe(TOKEN)
+    expect(headersOf(0)).not.toHaveProperty('x-webterm-token') // a stale stored token is never sent; the cookie is
     expect(String(fetchMock.mock.calls[0][0])).not.toContain(TOKEN)
   })
 

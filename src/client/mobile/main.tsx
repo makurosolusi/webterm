@@ -3,11 +3,11 @@
 import { createRoot } from 'react-dom/client'
 import { MobileApp } from './MobileApp'
 import { SW_SCOPE, SW_URL } from './mobile.push'
-import { adoptToken } from './mobile.token'
+import { exchangeLandingToken } from '../transportToken'
 import './mobile.css'
 
-adoptToken()
 if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE }).catch((err: unknown) => console.warn('[m] service worker registration failed', err))
 }
-createRoot(document.getElementById('root')!).render(<MobileApp />)
+// A `?token=` link becomes the session cookie before the first request (exchangeLandingToken never rejects).
+void exchangeLandingToken().then(() => createRoot(document.getElementById('root')!).render(<MobileApp />))

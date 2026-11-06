@@ -1,5 +1,5 @@
 // Klien REST untuk channel Telegram (status, pending, bindings). Transport + token memakai
-// `request` dari inboxTransport (header `x-webterm-token`, token tak pernah masuk URL/pesan error).
+// `request` dari inboxTransport (cookie sesi `wt_ui`, tak ada token di URL/pesan error).
 import { isAbortError, request } from './inboxTransport'
 import { InboxApiError } from './inboxTypes'
 import { CH } from './channelsLabels'

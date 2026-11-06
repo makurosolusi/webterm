@@ -1,7 +1,5 @@
 // Client side of /api/claude-provider (server: claudeProvider/claudeProvider.api.ts) plus the one settings
 // write the "Custom command" mode needs: the command lives in a Claude launch profile (single source of truth).
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 import { settingsUrl } from './useSettings'
 import { randomId } from './randomId'
 import { CLAUDE_PROFILE_LIMITS, normalizeClaudeProfiles, type ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
@@ -25,8 +23,6 @@ export const RESET_PATH = `${PROVIDER_PATH}/reset`
 /** JSON call to the provider API; throws the server's error code (or http_<status>), never the body. */
 export async function providerCall(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   let data: unknown

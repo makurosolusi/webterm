@@ -23,6 +23,8 @@ export interface UiSessionStore {
   count(): number
   /** Revoke every session except `keep` (the caller's own cookie, when it has one). */
   revokeAllExcept(keep?: string): void
+  /** Revoke one session (sign out); unknown or malformed values are a no-op. */
+  revoke(raw: string): void
 }
 
 const hashOf = (raw: string): string => createHash('sha256').update(raw).digest('hex')
@@ -65,6 +67,9 @@ export function createUiSessionStore(d: Database, now: () => number = Date.now):
     },
     revokeAllExcept(keep) {
       d.query('DELETE FROM ui_session WHERE hash != ?').run(keep && SESSION_SHAPE.test(keep) ? hashOf(keep) : '')
+    },
+    revoke(raw) {
+      if (SESSION_SHAPE.test(raw)) d.query('DELETE FROM ui_session WHERE hash = ?').run(hashOf(raw))
     },
   }
 }

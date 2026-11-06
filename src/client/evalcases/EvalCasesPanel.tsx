@@ -4,8 +4,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TOKEN_HEADER } from '../api'
-import { peekToken } from '../transportToken'
 
 export const EVAL_CASES_PATH = '/api/evalcases'
 const PAGE = 50
@@ -40,8 +38,6 @@ export const EVAL_TEXT = {
 
 async function request(method: string, path: string, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)

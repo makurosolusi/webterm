@@ -1,12 +1,11 @@
 // Transport plumbing for the operator inbox: token lookup, fetch wrapper, and response mapping.
 // Split out of `./inboxApi` so both files stay small; `./inboxApi` re-exports everything here.
 //
-// Every request carries the transport token (`x-webterm-token`) when one is set, the same credential
+// Every request carries the `wt_ui` session cookie (same-origin fetch), the same credential
 // `./api` uses for /api/workspaces and /api/fs. It never uses a node capability
 // (`x-webterm-capability`): the server refuses agent credentials and non-browser callers on
 // /api/approvals (`approvalAuth.ts`), so an agent cannot approve its own irreversible action. Secrets are only ever placed in a
 // request header: never in a URL, never in logs, and never in an error message.
-import { TOKEN_HEADER } from './api'
 import type {
   ApprovalChallenge,
   ApprovalStatus,
@@ -14,7 +13,7 @@ import type {
   InboxState,
 } from './inboxTypes'
 import { InboxApiError } from './inboxTypes'
-import { isAbortError, peekToken } from './transportToken'
+import { isAbortError } from './transportToken'
 
 export const INBOX_PATH = '/api/inbox'
 /** Human approval surface: webterm page only, never an agent credential (server `approvalAuth.ts`). */
@@ -75,10 +74,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     Accept: 'application/json',
     ...(init.headers as Record<string, string> | undefined),
   }
-  const token = peekToken()
-  if (token !== '') headers[TOKEN_HEADER] = token
 
-  // No `credentials` override: this is a same-origin app and the token travels in the header.
+  // No `credentials` override: this is a same-origin app and the session cookie rides along.
   const res = await fetch(path, { ...init, headers })
   if (!res.ok) {
     const code = await errorCode(res)

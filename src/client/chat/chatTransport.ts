@@ -1,10 +1,9 @@
 // Transport plumbing for the central chat client: route constants, the typed error, and the
 // token-bearing JSON fetch. Split from `../chatApi` so each file stays inside the repo budget.
 //
-// Credential: the transport token in `x-webterm-token`, same as `../api` and `../inboxTransport`.
+// Credential: the `wt_ui` session cookie, same as `../api` and `../inboxTransport`.
 // Never a node capability, never `actor`, never a digest/nonce: web chat cannot approve.
-import { TOKEN_HEADER } from '../api'
-import { isAbortError, peekToken } from '../transportToken'
+import { isAbortError } from '../transportToken'
 
 export { isAbortError }
 
@@ -73,8 +72,6 @@ export async function requestJson<T>(path: string, init: RequestInit = {}): Prom
     Accept: 'application/json',
     ...(init.headers as Record<string, string> | undefined),
   }
-  const token = peekToken()
-  if (token !== '') headers[TOKEN_HEADER] = token
   const method = (init.method ?? 'GET').toUpperCase()
   const res = await fetch(path, { ...init, headers })
   if (!res.ok) {

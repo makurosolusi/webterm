@@ -5,9 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
-import { TOKEN_HEADER } from '../../api'
 import { BROWSER_REST_PREFIX } from '../../../shared/browser.contract'
-import { peekToken } from '../../transportToken'
 
 export const DESIGN_TEXT = {
   toggleOn: 'Design Mode',
@@ -26,8 +24,6 @@ export const DESIGN_TEXT = {
 /** POST to `/api/browser/<id>/design[/send]`; rejects with the server's message when there is one. */
 export async function designCall<T>(nodeId: string, path: '' | '/send', body: object): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' }
-  const token = peekToken()
-  if (token !== '') headers[TOKEN_HEADER] = token
   const res = await fetch(`${BROWSER_REST_PREFIX}/${encodeURIComponent(nodeId)}/design${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
   const data = (await res.json().catch(() => ({}))) as { message?: unknown }
   if (!res.ok) throw new Error(typeof data.message === 'string' ? data.message : `${DESIGN_TEXT.failed} (${res.status})`)

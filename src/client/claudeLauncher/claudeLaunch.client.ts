@@ -1,6 +1,4 @@
 // Client side of POST /api/claude-launch/test (server/claudeLauncher/claudeLauncher.api.ts).
-import { TOKEN_HEADER } from '../api'
-import { peekToken } from '../transportToken'
 
 export interface LaunchStep { stage: 'wrapper' | 'claude' | 'auth'; ok: boolean; message: string; hint?: string }
 export interface LaunchTest {
@@ -20,8 +18,6 @@ export const openLaunchProfileSettings = (): void => {
 /** Probe a saved profile, or the one Central uses. Throws with the server's error code. */
 export async function testClaudeLaunch(target: { profileId: string } | { central: true }): Promise<LaunchTest> {
   const headers: Record<string, string> = { Accept: 'application/json', 'Content-Type': 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   const res = await fetch('/api/claude-launch/test', { method: 'POST', headers, cache: 'no-store', body: JSON.stringify(target) })
   let data: unknown
   try { data = await res.json() } catch { data = undefined } // non-JSON: the status is enough

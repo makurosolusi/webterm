@@ -1,11 +1,9 @@
 // Same-origin client of `/api/git/diff*` (src/server/gitDiff.route.ts). Token rides the query like
 // fsClient. Every failure throws one Error naming the operation and the server's reason.
 import { GIT_DIFF_PATH, GIT_DIFF_UNDO_PATH, type GitDiffList, type GitFileDiff } from '../server/gitDiff.types'
-import { tokenQuery } from './api'
 
 function url(path: string, params: Record<string, string>): string {
-  const q = new URLSearchParams(params).toString()
-  return `${path}?${[q, tokenQuery()].filter(Boolean).join('&')}`
+  return `${path}?${new URLSearchParams(params).toString()}`
 }
 
 async function call<T>(op: string, input: string, init?: RequestInit): Promise<T> {

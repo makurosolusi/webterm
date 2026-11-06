@@ -1,16 +1,16 @@
 // Kartu "Token akses" (Settings > Kemampuan): status dengan kata biasa, aktifkan/rotasi lewat UI (rute POST
 // hanya menerima halaman webterm, approvalAuth.ts). Pola tiru Orca RuntimePairingUrlGenerator.tsx:168-176 (clearGeneratedUrls),
 // :178-249 (generate, rotate: true), :301-325 (copyGeneratedUrl)
-// (bangkitkan -> tampilkan URL + Salin, bersihkan saat dilepas) dan login App.hooks.ts:48 (storeToken lalu
-// reload, karena api.ts menangkap token saat import). Nilai token hanya di state komponen: tidak di log,
-// tidak di storage selain sessionStorage transport, hilang saat kartu ditutup.
+// (bangkitkan -> tampilkan URL + Salin, bersihkan saat dilepas). Sesudah aktifkan/rotasi, tab ini masuk
+// dengan token baru (POST /auth/login -> cookie `wt_ui`), karena server mencabut sesi lain. Nilai token
+// hanya di state komponen: tidak di log, tidak di storage, hilang saat kartu ditutup.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { storeToken } from './api'
 import type { TokenStatus } from './tokenAccess.api.client'
 import { enableToken, fetchTokenStatus, rotateToken, tokenErrorText, tokenLink } from './tokenAccess.api.client'
 import { TOKEN_TEXT } from './tokenAccessLabels'
+import { loginWithToken } from './transportToken'
 
 export interface TokenAccessCardProps {
   /** Dipanggil setelah token baru terpasang dan kartu ditutup; tes menggantinya. */
@@ -29,7 +29,7 @@ export function TokenAccessCard({ reload = () => location.reload() }: TokenAcces
   const [busy, setBusy] = useState(false)
   const [link, setLink] = useState<string | null>(null)
   const [copied, setCopied] = useState<boolean | null>(null)
-  // Token baru sudah dipasang di tab ini -> api.ts perlu muat ulang; dijalankan saat Selesai/kartu ditutup.
+  // Token baru terpasang -> muat ulang seluruh tab dengan cookie baru; dijalankan saat Selesai/kartu ditutup.
   const pendingReload = useRef(false)
   const reloadRef = useRef(reload)
   reloadRef.current = reload
@@ -48,10 +48,11 @@ export function TokenAccessCard({ reload = () => location.reload() }: TokenAcces
     setError(null)
     try {
       const token = await mint()
-      storeToken(token) // tab ini tetap jalan: transport membaca sessionStorage (transportToken.ts)
       pendingReload.current = true
       setLink(tokenLink(location.origin, token))
       setCopied(null)
+      // Tab ini tetap jalan: tukar token baru dengan cookie sesi. Gagal -> tautan tetap tampil sebagai jalan masuk.
+      if ((await loginWithToken(token)) !== 204) setError(TOKEN_TEXT.signInFailed)
     } catch (e) {
       setError(tokenErrorText(e))
     } finally {

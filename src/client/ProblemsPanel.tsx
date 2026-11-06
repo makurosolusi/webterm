@@ -10,7 +10,6 @@ import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import type { Problem } from '../server/problems/problems.parse'
 import type { ProblemsState } from '../server/problems/problems.service'
 import type { Workspace, WsNode } from '../shared/workspace'
-import { tokenQuery } from './api'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { toggleBottomView } from './bottomPanelHost'
 import { codicon } from './dockCodicon'
@@ -22,8 +21,7 @@ export const PROBLEMS_POLL_MS = 3000
 type Reply = ProblemsState & { total: number }
 
 async function call<T>(op: string, path: string, body?: unknown): Promise<T> {
-  const url = `${path}${path.includes('?') ? '&' : '?'}${tokenQuery()}`.replace(/[?&]$/, '')
-  const res = await fetch(url, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const res = await fetch(path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   const out = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok) throw new Error(`${op}: ${String(out.message ?? out.error ?? `HTTP ${res.status}`)}`)
   return out as T

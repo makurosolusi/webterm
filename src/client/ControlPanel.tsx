@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { TOKEN_HEADER } from './api'
 import { CONTROL_TEXT, SOURCE_LABEL } from './controlPanelLabels'
 import { ControlField } from './ControlPanelField'
 import { ControlPanelDoctor } from './ControlPanelDoctor'
@@ -19,7 +18,6 @@ import { EvalCasesPanel } from './evalcases/EvalCasesPanel'
 import { RoutinesPanel } from './RoutinesPanel'
 import { MorningBriefLlmToggle } from './MorningBriefSettings'
 import { matchesSearch, normalizeQuery } from './SettingsFields'
-import { peekToken } from './transportToken'
 
 export const CONTROL_EFFECTIVE_PATH = '/api/control/effective'
 export const CONTROL_DOCTOR_PATH = '/api/control/doctor'
@@ -38,8 +36,6 @@ export interface AgentProtection { kind: string; level: string; reasons: string[
 /** Call `/api/control/effective` (GET read model, PUT settings write) or `path` (the Doctor's own). Throws with the server reason. */
 export async function controlRequest(method: string, body?: unknown, query = '', path = CONTROL_EFFECTIVE_PATH): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path + query, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)
@@ -52,8 +48,6 @@ export async function controlRequest(method: string, body?: unknown, query = '',
 
 async function getJson(path: string): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   const res = await fetch(path, { headers })
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`)
   return res.json()

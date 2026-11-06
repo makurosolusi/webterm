@@ -7,20 +7,17 @@ import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { VscodeQuickPick, type VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import type { WorkspaceTask } from '../server/tasks/tasks.list'
 import type { Workspace, WsNode } from '../shared/workspace'
-import { tokenQuery } from './api'
 import { codicon } from './dockCodicon'
 import { randomId } from './randomId'
 
-const withToken = (path: string): string => [path, tokenQuery()].filter(Boolean).join(path.includes('?') ? '&' : '?')
-
 export async function fetchTasks(workspaceId: string, fetchFn: typeof fetch = fetch): Promise<WorkspaceTask[]> {
-  const res = await fetchFn(withToken(`/api/tasks?workspace=${encodeURIComponent(workspaceId)}`))
+  const res = await fetchFn(`/api/tasks?workspace=${encodeURIComponent(workspaceId)}`)
   if (!res.ok) throw new Error(`Load tasks: HTTP ${res.status}`)
   return ((await res.json()) as { tasks: WorkspaceTask[] }).tasks
 }
 
 export async function runTask(workspaceId: string, taskId: string, nodeId: string, fetchFn: typeof fetch = fetch): Promise<void> {
-  const res = await fetchFn(withToken('/api/tasks/run'), {
+  const res = await fetchFn('/api/tasks/run', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace: workspaceId, task: taskId, node: nodeId }),
   })
   if (!res.ok) {

@@ -1,12 +1,10 @@
 // REST client for /api/browser/* (PLAN/BROWSER-CANVAS-b.md §4.5). Same credential as api.ts
-// (`x-webterm-token`). No response carries a cookie value; request bodies and response bodies are
+// (the `wt_ui` session cookie). No response carries a cookie value; request bodies and response bodies are
 // never echoed into errors.
 import { BROWSER_REST_PREFIX, ENV_BROWSER } from '../shared/browser.contract'
 import type {
   BrowserStatusResp, CookieCommitReq, CookieCommitResp, CookieDomainInfo, CookiePreviewReq, CookiePreviewResp,
 } from '../shared/browser.contract'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 
 /** REST failure; `code` is the server's stable error code (or `http_<status>`). */
 export class BrowserApiError extends Error {
@@ -31,8 +29,6 @@ async function errorCode(res: Response): Promise<string> {
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const token = peekToken()
-  if (token !== '') headers[TOKEN_HEADER] = token
   const res = await fetch(url, {
     method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })

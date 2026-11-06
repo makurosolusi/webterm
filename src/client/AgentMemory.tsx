@@ -10,8 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 import { BoardSection, ProposalsSection } from './AgentMemoryBoard'
 
 export const PROCEDURAL_PATH = '/api/awareness/procedural'
@@ -57,8 +55,6 @@ export type MemoryAct = (what: string, method: string, path: string, body?: unkn
 
 export async function memoryRequest(method: string, path = PROCEDURAL_PATH, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)
