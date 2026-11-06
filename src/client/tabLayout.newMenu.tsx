@@ -8,23 +8,31 @@ import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 export interface NewTabMenuProps {
   onAddTerminal: () => void
   onAddAgent: () => void
+  /** Absent = Claude disabled in settings; no row. */
+  onAddAgentChat?: () => void
   onAddBrowser?: () => void
   onAddDiff: () => void
   onAddFiles: () => void
 }
 
-export default function NewTabMenu(p: NewTabMenuProps) {
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+/** Rows of the menu, in order (pure, so tests can check which kinds it creates). */
+export function newTabMenuItems(p: NewTabMenuProps): VscodeMenuItem[] {
   const row = (id: string, label: string, icon: string, onSelect: () => void): VscodeMenuItem =>
     ({ type: 'item', id, label, icon: codicon(icon), onSelect })
-  const items: VscodeMenuItem[] = [
+  return [
     row('terminal', 'New Terminal', 'terminal', p.onAddTerminal),
     row('agent', 'New Agent', 'hubot', p.onAddAgent),
+    ...(p.onAddAgentChat ? [row('agentChat', 'New Agent Chat', 'comment-discussion', p.onAddAgentChat)] : []),
     ...(p.onAddBrowser ? [row('browser', 'New Browser', 'globe', p.onAddBrowser)] : []),
     row('diff', 'New Changes', 'git-compare', p.onAddDiff),
     { type: 'separator' },
     row('files', 'New Files', 'folder', p.onAddFiles),
   ]
+}
+
+export default function NewTabMenu(p: NewTabMenuProps) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const items = newTabMenuItems(p)
   return (
     <>
       <IconButton

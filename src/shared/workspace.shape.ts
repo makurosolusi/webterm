@@ -1,5 +1,5 @@
 import type { AgentId } from './workspace.agents'
-import { canContextLink } from './workspace.capabilities'
+import { canContextLink, type AgentPermissionMode } from './workspace.capabilities'
 import type { DeviceChoice } from './browser.devices'
 import type { TabLayout } from './tabLayout.schema'
 
@@ -25,7 +25,7 @@ export interface BridgeLink {
   kind: 'context' | 'file'
 }
 
-export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan' | 'app'
+export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan' | 'app' | 'agentChat'
 
 /** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
  *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
@@ -124,6 +124,8 @@ export interface WsNode {
   plan?: PlanNodeData     // node 'plan': draft / approved dag (validPlanData)
   agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
   device?: DeviceChoice   // node 'browser': device mode (browser.devices.ts); absent = Responsive
+  chatSessionId?: string  // node 'agentChat': Claude session id from system/init (agentChat.shape.ts)
+  permissionMode?: AgentPermissionMode // node 'agentChat': per-node mode; absent = settings default
 }
 
 export interface Workspace {

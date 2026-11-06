@@ -1,0 +1,107 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { CanUseTool, SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
+import { DEFAULT_SETTINGS } from '../../shared/settings'
+import type { AgentPermissionMode } from '../../shared/workspace'
+import { registerClaudeLaunchSettings } from '../claudeLauncher/claudeLauncher'
+import {
+  AGENT_CHAT_SETTING_SOURCES, agentChatPermissionMode, buildAgentChatOptions, createStderrTail, type SpawnImpl,
+} from './agentChat.options'
+
+const allow: CanUseTool = async (_n, input) => ({ behavior: 'allow', updatedInput: input })
+const configDir = mkdtempSync(join(tmpdir(), 'agent-chat-cfg-')) // test-only: never the real ~/.claude
+const parentEnv = { PATH: '/usr/bin:/bin', HOME: '/home/test', CLAUDE_CONFIG_DIR: configDir }
+const ENVMAN = { id: 'em', name: 'Envman', command: 'envman -e claude:work -- claude' }
+
+function build(over: Partial<Parameters<typeof buildAgentChatOptions>[0]> = {}) {
+  return buildAgentChatOptions({ nodeId: 'n-1', port: 8701, cwd: '/tmp/proj', mode: 'manual', canUseTool: allow, abort: new AbortController(), parentEnv, ...over })
+}
+
+afterEach(() => registerClaudeLaunchSettings(() => DEFAULT_SETTINGS))
+
+describe('agentChatPermissionMode', () => {
+  test('manual maps to default, the rest pass through', () => {
+    expect(agentChatPermissionMode('manual')).toBe('default')
+    for (const m of ['auto', 'acceptEdits', 'plan', 'bypassPermissions'] as const) expect(agentChatPermissionMode(m)).toBe(m)
+  })
+})
+
+describe('buildAgentChatOptions', () => {
+  test('always passes permissionMode; skip-permissions only for bypassPermissions', () => {
+    const modes: AgentPermissionMode[] = ['manual', 'auto', 'acceptEdits', 'plan', 'bypassPermissions']
+    for (const mode of modes) {
+      const { options } = build({ mode })
+      expect(options.permissionMode).toBe(agentChatPermissionMode(mode))
+      expect(options.allowDangerouslySkipPermissions).toBe(mode === 'bypassPermissions' ? true : undefined)
+    }
+  })
+
+  test('loads the same setting layers, streams partials, sets cwd and resume only when given', () => {
+    const { options, notice } = build({ resume: 'sess-9' })
+    expect(options.settingSources).toEqual(AGENT_CHAT_SETTING_SOURCES)
+    expect(options.settingSources).toEqual(['user', 'project', 'local'])
+    expect(options.includePartialMessages).toBe(true)
+    expect(options.cwd).toBe('/tmp/proj')
+    expect(options.resume).toBe('sess-9')
+    expect(notice).toBe(undefined)
+    expect('resume' in build().options).toBe(false)
+  })
+
+  test('mirrors the terminal launch: node settings, house rules, explore plugin and MCP config files', () => {
+    const { options } = build()
+    expect(options.settings).toContain('node-settings')
+    expect(options.plugins?.[0]?.type).toBe('local')
+    expect(options.plugins?.[0]?.path).toContain('claude-plugin')
+    expect(options.extraArgs?.['append-system-prompt-file']).toContain('house-rules')
+    expect(typeof options.extraArgs?.['mcp-config']).toBe('string')
+    // Files only: an inline JSON value would carry ':' that launch wrappers misread.
+    expect(options.extraArgs?.['mcp-config']?.startsWith('{')).toBe(false)
+  })
+
+  test('child env is the allowlisted parent plus node identity, with a temp CLAUDE_CONFIG_DIR', () => {
+    const env = build({ parentEnv: { ...parentEnv, CLAUDECODE: '1' } }).options.env ?? {}
+    expect(env.CLAUDE_CONFIG_DIR).toBe(configDir)
+    expect(env.NODETERM_NODE_ID).toBe('n-1')
+    expect(env.CLAUDECODE).toBe(undefined)
+  })
+
+  test('spawn hook runs the envman profile argv with SDK args appended, o.env only, signal passed', () => {
+    registerClaudeLaunchSettings(() => ({ ...DEFAULT_SETTINGS, claudeLaunchProfiles: [ENVMAN], defaultClaudeProfileId: 'em' }))
+    const calls: Parameters<SpawnImpl>[] = []
+    const fakeChild = {} as SpawnedProcess // test-only: the hook result is passed through untouched
+    const spawn: SpawnImpl = (...a) => { calls.push(a); return fakeChild }
+    const { options } = build({ profileId: 'em', spawn })
+    expect(options.pathToClaudeCodeExecutable).toBe('claude')
+    const signal = new AbortController().signal
+    const o: SpawnOptions = { command: '/bundled/claude', args: ['--output-format=stream-json', '--verbose'], cwd: '/tmp/proj', env: { ONLY: 'this' }, signal }
+    expect(options.spawnClaudeCodeProcess?.(o)).toBe(fakeChild)
+    expect(calls).toEqual([['envman', ['-e', 'claude:work', '--', 'claude', '--output-format=stream-json', '--verbose'], { cwd: '/tmp/proj', env: { ONLY: 'this' }, stdio: 'pipe', signal }]])
+  })
+
+  test('default profile still sets pathToClaudeCodeExecutable', () => {
+    expect(build().options.pathToClaudeCodeExecutable).toBe('claude')
+  })
+
+  test('a missing profile falls back and returns the missing-profile notice', () => {
+    const { notice } = build({ profileId: 'gone' })
+    expect(notice).toContain('Default')
+    expect(notice?.startsWith('\r\n')).toBe(false)
+  })
+
+  test('stderr chunks go to the caller, never stored in options', () => {
+    const got: string[] = []
+    build({ stderr: (c) => got.push(c) }).options.stderr?.('oops')
+    expect(got).toEqual(['oops'])
+  })
+})
+
+describe('createStderrTail', () => {
+  test('keeps only the last max chars', () => {
+    const t = createStderrTail(5)
+    t.push('abc')
+    t.push('defgh')
+    expect(t.text()).toBe('defgh')
+  })
+})

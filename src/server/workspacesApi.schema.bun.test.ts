@@ -6,6 +6,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
+import { AGENT_CHAT_KIND } from '../shared/agentChat.shape'
+import { normalizeWorkspace } from '../shared/workspace.schema'
 import { Db, openDb } from './db'
 import { workspacesRoute } from './workspacesApi'
 
@@ -56,6 +58,17 @@ test('a valid PUT keeps unknown node fields and sanitizes the node blobs it know
   const saved = store.get(ws.id)?.nodes[0] as unknown as Record<string, unknown>
   expect(saved.futureField).toEqual({ a: 1 })
   expect(saved.diffNotes).toEqual([{ id: 'd', path: 'a.ts', line: 1, body: 'ok' }])
+})
+
+test('an agent chat node round-trips through the schema, a PUT and a load without a downgrade', async () => {
+  const chat = { id: 'c1', kind: AGENT_CHAT_KIND, x: 3, y: 4, title: 'chat' }
+  const board = { ...VALID, nodes: [NODE, chat] }
+  expect(normalizeWorkspace(board)).toEqual({ board: { ...board, cwd: undefined, color: undefined, bridges: [] }, issues: [] })
+  const store = new Db(openDb(':memory:'))
+  const ws = store.create('p')
+  expect((await put(store, ws.id, board))?.status).toBe(200)
+  expect(store.get(ws.id)?.nodes).toEqual([NODE, chat])
+  expect(store.list().find((w) => w.id === ws.id)?.nodes).toEqual([NODE, chat])
 })
 
 test('a corrupt row still lets list() return every other workspace; the bad one degrades alone', () => {

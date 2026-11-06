@@ -130,8 +130,8 @@ describe('withTabPortal', () => {
     expect(probe.nodeId).toBe('rf1')
   })
 
-  it('exposes the eight node types as stable module constants', () => {
-    expect(Object.keys(nodeTypes).sort()).toEqual(['agent', 'app', 'browser', 'diff', 'editor', 'files', 'plan', 'terminal'])
+  it('exposes the nine node types as stable module constants', () => {
+    expect(Object.keys(nodeTypes).sort()).toEqual(['agent', 'agentChat', 'app', 'browser', 'diff', 'editor', 'files', 'plan', 'terminal'])
     Object.values(nodeTypes).forEach((t) => expect(t).toBeTruthy())
   })
 })

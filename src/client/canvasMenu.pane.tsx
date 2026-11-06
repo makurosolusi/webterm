@@ -31,6 +31,8 @@ export interface CanvasPaneMenuDeps {
   onAddBrowser?: (at?: XYPosition) => void
   /** Diff node at the click point; absent = no menu row. */
   onAddDiff?: (at?: XYPosition) => void
+  /** Agent Chat node at the click point; absent = no menu row. */
+  onAddAgentChat?: (at?: XYPosition) => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => void
   onFit: () => void
   onSelectAll: () => void
@@ -122,6 +124,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
           addFiles: () => deps.onAddFiles(open.at),
           addBrowser: () => (onAddBrowser ? onAddBrowser(open.at) : offerBrowser()),
           addDiff: deps.onAddDiff && (() => deps.onAddDiff?.(open.at)),
+          addAgentChat: deps.onAddAgentChat && (() => deps.onAddAgentChat?.(open.at)),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),
           fitView: deps.onFit,
           selectAll: deps.onSelectAll,

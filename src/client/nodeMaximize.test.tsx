@@ -153,7 +153,7 @@ describe('Toggle Maximize Node command', () => {
 })
 
 describe('node files share the one maximize', () => {
-  it.each(['AgentNode', 'BrowserNode', 'FilesNode', 'TerminalNode'])('%s has no own fitView/fullscreen maximize', (name) => {
+  it.each(['AgentNode', 'AgentChatNode', 'BrowserNode', 'FilesNode', 'TerminalNode'])('%s has no own fitView/fullscreen maximize', (name) => {
     const src = readFileSync(resolve(process.cwd(), `src/client/${name}.tsx`), 'utf8')
     expect(src).not.toMatch(/fitView|setMaximized|useNodeFullscreen|onToggleMaximize|requestFullscreen/)
   })

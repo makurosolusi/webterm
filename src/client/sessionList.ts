@@ -15,8 +15,9 @@ import type { AgentId, AgentStatus, Workspace, WsNode, WsNodeKind } from '../sha
 import { agentConfig } from '../shared/workspace'
 
 /** Kind node yang dihitung sebagai "sesi". `files`/`editor` adalah penampil, bukan shell —
- *  nodeterm juga hanya mendaftar node terminal di sidebar-nya. */
-export const SESSION_KINDS: readonly WsNodeKind[] = ['terminal', 'agent']
+ *  nodeterm juga hanya mendaftar node terminal di sidebar-nya. `agentChat` is a Claude session
+ *  without a terminal, so it is listed (and reopenable) like an agent node. */
+export const SESSION_KINDS: readonly WsNodeKind[] = ['terminal', 'agent', 'agentChat']
 
 export type StatusKind = 'working' | 'attention' | 'done' | 'unknown'
 

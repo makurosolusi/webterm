@@ -9,6 +9,7 @@ import type { CanvasMenuIcon, CanvasMenuItem, CanvasMenuRow } from './canvasMenu
 const ICON_NAMES: Record<CanvasMenuIcon, string> = {
   terminal: 'terminal',
   agent: 'hubot',
+  agentChat: 'comment-discussion',
   files: 'files',
   browser: 'globe',
   diff: 'git-compare',

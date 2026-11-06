@@ -203,3 +203,19 @@ test('claude template nodes record the default launch profile at instantiation; 
     registerClaudeLaunchSettings(() => DEFAULT_SETTINGS)
   }
 })
+
+test('an agentChat template node becomes a Claude chat with the default profile, no command and no session yet', async () => {
+  registerClaudeLaunchSettings(() => ({ claudeLaunchProfiles: [{ id: 'm', name: 'M', command: 'envman -e claude:m --' }], defaultClaudeProfileId: 'm', centralClaudeProfileId: '' }))
+  try {
+    const chat = { format: 'webterm-template', version: 1, id: 'chat-one', name: 'Chat', cwd: '/r', nodes: [{ key: 'c', kind: 'agentChat', x: 0, y: 0 }] }
+    expect((await call('POST', '/api/templates/import', chat))!.status).toBe(201)
+    const res = (await call('POST', '/api/templates/chat-one/instantiate', {})) as { body: { workspace: Workspace } }
+    const n = res.body.workspace.nodes[0]
+    expect(n).toMatchObject({ kind: 'agentChat', agentId: 'claude', claudeProfileId: 'm', cwd: '/r' })
+    expect([n.cmd, n.chatSessionId, n.sessionId]).toEqual([undefined, undefined, undefined])
+    const withCmd = { ...chat, id: 'chat-cmd', nodes: [{ key: 'c', kind: 'agentChat', x: 0, y: 0, cmd: 'claude' }] }
+    expect((await call('POST', '/api/templates/import', withCmd))!.status).toBe(400)
+  } finally {
+    registerClaudeLaunchSettings(() => DEFAULT_SETTINGS)
+  }
+})
