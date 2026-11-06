@@ -104,6 +104,8 @@ function stream(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, s: AgentChatSe
   const write = (e: AgentChatEvent): void => {
     if (!res.writableEnded) res.write(formatSseFrame({ kind: 'event', id: e.seq, event: AGENT_CHAT_SSE_EVENT, data: e }))
   }
+  // seq restarts at 1 with the server; without this a page open across a restart drops every new event.
+  s.resumeAfter(from)
   const replay = s.events(from)
   const oldest = replay[0]?.seq ?? Number.POSITIVE_INFINITY
   // The init the log cap dropped (the client needs its session id), then prompts still waiting for an

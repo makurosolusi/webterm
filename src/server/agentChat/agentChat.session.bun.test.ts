@@ -77,6 +77,21 @@ describe('AgentChatSession', () => {
     expect(of('status').map((e) => e.status)).toEqual(['starting', 'awaiting', 'tool'])
   })
 
+  test('an open prompt keeps status awaiting when its tool_use is mapped after canUseTool ran', async () => {
+    let answer: (r: PermissionResult) => void = () => {}
+    const { s, opens, of } = setup({ gate: () => new Promise<PermissionResult>((r) => { answer = r }) })
+    s.send('go')
+    const x = opens[0] as Opened
+    const asked = ask(x, 'Bash', { command: 'ls' })
+    x.fq.emit(fx.assistant('m1', [{ type: 'tool_use', id: 'tu-Bash', name: 'Bash', input: { command: 'ls' } }]))
+    await tick()
+    expect(of('tool').at(-1)?.state).toBe('running')
+    expect(s.status()).toBe('awaiting')
+    answer({ behavior: 'allow' })
+    await asked
+    expect(s.status()).toBe('tool')
+  })
+
   test('question and plan prompts get their own kind', async () => {
     const { s, opens, of } = setup()
     s.send('go')
@@ -203,6 +218,15 @@ describe('AgentChatSession', () => {
     expect(opens[0]?.input.mode).toBe('manual')
     await s.setMode('plan')
     expect(opens[0]?.fq.modes).toEqual(['plan'])
+  })
+
+  test('resumeAfter numbers the next events after a cursor past the log, and never moves seq back', () => {
+    const { s, of } = setup()
+    s.resumeAfter(50)
+    s.resumeAfter(10)
+    s.send('go')
+    expect(of('message')[0]?.seq).toBe(51)
+    expect(s.events(50).map((e) => e.seq)).toEqual([51, 52])
   })
 
   test('the event log has monotonic seq from 1, is capped, and replays after a seq', async () => {

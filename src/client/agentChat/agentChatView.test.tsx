@@ -79,6 +79,15 @@ describe('AgentChatView', () => {
     expect(t.send).toHaveBeenCalledWith('also this', 'next')
   })
 
+  it('a turn stopped mid-stream keeps its text but is no longer marked streaming', async () => {
+    const { emit } = setup()
+    emit({ seq: 1, t: 'status', status: 'thinking' }, { seq: 2, t: 'delta', messageId: 'm1', kind: 'text', text: 'Let me look' })
+    expect(await screen.findByText('streaming')).toBeTruthy()
+    emit({ seq: 3, t: 'status', status: 'interrupted' })
+    await waitFor(() => expect(screen.queryByText('streaming')).toBeNull())
+    expect(screen.getByText('Let me look')).toBeTruthy()
+  })
+
   it('keeps a failed message in a sticky error with Retry', async () => {
     const { t } = setup()
     t.send.mockRejectedValueOnce(new AgentChatApiError('send', 'n1', 409, 'session_locked', 'Open elsewhere.'))
@@ -96,6 +105,18 @@ describe('AgentChatView', () => {
     expect(await screen.findByText('$0.5000')).toBeTruthy()
     status('reconnecting')
     expect(screen.getByText('Connection lost. Reconnecting…')).toBeTruthy()
+  })
+
+  it('a node not saved yet shows connecting, not an error, and loads history once the stream opens', async () => {
+    const { t, status } = setup()
+    status('reconnecting') // the first stream attempt got 404: the board has not saved the node yet
+    expect(screen.getByText('Connecting to Claude…')).toBeTruthy()
+    expect(screen.queryByText('Connection lost. Reconnecting…')).toBeNull()
+    expect(t.history).not.toHaveBeenCalled()
+    status('open')
+    await waitFor(() => expect(t.history).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Ask Claude anything about this folder.')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('closes the stream on unmount', () => {

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import ChatMarkdown from '../chat/chatMarkdown'
 import type { AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
-import type { AgentChatState, ChatMessageView, DraftSegment } from './agentChatStore'
+import { isBusyStatus, type AgentChatState, type ChatMessageView, type DraftSegment } from './agentChatStore'
 import { ToolCard } from './toolCards'
 import { PermissionCard } from './permissionCard'
 import { QuestionCard } from './questionCard'
@@ -66,7 +66,8 @@ function MessageBody({ ctx, message }: { ctx: Ctx; message: ChatMessageView }) {
 
 function MessageRow({ ctx, message }: { ctx: Ctx; message: ChatMessageView }) {
   const user = message.role === 'user'
-  const streaming = message.draft.length > 0
+  // A turn stopped or crashed mid-stream leaves its draft without a final message: live only while busy.
+  const streaming = message.draft.length > 0 && isBusyStatus(ctx.state.status)
   return (
     <div className={`chat-message chat-message--${user ? 'human' : 'assistant'}`} aria-label={`${user ? 'user' : 'assistant'} message`}>
       <div className="chat-message__meta">

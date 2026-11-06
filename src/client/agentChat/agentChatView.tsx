@@ -111,10 +111,14 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
     )
   }, [transport])
 
+  // A node added a moment ago is not on the server until the board saves (404 until then); the stream
+  // retries until it is, so the first history page waits for the first open stream instead of failing.
+  const [opened, setOpened] = useState(false)
+  useEffect(() => { if (stream === 'open') setOpened(true) }, [stream])
   useEffect(() => {
-    loadHistory()
+    if (opened) loadHistory()
     return () => historyAbort.current?.abort()
-  }, [loadHistory])
+  }, [opened, loadHistory])
 
   // Persist what the server told us, once per change, so a reload resumes the same session and mode.
   const sessionId = state.session?.sessionId
@@ -160,7 +164,7 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
 
   return (
     <section className="agent-chat nodrag nowheel" aria-label="Agent chat">
-      {stream === 'reconnecting' && (
+      {stream === 'reconnecting' && opened && (
         <div className="agent-chat-banner" role="status">
           <span className="chat-progress" aria-hidden="true" />
           <span>Connection lost. Reconnecting…</span>
@@ -188,7 +192,7 @@ export function AgentChatView({ nodeId, chatSessionId, permissionMode, onNodeDat
             </div>
           )}
           {empty && !history.loading && (
-            <p className="chat-empty">{stream === 'connecting' ? 'Connecting to Claude…' : 'Ask Claude anything about this folder.'}</p>
+            <p className="chat-empty">{opened ? 'Ask Claude anything about this folder.' : 'Connecting to Claude…'}</p>
           )}
           <AgentChatThread state={state} actions={actions} />
         </div>

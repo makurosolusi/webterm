@@ -55,13 +55,11 @@ class Inbox implements AsyncIterable<SDKUserMessage> {
 const permissionKind = (toolName: string): 'tool' | 'question' | 'plan' =>
   toolName === 'AskUserQuestion' ? 'question' : toolName === 'ExitPlanMode' ? 'plan' : 'tool'
 
-function aborted(signal: AbortSignal): Promise<never> {
-  return new Promise((_, reject) => {
-    const fail = (): void => reject(new Error('permission request aborted'))
-    if (signal.aborted) fail()
-    else signal.addEventListener('abort', fail, { once: true })
-  })
-}
+const aborted = (signal: AbortSignal): Promise<never> => new Promise((_, reject) => {
+  const fail = (): void => reject(new Error('permission request aborted'))
+  if (signal.aborted) fail()
+  else signal.addEventListener('abort', fail, { once: true })
+})
 
 export class AgentChatSession {
   readonly nodeId: string
@@ -132,6 +130,9 @@ export class AgentChatSession {
     this.emit({ t: 'mode', mode: sdkMode })
   }
 
+  /** A client cursor past this log means the server restarted under an open page: number on after it. */
+  resumeAfter(cursor: number): void { if (cursor > this.seq) this.seq = cursor }
+
   events(after: number): AgentChatEvent[] {
     return this.log.filter((e) => e.seq > after)
   }
@@ -193,7 +194,11 @@ export class AgentChatSession {
     }
     if (m.type !== 'result') this.running = true
     else this.running = false
-    for (const e of this.mapper.map(m)) this.emit(e)
+    for (const e of this.mapper.map(m)) {
+      // canUseTool runs as soon as the SDK reads the request, often before the tool_use is mapped here: keep 'awaiting'.
+      if (e.t === 'status' && this.pending.size > 0 && (e.status === 'tool' || e.status === 'thinking')) continue
+      this.emit(e)
+    }
     if (m.type === 'result') this.armIdle()
   }
 
