@@ -8,6 +8,7 @@ import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 import { ptyLog } from './sessionsLog'
 import type { TmuxSupervisor } from './ptySupervisor'
+import { replay } from './sessionsAttach'
 
 /** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
  *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
@@ -130,12 +131,20 @@ export class SessionsCore {
     for (const session of this.map.values()) session.subs.remove(send)
   }
 
+  /** A socket that dropped output for `id` (backpressure, terminalSocket.ts) gets reset + full
+   *  replay, but only while it is still subscribed: a closed or detached view wants nothing. */
+  resync(id: string, send: (m: ServerMsg) => void): void {
+    const session = this.map.get(id)
+    if (session?.subs.has(send)) replay(session, send)
+  }
+
   /** Tambah `data` ke log (dengan cap byte) lalu pancarkan ke semua pelanggan, bernomor urut. */
   protected emit(session: Session, data: string): void {
     // PTY sesekali memanggil onData dengan string kosong. OutputLog tidak memberinya seq (ia
     // mengembalikan seq terakhir), jadi memancarkannya berarti pelanggan menerima `output` dengan
     // nomor urut duplikat — no-op, tapi membingungkan deteksi gap di client.
     if (data === '') return
+    session.daReplies.noteOutput(data, this.now())
     const seq = session.log.append(data, this.scrollbackBytes)
     session.subs.send({ t: 'output', id: session.id, data, seq })
   }

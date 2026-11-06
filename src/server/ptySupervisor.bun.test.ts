@@ -147,11 +147,11 @@ test('agent id disimpan di sesi supaya boot berikutnya tahu node agent', async (
 })
 
 test('fallback tanpa tmux: tanpa supervisor, dengan notice terlihat sekali', () => {
-  expect(bootSupervisor({ NODE_ENV: 'test' }, () => true)).toEqual({ supervisor: null })
-  const missing = bootSupervisor({}, () => false)
+  expect(bootSupervisor({ NODE_ENV: 'test' }, () => '/usr/bin/tmux')).toEqual({ supervisor: null })
+  const missing = bootSupervisor({}, () => undefined)
   expect(missing.supervisor).toBeNull()
   expect(missing.notice).toBe(TMUX_MISSING_NOTICE)
-  expect(bootSupervisor({}, () => true).supervisor?.socket).toBe('webterm')
+  expect(bootSupervisor({}, () => '/usr/bin/tmux').supervisor?.socket).toBe('webterm')
 
   const fake = (): Pty => ({ pid: 1, onData() {}, onExit() {}, write() {}, resize() {}, kill() {} })
   const s = new Sessions({ spawn: fake }, null)
@@ -161,6 +161,49 @@ test('fallback tanpa tmux: tanpa supervisor, dengan notice terlihat sekali', () 
     open(s, id, (m) => { if (m.t === 'output') got.push(m.data) })
     return got.join('')
   }
-  expect(out('f1')).toContain('tmux tidak ditemukan')
-  expect(out('f2')).not.toContain('tmux tidak ditemukan')
+  expect(out('f1')).toContain('tmux not found')
+  expect(out('f2')).not.toContain('tmux not found')
+})
+
+test('the tmux-missing notice is plain ASCII English product text', () => {
+  expect(TMUX_MISSING_NOTICE).toMatch(/^[\x20-\x7e\r\n]+$/)
+  expect(TMUX_MISSING_NOTICE).toContain('[webterm] tmux not found: this session will end when the webterm server restarts.')
+})
+
+test('close then an immediate re-open of the same id gets a NEW live session, not the dying one', async () => {
+  const s = new Sessions({ shell: '/bin/sh' }, sup)
+  s.open({ t: 'open', id: 'b1', cols: 80, rows: 24, cmd: 'sleep 100' }, () => {})
+  await until(() => sup.has('b1'), 'first session created')
+  const pane = () => {
+    try {
+      return execFileSync('tmux', ['-L', SOCKET, 'display-message', '-p', '-t', `=${supervisedName('b1')}:`, '#{pane_pid}'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    } catch {
+      return '' // no such session yet: the poll below keeps waiting
+    }
+  }
+  const firstPane = pane()
+  s.close('b1')
+  s.open({ t: 'open', id: 'b1', cols: 80, rows: 24, cmd: 'sleep 100' }, () => {})
+  // Poll instead of a fixed sleep (slow under full-suite load), then hold: the old bug showed the
+  // view going dead once the dying client's exit landed, so it must stay live after it settles.
+  await until(() => s.isLive('b1') && pane() !== '' && pane() !== firstPane, 'new live session')
+  await sleep(500)
+  expect(s.isLive('b1')).toBe(true)
+  expect(sup.has('b1')).toBe(true)
+  s.close('b1')
+}, 20_000)
+
+test('a plain open never attaches to a not-yet-adopted agent tmux session under its id', async () => {
+  const agent = new Sessions({ shell: '/bin/sh' }, sup)
+  agent.open({ t: 'open', id: 'k2', cols: 80, rows: 24, cmd: 'sleep 100', agentId: 'codex' }, () => {})
+  await until(() => sup.has('k2'), 'agent session created')
+  expect(sup.holder('k2')).toEqual({ agentId: 'codex' })
+  expect(sup.holder('never-made')).toBeNull()
+  const restarted = new Sessions({ shell: '/bin/sh' }, sup) // server restart, adoption not run yet
+  const got: ServerMsg[] = []
+  restarted.open({ t: 'open', id: 'k2', cols: 80, rows: 24 }, (m) => got.push(m))
+  expect(restarted.isLive('k2')).toBe(false)
+  expect(got.map((m) => m.t)).toEqual(['output', 'exit'])
+  expect(got[1]).toMatchObject({ t: 'exit', reason: 'kind_mismatch' })
+  agent.close('k2')
 })
