@@ -2,10 +2,12 @@
 // perintah peluncuran adalah isian pengguna dan tidak dicatat.
 import { basename } from 'node:path'
 import type { Workspace } from '../shared/workspace'
+import type { PreservedNode } from '../shared/workspace.schema'
 import { createLogger } from './logs'
 
 const log = createLogger('workspace')
 const MAX_LOGGED_ISSUES = 5
+const MAX_LOGGED_KIND = 40 // a hand-edited kind can be any string: cap what reaches the log
 
 /** Bandingkan `prev` (null = baru) dengan `next` lalu catat create/rename/node/layout/save. */
 export function logWorkspaceSave(prev: Workspace | null, next: Workspace): void {
@@ -43,6 +45,13 @@ export const workspaceLog = {
   repaired(workspaceId: string, issues: string[]): void {
     log.warn('workspace.row.repaired', 'Stored workspace row failed validation; served a repaired board', {
       ids: { workspaceId }, issues: issues.slice(0, MAX_LOGGED_ISSUES), issueCount: issues.length,
+    })
+  },
+  /** Stored nodes this build cannot read: hidden from the served board, kept in the row. Count and kinds only. */
+  nodesPreserved(workspaceId: string, nodes: readonly PreservedNode[]): void {
+    const kinds = [...new Set(nodes.map((n) => (typeof n.kind === 'string' ? n.kind.slice(0, MAX_LOGGED_KIND) : '(none)')))]
+    log.warn('workspace.nodes.preserved', 'Unreadable nodes are hidden from the board and preserved in storage', {
+      ids: { workspaceId }, count: nodes.length, kinds: kinds.slice(0, MAX_LOGGED_ISSUES),
     })
   },
   /** A post-commit side effect (log/event/guard) threw; the write already succeeded and keeps its status. */

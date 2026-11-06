@@ -230,11 +230,13 @@ if (boot.supervisor) sessions.statusStore = new StatusStore(join(dataDir(), NODE
 // test tetap bebas timer dan memilih sendiri kapan menyapu.
 sessions.startStaleSweep()
 
-/** Node id yang dikenal workspace mana pun (id pane split `node:pN` ikut node induknya). Import
- *  dinamis: `db.ts` memakai `bun:sqlite`, dan modul ini juga dimuat test vitest. */
+/** Node id yang dikenal workspace mana pun (id pane split `node:pN` ikut node induknya), termasuk
+ *  node yang disembunyikan dari board karena tak terbaca (`Db.nodeIds` membaca kolom mentah), jadi
+ *  sesinya tidak pernah dicap yatim. Import dinamis: `db.ts` memakai `bun:sqlite`, dan modul ini
+ *  juga dimuat test vitest. */
 async function knownNodeIds(): Promise<(id: string) => boolean> {
   const { db } = await import('./db')
-  const ids = new Set(db.list().flatMap((w) => w.nodes.map((n) => n.id)))
+  const ids = new Set(db.nodeIds())
   return (id) => ids.has(id.split(':')[0] ?? id)
 }
 

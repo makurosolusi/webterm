@@ -63,7 +63,7 @@ test('a valid PUT keeps unknown node fields and sanitizes the node blobs it know
 test('an agent chat node round-trips through the schema, a PUT and a load without a downgrade', async () => {
   const chat = { id: 'c1', kind: AGENT_CHAT_KIND, x: 3, y: 4, title: 'chat' }
   const board = { ...VALID, nodes: [NODE, chat] }
-  expect(normalizeWorkspace(board)).toEqual({ board: { ...board, cwd: undefined, color: undefined, bridges: [] }, issues: [] })
+  expect(normalizeWorkspace(board)).toEqual({ board: { ...board, cwd: undefined, color: undefined, bridges: [] }, issues: [], preserved: [] })
   const store = new Db(openDb(':memory:'))
   const ws = store.create('p')
   expect((await put(store, ws.id, board))?.status).toBe(200)

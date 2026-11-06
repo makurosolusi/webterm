@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
-import type { Workspace } from '../shared/workspace'
+import type { Workspace, WsNode } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
-import { normalizeWorkspace } from '../shared/workspace.schema'
+import { normalizeWorkspace, splitNodes, withPreservedNodes } from '../shared/workspace.schema'
 import type { WorkspaceSummaryPage } from '../shared/workspace.summary'
 import { workspaceLog } from './workspacesLog'
 import { decodeSummaryCursor, encodeSummaryCursor, toSummary } from './db.summary'
@@ -69,15 +69,17 @@ function parseColumn(raw: string | null | undefined, absent: string): unknown {
 }
 
 /**
- * Row -> workspace through the shared schema, so one bad blob or node degrades THAT board (dropped
+ * Row -> workspace through the shared schema, so one bad blob or node degrades THAT board (hidden
  * node, default viewport, warning with the id) instead of throwing out of `list()` for every board.
+ * A hidden node with an id stays in the row: `Db.nodesColumn` carries it through every write.
  */
 function toWorkspace(r: Row): Workspace {
-  const { board, issues } = normalizeWorkspace({
+  const { board, issues, preserved } = normalizeWorkspace({
     name: r.name, cwd: r.cwd, color: r.color,
     viewport: parseColumn(r.viewport, ''), nodes: parseColumn(r.nodes, ''), bridges: parseColumn(r.bridges, '[]'),
   })
   if (issues.length > 0) workspaceLog.repaired(r.id, issues)
+  if (preserved.length > 0) workspaceLog.nodesPreserved(r.id, preserved)
   return { id: r.id, ...board, name: r.name, layout: parseLayout(r.layout), updatedAt: r.updated_at }
 }
 
@@ -107,6 +109,18 @@ export class Db {
     return rows.length > limit && last ? { items, nextCursor: encodeSummaryCursor(last) } : { items }
   }
 
+  /**
+   * Every node id the stored rows hold, readable or preserved (raw column, not the served board), so
+   * the orphan reaper never ends the session of a node this build merely cannot display.
+   */
+  nodeIds(): string[] {
+    const rows = this.d.query('SELECT nodes FROM workspace').all() as Pick<Row, 'nodes'>[]
+    return rows.flatMap((r) => {
+      const { nodes, preserved } = splitNodes(parseColumn(r.nodes, '[]'))
+      return [...nodes, ...preserved].map((n) => n.id)
+    })
+  }
+
   get(id: string): Workspace | null {
     const row = this.d.query('SELECT * FROM workspace WHERE id = ?').get(id) as Row | null
     return row ? toWorkspace(row) : null
@@ -126,8 +140,32 @@ export class Db {
     }
     this.d.query(
       'INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), ws.updatedAt)
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), this.nodesColumn(ws.id, ws.nodes), JSON.stringify(ws.bridges), ws.updatedAt)
     return ws
+  }
+
+  /**
+   * The value of the `nodes` column for a write of `incoming` to row `id`: the stored row's preserved
+   * (unreadable) nodes ride along unless `incoming` reuses their id. EVERY write of the column goes
+   * through here (db.preserveNodes policy test); the caller holds the write transaction, so the
+   * stored nodes read here are the ones the write replaces.
+   */
+  private nodesColumn(id: string, incoming: readonly WsNode[]): string {
+    const row = this.d.query('SELECT nodes FROM workspace WHERE id = ?').get(id) as Pick<Row, 'nodes'> | null
+    return JSON.stringify(withPreservedNodes(incoming, row ? parseColumn(row.nodes, '[]') : []))
+  }
+
+  /** BEGIN IMMEDIATE: the write lock is taken before `fn` reads, so no other connection writes in between. */
+  private immediate<T>(fn: () => T): T {
+    this.d.exec('BEGIN IMMEDIATE')
+    try {
+      const result = fn()
+      this.d.exec('COMMIT')
+      return result
+    } catch (err) {
+      this.d.exec('ROLLBACK')
+      throw err
+    }
   }
 
   /**
@@ -136,16 +174,19 @@ export class Db {
    * stored row is newer the write is refused ('stale') instead of replacing another window's board.
    * Check and write are one statement, so two racing writers cannot both pass. `updated_at` is
    * strictly increasing per row (MAX with +1): two saves in the same millisecond still differ.
-   * `base` absent = unconditional (server-side writers such as templates).
+   * `base` absent = unconditional (server-side writers such as templates). Stored preserved nodes
+   * are carried through (`nodesColumn`), in the same transaction as the write.
    */
   save(ws: Workspace, base?: number): SaveOutcome {
-    const r = this.d.query(
-      `UPDATE workspace SET name=?1, cwd=?2, color=?3, viewport=?4, nodes=?5, bridges=?6,
-         layout=COALESCE(NULLIF(?7, ''), layout), updated_at=MAX(?8, updated_at + 1)
-       WHERE id=?9 AND (?10 IS NULL OR updated_at <= ?10)`
-    ).run(ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), Date.now(), ws.id, base ?? null)
-    if (r.changes > 0) return 'saved'
-    return this.d.query('SELECT 1 FROM workspace WHERE id = ?').get(ws.id) ? 'stale' : 'missing'
+    return this.immediate(() => {
+      const r = this.d.query(
+        `UPDATE workspace SET name=?1, cwd=?2, color=?3, viewport=?4, nodes=?5, bridges=?6,
+           layout=COALESCE(NULLIF(?7, ''), layout), updated_at=MAX(?8, updated_at + 1)
+         WHERE id=?9 AND (?10 IS NULL OR updated_at <= ?10)`
+      ).run(ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), this.nodesColumn(ws.id, ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), Date.now(), ws.id, base ?? null)
+      if (r.changes > 0) return 'saved'
+      return this.d.query('SELECT 1 FROM workspace WHERE id = ?').get(ws.id) ? 'stale' : 'missing'
+    })
   }
 
   delete(id: string): void {
