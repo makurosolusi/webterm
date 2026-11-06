@@ -53,13 +53,17 @@ export function hasToken(): boolean {
 export function storeToken(t: string): void {
   try {
     sessionStore()?.setItem(TOKEN_KEY, t)
-  } catch {}
+  } catch {
+    // Storage refused (private mode): the typed token is lost on reload and Login asks again.
+  }
 }
 
 export function clearToken(): void {
   try {
     sessionStore()?.removeItem(TOKEN_KEY)
-  } catch {}
+  } catch {
+    // Storage unreachable (private mode): there is no stored token to clear.
+  }
 }
 
 /** Probe /api/workspaces with a candidate token; true when the server accepts it. */
@@ -80,22 +84,43 @@ function withToken(headers?: Record<string, string>): Record<string, string> | u
   return { ...headers, [TOKEN_HEADER]: token }
 }
 
-const HTTP_CONFLICT = 409
+/** Thrown on non-2xx. `body` is the parsed JSON error body when there is one (a stale save's 409
+ *  carries the `current` board); `serverMessage` is its human-readable `error`/`message`. */
+export type HttpError = Error & { status: number; body?: unknown; serverMessage?: string }
 
-/** Thrown on non-2xx. `body` is set only for 409, whose body (e.g. a stale save's `current`
- *  board) is what the caller needs to recover. */
-export type HttpError = Error & { status: number; body?: unknown }
+/** The server's own explanation in an error body (`{ error }` or `{ message }`), if any. */
+function serverMessageOf(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined
+  const { error, message } = body as { error?: unknown; message?: unknown }
+  const text = typeof message === 'string' ? message : typeof error === 'string' ? error : undefined
+  return text?.trim() || undefined
+}
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: withToken(init?.headers as Record<string, string>) })
   if (!res.ok) {
-    const e = new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}`) as HttpError
+    // A non-JSON error body leaves `body` unset; the status still says what went wrong.
+    const body: unknown = await Promise.resolve().then(() => res.json()).catch(() => undefined)
+    const serverMessage = serverMessageOf(body)
+    const e = new Error(`${init?.method ?? 'GET'} ${url} -> ${res.status}${serverMessage ? `: ${serverMessage}` : ''}`) as HttpError
     e.status = res.status
-    // A non-JSON 409 body leaves `body` unset; the status still reports the conflict.
-    if (res.status === HTTP_CONFLICT) e.body = await res.json().catch(() => undefined)
+    e.body = body
+    e.serverMessage = serverMessage
     throw e
   }
   return res.json() as Promise<T>
+}
+
+/** Bytes a request body may have and still use `keepalive`. The browser caps the SUM of all
+ *  in-flight keepalive bodies at 64 KiB; a board takes at most this share so a settings flush
+ *  (`SETTINGS_KEEPALIVE_MAX_BYTES`) fits beside it. Above it the save is an ordinary fetch. */
+export const BOARD_KEEPALIVE_MAX_BYTES = 48 * 1024
+export const SETTINGS_KEEPALIVE_MAX_BYTES = 16 * 1024
+
+/** Whether `body` is small enough for a `keepalive` request: one that the browser still delivers
+ *  after the page unloads (a plain fetch is cancelled with the document). */
+export function fitsKeepalive(body: string, maxBytes: number): boolean {
+  return new TextEncoder().encode(body).length <= maxBytes
 }
 
 export function fetchWorkspaces(): Promise<Workspace[]> {
@@ -110,17 +135,21 @@ export function createWorkspace(name: string, cwd?: string, color?: string): Pro
   })
 }
 
-export function getWorkspace(id: string): Promise<Workspace> {
-  return jsonFetch(`/api/workspaces/${encodeURIComponent(id)}`)
+/** `signal` lets a superseded navigation (a later workspace click) cancel this read. */
+export function getWorkspace(id: string, signal?: AbortSignal): Promise<Workspace> {
+  return jsonFetch(`/api/workspaces/${encodeURIComponent(id)}`, signal ? { signal } : undefined)
 }
 
 /** PUT a board. `ws.updatedAt` must be the version the caller last got from the server: a newer
- *  stored board answers 409 (`body.current`), a deleted one 404. */
+ *  stored board answers 409 (`body.current`), a deleted one 404. Sent `keepalive` when it fits, so
+ *  a save flushed on page hide still lands after the tab is gone. */
 export function saveWorkspace(ws: Workspace): Promise<Workspace> {
+  const body = JSON.stringify(ws)
   return jsonFetch(`/api/workspaces/${encodeURIComponent(ws.id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ws),
+    body,
+    keepalive: fitsKeepalive(body, BOARD_KEEPALIVE_MAX_BYTES),
   })
 }
 

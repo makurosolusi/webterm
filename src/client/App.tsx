@@ -6,6 +6,7 @@ import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import Login from './Login'
+import BootScreen from './BootScreen'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import AppBottomPanel from './App.bottomPanel'
 import { toggleBottomView } from './bottomPanelHost'
@@ -95,7 +96,7 @@ export default function App() {
   // workspace dalam 400ms debounce. Lihat `useWorkspaceSaver` — termasuk kenapa `flushSave` wajib
   // dipanggil `applyWorkspace` sebelum board baru dipasang.
   const applyRef = useRef<((ws: Workspace) => void) | null>(null) // set below, once `applyWorkspace` exists
-  const { scheduleSave, flushSave, cancelSave } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef })
+  const { scheduleSave, flushSave, cancelSave, saveStatusItems } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces })
 
   // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
   // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
@@ -126,14 +127,15 @@ export default function App() {
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
   // jadi `scheduleSave` dan canvas tetap membaca ref yang SAMA dengan yang ditulis di sana.
-  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onNewProject } =
+  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onCreateReported, onNewProject, boot, retryBoot } =
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
       activeWsRef, nodesRef, edgesRef, cancelSave, rf,
     })
 
-  // Notification click → `onFocus`, which switches workspace when the node lives on another board.
+  // Notification click → `onFocus`, which switches workspace when the node lives on another board
+  // (found in `workspaces`, kept current by every save and switch).
   useEffect(() => setNotifyCanvas({ focus: (id) => void onFocus(id) }), [onFocus])
 
   const reopenDeps: ReopenDeps = { activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect, addBridges: restoreBridges }
@@ -218,10 +220,10 @@ export default function App() {
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
           .app-main akan menghitung tinggi header dua kali. */}
       <div className="app-main">
-        {!hydrated ? null : noWorkspaces ? (
+        {!hydrated ? <BootScreen boot={boot} onRetry={retryBoot} /> : noWorkspaces ? (
           <Welcome
             onNewProject={onNewProject}
-            onCreateEmpty={(name) => void onCreateWorkspace(name)}
+            onCreateEmpty={(name) => void onCreateReported(name)}
             closedSessions={closedSessions}
             onReopen={(id) => void reopenClosed(id, reopenDeps)}
           />
@@ -241,7 +243,7 @@ export default function App() {
           <AppDock
             {...{ vp, settings, activeWs, central, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, chatOpen, setChatOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
             {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, inboxUnread, agentSummary }}
-            extraStatusItems={[...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
+            extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SessionsPanel
             open={sessionsOpen}

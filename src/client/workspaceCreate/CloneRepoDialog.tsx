@@ -75,7 +75,7 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
               <Input id="clone-url" autoFocus value={url} spellCheck={false} disabled={flow.busy}
                 placeholder="https://github.com/user/repo.git — or user/repo" onChange={(e) => edit(setUrl, false)(e.target.value)} />
               {url.trim() !== '' && expanded !== url.trim() && <span className="opacity-70">→ {expanded}</span>}
-              {url.trim() !== '' && !valid && <span className="text-red-600">Use an https:// or git@host:owner/repo URL, or owner/repo for GitHub.</span>}
+              {url.trim() !== '' && !valid && <span className="text-(--vscode-errorForeground)">Use an https:// or git@host:owner/repo URL, or owner/repo for GitHub.</span>}
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="clone-name">Folder name</Label>
@@ -88,7 +88,7 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
                 onOpenExisting={() => { const ex = flow.notice?.pre.existing; if (ex) { onOpenExisting(ex.path, ex.workspaceId); onClose() } }}
                 onUseName={(n) => edit(setName)(n)} onProceed={(ack) => void flow.submit(ack)} />
             )}
-            {(flow.error || loadError) && <p className="text-red-600" role="alert">{flow.error || loadError}</p>}
+            {(flow.error || loadError) && <p className="text-(--vscode-errorForeground)" role="alert">{flow.error || loadError}</p>}
             {cloning && (
               <div className="flex flex-col gap-1" data-testid="clone-progress">
                 <span>{progress ? `${progress.phase}… ${progress.percent}%` : 'Starting clone…'}</span>

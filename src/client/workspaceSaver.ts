@@ -1,12 +1,17 @@
 // Debounced persistence of the active board, split out of `workspaceLifecycle.ts`. Saves go
-// through `createSaveQueue` (one in flight, version-checked); a save another window beat is
-// answered by reloading the stored board, VS Code "file changed on disk" style.
+// through `createSaveQueue` (one in flight, version-checked, failures kept dirty and retried); a
+// save another window beat is answered by reloading the stored board, VS Code "file changed on
+// disk" style. Every locked payload and every server answer is written into App's `workspaces`
+// list, the one client store the Sessions panel and notification focus read.
 import { useCallback, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import { toBridge, toWsNode } from './store'
-import { createSaveQueue } from './workspaceSaveQueue'
+import { createSaveQueue, type SaveState } from './workspaceSaveQueue'
 import { DELETED_NOTICE, STALE_RELOADED_NOTICE, showSaveNotice, staleNotSavedNotice } from './workspaceSave.notice'
+import { useSaveLifecycle } from './workspaceSave.lifecycle'
+import { useSaveStateSurface } from './workspaceSave.status'
+import type { VscodeStatusItem } from './components/vscode/vscodeStatusBar'
 import type { Viewport, Workspace } from '../shared/workspace'
 
 /** Jeda persistensi board aktif: cukup untuk menelan rentetan geser node, cukup pendek agar
@@ -21,6 +26,8 @@ export interface WorkspaceSaverDeps {
   saveTimer: RefObject<ReturnType<typeof setTimeout> | null>
   /** Mounts a board on the canvas (App's `applyWorkspace`, created after this hook, hence a ref). */
   applyRef: RefObject<((ws: Workspace) => void) | null>
+  /** App's workspace list: fed with every locked payload and every board the server answers. */
+  setWorkspaces: Dispatch<SetStateAction<Workspace[]>>
 }
 
 export interface WorkspaceSaver {
@@ -29,6 +36,11 @@ export interface WorkspaceSaver {
   flushSave: () => void
   /** Buang debounce yang menggantung tanpa menulis. */
   cancelSave: () => void
+  saveState: SaveState
+  /** Resend a failed save now (the notice's / status item's Retry). */
+  retrySave: () => void
+  /** Status bar entry while a save is failing. */
+  saveStatusItems: VscodeStatusItem[]
 }
 
 /**
@@ -37,7 +49,7 @@ export interface WorkspaceSaver {
  * 400ms itu (`onSelect`/`onCreateWorkspace`/`onDeleteWorkspace` memanggil `applyWorkspace`), dan
  * membaca ref saat itu menulis board BARU ke id workspace LAMA.
  */
-export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef }: WorkspaceSaverDeps): WorkspaceSaver {
+export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces }: WorkspaceSaverDeps): WorkspaceSaver {
   // Fungsi tulis yang payload-nya sudah tertangkap. Satu-satunya sumber `flushSave`. Disimpan di
   // ref, bukan di state: menembakkannya tidak boleh memicu render.
   const pending = useRef<(() => void) | null>(null)
@@ -48,9 +60,16 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
     pending.current = null
   }, [saveTimer])
 
+  const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' })
+  const names = useRef(new Map<string, string>()) // board id -> name, for the save-failed notice
+  const store = useCallback((ws: Workspace) => setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w))), [setWorkspaces])
+
   // Refused saves: the unsaved local layout is dropped, never merged or re-applied silently.
   const [queue] = useState(() => createSaveQueue({
+    onSaved: (saved, superseded) => { if (!superseded) store(saved) },
+    onState: setSaveState,
     onStale: (current) => {
+      store(current)
       if (activeWsRef.current?.id !== current.id) {
         showSaveNotice(staleNotSavedNotice(current.name), 'warning')
         return
@@ -82,12 +101,14 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
       // `activeWsRef` adalah sumber payload save BERIKUTNYA. Menimpanya dengan board lama (timer
       // yang menembak setelah pengguna pindah) akan menyimpan board lama itu di workspace baru.
       if (activeWsRef.current?.id === payload.id) activeWsRef.current = payload
-      void queue.enqueue(payload)
+      names.current.set(payload.id, payload.name)
+      store(payload) // the store shows what the canvas shows, saved or still dirty
+      void queue.enqueue(payload) // never rejects: failures become `saveState`
     }
     cancelSave()
     pending.current = fire
     saveTimer.current = setTimeout(fire, SAVE_DEBOUNCE_MS)
-  }, [activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, cancelSave, queue])
+  }, [activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, cancelSave, queue, store])
 
   const flushSave = useCallback(() => {
     const fire = pending.current
@@ -96,5 +117,11 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
     fire()
   }, [cancelSave])
 
-  return { scheduleSave, flushSave, cancelSave }
+  const retrySave = useCallback(() => { void queue.retry() }, [queue])
+  const hasUnsaved = useCallback(() => pending.current !== null || queue.isDirty(), [queue])
+  useSaveLifecycle({ flushSave, retrySave, hasUnsaved })
+  const nameOf = useCallback((id: string) => names.current.get(id) ?? id, [])
+  const saveStatusItems = useSaveStateSurface(saveState, nameOf, retrySave)
+
+  return { scheduleSave, flushSave, cancelSave, saveState, retrySave, saveStatusItems }
 }

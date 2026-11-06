@@ -5,7 +5,7 @@
 // 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
 // update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { tokenQuery } from './api'
+import { fitsKeepalive, SETTINGS_KEEPALIVE_MAX_BYTES, tokenQuery } from './api'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { applySettingsPatch, mergeSettingsPatches, type SettingsPatch } from '../shared/settings.patch'
 import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
@@ -77,10 +77,13 @@ export function settingsUrl(): string {
 }
 
 async function putSettings(patch: SettingsPatch): Promise<void> {
+  const body = JSON.stringify(patch)
+  // `keepalive`: a flush on pagehide must outlive the document (see `fitsKeepalive`).
   const res = await fetch(settingsUrl(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
+    body,
+    keepalive: fitsKeepalive(body, SETTINGS_KEEPALIVE_MAX_BYTES),
   })
   if (!res.ok) throw new Error(`PUT /api/settings -> ${res.status}`)
 }
@@ -153,11 +156,19 @@ export function useSettings(): UseSettings {
     return () => { alive = false }
   }, [])
 
-  // Reload/tutup tab di dalam jendela coalesce tidak boleh menjatuhkan edit terakhir.
+  // Reload/close/hide inside the coalesce window must not drop the last edit. `pagehide` and
+  // `visibilitychange` too: mobile browsers and the bfcache skip `beforeunload` (data-209-4).
   useEffect(() => {
     const flush = (): void => saver.current?.flush()
+    const onVisibility = (): void => { if (document.visibilityState === 'hidden') flush() }
     window.addEventListener('beforeunload', flush)
-    return () => window.removeEventListener('beforeunload', flush)
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   const hist = useRef<SettingsHistory | null>(null)
