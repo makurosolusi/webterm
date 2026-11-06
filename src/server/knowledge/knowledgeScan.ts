@@ -1,6 +1,7 @@
 // Project file scan for the knowledge index: git listing, exclusion of secrets, bounded safe reads,
 // import extraction. Everything is read-only and confined to the project root.
 import { execFile } from 'node:child_process'
+import { gitCommand } from '../gitExec'
 import { lstatSync, readFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -38,7 +39,8 @@ export function langOf(rel: string): string {
 /** Runs git in `root` (argv array, no shell). Returns null when git exits non-zero (not a repo / empty repo). */
 export async function git(root: string, args: string[]): Promise<string | null> {
   try {
-    const { stdout } = await run('git', ['--no-optional-locks', '-C', root, ...args], { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER })
+    const g = gitCommand(['--no-optional-locks', '-C', root, ...args])
+    const { stdout } = await run(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: g.env })
     return stdout
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { killed?: boolean }

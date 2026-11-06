@@ -2,6 +2,7 @@
 // `ensureRoutines()` is idempotent; boot calls it once the ledger is up, and the HTTP route calls it
 // too so the panel works even before that.
 import { execFile, spawn as spawnProcess, type ChildProcess } from 'node:child_process'
+import { gitCommand } from '../gitExec'
 import { homedir } from 'node:os'
 import { binaryOnPath } from '../binaryOnPath'
 import { lookupWorkspace } from '../central/workspaceLookup'
@@ -62,7 +63,8 @@ const TREE_STATE_TIMEOUT_MS = 10_000
 /** HEAD + porcelain status of a checkout; null when `cwd` is not a git work tree (or git fails). */
 export function gitTreeState(cwd: string): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile('git', ['-C', cwd, 'status', '--porcelain=v2', '--branch', '--untracked-files=all'], { timeout: TREE_STATE_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+    const g = gitCommand(['-C', cwd, 'status', '--porcelain=v2', '--branch', '--untracked-files=all'])
+    execFile(g.file, g.args, { timeout: TREE_STATE_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024, env: g.env }, (err, stdout) => {
       // Not a repo is the normal case for a home-dir routine: it only means "no diff signal" (counts as no diff).
       resolve(err ? null : String(stdout))
     })

@@ -3,6 +3,7 @@
 // arms itself on the first DAG route call (and survives restarts as rows), polls every 2 s like Orca
 // (`coordinator.ts:31`) while an active dag exists, and stops polling when none is left.
 import { execFile } from 'node:child_process'
+import { gitCommand } from '../gitExec'
 import { join } from 'node:path'
 import { dataDir } from '../config'
 import { beginCostRunLive, costGateLive, endCostRunLive } from '../cost/costRuntime'
@@ -28,7 +29,8 @@ const GATE_TTL_MS = 24 * 60 * 60_000
 
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', cwd, ...args], { timeout: GIT_TIMEOUT_MS }, (err, stdout, stderr) => {
+    const g = gitCommand(['-C', cwd, ...args])
+    execFile(g.file, g.args, { timeout: GIT_TIMEOUT_MS, env: g.env }, (err, stdout, stderr) => {
       if (err) reject(new Error(`git ${args[0]} in ${cwd} failed: ${String(stderr || err.message).trim().slice(0, 300)}`, { cause: err }))
       else resolve(String(stdout).trim())
     })

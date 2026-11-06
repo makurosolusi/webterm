@@ -2,6 +2,7 @@
 // branch/task/repo divalidasi sebelum menyentuh git, dan cleanup menolak path di luar root.
 // Exec di-inject supaya test tidak pernah menjalankan git nyata.
 import { isAbsolute, join, resolve } from 'node:path'
+import { gitCommand } from '../gitExec'
 import { isInsideRoot } from './safePath'
 import { symlinkProblem, worktreeTargetProblem } from './worktreeTarget'
 
@@ -215,7 +216,8 @@ export function createWorktreeService(options: WorktreeOptions): WorktreeService
       throw new WorktreeError('branch_in_use', `branch ${branch} is already owned by task ${holder}`)
     }
     const path = assertSafeWorktreeTarget(root, join(root, `task-${taskId}`))
-    const result = await exec('git', ['-C', repo, 'worktree', 'add', '-b', branch, path, baseRef])
+    const add = gitCommand(['-C', repo, 'worktree', 'add', '-b', branch, path, baseRef])
+    const result = await exec(add.file, add.args)
     if (result.code !== 0) {
       throw new WorktreeError('git_failed', `git worktree add failed: ${detail(result)}`)
     }
@@ -246,14 +248,8 @@ export function createWorktreeService(options: WorktreeOptions): WorktreeService
     const path = assertInsideRoot(root, allocation.path)
     const stale = symlinkProblem(path)
     if (stale !== null) throw new WorktreeError(stale.code, stale.message)
-    const result = await exec('git', [
-      '-C',
-      allocation.repo,
-      'worktree',
-      'remove',
-      '--force',
-      path,
-    ])
+    const remove = gitCommand(['-C', allocation.repo, 'worktree', 'remove', '--force', path])
+    const result = await exec(remove.file, remove.args)
     if (result.code !== 0) {
       throw new WorktreeError('git_failed', `git worktree remove failed: ${detail(result)}`)
     }
