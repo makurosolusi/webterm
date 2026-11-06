@@ -215,10 +215,26 @@ export function listInboxItems(ctx: LedgerContext, opts: { projectId?: string; l
   ctx.now(), ...(opts.projectId === undefined ? [] : [opts.projectId]), limit).map(toEntry)
 }
 
-/** Open items whose Telegram card has not gone out yet (the push sweep's work list). */
-export function unpushedItems(ctx: LedgerContext): InboxEntry[] {
-  return allRows(ctx.db, `${SELECT} WHERE i.status = 'open' AND i.pushed_at IS NULL AND (i.snooze_until IS NULL OR i.snooze_until <= ?)
-    ORDER BY i.created_at ASC LIMIT ?`, ctx.now(), LIST_MAX).map(toEntry)
+/** Page size of `unpushedItems`. */
+export const UNPUSHED_PAGE = LIST_MAX
+
+/** Where a card can go right now: projects with a bound approver chat, and project-less items. */
+export interface PushScope { projectIds: string[]; unscoped: boolean }
+
+/**
+ * Open items whose Telegram card has not gone out yet AND that can be delivered (the push sweep's
+ * work list), in insertion order, keyset-paged by rowid. Undeliverable items are left unpushed (not
+ * marked), so a later binding still gets them, but they never occupy the window. `nextSeq` is null
+ * on the last page.
+ */
+export function unpushedItems(ctx: LedgerContext, scope: PushScope, afterSeq = 0): { items: InboxEntry[]; nextSeq: number | null } {
+  const found = allRows(ctx.db, `SELECT i.rowid AS push_seq, ${SELECT.slice('SELECT '.length)}
+    WHERE i.status = 'open' AND i.pushed_at IS NULL AND (i.snooze_until IS NULL OR i.snooze_until <= ?)
+    AND (i.project_id IN (SELECT value FROM json_each(?)) OR (i.project_id IS NULL AND ?)) AND i.rowid > ?
+    ORDER BY i.rowid ASC LIMIT ?`,
+  ctx.now(), JSON.stringify(scope.projectIds), scope.unscoped ? 1 : 0, afterSeq, UNPUSHED_PAGE)
+  const last = found.length < UNPUSHED_PAGE ? undefined : found[found.length - 1]
+  return { items: found.map(toEntry), nextSeq: last ? Number(last['push_seq']) : null }
 }
 
 export function markPushed(ctx: LedgerContext, id: string): void {

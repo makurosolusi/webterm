@@ -10,7 +10,7 @@ import { APPROVAL_ROLES, type ChannelBinding } from '../channels/identity'
 import { renderInboxCard, sendTelegramCard, type CardSendOptions, type TelegramCard } from '../channels/telegramCards'
 import type { PresenceTracker } from '../channels/channelPresence'
 import { attentionFor, type AttentionContext } from './inboxAttention'
-import { ensureDailyDigest, markPushed, syncApprovalGates, syncDiffNoteReviews, unpushedItems } from './inboxItemStore'
+import { ensureDailyDigest, markPushed, syncApprovalGates, syncDiffNoteReviews, unpushedItems, type PushScope } from './inboxItemStore'
 
 const log = createLogger('inbox')
 export const INBOX_PUSH_INTERVAL_MS = 3000
@@ -21,6 +21,8 @@ export interface PushDeps {
   ctx: LedgerContext
   /** Chats that may receive this project's cards; `null` = every approver chat (the digest). */
   chatsFor(projectId: string | null): string[]
+  /** Projects with at least one chat in `chatsFor`; only their items are read, so unbound ones never starve them. */
+  boundProjects(): string[]
   attention: AttentionContext
   send(chatId: string, card: TelegramCard): Promise<boolean>
 }
@@ -31,17 +33,23 @@ export async function sweepInboxPush(deps: PushDeps): Promise<{ pushed: string[]
   ensureDailyDigest(deps.ctx)
   const pushed: string[] = []
   const held: string[] = []
-  for (const item of unpushedItems(deps.ctx)) {
-    const verdict = attentionFor(item, deps.attention)
-    if (verdict === 'skip') { markPushed(deps.ctx, item.id); continue }
-    if (verdict === 'hold') { held.push(item.id); continue }
-    const chats = deps.chatsFor(item.projectId)
-    if (chats.length === 0) continue // nothing bound yet; a later binding still gets it
-    const name = item.projectId ? getRow(deps.ctx.db, 'SELECT name FROM project WHERE id = ?', item.projectId)?.['name'] : null
-    const card = renderInboxCard(item, typeof name === 'string' ? name : null)
-    let ok = false
-    for (const chat of chats) ok = (await deps.send(chat, card)) || ok
-    if (ok) { markPushed(deps.ctx, item.id); pushed.push(item.id) }
+  const scope: PushScope = { projectIds: deps.boundProjects(), unscoped: deps.chatsFor(null).length > 0 }
+  // Keyset pages: held items (still unpushed) must not hide a deliverable item behind a fixed window.
+  for (let seq: number | null = 0; seq !== null;) {
+    const page = unpushedItems(deps.ctx, scope, seq)
+    seq = page.nextSeq
+    for (const item of page.items) {
+      const verdict = attentionFor(item, deps.attention)
+      if (verdict === 'skip') { markPushed(deps.ctx, item.id); continue }
+      if (verdict === 'hold') { held.push(item.id); continue }
+      const chats = deps.chatsFor(item.projectId)
+      if (chats.length === 0) continue // binding removed mid-sweep; a later binding still gets it
+      const name = item.projectId ? getRow(deps.ctx.db, 'SELECT name FROM project WHERE id = ?', item.projectId)?.['name'] : null
+      const card = renderInboxCard(item, typeof name === 'string' ? name : null)
+      let ok = false
+      for (const chat of chats) ok = (await deps.send(chat, card)) || ok
+      if (ok) { markPushed(deps.ctx, item.id); pushed.push(item.id) }
+    }
   }
   return { pushed, held }
 }
@@ -50,6 +58,11 @@ export async function sweepInboxPush(deps: PushDeps): Promise<{ pushed: string[]
 export function approverChats(bindings: Array<{ chatId: string; binding: ChannelBinding }>, projectId: string | null): string[] {
   const chats = bindings.filter((b) => APPROVAL_ROLES.includes(b.binding.role) && (projectId === null || b.binding.projectId === projectId)).map((b) => b.chatId)
   return [...new Set(chats)]
+}
+
+/** Projects that have an approver/owner chat, i.e. where `approverChats` is non-empty. */
+export function approverProjects(bindings: Array<{ binding: ChannelBinding }>): string[] {
+  return [...new Set(bindings.filter((b) => APPROVAL_ROLES.includes(b.binding.role)).map((b) => b.binding.projectId))]
 }
 
 /**
@@ -79,6 +92,7 @@ export function startInboxTelegramPush(w: TelegramPushWiring): () => void {
   const deps: PushDeps = {
     ctx: { db: w.db, now: w.now ?? Date.now },
     chatsFor: (projectId) => approverChats(w.store.listBindings('telegram'), projectId),
+    boundProjects: () => approverProjects(w.store.listBindings('telegram')),
     attention: { watching: (item) => watchingFrom(w.presence, item), muted: (ws) => w.presence.isMuted(ws) },
     send: (chat, card) => sendTelegramCard(chat, card, w.send),
   }
