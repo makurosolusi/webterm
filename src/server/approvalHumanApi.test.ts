@@ -1,113 +1,21 @@
 // Vitest: the human approval surface over a REAL ledger (in-memory SQLite) through the HTTP seam:
-// requestId idempotency (B3), error taxonomy (B5), 413 byte cap (B7), exact routes (B12/L3), approved
-// list (B4), credential-derived human identity (M1), task review transitions (E2E B1/B2).
-import { TEST_UI_COOKIE } from './uiSession.testutil'
-import { Readable } from 'node:stream'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+// requestId idempotency (B3), error taxonomy (B5), credential-derived human identity (M1), task
+// review transitions (E2E B1/B2). The 413 byte cap (B7), exact routes (B12/L3) and approved list
+// (B4) live in approvalHumanApi.http.test.ts.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { approvalHumanRoute, type HumanApprovalDeps } from './approvalHumanApi'
 import { LOOPBACK_ACTOR, ROOT_ACTOR } from './approvalHumanRoutes'
-import { APPROVAL_MAX_BODY_BYTES } from './approvalHttp'
-import { memoryLedgerRuntime, seedProject, seedReviewTask } from './approvalTestRuntime.testutil'
+import { seedReviewTask } from './approvalTestRuntime.testutil'
 import { setTokenState } from './tokenBootstrap'
-
-const REQ = 'req-00000001'
-/** The signed-in webterm page: the only caller the UI-only policy admits. */
-const BROWSER = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
-
-interface FakeRes {
-  statusCode: number
-  payload: string
-  headers: Record<string, string>
-  setHeader(name: string, value: string): void
-  end(data?: string): void
-}
-
-function fakeRes(): FakeRes {
-  return {
-    statusCode: 200, payload: '', headers: {},
-    setHeader(name: string, value: string) { this.headers[name] = value },
-    end(data = '') { this.payload = data },
-  }
-}
-
-type CallInit = { method?: string; body?: string | Buffer; headers?: Record<string, string> }
-
-async function call(deps: HumanApprovalDeps, path: string, init: CallInit = {}): Promise<{ handled: boolean; status: number; json: Record<string, unknown> }> {
-  const chunks = init.body === undefined ? [] : [Buffer.isBuffer(init.body) ? init.body : Buffer.from(init.body)]
-  const req = Readable.from(chunks) as unknown as IncomingMessage
-  req.method = init.method ?? (init.body === undefined ? 'GET' : 'POST')
-  req.headers = { ...BROWSER, ...init.headers }
-  const res = fakeRes()
-  const handled = await approvalHumanRoute(req, res as unknown as ServerResponse, new URL(path, 'http://x'), deps)
-  return { handled, status: res.statusCode, json: res.payload === '' ? {} : (JSON.parse(res.payload) as Record<string, unknown>) }
-}
-
-function setup(opts: { ledger?: boolean } = {}) {
-  const { runtime, clock } = memoryLedgerRuntime()
-  seedProject(runtime)
-  const deps: HumanApprovalDeps = {
-    runtime: opts.ledger === false ? null : runtime,
-    now: () => clock.at,
-    isNodeToken: () => false,
-  }
-  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-    call(deps, path, { method: 'POST', body: JSON.stringify(body), headers })
-  const request = (body: Record<string, unknown>) =>
-    post('/api/approvals/request', { requestId: REQ, projectId: 'p1', kind: 'deploy', request: { a: 1 }, ...body })
-  return { runtime, clock, deps, call, post, request }
-}
-
-type Fixture = ReturnType<typeof setup>
-
-async function challenge(f: Fixture, id: string) {
-  const res = await f.call(f.deps, `/api/approvals/challenge?id=${id}`)
-  return res.json
-}
-
-async function decide(
-  f: Fixture,
-  id: string,
-  digest: unknown,
-  nonce: unknown,
-  approve = true,
-  extra: Record<string, unknown> = {}
-) {
-  return f.post('/api/approvals/decide', {
-    requestId: 'req-00000002',
-    id,
-    digest,
-    nonce,
-    approve,
-    ...extra,
-  })
-}
-
-async function approvedApproval(f: Fixture): Promise<{ id: string; digest: string }> {
-  const created = await f.request({})
-  const view = await challenge(f, String(created.json['id']))
-  await decide(f, String(created.json['id']), view['digest'], view['nonce'])
-  return { id: String(created.json['id']), digest: String(view['digest']) }
-}
-
-const TOKEN = 'root-secret'
-const TOKEN_HEADERS = { 'x-webterm-token': TOKEN }
-
-/** Task-event actors in write order, read straight from the audit table. */
-function eventActors(f: Fixture, taskId: string): string[] {
-  const db = f.runtime.db as unknown as {
-    query(sql: string): { all(id: string): Array<{ actor: string }> }
-  }
-  return db.query('SELECT actor FROM event WHERE task_id = ? ORDER BY seq').all(taskId).map((r) => r.actor)
-}
-
-/** A claimed_done task plus the pending task approval a human decides on. */
-async function taskApprovalFor(f: Fixture) {
-  const task = seedReviewTask(f.runtime)
-  const body = { kind: 'task', taskId: task.taskId, fence: task.fence, request: { itemId: task.taskId } }
-  const id = String((await f.request(body)).json['id'])
-  return { task, id, view: await challenge(f, id) }
-}
+import {
+  TOKEN,
+  TOKEN_HEADERS,
+  challenge,
+  decide,
+  eventActors,
+  setup,
+  taskApprovalFor,
+  type Fixture,
+} from './approvalHumanApi.testutil'
 
 describe('request idempotency', () => {
   it('replays one stable acknowledgement for the same requestId', async () => {
@@ -256,130 +164,6 @@ describe('decision error taxonomy', () => {
     expect(expired.json).toEqual({ error: 'approval_expired' })
     // The challenge reports the lazy expiry instead of a stale `pending`.
     expect((await challenge(f, id))['status']).toBe('expired')
-  })
-})
-
-describe('body cap', () => {
-  it('answers 413 for a declared oversize body before reading it', async () => {
-    const f = setup()
-    const res = await f.call(f.deps, '/api/approvals/request', {
-      method: 'POST',
-      body: '{}',
-      headers: { 'content-length': String(APPROVAL_MAX_BODY_BYTES + 1) },
-    })
-    expect(res.status).toBe(413)
-    expect(res.json).toEqual({ error: 'payload_too_large', max: APPROVAL_MAX_BODY_BYTES })
-  })
-
-  it('answers 413 for a chunked oversize body', async () => {
-    const f = setup()
-    const res = await f.call(f.deps, '/api/approvals/request', {
-      method: 'POST',
-      body: 'a'.repeat(APPROVAL_MAX_BODY_BYTES + 10),
-    })
-    expect(res.status).toBe(413)
-    expect(res.json['error']).toBe('payload_too_large')
-  })
-
-  it('counts bytes, not UTF-16 units', async () => {
-    const f = setup()
-    // 5000 chars, 10000 bytes: under the char count, over the byte cap.
-    const res = await f.call(f.deps, '/api/approvals/request', {
-      method: 'POST',
-      body: JSON.stringify({ pad: 'é'.repeat(5000) }),
-    })
-    expect(res.status).toBe(413)
-  })
-
-  it('keeps invalid JSON as 400', async () => {
-    const f = setup()
-    const res = await f.call(f.deps, '/api/approvals/request', { method: 'POST', body: '{oops' })
-    expect(res.status).toBe(400)
-    expect(res.json).toEqual({ error: 'invalid_json' })
-  })
-})
-
-describe('route matching', () => {
-  it('does not shadow sibling paths and answers unknown subroutes with 404', async () => {
-    const f = setup()
-    expect((await f.call(f.deps, '/api/approvalsXYZ')).handled).toBe(false)
-    expect((await f.call(f.deps, '/api/approvals/nope', { method: 'POST', body: '{}' })).json).toEqual({
-      error: 'not_found',
-    })
-    expect((await f.call(f.deps, '/api/approvals/challenge')).status).toBe(400)
-    expect((await f.call(f.deps, '/api/approvals/challenge?id=nope')).json).toEqual({
-      error: 'approval_not_found',
-    })
-    expect((await f.call(f.deps, '/api/approvals/decide', { method: 'DELETE' })).status).toBe(405)
-    expect((await f.call(f.deps, '/api/approvals')).json).toEqual({ error: 'invalid_status' })
-  })
-
-  it('gates on the UI-only policy and answers 503 without a ledger', async () => {
-    const f = setup()
-    const curl = await f.call(f.deps, '/api/approvals/challenge?id=x', { headers: { 'sec-fetch-site': '' } })
-    expect([curl.status, curl.json]).toEqual([403, { error: 'approval_browser_only' }])
-    const off = setup({ ledger: false })
-    expect((await off.call(off.deps, '/api/approvals/challenge?id=x')).status).toBe(503)
-  })
-})
-
-describe('approved-but-unconsumed list', () => {
-  it('lists only approved, unconsumed approvals with pagination', async () => {
-    const f = setup()
-    const one = await approvedApproval(f)
-    await f.request({ requestId: 'req-00000005', request: { a: 2 } })
-
-    const page = await f.call(f.deps, '/api/approvals?status=approved&limit=1&offset=0')
-    expect(page.status).toBe(200)
-    const body = page.json as unknown as { items: Array<Record<string, unknown>>; total: number; limit: number; offset: number }
-    expect(body.total).toBe(1)
-    expect(body.limit).toBe(1)
-    expect(body.offset).toBe(0)
-    expect(body.items).toHaveLength(1)
-    expect(body.items[0]).toMatchObject({ id: one.id, digest: one.digest, kind: 'deploy', projectId: 'p1' })
-    // Consent that cannot transition a task names no task and carries no fence.
-    expect(body.items[0]).toMatchObject({ taskId: null, request: { a: 1 } })
-    expect(body.items[0]).not.toHaveProperty('fence')
-
-    const consumed = await f.post('/api/approvals/consume', { requestId: 'req-00000006', id: one.id, digest: one.digest })
-    expect(consumed.status).toBe(200)
-    const after = await f.call(f.deps, '/api/approvals?status=approved')
-    expect((after.json as unknown as { total: number }).total).toBe(0)
-  })
-
-  it('derives taskId and fence from request_json for a payload-only task approval', async () => {
-    const f = setup()
-    const task = seedReviewTask(f.runtime)
-    // The UI path sends the task reference inside `request`, so `approval.task_id` stays NULL.
-    const created = await f.request({
-      kind: 'task',
-      request: { itemId: task.taskId, taskId: task.taskId, fence: task.fence, title: 'Review task', detail: null },
-    })
-    expect(created.status).toBe(201)
-    const id = String(created.json['id'])
-    const view = await challenge(f, id)
-    expect((await decide(f, id, view['digest'], view['nonce'])).status).toBe(200)
-
-    const page = await f.call(f.deps, '/api/approvals?status=approved')
-    expect(page.status).toBe(200)
-    const body = page.json as unknown as { items: Array<Record<string, unknown>>; total: number }
-    expect(body.total).toBe(1)
-    expect(body.items[0]).toMatchObject({
-      id,
-      projectId: 'p1',
-      taskId: task.taskId,
-      fence: task.fence,
-      kind: 'task',
-      digest: view['digest'],
-      request: expect.objectContaining({ itemId: task.taskId, taskId: task.taskId, fence: task.fence }),
-    })
-  })
-
-  it('validates paging and status', async () => {
-    const f = setup()
-    expect((await f.call(f.deps, '/api/approvals?status=pending')).json).toEqual({ error: 'invalid_status' })
-    expect((await f.call(f.deps, '/api/approvals?status=approved&limit=0')).json).toEqual({ error: 'invalid_limit' })
-    expect((await f.call(f.deps, '/api/approvals?status=approved&offset=-1')).json).toEqual({ error: 'invalid_offset' })
   })
 })
 
