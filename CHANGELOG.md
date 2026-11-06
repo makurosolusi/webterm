@@ -52,6 +52,18 @@ Operator notes:
 - An Agent Chat keeps its Claude session: the server keeps it running while the tab is closed, closes it after 10 idle minutes, and resumes it on your next message, also after a server restart. A page left open while the server restarts keeps receiving new messages. If Claude crashes, the chat says so and your next message picks up the same session; a message that could not be sent shows "Not sent" with Retry.
 - An Agent Chat refuses to open a Claude session that is already open in another chat node or in a terminal agent node of the same workspace, and says where it is open, so two windows never write the same transcript.
 - Agent Chat accepts images and files: paste a screenshot, drag and drop onto the chat, or use the "+" button. Images go to Claude as real images, shown as thumbnails before sending and in the thread; other files are uploaded and their path is added to the message.
+- Agent Chat: type "/" at the start of a message for a menu of Claude Code commands, skills, custom commands and MCP prompts, with argument hints. If Claude cannot list them yet, the built-in commands are shown instead.
+- Agent Chat: type "@" to mention a file or folder of the chat's folder; pick a folder to look inside it.
+- Agent Chat: pick the model from the footer, or type `/model`. The choice is kept on the node and restored after a reload or a server restart.
+- Agent Chat: set the effort level and turn extended thinking on or off from the footer (effort levels follow the chosen model); kept on the node like the model.
+- Agent Chat: a context meter in the footer shows how full Claude's context window is after each turn.
+- Agent Chat: conversation history in the footer (or `/resume`) lists past conversations of the folder to search and resume, and "New conversation" (or `/clear`) starts fresh; the old one stays resumable. While Claude is working, switching is refused with the reason.
+- Agent Chat: output of commands such as `/cost` and `/context` and "conversation compacted" markers show in the thread.
+- Agent Chat: a message typed while Claude works shows a "Queued" badge until Claude picks it up.
+- Agent Chat: a todo panel above the composer shows Claude's current todo list and progress, and collapses to the item in progress.
+- Agent Chat: copy any message with its copy button.
+- Agent Chat: Escape stops the running turn (when no menu is open).
+- Agent Chat: when a turn ends or Claude asks for permission, an answer or a plan approval while you are not looking at the chat, you get the same unread mark, notification and chime as a terminal agent. A turn that ends while its subagents still run is marked unread without a notification.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
