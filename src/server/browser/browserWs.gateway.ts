@@ -37,6 +37,17 @@ const errorCode = (e: unknown): { code: BrowserErrorCode; hostname?: string } =>
     : e instanceof BrowserError ? { code: e.code, hostname: e.hostname }
       : { code: 'crashed' } // galat tak dikenal: jangan bocorkan pesan internal ke klien
 
+/** Cap for an error message written to the server log, so a pathological message cannot flood it. */
+const LOGGED_MESSAGE_MAX = 300
+const clipMessage = (s: string) => (s.length > LOGGED_MESSAGE_MAX ? `${s.slice(0, LOGGED_MESSAGE_MAX)}…` : s)
+/** Log fields for an unexpected failure: name + capped message, plus the cause's message one level deep. */
+const errorFields = (err: unknown): Record<string, string> => {
+  if (!(err instanceof Error)) return { error: typeof err }
+  const fields: Record<string, string> = { error: clipMessage(err.message), name: err.name }
+  if (err.cause !== undefined) fields.cause = err.cause instanceof Error ? clipMessage(err.cause.message) : typeof err.cause
+  return fields
+}
+
 const rawBytes = (d: RawData): Buffer => (Array.isArray(d) ? Buffer.concat(d) : Buffer.isBuffer(d) ? d : Buffer.from(d))
 const rawSize = (d: RawData): number => (Array.isArray(d) ? d.reduce((n, b) => n + b.length, 0) : d.byteLength)
 
@@ -64,7 +75,8 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
 
   const fail = (id: string, err: unknown) => {
     const { code, hostname } = errorCode(err)
-    if (code === 'crashed' && !(err instanceof BrowserError)) log.error('browser.ws', 'unexpected gateway failure', { ids: { nodeId: id }, error: err instanceof Error ? err.name : typeof err })
+    // Server-side log carries the message (+ one level of cause) so the root cause is visible; the client gets only the code.
+    if (code === 'crashed' && !(err instanceof BrowserError)) log.error('browser.ws', 'unexpected gateway failure', { ids: { nodeId: id }, ...errorFields(err) })
     sink.sendJson({ t: 'error', id, code, hostname })
   }
   const reject = (id: string, code: BrowserErrorCode) => sink.sendJson({ t: 'error', id, code })

@@ -59,6 +59,7 @@ Operator notes:
 - A browser node whose page crashed or disappeared now reports "crashed" instead of "not found", and Reload reopens it at its last URL.
 - Deleting a workspace now also removes its canvas background override and its uploaded image (an image still used elsewhere is kept). The workspace delete never fails because of this, and startup cleans up leftovers from workspaces that are already gone.
 - Clicking an empty spot on the canvas now closes the open popups that only closed when you clicked a node: the ⌘K / quick-open box (Omnibox), the quick pick, the menu bar menus and the breadcrumbs overflow menu. React Flow's canvas swallowed the click before those popups could see it.
+- Browser node failures that show as "crashed" now log their real cause on the server (message and underlying cause) instead of only the error class name, so a failing Chromium connection can be diagnosed.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
