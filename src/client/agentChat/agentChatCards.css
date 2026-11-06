@@ -1,0 +1,121 @@
+/* Tool, permission, question and plan cards of the agent chat node (VS Code tokens, like chat.css). */
+.acc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, #3c3c3c));
+  border-radius: var(--vscode-cornerRadius-medium, 4px);
+  background: var(--vscode-editorWidget-background, transparent);
+  font-size: 12px;
+  user-select: text;
+}
+.acc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.acc-muted { color: var(--vscode-descriptionForeground, #9d9d9d); }
+.acc-error { color: var(--vscode-errorForeground, #f48771); }
+
+.acc-code {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--vscode-editor-font-family, var(--font-mono, Menlo, monospace));
+  font-size: 12px;
+}
+.acc-code--cmd { color: var(--vscode-terminal-foreground, inherit); }
+.acc-output { padding: 4px 6px; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1)); border-radius: 3px; }
+.acc-output--error { color: var(--vscode-errorForeground, #f48771); }
+
+.acc-badge {
+  margin-left: auto;
+  flex: none;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+}
+.acc-badge--done, .acc-badge--allow { color: var(--vscode-testing-iconPassed, #73c991); }
+.acc-badge--error, .acc-badge--denied, .acc-badge--deny { color: var(--vscode-errorForeground, #f48771); }
+.acc-badge--awaiting_approval { color: var(--vscode-editorWarning-foreground, #cca700); }
+
+/* Tool card */
+.acc-tool { padding: 0; gap: 0; }
+.acc-tool__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  justify-content: flex-start;
+  border-radius: 0;
+  cursor: default;
+}
+.acc-tool__head:hover { background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.1)); }
+.acc-tool__head:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: -1px; }
+.acc-tool__state { flex: none; font-size: 14px; }
+.acc-tool[data-state='error'] .acc-tool__state,
+.acc-tool[data-state='denied'] .acc-tool__state { color: var(--vscode-errorForeground, #f48771); }
+.acc-tool[data-state='done'] .acc-tool__state { color: var(--vscode-testing-iconPassed, #73c991); }
+.acc-tool[data-state='error'] { border-color: var(--vscode-inputValidation-errorBorder, #be1100); }
+.acc-tool__name { flex: none; font-weight: 600; }
+.acc-tool__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vscode-editor-font-family, var(--font-mono, Menlo, monospace));
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+}
+.acc-tool__body { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 6px; }
+.acc-tool__children { padding-left: 8px; border-left: 2px solid var(--vscode-tree-indentGuidesStroke, #585858); }
+
+.acc-diff { margin: 0; max-height: 240px; overflow: auto; font-family: var(--vscode-editor-font-family, var(--font-mono, Menlo, monospace)); font-size: 12px; }
+.acc-diff__line { white-space: pre-wrap; word-break: break-word; }
+.acc-diff__line--add { background: var(--vscode-diffEditor-insertedLineBackground, rgba(155, 185, 85, 0.2)); }
+.acc-diff__line--del { background: var(--vscode-diffEditor-removedLineBackground, rgba(255, 0, 0, 0.2)); }
+
+.acc-todos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.acc-todos__item { display: flex; align-items: center; gap: 6px; }
+.acc-todos__item[data-status='completed'] span:last-child { text-decoration: line-through; color: var(--vscode-descriptionForeground, #9d9d9d); }
+.acc-todos__item[data-status='in_progress'] { font-weight: 600; }
+
+/* Permission / question / plan */
+.acc-permission__head { display: flex; align-items: center; gap: 6px; }
+.acc-permission__title { font-weight: 600; }
+.acc-permission__summary { padding: 4px 6px; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1)); border-radius: 3px; }
+.acc-card[data-outcome='open'] { border-color: var(--vscode-focusBorder, #007fd4); }
+.acc-question { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; }
+.acc-question__legend { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-weight: 600; }
+.acc-question__legend .acc-badge { margin-left: 0; background: var(--vscode-badge-background, #4d4d4d); color: var(--vscode-badge-foreground, #fff); }
+.acc-option { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.acc-option__label { font-weight: 500; }
+/* Radix radio item, metrics of the shadcn Checkbox (components/ui/checkbox.tsx). */
+.acc-radio {
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--vscode-checkbox-border, #6b6b6b);
+  border-radius: 50%;
+  background: var(--vscode-checkbox-background, #313131);
+  cursor: default;
+}
+.acc-radio:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: -1px; }
+.acc-radio:disabled { opacity: 0.4; }
+.acc-radio__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vscode-checkbox-foreground, #ccc); }
+.acc-plan__body { max-height: 320px; overflow: auto; }
+
+.acc-mode { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
