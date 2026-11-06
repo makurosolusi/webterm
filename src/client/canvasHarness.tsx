@@ -298,3 +298,14 @@ export function renderedEdgeIds(): string[] {
     (el) => el.getAttribute('data-id') ?? '',
   )
 }
+
+/** Answer the node close confirm (nodeCloseConfirm.tsx) with Close: every user close of a node now
+ *  asks first, so a test that closes one must click through the dialog like a user does. */
+export async function confirmNodeCloseDialog(): Promise<void> {
+  const btn = await waitFor(() => {
+    const b = Array.from(document.querySelectorAll('[data-slot="vscode-dialog"] button')).find((el) => el.textContent === 'Close')
+    if (!b) throw new Error('node close confirm not open')
+    return b as HTMLElement
+  })
+  await act(async () => { btn.click() })
+}

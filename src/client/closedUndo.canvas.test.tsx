@@ -6,7 +6,7 @@
 // `App.board` + `useCanvasUndo` + `restoreBridges` are wired (a hook test cannot see that order).
 import { fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { installCanvasDom, mountCanvas, renderedEdgeIds, unmountCanvas } from './canvasHarness'
+import { confirmNodeCloseDialog, installCanvasDom, mountCanvas, renderedEdgeIds, unmountCanvas } from './canvasHarness'
 import type { BridgeLink, WsNode } from '../shared/workspace'
 
 vi.mock('./ws', async (importOriginal) => {
@@ -44,6 +44,7 @@ describe('undo close node (canvas)', () => {
     await waitFor(() => expect(renderedEdgeIds()).toEqual([cable.id]))
 
     fireEvent.click(closeBtn('term-a'))
+    await confirmNodeCloseDialog()
     await waitFor(() => expect(nodeIds()).toEqual(['term-b']))
     expect(renderedEdgeIds()).toEqual([])
 

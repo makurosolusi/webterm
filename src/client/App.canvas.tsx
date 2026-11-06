@@ -17,6 +17,7 @@ import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import type { Viewport } from '../shared/workspace'
 import { closestNodeRoot } from './nodeRoot'
 import NodeMaximizeOverlay from './nodeMaximize.overlay'
+import { beforeNodeDelete, useCancelNodeCloseOnUnmount } from './nodeCloseConfirm'
 
 const edgeTypes = { context: ContextEdge }
 
@@ -49,6 +50,7 @@ export default function BoardCanvas({
   // Wallpaper sits behind the pane (no pan/zoom); workspace override -> global -> default.
   const wallpaper = useWallpaper(resolveCanvasBackground(settings, workspaceId))
   useNodeResizeWiring(locked, rf)
+  useCancelNodeCloseOnUnmount()
   // Drop di atas node (mis. xterm) milik node itu, bukan pemicu node browser baru.
   const overNode = (e: DragEvent) => closestNodeRoot(e.target as HTMLElement) !== null
   const onDragOver = (e: DragEvent) => {
@@ -76,6 +78,8 @@ export default function BoardCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      // Every user node close (× buttons, tabs, sessions panel, Delete key) asks first: nodeCloseConfirm.tsx.
+      onBeforeDelete={beforeNodeDelete}
       onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
       onMoveEnd={onMoveEnd}
       onPaneContextMenu={onPaneContextMenu}
