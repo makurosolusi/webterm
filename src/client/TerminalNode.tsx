@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import type { NodeProps, Viewport } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import { useReactFlow } from '@xyflow/react'
 import type { TerminalHandle } from './TerminalCore'
@@ -39,7 +39,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
   const [activePane, setActivePane] = useState(id)
 
   const [searchOpen, setSearchOpen] = useState(false)
-  const [maximized, setMaximized] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; pane: string; link: string | null } | null>(null)
   const { openBrowserAt } = useNodeActions()
   // Tanpa `onError`: node terminal tidak punya thread aktivitas seperti node agent, jadi kegagalan
@@ -67,7 +66,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
   const expandedH = useRef(height ?? 300)
-  const savedVp = useRef<Viewport | null>(null)
 
   const toggleCollapse = () => {
     if (!collapsed) { expandedH.current = height ?? 300; rf.updateNode(id, { height: COLLAPSED_H }) }
@@ -167,10 +165,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
     if (selected && !collapsed) term()?.focus()
   }, [selected, collapsed, activePane])
 
-  const toggleMaximize = () => {
-    if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }
-    else { if (savedVp.current) rf.setViewport(savedVp.current, { duration: 200 }); setMaximized(false) }
-  }
 
   return (
     <>
@@ -217,7 +211,6 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
           onRefresh={() => term()?.refit()}
           searchOpen={searchOpen} onToggleSearch={() => setSearchOpen((o) => !o)}
           micActive={micActive} onToggleMic={onToggleMicProp}
-          maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
         <div className="node-body">

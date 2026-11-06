@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
 import { nodeIdOf } from '../nodeRoot'
 import { IconButton } from '@/components/ui/icon-button'
+import type { VscodeMenuItem } from '../components/vscode/vscodeMenu'
 import { RESIZE_COMMAND_ID, exitNodeResize, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
@@ -67,4 +68,14 @@ export function NodeResizeToggle() {
       <span className="codicon codicon-arrow-both" aria-hidden="true" />
     </IconButton>
   )
+}
+
+/** The "…" menu row that stands in for NodeResizeToggle when a narrow header overflows it. */
+export function useNodeResizeMenuItem(): VscodeMenuItem {
+  const id = useNodeId()
+  const { editingId, locked } = useNodeResizeState()
+  const on = id !== null && editingId === id
+  // The menu sits outside the node, so its press has already ended the mode: "Done" must not toggle it back on.
+  const onSelect = () => { if (!id) return; if (on) exitNodeResize(id); else toggleNodeResize(id) }
+  return { type: 'item', id: 'resize', label: on ? 'Done resizing' : 'Resize this node', checked: on, disabled: locked, onSelect }
 }

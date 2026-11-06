@@ -68,7 +68,6 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [version, setVersion] = useState(0)
   const [menu, setMenu] = useState<Menu | null>(null)
   const [filterOpen, setFilterOpen] = useState(false)
-  const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? 300)
   const setNotice = (text: string) => { if (text) notify(id, { id: NODE_NOTICE, kind: 'error', text }); else dismissNotice(id, NODE_NOTICE) }
 
@@ -216,8 +215,6 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           onRefresh={refresh}
           searchOpen={filterOpen} onToggleSearch={() => setFilterOpen((o) => !o)}
-          maximized={maximized}
-          onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
 

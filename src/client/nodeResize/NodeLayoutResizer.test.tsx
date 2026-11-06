@@ -181,7 +181,7 @@ describe('useNodeResizeWiring (board wiring)', () => {
     const noop = vi.fn()
     const app = appCommands({
       openOmnibox: noop, openQuickOpen: noop, openFindInFiles: noop, openShortcuts: noop, openSettings: noop, newTerminal: noop,
-      newFiles: noop, newBrowser: noop, newDiff: noop, fitView: noop, toggleSessions: noop, toggleInbox: noop, toggleChat: noop, toggleBoard: noop,
+      newFiles: noop, newBrowser: noop, newDiff: noop, fitView: noop, toggleMaximizeNode: noop, toggleSessions: noop, toggleInbox: noop, toggleChat: noop, toggleBoard: noop,
     })
     expect([...findConflicts([...app, ...FIXED_COMMANDS, resizeCommand(() => [])], {}).keys()]).toEqual([])
   })
