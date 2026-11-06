@@ -34,8 +34,12 @@ export function fsErrCode(errno: string): FsErrCode {
 }
 
 export type EntryKind = 'file'|'dir'|'symlink-file'|'symlink-dir'|'symlink-broken'|'other'
-/** C = conflict; rollup folder = mark terkuat anak. */
-export type GitMark = 'M'|'A'|'D'|'U'|'R'|'C'
+/** C = conflict (badge `!`), I = ignored (no rollup); rollup folder = mark terkuat anak. */
+export type GitMark = 'M'|'A'|'D'|'U'|'R'|'C'|'I'
+/** Branch state from `status --branch` headers. `branch` null = detached (`head` = short oid). */
+export interface GitBranch { branch: string | null; head: string; upstream: string | null; ahead: number; behind: number }
+/** `git-status` response body; `branch` is absent when the dir is not inside a repo. */
+export interface GitStatus { marks: Record<string, GitMark>; branch?: GitBranch }
 /** Superset `DirEntry` lama `{name,dir,ignored}`. */
 export interface FileMeta {
   name: string
