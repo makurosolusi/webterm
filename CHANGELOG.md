@@ -52,6 +52,7 @@ Operator notes:
 - Activity and Central now open as tabs of the single bottom panel next to Inbox, Chat, Problems and Output, instead of separate panels stacked on top of each other. Clicking an item whose tab is hidden brings it to the front; clicking the visible one closes it.
 - The bottom panel is docked in canvas mode too: the canvas (and Welcome screen) now shrink to sit above it instead of being covered.
 - The activity bar icon and status bar item of the view that is actually shown are highlighted (an open-but-hidden view is no longer highlighted).
+- Text and icons around the canvas now use VS Code's sizes: 13px UI text, 16px icons, 24px activity bar icons, 22px list rows, 24px menu rows and 12px status bar text. Tooltips grew from 12px to 13px, and tab strip titles in tab layout from 12px to 13px with 16px icons. Node contents on the canvas are not affected; they still follow the canvas zoom.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -61,6 +62,7 @@ Operator notes:
 - Clicking an empty spot on the canvas now closes the open popups that only closed when you clicked a node: the ⌘K / quick-open box (Omnibox), the quick pick, the menu bar menus and the breadcrumbs overflow menu. React Flow's canvas swallowed the click before those popups could see it.
 - Browser node failures that show as "crashed" now log their real cause on the server (message and underlying cause) instead of only the error class name, so a failing Chromium connection can be diagnosed.
 - The file manager's "Reveal" menu item now shows the file in your system file manager ("Reveal in Finder" on macOS, "Reveal in File Explorer" on Windows, "Open Containing Folder" elsewhere; ⌥⌘R) instead of doing nothing. If revealing fails, the reason appears in the Files footer.
+- Icons were all drawn at 16px no matter where they were used, so activity bar icons looked too small. They now take the size of the place they are in, such as 24px in the activity bar.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
