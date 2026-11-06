@@ -20,7 +20,7 @@ const { getTokenState, setTokenState } = await import('../tokenBootstrap')
 const { TELEGRAM_WEBHOOK_PATH } = await import('../channels/channelsRuntime')
 
 /** Route entries wrapped in `uiOnly` (route.uiOnly.ts) or gated the same way in their handler. */
-const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create']
+const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name']
 /** Answer without the webterm page: the channel webhook (own provider secret, routed before /api)
  *  and the node-token surfaces (`isNodeTokenPath`) the CLI, browser skill and hooks call. */
 const ALLOWLIST = ['/api/agent-status', '/api/context-link', '/api/control/browser/navigate', '/api/tools', '/api/tools/x']
@@ -38,6 +38,7 @@ const PROBES: [string, string][] = [
   ['GET', '/api/active'], ['PUT', '/api/active'],
   ['POST', '/api/git/info'],
   ['GET', '/api/workspace-create/defaults'], ['POST', '/api/workspace-create/project'],
+  ['POST', '/api/generate-name'],
 ]
 
 const server = http.createServer((req, res) => { if (!handleApi(req, res)) { res.statusCode = 404; res.end() } })
@@ -45,7 +46,7 @@ await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
 const port = (server.address() as { port: number }).port
 afterAll(() => { server.close(); setTokenState({ token: undefined, source: 'none', created: false }) })
 
-function call(method: string, path: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+function call(method: string, path: string, headers: Record<string, string> = {}, payload = body): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, method, headers: { 'content-type': 'application/json', ...headers } }, (res) => {
       let text = ''
@@ -53,7 +54,7 @@ function call(method: string, path: string, headers: Record<string, string> = {}
       res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text }))
     })
     req.on('error', reject)
-    req.end(method === 'GET' || method === 'DELETE' ? undefined : body)
+    req.end(method === 'GET' || method === 'DELETE' ? undefined : payload)
   })
 }
 
@@ -84,6 +85,15 @@ describe('file and workspace routes are human-UI only', () => {
     expect(list.body).toContain('a.txt')
     expect((await call('GET', '/api/workspaces', UI)).status).toBe(200)
     expect((await call('POST', '/api/git/info', UI)).status).toBe(200)
+  })
+
+  // sec-208-10: name-gen spends model tokens on a node's terminal; a GET was fireable by any <img>.
+  // Only malformed bodies are sent from the page here: a valid one would spawn claude.
+  test('generate-name is POST only and validates its body', async () => {
+    expect((await call('GET', '/api/generate-name?node=n1', UI)).status).toBe(404)
+    expect((await call('POST', '/api/generate-name', UI, '{}')).status).toBe(400)
+    expect((await call('POST', '/api/generate-name', UI, 'not json')).status).toBe(400)
+    expect((await call('POST', '/api/generate-name', UI, JSON.stringify({ node: 'x'.repeat(8192) }))).status).toBe(413)
   })
 
   test('a cross-site page is refused even with fetch metadata', async () => {
