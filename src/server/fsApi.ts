@@ -102,6 +102,9 @@ const VERBS: Record<string, Verb> = {
   },
 }
 
+/** `[verb, method]` of every `/api/fs/<verb>` (the UI-only policy test probes each). */
+export const FS_VERB_METHODS: readonly (readonly [string, string])[] = Object.entries(VERBS).map(([name, v]) => [name, v.m])
+
 function reply(code: FsErrCode, error: string): FsApiResult {
   return { status: FS_ERR_STATUS[code], body: fsFail(code, error) }
 }

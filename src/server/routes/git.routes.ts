@@ -4,10 +4,13 @@ import { gitDiffRoute } from '../gitDiff.route'
 import { gitScmRoute } from '../gitScm.route'
 import { WORKSPACES_BODY_MAX_BYTES } from '../cappedRequestBody'
 import { send, type ApiRoute } from './route.core'
+import { uiOnly } from './route.uiOnly'
+import { GIT_INFO_PATH } from '../../shared/gitInfo'
 
 export const gitRoutes: ApiRoute[] = [
   // Batch git state for a set of node cwds; null for anything else, including a GET of this path.
-  { name: 'git-info', handle: async (c) => send(c.res, await gitInfoRoute(c.path, c.method, () => c.readBody())) },
+  // UI-only (route.uiOnly.ts): it reads any path's repo state, as /api/fs/* does.
+  uiOnly({ name: 'git-info', match: (c) => c.path === GIT_INFO_PATH, handle: async (c) => send(c.res, await gitInfoRoute(c.path, c.method, () => c.readBody())) }),
   { name: 'git-diff', handle: async (c) => send(c.res, await gitDiffRoute(c.path, c.method, c.url.searchParams, c.body(WORKSPACES_BODY_MAX_BYTES))) },
   { name: 'checkpoint', handle: async (c) => send(c.res, await (await import('../checkpoint/checkpoint.route')).checkpointRoute(c.path, c.method, c.url.searchParams, c.body(WORKSPACES_BODY_MAX_BYTES))) },
   // Source Control panel, POSTs UI-only (gitScm.route.ts)
