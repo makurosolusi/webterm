@@ -1,8 +1,9 @@
 // /api/control/effective: read gate, Control writes (hot apply, env lock, card-owned keys), Doctor GET/POST.
 import { describe, expect, it } from 'vitest'
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import type { DoctorDeps } from './doctor'
 import { ENV_REGISTRY } from './envRegistry'
-import { controlEffectiveRoute, rootReader, type ControlDeps } from './envSettings.control'
+import { controlEffectiveRoute, type ControlDeps } from './envSettings.control'
 import type { AuditEntry } from './featureCapabilities.audit'
 import { capabilitiesRoute } from './featureCapabilities.api'
 import { fakeReq, recorder, SENTINEL_WEBHOOK_SECRET, setupEnv } from './envSettings.testutil'
@@ -46,16 +47,22 @@ describe('GET', () => {
     expect((res.json() as { rows: unknown[] }).rows.length).toBeGreaterThan(ENV_REGISTRY.length)
   })
 
-  it('refuses node and capability tokens, and wrong root tokens', async () => {
-    expect(rootReader(req('GET', { 'x-webterm-token': 'node-token' }), undefined)).toBe(false)
-    expect(rootReader(req('GET', { 'x-webterm-capability': 'wcap_x' }), undefined)).toBe(false)
-    expect(rootReader(req('GET', { 'x-webterm-token': 'wrong' }), 'root')).toBe(false)
-    expect(rootReader(req('GET'), 'root')).toBe(false)
-    expect(rootReader(req('GET', { 'x-webterm-token': 'root' }), 'root')).toBe(true)
-    const h = harness()
-    const res = recorder()
-    await controlEffectiveRoute(req('PUT', { 'x-webterm-token': 'node-token' }, '{}'), res, 'PUT', h.deps)
-    expect(res.status).toBe(403)
+  it('real guard: the signed-in page and the root token read; node, capability, wrong tokens and no cookie are refused', async () => {
+    const { guard: _fake, ...real } = harness().deps
+    const status = async (method: string, headers: Record<string, string>, body?: string) => {
+      const res = recorder()
+      await controlEffectiveRoute(req(method, headers, body), res, method, { ...real, rootToken: 'root' })
+      return res.status
+    }
+    expect(await status('GET', { cookie: TEST_UI_COOKIE })).toBe(200)
+    expect(await status('GET', { 'x-webterm-token': 'root' })).toBe(200)
+    const refused: Array<Record<string, string>> = [{}, { 'x-webterm-token': 'node-token', cookie: TEST_UI_COOKIE }, { 'x-webterm-capability': 'wcap_x', cookie: TEST_UI_COOKIE }, { 'x-webterm-token': 'wrong' }]
+    for (const headers of refused) {
+      expect(await status('GET', headers)).toBe(403)
+    }
+    // A write also needs a same-origin Origin beside the cookie.
+    expect(await status('PUT', { host: 'h:1', cookie: TEST_UI_COOKIE }, '{}')).toBe(403)
+    expect(await status('PUT', { host: 'h:1', origin: 'http://h:1', cookie: TEST_UI_COOKIE }, '{}')).toBe(200)
   })
 
   it('rejects other methods with 405', async () => {
@@ -122,7 +129,8 @@ describe('PUT (Control writes)', () => {
 
   it('a guard rejection is 403 and audited as denied', async () => {
     const h = harness()
-    h.deps.guard = () => ({ ok: false, reason: 'origin' })
+    // Reads pass, so the refusal lands on the write check, where it is audited.
+    h.deps.guard = (_req, purpose) => (purpose === 'read' ? { ok: true, via: 'ui' } : { ok: false, reason: 'origin' })
     const res = await h.call('PUT', { set: { WEBTERM_FILES_LIST_MAX: '5' } })
     expect(res.status).toBe(403)
     expect(h.audits[0]).toMatchObject({ action: 'denied', detail: 'origin' })

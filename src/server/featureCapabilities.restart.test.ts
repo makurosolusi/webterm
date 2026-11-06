@@ -7,6 +7,7 @@ import { specFor } from './envRegistry'
 import { recorder, setupEnv } from './envSettings.testutil'
 import { capabilitiesRoute } from './featureCapabilities.api'
 import { settingsGuard } from './featureCapabilities.guard'
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { buildResponse } from './featureCapabilities.service'
 
 const PRIMARY = CAPABILITY_IDS.map((id) => CAPABILITIES[id].primaryKey)
@@ -36,7 +37,7 @@ describe('GET /api/capabilities tidak memuat restart', () => {
 
   it('lewat rute nyata: 200, tujuh kemampuan, tanpa field restart di level mana pun', async () => {
     const h = setupEnv({})
-    const req = Object.assign(Readable.from([]), { method: 'GET', headers: { host: '127.0.0.1:8700', origin: ORIGIN }, socket: { remoteAddress: '127.0.0.1' } }) as unknown as IncomingMessage
+    const req = Object.assign(Readable.from([]), { method: 'GET', headers: { host: '127.0.0.1:8700', origin: ORIGIN, cookie: TEST_UI_COOKIE }, socket: { remoteAddress: '127.0.0.1' } }) as unknown as IncomingMessage
     const res = recorder()
     const deps = () => ({ service: h.svc, guard: (r: IncomingMessage) => settingsGuard(r, undefined), audit: () => undefined })
     const extras = { env: h.target, detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }), dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch: (async () => new Response('{}')) as never }

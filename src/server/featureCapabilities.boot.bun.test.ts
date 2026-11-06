@@ -13,13 +13,14 @@ import { envSettingsApiDeps } from './envSettings.runtime'
 import { capabilitiesRoute } from './featureCapabilities.api'
 import { enabledSet, reconcile } from './featureCapabilities.runtime'
 import { recorder } from './envSettings.testutil'
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 
 const ORIGIN = 'http://127.0.0.1:8700'
 const saved = { ...process.env }
 
 async function post(path: string, body: unknown): Promise<number> {
   const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
-    method: 'POST', headers: { host: '127.0.0.1:8700', origin: ORIGIN }, socket: { remoteAddress: '127.0.0.1' },
+    method: 'POST', headers: { host: '127.0.0.1:8700', origin: ORIGIN, cookie: TEST_UI_COOKIE }, socket: { remoteAddress: '127.0.0.1' },
   }) as unknown as IncomingMessage
   const res = recorder()
   await capabilitiesRoute(req, res, 'POST', path, envSettingsApiDeps, { detect: () => ({ chromium: true, telegramToken: false, agentEngine: true }) })

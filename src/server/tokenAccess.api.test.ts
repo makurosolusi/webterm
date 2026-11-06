@@ -257,15 +257,18 @@ describe('efek ke kunci dangerous (settingsGuard)', () => {
     return res
   }
 
-  it('tanpa token ditegakkan: tanpa Origin 403 forbidden; loopback + Origin sama lolos', async () => {
-    const denied = await put({ host: SAME.host })
+  it('tanpa token ditegakkan: tanpa cookie atau tanpa Origin 403 forbidden; halaman bercookie + Origin sama lolos', async () => {
+    const denied = await put({ host: SAME.host, cookie: TEST_UI_COOKIE })
     expect([denied.status, denied.json()]).toEqual([403, { error: 'forbidden' }])
-    expect((await put(SAME)).status).toBe(200)
+    expect((await put(SAME)).status).toBe(403)
+    expect((await put({ ...SAME, cookie: TEST_UI_COOKIE })).status).toBe(200)
   })
 
-  it('sesudah enable: tanpa token 403 forbidden, token root lolos tanpa Origin', async () => {
+  it('sesudah enable: tanpa kredensial 403, cookie UI tetap lolos, token root lolos tanpa Origin', async () => {
     const { json } = await call('POST', ENABLE)
     expect((await put(SAME)).status).toBe(403)
+    expect((await put({ ...SAME, cookie: TEST_UI_COOKIE })).status).toBe(200)
+    expect((await put({ ...SAME, cookie: TEST_UI_COOKIE, 'x-webterm-token': 'salah' })).status).toBe(403)
     expect((await put({ 'x-webterm-token': 'salah' })).status).toBe(403)
     expect((await put({ 'x-webterm-token': json.token })).status).toBe(200)
   })

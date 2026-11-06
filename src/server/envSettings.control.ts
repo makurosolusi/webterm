@@ -4,9 +4,9 @@
 //   PUT {set, unset}  write Control-owned knobs; shell-env and locked keys are refused (409)
 //   GET ?doctor=1     Doctor checks;  POST {fix: id}  apply one safe Doctor fix
 // `/api/control/doctor` is the Doctor's own path (GET checks, POST {fix: id}); the query form above stays.
-// Root-only (`rootReader`), and mutations additionally pass the settings guard and are audited.
+// Owner-only: every request passes the settings guard (`read` for GET, `write` with Origin for
+// mutations); mutations are also audited.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { CAPABILITY_HEADER, TOKEN_HEADER, tokensMatch } from './auth'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { fixDoctor, isDoctorId, runDoctor, type DoctorDeps } from './doctor'
 import { getDotenvBoot } from './dotenvFiles'
@@ -14,8 +14,7 @@ import { buildEffectiveConfig, type EffectiveConfig } from './effectiveConfig'
 import { BOOTSTRAP_ONLY_KEYS } from './envRegistry'
 import type { EnvChange, EnvSettings } from './envSettings.service'
 import type { AuditEntry } from './featureCapabilities.audit'
-import { peerOf, settingsGuard, type GuardResult } from './featureCapabilities.guard'
-import { firstHeader } from './httpHeaders'
+import { peerOf, settingsGuard, type GuardPurpose, type GuardResult } from './featureCapabilities.guard'
 import { createLogger } from './logs'
 import { getTokenState } from './tokenBootstrap'
 
@@ -29,9 +28,10 @@ export interface ControlDeps {
   service: EnvSettings
   env?: NodeJS.ProcessEnv
   dotenvKeys?: ReadonlySet<string>
-  /** undefined = live token state; null = loopback mode without a root token. */
+  /** undefined = live token state; null = no root token (only the signed-in page passes). */
   rootToken?: string | null
-  guard?(req: IncomingMessage): GuardResult
+  /** Owner gate for reads and writes; default = `settingsGuard` with `rootToken`. */
+  guard?(req: IncomingMessage, purpose?: GuardPurpose): GuardResult
   audit?(entry: AuditEntry): void
   /** Doctor dependencies; default = real wiring (doctor.runtime.ts). */
   doctor?(model: EffectiveConfig): DoctorDeps
@@ -51,14 +51,6 @@ export function parseChange(body: unknown): EnvChange | null {
   const { set = {}, unset = [] } = body
   if (!isRecord(set) || !Array.isArray(unset) || !unset.every((k) => typeof k === 'string')) return null
   return { set, unset: unset as string[] }
-}
-
-/** Owner only: /api/control/* also admits node/capability tokens, so both are refused; with a root token set it
- *  must be presented, without one (loopback mode) any presented token is a node token. */
-export function rootReader(req: IncomingMessage, rootToken: string | undefined = getTokenState().token): boolean {
-  if (firstHeader(req.headers?.[CAPABILITY_HEADER])) return false
-  const presented = firstHeader(req.headers?.[TOKEN_HEADER]) || undefined
-  return rootToken === undefined ? presented === undefined : presented !== undefined && tokensMatch(rootToken, presented)
 }
 
 const model = (d: ControlDeps): EffectiveConfig => buildEffectiveConfig({
@@ -128,14 +120,16 @@ async function fix(req: IncomingMessage, res: ServerResponse, d: ControlDeps, vi
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse, method: string, d: ControlDeps, doctorPath: boolean): Promise<void> {
-  const root = d.rootToken === undefined ? rootReader(req) : rootReader(req, d.rootToken ?? undefined)
-  if (!root) return json(res, 403, { error: 'forbidden' })
+  // /api/control/* also admits node and capability tokens; the guard refuses both, reads included.
+  const rootToken = d.rootToken === undefined ? getTokenState().token : d.rootToken ?? undefined
+  const guard = d.guard ?? ((r: IncomingMessage, purpose?: GuardPurpose) => settingsGuard(r, rootToken, purpose))
+  if (!guard(req, 'read').ok) return json(res, 403, { error: 'forbidden' })
   if (method === 'GET') {
     const doctor = doctorPath || new URL(req.url ?? '/', 'http://x').searchParams.get('doctor') === '1'
     return json(res, 200, doctor ? { checks: await runDoctor(await doctorDepsOf(d, model(d))) } : model(d))
   }
   if (method !== 'POST' && (doctorPath || method !== 'PUT')) return json(res, 405, { error: 'method_not_allowed' })
-  const verdict = (d.guard ?? ((r: IncomingMessage) => settingsGuard(r)))(req)
+  const verdict = guard(req, 'write')
   if (!verdict.ok) {
     await audit(d, req, { action: 'denied', via: 'rejected', detail: verdict.reason })
     return json(res, 403, { error: 'forbidden' })
