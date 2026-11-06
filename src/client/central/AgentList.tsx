@@ -3,11 +3,11 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
-import { inboxErrorMessage } from '../inboxApi'
+import { CapabilityOffer } from '../CapabilityOffer'
 import { CL } from './centralLabels'
-import { centralControlApi } from './centralControlApi'
+import { AGENTS_OFF, centralControlApi } from './centralControlApi'
 import type { AgentAction, AgentRow, CentralControlClient } from './centralControlTypes'
-import { usePaged } from './centralLoad'
+import { centralErrorMessage, usePaged } from './centralLoad'
 
 export interface AgentListProps {
   client?: CentralControlClient
@@ -20,6 +20,7 @@ export default function AgentList({ client = centralControlApi, onApprovalReques
   const [relayFor, setRelayFor] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const off = agents.code === AGENTS_OFF
 
   const run = async (row: AgentRow, action: AgentAction, message?: string) => {
     try {
@@ -34,14 +35,16 @@ export default function AgentList({ client = centralControlApi, onApprovalReques
       setRelayFor(null)
       setText('')
     } catch (err) {
-      setNote({ ok: false, text: inboxErrorMessage(err) })
+      setNote({ ok: false, text: centralErrorMessage(err, CL.actionFailed) })
     }
   }
 
   return (
     <section className="ccp-section" aria-labelledby="ccp-agents-h">
       <h3 id="ccp-agents-h">{CL.agentsHeading}</h3>
-      {agents.error && <p role="alert" className="ccp-error">{agents.error}</p>}
+      {/* Agents off: the worker orchestrator card turns them on; Central restarts itself, no server restart. */}
+      {off && <div className="ccp-off" data-central-off="agents"><p>{CL.agentsOff}</p><CapabilityOffer id="workers" onDone={agents.reload} /></div>}
+      {agents.error && !off && <p role="alert" className="ccp-error">{agents.error}</p>}
       {agents.loading && agents.items.length === 0 && <p role="status">{CL.loading}</p>}
       {!agents.loading && !agents.error && agents.items.length === 0 && <p>{CL.empty}</p>}
       <ul className="ccp-list" aria-label={CL.agentsHeading}>

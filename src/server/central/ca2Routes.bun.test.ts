@@ -172,12 +172,21 @@ describe('skills admin', () => {
   })
 })
 
-describe('routes are absent when a family is off', () => {
-  it('agents and skills are not mounted without their executor/store', async () => {
+describe('a family whose feature is off answers 503 <feature>_off, not a fall-through 404', () => {
+  it('agents and skills reads and actions answer a typed off code without their executor/store', async () => {
     const off = { ...h, executor: null, skills: null } as Ca2Handle
-    const req = (path: string) => ({ method: 'GET', path, query: new URLSearchParams(), body: async () => ({}) })
-    expect(await ca2Dispatch(off, req('/api/central/agents'))).toBeNull()
-    expect(await ca2Dispatch(off, req('/api/central/skills'))).toBeNull()
-    expect((await ca2Dispatch(off, req('/api/central/status')))?.status).toBe(200)
+    const req = (method: string, path: string) => ({ method, path, query: new URLSearchParams(), body: async () => ({ message: 'hi', version: '1' }) })
+    expect(await ca2Dispatch(off, req('GET', '/api/central/agents'))).toEqual({ status: 503, body: { error: 'agents_off' } })
+    expect(await ca2Dispatch(off, req('GET', '/api/central/skills'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect(await ca2Dispatch(off, req('POST', '/api/central/agents/a1/relay'))).toEqual({ status: 503, body: { error: 'agents_off' } })
+    expect(await ca2Dispatch(off, req('POST', '/api/central/agents/a1/close'))).toEqual({ status: 503, body: { error: 'agents_off' } })
+    expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/approve'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/rollback'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect((await ca2Dispatch(off, req('POST', '/api/central/skills')))?.status).toBe(405)
+    for (const p of ['/api/central/status', '/api/central/approvals', '/api/central/memory', '/api/central/control']) expect((await ca2Dispatch(off, req('GET', p)))?.status).toBe(200)
+  })
+  it('with the feature on the same reads list as before', async () => {
+    expect(await get('/api/central/agents')).toMatchObject({ status: 200, body: { items: expect.any(Array) } })
+    expect(await get('/api/central/skills')).toMatchObject({ status: 200, body: { items: expect.any(Array) } })
   })
 })
