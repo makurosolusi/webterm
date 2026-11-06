@@ -15,6 +15,7 @@ export const CAPABILITY_NAME: Readonly<Record<CapabilityId, string>> = {
 const SUB_NAME: Readonly<Record<string, string>> = {
   WEBTERM_RUN_REQUIRE_APPROVAL: 'Ask before a worker runs',
   WEBTERM_BROWSER_AGENT: 'Let agents control the browser',
+  WEBTERM_CENTRAL_SKILLS: 'Let Central use skills',
 }
 
 /** Keys that have a direct UI control, mapped to where it lives. */
