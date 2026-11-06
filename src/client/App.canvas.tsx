@@ -16,6 +16,7 @@ import { resolveCanvasBackground } from '../shared/canvasBackground.schema'
 import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import type { Viewport } from '../shared/workspace'
 import { closestNodeRoot } from './nodeRoot'
+import NodeMaximizeOverlay from './nodeMaximize.overlay'
 
 const edgeTypes = { context: ContextEdge }
 
@@ -98,6 +99,7 @@ export default function BoardCanvas({
       )}
       {/* Adds an App node when an agent publishes an MCP Apps ui:// view (mcpapps/McpAppsWatcher.tsx). */}
       <McpAppsWatcher />
+      <NodeMaximizeOverlay nodes={nodes} />
       <MiniMap
         className="minimap-dock" pannable zoomable nodeColor={nodeColor}
         // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.

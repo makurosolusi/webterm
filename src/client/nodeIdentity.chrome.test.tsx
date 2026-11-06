@@ -8,17 +8,17 @@ afterEach(cleanup)
 const base = {
   title: 'brisk-otter', onRename: () => {}, collapsed: false, onToggleCollapse: () => {},
   color: '#0a84ff', onColor: () => {}, comments: [], onAddComment: () => {}, onRefresh: () => {},
-  searchOpen: false, onToggleSearch: () => {}, maximized: false, onToggleMaximize: () => {}, onClose: () => {},
+  searchOpen: false, onToggleSearch: () => {}, onClose: () => {},
 }
 
 describe('node identity in the chrome', () => {
   it('shows a Stop button only when wired, and it calls onStop (not onClose)', () => {
     const a = render(<NodeChrome {...base} />)
-    expect(a.container.querySelector('[data-title="Stop agent"]')).toBeNull()
+    expect(a.container.querySelector('[data-title="Stop Agent (keeps the node)"]')).toBeNull()
     a.unmount()
     const onStop = vi.fn(); const onClose = vi.fn()
     const b = render(<NodeChrome {...base} onStop={onStop} onClose={onClose} />)
-    fireEvent.click(b.container.querySelector('[data-title="Stop agent"]') as Element)
+    fireEvent.click(b.container.querySelector('[data-title="Stop Agent (keeps the node)"]') as Element)
     expect(onStop).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
   })

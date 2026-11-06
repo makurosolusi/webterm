@@ -26,7 +26,8 @@ import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
-import { resolveAsset } from './staticAssets'
+import { resolveAsset, serveAsset } from './staticAssets'
+import { onUnhandledRejection } from './processCrash'
 import { upgradeRoute } from './upgradeRouting'
 import { lspUpgrade } from './lsp/lsp.route'
 import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
@@ -45,9 +46,6 @@ import { startPortScanner } from './ports/ports.runtime'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
 import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
-
-// Bun.file di-type lokal (slice sempit) seperti nameGen/pty — @types/bun memerahkan file lain.
-declare const Bun: { file(path: string): { arrayBuffer(): Promise<ArrayBuffer> } }
 
 const LOG_DIR = 'logs'
 // Host/port, provenance .env, dataDir, token (env > berkas > bangkitkan), allowlist Host — urutannya di bootWiring.ts.
@@ -216,8 +214,7 @@ if (dev) {
     if (handleApi(req, res)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
-    res.setHeader('Content-Type', hit.contentType)
-    Bun.file(hit.assetPath).arrayBuffer().then((buf) => res.end(Buffer.from(buf)))
+    void serveAsset(res, hit) // never rejects: a missing file is a 404 for this request only
   })
 }
 
@@ -300,6 +297,8 @@ server.listen(PORT, HOST, () => {
 
 // Observe-only crash hook (does not change crash behaviour) + synchronous flush on every exit path.
 process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
+// Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
+process.on('unhandledRejection', onUnhandledRejection(log))
 process.on('exit', (code) => { log.info('server.stop', 'webterm stopping', { code }); flushLogsSync() })
 for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
   // Chromium + proxy dimatikan bersih (batas 5 dtk) sebelum proses keluar; tanpa runtime browser = perilaku lama.

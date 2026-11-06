@@ -66,6 +66,9 @@ function toWorkspace(r: Row): Workspace {
   }
 }
 
+/** Result of `Db.save`: written, refused because the stored board is newer, or no such row. */
+export type SaveOutcome = 'saved' | 'stale' | 'missing'
+
 export class Db {
   constructor(private d: Database) {}
 
@@ -97,17 +100,22 @@ export class Db {
     return ws
   }
 
-  save(ws: Workspace): void {
-    const updatedAt = Date.now()
-    this.d.query(
-      `INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, layout, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name=excluded.name, cwd=excluded.cwd, color=excluded.color,
-         viewport=excluded.viewport, nodes=excluded.nodes, bridges=excluded.bridges,
-         layout=COALESCE(NULLIF(excluded.layout, ''), layout),
-         updated_at=excluded.updated_at`
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), updatedAt)
+  /**
+   * Update an EXISTING board; never creates one (creation is `create`), so a save that lands after
+   * a delete cannot resurrect the row. `base` = the `updatedAt` the writer last saw: when the
+   * stored row is newer the write is refused ('stale') instead of replacing another window's board.
+   * Check and write are one statement, so two racing writers cannot both pass. `updated_at` is
+   * strictly increasing per row (MAX with +1): two saves in the same millisecond still differ.
+   * `base` absent = unconditional (server-side writers such as templates).
+   */
+  save(ws: Workspace, base?: number): SaveOutcome {
+    const r = this.d.query(
+      `UPDATE workspace SET name=?1, cwd=?2, color=?3, viewport=?4, nodes=?5, bridges=?6,
+         layout=COALESCE(NULLIF(?7, ''), layout), updated_at=MAX(?8, updated_at + 1)
+       WHERE id=?9 AND (?10 IS NULL OR updated_at <= ?10)`
+    ).run(ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), JSON.stringify(ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), Date.now(), ws.id, base ?? null)
+    if (r.changes > 0) return 'saved'
+    return this.d.query('SELECT 1 FROM workspace WHERE id = ?').get(ws.id) ? 'stale' : 'missing'
   }
 
   delete(id: string): void {

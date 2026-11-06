@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import type { NodeProps, Viewport } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import { agentConfig, canResume, hasUsage, isContextCapable, mintsSessionId } from '../shared/workspace'
@@ -114,7 +114,6 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const usageModel = agentId && hasUsage(agentId) ? d.agentModel : undefined
 
   const [searchOpen, setSearchOpen] = useState(false)
-  const [maximized, setMaximized] = useState(false)
   const [aiNaming, setAiNaming] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; link: string | null } | null>(null)
   const [restarting, setRestarting] = useState(false)
@@ -124,7 +123,6 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   // ponytail: expanded height disimpan di ref lokal, bukan data — node yang disimpan dalam keadaan
   // collapsed lalu di-reload kehilangan tinggi kustomnya (fallback 300). Upgrade: simpan expandedHeight di data (B3).
   const expandedH = useRef(height ?? 300)
-  const savedVp = useRef<Viewport | null>(null)
 
   // Dideklarasikan SEBELUM `useSpeechInput` di bawah, yang memakainya sebagai permukaan error.
   const addComment = (text: string, author?: string) =>
@@ -226,11 +224,6 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     rf.updateNodeData(id, { collapsed: !collapsed })
   }
 
-  const toggleMaximize = () => {
-    if (!maximized) { savedVp.current = rf.getViewport(); rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized(true) }
-    else { if (savedVp.current) rf.setViewport(savedVp.current, { duration: 200 }); setMaximized(false) }
-  }
-
   /**
    * Beri nama node lewat AI. Kegagalan HARUS terlihat: `r.message` membawa diagnosis nyata dari
    * server ("No terminal output to read yet.", "is the claude CLI on PATH?"), dan sebelumnya ia
@@ -288,9 +281,9 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           onRefresh={() => termRef.current?.refit()}
           searchOpen={searchOpen} onToggleSearch={() => setSearchOpen((o) => !o)}
           micActive={micActive} onToggleMic={onToggleMicProp}
-          maximized={maximized} onToggleMaximize={toggleMaximize}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
-          onStop={() => { stopAgent(id, label, send) }}
+          // VS Code shows Stop only while something runs: a working or blocked (mid-turn) agent.
+          onStop={status === 'working' || status === 'blocked' ? () => { stopAgent(id, label, send) } : undefined}
           menuItems={[{
             type: 'item', id: 'stop-idle', label: 'Stop all idle agents on this board',
             onSelect: () => { stopIdleAgents(rf.getNodes(), getStatus, send) },

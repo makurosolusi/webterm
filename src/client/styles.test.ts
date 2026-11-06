@@ -232,7 +232,8 @@ describe('node-chrome.css', () => {
     expect(title).toContain('font-weight: 400')
     // Judul tidak boleh melar: toolbar yang didorong `margin-left: auto`, bukan judul.
     expect(title).not.toContain('flex: 1')
-    expect(chrome).toContain('.node-toolbar { display: flex; align-items: center; gap: 2px; margin-left: auto; }')
+    // Block host with min-width 0, so a narrow header can shrink the toolbar (nodeToolbar.overflow).
+    expect(chrome).toContain('.node-toolbar { display: block; min-width: 0; margin-left: auto; }')
     expect(chrome).not.toContain('.node-toolbar__count')
     expect(chrome).not.toContain('.pane-split-btns')
     // Tombol header memakai `vscode-toolbar-button`; kelas status lama dan merah "danger" sudah tidak ada.

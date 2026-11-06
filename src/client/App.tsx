@@ -34,13 +34,15 @@ import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
 import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
-import { useWorkspaceLifecycle, useWorkspaceSaver } from './workspaceLifecycle'
+import { useWorkspaceLifecycle } from './workspaceLifecycle'
+import { useWorkspaceSaver } from './workspaceSaver'
 import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardHost from './BoardHost'
 import { useAppTabs } from './App.tabs'
+import { toggleMaximizeTarget } from './nodeMaximize.store'
 import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
@@ -92,7 +94,8 @@ export default function App() {
   // Payload dikunci di `scheduleSave`, bukan dibaca ulang saat timer menembak: board bisa berpindah
   // workspace dalam 400ms debounce. Lihat `useWorkspaceSaver` — termasuk kenapa `flushSave` wajib
   // dipanggil `applyWorkspace` sebelum board baru dipasang.
-  const { scheduleSave, flushSave, cancelSave } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer })
+  const applyRef = useRef<((ws: Workspace) => void) | null>(null) // set below, once `applyWorkspace` exists
+  const { scheduleSave, flushSave, cancelSave } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef })
 
   // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
   // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
@@ -117,6 +120,7 @@ export default function App() {
     rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
   })
+  applyRef.current = applyWorkspace // a save another window beat reloads the stored board through it
 
 
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
@@ -189,6 +193,7 @@ export default function App() {
     openOmnibox: () => omni.open('all'), openQuickOpen: () => omni.open('files'), openFindInFiles: () => omni.open('files', '%'),
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
     newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
+    toggleMaximizeNode: () => toggleMaximizeTarget(nodesRef.current),
     toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => toggleBottomView('inbox', inboxOpen, setInboxOpen), toggleChat: () => toggleBottomView('chat', chatOpen, setChatOpen),
     toggleBoard: () => setBoard((v) => !v),
   })

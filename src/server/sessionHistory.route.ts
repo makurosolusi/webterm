@@ -15,6 +15,9 @@ export const CLOSED_HISTORY_PATH = '/api/closed-history'
 /** Jeda minimum antar scan: tiap halaman yang di-scroll memanggil GET lagi, dan stat ribuan file
  *  per request tidak ada gunanya. `refresh=1` (tombol Refresh) melewatinya. */
 export const SCAN_MIN_INTERVAL_MS = 5000
+/** Deadline for one scan. A scan past it is aborted (files it finished stay indexed, the next scan
+ *  continues) so the single-flight below always settles and a later refresh can run. */
+export const SCAN_TIMEOUT_MS = 30_000
 
 export type HistoryResult = { status: number; body?: unknown } | null
 
@@ -22,21 +25,36 @@ export interface HistoryDeps {
   db: HistoryDb
   roots?: readonly ScanRoot[]
   now?: () => number
+  /** Override of `SCAN_TIMEOUT_MS` (tests). */
+  scanTimeoutMs?: number
 }
 
 const scanState = new WeakMap<HistoryDb, { at: number; running: Promise<void> | null }>()
 
-/** Scan single-flight + ber-throttle per database. */
+/** Rejects with the signal's reason once it aborts. Raced against the scan so the single-flight is
+ *  released at the deadline even if a read never returns to check the signal. */
+const aborted = (signal: AbortSignal): Promise<never> =>
+  new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+
+/** Scan single-flight + ber-throttle per database. A failed or timed-out scan is logged and the
+ *  current index is served; it never leaves the single-flight stuck. */
 async function freshen(deps: HistoryDeps, force: boolean): Promise<void> {
   const now = (deps.now ?? Date.now)()
   const st = scanState.get(deps.db) ?? { at: -Infinity, running: null }
   scanState.set(deps.db, st)
   if (st.running) return st.running
   if (!force && now - st.at < SCAN_MIN_INTERVAL_MS) return
-  st.running = scanSessions(deps.db, deps.roots).finally(() => {
-    st.at = now
-    st.running = null
-  })
+  const timeoutMs = deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS
+  const signal = AbortSignal.timeout(timeoutMs)
+  st.running = Promise.race([scanSessions(deps.db, deps.roots, signal), aborted(signal)])
+    .catch((err: unknown) => {
+      const cause = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      console.warn(`session history: scan stopped (deadline ${timeoutMs} ms, ${cause}); serving the current index`)
+    })
+    .finally(() => {
+      st.at = now
+      st.running = null
+    })
   return st.running
 }
 

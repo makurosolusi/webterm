@@ -67,20 +67,20 @@ describe('withTabPortal', () => {
 
   it('reports inTab/visible through context', () => {
     render(<Shell><Wrapped {...props()} /></Shell>)
-    expect(probe.host).toEqual({ inTab: false, visible: true })
+    expect(probe.host).toEqual({ inTab: false, visible: true, maximized: false })
     act(() => setMode('tabs'))
-    expect(probe.host).toEqual({ inTab: true, visible: true })
+    expect(probe.host).toEqual({ inTab: true, visible: true, maximized: false })
     act(() => connectTabLayout({ ...defaultTabLayout(), mode: 'tabs', tabs: { ...defaultTabLayout().tabs, order: ['n1', 'n2'], active: 'n2' } }, null))
-    expect(probe.host).toEqual({ inTab: true, visible: false })
+    expect(probe.host).toEqual({ inTab: true, visible: false, maximized: false })
     act(() => activateTab('n1'))
-    expect(probe.host).toEqual({ inTab: true, visible: true })
+    expect(probe.host).toEqual({ inTab: true, visible: true, maximized: false })
   })
 
   it('files node visibility follows the files panel in tab mode', () => {
     const tabs = defaultTabLayout().tabs
     act(() => connectTabLayout({ ...defaultTabLayout(), mode: 'tabs', tabs: { ...tabs, filesPanel: { ...tabs.filesPanel, open: false } } }, null))
     render(<Shell><Wrapped {...props({}, { id: 'f1', type: 'files' })} /></Shell>)
-    expect(probe.host).toEqual({ inTab: true, visible: false })
+    expect(probe.host).toEqual({ inTab: true, visible: false, maximized: false })
     act(() => connectTabLayout({ ...defaultTabLayout(), mode: 'tabs', tabs: { ...tabs, filesPanel: { ...tabs.filesPanel, open: true } } }, null))
     expect((probe.host as { visible: boolean }).visible).toBe(true)
   })

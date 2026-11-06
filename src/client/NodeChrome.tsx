@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, ReactNode } from 'react'
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
 import { Textfield, ToolbarButton } from '@/vscode/register'
 import { cn } from '@/lib/utils'
@@ -7,9 +7,9 @@ import NodeColorSwatch from './NodeColorSwatch'
 import NodeToolbar from './NodeToolbar'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
-import { useNodeFullscreen } from './useNodeFullscreen'
-import { NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
+import { NodeResizeToggle, useNodeResizeMenuItem } from './nodeResize/NodeLayoutResizer'
 import { useNodeHost } from './tabLayout.context'
+import { useNodeMaximize } from './nodeMaximize.store'
 
 export interface NodeChromeProps {
   title: string
@@ -27,7 +27,6 @@ export interface NodeChromeProps {
   onRefresh: () => void
   searchOpen: boolean; onToggleSearch: () => void
   micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
-  maximized: boolean; onToggleMaximize: () => void
   onClose: () => void
   onStop?: () => void             // agent only: Stop button in the toolbar
   /** Stable identity color (agent only): chip before the title, separate from the node color. */
@@ -98,15 +97,25 @@ export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; stat
   )
 }
 
+/** Header elements that own their clicks, so a double-click on them is not Maximize. */
+const HEADER_CONTROLS = '.nodrag, button, a, input, [role="button"], [role="menu"]'
+
 export default function NodeChrome(props: NodeChromeProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [commentsOpen, setCommentsOpen] = useState(false)
   const titleRef = useRef<HTMLElement | null>(null)
-  const headerRef = useRef<HTMLDivElement | null>(null)
-  const fs = useNodeFullscreen(headerRef)
-  // Tab mode is view-only: collapse/resize/maximize would rewrite the node's canvas layout.
+  // Tab mode is view-only: collapse/resize/maximize would rewrite the node's canvas layout. A
+  // maximized node keeps its canvas layout too, so collapse/resize hide there as well.
   const { inTab } = useNodeHost()
+  const max = useNodeMaximize()
+  const fixedLayout = inTab || max.maximized
+  const resizeMenuItem = useNodeResizeMenuItem()
+  // Double-click on the bare header toggles Maximize (VS Code: double-click the editor tab bar).
+  // Controls are excluded; so is the title (`nodrag`), whose single click is Rename.
+  const onHeaderDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (max.toggle && !(e.target as Element).closest(HEADER_CONTROLS)) max.toggle()
+  }
 
   const beginEdit = () => { setDraft(props.title); setEditing(true) }
   const commit = () => {
@@ -126,8 +135,8 @@ export default function NodeChrome(props: NodeChromeProps) {
   const chip = statusChip(props.status)
 
   return (
-    <div ref={headerRef} className="node-header relative">
-      {!inTab && (
+    <div className="node-header relative" onDoubleClick={onHeaderDoubleClick}>
+      {!fixedLayout && (
         <ToolbarButton
           label={props.collapsed ? 'Expand' : 'Collapse'}
           className="nodrag"
@@ -175,21 +184,19 @@ export default function NodeChrome(props: NodeChromeProps) {
       {props.pill}
       {props.extraHeader}
 
-      {!props.collapsed && !inTab && <NodeResizeToggle />}
-
       <NodeToolbar
         onRefresh={props.onRefresh}
         searchOpen={props.searchOpen} onToggleSearch={props.onToggleSearch}
         micActive={props.micActive} onToggleMic={props.onToggleMic}
         commentsOpen={commentsOpen} onToggleComments={() => setCommentsOpen((o) => !o)} commentCount={props.comments.length}
-        maximized={props.maximized} onToggleMaximize={props.onToggleMaximize} hideMaximize={inTab}
-        fullscreen={fs.isFullscreen} onToggleFullscreen={fs.toggle} fullscreenDisabled={fs.fullscreenDisabled}
+        maximized={max.maximized} onToggleMaximize={() => max.toggle?.()} hideMaximize={!max.toggle}
         onClose={props.onClose}
         onStop={props.onStop}
         onAiName={props.onAiName} aiNaming={props.aiNaming}
         onBroadcast={props.onBroadcast} broadcastActive={props.broadcastActive} broadcastDisabled={props.broadcastDisabled}
         hideLinks={props.hideLinks} onToggleHideLinks={props.onToggleHideLinks}
         extraMenuItems={props.menuItems}
+        extraAction={!props.collapsed && !fixedLayout ? { node: <NodeResizeToggle />, menuItem: resizeMenuItem } : undefined}
       />
 
       {commentsOpen && (
