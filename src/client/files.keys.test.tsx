@@ -12,8 +12,12 @@ const fs = vi.hoisted(() => ({
 }))
 // Slot menanyakan kemampuan server; tes shell berjalan dengan semua fitur mati.
 vi.mock('./fsClient', async () => ({ ...fs, ...(await import('./filesCaps.fixture')).capsMock() }))
+const reveal = vi.hoisted(() => vi.fn())
+vi.mock('./workspaceCreate/workspaceCreate.api', () => ({ revealPath: reveal }))
 
 import FilesNode from './FilesNode'
+import { revealLabel } from './FilesMenu'
+import { hostPlatform } from './terminalKeys.platform'
 import { FILES_SLOTS, type FilesSlot } from './filesSlots'
 
 const tree = (dirPath = '/proj'): ReactNode => (
@@ -28,6 +32,8 @@ const selected = (c: HTMLElement) => [...c.querySelectorAll('.files-row--sel')].
 const cursor = (c: HTMLElement) => c.querySelector('.files-row--cursor')?.textContent
 const key = (c: HTMLElement, k: string, init: KeyboardEventInit = {}) => fireEvent.keyDown(list(c), { key: k, ...init })
 const settle = () => act(async () => {})
+/** Label depends on the host OS (Finder / File Explorer / Containing Folder). */
+const REVEAL = revealLabel(hostPlatform())
 
 async function mount(n = 5) {
   fs.list.mockResolvedValue(names(n))
@@ -45,6 +51,7 @@ afterEach(() => {
   while (slots.length > 6) slots.pop()
   vi.restoreAllMocks()
   Object.values(fs).forEach((m) => m.mockReset())
+  reveal.mockReset()
 })
 
 describe('a11y dan header', () => {
@@ -142,12 +149,39 @@ describe('keyboard', () => {
     const c = await mount(3)
     key(c, 'ArrowDown')
     key(c, 'ContextMenu')
-    for (const label of ['Open', 'Open in Integrated Terminal', 'New File…', 'Fake action', 'Reveal', 'Refresh', 'Copy Path', 'Copy Relative Path']) {
+    for (const label of ['Open', 'Open in Integrated Terminal', 'New File…', 'Fake action', REVEAL, 'Refresh', 'Copy Path', 'Copy Relative Path']) {
       expect(await screen.findByText(label)).toBeTruthy()
     }
     expect(screen.getAllByRole('separator').length).toBeGreaterThanOrEqual(3)
     expect(screen.getByText('Enter')).toBeTruthy()
     expect(screen.getByText('⌥⌘C')).toBeTruthy()
+    expect(screen.getByText('⌥⌘R')).toBeTruthy()
+  })
+})
+
+describe('reveal in the OS file manager', () => {
+  it('the menu item sends the absolute path of the right-clicked entry to revealPath', async () => {
+    reveal.mockResolvedValue(undefined)
+    const c = await mount(3)
+    fireEvent.contextMenu(rows(c)[1])
+    fireEvent.click(await screen.findByText(REVEAL))
+    expect(reveal).toHaveBeenCalledWith('/proj/f01')
+  })
+
+  it('⌥⌘R reveals the cursor entry', async () => {
+    reveal.mockResolvedValue(undefined)
+    const c = await mount(3)
+    key(c, 'ArrowDown')
+    key(c, '®', { code: 'KeyR', altKey: true, metaKey: true })
+    expect(reveal).toHaveBeenCalledWith('/proj/f00')
+  })
+
+  it('a failed reveal shows the server reason in the notice', async () => {
+    reveal.mockRejectedValue(new Error('Nothing to reveal at that path.'))
+    const c = await mount(3)
+    key(c, 'ArrowDown')
+    key(c, '®', { code: 'KeyR', altKey: true, metaKey: true })
+    await waitFor(() => expect(c.querySelector('.files-foot')?.textContent).toBe('Could not reveal “f00”: Nothing to reveal at that path.'))
   })
 })
 

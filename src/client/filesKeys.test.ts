@@ -162,4 +162,10 @@ describe('listKeyAction — fase 2', () => {
     expect(listKeyAction({ key: 'ç', code: 'KeyC', alt: true, meta: true }, 0, 3)).toEqual({ kind: 'copyPath', relative: false })
     expect(listKeyAction({ key: 'Ç', code: 'KeyC', alt: true, meta: true, shift: true }, 0, 3)).toEqual({ kind: 'copyPath', relative: true })
   })
+
+  it('⌥⌘R reveals in the OS file manager (by code); Shift or no Alt is not reveal', () => {
+    expect(listKeyAction({ key: '®', code: 'KeyR', alt: true, meta: true }, 0, 3)).toEqual({ kind: 'reveal' })
+    expect(listKeyAction({ key: 'R', code: 'KeyR', alt: true, meta: true, shift: true }, 0, 3)).toBeNull()
+    expect(listKeyAction({ key: 'r', code: 'KeyR', meta: true }, 0, 3)).toBeNull()
+  })
 })
