@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { approveLabel, INBOX_ITEMS_PATH, InboxItems, snoozeUntil, type UnifiedItem } from './InboxPanel.items'
 
@@ -38,6 +38,20 @@ function serve() {
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+/** Two server pages; the second fails `failures` times first. Returns the GET urls seen. */
+function servePaged(failures = 0) {
+  const gets: string[] = []
+  let left = failures
+  const note = (id: string, title: string): UnifiedItem => ({ ...base, id, kind: 'notify', title, actions: ['ignore'] })
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    gets.push(url)
+    if (!url.includes('cursor=')) return json({ items: [note('n1', 'First page item')], nextCursor: 'c 1' })
+    if (left-- > 0) return new Response(JSON.stringify({ error: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    return json({ items: [note('n201', 'Second page item')], nextCursor: null })
+  }))
+  return gets
+}
 
 describe('InboxItems', () => {
   it('renders every kind with its actions and the impact line; other approvals stay in the sections', async () => {
@@ -97,6 +111,30 @@ describe('InboxItems', () => {
     await waitFor(() => expect(posts).toHaveLength(2))
     expect(posts[1]).toEqual({ url: `${INBOX_ITEMS_PATH}/batch`, body: { ids: ['perm_1', 'gate_1'], action: { type: 'approve' } } })
     expect(await screen.findByText('1 item(s) cannot be rewound and must be approved one by one.')).toBeTruthy()
+  })
+
+  it('Load more fetches the next server page by cursor and hides once the list is complete', async () => {
+    const gets = servePaged()
+    render(<InboxItems pollMs={0} />)
+    expect(await screen.findByText('First page item')).toBeTruthy()
+    expect(screen.queryByText('Second page item')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(await screen.findByText('Second page item')).toBeTruthy()
+    expect(screen.getByText('First page item')).toBeTruthy()
+    expect(gets).toContain(`${INBOX_ITEMS_PATH}?cursor=c%201`)
+    expect(screen.queryByRole('button', { name: /Load more/ })).toBeNull()
+  })
+
+  it('a failed Load more shows a sticky error whose Retry loads the page', async () => {
+    servePaged(1)
+    render(<InboxItems pollMs={0} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }))
+    const alert = await screen.findByRole('alert')
+    expect(screen.queryByText('Second page item')).toBeNull()
+    expect(screen.getByText('First page item')).toBeTruthy()
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Second page item')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('snooze presets', () => {

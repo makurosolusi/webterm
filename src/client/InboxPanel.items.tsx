@@ -4,12 +4,14 @@
 // tier, rewindable or not) sits under every gate so approving is never blind. Gates are held while a
 // Claude hook waits, so the list polls on its own. Other ledger approvals (task reviews, Central
 // gates) keep their APPROVE-phrase dialog in the sections below and are not repeated here.
+// The server pages the list (agent-211-C8); "Load more" adds a page, and each poll re-reads them all.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { APPROVAL_PATH, inboxErrorMessage, isAbortError } from './inboxApi'
+import { InboxPanelError } from './inboxPanelChrome'
 import { request } from './inboxTransport'
 
 export const INBOX_ITEMS_PATH = `${APPROVAL_PATH}/inbox`
@@ -58,6 +60,23 @@ export function snoozeUntil(choice: '1h' | 'tomorrow', now: number): number {
   return now + HOUR_MS
 }
 
+interface ItemsPage { items?: UnifiedItem[]; nextCursor?: string | null }
+
+/** Reads the first `pages` pages of the server list; `more` = the server has items past them. */
+async function fetchPages(pages: number, signal: AbortSignal): Promise<{ items: UnifiedItem[]; more: boolean; loaded: number }> {
+  const items: UnifiedItem[] = []
+  let cursor: string | null = null
+  let loaded = 0
+  // ponytail: every poll re-reads all loaded pages (≤ 200 items each); a delta feed if inboxes grow huge.
+  do {
+    const body: ItemsPage = await request<ItemsPage>(cursor === null ? INBOX_ITEMS_PATH : `${INBOX_ITEMS_PATH}?cursor=${encodeURIComponent(cursor)}`, { signal })
+    items.push(...(body?.items ?? []))
+    cursor = body?.nextCursor ?? null
+    loaded++
+  } while (cursor !== null && loaded < pages)
+  return { items, more: cursor !== null, loaded }
+}
+
 const post = (path: string, body: unknown) =>
   request<Record<string, unknown>>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
@@ -68,21 +87,26 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
   const [tick, setTick] = useState(0)
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [draft, setDraft] = useState<{ id: string; mode: 'edit' | 'reply'; text: string } | null>(null)
+  const [pages, setPages] = useState(1)
+  const [loaded, setLoaded] = useState(0)
+  const [more, setMore] = useState(false)
   const pollMs = props.pollMs ?? POLL_MS
   const now = props.now ?? Date.now
 
   useEffect(() => {
     const ctl = new AbortController()
-    request<{ items?: UnifiedItem[] }>(INBOX_ITEMS_PATH, { signal: ctl.signal })
-      .then((body) => {
-        const next = (body?.items ?? []).filter(shownHere)
+    fetchPages(pages, ctl.signal)
+      .then((res) => {
+        const next = res.items.filter(shownHere)
         setItems(next)
+        setMore(res.more)
+        setLoaded(res.loaded)
         setSelected((prev) => new Set([...prev].filter((id) => next.some((i) => i.id === id))))
       })
       .catch((err: unknown) => { if (!isAbortError(err)) setError(inboxErrorMessage(err)) })
     const t = pollMs > 0 ? setTimeout(() => setTick((n) => n + 1), pollMs) : undefined
     return () => { ctl.abort(); if (t) clearTimeout(t) }
-  }, [tick, pollMs])
+  }, [tick, pollMs, pages])
 
   const run = useCallback(async (call: () => Promise<Record<string, unknown>>) => {
     setBusy(true)
@@ -112,10 +136,14 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
     return next
   })
 
+  /** A requested page is in flight; a page the server no longer has (list shrank) ends it via `more`. */
+  const loadingMore = more && pages > loaded && error === null
+  const retry = () => { setError(null); setTick((n) => n + 1) }
+
   if (items.length === 0 && !error) return null
   return (
     <section className="inbox-section" aria-label="Inbox items">
-      {error && <p className="inbox-error" role="alert"><span className="inbox-error__text">{error}</span></p>}
+      {error && <InboxPanelError message={error} onRetry={retry} />}
       {selected.size > 0 && (
         <div className="inbox-bulk" role="toolbar" aria-label="Batch actions">
           <span>{selected.size} selected</span>
@@ -157,6 +185,11 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
           )
         })}
       </ul>
+      {more && (
+        <Button size="sm" variant="secondary" disabled={loadingMore} aria-busy={loadingMore} onClick={() => setPages(loaded + 1)}>
+          {loadingMore ? 'Loading more…' : 'Load more'}
+        </Button>
+      )}
     </section>
   )
 }

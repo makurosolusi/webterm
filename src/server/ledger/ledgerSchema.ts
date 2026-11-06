@@ -21,6 +21,7 @@ import { applyV19 } from './ledgerSchemaV19'
 import { applyV20 } from './ledgerSchemaV20'
 import { applyV21 } from './ledgerSchemaV21'
 import { applyV22 } from './ledgerSchemaV22'
+import { applyV23 } from './ledgerSchemaV23'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -70,4 +71,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 21, up: applyV21 },
   // v22: event(ts)/event(node_id, ts) indexes for replay; cost_run rebuilt once so kind admits 'bakeoff'.
   { version: 22, up: applyV22 },
+  // v23: retention — event chain base (prefix prune keeps the chain verifiable) + settle-time indexes; no backfill.
+  { version: 23, up: applyV23 },
 ]
