@@ -24,20 +24,20 @@ bun run dev
 
 Serves http://127.0.0.1:8700.
 
-Features are switched in Settings > **Capabilities**: seven cards (Central Agent, Worker orchestrator, Central Agent autonomy, Browser on canvas, Files, Edit and upload files, Telegram), each one on/off switch that applies immediately, with no restart, plus an **Access token** card (enable or rotate the access token; no switch). A capability also turns on what it needs: workers need Central, autonomy needs workers, file writes need file viewing. The per-feature variables below are no longer the main path; they are still read as legacy input (a child key whose parent capability is off is ignored, with one warning per key). Changing settings or capabilities without a token is accepted only from a loopback peer with a same-origin `Origin` header, otherwise `403 forbidden`; scripts send the root token in `x-webterm-token`. Design and limits: `docs/decisions/envsimple.md`; changes: `docs/changelog/envsimple.md`.
+Features are switched in Settings > **Capabilities**: seven cards (Central Agent, Worker orchestrator, Central Agent autonomy, Browser on canvas, Files, Edit and upload files, Telegram), each one on/off switch that applies immediately, with no restart, plus an **Access token** card (enable or rotate the access token; no switch). A capability also turns on what it needs: workers need Central, autonomy needs workers, file writes need file viewing. The per-feature variables below are no longer the main path; they are still read as legacy input (a child key whose parent capability is off is ignored, with one warning per key). Changing settings or capabilities needs the signed-in webterm page (see [Signing in](#signing-in)); scripts send the root token in `x-webterm-token`. Design and limits: `docs/decisions/envsimple.md`; changes: `docs/changelog/envsimple.md`.
 
 Environment variables:
 
 - `PORT` — listen port (default `8700`); a bad value aborts startup.
 - `WEBTERM_PROXY_PORT` — port of the separate-origin dev-server proxy (`/proxy/<port>`), default `PORT+1` on the same host; if it is busy the OS picks one. Read once at boot.
 - `HOST` — bind address (default `127.0.0.1`); `WEBTERM_HOST` is an accepted fallback.
-- `WEBTERM_TOKEN` — shared secret on `/api` and `/ws`. None on loopback until enabled from Settings > Capabilities > Access token (or `POST /api/settings/token/enable`; loopback peer, the link is shown once). A non-loopback bind generates one in `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`); a TTY prints the path and a `?token=` URL, other output only the path. An environment value wins. Without a token, the `/ws` and `/ws/browser` WebSockets need the browser's same-origin `Origin` header; clients without one (curl, agent shells) get `403 origin_required`.
+- `WEBTERM_TOKEN` — the root access token, required on `/api` and `/ws` on every bind, loopback included. Without this variable, webterm reads `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`) or generates it there on first start; a TTY prints the file path, never the value. Scripts send it in the `x-webterm-token` header; it is never accepted in a URL query. Rotate it from Settings > Capabilities > Access token, which signs every other browser out. The `/ws` and `/ws/browser` WebSockets on the browser cookie also need the page's same-origin `Origin` header; clients without one get `403 origin_required`.
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`. It also holds the `webterm` CLI (`bin/webterm`) and the Claude provider settings (`claude-provider/`, mode `600`). Ledger migrations (up to v22) run automatically on start.
 - `WEBTERM_AGENT_SANDBOX` — default `on`. Claude agents run shell commands in the Claude Code sandbox (macOS), so they cannot read webterm secrets or other nodes' tokens. Applies on the next agent launch; also in Settings > Control.
-- `WEBTERM_ALLOWED_HOSTS` — CSV of extra `Host` values (`host` or `host:port`); checked only while no token is enforced, else `403 host_not_allowed`.
+- `WEBTERM_ALLOWED_HOSTS` — CSV of extra `Host` values (`host` or `host:port`); checked only while no token is enforced (no longer the case since every start has one, see `docs/decisions/ui-session-cookie.md`), else `403 host_not_allowed`.
 - `WEBTERM_LEDGER_SHADOW` — set `1` to run the SQLite ledger (inbox, approvals, channel webhook) in shadow mode, where a failed open does not stop the server. The ledger itself is always on; `WEBTERM_LEDGER` is ignored.
-- Human approvals (`/api/approvals/*`) and token enable/rotate need no configuration: they are accepted only from the webterm page in a browser (`Sec-Fetch-Site: same-origin` plus a same-origin `Origin`), and an agent credential (node token or capability) is refused with `403 agent_cannot_approve`. With a root token enabled, the normal token gate applies first. See `docs/decisions/approval-ui-origin.md`.
+- Human approvals (`/api/approvals/*`) and token rotate need no configuration: they are accepted only from the signed-in webterm page (its `wt_ui` cookie plus `Sec-Fetch-Site: same-origin` and a same-origin `Origin`), and an agent credential (node token or capability) is refused with `403 agent_cannot_approve`. See `docs/decisions/ui-session-cookie.md`.
 - `WEBTERM_TELEGRAM` — the Telegram capability switch. Normally set by pasting a bot token in the Telegram card (the token is verified with Telegram first). Polling is the default; `POST /webhooks/telegram` is installed only with `WEBTERM_TELEGRAM_MODE=webhook`.
 - `WEBTERM_TELEGRAM_WEBHOOK_SECRET` — optional override of the webhook `secret_token`; generated into `<data dir>/secrets/` when absent. Keep it out of committed files.
 - `WEBTERM_TELEGRAM_BOT_TOKEN` — optional override of the bot token used for replies. The legacy `TELEGRAM_BOT_TOKEN` name is deprecated.
@@ -77,6 +77,15 @@ The channel runtime (webhook, binding API, reply sender) follows the Telegram ca
 
 The file manager API lives under `/api/fs/<verb>` and uses the same token gate as the rest of `/api`. GET verbs: `list`, `list-v2`, `read`, `read-binary`, `exists`, `stat`, `capabilities`, plus `raw` (needs `WEBTERM_FILES_VIEWERS`), `git-status` (`WEBTERM_FILES_GIT_STATUS`), and `search` (`WEBTERM_FILES_QUICK_OPEN`). POST verbs: `create`, `write`, `mkdir`, plus `delete`, `restore`, `rename`, `copy` (`WEBTERM_FILES_MUTATE`) and `upload` (`WEBTERM_FILES_UPLOAD`). A verb whose flag is off answers `501` with code `EDISABLED`. Design decisions and known limits: `docs/decisions/files-manager.md`.
 
+## Signing in
+
+Nothing to configure. On the first `bun run dev` webterm opens your default browser already signed in: it writes a one-time code (single use, 60 s) into a `600` file in `<data dir>/run/` and opens that file, so the code never appears in a terminal, a URL you share, or `ps`. The browser keeps an HttpOnly `wt_ui` session cookie for 30 days of inactivity. A restart opens nothing; open tabs keep working.
+
+- A signed-out tab shows a sign-in screen: "Open signed-in window" opens a new signed-in window on the computer running webterm (at most one per 10 s), or paste the access token from `<data dir>/secrets/WEBTERM_TOKEN`.
+- Headless or remote: paste the token on that screen, or open `http://<host>:<port>/?token=<token>` once. The page trades the token for the cookie and removes it from the address bar; the server never accepts a token from a URL otherwise.
+- Sign out from the workspace bar. Rotating the token signs every other browser out.
+- Scripts and agents never use the cookie: scripts send the root token in `x-webterm-token`, and agent sessions use their own node token (the `webterm` CLI reads it from the node's header file).
+
 ## `webterm` CLI
 
 Agent sessions get a `webterm` CLI on `PATH` (written to `<data dir>/bin/webterm` on every boot, plus a `webterm-cli` skill stub under `~/.claude/skills/`). It carries no token; it reads the node's own header file. Commands: `webterm agent-context`, `webterm <tool> --json '{...}'` (a capability call over `/api/tools`), `webterm skills get <name>`, `webterm whats-new [--since <version>]`, `webterm browser ...`, `webterm context ...`, and `webterm eval run [--model fake|real] [--json]`, which replays the eval cases collected from rejected approvals, dismissed memory proposals and checkpoint rewinds (exit 0 all pass, 1 a failure, 2 bad usage). Separately, each agent CLI (Claude, Codex, OpenCode, Gemini) is configured at spawn with a `webterm` stdio MCP server, through webterm-owned files and per-process flags only, never your global CLI config.
@@ -95,7 +104,7 @@ Levels: `trace`, `debug`, `info` (default), `warn`, `error`. Entries below the a
 - `WEBTERM_LOG_BUFFER` — entries kept in memory (100 to 100000, default `5000`).
 - `WEBTERM_LOG_FILE` — `on` (default) or `off`. When on, entries are appended as JSON lines to `<WEBTERM_DATA_DIR>/logs/webterm-YYYY-MM-DD.log`, rotated by day and at 5 MiB, keeping at most 7 files.
 
-Endpoints, all behind the root-token gate (open on loopback without a token, like `/api/settings`; per-node agent tokens are refused):
+Endpoints, all behind the `/api` gate (the signed-in page or the root token, like `/api/settings`; per-node agent tokens are refused):
 
 - `GET /api/logs` — recent entries; filters `level`, `channel`, `q`, `afterSeq`, `limit` (default 1000, max 2000).
 - `GET /api/logs/stream` — Server-Sent Events with replay from `afterSeq` / `Last-Event-ID`.
