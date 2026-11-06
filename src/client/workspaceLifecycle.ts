@@ -18,7 +18,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
 import { getWorkspace, createWorkspace, saveWorkspace, deleteWorkspace } from './api'
 import { nextActiveWorkspaceId } from './workspaceMenu'
-import { workspaceNameFromPath } from './store'
+import { toFlow, workspaceNameFromPath } from './store'
 import { sessionIdsOf } from './paneTree'
 import { send } from './ws'
 import { revealInTabs } from './nodeReveal'
@@ -27,6 +27,7 @@ import type { ClosedHistory } from './closedHistory'
 import { useWorkspaceBoot, type BootState } from './workspaceLifecycle.boot'
 import { useLatestSelect } from './workspaceLifecycle.select'
 import { reported } from './workspaceActionError'
+import { confirmNodeClose } from './nodeCloseConfirm'
 import type { Workspace } from '../shared/workspace'
 
 /** Yang dibutuhkan hook ini dari App. Setter & ref dipinjam APA ADANYA — ref harus ref yang sama
@@ -110,10 +111,12 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
       return
     }
     const owner = workspaces.find((w) => w.nodes.some((n) => n.id === id))
-    if (!owner) return
+    const target = owner?.nodes.find((n) => n.id === id)
+    // Not on the mounted canvas, so `onBeforeDelete` never sees it: the same confirm, asked here.
+    if (!owner || !target || !(await confirmNodeClose([toFlow(target)]))) return
     // Tiap DAUN, bukan id node: node terminal yang terbelah memegang satu PTY per pane, dan `close`
     // untuk id node saja meninggalkan sisanya hidup tanpa pemilik (lihat `sessionIdsOf`).
-    for (const sid of sessionIdsOf(owner.nodes.find((n) => n.id === id)?.panes, id)) send({ t: 'close', id: sid })
+    for (const sid of sessionIdsOf(target.panes, id)) send({ t: 'close', id: sid })
     const fresh = await getWorkspace(owner.id)
     recordClosed([id], fresh.nodes, fresh)
     // `fresh.updatedAt` rides along as the save's precondition (409 if another window wrote since).
