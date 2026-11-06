@@ -78,11 +78,26 @@ describe('TerminalCore', () => {
 
   it('elemen 0x0: `open` ditunda, lalu terkirim lewat fallback batas waktu', async () => {
     hostSize = 0
-    await mountCanvas({ nodes: [termNode], dirs: {} })
-    expect(ofType('open')).toHaveLength(0)
+    // pty-207-7: the fallback timer (and only it) runs on a manual clock. On the wall clock a mount
+    // slower than FALLBACK_MS fired it before the "not yet" assertion. Faking every setTimeout would
+    // also freeze React Flow's onInit and testing-library's waitFor, so the rest stay real.
+    const held: Array<() => void> = []
+    const realSetTimeout = globalThis.setTimeout
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number, ...rest: unknown[]) =>
+      ms === FALLBACK_MS ? held.push(cb) : realSetTimeout(cb, ms, ...rest)) as typeof setTimeout)
+    try {
+      await mountCanvas({ nodes: [termNode], dirs: {} })
+      // Lock: a mount that takes longer than the fallback (simulated by real waiting) still sees no open.
+      await new Promise((r) => realSetTimeout(r, FALLBACK_MS * 2))
+      expect(ofType('open')).toHaveLength(0)
+      expect(held).toHaveLength(1)
 
-    await waitFor(() => expect(ofType('open')).toHaveLength(1), { timeout: 3000 })
-    expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
+      held.forEach((cb) => cb())
+      expect(ofType('open')).toHaveLength(1)
+      expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('no refit while the host is hidden (xterm renderer paused); refits once it is shown again', async () => {

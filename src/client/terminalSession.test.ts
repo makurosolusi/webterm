@@ -21,6 +21,9 @@ describe('exitMessage', () => {
     expect(exitMessage(-1, 'peer-closed')).toBe('\r\n[session closed]')
     expect(exitMessage(0, 'peer-closed')).toBe('\r\n[session closed]')
   })
+  it('adds nothing after a kind-mismatch refusal: the server notice already explains it', () => {
+    expect(exitMessage(-1, 'kind_mismatch')).toBe('')
+  })
   it('still prints for a process that exited on its own', () => {
     expect(exitMessage(0, 'self')).toBe('\r\n[process exited with code 0]')
     expect(exitMessage(1, 'self')).toBe('\r\n[process exited with code 1]')

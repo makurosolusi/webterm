@@ -3,6 +3,7 @@ import type { OutputLog } from './outputLog'
 import type { Pty, spawnPty } from './pty'
 import type { SubscriberSet } from './subscribers'
 import type { ServerMsg } from '../shared/protocol'
+import type { DaReplyGate } from './daReplyGate'
 
 /** Satu PTY hidup beserta jalur observasinya: log output bernomor urut dan kumpulan pelanggan. */
 export interface Session {
@@ -18,6 +19,10 @@ export interface Session {
   /** Current PTY size (open + every resize): the screen `screenSource` is rebuilt at. */
   cols: number
   rows: number
+  /** Names this session's log: `seq` restarts at 1 per log, so a client's seq is only valid with it. */
+  epoch: string
+  /** One DA answer per DA query on this session's input (pty-207-1). */
+  daReplies: DaReplyGate
 }
 
 /** Ringkasan sesi hidup untuk endpoint/panel daftar. Tanpa tombstone: sesi yang sudah keluar tidak

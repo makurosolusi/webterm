@@ -1,6 +1,7 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { binaryExists, ptyEnv, resolveCwd, shellArgv } from './ptyShell'
+import { ptyEnv, resolveCwd, shellArgv } from './ptyShell'
+import { locateBinary } from './loginShellPath'
 import { spawnPty, type Pty } from './pty'
 import { createLogger } from './logs'
 
@@ -117,6 +118,19 @@ export class TmuxSupervisor {
     })
   }
 
+  /** Kind of the live tmux session for `id` (`@webterm-agent`), or null when there is none. */
+  holder(id: string): { agentId?: string } | null {
+    try {
+      // The name is read back: with no such session, display-message may still answer (empty).
+      const [name, agentId] = this.run(['display-message', '-p', '-t', `=${supervisedName(id)}:`, `#{session_name}\t#{${AGENT_OPT}}`]).trim().split('\t')
+      return name === supervisedName(id) ? { agentId: agentId || undefined } : null
+    } catch (err) {
+      // Exit 1 = no such session (or no server yet): the answer. Anything else is worth a line.
+      if (exitStatus(err) !== 1) log.warn('pty.supervisor_holder_failed', 'tmux display-message failed', { ids: { nodeId: id }, code: exitStatus(err) })
+      return null
+    }
+  }
+
   has(id: string): boolean {
     try {
       this.run(['has-session', '-t', `=${supervisedName(id)}`])
@@ -213,13 +227,20 @@ export class TmuxSupervisor {
     }
   }
 
-  /** Tutup node = akhiri sesinya. Async: `close` tidak boleh menunggu tmux. */
+  /** Close a node = end its session. SYNCHRONOUS (~5 ms, the cost of `has`): with an async kill an
+   *  open right after close still saw the dying session, attached to it and exited (pty-207-2).
+   *  nodeterm orders it the same way: kill-session before any create. */
   kill(id: string): void {
-    execFile(this.bin, ['-L', this.socket, 'kill-session', '-t', `=${supervisedName(id)}`], { env: this.env(false) }, () => {
-      // Galat = sesi sudah tidak ada (keluar sendiri / tak pernah dibuat) — hasil yang diminta.
-    })
+    try {
+      this.run(['kill-session', '-t', `=${supervisedName(id)}`])
+    } catch (err) {
+      // Exit 1 = the session is already gone (exited by itself / never created): the asked-for result.
+      if (exitStatus(err) !== 1) log.warn('pty.supervisor_kill_failed', 'tmux kill-session failed', { ids: { nodeId: id }, code: exitStatus(err) })
+    }
   }
 }
+
+const exitStatus = (err: unknown): number | undefined => (err as { status?: number }).status
 
 /** Socket per data dir: dua instance webterm dengan data dir berbeda (dev vs test) tidak berbagi
  *  sesi. Data dir default = `webterm` polos supaya mudah diperiksa (`tmux -L webterm ls`). */
@@ -228,18 +249,21 @@ export function supervisorSocket(dataDir: string | undefined): string {
 }
 
 export const TMUX_MISSING_NOTICE =
-  '\r\n[webterm] tmux tidak ditemukan: sesi ini akan berhenti saat server webterm restart. Pasang tmux (mis. `brew install tmux`) supaya sesi bertahan.\r\n'
+  '\r\n[webterm] tmux not found: this session will end when the webterm server restarts. Install tmux (e.g. `brew install tmux`) so sessions survive.\r\n'
 
 /** Supervisor proses ini. Mati di bawah test (`NODE_ENV=test`, di-set bun test dan vitest) dan di
  *  luar Bun: test tidak boleh menempel ke sesi tmux milik pengguna. */
 export function bootSupervisor(
   env: NodeJS.ProcessEnv = process.env,
-  exists: (bin: string) => boolean = binaryExists
+  locate: (bin: string) => string | undefined = (bin) => locateBinary(bin, env.PATH)
 ): { supervisor: TmuxSupervisor | null; notice?: string } {
   if (env.NODE_ENV === 'test' || !process.versions.bun) return { supervisor: null }
-  if (!exists('tmux')) {
+  // Absolute path: the probe may find tmux only on the login shell's PATH (ops-212-4), which every
+  // later tmux call (run/attach) does not search.
+  const tmux = locate('tmux')
+  if (!tmux) {
     log.warn('pty.supervisor_missing', 'tmux not found; sessions will not survive a server restart')
     return { supervisor: null, notice: TMUX_MISSING_NOTICE }
   }
-  return { supervisor: new TmuxSupervisor(supervisorSocket(env.WEBTERM_DATA_DIR)) }
+  return { supervisor: new TmuxSupervisor(supervisorSocket(env.WEBTERM_DATA_DIR), tmux) }
 }

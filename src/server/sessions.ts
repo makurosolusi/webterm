@@ -22,6 +22,8 @@ import { wrapClaudeLaunch } from './claudeProvider/claudeProvider.launch'
 import { applyNodeClaudeProfile, resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
 import { isLegacyClaudeNode } from '../shared/claudeLaunch/claudeLaunch.builtin'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
+import { nextEpoch, refuseKind, replay, sameKind } from './sessionsAttach'
+import { DA_REPLY_TTL_OTHER_MS, DA_REPLY_TTL_TMUX_MS, DaReplyGate } from './daReplyGate'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
 // menjaga kontrak itu tanpa memaksa semua pemanggil tahu file barunya.
@@ -52,10 +54,9 @@ export class Sessions extends SessionsCore {
    * pintu masuk membuat keduanya tidak pernah melihat nilai berbahaya (`hooks.ts` mengutip sendiri
    * sebagai lapis kedua).
    *
-   * SEMUA pelanggan menerima seluruh scrollback lalu snapshot status, termasuk `send` yang sudah
-   * terdaftar. Alasannya: remount meng-dispose dan membuat ulang xterm-nya, jadi buffer di sisi
-   * client hilang — tanpa replay layar itu kosong. `add` idempoten, jadi tidak ada langganan ganda;
-   * replay hanya dikirim ke `send`, bukan di-broadcast ke pelanggan lain.
+   * Each attach replays to `send` only (never broadcast): the gap after `msg.since` when the client
+   * still holds the rest, otherwise reset + the whole log (a remount has a fresh, empty xterm), then
+   * a status snapshot. `add` is idempotent. An open of another kind is refused (`sessionsAttach.ts`).
    */
   open(raw: OpenMsg, send: (m: ServerMsg) => void): void {
     if (!isSafeNodeId(raw.id)) return
@@ -66,15 +67,17 @@ export class Sessions extends SessionsCore {
     const { msg, notice: profileNotice } = applyNodeClaudeProfile(withProfile)
     const existing = this.map.get(msg.id)
     if (existing) {
+      if (!sameKind(existing.agentId, msg.agentId)) return refuseKind(msg.id, existing.agentId, msg.agentId, send)
       ptyLog.reattached(msg.id, existing.subs.size())
       const status = this.registry.getStatus(msg.id)?.status
       existing.subs.add(send)
-      for (const chunk of existing.log.since(0)) {
-        send({ t: 'output', id: msg.id, data: chunk.data, seq: chunk.seq })
-      }
+      replay(existing, send, msg.since)
       send({ t: 'status', id: msg.id, status })
       return
     }
+    // A tmux session not adopted yet carries its kind in `@webterm-agent`: same gate before attach.
+    const held = this.supervised?.holder(msg.id)
+    if (held && !sameKind(held.agentId, msg.agentId)) return refuseKind(msg.id, held.agentId, msg.agentId, send)
 
     // Diprobe SEKALI (filesystem), lalu dipakai dua kali: menjatuhkan `--resume` dan memberi tahu
     // pengguna. Hanya transcript yang TERBUKTI tidak ada yang menjatuhkannya — `transcriptPresence.ts`.
@@ -145,6 +148,7 @@ export class Sessions extends SessionsCore {
     const session = this.track(msg.id, pty, msg.agentId, msg.cols, msg.rows)
     ptyLog.spawned(msg, pty.pid, this.options.shell)
     session.subs.add(send)
+    replay(session, send)
     for (const data of notices) this.emit(session, data)
 
     // PTY baru = hidup baru. Tombstone exit dan status milik sesi sebelumnya dengan id yang sama
@@ -167,7 +171,8 @@ export class Sessions extends SessionsCore {
   /** Daftarkan PTY hidup sebagai sesi node dan sambungkan output/exit-nya. */
   private track(id: string, pty: Pty, agentId: string | undefined, cols: number, rows: number): Session {
     const session: Session = {
-      id, pty, agentId, cols, rows,
+      id, pty, agentId, cols, rows, epoch: nextEpoch(),
+      daReplies: new DaReplyGate(this.supervised ? DA_REPLY_TTL_TMUX_MS : DA_REPLY_TTL_OTHER_MS),
       log: new OutputLog(),
       subs: new SubscriberSet<ServerMsg>(),
       exited: false,
@@ -218,8 +223,11 @@ export class Sessions extends SessionsCore {
     return { adopted, orphans }
   }
 
+  /** Every viewer's input converges here, so the DA gate covers replay, reconnect and multi-tab. */
   input(id: string, data: string): void {
-    this.map.get(id)?.pty.write(data)
+    const session = this.map.get(id)
+    const kept = session?.daReplies.filterInput(data, this.now())
+    if (kept) session?.pty.write(kept)
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -275,6 +283,7 @@ export class Sessions extends SessionsCore {
     // Kill SESUDAH map dihapus: `onExit` digerbangi identitas, jadi gema kematian yang kita minta
     // sendiri tidak pernah menjadi `exit` kedua. Untuk sesi tmux, `pty.kill()` hanya melepas client;
     // sesinya diakhiri `kill`, juga ketika tidak ada entry `map` (node yatim / belum diadopsi).
+    // `kill` is synchronous, so an open right after this close creates a NEW tmux session.
     session?.pty.kill()
     this.supervised?.kill(id)
   }
@@ -303,6 +312,7 @@ export class Sessions extends SessionsCore {
       case 'input': this.input(msg.id, msg.data); break
       case 'resize': this.resize(msg.id, msg.cols, msg.rows); break
       case 'close': this.close(msg.id, send); break
+      case 'detach': this.map.get(msg.id)?.subs.remove(send); break
     }
   }
 }

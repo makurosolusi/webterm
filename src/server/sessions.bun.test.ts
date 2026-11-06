@@ -407,7 +407,7 @@ test('a freshly spawned agent session reports NO status until something real say
     // Dan tidak ada status yang DISIMPAN diam-diam. Socket yang re-attach sekarang selalu dijawab,
     // tapi jawabannya "tidak ada status" — bukan satu pun nilai AgentStatus yang dikarang.
     const again: string[] = []
-    s.open({ t: 'open', id: 'st1', cols: 80, rows: 24 }, (m) => { if (m.t === 'status') again.push(m.status ?? 'NONE') })
+    s.open({ t: 'open', id: 'st1', cols: 80, rows: 24, agentId: 'claude' }, (m) => { if (m.t === 'status') again.push(m.status ?? 'NONE') })
     expect(again.join(',')).toBe('NONE')
     expect(again.join(',')).not.toContain(OLD_STATUS_AT_SPAWN)
 
