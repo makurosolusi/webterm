@@ -1,4 +1,4 @@
-// Kontrak route hook `POST /api/agent-status` di bawah `WEBTERM_STRICT_HOOK_AUTH=1`.
+// Kontrak route hook `POST /api/agent-status`; strict auth is the default (data-209-1).
 //
 // Modul route sekarang menerima dependency + override gerbang, jadi test ini menjalankan route
 // SUNGGUHAN (bukan membaca source): request palsu berbentuk IncomingMessage, response pencatat,
@@ -98,7 +98,7 @@ afterEach(() => {
   delete process.env.CLAUDE_CONFIG_DIR
 })
 
-describe('strict auth MATI (default) — fail-open lama dipertahankan', () => {
+describe('strict auth MATI (WEBTERM_STRICT_HOOK_AUTH=0) — fail-open lama', () => {
   it('menerapkan status tanpa token', async () => {
     const res = mockRes()
     const d = deps()
@@ -180,6 +180,7 @@ describe('strict auth NYALA — token node wajib', () => {
 describe('strict auth NYALA — transcript_path harus di dalam root yang diizinkan', () => {
   const withToken = (body: unknown) => mockReq(body, { [NODE_TOKEN_HEADER]: TOKEN })
 
+  /** The path is dropped, the hook is not: the verified node keeps its status badge. */
   async function expectRejected(path: string): Promise<void> {
     const res = mockRes()
     const d = deps()
@@ -187,10 +188,8 @@ describe('strict auth NYALA — transcript_path harus di dalam root yang diizink
       withToken({ hook_event_name: 'Stop', transcript_path: path }),
       res, URL_FOR(NODE), { strictAuth: true, deps: d }
     )
-    expect(res.statusCode).toBe(403)
-    expect(JSON.parse(res.body)).toEqual({ error: 'transcript path outside allowed roots' })
-    // Penolakan terjadi SEBELUM penulisan: status pun tidak boleh mendarat.
-    expect(d.writes).toEqual({ status: [], transcript: [] })
+    expect(res.statusCode).toBe(204)
+    expect(d.writes).toEqual({ status: [{ node: NODE, status: 'waiting' }], transcript: [] })
   }
 
   it('menolak traversal `..` bahkan bila hasil akhirnya di dalam root', async () => {
@@ -448,16 +447,15 @@ describe('context-link tidak tersentuh', () => {
 })
 
 describe('STRICT_HOOK_AUTH dibaca dari env saat modul dimuat', () => {
-  it('default mati, dan `1` menyalakannya', async () => {
+  it('on by default with no env (data-209-1); only exactly `0` turns it off', async () => {
     vi.resetModules()
     delete process.env.WEBTERM_STRICT_HOOK_AUTH
-    const off = await import('./agentStatusApi')
-    expect(off.STRICT_HOOK_AUTH).toBe(false)
-
-    vi.resetModules()
-    process.env.WEBTERM_STRICT_HOOK_AUTH = '1'
-    const on = await import('./agentStatusApi')
-    expect(on.STRICT_HOOK_AUTH).toBe(true)
+    expect((await import('./agentStatusApi')).STRICT_HOOK_AUTH).toBe(true)
+    for (const [raw, want] of [['0', false], ['off', true], ['1', true]] as const) {
+      vi.resetModules()
+      process.env.WEBTERM_STRICT_HOOK_AUTH = raw
+      expect(`${raw}: ${(await import('./agentStatusApi')).STRICT_HOOK_AUTH}`).toBe(`${raw}: ${want}`)
+    }
     delete process.env.WEBTERM_STRICT_HOOK_AUTH
   })
 })
@@ -466,8 +464,9 @@ describe('Senses producer (F1-d)', () => {
   it('records hook.<Event>: trusted with the node token, untrusted without', async () => {
     const seen: SenseEvent[] = []
     const off = eventBus.subscribe('hook.*', (e) => { seen.push(e) })
-    const d = deps()
+    const d = deps({ workspaceFor: () => ({ id: 'w', name: 'w', bridges: [], nodes: [{ id: NODE, kind: 'agent', title: 'Claude' }] }) as unknown as Workspace })
     await agentStatusRoute(mockReq({ hook_event_name: 'Stop' }, { [NODE_TOKEN_HEADER]: TOKEN }), mockRes(), URL_FOR(NODE), { strictAuth: false, deps: d })
+    await agentStatusRoute(mockReq({ hook_event_name: 'Stop' }, { [NODE_TOKEN_HEADER]: TOKEN }), mockRes(), URL_FOR(NODE), { strictAuth: false, deps: deps() }) // on no board: no row
     await agentStatusRoute(mockReq({ hook_event_name: 'UserPromptSubmit', prompt: 'secret plan '.repeat(50) }), mockRes(), URL_FOR(NODE), { strictAuth: false, deps: d })
     off()
     expect(seen.map((e) => [e.kind, e.trust, e.nodeId])).toEqual([
