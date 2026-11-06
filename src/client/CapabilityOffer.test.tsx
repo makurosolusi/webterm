@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CapabilityOffer } from './CapabilityOffer'
-import { CAPABILITY_TEXT, forbiddenText } from './capabilitiesLabels'
+import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { resetCapabilitiesCache } from './useCapabilities'
 
 const chromiumPath = { value: '', detected: false, active: null, source: null, overrideInvalid: false, candidates: ['/opt/chrome'] } // test-only
@@ -58,12 +58,9 @@ describe('CapabilityOffer', () => {
     expect(onDone).not.toHaveBeenCalled()
   })
 
-  it('pesan 403 menyebut sebab dan jalan keluar (127.0.0.1:<port> atau token akses), port dari halaman', () => {
-    expect(forbiddenText('8700')).toContain('http://127.0.0.1:8700')
-    expect(forbiddenText('8700')).toMatch(/access token/)
-    expect(forbiddenText('')).not.toMatch(/127\.0\.0\.1:/)
-    expect(forbiddenText('')).toMatch(/127\.0\.0\.1/)
-    expect(forbiddenText('8700')).not.toMatch(/WEBTERM_|env/i)
+  it('pesan 403 menyebut sebab (sesi berakhir) dan jalan keluar (reload lalu sign in), tanpa alamat atau token', () => {
+    expect(CAPABILITY_TEXT.forbidden).toBe('Your session has ended. Reload to sign in again.')
+    expect(CAPABILITY_TEXT.forbidden).not.toMatch(/127\.0\.0\.1|access token|WEBTERM_|env/i)
   })
 
   it('Nyalakan yang berujung needs-step tidak memanggil onDone', async () => {

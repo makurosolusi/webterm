@@ -7,15 +7,6 @@ export const CAPABILITY_STATUS_LABEL: Readonly<Record<CapabilityStatus, string>>
   'needs-step': 'Needs one step',
 }
 
-/**
- * Penolakan 403 penjaga pengaturan: sebab (dibuka lewat tunnel/proxy/alamat lain) + jalan keluar.
- * Port dari `location` halaman ini; tanpa port (mis. tunnel di 443) kalimatnya tetap benar tanpa angka.
- */
-export function forbiddenText(port: string): string {
-  const where = port ? `http://127.0.0.1:${port}` : '127.0.0.1 on the computer running webterm'
-  return `Change denied because this page was not opened directly on the computer running webterm. Open it via ${where}, or enable the access token and sign in with it.`
-}
-
 export const CAPABILITY_TEXT = {
   alsoTurnsOn: 'Also turns on:',
   alsoTurnsOff: 'Also turns off:',
@@ -26,7 +17,8 @@ export const CAPABILITY_TEXT = {
     `${label}?\n\nThis gives agents more control over this computer and the accounts you are signed in to. Only turn it on if you trust the agents that run.`,
   loadFailed: 'Could not load capabilities. Try again in a moment.',
   changeFailed: 'The change did not go through. Try again in a moment.',
-  forbidden: forbiddenText(typeof location === 'undefined' ? '' : location.port),
+  // 403 from the settings guard = no live UI session; a reload lands on the sign-in screen (appBoot).
+  forbidden: 'Your session has ended. Reload to sign in again.',
 } as const
 
 /**

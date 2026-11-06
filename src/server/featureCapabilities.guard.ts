@@ -5,7 +5,7 @@
 // The cookie is a credential of its own, so no loopback/forwarded peer check: a remote web channel or a
 // reverse proxy is the normal case, as for the root header (docs/decisions/ui-session-cookie.md).
 // A denial is always a generic 403 `forbidden`; the client turns it into a cause + way out
-// (`forbiddenText` in capabilitiesLabels.ts).
+// (`CAPABILITY_TEXT.forbidden` in capabilitiesLabels.ts).
 import type { IncomingMessage } from 'node:http'
 import { hasUiSession } from './approvalAuth'
 import { CAPABILITY_HEADER, TOKEN_HEADER, sameOrigin, tokensMatch } from './auth'

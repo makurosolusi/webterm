@@ -3,7 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
-import { CAPABILITY_TEXT, forbiddenText } from './capabilitiesLabels'
+import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { resetCapabilitiesCache, useCapabilities } from './useCapabilities'
 
 const state = (status: 'on' | 'off'): CapabilitiesResponse =>
@@ -42,7 +42,7 @@ describe('useCapabilities', () => {
     expect(result.current.data?.capabilities[0].status).toBe('on')
   })
 
-  it('maps 403 to the Indonesian message and keeps the old state', async () => {
+  it('maps 403 to the session message and keeps the old state', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(json(200, state('off')))
       .mockResolvedValueOnce(json(403, { error: 'forbidden' })))
@@ -55,15 +55,14 @@ describe('useCapabilities', () => {
     expect(result.current.data?.capabilities[0].status).toBe('off')
   })
 
-  it('403 memakai port dengar dari server (bukan port tunnel halaman)', async () => {
+  it('403 on a write maps to the session message', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(json(200, state('off')))
-      .mockResolvedValueOnce(json(403, { error: 'forbidden', port: 9123 })))
+      .mockResolvedValueOnce(json(403, { error: 'forbidden' })))
     const { result } = renderHook(() => useCapabilities())
     await waitFor(() => expect(result.current.data).not.toBeNull())
     await act(async () => { await result.current.toggle('files', true) })
-    expect(result.current.error).toBe(forbiddenText('9123'))
-    expect(result.current.error).toContain('http://127.0.0.1:9123')
+    expect(result.current.error).toBe(CAPABILITY_TEXT.forbidden)
   })
 
   it('recheck meminta deteksi segar (?refresh=1); refresh biasa tidak', async () => {

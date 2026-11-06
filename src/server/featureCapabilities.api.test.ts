@@ -91,7 +91,7 @@ describe('POST /:id', () => {
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: 'http://evil.example' }),
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { cookie: false }),
     ]
-    expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden', port: 8700 }]))
+    expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden' }]))
     expect(h.target.WEBTERM_CENTRAL).toBeUndefined()
     expect(h.audits.map((a) => [a.action, a.via, a.detail])).toEqual([['denied', 'rejected', 'origin'], ['denied', 'rejected', 'origin'], ['denied', 'rejected', 'session']])
   })
@@ -100,12 +100,6 @@ describe('POST /:id', () => {
     expect((await h.call('GET', '/api/capabilities')).status).toBe(200)
     expect((await h.call('GET', '/api/capabilities', undefined, { query: '?refresh=1' })).status).toBe(200)
     expect(h.detectCalls).toEqual([{ fresh: false }, { fresh: true }])
-  })
-  it('403 memuat port dengar server (PORT), bukan port tunnel yang dilihat halaman', async () => {
-    const h = harness()
-    h.target.PORT = '9123' // test-only
-    const r = await h.call('POST', '/api/capabilities/central', { enabled: true }, { origin: null })
-    expect([r.status, r.json]).toEqual([403, { error: 'forbidden', port: 9123 }])
   })
   it('dua POST bersamaan konsisten dan tiap hook start/stop tepat sekali', async () => {
     offs.push(onCapabilityChange('files', { start: () => { events.push('start') }, stop: () => { events.push('stop') } }))
