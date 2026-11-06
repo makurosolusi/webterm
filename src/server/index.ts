@@ -1,7 +1,8 @@
 import http from 'node:http'
 import { basename, join } from 'node:path'
 import { WebSocketServer } from 'ws'
-import { WS_PATH, type ClientMsg, type ServerMsg } from '../shared/protocol'
+import { WS_PATH } from '../shared/protocol'
+import { serveTerminalSocket } from './terminalSocket'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
 import { sweepTrashOnBoot } from './fsBoot'
@@ -265,28 +266,8 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
 })
 
-wss.on('connection', (ws) => {
-  const wsLog = createLogger('ws')
-  wsLog.info('ws.connect', 'WebSocket client connected', { clients: wss.clients.size })
-  const send = (m: ServerMsg) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m)) }
-  ws.on('message', (raw) => {
-    let msg: ClientMsg
-    try { msg = JSON.parse(String(raw)) } catch { return }
-    try {
-      // fswatch/fsunwatch tidak lewat sessions (bukan sesi PTY); flag WATCH mati = diabaikan.
-      if (msg.t === 'fswatch' || msg.t === 'fsunwatch') {
-        if (filesFlagOn('WATCH') && typeof msg.dir === 'string') fsWatchHub[msg.t === 'fswatch' ? 'watch' : 'unwatch'](send, msg.dir)
-      } else sessions.handle(msg, send)
-    } catch (err) {
-      wsLog.error('ws.error', `WebSocket message handling failed (t=${msg?.t})`, { error: err })
-    }
-  })
-  ws.on('close', (code, reason) => {
-    sessions.detach(send)
-    fsWatchHub.dropClient(send)
-    wsLog.info('ws.disconnect', 'WebSocket client disconnected', { code, reason: reason.toString().slice(0, 120) })
-  })
-})
+// Terminal socket dispatch, heartbeat and backpressure live in terminalSocket.ts.
+wss.on('connection', (ws) => serveTerminalSocket(ws, { sessions, fsWatchHub, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size }))
 
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {

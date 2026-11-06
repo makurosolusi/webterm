@@ -50,7 +50,8 @@ function live(id: string) {
   const stored = (): string => {
     const replay: string[] = []
     const probe = (m: ServerMsg) => { if (m.t === 'status') replay.push(m.status ?? 'NONE') }
-    s.open({ t: 'open', id, cols: 80, rows: 24 }, probe)
+    // Same kind as the live session: a plain open on an agent id is refused (pty-207-6).
+    s.open({ t: 'open', id, cols: 80, rows: 24, agentId: 'claude' }, probe)
     s.detach(probe)
     return replay.join(',')
   }
