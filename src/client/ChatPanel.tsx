@@ -1,6 +1,6 @@
-// Chat pane for the central agent (RND/11 §3), rendered in the VS Code bottom panel. Standalone
-// it owns a single-tab surface; `bottomPanelHost.tsx` is the shared tabbed mount. Mounted by
-// App, opened by the Dock button, never a canvas node. Props-driven; the default client is the
+// Chat pane for the central agent (RND/11 §3), rendered in the secondary side bar on the right.
+// Standalone it owns a single-tab surface; `App.secondarySideBar.tsx` is the shared tabbed mount.
+// Mounted by App, opened by the Dock button or ⌥⌘B, never a canvas node. Props-driven; the default client is the
 // module `chatApi` so production wiring is one prop-free mount.
 //
 // S0 scope: conversation list (global + project scopes), Markdown thread, streaming text,
@@ -17,27 +17,7 @@ import { chatApi, chatErrorMessage, isAbortError, openChatStream } from './chatA
 import { InboxPanelSurface } from './inboxPanelSurface'
 import './chat/chat.css'
 
-const OPEN_KEY = 'webterm.chatOpen'
 const SELECTED_KEY = 'webterm.chatConversation'
-
-/** Open/closed state for the Dock toggle, persisted per browser. Closed on first run. */
-export function useChatOpen(): readonly [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(() => {
-    try {
-      return localStorage.getItem(OPEN_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
-  useEffect(() => {
-    try {
-      localStorage.setItem(OPEN_KEY, open ? '1' : '0')
-    } catch {
-      // Private mode: the choice lasts for this tab only.
-    }
-  }, [open])
-  return [open, setOpen] as const
-}
 
 function readSelected(): string | null {
   try {
@@ -58,7 +38,7 @@ function persistSelected(id: string | null): void {
 }
 
 export interface ChatPanelProps {
-  /** Default true; App owns it via `useChatOpen`. Closed = render nothing. */
+  /** Default true; App owns it via the side bar store. Closed = render nothing. */
   open?: boolean
   onClose?: () => void
   /** API implementation. Must be referentially stable (module default is). */
@@ -69,6 +49,8 @@ export interface ChatPanelProps {
   embedded?: boolean
   /** Embedded only: host toolbar slot while this pane is the active tab; null while hidden. */
   actionsHost?: HTMLElement | null
+  /** Narrow host (side bar): the conversation list sits behind a History toggle instead of a column. */
+  compact?: boolean
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
@@ -85,6 +67,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<string | null>(readSelected)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [history, setHistory] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -126,6 +109,16 @@ export default function ChatPanel(props: ChatPanelProps) {
     </IconTooltip>
   )
   const current = conversations?.find((row) => row.id === selected) ?? null
+  const compact = props.compact === true
+  const historyLabel = history ? 'Back to the conversation' : `Show conversations${current ? ` (current: ${conversationLabel(current)})` : ''}`
+  const historyButton = compact && (
+    <IconTooltip label={historyLabel}>
+      <button type="button" className="vscode-panel-action" aria-label="Show conversations" aria-pressed={history}
+        onClick={() => setHistory((shown) => !shown)}>
+        <span className="codicon codicon-history" aria-hidden="true" />
+      </button>
+    </IconTooltip>
+  )
 
   const body = (
     <>
@@ -146,8 +139,8 @@ export default function ChatPanel(props: ChatPanelProps) {
         </div>
       )}
 
-      <div className="chat-body">
-        <nav className="chat-conversations" aria-label="Conversations">
+      <div className={cn('chat-body', compact && 'chat-body--compact')}>
+        {(!compact || history) && <nav className="chat-conversations" aria-label="Conversations">
           {conversations === null ? (
             loading && <p className="chat-list-status">Loading…</p>
           ) : conversations.length === 0 ? (
@@ -160,7 +153,7 @@ export default function ChatPanel(props: ChatPanelProps) {
                     type="button"
                     className={cn('chat-list-item', conversation.id === selected && 'is-active')}
                     aria-current={conversation.id === selected ? 'true' : undefined}
-                    onClick={() => setSelected(conversation.id)}
+                    onClick={() => { setSelected(conversation.id); setHistory(false) }}
                   >
                     <span className="chat-list-item__label">{conversationLabel(conversation)}</span>
                     {conversation.activeTurnId !== null && (
@@ -171,9 +164,10 @@ export default function ChatPanel(props: ChatPanelProps) {
               ))}
             </ul>
           )}
-        </nav>
+        </nav>}
 
-        <div className="chat-main">
+        {/* Hidden, not unmounted, behind History: the stream and the composer draft survive. */}
+        <div className="chat-main" hidden={compact && history}>
           {current ? (
             <ChatConversationView
               key={current.id}
@@ -196,7 +190,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (props.embedded) {
     return (
       <div className="chat-panel chat-panel--embedded">
-        {props.actionsHost && createPortal(refreshButton, props.actionsHost)}
+        {props.actionsHost && createPortal(<>{historyButton}{refreshButton}</>, props.actionsHost)}
         {body}
       </div>
     )

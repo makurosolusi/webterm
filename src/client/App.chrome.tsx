@@ -5,12 +5,13 @@ import type { DockProps } from './Dock'
 import type { WorkspaceBarProps } from './WorkspaceBar'
 import type { useOmnibox } from './Omnibox.open'
 import type { CanvasViewport } from './canvasViewport'
-import type { useCentralControl } from './central/CentralControlPanel'
 import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
 import { useTabLayout } from './tabLayout.store'
 import { toggleLayoutMode } from './tabLayout.commands'
 import { toggleBottomView } from './bottomPanelHost'
+import { toggleSideBarView, useSideBar } from './secondarySideBar.store'
+import { SecondarySideBarToggle, shownSideBarView } from './App.secondarySideBar'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
@@ -20,15 +21,14 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
   vp: CanvasViewport
   settings: Settings
   activeWs: Workspace | null
-  central: ReturnType<typeof useCentralControl>
+  /** Central capability flag: off = the Dock's Central icon offers to turn it on. */
+  centralEnabled: boolean
   board: boolean
   setBoard: Toggle
   sessionsOpen: boolean
   setSessionsOpen: Toggle
   inboxOpen: boolean
   setInboxOpen: (open: boolean) => void
-  chatOpen: boolean
-  setChatOpen: (open: boolean) => void
   locked: boolean
   setLocked: Toggle
   cleanView: boolean
@@ -39,9 +39,10 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
 
 /** Dock wired to App's state: its toggles, canvas viewport controls, and status-bar chips. */
 export default function AppDock({
-  vp, settings, activeWs, central, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen,
-  chatOpen, setChatOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
+  vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
 }: AppDockProps) {
+  const side = useSideBar()
+  const sideShown = side.open ? shownSideBarView(side.view, centralEnabled) : null
   return (
     <Dock
       {...pass}
@@ -57,10 +58,10 @@ export default function AppDock({
       onToggleSessions={() => setSessionsOpen((v) => !v)}
       inboxOpen={inboxOpen}
       onToggleInbox={() => toggleBottomView('inbox', inboxOpen, setInboxOpen)}
-      chatOpen={chatOpen}
-      onToggleChat={() => toggleBottomView('chat', chatOpen, setChatOpen)}
-      centralOpen={central.open}
-      onToggleCentral={central.enabled ? () => toggleBottomView('central', central.open, (o) => (o ? central.toggle() : central.close())) : undefined}
+      chatOpen={sideShown === 'chat'}
+      onToggleChat={() => toggleSideBarView('chat')}
+      centralOpen={sideShown === 'central'}
+      onToggleCentral={centralEnabled ? () => toggleSideBarView('central') : undefined}
       zoomPct={Math.round(vp.zoom * 100)}
       onZoomIn={vp.onZoomIn}
       onZoomOut={vp.onZoomOut}
@@ -108,6 +109,7 @@ export function AppWorkspaceBar({
       onOpenPalette={() => omni.open('all')}
       layoutMode={layoutMode}
       onToggleLayout={toggleLayoutMode}
+      titleActions={pass.workspaces.length > 0 ? <SecondarySideBarToggle /> : undefined}
     />
   )
 }

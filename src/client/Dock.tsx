@@ -34,12 +34,14 @@ const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
 
-/** Ikon rail yang menyala: Sessions (sidebar), view panel yang TAMPIL (bukan sekadar terbuka), dan Board. */
-const PANEL_ICONS = ['inbox', 'chat', 'central']
+/** Ikon rail yang menyala: Sessions (sidebar), Inbox bila TAMPIL di panel bawah (bukan sekadar terbuka),
+ *  view yang tampil di secondary side bar (Chat/Central), dan Board. */
 function activeActivityIds(props: DockProps, shown: string | null): string[] {
   return [
     ...(props.sessionsOpen ? ['sessions'] : []),
-    ...(shown !== null && PANEL_ICONS.includes(shown) ? [shown] : []),
+    ...(shown === 'inbox' ? ['inbox'] : []),
+    ...(props.chatOpen ? ['chat'] : []),
+    ...(props.centralOpen ? ['central'] : []),
     ...(props.boardOpen ? ['board'] : []),
   ]
 }

@@ -21,11 +21,11 @@ export interface DockProps {
   /** Inbox terbuka? Item `Inbox` duduk sebaris dengan Sessions di activity bar. */
   inboxOpen: boolean
   onToggleInbox: () => void
-  /** Chat panel terbuka? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
+  /** Chat TAMPIL di secondary side bar (menyalakan ikonnya)? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
    *  itemnya hanya dirender ketika integrator menyediakan handler. */
   chatOpen?: boolean
   onToggleChat?: () => void
-  /** Panel kontrol Central. Item SELALU tampil; tidak ada handler = Agent Pusat mati, klik memunculkan tawaran "Nyalakan". */
+  /** Panel kontrol Central tampil di secondary side bar. Item SELALU tampil; tidak ada handler = Agent Pusat mati, klik memunculkan tawaran "Nyalakan". */
   centralOpen?: boolean
   onToggleCentral?: () => void
   /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;

@@ -224,3 +224,25 @@ describe('ChatPanel busy + errors', () => {
     expect(screen.queryByText(/No conversations yet/)).toBeNull()
   })
 })
+
+describe('compact (secondary side bar)', () => {
+  it('puts the conversation list behind History and keeps the conversation mounted', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const client = makeClient()
+    const streams = makeStreams()
+    render(<ChatPanel open embedded compact actionsHost={host} client={client} streamFactory={streams.factory} />)
+    await waitFor(() => expect(streams.opened.map((s) => s.id)).toEqual(['central:global']))
+    expect(screen.queryByRole('navigation', { name: 'Conversations' })).toBeNull()
+    const history = within(host).getByRole('button', { name: 'Show conversations' })
+    expect(tipOf(history)).toBe('Show conversations (current: Global)')
+    fireEvent.click(history)
+    expect(history.getAttribute('aria-pressed')).toBe('true')
+    const nav = screen.getByRole('navigation', { name: 'Conversations' })
+    expect(streams.opened[0]!.closed).toBe(false) // hidden behind the list, not unmounted
+    fireEvent.click(within(nav).getByRole('button', { name: 'webterm' }))
+    expect(screen.queryByRole('navigation', { name: 'Conversations' })).toBeNull()
+    await waitFor(() => expect(streams.opened.map((s) => s.id)).toContain('central:project:webterm'))
+    host.remove()
+  })
+})

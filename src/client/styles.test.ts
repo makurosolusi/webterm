@@ -139,8 +139,9 @@ describe('styles.css — token sheet', () => {
     )
     // Kolom sidebar selebar 0 saat tertutup; `--sidebar` (di App) membukanya menjadi 300px tanpa
     // menggeser rail. Canvas tetap `minmax(0, 1fr)` supaya ia yang menyerap sisa lebar.
-    expect(shell).toContain('grid-template-columns: var(--activity-bar-w) 0 minmax(0, 1fr)')
-    expect(shell).toContain("'activity sidebar main'")
+    // Kolom ke-4 `aux` = secondary side bar (Chat/Central), 0 sampai ia ter-dock (secondarySideBar.css).
+    expect(shell).toContain('grid-template-columns: var(--activity-bar-w) 0 minmax(0, 1fr) var(--aux-w)')
+    expect(shell).toContain("'activity sidebar main aux'")
     expect(tokens).toContain('.app-shell--sidebar {')
     const open = tokens.slice(tokens.indexOf('.app-shell--sidebar {'))
     expect(open.slice(0, open.indexOf('}'))).toContain('300px')

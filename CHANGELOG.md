@@ -67,6 +67,7 @@ Operator notes:
 - Agent Chat: when a turn ends or Claude asks for permission, an answer or a plan approval while you are not looking at the chat, you get the same unread mark, notification and chime as a terminal agent. A turn that ends while its subagents still run is marked unread without a notification.
 
 ### Changed
+- The Central chat and control panel now open in a resizable side bar on the right, like Copilot Chat in VS Code, instead of the bottom panel, so they no longer cover the canvas. Toggle it with the title-bar button or ⌥⌘B / Ctrl+Alt+B.
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
 - Nodes are resized only through the Resize toggle in the node header, or ⌘⌥R ("Node: Resize Focused Node" in ⌘K). Clicking or selecting a node no longer shows the blue resize frame. Resize mode ends on Esc, a click outside, typing in the node, collapsing or removing it, or locking the view.
 - Opening a file that is already open (for example from a second Files node) now selects only that editor, pans to it if it is not fully on screen and moves keyboard focus into it. Before, an off-screen editor was only marked selected and it looked like nothing happened. Newly opened editors get the same treatment.

@@ -22,7 +22,8 @@
 .vscode-bottom-panel {
   position: absolute;
   left: var(--activity-bar-w, 48px);
-  right: 0;
+  /* Ends at a docked secondary side bar, as VS Code's panel ends at the auxiliary bar. */
+  right: var(--aux-w, 0px);
   bottom: var(--status-bar-h, 22px);
   z-index: 13;
   display: flex;
