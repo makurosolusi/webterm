@@ -3,20 +3,28 @@
 // lines. While a turn is live the primary button becomes Stop (RND/11 §3): a second send would
 // be a 409, so the UI offers the action that can actually make progress. A busy conversation
 // from another tab still shows Stop because the panel learns `activeTurnId` from the 409 body.
-import { useLayoutEffect, useRef, useState } from 'react'
-import { IconTooltip } from '@/components/ui/icon-button'
-import type { KeyboardEvent } from 'react'
+// With `attach` the composer also takes files (chatComposerAttach): an image-only message may be sent.
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { IconButton, IconTooltip } from '@/components/ui/icon-button'
+import type { KeyboardEvent, RefObject } from 'react'
+import type { ComposerImage } from './chatAttach'
+import { AttachTray, useComposerAttach, type AttachFiles } from './chatComposerAttach'
 
 export interface ChatComposerProps {
   busy: boolean
   disabled?: boolean
-  onSend: (text: string) => void
+  /** `images` is always [] without `attach`. */
+  onSend: (text: string, images: ComposerImage[]) => void
   onStop: () => void
   /** Accessible name of the textarea (default: the central agent's). */
   label?: string
   placeholder?: string
   /** Chars a message may have; longer text cannot be sent and shows why. */
   maxLength?: number
+  /** Opt-in attachments: paste, drop and the "+" picker resolve files through this. */
+  attach?: AttachFiles
+  /** Where files may be dropped (default: the composer itself). */
+  dropZone?: RefObject<HTMLElement | null>
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -36,8 +44,13 @@ export default function ChatComposer(props: ChatComposerProps) {
   const history = useRef<string[]>([])
   const slot = useRef<number | null>(null)
   const draft = useRef('')
+  const root = useRef<HTMLDivElement | null>(null)
+  const picker = useRef<HTMLInputElement | null>(null)
+  const insert = useCallback((add: string) => setText((cur) => (cur && !/\s$/.test(cur) ? `${cur} ${add}` : `${cur}${add}`)), [])
+  const files = useComposerAttach(props.attach, !!props.disabled, insert, props.dropZone ?? root)
   const tooLong = props.maxLength !== undefined && text.length > props.maxLength
-  const canSend = text.trim() !== '' && !props.busy && !props.disabled && !tooLong
+  const hasContent = text.trim() !== '' || files.images.length > 0
+  const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy
 
   // Auto-grow: measure from `auto` so the box also shrinks after a send or a deletion.
   useLayoutEffect(() => {
@@ -51,9 +64,9 @@ export default function ChatComposer(props: ChatComposerProps) {
   const submit = (): void => {
     if (!canSend) return
     const sent = text.trim()
-    history.current.push(sent)
+    if (sent) history.current.push(sent)
     slot.current = null
-    props.onSend(sent)
+    props.onSend(sent, files.take())
     setText('')
   }
 
@@ -86,8 +99,23 @@ export default function ChatComposer(props: ChatComposerProps) {
   }
 
   return (
-    <div className="chat-composer">
+    <div className="chat-composer" ref={root}>
+      <AttachTray a={files} />
       <div className="chat-composer__box">
+        {props.attach && (
+          <>
+            <IconButton label="Attach files" tooltip="Attach files or images (or paste / drop them)" size="icon-xs"
+              className="chat-composer__attach" disabled={props.disabled} onClick={() => picker.current?.click()}>
+              <span className="codicon codicon-add" aria-hidden="true" />
+            </IconButton>
+            <input ref={picker} type="file" multiple hidden tabIndex={-1} aria-hidden="true" data-testid="chat-attach-input"
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? [])
+                e.target.value = '' // picking the same file again still fires change
+                void files.attach(picked)
+              }} />
+          </>
+        )}
         <textarea
           ref={area}
           className="chat-composer__input"
@@ -98,6 +126,7 @@ export default function ChatComposer(props: ChatComposerProps) {
           disabled={props.disabled}
           onChange={(event) => { slot.current = null; setText(event.target.value) }}
           onKeyDown={onKeyDown}
+          onPaste={files.onPaste}
         />
         {props.busy ? (
           <IconTooltip label="Stop the running turn">
@@ -107,7 +136,7 @@ export default function ChatComposer(props: ChatComposerProps) {
           </IconTooltip>
         ) : (
           <IconTooltip label="Send message" shortcut="Enter" disabled={!canSend}
-            disabledReason={props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : 'type a message first'}>
+            disabledReason={props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : files.busy ? 'attaching files' : 'type a message first'}>
             <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend} aria-label="Send message">
               <span className="codicon codicon-send" aria-hidden="true" />
             </button>
