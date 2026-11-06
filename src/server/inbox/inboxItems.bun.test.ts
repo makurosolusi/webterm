@@ -3,6 +3,7 @@
 // mirrored Claude permission gates, Telegram cards (Approve once / Deny only, fake fetch, never the
 // network), the attention policy, the daily digest, the UI-only HTTP seam, and the same decision
 // event from Telegram and the canvas.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -270,7 +271,7 @@ test('HTTP /api/approvals/inbox: the page lists, acts and batches; an agent cred
     await approvalHumanRoute(req, out as unknown as ServerResponse, new URL(`http://x${path}`), { runtime, now: s.ctx.now, isNodeToken: (t) => t === 'node-tok', record: s.deps.record, outbox: s.deps.outbox })
     return { status: out.statusCode, json: JSON.parse(out.payload || '{}') as Record<string, unknown> }
   }
-  const page = { 'sec-fetch-site': 'same-origin' }
+  const page = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   expect(((await call('/api/approvals/inbox', page)).json.items as unknown[]).length).toBe(1)
   expect((await call('/api/approvals/inbox/act', { ...page, 'x-webterm-token': 'node-tok' }, { id: g.id, action: { type: 'approve' } })).status).toBe(403)
   expect((await call('/api/approvals/inbox/act', page, { id: g.id, action: { type: 'nope' } })).status).toBe(400)

@@ -9,7 +9,6 @@ import { WS_PATH } from '../shared/protocol'
 import type { ClientMsg, ExitMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
-import { tokenQuery } from './api'
 import { noteStatus } from './unread'
 import { reconnectDelay, setConnection } from './ws.connection'
 
@@ -83,9 +82,8 @@ export function onReconnect(cb: () => void): () => void {
 
 function url(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  // `new WebSocket` cannot set headers, so the token (when there is one) rides in the query.
-  const q = tokenQuery()
-  return `${proto}://${location.host}${WS_PATH}${q === '' ? '' : `?${q}`}`
+  // No credential in the URL: the same-origin upgrade carries the `wt_ui` session cookie.
+  return `${proto}://${location.host}${WS_PATH}`
 }
 
 const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN

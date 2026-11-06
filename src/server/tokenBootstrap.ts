@@ -1,10 +1,10 @@
-// Token akses root tanpa .env: env menang, lalu berkas <secretsDir>/WEBTERM_TOKEN (0600), lalu
-// dibangkitkan otomatis hanya bila bind non-loopback. Modul ini TIDAK mencetak apa pun dan tidak
-// menulis process.env — cetak TTY dan writeTokenToEnv dikabel di boot (index.ts).
+// Root access token without .env: env wins, then the file <secretsDir>/WEBTERM_TOKEN (0600), else one
+// is minted and persisted, on every bind (loopback included: webterm is always credentialed, design
+// docs/decisions/ui-session-cookie.md). This module prints nothing and does not write process.env:
+// the TTY line and writeTokenToEnv are wired at boot (bootWiring.ts).
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { isLoopbackHost } from './auth'
 import { createFileSecretStore, type SecretStore } from './envSecrets.store'
 
 export type TokenSource = 'env' | 'file' | 'none'
@@ -58,9 +58,8 @@ export function persistToken(
   }
 }
 
-/** Tentukan token boot; berhenti di langkah pertama yang cocok (env, berkas, bangkitkan, none). */
+/** Boot token: the first source that holds (env, file, else mint + persist). Never 'none'. */
 export function bootstrapToken(i: {
-  host: string
   env: NodeJS.ProcessEnv
   secretsDir: string
   generate?: () => string
@@ -77,9 +76,6 @@ export function bootstrapToken(i: {
     }
     return { token: stored, source: 'file', created: false }
   }
-
-  // Loopback tanpa token tetap terbuka sampai pengguna mengaktifkannya (enable).
-  if (isLoopbackHost(i.host)) return NO_TOKEN
 
   const token = mintToken(i.generate)
   persistToken(i.secretsDir, token)

@@ -1,7 +1,6 @@
 import type * as Monaco from 'monaco-editor'
 import { createTsWorkerReaper } from './tsWorkerReaper'
 import { defineWebtermThemes } from './monacoTheme'
-import { tokenQuery } from './api'
 import { getBrowserWorkspace } from './browser.stream'
 import * as fsClient from './fsClient'
 import { LSP_WS_PATH } from './editorLsp.client'
@@ -79,8 +78,8 @@ export function loadMonaco(): Promise<MonacoApi> {
 
 function lspWsUrl(workspace: string, language: string): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  // `new WebSocket` cannot set headers, so the token (when there is one) rides in the query.
-  const q = [tokenQuery(), `workspace=${encodeURIComponent(workspace)}`, `language=${language}`].filter(Boolean).join('&')
+  // No credential in the URL: the same-origin upgrade carries the `wt_ui` session cookie.
+  const q = [`workspace=${encodeURIComponent(workspace)}`, `language=${language}`].join('&')
   return `${proto}://${location.host}${LSP_WS_PATH}?${q}`
 }
 

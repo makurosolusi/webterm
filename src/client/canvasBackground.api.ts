@@ -1,7 +1,6 @@
 // Client side of the canvas wallpaper image routes (src/server/routes/canvasBackground.routes.ts).
 import { mergeSettings, type Settings } from '../shared/settings'
 import { MAX_CANVAS_IMAGE_BYTES } from '../shared/canvasBackground.schema'
-import { tokenQuery } from './api'
 
 const IMAGE_PATH = '/api/canvas-background/image'
 const MIB = 1024 * 1024
@@ -11,9 +10,7 @@ export const IMAGE_TOO_LARGE_MESSAGE = `Image is too large (max ${MAX_CANVAS_IMA
 
 const withQuery = (path: string, params: Record<string, string>): string => {
   const q = new URLSearchParams(params).toString()
-  const t = tokenQuery()
-  const all = [q, t].filter(Boolean).join('&')
-  return all ? `${path}?${all}` : path
+  return q ? `${path}?${q}` : path
 }
 
 const scope = (workspaceId: string | null): Record<string, string> => (workspaceId ? { workspace: workspaceId } : {})

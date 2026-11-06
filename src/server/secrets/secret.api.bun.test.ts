@@ -1,5 +1,6 @@
 // Bun-only: `/api/secrets` is UI-only (agent credentials and non-browser callers get 403), never answers
 // with a value, writes 0600 files, and the GET usage log carries names + command hash only.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
@@ -19,7 +20,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }))
 
 const VALUE = 'test-only-npm-value-0123456789' // test-only fixture
 const NODE_TOKEN = 'test-only-node-token' // test-only
-const UI = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+const UI = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
 
 function setup() {
   const db = freshDb()
@@ -35,7 +36,9 @@ test('agent credentials and non-browser callers are refused on every verb', () =
   const { call, deps } = setup()
   const path = `${SECRETS_PATH}/NPM_TOKEN`
   expect(call('PUT', path, { ...UI, [TOKEN_HEADER]: NODE_TOKEN }, { value: VALUE })).toEqual({ status: 403, body: { error: 'agent_cannot_manage_secrets' } })
-  expect(call('PUT', `${path}?token=${NODE_TOKEN}`, UI, { value: VALUE }).status).toBe(403)
+  // A query token is no credential either way: without the cookie it opens nothing.
+  const { cookie: _signedIn, ...forged } = UI
+  expect(call('PUT', `${path}?token=${NODE_TOKEN}`, forged, { value: VALUE }).status).toBe(403)
   expect(call('GET', SECRETS_PATH, { ...UI, [CAPABILITY_HEADER]: 'wcap_test-only' }).status).toBe(403)
   expect(call('DELETE', path, { host: '127.0.0.1:8700' })).toEqual({ status: 403, body: { error: 'approval_browser_only' } })
   expect(call('PUT', path, { ...UI, origin: 'http://evil.example' }, { value: VALUE }).status).toBe(403)

@@ -66,27 +66,32 @@ async function drainBody(req: IncomingMessage, res: ServerResponse): Promise<boo
   return false
 }
 
-async function enable(req: IncomingMessage, res: ServerResponse, secretsDir: string): Promise<void> {
+/** Called after a new token is installed (UI sessions: revoke all but the caller's, auth.routes.ts). */
+export type OnTokenInstalled = (req: IncomingMessage) => void
+
+async function enable(req: IncomingMessage, res: ServerResponse, secretsDir: string, installed?: OnTokenInstalled): Promise<void> {
   if (!isLoopbackPeer(req)) return json(res, 403, { error: 'loopback_only' })
   if (!(await drainBody(req, res))) return
   // Setelah await terakhir semuanya sinkron: dua permintaan konkuren tak bisa sama-sama lolos cek ini.
   if (getTokenState().source !== 'none') return json(res, 409, { error: 'already_enabled' })
   const token = installToken(secretsDir, 'auth.token_enabled')
   if (token === null) return json(res, 500, { error: 'token_persist_failed' })
+  installed?.(req)
   sendToken(res, token)
 }
 
-async function rotate(req: IncomingMessage, res: ServerResponse, secretsDir: string): Promise<void> {
+async function rotate(req: IncomingMessage, res: ServerResponse, secretsDir: string, installed?: OnTokenInstalled): Promise<void> {
   if (!(await drainBody(req, res))) return
   const { source } = getTokenState()
   if (source === 'env') return json(res, 409, { error: 'env_managed' })
   if (source === 'none') return json(res, 409, { error: 'not_enabled' })
   const token = installToken(secretsDir, 'auth.token_rotated')
   if (token === null) return json(res, 500, { error: 'token_persist_failed' })
+  installed?.(req)
   sendToken(res, token)
 }
 
-async function dispatch(req: IncomingMessage, res: ServerResponse, path: string, secretsDir: string): Promise<void> {
+async function dispatch(req: IncomingMessage, res: ServerResponse, path: string, secretsDir: string, installed?: OnTokenInstalled): Promise<void> {
   const method = req.method ?? 'GET'
   if (path === TOKEN_ACCESS_PATH) {
     if (method !== 'GET') return json(res, 405, { error: 'method not allowed' })
@@ -96,16 +101,16 @@ async function dispatch(req: IncomingMessage, res: ServerResponse, path: string,
   if (method !== 'POST') return json(res, 405, { error: 'method not allowed' })
   const denial = uiOnlyDenial(req, new URL(req.url ?? path, 'http://x'), isValidNodeToken)
   if (denial) return json(res, 403, { error: denial })
-  return path === ENABLE_PATH ? enable(req, res, secretsDir) : rotate(req, res, secretsDir)
+  return path === ENABLE_PATH ? enable(req, res, secretsDir, installed) : rotate(req, res, secretsDir, installed)
 }
 
 /**
  * Layani rute token opt-in; true = path milik keluarga ini (respons ditulis, async), false = bukan.
  * Dipanggil index.ts SETELAH gerbang auth/Host.
  */
-export function tokenAccessRoute(req: IncomingMessage, res: ServerResponse, pathname: string, secretsDir: string): boolean {
+export function tokenAccessRoute(req: IncomingMessage, res: ServerResponse, pathname: string, secretsDir: string, installed?: OnTokenInstalled): boolean {
   if (pathname !== TOKEN_ACCESS_PATH && pathname !== ENABLE_PATH && pathname !== ROTATE_PATH) return false
-  dispatch(req, res, pathname, secretsDir).catch((err: unknown) => {
+  dispatch(req, res, pathname, secretsDir, installed).catch((err: unknown) => {
     log.error('auth.token_route_failed', `Token route failed: ${pathname}`, { cause: err instanceof Error ? err.message : String(err) })
     if (!res.headersSent) json(res, 500, { error: 'internal' })
   })

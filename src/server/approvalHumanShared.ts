@@ -3,10 +3,11 @@
 import type { IncomingMessage } from 'node:http'
 import type { ApprovalAcks } from './control/approvalApi'
 import { AckStore } from './control/controlTypes'
-import { TOKEN_HEADER, TOKEN_PARAM } from './auth'
+import { TOKEN_HEADER, tokensMatch } from './auth'
 import { durableAckFor } from './ledger/durableAck'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { firstHeader } from './httpHeaders'
+import { getTokenState } from './tokenBootstrap'
 export { MAX_PROJECT_ID } from './apiShared.types'
 
 /**
@@ -16,21 +17,18 @@ export { MAX_PROJECT_ID } from './apiShared.types'
 export const HUMAN_ACTOR = 'human'
 /** Derived actor when the caller proved possession of the transport root token. */
 export const ROOT_ACTOR = 'human:root'
-/** Derived actor when no root token is enforced and the webterm page approved on loopback. */
+/** Derived actor when the signed-in webterm page approved (value kept from the token-free era: audit rows compare it). */
 export const LOOPBACK_ACTOR = 'human:loopback'
 export const MAX_KIND = 128
 export const MAX_SECRET = 256
 
 /**
- * Audit identity derived from the transport credential, never from the body. `?token=` and
- * `x-webterm-token` are the only credentials this family accepts (the outer gate in `auth.ts` has
- * compared them), so either present means the root-token path; no token means the token-free loopback UI.
+ * Audit identity derived from the transport credential, never from the body: the root-token header
+ * (compared here, since a signed-in cookie lets a request through with any header beside it), else
+ * the signed-in UI (its `wt_ui` cookie; node tokens never get this far, `uiOnlyDenial`).
  */
-export function actorForRequest(req: IncomingMessage, url: URL): string {
-  const raw = req.headers[TOKEN_HEADER]
-  const header = firstHeader(raw)?.trim()
-  const query = url.searchParams.get(TOKEN_PARAM)?.trim()
-  return header || query ? ROOT_ACTOR : LOOPBACK_ACTOR
+export function actorForRequest(req: IncomingMessage, _url: URL): string {
+  return tokensMatch(getTokenState().token, firstHeader(req.headers[TOKEN_HEADER])) ? ROOT_ACTOR : LOOPBACK_ACTOR
 }
 
 export type Result = { status: number; body?: unknown }

@@ -42,6 +42,9 @@ Operator notes:
 - Terminals show a banner while the connection to the webterm server is lost: "Connection to the webterm server lost. Reconnecting in 5s… Typing is paused." with a "Retry now" button. Reconnect attempts back off from 1 to 10 seconds.
 - The Inbox shows its items a page at a time, with a "Load more" button at the end of the list.
 - If the app fails to load at startup, an error screen says what went wrong and offers Retry, instead of a blank page.
+- Signing in without setup: the first start opens your default browser already signed in, through a one-time code (single use, 60 s) in a file only you can read. The browser keeps an HttpOnly session cookie for 30 days of inactivity, and a restart opens nothing and keeps open tabs working.
+- A sign-in screen for a browser that is not signed in: "Open signed-in window" opens a signed-in window on the computer running webterm (at most one per 10 s), or paste the access token. The tab reloads by itself once it is signed in elsewhere.
+- Sign out in the workspace bar. Rotating the access token signs every other browser out.
 - Agent Chat node: Claude Code without a terminal, shown as a chat. Replies stream as Markdown, tools show as cards (commands with their output, file edits as diffs, reads, todo lists, subagents), and the footer shows the model, the cost of the last turn and the tokens used. Add one from the Dock, "Add node", the canvas menu, the tab-layout "+" menu or "Agent Chat: New Agent Chat" in ⌘K. The terminal agent node is unchanged and still there.
 - In an Agent Chat, Claude asks before it runs a tool: Allow once, Always allow or Deny right in the chat. Questions from Claude show as a small form, and a plan shows as a card you approve or send back. Pick the permission mode per node, press Stop to end a turn, and type while Claude works to queue your next message.
 - An Agent Chat keeps its Claude session: the server keeps it running while the tab is closed, closes it after 10 idle minutes, and resumes it on your next message, also after a server restart. A page left open while the server restarts keeps receiving new messages. If Claude crashes, the chat says so and your next message picks up the same session; a message that could not be sent shows "Not sent" with Retry.
@@ -82,6 +85,10 @@ Operator notes:
 - The production build serves the UI from the built files, with compressed text assets and cache headers, so pages load faster.
 - Requests with an oversized body are refused with 413 and a message saying why, instead of being read in full.
 - Setup scripts, prechecks and helper processes webterm starts no longer inherit the server's secrets; they get the same filtered environment as terminals.
+- Every start has an access token, loopback included: `WEBTERM_TOKEN`, else `<data dir>/secrets/WEBTERM_TOKEN`, created on first start (mode `600`). The terminal line names the file, never the value. Scripts send it in the `x-webterm-token` header.
+- The webterm page uses only its session cookie for `/api`, `/ws` and live streams. A `?token=` link still signs a browser in once and then disappears from the address bar; the server no longer accepts a token in any URL.
+- A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
+- Settings > Control labels a sandboxed Claude agent on macOS as "Protected": the webterm API needs a credential the sandbox cannot read.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -126,6 +133,11 @@ Operator notes:
 - An agent that failed or was stopped now says so, with Retry or Resume, instead of showing a blank node or "Done".
 - Agent status survives a server restart.
 - Deleting a workspace ends its terminals, and terminals left behind by nodes that no longer exist on any board are cleaned up after a day.
+
+### Security
+- Closed: a local process, such as an agent shell in the Claude sandbox, could reach the loopback API without any credential, and by forging `Sec-Fetch-Site: same-origin` plus `Origin` it could approve its own actions, enable the access token, or read and write files and workspaces (sec-208-1). Every request now needs the root token, the signed-in browser's HttpOnly cookie, or a node token on agent paths.
+- Tokens no longer travel in URLs, where they ended up in browser history, logs and `Referer` headers.
+- The dev-server proxy strips the session cookie, and agent sandboxes cannot read browser profiles, where the cookie is stored on disk.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).

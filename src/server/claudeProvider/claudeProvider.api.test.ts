@@ -1,3 +1,4 @@
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -23,7 +24,7 @@ afterEach(() => {
 })
 
 const ui = (method: string, extra: Record<string, string> = {}): IncomingMessage =>
-  ({ method, headers: { host: 'localhost:8700', origin: 'http://localhost:8700', 'sec-fetch-site': 'same-origin', ...extra } }) as unknown as IncomingMessage
+  ({ method, headers: { host: 'localhost:8700', origin: 'http://localhost:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, ...extra } }) as unknown as IncomingMessage
 
 function deps(extra: Partial<ProviderApiDeps> = {}): ProviderApiDeps {
   return {

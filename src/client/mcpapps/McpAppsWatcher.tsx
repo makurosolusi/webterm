@@ -6,7 +6,6 @@
 // saves as an 'add' change (App.board onNodesChange).
 import { useEffect } from 'react'
 import { useReactFlow, type Node } from '@xyflow/react'
-import { tokenQuery } from '../api'
 import { claimApps } from './mcpApp.api'
 
 export const APP_NODE_KIND = 'app'
@@ -47,8 +46,7 @@ export default function McpAppsWatcher() {
       }
     }
     let poll: ReturnType<typeof setInterval> | null = null
-    const token = tokenQuery()
-    const source = typeof EventSource === 'undefined' ? null : new EventSource(`${APP_STREAM_URL}${token ? `&${token}` : ''}`)
+    const source = typeof EventSource === 'undefined' ? null : new EventSource(APP_STREAM_URL)
     if (source) {
       source.onopen = () => void claim()
       source.addEventListener('sense', () => void claim())

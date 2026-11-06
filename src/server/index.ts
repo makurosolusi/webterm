@@ -9,7 +9,7 @@ import { sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { TOKEN_PARAM, authorizeRequest, denyReason, isLoopbackHost, isNodeTokenPath, logAuthLogin, logAuthReject } from './auth'
+import { authorizeRequest, denyReason, isLoopbackHost, isNodeTokenPath, logAuthLogin, logAuthReject } from './auth'
 import { dataDir } from './config'
 import { configureLogging, createLogger, flushLogsSync } from './logs'
 import { capabilityStore } from './control/mount'
@@ -27,6 +27,9 @@ import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
+import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
+import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
+import { uiSessions } from './uiSession'
 import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
 import { onUnhandledRejection } from './processCrash'
 import { closeStores } from './shutdown'
@@ -136,15 +139,15 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
   const ok = authorizeRequest({
     headers: req.headers,
     expectedToken,
-    queryToken: url.searchParams.get(TOKEN_PARAM),
     pathname: url.pathname,
     allowedHosts: HOSTS,
     isNodeToken: isValidNodeToken,
     // Capability (wcap_*) hanya diterima authorizeRequest pada keluarga /api/control/*.
     // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
     isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
+    isUiSession: (v) => uiSessions().verify(v),
   })
-  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken, url.searchParams.get(TOKEN_PARAM), HOSTS), req.headers.host)
+  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken, HOSTS), req.headers.host)
   return ok
 }
 
@@ -178,6 +181,21 @@ if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => lo
 // Web Push to the /m PWA: a gate must reach a phone that is asleep, so the loop runs without /m open.
 if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
+const uiOpener = createUiOpener({ runDir: join(dataDir(), RUN_SUBDIR), bindHost: HOST, port: PORT })
+const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, opener: uiOpener, hosts: HOSTS, token: () => getTokenState().token })
+const onTokenInstalled = revokeOtherSessions(uiSessions) // token enable/rotate signs every other tab out
+
+/** Every non-asset route, shared by dev and prod; true = the request is answered. */
+function routeApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL): boolean {
+  // Channel webhook: own provider secret, not WEBTERM_TOKEN, so before the /api gate (`handle` owns its exact path).
+  if (telegramHot.handle(req, res)) return true
+  if (refuseProxyOnMain(req, res)) return true // 404: the proxy has its own origin (proxy.routes.ts)
+  if (uiAuthRoute(req, res, url)) return true // before the gate: this is how a browser gets a credential
+  if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(req, res, HOSTS); return true }
+  if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'), onTokenInstalled)) return true
+  return telegramHot.handleApi(req, res) || handleApi(req, res) // root-only, after the gate: per-node tokens never reach it
+}
+
 const server = http.createServer()
 // Dev-server proxy (/proxy/<port>/, /absproxy/<port>/) lives on its OWN port = own origin, so a proxied
 // page (arbitrary npm code) cannot read the UI's token. Same bind host; PORT+1 or WEBTERM_PROXY_PORT, busy -> OS port.
@@ -190,17 +208,7 @@ if (dev) {
   const { createServer: createViteServer } = await import('vite')
   const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
   server.on('request', (req, res) => {
-    const url = reqUrl(req)
-    // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
-    // before the /api gate. `handle` owns only its exact path.
-    if (telegramHot.handle(req, res)) return
-    if (refuseProxyOnMain(req, res)) return // 404: the proxy has its own origin (proxy.routes.ts)
-    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
-    if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
-    // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
-    if (telegramHot.handleApi(req, res)) return
-    if (handleApi(req, res)) return
-    vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
+    if (!routeApp(req, res, reqUrl(req))) vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
 } else {
   // dist/ on disk first (plain `vite build`), else the manifest embedDist.ts embeds into a `--compile`
@@ -208,15 +216,7 @@ if (dev) {
   const { assets } = await loadAssetManifest(DIST_DIR, () => import('./distAssets.generated').then((m) => m.assets, noEmbeddedAssets))
   server.on('request', (req, res) => {
     const url = reqUrl(req)
-    // Channel webhook carries its own provider secret, not WEBTERM_TOKEN, so it must be routed
-    // before the /api gate. `handle` owns only its exact path.
-    if (telegramHot.handle(req, res)) return
-    if (refuseProxyOnMain(req, res)) return // 404: the proxy has its own origin (proxy.routes.ts)
-    if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) return refuseRequest(req, res, HOSTS)
-    if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'))) return
-    // Root-only binding CRUD, after the gate (per-node tokens must never reach it).
-    if (telegramHot.handleApi(req, res)) return
-    if (handleApi(req, res)) return
+    if (routeApp(req, res, url)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
     void serveAsset(res, hit, req.headers['accept-encoding']) // never rejects: a missing file is a 404 for this request only
@@ -242,14 +242,14 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy()
     return
   }
-  // Human channels (/ws PTY, /ws/browser stream), token-free bind: only a browser-sent Origin proves the caller is the web UI (wsOrigin.ts).
-  if (!humanUpgradeOriginOk(req.headers, getTokenState().token !== undefined)) {
+  // Human channels (/ws PTY, /ws/browser stream) on the cookie: only a browser-sent Origin proves the caller is the web UI (wsOrigin.ts).
+  if (!humanUpgradeOriginOk(req.headers, getTokenState().token)) {
     logAuthReject(url.pathname, 'origin')
     socket.write(`HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${WS_ORIGIN_REQUIRED.length}\r\n\r\n${WS_ORIGIN_REQUIRED}`)
     socket.destroy()
     return
   }
-  if (getTokenState().token !== undefined) logAuthLogin(url.pathname)
+  logAuthLogin(url.pathname)
   // Editor language servers: same gates as above; root = the workspace's stored cwd (lsp.route.ts).
   if (route === 'lsp') return lspUpgrade(req, socket, head, url, { workspace: (id) => db.get(id) })
   if (route === 'browser') {
@@ -278,6 +278,7 @@ server.listen(PORT, HOST, () => {
   log.info('server.start', `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, token ${token}, source ${source})`, {
     host: HOST, port: PORT, mode: dev ? 'dev' : 'prod', dataDir: basename(dataDir()), authRequired: TOKEN !== undefined,
   })
+  void autoOpenAtBoot({ sessionCount: () => uiSessions().count(), opener: uiOpener, interactive: process.stderr.isTTY === true })
 })
 
 // Observe-only crash hook (does not change crash behaviour) + synchronous flush on every exit path.

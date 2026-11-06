@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import type { DetectedPort } from '../server/ports/ports.service'
-import { tokenQuery } from './api'
 import type { OpenBrowserReq, OpenResult } from './browser.open.plan'
 import { codicon } from './dockCodicon'
 
@@ -13,7 +12,7 @@ export const PORTS_POLL_MS = 5000
 const MAX_CHIPS = 4
 
 export async function fetchPorts(workspaceId: string, fetchFn: typeof fetch = fetch): Promise<DetectedPort[]> {
-  const q = [new URLSearchParams({ workspace: workspaceId }).toString(), tokenQuery()].filter(Boolean).join('&')
+  const q = new URLSearchParams({ workspace: workspaceId }).toString()
   const res = await fetchFn(`/api/ports?${q}`)
   if (!res.ok) throw new Error(`Load detected ports: HTTP ${res.status}`)
   return ((await res.json()) as { ports: DetectedPort[] }).ports

@@ -5,7 +5,6 @@
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import type { ClientMsg, FrameLatency, ServerMsg, ViewportMsg } from '../shared/browser.contract'
 import { decodeFrameHeader } from '../shared/browser.wire'
-import { tokenQuery } from './api'
 
 const RECONNECT_MS = 1000
 const WS_OPEN = 1 // WebSocket.readyState OPEN (protokol)
@@ -124,7 +123,7 @@ export const getBrowserWorkspace = (): string => workspaceId
 
 function browserWsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const q = [tokenQuery(), workspaceId === '' ? '' : `workspaceId=${encodeURIComponent(workspaceId)}`].filter(Boolean).join('&') // `new WebSocket` tak bisa set header; token ikut di query
+  const q = workspaceId === '' ? '' : `workspaceId=${encodeURIComponent(workspaceId)}` // no credential in the URL: the same-origin upgrade carries the session cookie
   return `${proto}://${location.host}${BROWSER_WS_PATH}${q === '' ? '' : `?${q}`}`
 }
 

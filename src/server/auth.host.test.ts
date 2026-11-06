@@ -9,20 +9,24 @@ const evil = { host: EVIL, origin: `http://${EVIL}` }
 const self = { host: SELF, origin: `http://${SELF}` }
 
 describe('allowedHosts di authorize', () => {
+  const T = { [TOKEN_HEADER]: 'tok' }
+  const ok = (headers: Record<string, unknown>, allowedHosts?: Parameters<typeof authorize>[0]['allowedHosts']) =>
+    authorize({ headers: { ...headers, ...T } as never, expectedToken: 'tok', allowedHosts })
+
   it('Host asing + Origin asing cocok: ditolak saat allowlist aktif, lolos saat undefined', () => {
-    expect(authorize({ headers: evil, expectedToken: undefined, allowedHosts: list })).toBe(false)
-    expect(authorize({ headers: evil, expectedToken: undefined })).toBe(true)
+    expect(ok(evil, list)).toBe(false)
+    expect(ok(evil)).toBe(true)
   })
 
   it('fungsi pengembali undefined = jalur mati; pengembali list = aktif (per request)', () => {
-    expect(authorize({ headers: evil, expectedToken: undefined, allowedHosts: () => undefined })).toBe(true)
-    expect(authorize({ headers: evil, expectedToken: undefined, allowedHosts: () => list })).toBe(false)
+    expect(ok(evil, () => undefined)).toBe(true)
+    expect(ok(evil, () => list)).toBe(false)
   })
 
   it('Host sendiri lolos; Host array/kosong ditolak', () => {
-    expect(authorize({ headers: self, expectedToken: undefined, allowedHosts: list })).toBe(true)
-    expect(authorize({ headers: { host: [SELF, SELF] }, expectedToken: undefined, allowedHosts: list })).toBe(false)
-    expect(authorize({ headers: {}, expectedToken: undefined, allowedHosts: list })).toBe(false)
+    expect(ok(self, list)).toBe(true)
+    expect(ok({ host: [SELF, SELF] }, list)).toBe(false)
+    expect(ok({}, list)).toBe(false)
   })
 
   it('Host ok tetap tunduk pada token', () => {
@@ -48,9 +52,9 @@ describe('allowedHosts di authorizeRequest', () => {
 
 describe('denyReason + log', () => {
   it("denyReason = 'host' untuk Host asing, tanpa mengubah origin/token", () => {
-    expect(denyReason(evil, undefined, null, list)).toBe('host')
-    expect(denyReason(self, 'tok', null, list)).toBe('token')
-    expect(denyReason({ host: SELF, origin: `http://${EVIL}` }, undefined, null, list)).toBe('origin')
+    expect(denyReason(evil, undefined, list)).toBe('host')
+    expect(denyReason(self, 'tok', list)).toBe('token')
+    expect(denyReason({ host: SELF, origin: `http://${EVIL}` }, undefined, list)).toBe('origin')
   })
 
   it('logAuthReject menerima alasan host tanpa melempar', () => {

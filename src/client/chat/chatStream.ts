@@ -4,9 +4,8 @@
 // Reconnect is manual on purpose: the browser's automatic retry cannot be told which cursor to
 // resume from, and a silent duplicate replay would fight the store's dedupe. Here every attempt
 // carries `?after=<lastSeq>` (the server treats it like `Last-Event-ID`), and the `id:` line is
-// also read as the cursor. EventSource cannot set headers, so a token-protected deployment passes
-// the token in the query exactly like the PTY WebSocket URL; loopback carries none.
-import { tokenQuery } from '../api'
+// also read as the cursor. EventSource cannot set headers; it needs none: the browser sends the
+// HttpOnly `wt_ui` cookie, and the server never reads a token from the query.
 import type { ChatEvent, ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
 import { CHAT_EVENT_TYPES, CHAT_PATH } from './chatTransport'
 import { parseEventFrame } from './chatWire'
@@ -43,8 +42,6 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
   const url = (): string => {
     const query: string[] = []
     if (lastSeq > 0) query.push(`after=${lastSeq}`)
-    const token = tokenQuery()
-    if (token !== '') query.push(token)
     return query.length === 0 ? feed.path : `${feed.path}?${query.join('&')}`
   }
 

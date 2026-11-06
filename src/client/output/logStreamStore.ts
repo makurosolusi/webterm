@@ -5,8 +5,6 @@
 // Reconnect is manual (like chat/chatStream) so every attempt re-runs the backfill from the last
 // seen seq: that closes gaps and also detects a server restart (seq went backwards).
 import { LOG_LEVELS, type LogChannelInfo, type LogEntry, type LogLevel, type LogQueryResult } from '../../shared/logEntry'
-import { TOKEN_HEADER, tokenQuery } from '../api'
-import { peekToken } from '../transportToken'
 
 export type LogConnection = 'connecting' | 'open' | 'closed'
 
@@ -65,8 +63,7 @@ export function subscribeLogStream(listener: () => void): () => void {
 }
 
 function headers(extra?: Record<string, string>): Record<string, string> {
-  const token = peekToken()
-  return { Accept: 'application/json', ...extra, ...(token === '' ? {} : { [TOKEN_HEADER]: token }) }
+  return { Accept: 'application/json', ...extra }
 }
 
 async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -150,8 +147,7 @@ async function connect(gen: number): Promise<void> {
     const level = await backfill()
     if (gen !== generation) return
     emit({ level })
-    const token = tokenQuery()
-    const next = new EventSource(`${LOGS_PATH}/stream?afterSeq=${lastSeq}${token === '' ? '' : `&${token}`}`)
+    const next = new EventSource(`${LOGS_PATH}/stream?afterSeq=${lastSeq}`)
     source = next
     next.onopen = () => {
       if (gen !== generation) return

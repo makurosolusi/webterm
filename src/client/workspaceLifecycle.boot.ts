@@ -25,7 +25,7 @@ export interface WorkspaceBootDeps {
   applyWorkspace: (ws: Workspace) => void
   setWorkspaces: Dispatch<SetStateAction<Workspace[]>>
   setHydrated: Dispatch<SetStateAction<boolean>>
-  /** Raised when the boot fetch answers 403: the token is missing/wrong → App renders Login. */
+  /** Raised when the boot fetch answers 403: this browser has no UI session → App renders SignInScreen. */
   setAuthRequired: Dispatch<SetStateAction<boolean>>
 }
 
@@ -57,7 +57,7 @@ export function useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, s
         setHydrated(true)
       } catch (e) {
         if (stale) return
-        // 403 = the server gate refused the token: this boot fetch doubles as the auth probe, so
+        // 403 = the server gate refused this browser (no live session cookie): this boot fetch doubles as the auth probe, so
         // there is no separate round trip. `hydrated` is raised too, or App never leaves loading.
         if ((e as { status?: number }).status === HTTP_FORBIDDEN) { setAuthRequired(true); setHydrated(true); return }
         console.error('[webterm] loading workspaces failed, retrying:', e)

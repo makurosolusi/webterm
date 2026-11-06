@@ -1,5 +1,9 @@
 # Persetujuan dari UI, kredensial agent ditolak
 
+> **Superseded** by [ui-session-cookie.md](ui-session-cookie.md): fetch metadata alone no longer proves
+> the webterm page; human-only routes now also need the HttpOnly `wt_ui` session cookie, and loopback is
+> always credentialed. Kept for the history of the decision.
+
 Kode: `src/server/approvalAuth.ts` (`uiOnlyDenial`), dipakai `/api/approvals*` (`approvalHumanApi.ts`) dan
 `POST /api/settings/token/enable|rotate` (`tokenAccess.api.ts`).
 

@@ -5,8 +5,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 
 export const POLICY_GRANTS_PATH = '/api/policy/grants'
 const HOUR_MS = 3_600_000
@@ -38,11 +36,9 @@ const DURATIONS = [
 const EFFECTS = ['allow', 'ask', 'deny'] as const
 const BADGE = { allow: 'secondary', ask: 'outline', deny: 'destructive' } as const
 
-/** Fetch with the transport token; throws with the server's error code (or the status) on failure. */
+/** Fetch (the session cookie rides along); throws with the server's error code (or the status) on failure. */
 async function policyRequest(method: string, path = POLICY_GRANTS_PATH, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)

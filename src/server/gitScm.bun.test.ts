@@ -1,5 +1,6 @@
 // Source Control (gitScm*.ts) against REAL git repos and a REAL bare remote, all under $TMPDIR and
 // removed afterwards. Never touches a user repo, never pushes anywhere but the temp bare remote.
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
@@ -19,7 +20,7 @@ import { forgetNodeToken, isValidNodeToken, nodeToken } from './hooksTokens'
 const sh = promisify(execFile)
 const T = 60_000
 const HOST = '127.0.0.1:8700'
-const BROWSER = { host: HOST, origin: `http://${HOST}`, 'sec-fetch-site': 'same-origin' } // test-only: the webterm page
+const BROWSER = { host: HOST, origin: `http://${HOST}`, 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE } // test-only: the webterm page
 const NODE_ID = 'node-scm-test'
 const GIT_ENV = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t.test', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t.test' }
 const saved: Record<string, string | undefined> = {}

@@ -1,12 +1,12 @@
 /** @vitest-environment jsdom */
 // Kartu Access token: status off/on/env, aktifkan -> tautan sekali + Salin, rotasi tersembunyi untuk env,
-// tab ini tetap jalan (token tersimpan di transport), nilai token tidak pernah masuk console.
+// tab ini tetap jalan (masuk dengan token baru lewat POST /auth/login), nilai token tidak pernah masuk console.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { TokenAccessCard } from './TokenAccessCard'
 import { TOKEN_TEXT } from './tokenAccessLabels'
-import { TOKEN_KEY, peekToken } from './transportToken'
+import { AUTH_LOGIN_PATH } from './transportToken'
 import type { TokenStatus } from './tokenAccess.api.client'
 
 const FIXTURE_TOKEN = 'fixture-token-abc123' // test-only
@@ -14,14 +14,15 @@ const OFF: TokenStatus = { enforced: false, source: 'none', canEnable: true }
 const ON_FILE: TokenStatus = { enforced: true, source: 'file', canEnable: false }
 const ON_ENV: TokenStatus = { enforced: true, source: 'env', canEnable: false }
 
-type Call = { url: string; method: string; headers: Record<string, string> }
+type Call = { url: string; method: string; headers: Record<string, string>; body?: string }
 let calls: Call[] = []
 
-function serve(statuses: TokenStatus[], post: { status: number; body: unknown } = { status: 200, body: { token: FIXTURE_TOKEN } }): void {
+function serve(statuses: TokenStatus[], post: { status: number; body: unknown } = { status: 200, body: { token: FIXTURE_TOKEN } }, loginStatus = 204): void {
   let i = 0
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET'
-    calls.push({ url, method, headers: (init.headers ?? {}) as Record<string, string> })
+    calls.push({ url, method, headers: (init.headers ?? {}) as Record<string, string>, body: init.body as string | undefined })
+    if (url === AUTH_LOGIN_PATH) return new Response(null, { status: loginStatus })
     if (method === 'POST') return new Response(JSON.stringify(post.body), { status: post.status })
     const s = statuses[Math.min(i++, statuses.length - 1)]
     return new Response(JSON.stringify(s), { status: 200 })
@@ -31,7 +32,7 @@ function serve(statuses: TokenStatus[], post: { status: number; body: unknown } 
 const consoleSpies = (): ReturnType<typeof vi.spyOn>[] =>
   (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined))
 
-beforeEach(() => { calls = []; sessionStorage.clear() })
+beforeEach(() => { calls = [] })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('TokenAccessCard', () => {
@@ -75,7 +76,7 @@ describe('TokenAccessCard', () => {
     expect(calls.filter((c) => c.method === 'POST')).toEqual([])
   })
 
-  it('enable: confirm, link shown once with Copy, token stored for this tab, never logged', async () => {
+  it('enable: confirm, link shown once with Copy, this tab signs in with the new token, never logged', async () => {
     const spies = consoleSpies()
     serve([OFF, ON_FILE])
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -90,11 +91,13 @@ describe('TokenAccessCard', () => {
     expect(input.value).toBe(`${location.origin}/?token=${FIXTURE_TOKEN}`)
     expect(calls.find((c) => c.method === 'POST')?.url).toBe('/api/settings/token/enable')
 
-    // Tab ini tetap jalan: token di sessionStorage (cara transportToken.ts membaca) dan dipakai GET berikutnya.
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBe(FIXTURE_TOKEN)
-    expect(peekToken()).toBe(FIXTURE_TOKEN)
+    // Tab ini tetap jalan: token baru ditukar dengan cookie sesi; tak ada request lain yang membawa token.
+    const login = calls.filter((c) => c.url === AUTH_LOGIN_PATH)
+    expect(login.length).toBe(1)
+    expect(login[0]!.body).toBe(JSON.stringify({ token: FIXTURE_TOKEN }))
     await screen.findByText(TOKEN_TEXT.onFile)
-    expect(calls.at(-1)?.headers['x-webterm-token']).toBe(FIXTURE_TOKEN)
+    for (const c of calls.filter((x) => x.url !== AUTH_LOGIN_PATH)) expect(JSON.stringify(c)).not.toContain(FIXTURE_TOKEN)
+    expect(screen.queryByRole('alert')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: TOKEN_TEXT.copy }))
     expect(writeText).toHaveBeenCalledWith(input.value)
@@ -120,6 +123,15 @@ describe('TokenAccessCard', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
+  it('a refused sign-in with the new token says so and keeps the link as the way back in', async () => {
+    serve([OFF, ON_FILE], undefined, 403)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<TokenAccessCard reload={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.enable }))
+    expect((await screen.findByRole('alert')).textContent).toBe(TOKEN_TEXT.signInFailed)
+    expect(screen.getByLabelText(TOKEN_TEXT.linkLabel)).toBeTruthy()
+  })
+
   it('copy without clipboard access shows the manual-copy hint', async () => {
     serve([OFF])
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -134,14 +146,14 @@ describe('TokenAccessCard', () => {
     ['agent_cannot_approve', TOKEN_TEXT.agentCannot],
     ['approval_browser_only', TOKEN_TEXT.browserOnly],
     ['loopback_only', TOKEN_TEXT.loopbackOnly],
-  ])('403 %s maps to honest text, no link, nothing stored', async (code, text) => {
+  ])('403 %s maps to honest text, no link, no sign-in', async (code, text) => {
     serve([OFF], { status: 403, body: { error: code } })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<TokenAccessCard reload={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.enable }))
     expect((await screen.findByRole('alert')).textContent).toBe(text)
     expect(screen.queryByLabelText(TOKEN_TEXT.linkLabel)).toBeNull()
-    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(calls.some((c) => c.url === AUTH_LOGIN_PATH)).toBe(false)
   })
 
   it('status load failure is shown, not swallowed', async () => {

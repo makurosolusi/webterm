@@ -1,6 +1,4 @@
 // Klien REST untuk Agent History (`src/server/sessionHistory.route.ts`). Token hanya di header.
-import { TOKEN_HEADER } from './api'
-import { peekToken } from './transportToken'
 import type { ClosedEntry } from './closedHistory'
 
 export type HistoryAgent = 'claude' | 'codex'
@@ -24,8 +22,6 @@ export interface AgentSessionPage {
 
 async function call<T>(url: string, init?: { method: string; body: unknown }): Promise<T | undefined> {
   const headers: Record<string, string> = {}
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (init) headers['Content-Type'] = 'application/json'
   const res = await fetch(url, init ? { method: init.method, headers, body: JSON.stringify(init.body) } : { headers })
   if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${url.split('?')[0]} -> ${res.status}`)

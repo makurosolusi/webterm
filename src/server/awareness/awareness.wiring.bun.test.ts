@@ -1,6 +1,7 @@
 // Bun-only: awareness wired into the process. The agent-status hook reply carries the node card and
 // the human-confirmed procedural block on SessionStart, and `/api/awareness/procedural` is mounted in
 // the real api.ts router (UI 200, node token 403). Temp data dir + temp ledger, never the real home.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterAll, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { EventEmitter } from 'node:events'
@@ -76,7 +77,7 @@ test('/api/awareness/procedural through the real router: UI lists facts, a node 
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok))
   try {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-    const ui = { origin: base, 'sec-fetch-site': 'same-origin' }
+    const ui = { origin: base, 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
     const list = await fetch(`${base}/api/awareness/procedural`, { headers: ui })
     expect(list.status).toBe(200)
     const facts = ((await list.json()) as { facts: { text: string }[] }).facts.map((f) => f.text)

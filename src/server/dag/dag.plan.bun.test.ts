@@ -1,6 +1,7 @@
 // Bun-only (real ledger): F4-f plan drafting. An intent becomes a draft with waves + estimate and NO dag
 // row; only a human `POST /api/dag` creates it; agents get 403 on both; dispatches show in the dag view
 // so the canvas can wire one worker node per dispatch. The planner is a fake: never a real Claude.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import { freshDb, T0 } from '../central/guard/controlGuard.testutil'
@@ -39,7 +40,7 @@ function setup(planner: Planner) {
     workspace: (id) => (id === 'w9' ? { id, name: 'Nine', cwd: '/tmp/st/repo9' } : null),
   }
   const req = (method: string, headers: Record<string, string>) => ({ method, headers: { host: '127.0.0.1:8700', ...headers } }) as unknown as IncomingMessage
-  const human = (method = 'POST') => req(method, { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700' })
+  const human = (method = 'POST') => req(method, { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700' })
   const agent = req('POST', { 'x-webterm-token': 'node-tok', 'sec-fetch-site': 'same-origin' })
   const call = (r: IncomingMessage, path: string, body: Record<string, unknown> = {}) => handleDagApi(deps, r, new URL(`http://127.0.0.1:8700${path}`), body)
   const poll = async (planId: string) => {

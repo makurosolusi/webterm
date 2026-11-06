@@ -10,7 +10,6 @@ import {
   isControlPath,
   isLoopbackHost,
   isNodeTokenPath,
-  requiresToken,
   sameOrigin,
   tokensMatch,
 } from './auth'
@@ -86,18 +85,12 @@ describe('sameOrigin', () => {
   })
 })
 
-describe('isLoopbackHost / requiresToken', () => {
+describe('isLoopbackHost', () => {
   it('treats the three loopback spellings as loopback', () => {
-    for (const h of ['127.0.0.1', 'localhost', '::1']) {
-      expect(isLoopbackHost(h)).toBe(true)
-      expect(requiresToken(h)).toBe(false)
-    }
+    for (const h of ['127.0.0.1', 'localhost', '::1']) expect(isLoopbackHost(h)).toBe(true)
   })
   it('treats wildcards and LAN addresses as reachable from outside', () => {
-    for (const h of ['0.0.0.0', '::', '192.168.1.20', 'webterm.local']) {
-      expect(isLoopbackHost(h)).toBe(false)
-      expect(requiresToken(h)).toBe(true)
-    }
+    for (const h of ['0.0.0.0', '::', '192.168.1.20', 'webterm.local']) expect(isLoopbackHost(h)).toBe(false)
   })
   it('defaults to loopback', () => {
     expect(isLoopbackHost(DEFAULT_HOST)).toBe(true)
@@ -105,9 +98,10 @@ describe('isLoopbackHost / requiresToken', () => {
 })
 
 describe('tokensMatch', () => {
-  it('accepts anything when no token is configured', () => {
-    expect(tokensMatch(undefined, null)).toBe(true)
-    expect(tokensMatch(undefined, 'whatever')).toBe(true)
+  it('fails closed when no token is configured: nothing proves a missing secret', () => {
+    expect(tokensMatch(undefined, null)).toBe(false)
+    expect(tokensMatch(undefined, undefined)).toBe(false)
+    expect(tokensMatch(undefined, 'whatever')).toBe(false)
   })
   it('accepts the right token', () => {
     expect(tokensMatch('s3cret', 's3cret')).toBe(true)
@@ -131,8 +125,9 @@ describe('tokensMatch', () => {
 describe('authorize', () => {
   const headers = { host: SELF, origin: `http://${SELF}` }
 
-  it('passes on loopback with no token at all', () => {
-    expect(authorize({ headers, expectedToken: undefined })).toBe(true)
+  it('refuses a request with no token, loopback included (always credentialed)', () => {
+    expect(authorize({ headers, expectedToken: undefined })).toBe(false)
+    expect(authorize({ headers, expectedToken: 's3cret' })).toBe(false)
   })
   it('fails on a bad origin even when the token is right', () => {
     expect(
@@ -145,17 +140,12 @@ describe('authorize', () => {
   it('accepts the token from the header', () => {
     expect(authorize({ headers: { ...headers, [TOKEN_HEADER]: 's3cret' }, expectedToken: 's3cret' })).toBe(true)
   })
-  it('accepts the token from the query (the WebSocket handshake has no headers to set)', () => {
-    expect(authorize({ headers, expectedToken: 's3cret', queryToken: 's3cret' })).toBe(true)
+  it('rejects a wrong token', () => {
+    expect(authorize({ headers: { ...headers, [TOKEN_HEADER]: 'nope00' }, expectedToken: 's3cret' })).toBe(false)
   })
-  it('rejects a wrong or missing token', () => {
-    expect(authorize({ headers, expectedToken: 's3cret', queryToken: 'nope' })).toBe(false)
-    expect(authorize({ headers, expectedToken: 's3cret' })).toBe(false)
-  })
-  it('prefers the header over the query so a stale URL cannot downgrade a good request', () => {
-    expect(
-      authorize({ headers: { ...headers, [TOKEN_HEADER]: 's3cret' }, expectedToken: 's3cret', queryToken: 'nope' })
-    ).toBe(true)
+  it('has no query-token input at all: a credential only ever comes from a header or the cookie', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, 'auth.ts'), 'utf8')
+    expect(src).not.toMatch(/queryToken|searchParams/)
   })
 })
 
@@ -232,15 +222,10 @@ describe('authorizeRequest — node token allowlist', () => {
     expect(gate('/api/tools', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
     expect(gate('/api/tools/git.diff', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
   })
-  it('accepts a node token on the allowed paths from the query', () => {
-    expect(gate('/api/agent-status', { queryToken: NODE })).toBe(true)
-    expect(gate('/api/control/deny', { queryToken: NODE })).toBe(true)
-  })
   it('still accepts the root token everywhere it did before', () => {
     for (const p of ['/api/agent-status', '/api/context-link', '/api/settings', '/api/workspaces', '/api/fs/read', '/ws']) {
       expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
     }
-    expect(gate('/api/settings', { queryToken: ROOT })).toBe(true)
   })
   it('rejects a node token on settings, workspaces, fs, generate-name and /ws', () => {
     for (const p of [
@@ -252,41 +237,33 @@ describe('authorizeRequest — node token allowlist', () => {
       '/ws',
     ]) {
       expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(false)
-      expect(gate(p, { queryToken: NODE })).toBe(false)
     }
   })
   it('rejects an unknown token even on the allowed paths', () => {
     expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'not-a-node-token' } })).toBe(false)
-    expect(gate('/api/agent-status', { queryToken: 'not-a-node-token' })).toBe(false)
     expect(gate('/api/agent-status')).toBe(false)
     expect(gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: '' } })).toBe(false)
   })
   it('applies the origin check to the node-token path too', () => {
     const hostile = { host: SELF, origin: 'https://evil.example', [TOKEN_HEADER]: NODE }
     expect(gate('/api/agent-status', { headers: hostile })).toBe(false)
-    expect(gate('/api/context-link', { headers: { host: SELF, origin: 'https://evil.example' }, queryToken: NODE })).toBe(
-      false
-    )
-    expect(gate('/api/control/x', { headers: { host: SELF, 'sec-fetch-site': 'cross-site' }, queryToken: NODE })).toBe(
-      false
-    )
+    expect(gate('/api/control/x', { headers: { host: SELF, 'sec-fetch-site': 'cross-site', [TOKEN_HEADER]: NODE } })).toBe(false)
   })
-  it('keeps the loopback no-token default working for every path', () => {
-    // expectedToken undefined === token-free loopback: nothing to prove, unchanged by this gate.
-    expect(gate('/api/settings', { expectedToken: undefined })).toBe(true)
-    expect(gate('/ws', { expectedToken: undefined })).toBe(true)
+  it('no credential means refused on every path, even with no root token configured', () => {
+    for (const p of ['/api/settings', '/ws', '/api/agent-status']) {
+      expect(gate(p)).toBe(false)
+      expect(gate(p, { expectedToken: undefined })).toBe(false)
+    }
   })
-  it('prefers the header over the query, so a stale query cannot open a path', () => {
-    // A wrong header must not be rescued by a node token in the query: the header is what the
-    // request actually proves.
-    expect(
-      gate('/api/agent-status', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'wrong' }, queryToken: NODE })
-    ).toBe(false)
+  it('accepts a live wt_ui cookie only from a same-origin request', () => {
+    const isUiSession = (v: string) => v === 'live'
+    expect(gate('/api/settings', { headers: { ...ORIGIN_HEADERS, cookie: 'wt_ui=live' }, isUiSession })).toBe(true)
+    expect(gate('/api/settings', { headers: { ...ORIGIN_HEADERS, cookie: 'wt_ui=dead' }, isUiSession })).toBe(false)
+    expect(gate('/api/settings', { headers: { host: SELF, origin: `http://webterm.test:8701`, cookie: 'wt_ui=live' }, isUiSession })).toBe(false)
   })
 
-  it.each(ROOT_ONLY_PATHS)('rejects a node token on %s from header and query', (p) => {
+  it.each(ROOT_ONLY_PATHS)('rejects a node token on %s', (p) => {
     expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(false)
-    expect(gate(p, { queryToken: NODE })).toBe(false)
     // The root token must still reach every one of them: these are root-only, not unreachable.
     expect(gate(p, { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
   })
@@ -363,18 +340,6 @@ describe('authorizeRequest — capability tokens (control API only)', () => {
     expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [CAPABILITY_HEADER]: '' } })).toBe(false)
   })
 
-  it('does not read a capability from the query string', () => {
-    expect(gate('/api/control/spawn', { queryToken: CAP })).toBe(false)
-    // Even a same-origin request cannot smuggle one in via ?capability= / ?token=.
-    const url = new URL(`http://${SELF}/api/control/spawn?capability=${CAP}`)
-    expect(
-      gate(url.pathname, { queryToken: url.searchParams.get('token') ?? url.searchParams.get('capability') })
-    ).toBe(false)
-    expect(
-      gate('/api/control/spawn', { queryToken: CAP, headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: 'wrong' } })
-    ).toBe(false)
-  })
-
   it('does not accept a capability sent in x-webterm-token', () => {
     expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: CAP } })).toBe(false)
   })
@@ -382,7 +347,6 @@ describe('authorizeRequest — capability tokens (control API only)', () => {
   it('keeps root and node tokens working on the control family', () => {
     expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: ROOT } })).toBe(true)
     expect(gate('/api/control/spawn', { headers: { ...ORIGIN_HEADERS, [TOKEN_HEADER]: NODE } })).toBe(true)
-    expect(gate('/api/control/spawn', { queryToken: NODE })).toBe(true)
   })
 
   it('keeps root and node behavior byte-identical when no capability validator is injected', () => {
@@ -398,7 +362,6 @@ describe('authorizeRequest — capability tokens (control API only)', () => {
     // same-origin request, and a node token alongside it must not rescue the request.
     expect(gate(p, { headers: withCap() })).toBe(false)
     expect(gate(p, { headers: withCap({ [TOKEN_HEADER]: NODE }) })).toBe(false)
-    expect(gate(p, { queryToken: CAP })).toBe(false)
   })
 })
 

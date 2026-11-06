@@ -1,6 +1,7 @@
 // Bun-only (bun:sqlite): routines over the real ledger schema. Real shell prechecks, a real
 // `agent.spawn` path with a FAKE `claude` binary (never the real CLI), the scheduler's catch-up
 // collapse, event debounce + trust gate, budget caps, inbox items + events, and the UI-only HTTP seam.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, expect, test } from 'bun:test'
 import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
@@ -211,7 +212,7 @@ test('busy: a second fire while a run is active is skipped; unknown workspace is
   expect(s.runner.fire(lost, 'manual').run).toMatchObject({ status: 'skipped', reason: 'workspace not found' })
 })
 
-const req = (method: string, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin' }) => ({ method, headers } as unknown as IncomingMessage)
+const req = (method: string, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }) => ({ method, headers } as unknown as IncomingMessage)
 const url = (p: string) => new URL(`http://x${p}`)
 
 test('HTTP: UI creates, lists, runs now; agents get 403; fire needs an api trigger', async () => {

@@ -1,5 +1,6 @@
 // Bun-only (real policy engine on the real ledger schema): MCP Apps publish/claim/view routes, the CSP
 // a view gets, and the view's tools/call going through webterm policy as the App node itself.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { describe, expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import type { Workspace, WsNode } from '../../shared/workspace'
@@ -44,7 +45,7 @@ const deps: McpAppsDeps = {
   isNodeToken: (t) => t === AGENT_TOKEN,
 }
 
-const UI = { 'sec-fetch-site': 'same-origin', host: '127.0.0.1:8700' }
+const UI = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, host: '127.0.0.1:8700' }
 const req = (method: string, headers: Record<string, string>) => ({ method, headers }) as unknown as IncomingMessage
 const hit = (method: string, path: string, body?: unknown, headers: Record<string, string> = UI) =>
   mcpAppsRoute(req(method, headers), new URL(path, 'http://127.0.0.1:8700'), async () => (body === undefined ? '' : JSON.stringify(body)), deps)

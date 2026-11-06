@@ -1,5 +1,6 @@
 // Bun-only (bun:sqlite). F5-a memory intelligence: bi-temporal supersede, tombstones, suppression,
 // incognito, PII masking, the poisoning guard, freshness, the v18 migration and the UI-only HTTP surface.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import { Database } from 'bun:sqlite'
@@ -190,7 +191,7 @@ test('HTTP: agent credentials are refused; the same-origin page lists by kind an
   const call = (method: string, headers: Record<string, string>, path = MEMORY_CONTROLS_PATH, body?: unknown) =>
     handleMemoryControlsApi({ method, headers } as unknown as IncomingMessage, new URL(`http://127.0.0.1:8700${path}`), body,
       { db, isNodeToken: (t) => t === 'node-tok', now: () => T0 + 1 })
-  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   same(await call('POST', { ...ui, 'x-webterm-token': 'node-tok' }, `${MEMORY_CONTROLS_PATH}/${id}/forget`), { status: 403, body: { error: 'agent_cannot_remember' } })
   expect((await call('GET', { host: '127.0.0.1:8700' }))?.status).toBe(403)
   expect((await call('GET', ui, `${MEMORY_CONTROLS_PATH}?kind=nope`))?.status).toBe(400)

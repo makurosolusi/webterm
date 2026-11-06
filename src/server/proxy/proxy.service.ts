@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { request as httpRequest } from 'node:http'
 import { connect, type Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
-import { CAPABILITY_HEADER, TOKEN_HEADER, TOKEN_PARAM, tokensMatch, type AllowedHostsArg } from '../auth'
+import { CAPABILITY_HEADER, TOKEN_HEADER, TOKEN_PARAM, UI_SESSION_COOKIE, readCookie, tokensMatch, type AllowedHostsArg } from '../auth'
 import { isLoopbackOrUnspecified } from '../browser/ssrf.ip'
 import { firstHeader } from '../httpHeaders'
 import { hostAllowed } from '../hostAllow'
@@ -25,8 +25,8 @@ import { createLogger } from '../logs'
 
 const log = createLogger('proxy')
 
-/** HttpOnly cookie the proxy sets after a `?token=` hit, so sub-resources and the HMR socket (which
- *  carry no token) stay authorized. Holds an HMAC of the root token, never the token itself. */
+/** HttpOnly cookie the proxy sets after a root-token header hit, so sub-resources and the HMR socket
+ *  (which carry no header) stay authorized. Holds an HMAC of the root token, never the token itself. */
 export const PROXY_COOKIE = 'webterm_proxy'
 const PORT_MAX = 65_535
 const CONNECT_TIMEOUT_MS = 15_000
@@ -36,8 +36,10 @@ const WEBTERM_HEADERS = [TOKEN_HEADER, CAPABILITY_HEADER]
 
 export interface ProxyDeps {
   allowedHosts?: AllowedHostsArg
-  /** Root token in force right now (undefined = token-free loopback bind). */
+  /** Root token in force right now. */
   token(): string | undefined
+  /** Verifier of the `wt_ui` cookie: the signed-in UI's browser sends it to this port too. */
+  isUiSession(raw: string): boolean
   /** Listeners the port sensor has seen: the allowlist. */
   listening(): Promise<ReadonlyArray<{ port: number; host: string }>>
   /** webterm's main port: its origin may navigate here (Origin accepted); never proxied. */
@@ -61,7 +63,7 @@ export function parseProxyUrl(rawUrl: string): (ProxyTarget & { bare: boolean })
   return { kind, port, prefix, bare: m[3] === undefined, path: kind === 'proxy' ? (m[3] ?? '/') : pathname, search: dropTokenParam(q < 0 ? '' : rawUrl.slice(q + 1)) }
 }
 
-/** Raw query minus `token` (the root token must not reach the dev server); keeps the rest byte-for-byte. */
+/** Raw query minus `token` (a pasted landing link must not hand the root token to the dev server); keeps the rest byte-for-byte. */
 function dropTokenParam(query: string): string {
   const kept = query.split('&').filter((p) => p !== '' && safeDecode(p.split('=')[0]!) !== TOKEN_PARAM)
   return kept.length ? `?${kept.join('&')}` : ''
@@ -70,17 +72,13 @@ const safeDecode = (s: string): string => { try { return decodeURIComponent(s) }
 
 const cookieValue = (token: string): string => crypto.createHmac('sha256', token).update('webterm-proxy-cookie').digest('base64url')
 
-function readCookie(header: string | undefined, name: string): string | undefined {
-  for (const part of (header ?? '').split(';')) {
-    const i = part.indexOf('=')
-    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim()
-  }
-  return undefined
-}
+/** webterm's own cookies: the proxy's and the UI session (cookies ignore ports, RFC 6265, so the
+ *  browser sends `wt_ui` here too; an agent-started dev server must never receive it). */
+const WEBTERM_COOKIES: ReadonlySet<string> = new Set([PROXY_COOKIE, UI_SESSION_COOKIE])
 
-/** Cookie header minus webterm's own cookie; undefined when nothing is left. */
+/** Cookie header minus webterm's own cookies; undefined when nothing is left. */
 function stripWebtermCookie(header: string | undefined): string | undefined {
-  const kept = (header ?? '').split(';').map((p) => p.trim()).filter((p) => p !== '' && p.split('=')[0]!.trim() !== PROXY_COOKIE)
+  const kept = (header ?? '').split(';').map((p) => p.trim()).filter((p) => p !== '' && !WEBTERM_COOKIES.has(p.split('=')[0]!.trim()))
   return kept.length ? kept.join('; ') : undefined
 }
 
@@ -90,7 +88,7 @@ type Gate = { ok: true; setCookie: boolean } | { ok: false }
  * `sameOrigin()` (auth.ts) widened by exactly one origin: webterm's main origin (same hostname, main
  * port) may navigate or open sockets here; the reverse is what /api refuses. Origin absent = non-browser
  * or a plain navigation: allowed unless `Sec-Fetch-Site: cross-site` (same-site = other ports of this
- * host). `requirePresent` = the /ws rule on a token-free bind (wsOrigin.ts): only a browser Origin proves the UI.
+ * host). `requirePresent` = the /ws rule for cookie callers (wsOrigin.ts): only a browser Origin proves the UI.
  */
 export function proxyOriginOk(headers: IncomingMessage['headers'], mainPort: number, requirePresent: boolean): boolean {
   const origin = firstHeader(headers.origin)
@@ -110,13 +108,16 @@ function hostOk(headers: IncomingMessage['headers'], arg: AllowedHostsArg | unde
   return list === undefined || hostAllowed(headers.host, list)
 }
 
-/** Host allowlist + `proxyOriginOk`; credential = root token (header/query, as /api) or the proxy cookie. */
+/** Host allowlist + `proxyOriginOk`; credential = root token header (as /api, never the query), a live
+ *  `wt_ui` session, or the proxy cookie. */
 function gate(req: IncomingMessage, token: string | undefined, deps: ProxyDeps, upgrade: boolean): Gate {
-  if (!hostOk(req.headers, deps.allowedHosts) || !proxyOriginOk(req.headers, deps.mainPort, upgrade && token === undefined)) return { ok: false }
-  if (token === undefined) return { ok: true, setCookie: false }
-  const query = new URL(req.url ?? '/', 'http://x').searchParams.get(TOKEN_PARAM)
-  if (tokensMatch(token, firstHeader(req.headers[TOKEN_HEADER]) ?? query)) return { ok: true, setCookie: true }
-  return tokensMatch(cookieValue(token), readCookie(firstHeader(req.headers.cookie), PROXY_COOKIE)) ? { ok: true, setCookie: false } : { ok: false }
+  const root = tokensMatch(token, firstHeader(req.headers[TOKEN_HEADER]))
+  if (!hostOk(req.headers, deps.allowedHosts) || !proxyOriginOk(req.headers, deps.mainPort, upgrade && !root)) return { ok: false }
+  if (root) return { ok: true, setCookie: true }
+  const cookies = firstHeader(req.headers.cookie)
+  const session = readCookie(cookies, UI_SESSION_COOKIE)
+  if (session !== undefined && deps.isUiSession(session)) return { ok: true, setCookie: false }
+  return token !== undefined && tokensMatch(cookieValue(token), readCookie(cookies, PROXY_COOKIE)) ? { ok: true, setCookie: false } : { ok: false }
 }
 
 /** Bind address -> loopback IP to dial, or null when the listener is not loopback-reachable. */
@@ -210,7 +211,7 @@ function refuseSocket(socket: Duplex, status: string, reason: string): void {
   socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${reason.length}\r\n\r\n${reason}`)
 }
 
-/** WebSocket side (HMR). Same gate, Origin required on a token-free bind (as /ws); then a raw TCP splice. */
+/** WebSocket side (HMR). Same gate, Origin required unless the root token header is presented (as /ws); then a raw TCP splice. */
 export function handleProxyUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, deps: ProxyDeps): boolean {
   const t = parseProxyUrl(req.url ?? '/')
   if (t === null) return false

@@ -1,5 +1,6 @@
 // Clone runner against a fake `git` (emits progress, creates the folder, sleeps or fails on cue) and
 // New project against real git, all under a temp dir. Never touches the user's repos or HOME.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -125,7 +126,7 @@ function fakeRes() {
   }
   return { res: res as unknown as ServerResponse, r }
 }
-const uiReq = (method: string, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', host: 'localhost:8700', origin: 'http://localhost:8700' }) =>
+const uiReq = (method: string, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, host: 'localhost:8700', origin: 'http://localhost:8700' }) =>
   ({ method, headers }) as unknown as IncomingMessage
 // test-only: injected HOME / data dir under tmp, so the real ~/webterm is never resolved or made.
 const env = () => ({ home: join(tmp, 'home'), dataDir: join(tmp, 'home', '.webterm-server'), configured: '' })

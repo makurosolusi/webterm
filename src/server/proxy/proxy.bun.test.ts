@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
-import { authorizeRequest } from '../auth'
+import { UI_SESSION_COOKIE, authorizeRequest } from '../auth'
 import { parseProxyUrl, PROXY_COOKIE, type ProxyDeps } from './proxy.service'
 import { preferredProxyPort, startProxyListener, type ProxyListener } from './proxy.listener'
 
@@ -17,7 +17,9 @@ const { proxyInfo, refuseProxyOnMain } = await import('../routes/proxy.routes')
 
 const listen = (s: http.Server): Promise<number> => new Promise((r) => s.listen(0, '127.0.0.1', () => r((s.address() as AddressInfo).port)))
 
-let token: string | undefined
+const token = 'root-secret-token' // test-only
+const SESSION = 's'.repeat(43) // test-only: the one live `wt_ui` value
+const UI = `${UI_SESSION_COOKIE}=${SESSION}`
 const LAN_PORT = 45_999 // test-only: "listening" on a LAN address per the fake sensor
 
 const upstream = http.createServer((req, res) => {
@@ -33,6 +35,7 @@ const mainPort = await listen(main)
 let proxyPort = 0
 const deps: ProxyDeps = {
   token: () => token,
+  isUiSession: (raw) => raw === SESSION,
   mainPort,
   listening: async () => [{ port: up, host: '127.0.0.1' }, { port: LAN_PORT, host: '192.168.1.5' }, { port: mainPort, host: '127.0.0.1' }, { port: proxyPort, host: '127.0.0.1' }],
   selfPorts: () => [mainPort, proxyPort],
@@ -43,8 +46,9 @@ const fr = proxyPort
 afterAll(async () => { await listener.close(); main.close(); upstream.close() })
 
 const origin = () => `http://127.0.0.1:${fr}`
-const get = (path: string, headers: Record<string, string> = {}) => fetch(`${origin()}${path}`, { headers, redirect: 'manual' })
-const echo = async (path: string, headers: Record<string, string> = {}) => {
+/** Signed-in UI by default (its browser sends `wt_ui` to this port too); pass `{}` explicitly for no credential. */
+const get = (path: string, headers: Record<string, string> = { Cookie: UI }) => fetch(`${origin()}${path}`, { headers, redirect: 'manual' })
+const echo = async (path: string, headers: Record<string, string> = { Cookie: UI }) => {
   const r = await get(path, headers)
   expect(r.status).toBe(200)
   return { res: r, body: (await r.json()) as { url: string; headers: Record<string, string> } }
@@ -97,7 +101,7 @@ describe('HTTP', () => {
 
   test('hop-by-hop and webterm credentials never reach upstream; upstream hop-by-hop never reaches the client', async () => {
     const { res, body } = await echo(`/proxy/${up}/h`, {
-      Cookie: `${PROXY_COOKIE}=abc; app=1`, 'x-webterm-token': 't', 'x-webterm-capability': 'wcap_x',
+      Cookie: `${PROXY_COOKIE}=abc; app=1; ${UI}`, 'x-webterm-token': 't', 'x-webterm-capability': 'wcap_x',
       'Proxy-Authorization': 'Basic x', 'X-Drop': '1', Connection: 'X-Drop', 'X-Keep': 'k',
     })
     expect(body.headers.cookie).toBe('app=1')
@@ -105,6 +109,12 @@ describe('HTTP', () => {
     expect(body.headers['x-keep']).toBe('k')
     expect(res.headers.get('keep-alive')).not.toBe('timeout=77') // the front server may add its own
     expect(res.headers.get('x-hop')).toBeNull()
+  })
+
+  test('the UI session cookie never reaches upstream (cookies ignore ports)', async () => {
+    const { body } = await echo(`/proxy/${up}/h`, { Cookie: `${UI}; app=1; ${PROXY_COOKIE}=abc` })
+    expect(body.headers.cookie).toBe('app=1')
+    expect((await echo(`/proxy/${up}/h`, { Cookie: UI })).body.headers.cookie).not.toBeDefined()
   })
 
   test('port the sensor has not seen is refused', async () => {
@@ -125,52 +135,49 @@ describe('HTTP', () => {
   })
 
   test('foreign Origin is refused', async () => {
-    expect((await get(`/proxy/${up}/`, { Origin: 'http://evil.example' })).status).toBe(403)
-    expect((await get(`/proxy/${up}/`, { 'Sec-Fetch-Site': 'cross-site' })).status).toBe(403)
+    expect((await get(`/proxy/${up}/`, { Cookie: UI, Origin: 'http://evil.example' })).status).toBe(403)
+    expect((await get(`/proxy/${up}/`, { Cookie: UI, 'Sec-Fetch-Site': 'cross-site' })).status).toBe(403)
   })
 
-  test('token mode: no token 403, ?token= sets a cookie that is not the token, cookie alone works', async () => {
-    token = 'root-secret-token' // test-only
-    try {
-      expect((await get(`/proxy/${up}/`)).status).toBe(403)
-      expect((await get(`/proxy/${up}/?token=wrong-secret-tokn`)).status).toBe(403)
-      const { res } = await echo(`/proxy/${up}/?token=${token}`)
-      const set = res.headers.get('set-cookie') ?? ''
-      expect(set).toContain(`${PROXY_COOKIE}=`)
-      expect(set).toContain(`Path=/proxy/${up}`)
-      expect(set).toContain('HttpOnly')
-      expect(set).not.toContain(token)
-      const cookie = set.split(';')[0]!
-      const { body } = await echo(`/proxy/${up}/asset.js`, { Cookie: cookie })
-      expect(body.headers.cookie).not.toBeDefined() // webterm's cookie stripped
-      expect((await get(`/proxy/${up}/`, { Cookie: `${PROXY_COOKIE}=forged` })).status).toBe(403)
-    } finally { token = undefined }
+  test('no credential 403; ?token= is never one; a dead session is not one; the root header sets a cookie that is not the token', async () => {
+    expect((await get(`/proxy/${up}/`, {})).status).toBe(403)
+    expect((await get(`/proxy/${up}/?token=${token}`, {})).status).toBe(403)
+    expect((await get(`/proxy/${up}/`, { Cookie: `${UI_SESSION_COOKIE}=${'d'.repeat(43)}` })).status).toBe(403)
+    const { res } = await echo(`/proxy/${up}/`, { 'x-webterm-token': token })
+    const set = res.headers.get('set-cookie') ?? ''
+    expect(set).toContain(`${PROXY_COOKIE}=`)
+    expect(set).toContain(`Path=/proxy/${up}`)
+    expect(set).toContain('HttpOnly')
+    expect(set).not.toContain(token)
+    const cookie = set.split(';')[0]!
+    const { body } = await echo(`/proxy/${up}/asset.js`, { Cookie: cookie })
+    expect(body.headers.cookie).not.toBeDefined() // webterm's cookie stripped
+    expect((await get(`/proxy/${up}/`, { Cookie: `${PROXY_COOKIE}=forged` })).status).toBe(403)
   })
 })
 
 describe('WebSocket', () => {
   test('HMR socket passes through with a same-origin Origin', async () => {
-    expect(await wsTry(`/absproxy/${up}/hmr?token=x`, { Origin: origin() })).toBe(`echo:/absproxy/${up}/hmr:hi`)
-    expect(await wsTry(`/proxy/${up}/sock`, { Origin: origin() })).toBe('echo:/sock:hi')
+    expect(await wsTry(`/absproxy/${up}/hmr?token=x`, { Origin: origin(), Cookie: UI })).toBe(`echo:/absproxy/${up}/hmr:hi`)
+    expect(await wsTry(`/proxy/${up}/sock`, { Origin: origin(), Cookie: UI })).toBe('echo:/sock:hi')
   })
 
-  test('token-free bind: missing Origin is refused (same rule as /ws)', async () => {
-    expect(await wsTry(`/proxy/${up}/sock`, {})).toBe('status:403')
+  test('cookie caller: missing Origin is refused (same rule as /ws); the root header needs none', async () => {
+    expect(await wsTry(`/proxy/${up}/sock`, { Cookie: UI })).toBe('status:403')
+    expect(await wsTry(`/proxy/${up}/sock`, { 'x-webterm-token': token })).toBe('echo:/sock:hi')
   })
 
   test('bad Origin and non-allowlisted / non-loopback ports are refused', async () => {
-    expect(await wsTry(`/proxy/${up}/sock`, { Origin: 'http://evil.example' })).toBe('status:403')
-    expect(await wsTry('/proxy/1/sock', { Origin: origin() })).toBe('status:403')
-    expect(await wsTry(`/proxy/${LAN_PORT}/sock`, { Origin: origin() })).toBe('status:403')
+    expect(await wsTry(`/proxy/${up}/sock`, { Origin: 'http://evil.example', Cookie: UI })).toBe('status:403')
+    expect(await wsTry('/proxy/1/sock', { Origin: origin(), Cookie: UI })).toBe('status:403')
+    expect(await wsTry(`/proxy/${LAN_PORT}/sock`, { Origin: origin(), Cookie: UI })).toBe('status:403')
   })
 
-  test('token mode: cookie opens the socket, no credential does not', async () => {
-    token = 'root-secret-token' // test-only
-    try {
-      expect(await wsTry(`/proxy/${up}/sock`, { Origin: origin() })).toBe('status:403')
-      const set = (await get(`/proxy/${up}/?token=${token}`)).headers.get('set-cookie') ?? ''
-      expect(await wsTry(`/proxy/${up}/sock`, { Origin: origin(), Cookie: set.split(';')[0]! })).toBe('echo:/sock:hi')
-    } finally { token = undefined }
+  test('proxy cookie opens the socket, no credential and ?token= do not', async () => {
+    expect(await wsTry(`/proxy/${up}/sock`, { Origin: origin() })).toBe('status:403')
+    expect(await wsTry(`/proxy/${up}/sock?token=${token}`, { Origin: origin() })).toBe('status:403')
+    const set = (await get(`/proxy/${up}/`, { 'x-webterm-token': token })).headers.get('set-cookie') ?? ''
+    expect(await wsTry(`/proxy/${up}/sock`, { Origin: origin(), Cookie: set.split(';')[0]! })).toBe('echo:/sock:hi')
   })
 })
 
@@ -192,15 +199,16 @@ describe('separate origin', () => {
   })
 
   test('navigation from the webterm UI origin is accepted (HTTP + WS)', async () => {
-    expect((await echo(`/proxy/${up}/`, { Origin: mainOrigin(), 'Sec-Fetch-Site': 'same-site' })).body.url).toBe('/')
-    expect(await wsTry(`/proxy/${up}/sock`, { Origin: mainOrigin() })).toBe('echo:/sock:hi')
+    expect((await echo(`/proxy/${up}/`, { Origin: mainOrigin(), 'Sec-Fetch-Site': 'same-site', Cookie: UI })).body.url).toBe('/')
+    expect(await wsTry(`/proxy/${up}/sock`, { Origin: mainOrigin(), Cookie: UI })).toBe('echo:/sock:hi')
     // Another port on the same host is not the UI: refused.
-    expect((await get(`/proxy/${up}/`, { Origin: `http://127.0.0.1:${up}` })).status).toBe(403)
+    expect((await get(`/proxy/${up}/`, { Origin: `http://127.0.0.1:${up}`, Cookie: UI })).status).toBe(403)
   })
 
   test('/api refuses a request whose Origin is the proxy origin', () => {
     const ask = (o: string) => authorizeRequest({
-      headers: { host: `127.0.0.1:${mainPort}`, origin: o }, expectedToken: undefined, pathname: '/api/settings', isNodeToken: () => false,
+      headers: { host: `127.0.0.1:${mainPort}`, origin: o, cookie: UI }, expectedToken: token, pathname: '/api/settings', isNodeToken: () => false,
+      isUiSession: (v) => v === SESSION,
     })
     expect(ask(mainOrigin())).toBe(true)
     expect(ask(origin())).toBe(false)

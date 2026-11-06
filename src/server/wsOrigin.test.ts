@@ -13,23 +13,27 @@ import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
 const SELF = 'webterm.test:8700'
 const ROOT = 'root-s3cret' // test-only
 const NODE = 'node-token-aaaa' // test-only
+const SESSION = 's'.repeat(43) // test-only
+const COOKIE = { cookie: `wt_ui=${SESSION}` }
 
 describe('humanUpgradeOriginOk', () => {
-  it('accepts a browser-shaped handshake (Origin == Host) without a token', () => {
-    expect(humanUpgradeOriginOk({ host: SELF, origin: `http://${SELF}` }, false)).toBe(true)
+  it('cookie caller: accepts a browser-shaped handshake (Origin == Host)', () => {
+    expect(humanUpgradeOriginOk({ host: SELF, origin: `http://${SELF}` }, ROOT)).toBe(true)
   })
-  it('denies a handshake with no Origin when no root token is in force (curl, agent shell)', () => {
-    expect(humanUpgradeOriginOk({ host: SELF }, false)).toBe(false)
-    expect(humanUpgradeOriginOk({ host: SELF, origin: '' }, false)).toBe(false)
-    expect(humanUpgradeOriginOk({ host: SELF, 'sec-fetch-site': 'same-origin' }, false)).toBe(false)
+  it('cookie caller: denies a handshake with no Origin (curl, agent shell)', () => {
+    expect(humanUpgradeOriginOk({ host: SELF }, ROOT)).toBe(false)
+    expect(humanUpgradeOriginOk({ host: SELF, origin: '' }, ROOT)).toBe(false)
+    expect(humanUpgradeOriginOk({ host: SELF, 'sec-fetch-site': 'same-origin' }, ROOT)).toBe(false)
   })
   it('denies a foreign, null or malformed Origin', () => {
-    expect(humanUpgradeOriginOk({ host: SELF, origin: 'https://evil.example' }, false)).toBe(false)
-    expect(humanUpgradeOriginOk({ host: SELF, origin: 'null' }, false)).toBe(false)
-    expect(humanUpgradeOriginOk({ host: SELF, origin: 'not a url' }, false)).toBe(false)
+    expect(humanUpgradeOriginOk({ host: SELF, origin: 'https://evil.example' }, ROOT)).toBe(false)
+    expect(humanUpgradeOriginOk({ host: SELF, origin: 'null' }, ROOT)).toBe(false)
+    expect(humanUpgradeOriginOk({ host: SELF, origin: 'not a url' }, ROOT)).toBe(false)
   })
-  it('leaves the root-token path unchanged: the verified token is the credential', () => {
-    expect(humanUpgradeOriginOk({ host: SELF }, true)).toBe(true)
+  it('root token header: the verified token is the credential, no Origin needed; a wrong one is not', () => {
+    expect(humanUpgradeOriginOk({ host: SELF, [TOKEN_HEADER]: ROOT }, ROOT)).toBe(true)
+    expect(humanUpgradeOriginOk({ host: SELF, [TOKEN_HEADER]: NODE }, ROOT)).toBe(false)
+    expect(humanUpgradeOriginOk({ host: SELF }, undefined)).toBe(false)
   })
 })
 
@@ -38,7 +42,7 @@ describe('humanUpgradeOriginOk', () => {
 describe('human-channel upgrades over a real socket', () => {
   let server: http.Server
   let port = 0
-  let token: string | undefined
+  const token = ROOT
   const wss = new WebSocketServer({ noServer: true })
 
   beforeAll(async () => {
@@ -49,15 +53,15 @@ describe('human-channel upgrades over a real socket', () => {
       const ok = authorizeRequest({
         headers: req.headers,
         expectedToken: token,
-        queryToken: url.searchParams.get('token'),
         pathname: url.pathname,
         isNodeToken: (t) => t === NODE,
+        isUiSession: (v) => v === SESSION,
       })
       if (!ok) {
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
         return socket.destroy()
       }
-      if (!humanUpgradeOriginOk(req.headers, token !== undefined)) {
+      if (!humanUpgradeOriginOk(req.headers, token)) {
         socket.write(`HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: ${WS_ORIGIN_REQUIRED.length}\r\n\r\n${WS_ORIGIN_REQUIRED}`)
         return socket.destroy()
       }
@@ -86,41 +90,33 @@ describe('human-channel upgrades over a real socket', () => {
     })
   }
 
-  it('token-free bind: browser-shaped upgrade opens', async () => {
-    token = undefined
-    expect(await dial({ origin: 'http://SELF' })).toBe('open')
+  it('no credential at all: refused, Origin or not (loopback is credentialed)', async () => {
+    expect(await dial({ origin: 'http://SELF' })).toMatch(/^403/)
+    expect(await dial()).toMatch(/^403/)
   })
-  it('token-free bind: no-Origin upgrade from loopback is denied with 403 origin_required', async () => {
-    token = undefined
-    expect(await dial()).toBe(`403 ${WS_ORIGIN_REQUIRED}`)
+  it('signed-in page (cookie + Origin) opens; the cookie without Origin gets 403 origin_required', async () => {
+    expect(await dial({ origin: 'http://SELF', headers: COOKIE })).toBe('open')
+    expect(await dial({ headers: COOKIE })).toBe(`403 ${WS_ORIGIN_REQUIRED}`)
   })
-  it('token-free bind: /ws/browser opens for a browser-shaped upgrade and refuses no-Origin / foreign Origin', async () => {
-    token = undefined
+  it('/ws/browser: cookie + Origin opens; no-Origin and foreign Origin are refused', async () => {
     const path = BROWSER_WS_PATH
-    expect(await dial({ path, origin: 'http://SELF', query: '?workspaceId=w1' })).toBe('open')
-    expect(await dial({ path, query: '?workspaceId=w1' })).toBe(`403 ${WS_ORIGIN_REQUIRED}`)
-    expect(await dial({ path, origin: 'https://evil.example', query: '?workspaceId=w1' })).toMatch(/^403/)
-  })
-  it('/ws/browser with the root token is unchanged (token opens, no token refused)', async () => {
-    token = ROOT
-    expect(await dial({ path: BROWSER_WS_PATH, query: `?workspaceId=w1&token=${ROOT}` })).toBe('open')
-    expect(await dial({ path: BROWSER_WS_PATH, origin: 'http://SELF', query: '?workspaceId=w1' })).toMatch(/^403/)
-  })
-  it('foreign Origin is denied', async () => {
-    token = undefined
-    expect(await dial({ origin: 'https://evil.example' })).toMatch(/^403/)
+    const query = '?workspaceId=w1'
+    expect(await dial({ path, origin: 'http://SELF', query, headers: COOKIE })).toBe('open')
+    expect(await dial({ path, query, headers: COOKIE })).toBe(`403 ${WS_ORIGIN_REQUIRED}`)
+    expect(await dial({ path, origin: 'https://evil.example', query, headers: COOKIE })).toMatch(/^403/)
   })
   it('a node token (agent session credential) still cannot open /ws', async () => {
-    token = ROOT
     expect(await dial({ headers: { [TOKEN_HEADER]: NODE } })).toMatch(/^403/)
-    expect(await dial({ origin: 'http://SELF', query: `?token=${NODE}` })).toMatch(/^403/)
+    expect(await dial({ origin: 'http://SELF', headers: { [TOKEN_HEADER]: NODE } })).toMatch(/^403/)
   })
-  it('root token path unchanged: token opens with or without Origin, missing token is refused', async () => {
-    token = ROOT
-    expect(await dial({ query: `?token=${ROOT}` })).toBe('open')
-    expect(await dial({ origin: 'http://SELF', query: `?token=${ROOT}` })).toBe('open')
+  it('?token= in the URL is never a credential, not even the root token', async () => {
+    expect(await dial({ query: `?token=${ROOT}` })).toMatch(/^403/)
+    expect(await dial({ origin: 'http://SELF', query: `?token=${ROOT}` })).toMatch(/^403/)
+    expect(await dial({ path: BROWSER_WS_PATH, query: `?workspaceId=w1&token=${ROOT}` })).toMatch(/^403/)
+  })
+  it('root token header opens with or without Origin', async () => {
     expect(await dial({ headers: { [TOKEN_HEADER]: ROOT } })).toBe('open')
-    expect(await dial({ origin: 'http://SELF' })).toMatch(/^403/)
+    expect(await dial({ origin: 'http://SELF', headers: { [TOKEN_HEADER]: ROOT } })).toBe('open')
   })
 })
 
@@ -128,7 +124,7 @@ describe('index.ts wiring', () => {
   // index.ts binds a port on import, so assert the wiring from its source (pattern of auth.test.ts).
   it('applies the Origin check to every claimed upgrade (/ws and /ws/browser), after allowed(), keyed on the live root token', () => {
     const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
-    expect(src).toMatch(/if \(!humanUpgradeOriginOk\(req\.headers, getTokenState\(\)\.token !== undefined\)\)/)
+    expect(src).toMatch(/if \(!humanUpgradeOriginOk\(req\.headers, getTokenState\(\)\.token\)\)/)
     // Before the browser branch, so /ws/browser cannot bypass it; after destroy/ignore, so Vite HMR is untouched.
     expect(src.indexOf("if (route === 'ignore') return")).toBeLessThan(src.indexOf('humanUpgradeOriginOk(req.headers'))
     expect(src.indexOf('humanUpgradeOriginOk(req.headers')).toBeLessThan(src.indexOf("if (route === 'browser')"))

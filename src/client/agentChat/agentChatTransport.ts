@@ -1,5 +1,5 @@
 // HTTP + SSE client of one agent chat node (`/api/agent-chat/:nodeId/<verb>`, see
-// src/server/agentChat/agentChat.route.ts). Reuses the Central chat plumbing: the token-bearing
+// src/server/agentChat/agentChat.route.ts). Reuses the Central chat plumbing: the cookie-carrying
 // `requestJson`, its `ChatApiError`, and the SSE opener with cursor + backoff.
 import { ChatApiError, chatErrorMessage, isAbortError, requestJson } from '../chat/chatTransport'
 import { openSseStream } from '../chat/chatStream'

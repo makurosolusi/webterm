@@ -1,9 +1,7 @@
 // Enam method filesystem lewat `/api/fs/*` (server: `src/server/fsApi.ts`). Di nodeterm ini
 // `window.api.fs.*` di atas IPC Electron; di sini fetch same-origin.
 //
-// Token dikirim lewat query `?token=` memakai `tokenQuery()` yang sudah diekspor `./api`, BUKAN
-// header: header akan menuntut menyentuh `./api` (di luar kepemilikan), dan `authorize()` di
-// `src/server/auth.ts` menerima kedua jalur untuk seluruh `/api/*`.
+// No credential in the URL or headers: the same-origin request carries the `wt_ui` session cookie.
 //
 // DUA KONTRAK ERROR, dan bedanya sengaja:
 //
@@ -28,14 +26,12 @@
 // KONTRAK 3 (verb baru, PLAN/FILEMANAGER-b.md §5): `FsResult` — TIDAK PERNAH melempar. `FsFail`
 // di-parse dari body walau status non-2xx (409/413/501...); jaringan/JSON rusak jadi `EIO`.
 import { fsFail, type FsCapabilities, type FsFail, type FsResult, type FileMeta, type FsVersion, type GitStatus, type ListV2, type ReadMeta } from '../shared/fsContract'
-import { tokenQuery } from './api'
 import { onReconnect } from './ws'
 import type { DirEntry } from './fileBrowse'
 
 function url(verb: string, params?: Record<string, string>): string {
   const q = new URLSearchParams(params)
-  const token = tokenQuery()
-  return `/api/fs/${verb}${q.size || token ? '?' : ''}${[q.toString(), token].filter(Boolean).join('&')}`
+  return `/api/fs/${verb}${q.size ? `?${q.toString()}` : ''}`
 }
 
 /** Satu GET ber-JSON yang MELEMPAR; dasar kedua kontrak di atas. Semua penyebab (jaringan, status

@@ -1,15 +1,13 @@
 // Same-origin client of `/api/dag*` for the Plan node (src/server/dag/dag.api.ts, dag.plan.ts). Every
 // failure throws one Error naming the operation and the server's reason.
 import type { PlanTaskData } from '../shared/workspace'
-import { tokenQuery } from './api'
 import type { DagView, Estimate } from './PlanNode.model'
 
 const DAG_PATH = '/api/dag'
-const withToken = (path: string): string => { const q = tokenQuery(); return q ? `${path}?${q}` : path }
 
 async function call<T>(op: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit | undefined = body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-  const res = await fetch(withToken(path), init)
+  const res = await fetch(path, init)
   const out = (await res.json().catch(() => ({}))) as T & { detail?: string; error?: string }
   if (!res.ok) throw new Error(`${op}: ${out.detail ?? out.error ?? `HTTP ${res.status}`}`)
   return out

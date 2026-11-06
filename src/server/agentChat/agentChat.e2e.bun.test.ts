@@ -32,10 +32,11 @@ const { fsWatchHub } = await import('../fsWatch')
 const { serveTerminalSocket } = await import('../terminalSocket')
 const { WS_PATH } = await import('../../shared/protocol')
 const { AgentChatPool, setAgentChatPool } = await import('./agentChat.pool')
+const { TEST_UI_COOKIE } = await import('../uiSession.testutil') // after ../api: the signed-in page's cookie
 
 const WAIT_MS = 5_000
 const TEST_TIMEOUT_MS = 30_000
-const UI = { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }
+const UI = { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
 const fake = scriptedClaude()
 // The production pool (routes/agentChat.routes.ts) with the same stored-node lookup; only the opener is fake.
 const pool = new AgentChatPool({

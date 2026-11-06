@@ -1,5 +1,4 @@
 // Client side of /api/workspace-create (server: src/server/workspaceCreate/workspaceCreate.route.ts).
-import { tokenQuery } from '../api'
 import type { CloneProgress } from '../../server/workspaceCreate/cloneUrl'
 import type { Preflight } from '../../server/workspaceCreate/preflight'
 
@@ -11,7 +10,7 @@ export const PARENT_KEY = 'webterm.cloneParent'
 export const PROJECT_PARENT_KEY = 'webterm.projectParent'
 
 const url = (p: string, extra: Record<string, string> = {}): string => {
-  const q = [new URLSearchParams(extra).toString(), tokenQuery()].filter(Boolean).join('&')
+  const q = new URLSearchParams(extra).toString()
   return `${PREFIX}${p}${q ? `?${q}` : ''}`
 }
 

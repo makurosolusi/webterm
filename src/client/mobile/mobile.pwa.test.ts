@@ -1,11 +1,9 @@
 // The installable shell: manifest, icons and service worker in src/client/public/m, and the pure
-// client helpers (push support, token adoption).
+// client helpers (push support).
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { TOKEN_KEY } from '../transportToken'
 import { b64urlToBytes, pushSupport, type PushEnv } from './mobile.push'
-import { adoptToken, MOBILE_TOKEN_KEY } from './mobile.token'
 
 const PUBLIC = join(process.cwd(), 'src/client/public/m')
 const read = (f: string) => readFileSync(join(PUBLIC, f))
@@ -113,27 +111,5 @@ describe('pushSupport', () => {
   })
   it('decodes the VAPID key', () => {
     expect([...b64urlToBytes('BAEC_w')]).toEqual([4, 1, 2, 255])
-  })
-})
-
-describe('adoptToken', () => {
-  const store = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) }, removeItem: (k: string) => { m.delete(k) } } as unknown as Storage }
-
-  it('moves a link token into persistent storage and out of the address bar', () => {
-    const local = store(), session = store()
-    const replace = vi.fn()
-    adoptToken({ href: 'https://box.example/m/?token=abc&x=1#inbox', local, session, replace })
-    expect(replace).toHaveBeenCalledWith('/m/?x=1#inbox')
-    expect(local.getItem(MOBILE_TOKEN_KEY)).toBe('abc')
-    expect(session.getItem(TOKEN_KEY)).toBe('abc')
-  })
-  it('restores the remembered token on the next launch, and prefers a fresh one', () => {
-    const local = store(), session = store()
-    local.setItem(MOBILE_TOKEN_KEY, 'old')
-    adoptToken({ href: 'https://box.example/m/', local, session, replace: vi.fn() })
-    expect(session.getItem(TOKEN_KEY)).toBe('old')
-    session.setItem(TOKEN_KEY, 'new') // api.ts already moved this launch's link token here
-    adoptToken({ href: 'https://box.example/m/', local, session, replace: vi.fn() })
-    expect(local.getItem(MOBILE_TOKEN_KEY)).toBe('new')
   })
 })

@@ -1,6 +1,6 @@
 // Human transport client for the central chat surface (RND/11 §4).
 //
-// Same credential as the rest of the client API (`x-webterm-token`). No capability token, no
+// Same credential as the rest of the client API (the `wt_ui` session cookie). No capability token, no
 // `actor`, no digest/nonce: web chat can never approve anything. Response shapes are parsed by
 // `./chat/chatWire`; transport details live in `./chat/chatTransport`.
 //

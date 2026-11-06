@@ -5,7 +5,7 @@
 // 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
 // update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { fitsKeepalive, SETTINGS_KEEPALIVE_MAX_BYTES, tokenQuery } from './api'
+import { fitsKeepalive, SETTINGS_KEEPALIVE_MAX_BYTES } from './api'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { applySettingsPatch, mergeSettingsPatches, type SettingsPatch } from '../shared/settings.patch'
 import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
@@ -69,11 +69,9 @@ export function createCoalescer<T>(
   }
 }
 
-/** `/api/settings` plus the web-channel token (same as fsClient does for fs requests). Without it the
- *  request is bare and the server's token gate answers 403 — settings never load or persist. */
+/** The settings endpoint. No credential in the URL: the `wt_ui` session cookie rides along. */
 export function settingsUrl(): string {
-  const q = tokenQuery()
-  return q ? `/api/settings?${q}` : '/api/settings'
+  return '/api/settings'
 }
 
 async function putSettings(patch: SettingsPatch): Promise<void> {

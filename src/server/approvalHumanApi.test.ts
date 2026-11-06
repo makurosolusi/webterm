@@ -1,18 +1,19 @@
-// Vitest: the human approval surface over a REAL ledger (Node in-memory SQLite), driven through
-// the HTTP seam. Covers the QC P3 findings this task owns: requestId idempotency (B3), the error
-// taxonomy (B5), the byte cap/413 (B7), exact route matching (B12/L3), the approved list (B4),
-// fixed human identity (M1, now derived from the transport credential), and the task review transitions (E2E B1/B2).
+// Vitest: the human approval surface over a REAL ledger (in-memory SQLite) through the HTTP seam:
+// requestId idempotency (B3), error taxonomy (B5), 413 byte cap (B7), exact routes (B12/L3), approved
+// list (B4), credential-derived human identity (M1), task review transitions (E2E B1/B2).
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { approvalHumanRoute, type HumanApprovalDeps } from './approvalHumanApi'
 import { LOOPBACK_ACTOR, ROOT_ACTOR } from './approvalHumanRoutes'
 import { APPROVAL_MAX_BODY_BYTES } from './approvalHttp'
 import { memoryLedgerRuntime, seedProject, seedReviewTask } from './approvalTestRuntime.testutil'
+import { setTokenState } from './tokenBootstrap'
 
 const REQ = 'req-00000001'
-/** fetch() from the webterm page itself: the only caller the UI-only policy admits. */
-const BROWSER = { 'sec-fetch-site': 'same-origin' }
+/** The signed-in webterm page: the only caller the UI-only policy admits. */
+const BROWSER = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
 
 interface FakeRes {
   statusCode: number
@@ -24,45 +25,22 @@ interface FakeRes {
 
 function fakeRes(): FakeRes {
   return {
-    statusCode: 200,
-    payload: '',
-    headers: {},
-    setHeader(name: string, value: string) {
-      this.headers[name] = value
-    },
-    end(data = '') {
-      this.payload = data
-    },
+    statusCode: 200, payload: '', headers: {},
+    setHeader(name: string, value: string) { this.headers[name] = value },
+    end(data = '') { this.payload = data },
   }
 }
 
-interface CallInit {
-  method?: string
-  body?: string | Buffer
-  headers?: Record<string, string>
-}
+type CallInit = { method?: string; body?: string | Buffer; headers?: Record<string, string> }
 
-async function call(
-  deps: HumanApprovalDeps,
-  path: string,
-  init: CallInit = {}
-): Promise<{ handled: boolean; status: number; json: Record<string, unknown> }> {
+async function call(deps: HumanApprovalDeps, path: string, init: CallInit = {}): Promise<{ handled: boolean; status: number; json: Record<string, unknown> }> {
   const chunks = init.body === undefined ? [] : [Buffer.isBuffer(init.body) ? init.body : Buffer.from(init.body)]
   const req = Readable.from(chunks) as unknown as IncomingMessage
   req.method = init.method ?? (init.body === undefined ? 'GET' : 'POST')
   req.headers = { ...BROWSER, ...init.headers }
   const res = fakeRes()
-  const handled = await approvalHumanRoute(
-    req,
-    res as unknown as ServerResponse,
-    new URL(path, 'http://x'),
-    deps
-  )
-  return {
-    handled,
-    status: res.statusCode,
-    json: res.payload === '' ? {} : (JSON.parse(res.payload) as Record<string, unknown>),
-  }
+  const handled = await approvalHumanRoute(req, res as unknown as ServerResponse, new URL(path, 'http://x'), deps)
+  return { handled, status: res.statusCode, json: res.payload === '' ? {} : (JSON.parse(res.payload) as Record<string, unknown>) }
 }
 
 function setup(opts: { ledger?: boolean } = {}) {
@@ -184,16 +162,18 @@ describe('request validation and identity', () => {
 })
 
 describe('principal-derived actor', () => {
+  beforeEach(() => setTokenState({ token: TOKEN, source: 'file', created: false }))
+  afterEach(() => setTokenState({ token: undefined, source: 'none', created: false }))
   it('binds approvedBy to the credential and ignores body.actor', async () => {
     const cases: Array<[string, Record<string, string>, string]> = [
       ['', TOKEN_HEADERS, ROOT_ACTOR],
-      [`?token=${TOKEN}`, {}, ROOT_ACTOR],
+      [`?token=${TOKEN}`, {}, LOOPBACK_ACTOR], // the query is never a credential
+      ['', { 'x-webterm-token': 'not-the-root' }, LOOPBACK_ACTOR],
       ['', {}, LOOPBACK_ACTOR],
     ]
     for (const [suffix, headers, actor] of cases) {
       const f = setup()
-      const created = await f.request({})
-      const id = String(created.json['id'])
+      const id = String((await f.request({})).json['id'])
       const view = await challenge(f, id)
       const res = await f.post(
         `/api/approvals/decide${suffix}`,

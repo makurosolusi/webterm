@@ -239,7 +239,7 @@ test('SSE replays from afterSeq, streams live by kind, releases on disconnect; h
 
 test('events endpoints refuse a per-node token (root / same-origin UI only)', () => {
   const gate = (pathname: string, token: string) => authorizeRequest({
-    headers: {}, expectedToken: 'root-token-synthetic', queryToken: token, pathname, isNodeToken: (t) => t === 'node-token', // test-only tokens
+    headers: { 'x-webterm-token': token }, expectedToken: 'root-token-synthetic', pathname, isNodeToken: (t) => t === 'node-token', // test-only tokens
   })
   for (const p of ['/api/events/stream', '/api/events/head']) {
     expect(isNodeTokenPath(p)).toBe(false)

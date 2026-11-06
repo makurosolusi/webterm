@@ -10,6 +10,8 @@ import { FS_BODY_MAX } from '../shared/fsLimits'
 const dataDir = mkdtempSync(join(tmpdir(), 'wt-fsbody-'))
 process.env.WEBTERM_DATA_DIR = dataDir // sebelum ./api -> ./db dibuka
 const { handleApi } = await import('./api')
+const { uiSessions } = await import('./uiSession')
+const UI_COOKIE = `wt_ui=${uiSessions().create()}` // a real signed-in session
 
 const server = http.createServer((req, res) => { if (!handleApi(req, res)) { res.statusCode = 404; res.end() } })
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
@@ -19,7 +21,7 @@ const port = (server.address() as { port: number }).port
 function post(path: string, chunks: Buffer[]): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     // Sent as the webterm page would (routes/route.uiOnly.ts).
-    const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin' } }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin', Cookie: UI_COOKIE } }, (res) => {
       let body = ''
       res.on('data', (c) => { body += c })
       res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))

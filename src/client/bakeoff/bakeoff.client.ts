@@ -1,7 +1,5 @@
 // Client side of /api/bakeoff (src/server/bakeoff/bakeoff.api.ts): request helper, product text and
 // the small formatters the comparison cards use.
-import { TOKEN_HEADER } from '../api'
-import { peekToken } from '../transportToken'
 import type { BakeoffView, CandidateView } from '../../server/bakeoff/bakeoff.store'
 
 export type { BakeoffView, CandidateView }
@@ -27,8 +25,6 @@ export const BAKEOFF_TEXT = {
 /** JSON request; a non-2xx answer throws with the server's message, except `allow` statuses which return the body. */
 export async function bakeoffRequest(method: 'GET' | 'POST', path = BAKEOFF_API, body?: unknown, allow: number[] = []): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const t = peekToken()
-  if (t !== '') headers[TOKEN_HEADER] = t
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const out: unknown = await res.json().catch(() => null)

@@ -1,11 +1,14 @@
-// sec-208-1 lock, on a token-free bind (no root token configured, the zero-config default): no
-// file or workspace route answers a request that carries no credential and no browser fetch
-// metadata (a plain curl, an agent shell). The webterm page (same-origin fetch) and the root token
-// still get through, and the surfaces agent sessions use (webterm CLI capability bindings, browser
-// skill, context-link, hooks) are an explicit allowlist that the gate never touches.
+// sec-208-1 lock on the inner human-UI gate (handleApi, behind the outer gate of index.ts): no file
+// or workspace route answers a request that carries no credential and no browser fetch metadata (a
+// plain curl, an agent shell), and forged browser metadata without the `wt_ui` cookie buys nothing
+// over that curl (Lock 2). The signed-in page and the root token still get through, and the
+// surfaces agent sessions use (webterm CLI capability bindings, browser skill, context-link, hooks)
+// are an explicit allowlist that the gate never touches. Lock 1 (outer gate): boot.zeroenv.bun.test.ts.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
+import { apiPathsByFile } from '../apiPaths.testutil'
 import { afterAll, describe, expect, test } from 'bun:test'
 import http from 'node:http'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -18,6 +21,7 @@ const { TOOL_INDEX } = await import('../cli/cli.registry')
 const { isNodeTokenPath, TOKEN_HEADER } = await import('../auth')
 const { getTokenState, setTokenState } = await import('../tokenBootstrap')
 const { TELEGRAM_WEBHOOK_PATH } = await import('../channels/channelsRuntime')
+const { TOKEN_ACCESS_PATH, tokenAccessRoute } = await import('../tokenAccess.api')
 
 /** Route entries wrapped in `uiOnly` (route.uiOnly.ts) or gated the same way in their handler. */
 const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name', 'agent-chat']
@@ -25,7 +29,7 @@ const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace
  *  and the node-token surfaces (`isNodeTokenPath`) the CLI, browser skill and hooks call. */
 const ALLOWLIST = ['/api/agent-status', '/api/context-link', '/api/control/browser/navigate', '/api/tools', '/api/tools/x']
 const ROOT_TOKEN = 'root-token-test-only-0123456789abcdef' // test-only
-const UI = { 'sec-fetch-site': 'same-origin' }
+const UI = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
 
 const folder = mkdtempSync(join(tmpdir(), 'wt-uionly-files-'))
 writeFileSync(join(folder, 'a.txt'), 'hello')
@@ -43,7 +47,15 @@ const PROBES: [string, string][] = [
   ['POST', '/api/agent-chat/n1/interrupt'], ['POST', '/api/agent-chat/n1/permission'], ['POST', '/api/agent-chat/n1/mode'],
 ]
 
-const server = http.createServer((req, res) => { if (!handleApi(req, res)) { res.statusCode = 404; res.end() } })
+const SRC = join(import.meta.dirname, '..', '..')
+const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+const pathOf = (url: string): string => new URL(url, 'http://x').pathname
+// Same order as index.ts routeApp after the outer gate.
+const server = http.createServer((req, res) => {
+  if (tokenAccessRoute(req, res, pathOf(req.url ?? '/'), join(dataDir, 'secrets')) || handleApi(req, res)) return
+  res.statusCode = 404
+  res.end()
+})
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
 const port = (server.address() as { port: number }).port
 afterAll(() => { server.close(); setTokenState({ token: undefined, source: 'none', created: false }) })
@@ -62,17 +74,24 @@ function call(method: string, path: string, headers: Record<string, string> = {}
 
 /** Gated route entries whose `match` claims `path` (a fake ctx; no handler runs). */
 function gatedFor(path: string): string[] {
-  const c = routeCtx({ url: path, method: 'GET', headers: {} } as http.IncomingMessage, {} as http.ServerResponse, async () => {})
-  return API_ROUTES.filter((r) => GATED.includes(r.name) && r.match?.(c)).map((r) => r.name)
+  return matching(path, 'GET').filter((n) => GATED.includes(n))
 }
+function matching(path: string, method: string): string[] {
+  const c = routeCtx({ url: path, method, headers: {} } as http.IncomingMessage, {} as http.ServerResponse, async () => {})
+  return API_ROUTES.filter((r) => r.match?.(c)).map((r) => r.name)
+}
+/** Browser fetch metadata a non-browser caller can forge: same-origin Sec-Fetch-Site plus a matching Origin. */
+const forged = (): Record<string, string> => ({ 'sec-fetch-site': 'same-origin', origin: `http://127.0.0.1:${port}` })
+/** Source files that hold a human-UI gate (`uiOnly` wrapper or a direct `uiOnlyDenial` call), with their /api paths. */
+const GATED_FILES = [...apiPathsByFile()].filter(([f]) =>
+  f.startsWith('server/') && !/approvalAuth\.ts$|route\.uiOnly\.ts$/.test(f) && /uiOnlyDenial\(|uiOnly\(/.test(readFileSync(join(SRC, f), 'utf8')))
 
 describe('file and workspace routes are human-UI only', () => {
   test('every gated name is in the route table and has a match', () => {
     for (const name of GATED) expect(typeof API_ROUTES.find((r) => r.name === name)?.match).toBe('function')
   })
 
-  test('token-free bind: no credential and no fetch metadata -> 403 on every probe', async () => {
-    expect(getTokenState().token).toBe(undefined)
+  test('no credential and no fetch metadata -> 403 on every probe', async () => {
     const answered: string[] = []
     for (const [m, p] of PROBES) {
       const r = await call(m, p)
@@ -110,6 +129,44 @@ describe('file and workspace routes are human-UI only', () => {
     } finally {
       setTokenState({ token: undefined, source: 'none', created: false })
     }
+  })
+})
+
+// Lock 2: every gated source file, every path it names, every method. A forged same-origin request
+// without the cookie must answer exactly what a plain curl gets (routes that check their runtime
+// before the gate answer 503 both ways), so the cookie, not the metadata, is what opens the gate.
+describe('forged browser metadata without the wt_ui cookie opens nothing', () => {
+  test('the walk finds the gated source files', () => {
+    expect(GATED_FILES.length).toBeGreaterThan(20)
+  })
+
+  test('every human-UI route answers a forged same-origin request like a plain curl', async () => {
+    const opened: string[] = []
+    let refused = 0
+    for (const [file, paths] of GATED_FILES) {
+      for (const p of paths) {
+        for (const m of METHODS) {
+          const plain = (await call(m, p, {}, '{}')).status
+          const fake = (await call(m, p, forged(), '{}')).status
+          if (fake === 403) refused++
+          if (fake !== plain) opened.push(`${file}: ${m} ${p} curl=${plain} forged=${fake}`)
+        }
+      }
+    }
+    expect(opened).toEqual([])
+    expect(refused).toBeGreaterThan(50)
+  }, 60_000)
+
+  test('POST /api/settings/token/enable refuses a forged same-origin request', async () => {
+    const r = await call('POST', `${TOKEN_ACCESS_PATH}/enable`, forged(), '{}')
+    expect(r.status).toBe(403)
+    expect(getTokenState().token).toBe(undefined) // nothing was installed
+  })
+
+  test('every routed entry is reached by some harvested /api path, so the walks miss no family', () => {
+    const paths = [...new Set([...apiPathsByFile().values()].flat())]
+    const unreached = API_ROUTES.filter((r) => r.match && !paths.some((p) => METHODS.some((m) => matching(p, m).includes(r.name))))
+    expect(unreached.map((r) => r.name)).toEqual([])
   })
 })
 

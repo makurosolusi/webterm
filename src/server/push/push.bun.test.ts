@@ -1,5 +1,6 @@
 // Bun-only: the /m reads over a real ledger (bun:sqlite) and the push/mobile families through the
 // REAL router (api.ts), so a reorder that shadows them, or a missing UI-only gate, turns red.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterAll, expect, test } from 'bun:test'
 import http from 'node:http'
 import { mkdtempSync } from 'node:fs'
@@ -27,7 +28,7 @@ async function call(path: string, init: RequestInit = {}): Promise<{ status: num
   const res = await fetch(`http://${host}${path}`, init)
   return { status: res.status, body: (await res.json()) as Record<string, unknown> }
 }
-const BROWSER = { 'sec-fetch-site': 'same-origin', origin: `http://127.0.0.1:${port}` }
+const BROWSER = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: `http://127.0.0.1:${port}` }
 
 test('listMobileAgents: agent nodes only, live first, newest hook preview as last message', () => {
   const db = openLedgerDb(':memory:')

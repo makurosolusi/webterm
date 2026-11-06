@@ -1,6 +1,7 @@
 // Bun-only: the policy wired into the process — persisted node tokens (header-file model), restart,
 // cable grant through the real browser control handler, human deny for browser.act, spawn lineage,
 // and the api.ts mount answering 503 without a ledger.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterAll, afterEach, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
@@ -123,7 +124,7 @@ test('api.ts mount: 503 ledger_off without a ledger, the grant list for the UI w
     const r = { statusCode: 0, body: '', setHeader() {}, end(b?: string) { r.body = b ?? '' } }
     return r
   }
-  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   const req = { method: 'GET', headers: ui } as unknown as IncomingMessage
   const url = new URL('http://127.0.0.1:8700/api/policy/grants')
   const off = res()
