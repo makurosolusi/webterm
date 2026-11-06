@@ -44,6 +44,20 @@ describe('createAgentChatTransport', () => {
     expect(call(0).init.method).toBe('POST')
   })
 
+  it('sends images in the send body, stages a file raw, and builds transcript image URLs', async () => {
+    const t = createAgentChatTransport('n1')
+    await t.send('', undefined, [{ mediaType: 'image/png', data: 'AAAA' }])
+    expect(JSON.parse(call(0).init.body as string)).toEqual({ text: '', images: [{ mediaType: 'image/png', data: 'AAAA' }] })
+    fetchMock.mockResolvedValueOnce(reply({ path: '/data/up/x-a b.txt' }))
+    const file = new File(['hello'], 'a b.txt')
+    expect(await t.upload(file, 'a b.txt')).toBe('/data/up/x-a b.txt')
+    expect(call(1).url).toBe(`${AGENT_CHAT_PATH}/n1/upload?name=a%20b.txt`)
+    expect(call(1).init.body).toBe(file)
+    fetchMock.mockResolvedValueOnce(reply({ error: 'too_large' }, 413))
+    expect(await t.upload(file, 'a b.txt').catch((e: unknown) => e)).toMatchObject({ operation: 'upload', status: 413, message: 'The file is over the upload limit.' })
+    expect(t.imageUrl('u-1:0')).toBe(`${AGENT_CHAT_PATH}/n1/history?image=u-1%3A0`)
+  })
+
   it('reads history pages and a full tool result', async () => {
     fetchMock.mockResolvedValueOnce(reply({ items: [{ cursor: 3, t: 'notice', level: 'info', text: 'x' }, { bogus: 1 }], next: 2 }))
     fetchMock.mockResolvedValueOnce(reply({ id: 'tu1', result: 'full text' }))

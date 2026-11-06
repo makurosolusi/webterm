@@ -9,6 +9,7 @@ Operator notes:
 - The workspace table gets a `layout` column (the tab-layout view, JSON) on first start; existing databases are upgraded in place and every workspace starts in canvas mode.
 - New dependency `@anthropic-ai/claude-agent-sdk` 0.3.318 (Anthropic commercial terms) for the Agent Chat node, with its peers `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk` and `zod`, all pinned. It drives the `claude` you have installed; no bundled Claude binary is used.
 - `WEBTERM_ALLOWED_HOSTS` is no longer read (see Removed). A leftover entry in `.env` is ignored and can be deleted.
+- New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 
 ### Added
 - Closing a node (× button, tab, sessions panel or Delete key) now asks for confirmation and says what will end: a running terminal or agent session, unsaved editor changes, or a browser page.
@@ -51,6 +52,7 @@ Operator notes:
 - In an Agent Chat, Claude asks before it runs a tool: Allow once, Always allow or Deny right in the chat. Questions from Claude show as a small form, and a plan shows as a card you approve or send back. Pick the permission mode per node, press Stop to end a turn, and type while Claude works to queue your next message.
 - An Agent Chat keeps its Claude session: the server keeps it running while the tab is closed, closes it after 10 idle minutes, and resumes it on your next message, also after a server restart. A page left open while the server restarts keeps receiving new messages. If Claude crashes, the chat says so and your next message picks up the same session; a message that could not be sent shows "Not sent" with Retry.
 - An Agent Chat refuses to open a Claude session that is already open in another chat node or in a terminal agent node of the same workspace, and says where it is open, so two windows never write the same transcript.
+- Agent Chat accepts images and files: paste a screenshot, drag and drop onto the chat, or use the "+" button. Images go to Claude as real images, shown as thumbnails before sending and in the thread; other files are uploaded and their path is added to the message.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.

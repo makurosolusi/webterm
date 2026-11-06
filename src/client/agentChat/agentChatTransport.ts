@@ -4,7 +4,7 @@
 import { ChatApiError, chatErrorMessage, isAbortError, requestJson } from '../chat/chatTransport'
 import { openSseStream } from '../chat/chatStream'
 import type { ChatEventSource, ChatStream, ChatStreamStatus } from '../chat/chatTypes'
-import type { AgentChatEvent, AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
+import type { AgentChatEvent, AgentChatImage, AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import type { HistoryItem } from './agentChatStore'
 
@@ -16,7 +16,7 @@ export const AGENT_CHAT_HISTORY_PAGE = 50
 
 const EVENT_TYPES = new Set<string>(['status', 'init', 'delta', 'message', 'tool', 'permission', 'permissionResolved', 'result', 'notice', 'mode'])
 
-export type AgentChatOperation = 'send' | 'interrupt' | 'permission' | 'mode' | 'history' | 'tool result'
+export type AgentChatOperation = 'send' | 'interrupt' | 'permission' | 'mode' | 'history' | 'tool result' | 'upload'
 
 /** A failed agent chat request: `message` is user-facing; operation, node and status are for code. */
 export class AgentChatApiError extends ChatApiError {
@@ -39,8 +39,8 @@ export function agentChatErrorMessage(op: AgentChatOperation, error: unknown): s
   if (s === 404) return op === 'tool result' ? 'The full output is not in the transcript.' : 'This chat is not on the server yet. Wait for the board to save, then retry.'
   if (s === 409 && op === 'send') return 'This Claude session is open somewhere else. See the notice in the chat.'
   if (s === 409 && op === 'permission') return 'This request was already answered or has expired.'
-  if (s === 413) return 'The request is too large.'
-  if (s === 400 && op === 'send') return 'The message could not be sent (empty or too long).'
+  if (s === 413) return op === 'upload' ? 'The file is over the upload limit.' : 'The request is too large.'
+  if (s === 400 && op === 'send') return 'The message could not be sent (empty, too long, or an image was refused).'
   if (s >= 500) return 'The server could not answer. Try again.'
   return `The ${op} request failed. Try again.`
 }
@@ -56,7 +56,11 @@ export interface AgentChatStreamOptions {
 /** Everything the view needs from the server; tests pass a fake. */
 export interface AgentChatTransport {
   stream(opts: AgentChatStreamOptions): ChatStream
-  send(text: string, priority?: 'now' | 'next'): Promise<void>
+  send(text: string, priority?: 'now' | 'next', images?: AgentChatImage[]): Promise<void>
+  /** Stage a non-image file on the server; resolves to its absolute path there. */
+  upload(file: File, name: string): Promise<string>
+  /** URL of a transcript image (`ref` of a history `image` part). */
+  imageUrl(ref: string): string
   interrupt(): Promise<void>
   answer(a: AgentChatPermissionAnswer): Promise<void>
   setMode(mode: AgentPermissionMode): Promise<void>
@@ -107,7 +111,13 @@ export function createAgentChatTransport(nodeId: string, createSource?: (url: st
       parse: (_type, data) => parseAgentChatFrame(data),
       reapply: (e) => e.t === 'init' || e.t === 'permission',
     }, { ...opts, ...(createSource ? { createSource } : {}) }),
-    send: (text, priority) => post('send', 'send', { text, ...(priority ? { priority } : {}) }),
+    send: (text, priority, images) => post('send', 'send', { text, ...(priority ? { priority } : {}), ...(images?.length ? { images } : {}) }),
+    upload: async (file, name) => {
+      const body = await call<{ path?: unknown }>('upload', `upload?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file })
+      if (typeof body?.path !== 'string') throw new AgentChatApiError('upload', nodeId, 502, 'bad_response', `The server did not return a path for ${name}.`)
+      return body.path
+    },
+    imageUrl: (ref) => `${base}/history?image=${encodeURIComponent(ref)}`,
     interrupt: () => post('interrupt', 'interrupt', {}),
     answer: (a) => post('permission', 'permission', a),
     setMode: (mode) => post('mode', 'mode', { mode }),

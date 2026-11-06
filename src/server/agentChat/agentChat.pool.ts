@@ -3,7 +3,7 @@
 // over the cap the least recently active idle Query is suspended (resumable), never a busy one.
 // Kept free of ./db (bun:sqlite): workspacesApi imports the close hooks under the node-env suite, so
 // the production lookup is injected by routes/agentChat.routes.ts.
-import type { AgentChatEvent } from '../../shared/agentChat.wire'
+import type { AgentChatEvent, AgentChatImage } from '../../shared/agentChat.wire'
 import { AGENT_CHAT_KIND } from '../../shared/agentChat.shape'
 import type { AgentPermissionMode, Workspace, WsNode } from '../../shared/workspace'
 import { resolveCwd } from '../ptyShell'
@@ -92,7 +92,7 @@ export class AgentChatPool {
   lastInit(nodeId: string): AgentChatEvent | undefined { return this.entries.get(nodeId)?.init }
 
   /** Send a user turn: session lock first, then the live cap. A refusal is also a notice in the log. */
-  send(nodeId: string, text: string, priority?: 'now' | 'next'): AgentChatSendResult | undefined {
+  send(nodeId: string, text: string, priority?: 'now' | 'next', images: readonly AgentChatImage[] = []): AgentChatSendResult | undefined {
     const s = this.session(nodeId)
     const entry = this.entries.get(nodeId)
     if (!s || !entry) return undefined
@@ -105,7 +105,7 @@ export class AgentChatPool {
       }
     }
     if (!s.live()) this.makeRoom(s)
-    s.send(text, priority)
+    s.send(text, priority, images)
     return { ok: true }
   }
 

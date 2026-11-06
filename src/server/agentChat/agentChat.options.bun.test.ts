@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CanUseTool, SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
@@ -36,6 +36,14 @@ describe('buildAgentChatOptions', () => {
       expect(options.permissionMode).toBe(agentChatPermissionMode(mode))
       expect(options.allowDangerouslySkipPermissions).toBe(mode === 'bypassPermissions' ? true : undefined)
     }
+  })
+
+  test('Claude may read this node\'s staged uploads (and only them) without a prompt', () => {
+    const root = mkdtempSync(join(tmpdir(), 'agent-chat-up-')) // test-only
+    const { options } = build({ uploadsRoot: root })
+    expect(options.additionalDirectories).toEqual([join(root, 'n-1')])
+    expect(statSync(join(root, 'n-1')).isDirectory()).toBe(true)
+    expect(build({ nodeId: 'n-2', uploadsRoot: root }).options.additionalDirectories).toEqual([join(root, 'n-2')])
   })
 
   test('loads the same setting layers, streams partials, sets cwd and resume only when given', () => {

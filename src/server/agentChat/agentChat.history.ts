@@ -2,7 +2,7 @@
 // the SDK `getSessionMessages()`, mapped by the live mapper into `message` / `tool` bodies, so history
 // and live events render the same. Paged newest-first by item index; full tool results on demand.
 import { getSessionMessages, type SDKMessage, type SessionMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentChatEventBody } from '../../shared/agentChat.wire'
+import { AGENT_CHAT_IMAGE_TYPES, type AgentChatEventBody, type AgentChatImage, type AgentChatPart } from '../../shared/agentChat.wire'
 import { createAgentChatMapper, resultText } from './agentChat.events'
 
 export const AGENT_CHAT_HISTORY_DEFAULT_LIMIT = 50
@@ -18,7 +18,7 @@ export const loadTranscript: LoadTranscript = (sessionId) => getSessionMessages(
 export type AgentChatHistoryItem = AgentChatEventBody & { cursor: number }
 export interface AgentChatHistoryPage { items: AgentChatHistoryItem[]; next: number | null }
 
-interface Block { type?: string; text?: unknown; tool_use_id?: unknown; content?: unknown }
+interface Block { type?: string; text?: unknown; tool_use_id?: unknown; content?: unknown; source?: { type?: unknown; media_type?: unknown; data?: unknown } }
 
 const contentOf = (m: SessionMessage): unknown => (m.message as { content?: unknown } | null)?.content
 const blocksOf = (m: SessionMessage): Block[] => {
@@ -33,6 +33,28 @@ function userText(m: SessionMessage): string {
   return blocksOf(m).map((b) => (b.type === 'text' && typeof b.text === 'string' ? b.text : '')).filter(Boolean).join('\n')
 }
 
+/** The base64 image of a user block, if it is one the client may render. */
+function imageOf(b: Block | undefined): AgentChatImage | undefined {
+  const src = b?.type === 'image' ? b.source : undefined
+  if (src?.type !== 'base64' || typeof src.data !== 'string' || typeof src.media_type !== 'string' || !AGENT_CHAT_IMAGE_TYPES.includes(src.media_type)) return undefined
+  return { mediaType: src.media_type, data: src.data }
+}
+
+/** Image parts of a user message, by reference (`<uuid>:<block index>`): a page never carries image bytes. */
+function userImages(m: SessionMessage): AgentChatPart[] {
+  return blocksOf(m).flatMap((b, i) => { const img = imageOf(b); return img ? [{ k: 'image' as const, mediaType: img.mediaType, ref: `${m.uuid}:${i}` }] : [] })
+}
+
+/** The image a `ref` of `userImages` names; undefined = no such image in the transcript. */
+export function transcriptImage(msgs: SessionMessage[], ref: string): AgentChatImage | undefined {
+  const sep = ref.lastIndexOf(':')
+  const uuid = ref.slice(0, sep)
+  const index = Number(ref.slice(sep + 1))
+  if (sep < 1 || !Number.isSafeInteger(index)) return undefined
+  const m = msgs.find((x) => x.type === 'user' && x.uuid === uuid)
+  return m ? imageOf(blocksOf(m)[index]) : undefined
+}
+
 /** Every transcript message as one item per message id / tool id, in first-seen order. */
 export function historyItems(msgs: SessionMessage[]): AgentChatEventBody[] {
   const mapper = createAgentChatMapper()
@@ -45,7 +67,10 @@ export function historyItems(msgs: SessionMessage[]): AgentChatEventBody[] {
   for (const m of msgs) {
     if (m.type === 'user') {
       const text = userText(m)
-      if (text && !text.startsWith(INTERRUPT_MARKER)) put(`u:${m.uuid}`, { t: 'message', messageId: m.uuid, role: 'user', parts: [{ k: 'text', text }] })
+      const images = userImages(m)
+      if ((text || images.length) && !text.startsWith(INTERRUPT_MARKER)) {
+        put(`u:${m.uuid}`, { t: 'message', messageId: m.uuid, role: 'user', parts: [...images, ...(text ? [{ k: 'text' as const, text }] : [])] })
+      }
     }
     // A SessionMessage carries the SDK message fields the mapper reads (type, message, parent_tool_use_id).
     for (const e of mapper.map(m as unknown as SDKMessage)) {

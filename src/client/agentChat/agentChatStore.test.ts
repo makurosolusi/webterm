@@ -89,6 +89,24 @@ describe('agentChatReducer', () => {
     expect(agentChatReducer(s, { type: 'history', items, next: null }).order).toEqual(s.order)
   })
 
+  it('dedupes a user turn by its shared id; image-only messages never merge by content alone', () => {
+    const img = (mediaType: string, data?: string) => ({ k: 'image' as const, mediaType, ...(data ? { data } : {}) })
+    const live = run([
+      // Bytes dropped from the server's replay log: the transcript copy (same id) restores it by reference.
+      { seq: 1, t: 'message', messageId: 'u-same', role: 'user', parts: [img('image/png')] },
+      { seq: 2, t: 'message', messageId: 'u-live', role: 'user', parts: [img('image/png', 'AAAA'), img('image/png', 'BBBB')] },
+    ])
+    const items: HistoryItem[] = [
+      { cursor: 0, t: 'message', messageId: 'u-same', role: 'user', parts: [{ k: 'image', mediaType: 'image/png', ref: 'u-same:0' }] },
+      { cursor: 1, t: 'message', messageId: 'u-other', role: 'user', parts: [{ k: 'image', mediaType: 'image/jpeg', ref: 'u-other:0' }] },
+    ]
+    const s = agentChatReducer(live, { type: 'history', items, next: null })
+    expect(s.messages['u-same']?.parts).toEqual([{ k: 'image', mediaType: 'image/png', ref: 'u-same:0' }])
+    // Another image-only message (one JPEG vs the live two PNGs) is its own message, not absorbed.
+    expect(s.order).toEqual(['m:u-other', 'm:u-same', 'm:u-live'])
+    expect(s.messages['u-live']?.absorbed).toBeUndefined()
+  })
+
   it('keeps two node states independent', () => {
     const a = run([init(1, 'A')], initialAgentChatState('a'))
     const b = initialAgentChatState('b')

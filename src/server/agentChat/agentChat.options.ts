@@ -5,6 +5,7 @@
 // reason as the terminal: launch wrappers (envman) scan argv and misread `:` (writeClaudeSettings).
 // The process starts through the node's launch profile argv (spawn hook), never the bundled binary.
 import { spawn as nodeSpawn } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import {
   query, type CanUseTool, type Options, type PermissionMode, type Query, type SDKUserMessage, type SpawnOptions, type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk'
@@ -13,6 +14,7 @@ import { missingProfileNotice, resolveClaudeLaunch } from '../claudeLauncher/cla
 import { writeClaudeSettings, writeHouseRules } from '../hooksSettings'
 import { writeClaudeMcpConfig } from '../mcp/mcp.launch'
 import { writeExplorePlugin } from '../subagents/exploreAgent'
+import { agentChatUploadsDir } from './agentChat.attach'
 import { agentChatEnv } from './agentChat.env'
 
 /** Same layers the terminal agent loads: CLAUDE.md, skills, hooks, permissions. */
@@ -41,6 +43,8 @@ export interface AgentChatOptionsInput {
   parentEnv?: NodeJS.ProcessEnv
   /** Child stderr chunks (keep a bounded tail, never log: prompts and output can be in it). */
   stderr?: (chunk: string) => void
+  /** Root of staged uploads (default `<data dir>/agent-chat-uploads`); tests pass a temp dir. */
+  uploadsRoot?: string
   /** Process spawner behind the SDK hook; tests inject a recorder. */
   spawn?: SpawnImpl
 }
@@ -51,8 +55,12 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
   const argv = launch.argv
   const spawnImpl = i.spawn ?? (nodeSpawn as unknown as SpawnImpl) // ChildProcess satisfies SpawnedProcess (sdk.d.ts)
   const mode = agentChatPermissionMode(i.mode)
+  // Only this node's staged files, never other nodes': created first, the CLI expects an existing dir.
+  const uploads = agentChatUploadsDir(i.nodeId, i.uploadsRoot)
+  mkdirSync(uploads, { recursive: true, mode: 0o700 })
   const options: Options = {
     cwd: i.cwd,
+    additionalDirectories: [uploads],
     env: agentChatEnv({ nodeId: i.nodeId, port: i.port, parentEnv: i.parentEnv }),
     permissionMode: mode,
     ...(mode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),

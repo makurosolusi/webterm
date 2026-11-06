@@ -5,6 +5,7 @@ import type { AgentChatEvent } from '../../shared/agentChat.wire'
 import type { AgentChatOpenInput } from './agentChat.options'
 import { FakeQuery, fx } from './agentChat.fakeQuery'
 import { AGENT_CHAT_EVENT_LOG_MAX, AgentChatSession, type PermissionGate } from './agentChat.session'
+import { capLogImages } from './agentChat.attach'
 
 interface Opened { resume?: string; canUseTool: CanUseTool; abort: AbortController; input: AgentChatOpenInput; fq: FakeQuery }
 
@@ -47,12 +48,44 @@ describe('AgentChatSession', () => {
     const fq = opens[0]?.fq as FakeQuery
     fq.emit(fx.init('s-1'), fx.init('s-1'))
     await tick()
-    expect(fq.prompts).toEqual([{ type: 'user', message: { role: 'user', content: 'hello' }, parent_tool_use_id: null }])
+    // The SDK uuid is the live event's messageId: the transcript copy then carries the same id (history dedupe).
+    expect(fq.prompts).toEqual([{ type: 'user', uuid: of('message')[0]?.messageId as never, message: { role: 'user', content: 'hello' }, parent_tool_use_id: null }])
     expect(sessionIds).toEqual(['s-1'])
     fq.emit(fx.result())
     await tick()
     expect(s.busy()).toBe(false)
     expect(s.status()).toBe('idle')
+  })
+
+  test('a send with images pushes image blocks then the text block, and emits a user message with image parts', async () => {
+    const { s, opens, of } = setup()
+    const image = { mediaType: 'image/png', data: 'iVBORw0KGgo=' } // test-only bytes
+    s.send('look', undefined, [image])
+    s.send('', undefined, [image])
+    await tick()
+    const block = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: image.data } }
+    expect(opens[0]?.fq.prompts.map((p) => p.message)).toEqual([
+      { role: 'user', content: [block, { type: 'text', text: 'look' }] },
+      { role: 'user', content: [block] },
+    ])
+    expect(of('message').map((m) => m.parts)).toEqual([
+      [{ k: 'image', mediaType: 'image/png', data: image.data }, { k: 'text', text: 'look' }],
+      [{ k: 'image', mediaType: 'image/png', data: image.data }],
+    ])
+  })
+
+  test('the replay log keeps only the newest image data within its budget', () => {
+    const msg = (seq: number, data: string): AgentChatEvent => ({ seq, t: 'message', messageId: `m${seq}`, role: 'user', parts: [{ k: 'image', mediaType: 'image/png', data }, { k: 'text', text: `t${seq}` }] })
+    const first = msg(1, 'AAAA')
+    const log: AgentChatEvent[] = [first, { seq: 2, t: 'mode', mode: 'plan' }, msg(3, 'BBBB'), msg(4, 'CCCC')]
+    capLogImages(log, 8)
+    expect(log.map((e) => (e.t === 'message' ? e.parts : e.t))).toEqual([
+      [{ k: 'image', mediaType: 'image/png' }, { k: 'text', text: 't1' }],
+      'mode',
+      [{ k: 'image', mediaType: 'image/png', data: 'BBBB' }, { k: 'text', text: 't3' }],
+      [{ k: 'image', mediaType: 'image/png', data: 'CCCC' }, { k: 'text', text: 't4' }],
+    ])
+    expect(first.t === 'message' && first.parts[0]).toEqual({ k: 'image', mediaType: 'image/png', data: 'AAAA' }) // copied, not mutated
   })
 
   test('sends while a turn runs are queued as next, in order, on the same Query', async () => {

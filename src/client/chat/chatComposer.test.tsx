@@ -39,7 +39,7 @@ describe('ChatComposer', () => {
     fireEvent.keyDown(box(), { key: 'Enter', isComposing: true })
     expect(onSend).not.toHaveBeenCalled()
     fireEvent.keyDown(box(), { key: 'Enter' })
-    expect(onSend).toHaveBeenCalledWith('hello')
+    expect(onSend).toHaveBeenCalledWith('hello', [])
     expect(box().value).toBe('')
   })
 
