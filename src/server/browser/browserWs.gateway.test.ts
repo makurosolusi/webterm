@@ -10,6 +10,7 @@ import type { Client, Rig } from './browserWs.testkit'
 import { createViewerHub } from './browserWs.viewers'
 import type { GatewayHost } from './browserWs.viewers'
 import { handleBrowserConnection } from './browserWs.gateway'
+import { logBus } from '../logs'
 
 let rig: Rig
 afterEach(async () => { await rig?.stop() })
@@ -196,6 +197,19 @@ describe('input, lease and errors', () => {
     await wait(() => c.json.length === 1, 'error')
     expect(c.json[0]).toMatchObject({ t: 'error', id: 'n1', code: 'no_binary' })
     expect(rig.hub.count('n1')).toBe(0)
+  })
+
+  it('logs the message and cause of an unexpected attach failure but sends the client only the code', async () => {
+    rig = await makeRig()
+    logBus.clear()
+    rig.host.fail.open = new Error('cdp connect timed out after 10000 ms', { cause: new Error('ECONNREFUSED 127.0.0.1:9222') })
+    const c = await rig.connect()
+    c.send(attach())
+    await wait(() => c.json.length === 1, 'error')
+    expect(c.json[0]).toEqual({ t: 'error', id: 'n1', code: 'crashed' })
+    const entry = logBus.snapshot().find((e) => e.event === 'browser.ws' && e.message === 'unexpected gateway failure')
+    expect(entry?.ids).toMatchObject({ nodeId: 'n1' })
+    expect(entry?.data).toMatchObject({ error: 'cdp connect timed out after 10000 ms', name: 'Error', cause: 'ECONNREFUSED 127.0.0.1:9222' })
   })
 
   it('relays dialog events and copy results to the node viewers', async () => {
