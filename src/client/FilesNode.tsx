@@ -65,7 +65,6 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const [menu, setMenu] = useState<Menu | null>(null)
   const [notice, setNotice] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
-  const [maximized, setMaximized] = useState(false)
   const expandedH = useRef(height ?? 300)
 
   const { entries, loading, verdict } = useFilesListing(cwd, version, needsMeta(view), () => {
@@ -209,8 +208,6 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           onRefresh={refresh}
           searchOpen={filterOpen} onToggleSearch={() => setFilterOpen((o) => !o)}
-          maximized={maximized}
-          onToggleMaximize={() => { rf.fitView({ nodes: [{ id }], padding: 0.08, duration: 200 }); setMaximized((m) => !m) }}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
 

@@ -36,10 +36,10 @@ class FakeRO {
   disconnect() {}
 }
 
-const mount = (host: { inTab: boolean; visible: boolean } | null, collapsed = false) =>
+const mount = (host: { inTab: boolean; visible: boolean; maximized?: boolean } | null, collapsed = false) =>
   render(
     <ReactFlowProvider>
-      <NodeHostContext.Provider value={host ?? { inTab: false, visible: true }}>
+      <NodeHostContext.Provider value={{ maximized: false, ...(host ?? { inTab: false, visible: true }) }}>
         <BrowserNode {...({ id: 'b1', data: { title: 't', collapsed }, selected: false } as unknown as ComponentProps<typeof BrowserNode>)} />
       </NodeHostContext.Provider>
     </ReactFlowProvider>,
@@ -77,7 +77,7 @@ describe('BrowserNode in tab mode', () => {
     expect(fake.calls).toEqual(['attach'])
     r.rerender(
       <ReactFlowProvider>
-        <NodeHostContext.Provider value={{ inTab: true, visible: false }}>
+        <NodeHostContext.Provider value={{ inTab: true, visible: false, maximized: false }}>
           <BrowserNode {...({ id: 'b1', data: { title: 't' }, selected: false } as unknown as ComponentProps<typeof BrowserNode>)} />
         </NodeHostContext.Provider>
       </ReactFlowProvider>,

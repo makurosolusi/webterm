@@ -1,0 +1,15 @@
+/* Maximized node (nodeMaximize.overlay): fills the React Flow pane like VS Code's maximized editor
+   group. React Flow's wrapper is its own stacking context (z-index 0), so anything above the canvas
+   (menus, dialogs, toasts, floating panels) still stays above this; inside it, the overlay only has
+   to clear React Flow panels (minimap, z-index 5). */
+:root { --node-maximize-z: 10; }
+
+.node-maximize {
+  position: absolute;
+  inset: 0;
+  z-index: var(--node-maximize-z);
+  background: var(--vscode-editor-background);
+  overflow: hidden;
+}
+/* The header stays as the title bar; the node frame goes flush with the canvas edges. */
+.node-maximize .term-node { border: 0; border-radius: 0; }
