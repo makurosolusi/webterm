@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import type { editor as MonacoEditor } from 'monaco-editor'
+import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import type { FsResult, FsVersion, ReadEncoding, ReadMeta } from '../shared/fsContract'
 import { loadMonaco } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
@@ -23,6 +23,9 @@ export interface UseEditorFileArgs {
   writeChecked: WriteChecked
   setLoadError: (msg: string) => void
 }
+
+/** Per-editor Save action id; Monaco prefixes it with the editor id, so every node owns its own. */
+const SAVE_ACTION_ID = 'webterm.editor.save'
 
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
@@ -157,6 +160,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
     let model: MonacoEditor.ITextModel | null = null
     let editor: MonacoEditor.IStandaloneCodeEditor | null = null
     let themeObserver: MutationObserver | null = null
+    let saveAction: IDisposable | null = null
 
     a.readMeta(filePath)
       .then(async (meta) => {
@@ -189,7 +193,10 @@ export function useEditorFile(a: UseEditorFileArgs) {
         loadedRef.current = true
         setEncoding(meta.encoding)
         editor.onDidChangeModelContent(() => setDirty(editor!.getValue() !== savedRef.current))
-        editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => saveRef.current())
+        // `addAction`, not `addCommand`: standalone `addCommand` registers a global keybinding (last
+        // editor wins, never disposed), while an action's keybinding is scoped to this editor's id, so
+        // Cmd+S saves the focused node's file, like VS Code's save on the active editor.
+        saveAction = editor.addAction({ id: SAVE_ACTION_ID, label: 'File: Save', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS], run: () => saveRef.current() })
         if (opensInPreview(ext, a.openMarkdownPreview)) {
           setPreviewHtml(renderMarkdown(meta.content))
           setPreview(true)
@@ -205,6 +212,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
       disposed = true
       loadedRef.current = false
       themeObserver?.disconnect()
+      // The action's registrations live in global registries, not on the editor: dispose them here.
+      saveAction?.dispose()
       editor?.dispose()
       // Model dibuang eksplisit: React tidak melepas resource Monaco hanya karena container-nya
       // keluar dari tree, dan model yang tertinggal menahan worker bahasanya (lihat tsWorkerReaper).

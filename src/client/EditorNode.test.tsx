@@ -13,7 +13,7 @@ const fake = vi.hoisted(() => {
     getValue: () => state.value,
     setValue: (v: string) => { state.value = v; state.onChange() },
     onDidChangeModelContent: (cb: () => void) => { state.onChange = cb },
-    addCommand: (_k: number, cb: () => void) => { state.save = cb },
+    addAction: (d: { run: () => void }) => { state.save = d.run; return { dispose: () => {} } },
     dispose: () => {},
   }
   const monaco = {
