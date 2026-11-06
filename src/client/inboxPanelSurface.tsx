@@ -7,8 +7,9 @@
 // metrics without the surface chrome.
 import type { ReactNode, Ref } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
-import { togglePanelMaximized, usePanelHeight } from './bottomPanelHeight'
-import { BottomPanelSash } from './bottomPanelSash'
+import { bottomPanelHeight } from './bottomPanelHeight'
+import { PanelSash } from './bottomPanelSash'
+import { sideBarWidth } from './secondarySideBar.store'
 import { BottomPanelTabs, type BottomPanelTab } from './bottomPanelTabs'
 import './inboxPanelSurface.css'
 
@@ -27,25 +28,42 @@ export interface InboxPanelSurfaceProps {
   className?: string
   ariaLabel: string
   tabsLabel?: string
+  /** `right` = the secondary side bar (sash on the left edge, side-bar labels); default the bottom panel. */
+  dock?: 'bottom' | 'right'
 }
 
+const DOCKS = {
+  bottom: {
+    size: bottomPanelHeight, rootClass: 'vscode-bottom-panel', sash: 'horizontal', sashLabel: 'Resize panel', sashClass: 'vscode-bottom-panel__sash',
+    maximize: ['Maximize Panel Size', 'Click to maximize the panel', 'codicon-chevron-up'],
+    restore: ['Restore Panel Size', 'Panel maximized. Click to restore its size', 'codicon-chevron-down'],
+    close: 'Close Panel',
+  },
+  right: {
+    size: sideBarWidth, rootClass: 'vscode-secondary-side-bar', sash: 'vertical', sashLabel: 'Resize side bar', sashClass: 'vscode-secondary-side-bar__sash',
+    maximize: ['Maximize Secondary Side Bar', 'Click to widen the side bar over the canvas', 'codicon-screen-full'],
+    restore: ['Restore Secondary Side Bar', 'Side bar maximized. Click to restore its width', 'codicon-screen-normal'],
+    close: 'Hide Secondary Side Bar',
+  },
+} as const
+
 /**
- * Bottom-docked VS Code panel: absolute over the canvas, flush with the status bar. Owns
- * surface chrome only; tab content and data stay in the panel components.
+ * Docked VS Code part: the bottom panel (flush with the status bar) or the secondary side bar
+ * (right edge). Owns surface chrome only; tab content and data stay in the panel components.
  */
 export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Element {
   const { tabs, activeId, onActivate, onClose, onClosePanel, actions, actionsSlotRef, children, className, ariaLabel } = props
-  const { maximized } = usePanelHeight()
-  const maximizeLabel = maximized ? 'Restore Panel Size' : 'Maximize Panel Size'
-  const maximizeTip = maximized ? 'Panel maximized. Click to restore its size' : 'Click to maximize the panel'
+  const dock = DOCKS[props.dock ?? 'bottom']
+  const { maximized } = dock.size.use()
+  const [maximizeLabel, maximizeTip, maximizeIcon] = maximized ? dock.restore : dock.maximize
   return (
     <section
-      className={['vscode-bottom-panel', className].filter(Boolean).join(' ')}
+      className={[dock.rootClass, className].filter(Boolean).join(' ')}
       data-maximized={maximized ? 'true' : 'false'}
       role="complementary"
       aria-label={ariaLabel}
     >
-      <BottomPanelSash />
+      <PanelSash size={dock.size} orientation={dock.sash} label={dock.sashLabel} className={dock.sashClass} />
       <div className="vscode-bottom-panel__titlebar">
         <BottomPanelTabs
           tabs={tabs}
@@ -59,13 +77,13 @@ export function InboxPanelSurface(props: InboxPanelSurfaceProps): React.JSX.Elem
           {actions}
           <IconTooltip label={maximizeTip}>
             <button type="button" className="vscode-panel-action" aria-label={maximizeLabel}
-              aria-pressed={maximized} onClick={togglePanelMaximized}>
-              <span className={`codicon codicon-chevron-${maximized ? 'down' : 'up'}`} aria-hidden="true" />
+              aria-pressed={maximized} onClick={dock.size.toggleMaximized}>
+              <span className={`codicon ${maximizeIcon}`} aria-hidden="true" />
             </button>
           </IconTooltip>
           {onClosePanel !== undefined && (
-            <IconTooltip label="Close Panel">
-              <button type="button" className="vscode-panel-action" aria-label="Close Panel" onClick={onClosePanel}>
+            <IconTooltip label={dock.close}>
+              <button type="button" className="vscode-panel-action" aria-label={dock.close} onClick={onClosePanel}>
                 <span className="codicon codicon-close" aria-hidden="true" />
               </button>
             </IconTooltip>

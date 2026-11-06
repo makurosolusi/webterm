@@ -250,10 +250,13 @@ describe('Clean view — kontrak grid .app-shell', () => {
     const rows = [...decl(base, 'grid-template-areas')!.matchAll(/'([^']+)'/g)].map((m) => m[1].trim().split(/\s+/))
     const areaCols = rows.find((r) => r.includes('main'))!
     const clean = decl(block('body.clean-view .app-shell'), 'grid-template-columns')!
-    expect(clean).toBe('0 0 minmax(0, 1fr)')
+    expect(clean).toBe('0 0 minmax(0, 1fr) 0')
     // minmax(0, 1fr) dihitung satu track
-    expect(clean.replace(/minmax\([^)]*\)/g, 'M').split(' ')).toHaveLength(areaCols.length)
-    expect(areaCols[areaCols.length - 1]).toBe('main')
+    const tracks = clean.replace(/minmax\([^)]*\)/g, 'M').split(' ')
+    expect(tracks).toHaveLength(areaCols.length)
+    // Kolom main = minmax(0, 1fr); kolom `aux` (secondary side bar) runtuh ke 0 di clean view.
+    expect(tracks[areaCols.indexOf('main')]).toBe('M')
+    expect(areaCols[areaCols.length - 1]).toBe('aux')
   })
 
   it('menang atas .app-shell--sidebar tanpa !important (spesifisitas lebih tinggi)', () => {

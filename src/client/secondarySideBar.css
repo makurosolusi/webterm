@@ -1,0 +1,103 @@
+/* Secondary side bar (VS Code auxiliary bar): Central chat and control panel on the right.
+
+   Docked, it fills the `aux` grid column of `.app-shell` (styles.css) from below the title bar
+   to the status bar, so the canvas, the editor-tab row and the bottom panel end where it starts.
+   Width comes from `--secondary-side-bar-w`, which `secondarySideBar.store.ts` sets on <html>
+   once the user resizes (default 380px, at most 60% of the window).
+
+   Maximized, or below SIDE_BAR_OVERLAY_BREAKPOINT (900px, `--overlay`), it leaves the grid and
+   overlays the canvas area from the right instead of squeezing it. Title row, tabs, toolbar and
+   panes reuse the bottom panel's classes from inboxPanelSurface.css. */
+
+:root {
+  --secondary-side-bar-w: 380px;
+}
+
+.app-shell:has(> .vscode-secondary-side-bar:not([data-maximized='true']):not(.vscode-secondary-side-bar--overlay)) {
+  --aux-w: min(var(--secondary-side-bar-w), 60vw);
+}
+
+.vscode-secondary-side-bar {
+  grid-area: aux;
+  position: relative;
+  z-index: 13;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border, var(--border, rgba(128, 128, 128, 0.35))));
+  background: var(--vscode-sideBar-background, var(--vscode-panel-background, var(--bg, #1e1e1e)));
+  color: var(--vscode-sideBar-foreground, var(--vscode-foreground, var(--text, #cccccc)));
+  font-family: var(--vscode-font-family, var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif));
+  font-size: var(--vscode-font-size, 13px);
+}
+.vscode-secondary-side-bar .vscode-bottom-panel__titlebar,
+.vscode-secondary-side-bar .vscode-bottom-panel__body {
+  background: inherit;
+}
+
+/* Overlay modes: out of the grid, over the canvas area (below the workspace tabs, which then span
+   the full width again), flush with the status bar. */
+.vscode-secondary-side-bar[data-maximized='true'],
+.vscode-secondary-side-bar--overlay {
+  position: absolute;
+  top: var(--tabbar-h);
+  right: 0;
+  bottom: var(--status-bar-h);
+  z-index: 25;
+}
+.vscode-secondary-side-bar--overlay {
+  width: min(var(--secondary-side-bar-w), calc(100vw - var(--activity-bar-w)));
+  box-shadow: 0 0 8px rgba(0, 0, 0, calc(0.36 * var(--shadow-k, 1)));
+}
+.vscode-secondary-side-bar[data-maximized='true'] {
+  left: var(--activity-bar-w);
+  width: auto;
+}
+.app-shell--sidebar > .vscode-secondary-side-bar[data-maximized='true'] {
+  left: calc(var(--activity-bar-w) + var(--bottom-panel-sidebar-w, 300px));
+}
+
+/* ---------------------------------------------------------------- sash (left edge) */
+.vscode-secondary-side-bar__sash {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--bottom-panel-sash-h, 4px) / -2);
+  z-index: 35;
+  width: var(--bottom-panel-sash-h, 4px);
+  cursor: ew-resize;
+  touch-action: none;
+  background: transparent;
+  transition: background-color 0s 0.1s;
+}
+.vscode-secondary-side-bar__sash:hover,
+.vscode-secondary-side-bar__sash:active {
+  background: var(--vscode-sash-hoverBorder, var(--accent, #0078d4));
+}
+.vscode-secondary-side-bar__sash:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+/* ---------------------------------------------------------------- chat in a narrow column */
+/* The conversation list sits behind the History action instead of a 160px column. */
+.chat-body--compact { flex-direction: column; }
+.chat-body--compact .chat-conversations {
+  flex: 1 1 0;
+  border-right: 0;
+}
+.chat-main[hidden] { display: none; }
+
+/* Composer reads like Copilot Chat's: a rounded box with breathing room in a narrow column. */
+.vscode-secondary-side-bar .chat-thread {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.vscode-secondary-side-bar .chat-composer {
+  padding: 8px 12px 12px;
+}
+.vscode-secondary-side-bar .chat-composer__box {
+  padding: 6px 6px 6px 10px;
+  border-radius: 6px;
+}

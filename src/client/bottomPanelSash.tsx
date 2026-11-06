@@ -1,58 +1,71 @@
-// Resize sash on the top edge of the VS Code bottom panel: 4px hit area, `ns-resize`,
-// pointer drag, and keyboard resize (ArrowUp/Down 10px, Shift 50px, Home/End = min/max).
+// Resize sash of a VS Code part: on the top edge of the bottom panel (`ns-resize`) or the left
+// edge of the secondary side bar (`ew-resize`). 4px hit area, pointer drag, keyboard resize
+// (arrows 10px, Shift 50px, Home/End = min/max) and double-click back to the default size.
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { useRef } from 'react'
-import {
-  PANEL_MIN_HEIGHT, currentPanelHeight, heightAfterKey, panelMaxHeight, resetPanelHeight, setPanelHeight,
-  usePanelHeight,
-} from './bottomPanelHeight'
+import { bottomPanelHeight } from './bottomPanelHeight'
+import type { PanelSize } from './panelSize'
 
-/** Panel height after dragging the sash by `deltaY` px (up = taller). */
-export function heightAfterDrag(startHeight: number, startY: number, currentY: number): number {
-  return startHeight + (startY - currentY)
+/** Size after dragging an edge sash from `start` to `current` along its axis (towards the canvas = bigger). */
+export function heightAfterDrag(startSize: number, start: number, current: number): number {
+  return startSize + (start - current)
 }
 
-/** Horizontal separator that resizes the shared bottom-panel height. */
-export function BottomPanelSash(): React.JSX.Element {
-  usePanelHeight() // re-render on height change so aria-valuenow follows
-  const drag = useRef<{ height: number; y: number } | null>(null)
+export interface PanelSashProps {
+  size: PanelSize
+  /** `horizontal` = a bar on the top edge (panel); `vertical` = a bar on the left edge (side bar). */
+  orientation: 'horizontal' | 'vertical'
+  label: string
+  className: string
+}
+
+/** Separator that resizes one part's shared size store. */
+export function PanelSash({ size, orientation, label, className }: PanelSashProps): React.JSX.Element {
+  size.use() // re-render on size change so aria-valuenow follows
+  const drag = useRef<{ size: number; at: number } | null>(null)
+  const axis = (event: ReactPointerEvent): number => (orientation === 'horizontal' ? event.clientY : event.clientX)
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     event.preventDefault()
-    drag.current = { height: currentPanelHeight(), y: event.clientY }
+    drag.current = { size: size.current(), at: axis(event) }
     // Optional call: jsdom has no pointer capture; real browsers keep the drag on the sash.
     event.currentTarget.setPointerCapture?.(event.pointerId)
   }
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const start = drag.current
-    if (start) setPanelHeight(heightAfterDrag(start.height, start.y, event.clientY))
+    if (start) size.set(heightAfterDrag(start.size, start.at, axis(event)))
   }
   const endDrag = (): void => { drag.current = null }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const next = heightAfterKey(event.key, event.shiftKey, currentPanelHeight())
+    const next = size.afterKey(event.key, event.shiftKey, size.current())
     if (next === null) return
     event.preventDefault()
-    setPanelHeight(next)
+    size.set(next)
   }
 
   return (
     <div
-      className="vscode-bottom-panel__sash"
+      className={className}
       role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize panel"
-      aria-valuemin={PANEL_MIN_HEIGHT}
-      aria-valuemax={panelMaxHeight()}
-      aria-valuenow={currentPanelHeight()}
+      aria-orientation={orientation}
+      aria-label={label}
+      aria-valuemin={size.min}
+      aria-valuemax={size.max()}
+      aria-valuenow={size.current()}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onDoubleClick={resetPanelHeight}
+      onDoubleClick={size.reset}
       onKeyDown={onKeyDown}
     />
   )
+}
+
+/** Horizontal separator that resizes the shared bottom-panel height. */
+export function BottomPanelSash(): React.JSX.Element {
+  return <PanelSash size={bottomPanelHeight} orientation="horizontal" label="Resize panel" className="vscode-bottom-panel__sash" />
 }

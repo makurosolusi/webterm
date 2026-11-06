@@ -14,7 +14,7 @@
 // Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
 // bawahnya): tombol `+` adalah jalan masuk yang sama, dan chrome yang baru muncul setelah
 // workspace pertama menggeser canvas tepat saat pengguna menekan tombol.
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
 import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
@@ -66,6 +66,8 @@ export interface WorkspaceBarProps {
   /** Current board layout; with `onToggleLayout` it adds the canvas/tabs switch (button + View menu). */
   layoutMode?: 'canvas' | 'tabs'
   onToggleLayout?: () => void
+  /** Layout controls at the right end of the title bar (Toggle Secondary Side Bar). */
+  titleActions?: ReactNode
 }
 
 export default function WorkspaceBar({
@@ -85,6 +87,7 @@ export default function WorkspaceBar({
   onOpenPalette,
   layoutMode,
   onToggleLayout,
+  titleActions,
 }: WorkspaceBarProps) {
   const paletteKey = useCommandShortcut('workbench.omnibox')
   const layoutKey = useCommandShortcut('view.layout.toggle')
@@ -235,6 +238,7 @@ export default function WorkspaceBar({
         </div>
 
         <div className="app-titlebar__actions">
+          {titleActions}
           {showLogout && (
             <IconTooltip label="Log out and return to the login screen">
               <button

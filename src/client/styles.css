@@ -146,14 +146,16 @@ body {
    Tinggi cell definit lewat `minmax(0, 1fr)`, jadi React Flow (height: 100%) dan `Welcome`
    (inset: 0) mendapat tinggi nyata tanpa satu pun angka layout di JS. */
 .app-shell {
+  /* Kolom ke-4 = secondary side bar (Chat/Central, `secondarySideBar.css`): 0 sampai ia ter-dock. */
+  --aux-w: 0px;
   display: grid;
-  grid-template-columns: var(--activity-bar-w) 0 minmax(0, 1fr);
+  grid-template-columns: var(--activity-bar-w) 0 minmax(0, 1fr) var(--aux-w);
   grid-template-rows: var(--title-bar-h) var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h);
   grid-template-areas:
-    'title title title'
-    'tabs tabs tabs'
-    'activity sidebar main'
-    'status status status';
+    'title title title title'
+    'tabs tabs tabs aux'
+    'activity sidebar main aux'
+    'status status status status';
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -163,7 +165,7 @@ body {
 /* Sidebar is a real grid column in the VS Code layout, not a floating card. It collapses
    to 0 while closed so the canvas keeps the full editor width. */
 .app-shell--sidebar {
-  grid-template-columns: var(--activity-bar-w) 300px minmax(0, 1fr);
+  grid-template-columns: var(--activity-bar-w) 300px minmax(0, 1fr) var(--aux-w);
 }
 
 /* Layar Login tidak punya chrome apa pun; grid 48px + 35px akan memotongnya. */
@@ -362,11 +364,11 @@ body.clean-view .app-tabs,
 body.clean-view .app-statusbar {
   display: none;
 }
-/* 3 kolom = jumlah kolom `grid-template-areas` `.app-shell` (activity sidebar main). Dengan 2 kolom,
+/* 4 kolom = jumlah kolom `grid-template-areas` `.app-shell` (activity sidebar main aux). Dengan kurang kolom,
    `main` jatuh ke track implisit `auto` dan canvas runtuh. Spesifisitas (0,2,1) mengalahkan
    `.app-shell--sidebar` (0,1,0), jadi sidebar terbuka pun tetap 0. */
 body.clean-view .app-shell {
-  grid-template-columns: 0 0 minmax(0, 1fr);
+  grid-template-columns: 0 0 minmax(0, 1fr) 0;
   grid-template-rows: 0 0 minmax(0, 1fr) 0;
 }
 

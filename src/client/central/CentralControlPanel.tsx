@@ -1,6 +1,6 @@
-// Body of the Central tab in the shared bottom panel (`App.bottomPanel`). Renders nothing unless
-// the flag is on; opened from the Dock.
-import { useCallback, useState } from 'react'
+// Body of the Central tab in the secondary side bar (`App.secondarySideBar`). Renders nothing
+// unless the flag is on; opened from the Dock.
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,7 +14,6 @@ import { centralControlApi, useCentralControlEnabled } from './centralControlApi
 import type { CentralControlClient, StatusView } from './centralControlTypes'
 import './central.css'
 
-const OPEN_KEY = 'webterm.centralControlOpen'
 type TabId = 'control' | 'agents' | 'approvals' | 'skills' | 'memory'
 const TABS = [
   { id: 'control', label: CL.tabControl },
@@ -23,20 +22,6 @@ const TABS = [
   { id: 'skills', label: CL.tabSkills },
   { id: 'memory', label: CL.tabMemory },
 ]
-
-/** Flag plus persisted open state for the Dock toggle; `enabled` false means App wires nothing. */
-export function useCentralControl(override?: boolean) {
-  const enabled = useCentralControlEnabled(override)
-  // Flag dimuat async dari server, jadi state buka dibaca tanpa gerbang `enabled`; `open` di bawah yang menggerbangi.
-  const [open, setOpen] = useState(() => {
-    try { return localStorage.getItem(OPEN_KEY) === '1' } catch { return false }
-  })
-  const set = useCallback((next: boolean) => {
-    setOpen(next)
-    try { localStorage.setItem(OPEN_KEY, next ? '1' : '0') } catch { /* private mode: lasts this tab only */ }
-  }, [])
-  return { enabled, open: enabled && open, toggle: () => set(!open), close: () => set(false) }
-}
 
 export interface CentralControlPanelProps {
   open: boolean

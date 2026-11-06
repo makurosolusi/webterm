@@ -10,8 +10,9 @@ import BootScreen from './BootScreen'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import AppBottomPanel from './App.bottomPanel'
 import { toggleBottomView } from './bottomPanelHost'
-import { useChatOpen } from './ChatPanel'
-import { useCentralControl } from './central/CentralControlPanel'
+import SecondarySideBar from './App.secondarySideBar'
+import { toggleSideBar, toggleSideBarView } from './secondarySideBar.store'
+import { useCentralControlEnabled } from './central/centralControlApi'
 import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
@@ -72,10 +73,9 @@ export default function App() {
   const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
   // Sama seperti Sessions: tombolnya di Dock, jadi keadaannya milik App yang merender keduanya.
   const [inboxOpen, setInboxOpen] = useInboxOpen()
-  // Chat adalah permukaan ketiga yang mengapung di atas canvas (bukan node): state-nya di App
-  // karena tombol pembukanya di Dock, sama seperti Sessions/Inbox.
-  const [chatOpen, setChatOpen] = useChatOpen()
-  const central = useCentralControl()
+  // Chat & Central tinggal di secondary side bar kanan; buka/tutup & view-nya milik
+  // `secondarySideBar.store` (dibaca Dock, title bar, dan side bar itu sendiri), bukan state App.
+  const centralEnabled = useCentralControlEnabled()
   // Mode fokus: chrome disembunyikan lewat satu kelas body, tanpa meng-unmount apa pun. Lihat
   // `./cleanView` — termasuk kenapa jalan keluarnya chord dan bukan Escape.
   const [cleanView, toggleCleanView] = useCleanView()
@@ -196,7 +196,7 @@ export default function App() {
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
     newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
     toggleMaximizeNode: () => toggleMaximizeTarget(nodesRef.current),
-    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => toggleBottomView('inbox', inboxOpen, setInboxOpen), toggleChat: () => toggleBottomView('chat', chatOpen, setChatOpen),
+    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => toggleBottomView('inbox', inboxOpen, setInboxOpen), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
     toggleBoard: () => setBoard((v) => !v),
   })
   useKeybindingsSync(settings.keybindings, settingsHydrated, update)
@@ -241,7 +241,7 @@ export default function App() {
       {hydrated && !noWorkspaces && (
         <>
           <AppDock
-            {...{ vp, settings, activeWs, central, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, chatOpen, setChatOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
+            {...{ vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
             {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, inboxUnread, agentSummary }}
             extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
@@ -259,12 +259,14 @@ export default function App() {
             onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           />
           <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
-          {/* Inbox, Chat, Problems, dan Output satu permukaan bertab: tepat satu view tampil. Panel
+          {/* Inbox, Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
               menutup lewat Escape/X tab-nya; dialog persetujuan Inbox yang memegang consent. */}
-          <AppBottomPanel central={central} inboxOpen={inboxOpen} setInboxOpen={setInboxOpen} chatOpen={chatOpen} setChatOpen={setChatOpen}
+          <AppBottomPanel inboxOpen={inboxOpen} setInboxOpen={setInboxOpen}
             problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
             onFocus={(id) => void onFocus(id)}
             workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} />
+          {/* Chat & Central di kanan (ala Copilot Chat): kolom grid `aux`, canvas menyempit, tidak ditutupi. */}
+          <SecondarySideBar centralEnabled={centralEnabled} />
           <OutputPanelHost />
           {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
