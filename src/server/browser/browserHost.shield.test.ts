@@ -52,6 +52,8 @@ describe('popups', () => {
     const { events, state } = await openShielded({ now: () => t })
     for (let i = 0; i < POPUP_BURST_MAX + 2; i++) popup(`P${i}`, `https://news.test/${i}`)
     await waitFor(() => (state().blockedPopups ?? 0) === 2, 'flood counted')
+    // The count is host-side and synchronous; each close reaches the fake CDP over its socket later.
+    await waitFor(() => callsOf(CDP.closeTarget).length === POPUP_BURST_MAX + 2, 'every popup closed')
     expect(events.filter((e) => e.k === 'popup')).toHaveLength(POPUP_BURST_MAX)
     expect(callsOf(CDP.closeTarget)).toHaveLength(POPUP_BURST_MAX + 2)
     t += POPUP_BURST_WINDOW_MS

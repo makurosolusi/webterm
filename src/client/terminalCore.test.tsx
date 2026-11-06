@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 // TerminalCore di canvas sungguhan: wheel, kapan `open` dikirim, dan dedupe `resize`.
-import { waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { act, waitFor } from '@testing-library/react'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import type { WsNode } from '../shared/workspace'
 
@@ -21,9 +21,8 @@ vi.mock('@xterm/xterm', async (importOriginal) => {
   }
   return { ...real, Terminal: Recorded }
 })
-// Fallback diperpendek supaya test "tak pernah berukuran" tidak menunggu detik sungguhan.
-// 500ms: tetap singkat, tapi longgar supaya mount di bawah beban tidak memicu fallback sebelum assertion pertama.
-const { FALLBACK_MS } = vi.hoisted(() => ({ FALLBACK_MS: 500 }))
+// Unique delay: the `open` fallback timer is recognised by it and fired by hand, never by the wall clock.
+const { FALLBACK_MS } = vi.hoisted(() => ({ FALLBACK_MS: 987_654 }))
 vi.mock('./terminalSizing', async (importOriginal) => {
   const real = await importOriginal<typeof import('./terminalSizing')>()
   return { ...real, OPEN_SIZE_FALLBACK_MS: FALLBACK_MS }
@@ -46,7 +45,20 @@ beforeAll(() => {
     })
   }
 })
+/** Held `open` fallback callbacks; they never run on their own, so nothing races the mount. */
+let fallbackCbs: (() => void)[] = []
+beforeEach(() => {
+  fallbackCbs = []
+  // Only the fallback timer is held: faking every setTimeout would also freeze React Flow's onInit
+  // and testing-library's waitFor, so all other timers pass through to the real clock.
+  const realSetTimeout = globalThis.setTimeout
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...a: unknown[]) => {
+    if (ms === FALLBACK_MS) { fallbackCbs.push(fn); return 0 as unknown as ReturnType<typeof setTimeout> }
+    return realSetTimeout(fn, ms, ...a)
+  }) as typeof setTimeout)
+})
 afterEach(() => {
+  vi.restoreAllMocks()
   unmountCanvas()
   sent.length = 0
   terms.length = 0
@@ -78,26 +90,15 @@ describe('TerminalCore', () => {
 
   it('elemen 0x0: `open` ditunda, lalu terkirim lewat fallback batas waktu', async () => {
     hostSize = 0
-    // pty-207-7: the fallback timer (and only it) runs on a manual clock. On the wall clock a mount
-    // slower than FALLBACK_MS fired it before the "not yet" assertion. Faking every setTimeout would
-    // also freeze React Flow's onInit and testing-library's waitFor, so the rest stay real.
-    const held: Array<() => void> = []
-    const realSetTimeout = globalThis.setTimeout
-    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void, ms?: number, ...rest: unknown[]) =>
-      ms === FALLBACK_MS ? held.push(cb) : realSetTimeout(cb, ms, ...rest)) as typeof setTimeout)
-    try {
-      await mountCanvas({ nodes: [termNode], dirs: {} })
-      // Lock: a mount that takes longer than the fallback (simulated by real waiting) still sees no open.
-      await new Promise((r) => realSetTimeout(r, FALLBACK_MS * 2))
-      expect(ofType('open')).toHaveLength(0)
-      expect(held).toHaveLength(1)
+    await mountCanvas({ nodes: [termNode], dirs: {} })
+    expect(fallbackCbs).toHaveLength(1)
+    // Let ResizeObserver + rAF fire: the host stays 0x0, so `open` must still be deferred.
+    await new Promise((r) => setTimeout(r, OBSERVER_SETTLE_MS))
+    expect(ofType('open')).toHaveLength(0)
 
-      held.forEach((cb) => cb())
-      expect(ofType('open')).toHaveLength(1)
-      expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
-    } finally {
-      spy.mockRestore()
-    }
+    act(() => fallbackCbs[0]())
+    expect(ofType('open')).toHaveLength(1)
+    expect(ofType('open')[0]).toMatchObject({ id: 'term-1', cols: 80, rows: 24 })
   })
 
   it('no refit while the host is hidden (xterm renderer paused); refits once it is shown again', async () => {
