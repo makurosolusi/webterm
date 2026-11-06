@@ -1,7 +1,7 @@
 // Renders a node's content into a persistent host div (tabLayout.dom) instead of in place, so the
 // same React subtree (and its xterm / iframe / Monaco) survives moving between canvas, tab pane and
 // the maximize overlay (nodeMaximize.overlay).
-import { memo, useCallback, useEffect, useMemo, type ComponentType, type SyntheticEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, type ComponentType, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { NodeProps } from '@xyflow/react'
 import { NodeHostContext } from './tabLayout.context'
@@ -16,6 +16,12 @@ const stopSynthetic = (e: SyntheticEvent): void => { e.isPropagationStopped = ()
 const GUARD = {
   onClick: stopSynthetic, onDoubleClick: stopSynthetic, onMouseDown: stopSynthetic, onPointerDown: stopSynthetic,
   onWheel: stopSynthetic, onContextMenu: stopSynthetic, onKeyDown: stopSynthetic,
+}
+// Keys from a portaled popup (Radix menus, Select, dialogs) bubble through the React tree into the
+// NodeWrapper, whose keyboard a11y moves the selected node on arrows and toggles selection on
+// Enter/Escape. Stop only those: a key whose target is inside the node's own DOM keeps reaching it.
+const stopPortalKeys = (e: KeyboardEvent<HTMLDivElement>): void => {
+  if (!e.currentTarget.contains(e.target as Node)) stopSynthetic(e)
 }
 
 export function withTabPortal(Inner: ComponentType<NodeProps>): ComponentType<NodeProps> {
@@ -41,7 +47,7 @@ export function withTabPortal(Inner: ComponentType<NodeProps>): ComponentType<No
         <div ref={slot} className="tab-host-slot" />
         {createPortal(
           <NodeHostContext.Provider value={state}>
-            <div className="tab-host-guard" style={{ display: 'contents' }} {...(detached ? GUARD : null)}>
+            <div className="tab-host-guard" style={{ display: 'contents' }} onKeyDown={stopPortalKeys} {...(detached ? GUARD : null)}>
               <Inner {...props} data={tabData} />
             </div>
           </NodeHostContext.Provider>,
