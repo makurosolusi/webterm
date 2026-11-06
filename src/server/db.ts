@@ -150,6 +150,9 @@ export class Db {
     ).run(JSON.stringify(next))
     return next
   }
+
+  /** Shutdown only (index.ts exit hook): later calls on this store throw. Cast like ledgerRuntime.ts: the local bun:sqlite type omits close. */
+  close(): void { (this.d as unknown as { close(): void }).close() }
 }
 
 export const db = new Db(openDb())
