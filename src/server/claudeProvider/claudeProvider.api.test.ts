@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { handleProviderApi, lastProviderTest, PROVIDER_PATH, type ProviderApiDeps } from './claudeProvider.api'
-import { providerDir } from './claudeProvider.store'
+import { handleProviderApi, lastProviderTest, PROVIDER_PATH, RESET_PATH, type ProviderApiDeps } from './claudeProvider.api'
+import { BACKUP_KEY, providerDir } from './claudeProvider.store'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
 const NODE_TOKEN = 'node-token-test-only' // test-only
@@ -71,6 +71,17 @@ describe('claude provider API', () => {
     expect(lastProviderTest()).toMatchObject({ ok: true })
     await put({ mode: 'apiKey' }) // a change clears the stale result
     expect(lastProviderTest()).toBeNull()
+  })
+
+  it('a damaged config is an explicit error in GET; POST /reset (UI-only) clears it and keeps a backup', async () => {
+    await put({ mode: 'apiKey', secret: KEY })
+    writeFileSync(join(providerDir(), 'CONFIG'), '{broken', { mode: 0o600 })
+    expect((await handleProviderApi(ui('GET'), url(), '', deps())).body).toMatchObject({ provider: { mode: 'login', configError: 'unreadable' } })
+    expect((await handleProviderApi(ui('POST', { 'x-webterm-token': NODE_TOKEN }), url(RESET_PATH), '', deps())).status).toBe(403)
+    const r = await handleProviderApi(ui('POST'), url(RESET_PATH), '', deps())
+    expect(r.status).toBe(200)
+    expect((r.body as { provider: Record<string, unknown> }).provider).toEqual({ mode: 'login', secretSet: true, ready: true })
+    expect(readFileSync(join(providerDir(), BACKUP_KEY), 'utf8')).toBe('{broken')
   })
 
   it('login mode tests Claude Code login readiness', async () => {
