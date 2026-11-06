@@ -145,6 +145,7 @@ export async function workspacesRoute(
       return saved ? { status: 200, body: saved } : NOT_FOUND
     }
     if (method === 'DELETE') {
+      (await import('./sessions')).sessions.closeNodes(store.get(id)?.nodes ?? []) // ops-212-3: its shells/agents end with it
       guarded('delete', id, () => store.delete(id))
       workspaceLog.deleted(id)
       await dropWorkspaceBackground(store, id, bgDir) // never throws: logs a warning on failure
