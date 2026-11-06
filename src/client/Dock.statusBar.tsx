@@ -5,10 +5,16 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { DockProps } from './Dock.types'
 import { codicon } from './dockCodicon'
+import { useShownBottomView } from './bottomPanelHost'
 import { useTabLayout } from './tabLayout.store'
 
 /** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
 export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
+
+/** Status bar items that toggle a bottom-panel view, by the view they show. */
+const PANEL_VIEW_OF_ITEM: Record<string, string> = {
+  problems: 'problems', activity: 'activity', 'output-errors': 'output', 'output-warnings': 'output',
+}
 
 /**
  * Status bar 22px: aksi kanvas (undo/redo/back/forward/fit/zoom) plus identitas workspace.
@@ -19,6 +25,7 @@ export function CanvasStatusBar(props: DockProps) {
   const [zoomOpen, setZoomOpen] = useState(false)
   // Tab mode has no canvas viewport, so these controls would do nothing.
   const canvasMode = useTabLayout().mode !== 'tabs'
+  const shown = useShownBottomView()
 
   const left: VscodeStatusItem[] = []
   if (props.workspaceName) {
@@ -26,7 +33,9 @@ export function CanvasStatusBar(props: DockProps) {
   }
 
   const right: VscodeStatusItem[] = [
-    ...(props.extraStatusItems ?? []),
+    ...(props.extraStatusItems ?? []).map((item) => (
+      item.id in PANEL_VIEW_OF_ITEM ? { ...item, active: PANEL_VIEW_OF_ITEM[item.id] === shown } : item
+    )),
     {
       id: 'undo', label: '', icon: codicon('discard'), tooltip: 'Undo last canvas change', ariaLabel: 'Undo',
       onClick: props.onUndo, disabled: !props.canUndo, disabledReason: 'nothing to undo',

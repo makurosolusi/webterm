@@ -12,6 +12,7 @@ import type { ProblemsState } from '../server/problems/problems.service'
 import type { Workspace, WsNode } from '../shared/workspace'
 import { tokenQuery } from './api'
 import { IconTooltip } from '@/components/ui/icon-button'
+import { toggleBottomView } from './bottomPanelHost'
 import { codicon } from './dockCodicon'
 import { useLspProblems, type LspProblem } from './editorLsp.store'
 import { openEditorAt } from './Omnibox.open'
@@ -81,8 +82,8 @@ export function useProblems(workspaceId: string | null) {
     id: 'problems', label: `${errors} / ${warnings}`, icon: codicon('issues'), tone: errors > 0 ? 'error' : 'default',
     tooltip: `${plural(errors, 'error')}, ${plural(warnings, 'warning')} from the type checker and linter — toggle Problems`,
     ariaLabel: `Problems: ${errors} errors, ${warnings} warnings`,
-    onClick: () => setOpen((v) => !v),
-  }] : []), [workspaceId, errors, warnings])
+    onClick: () => toggleBottomView('problems', open, setOpen),
+  }] : []), [workspaceId, errors, warnings, open])
   return { workspaceId, state, list, open, setOpen, error, act, statusItems }
 }
 

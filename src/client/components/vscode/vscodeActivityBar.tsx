@@ -23,6 +23,8 @@ export interface VscodeActivityBarProps {
   bottomItems?: VscodeActivityBarItem[]
   /** Controlled active entry; `aria-current="page"` follows this value. */
   activeId?: string | null
+  /** Extra active entries for independent areas (sidebar and panel); same look as `activeId`. */
+  activeIds?: readonly string[]
   onSelect: (id: string) => void
   className?: string
   /** Accessible name for the rail; defaults to `Activity bar`. */
@@ -46,6 +48,7 @@ export function VscodeActivityBar({
   items,
   bottomItems = [],
   activeId = null,
+  activeIds = [],
   onSelect,
   className,
   ariaLabel = 'Activity bar',
@@ -85,7 +88,7 @@ export function VscodeActivityBar({
   }
 
   const renderItem = (item: VscodeActivityBarItem, index: number) => {
-    const active = item.id === activeId
+    const active = item.id === activeId || activeIds.includes(item.id)
     const count = badgeText(item.badge)
     return (
       <IconTooltip key={item.id} label={item.tooltip ?? item.label} commandId={item.commandId} side="right" disabled={item.disabled}>

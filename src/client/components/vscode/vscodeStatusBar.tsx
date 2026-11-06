@@ -19,6 +19,8 @@ export interface VscodeStatusItem {
   /** Renders a disabled button whose tooltip appends `disabledReason`. */
   disabled?: boolean
   disabledReason?: string
+  /** Pressed look for an item whose panel view is showing (`aria-pressed`, `data-active`). */
+  active?: boolean
 }
 
 export interface VscodeStatusBarProps {
@@ -54,6 +56,8 @@ function StatusItem({ item }: { item: VscodeStatusItem }) {
       className={className}
       aria-label={item.ariaLabel ?? item.tooltip}
       disabled={item.disabled}
+      aria-pressed={item.active}
+      data-active={item.active ? 'true' : undefined}
       onClick={item.onClick}
     >
       {content}

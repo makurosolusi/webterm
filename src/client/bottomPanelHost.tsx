@@ -1,5 +1,5 @@
-// The single VS Code bottom panel: one surface, a tab per open view (Inbox, Chat, Problems,
-// Output), exactly one view shown. Opening a view selects its tab instead of stacking another
+// The single VS Code bottom panel: one surface, a tab per open view (Inbox, Chat, Central, Problems,
+// Activity, Output), exactly one view shown. Opening a view selects its tab instead of stacking another
 // surface on top. Views stay mounted while open (hidden when inactive) so switching tabs never
 // restarts a fetch, drops an approval dialog, or reopens a stream.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -20,6 +20,7 @@ export interface BottomPanelView {
 }
 
 let activeId: string | null = null
+let shownId: string | null = null
 const listeners = new Set<() => void>()
 
 /** Select a view's tab (also used by the Dock when the view is open behind another tab). */
@@ -30,8 +31,19 @@ export function revealBottomView(id: string | null): void {
 
 /** Dock toggle with VS Code semantics: closed opens, open-but-hidden reveals, shown closes. */
 export function toggleBottomView(id: string, open: boolean, setOpen: (open: boolean) => void): void {
-  if (open && activeId !== id) revealBottomView(id)
+  if (open && shownId !== null && shownId !== id) revealBottomView(id)
   else setOpen(!open)
+}
+
+function publishShown(id: string | null): void {
+  if (shownId === id) return
+  shownId = id
+  listeners.forEach((listener) => listener())
+}
+
+/** Id of the tab the panel is showing right now; null when no panel is up (open-but-hidden views are not shown). */
+export function useShownBottomView(): string | null {
+  return useSyncExternalStore(subscribe, () => shownId)
 }
 
 function subscribe(listener: () => void): () => void {
@@ -56,6 +68,11 @@ export default function BottomPanelHost({ views }: { views: BottomPanelView[] })
     if (added) revealBottomView(added.id)
     else if (shown !== null && shown !== stored) revealBottomView(shown)
   }, [openKey, shown, stored])
+
+  useEffect(() => {
+    publishShown(shown)
+    return () => publishShown(null)
+  }, [shown])
 
   if (shown === null) return null
   const byId = (id: string): BottomPanelView | undefined => open.find((view) => view.id === id)

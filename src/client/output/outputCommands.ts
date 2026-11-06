@@ -2,6 +2,7 @@
 // View menu, the command palette and the shortcut all drive the same panel without prop drilling.
 import { useEffect, useSyncExternalStore } from 'react'
 import type { LogLevel } from '../../shared/logEntry'
+import { toggleBottomView } from '../bottomPanelHost'
 import { isMacPlatform } from '../terminalKeys'
 import { isOutputToggleChord, outputShortcutLabel } from './outputChord'
 
@@ -53,7 +54,7 @@ export function openOutput(): void { setOpen(true) }
 /** Closes the panel. */
 export function closeOutput(): void { setOpen(false) }
 /** View: Toggle Output. */
-export function toggleOutput(): void { setOpen(!state.open) }
+export function toggleOutput(): void { toggleBottomView('output', state.open, setOpen) }
 /** Opens the "Set Log Level" quick pick. */
 export function openLevelPicker(): void { emit({ levelPickerOpen: true }) }
 /** Closes the "Set Log Level" quick pick. */

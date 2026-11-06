@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import BottomPanelHost from './bottomPanelHost'
 import Dock, { type DockProps } from './Dock'
 import InboxPanel from './InboxPanel'
 import type { InboxClient, InboxItem } from './inboxApi'
@@ -251,13 +252,15 @@ describe('Dock inbox button', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('reflects the open state and drops the badge at zero', () => {
-    const { rerender } = render(<Dock {...dockProps({ inboxOpen: true, inboxUnread: 0 })} />)
+  it('highlights only while Inbox is the shown panel view, and drops the badge at zero', () => {
+    const inbox = { id: 'inbox', label: 'Inbox', open: true, onClose: () => undefined, render: () => <i /> }
+    const { rerender } = render(<><BottomPanelHost views={[inbox]} /><Dock {...dockProps({ inboxOpen: true, inboxUnread: 0 })} /></>)
     const button = screen.getByRole('button', { name: 'Toggle inbox panel' })
     expect(button.getAttribute('aria-current')).toBe('page')
     expect(button.querySelector('.vscode-activity-bar__badge')).toBeNull()
 
     rerender(<Dock {...dockProps({ inboxOpen: false, inboxUnread: 120 })} />)
+    expect(screen.getByRole('button', { name: 'Toggle inbox panel, 99+' }).getAttribute('aria-current')).toBeNull()
     expect(screen.getByRole('button', { name: 'Toggle inbox panel, 99+' }).querySelector('.vscode-activity-bar__badge')?.textContent).toBe('99+')
   })
 })

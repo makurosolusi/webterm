@@ -61,7 +61,7 @@ export default function AppDock({
       chatOpen={chatOpen}
       onToggleChat={() => toggleBottomView('chat', chatOpen, setChatOpen)}
       centralOpen={central.open}
-      onToggleCentral={central.enabled ? central.toggle : undefined}
+      onToggleCentral={central.enabled ? () => toggleBottomView('central', central.open, (o) => (o ? central.toggle() : central.close())) : undefined}
       zoomPct={Math.round(vp.zoom * 100)}
       onZoomIn={vp.onZoomIn}
       onZoomOut={vp.onZoomOut}

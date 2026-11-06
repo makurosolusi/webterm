@@ -1,8 +1,9 @@
-// Bottom panel host for the central control surface. Renders nothing unless the flag is on, so
-// the old UI is identical by default. Mounted by App; opened from the Dock.
+// Body of the Central tab in the shared bottom panel (`App.bottomPanel`). Renders nothing unless
+// the flag is on; opened from the Dock.
 import { useCallback, useState } from 'react'
-import type { BottomPanelTab } from '../bottomPanelTabs'
-import { InboxPanelSurface } from '../inboxPanelSurface'
+import { createPortal } from 'react-dom'
+import { IconButton } from '@/components/ui/icon-button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import AgentList from './AgentList'
 import { ApprovalQueue } from './ApprovalCardR2'
 import LevelPanel from './LevelPanel'
@@ -15,12 +16,12 @@ import './central.css'
 
 const OPEN_KEY = 'webterm.centralControlOpen'
 type TabId = 'control' | 'agents' | 'approvals' | 'skills' | 'memory'
-const TABS: BottomPanelTab[] = [
-  { id: 'control', label: CL.tabControl, closable: false },
-  { id: 'agents', label: CL.tabAgents, closable: false },
-  { id: 'approvals', label: CL.tabApprovals, closable: false },
-  { id: 'skills', label: CL.tabSkills, closable: false },
-  { id: 'memory', label: CL.tabMemory, closable: false },
+const TABS = [
+  { id: 'control', label: CL.tabControl },
+  { id: 'agents', label: CL.tabAgents },
+  { id: 'approvals', label: CL.tabApprovals },
+  { id: 'skills', label: CL.tabSkills },
+  { id: 'memory', label: CL.tabMemory },
 ]
 
 /** Flag plus persisted open state for the Dock toggle; `enabled` false means App wires nothing. */
@@ -39,27 +40,41 @@ export function useCentralControl(override?: boolean) {
 
 export interface CentralControlPanelProps {
   open: boolean
-  onClose: () => void
   enabled?: boolean
   client?: CentralControlClient
+  /** Host toolbar slot; the embedded refresh action is portaled here. */
+  actionsHost?: HTMLElement | null
 }
 
-export default function CentralControlPanel({ open, onClose, enabled: enabledProp, client = centralControlApi }: CentralControlPanelProps) {
+export default function CentralControlPanel({ open, enabled: enabledProp, client = centralControlApi, actionsHost }: CentralControlPanelProps) {
   const enabled = useCentralControlEnabled(enabledProp)
   const [tab, setTab] = useState<TabId>('control')
   const [status, setStatus] = useState<StatusView | null>(null)
   const [approvalsKey, setApprovalsKey] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
   if (!enabled || !open) return null
   return (
-    <InboxPanelSurface className="ccp-panel" ariaLabel={CL.panelTitle} tabsLabel={CL.tabsLabel} tabs={TABS} activeId={tab} onActivate={(id) => setTab(id as TabId)} onClosePanel={onClose}>
+    <div className="ccp-panel ccp-panel--embedded">
+      {actionsHost && createPortal(
+        <IconButton label={CL.refresh} size="icon-sm" onClick={() => setRefreshKey((k) => k + 1)}>
+          <span className="codicon codicon-refresh" aria-hidden="true" />
+        </IconButton>, actionsHost)}
       <div className="ccp-body">
+        <Tabs value={tab} onValueChange={(id) => setTab(id as TabId)}>
+          <TabsList aria-label={CL.tabsLabel}>
+            {TABS.map((t) => <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>)}
+          </TabsList>
+        </Tabs>
         {status?.model.free && <p className="ccp-privacy" role="note">{CL.privacyLabel} ({status.model.id})</p>}
-        {tab === 'control' && <LevelPanel client={client} onStatus={setStatus} />}
-        {tab === 'agents' && <AgentList client={client} onApprovalRequested={() => setApprovalsKey((k) => k + 1)} />}
-        {tab === 'approvals' && <ApprovalQueue key={approvalsKey} client={client} />}
-        {tab === 'skills' && <SkillReview client={client} />}
-        {tab === 'memory' && <MemoryView client={client} />}
+        {/* refreshKey remounts the active section so it reloads its data. */}
+        <div key={`${tab}-${refreshKey}`} className="ccp-section-host">
+          {tab === 'control' && <LevelPanel client={client} onStatus={setStatus} />}
+          {tab === 'agents' && <AgentList client={client} onApprovalRequested={() => setApprovalsKey((k) => k + 1)} />}
+          {tab === 'approvals' && <ApprovalQueue key={approvalsKey} client={client} />}
+          {tab === 'skills' && <SkillReview client={client} />}
+          {tab === 'memory' && <MemoryView client={client} />}
+        </div>
       </div>
-    </InboxPanelSurface>
+    </div>
   )
 }
