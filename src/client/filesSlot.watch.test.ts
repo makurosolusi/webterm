@@ -16,7 +16,7 @@ import { watchSlot } from './filesSlot.watch'
 
 const useSlot = watchSlot.useSlot!
 const ctx = (dir: string, refresh = vi.fn()): FilesSlotCtx =>
-  ({ cwd: '/', dir, entries: [], selection: [], refresh, open: vi.fn(), startInput: vi.fn(), nodeId: 'n' })
+  ({ cwd: '/', dir, entries: [], selection: [], refresh, open: vi.fn(), startInput: vi.fn(), nodeId: 'n', notify: vi.fn(), dismiss: vi.fn() })
 const flush = () => new Promise<void>((r) => setTimeout(r, 0))
 
 beforeEach(() => { capabilities.mockResolvedValue({ watch: true }) })

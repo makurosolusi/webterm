@@ -178,6 +178,7 @@
 
   /* lists + trees */
   --vscode-list-hoverBackground: #2a2d2e;
+  --vscode-list-dropBackground: #062f4a;
   --vscode-list-hoverForeground: #cccccc;
   --vscode-list-activeSelectionBackground: #04395e;
   --vscode-list-activeSelectionForeground: #ffffff;
@@ -226,6 +227,15 @@
   --vscode-notificationsErrorIcon-foreground: var(--vscode-editorError-foreground);
   --vscode-notificationsWarningIcon-foreground: var(--vscode-editorWarning-foreground);
   --vscode-notificationsInfoIcon-foreground: var(--vscode-editorInfo-foreground);
+
+  /* git decorations: defaults contributed by extensions/git/package.json (Dark Modern does not override) */
+  --vscode-gitDecoration-addedResourceForeground: #81b88b;
+  --vscode-gitDecoration-modifiedResourceForeground: #e2c08d;
+  --vscode-gitDecoration-deletedResourceForeground: #c74e39;
+  --vscode-gitDecoration-renamedResourceForeground: #73c991;
+  --vscode-gitDecoration-untrackedResourceForeground: #73c991;
+  --vscode-gitDecoration-ignoredResourceForeground: #8c8c8c;
+  --vscode-gitDecoration-conflictingResourceForeground: #e4676b;
   /* tokens the primitives read; values measured on vscode.dev (RND/vscode-measured/overlays-forms-tokens.json) */
   --vscode-dialog-border: var(--vscode-widget-border);
   --vscode-notificationToast-border: var(--vscode-widget-border);

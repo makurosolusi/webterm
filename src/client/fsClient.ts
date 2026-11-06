@@ -27,7 +27,7 @@
 //
 // KONTRAK 3 (verb baru, PLAN/FILEMANAGER-b.md §5): `FsResult` — TIDAK PERNAH melempar. `FsFail`
 // di-parse dari body walau status non-2xx (409/413/501...); jaringan/JSON rusak jadi `EIO`.
-import { fsFail, type FsCapabilities, type FsFail, type FsResult, type FileMeta, type FsVersion, type GitMark, type ListV2, type ReadMeta } from '../shared/fsContract'
+import { fsFail, type FsCapabilities, type FsFail, type FsResult, type FileMeta, type FsVersion, type GitStatus, type ListV2, type ReadMeta } from '../shared/fsContract'
 import { tokenQuery } from './api'
 import { onReconnect } from './ws'
 import type { DirEntry } from './fileBrowse'
@@ -173,7 +173,7 @@ export function copy(from: string, to: string): Promise<FsResult> {
   return postJson('copy', { from, to })
 }
 
-export function gitStatus(dir: string): Promise<FsResult<{ marks: Record<string, GitMark> }>> {
+export function gitStatus(dir: string): Promise<FsResult<GitStatus>> {
   return call('git-status', { path: dir })
 }
 
