@@ -9,6 +9,7 @@
 // Removal never passes `--force` unless the caller confirmed, and only deletes the branch with
 // `git branch -d` when asked (never `-D`): unmerged work stays reachable.
 import { execFile } from 'node:child_process'
+import { gitCommand } from './gitExec'
 import { existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -72,7 +73,8 @@ export function worktreeRoot(deps: WorktreeDeps = {}): string {
 
 async function git(cwd: string, args: string[], timeout = GIT_TIMEOUT_MS): Promise<string> {
   try {
-    const { stdout } = await run('git', ['-C', cwd, ...args], { timeout, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })
+    const g = gitCommand(['-C', cwd, ...args])
+    const { stdout } = await run(g.file, g.args, { timeout, maxBuffer: 16 * 1024 * 1024, env: g.env })
     return stdout.trim()
   } catch (err) {
     const stderr = String((err as { stderr?: string }).stderr ?? '').trim()

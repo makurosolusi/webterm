@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto'
 import { access, mkdir, open, readdir, readFile, realpath, rename, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { requireText } from '../ledger/ledgerCore'
+import { gitCommand, gitEnv } from '../gitExec'
 import { MemoryError } from './memoryModel'
 
 declare const Bun: {
@@ -108,10 +109,8 @@ function bunSpawn(file: string, args: string[], cwd: string): Promise<MemoryFile
   if (typeof Bun === 'undefined') {
     return Promise.reject(new MemoryFileError('git exec requires Bun.spawn or an injected spawn'))
   }
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
-  env.GIT_TERMINAL_PROMPT = '0'
-  const proc = Bun.spawn({ cmd: [file, ...args], cwd, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  // Only git runs here: the gitExec.ts env (no root/bot token, no prompt).
+  const proc = Bun.spawn({ cmd: [file, ...args], cwd, env: gitEnv(), stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
   return Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
     .then(([stdout, stderr, code]) => ({ code, stdout, stderr }))
 }
@@ -124,7 +123,8 @@ export function createMemoryFilePort(root: string, spawn?: MemoryFileSpawn): Mem
       await mkdir(rootPath, { recursive: true, mode: 0o700 })
       // A cold install has no repo: `git add` would fail until one exists.
       if (await pathExists(join(rootPath, '.git'))) return
-      const result = await (spawn ?? bunSpawn)('git', ['init', '-q'], rootPath)
+      const init = gitCommand(['init', '-q'])
+      const result = await (spawn ?? bunSpawn)(init.file, init.args, rootPath)
       if (result.code !== 0) {
         throw new MemoryFileError(`git init failed for memory root: ${result.stderr.trim()}`)
       }

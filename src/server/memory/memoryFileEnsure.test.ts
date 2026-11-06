@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DDL_V1 } from '../ledger/ledgerSchemaV1'
+import { withoutGitSafety } from '../gitExec.testutil'
 import { type MemoryAuthority } from './memoryModel'
 import {
   MEMORY_FILES_FLAG, type MemoryFileExecResult, type MemorySqlDb,
@@ -79,7 +80,7 @@ describe('cold install (port.ensure)', () => {
     const root = join(await tempDir(), 'data', 'memory')
     const calls: string[][] = []
     const port = createMemoryFilePort(root, async (_file, args) => {
-      calls.push(args)
+      calls.push(withoutGitSafety(args))
       return { code: 0, stdout: '', stderr: '' }
     })
 
@@ -105,7 +106,7 @@ describe('cold install (port.ensure)', () => {
     const root = await tempDir()
     let inits = 0
     const port = createMemoryFilePort(root, async (_file, args) => {
-      if (args[0] === 'init') {
+      if (withoutGitSafety(args)[0] === 'init') {
         inits += 1
         await mkdir(join(root, '.git'), { recursive: true })
       }

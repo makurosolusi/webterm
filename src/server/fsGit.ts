@@ -2,7 +2,7 @@
 // -> mark per path + branch/ahead/behind (footer). `resolveGitDir` feeds the gitdir watch in fsWatch.ts.
 // execFile (argumen array, tanpa shell); hanya baca (GIT_OPTIONAL_LOCKS=0 supaya tak menyentuh index.lock).
 import { execFile } from 'node:child_process'
-import { ptyEnv } from './ptyShell'
+import { gitCommand } from './gitExec'
 import npath from 'node:path'
 import { fsFail, type FsResult, type GitBranch, type GitMark, type GitStatus } from '../shared/fsContract'
 import { failFrom } from './fsAtomic'
@@ -28,7 +28,8 @@ type GitRun = { out: string; code: number } | 'missing' | 'timeout'
 /** Jalankan git tanpa shell (argumen array). `execFile` = ENOENT/timeout/kode keluar dibedakan jelas. */
 function runGit(dir: string, args: string[]): Promise<GitRun> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', dir, ...args], { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_OUTPUT_MAX_BYTES, env: { ...ptyEnv(process.env, { interactive: false }), GIT_OPTIONAL_LOCKS: '0' } }, (err, out) => {
+    const g = gitCommand(['-C', dir, ...args], { env: { GIT_OPTIONAL_LOCKS: '0' } })
+    execFile(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_OUTPUT_MAX_BYTES, env: g.env }, (err, out) => {
       const e = err as (NodeJS.ErrnoException & { killed?: boolean }) | null
       if (!e) return resolve({ out, code: 0 })
       if (e.code === 'ENOENT') return resolve('missing')

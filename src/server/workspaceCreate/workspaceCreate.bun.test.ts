@@ -50,7 +50,7 @@ test('clone streams progress, passes the URL after --, and blocks file/ext proto
   expect(readFileSync(join(path, 'README.md'), 'utf8')).toBe('hi\n')
   expect(seen).toContain('Receiving objects 100')
   expect(readFileSync(argvLog, 'utf8').trim().split('\n')).toEqual([
-    '-c', 'protocol.file.allow=never', '-c', 'protocol.ext.allow=never', 'clone', '--progress', '--', 'https://github.com/owner/repo.git', join(tmp, 'repo'),
+    '-c', 'core.fsmonitor=false', '-c', 'protocol.file.allow=never', '-c', 'protocol.ext.allow=never', 'clone', '--progress', '--', 'https://github.com/owner/repo.git', join(tmp, 'repo'),
   ])
 }, TEST_TIMEOUT_MS)
 

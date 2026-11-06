@@ -139,23 +139,21 @@ export async function agentStatusRoute(
   let body: HookStatusBody & { message?: string; transcript_path?: string }
   try { body = JSON.parse(read.ok ? read.body : '') } catch { body = {} }
 
-  // Gerbang strict: keduanya diperiksa SEBELUM apa pun ditulis, jadi permintaan yang ditolak
-  // tidak meninggalkan jejak status/transcript. Saat mati (default), tidak ada satu pun cabang
-  // di bawah ini yang berjalan — perilaku fail-open lama dipertahankan huruf per huruf.
-  if (opts?.strictAuth ?? STRICT_HOOK_AUTH) {
-    if (!stateVerified(node, nodeTokenHeader(req))) {
-      log.warn('hooks.reject', 'Hook rejected: invalid node token', { ids: { nodeId: node }, status: 403 })
-      json(res, 403, { error: 'invalid node token' })
-      return true
-    }
-    const raw = body.transcript_path
-    if (typeof raw === 'string' && raw.length > 0
-      && (raw.length > TRANSCRIPT_PATH_MAX || !transcriptPathAllowed(raw))) {
-      log.warn('hooks.reject', 'Hook rejected: transcript path outside allowed roots', { ids: { nodeId: node }, status: 403 })
-      json(res, 403, { error: 'transcript path outside allowed roots' })
-      return true
-    }
+  // Strict gate (on by default, agentStatusAuth.ts): a request without this node's token is
+  // rejected BEFORE anything is written, so it leaves no status, transcript or ledger row.
+  const strict = opts?.strictAuth ?? STRICT_HOOK_AUTH
+  if (strict && !stateVerified(node, nodeTokenHeader(req))) {
+    log.warn('hooks.reject', 'Hook rejected: invalid node token', { ids: { nodeId: node }, status: 403 })
+    json(res, 403, { error: 'invalid node token' })
+    return true
   }
+  const path = typeof body.transcript_path === 'string' && body.transcript_path.length > 0
+    && body.transcript_path.length <= TRANSCRIPT_PATH_MAX ? body.transcript_path : undefined
+  // Under strict an out-of-root path is dropped, not the whole hook: a launch line with its own
+  // CLAUDE_CONFIG_DIR must keep its status badge, and every reader (contextLinkTranscript,
+  // costCapture) refuses such a path anyway.
+  const transcript = path !== undefined && (!strict || transcriptPathAllowed(path)) ? path : undefined
+  if (path !== undefined && transcript === undefined) log.warn('hooks.reject', 'Hook transcript path outside allowed roots, not stored', { ids: { nodeId: node } })
 
   const deps = opts?.deps ?? (await defaultDeps())
   const status = hookStatus(body)
@@ -163,10 +161,7 @@ export async function agentStatusRoute(
   if (status) deps.setStatus(node, status)
   // Hanya DISIMPAN: pembacaan file terjadi di `contextLink`, dan path sepanjang apa pun di sini
   // akan ditulis ulang oleh setiap hook berikutnya pada node yang sama.
-  if (typeof body.transcript_path === 'string' && body.transcript_path.length > 0
-    && body.transcript_path.length <= TRANSCRIPT_PATH_MAX) {
-    deps.setTranscript(node, body.transcript_path)
-  }
+  if (transcript !== undefined) deps.setTranscript(node, transcript)
   // Balasan hook adalah satu-satunya kanal PUSH ke konteks agent. `nextHookContext` sendiri yang
   // memutuskan event mana layak diumumkan dan mendedupnya antar turn, jadi di sini cukup
   // payload-vs-null; tanpa payload balasannya tetap 204 tanpa body, persis seperti sebelumnya.
@@ -184,8 +179,10 @@ export async function agentStatusRoute(
   // untuk perubahan yang sama tidak boleh menyusul (no double announce).
   if (ws) linkNoteTold(node, event, ws)
   // Senses: AFTER setStatus/linkNoteTold, because the linkNote and wake subscribers read the status
-  // this hook just wrote. Trusted only when the request carried this node's own token.
-  produceHookEvent({ nodeId: node, workspaceId: ws?.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
+  // this hook just wrote. Trusted only when the request carried this node's own token. A node on no
+  // board gets no ledger row (data-209-1): the event table is append-only, so a row per stray POST
+  // is permanent growth (temporary mitigation; retention/GC is a later wave).
+  if (ws) produceHookEvent({ nodeId: node, workspaceId: ws.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
   await checkpointBeforePrompt(event, ws, node)
   const mail = outboxHookContext(node, event)
   const text = [aware, extras, peers?.additionalContext, browsers, mail].filter(Boolean).join('\n\n')

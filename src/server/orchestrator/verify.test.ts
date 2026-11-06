@@ -11,6 +11,7 @@ import {
   verifyWorktree,
 } from './verify'
 import { createProcessExec } from './verifier'
+import { withoutGitSafety } from '../gitExec.testutil'
 
 const ROOT = '/tmp/wt/task-1'
 const BASE_NAMES = 'git diff --name-only HEAD^...HEAD --'
@@ -22,9 +23,13 @@ function sha256(text: string): string {
 
 type Script = Record<string, Partial<VerifyExecResult>>
 
+/** Evidence command without the gitExec.ts safety flags (locked in gitExec.bun.test.ts). */
+const plainCommand = (command: string) => withoutGitSafety(command.split(' ')).join(' ')
+
 function fakeExec(script: Script) {
   const calls: { file: string; args: string[]; options: VerifyExecOptions }[] = []
-  const exec: VerifyExec = (file, args, options) => {
+  const exec: VerifyExec = (file, raw, options) => {
+    const args = file === 'git' ? withoutGitSafety(raw) : raw
     calls.push({ file, args, options })
     const key = [file, ...args].join(' ')
     const entry = script[key]
@@ -61,7 +66,7 @@ describe('verifyWorktree', () => {
     expect(outcome.scopeViolations).toEqual([])
     expect(outcome.tests).toEqual({ passed: 12, failed: 0, command: 'npm test' })
     expect(outcome.typecheck).toEqual({ ok: true, command: 'npm run typecheck' })
-    expect(outcome.evidence.map((entry) => entry.command)).toEqual([
+    expect(outcome.evidence.map((entry) => plainCommand(entry.command))).toEqual([
       'git status --porcelain',
       'git diff --name-only',
       'git diff --stat',
@@ -282,7 +287,7 @@ describe('createProcessExec', () => {
       { root: process.cwd(), exec: createProcessExec() },
       { cwd: process.cwd(), checks: { test: false, typecheck: false } }
     )
-    expect(outcome.evidence.map((entry) => entry.command)).toEqual([
+    expect(outcome.evidence.map((entry) => plainCommand(entry.command))).toEqual([
       'git status --porcelain',
       'git diff --name-only',
       'git diff --stat',

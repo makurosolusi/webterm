@@ -240,8 +240,11 @@ describe('export (writeMemoryFactFile)', () => {
     expect(content).toContain('\n# Deploy notes\n')
 
     expect(fake.calls.map((call) => call.file)).toEqual(['git', 'git'])
-    expect(fake.calls[0]!.args).toEqual(['add', '--', 'p1/project/deploy-notes-63f292d70d.md'])
-    const commitArgs = fake.calls[1]!.args
+    // gitExec.ts prefix: no fsmonitor, no hooks.
+    const SAFE = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null']
+    expect(fake.calls[0]!.args).toEqual([...SAFE, 'add', '--', 'p1/project/deploy-notes-63f292d70d.md'])
+    expect(fake.calls[1]!.args.slice(0, SAFE.length)).toEqual(SAFE)
+    const commitArgs = fake.calls[1]!.args.slice(SAFE.length)
     expect(commitArgs.slice(0, 4)).toEqual(['-c', 'user.name=webterm', '-c', 'user.email=webterm@localhost'])
     expect(commitArgs.slice(4, 6)).toEqual(['commit', '-m'])
     expect(commitArgs.slice(7)).toEqual(['--only', '--', 'p1/project/deploy-notes-63f292d70d.md'])
