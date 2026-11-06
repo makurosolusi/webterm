@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { allRows } from '../ledger/ledgerCore'
+import { gitCommand } from '../gitExec'
 import { eventBus } from '../events/eventBus'
 import type { SenseEvent } from '../events/eventModel'
 import { openFixture } from '../central/centralTestFixture.testutil'
@@ -70,7 +71,10 @@ describe('verifyWorktreeCompletion on a real repo', () => {
     expect(isSealedEvidence(v.evidence) && evidenceVerified(v.evidence)).toBe(true)
     expect(v.receipt).toMatchObject({ outcome: 'ok', detail: 'verified', operationId: 't1' })
     const commands = v.receipt.evidence['commands'] as Array<{ command: string; exitCode: number }>
-    expect(commands.map((c) => c.command)).toEqual(expect.arrayContaining(['git status --porcelain', 'npm test']))
+    // The receipt records the argv the system really ran (hardened git flags included), not a short form.
+    const ran = (args: string[]) => { const g = gitCommand(args); return [g.file, ...g.args].join(' ') }
+    expect(ran(['status', '--porcelain'])).toBe('git -c core.fsmonitor=false -c core.hooksPath=/dev/null status --porcelain')
+    expect(commands.map((c) => c.command)).toEqual(expect.arrayContaining([ran(['status', '--porcelain']), ran(['diff', '--name-only']), 'npm test']))
     expect(commands.find((c) => c.command === 'npm test')?.exitCode).toBe(0)
     expect(v.receipt.evidence['workerClaim']).toEqual({ ignored: true, chars: 12 })
     // No `typecheck` script in this project: not run, so not failed for it.
