@@ -8,6 +8,7 @@ Operator notes:
 - A stored `agentLaunchCommands.claude` is moved into a Claude launch profile named "Custom" on first load (see below); nothing to do by hand.
 - The workspace table gets a `layout` column (the tab-layout view, JSON) on first start; existing databases are upgraded in place and every workspace starts in canvas mode.
 - New dependency `@anthropic-ai/claude-agent-sdk` 0.3.318 (Anthropic commercial terms) for the Agent Chat node, with its peers `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk` and `zod`, all pinned. It drives the `claude` you have installed; no bundled Claude binary is used.
+- `WEBTERM_ALLOWED_HOSTS` is no longer read (see Removed). A leftover entry in `.env` is ignored and can be deleted.
 
 ### Added
 - "Clone Repository…" next to "Open Folder…" in the workspace "+" menu, the File menu, the Welcome screen and ⌘K. Paste an `https://`, `ssh://` or `git@host:path` URL, or `owner/repo` for GitHub. The clone shows its progress, can be cancelled, and opens as a new workspace. The parent folder defaults to `~/webterm/projects`, which is created the first time something is cloned or created there. The last parent you used is suggested next time, and if that folder is gone the default is used instead. If a private repository fails to authenticate, the error tells you to run `gh auth login` or set up an SSH key.
@@ -75,7 +76,7 @@ Operator notes:
 - On a narrow node, header buttons that don't fit move into the "…" (More) menu, so Close always stays visible.
 - File, board and folder-picker endpoints (such as `/api/fs` and `/api/workspaces`) now answer only the webterm page or a request carrying the root token. A plain `curl` or script without the root token gets 403 "Files and workspaces are available to the webterm UI only."
 - Agent status hooks now require the node's token. The hooks webterm installs for Claude already send it, so agent nodes are unaffected. A hook from a node that is on no board no longer records anything.
-- The Control panel shows the Claude Code sandbox as "mitigation" instead of "protected" and says why: it stops shell commands from reading webterm's data files directly, but the webterm API on 127.0.0.1 is still reachable from inside it.
+- Settings > Control shows how far each agent is protected, with the reasons. A sandboxed Claude agent on macOS is "Protected": the sandbox stops shell commands from reading webterm's data files, and the webterm API needs a credential the sandbox cannot read. A Claude agent with the sandbox switched off or on another platform, and other agent CLIs (which have no sandbox), show "Mitigation only".
 - Keys typed while a terminal is disconnected are dropped instead of being sent to the shell once the connection comes back.
 - After a reconnect a terminal receives only the output it missed, instead of clearing its screen and replaying the whole scrollback. It still clears and replays everything when the missed part is no longer stored or the session is a new one.
 - A terminal view that is taken off the page stops receiving output from the server; the session keeps running and is replayed when the terminal is shown again.
@@ -88,7 +89,6 @@ Operator notes:
 - Every start has an access token, loopback included: `WEBTERM_TOKEN`, else `<data dir>/secrets/WEBTERM_TOKEN`, created on first start (mode `600`). The terminal line names the file, never the value. Scripts send it in the `x-webterm-token` header.
 - The webterm page uses only its session cookie for `/api`, `/ws` and live streams. A `?token=` link still signs a browser in once and then disappears from the address bar; the server no longer accepts a token in any URL.
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
-- Settings > Control labels a sandboxed Claude agent on macOS as "Protected": the webterm API needs a credential the sandbox cannot read.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -133,6 +133,12 @@ Operator notes:
 - An agent that failed or was stopped now says so, with Retry or Resume, instead of showing a blank node or "Done".
 - Agent status survives a server restart.
 - Deleting a workspace ends its terminals, and terminals left behind by nodes that no longer exist on any board are cleaned up after a day.
+- Settings and feature toggles no longer fail with 403 in the signed-in web UI. Changes now also work from a remote web channel or behind a reverse proxy.
+- When a settings change is refused because your session has ended, the message now says "Your session has ended. Reload to sign in again." instead of pointing you to 127.0.0.1 or the access token.
+- Canvas nodes saved by a newer webterm version, or partly corrupted, are no longer deleted on the next save, and their running terminal sessions are no longer cleaned up as left behind.
+
+### Removed
+- `WEBTERM_ALLOWED_HOSTS` and the Host allowlist. They could never switch on now that every start enforces an access token, and a DNS-rebinding page is still refused because it has no credential for webterm.
 
 ### Security
 - Closed: a local process, such as an agent shell in the Claude sandbox, could reach the loopback API without any credential, and by forging `Sec-Fetch-Site: same-origin` plus `Origin` it could approve its own actions, enable the access token, or read and write files and workspaces (sec-208-1). Every request now needs the root token, the signed-in browser's HttpOnly cookie, or a node token on agent paths.
