@@ -1,5 +1,5 @@
 // Transport plumbing for the central chat client: route constants, the typed error, and the
-// token-bearing JSON fetch. Split from `../chatApi` so each file stays inside the repo budget.
+// cookie-carrying JSON fetch. Split from `../chatApi` so each file stays inside the repo budget.
 //
 // Credential: the `wt_ui` session cookie, same as `../api` and `../inboxTransport`.
 // Never a node capability, never `actor`, never a digest/nonce: web chat cannot approve.

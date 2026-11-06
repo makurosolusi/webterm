@@ -43,7 +43,7 @@ export function useAppTheme(settings: Pick<Settings, 'appTheme' | 'terminalTheme
 
 /** Whether this browser holds a UI session (drives the Logout entry), and sign-out. */
 export function useAuthActions() {
-  // A token-free loopback server needs no session, so `signedIn` stays false there and Logout hides.
+  // false until GET /auth/session confirms this browser's cookie; Logout hides meanwhile.
   const [signedIn, setSignedIn] = useState(false)
   useEffect(() => {
     const ac = new AbortController()

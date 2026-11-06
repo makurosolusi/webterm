@@ -53,7 +53,7 @@ export interface WorkspaceBarProps {
   onDeleteWorkspace: (id: string) => void
   /** Sign out (POST /auth/logout) then reload to SignInScreen. Rendered only when `showLogout`. */
   onLogout?: () => void
-  /** This browser holds a UI session. A token-free loopback has none, so there is nothing to sign out of. */
+  /** This browser holds a UI session (the `wt_ui` cookie), so there is something to sign out of. */
   showLogout?: boolean
   /** File > Settings…: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
   onOpenSettings?: () => void
