@@ -106,6 +106,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Arrow keys, Enter and Escape in menus opened from a node (model picker, mode picker, dropdowns) no longer move or deselect the node.
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
 - Opening Chat and Inbox (or Problems and Output) together no longer stacks panels on top of each other. They are now tabs of one bottom panel with a single header: opening a view selects its tab, the Chat input stays inside the panel, and "Jump to bottom" sits above the input instead of covering messages.
 - A browser node whose page crashed or disappeared now reports "crashed" instead of "not found", and Reload reopens it at its last URL.
