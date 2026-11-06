@@ -30,7 +30,7 @@ export interface UiAuthDeps {
   sessions: () => UiSessionStore
   opener: UiOpener
   hosts?: AllowedHostsArg
-  /** Root token in force (undefined = token-free loopback bind: /auth/login has nothing to check). */
+  /** Root token in force (every boot mints one; undefined only before boot, when /auth/login refuses). */
   token: () => string | undefined
   now?: () => number
 }

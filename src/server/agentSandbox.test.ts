@@ -100,10 +100,10 @@ describe('agentProtection', () => {
     }
   })
 
-  it('no kind claims protected while the API stays reachable from the sandbox (sec-208-1)', () => {
+  it('only sandboxed Claude on macOS claims protected: the API needs a credential the sandbox cannot read (sec-208-1)', () => {
     const level = (p: NodeJS.Platform, k: string) => agentProtection(p, {}).find((r) => r.kind === k)?.level
-    expect(level('darwin', 'claude')).toBe('mitigation')
-    expect(agentProtection('darwin', {}).find((r) => r.kind === 'claude')!.reasons.join(' ')).toContain('API')
+    expect(level('darwin', 'claude')).toBe('protected')
+    expect(agentProtection('darwin', {}).find((r) => r.kind === 'claude')!.reasons.join(' ')).toContain('HttpOnly cookie')
     expect(level('linux', 'claude')).toBe('mitigation')
     const off = agentProtection('darwin', { WEBTERM_AGENT_SANDBOX: 'off' }).find((r) => r.kind === 'claude')!
     expect(off.level).toBe('mitigation')

@@ -1,6 +1,7 @@
 // Bun-only (bun:sqlite, real ledger v16 schema): the DAG scheduler with fake ports (no git, no real
 // Claude). Waves from leases, human-only gates (403 for agents) with reblock, the 3-strike breaker,
 // the stale-base guard, verifier-only completion with the lease, escalation binding, events.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import { freshDb, T0 } from '../central/guard/controlGuard.testutil'
@@ -175,7 +176,7 @@ test('a gate node blocks dependents until a human decides; agents get 403; a pen
   expect((await handleDagApi(deps, req({}), url, { approve: true }))?.status).toBe(403) // plain curl, no browser
   expect(h.status(dag.id).gate).toBe('blocked')
 
-  const human = req({ 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700' })
+  const human = req({ 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700' })
   expect((await handleDagApi(deps, human, url, { approve: true, option: 'never' }))?.status).toBe(400)
   const ok = await handleDagApi(deps, human, url, { approve: true, option: 'tonight' })
   expect(ok?.status).toBe(200)
@@ -241,7 +242,7 @@ test('workers switched off dispatch nothing; restart abandons orphans without a 
 test('API: create validates the brief, previews waves; reads are open, writes UI-only', async () => {
   const h = setup()
   const deps: DagApiDeps = { ctx: { db: h.db, now: () => h.clock.t }, scheduler: h.s, isNodeToken: () => false, record: () => {} }
-  const human = { method: 'POST', headers: { host: '127.0.0.1:8700', 'sec-fetch-site': 'same-origin' } } as unknown as IncomingMessage
+  const human = { method: 'POST', headers: { host: '127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE } } as unknown as IncomingMessage
   const url = new URL('http://127.0.0.1:8700/api/dag')
   const body = { projectId: 'p1', title: 'T', repo: '/tmp/st/repo', tasks: [{ key: 'a', brief: brief(['src/a']) }, { key: 'b', brief: brief(['src/a/b']) }] }
   const bad = await handleDagApi(deps, human, url, { ...body, tasks: [{ key: 'a', brief: { objective: 'x' } }] })

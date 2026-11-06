@@ -1,5 +1,6 @@
 // Bun-only: the held PermissionRequest over the real ledger schema + policy engine: allow once, deny,
 // timeout (no decision), always-allow writes a human-ui grant that answers later requests, events.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
@@ -152,7 +153,7 @@ test('HTTP /api/approvals/permission: the page lists and decides; an agent crede
     await approvalHumanRoute(r, out as unknown as ServerResponse, new URL('http://x/api/approvals/permission'), { runtime, now: s.now, isNodeToken: (t) => t === 'node-tok' })
     return { status: out.statusCode, json: (out.payload ? JSON.parse(out.payload) : {}) as { items?: Array<{ id: string; label: string }> } }
   }
-  const page = { 'sec-fetch-site': 'same-origin' }
+  const page = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   const seen = { label: '', agent: 0, page: 0 }
   let done = false
   const tick = s.deps.sleep

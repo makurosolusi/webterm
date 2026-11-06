@@ -1,3 +1,4 @@
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import type { IncomingMessage } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import type { Workspace } from '../../shared/workspace'
@@ -108,7 +109,7 @@ describe('ProblemsService', () => {
 })
 
 const HOST = '127.0.0.1:8700'
-const req = (method: string, headers: Record<string, string> = { host: HOST, origin: `http://${HOST}`, 'sec-fetch-site': 'same-origin' }) =>
+const req = (method: string, headers: Record<string, string> = { host: HOST, origin: `http://${HOST}`, 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }) =>
   ({ method, headers }) as unknown as IncomingMessage
 const ws: Workspace = { id: 'ws1', name: 'w', cwd: '/w', viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], bridges: [], updatedAt: 0 }
 

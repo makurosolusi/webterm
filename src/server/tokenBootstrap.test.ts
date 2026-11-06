@@ -11,8 +11,6 @@ import {
   tokenFilePath,
 } from './tokenBootstrap'
 
-const LOOPBACK = '127.0.0.1'
-const LAN = '192.168.1.5'
 const FIXED = 'A'.repeat(43)
 const ENV_TOKEN = 'E'.repeat(40)
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]{32,128}$/
@@ -41,7 +39,7 @@ describe('bootstrapToken', () => {
   it('env menang atas berkas dan berkas tak disentuh', () => {
     const p = seed(FIXED)
     const before = statSync(p).mtimeMs
-    const s = bootstrapToken({ host: LAN, env: { WEBTERM_TOKEN: `  ${ENV_TOKEN} ` }, secretsDir })
+    const s = bootstrapToken({ env: { WEBTERM_TOKEN: `  ${ENV_TOKEN} ` }, secretsDir })
     expect(s).toEqual({ token: ENV_TOKEN, source: 'env', created: false })
     expect(statSync(p).mtimeMs).toBe(before)
     expect(readFileSync(p, 'utf8')).toBe(FIXED)
@@ -49,26 +47,21 @@ describe('bootstrapToken', () => {
 
   it('env hanya spasi dianggap kosong dan jatuh ke berkas', () => {
     seed(FIXED)
-    expect(bootstrapToken({ host: LAN, env: { WEBTERM_TOKEN: '   ' }, secretsDir })).toEqual({
+    expect(bootstrapToken({ env: { WEBTERM_TOKEN: '   ' }, secretsDir })).toEqual({
       token: FIXED, source: 'file', created: false,
     })
   })
 
   it('memakai berkas bila env kosong (isi di-trim)', () => {
     seed(`${FIXED}\n`)
-    expect(bootstrapToken({ host: LOOPBACK, env: {}, secretsDir })).toEqual({
+    expect(bootstrapToken({ env: {}, secretsDir })).toEqual({
       token: FIXED, source: 'file', created: false,
     })
   })
 
-  it('loopback tanpa env dan berkas => none, tak ada berkas/dir dibuat', () => {
-    const s = bootstrapToken({ host: LOOPBACK, env: {}, secretsDir })
-    expect(s).toEqual({ token: undefined, source: 'none', created: false })
+  it('no env and no file => minted, 0600/0700, on every bind (loopback is credentialed too); the second boot reads the disk', () => {
     expect(existsSync(secretsDir)).toBe(false)
-  })
-
-  it('non-loopback tanpa keduanya => dibangkitkan, 0600/0700, panggilan kedua memakai isi disk', () => {
-    const first = bootstrapToken({ host: LAN, env: {}, secretsDir })
+    const first = bootstrapToken({ env: {}, secretsDir })
     expect(first.source).toBe('file')
     expect(first.created).toBe(true)
     expect(first.token).toHaveLength(43)
@@ -76,13 +69,13 @@ describe('bootstrapToken', () => {
     expect(mode(secretsDir)).toBe(0o700)
     expect(mode(tokenFilePath(secretsDir))).toBe(0o600)
 
-    const second = bootstrapToken({ host: LAN, env: {}, secretsDir })
+    const second = bootstrapToken({ env: {}, secretsDir })
     expect(second).toEqual({ token: first.token, source: 'file', created: false })
     expect(readFileSync(tokenFilePath(secretsDir), 'utf8')).toBe(first.token)
   })
 
   it('generate injeksi dipakai untuk token baru', () => {
-    const s = bootstrapToken({ host: LAN, env: {}, secretsDir, generate: () => FIXED })
+    const s = bootstrapToken({ env: {}, secretsDir, generate: () => FIXED })
     expect(s).toEqual({ token: FIXED, source: 'file', created: true })
   })
 
@@ -91,7 +84,7 @@ describe('bootstrapToken', () => {
     (_label, content) => {
       const p = seed(content)
       let msg = ''
-      try { bootstrapToken({ host: LAN, env: {}, secretsDir }) } catch (e) { msg = (e as Error).message }
+      try { bootstrapToken({ env: {}, secretsDir }) } catch (e) { msg = (e as Error).message }
       expect(msg).toContain('token file unreadable or malformed')
       expect(msg).toContain(p)
       if (content) expect(msg).not.toContain(content)
@@ -99,14 +92,12 @@ describe('bootstrapToken', () => {
     },
   )
 
-  it('berkas mode 0644 => throw tanpa membocorkan token, loopback pun tidak membuka akses', () => {
+  it('berkas mode 0644 => throw tanpa membocorkan token', () => {
     const p = seed(FIXED, 0o644)
-    for (const host of [LAN, LOOPBACK]) {
-      let msg = ''
-      try { bootstrapToken({ host, env: {}, secretsDir }) } catch (e) { msg = (e as Error).message }
-      expect(msg).toContain(p)
-      expect(msg).not.toContain(FIXED)
-    }
+    let msg = ''
+    try { bootstrapToken({ env: {}, secretsDir }) } catch (e) { msg = (e as Error).message }
+    expect(msg).toContain(p)
+    expect(msg).not.toContain(FIXED)
     expect(readFileSync(p, 'utf8')).toBe(FIXED)
   })
 })

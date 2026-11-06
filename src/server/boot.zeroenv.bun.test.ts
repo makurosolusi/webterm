@@ -2,10 +2,14 @@
 // Tiap kasus punya tmp HOME/data/cwd sendiri; semua anak dibunuh di afterAll. Nilai token tak pernah dicetak.
 import { afterAll, expect, test } from 'bun:test'
 import { type ChildProcess, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { type AddressInfo, connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { BROWSER_WS_PATH } from '../shared/browser.contract'
+import { WS_PATH } from '../shared/protocol'
+import { allApiPaths } from './apiPaths.testutil'
+import { LSP_WS_PATH } from './lsp/lsp.contract'
 import { reapChildren } from './processReap.testutil'
 
 const ENTRY = join(import.meta.dirname, 'index.ts')
@@ -18,6 +22,10 @@ const SENTINEL_BOT = 'sentinel-bot-value-xyz'
 // Covers the slowest case (Z2+Z3 boots twice), so a server that never comes up fails with its own
 // message instead of bun's 5 s default, and the child is never left running mid-test.
 const BOOT_TEST_TIMEOUT_MS = 2 * READY_TIMEOUT_MS + 5_000
+/** Lock 1 walks every /api path four times; generous so a loaded machine fails on content, not time. */
+const WALK_TEST_TIMEOUT_MS = 120_000
+/** Lets the async file log sink drain before the data dir is scanned for the token. */
+const LOG_FLUSH_MS = 500
 const children: ChildProcess[] = []
 // Kill AND wait: an unawaited kill leaves the server for bun's own dangling-process kill (processReap.testutil.ts).
 afterAll(() => { children.forEach((c) => c.kill()); return reapChildren() })
@@ -72,10 +80,10 @@ async function exitedWithin(b: Boot): Promise<number | null> {
 }
 
 /** GET mentah via TCP supaya header Host bisa dipalsukan (fetch melarangnya). */
-function rawGet(port: number, host: string, extraHeaders = ''): Promise<{ status: number; body: string }> {
+function rawGet(port: number, host: string, extraHeaders = '', path = '/api/settings/env'): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     let buf = ''
-    const sock = connect(port, '127.0.0.1', () => sock.write(`GET /api/settings/env HTTP/1.1\r\nHost: ${host}\r\n${extraHeaders}Connection: close\r\n\r\n`))
+    const sock = connect(port, '127.0.0.1', () => sock.write(`GET ${path} HTTP/1.1\r\nHost: ${host}\r\n${extraHeaders}Connection: close\r\n\r\n`))
     sock.on('data', (d) => void (buf += d.toString()))
     sock.on('error', reject)
     sock.on('close', () => resolve({ status: Number(buf.split(' ')[1]), body: buf.split('\r\n\r\n')[1] ?? '' }))
@@ -85,15 +93,49 @@ function rawGet(port: number, host: string, extraHeaders = ''): Promise<{ status
 const tokenPath = (data: string): string => join(data, 'secrets', 'WEBTERM_TOKEN')
 const mode = (p: string): number => statSync(p).mode & 0o777
 const api = (b: Boot, headers: Record<string, string> = {}): Promise<Response> => fetch(`http://127.0.0.1:${b.port}/api/settings/env`, { headers })
+const UPGRADE = 'Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n'
+/** Files under `dir` whose bytes contain `needle` (logs, db, WAL, run files alike). */
+const filesContaining = (dir: string, needle: string): string[] =>
+  (readdirSync(dir, { recursive: true }) as string[]).map((f) => join(dir, f)).filter((f) => statSync(f).isFile() && readFileSync(f).includes(needle))
 
-test('Z1 loopback tanpa env: naik terbuka, data 0700, db 0600, tanpa berkas token, stderr bersih', async () => {
+test('Z1 loopback with no env is credentialed: data 0700, db 0600, token file 0600/43, no credential 403, stderr clean', async () => {
   const b = await boot()
-  expect((await api(b)).status).toBe(200)
+  const token = readFileSync(tokenPath(b.data), 'utf8').trim()
+  expect(token.length).toBe(TOKEN_LEN)
+  expect(mode(tokenPath(b.data))).toBe(0o600)
+  expect((await api(b)).status).toBe(403)
+  expect((await api(b, { 'x-webterm-token': token })).status).toBe(200)
   expect(mode(b.data)).toBe(0o700)
   expect(mode(join(b.data, 'webterm.db'))).toBe(0o600)
-  expect(existsSync(tokenPath(b.data))).toBe(false)
   expect(b.out()).not.toMatch(/Error|EADDRINUSE|throw/)
+  expect(b.out()).not.toContain(token)
 }, BOOT_TEST_TIMEOUT_MS)
+
+// Lock 1 (design §6): the path list is harvested from the source (apiPaths.testutil.ts), so a new
+// route family is walked without editing this test. Allowlisted callers never reach /api without a
+// credential: /auth/* is outside /api, the channel webhook is routed before the gate, node-token
+// paths need a valid node token (auth.test.ts).
+test('L1 default loopback bind: every /api path and every /ws refuse no credential and ?token=; the token is never logged', async () => {
+  const b = await boot()
+  const token = readFileSync(tokenPath(b.data), 'utf8').trim()
+  const paths = allApiPaths()
+  expect(paths.length).toBeGreaterThan(100)
+  const answered: string[] = []
+  for (const p of paths) for (const method of ['GET', 'POST']) for (const query of ['', `?token=${token}`]) {
+    const r = await fetch(`http://127.0.0.1:${b.port}${p}${query}`, { method })
+    await r.body?.cancel()
+    if (r.status !== 401 && r.status !== 403) answered.push(`${method} ${p}${query && ' ?token=<root>'} -> ${r.status}`)
+  }
+  expect(answered).toEqual([])
+  for (const p of [WS_PATH, BROWSER_WS_PATH, LSP_WS_PATH]) for (const query of ['', `?token=${token}`]) {
+    const r = await rawGet(b.port, `127.0.0.1:${b.port}`, UPGRADE, `${p}${query}`)
+    expect(`${p}${query && '?token=<root>'} -> ${r.status}`).toBe(`${p}${query && '?token=<root>'} -> 403`)
+  }
+  expect((await api(b, { 'x-webterm-token': token })).status).toBe(200) // the walk is not a dead server
+  await sleep(LOG_FLUSH_MS)
+  expect(b.out()).not.toContain(token)
+  expect(filesContaining(b.data, token)).toEqual([tokenPath(b.data)])
+}, WALK_TEST_TIMEOUT_MS)
 
 test('Z2+Z3 non-loopback: token berkas 0600/43, 401/403 tanpa token, token tak bocor; reboot memakai token sama', async () => {
   const b = await boot({ HOST: '0.0.0.0' })
@@ -138,13 +180,15 @@ test('Z6 PORT invalid: keluar non-nol dan pesan menyebut PORT="abc"', async () =
   expect(b.out()).toContain('PORT="abc"')
 }, BOOT_TEST_TIMEOUT_MS)
 
-test('Z7 rebinding: Host asing 403 host_not_allowed (Host tak dipantulkan), Host localhost 200', async () => {
+// The Host allowlist only ran while no token existed; loopback now always has one, so a rebinding
+// page is stopped by the credential instead: its origin holds no wt_ui cookie and no token.
+test('Z7 rebinding: a foreign Host with no credential is 403 (Host not reflected); localhost + token 200', async () => {
   const b = await boot()
+  const token = readFileSync(tokenPath(b.data), 'utf8').trim()
   const evil = await rawGet(b.port, `evil.example:${b.port}`, `Origin: http://evil.example:${b.port}\r\n`)
   expect(evil.status).toBe(403)
-  expect(JSON.parse(evil.body)).toEqual({ error: 'host_not_allowed' })
   expect(evil.body).not.toContain('evil.example')
-  expect((await rawGet(b.port, `localhost:${b.port}`)).status).toBe(200)
+  expect((await rawGet(b.port, `localhost:${b.port}`, `x-webterm-token: ${token}\r\n`)).status).toBe(200)
 }, BOOT_TEST_TIMEOUT_MS)
 
 // Adaptasi Z8: POST /api/settings/token/enable milik EM-15 (belum ada). Efek yang sama diuji lewat token berkas:

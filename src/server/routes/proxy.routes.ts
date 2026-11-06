@@ -7,6 +7,7 @@ import { startPortScanner } from '../ports/ports.runtime'
 import { parseProxyUrl } from '../proxy/proxy.service'
 import { preferredProxyPort, startProxyListener } from '../proxy/proxy.listener'
 import { getTokenState } from '../tokenBootstrap'
+import { uiSessions } from '../uiSession'
 import { json, type ApiRoute } from './route.core'
 
 let proxyPort: number | undefined
@@ -18,6 +19,7 @@ export async function startDevProxy(o: { host: string; mainPort: number; allowed
     deps: {
       allowedHosts: o.allowedHosts, mainPort: o.mainPort,
       token: () => getTokenState().token,
+      isUiSession: (raw) => uiSessions().verify(raw),
       listening: async () => (await startPortScanner()).list(),
       selfPorts: () => (proxyPort === undefined ? [o.mainPort] : [o.mainPort, proxyPort]),
     },

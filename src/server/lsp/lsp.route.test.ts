@@ -16,6 +16,7 @@ import { LSP_HINTS } from './lsp.resolve'
 import { lspUpgrade } from './lsp.route'
 
 const FAKE = path.join(__dirname, '__fixtures__', 'fakeLsp.mjs')
+const SESSION = 's'.repeat(43) // test-only signed-in UI
 
 describe('/ws/lsp over a real socket', () => {
   let server: http.Server
@@ -29,11 +30,11 @@ describe('/ws/lsp over a real socket', () => {
       const url = new URL(req.url || '/', 'http://x')
       const route = upgradeRoute(url.pathname, WS_PATH, false)
       if (route === 'destroy') return socket.destroy()
-      if (!authorizeRequest({ headers: req.headers, expectedToken: undefined, queryToken: null, pathname: url.pathname, isNodeToken: () => false })) {
+      if (!authorizeRequest({ headers: req.headers, expectedToken: undefined, pathname: url.pathname, isNodeToken: () => false, isUiSession: (v) => v === SESSION })) {
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
         return socket.destroy()
       }
-      if (!humanUpgradeOriginOk(req.headers, false)) {
+      if (!humanUpgradeOriginOk(req.headers, undefined)) {
         socket.write(`HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: ${WS_ORIGIN_REQUIRED.length}\r\n\r\n${WS_ORIGIN_REQUIRED}`)
         return socket.destroy()
       }
@@ -45,7 +46,7 @@ describe('/ws/lsp over a real socket', () => {
   afterAll(() => { mgr.killAll(); return new Promise<void>((r) => server.close(() => r())) })
 
   const dial = (query: string, withOrigin = true) =>
-    new WebSocket(`ws://127.0.0.1:${port}${LSP_WS_PATH}${query}`, withOrigin ? { origin: `http://127.0.0.1:${port}` } : {})
+    new WebSocket(`ws://127.0.0.1:${port}${LSP_WS_PATH}${query}`, { headers: { cookie: `wt_ui=${SESSION}` }, ...(withOrigin ? { origin: `http://127.0.0.1:${port}` } : {}) })
 
   const refused = (ws: WebSocket) => new Promise<string>((resolve) => {
     ws.on('unexpected-response', (_q, res) => { let b = ''; res.on('data', (c) => (b += c)); res.on('end', () => resolve(`${res.statusCode} ${b}`.trim())) })

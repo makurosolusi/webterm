@@ -1,5 +1,6 @@
 // Bun-only (bun:sqlite). Procedural memory: human-only writes, consent bridge, poisoning guard,
 // SessionStart block and its size cap, and the UI-only HTTP surface.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import type { Workspace } from '../../shared/workspace'
@@ -81,7 +82,7 @@ test('HTTP: agent credentials are refused; the same-origin page lists, adds, con
   const db = fixture()
   const call = (method: string, headers: Record<string, string>, path = PROCEDURAL_PATH, body?: unknown) =>
     handleProceduralApi({ method, headers } as unknown as IncomingMessage, new URL(`http://127.0.0.1:8700${path}`), body, db, (t) => t === 'node-tok')
-  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   expect(call('POST', { ...ui, 'x-webterm-token': 'node-tok' }, PROCEDURAL_PATH, { text: 'x' })).toEqual({ status: 403, body: { error: 'agent_cannot_remember' } })
   expect(call('POST', { ...ui, 'x-webterm-capability': 'wcap_x' }, PROCEDURAL_PATH, { text: 'x' })?.status).toBe(403)
   expect(call('POST', { host: '127.0.0.1:8700' }, PROCEDURAL_PATH, { text: 'x' })?.status).toBe(403) // plain curl

@@ -1,5 +1,6 @@
 // Bun-only: policy engine over the real ledger schema (v11) — rules, tier data, cable grants,
 // attenuation, K3/K4 refusals, decision events, persistence across a reopen, and the guard wiring.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterAll, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -169,7 +170,7 @@ test('HTTP: an agent credential cannot create grants (403); the same-origin UI c
   const { policy } = setup()
   const call = (method: string, headers: Record<string, string>, body?: unknown, path = POLICY_GRANTS_PATH) =>
     handlePolicyApi({ method, headers } as unknown as IncomingMessage, new URL(`http://127.0.0.1:8700${path}`), body, { policy, isNodeToken: (t) => t === 'node-tok' })
-  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   const rule = { subject: 'node:a1', capability: 'browser.*', effect: 'allow' }
   expect(call('POST', { ...ui, 'x-webterm-capability': 'wcap_x' }, rule)).toEqual({ status: 403, body: { error: 'agent_cannot_grant' } })
   expect(call('POST', { ...ui, 'x-webterm-token': 'node-tok' }, rule)).toEqual({ status: 403, body: { error: 'agent_cannot_grant' } })

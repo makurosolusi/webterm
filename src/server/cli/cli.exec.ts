@@ -43,7 +43,7 @@ export type Args = Record<string, unknown>
 
 /**
  * Proven caller: a node token (the agent's own header file) = `node:<id>`. Anything else reached the
- * route through the root gate in index.ts (root token or tokenless loopback), so it is the human.
+ * route through the root gate in index.ts (root token header or the signed-in UI cookie), so it is the human.
  */
 export function principalOf(headers: IncomingMessage['headers']): Principal {
   const node = requesterOf(headers)

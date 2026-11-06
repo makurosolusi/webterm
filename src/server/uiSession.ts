@@ -4,6 +4,7 @@
 // sec-208-3 (a sandboxed agent can curl loopback but cannot read the browser profile or the data dir).
 import type { Database } from 'bun:sqlite'
 import { createHash, randomBytes } from 'node:crypto'
+import { acceptUiSessions } from './approvalAuth'
 import { openDb } from './db'
 
 /** Idle expiry, as nodeterm: a session unused for 30 days is gone. */
@@ -81,3 +82,6 @@ export function uiSessions(): UiSessionStore {
   store ??= createUiSessionStore(openDb())
   return store
 }
+
+// The human-only gate (approvalAuth.ts, pure) checks cookies through this registry.
+acceptUiSessions((raw) => uiSessions().verify(raw))

@@ -1,6 +1,7 @@
 // Smoke Chrome NYATA untuk node Browser (bukan bagian `npm test`): WEBTERM_BROWSER_SMOKE=on bun scripts/browser-smoke.ts
 // Menjalankan server uji di PORT sendiri + data dir /tmp terisolasi + fixture HTTP loopback; semua anak dimatikan di akhir.
 import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -29,9 +30,12 @@ const fixture = Bun.serve({
 })
 const dataDir = mkdtempSync(join(tmpdir(), 'webterm-browser-smoke-'))
 const base = `http://127.0.0.1:${fixture.port}`
+// Every request needs a credential (loopback too): the smoke owns a throwaway root token and sends it as a header.
+const TOKEN = randomBytes(32).toString('base64url')
+const AUTH = { 'x-webterm-token': TOKEN }
 const server = spawn('bun', ['src/server/index.ts'], {
   stdio: ['ignore', 'ignore', 'pipe'],
-  env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT), HOST: '127.0.0.1', WEBTERM_DATA_DIR: dataDir, WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_DISCARD_MS: String(DISCARD_MS), WEBTERM_BROWSER_ALLOW_HOSTS: `127.0.0.1:${fixture.port}`, WEBTERM_TOKEN: '' },
+  env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT), HOST: '127.0.0.1', WEBTERM_DATA_DIR: dataDir, WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_DISCARD_MS: String(DISCARD_MS), WEBTERM_BROWSER_ALLOW_HOSTS: `127.0.0.1:${fixture.port}`, WEBTERM_TOKEN: TOKEN },
 })
 let serverErr = ''
 server.stderr?.on('data', (b) => { serverErr = (serverErr + b).slice(-2000); if (process.env.WEBTERM_SMOKE_KEEP === 'on') process.stderr.write(b) })
@@ -42,13 +46,13 @@ async function until(cond: () => boolean | Promise<boolean>, ms = 15_000): Promi
 
 async function main() {
   const api = `http://127.0.0.1:${PORT}`
-  const up = async () => { try { return (await fetch(`${api}/api/browser/status`)).ok } catch { return false } } // belum listen = false, bukan galat
+  const up = async () => { try { return (await fetch(`${api}/api/browser/status`, { headers: AUTH })).ok } catch { return false } } // belum listen = false, bukan galat
   check('server naik', await until(up, 10_000), serverErr.slice(-200))
-  const st = await (await fetch(`${api}/api/browser/status`)).json() as Record<string, unknown>
+  const st = await (await fetch(`${api}/api/browser/status`, { headers: AUTH })).json() as Record<string, unknown>
   check('status enabled+binFound', st.enabled === true && st.binFound === true, JSON.stringify(st))
 
-  // Origin = halaman webterm sendiri: server menolak upgrade kanal manusia tanpa Origin saat tanpa token (wsOrigin.ts).
-  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws/browser?workspaceId=${WORKSPACE}`, { headers: { Origin: api } })
+  // Root token header: the verified token is the credential, no Origin needed (wsOrigin.ts).
+  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws/browser?workspaceId=${WORKSPACE}`, { headers: AUTH })
   ws.binaryType = 'arraybuffer'
   const states: Array<Record<string, unknown>> = [], errors: unknown[] = []
   const frames: Uint8Array[] = []
@@ -103,7 +107,7 @@ async function main() {
   check('SSRF: IP privat tak di-allowlist ditolak (blocked)', await until(() => errors.some((e) => (e as { code?: string }).code === 'blocked')), JSON.stringify(errors))
 
   send({ t: 'detach' })
-  const liveCount = async () => ((await (await fetch(`${api}/api/browser/status`)).json()) as { live: number }).live
+  const liveCount = async () => ((await (await fetch(`${api}/api/browser/status`, { headers: AUTH })).json()) as { live: number }).live
   check('detach -> tab di-discard setelah DISCARD_MS (live=0)', await until(async () => (await liveCount()) === 0, 10_000))
   const before = events.filter((e) => e.startsWith('load:/b')).length
   send({ t: 'attach', w: 800, h: 600, dpr: 1 })

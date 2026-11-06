@@ -1,16 +1,12 @@
-// Human-UI-only gate for route entries that read or write the user's files and board (sec-208-1,
-// temporary mitigation). On a token-free loopback bind the outer gate (`allowed()`, index.ts)
-// admits any local process, so a plain `curl` or an agent shell could list/read/write any path and
-// rewrite workspaces. Wrapped entries answer only:
-//   - the webterm page (`uiOnlyDenial`, approvalAuth.ts: same-origin fetch metadata, no agent
-//     credential), or
-//   - a request carrying the configured root token (an operator script; the outer gate already
-//     proved it, and node tokens never pass the outer gate on these paths: `isNodeTokenPath`).
+// Human-UI-only gate for route entries that read or write the user's files and board (sec-208-1).
+// The outer gate (`allowed()`, index.ts) admits several credentials, node tokens included on their
+// own paths; wrapped entries answer only:
+//   - the signed-in webterm page (`uiOnlyDenial`, approvalAuth.ts: live `wt_ui` cookie, same-origin
+//     fetch metadata, no agent credential), or
+//   - a request carrying the root token header (an operator script; the outer gate already proved it).
 // Agent sessions keep their own surfaces (/api/tools, /api/control/*, /api/context-link), none of
 // which route through a wrapped entry. Lock: routes/route.uiOnly.policy.bun.test.ts.
-// ponytail: `Sec-Fetch-Site` can be forged by a deliberate same-uid process (see uiOnlyDenial);
-// the permanent fix is a UI session secret bound to the page, as nodeterm control-confirm does.
-import { TOKEN_HEADER, TOKEN_PARAM, tokensMatch } from '../auth'
+import { TOKEN_HEADER, tokensMatch } from '../auth'
 import { uiOnlyDenial } from '../approvalAuth'
 import { firstHeader } from '../httpHeaders'
 import { getTokenState } from '../tokenBootstrap'
@@ -18,12 +14,8 @@ import { json, type ApiRoute, type RouteCtx } from './route.core'
 
 const UI_ONLY_MESSAGE = 'Files and workspaces are available to the webterm UI only.'
 
-/** true when a root token is configured and this request presents it. */
-function hasRootToken(c: RouteCtx): boolean {
-  const root = getTokenState().token
-  if (root === undefined) return false
-  return tokensMatch(root, firstHeader(c.req.headers[TOKEN_HEADER]) ?? c.url.searchParams.get(TOKEN_PARAM))
-}
+/** true when this request presents the root token header (tokensMatch fails closed without one). */
+const hasRootToken = (c: RouteCtx): boolean => tokensMatch(getTokenState().token, firstHeader(c.req.headers[TOKEN_HEADER]))
 
 /** `route` answering 403 to anything but the webterm page or the root token; needs a `match`. */
 export function uiOnly(route: ApiRoute & { match: NonNullable<ApiRoute['match']> }): ApiRoute {

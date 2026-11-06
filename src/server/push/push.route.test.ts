@@ -1,3 +1,4 @@
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,7 +10,7 @@ import { readPushState, vapidKeys, VAPID_SECRET_KEY } from './push.store'
 import { fakeBrowser, recordingFetch } from './push.testutil'
 
 const HOST = '127.0.0.1:8700'
-const BROWSER = { host: HOST, origin: `http://${HOST}`, 'sec-fetch-site': 'same-origin' }
+const BROWSER = { host: HOST, origin: `http://${HOST}`, 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
 const NODE_TOKEN = 'n'.repeat(40) // test-only
 
 let deps: PushRouteDeps

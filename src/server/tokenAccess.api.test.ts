@@ -1,4 +1,5 @@
 // Token opt-in (EM-15): enable/rotate/GET lewat rute nyata, data dir mkdtemp, nol nilai token di log/GET.
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -21,7 +22,7 @@ const ENABLE = `${GET_PATH}/enable`
 const ROTATE = `${GET_PATH}/rotate`
 const NONE = { token: undefined, source: 'none', created: false } as const
 /** Bentuk permintaan fetch() dari halaman webterm sendiri (fetch metadata + Origin sama). */
-const BROWSER = { host: `${LOOPBACK}:8700`, origin: `http://${LOOPBACK}:8700`, 'sec-fetch-site': 'same-origin' }
+const BROWSER = { host: `${LOOPBACK}:8700`, origin: `http://${LOOPBACK}:8700`, 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
 
 let root: string
 let secretsDir: string

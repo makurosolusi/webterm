@@ -1,5 +1,6 @@
 // Templates end to end over the real route, a real in-memory webterm `app` table and a real ledger
 // routine store; worktree creation is a recorder (the git side is covered by workspaceWorktree tests).
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { beforeEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import type { IncomingMessage } from 'node:http'
@@ -13,7 +14,7 @@ import { substitute, validateTemplate, type WebtermTemplate } from './template.m
 import { registerClaudeLaunchSettings } from '../claudeLauncher/claudeLauncher'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
 
-const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' } // test-only
+const ui = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' } // test-only
 const HOSTILE = '$(rm -rf ~) `id` ; echo pwned\nsecond line {{repo}}'
 const SECRET = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUV' // test-only fake key shape
 

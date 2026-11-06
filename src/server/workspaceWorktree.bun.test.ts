@@ -1,4 +1,5 @@
 // Real git on throwaway repos under a temp dir: never touches the user's repos or data dir.
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -160,7 +161,7 @@ test('route: agent credentials get 403 on POST, needs_confirm is a 409', async (
   const u = (p: string) => new URL(`http://127.0.0.1:8700${p}`)
   const agent = await workspaceWorktreeRoute(req({ 'x-webterm-token': 'node-tok' }), u('/api/workspace-worktree/create'), async () => '{}', { root, isNodeToken: () => true })
   expect(agent?.status).toBe(403)
-  const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
+  const ui = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
   const created = await workspaceWorktreeRoute(req(ui), u('/api/workspace-worktree/create'), async () => JSON.stringify({ repo, title: 'Route' }), { root, isNodeToken: () => false })
   expect(created?.status).toBe(201)
   const path = (created?.body as { path: string }).path

@@ -1,6 +1,7 @@
 // sec-208-4 lock. (1) Regression: the shared route body reader (`ctx.readBody`, git-info) stops at
 // its cap and answers 413 instead of buffering the whole body (a 200 MB POST used to cost 500 MB RSS).
 // (2) Policy: no server source reads a request stream by hand outside the capped readers.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterAll, describe, expect, test } from 'bun:test'
 import http from 'node:http'
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -23,7 +24,7 @@ const CAPPED_READERS = new Set([
   'evalcases/evalReplay.ts', // offline eval harness, in-process test server only
   'central/eval/goldenHarness.ts', // offline eval harness, in-process test server only
 ])
-const UI = { 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }
+const UI = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, 'content-type': 'application/json' }
 
 const server = http.createServer((req, res) => { if (!handleApi(req, res)) { res.statusCode = 404; res.end() } })
 await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))

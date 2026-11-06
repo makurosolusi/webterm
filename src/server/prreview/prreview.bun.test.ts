@@ -2,6 +2,7 @@
 // does), a fake `gh` script first on PATH (auth status / pr view / pr list / pr diff / api), the real
 // `agent.spawn` spawner and process runner with a fake agent in place of `claude`, real worktrees and
 // a real in-memory ledger with the Inbox. Nothing may reach GitHub before the human approves.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { execFileSync } from 'node:child_process'
@@ -114,7 +115,7 @@ async function drafted(svc: PrReviewService): Promise<string> {
 }
 
 const req = (method: string, headers: Record<string, string> = {}) => ({ method, headers }) as unknown as IncomingMessage
-const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
+const ui = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
 const u = (p: string) => new URL(`http://127.0.0.1:8700${p}`)
 const body = (v: unknown) => async () => JSON.stringify(v)
 

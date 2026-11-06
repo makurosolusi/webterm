@@ -1,6 +1,7 @@
 // Bun-only (real ledger schema): F4-d switch default + persistence, the classifier hooked into Central's act_gated
 // cards and into held Claude permission prompts, never-auto beating an `allow`, failure leaving the card to the
 // human, the simulator's diff counts over a fixture event log, and the UI-only routes. The model is always a fake.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import type { IncomingMessage } from 'node:http'
@@ -165,7 +166,7 @@ test('simulator: diff counts over a fixture event log, nothing executed', () => 
   expect(thrown instanceof RangeError).toBe(true)
 })
 
-const req = (method: string, headers: Record<string, string> = {}): IncomingMessage => ({ method, headers: { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', ...headers } }) as unknown as IncomingMessage
+const req = (method: string, headers: Record<string, string> = {}): IncomingMessage => ({ method, headers: { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, ...headers } }) as unknown as IncomingMessage
 
 test('routes: agents get 403, the page can flip the switch and simulate', () => {
   const s = setup()

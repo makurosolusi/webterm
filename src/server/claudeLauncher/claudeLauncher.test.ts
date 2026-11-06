@@ -1,4 +1,5 @@
 // Resolver + node profile application + the Test endpoint (no server boot, no DB).
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
 import { Readable } from 'node:stream'
@@ -59,7 +60,7 @@ describe('applyNodeClaudeProfile', () => {
 })
 
 describe('POST /api/claude-launch/test', () => {
-  const req = (body: unknown, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', host: 'h', origin: 'http://h' }): IncomingMessage =>
+  const req = (body: unknown, headers: Record<string, string> = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, host: 'h', origin: 'http://h' }): IncomingMessage =>
     Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: 'POST', headers }) as unknown as IncomingMessage
   const url = new URL('http://h/api/claude-launch/test')
   const probe = vi.fn(async (launch: { profile: { id: string; name: string } }) => ({ ok: true, profile: launch.profile, steps: [] }))

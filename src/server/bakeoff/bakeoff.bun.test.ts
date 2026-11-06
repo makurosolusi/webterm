@@ -1,6 +1,7 @@
 // Bake-off end to end on a throwaway git repo: real worktrees, the real `agent.spawn` spawner and
 // process runner with a fake agent script in place of `claude` (no model is ever called), the real
 // F4-c verifier, a real ledger (in-memory, migrated to v20) and the inbox card.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { execFileSync } from 'node:child_process'
@@ -151,7 +152,7 @@ test('the daily cost cap refuses a bake-off whose N x estimate does not fit, bef
   expect(await codeOf(refused)).toBe('cost_cap')
   const message = 'A bake-off of 4 candidates is estimated at $0.80, but only $0.60 of the $1.00 daily cost cap remains. Use fewer candidates or raise the cap.'
   expect(await refused.catch((e: Error) => e.message)).toBe(message)
-  const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
+  const ui = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
   const viaApi = await handleBakeoffApi({ service: svc, isNodeToken: () => false }, { method: 'POST', headers: ui } as unknown as IncomingMessage,
     new URL('http://127.0.0.1:8700/api/bakeoff'), async () => JSON.stringify({ repo, prompt: 'x', count: 4 }))
   expect(viaApi).toEqual({ status: 429, body: { error: 'cost_cap', message } })
@@ -178,7 +179,7 @@ test('api: agent credentials get 403, reads are open, cleanup asks for confirm w
   const svc = service()
   const req = (method: string, headers: Record<string, string> = {}) => ({ method, headers }) as unknown as IncomingMessage
   const u = (p: string) => new URL(`http://127.0.0.1:8700${p}`)
-  const ui = { 'sec-fetch-site': 'same-origin', origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
+  const ui = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE, origin: 'http://127.0.0.1:8700', host: '127.0.0.1:8700' }
   const body = (v: unknown) => async () => JSON.stringify(v)
   const agent = await handleBakeoffApi({ service: svc, isNodeToken: () => true }, req('POST', { 'x-webterm-token': 'tok' }), u('/api/bakeoff'), body({ repo, prompt: 'x', count: 2 }))
   expect(agent?.status).toBe(403)

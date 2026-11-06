@@ -1,5 +1,6 @@
 // Bun-only (bun:sqlite). F5-b shared blackboard: who may write which key, proposals + human confirm/reject,
 // history, the awareness summary, the HTTP gate (UI / node token / anonymous) and the Central tools.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import { writeProposals } from '../memory/consolidator/consolidator.store'
@@ -99,7 +100,7 @@ test('summary lists current values newest first under the header and fits the bu
 
 test('HTTP: the UI and proven nodes read; a node writes as itself; only the UI confirms; anonymous callers get 403', () => {
   const db = fixture()
-  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   const node = { 'x-webterm-token': 'tok-a1' }
   const call = (method: string, headers: Record<string, string>, path = BLACKBOARD_PATH, body?: unknown) =>
     handleBlackboardApi({ method, headers } as unknown as IncomingMessage, new URL(`http://127.0.0.1:8700${path}`), body, {

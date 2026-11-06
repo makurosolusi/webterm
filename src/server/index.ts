@@ -9,7 +9,7 @@ import { sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
-import { TOKEN_PARAM, authorizeRequest, denyReason, isLoopbackHost, isNodeTokenPath, logAuthLogin, logAuthReject } from './auth'
+import { authorizeRequest, denyReason, isLoopbackHost, isNodeTokenPath, logAuthLogin, logAuthReject } from './auth'
 import { dataDir } from './config'
 import { configureLogging, createLogger, flushLogsSync } from './logs'
 import { capabilityStore } from './control/mount'
@@ -138,7 +138,6 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
   const ok = authorizeRequest({
     headers: req.headers,
     expectedToken,
-    queryToken: url.searchParams.get(TOKEN_PARAM),
     pathname: url.pathname,
     allowedHosts: HOSTS,
     isNodeToken: isValidNodeToken,
@@ -147,7 +146,7 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
     isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
     isUiSession: (v) => uiSessions().verify(v),
   })
-  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken, url.searchParams.get(TOKEN_PARAM), HOSTS), req.headers.host)
+  if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken, HOSTS), req.headers.host)
   return ok
 }
 
@@ -242,14 +241,14 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy()
     return
   }
-  // Human channels (/ws PTY, /ws/browser stream), token-free bind: only a browser-sent Origin proves the caller is the web UI (wsOrigin.ts).
-  if (!humanUpgradeOriginOk(req.headers, getTokenState().token !== undefined)) {
+  // Human channels (/ws PTY, /ws/browser stream) on the cookie: only a browser-sent Origin proves the caller is the web UI (wsOrigin.ts).
+  if (!humanUpgradeOriginOk(req.headers, getTokenState().token)) {
     logAuthReject(url.pathname, 'origin')
     socket.write(`HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${WS_ORIGIN_REQUIRED.length}\r\n\r\n${WS_ORIGIN_REQUIRED}`)
     socket.destroy()
     return
   }
-  if (getTokenState().token !== undefined) logAuthLogin(url.pathname)
+  logAuthLogin(url.pathname)
   // Editor language servers: same gates as above; root = the workspace's stored cwd (lsp.route.ts).
   if (route === 'lsp') return lspUpgrade(req, socket, head, url, { workspace: (id) => db.get(id) })
   if (route === 'browser') {

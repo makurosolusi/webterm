@@ -20,16 +20,15 @@ const LISTEN_FAILED_EXIT_CODE = 1
 
 const log = createLogger('server')
 
-/** Token baru: URL ber-token hanya ke stderr TTY (sekali, bukan logger); selain TTY hanya path + panjang. */
-function announceToken(state: TokenState, host: string, port: number, secretsDir: string): void {
-  if (!state.created || state.token === undefined) return
+/** Where the access token lives: a new one is logged (path + length); a terminal gets one line naming
+ *  its source on every boot (headless sign-in pastes it). The value itself is never printed or logged. */
+function announceToken(state: TokenState, secretsDir: string): void {
+  if (state.token === undefined) return
   const path = tokenFilePath(secretsDir)
-  if (!process.stderr.isTTY) {
-    log.info('auth.token_created', 'Access token created', { path, len: state.token.length })
-    return
-  }
-  const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
-  process.stderr.write(`webterm: access token created at ${path} (${TOKEN_FILE_MODE_LABEL}). Open: http://${urlHost}:${port}/?token=${state.token}\n`)
+  if (state.created) log.info('auth.token_created', 'Access token created', { path, len: state.token.length })
+  if (!process.stderr.isTTY) return
+  const where = state.source === 'env' ? 'the WEBTERM_TOKEN environment variable' : `${path} (${TOKEN_FILE_MODE_LABEL})`
+  process.stderr.write(`webterm: sign in through the window webterm opens, or paste the access token from ${where}\n`)
 }
 
 /**
@@ -41,11 +40,11 @@ export function bootWiring(env: NodeJS.ProcessEnv, cwd: string): { host: string;
   const { host, port } = resolveHostPort(env)
   recordDotenvBoot(cwd, env)
   const secretsDir = join(dataDir(), SECRETS_SUBDIR)
-  const state = bootstrapToken({ host, env, secretsDir })
+  const state = bootstrapToken({ env, secretsDir })
   setTokenState(state)
   // Semua pembaca process.env.WEBTERM_TOKEN (PTY anak, penjaga auth) harus melihat bentuk kanonik.
   writeTokenToEnv(state.token)
-  announceToken(state, host, port, secretsDir)
+  announceToken(state, secretsDir)
   const list = buildAllowedHosts({ host, port, env })
   if (list.ignored > 0) log.warn('hosts.ignored', 'WEBTERM_ALLOWED_HOSTS entries ignored (malformed or over the limit)', { count: list.ignored })
   return { host, port, hosts: () => (getTokenState().source === 'none' ? list : undefined) }
@@ -54,7 +53,7 @@ export function bootWiring(env: NodeJS.ProcessEnv, cwd: string): { host: string;
 /** 403 untuk request yang ditolak gerbang: Host ditolak => JSON `host_not_allowed` (Host tak dipantulkan). */
 export function refuseRequest(req: IncomingMessage, res: ServerResponse, hosts: AllowedHostsArg): void {
   res.statusCode = 403
-  if (denyReason(req.headers, undefined, null, hosts) !== 'host') return void res.end('forbidden')
+  if (denyReason(req.headers, undefined, hosts) !== 'host') return void res.end('forbidden')
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ error: HOST_DENIED_ERROR }))
 }

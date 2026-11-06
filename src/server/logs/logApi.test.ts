@@ -2,7 +2,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { authorizeRequest, denyReason, isNodeTokenPath, logAuthReject } from '../auth'
+import { TOKEN_HEADER, authorizeRequest, denyReason, isNodeTokenPath, logAuthReject } from '../auth'
 import { logBus } from './logBus'
 import { logsRoute } from './logApi'
 import { CLIENT_MAX_ENTRIES, CLIENT_RATE_MAX_ENTRIES, createWindowLimiter } from './logClientApi'
@@ -145,11 +145,12 @@ describe('auth tier', () => {
     authorizeRequest({ headers, expectedToken: 'root-token-synthetic', pathname: '/api/logs', isNodeToken: (t) => t === 'node-token', ...over })
   it('log endpoints are root-token only, like settings/env', () => {
     for (const p of ['/api/logs', '/api/logs/stream', '/api/logs/level', '/api/logs/client']) expect(isNodeTokenPath(p), p).toBe(false)
+    const h = (t: string) => ({ headers: { [TOKEN_HEADER]: t } })
     expect(gate({})).toBe(false)
-    expect(gate({ queryToken: 'node-token' })).toBe(false)
-    expect(gate({ queryToken: 'wrong' })).toBe(false)
-    expect(gate({ queryToken: 'root-token-synthetic' })).toBe(true)
-    expect(gate({ headers: { origin: 'http://evil.example', host: '127.0.0.1:8700' }, queryToken: 'root-token-synthetic' })).toBe(false)
+    expect(gate(h('node-token'))).toBe(false)
+    expect(gate(h('wrong'))).toBe(false)
+    expect(gate(h('root-token-synthetic'))).toBe(true)
+    expect(gate({ headers: { origin: 'http://evil.example', host: '127.0.0.1:8700', [TOKEN_HEADER]: 'root-token-synthetic' } })).toBe(false)
   })
 })
 
@@ -162,7 +163,7 @@ describe('pathTemplate', () => {
 
 describe('auth.reject logging', () => {
   it('records path and reason only, with origin vs token told apart', () => {
-    expect(denyReason({}, 'root-token-synthetic', 'wrong')).toBe('token')
+    expect(denyReason({ [TOKEN_HEADER]: 'wrong' }, 'root-token-synthetic')).toBe('token')
     expect(denyReason({ origin: 'http://evil.example', host: '127.0.0.1:8700' }, undefined)).toBe('origin')
     logAuthReject('/api/logs', 'token')
     const [e] = logBus.query()

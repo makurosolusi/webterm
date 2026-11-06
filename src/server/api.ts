@@ -97,8 +97,8 @@ export function handleApi(req: IncomingMessage, res: ServerResponse): boolean {
   if (!req.url || !req.url.startsWith('/api/')) return false
   const requestLog = startRequestLog(req, res)
   route(req, res).catch((err: unknown) => {
-    // Method + pathname ONLY (inside startRequestLog): the query string carries the auth token
-    // (TOKEN_PARAM), and the error itself can quote absolute paths or request bodies — so it goes
+    // Method + pathname ONLY (inside startRequestLog): a query can still carry a pasted `?token=`
+    // (TOKEN_PARAM, never accepted but never logged either), and the error itself can quote absolute paths or request bodies — so it goes
     // to the log, never to the body the client reads.
     requestLog.fail(err)
     if (res.writableEnded) return

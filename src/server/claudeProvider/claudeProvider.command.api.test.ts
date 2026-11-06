@@ -1,5 +1,6 @@
 // Command mode end to end through the API with REAL child processes: fake `claude` scripts, no network,
 // no real claude/envman. The fake prints secret-looking text so every case also proves it never leaks.
+import { TEST_UI_COOKIE } from '../uiSession.testutil'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { IncomingMessage } from 'node:http'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -46,7 +47,7 @@ const setProfiles = (claudeLaunchProfiles: { id: string; name: string; command: 
   registerClaudeLaunchSettings(() => ({ ...DEFAULT_SETTINGS, claudeLaunchProfiles }))
 
 const ui = (method: string): IncomingMessage =>
-  ({ method, headers: { host: 'localhost:8700', origin: 'http://localhost:8700', 'sec-fetch-site': 'same-origin' } }) as unknown as IncomingMessage
+  ({ method, headers: { host: 'localhost:8700', origin: 'http://localhost:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE } }) as unknown as IncomingMessage
 const deps = (mode = 'ok', extra: Partial<ProviderApiDeps> = {}): ProviderApiDeps => ({
   isNodeToken: () => false, sessionsBefore: () => 0, loginReady: async () => ({ ok: true }), now: () => 1000,
   env: { PATH: process.env.PATH ?? '/usr/bin:/bin', FAKE_MODE: mode, FAKE_LOG: log }, ...extra,

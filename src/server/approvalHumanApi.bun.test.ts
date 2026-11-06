@@ -2,6 +2,7 @@
 // `openLedgerDb` + `createLedger`. Covers the P3 gap this change owns: a task approval must name a
 // resolvable task+fence (otherwise its consent can never transition the task), plus the full
 // approve/consume/reject transitions and one-shot consumption.
+import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { afterAll, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -81,7 +82,7 @@ async function call(
   const chunks = init.body === undefined ? [] : [Buffer.from(init.body)]
   const req = Readable.from(chunks) as unknown as IncomingMessage
   req.method = init.method ?? (init.body === undefined ? 'GET' : 'POST')
-  req.headers = { 'sec-fetch-site': 'same-origin' } // fetch() from the webterm page (UI-only policy)
+  req.headers = { 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE } // fetch() from the webterm page (UI-only policy)
   const res = fakeRes()
   await approvalHumanRoute(req, res as unknown as ServerResponse, new URL(path, 'http://x'), f.deps)
   return {

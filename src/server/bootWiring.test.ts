@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeTokenToEnv } from './auth'
 import { bootWiring, HOST_DENIED_ERROR, onListenError, refuseRequest } from './bootWiring'
+import { buildAllowedHosts } from './hostAllow'
 import { getTokenState, setTokenState } from './tokenBootstrap'
 
 // Logger dipalsukan: sink konsol/file tak terjamin aktif di vitest, yang diuji adalah apa yang DIKIRIM ke logger.
@@ -46,8 +47,7 @@ const refuse = (headers: Record<string, string>, hosts: Parameters<typeof refuse
 
 describe('refuseRequest', () => {
   it('Host ditolak => 403 JSON host_not_allowed tanpa memantulkan Host', () => {
-    const hosts = bootWiring({ PORT: '9000' }, dir).hosts
-    const res = refuse({ host: 'evil.example:9000' }, hosts)
+    const res = refuse({ host: 'evil.example:9000' }, buildAllowedHosts({ host: '127.0.0.1', port: 9000, env: {} }))
     expect(res.statusCode).toBe(403)
     expect(JSON.parse(res.body)).toEqual({ error: HOST_DENIED_ERROR })
     expect(res.body).not.toContain('evil.example')
@@ -59,13 +59,21 @@ describe('refuseRequest', () => {
 })
 
 describe('bootWiring', () => {
-  it('loopback tanpa token: source none, hosts aktif; setelah token ditegakkan hosts mati', () => {
-    const { hosts, port } = bootWiring({ PORT: '9000' }, dir)
+  it('loopback is credentialed too: a token is minted on the default bind', () => {
+    const { port } = bootWiring({ PORT: '9000' }, dir)
     expect(port).toBe(9000)
-    expect(getTokenState().source).toBe('none')
-    expect(typeof hosts === 'function' && hosts()).toBeTruthy()
-    setTokenState({ token: 'x'.repeat(43), source: 'file', created: false })
-    expect(typeof hosts === 'function' && hosts()).toBeUndefined()
+    expect(getTokenState()).toMatchObject({ source: 'file', created: true })
+  })
+
+  it('TTY: one line names the token file path, never the value; every boot', () => {
+    Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true })
+    bootWiring({ PORT: '9000' }, dir)
+    bootWiring({ PORT: '9000' }, dir)
+    const token = getTokenState().token as string
+    expect(getTokenState().created).toBe(false)
+    expect(written.match(new RegExp(join(dir, 'data', 'secrets', 'WEBTERM_TOKEN'), 'g'))).toHaveLength(2)
+    expect(written + JSON.stringify(logged)).not.toContain(token)
+    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true })
   })
 
   it('non-loopback non-TTY: token dibuat, log memuat path+panjang tapi bukan nilai token', () => {
@@ -78,13 +86,6 @@ describe('bootWiring', () => {
     expect(out).toContain(join(dir, 'data', 'secrets', 'WEBTERM_TOKEN'))
     expect(out).toContain(`"len":${(token as string).length}`)
     expect(out + written).not.toContain(token as string)
-  })
-
-  it('non-loopback TTY: satu baris stderr dengan URL ber-token', () => {
-    Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true })
-    bootWiring({ HOST: '0.0.0.0', PORT: '9000' }, dir)
-    expect(written).toContain(`http://0.0.0.0:9000/?token=${getTokenState().token}`)
-    Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true })
   })
 
   it('WEBTERM_ALLOWED_HOSTS rusak => satu warn berisi JUMLAH, bukan isinya', () => {

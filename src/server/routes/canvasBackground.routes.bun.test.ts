@@ -118,6 +118,6 @@ test('requires the root token like every /api path (no node-token bypass)', () =
   const headers = { host: '127.0.0.1:8700' }
   const args = { headers, expectedToken: 'tok', pathname: '/api/canvas-background/image', isNodeToken: () => true }
   expect(authorizeRequest(args)).toBe(false)
-  expect(authorizeRequest({ ...args, queryToken: 'wrong' })).toBe(false)
-  expect(authorizeRequest({ ...args, queryToken: 'tok' })).toBe(true)
+  expect(authorizeRequest({ ...args, headers: { ...headers, 'x-webterm-token': 'wrong' } })).toBe(false)
+  expect(authorizeRequest({ ...args, headers: { ...headers, 'x-webterm-token': 'tok' } })).toBe(true)
 })

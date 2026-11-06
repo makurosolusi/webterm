@@ -2,6 +2,7 @@
 // hold, untrusted sources stay unconfirmable, duplicates are dropped, the daily token cap stops a run,
 // confirm (one / all) applies add/update/invalidate, and the idle trigger debounces. The model is always a
 // fake: no test reaches `claude`.
+import { TEST_UI_COOKIE } from '../../uiSession.testutil'
 import { afterAll, expect, test } from 'bun:test'
 import type { IncomingMessage } from 'node:http'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -199,7 +200,7 @@ test('runner parses structured output and usage from the CLI JSON', () => {
 test('HTTP: UI-only list, confirm and confirm-all; agents get 403; run needs the consolidator', async () => {
   const db = fixture()
   const [id] = writeProposals(db, [add('The user prefers dark mode')], SRC, T0).written
-  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin' }
+  const ui = { host: '127.0.0.1:8700', origin: 'http://127.0.0.1:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE }
   const call = (method: string, headers: Record<string, string>, path = PROPOSALS_PATH, consolidator: Parameters<typeof handleProposalsApi>[2]['consolidator'] = null) =>
     handleProposalsApi({ method, headers } as unknown as IncomingMessage, new URL(`http://127.0.0.1:8700${path}`), { db, isNodeToken: (t) => t === 'tok', now: () => T0, consolidator })
   expect((await call('GET', { ...ui, 'x-webterm-token': 'tok' }))?.body).toEqual({ error: 'agent_cannot_remember' })
