@@ -4,7 +4,7 @@ import { useInboxBadge, useInboxHotkey } from './inboxDockState'
 import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
 import { useOutputStatusItems } from './output/outputStatusItem'
 import { resolveTerminalTheme } from './themes'
-import { setTimelineOpen } from './Timeline'
+import { toggleTimeline } from './Timeline'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { subscribeStatus } from './ws'
 import { validateToken, storeToken, clearToken } from './api'
@@ -68,10 +68,10 @@ export function useAgentSummary(statuses: Record<string, AgentStatus>) {
   }, [statuses])
 }
 
-/** Status bar item that opens the Activity timeline (same store as "View: Toggle Activity"). */
+/** Status bar item that toggles the Activity timeline (same store as "View: Toggle Activity"). */
 export const ACTIVITY_STATUS_ITEM: VscodeStatusItem = {
   id: 'activity', label: 'Activity', icon: createElement('span', { className: 'codicon codicon-pulse', 'aria-hidden': true }),
-  tooltip: 'Open Activity timeline', ariaLabel: 'Open Activity timeline', onClick: () => setTimelineOpen(true),
+  tooltip: 'Toggle Activity timeline', ariaLabel: 'Toggle Activity timeline', onClick: toggleTimeline,
 }
 
 /** Badge + hotkey Inbox dan item status/palette panel Output untuk Dock. */

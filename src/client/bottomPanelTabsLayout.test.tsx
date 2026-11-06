@@ -10,7 +10,7 @@ afterEach(cleanup)
 
 const view = (open: boolean): BottomPanelView => ({ id: 'v', label: 'V', open, onClose: () => undefined, render: () => <i /> })
 const css = readFileSync(`${process.cwd()}/src/client/tab-layout.css`, 'utf8')
-const TABS_RULE = /\.app-shell:has\(> \.bottom-panel-host\) \.tabs-view\s*\{([^}]*)\}/
+const TABS_RULE = /\.app-shell:has\(> \.vscode-bottom-panel\) \.tabs-view[^{]*\{([^}]*)\}/
 
 describe('bottom panel in tab mode', () => {
   it('the host is a direct child of the shell only while a view is open', () => {
@@ -21,9 +21,8 @@ describe('bottom panel in tab mode', () => {
     expect(shell.matches('.app-shell:has(> .bottom-panel-host)')).toBe(false)
   })
 
-  it('shrinks .tabs-view by the panel height variable, and leaves the canvas overlay alone', () => {
+  it('shrinks .tabs-view by the panel height variable', () => {
     expect(TABS_RULE.exec(css)![1]).toContain('bottom: var(--bottom-panel-h)')
-    expect(css).not.toMatch(/bottom-panel[^{]*\.board-host/)
     expect(css).not.toContain('!important')
   })
 })

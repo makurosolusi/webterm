@@ -5,7 +5,7 @@
    1px TOP border on the active tab, a 16px count badge, a 4px sash on the top edge, and 22px
    list rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
 
-   The panel is flush: no radius, no shadow, sitting on top of the status bar. One surface hosts every view (bottomPanelHost.tsx). It starts after
+   The panel is flush: no radius, no shadow, docked above the status bar (the canvas ends where it starts, see tab-layout.css). One surface hosts every view (bottomPanelHost.tsx). It starts after
    the activity bar (and the 300px sidebar column while that is open). Height comes from
    `--bottom-panel-h`, which `bottomPanelHeight.ts` sets on <html> once the user resizes. */
 

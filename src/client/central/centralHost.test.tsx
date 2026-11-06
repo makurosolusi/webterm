@@ -68,33 +68,32 @@ describe('flag gate', () => {
 
   it('flag off renders nothing even when open', () => {
     const client = fakeClient()
-    const { container } = render(<CentralControlPanel open enabled={false} onClose={() => {}} client={client} />)
+    const { container } = render(<CentralControlPanel open enabled={false} client={client} />)
     expect(container.innerHTML).toBe('')
     expect(client.getControl).not.toHaveBeenCalled()
   })
 
   it('closed renders nothing', () => {
-    const { container } = render(<CentralControlPanel open={false} enabled onClose={() => {}} client={fakeClient()} />)
+    const { container } = render(<CentralControlPanel open={false} enabled client={fakeClient()} />)
     expect(container.innerHTML).toBe('')
   })
 })
 
 describe('CentralControlPanel', () => {
-  it('has a labelled region, tab roles, a privacy label for free models, and switches tabs by keyboard', async () => {
-    render(<CentralControlPanel open enabled onClose={() => {}} client={fakeClient()} />)
-    expect(screen.getByRole('complementary', { name: 'Central control' })).toBeTruthy()
+  it('has tab roles, a privacy label for free models, and switches tabs by keyboard', async () => {
+    render(<CentralControlPanel open enabled client={fakeClient()} />)
     const tabs = screen.getAllByRole('tab')
     expect(tabs.map((t) => t.textContent)).toEqual(expect.arrayContaining(['Control', 'Agents', 'Approvals', 'Skills', 'Memory']))
     const note = await screen.findByRole('note')
     expect(note.textContent).toContain('sent to the model provider')
     expect(note.textContent).toContain('opencode/free')
-    fireEvent.click(screen.getByRole('tab', { name: 'Memory' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Memory' }), { button: 0 })
     expect(await screen.findByRole('table')).toBeTruthy()
   })
 
   it('shows no privacy label for a non-free model', async () => {
     const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 0, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false } })) })
-    render(<CentralControlPanel open enabled onClose={() => {}} client={client} />)
+    render(<CentralControlPanel open enabled client={client} />)
     await screen.findByText(/unlimited/)
     expect(screen.queryByRole('note')).toBeNull()
   })

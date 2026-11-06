@@ -49,8 +49,12 @@ Operator notes:
 - The Central Agent "Turn on" offer no longer mentions OpenCode.
 - If the profile chosen for Custom command mode is deleted, agents and Central launch with the Default profile and the card shows a notice, instead of failing.
 - A Claude provider test that times out now stops the whole process tree it started, not only the wrapper, so no `claude` process is left behind.
+- Activity and Central now open as tabs of the single bottom panel next to Inbox, Chat, Problems and Output, instead of separate panels stacked on top of each other. Clicking an item whose tab is hidden brings it to the front; clicking the visible one closes it.
+- The bottom panel is docked in canvas mode too: the canvas (and Welcome screen) now shrink to sit above it instead of being covered.
+- The activity bar icon and status bar item of the view that is actually shown are highlighted (an open-but-hidden view is no longer highlighted).
 
 ### Fixed
+- Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
 - Opening Chat and Inbox (or Problems and Output) together no longer stacks panels on top of each other. They are now tabs of one bottom panel with a single header: opening a view selects its tab, the Chat input stays inside the panel, and "Jump to bottom" sits above the input instead of covering messages.
 - A browser node whose page crashed or disappeared now reports "crashed" instead of "not found", and Reload reopens it at its last URL.
 - Deleting a workspace now also removes its canvas background override and its uploaded image (an image still used elsewhere is kept). The workspace delete never fails because of this, and startup cleans up leftovers from workspaces that are already gone.

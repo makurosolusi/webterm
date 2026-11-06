@@ -8,6 +8,7 @@ import type { VscodeActivityBarItem } from '@/components/vscode/vscodeActivityBa
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import { IconButton } from '@/components/ui/icon-button'
+import { useShownBottomView } from './bottomPanelHost'
 import { codicon } from './dockCodicon'
 import { useCommands } from './commandRegistry'
 import { CanvasStatusBar } from './Dock.statusBar'
@@ -32,15 +33,14 @@ const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
 
-/** Id aktivitas yang sedang "terpilih". Activity bar hanya punya satu slot aktif; permukaan
- *  webterm boleh terbuka bersamaan, jadi urutannya dipaku dan sisanya tampil non-aktif. */
-function activeActivityId(props: DockProps): string | null {
-  if (props.sessionsOpen) return 'sessions'
-  if (props.inboxOpen) return 'inbox'
-  if (props.chatOpen) return 'chat'
-  if (props.centralOpen) return 'central'
-  if (props.boardOpen) return 'board'
-  return null
+/** Ikon rail yang menyala: Sessions (sidebar), view panel yang TAMPIL (bukan sekadar terbuka), dan Board. */
+const PANEL_ICONS = ['inbox', 'chat', 'central']
+function activeActivityIds(props: DockProps, shown: string | null): string[] {
+  return [
+    ...(props.sessionsOpen ? ['sessions'] : []),
+    ...(shown !== null && PANEL_ICONS.includes(shown) ? [shown] : []),
+    ...(props.boardOpen ? ['board'] : []),
+  ]
 }
 
 /**
@@ -54,6 +54,7 @@ export default function Dock(props: DockProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const canvasMode = useTabLayout().mode !== 'tabs'
+  const shown = useShownBottomView()
   const { onAddBrowser, onToggleCentral } = props
   const { setOffer, dialog: offerDialog } = useCapabilityOffer(onAddBrowser, onToggleCentral)
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
@@ -181,7 +182,7 @@ export default function Dock(props: DockProps) {
       <div className="dock">
         <VscodeActivityBar
           items={items}
-          activeId={activeActivityId(props)}
+          activeIds={activeActivityIds(props, shown)}
           onSelect={onActivitySelect}
           ariaLabel="Activity bar"
         />

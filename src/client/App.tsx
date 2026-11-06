@@ -10,7 +10,7 @@ import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import AppBottomPanel from './App.bottomPanel'
 import { toggleBottomView } from './bottomPanelHost'
 import { useChatOpen } from './ChatPanel'
-import CentralControlPanel, { useCentralControl } from './central/CentralControlPanel'
+import { useCentralControl } from './central/CentralControlPanel'
 import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
 import HelpOverlay from './HelpOverlay'
@@ -254,15 +254,15 @@ export default function App() {
           <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Inbox, Chat, Problems, dan Output satu permukaan bertab: tepat satu view tampil. Panel
               menutup lewat Escape/X tab-nya; dialog persetujuan Inbox yang memegang consent. */}
-          <AppBottomPanel inboxOpen={inboxOpen} setInboxOpen={setInboxOpen} chatOpen={chatOpen} setChatOpen={setChatOpen}
+          <AppBottomPanel central={central} inboxOpen={inboxOpen} setInboxOpen={setInboxOpen} chatOpen={chatOpen} setChatOpen={setChatOpen}
             problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
-            onFocus={(id) => void onFocus(id)} />
-          <CentralControlPanel open={central.open} onClose={central.close} enabled={central.enabled} />
+            onFocus={(id) => void onFocus(id)}
+            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} />
           <OutputPanelHost />
           {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
           <AppHosts
-            workspaces={workspaces} liveNodes={liveNodes} activeWs={activeWs} onFocusNode={(id) => void onFocus(id)}
+            activeWs={activeWs}
             onCreated={(ws) => { setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}
             onPlace={(placed, bridges) => { for (const n of placed) addFlowNode(() => n); restoreBridges(bridges, placed.map((n) => n.id)) }}
           />

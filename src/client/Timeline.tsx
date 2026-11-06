@@ -7,8 +7,7 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { VscodeTooltip } from './components/vscode/vscodeTooltip'
 import { LEVEL_NAMES } from './central/centralLabels'
 import { useRegisterCommands, type Command } from './commandRegistry'
-import { InboxPanelSurface } from './inboxPanelSurface'
-import type { BottomPanelTab } from './bottomPanelTabs'
+import { toggleBottomView, type BottomPanelView } from './bottomPanelHost'
 import {
   GROUP_LABELS, KIND_LABELS, NO_FILTER, buildContext, groupEvents, matchesFilter,
   type GroupMode, type KindFilter, type TimelineFilter,
@@ -20,8 +19,6 @@ import './Timeline.css'
 
 /** localStorage key for the open state. */
 export const TIMELINE_OPEN_KEY = 'webterm.timelineOpen'
-const TABS: BottomPanelTab[] = [{ id: 'activity', label: 'Activity', closable: false, tooltip: 'Activity' }]
-const noop = (): void => {}
 
 /* --- Open state: one module store so the palette command and the panel share it ---------------- */
 
@@ -36,7 +33,10 @@ export function setTimelineOpen(next: boolean): void {
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 const useTimelineOpen = (): boolean => useSyncExternalStore(subscribe, () => open, () => open)
 
-const COMMANDS: Command[] = [{ id: 'view.toggleActivity', label: 'View: Toggle Activity', run: () => setTimelineOpen(!open) }]
+/** Dock/palette/status-bar toggle: opens, reveals behind another tab, or closes when shown. */
+export const toggleTimeline = (): void => toggleBottomView('activity', open, setTimelineOpen)
+
+const COMMANDS: Command[] = [{ id: 'view.toggleActivity', label: 'View: Toggle Activity', run: toggleTimeline }]
 
 /* --- Panel ------------------------------------------------------------------------------------------ */
 
@@ -146,14 +146,16 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
   )
 }
 
-/** Always-mounted host: registers "View: Toggle Activity" and renders the panel while open. */
-export default function TimelineHost(props: TimelinePanelProps): React.JSX.Element | null {
+/** Activity as a tab of the bottom panel (see App.bottomPanel). The toolbar lives in the body, so no actions slot. */
+export function useTimelineView(props: TimelinePanelProps): BottomPanelView {
+  return {
+    id: 'activity', label: 'Activity', tooltip: 'Activity', open: useTimelineOpen(), onClose: () => setTimelineOpen(false),
+    render: () => <TimelinePanel {...props} />,
+  }
+}
+
+/** Always-mounted: registers "View: Toggle Activity"; the panel itself is a BottomPanelHost view. */
+export default function TimelineHost(): null {
   useRegisterCommands(COMMANDS)
-  const isOpen = useTimelineOpen()
-  if (!isOpen) return null
-  return (
-    <InboxPanelSurface className="timeline-panel-host" ariaLabel="Activity" tabs={TABS} activeId="activity" onActivate={noop} onClosePanel={() => setTimelineOpen(false)}>
-      <TimelinePanel {...props} />
-    </InboxPanelSurface>
-  )
+  return null
 }
