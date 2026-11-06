@@ -21,6 +21,7 @@ import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import npath from 'node:path'
 import { promisify } from 'node:util'
+import { gitCommand } from '../gitExec'
 import { isSensitivePath } from '../repoHygiene'
 
 const run = promisify(execFile)
@@ -45,20 +46,17 @@ export interface Checkpoint extends CheckpointMeta { seq: number; commit: string
 export interface Repo { root: string; prefix: string; index: string }
 export interface FileChange { status: 'A' | 'M' | 'D' | 'T'; path: string }
 
-/** Env for every git call: no prompts, no inherited repo overrides, a fixed committer identity. */
-function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0',
-    GIT_AUTHOR_NAME: 'webterm', GIT_AUTHOR_EMAIL: 'checkpoint@webterm.local',
-    GIT_COMMITTER_NAME: 'webterm', GIT_COMMITTER_EMAIL: 'checkpoint@webterm.local', ...extra,
-  }
-  for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX']) if (!(k in extra)) delete env[k]
-  return env
+/** Fixed committer identity + no optional locks; prompts/env filter/repo redirects: gitExec.ts. */
+const CHECKPOINT_ENV = {
+  GIT_OPTIONAL_LOCKS: '0',
+  GIT_AUTHOR_NAME: 'webterm', GIT_AUTHOR_EMAIL: 'checkpoint@webterm.local',
+  GIT_COMMITTER_NAME: 'webterm', GIT_COMMITTER_EMAIL: 'checkpoint@webterm.local',
 }
 
 async function git(cwd: string, args: string[], opts: { env?: Record<string, string>; input?: string } = {}): Promise<string> {
   try {
-    const p = run('git', ['-C', cwd, ...args], { env: gitEnv(opts.env), timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER })
+    const g = gitCommand(['-C', cwd, ...args], { env: { ...CHECKPOINT_ENV, ...opts.env } })
+    const p = run(g.file, g.args, { env: g.env, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER })
     p.child.stdin?.end(opts.input ?? '')
     return (await p).stdout
   } catch (err) {
@@ -77,7 +75,8 @@ export function refKey(workspaceId: string): string {
 export async function repoOf(cwd: string): Promise<Repo | null> {
   let out: string
   try {
-    out = (await run('git', ['-C', cwd, 'rev-parse', '--show-toplevel', '--show-prefix'], { env: gitEnv(), timeout: GIT_TIMEOUT_MS })).stdout
+    const g = gitCommand(['-C', cwd, 'rev-parse', '--show-toplevel', '--show-prefix'], { env: CHECKPOINT_ENV })
+    out = (await run(g.file, g.args, { env: g.env, timeout: GIT_TIMEOUT_MS })).stdout
   } catch {
     return null // not a repo (or no such dir): reported as "not rewindable", by design
   }

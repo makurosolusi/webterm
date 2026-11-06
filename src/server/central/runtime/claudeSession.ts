@@ -17,6 +17,8 @@ export interface TurnFailure {
   retryable?: boolean
   /** Which input-free message to use when `code` is `runtime_unavailable`. */
   unavailable?: ClaudeUnavailableCode
+  /** Redacted one-line cause (stderr / exit status) appended to `runtime_error`. */
+  reason?: string
 }
 
 export interface ClaudeTurnState {
@@ -30,6 +32,8 @@ export interface ClaudeTurnState {
   result: ClaudeResultEvent | null
   retries: number
   spawnError: NodeJS.ErrnoException | null
+  /** Bounded tail of the child's stderr, in memory only; redacted before it is logged or surfaced. */
+  stderrTail: string
   /** MCP tool calls requested and not yet answered: tool_use id -> name + start time. */
   openTools: Map<string, { name: string; at: number }>
   /** Every tool_use id already announced (partial mode repeats assistant messages). */
@@ -38,7 +42,7 @@ export interface ClaudeTurnState {
 
 export function newTurnState(): ClaudeTurnState {
   return { sessionRef: null, sawDelta: false, messages: new Map(), failure: null,
-    termination: null, result: null, retries: 0, spawnError: null, openTools: new Map(), seenTools: new Set() }
+    termination: null, result: null, retries: 0, spawnError: null, stderrTail: '', openTools: new Map(), seenTools: new Set() }
 }
 
 const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
@@ -47,8 +51,8 @@ const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
   claude_check_failed: 'Claude Code could not be checked',
 }
 
-/** Stable, input-free messages: never echo the prompt or child output. */
-export function runtimeErrorMessage(code: RuntimeErrorCode, unavailable?: ClaudeUnavailableCode): string {
+/** Stable messages, never the prompt; `reason` (already redacted) is appended to runtime failures. */
+export function runtimeErrorMessage(code: RuntimeErrorCode, unavailable?: ClaudeUnavailableCode, reason?: string): string {
   switch (code) {
     case 'runtime_unavailable':
       return UNAVAILABLE_MESSAGES[unavailable ?? 'claude_check_failed']
@@ -63,7 +67,7 @@ export function runtimeErrorMessage(code: RuntimeErrorCode, unavailable?: Claude
     case 'unknown_tool':
       return 'claude requested a tool that is not allowed'
     default:
-      return 'claude runtime failed'
+      return reason ? `claude runtime failed: ${reason}` : 'claude runtime failed'
   }
 }
 
@@ -72,7 +76,7 @@ export function failTurn(emitter: TurnEmitter, state: ClaudeTurnState, failure: 
   if (state.failure !== null) return
   state.failure = failure
   emitter.emit({
-    type: 'error', code: failure.code, message: runtimeErrorMessage(failure.code, failure.unavailable),
+    type: 'error', code: failure.code, message: runtimeErrorMessage(failure.code, failure.unavailable, failure.reason),
     retryable: failure.retryable ?? false,
   })
 }
@@ -133,6 +137,8 @@ export interface FinishInput {
   elapsedMs: number
   /** Session id used for this turn (the resumed one or the freshly generated one). */
   fallbackSessionRef: string
+  /** Why the child ended without a result (redacted stderr line or exit status). */
+  exitReason?: string
 }
 
 /** Decides the outcome, emits the missing `error` + one `usage`, and closes the turn. */
@@ -160,7 +166,11 @@ export function finishTurn(emitter: TurnEmitter, f: FinishInput): RuntimeResult 
     }
   }
   if (outcome === 'error' && code !== undefined) {
-    failTurn(emitter, state, { code, ...(code === 'runtime_unavailable' ? { unavailable: 'claude_not_found' as const } : {}) })
+    failTurn(emitter, state, {
+      code,
+      ...(code === 'runtime_unavailable' ? { unavailable: 'claude_not_found' as const } : {}),
+      ...(code === 'runtime_error' && f.exitReason ? { reason: f.exitReason } : {}),
+    })
   }
   const usage = state.result?.usage ?? totalsOf(state)
   const runtimeUsage = {

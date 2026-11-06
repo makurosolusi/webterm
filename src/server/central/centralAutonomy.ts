@@ -240,8 +240,9 @@ export function createCentralAutonomy(deps: AutonomyDeps): CentralAutonomyHandle
         let result: { ok: boolean; code?: string }
         try {
           result = await deps.run(project.id, item.id, plan.version)
-        } catch {
-          // A thrown run is a failed run, not a crashed loop: no stack details are recorded.
+        } catch (err) {
+          // A thrown run is a failed run, not a crashed loop: only the message is logged, never the stack.
+          log.error('central.autonomy.run_threw', 'central autonomy: run threw', { projectId: project.id, itemId: item.id, error: err instanceof Error ? err.message : String(err) })
           result = { ok: false, code: 'internal' }
         }
         if (result.ok) {

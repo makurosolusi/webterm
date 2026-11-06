@@ -1,9 +1,7 @@
 // Runtime verifikasi P3: runner proses (allowlist argv, timeout, output cap) dan helper yang
 // mengubah verdict independen menjadi status ledger. Verifikasi tidak pernah percaya payload
 // worker: `claimed_done` hanya naik ke `verified` lewat `verifyWorkerResult`.
-import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cleanEnv } from './verifyEnv'
 import {
   type ConfiguredCommand,
   type VerificationEvidence,
@@ -132,42 +130,8 @@ export function parseTestCounts(output: string): { passed: number; failed: numbe
 // Child env hardening lives in `verifyEnv.ts`; re-exported so callers keep one import site.
 export { cleanEnv, verifyHomeDir } from './verifyEnv'
 
-/** Exec produksi: `execFile` (shell: false), timeout + maxBuffer, env bersih. */
-export function createProcessExec(source: NodeJS.ProcessEnv = process.env): VerifyExec {
-  return (file, args, options) =>
-    new Promise((resolveRun) => {
-      execFile(
-        file,
-        args,
-        {
-          cwd: options.cwd,
-          timeout: options.timeoutMs,
-          maxBuffer: Math.max(1024, options.maxOutputBytes),
-          encoding: 'utf8',
-          shell: false,
-          windowsHide: true,
-          env: cleanEnv(source),
-        },
-        (error, stdout, stderr) => {
-          if (!error) {
-            resolveRun({ code: 0, stdout, stderr })
-            return
-          }
-          const failure = error as { code?: number | string; killed?: boolean; signal?: string }
-          const truncated = failure.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
-          const timedOut = failure.killed === true || failure.signal === 'SIGTERM'
-          const code = typeof failure.code === 'number' ? failure.code : 1
-          resolveRun({
-            code: truncated || timedOut ? 1 : code,
-            stdout,
-            stderr,
-            ...(timedOut ? { timedOut: true } : {}),
-            ...(truncated ? { truncated: true } : {}),
-          })
-        }
-      )
-    })
-}
+// Production exec (own process group, tree kill on timeout) lives in `verifyProcess.ts`.
+export { createProcessExec } from './verifyProcess'
 
 export type VerifyModelEvidence = ModelEvidence & { commands: VerificationEvidence[] }
 

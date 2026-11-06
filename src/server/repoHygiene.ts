@@ -13,6 +13,7 @@ import { promises as fs } from 'node:fs'
 import npath from 'node:path'
 import { promisify } from 'node:util'
 import { resolveFsPath } from './fsOps'
+import { gitCommand } from './gitExec'
 import { createLogger } from './logs'
 
 const log = createLogger('hygiene')
@@ -64,16 +65,16 @@ export function isSensitivePath(p: string): boolean {
 }
 
 async function gitLines(root: string, args: string[]): Promise<string[]> {
-  const { stdout } = await run('git', ['-C', root, ...args], {
-    timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-  })
+  const g = gitCommand(['-C', root, ...args])
+  const { stdout } = await run(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: g.env })
   return stdout.split('\0').filter(Boolean)
 }
 
 /** Repo root for a cwd, or null when the cwd is not inside a git work tree (or does not exist). */
 async function repoRoot(cwd: string): Promise<string | null> {
   try {
-    const { stdout } = await run('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { timeout: GIT_TIMEOUT_MS })
+    const g = gitCommand(['-C', cwd, 'rev-parse', '--show-toplevel'])
+    const { stdout } = await run(g.file, g.args, { timeout: GIT_TIMEOUT_MS, env: g.env })
     return stdout.trim() || null
   } catch {
     return null // not a repo: nothing to guard, by design

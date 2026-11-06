@@ -22,6 +22,7 @@
 // batas ukuran `fsLimits.ts`, dan `checkFsPath` untuk verb v2. Isi file TIDAK PERNAH di-log.
 import { promises as fs, type Dirent, type Stats } from 'node:fs'
 import { execFile } from 'node:child_process'
+import { gitCommand } from './gitExec'
 import { homedir } from 'node:os'
 import npath from 'node:path'
 import { promisify } from 'node:util'
@@ -73,11 +74,8 @@ async function flagIgnored(dir: string, entries: DirEntry[]): Promise<void> {
     for (const en of entries) if (set.has(en.name)) en.ignored = true
   }
   try {
-    const { stdout } = await run(
-      'git',
-      ['-C', dir, 'check-ignore', '--', ...entries.map((e) => e.name)],
-      { maxBuffer: 4 * 1024 * 1024 }
-    )
+    const g = gitCommand(['-C', dir, 'check-ignore', '--', ...entries.map((e) => e.name)])
+    const { stdout } = await run(g.file, g.args, { maxBuffer: 4 * 1024 * 1024, env: g.env })
     flag(stdout)
   } catch (err) {
     // `check-ignore` keluar non-nol untuk "tidak ada yang cocok" (1) dan "bukan repo git" (128) —

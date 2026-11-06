@@ -7,6 +7,7 @@
 // Extra guard over Orca: an entry is copied only when it is ALSO ignored inside the new worktree, so
 // a base branch whose .gitignore lacks `.env` can never turn the copied secret into a stageable file.
 import { execFile, spawn } from 'node:child_process'
+import { gitCommand } from './gitExec'
 import { promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -40,7 +41,8 @@ export interface SetupResult {
 
 async function ignoredIn(root: string, rel: string): Promise<boolean> {
   try {
-    await run('git', ['-C', root, 'check-ignore', '-q', '--', rel], { timeout: 5_000 })
+    const g = gitCommand(['-C', root, 'check-ignore', '-q', '--', rel])
+    await run(g.file, g.args, { timeout: 5_000, env: g.env })
     return true
   } catch {
     return false // exit 1 = not ignored (tracked files are never reported ignored)

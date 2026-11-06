@@ -28,10 +28,11 @@ describe('dialek flag (L10)', () => {
     }
   })
 
-  it('dua kunci keamanan tetap === \'1\'', () => {
-    for (const f of ['control/mount.ts', 'agentStatusAuth.ts']) {
-      expect(readFileSync(join(__dirname, '..', f), 'utf8'), f).toContain("=== '1'")
-    }
+  it('security keys stay fail-closed: control mount opt-in === \'1\', strict hook auth on unless exactly \'0\'', () => {
+    const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
+    expect(src('control/mount.ts'), 'control/mount.ts').toContain("=== '1'")
+    // Default ON: only an exact '0' turns hook auth off, so a typo keeps the gate closed.
+    expect(src('agentStatusAuth.ts'), 'agentStatusAuth.ts').toContain("process.env.WEBTERM_STRICT_HOOK_AUTH !== '0'")
   })
 
   it('state env: flag dari env 1/true tampil on', () => {

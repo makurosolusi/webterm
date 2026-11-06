@@ -25,9 +25,9 @@ import { PERMISSION_KIND } from '../permission/permission.model'
 import { actOnItem, actOnItems, type InboxActDeps } from './inboxActions'
 import { attentionFor } from './inboxAttention'
 import { INBOX_DECISION_EVENT, type Impact } from './inboxItemModel'
-import { approvedArgsFor, createGate, createInboxItem, getInboxItem, listInboxItems } from './inboxItemStore'
+import { UNPUSHED_PAGE, approvedArgsFor, createGate, createInboxItem, getInboxItem, listInboxItems } from './inboxItemStore'
 import { createPresenceTracker } from '../channels/channelPresence'
-import { approverChats, sweepInboxPush, watchingFrom, type PushDeps } from './inboxPush'
+import { approverChats, approverProjects, sweepInboxPush, watchingFrom, type PushDeps } from './inboxPush'
 
 const R2: Impact = { what: 'Runs the migration', tier: 'R2', rewindable: true }
 const R3: Impact = { what: 'Publishes the package', tier: 'R3', rewindable: false }
@@ -186,9 +186,11 @@ test('gate cards carry only Approve once / Deny; the sender posts that markup (f
 
 function pushDeps(s: ReturnType<typeof setup>, opts: { watching?: boolean; muted?: string[] } = {}) {
   const cards: Array<{ chat: string; card: TelegramCard }> = []
+  const bindings = [{ chatId: '42', binding: { projectId: 'p1', role: 'approver' as const } }, { chatId: '9', binding: { projectId: 'p1', role: 'viewer' as const } }]
   const deps: PushDeps = {
     ctx: s.ctx,
-    chatsFor: (projectId) => approverChats([{ chatId: '42', binding: { projectId: 'p1', role: 'approver' } }, { chatId: '9', binding: { projectId: 'p1', role: 'viewer' } }], projectId),
+    chatsFor: (projectId) => approverChats(bindings, projectId),
+    boundProjects: () => approverProjects(bindings),
     attention: { watching: () => opts.watching ?? false, muted: (ws) => (opts.muted ?? []).includes(ws) },
     send: async (chat, card) => { cards.push({ chat, card }); return true },
   }
@@ -211,6 +213,36 @@ test('every gate is pushed once to approver chats; watching holds it; mute and n
   expect(away.cards[0].card.buttons.map((b) => b.text)).toEqual(['Approve once', 'Deny'])
   expect((await sweepInboxPush(away.deps)).pushed).toEqual([]) // once only
   expect(attentionFor({ kind: 'notify', source: 'digest', nodeId: null, workspaceId: null }, away.deps.attention)).toBe('push')
+})
+
+test('N>LIMIT undeliverable items never block a deliverable one', async () => {
+  const s = setup()
+  for (let i = 0; i < UNPUSHED_PAGE + 5; i += 1) {
+    s.clock.t += 1
+    createInboxItem(s.ctx, { kind: 'review', source: 'routines', projectId: 'unbound', title: `routine ${i}` })
+  }
+  s.clock.t += 1
+  const fresh = createInboxItem(s.ctx, { kind: 'question', source: 'agent', projectId: 'p1', title: 'p1 needs you' })
+  const away = pushDeps(s)
+  expect((await sweepInboxPush(away.deps)).pushed).toEqual([fresh.id])
+  expect(away.cards.map((c) => c.chat)).toEqual(['42'])
+  // Undeliverable rows stay unpushed, so binding their project later still delivers them.
+  expect(rows(s.db, "SELECT COUNT(*) AS n FROM inbox_item WHERE project_id = 'unbound' AND pushed_at IS NULL")[0]?.['n']).toBe(UNPUSHED_PAGE + 5)
+})
+
+test('more held items than a page never hide a deliverable one behind them', async () => {
+  const s = setup()
+  for (let i = 0; i < UNPUSHED_PAGE + 5; i += 1) {
+    s.clock.t += 1
+    createInboxItem(s.ctx, { kind: 'question', source: 'agent', projectId: 'p1', nodeId: 'watched', title: `held ${i}` })
+  }
+  s.clock.t += 1
+  const other = createInboxItem(s.ctx, { kind: 'question', source: 'agent', projectId: 'p1', nodeId: 'elsewhere', title: 'other node' })
+  const away = pushDeps(s)
+  away.deps.attention = { watching: (item) => item.nodeId === 'watched', muted: () => false }
+  const result = await sweepInboxPush(away.deps)
+  expect(result.pushed).toEqual([other.id])
+  expect(result.held).toHaveLength(UNPUSHED_PAGE + 5)
 })
 
 test('a daily digest sums up yesterday\'s notify news once per day', () => {

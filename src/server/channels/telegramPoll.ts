@@ -15,6 +15,8 @@ export const TELEGRAM_POLL_REQUEST_MARGIN_MS = 10_000
 export const TELEGRAM_POLL_BACKOFF_BASE_MS = 1_000
 export const TELEGRAM_POLL_BACKOFF_MAX_MS = 60_000
 export const TELEGRAM_POLL_ALLOWED_UPDATES = ['message', 'callback_query'] as const
+/** Dispatch attempts for one update before it is dead-lettered and the offset moves past it. */
+export const TELEGRAM_POLL_UPDATE_MAX_ATTEMPTS = 3
 
 export interface TelegramPollStatus {
   ok: boolean
@@ -35,6 +37,8 @@ export interface TelegramPollerOptions {
   pollTimeoutSec?: number
   backoffBaseMs?: number
   backoffMaxMs?: number
+  /** Default `TELEGRAM_POLL_UPDATE_MAX_ATTEMPTS`. */
+  maxUpdateAttempts?: number
   now?: () => number
   random?: () => number
   /** Test seam; must resolve early when the signal aborts. */
@@ -79,6 +83,9 @@ export function startTelegramPoller(options: TelegramPollerOptions): TelegramPol
   const pollSec = options.pollTimeoutSec ?? TELEGRAM_POLL_TIMEOUT_SEC
   const baseMs = options.backoffBaseMs ?? TELEGRAM_POLL_BACKOFF_BASE_MS
   const maxMs = options.backoffMaxMs ?? TELEGRAM_POLL_BACKOFF_MAX_MS
+  const maxAttempts = Math.max(1, options.maxUpdateAttempts ?? TELEGRAM_POLL_UPDATE_MAX_ATTEMPTS)
+  // ponytail: attempts live in memory, so a restart grants one more bounded round before dead-letter.
+  const attempts = new Map<number, number>()
   const ctl = new AbortController()
   const { signal } = ctl
 
@@ -113,13 +120,26 @@ export function startTelegramPoller(options: TelegramPollerOptions): TelegramPol
         const updates = Array.isArray(result) ? result : []
         for (const update of updates) {
           if (signal.aborted) break
+          const id = updateIdOf(update)
           try {
             await options.dispatch(update)
           } catch (err) {
-            throw new PollApiError('transient', redactSecrets(`dispatch failed: ${String(err)}`, [token]).slice(0, 200))
+            const why = redactSecrets(`dispatch failed: ${String(err)}`, [token]).slice(0, 200)
+            const tries = id === undefined ? maxAttempts : (attempts.get(id) ?? 0) + 1
+            // Not consumed yet: retry the same offset with backoff. After K tries the update is
+            // poison; dead-letter it (error log + ingress lastError notice) so later updates still flow.
+            if (tries < maxAttempts && id !== undefined) {
+              attempts.set(id, tries)
+              throw new PollApiError('transient', why)
+            }
+            const notice = `update ${id ?? 'unknown'} dead-lettered after ${tries} attempts: ${why}`
+            log.error('telegram.poll.dead_letter', `telegram poll: ${notice}`, { updateId: id, attempts: tries })
+            report({ ok: false, at: now(), error: notice })
           }
-          const id = updateIdOf(update)
-          if (id !== undefined) offset = Math.max(offset, id + 1)
+          if (id !== undefined) {
+            attempts.delete(id)
+            offset = Math.max(offset, id + 1)
+          }
         }
         failures = 0
         report({ ok: true, at: now() })

@@ -12,7 +12,7 @@ const LOWERCASE_LITERAL = /toLowerCase\(\)\s*(?:===|!==)\s*'(?:1|on|true|off|0|f
 /** Baris yang sudah lewat dialek kanonik bukan parser lain. */
 const CANONICAL = /parseFlag\(|flagOn\(|flagOr\(/
 
-/** Dua kunci keamanan: sengaja persis `=== '1'` (strictFlag). approvalAuth.ts tak lagi membaca env (zero-config). */
+/** Two security keys, exact literals on purpose: ALLOW_TOKEN_MINT `=== '1'`, STRICT_HOOK_AUTH `!== '0'` (on by default). approvalAuth.ts no longer reads env (zero-config). */
 const SECURITY_STRICT = ['agentStatusAuth.ts', 'control/mount.ts']
 /** Beda dialek, ditunda (KE-3): `X=1` dulu senyap off; menyatukan mengubah perilaku. Lihat laporan ES-01. */
 const KE3_DIALECT = ['envSettings.service.ts']

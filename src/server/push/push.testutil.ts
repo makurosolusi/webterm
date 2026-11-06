@@ -43,11 +43,11 @@ export async function fakeBrowser(): Promise<FakeBrowser> {
 export interface SentRequest { url: string; headers: Record<string, string>; body: Uint8Array }
 
 /** fetch stand-in: records each request, answers `status(url)` (default 201). Never touches the network. */
-export function recordingFetch(status: (url: string) => number = () => 201): { fetch: typeof fetch; sent: SentRequest[] } {
+export function recordingFetch(status: (url: string) => number = () => 201, headers: Record<string, string> = {}): { fetch: typeof fetch; sent: SentRequest[] } {
   const sent: SentRequest[] = []
   const fn = (async (input: string | URL | Request, init?: RequestInit) => {
     sent.push({ url: String(input), headers: { ...(init?.headers as Record<string, string>) }, body: new Uint8Array(init?.body as Uint8Array) })
-    return new Response(null, { status: status(String(input)) })
+    return new Response(null, { status: status(String(input)), headers })
   }) as typeof fetch
   return { fetch: fn, sent }
 }

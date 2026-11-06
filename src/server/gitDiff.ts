@@ -13,7 +13,7 @@ import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import npath from 'node:path'
 import { resolveFsPath } from './fsOps'
-import { ptyEnv } from './ptyShell'
+import { gitCommand } from './gitExec'
 import { isSensitivePath } from './repoHygiene'
 import { GIT_DIFF_FILE_MAX_BYTES, type GitChange, type GitChangeStatus, type GitFileDiff, type GitHunk } from './gitDiff.types'
 
@@ -35,10 +35,8 @@ interface Run { ok: boolean; stdout: string; stderr: string }
 
 function git(cwd: string, args: string[], input?: string): Promise<Run> {
   return new Promise((resolve) => {
-    const child = execFile('git', ['--no-optional-locks', '-C', cwd, ...args], {
-      timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER,
-      env: { ...ptyEnv(process.env, { interactive: false }), GIT_TERMINAL_PROMPT: '0' },
-    }, (err, stdout, stderr) => resolve({ ok: !err, stdout: String(stdout), stderr: String(stderr) }))
+    const g = gitCommand(['--no-optional-locks', '-C', cwd, ...args])
+    const child = execFile(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: g.env }, (err, stdout, stderr) => resolve({ ok: !err, stdout: String(stdout), stderr: String(stderr) }))
     child.stdin?.end(input ?? '')
   })
 }

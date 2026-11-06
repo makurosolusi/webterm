@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { withoutGitSafety } from '../gitExec.testutil'
 import {
   WorktreeError,
   assertInsideRoot,
@@ -18,7 +19,7 @@ const REPO = resolve('/tmp/example-repo')
 function fakeExec(result: ExecResult = { code: 0 }): { exec: Exec; calls: string[][] } {
   const calls: string[][] = []
   const exec: Exec = async (file, args) => {
-    calls.push([file, ...args])
+    calls.push([file, ...withoutGitSafety(args)])
     return result
   }
   return { exec, calls }
@@ -196,7 +197,7 @@ describe('release and cleanup guards', () => {
     const calls: string[][] = []
     let fail = false
     const exec: Exec = async (file, args) => {
-      calls.push([file, ...args])
+      calls.push([file, ...withoutGitSafety(args)])
       return fail ? { code: 1, stderr: 'fatal: not a worktree' } : { code: 0 }
     }
     const worktrees = service(exec)
@@ -232,7 +233,7 @@ describe('symlink confinement (L1)', () => {
   function realService(root: string) {
     const calls: string[][] = []
     const exec: Exec = async (file, args) => {
-      calls.push([file, ...args])
+      calls.push([file, ...withoutGitSafety(args)])
       return { code: 0 }
     }
     return { calls, service: createWorktreeService({ root, exec, now: () => 42 }) }

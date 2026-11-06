@@ -10,6 +10,7 @@
  */
 import { createHash } from 'node:crypto'
 import type { Database } from 'bun:sqlite'
+import { gitCommand } from '../gitExec'
 import { type Row, requireText } from '../ledger/ledgerCore'
 import { assertCanPromote, requireAuthority, toMemory } from './memoryCore'
 import { type Memory, type MemoryAuthority, MemoryConflictError } from './memoryModel'
@@ -84,11 +85,11 @@ export async function writeMemoryFactFile(
   const content = renderMemoryFile(memory, evidenceDigestOf(sql, memory.id))
   if ((await port.read(relPath)) === content) return { status: 'unchanged', relPath, commit: null }
   await port.write(relPath, content)
-  const added = await port.exec('git', ['add', '--', relPath], port.root)
+  const add = gitCommand(['add', '--', relPath])
+  const added = await port.exec(add.file, add.args, port.root)
   if (added.code !== 0) throw new MemoryFileError(`git add failed for ${relPath}: ${added.stderr.trim()}`)
-  const commit = await port.exec(
-    'git', [...GIT_IDENTITY, 'commit', '-m', memoryCommitMessage(memory), '--only', '--', relPath], port.root
-  )
+  const ci = gitCommand([...GIT_IDENTITY, 'commit', '-m', memoryCommitMessage(memory), '--only', '--', relPath])
+  const commit = await port.exec(ci.file, ci.args, port.root)
   if (commit.code !== 0) {
     if (/nothing to commit|no changes added/i.test(commit.stdout + commit.stderr)) {
       return { status: 'unchanged', relPath, commit: null }

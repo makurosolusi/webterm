@@ -6,6 +6,7 @@ import { ClaudeRuntime } from './claudeRuntime'
 import type { ClaudeReady, ClaudeRuntimeOptions } from './claudeOptions'
 import { captureSource, emitSource, initRecord, recorder, resultRecord, turnInput, writeFakeClaude } from './claude.fakeBin'
 import { createCentralMcpLink } from './claudeMcp'
+import { logBus } from '../../logs'
 
 let dir = ''
 let capture = ''
@@ -160,5 +161,27 @@ describe('ClaudeRuntime preflight', () => {
     const result = await runtime(spawning(), { preflight: async () => ({ ok: true }) }).turn(turnInput(), recorder().emit)
     expect(result.outcome).toBe('success')
     expect(existsSync(marker())).toBe(true)
+  })
+})
+
+describe('ClaudeRuntime child exit without a result', () => {
+  it('surfaces the exit status and redacted stderr line in the error event and logs it', async () => {
+    const exe = writeFakeClaude(dir, `readStdin(); process.stderr.write('warming up\\nError: profile "p" not found in envman sk-ant-abcdefghijklmnopqrstu\\n'); process.exit(3)`)
+    const before = logBus.query({}).length
+    const { events, emit } = recorder()
+    const result = await runtime(exe).turn(turnInput({ turnId: 't-exit' }), emit)
+    expect(result).toMatchObject({ outcome: 'error', errorCode: 'runtime_error' })
+    const error = events.find((e) => e.type === 'error') as { message: string } | undefined
+    expect(error?.message).toBe('claude runtime failed: exit 3: Error: profile "p" not found in envman [redacted]')
+    const logged = logBus.query({}).slice(before).find((e) => e.event === 'central.claude_exit_failed')
+    expect(logged?.level).toBe('error')
+    expect(logged?.data).toMatchObject({ turnId: 't-exit', exitCode: 3 })
+    expect(JSON.stringify(logged)).not.toContain('sk-ant-abcdef')
+  })
+
+  it('falls back to the exit status when stderr is empty', async () => {
+    const { events, emit } = recorder()
+    await runtime(writeFakeClaude(dir, 'readStdin(); process.exit(7)')).turn(turnInput(), emit)
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'claude runtime failed: exit 7' })
   })
 })

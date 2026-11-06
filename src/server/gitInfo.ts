@@ -32,7 +32,7 @@
 // kepala `fsOps.ts` (yang menjaga permukaan ini adalah bind loopback + Origin + token di
 // `src/server/auth.ts`, bukan pemagaran path).
 import { execFile } from 'node:child_process'
-import { ptyEnv } from './ptyShell'
+import { gitCommand } from './gitExec'
 import { promises as fs } from 'node:fs'
 import { promisify } from 'node:util'
 import {
@@ -79,15 +79,9 @@ interface GitRun {
 
 async function git(cwd: string, args: string[]): Promise<GitRun> {
   try {
-    const { stdout } = await run('git', ['--no-optional-locks', '-C', cwd, ...args], {
-      timeout: GIT_TIMEOUT_MS,
-      maxBuffer: GIT_MAX_BUFFER,
-      // GIT_TERMINAL_PROMPT=0: tanpa TTY sebuah prompt kredensial tidak akan pernah dijawab, jadi
-      // ia menggantung sampai timeout alih-alih gagal cepat.
-      // Env tersaring seperti PTY (`ptyEnv`): token root, bot token, dan kunci `.env` server tidak
-      // ikut ke git — hook repo (`.git/hooks/*`) berjalan dengan env ini.
-      env: { ...ptyEnv(process.env, { interactive: false }), GIT_TERMINAL_PROMPT: '0' },
-    })
+    // gitExec.ts: filtered env, no prompt, repo-local fsmonitor/hooks/diff drivers off.
+    const g = gitCommand(['--no-optional-locks', '-C', cwd, ...args])
+    const { stdout } = await run(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: g.env })
     return { ok: true, stdout, killed: false }
   } catch (err) {
     const e = err as { stdout?: string; killed?: boolean }
