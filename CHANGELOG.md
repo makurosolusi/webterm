@@ -38,6 +38,7 @@ Operator notes:
 - Tab layout shortcuts, active only in tab layout: ⌘1 to ⌘9 jump to a tab, ⌘⇧[ and ⌘⇧] go to the previous or next tab (wrapping around), and ⌘W closes the active tab. On Windows and Linux (Ctrl in place of ⌘) closing is Ctrl+Alt+W, because Ctrl+W belongs to the shell and the browser. The toggle and tab shortcuts also work while typing in a terminal or an editor, where ⌘⇧L and ⌘⇧[ / ] used to mean "select all occurrences" and fold / unfold. In an editor the fold shortcuts still work in canvas layout.
 - Tab layout only changes how nodes are shown. Cables, node positions, sizes and the viewport are not touched, so switching back to canvas restores the board exactly as it was. Terminals, editors and browsers are not reloaded when you switch: scrollback, unsaved editor changes and the page in a browser node are kept. A terminal that was scrolled to the bottom is still at the bottom afterwards.
 - The dock hides the zoom, fit view and view lock buttons in tab layout, since they only apply to the canvas. The bottom panel (Inbox, Chat, Problems, Output) takes its own space below the active tab instead of covering it.
+- Terminals show a banner while the connection to the webterm server is lost: "Connection to the webterm server lost. Reconnecting in 5s… Typing is paused." with a "Retry now" button. Reconnect attempts back off from 1 to 10 seconds.
 
 ### Changed
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
@@ -65,6 +66,10 @@ Operator notes:
 - File, board and folder-picker endpoints (such as `/api/fs` and `/api/workspaces`) now answer only the webterm page or a request carrying the root token. A plain `curl` or script without the root token gets 403 "Files and workspaces are available to the webterm UI only."
 - Agent status hooks now require the node's token. The hooks webterm installs for Claude already send it, so agent nodes are unaffected. A hook from a node that is on no board no longer records anything.
 - The Control panel shows the Claude Code sandbox as "mitigation" instead of "protected" and says why: it stops shell commands from reading webterm's data files directly, but the webterm API on 127.0.0.1 is still reachable from inside it.
+- Keys typed while a terminal is disconnected are dropped instead of being sent to the shell once the connection comes back.
+- After a reconnect a terminal receives only the output it missed, instead of clearing its screen and replaying the whole scrollback. It still clears and replays everything when the missed part is no longer stored or the session is a new one.
+- A terminal view that is taken off the page stops receiving output from the server; the session keeps running and is replayed when the terminal is shown again.
+- The "tmux not found" notice in terminals is now in English.
 
 ### Fixed
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
@@ -92,6 +97,11 @@ Operator notes:
 - Inbox items that cannot be delivered yet no longer hold back later items from push delivery; they are delivered once their project is bound.
 - Web push backs off from an endpoint that keeps failing and honours Retry-After, instead of retrying it on every sweep.
 - Messages typed into agent nodes: a delivery queue that failed to start is retried, and an unconfirmed message is re-typed once into a cleared input, so text is never doubled or appended to leftovers.
+- Terminal answers such as `1;2c0;276;0c` no longer get typed into the shell or an agent's prompt when scrollback is replayed or a session is open in several tabs. Each terminal query now gets exactly one answer.
+- Closing a terminal and reopening it right away no longer attaches to the session that is still shutting down and exits at once.
+- A browser tab that stops reading (for example a frozen background tab) no longer makes the server's memory grow: its terminal output is paused and replayed once the tab catches up. A connection that stops answering is detected within a minute and closed.
+- A plain terminal never attaches to an agent's session under the same node id, or the other way round. The terminal explains that the session is already running something else and suggests adding a new node.
+- tmux is now found on your login shell's `PATH` too, so when webterm is started as a service or from the Dock, Homebrew's tmux is used and sessions still survive a server restart.
 
 ## [0.8.0] - 2026-11-05
 The control-plane programme (phases F0 to F6).
