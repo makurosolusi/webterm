@@ -6,7 +6,7 @@
 // With `attach` the composer also takes files (chatComposerAttach): an image-only message may be sent.
 // With `completion` it opens a `/` command and `@` file menu (agentChat/completionMenu). Escape while
 // a turn runs stops it, unless a menu is open (then Escape only closes the menu).
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
 import type { KeyboardEvent, RefObject } from 'react'
 import type { ComposerImage } from './chatAttach'
@@ -33,6 +33,8 @@ export interface ChatComposerProps {
   dropZone?: RefObject<HTMLElement | null>
   /** Opt-in `/` and `@` completion menu; absent = plain composer (the Central chat). */
   completion?: ComposerCompletion
+  /** Focus the textarea on mount (a freshly created chat). */
+  autoFocus?: boolean
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -57,6 +59,8 @@ export default function ChatComposer(props: ChatComposerProps) {
   const insert = useCallback((add: string) => setText((cur) => (cur && !/\s$/.test(cur) ? `${cur} ${add}` : `${cur}${add}`)), [])
   const files = useComposerAttach(props.attach, !!props.disabled, insert, props.dropZone ?? root)
   const complete = useComposerCompletion(props.completion, text, setText, area)
+  const autoFocus = props.autoFocus === true
+  useEffect(() => { if (autoFocus) area.current?.focus() }, [autoFocus])
   const tooLong = props.maxLength !== undefined && text.length > props.maxLength
   const hasContent = text.trim() !== '' || files.images.length > 0
   const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy

@@ -36,7 +36,8 @@ export type MessagePart =
   | { type: 'approval'; approvalId: string; state: ToolCardState; digest?: string; expiresAt?: number }
   | { type: 'error'; code: string; message: string }
 
-export type ConversationScope = { kind: 'global' } | { kind: 'project'; projectId: string }
+/** `chatId` set = one of the user's extra global chats ("New chat"); unset = the default `central:global`. */
+export type ConversationScope = { kind: 'global'; chatId?: string } | { kind: 'project'; projectId: string }
 
 export type ConversationErrorCode =
   | 'invalid_scope' | 'invalid_conversation' | 'invalid_role' | 'invalid_state'
@@ -53,6 +54,9 @@ export class ConversationError extends Error {
 
 export const GLOBAL_CONVERSATION_ID = 'central:global'
 export const PROJECT_CONVERSATION_PREFIX = 'central:project:'
+export const CHAT_CONVERSATION_PREFIX = 'central:chat:'
+/** Server-minted chat ids (UUIDs); the strict shape keeps them safe in paths, keys and scope strings. */
+const CHAT_ID = /^[A-Za-z0-9-]{1,64}$/
 export const MAX_MESSAGE_CHARS = 32_000
 export const MAX_CLIENT_MESSAGE_ID = 200
 export const MAX_PARTS = 100
@@ -63,29 +67,38 @@ const CONTROL = /[\u0000-\u001f\u007f]/
 function fail(code: ConversationErrorCode, message: string): never {
   throw new ConversationError(code, message)
 }
+function chatId(value: string): string {
+  if (!CHAT_ID.test(value)) fail('invalid_conversation', 'chat id must be 1..64 letters, digits or dashes')
+  return value
+}
 function id(value: unknown, label: string): string {
   const text = typeof value === 'string' ? value.trim() : ''
   if (text === '' || text.length > MAX_ID || CONTROL.test(text)) fail('invalid_conversation', `${label} is invalid`)
   return text
 }
 
-/** Parses `global` or `project:<id>` into a typed scope. */
+/** Parses `global`, `chat:<id>` or `project:<id>` into a typed scope. */
 export function parseScope(raw: unknown): ConversationScope {
   if (raw === 'global') return { kind: 'global' }
+  if (typeof raw === 'string' && raw.startsWith('chat:')) return { kind: 'global', chatId: chatId(raw.slice('chat:'.length)) }
   if (typeof raw === 'string' && raw.startsWith('project:')) {
     return { kind: 'project', projectId: id(raw.slice('project:'.length), 'projectId') }
   }
-  fail('invalid_scope', 'scope must be "global" or "project:<id>"')
+  fail('invalid_scope', 'scope must be "global", "chat:<id>" or "project:<id>"')
 }
 
 /** Canonical conversation id per RND/08 D8. */
 export function conversationIdForScope(scope: ConversationScope): string {
-  return scope.kind === 'global' ? GLOBAL_CONVERSATION_ID : `${PROJECT_CONVERSATION_PREFIX}${id(scope.projectId, 'projectId')}`
+  if (scope.kind === 'project') return `${PROJECT_CONVERSATION_PREFIX}${id(scope.projectId, 'projectId')}`
+  return scope.chatId === undefined ? GLOBAL_CONVERSATION_ID : `${CHAT_CONVERSATION_PREFIX}${chatId(scope.chatId)}`
 }
 
 /** Inverse mapping; a non-canonical id is rejected rather than guessed. */
 export function scopeFromConversationId(raw: unknown): ConversationScope {
   if (raw === GLOBAL_CONVERSATION_ID) return { kind: 'global' }
+  if (typeof raw === 'string' && raw.startsWith(CHAT_CONVERSATION_PREFIX)) {
+    return { kind: 'global', chatId: chatId(raw.slice(CHAT_CONVERSATION_PREFIX.length)) }
+  }
   if (typeof raw === 'string' && raw.startsWith(PROJECT_CONVERSATION_PREFIX)) {
     return { kind: 'project', projectId: id(raw.slice(PROJECT_CONVERSATION_PREFIX.length), 'projectId') }
   }

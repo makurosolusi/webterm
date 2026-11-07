@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  CHAT_PATH, ChatApiError, cancelTurn, chatErrorMessage, listConversations, listMessages,
+  CHAT_PATH, ChatApiError, cancelTurn, chatErrorMessage, createConversation, listConversations, listMessages,
   openChatStream, sendMessage,
 } from './chatApi'
 import type { ChatEvent } from './chat/chatTypes'
@@ -29,7 +29,7 @@ function headersOf(call: number): Record<string, string> {
 
 const conversation = {
   id: 'central:global', scope: 'global', projectId: null, activeTurnId: null,
-  lastEventSeq: 4, lastMessageSeq: 3, updatedAt: 100,
+  lastEventSeq: 4, lastMessageSeq: 3, updatedAt: 100, title: 'First question',
 }
 
 class FakeEventSource {
@@ -99,6 +99,16 @@ describe('chat fetch client', () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`${CHAT_PATH}/conversations?limit=50`)
     expect(headersOf(0) ?? {}).not.toHaveProperty(TOKEN_HEADER) // the session cookie is the credential
     expect(rows).toEqual([conversation])
+  })
+
+  it('creates a conversation with POST and rejects a malformed answer', async () => {
+    fetchMock.mockResolvedValue(response({ ...conversation, id: 'central:chat:x', title: null }))
+    const row = await createConversation()
+    expect(fetchMock.mock.calls[0][0]).toBe(`${CHAT_PATH}/conversations`)
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST')
+    expect(row).toMatchObject({ id: 'central:chat:x', title: null })
+    fetchMock.mockResolvedValue(response({ nope: true }))
+    await expect(createConversation()).rejects.toMatchObject({ code: 'bad_response' })
   })
 
   it('loads history sorted by seq and drops unsequenced rows', async () => {

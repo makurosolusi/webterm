@@ -5,7 +5,8 @@
 // `./chat/chatWire`; transport details live in `./chat/chatTransport`.
 //
 // Routes (mounted under /api/central):
-//   GET  /conversations                 -> {items: Conversation[]}
+//   GET  /conversations                 -> {items: Conversation[], nextOffset}  (newest first, ?limit&offset)
+//   POST /conversations                 -> Conversation (201, a new empty chat)
 //   GET  /conversations/:id/messages    -> {items: Message[]}        (?limit=50)
 //   POST /conversations/:id/messages    -> {messageId,seq,turnId,status}  (Idempotency-Key)
 //   GET  /conversations/:id/stream      -> SSE frames, `id: <seq>`
@@ -32,6 +33,18 @@ export async function listConversations(opts: RequestOptions = {}): Promise<Chat
   const rows = conversationRows(body)
   if (rows === null) throw new ChatApiError('Conversation list malformed', 502, 'bad_response')
   return rows.map(normalizeConversation).filter((row): row is ChatConversation => row !== null)
+}
+
+export async function createConversation(opts: RequestOptions = {}): Promise<ChatConversation> {
+  const body = await requestJson<unknown>(`${CHAT_PATH}/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    signal: opts.signal,
+  })
+  const row = normalizeConversation(body)
+  if (row === null) throw new ChatApiError('New conversation malformed', 502, 'bad_response')
+  return row
 }
 
 export async function listMessages(
@@ -97,6 +110,7 @@ export async function cancelTurn(turnId: string, opts: RequestOptions = {}): Pro
 /** Default client. Tests pass a fake object instead. */
 export const chatApi: ChatClient = {
   listConversations,
+  createConversation,
   listMessages,
   sendMessage,
   cancelTurn,

@@ -19,16 +19,17 @@ const tipOf = (el: Element): string | null => {
 
 const GLOBAL: ChatConversation = {
   id: 'central:global', scope: 'global', projectId: null, activeTurnId: null,
-  lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10,
+  lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10, title: null,
 }
 const PROJECT: ChatConversation = {
   id: 'central:project:webterm', scope: 'project:webterm', projectId: 'webterm',
-  activeTurnId: null, lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 9,
+  activeTurnId: null, lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 9, title: null,
 }
 
 function makeClient(overrides: Partial<ChatClient> = {}): ChatClient {
   return {
     listConversations: vi.fn(async () => [GLOBAL, PROJECT]),
+    createConversation: vi.fn(async () => GLOBAL),
     listMessages: vi.fn(async () => []),
     sendMessage: vi.fn(async () => ({ messageId: 'm1', seq: 1, turnId: 't1', status: 'queued' as const })),
     cancelTurn: vi.fn(async () => ({ status: 'cancelled' as const })),
@@ -83,8 +84,8 @@ describe('ChatPanel list + empty states', () => {
     const streams = makeStreams()
     renderPanel(client, streams)
 
-    expect(await screen.findByRole('button', { name: 'Global' })).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'webterm' }))
+    expect(await screen.findByRole('button', { name: /^Global/ })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^webterm/ }))
 
     await waitFor(() => expect(client.listMessages).toHaveBeenCalledWith(
       'central:project:webterm', expect.anything()
@@ -240,7 +241,7 @@ describe('compact (secondary side bar)', () => {
     expect(history.getAttribute('aria-pressed')).toBe('true')
     const nav = screen.getByRole('navigation', { name: 'Conversations' })
     expect(streams.opened[0]!.closed).toBe(false) // hidden behind the list, not unmounted
-    fireEvent.click(within(nav).getByRole('button', { name: 'webterm' }))
+    fireEvent.click(within(nav).getByRole('button', { name: /^webterm/ }))
     expect(screen.queryByRole('navigation', { name: 'Conversations' })).toBeNull()
     await waitFor(() => expect(streams.opened.map((s) => s.id)).toContain('central:project:webterm'))
     host.remove()

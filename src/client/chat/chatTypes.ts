@@ -38,6 +38,8 @@ export interface ChatConversation {
   lastEventSeq: number
   lastMessageSeq: number
   updatedAt: number
+  /** First human message, trimmed by the server; null until the first send. */
+  title: string | null
 }
 
 export interface ChatEvent {
@@ -97,6 +99,8 @@ export interface ChatStream {
 /** Stable surface the panel needs. Tests pass a fake; defaults live in `../chatApi`. */
 export interface ChatClient {
   listConversations: (opts?: RequestOptions) => Promise<ChatConversation[]>
+  /** A new, empty chat (fresh Claude session server-side). */
+  createConversation: (opts?: RequestOptions) => Promise<ChatConversation>
   listMessages: (conversationId: string, opts?: RequestOptions) => Promise<ChatMessage[]>
   sendMessage: (
     conversationId: string,
@@ -108,6 +112,7 @@ export interface ChatClient {
 
 export const GLOBAL_CONVERSATION_ID = 'central:global'
 const PROJECT_PREFIX = 'central:project:'
+const CHAT_PREFIX = 'central:chat:'
 const ACTIVE: readonly ChatTurnStatus[] = ['queued', 'running', 'awaiting_approval']
 
 /** True while the turn holds the conversation lock. */
@@ -115,10 +120,12 @@ export function isActiveTurnStatus(status: ChatTurnStatus | null): boolean {
   return status !== null && ACTIVE.includes(status)
 }
 
-/** Conversation list label: "Global" or the project id. */
-export function conversationLabel(conversation: Pick<ChatConversation, 'id' | 'projectId'>): string {
-  if (conversation.id === GLOBAL_CONVERSATION_ID) return 'Global'
+/** Conversation list label: the project id, else the title, else "Global" / "New chat". */
+export function conversationLabel(conversation: Pick<ChatConversation, 'id' | 'projectId'> & { title?: string | null }): string {
   if (conversation.projectId) return conversation.projectId
+  if (conversation.title) return conversation.title
+  if (conversation.id === GLOBAL_CONVERSATION_ID) return 'Global'
+  if (conversation.id.startsWith(CHAT_PREFIX)) return 'New chat'
   if (conversation.id.startsWith(PROJECT_PREFIX)) return conversation.id.slice(PROJECT_PREFIX.length)
   return conversation.id
 }
