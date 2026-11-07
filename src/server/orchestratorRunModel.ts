@@ -17,12 +17,11 @@ export const ORCHESTRATOR_RUN_FLAG = CAPABILITIES.workers.primaryKey
 export const ORCHESTRATOR_REQUIRE_APPROVAL_FLAG = 'WEBTERM_RUN_REQUIRE_APPROVAL'
 export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'
 
-/** Legacy worker kind: used when nothing is configured and `claude` is installed. */
+/** Worker kind used when nothing else is configured; workers run on Claude (no silent fallback). */
 export const DEFAULT_AGENT_ID = 'claude'
-/** P3: worker kind for users without Claude (free-model friendly). */
-export const FALLBACK_AGENT_ID = 'opencode'
-/** Preference among configured kinds; the remaining builtins follow in `BUILTIN_AGENT_IDS` order. */
-const WORKER_KIND_PREFERENCE: readonly string[] = [DEFAULT_AGENT_ID, FALLBACK_AGENT_ID]
+/** Refusal when no worker kind is configured and Claude cannot start: the user sets Claude up. */
+export const CLAUDE_NEEDED_ERROR = 'claude_needed'
+export const CLAUDE_NEEDED_MESSAGE = 'Workers need Claude. Set up Claude in Settings › Agent › Claude launch profiles and press Test.'
 export const MAX_ID_CHARS = 200
 export const MAX_PROMPT_CHARS = 2000
 export const MAX_BASE_REF_CHARS = 200
@@ -50,18 +49,17 @@ export function orchestratorRunRequireApproval(
 }
 
 /**
- * Worker kind from `settings.agentLaunchCommands`: the first configured kind (claude, opencode,
- * then the other builtins). Nothing configured keeps the legacy `claude`, or `opencode` when
- * `claudeOnPath` is false (P3).
+ * Worker kind from `settings.agentLaunchCommands`: the first configured kind (claude, then the other
+ * builtins). Nothing configured = `claude`, or null when `claudeOnPath` is false (Claude needed).
  */
 export function resolveWorkerKind(
   configured: Partial<Record<string, string>>,
   claudeOnPath = true
-): string {
-  const order = [...WORKER_KIND_PREFERENCE, ...BUILTIN_AGENT_IDS.filter((id) => !WORKER_KIND_PREFERENCE.includes(id))]
+): string | null {
+  const order = [DEFAULT_AGENT_ID, ...BUILTIN_AGENT_IDS.filter((id) => id !== DEFAULT_AGENT_ID)]
   const hit = order.find((id) => (configured[id]?.trim() ?? '') !== '')
   if (hit !== undefined) return hit
-  return claudeOnPath ? DEFAULT_AGENT_ID : FALLBACK_AGENT_ID
+  return claudeOnPath ? DEFAULT_AGENT_ID : null
 }
 
 function text(value: unknown, max: number): string | null {

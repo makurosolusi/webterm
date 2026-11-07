@@ -94,7 +94,7 @@ describe('bootstrap-only, dangerous, locked', () => {
     const s = setupEnv()
     expect(s.svc.update({ set: { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' }, unset: [] }, USER).ok).toBe(true)
     expect(s.target.WEBTERM_ORCHESTRATOR_RUN).toBe('on')
-    expect(s.svc.update({ set: { WEBTERM_OPENCODE_BIN: '/bin/sh' }, unset: [] }).ok).toBe(true)
+    expect(s.svc.update({ set: { WEBTERM_CONTROL_CWD_ROOTS: '/bin/sh' }, unset: [] }).ok).toBe(true)
   })
 
   it('WEBTERM_ENV_SETTINGS=off mengunci semua PUT dan mengabaikan override tersimpan', () => {

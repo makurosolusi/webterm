@@ -22,7 +22,7 @@ it('an unexpected run failure answers a context-free 500 but logs the cause with
   const before = logBus.query({}).length
   const result = await orchestratorRunRoute({ projectId: 'p1', itemId: 'i1', expectedVersion: 1 }, {
     ledger, enabled: true, requireApproval: false, planStore: plan, dataDir: () => dataDir,
-    settings: () => ({ agentLaunchCommands: {} }),
+    settings: () => ({ agentLaunchCommands: {} }), claudeOnPath: () => true,
     createRuntime: () => { throw new Error('pty spawn exhausted') },
   })
   expect(result).toEqual({ status: 500, body: { ok: false, error: { code: 'internal', message: 'orchestrator run failed' } } })

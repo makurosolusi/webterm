@@ -14,7 +14,7 @@ import type { LedgerRuntime } from '../../ledger/ledgerRuntime'
 import { listConversationEvents } from '../conversationStore'
 import type { CentralRuntime } from '../runtime/centralRuntime'
 import { ClaudeRuntime } from '../runtime/claudeRuntime'
-import { OpenCodeRuntime } from '../runtime/opencodeRuntime'
+import { MockRuntime } from '../runtime/mockRuntime'
 import { createCentralMcpLink } from '../runtime/claudeMcp'
 import { captureSource, emitSource, successRecords, writeFakeClaude } from '../runtime/claude.fakeBin'
 import { StreamHub } from './streamHub'
@@ -168,9 +168,9 @@ describe('send with attachments (claude runtime)', () => {
   })
 })
 
-describe('send with attachments (opencode runtime)', () => {
+describe('send with attachments (non-Claude runtime)', () => {
   it('refuses images clearly instead of dropping them', async () => {
-    const { db, deps } = setup(new OpenCodeRuntime({ preflight: async () => ({ ok: true }) }))
+    const { db, deps } = setup(new MockRuntime())
     const r = await call(deps, MESSAGES(), { clientMessageId: 'o1', text: 'see', images: [{ mediaType: 'image/png', data: PNG }] })
     expect(r.status).toBe(400)
     expect(errorOf(r.json).code).toBe('images_unsupported')

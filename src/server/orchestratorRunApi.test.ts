@@ -97,7 +97,7 @@ function deps(
       requireApproval: false, // bawaan produksi kini ON (ENVSIMPLE Q3); tes alur run menyematkan off
       planStore: planStore(item()),
       dataDir: () => dataDir,
-      settings: () => ({ agentLaunchCommands: {} }),
+      settings: () => ({ agentLaunchCommands: {} }), claudeOnPath: () => true,
       createRuntime: (compose) => {
         captured.compose = compose
         return {
@@ -243,6 +243,15 @@ describe('orchestrator run route', () => {
 
     const noPlan = deps(async () => outcome(), { planStore: planStore(null) })
     expect((await orchestratorRunRoute(valid, noPlan.deps)).status).toBe(409)
+  })
+
+  it('without Claude and no configured kind refuses 409 claude_needed, never an opencode worker', async () => {
+    const run = deps(async () => outcome(), { claudeOnPath: () => false })
+    const result = await orchestratorRunRoute(valid, run.deps)
+    expect(result.status).toBe(409)
+    expect(result.body).toMatchObject({ error: 'claude_needed', message: expect.stringContaining('Set up Claude') })
+    expect(run.captured.compose).toBeUndefined()
+    expect(run.captured.calls).toBe(0)
   })
 
   it('uses the ledger project path as repo and the settings launcher as cmd', async () => {

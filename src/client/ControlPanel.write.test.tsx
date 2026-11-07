@@ -53,7 +53,7 @@ describe('Control tab writes', () => {
     const owned = ENV_REGISTRY.filter((s) => rowEl(s.key)?.textContent?.includes('Managed in') !== true).map((s) => s.key)
     // The former ENV_ONLY_PENDING_F1 list, minus WEBTERM_CENTRAL_MAX_STEPS (K7) and WEBTERM_CENTRAL_SKILLS, which moved to its
     // single surface as a sub-switch of the Central agent card (one key, one editor; Control answers managed_elsewhere).
-    expect(owned.length).toBeGreaterThanOrEqual(37)
+    expect(owned.length).toBeGreaterThanOrEqual(35) // 37 minus the two retired WEBTERM_OPENCODE_* keys
     expect(owned).not.toContain('WEBTERM_CENTRAL_SKILLS')
     expect(rowEl('WEBTERM_CENTRAL_SKILLS').textContent).toContain('Managed in Settings › Capabilities › Central agent › Let Central use skills')
     const missing = owned.filter((k) => document.querySelector(`[data-control="${k}"]`) === null)

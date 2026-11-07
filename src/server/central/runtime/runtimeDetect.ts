@@ -4,11 +4,13 @@ import { delimiter, join } from 'node:path'
 import type { RuntimeKind } from './centralRuntime'
 import { centralClaudeLaunch, type ResolvedClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 
+/** Nilai `WEBTERM_CENTRAL_RUNTIME` yang dikenal; di luar ini = tak dikenal (fail-closed ke off). */
+export const SUPPORTED_RUNTIME_KINDS: ReadonlySet<string> = new Set(['off', 'claude', 'mock'])
 /**
- * Nilai `WEBTERM_CENTRAL_RUNTIME` yang dikenal; di luar ini = tak dikenal (fail-closed ke off).
- * `codex` sengaja tidak ada: belum punya adapter, jadi tak boleh tampil "siap".
+ * Mesin yang sudah dipensiunkan (OpenCode) atau tak pernah punya adapter (Codex): nilai tersimpan/env ini
+ * berarti otomatis (Claude bila ada), bukan `off` diam-diam, supaya pemakai lama tak kehilangan Central.
  */
-export const SUPPORTED_RUNTIME_KINDS: ReadonlySet<string> = new Set(['off', 'claude', 'opencode', 'mock'])
+export const RETIRED_RUNTIME_KINDS: ReadonlySet<string> = new Set(['opencode', 'codex'])
 const RUNTIME_KEY = 'WEBTERM_CENTRAL_RUNTIME'
 
 /** Penanya "adakah binary ini?"; disuntik supaya tes tak bergantung PATH nyata. */
@@ -36,12 +38,12 @@ export function launchLabel(l: ResolvedClaudeLaunch): string {
 }
 
 /**
- * Mesin eksplisit (`WEBTERM_CENTRAL_RUNTIME` dikenal) menang; selain itu claude, lalu opencode, lalu `off`.
+ * Mesin eksplisit (`WEBTERM_CENTRAL_RUNTIME` dikenal) menang; selain itu claude, lalu `off`.
  * claude = binary pertama profil launch Central (wrapper seperti envman bila dipakai).
  * Otomatis TIDAK pernah jatuh ke `mock` (mesin simulasi yang hanya menggemakan teks): mock hanya bila dipilih eksplisit.
  */
 export function detectAgentEngine(env: NodeJS.ProcessEnv, which: WhichFn = (bin) => onPath(bin, env.PATH)): RuntimeKind {
   const explicit = (env[RUNTIME_KEY] ?? '').trim().toLowerCase()
   if (SUPPORTED_RUNTIME_KINDS.has(explicit)) return explicit as RuntimeKind
-  return which(launchHead(centralClaudeLaunch())) ? 'claude' : which('opencode') ? 'opencode' : 'off'
+  return which(launchHead(centralClaudeLaunch())) ? 'claude' : 'off'
 }

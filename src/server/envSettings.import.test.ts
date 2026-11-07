@@ -79,10 +79,10 @@ describe('importDotenv klasifikasi', () => {
 describe('importDotenv gerbang dangerous', () => {
   it('kunci dangerous ikut tertulis', () => {
     const { svc, overrides } = setupEnv()
-    dotenv([`WEBTERM_OPENCODE_BIN=${BIN_MARK}`])
+    dotenv([`WEBTERM_CONTROL_CWD_ROOTS=${BIN_MARK}`])
     const ok = importDotenv({ service: svc }, true)
-    expect(keyOf(ok, 'WEBTERM_OPENCODE_BIN')?.action).toBe('add')
-    expect(JSON.parse(overrides.json ?? '{}')).toEqual({ WEBTERM_OPENCODE_BIN: BIN_MARK })
+    expect(keyOf(ok, 'WEBTERM_CONTROL_CWD_ROOTS')?.action).toBe('add')
+    expect(JSON.parse(overrides.json ?? '{}')).toEqual({ WEBTERM_CONTROL_CWD_ROOTS: BIN_MARK })
     expect(JSON.stringify(ok)).not.toContain(BIN_MARK)
   })
 })

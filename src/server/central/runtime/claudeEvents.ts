@@ -12,7 +12,7 @@ import type { TurnEmitter } from './runtimeEvents'
 import { type ClaudeTurnState, failTurn } from './claudeSession'
 import { MCP_SERVER_NAME } from '../../mcp/mcp.paths'
 import { WEBTERM_MCP_TOOL_PREFIX } from './claudeOptions'
-import { stderrReason } from './opencodeSession'
+import { stderrReason } from './runtimeShared'
 import { type ClaudeResultEvent, type ClaudeUsage, type Rec, parseClaudeResult, parseUsage, rec, str } from './claudeResult'
 
 export interface ClaudeToolUse { id: string; name: string; input: unknown }

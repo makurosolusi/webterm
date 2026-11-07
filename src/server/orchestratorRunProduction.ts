@@ -140,8 +140,9 @@ export function runItemTaskId(
  * profile whose program exists counts as "claude configured"); other kinds use their
  * `agentLaunchCommands` override.
  * The legacy `agentLaunchCommands.claude` is ignored: settings load seeds it into a profile.
+ * Null = nothing configured and Claude cannot start: the caller refuses with "Claude needed".
  */
-export async function workerLaunch(deps: OrchestratorRunDeps): Promise<{ agentId: string; cmd: string }> {
+export async function workerLaunch(deps: OrchestratorRunDeps): Promise<{ agentId: string; cmd: string } | null> {
   let configured: Partial<Record<string, string>> = {}
   let claude = resolveClaudeProfileIn({})
   try {
@@ -158,6 +159,7 @@ export async function workerLaunch(deps: OrchestratorRunDeps): Promise<{ agentId
   const claudeOnPath = (deps.claudeOnPath ?? (() => binaryExists(claude.argv[0] as string)))()
   if (claudeOnPath && claude.profile.id !== DEFAULT_CLAUDE_PROFILE.id) configured = { ...configured, claude: claudeLine }
   const agentId = resolveWorkerKind(configured, claudeOnPath)
+  if (agentId === null) return null
   const cmd = agentId === 'claude' ? claudeLine : isBuiltinAgent(agentId) ? assembleCmd(agentId, configured[agentId]) : agentId
   return { agentId, cmd }
 }

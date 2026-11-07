@@ -7,8 +7,7 @@ export const ADVANCED_TEXT = {
   summary: 'Advanced',
   engineLabel: 'Central Agent engine',
   engineDetected: (name: string): string => `Detected: ${name}`,
-  engineMissing: 'Not installed: install Claude Code, then check again.',
-  engineChosenNotReady: (name: string): string => `${name} is not ready: it is not installed or not signed in.`,
+  engineMissing: 'Set up Claude: add or pick a profile in Settings › Agent › Claude launch profiles, press Test, then check again.',
   engineRecheck: 'Check again',
   engineChecking: 'Checking…',
   engineRecheckHint: 'Re-detect installed agent engines',
@@ -33,12 +32,11 @@ export const ADVANCED_TEXT = {
 export const ENGINE_OPTIONS: ReadonlyArray<{ value: Engine; label: string; name: string }> = [
   { value: 'auto', label: 'Automatic', name: 'Automatic' },
   { value: 'claude', label: 'Claude', name: 'Claude' },
-  { value: 'opencode', label: 'OpenCode (chat only)', name: 'OpenCode' },
 ]
 
 /** Nama mesin hasil deteksi otomatis; `off` = tidak ada CLI yang ditemukan. */
 export const engineName = (kind: string): string =>
-  kind === 'off' ? 'none (install Claude Code)'
+  kind === 'off' ? 'none (set up Claude)'
     : ENGINE_OPTIONS.find((o) => o.value === kind)?.name ?? kind
 
 export const SECTION_TEXT = {

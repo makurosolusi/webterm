@@ -9,11 +9,11 @@ const dirs: string[] = []
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 
 describe('detectAgentEngine', () => {
-  it('claude ada -> claude (walau opencode juga ada)', () => {
+  it('claude ada -> claude', () => {
     expect(detectAgentEngine({}, only('claude', 'opencode'))).toBe('claude')
   })
-  it('hanya opencode -> opencode', () => {
-    expect(detectAgentEngine({}, only('opencode'))).toBe('opencode')
+  it('hanya opencode -> off: Central runs on Claude only', () => {
+    expect(detectAgentEngine({}, only('opencode'))).toBe('off')
   })
   it('tak ada CLI -> off, tidak pernah mock simulasi', () => {
     expect(detectAgentEngine({}, only())).toBe('off')
@@ -26,7 +26,10 @@ describe('detectAgentEngine', () => {
     expect(detectAgentEngine({ WEBTERM_CENTRAL_RUNTIME: 'off' }, only('claude'))).toBe('off')
   })
   it('nilai eksplisit tak dikenal diabaikan: tetap deteksi', () => {
-    expect(detectAgentEngine({ WEBTERM_CENTRAL_RUNTIME: 'gpt' }, only('opencode'))).toBe('opencode')
+    expect(detectAgentEngine({ WEBTERM_CENTRAL_RUNTIME: 'gpt' }, only('claude'))).toBe('claude')
+  })
+  it('opencode tersimpan (mesin pensiunan) = otomatis, jadi claude bila ada', () => {
+    expect(detectAgentEngine({ WEBTERM_CENTRAL_RUNTIME: 'opencode' }, only('claude', 'opencode'))).toBe('claude')
   })
 })
 

@@ -34,10 +34,19 @@ describe('WEBTERM_CENTRAL_RUNTIME parsing', () => {
   })
 
   it('tak diset = deteksi otomatis; string kosong/tak dikenal tetap fail-closed', () => {
-    expect(centralRuntimeKind(undefined, (bin) => bin === 'opencode')).toBe('opencode')
+    expect(centralRuntimeKind(undefined, (bin) => bin === 'claude')).toBe('claude')
+    expect(centralRuntimeKind(undefined, (bin) => bin === 'opencode')).toBe('off')
     expect(centralRuntimeKind(undefined, () => false)).toBe('off')
     expect(centralRuntimeKind('', () => true)).toBe('off')
     expect(centralRuntimeEnabled(undefined, () => false)).toBe(false)
+  })
+
+  it('stored opencode resolves to claude: a retired engine means automatic, never a silent off', () => {
+    for (const raw of ['opencode', ' OpenCode ', 'codex']) {
+      expect(centralRuntimeKind(raw, (bin) => bin === 'claude'), raw).toBe('claude')
+      expect(centralRuntimeKind(raw, () => false), raw).toBe('off')
+    }
+    expect(parseRuntimeKind('opencode')).toBe('off') // the pure parser stays fail-closed; only the resolver maps it
   })
 
   it('enables only explicitly selected adapters', () => {

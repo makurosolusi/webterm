@@ -21,13 +21,13 @@ describe('workerLaunch', () => {
 
   it('probes the program the default profile runs first, not a bare claude', async () => {
     const run = (command: string) => workerLaunch({ ledger: null, settings: () => ({ agentLaunchCommands: {}, claudeLaunchProfiles: [{ id: 'p', name: 'P', command }], defaultClaudeProfileId: 'p' }) })
-    expect(await run('/nonexistent/wt-wrapper --')).toEqual({ agentId: 'opencode', cmd: 'opencode' })
+    expect(await run('/nonexistent/wt-wrapper --')).toBeNull()
     expect(await run('/bin/echo --')).toEqual({ agentId: 'claude', cmd: '/bin/echo -- claude' })
   })
 
-  it('keeps the builtin launcher for legacy installs and picks opencode when claude is missing (P3)', async () => {
+  it('keeps the builtin launcher, and without claude answers null (Claude needed), never opencode', async () => {
     expect(await launch({})).toEqual({ agentId: 'claude', cmd: 'claude' })
-    expect(await launch({}, false)).toEqual({ agentId: 'opencode', cmd: 'opencode' })
+    expect(await launch({}, false)).toBeNull()
   })
 
   it('falls back to the default launcher when settings cannot be read', async () => {
@@ -38,6 +38,6 @@ describe('workerLaunch', () => {
       },
       claudeOnPath: () => false,
     })
-    expect(broken).toEqual({ agentId: 'opencode', cmd: 'opencode' })
+    expect(broken).toBeNull()
   })
 })

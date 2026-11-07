@@ -1,7 +1,7 @@
 // Headless worker runner (RND/22 4.3): argv ARRAY via child_process.spawn (works in Bun), no shell, scrubbed env, JSONL on stdout.
 import { spawn } from 'node:child_process'
 import { isAbsolute } from 'node:path'
-import { scrubOpencodeEnv } from '../runtime/opencodeOptions'
+import { scrubAgentEnv } from '../../agentEnv'
 
 /** Default cap on retained stdout (bytes of text); older output is dropped. */
 export const EXEC_TAIL_BYTES = 64 * 1024
@@ -48,7 +48,7 @@ export function scrubExecEnv(source: NodeJS.ProcessEnv = process.env, overrides:
   const keep = (name: string, value: string | undefined): void => {
     if (value !== undefined && !FORBIDDEN_NAME.test(name) && !CAPABILITY_VALUE.test(value)) out[name] = value
   }
-  for (const [name, value] of Object.entries(scrubOpencodeEnv(source))) keep(name, value)
+  for (const [name, value] of Object.entries(scrubAgentEnv(source))) keep(name, value)
   for (const [name, value] of Object.entries(overrides)) keep(name, value)
   return out
 }

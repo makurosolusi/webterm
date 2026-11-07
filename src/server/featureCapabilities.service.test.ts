@@ -144,8 +144,8 @@ describe('reset', () => {
 describe('setAdvanced', () => {
   it('menulis mesin agen dan lokasi Chrome; auto menghapus override', async () => {
     const h = harness()
-    expect((await setAdvanced(h.ctx, { agentEngine: 'opencode', chromiumPath: '/opt/chrome' })).status).toBe(200)
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_RUNTIME: 'opencode', WEBTERM_BROWSER_BIN: '/opt/chrome' })
+    expect((await setAdvanced(h.ctx, { agentEngine: 'claude', chromiumPath: '/opt/chrome' })).status).toBe(200)
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_RUNTIME: 'claude', WEBTERM_BROWSER_BIN: '/opt/chrome' })
     await setAdvanced(h.ctx, { agentEngine: 'auto', chromiumPath: '' })
     expect(h.target.WEBTERM_CENTRAL_RUNTIME).toBeUndefined()
     expect(h.target.WEBTERM_BROWSER_BIN).toBeUndefined()

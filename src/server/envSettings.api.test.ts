@@ -59,9 +59,9 @@ describe('PUT', () => {
   })
 
   it('kunci dangerous dari penjaga yang meloloskan kini 200', async () => {
-    const { res, s } = await call('PUT', { set: { WEBTERM_OPENCODE_BIN: '/bin/sh' } })
+    const { res, s } = await call('PUT', { set: { WEBTERM_CONTROL_CWD_ROOTS: '/bin/sh' } })
     expect(res.status).toBe(200)
-    expect(s.target.WEBTERM_OPENCODE_BIN).toBe('/bin/sh')
+    expect(s.target.WEBTERM_CONTROL_CWD_ROOTS).toBe('/bin/sh')
   })
 
   it('penjaga menolak: 403 forbidden tanpa efek, tanpa kata token, audit denied generik', async () => {

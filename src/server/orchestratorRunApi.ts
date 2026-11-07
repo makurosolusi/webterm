@@ -13,6 +13,8 @@ import { LEDGER_OFF } from './apiShared.types'
 import { createLogger } from './logs'
 import type { WorkerRunOutcome } from './orchestrator/workerRuntime'
 import {
+  CLAUDE_NEEDED_ERROR,
+  CLAUDE_NEEDED_MESSAGE,
   ORCHESTRATOR_REQUIRE_APPROVAL_FLAG,
   ORCHESTRATOR_RUN_FLAG,
   ORCHESTRATOR_RUN_PATH,
@@ -37,6 +39,8 @@ import {
 } from './orchestratorRunProduction'
 
 export {
+  CLAUDE_NEEDED_ERROR,
+  CLAUDE_NEEDED_MESSAGE,
   ORCHESTRATOR_REQUIRE_APPROVAL_FLAG,
   ORCHESTRATOR_RUN_FLAG,
   ORCHESTRATOR_RUN_PATH,
@@ -124,6 +128,10 @@ export async function orchestratorRunRoute(
   // but another item is refused (409 approval_task_mismatch) instead of running the wrong item.
   const expectedTaskId = runItemTaskId(plan, request.projectId, request.itemId)
 
+  // No worker kind without Claude: refuse before the approval gate, so no decision is consumed.
+  const launch = await workerLaunch(deps)
+  if (launch === null) return { status: 409, body: { error: CLAUDE_NEEDED_ERROR, message: CLAUDE_NEEDED_MESSAGE } }
+
   // Everything that could refuse the request has answered by now, so the approval gate below is
   // the first thing that can consume a decision. It also wraps worktree allocation and runtime
   // creation, so a rejected approval leaves no root dir, no git exec and no PTY.
@@ -134,7 +142,7 @@ export async function orchestratorRunRoute(
     const worktrees = resolved.worktrees
 
     try {
-      const compose: RuntimeCompose = { root, repo, ...(await workerLaunch(deps)), plan, worktrees }
+      const compose: RuntimeCompose = { root, repo, ...launch, plan, worktrees }
       const worker = deps.createRuntime ? deps.createRuntime(compose) : await productionRuntime(deps, compose)
       const outcome: WorkerRunOutcome = await worker.runTask(workerInput(request, repo))
       if (outcome.ok) return { status: 200, body: { ok: true, outcome } }

@@ -5,7 +5,7 @@ import type { ProviderView } from './claudeProvider/claudeProvider.model'
 
 function deps(over: Partial<DoctorDeps> = {}): DoctorDeps {
   return {
-    onPath: () => true, claudeReady: async () => ({ ok: true }), opencodeBin: 'opencode', opencodeReady: async () => ({ ok: true }),
+    onPath: () => true, claudeReady: async () => ({ ok: true }),
     generated: () => [{ label: 'context-link skill', path: '/s', expected: 'v2' }], readFile: () => 'v2', installGenerated: () => {},
     telegram: async () => ({ state: 'ok', name: '@bot' }), sandbox: () => ({ on: true, supported: true }), setSandbox: () => {},
     looseDirs: () => [], tightenDirs: () => {}, verifyLedger: () => ({ ok: true, checked: 4, head: null }), ...over,
@@ -17,15 +17,14 @@ const byId = async (d: DoctorDeps): Promise<Record<DoctorId, DoctorCheck>> =>
 describe('runDoctor', () => {
   it('all green on a healthy machine, no fix offered', async () => {
     const all = await runDoctor(deps())
-    expect(all.map((c) => c.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok'])
+    expect(all.map((c) => c.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok'])
     expect(all.some((c) => c.fix)).toBe(false)
   })
 
   it('reports each failure with an explanation and a fix only where it is safe', async () => {
     const c = await byId(deps({
-      onPath: (b) => b === 'claude' || b === 'opencode', // rg + tmux missing
+      onPath: (b) => b === 'claude', // rg + tmux missing
       claudeReady: async () => ({ ok: false, reason: 'not logged in' }),
-      opencodeReady: async () => ({ ok: false, reason: 'no model configured' }),
       readFile: () => 'v1',
       telegram: async () => ({ state: 'rejected' }),
       sandbox: () => ({ on: false, supported: true }),
@@ -35,7 +34,6 @@ describe('runDoctor', () => {
     expect(c.claude).toMatchObject({ status: 'fail' })
     expect(c.claude.detail).toContain('not logged in')
     expect(c.claude.fix).toBeUndefined() // login is interactive
-    expect(c.opencode).toMatchObject({ status: 'warn' })
     expect(c.skills).toMatchObject({ status: 'fail', fix: 'Reinstall' })
     expect(c.skills.detail).toContain('context-link skill')
     expect(c.telegram).toMatchObject({ status: 'fail' })
@@ -52,7 +50,7 @@ describe('runDoctor', () => {
     const c = await byId(deps({
       onPath: () => false, claudeReady: async () => ({ ok: false, reason: 'The claude CLI was not found on PATH.', missing: true }), telegram: async () => ({ state: 'unset' }), sandbox: () => ({ on: false, supported: false }), verifyLedger: () => null,
     }))
-    expect([c.claude.status, c.opencode.status, c.telegram.status, c.sandbox.status, c.ledger.status]).toEqual(['warn', 'off', 'off', 'off', 'off'])
+    expect([c.claude.status, c.telegram.status, c.sandbox.status, c.ledger.status]).toEqual(['warn', 'off', 'off', 'off'])
     expect((await byId(deps({ telegram: async () => ({ state: 'unreachable' }) }))).telegram.status).toBe('warn')
   })
 
@@ -66,7 +64,7 @@ describe('runDoctor', () => {
     const all = await runDoctor(deps({ verifyLedger: () => { throw new Error('disk I/O error') } }))
     expect(all.find((c) => c.id === 'ledger')).toMatchObject({ status: 'fail' })
     expect(all.find((c) => c.id === 'ledger')?.detail).toContain('disk I/O error')
-    expect(all.filter((c) => c.status === 'ok')).toHaveLength(8)
+    expect(all.filter((c) => c.status === 'ok')).toHaveLength(7)
   })
 })
 

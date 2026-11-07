@@ -19,8 +19,8 @@ describe('ENV_REGISTRY', () => {
     expect(isBootstrapOnly(ENV_SETTINGS_SWITCH)).toBe(true)
     expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_TELEGRAM_API_BASE')
   })
-  it('jumlah entri 63; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
-    expect(ENV_REGISTRY).toHaveLength(63)
+  it('jumlah entri 61; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
+    expect(ENV_REGISTRY).toHaveLength(61)
     const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL', 'WEBTERM_CENTRAL_MAX_STEPS']
     const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3' }))
     expect(s.svc.state({ root: true }).entries.filter((e) => retired.includes(e.key))).toEqual([])
@@ -31,8 +31,8 @@ describe('ENV_REGISTRY', () => {
   it('kelas dangerous dan secret sesuai rancangan', () => {
     expect(names((s) => s.dangerous)).toEqual([
       'WEBTERM_BROWSER', 'WEBTERM_BROWSER_AGENT', 'WEBTERM_BROWSER_ALLOW_HOSTS', 'WEBTERM_BROWSER_BIN', 'WEBTERM_BROWSER_COOKIE_IMPORT',
-      'WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_AUTONOMY', 'WEBTERM_CONTROL_CWD_ROOTS', 'WEBTERM_MEMORY_DIR', 'WEBTERM_OPENCODE_ALLOW_TOOLS',
-      'WEBTERM_OPENCODE_BIN', 'WEBTERM_ORCHESTRATOR_RUN', 'WEBTERM_TRUST_PROXY',
+      'WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_AUTONOMY', 'WEBTERM_CONTROL_CWD_ROOTS', 'WEBTERM_MEMORY_DIR',
+      'WEBTERM_ORCHESTRATOR_RUN', 'WEBTERM_TRUST_PROXY',
     ])
     expect(names((s) => s.kind === 'secret')).toEqual(['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET'])
     expect(specFor('WEBTERM_CHANNEL_HMAC_SECRET')).toBeUndefined() // tak ada pembaca nilainya
@@ -116,8 +116,6 @@ const VERDICT: Row[] = [
   ['WEBTERM_CENTRAL_TOOLS', 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_MEMORY', 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_AUTONOMY', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_ORCHESTRATOR_RUN']],
-  ['WEBTERM_OPENCODE_BIN', 'central', 'Central', 'advanced', 'hot', [RT]],
-  ['WEBTERM_OPENCODE_ALLOW_TOOLS', 'central', 'Central', 'advanced', 'hot', [RT]],
   ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orchestrator', 'user', 'hot', []],
   ['WEBTERM_RUN_REQUIRE_APPROVAL', 'platform', 'Orchestrator', 'user', 'hot', ['WEBTERM_ORCHESTRATOR_RUN']],
   ['WEBTERM_MEMORY_FILES', 'platform', 'Memory', 'user', 'hot', []],
@@ -130,9 +128,9 @@ const VERDICT: Row[] = [
 ]
 
 describe('vonis c-ENV-02 per entri', () => {
-  it('tabel mencakup 26 kunci inti, tanpa duplikat', () => {
-    expect(VERDICT).toHaveLength(26)
-    expect(new Set(VERDICT.map((r) => r[0])).size).toBe(26)
+  it('tabel mencakup 24 kunci inti, tanpa duplikat', () => {
+    expect(VERDICT).toHaveLength(24)
+    expect(new Set(VERDICT.map((r) => r[0])).size).toBe(24)
   })
   it.each(VERDICT)('%s: owner/section/audience/restart/requires', (key, owner, section, audience, restart, requires) => {
     const s = specFor(key) as EnvSpec
@@ -141,7 +139,7 @@ describe('vonis c-ENV-02 per entri', () => {
     expect((s.requires ?? []).map((r) => r.key)).toEqual(requires)
   })
   it('restart dikoreksi ke hot pada E05, E11, E16, E17, E19, E23', () => {
-    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY', 'WEBTERM_ORCHESTRATOR_RUN']) {
+    for (const k of ['WEBTERM_TELEGRAM_BOT_TOKEN', 'WEBTERM_CENTRAL_MODEL', 'WEBTERM_RUN_REQUIRE_APPROVAL', 'WEBTERM_TRUST_PROXY', 'WEBTERM_ORCHESTRATOR_RUN']) {
       expect(specFor(k)?.restartRequired, k).toBe(false)
     }
   })
@@ -173,7 +171,6 @@ describe('vonis c-ENV-02 per entri', () => {
   })
   it('E15, E17, E21, E22: dangerNote dan bentuk nilai', () => {
     expect(specFor('WEBTERM_CENTRAL_AUTONOMY')?.dangerNote).toContain('real workers')
-    expect(specFor('WEBTERM_OPENCODE_ALLOW_TOOLS')?.dangerNote).toContain('bash/edit/webfetch/task')
     const dir = specFor('WEBTERM_MEMORY_DIR') as EnvSpec
     expect(dir).toMatchObject({ allowEmpty: true, absolutePath: true, unsetLabel: '<dataDir>/memory' })
     expect(validateEnvValue(dir, '').ok).toBe(true)
