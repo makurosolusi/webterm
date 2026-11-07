@@ -35,7 +35,11 @@ export interface GrepPage {
   engine: 'rg' | 'fallback'
   cancelled: boolean
 }
-export interface GrepOpts { offset?: number; limit?: number; searchId?: string; env?: Env }
+export interface GrepOpts {
+  offset?: number; limit?: number; searchId?: string; env?: Env
+  /** Test seams: inject spawn failures and a failing fallback listing. */
+  spawn?: typeof spawn; list?: typeof searchFiles
+}
 
 const running = new Map<string, () => void>()
 
@@ -79,18 +83,18 @@ export function parseRgLine(line: string): GrepMatch | null {
   return { file, line: d.line_number ?? 0, col: (d.submatches?.[0]?.start ?? 0) + 1, text: clip(text) }
 }
 
-type Outcome = 'done' | 'missing' | 'cancelled'
+/** FsFail = the engine could not run at all (not the same as zero matches). */
+type Outcome = 'done' | 'missing' | 'cancelled' | FsFail
 /** One search's cancel state; `kill` is swapped in by whichever engine is running. */
 interface Job { cancelled: boolean; kill: () => void }
 
-function viaRg(root: string, q: string, page: ReturnType<typeof pager>, env: Env, job: Job): Promise<Outcome> {
+function viaRg(root: string, q: string, page: ReturnType<typeof pager>, env: Env, job: Job, run: typeof spawn): Promise<Outcome> {
   const args = ['--no-config', '--json', '--hidden', '--glob', '!.git', '--max-filesize', `${MAX_FILE_MB}M`,
     '--ignore-case', '--fixed-strings', '--sort', 'path', '--', q, '.']
   return new Promise((done) => {
-    const proc = spawn('rg', args, { cwd: root, env: childEnv({}, env), stdio: ['ignore', 'pipe', 'ignore'] }) // sec-208-7: filtered
+    const proc = run('rg', args, { cwd: root, env: childEnv({}, env), stdio: ['ignore', 'pipe', 'ignore'] }) // sec-208-7: filtered
     let rest = ''
     let outcome: Outcome = 'done'
-    let missing = false
     const stop = (why: Outcome): void => { outcome = why; proc.kill() }
     job.kill = () => stop('cancelled')
     const timer = setTimeout(() => stop('cancelled'), GREP_TIMEOUT_MS) // reported as cancelled, not as the end
@@ -105,15 +109,20 @@ function viaRg(root: string, q: string, page: ReturnType<typeof pager>, env: Env
         at = rest.indexOf('\n')
       }
     })
-    proc.on('error', () => { missing = true }) // ENOENT: rg not on PATH
-    proc.on('close', () => { clearTimeout(timer); done(job.cancelled ? 'cancelled' : missing ? 'missing' : outcome) })
+    // Only ENOENT means "rg not installed"; EMFILE/EAGAIN/EACCES are failures, never an empty search.
+    proc.on('error', (e: NodeJS.ErrnoException) => {
+      clearTimeout(timer)
+      const code = e.code ?? 'unknown'
+      done(job.cancelled ? 'cancelled' : code === 'ENOENT' ? 'missing' : fsFail(fsErrCode(code), `content search could not run rg (${code}): ${e.message}`))
+    })
+    proc.on('close', () => { clearTimeout(timer); done(job.cancelled ? 'cancelled' : outcome) })
   })
 }
 
 /** No rg: the existing listing (rg → git → walk, .gitignore honoured by git) + a plain line scan. */
-async function viaFallback(root: string, q: string, page: ReturnType<typeof pager>, env: Env, job: Job): Promise<Outcome> {
-  const listed = await searchFiles(root, SEARCH_MATCH_ALL, undefined, env)
-  if (!listed.ok) return 'done'
+async function viaFallback(root: string, q: string, page: ReturnType<typeof pager>, env: Env, job: Job, list: typeof searchFiles): Promise<Outcome> {
+  const listed = await list(root, SEARCH_MATCH_ALL, undefined, env)
+  if (!listed.ok) return fsFail(listed.code, `content search fallback could not list files (${listed.code}): ${listed.error}`)
   const needle = q.toLowerCase()
   // ponytail: sequential reads, fine for a fallback; rg is the fast path.
   for (const file of listed.files) {
@@ -162,8 +171,9 @@ export async function grepFiles(root: string, q: string, opts: GrepOpts = {}): P
     if (typeof dir !== 'string') return dir
     if (job.cancelled) return { ok: true, matches: [], nextOffset: null, engine: 'rg', cancelled: true }
     let engine: GrepPage['engine'] = 'rg'
-    let outcome = await viaRg(dir, q, page, env, job)
-    if (outcome === 'missing') { engine = 'fallback'; outcome = await viaFallback(dir, q, page, env, job) }
+    let outcome = await viaRg(dir, q, page, env, job, opts.spawn ?? spawn)
+    if (outcome === 'missing') { engine = 'fallback'; outcome = await viaFallback(dir, q, page, env, job, opts.list ?? searchFiles) }
+    if (typeof outcome === 'object') return outcome
     const cancelled = outcome === 'cancelled'
     return { ok: true, matches: page.matches, nextOffset: cancelled ? null : page.next(), engine, cancelled }
   } catch (e) {
