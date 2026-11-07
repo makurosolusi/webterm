@@ -75,6 +75,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Settings: "Reset Setting" (the gear next to "(Modified)") on a setting that holds a list or map you built, such as Claude launch profiles, now asks first and says what will be removed ("Remove all 2 Claude launch profiles?"). Simple settings still reset in one click.
 - Claude launch profiles have a proper editor: Add profile opens a form with name, command presets, a live preview of what will run, Test, and one-click use for new agents or Central. Each profile is a row with its resolved command, "Default for new agents" / "Central" badges, and Edit, Test and Delete (Delete asks first). Save stays disabled while the name is empty or already used, the command is empty, or a quote is not closed. Test runs on the saved profile.
 - Chat messages you send now appear in a bubble on the right in Agent Chat and the Central chat, with replies on the left.
 - The app loads less JavaScript on start (about 19% less, 14% fewer bytes over the wire, on a board with a terminal): Settings, the Central side bar views, the keyboard shortcuts overlay, the Kanban board, the Activity, Output and SCM panels, the bake-off, replay, template and new-workspace dialogs, and the Agent Chat body now load the first time they are opened. Markdown preview loads together with the editor.
