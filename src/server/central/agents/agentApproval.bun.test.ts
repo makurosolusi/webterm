@@ -106,3 +106,30 @@ test('approved card: a retry before the sweep starts the agent itself', async ()
   expect(s.ex.store.get(agentId)?.state).toBe('working')
   expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(0)
 })
+
+test('approved card that lapsed unused: the sweep puts a fresh card up instead of leaving the agent stuck', async () => {
+  const s = setup()
+  const agentId = String((await s.spawn()).result?.data?.agentId)
+  s.decide(`agent-${agentId}`, true)
+  s.clock.t += TTL_MS + 1
+  expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(0)
+  expect(s.ex.store.get(agentId)).toMatchObject({ state: 'approval_pending', approvalId: `agent-${agentId}-2` })
+  expect(getApproval({ db: s.db, now: s.now }, `agent-${agentId}-2`)?.status).toBe('pending')
+  // The lapsed consent stays unspent: single use is never bypassed.
+  expect(getRow(s.db, 'SELECT d.single_use FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?', `agent-${agentId}`)?.['single_use']).toBe(1)
+  expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(0)
+  expect(s.ex.store.get(agentId)?.approvalId).toBe(`agent-${agentId}-2`)
+})
+
+test('approved card that lapsed unused: a retry re-pends and says pending on the new card', async () => {
+  const s = setup()
+  const agentId = String((await s.spawn()).result?.data?.agentId)
+  s.decide(`agent-${agentId}`, true)
+  s.clock.t += TTL_MS + 1
+  const retry = await s.spawn()
+  expect(retry.receipt).toMatchObject({ detail: 'approval_required', evidence: { approvalStatus: 'pending' } })
+  expect(retry.result?.data).toMatchObject({ approvalId: `agent-${agentId}-2`, approvalStatus: 'pending' })
+  s.decide(`agent-${agentId}-2`, true)
+  expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(1)
+  expect(s.ex.store.get(agentId)?.state).toBe('working')
+})

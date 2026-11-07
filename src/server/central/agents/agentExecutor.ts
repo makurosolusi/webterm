@@ -99,6 +99,8 @@ export interface AgentExecutor {
   resume(agentId: string): Promise<ToolResult>
   /** Cancels an `approval_pending` agent whose card a human rejected (resume sweep). */
   reject(agentId: string): ToolResult
+  /** Puts a fresh card on an `approval_pending` agent whose approval lapsed unused (resume sweep). */
+  renew(agentId: string): Promise<ToolResult>
   prompt(agent: AgentRecord, text: string, mode: 'steer' | 'followup'): Promise<ToolResult>
   close(agent: AgentRecord, reason: string, force: boolean): Promise<ToolResult>
   read(agent: AgentRecord, tail: number): Promise<ToolResult>
@@ -228,9 +230,13 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
   /**
    * A retry of a spawn parked on a card answers from the ledger, never from the stored id alone:
    * pending -> same card; approved -> consume and start; rejected -> cancelled; expired -> a fresh card.
+   * An approval whose TTL ran out before it was used counts as expired: the ledger refuses to consume it
+   * (consent is bound to its window), so a fresh card is the only way forward.
    */
   async function settlePending(agent: AgentRecord): Promise<ToolResult> {
-    const status = agent.approvalId ? getApproval({ db, now }, agent.approvalId)?.status ?? 'expired' : 'expired'
+    const approval = agent.approvalId ? getApproval({ db, now }, agent.approvalId) : null
+    const lapsed = approval?.status === 'approved' && approval.expiresAt !== null && approval.expiresAt <= now()
+    const status = !approval || lapsed ? 'expired' : approval.status
     if (status === 'pending') return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'pending' } }
     if (status === 'rejected') return rejectPending(agent)
     if (status === 'expired') return pendApproval(agent)
@@ -304,6 +310,10 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     reject(agentId) {
       const agent = store.get(agentId)
       return agent?.state === 'approval_pending' ? rejectPending(agent) : { ok: false, code: 'not_pending' }
+    },
+    async renew(agentId) {
+      const agent = store.get(agentId)
+      return agent?.state === 'approval_pending' ? pendApproval(agent) : { ok: false, code: 'not_pending' }
     },
     async prompt(agent, text, mode) {
       if (agent.runner !== 'pty' || !agent.nodeId) return { ok: false, code: 'prompt_unsupported' }
