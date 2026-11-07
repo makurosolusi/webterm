@@ -72,7 +72,7 @@ export interface GoldenHarness {
   service: TurnService
   /** Runtime turns started since the last (re)boot; replay must never start one. */
   readonly calls: number
-  /** Resolves once a `hang` step is reached. */
+  /** Resolves once a `hang` step is reached AND the server has persisted the text streamed before it. */
   hung(): Promise<void>
   /** Simulates a crash + reboot: drops the process state, reopens the DB file, reconciles. */
   restart(turns: readonly FakeStep[][]): ReconcileResult
@@ -130,6 +130,13 @@ for (const s of steps) {
 emit({ type: 'result', subtype: 'success', is_error: false, session_id: 'sess-golden', total_cost_usd: 0, duration_ms: 1, usage: { input_tokens: 1, output_tokens: 1 } })
 srv.stdin.end()
 `
+}
+
+/** Text the server has persisted for the running turn (same source the reconciler rebuilds partialText from). */
+function streamedRunningText(db: Database): string {
+  return allRows(db, `SELECT e.payload_json FROM central_event e JOIN central_turn t ON t.id = e.turn_id
+    WHERE t.status = 'running' AND e.type = 'part.delta' ORDER BY e.seq ASC`)
+    .map((row) => String((JSON.parse(String(row['payload_json'])) as { delta?: unknown }).delta ?? '')).join('')
 }
 
 function closeDb(db: Database): void {
@@ -193,7 +200,8 @@ export async function createHarness(options: HarnessOptions): Promise<GoldenHarn
     rmSync(hungFile, { force: true })
   }
 
-  let current = boot(options.turns)
+  let script = options.turns
+  let current = boot(script)
   const now = Date.now()
   execWrite(
     current.db,
@@ -208,11 +216,20 @@ export async function createHarness(options: HarnessOptions): Promise<GoldenHarn
     get calls() { return existsSync(counterFile) ? Number(readFileSync(counterFile, 'utf8')) : 0 },
     async hung() {
       while (!existsSync(hungFile)) await new Promise((r) => setTimeout(r, HUNG_POLL_MS))
+      // hung.pid is a side channel: it can land before this process has read the fake's stdout (an
+      // event-loop stall in the one-process suite). Restarting then closes the DB under unread deltas:
+      // partialText comes back null and the late deltas throw "Database has closed" in the next test.
+      // So "hung" also means: every text step before the hang is persisted as a part.delta.
+      const steps = script[harness.calls - 1] ?? []
+      const hang = steps.findIndex((s) => 'hang' in s)
+      const expected = steps.slice(0, hang).map((s) => ('text' in s ? s.text : '')).join('')
+      while (streamedRunningText(current.db) !== expected) await new Promise((r) => setTimeout(r, HUNG_POLL_MS))
     },
     restart(turns) {
       // Close first: the crashed process must not get to finalize its turn; the reconciler does that.
       closeDb(current.db)
       killHung()
+      script = turns
       current = boot(turns)
       return reconcileTurns(current.db, Date.now())
     },
