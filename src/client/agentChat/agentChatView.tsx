@@ -1,7 +1,7 @@
 // Body of one agent chat node (PLAN/AGENT-CHAT.md W2): live SSE timeline, status line with Stop,
-// todo panel, composer with "/" and "@" completion, and the footer (mode, model, effort, history,
-// context, cost); the controls live in useAgentChatControls. One reducer per mounted view; the stream
-// closes on unmount.
+// usage-limit notice, edit / rewind (agentChatBranch), todo and task panels, composer with "/" and "@"
+// completion, and the footer (mode, model, effort, history, context, cost); the controls live in
+// useAgentChatControls. One reducer per mounted view; the stream closes on unmount.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import ChatComposer from '../chat/chatComposer'
 import type { ComposerImage } from '../chat/chatAttach'
@@ -19,6 +19,9 @@ import { AgentChatThread, type ThreadActions } from './agentChatThread'
 import { ModePicker } from './modePicker'
 import { AgentChatFooter } from './agentChatFooter'
 import { TodoPanel } from './todoPanel'
+import { TasksPanel } from './tasksPanel'
+import { RateLimitNotice } from './rateLimitNotice'
+import { EditBanner, RewindPanel, useAgentChatBranch } from './agentChatBranch'
 import { useAgentChatControls, why, type AgentChatPatch } from './useAgentChatControls'
 import { useAgentChatAttention } from './useAgentChatAttention'
 import '../chat/chat.css'
@@ -100,8 +103,15 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
 
   const controls = useAgentChatControls({ transport, state, stream, cwd, chatSessionId, permissionMode, chatConfig, onNodeData })
   useAgentChatAttention(nodeId, state)
+  const branch = useAgentChatBranch()
   const noteEvents = controls.noteEvents
-  const apply = useCallback((events: AgentChatEvent[]) => { noteEvents(events); dispatch({ type: 'events', events }) }, [noteEvents])
+  const onReset = useRef<() => void>(() => {})
+  const apply = useCallback((events: AgentChatEvent[]) => {
+    noteEvents(events)
+    dispatch({ type: 'events', events })
+    // Another conversation (resume, fork): its transcript is the timeline now.
+    if (events.some((e) => e.t === 'reset')) onReset.current()
+  }, [noteEvents])
   const batch = useBatchedEvents(apply)
 
   useEffect(() => {
@@ -125,6 +135,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
     )
   }, [transport])
 
+  onReset.current = () => { branch.cancelEdit(); branch.closeRewind(); loadHistory() }
+
   // A node added a moment ago is not on the server until the board saves (404 until then); the stream
   // retries until it is, so the first history page waits for the first open stream instead of failing.
   const [opened, setOpened] = useState(false)
@@ -144,12 +156,14 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
 
   const busy = isBusyStatus(state.status)
   const send = (text: string, images: ComposerImage[] = []): void => {
-    if (controls.intercept(text, images.length > 0)) return
+    if (!branch.editing && controls.intercept(text, images.length > 0)) return
     setSendError(null)
     setSending(true)
     const wire = images.map(({ mediaType, data }) => ({ mediaType, data }))
-    transport.send(text, busy ? 'next' : undefined, wire).then(
-      () => setSending(false),
+    const edited = branch.editing?.id
+    const request = edited ? transport.fork(edited, text, wire) : transport.send(text, busy ? 'next' : undefined, wire)
+    request.then(
+      () => { setSending(false); if (edited) branch.cancelEdit() },
       (err: unknown) => { setSending(false); setSendError({ text, images, message: why(err) }) },
     )
   }
@@ -162,7 +176,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
     setMode: (m) => transport.setMode(m),
     loadFull: (id) => transport.toolResult(id),
     imageUrl: (ref) => transport.imageUrl(ref),
-  }), [transport])
+    branch: { edit: branch.edit, rewind: branch.rewind },
+  }), [transport, branch.edit, branch.rewind])
 
   const jump = (): void => {
     const el = scrollRef.current
@@ -192,6 +207,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
           <span>{state.status === 'closed' ? 'This Claude session has ended. Send a message to start a new turn.' : 'Live updates stopped. Reload the board to reconnect.'}</span>
         </div>
       )}
+
+      <RateLimitNotice limit={state.rateLimit} />
 
       <div className="chat-thread-wrap">
         <div className="chat-thread agent-chat-thread" role="log" aria-live="polite" aria-busy={busy} ref={scrollRef} onScroll={onScroll}>
@@ -264,8 +281,11 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
           <span>Sending…</span>
         </div>
       )}
+      {branch.rewindId && <RewindPanel transport={transport} messageId={branch.rewindId} onClose={branch.closeRewind} />}
+      {branch.editing && <EditBanner onCancel={branch.cancelEdit} />}
       <TodoPanel todos={state.todos} />
-      <ChatComposer busy={false} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
+      <TasksPanel tasks={state.tasks} onStop={(id) => transport.stopTask(id)} />
+      <ChatComposer busy={false} seed={branch.editing?.seed} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
         completion={controls.completion} maxLength={AGENT_CHAT_TEXT_MAX}
         placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : 'Ask Claude, / for commands, @ for files…'} />
 

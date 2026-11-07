@@ -11,7 +11,7 @@ import { ToolCard } from './toolCards'
 import { PermissionCard } from './permissionCard'
 import { QuestionCard } from './questionCard'
 import { PlanCard } from './planCard'
-import { MessageActions } from './messageActions'
+import { MessageActions, type BranchActions } from './messageActions'
 import { CommandOutputBlock, CompactDivider, QueuedBadge } from './timelineBlocks'
 
 export interface ThreadActions {
@@ -20,6 +20,8 @@ export interface ThreadActions {
   loadFull: (toolUseId: string) => Promise<string>
   /** URL of a transcript image (history `image` part reference). */
   imageUrl: (ref: string) => string
+  /** Edit / Rewind to here on user messages; offered only while no turn runs. */
+  branch?: BranchActions
 }
 
 interface Ctx { state: AgentChatState; actions: ThreadActions }
@@ -99,7 +101,7 @@ function MessageRow({ ctx, message }: { ctx: Ctx; message: ChatMessageView }) {
         {user && message.queued && <QueuedBadge />}
       </div>
       <MessageBody ctx={ctx} message={message} />
-      {!streaming && <MessageActions message={message} />}
+      {!streaming && <MessageActions message={message} {...(ctx.actions.branch && !isBusyStatus(ctx.state.status) ? { branch: ctx.actions.branch } : {})} />}
     </div>
   )
 }

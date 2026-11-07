@@ -5,7 +5,9 @@
 // Cursor rule (server re-sends live state on every connect): an event with `seq > lastSeq` applies
 // normally; an `init` / `permission` at or below the cursor applies idempotently and never lowers
 // it; anything else at or below the cursor is a duplicate and is dropped.
-import type { AgentChatConfig, AgentChatContext, AgentChatEvent, AgentChatEventBody, AgentChatPart, AgentChatStatus, AgentChatTodo } from '../../shared/agentChat.wire'
+import type {
+  AgentChatConfig, AgentChatContext, AgentChatEvent, AgentChatEventBody, AgentChatPart, AgentChatStatus, AgentChatTask, AgentChatTodo,
+} from '../../shared/agentChat.wire'
 import { isPermissionMode, type AgentPermissionMode } from '../../shared/workspace.capabilities'
 import type { PermissionEvent, PermissionOutcome, ToolEvent } from './agentChatCards.types'
 
@@ -41,6 +43,10 @@ export interface AgentChatState {
   compacts: Record<string, { trigger: 'manual' | 'auto'; preTokens?: number }>
   /** Items of the latest TodoWrite tool input; [] until Claude writes one. */
   todos: AgentChatTodo[]
+  /** Subagents and background tasks of this conversation, by id in start order. */
+  tasks: Record<string, AgentChatTask>
+  /** Plan usage limit hit or close (cleared by `allowed` or a turn that succeeds). */
+  rateLimit?: RateLimitView
   config?: AgentChatConfig
   context?: AgentChatContext
   /** Bumped on `commandsChanged`: the view refetches the "/" catalog when it changes. */
@@ -57,6 +63,8 @@ export interface AgentChatState {
   historyNext?: number | null
 }
 
+export type RateLimitView = Omit<Extract<AgentChatEventBody, { t: 'rateLimit' }>, 't'>
+
 /** One transcript item from `GET history` (an event body plus its page cursor). */
 export type HistoryItem = AgentChatEventBody & { cursor: number }
 
@@ -69,7 +77,7 @@ const BUSY: readonly AgentChatStatus[] = ['starting', 'thinking', 'tool', 'await
 export const isBusyStatus = (s: AgentChatStatus): boolean => BUSY.includes(s)
 
 export function initialAgentChatState(nodeId: string): AgentChatState {
-  return { nodeId, lastSeq: 0, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [], catalogVersion: 0, status: 'idle' }
+  return { nodeId, lastSeq: 0, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [], tasks: {}, catalogVersion: 0, status: 'idle' }
 }
 
 /** SDK permission mode -> node mode ('default' is the node's 'manual'); undefined for modes the node has no name for. */
@@ -150,7 +158,13 @@ function applyOne(s: AgentChatState, e: AgentChatEvent): AgentChatState {
       return cur ? { ...st, permissions: { ...st.permissions, [e.requestId]: { ...cur, outcome: e.outcome } } } : st
     }
     case 'result':
-      return { ...st, costUsd: e.costUsd, tokens: tokensOf(e.usage) ?? st.tokens }
+      return { ...st, costUsd: e.costUsd, tokens: tokensOf(e.usage) ?? st.tokens, ...(e.isError ? {} : { rateLimit: undefined }) }
+    case 'rateLimit': {
+      const { seq: _seq, t: _t, ...limit } = e
+      return { ...st, rateLimit: e.status === 'allowed' ? undefined : limit }
+    }
+    case 'task':
+      return { ...st, tasks: { ...st.tasks, [e.task.id]: e.task } }
     case 'notice': {
       const id = `s${e.seq}`
       return { ...st, order: [...st.order, `n:${id}`], notices: { ...st.notices, [id]: { level: e.level, text: e.text } } }
@@ -172,7 +186,7 @@ function applyOne(s: AgentChatState, e: AgentChatEvent): AgentChatState {
       // /clear: a new conversation. Config and mode belong to the node, not the conversation.
       const session = st.session ? { ...st.session, sessionId: e.sessionId } : undefined
       return {
-        ...st, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [],
+        ...st, order: [], messages: {}, tools: {}, permissions: {}, notices: {}, commandOutputs: {}, compacts: {}, todos: [], tasks: {},
         historyNext: undefined, context: undefined, costUsd: undefined, tokens: undefined, ...(session ? { session } : {}),
       }
     }

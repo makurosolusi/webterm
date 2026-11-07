@@ -1,6 +1,6 @@
 // Test-only: a scripted stand-in for the SDK `Query` plus SDK message fixtures. Never imported by
 // production code; no real Claude process is involved.
-import type { ModelInfo, PermissionMode, Query, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
+import type { ModelInfo, PermissionMode, Query, RewindFilesResult, SDKMessage, SDKUserMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk'
 
 type Item = { m: SDKMessage } | { err: Error } | { end: true }
 
@@ -13,6 +13,8 @@ export class FakeQuery implements AsyncIterable<SDKMessage> {
   readonly controls: string[] = []
   commands: SlashCommand[] = [{ name: 'compact', description: 'Compact', argumentHint: '', builtin: true }, { name: 'deploy', description: 'Ship it', argumentHint: '<env>' }]
   models: ModelInfo[] = [{ value: 'opus', displayName: 'Opus', description: 'Best', supportsEffort: true, supportedEffortLevels: ['low', 'high'] }, { value: 'haiku', displayName: 'Haiku', description: 'Fast' }]
+  /** What rewindFiles answers (both dry run and real); calls land in `controls` as 'rewind:<id>:dry' / 'rewind:<id>'. */
+  rewind: RewindFilesResult = { canRewind: true, filesChanged: ['/work/a.ts'], insertions: 3, deletions: 1 }
   /** Set to make every control request reject with it. */
   controlError?: Error
   /** Set to make supportedCommands/supportedModels never answer. */
@@ -36,6 +38,9 @@ export class FakeQuery implements AsyncIterable<SDKMessage> {
   async setMaxThinkingTokens(n: number | null): Promise<void> { this.ctl(`thinking:${n ?? 'default'}`) }
   async supportedCommands(): Promise<SlashCommand[]> { await this.answer('supportedCommands'); return this.commands }
   async supportedModels(): Promise<ModelInfo[]> { await this.answer('supportedModels'); return this.models }
+
+  async rewindFiles(id: string, o?: { dryRun?: boolean }): Promise<RewindFilesResult> { this.ctl(`rewind:${id}${o?.dryRun ? ':dry' : ''}`); return this.rewind }
+  async stopTask(id: string): Promise<void> { this.ctl(`stopTask:${id}`) }
 
   private ctl(name: string): void {
     if (this.controlError) throw this.controlError
@@ -85,6 +90,11 @@ export const fx = {
     msg({ type: 'system', subtype: 'compact_boundary', uuid, compact_metadata: { trigger, ...(preTokens !== undefined ? { pre_tokens: preTokens } : {}) } }),
   reset: (newId: string): SDKMessage => msg({ type: 'conversation_reset', new_conversation_id: newId, uuid: 'u-reset', session_id: 's-1', trigger: 'clear' }),
   commandsChanged: (): SDKMessage => msg({ type: 'system', subtype: 'commands_changed', commands: [], uuid: 'u-cc', session_id: 's-1' }),
+  /** Echo of a streamed user message (replay-user-messages). */
+  replay: (uuid: string, text: string): SDKMessage => msg({ type: 'user', uuid, isReplay: true, parent_tool_use_id: null, message: { role: 'user', content: text } }),
+  rateLimit: (status: string, resetsAt?: number, type = 'five_hour'): SDKMessage =>
+    msg({ type: 'rate_limit_event', uuid: 'u-rl', session_id: 's-1', rate_limit_info: { status, rateLimitType: type, ...(resetsAt !== undefined ? { resetsAt } : {}) } }),
+  task: (subtype: string, taskId: string, fields: Record<string, unknown> = {}): SDKMessage => msg({ type: 'system', subtype, task_id: taskId, uuid: `u-${subtype}`, session_id: 's-1', ...fields }),
   init: (sessionId = 's-1', model = 'claude-test', permissionMode = 'default'): SDKMessage => msg({
     type: 'system', subtype: 'init', session_id: sessionId, model, permissionMode, cwd: '/work',
     slash_commands: ['compact'], capabilities: ['interrupt'], claude_code_version: '2.1.300',

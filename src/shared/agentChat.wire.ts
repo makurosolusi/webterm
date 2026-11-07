@@ -34,7 +34,11 @@ export type AgentChatEvent = { seq: number } & (
   /** The slash command catalog changed: refetch `GET catalog`. */
   | { t: 'commandsChanged' }
   /** A user message waits behind the running turn (`queued: true`) or Claude picked it up (`false`). */
-  | { t: 'queued'; messageId: string; queued: boolean })
+  | { t: 'queued'; messageId: string; queued: boolean }
+  /** Plan usage limit state changed (`rate_limit_event`); `allowed` = back under the limit; `resetsAt` in epoch ms. */
+  | { t: 'rateLimit'; status: 'allowed' | 'allowed_warning' | 'rejected'; resetsAt?: number; limit?: string; utilization?: number }
+  /** A background task (subagent, shell) started, progressed or ended (`task_*` system messages). */
+  | { t: 'task'; task: AgentChatTask })
 
 /** One entry of the "/" menu (`GET catalog`). `builtin` = shipped with Claude Code, not a skill/custom/MCP prompt. */
 export interface AgentChatCommand { name: string; description: string; argumentHint?: string; aliases?: string[]; builtin: boolean }
@@ -48,6 +52,30 @@ export interface AgentChatContext { used: number; window: number }
 export interface AgentChatTodo { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 /** One past conversation of the node's cwd (`GET sessions`). */
 export interface AgentChatSessionSummary { sessionId: string; title: string; updatedAt: number; current: boolean }
+
+/** One entry of the "Tasks" list (a subagent or background shell of the session). */
+export interface AgentChatTask {
+  id: string
+  status: 'running' | 'completed' | 'failed' | 'stopped'
+  description: string
+  /** Tool call that started it (a Task card), when the SDK names it. */
+  toolUseId?: string
+  /** Latest one-line progress or the final summary. */
+  summary?: string
+  /** Tool the task ran last. */
+  lastTool?: string
+}
+
+/** Answer of `POST rewind` (SDK RewindFilesResult): what a rewind to a user message changes (dry run) or changed. */
+export interface AgentChatRewindResult {
+  canRewind: boolean
+  error?: string
+  filesChanged: string[]
+  insertions: number
+  deletions: number
+  /** Real rewind only: tracked paths left alone because they are links or unsafe to restore. */
+  skippedLinks?: number
+}
 
 /** An event before the session stamps its `seq`. */
 export type AgentChatEventBody = AgentChatEvent extends infer E ? (E extends { seq: number } ? Omit<E, 'seq'> : never) : never

@@ -1,0 +1,24 @@
+/* Syntax colors of chat code blocks (chatHighlight.ts). Default Dark+ / Light+ token colors of VS Code,
+   switched by the app theme (`data-theme="light"` on <html>), so blocks recolor with the theme. */
+.chat-markdown {
+  --chat-tok-keyword: #569cd6; --chat-tok-string: #ce9178; --chat-tok-comment: #6a9955; --chat-tok-number: #b5cea8;
+  --chat-tok-type: #4ec9b0; --chat-tok-regexp: #d16969; --chat-tok-tag: #569cd6; --chat-tok-attribute: #9cdcfe;
+  --chat-tok-variable: #9cdcfe; --chat-tok-constant: #4fc1ff; --chat-tok-predefined: #dcdcaa; --chat-tok-key: #9cdcfe;
+}
+:root[data-theme='light'] .chat-markdown {
+  --chat-tok-keyword: #0000ff; --chat-tok-string: #a31515; --chat-tok-comment: #008000; --chat-tok-number: #098658;
+  --chat-tok-type: #267f99; --chat-tok-regexp: #811f3f; --chat-tok-tag: #800000; --chat-tok-attribute: #e50000;
+  --chat-tok-variable: #001080; --chat-tok-constant: #0070c1; --chat-tok-predefined: #795e26; --chat-tok-key: #0451a5;
+}
+.chat-tok--keyword, .chat-tok--metatag { color: var(--chat-tok-keyword); }
+.chat-tok--string { color: var(--chat-tok-string); }
+.chat-tok--comment { color: var(--chat-tok-comment); font-style: italic; }
+.chat-tok--number { color: var(--chat-tok-number); }
+.chat-tok--type { color: var(--chat-tok-type); }
+.chat-tok--regexp { color: var(--chat-tok-regexp); }
+.chat-tok--tag { color: var(--chat-tok-tag); }
+.chat-tok--attribute { color: var(--chat-tok-attribute); }
+.chat-tok--variable { color: var(--chat-tok-variable); }
+.chat-tok--constant { color: var(--chat-tok-constant); }
+.chat-tok--predefined, .chat-tok--annotation { color: var(--chat-tok-predefined); }
+.chat-tok--key { color: var(--chat-tok-key); }
