@@ -246,7 +246,7 @@ describe('SettingsPanel search', () => {
 
     fireEvent.change(search, { target: { value: 'tidak-ada-setting-ini' } })
     expect(screen.queryByLabelText('Font size')).toBeNull()
-    expect(screen.getByText(/Tidak ada setting yang cocok/)).toBeTruthy()
+    expect(screen.getByText(/No settings match/)).toBeTruthy()
   })
 
   it('clears the query on Escape instead of closing the dialog, and clears on section click', () => {

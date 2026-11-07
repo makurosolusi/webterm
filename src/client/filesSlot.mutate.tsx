@@ -38,7 +38,7 @@ function reportFailures(s: Scope, action: MutateAction, failed: Failure[], total
   const texts = failed.slice(0, MAX_LISTED).map((f) => failText(action, f.name, f.fail))
   const actions = enableActions(s, failed)
   if (total === 1) { toast(s, { severity: 'error', title: texts[0], actions }); return }
-  const more = failed.length > MAX_LISTED ? ` (+${failed.length - MAX_LISTED} lainnya)` : ''
+  const more = failed.length > MAX_LISTED ? ` (+${failed.length - MAX_LISTED} more)` : ''
   toast(s, { severity: 'error', title: TOAST.failedSome(failed.length, total), message: texts.join(' ') + more, actions })
 }
 

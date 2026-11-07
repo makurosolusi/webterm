@@ -1,68 +1,126 @@
-// Penjaga: teks produk webterm berbahasa Inggris. Gagal bila kata UI Indonesia umum muncul lagi di
-// string literal file label/uxText/messages/registry (komentar boleh tetap Indonesia).
+// Penjaga: teks produk webterm berbahasa Inggris. Memindai SEMUA sumber non-test di src/client, src/server,
+// src/shared (bukan cuma file label): kode setelah komentar dibuang, jadi string literal, template, JSX text,
+// pesan error/log, dan prompt model ikut terperiksa. Versi lama hanya memindai file *Labels/*Messages dan
+// daftar kata sempit, sehingga "Batas tertinggi" (centralLabels.ts) lolos.
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const SRC = fileURLToPath(new URL('..', import.meta.url))
+const AREAS = ['client', 'server', 'shared']
 
-/** File yang memegang teks produk (label, pesan, katalog kemampuan, deskripsi registry env yang tampil di UI). */
-const PRODUCT_TEXT_FILE = /(Labels|labels|\.uxText|Messages)\.ts$|(^|\/)(browser\.status|featureCapabilities|featureCapabilities\.service|envSettings\.state)\.ts$|(^|\/)(browser\.)?envRegistry(\.[a-z0-9]+)?\.ts$|^client\/(Settings[A-Za-z]*\.tsx|QuickOpen\.tsx|uploadQueue\.ts|filesSlot\.upload\.tsx|filesWriteOffer\.tsx|inboxTransport\.ts|terminalLinks\.ts)$/
-
-/** Kata UI Indonesia yang tak punya padanan sama-eja di Inggris (sengaja tanpa "di"/"ke"/"ini": bentrok dengan path/ekstensi). */
+/** Kata Indonesia yang tak punya padanan sama-eja di Inggris (sengaja tanpa "di"/"ke"/"ini"/"ada": bentrok dengan path/ekstensi/nama). */
 const INDONESIAN = [
-  'yang', 'dengan', 'tidak', 'belum', 'sudah', 'untuk', 'atau', 'bisa', 'sedang', 'lagi', 'dulu', 'harus', 'tanpa',
-  'lewat', 'bila', 'hanya', 'kamu', 'anda', 'nyalakan', 'matikan', 'tersambung', 'kemampuan', 'pengaturan',
-  'lanjutan', 'buka', 'salin', 'izinkan', 'atur', 'terkunci', 'pratinjau', 'dipotong', 'periksa', 'gagal', 'simpan',
-  'hapus', 'tutup', 'batal', 'pilih', 'coba', 'memuat', 'menyimpan', 'berkas', 'aktif', 'mati', 'proyek', 'kanvas',
-  'pesan', 'galat', 'perintah', 'izin', 'persetujuan', 'agen', 'sesi',
+  'yang', 'dan', 'dengan', 'tidak', 'tak', 'belum', 'sudah', 'untuk', 'atau', 'bisa', 'sedang', 'lagi', 'dulu', 'harus',
+  'tanpa', 'lewat', 'bila', 'jika', 'kalau', 'karena', 'supaya', 'hanya', 'juga', 'saja', 'bukan', 'telah', 'tersebut',
+  'kamu', 'anda', 'silakan', 'mohon', 'harap', 'lainnya', 'nyalakan', 'matikan', 'tersambung', 'terpasang', 'kemampuan',
+  'pengaturan', 'lanjutan', 'buka', 'salin', 'izinkan', 'atur', 'terkunci', 'pratinjau', 'dipotong', 'periksa', 'gagal',
+  'berhasil', 'simpan', 'hapus', 'tutup', 'batal', 'pilih', 'coba', 'memuat', 'menyimpan', 'berkas', 'proyek', 'kanvas',
+  'pesan', 'galat', 'kesalahan', 'perintah', 'izin', 'persetujuan', 'agen', 'sesi', 'batas', 'tertinggi', 'terendah',
+  'rusak', 'cocok',
 ]
-const WORD = new RegExp(`\\b(${INDONESIAN.join('|')})\\b`, 'i')
+const WORD = new RegExp(`\\b(${INDONESIAN.join('|')})\\b`, 'gi')
 
-/** Nama diri / istilah yang sah walau mirip kata di atas (substring literal yang dibuang sebelum dicek). */
-const ALLOW: readonly string[] = []
+/** Non-Inggris yang sah: `file` relatif ke src, `text` dibuang dari kode sebelum dicek, `reason` wajib. */
+const ALLOW: readonly { file: string; text: string; reason: string }[] = [
+  { file: 'server/central/skills/skillLint.ts', text: String.raw`/abaikan\s+(semua\s+)?(aturan|instruksi|perintah)/i`,
+    reason: 'detector for Indonesian prompt-injection phrasing; never shown to anyone' },
+]
 
-const LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g
-
-/** Literal string berbahasa Indonesia di satu sumber; komentar baris/blok diabaikan. */
-function indonesianLiterals(source: string): string[] {
-  const hits: string[] = []
-  for (const raw of source.split('\n')) {
-    const line = raw.trim()
-    if (line.startsWith('//') || line.startsWith('*') || line.startsWith('/*')) continue
-    const code = raw.replace(/\s\/\/\s.*$/, '')
-    for (const lit of code.match(LITERAL) ?? []) {
-      const text = ALLOW.reduce((t, a) => t.replaceAll(a, ''), lit)
-      if (WORD.test(text)) hits.push(lit)
+/** Buang komentar `//`, `/* *\/` dan baris komentar SQL `-- ` di dalam template; string, template, regex utuh. */
+function stripComments(src: string): string {
+  let out = ''
+  let i = 0
+  const n = src.length
+  const interp: number[] = []
+  let depth = 0
+  let last = ''
+  const regexAllowed = () => last === '' || /[(,=:[!&|?{};+\-*%<>~^]$/.test(last) || /\b(return|typeof|case|in|of|throw|yield|await)$/.test(last)
+  const template = () => {
+    while (i < n) {
+      if (src[i] === '\\') { out += src.slice(i, i + 2); i += 2; continue }
+      if (src[i] === '`') { out += '`'; i++; return }
+      if (src[i] === '$' && src[i + 1] === '{') { out += '${'; i += 2; interp.push(depth++); return }
+      out += src[i++]
     }
   }
-  return hits
+  while (i < n) {
+    const c = src[i]
+    if (c === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') i++; continue }
+    if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2) < 0 ? n : src.indexOf('*/', i + 2) + 2
+      out += src.slice(i, end).replace(/[^\n]/g, '')
+      i = end
+      continue
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1
+      while (j < n && src[j] !== c && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1
+      out += src.slice(i, j + 1); i = j + 1; last = 'a'; continue
+    }
+    if (c === '`') { out += c; i++; template(); last = 'a'; continue }
+    if (c === '}' && interp.length && interp[interp.length - 1] === depth - 1) {
+      interp.pop(); depth--; out += c; i++; template(); last = 'a'; continue
+    }
+    if (c === '/' && regexAllowed()) {
+      let j = i + 1
+      let cls = false
+      while (j < n && src[j] !== '\n' && (cls || src[j] !== '/')) {
+        if (src[j] === '\\') j++
+        else if (src[j] === '[') cls = true
+        else if (src[j] === ']') cls = false
+        j++
+      }
+      if (src[j] === '/') { out += src.slice(i, j + 1); i = j + 1; last = 'a'; continue }
+    }
+    if (c === '{') depth++
+    if (c === '}') depth--
+    out += c
+    i++
+    if (!/\s/.test(c)) last = (last + c).slice(-8)
+  }
+  return out.replace(/^[ \t]*-- .*$/gm, '')
 }
 
-function productTextFiles(): string[] {
-  return (readdirSync(SRC, { recursive: true }) as string[])
-    .map((f) => f.split('\\').join('/'))
-    .filter((f) => PRODUCT_TEXT_FILE.test(f) && !/\.test\.tsx?$/.test(f))
+/** Baris kode (tanpa komentar) yang memuat kata Indonesia, sebagai `baris: kata`. */
+function indonesianHits(source: string, allow: readonly string[] = []): string[] {
+  const code = allow.reduce((t, a) => t.replaceAll(a, ''), stripComments(source))
+  return code.split('\n').flatMap((line, k) => [...line.matchAll(WORD)].map((m) => `${k + 1}: ${m[0]}`))
+}
+
+function sourceFiles(): string[] {
+  return AREAS.flatMap((area) => (readdirSync(join(SRC, area), { recursive: true }) as string[])
+    .map((f) => `${area}/${f.split('\\').join('/')}`))
+    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$|\.d\.ts$|__fixtures__\//.test(f))
 }
 
 describe('product text is English', () => {
-  it('detector flags Indonesian and passes English', () => {
-    expect(indonesianLiterals(`const a = 'Nyalakan browser'\n// komentar tidak dihitung`)).toEqual([`'Nyalakan browser'`])
-    expect(indonesianLiterals(`const a = 'Turn on browser' // tidak dihitung`)).toEqual([])
+  it('detector flags Indonesian in strings and JSX text, ignores comments', () => {
+    expect(indonesianHits(`const a = 'Batas tertinggi'\n// komentar tidak dihitung`)).toEqual(['1: Batas', '1: tertinggi'])
+    expect(indonesianHits(`<p>\n  Tidak ada setting\n</p>`)).toEqual(['2: Tidak'])
+    expect(indonesianHits('const b = `x ${y} gagal`')).toEqual(['1: gagal'])
+    expect(indonesianHits(`const a = 'Turn on' // tidak dihitung\n/* belum\n dihitung */ const r = /\\/\\//`)).toEqual([])
+    expect(indonesianHits('const q = `\n  -- komentar SQL tidak dihitung\n  SELECT 1`')).toEqual([])
   })
 
-  it('covers the label, uxText, messages, and registry files', () => {
-    const files = productTextFiles()
-    for (const f of ['client/browser.uxText.ts', 'client/filesMessages.ts', 'client/capabilitiesLabels.ts',
-      'shared/featureCapabilities.ts', 'server/envRegistry.central.ts', 'server/browser/browser.envRegistry.ts']) {
+  it('scans every non-test source file in client, server and shared', () => {
+    const files = sourceFiles()
+    expect(files.length).toBeGreaterThan(500)
+    for (const f of ['client/central/centralLabels.ts', 'client/SettingsPanel.tsx', 'server/index.ts', 'shared/featureCapabilities.ts']) {
       expect(files).toContain(f)
     }
   })
 
-  it('no Indonesian UI words in product text string literals', () => {
-    const offenders = productTextFiles().flatMap((f) =>
-      indonesianLiterals(readFileSync(join(SRC, f), 'utf8')).map((lit) => `${f}: ${lit}`))
+  it('every allowlist entry still matches its file (no stale exemptions)', () => {
+    for (const a of ALLOW) expect(readFileSync(join(SRC, a.file), 'utf8'), `${a.file}: ${a.reason}`).toContain(a.text)
+  })
+
+  it('no Indonesian words in product text', () => {
+    const offenders = sourceFiles().flatMap((f) => {
+      const allow = ALLOW.filter((a) => a.file === f).map((a) => a.text)
+      return indonesianHits(readFileSync(join(SRC, f), 'utf8'), allow).map((h) => `${f}:${h}`)
+    })
     expect(offenders).toEqual([])
   })
 })

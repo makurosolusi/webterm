@@ -118,6 +118,7 @@ Operator notes:
 
 ### Fixed
 - The Central chat no longer gets stuck on "Reconnecting…" when a turn fails: the failure was mistaken for a lost connection, so the chat reconnected over and over and the reply stayed on "streaming".
+- Remaining Indonesian text in the app (labels, errors and messages) is now English.
 - A failed Central reply now says why (for example "claude timed out", or "The server restarted before this reply finished."), also after a reload, and the newest failed message or reply has a Retry button that sends it again.
 - Central chat accepts messages with several lines.
 - Cancelling a repository clone no longer hangs and blocks the next clone.

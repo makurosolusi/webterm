@@ -25,7 +25,7 @@ function useWatchDir(ctx: FilesSlotCtx): void {
       const n = (subscribers.get(dir) ?? 0) + 1
       subscribers.set(dir, n)
       if (n === 1) send({ t: 'fswatch', dir })
-    }).catch((err: unknown) => console.warn(`filesSlot.watch: capabilities gagal untuk ${dir}`, err))
+    }).catch((err: unknown) => console.warn(`filesSlot.watch: capabilities failed for ${dir}`, err))
     const off = onFsEvent((e) => {
       if (e.kind === 'dirty' && e.origin === 'remote' && e.path === dir) refreshRef.current()
     })

@@ -4,7 +4,7 @@ import * as fsClient from './fsClient'
 import { ancestorDirs, newEntryPath } from './fileBrowse'
 
 /** Pesan saat nama sudah dipakai; juga dipakai FilesNode untuk hasil `created:false`. */
-export const existsNotice = (name: string): string => `Sudah ada: ${name}`
+export const existsNotice = (name: string): string => `Already exists: ${name}`
 /** Pesan validasi nama (juga ditampilkan live di FilesInput). */
 export const NAME_NOT_ALLOWED = 'That name is not allowed here.'
 

@@ -22,7 +22,7 @@ export const CL = {
   privacyLabel: 'Free model: prompts and repository content are sent to the model provider. Use a credentialed provider for sensitive data.',
   levelHeading: 'Control level',
   effective: 'Effective',
-  ceiling: 'Batas tertinggi',
+  ceiling: 'Ceiling',
   globalLevel: 'Global',
   budgetHeading: 'Daily budget (UTC)',
   tokens: 'Tokens',
