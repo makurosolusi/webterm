@@ -126,6 +126,24 @@ describe('sending', () => {
   })
 })
 
+describe('multi-line messages', () => {
+  it('accepts several lines, stores them verbatim (CRLF normalised) and still rejects other control chars', async () => {
+    const { deps, service } = setup()
+    const sent = await send(deps, 'central:global', 'ml1', 'first line\r\n\tindented\n\nlast')
+    expect(sent.status).toBe(202)
+    await service.waitFor(String(sent.json['turnId']))
+    const history = await call(deps, '/api/central/conversations/central%3Aglobal/messages')
+    const human = (history.json['items'] as { role: string; parts: { text: string }[] }[]).find((m) => m.role === 'human')!
+    expect(human.parts[0]!.text).toBe('first line\n\tindented\n\nlast')
+    expect(rows((await call(deps, '/api/central/conversations')).json)[0]!.title).toBe('first line')
+
+    for (const bad of ['bell\u0007', 'lone\rreturn', 'nul\u0000', 'esc\u001b[0m']) {
+      const rejected = await send(deps, 'central:global', `bad-${bad.length}-${bad.charCodeAt(4)}`, bad)
+      expect(rejected.status).toBe(400)
+    }
+  })
+})
+
 describe('Claude session per conversation', () => {
   it('a new chat starts a fresh session instead of resuming the previous one', async () => {
     // One fake CLI for every turn: logs its argv, answers with session `sess-<n>` for the n-th run.

@@ -94,7 +94,7 @@ describe('chat fetch client', () => {
     sessionStorage.setItem(TOKEN_KEY, TOKEN)
     fetchMock.mockResolvedValue(response({ items: [conversation, { bogus: true }] }))
 
-    const rows = await listConversations()
+    const { items: rows } = await listConversations()
 
     expect(fetchMock.mock.calls[0][0]).toBe(`${CHAT_PATH}/conversations?limit=50`)
     expect(headersOf(0) ?? {}).not.toHaveProperty(TOKEN_HEADER) // the session cookie is the credential
@@ -138,6 +138,12 @@ describe('chat fetch client', () => {
     expect(headersOf(0)['Idempotency-Key']).toBe('cm-9')
     expect(JSON.parse(String(init.body))).toEqual({ clientMessageId: 'cm-9', text: 'hello' })
     expect(result).toEqual({ messageId: 'm9', seq: 9, turnId: 't1', status: 'queued' })
+  })
+
+  it('keeps the newlines of a multi-line message in the POST body', async () => {
+    fetchMock.mockResolvedValue(response({ messageId: 'm9', seq: 9, turnId: 't1', status: 'queued' }))
+    await sendMessage('central:global', { clientMessageId: 'cm-ml', text: 'one\ntwo\n' })
+    expect(JSON.parse(String(initOf(0).body)).text).toBe('one\ntwo')
   })
 
   it('surfaces 409 conversation_busy with the active turn', async () => {

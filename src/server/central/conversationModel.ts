@@ -63,6 +63,8 @@ export const MAX_PARTS = 100
 export const MAX_PART_JSON = 64_000
 const MAX_ID = 200
 const CONTROL = /[\u0000-\u001f\u007f]/
+/** Message text may span lines: `\n` and `\t` pass, a lone `\r` and every other control char do not. */
+const TEXT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/
 
 function fail(code: ConversationErrorCode, message: string): never {
   throw new ConversationError(code, message)
@@ -128,10 +130,15 @@ export function normalizeClientMessageId(value: unknown): string | null {
   }
   return text
 }
-export function validateMessageText(value: unknown): string {
-  const text = typeof value === 'string' ? value.trim() : ''
-  if (text === '' || text.length > MAX_MESSAGE_CHARS) fail('invalid_message', `text must be 1..${MAX_MESSAGE_CHARS} characters`)
+/** Multi-line message text: `\r\n` becomes `\n`, then 1..MAX chars without other control chars. */
+function messageBody(value: unknown, code: ConversationErrorCode, label: string): string {
+  const text = typeof value === 'string' ? value.replace(/\r\n/g, '\n').trim() : ''
+  if (text === '' || text.length > MAX_MESSAGE_CHARS) fail(code, `${label} must be 1..${MAX_MESSAGE_CHARS} characters`)
+  if (TEXT_CONTROL.test(text)) fail(code, `${label} contains a control character`)
   return text
+}
+export function validateMessageText(value: unknown): string {
+  return messageBody(value, 'invalid_message', 'text')
 }
 
 function partText(value: unknown, label: string, max = MAX_ID): string {
@@ -151,7 +158,7 @@ function jsonable(value: unknown, label: string): unknown {
 function validatePart(raw: unknown, index: number): MessagePart {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('invalid_parts', `parts[${index}] must be an object`)
   const part = raw as Record<string, unknown>
-  if (part['type'] === 'text') return { type: 'text', text: partText(part['text'], `parts[${index}].text`, MAX_MESSAGE_CHARS) }
+  if (part['type'] === 'text') return { type: 'text', text: messageBody(part['text'], 'invalid_parts', `parts[${index}].text`) }
   if (part['type'] === 'error') {
     return { type: 'error', code: partText(part['code'], `parts[${index}].code`), message: partText(part['message'], `parts[${index}].message`) }
   }

@@ -42,6 +42,12 @@ export interface ChatConversation {
   title: string | null
 }
 
+/** `nextOffset` null = no older conversations. */
+export interface ChatConversationPage {
+  items: ChatConversation[]
+  nextOffset: number | null
+}
+
 export interface ChatEvent {
   seq: number
   type: string
@@ -98,7 +104,8 @@ export interface ChatStream {
 
 /** Stable surface the panel needs. Tests pass a fake; defaults live in `../chatApi`. */
 export interface ChatClient {
-  listConversations: (opts?: RequestOptions) => Promise<ChatConversation[]>
+  /** One page, newest first; `offset` from the previous page's `nextOffset`. */
+  listConversations: (opts?: RequestOptions & { offset?: number }) => Promise<ChatConversationPage>
   /** A new, empty chat (fresh Claude session server-side). */
   createConversation: (opts?: RequestOptions) => Promise<ChatConversation>
   listMessages: (conversationId: string, opts?: RequestOptions) => Promise<ChatMessage[]>

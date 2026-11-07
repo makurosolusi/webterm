@@ -27,7 +27,7 @@ const OLD_MESSAGE: ChatMessage = {
 
 function makeClient(overrides: Partial<ChatClient> = {}): ChatClient {
   return {
-    listConversations: vi.fn(async () => [OTHER, OLD]),
+    listConversations: vi.fn(async () => ({ items: [OTHER, OLD], nextOffset: null })),
     createConversation: vi.fn(async () => CREATED),
     listMessages: vi.fn(async (id: string) => (id === OLD.id ? [OLD_MESSAGE] : [])),
     sendMessage: vi.fn(async () => ({ messageId: 'm9', seq: 1, turnId: 't9', status: 'queued' as const })),
@@ -123,7 +123,7 @@ describe('History', () => {
   it('shows loading, then a list error with Retry', async () => {
     const listConversations = vi.fn()
       .mockRejectedValueOnce(new ChatApiError('Server error', 500, 'central_chat_internal'))
-      .mockResolvedValue([OTHER])
+      .mockResolvedValue({ items: [OTHER], nextOffset: null })
     renderPanel(makeClient({ listConversations }))
     openHistory()
     expect(screen.getByText('Loading…')).not.toBeNull()
@@ -134,7 +134,7 @@ describe('History', () => {
 
   it('switching away from a running turn keeps it running (no cancel) and marks it live', async () => {
     const running = { ...OTHER, activeTurnId: 't1' }
-    const client = makeClient({ listConversations: vi.fn(async () => [running, OLD]) })
+    const client = makeClient({ listConversations: vi.fn(async () => ({ items: [running, OLD], nextOffset: null })) })
     renderPanel(client)
     await waitFor(() => expect(client.listMessages).toHaveBeenCalledWith(OTHER.id, expect.anything()))
     openHistory()
@@ -142,5 +142,43 @@ describe('History', () => {
     fireEvent.click(screen.getByRole('button', { name: /Old question/ }))
     expect(await screen.findByText('hello from before')).not.toBeNull()
     expect(client.cancelTurn).not.toHaveBeenCalled()
+  })
+})
+
+describe('History Show more', () => {
+  const OLDER: ChatConversation = { ...OTHER, id: 'central:chat:older', scope: 'chat:older', title: 'Older idea', updatedAt: NOW - 86_400_000 * 3 }
+
+  it('loads the next page at the end of the list, then hides the button on the last page', async () => {
+    const listConversations = vi.fn()
+      .mockResolvedValueOnce({ items: [OTHER, OLD], nextOffset: 2 })
+      .mockResolvedValueOnce({ items: [OLDER], nextOffset: null })
+    renderPanel(makeClient({ listConversations }))
+    await screen.findByLabelText('Message the central agent')
+    openHistory()
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(await screen.findByRole('button', { name: /Older idea/ })).not.toBeNull()
+    expect(listConversations).toHaveBeenLastCalledWith({ offset: 2 })
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull()
+    const list = screen.getByRole('navigation', { name: 'Conversations' })
+    expect(within(list).getAllByRole('button').map((b) => b.textContent?.split(/\d/)[0])).toEqual(['Release plan', 'Old question', 'Older idea'])
+  })
+
+  it('shows loading while fetching and a retryable error when the page fails', async () => {
+    let reject: (e: unknown) => void = () => {}
+    const listConversations = vi.fn()
+      .mockResolvedValueOnce({ items: [OTHER], nextOffset: 1 })
+      .mockImplementationOnce(() => new Promise((_, r) => { reject = r }))
+      .mockResolvedValueOnce({ items: [OLDER], nextOffset: null })
+    renderPanel(makeClient({ listConversations }))
+    await screen.findByLabelText('Message the central agent')
+    openHistory()
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    const busy = screen.getByRole('button', { name: 'Loading…' }) as HTMLButtonElement
+    expect(busy.disabled).toBe(true)
+    await act(async () => reject(new ChatApiError('Server error', 500, 'central_chat_internal')))
+    expect(screen.getByRole('alert').textContent).toContain('Could not load more')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('button', { name: /Older idea/ })).not.toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

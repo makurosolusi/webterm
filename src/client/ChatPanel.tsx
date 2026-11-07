@@ -74,6 +74,9 @@ export default function ChatPanel(props: ChatPanelProps) {
   const [createError, setCreateError] = useState<string | null>(null)
   // The chat just created by "New chat": its composer takes focus once.
   const [fresh, setFresh] = useState<string | null>(null)
+  // History paging: offset of the next older page (null = none), and the Show more request state.
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
+  const [more, setMore] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
 
   useEffect(() => {
     if (!open) return
@@ -81,10 +84,12 @@ export default function ChatPanel(props: ChatPanelProps) {
     setListError(null)
     setLoading(true)
     clientRef.current.listConversations({ signal: controller.signal }).then(
-      (rows) => {
+      ({ items: rows, nextOffset: next }) => {
         if (controller.signal.aborted) return
         setLoading(false)
         setConversations(rows)
+        setNextOffset(next)
+        setMore({ loading: false, error: null })
         setSelected((current) => {
           if (current !== null && rows.some((row) => row.id === current)) return current
           return rows[0]?.id ?? null
@@ -105,6 +110,22 @@ export default function ChatPanel(props: ChatPanelProps) {
   }, [open, selected])
 
   if (!open) return null
+
+  const showMore = (): void => {
+    if (nextOffset === null || more.loading) return
+    setMore({ loading: true, error: null })
+    clientRef.current.listConversations({ offset: nextOffset }).then(
+      ({ items, nextOffset: next }) => {
+        setConversations((rows) => {
+          const known = new Set((rows ?? []).map((row) => row.id))
+          return [...(rows ?? []), ...items.filter((row) => !known.has(row.id))]
+        })
+        setNextOffset(next)
+        setMore({ loading: false, error: null })
+      },
+      (error: unknown) => setMore({ loading: false, error: `Could not load more: ${chatErrorMessage(error)}` })
+    )
+  }
 
   const newChat = (): void => {
     if (creating) return
@@ -212,6 +233,17 @@ export default function ChatPanel(props: ChatPanelProps) {
                   </button>
                 </li>
               ))}
+              {nextOffset !== null && (
+                <li className="chat-list-more">
+                  {more.error !== null && <p className="chat-list-status" role="alert">{more.error}</p>}
+                  <button type="button" className="chat-list-item" disabled={more.loading}
+                    aria-busy={more.loading || undefined} onClick={showMore}>
+                    <span className="chat-list-item__label">
+                      {more.loading ? 'Loading…' : more.error !== null ? 'Retry' : 'Show more'}
+                    </span>
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </nav>}

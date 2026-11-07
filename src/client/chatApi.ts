@@ -12,7 +12,7 @@
 //   GET  /conversations/:id/stream      -> SSE frames, `id: <seq>`
 //   POST /turns/:id/cancel              -> {status}
 import type {
-  CancelTurnResult, ChatClient, ChatConversation, ChatMessage, SendMessageInput,
+  CancelTurnResult, ChatClient, ChatConversation, ChatConversationPage, ChatMessage, SendMessageInput,
   SendMessageResult, ChatTurnStatus,
 } from './chat/chatTypes'
 import type { RequestOptions } from './inboxTypes'
@@ -25,14 +25,23 @@ export { CHAT_PATH, CHAT_EVENT_TYPES, ChatApiError, chatErrorMessage, isAbortErr
 export { openChatStream } from './chat/chatStream'
 export const CHAT_MESSAGE_LIMIT = 50
 
-export async function listConversations(opts: RequestOptions = {}): Promise<ChatConversation[]> {
-  const body = await requestJson<unknown>(`${CHAT_PATH}/conversations?limit=50`, {
+export const CHAT_CONVERSATION_LIMIT = 50
+
+export async function listConversations(
+  opts: RequestOptions & { offset?: number } = {}
+): Promise<ChatConversationPage> {
+  const offset = opts.offset ? `&offset=${opts.offset}` : ''
+  const body = await requestJson<unknown>(`${CHAT_PATH}/conversations?limit=${CHAT_CONVERSATION_LIMIT}${offset}`, {
     method: 'GET',
     signal: opts.signal,
   })
   const rows = conversationRows(body)
   if (rows === null) throw new ChatApiError('Conversation list malformed', 502, 'bad_response')
-  return rows.map(normalizeConversation).filter((row): row is ChatConversation => row !== null)
+  const next = (body as { nextOffset?: unknown } | null)?.nextOffset
+  return {
+    items: rows.map(normalizeConversation).filter((row): row is ChatConversation => row !== null),
+    nextOffset: typeof next === 'number' && Number.isSafeInteger(next) && next > 0 ? next : null,
+  }
 }
 
 export async function createConversation(opts: RequestOptions = {}): Promise<ChatConversation> {
