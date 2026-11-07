@@ -78,6 +78,8 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- The Central chat is now the single hub for everything that needs you: a Needs-you strip on top of the chat lists approvals, reviews and broken tasks, approval requests appear in the chat as cards you can approve, deny or edit there, and the Chat icon shows how many items wait.
+- Telegram is a remote door to the Central chat: messages land in the same conversation as the app (with the bound project noted) and are queued while Central is busy, gates and agent alerts appear once in the chat and are mirrored to Telegram, and /inbox shows the same Needs-you list.
 - Settings: "Reset Setting" (the gear next to "(Modified)") on a setting that holds a list or map you built, such as Claude launch profiles, now asks first and says what will be removed ("Remove all 2 Claude launch profiles?"). Simple settings still reset in one click.
 - Claude launch profiles have a proper editor: Add profile opens a form with name, command presets, a live preview of what will run, Test, and one-click use for new agents or Central. Each profile is a row with its resolved command, "Default for new agents" / "Central" badges, and Edit, Test and Delete (Delete asks first). Save stays disabled while the name is empty or already used, the command is empty, or a quote is not closed. Test runs on the saved profile.
 - Chat messages you send now appear in a bubble on the right in Agent Chat and the Central chat, with replies on the left.
@@ -122,6 +124,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Central no longer asks you to approve an agent card that has expired or been rejected: an expired or lapsed card is replaced with a fresh one in the chat, a rejected spawn is cancelled, and cards update live wherever they are decided.
 - When a Central chat reply fails because Claude could not start, the chat now says why (for example Claude not found, not signed in, or an unsupported option) instead of only "claude runtime failed".
 - A Central chat that was used with OpenCode and then switched to Claude no longer fails every reply: Claude now starts its own session instead of trying to resume the OpenCode one.
 - When Claude no longer has the session a Central chat was continuing, the reply now starts a fresh Claude session automatically and says so ("Started a fresh Claude session; the previous one was no longer available.") instead of failing every message.
@@ -182,6 +185,7 @@ Operator notes:
 - Canvas nodes saved by a newer webterm version, or partly corrupted, are no longer deleted on the next save, and their running terminal sessions are no longer cleaned up as left behind.
 
 ### Removed
+- The Inbox panel and the Central › Approvals tab; both are replaced by the Central chat.
 - `WEBTERM_ALLOWED_HOSTS` and the Host allowlist. They could never switch on now that every start enforces an access token, and a DNS-rebinding page is still refused because it has no credential for webterm.
 
 ### Security
