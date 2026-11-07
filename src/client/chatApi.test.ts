@@ -61,9 +61,10 @@ class FakeEventSource {
 
   emit(type: string, seq: number, payload: Record<string, unknown> = {}): void {
     const frame = { seq, type, conversationId: 'central:global', createdAt: 1, ...payload }
-    for (const listener of this.listeners.get(type) ?? []) {
-      listener({ data: JSON.stringify(frame), lastEventId: String(seq) } as MessageEvent)
-    }
+    const event = { data: JSON.stringify(frame), lastEventId: String(seq) } as MessageEvent
+    // As in a browser: `onerror` is the handler for every `error` event, a server `event: error` frame included.
+    if (type === 'error') this.onerror?.(event)
+    for (const listener of this.listeners.get(type) ?? []) listener(event)
   }
 
   open(): void {
@@ -206,6 +207,20 @@ describe('chat SSE client', () => {
     vi.advanceTimersByTime(1_000)
     const second = FakeEventSource.instances[1]
     expect(second.url).toBe(`${CHAT_PATH}/conversations/central%3Aglobal/stream?after=6`)
+  })
+
+  it('a server error frame is applied as an event, not taken for a dead socket', () => {
+    vi.useFakeTimers()
+    const { events, statuses } = open(4)
+    const first = FakeEventSource.instances[0]
+    first.open()
+    first.emit('error', 5, { payload: { code: 'timeout', message: 'claude timed out' } })
+    first.emit('done', 6)
+    expect(events.map((event) => event.type)).toEqual(['error', 'done'])
+    expect(statuses).not.toContain('reconnecting')
+    expect(first.closed).toBe(false)
+    vi.advanceTimersByTime(60_000)
+    expect(FakeEventSource.instances).toHaveLength(1)
   })
 
   it('applies done without closing the subscription and stops reconnecting after close()', () => {

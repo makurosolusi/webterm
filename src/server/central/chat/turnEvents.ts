@@ -26,6 +26,8 @@ export interface RunState {
   text: string
   usage: RuntimeUsage
   tools: Map<string, ToolRecord>
+  /** First runtime `error` of the turn: persisted as the failed reply's `error` part so a reload still shows why. */
+  failure?: { code: string; message: string }
 }
 
 export interface ProjectedEvent {
@@ -71,6 +73,7 @@ export function projectRuntimeEvent(
     }
   }
   if (event.type === 'error') {
+    state.failure ??= { code: event.code, message: event.message }
     return {
       type: 'error',
       payload: { messageId, code: event.code, message: event.message, retryable: event.retryable },

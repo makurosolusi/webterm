@@ -13,6 +13,7 @@ import { QuestionCard } from './questionCard'
 import { PlanCard } from './planCard'
 import { MessageActions, type BranchActions } from './messageActions'
 import { CommandOutputBlock, CompactDivider, QueuedBadge } from './timelineBlocks'
+import '../chat/chatBubbles.css'
 
 export interface ThreadActions {
   answer: (a: AgentChatPermissionAnswer) => Promise<void>
@@ -92,16 +93,29 @@ function MessageRow({ ctx, message }: { ctx: Ctx; message: ChatMessageView }) {
   const user = message.role === 'user'
   // A turn stopped or crashed mid-stream leaves its draft without a final message: live only while busy.
   const streaming = message.draft.length > 0 && isBusyStatus(ctx.state.status)
+  const actions = !streaming && <MessageActions message={message} {...(ctx.actions.branch && !isBusyStatus(ctx.state.status) ? { branch: ctx.actions.branch } : {})} />
+  if (user) {
+    // Your own message: a right-aligned bubble with no header, as in VS Code / Copilot Chat.
+    return (
+      <div className="chat-message chat-message--human chat-bubble-row" aria-label="user message">
+        <div className="chat-bubble">
+          <span className="sr-only">You said: </span>
+          <MessageBody ctx={ctx} message={message} />
+        </div>
+        {message.queued && <QueuedBadge />}
+        {actions}
+      </div>
+    )
+  }
   return (
-    <div className={`chat-message chat-message--${user ? 'human' : 'assistant'}`} aria-label={`${user ? 'user' : 'assistant'} message`}>
+    <div className="chat-message chat-message--assistant" aria-label="assistant message">
       <div className="chat-message__meta">
-        <span className={`chat-message__icon codicon codicon-${user ? 'account' : 'sparkle'}`} aria-hidden="true" />
-        <span className="chat-message__role">{user ? 'You' : 'Claude'}</span>
+        <span className="chat-message__icon codicon codicon-sparkle" aria-hidden="true" />
+        <span className="chat-message__role">Claude</span>
         {streaming && <span className="chat-message__live">streaming</span>}
-        {user && message.queued && <QueuedBadge />}
       </div>
       <MessageBody ctx={ctx} message={message} />
-      {!streaming && <MessageActions message={message} {...(ctx.actions.branch && !isBusyStatus(ctx.state.status) ? { branch: ctx.actions.branch } : {})} />}
+      {actions}
     </div>
   )
 }

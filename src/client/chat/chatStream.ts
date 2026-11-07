@@ -105,7 +105,13 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
       attempts = 0
       status('open')
     }
-    next.onerror = () => reconnect()
+    // `onerror` is the handler for EVERY `error` event, and the server names a failed turn's frame
+    // `event: error` too. Reconnecting on that frame dropped it unapplied and replayed it on every
+    // reconnect: an endless "Reconnecting…" and a failed reply that never showed why.
+    next.onerror = (event) => {
+      if (typeof (event as MessageEvent | undefined)?.data === 'string') return
+      reconnect()
+    }
     for (const type of feed.eventTypes) {
       // Server-sent `error` frames are MessageEvents; transport failures arrive on onerror and
       // carry no data. Splitting on that keeps a failed turn distinct from a dead socket.

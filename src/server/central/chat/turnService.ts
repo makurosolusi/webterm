@@ -66,6 +66,9 @@ function delay(ms: number): Promise<void> {
   })
 }
 
+/** Shown when the runtime threw instead of ending the turn (details stay in the server log). */
+const RUNTIME_THREW_MESSAGE = 'The central agent runtime failed unexpectedly.'
+
 export class TurnService {
   private readonly db: Database
   private readonly runtime: CentralRuntime | null
@@ -212,9 +215,10 @@ export class TurnService {
         turnId: turn.id, outcome: 'error', text: state.text,
         usage: state.usage, errorCode: 'runtime_error', sessionRef: null,
       }
+      // Stable text, never err.message: it is persisted, streamed and shown on the failed reply.
+      state.failure ??= { code: 'runtime_error', message: RUNTIME_THREW_MESSAGE }
       this.record(conversation.id, 'error', {
-        messageId: assistant.id, code: 'runtime_error',
-        message: err instanceof Error ? err.message : 'runtime error', retryable: true,
+        messageId: assistant.id, ...state.failure, retryable: true,
       }, turn.id, assistant.id)
       return finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
     } finally {

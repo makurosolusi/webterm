@@ -117,7 +117,10 @@ export function appendAssistantMessage(
   }).message
 }
 
-function assistantParts(state: RunState, text: string): MessagePart[] {
+/** Reason shown on a failed reply when the runtime gave none (it ended with an error code only). */
+const FAILED_FALLBACK = 'The central agent stopped with an error.'
+
+function assistantParts(state: RunState, text: string, failure: { code: string; message: string } | null): MessagePart[] {
   const parts: MessagePart[] = []
   if (text !== '') parts.push({ type: 'text', text })
   for (const tool of state.tools.values()) {
@@ -129,6 +132,7 @@ function assistantParts(state: RunState, text: string): MessagePart[] {
     // The chat's approval note; the decision itself happens on the ledger card (inbox / Telegram).
     if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: 'awaiting_approval' })
   }
+  if (failure) parts.push({ type: 'error', ...failure })
   return parts
 }
 
@@ -144,10 +148,13 @@ export function finalizeTurn(
     ? 'succeeded'
     : result.outcome === 'cancelled' ? 'cancelled' : 'failed'
   const text = result.text === '' ? state.text : result.text
+  const failure = status === 'failed'
+    ? state.failure ?? { code: result.errorCode ?? 'runtime_error', message: FAILED_FALLBACK }
+    : null
   execWrite(
     db, 'UPDATE central_message SET parts_json = ?, state = ? WHERE id = ?',
     // Masked again as a whole: a broker value split across two text deltas only reassembles here.
-    JSON.stringify(redactValue(maskValue(assistantParts(state, text), brokerSecretValues()), PERSIST_LIMITS)),
+    JSON.stringify(redactValue(maskValue(assistantParts(state, text, failure), brokerSecretValues()), PERSIST_LIMITS)),
     status === 'succeeded' ? 'complete' : status, assistantId
   )
   const turn = updateTurn(db, {

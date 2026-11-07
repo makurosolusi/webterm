@@ -190,3 +190,30 @@ describe('chatStore hydrate', () => {
     expect(orderedMessages(state).map((message) => message.id)).toEqual(['m1', 'm2', optimistic.id])
   })
 })
+
+describe('chatStore failed turn', () => {
+  it('puts the error reason on the failed reply, and done does not settle it as complete', () => {
+    const state = reduce([
+      { type: 'event', event: event(1, 'part.delta', { turnId: 't1', messageId: 'a1', payload: { text: 'Partial' } }) },
+      { type: 'event', event: event(2, 'error', { turnId: 't1', messageId: 'a1', payload: { code: 'timeout', message: 'claude timed out' } }) },
+      { type: 'event', event: event(3, 'turn.status', { turnId: 't1', payload: { status: 'failed', errorCode: 'timeout' } }) },
+      { type: 'event', event: event(4, 'done', { turnId: 't1', payload: { status: 'failed' } }) },
+    ])
+    expect(state.error).toBe(null)
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0].state).toBe('failed')
+    expect(state.messages[0].parts).toEqual([
+      { type: 'text', text: 'Partial' },
+      { type: 'error', code: 'timeout', message: 'claude timed out' },
+    ])
+  })
+
+  it('a failed turn without an error frame still marks its streaming reply failed', () => {
+    const state = reduce([
+      { type: 'event', event: event(1, 'part.delta', { turnId: 't1', messageId: 'a1', payload: { text: 'x' } }) },
+      { type: 'event', event: event(2, 'turn.status', { turnId: 't1', payload: { status: 'failed' } }) },
+      { type: 'event', event: event(3, 'done', { turnId: 't1' }) },
+    ])
+    expect(state.messages[0].state).toBe('failed')
+  })
+})

@@ -1,0 +1,42 @@
+/* Your own messages as a right-aligned bubble (VS Code / Copilot Chat); replies stay left with icon + name.
+   Shared by the Central chat (chatMessages.tsx) and the Agent Chat node (agentChatThread.tsx). */
+.chat-message.chat-bubble-row { align-items: flex-end; }
+/* No role icon to indent under: undo the Chat-view body indent from chat.css. */
+.chat-bubble-row.chat-message > :not(.chat-message__meta) { margin-left: 0; }
+
+.chat-bubble {
+  max-width: 85%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--vscode-chat-requestBorder, var(--vscode-input-border, transparent));
+  border-radius: 10px;
+  background: var(--vscode-chat-requestBackground, var(--vscode-input-background, rgba(128, 128, 128, 0.15)));
+  color: var(--vscode-input-foreground, inherit);
+  overflow-wrap: anywhere;
+}
+.chat-bubble .chat-text { white-space: pre-wrap; }
+.chat-bubble .agent-chat-images { justify-content: flex-end; }
+.chat-bubble .agent-chat-images:last-child { margin-bottom: 0; }
+.chat-message[data-state='failed'] > .chat-bubble { border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground, #f48771)); }
+
+/* Actions sit under the bubble's right edge, revealed on hover/focus (agentChatTimeline.css). */
+.chat-bubble-row .act-row { justify-content: flex-end; }
+.chat-bubble-row .act-queued { margin-left: 0; }
+
+.chat-failed-note { display: flex; align-items: center; gap: 8px; }
+.chat-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-button-secondaryBackground, #313131);
+  color: var(--vscode-button-secondaryForeground, #cccccc);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-retry:hover { background: var(--vscode-button-secondaryHoverBackground, #3c3c3c); }
+.chat-retry:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }

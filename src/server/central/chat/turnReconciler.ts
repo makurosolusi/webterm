@@ -8,6 +8,8 @@ import { appendConversationEvent, updateTurn } from '../conversationStore'
 import type { MessagePart } from '../conversationModel'
 
 export const INTERRUPTED_CODE = 'interrupted'
+/** Reason on a reply cut off by a server restart, persisted as its `error` part. */
+export const INTERRUPTED_MESSAGE = 'The server restarted before this reply finished.'
 
 export interface ReconcileOptions {
   /** Turns that still have a live process; never touched. */
@@ -50,6 +52,7 @@ export function reconcileTurns(db: Database, now: number, options: ReconcileOpti
       turnId, status: 'failed', errorCode: INTERRUPTED_CODE, partialText: text === '' ? null : text, now,
     })
     const parts: MessagePart[] = text === '' ? [] : [{ type: 'text', text }]
+    parts.push({ type: 'error', code: INTERRUPTED_CODE, message: INTERRUPTED_MESSAGE })
     execWrite(
       db, `UPDATE central_message SET parts_json = ?, state = 'failed' WHERE turn_id = ? AND role = 'assistant'`,
       JSON.stringify(redactValue(parts, PERSIST_LIMITS)), turnId
