@@ -1,7 +1,8 @@
 // Desktop -> Telegram forwarding (F2-g). When every browser tab has been away longer than the
 // configured minutes (default 3, like Orca DESKTOP_AWAY_SECONDS = 180) and an agent finishes or
-// needs input, a short notice goes to the chats bound to that workspace, through the same outbox
-// (and so the same renderer and retry) as every other reply. Muted workspaces never forward.
+// needs input, ONE notice is appended to the Central conversation (`notice` dep, the single source
+// the UI shows) and the same text is mirrored to the chats bound to that workspace, through the same
+// outbox (and so the same renderer and retry) as every other reply. Muted workspaces never forward.
 //
 // Presence is a heartbeat: a visible tab pings `POST /api/channels/presence` (channelPresenceHttp);
 // hidden or closed tabs send nothing, so "away" = time since the last visible ping. The tracker is
@@ -64,6 +65,8 @@ export interface ForwarderDeps {
   subscribe(pattern: string, fn: (event: SenseEvent) => void): () => void
   /** Node label + workspace name for the notice; null = unknown node (still forwarded, generic). */
   describe?(nodeId: string, workspaceId: string): { label: string; workspace: string } | null
+  /** Appends the notice to the Central conversation (production: `appendCentralNotice`); idempotent per key. */
+  notice?(key: string, text: string): void
 }
 
 /** The notice text; plain words, rendered by the shared Telegram renderer at send time. */
@@ -85,10 +88,6 @@ export function startAgentForwarder(deps: ForwarderDeps): () => void {
     const minutes = deps.store.forwardAwayMinutes
     if (minutes === 0 || deps.presence.awayMs() < minutes * MINUTE_MS) return
     if (deps.presence.isMuted(event.workspaceId)) return
-    // ponytail: a chat bound to project id == workspace id (how synced projects are created);
-    // a ledger lookup is needed only if projects ever get ids of their own.
-    const chats = deps.store.listBindings(TELEGRAM_CHANNEL).filter((b) => b.binding.projectId === event.workspaceId)
-    if (chats.length === 0) return
     let who: { label: string; workspace: string } | null = null
     try {
       who = deps.describe?.(event.nodeId, event.workspaceId) ?? null
@@ -96,9 +95,18 @@ export function startAgentForwarder(deps: ForwarderDeps): () => void {
       log.warn('channels.forward_describe_failed', 'agent notice sent without names', { error: err instanceof Error ? err.name : typeof err })
     }
     const text = renderAgentNotice(status, who)
+    const key = `${event.nodeId}:${event.seq}:${event.ts}`
+    try {
+      deps.notice?.(`agent:${key}`, text)
+    } catch (err) {
+      log.warn('channels.forward_notice_failed', 'agent notice not added to the Central conversation', { error: err instanceof Error ? err.name : typeof err })
+    }
+    // ponytail: a chat bound to project id == workspace id (how synced projects are created);
+    // a ledger lookup is needed only if projects ever get ids of their own.
+    const chats = deps.store.listBindings(TELEGRAM_CHANNEL).filter((b) => b.binding.projectId === event.workspaceId)
     for (const { chatId } of chats) {
       try {
-        deps.store.enqueueReply({ key: `notice:${event.nodeId}:${event.seq}:${event.ts}:${chatId}`, channel: TELEGRAM_CHANNEL, chatId, text })
+        deps.store.enqueueReply({ key: `notice:${key}:${chatId}`, channel: TELEGRAM_CHANNEL, chatId, text })
       } catch (err) {
         log.warn('channels.forward_failed', 'agent notice enqueue failed', { error: err instanceof Error ? err.name : typeof err })
       }

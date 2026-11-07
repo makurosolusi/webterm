@@ -3,8 +3,10 @@ import { isEnabled } from '../featureCapabilities.runtime'
 import { resolveChatService } from '../centralChatHandlers'
 import { listMessages, type TurnService } from '../central/chat/turnService'
 import { CentralChatError } from '../central/chat/chatErrors'
-import { ConversationError, PROJECT_CONVERSATION_PREFIX } from '../central/conversationModel'
+import { ConversationError, GLOBAL_CONVERSATION_ID } from '../central/conversationModel'
 import { getTurn } from '../central/conversationStore'
+import { getRow } from '../ledger/ledgerCore'
+import { lookupWorkspace } from '../central/workspaceLookup'
 import type { RuntimeKind } from '../central/runtime/centralRuntime'
 import type { TelegramCentralPort } from './channelDispatch'
 
@@ -17,6 +19,22 @@ export function centralTelegramEnabled(env: NodeJS.ProcessEnv = process.env): bo
   return isEnabled('central', env) && isEnabled('telegram', env)
 }
 
+/**
+ * Name of the chat's bound project for the context line: the workspace (bindings carry workspace
+ * ids), else the ledger project by id or workspace id, else the raw id.
+ */
+function projectLabel(db: Database, id: string): string {
+  const workspace = lookupWorkspace(id)?.name
+  if (workspace) return workspace
+  const row = getRow(db, 'SELECT name FROM project WHERE id = ? OR workspace_id = ? LIMIT 1', id, id)
+  return typeof row?.['name'] === 'string' ? row['name'] : id
+}
+
+/**
+ * Telegram is a remote door into the SAME conversation the Central UI opens by default
+ * (`central:global`): same history, approvals and notices. The bound project rides along as a
+ * context line instead of a separate per-project conversation.
+ */
 export function createTelegramCentralPort(input: {
   db: Database
   kind: RuntimeKind
@@ -26,10 +44,11 @@ export function createTelegramCentralPort(input: {
   const chat = resolveChatService({ now: input.now, service: input.service }, input.db, input.kind)
   return {
     async ask({ projectId, text, updateId }) {
-      const conversationId = `${PROJECT_CONVERSATION_PREFIX}${projectId}`
+      const conversationId = GLOBAL_CONVERSATION_ID
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
-        const submitted = chat.service.submit({ conversationId, clientMessageId: `telegram:${updateId}`, text })
+        const contextual = `[via Telegram, project: ${projectLabel(input.db, projectId)}]\n${text}`
+        const submitted = chat.service.submit({ conversationId, clientMessageId: `telegram:${updateId}`, text: contextual })
         const timeout = new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('central_timeout')), TIMEOUT_MS)
         })
@@ -39,8 +58,7 @@ export function createTelegramCentralPort(input: {
         if (turn?.errorCode === RUNTIME_UNAVAILABLE) {
           return { ok: false, code: 'central_runtime_unavailable' }
         }
-        // The turn's own conversation: a workspace id may resolve to a ledger project with another id.
-        const page = listMessages(input.db, turn?.conversationId ?? conversationId, { limit: 20 })
+        const page = listMessages(input.db, conversationId, { limit: 20 })
         const assistant = page.items.find(
           (message) => message.role === 'assistant' && message.turnId === submitted.response.turnId
         ) ?? page.items.filter((message) => message.role === 'assistant').at(-1)

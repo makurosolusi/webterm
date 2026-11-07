@@ -106,49 +106,48 @@ describe('telegram central bridge', () => {
   })
 })
 
-describe('telegram central bridge: workspace-id binding', () => {
+describe('telegram central bridge: one conversation with the UI', () => {
   // test-only workspace store: one workspace the ledger has never seen.
   const workspaces: Record<string, { name: string; cwd?: string }> = { 'ws-1': { name: 'wibu', cwd: '/tmp/wibu' } }
   let unregister: (() => void) | undefined
   afterEach(() => unregister?.())
-  const projects = (db: Database, workspaceId: string) =>
-    db.query('SELECT id, name, path FROM project WHERE workspace_id = ?').all(workspaceId)
+  const conversations = (db: Database) => db.query('SELECT id FROM central_conversation').all()
+  const humanTexts = (db: Database) =>
+    (db.query("SELECT parts_json FROM central_message WHERE role = 'human' ORDER BY seq").all() as Array<{ parts_json: string }>)
+      .map((row) => (JSON.parse(row.parts_json) as Array<{ text?: string }>).map((part) => part.text ?? '').join(''))
 
-  it('creates the ledger project once from the workspace, then answers', async () => {
+  it('lands in central:global with the workspace name as context, creating no project or project chat', async () => {
     unregister = registerWorkspaceLookup((id) => workspaces[id] ?? null)
     const fixture = openFixture()
     try {
       const port = createTelegramCentralPort({ db: fixture.db, kind: 'mock' })
-      const first = await port.ask({ projectId: 'ws-1', text: 'hello', updateId: 10 })
-      expect(first.ok).toBe(true)
-      const second = await port.ask({ projectId: 'ws-1', text: 'again', updateId: 11 })
-      expect(second.ok).toBe(true)
-      expect(projects(fixture.db, 'ws-1')).toEqual([{ id: 'ws-1', name: 'wibu', path: '/tmp/wibu' }])
-      expect(fixture.db.query('SELECT COUNT(*) AS count FROM central_turn').get()).toMatchObject({ count: 2 })
+      expect((await port.ask({ projectId: 'ws-1', text: 'hello', updateId: 10 })).ok).toBe(true)
+      expect((await port.ask({ projectId: 'ws-1', text: 'again', updateId: 11 })).ok).toBe(true)
+      expect(conversations(fixture.db)).toEqual([{ id: 'central:global' }])
+      expect(humanTexts(fixture.db)).toEqual(['[via Telegram, project: wibu]\nhello', '[via Telegram, project: wibu]\nagain'])
+      expect(fixture.db.query('SELECT COUNT(*) AS count FROM project').get()).toMatchObject({ count: 0 })
     } finally { fixture.close() }
   })
 
-  it('maps a workspace id to the ledger project already linked to it', async () => {
+  it('names a ledger project found by its workspace id', async () => {
     unregister = registerWorkspaceLookup(() => null)
     const fixture = openFixture()
     try {
-      seedPortfolio(fixture.db) // p1 has workspace_id w-p1
+      seedPortfolio(fixture.db) // p1 "Alpha" has workspace_id w-p1
       const port = createTelegramCentralPort({ db: fixture.db, kind: 'mock' })
-      const result = await port.ask({ projectId: 'w-p1', text: 'hello', updateId: 12 })
-      expect(result.ok).toBe(true)
-      expect(fixture.db.query('SELECT id FROM central_conversation').all()).toEqual([{ id: 'central:project:p1' }])
-      expect(fixture.db.query('SELECT COUNT(*) AS count FROM project').get()).toMatchObject({ count: 3 })
+      expect((await port.ask({ projectId: 'w-p1', text: 'hello', updateId: 12 })).ok).toBe(true)
+      expect(conversations(fixture.db)).toEqual([{ id: 'central:global' }])
+      expect(humanTexts(fixture.db)).toEqual(['[via Telegram, project: Alpha]\nhello'])
     } finally { fixture.close() }
   })
 
-  it('still rejects an id that is neither a project nor a workspace', async () => {
+  it('still answers when the bound id is neither a project nor a workspace (raw id as context)', async () => {
     unregister = registerWorkspaceLookup((id) => workspaces[id] ?? null)
     const fixture = openFixture()
     try {
       const port = createTelegramCentralPort({ db: fixture.db, kind: 'mock' })
-      await expect(port.ask({ projectId: 'ws-missing', text: 'hello', updateId: 13 }))
-        .resolves.toEqual({ ok: false, code: 'project_not_found' })
-      expect(fixture.db.query('SELECT COUNT(*) AS count FROM project').get()).toMatchObject({ count: 0 })
+      expect((await port.ask({ projectId: 'ws-missing', text: 'hello', updateId: 13 })).ok).toBe(true)
+      expect(humanTexts(fixture.db)).toEqual(['[via Telegram, project: ws-missing]\nhello'])
     } finally { fixture.close() }
   })
 })

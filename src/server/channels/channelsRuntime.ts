@@ -19,6 +19,7 @@ import { defaultWorldCounts } from './channelWorld'
 import { presence as processPresence, startAgentForwarder } from './channelPresence'
 import { describeAgentNode } from './channelPresenceDescribe'
 import { startInboxTelegramPush } from '../inbox/inboxPush'
+import { appendCentralNotice } from '../central/chat/conversationNotice'
 import { handleChannelPresenceApi } from './channelPresenceHttp'
 import { eventBus } from '../events/eventBus'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
@@ -162,16 +163,26 @@ export function startChannelsRuntime(
 
   const bots = mountBotManager(env, dataDir(), options.bots)
   const presence = options.presence ?? processPresence
+  // One source: every notification is first a notice in the Central conversation the UI shows
+  // (`central:global`); Telegram mirrors it. Absent with a fake ledger (node-env tests): Telegram only.
+  const notice = ledgerDb
+    ? (key: string, text: string): void => void appendCentralNotice(ledgerDb, { key, text, ...(options.now ? { now: options.now } : {}) })
+    : undefined
   const stopForwarder = startAgentForwarder({
     store,
     presence,
     subscribe: options.subscribe ?? ((pattern, fn) => eventBus.subscribe(pattern, fn)),
     describe: options.describe ?? describeAgentNode,
+    ...(notice ? { notice } : {}),
   })
-  // F3-a: every inbox gate goes to the bound approver chats as a card (Approve once / Deny), under
-  // the attention policy. Same env + fetch seam as the egress sender, so a test never hits Telegram.
+  // F3-a: every inbox gate becomes a Central notice, mirrored to the bound approver chats as a card
+  // (Approve once / Deny) under the attention policy. Same env + fetch seam as the egress sender.
   const stopInboxPush = ledgerDb
-    ? startInboxTelegramPush({ db: ledgerDb, store, presence, send: { env, ...(options.sender?.fetch ? { fetch: options.sender.fetch } : {}) }, ...(options.now ? { now: options.now } : {}) })
+    ? startInboxTelegramPush({
+      db: ledgerDb, store, presence, send: { env, ...(options.sender?.fetch ? { fetch: options.sender.fetch } : {}) },
+      notice: (item, text) => notice?.(`inbox:${item.id}`, text),
+      ...(options.now ? { now: options.now } : {}),
+    })
     : () => undefined
 
   log.info('channels.start', `telegram channel started (${mode})`, { mode, egress: sender !== null })

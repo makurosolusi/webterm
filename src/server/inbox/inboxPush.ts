@@ -1,4 +1,6 @@
-// Pushes inbox items to Telegram under the attention policy (F3-a). A sweep, not an event hook,
+// Delivers inbox items under the attention policy (F3-a): each new item becomes ONE notice in the
+// Central conversation (`notice`, the single source the UI shows), and the Telegram card mirrors it
+// to the bound approver chats. This is the only gate notification loop. A sweep, not an event hook,
 // because gates come from several producers (Claude permission prompts, task reviews, Central) that
 // all end in one `approval` table: one cheap SELECT finds them all. Each item is pushed at most once
 // (`pushed_at`; a snooze clears it so the item pings again when it resurfaces); a held item is
@@ -7,8 +9,9 @@ import type { Database } from 'bun:sqlite'
 import { getRow, type LedgerContext } from '../ledger/ledgerCore'
 import { createLogger } from '../logs'
 import { APPROVAL_ROLES, type ChannelBinding } from '../channels/identity'
-import { renderInboxCard, sendTelegramCard, type CardSendOptions, type TelegramCard } from '../channels/telegramCards'
+import { inboxNoticeText, renderInboxCard, sendTelegramCard, type CardSendOptions, type TelegramCard } from '../channels/telegramCards'
 import type { PresenceTracker } from '../channels/channelPresence'
+import type { InboxEntry } from './inboxItemModel'
 import { attentionFor, type AttentionContext } from './inboxAttention'
 import { ensureDailyDigest, markPushed, syncApprovalGates, syncDiffNoteReviews, unpushedItems, type PushScope } from './inboxItemStore'
 
@@ -25,6 +28,17 @@ export interface PushDeps {
   boundProjects(): string[]
   attention: AttentionContext
   send(chatId: string, card: TelegramCard): Promise<boolean>
+  /** Appends the item's notice to the Central conversation; idempotent per item (repeat calls are no-ops). */
+  notice?(item: InboxEntry, text: string): void
+}
+
+function noticeOnce(deps: PushDeps, item: InboxEntry, text: string): void {
+  try {
+    deps.notice?.(item, text)
+  } catch (err) {
+    // The Telegram card still goes out; a later sweep retries the notice only while the item stays unpushed.
+    log.warn('inbox.notice.failed', `central notice for inbox item ${item.id} failed`, { error: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 export async function sweepInboxPush(deps: PushDeps): Promise<{ pushed: string[]; held: string[] }> {
@@ -41,11 +55,14 @@ export async function sweepInboxPush(deps: PushDeps): Promise<{ pushed: string[]
     for (const item of page.items) {
       const verdict = attentionFor(item, deps.attention)
       if (verdict === 'skip') { markPushed(deps.ctx, item.id); continue }
+      const row = item.projectId ? getRow(deps.ctx.db, 'SELECT name FROM project WHERE id = ?', item.projectId)?.['name'] : null
+      const name = typeof row === 'string' ? row : null
+      // The conversation gets it at once, even while the user is watching; only Telegram waits.
+      noticeOnce(deps, item, inboxNoticeText(item, name))
       if (verdict === 'hold') { held.push(item.id); continue }
       const chats = deps.chatsFor(item.projectId)
       if (chats.length === 0) continue // binding removed mid-sweep; a later binding still gets it
-      const name = item.projectId ? getRow(deps.ctx.db, 'SELECT name FROM project WHERE id = ?', item.projectId)?.['name'] : null
-      const card = renderInboxCard(item, typeof name === 'string' ? name : null)
+      const card = renderInboxCard(item, name)
       let ok = false
       for (const chat of chats) ok = (await deps.send(chat, card)) || ok
       if (ok) { markPushed(deps.ctx, item.id); pushed.push(item.id) }
@@ -80,6 +97,8 @@ export interface TelegramPushWiring {
   store: { listBindings(channel?: string): Array<{ chatId: string; binding: ChannelBinding }> }
   presence: Pick<PresenceTracker, 'awayMs' | 'isMuted' | 'focusedNode'>
   send?: CardSendOptions
+  /** See `PushDeps.notice`; production: `appendCentralNotice` on the same DB. */
+  notice?: PushDeps['notice']
   now?: () => number
   intervalMs?: number
 }
@@ -95,6 +114,7 @@ export function startInboxTelegramPush(w: TelegramPushWiring): () => void {
     boundProjects: () => approverProjects(w.store.listBindings('telegram')),
     attention: { watching: (item) => watchingFrom(w.presence, item), muted: (ws) => w.presence.isMuted(ws) },
     send: (chat, card) => sendTelegramCard(chat, card, w.send),
+    ...(w.notice ? { notice: w.notice } : {}),
   }
   let running = false
   const timer = setInterval(() => {

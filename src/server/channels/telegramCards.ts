@@ -53,6 +53,17 @@ const HEADING: Record<InboxEntry['kind'], string> = {
   notify: 'Update',
 }
 
+/**
+ * Plain-text notice for one inbox item: what the Central conversation shows (conversationNotice.ts),
+ * and the same words the Telegram card carries, so both surfaces read from one source.
+ */
+export function inboxNoticeText(item: InboxEntry, projectName?: string | null): string {
+  const parts = [`${HEADING[item.kind]}: ${item.title}`]
+  if (item.impact) parts.push(impactLine(item.impact))
+  if (projectName) parts.push(`project ${projectName}`)
+  return parts.join(' — ')
+}
+
 /** Card for one inbox item; untrusted text is escaped. Gate = Approve once / Deny, nothing else. */
 export function renderInboxCard(item: InboxEntry, projectName?: string | null): TelegramCard {
   const lines = [`<b>${HEADING[item.kind]}</b>`, escapeTelegramHtml(item.title)]
