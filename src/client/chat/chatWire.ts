@@ -54,6 +54,7 @@ export function normalizeConversation(raw: unknown): ChatConversation | null {
     lastEventSeq: finite(row.lastEventSeq) ?? 0,
     lastMessageSeq: finite(row.lastMessageSeq) ?? 0,
     updatedAt: finite(row.updatedAt) ?? 0,
+    title: optionalText(row.title) ?? null,
   }
 }
 

@@ -24,7 +24,7 @@ export interface AppendMessageResponse {
   status: TurnStatus
 }
 
-/** Row shown in the conversation list (global + one per project). */
+/** Row shown in the conversation list (global, extra chats, one per project). */
 export interface ConversationSummary {
   id: string
   scope: string
@@ -32,7 +32,17 @@ export interface ConversationSummary {
   activeTurnId: string | null
   lastEventSeq: number
   lastMessageSeq: number
+  createdAt: number
   updatedAt: number
+  /** First human message, trimmed; null before the first send. */
+  title: string | null
+  turnCount: number
+}
+
+/** One page of the conversation list, newest first; `nextOffset` null on the last page. */
+export interface ConversationPage {
+  items: ConversationSummary[]
+  nextOffset: number | null
 }
 
 /** Stable error envelope: the code is part of the API contract, the message is not. */

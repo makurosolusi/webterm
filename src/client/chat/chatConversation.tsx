@@ -21,6 +21,8 @@ export interface ChatConversationViewProps {
   conversation: ChatConversation
   client: ChatClient
   streamFactory: StreamFactory
+  /** Focus the composer on mount (New chat). */
+  focusComposer?: boolean
 }
 
 function schedule(callback: () => void): number {
@@ -188,7 +190,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
       )}
 
       <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} />
-      <ChatComposer busy={busy} onSend={send} onStop={stop} />
+      <ChatComposer busy={busy} onSend={send} onStop={stop} autoFocus={props.focusComposer} />
     </section>
   )
 }

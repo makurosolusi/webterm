@@ -3,8 +3,9 @@
 // Mounted by App, opened by the Dock button or ⌥⌘B, never a canvas node. Props-driven; the default client is the
 // module `chatApi` so production wiring is one prop-free mount.
 //
-// S0 scope: conversation list (global + project scopes), Markdown thread, streaming text,
-// composer with Stop, reconnect status, and error states. Approval cards are intentionally absent;
+// S0 scope: conversation list (global, extra chats, project scopes), Markdown thread, streaming text,
+// composer with Stop, reconnect status, and error states. "New chat" (+) creates a fresh conversation
+// like Copilot Chat; switching away from a running turn leaves it running on the server (Copilot keeps it too). Approval cards are intentionally absent;
 // a tool card shows name/state only.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -15,6 +16,7 @@ import type { ChatClient, ChatConversation } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
 import { chatApi, chatErrorMessage, isAbortError, openChatStream } from './chatApi'
 import { InboxPanelSurface } from './inboxPanelSurface'
+import { relativeTime } from './SessionHistory.model'
 import './chat/chat.css'
 
 const SELECTED_KEY = 'webterm.chatConversation'
@@ -68,6 +70,13 @@ export default function ChatPanel(props: ChatPanelProps) {
   const [selected, setSelected] = useState<string | null>(readSelected)
   const [refreshKey, setRefreshKey] = useState(0)
   const [history, setHistory] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  // The chat just created by "New chat": its composer takes focus once.
+  const [fresh, setFresh] = useState<string | null>(null)
+  // History paging: offset of the next older page (null = none), and the Show more request state.
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
+  const [more, setMore] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
 
   useEffect(() => {
     if (!open) return
@@ -75,10 +84,12 @@ export default function ChatPanel(props: ChatPanelProps) {
     setListError(null)
     setLoading(true)
     clientRef.current.listConversations({ signal: controller.signal }).then(
-      (rows) => {
+      ({ items: rows, nextOffset: next }) => {
         if (controller.signal.aborted) return
         setLoading(false)
         setConversations(rows)
+        setNextOffset(next)
+        setMore({ loading: false, error: null })
         setSelected((current) => {
           if (current !== null && rows.some((row) => row.id === current)) return current
           return rows[0]?.id ?? null
@@ -100,6 +111,49 @@ export default function ChatPanel(props: ChatPanelProps) {
 
   if (!open) return null
 
+  const showMore = (): void => {
+    if (nextOffset === null || more.loading) return
+    setMore({ loading: true, error: null })
+    clientRef.current.listConversations({ offset: nextOffset }).then(
+      ({ items, nextOffset: next }) => {
+        setConversations((rows) => {
+          const known = new Set((rows ?? []).map((row) => row.id))
+          return [...(rows ?? []), ...items.filter((row) => !known.has(row.id))]
+        })
+        setNextOffset(next)
+        setMore({ loading: false, error: null })
+      },
+      (error: unknown) => setMore({ loading: false, error: `Could not load more: ${chatErrorMessage(error)}` })
+    )
+  }
+
+  const newChat = (): void => {
+    if (creating) return
+    setCreating(true)
+    setCreateError(null)
+    clientRef.current.createConversation().then(
+      (row) => {
+        setCreating(false)
+        setConversations((rows) => [row, ...(rows ?? []).filter((other) => other.id !== row.id)])
+        setSelected(row.id)
+        setFresh(row.id)
+        setHistory(false)
+      },
+      (error: unknown) => {
+        setCreating(false)
+        setCreateError(`Could not start a new chat: ${chatErrorMessage(error)}`)
+      }
+    )
+  }
+
+  const newChatButton = (
+    <IconTooltip label={creating ? 'Starting a new chat…' : 'New chat'}>
+      <button type="button" className="vscode-panel-action" aria-label="New chat" aria-busy={creating || undefined}
+        disabled={creating} onClick={newChat}>
+        <span className="codicon codicon-add" aria-hidden="true" />
+      </button>
+    </IconTooltip>
+  )
   const refreshButton = (
     <IconTooltip label="Refresh conversations">
       <button type="button" className="vscode-panel-action" aria-label="Refresh conversations"
@@ -139,6 +193,20 @@ export default function ChatPanel(props: ChatPanelProps) {
         </div>
       )}
 
+      {createError !== null && (
+        <div className="chat-error" role="alert">
+          <span className="codicon codicon-error" aria-hidden="true" />
+          <span>{createError}</span>
+          <button type="button" className="chat-error__retry" onClick={newChat}>Retry</button>
+          <IconTooltip label="Dismiss error">
+            <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
+              onClick={() => setCreateError(null)}>
+              <span className="codicon codicon-close" aria-hidden="true" />
+            </button>
+          </IconTooltip>
+        </div>
+      )}
+
       <div className={cn('chat-body', compact && 'chat-body--compact')}>
         {(!compact || history) && <nav className="chat-conversations" aria-label="Conversations">
           {conversations === null ? (
@@ -156,12 +224,26 @@ export default function ChatPanel(props: ChatPanelProps) {
                     onClick={() => { setSelected(conversation.id); setHistory(false) }}
                   >
                     <span className="chat-list-item__label">{conversationLabel(conversation)}</span>
+                    {conversation.updatedAt > 0 && (
+                      <span className="chat-list-item__time">{relativeTime(conversation.updatedAt)}</span>
+                    )}
                     {conversation.activeTurnId !== null && (
                       <span className="chat-list-item__live" title="Turn running" aria-label="Turn running" />
                     )}
                   </button>
                 </li>
               ))}
+              {nextOffset !== null && (
+                <li className="chat-list-more">
+                  {more.error !== null && <p className="chat-list-status" role="alert">{more.error}</p>}
+                  <button type="button" className="chat-list-item" disabled={more.loading}
+                    aria-busy={more.loading || undefined} onClick={showMore}>
+                    <span className="chat-list-item__label">
+                      {more.loading ? 'Loading…' : more.error !== null ? 'Retry' : 'Show more'}
+                    </span>
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </nav>}
@@ -174,6 +256,7 @@ export default function ChatPanel(props: ChatPanelProps) {
               conversation={current}
               client={clientRef.current}
               streamFactory={streamRef.current}
+              focusComposer={current.id === fresh}
             />
           ) : (
             conversations !== null && (
@@ -190,7 +273,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (props.embedded) {
     return (
       <div className="chat-panel chat-panel--embedded">
-        {props.actionsHost && createPortal(<>{historyButton}{refreshButton}</>, props.actionsHost)}
+        {props.actionsHost && createPortal(<>{newChatButton}{historyButton}{refreshButton}</>, props.actionsHost)}
         {body}
       </div>
     )
@@ -210,7 +293,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       activeId="chat"
       onActivate={() => undefined}
       {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.(), onClosePanel: () => props.onClose?.() })}
-      actions={refreshButton}
+      actions={<>{newChatButton}{refreshButton}</>}
     >
       {body}
     </InboxPanelSurface>

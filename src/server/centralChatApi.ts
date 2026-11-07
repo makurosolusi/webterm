@@ -14,7 +14,7 @@ import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import {
   CENTRAL_CHAT_BODY_MAX_BYTES, type CentralChatDeps, decodeSegment, failJson,
-  handleCancel, handleConversations, handleHealth, handleMessagesGet, handleMessagesPost,
+  handleCancel, handleConversations, handleCreateConversation, handleHealth, handleMessagesGet, handleMessagesPost,
   methodNotAllowed, resolveChatService, sendJson,
 } from './centralChatHandlers'
 import { handleStream } from './centralChatSse'
@@ -96,7 +96,13 @@ export async function centralChatRoute(
     return true
   }
 
+  if (method === 'POST') {
+    // The create body is ignored (`{}`); drain it so keep-alive is not desynced.
+    req.resume()
+    handleCreateConversation(res, db, deps.now?.())
+    return true
+  }
   if (method !== 'GET') return methodNotAllowed(res, method), true
-  handleConversations(res, db, deps.now?.())
+  handleConversations(res, db, url, deps.now?.())
   return true
 }

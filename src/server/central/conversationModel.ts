@@ -36,7 +36,8 @@ export type MessagePart =
   | { type: 'approval'; approvalId: string; state: ToolCardState; digest?: string; expiresAt?: number }
   | { type: 'error'; code: string; message: string }
 
-export type ConversationScope = { kind: 'global' } | { kind: 'project'; projectId: string }
+/** `chatId` set = one of the user's extra global chats ("New chat"); unset = the default `central:global`. */
+export type ConversationScope = { kind: 'global'; chatId?: string } | { kind: 'project'; projectId: string }
 
 export type ConversationErrorCode =
   | 'invalid_scope' | 'invalid_conversation' | 'invalid_role' | 'invalid_state'
@@ -53,15 +54,24 @@ export class ConversationError extends Error {
 
 export const GLOBAL_CONVERSATION_ID = 'central:global'
 export const PROJECT_CONVERSATION_PREFIX = 'central:project:'
+export const CHAT_CONVERSATION_PREFIX = 'central:chat:'
+/** Server-minted chat ids (UUIDs); the strict shape keeps them safe in paths, keys and scope strings. */
+const CHAT_ID = /^[A-Za-z0-9-]{1,64}$/
 export const MAX_MESSAGE_CHARS = 32_000
 export const MAX_CLIENT_MESSAGE_ID = 200
 export const MAX_PARTS = 100
 export const MAX_PART_JSON = 64_000
 const MAX_ID = 200
 const CONTROL = /[\u0000-\u001f\u007f]/
+/** Message text may span lines: `\n` and `\t` pass, a lone `\r` and every other control char do not. */
+const TEXT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/
 
 function fail(code: ConversationErrorCode, message: string): never {
   throw new ConversationError(code, message)
+}
+function chatId(value: string): string {
+  if (!CHAT_ID.test(value)) fail('invalid_conversation', 'chat id must be 1..64 letters, digits or dashes')
+  return value
 }
 function id(value: unknown, label: string): string {
   const text = typeof value === 'string' ? value.trim() : ''
@@ -69,23 +79,28 @@ function id(value: unknown, label: string): string {
   return text
 }
 
-/** Parses `global` or `project:<id>` into a typed scope. */
+/** Parses `global`, `chat:<id>` or `project:<id>` into a typed scope. */
 export function parseScope(raw: unknown): ConversationScope {
   if (raw === 'global') return { kind: 'global' }
+  if (typeof raw === 'string' && raw.startsWith('chat:')) return { kind: 'global', chatId: chatId(raw.slice('chat:'.length)) }
   if (typeof raw === 'string' && raw.startsWith('project:')) {
     return { kind: 'project', projectId: id(raw.slice('project:'.length), 'projectId') }
   }
-  fail('invalid_scope', 'scope must be "global" or "project:<id>"')
+  fail('invalid_scope', 'scope must be "global", "chat:<id>" or "project:<id>"')
 }
 
 /** Canonical conversation id per RND/08 D8. */
 export function conversationIdForScope(scope: ConversationScope): string {
-  return scope.kind === 'global' ? GLOBAL_CONVERSATION_ID : `${PROJECT_CONVERSATION_PREFIX}${id(scope.projectId, 'projectId')}`
+  if (scope.kind === 'project') return `${PROJECT_CONVERSATION_PREFIX}${id(scope.projectId, 'projectId')}`
+  return scope.chatId === undefined ? GLOBAL_CONVERSATION_ID : `${CHAT_CONVERSATION_PREFIX}${chatId(scope.chatId)}`
 }
 
 /** Inverse mapping; a non-canonical id is rejected rather than guessed. */
 export function scopeFromConversationId(raw: unknown): ConversationScope {
   if (raw === GLOBAL_CONVERSATION_ID) return { kind: 'global' }
+  if (typeof raw === 'string' && raw.startsWith(CHAT_CONVERSATION_PREFIX)) {
+    return { kind: 'global', chatId: chatId(raw.slice(CHAT_CONVERSATION_PREFIX.length)) }
+  }
   if (typeof raw === 'string' && raw.startsWith(PROJECT_CONVERSATION_PREFIX)) {
     return { kind: 'project', projectId: id(raw.slice(PROJECT_CONVERSATION_PREFIX.length), 'projectId') }
   }
@@ -115,10 +130,15 @@ export function normalizeClientMessageId(value: unknown): string | null {
   }
   return text
 }
-export function validateMessageText(value: unknown): string {
-  const text = typeof value === 'string' ? value.trim() : ''
-  if (text === '' || text.length > MAX_MESSAGE_CHARS) fail('invalid_message', `text must be 1..${MAX_MESSAGE_CHARS} characters`)
+/** Multi-line message text: `\r\n` becomes `\n`, then 1..MAX chars without other control chars. */
+function messageBody(value: unknown, code: ConversationErrorCode, label: string): string {
+  const text = typeof value === 'string' ? value.replace(/\r\n/g, '\n').trim() : ''
+  if (text === '' || text.length > MAX_MESSAGE_CHARS) fail(code, `${label} must be 1..${MAX_MESSAGE_CHARS} characters`)
+  if (TEXT_CONTROL.test(text)) fail(code, `${label} contains a control character`)
   return text
+}
+export function validateMessageText(value: unknown): string {
+  return messageBody(value, 'invalid_message', 'text')
 }
 
 function partText(value: unknown, label: string, max = MAX_ID): string {
@@ -138,7 +158,7 @@ function jsonable(value: unknown, label: string): unknown {
 function validatePart(raw: unknown, index: number): MessagePart {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('invalid_parts', `parts[${index}] must be an object`)
   const part = raw as Record<string, unknown>
-  if (part['type'] === 'text') return { type: 'text', text: partText(part['text'], `parts[${index}].text`, MAX_MESSAGE_CHARS) }
+  if (part['type'] === 'text') return { type: 'text', text: messageBody(part['text'], 'invalid_parts', `parts[${index}].text`) }
   if (part['type'] === 'error') {
     return { type: 'error', code: partText(part['code'], `parts[${index}].code`), message: partText(part['message'], `parts[${index}].message`) }
   }
