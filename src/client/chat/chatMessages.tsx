@@ -67,8 +67,37 @@ function LegacyProposalBlock({ proposal }: { proposal: LegacyProposal }) {
   )
 }
 
-function PartView(props: { part: ChatPart; assistant: boolean }) {
+type ImageUrl = ((ref: string) => string) | undefined
+
+/** Byte size as the file chip shows it. */
+function fileSize(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 102.4) / 10} KB`
+}
+
+/** An attached image (bytes on the optimistic echo, else by reference) or a text file chip. */
+function AttachmentView(props: { part: Extract<ChatPart, { type: 'image' | 'file' }>; imageUrl: ImageUrl }) {
+  const { part } = props
+  if (part.type === 'file') {
+    return (
+      <span className="chat-file-chip" title={part.name}>
+        <span className="codicon codicon-file" aria-hidden="true" />
+        <span className="chat-file-chip__name">{part.name}</span>
+        <span className="chat-file-chip__size">{fileSize(part.size)}</span>
+      </span>
+    )
+  }
+  const src = part.data ? `data:${part.mediaType};base64,${part.data}` : part.ref && props.imageUrl ? props.imageUrl(part.ref) : undefined
+  if (!src) return <span className="chat-file-chip">[image]</span>
+  return (
+    <a href={src} target="_blank" rel="noreferrer">
+      <img className="chat-image" src={src} alt="Attached image" loading="lazy" />
+    </a>
+  )
+}
+
+function PartView(props: { part: ChatPart; assistant: boolean; imageUrl?: ImageUrl }) {
   const { part, assistant } = props
+  if (part.type === 'image' || part.type === 'file') return <AttachmentView part={part} imageUrl={props.imageUrl} />
   if (part.type === 'tool') return <ToolCard part={part} />
   if (part.type === 'approval') {
     return <div className="chat-approval-note">Approval requested ({part.state})</div>
@@ -87,7 +116,7 @@ function PartView(props: { part: ChatPart; assistant: boolean }) {
 }
 
 /** Your own message: a right-aligned bubble with no header, as in VS Code / Copilot Chat. */
-function HumanBubble(props: { message: ChatMessage; onRetry?: (() => void) | undefined }) {
+function HumanBubble(props: { message: ChatMessage; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
   const { message } = props
   return (
     <div
@@ -98,7 +127,7 @@ function HumanBubble(props: { message: ChatMessage; onRetry?: (() => void) | und
       <div className="chat-bubble">
         <span className="sr-only">You said: </span>
         {message.parts.map((part, index) => (
-          <PartView key={`${message.id}-${index}`} part={part} assistant={false} />
+          <PartView key={`${message.id}-${index}`} part={part} assistant={false} imageUrl={props.imageUrl} />
         ))}
       </div>
       {message.state === 'failed' && <FailedNote onRetry={props.onRetry} text="Not sent" />}
@@ -120,9 +149,9 @@ function FailedNote(props: { text?: string; onRetry?: (() => void) | undefined }
   )
 }
 
-function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | undefined }) {
+function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
   const { message } = props
-  if (message.role === 'human') return <HumanBubble message={message} onRetry={props.onRetry} />
+  if (message.role === 'human') return <HumanBubble message={message} onRetry={props.onRetry} imageUrl={props.imageUrl} />
   const assistant = message.role === 'assistant' || message.role === 'tool'
   const header = ROLE_HEADER[message.role]
   return (
@@ -166,6 +195,8 @@ export interface ChatMessagesProps {
   streaming: boolean
   /** Resends a message; offers Retry on a failed message or reply while no turn runs. */
   onRetry?: (text: string) => void
+  /** URL of a stored image (history `image` part reference). */
+  imageUrl?: (ref: string) => string
 }
 
 export default function ChatMessages(props: ChatMessagesProps) {
@@ -207,7 +238,7 @@ export default function ChatMessages(props: ChatMessagesProps) {
             // Only the newest message: retrying an old failure in the middle of the thread would be out of context.
             const text = props.onRetry && !props.streaming && index === props.messages.length - 1 ? retryText(props.messages, index) : ''
             const retry = props.onRetry
-            return <MessageRow key={message.id} message={message} onRetry={text && retry ? () => retry(text) : undefined} />
+            return <MessageRow key={message.id} message={message} onRetry={text && retry ? () => retry(text) : undefined} imageUrl={props.imageUrl} />
           })
         )}
       </div>

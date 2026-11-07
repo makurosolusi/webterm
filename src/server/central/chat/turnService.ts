@@ -25,6 +25,7 @@ import { createLegacyContextAssembler, type ContextAssembler } from '../context/
 import { ContextRejectedError } from '../context/contextAssembler'
 import type { Summarize } from '../context/checkpointSummarizer'
 import { recordTurnContext } from './turnContextLog'
+import { type CentralAttachments, storeImages, withFiles } from './chatAttachments'
 import { resolveLimits } from './turnLimits'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
@@ -92,12 +93,20 @@ export class TurnService {
   }
 
   /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
-  submit(input: { conversationId: string; clientMessageId?: unknown; text: unknown }): SubmitResult {
+  submit(input: { conversationId: string; clientMessageId?: unknown; text: unknown; attachments?: CentralAttachments }): SubmitResult {
     if (this.runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
     const conversation = resolveOrCreateConversation(this.db, input.conversationId)
     const clientMessageId = normalizeClientMessageId(input.clientMessageId)
     if (clientMessageId === null) throw new CentralChatError('invalid_message', 'clientMessageId is required', 400)
-    const text = validateMessageText(input.text)
+    const images = input.attachments?.images ?? []
+    const files = input.attachments?.files ?? []
+    // Attachments alone are a message: blank text is allowed only next to them.
+    const text = (images.length || files.length) && typeof input.text === 'string' && !input.text.trim()
+      ? '' : validateMessageText(input.text)
+    // Only the Claude runtime sends image blocks; any other one would drop them silently.
+    if (images.length && this.runtime.kind !== 'claude') {
+      throw new CentralChatError('images_unsupported', 'Images need the Claude runtime; this Central runs on another one. Send text or text files, or switch Central to Claude.', 400)
+    }
 
     const existing = findByClientMessageId(this.db, conversation.id, clientMessageId)
     if (existing) return this.replay(existing)
@@ -113,14 +122,20 @@ export class TurnService {
       if (err instanceof ContextRejectedError) throw new CentralChatError('budget_exhausted', err.message, chatErrorStatus(err.code))
       throw err
     }
-    const { prompt, history } = built
+    const { history } = built
+    const prompt = withFiles(built.prompt, files)
     // Only the real assembler reports rotation; the legacy one never sets it.
     const rotate = (built as { rotateSession?: boolean }).rotateSession === true
     const cacheEnv = (built as { cacheEnv?: Record<string, string> }).cacheEnv ?? {}
     const appended = appendMessage(this.db, {
       conversationId: conversation.id, role: 'human',
       // The model still gets the raw text (it may need to relay a pasted secret to a tool); history never keeps it.
-      parts: [{ type: 'text', text: redactSecrets(text) }], clientMessageId, now: this.now(),
+      parts: [
+        ...storeImages(conversation.id, images),
+        ...files.map((f) => ({ type: 'file' as const, name: f.name, size: f.size })),
+        ...(text ? [{ type: 'text' as const, text: redactSecrets(text) }] : []),
+      ],
+      clientMessageId, now: this.now(),
     })
     if (!appended.created) return this.replay(appended.message)
     const message = appended.message
@@ -140,11 +155,11 @@ export class TurnService {
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
     // Rotated-session context, built only if the runtime finds its resumed session gone.
-    const freshSessionText = (): string => this.context.build({
+    const freshSessionText = (): string => withFiles(this.context.build({
       db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
       rotate: true, beforeSeq: message.seq,
-    }).prompt
-    const done = this.runTurn(conversation, turn, prompt, history, rotate, cacheEnv, freshSessionText)
+    }).prompt, files)
+    const done = this.runTurn(conversation, turn, { prompt, images }, history, rotate, cacheEnv, freshSessionText)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -185,7 +200,7 @@ export class TurnService {
   }
 
   private async runTurn(
-    conversation: Conversation, turn: Turn, prompt: string, history: string[], rotate: boolean,
+    conversation: Conversation, turn: Turn, ask: { prompt: string; images: TurnInput['images'] }, history: string[], rotate: boolean,
     cacheEnv: Record<string, string>, freshSessionText: () => string
   ): Promise<Turn> {
     const runtime = this.runtime
@@ -202,7 +217,8 @@ export class TurnService {
     }
     const input: TurnInput = {
       conversationId: conversation.id, turnId: turn.id,
-      text: prompt, history,
+      text: ask.prompt, history,
+      ...(ask.images?.length ? { images: ask.images } : {}),
       tools: [...DEFAULT_CENTRAL_TOOLS], limits: resolveLimits(this.env),
       // A rotated conversation starts a fresh runtime session seeded from the checkpoint.
       ...(turn.sessionRef === null || rotate ? {} : { sessionRef: turn.sessionRef }),

@@ -76,7 +76,8 @@ export async function sendMessage(
   opts: RequestOptions = {}
 ): Promise<SendMessageResult> {
   const text = input.text.trim()
-  if (text === '') throw new ChatApiError('Message is empty', 400, 'invalid_message')
+  const attached = (input.images?.length ?? 0) + (input.files?.length ?? 0) > 0
+  if (text === '' && !attached) throw new ChatApiError('Message is empty', 400, 'invalid_message')
   const body = await requestJson<unknown>(
     `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/messages`,
     {
@@ -86,6 +87,8 @@ export async function sendMessage(
         clientMessageId: input.clientMessageId,
         text,
         ...(input.replyTo === undefined ? {} : { replyTo: input.replyTo }),
+        ...(input.images?.length ? { images: input.images } : {}),
+        ...(input.files?.length ? { files: input.files } : {}),
       }),
       signal: opts.signal,
     }
@@ -103,6 +106,11 @@ export async function sendMessage(
     turnId,
     status: typeof row.status === 'string' ? (row.status as ChatTurnStatus) : 'queued',
   }
+}
+
+/** URL of a stored image of a conversation (`ref` of a history `image` part); same cookie as the rest. */
+export function chatImageUrl(conversationId: string, ref: string): string {
+  return `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/messages?image=${encodeURIComponent(ref)}`
 }
 
 export async function cancelTurn(turnId: string, opts: RequestOptions = {}): Promise<CancelTurnResult> {

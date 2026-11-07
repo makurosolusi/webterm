@@ -1,7 +1,7 @@
 // State + action dispatch for one chat conversation. Pure and synchronous: transport lives in
 // `../chatApi`, rendering in `./chatMessages`, and event merging in `./chatEventReducer`.
 // The server is the ordering authority; `lastEventSeq` makes a replayed SSE frame a no-op.
-import type { ChatMessage, ChatTurnStatus } from './chatTypes'
+import type { ChatMessage, ChatPart, ChatTurnStatus } from './chatTypes'
 import { isActiveTurnStatus } from './chatTypes'
 import { applyChatEvent } from './chatEventReducer'
 
@@ -153,13 +153,13 @@ export function orderedMessages(state: ChatState): ChatMessage[] {
   })
 }
 
-export function buildOptimisticMessage(clientMessageId: string, text: string): ChatMessage {
+export function buildOptimisticMessage(clientMessageId: string, text: string, attached: ChatPart[] = []): ChatMessage {
   return {
     id: `optimistic:${clientMessageId}`,
     role: 'human',
     seq: null,
     state: 'streaming',
-    parts: [{ type: 'text', text }],
+    parts: [...attached, ...(text ? [{ type: 'text' as const, text }] : [])],
     clientMessageId,
     optimistic: true,
   }

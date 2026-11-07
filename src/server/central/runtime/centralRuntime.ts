@@ -65,6 +65,8 @@ export interface TurnInput {
    * A runtime calls it when the resumed session is gone and it starts over; may throw.
    */
   freshSessionText?: () => string
+  /** Base64 images of the human message (validated at the route); only the Claude runtime accepts them. */
+  images?: readonly { mediaType: string; data: string }[]
 }
 
 interface EventBase {

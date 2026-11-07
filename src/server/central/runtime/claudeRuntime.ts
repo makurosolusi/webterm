@@ -25,6 +25,7 @@ import { FRESH_SESSION_NOTICE, isMissingSession, logTurnFailed } from './claudeF
 import { createLogger } from '../../logs'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
+import { userContent } from '../../agentChat/agentChat.attach'
 
 const log = createLogger('central')
 /** Only the tail of stderr is kept, in memory, for the failure reason. */
@@ -217,6 +218,7 @@ export class ClaudeRuntime implements CentralRuntime {
       ...(model.arg === undefined ? {} : { model: model.arg }),
       maxTurns: input.limits.maxTurns ?? DEFAULT_MAX_TURNS,
       ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
+      ...(input.images?.length ? { streamInput: true } : {}),
     })
     // Central launch profile (e.g. `envman -e p -- claude`) read per turn, so a profile edit reaches the next turn.
     const profile = this.options.executable ? null : centralClaudeLaunch()
@@ -252,6 +254,16 @@ export class ClaudeRuntime implements CentralRuntime {
       // EPIPE when the child exits before reading the prompt; its exit path reports the failure.
       log.warn('central.claude_stdin_failed', 'claude stdin write failed', { code: err.code ?? 'unknown' })
     })
-    child.stdin?.end(input.text)
+    child.stdin?.end(stdinPayload(input))
   }
+}
+
+/**
+ * What the child reads on stdin: the plain prompt, or with images one `--input-format stream-json` line,
+ * an SDKUserMessage (@anthropic-ai/claude-agent-sdk sdk.d.ts: `{type:'user', message: MessageParam,
+ * parent_tool_use_id}`) holding image blocks then the text block, as Agent Chat sends a paste.
+ */
+export function stdinPayload(input: Pick<TurnInput, 'text' | 'images'>): string {
+  if (!input.images?.length) return input.text
+  return `${JSON.stringify({ type: 'user', message: { role: 'user', content: userContent(input.text, input.images) }, parent_tool_use_id: null })}\n`
 }

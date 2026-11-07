@@ -13,7 +13,9 @@ import { isActiveTurnStatus, newClientMessageId } from './chatTypes'
 import {
   buildOptimisticMessage, chatReducer, initialChatState, orderedMessages,
 } from './chatStore'
-import { ChatApiError, chatErrorMessage, isAbortError } from '../chatApi'
+import { ChatApiError, chatErrorMessage, chatImageUrl, isAbortError } from '../chatApi'
+import type { ComposerImage } from './chatAttach'
+import { CENTRAL_TEXT_FILE_TYPE, centralChatAttach } from './chatCentralAttach'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -65,6 +67,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     activeTurnId: row.activeTurnId,
   }))
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const section = useRef<HTMLElement | null>(null)
 
   // Refs, not effect deps: an inline client/stream factory must not restart the stream.
   const clientRef = useRef(props.client)
@@ -129,10 +132,19 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const busy = state.activeTurnId !== null || isActiveTurnStatus(state.turnStatus)
   const status = statusText(state.stream, state.turnStatus, busy)
 
-  const send = (text: string): void => {
+  const send = (text: string, items: ComposerImage[] = []): void => {
     const clientMessageId = newClientMessageId()
-    dispatch({ type: 'optimistic', message: buildOptimisticMessage(clientMessageId, text) })
-    clientRef.current.sendMessage(conversation.id, { clientMessageId, text }).then(
+    const images = items.filter((i) => i.mediaType !== CENTRAL_TEXT_FILE_TYPE).map(({ mediaType, data }) => ({ mediaType, data }))
+    const files = items.filter((i) => i.mediaType === CENTRAL_TEXT_FILE_TYPE).map(({ name, data }) => ({ name, data }))
+    const echo = [
+      ...images.map((i) => ({ type: 'image' as const, ...i })),
+      // Bytes of base64: 3 per 4 chars, minus the padding.
+      ...files.map((f) => ({ type: 'file' as const, name: f.name, size: (f.data.length * 3) / 4 - (f.data.match(/=*$/)?.[0].length ?? 0) })),
+    ]
+    dispatch({ type: 'optimistic', message: buildOptimisticMessage(clientMessageId, text, echo) })
+    clientRef.current.sendMessage(conversation.id, {
+      clientMessageId, text, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}),
+    }).then(
       (result) => {
         dispatch({
           type: 'send-ok',
@@ -168,7 +180,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const error = state.error ?? historyError
 
   return (
-    <section className="chat-conversation" aria-label="Conversation">
+    <section ref={section} className="chat-conversation" aria-label="Conversation">
       <header className="chat-conversation__head">
         {status.live
           ? <span className="chat-progress" aria-hidden="true" />
@@ -189,8 +201,10 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         </div>
       )}
 
-      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send} />
-      <ChatComposer busy={busy} onSend={send} onStop={stop} autoFocus={props.focusComposer} />
+      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send}
+        imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
+      <ChatComposer busy={busy} onSend={send} onStop={stop} autoFocus={props.focusComposer}
+        attach={centralChatAttach} dropZone={section} />
     </section>
   )
 }

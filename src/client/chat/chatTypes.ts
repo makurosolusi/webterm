@@ -17,6 +17,10 @@ export type ChatPart =
   | { type: 'approval'; approvalId: string; state: ChatToolState }
   | { type: 'error'; code: string; message: string }
   | { type: 'notice'; text: string }
+  /** Attached image: `data` (base64) on the optimistic echo, `ref` (served by the messages route) in history. */
+  | { type: 'image'; mediaType: string; ref?: string; data?: string }
+  /** Attached text file: name and byte size (its content went to the model only). */
+  | { type: 'file'; name: string; size: number }
 
 /** One message as rendered. `seq` is null only for the optimistic human echo. */
 export interface ChatMessage {
@@ -65,6 +69,10 @@ export interface SendMessageInput {
   clientMessageId: string
   text: string
   replyTo?: string
+  /** Base64 images (Agent Chat limits); the server refuses them on a runtime that cannot read images. */
+  images?: { mediaType: string; data: string }[]
+  /** Base64 UTF-8 text files, inlined into the prompt server-side. */
+  files?: { name: string; data: string }[]
 }
 
 export interface SendMessageResult {

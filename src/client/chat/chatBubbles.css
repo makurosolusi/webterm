@@ -40,3 +40,26 @@
 }
 .chat-retry:hover { background: var(--vscode-button-secondaryHoverBackground, #3c3c3c); }
 .chat-retry:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }
+
+/* Central chat attachments: image thumbnails and text file chips inside your bubble. */
+.chat-bubble .chat-image {
+  display: inline-block;
+  max-width: 220px;
+  max-height: 160px;
+  margin: 0 0 4px 4px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.chat-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 0 0 4px 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+.chat-file-chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-file-chip__size { opacity: 0.7; }
