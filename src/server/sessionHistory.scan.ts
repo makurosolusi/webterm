@@ -6,7 +6,6 @@
 // transcript ratusan MB hanya dibaca penuh sekali, dan tak pernah dimuat utuh ke memori (stream).
 import { readdirSync } from 'node:fs'
 import { constants, lstat, open, type FileHandle } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { claudeProjectsRoot } from './transcriptPresence'
 import { consumeLine, newParseState, sessionIdFromFile, type HistoryAgent, type SessionParseState } from './sessionHistory.parse'
@@ -17,29 +16,23 @@ export interface ScanRoot {
   dir: string
 }
 
-/** Root transcript yang dikenal. Codex menghormati `CODEX_HOME` (override resmi codex). */
+/** Root transcript yang dikenal: Claude Code saja (Claude-first; transcript Codex tak lagi dipindai). */
 export function defaultRoots(): ScanRoot[] {
-  const codexHome = process.env.CODEX_HOME?.trim() || join(homedir(), '.codex')
-  return [
-    { agent: 'claude', dir: claudeProjectsRoot() },
-    { agent: 'codex', dir: join(codexHome, 'sessions') },
-  ]
+  return [{ agent: 'claude', dir: claudeProjectsRoot() }]
 }
 
-/** File `.jsonl` milik satu root. Claude: `<root>/<project>/<id>.jsonl` saja (subagent di
- *  subdirektori bukan sesi yang bisa di-resume). Codex: `sessions/YYYY/MM/DD/rollout-*.jsonl`. */
+/** File `.jsonl` milik satu root: `<root>/<project>/<id>.jsonl` saja (subagent di subdirektori
+ *  bukan sesi yang bisa di-resume). */
 export function listTranscripts(root: ScanRoot): string[] {
   let names: string[]
   try {
-    names = root.agent === 'codex'
-      ? (readdirSync(root.dir, { recursive: true }) as string[])
-      : readdirSync(root.dir).flatMap((p) => {
-          try {
-            return readdirSync(join(root.dir, p)).map((f) => join(p, f))
-          } catch {
-            return [] // entri bukan direktori (mis. file lepas di root): bukan project dir
-          }
-        })
+    names = readdirSync(root.dir).flatMap((p) => {
+      try {
+        return readdirSync(join(root.dir, p)).map((f) => join(p, f))
+      } catch {
+        return [] // entri bukan direktori (mis. file lepas di root): bukan project dir
+      }
+    })
   } catch {
     return [] // root belum ada (CLI tidak terpasang): tidak ada sesi, bukan galat
   }
@@ -109,7 +102,7 @@ async function indexFile(db: HistoryDb, agent: HistoryAgent, path: string, signa
     const resume = prev && prev.agent === agent && st.size >= prev.parsedBytes
     const state: SessionParseState = resume
       ? { agent, id: prev.id, cwd: prev.cwd, title: prev.title, startedAt: prev.startedAt, endedAt: prev.endedAt, messageCount: prev.messageCount }
-      : newParseState(agent, sessionIdFromFile(agent, basename(path)))
+      : newParseState(agent, sessionIdFromFile(basename(path)))
     const from = resume ? prev.parsedBytes : 0
     // Read up to the size seen now: bytes appended during the read belong to the next scan.
     const end = Math.min(st.size, from + SCAN_FILE_READ_MAX_BYTES)
@@ -143,5 +136,6 @@ export async function scanSessions(db: HistoryDb, roots: readonly ScanRoot[] = d
     }
   }
   signal?.throwIfAborted()
-  pruneIndexed(db, present)
+  // Only rows of the agents scanned here: rows of agents no longer scanned (codex) stay in the DB.
+  pruneIndexed(db, present, new Set(roots.map((r) => r.agent)))
 }

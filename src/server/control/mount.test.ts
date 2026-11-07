@@ -254,7 +254,7 @@ describe('control HTTP mount', () => {
   it('replays a spawn on a second call with production deps (stable identity)', async () => {
     const cap = capabilityStore.mint({ verb: 'node.spawn', resource: 'node:node-b' })
     const requestId = 'req-prod-01'
-    const body = JSON.stringify({ requestId, nodeId: 'node-b', agentId: 'codex' })
+    const body = JSON.stringify({ requestId, nodeId: 'node-b', agentId: 'claude' })
     const headers = { 'x-webterm-capability': cap }
     const first = fakeRes()
     await handleControlHttp(
@@ -282,7 +282,7 @@ describe('control HTTP mount', () => {
     // object; otherwise the ack store is recreated and the second spawn hits 409 node_exists.
     const cap = capabilityStore.mint({ verb: 'node.spawn', resource: 'node:node-merge' })
     const requestId = 'req-merge-01'
-    const body = JSON.stringify({ requestId, nodeId: 'node-merge', agentId: 'codex' })
+    const body = JSON.stringify({ requestId, nodeId: 'node-merge', agentId: 'claude' })
     const overrides: Partial<ControlDeps> = {
       capabilities: {
         verify: (token, now = Date.now()) => capabilityStore.verify(token, now),

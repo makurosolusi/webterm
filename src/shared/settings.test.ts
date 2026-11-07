@@ -48,6 +48,17 @@ describe('mergeSettings', () => {
     expect(merged.agentLaunchCommands).toEqual({ claude: 'claude-wrapper' })
   })
 
+  it('settings normaliser drops non-Claude launch commands and retired ids from disabledAgents', () => {
+    const merged = mergeSettings({
+      agentLaunchCommands: { claude: 'claude-wrapper', codex: 'codex --profile x', gemini: 'gemini' },
+      disabledAgents: ['codex', 'custom:a1', 'cursor', 'claude'],
+    })
+    expect(merged.agentLaunchCommands).toEqual({ claude: 'claude-wrapper' })
+    expect(merged.disabledAgents).toEqual(['custom:a1', 'claude'])
+    expect(mergeSettings({ agentLaunchCommands: { codex: 'codex' } }).agentLaunchCommands).toEqual({})
+    expect(mergeSettings({ agentLaunchCommands: { claude: 7 } }).agentLaunchCommands).toEqual({})
+  })
+
   it('mempertahankan nilai false dan 0 — bukan menganggapnya absen', () => {
     const merged = mergeSettings({
       cursorBlink: false,

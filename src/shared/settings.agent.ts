@@ -9,14 +9,9 @@ export interface AgentSettings {
   // --- Agent -----------------------------------------------------------------------------------
   /** Agent yang diluncurkan tombol quick-add. */
   defaultAgent: AgentId
-  /** Override perintah peluncuran per agent builtin. Nilainya mengganti nama CLI polos di mana
-   *  pun baris peluncuran dibangun — sesi baru, relaunch, restart in-place — dengan flag yang biasa
-   *  (`--resume`, prompt) ditempelkan setelahnya, sehingga skrip wrapper yang memilih akun ikut
-   *  berjalan. Kosong/absen = default builtin. Hanya builtin: agent custom sudah punya
-   *  `launchCmd`-nya sendiri.
-   *  CLAUDE: superseded by `claudeLaunchProfiles` (a stored `claude` entry is seeded once as the
-   *  "Custom" profile). Still read for back-compat by paths not yet routed through
-   *  `server/claudeLauncher` and by the other builtins. */
+  /** Legacy Claude launch override (the only builtin; keys of retired builtins are dropped on load).
+   *  Superseded by `claudeLaunchProfiles` (a stored `claude` entry is seeded once as the "Custom"
+   *  profile); still read for back-compat by paths not yet routed through `server/claudeLauncher`. */
   agentLaunchCommands: Partial<Record<BuiltinAgentId, string>>
   /** User Claude launch profiles (`envman -e p:e -- claude`, ...). The built-in Default (`claude`)
    *  is implicit, never stored, never deletable. Resolve via `server/claudeLauncher`. */

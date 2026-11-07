@@ -42,7 +42,7 @@ describe('agent.kinds', () => {
     expect(r.ok).toBe(true)
     const kinds = r.data?.kinds as { id: string; builtin: boolean; headless: boolean }[]
     expect(r.data?.count).toBe(kinds.length)
-    expect(kinds.map((k) => k.id)).toEqual(expect.arrayContaining(['claude', 'opencode', 'custom:open']))
+    expect(kinds.map((k) => k.id)).toEqual(expect.arrayContaining(['claude', 'custom:open']))
     expect(kinds.some((k) => k.id === 'custom:closed')).toBe(false)
     expect(kinds.find((k) => k.id === 'custom:open')).toEqual({ id: 'custom:open', label: 'Open', builtin: false, headless: true })
     const json = JSON.stringify(r)

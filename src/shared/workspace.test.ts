@@ -22,7 +22,6 @@ import {
   setCustomAgentBaseResolver,
   withSessionId,
 } from './workspace'
-import type { BuiltinAgentId } from './workspace'
 
 const SID = '3f2a1c00-0000-4000-8000-000000000001'
 
@@ -64,7 +63,6 @@ describe('isBuiltinAgent', () => {
 describe('assembleCmd', () => {
   it('mengembalikan perintah polos tanpa profil', () => {
     expect(assembleCmd('claude')).toBe('claude')
-    expect(assembleCmd('antigravity')).toBe('agy')
   })
 
   it('tidak pernah membungkus perintah dengan wrapper apa pun', () => {
@@ -90,26 +88,26 @@ describe('assembleCmd', () => {
       expect(assembleCmd(id, override)).not.toBe(AGENT_CONFIG[id].launchCmd)
     }
     // Kosong/spasi/absen = tidak ada override, jatuh ke default builtin.
-    expect(assembleCmd('antigravity', '')).toBe('agy')
-    expect(assembleCmd('codex', '   ')).toBe('codex')
-    expect(assembleCmd('antigravity', undefined)).toBe('agy')
+    expect(assembleCmd('claude', '')).toBe('claude')
+    expect(assembleCmd('claude', '   ')).toBe('claude')
+    expect(assembleCmd('claude', undefined)).toBe('claude')
   })
 })
 
 describe('kapabilitas', () => {
-  it('builtin menjawab sesuai daftar keanggotaannya', () => {
-    expect(canContextLink('claude')).toBe(true)
-    // copilot tidak memindai ~/.claude/skills, jadi ia di luar CONTEXT_LINK_CAPABLE.
-    expect(canContextLink('copilot')).toBe(false)
-    expect(canResume('opencode')).toBe(true)
-    expect(mintsSessionId('claude')).toBe(true)
-    expect(mintsSessionId('codex')).toBe(false)
-    expect(hasUsage('codex')).toBe(true)
-    expect(hasUsage('copilot')).toBe(false)
-    expect(hasPermissionMode('gemini')).toBe(true)
-    expect(hasPermissionMode('opencode')).toBe(false)
-    expect(canSwitchModel('copilot')).toBe(true)
-    expect(canSwitchModel('opencode')).toBe(false)
+  it('claude punya setiap kapabilitas', () => {
+    for (const p of [canContextLink, canResume, mintsSessionId, hasUsage, hasPermissionMode, canSwitchModel]) {
+      expect(p('claude')).toBe(true)
+    }
+  })
+
+  it('builtin yang dipensiunkan (codex, gemini, …) tidak punya kapabilitas apa pun — program terminal biasa', () => {
+    for (const id of ['codex', 'gemini', 'opencode', 'grok', 'copilot', 'cursor', 'antigravity']) {
+      expect(isBuiltinAgent(id)).toBe(false)
+      for (const p of [canContextLink, canResume, mintsSessionId, hasUsage, hasPermissionMode, canSwitchModel]) {
+        expect(p(id)).toBe(false)
+      }
+    }
   })
 
   it('agent tak dikenal tanpa base tidak punya kapabilitas apa pun', () => {
@@ -131,53 +129,40 @@ describe('kapabilitas', () => {
   })
 
   it('builtin tidak pernah resolve lewat resolver, bahkan bila resolver mengklaim namanya', () => {
-    setCustomAgentBaseResolver(() => 'claude')
-    // copilot TETAP copilot: builtin memang harness-nya sendiri.
-    expect(capabilityAgentId('copilot')).toBe('copilot')
-    expect(canContextLink('copilot')).toBe(false)
+    setCustomAgentBaseResolver(() => undefined)
+    // claude TETAP claude: builtin memang harness-nya sendiri.
+    expect(capabilityAgentId('claude')).toBe('claude')
   })
 })
 
 describe('isContextCapable / classifyLink', () => {
   it('true untuk agent builtin yang context-capable', () => {
     expect(isContextCapable('claude')).toBe(true)
-    expect(isContextCapable('codex')).toBe(true)
-    expect(isContextCapable('gemini')).toBe(true)
   })
-  it('false untuk custom tanpa base dan untuk undefined', () => {
+  it('false untuk custom tanpa base, CLI non-Claude dan undefined', () => {
     expect(isContextCapable('custom')).toBe(false)
+    expect(isContextCapable('codex')).toBe(false)
     expect(isContextCapable(undefined)).toBe(false)
   })
   it('kedua ujung capable -> context', () => {
-    expect(classifyLink('claude', 'codex')).toBe('context')
+    expect(classifyLink('claude', 'claude')).toBe('context')
   })
   it('salah satu ujung tidak capable -> null', () => {
     expect(classifyLink('claude', undefined)).toBe(null)
     expect(classifyLink('custom', 'claude')).toBe(null)
-    expect(classifyLink('copilot', 'claude')).toBe(null)
+    expect(classifyLink('codex', 'claude')).toBe(null)
   })
 })
 
-describe('grammar resume per agent', () => {
-  const expected: Record<BuiltinAgentId, string> = {
-    claude: `claude --resume ${SID}`,
-    gemini: `gemini --resume ${SID}`,
-    grok: `grok --resume ${SID}`,
-    cursor: `cursor-agent --resume ${SID}`,
-    codex: `codex resume ${SID}`,
-    opencode: `opencode --session ${SID}`,
-    copilot: `copilot --resume=${SID}`,
-    antigravity: `agy --conversation=${SID}`,
-  }
-
-  it('setiap builtin memakai grammar yang diukur di CLI-nya sendiri', () => {
-    for (const id of BUILTIN_AGENT_IDS) {
-      expect(resumeCommand(id, SID)).toBe(expected[id])
-    }
+describe('grammar resume', () => {
+  it('claude memakai --resume; CLI non-Claude tidak punya grammar resume', () => {
+    expect(resumeCommand('claude', SID)).toBe(`claude --resume ${SID}`)
+    expect(resumeCommand('codex', SID)).toBe(null)
+    expect(resumeCommandWith('codex', 'codex', SID)).toBe(null)
   })
 
   it('override perintah peluncuran mengganti program, grammar flag tetap', () => {
-    expect(resumeCommand('codex', SID, 'my-codex-wrapper')).toBe(`my-codex-wrapper resume ${SID}`)
+    expect(resumeCommand('claude', SID, 'my-claude-wrapper')).toBe(`my-claude-wrapper --resume ${SID}`)
     expect(resumeCommand('claude', SID, '  ')).toBe(`claude --resume ${SID}`)
   })
 
@@ -203,13 +188,11 @@ describe('grammar resume per agent', () => {
 describe('withSessionId', () => {
   it('hanya menempel flag untuk agent yang mencetak session id', () => {
     expect(withSessionId('claude', 'claude', SID)).toBe(`claude --session-id ${SID}`)
-    expect(withSessionId('copilot', 'copilot', SID)).toBe(`copilot --session-id=${SID}`)
-    // cursor tidak punya flag session-id — ia mengadopsi id lewat --resume.
-    expect(withSessionId('cursor-agent', 'cursor', SID)).toBe(`cursor-agent --resume ${SID}`)
   })
 
   it('mengembalikan perintah identik byte untuk agent lain atau id tidak aman', () => {
     expect(withSessionId('codex', 'codex', SID)).toBe('codex')
+    expect(withSessionId('copilot', 'copilot', SID)).toBe('copilot')
     expect(withSessionId('claude', 'claude', '')).toBe('claude')
     expect(withSessionId('claude', 'claude', 'a b; whoami')).toBe('claude')
   })

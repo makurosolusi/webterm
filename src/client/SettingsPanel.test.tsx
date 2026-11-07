@@ -282,27 +282,15 @@ describe('SettingsPanel agents', () => {
     expect(screen.getByRole('button', { name: 'Add profile' })).toBeTruthy()
   })
 
-  it('writes a builtin launch command and deletes the key when the field is emptied', () => {
-    const { onChange, rerender } = renderPanel()
-
+  it('has no per-CLI launch command rows; Claude is configured through launch profiles and the base picker offers Claude only', () => {
+    const agent: CustomAgent = { id: 'custom:p', label: 'Proxy', launchCmd: '', baseAgent: 'claude' }
+    render(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, customAgents: [agent] }} onChange={vi.fn()} onClose={vi.fn()} />)
     fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
-    const launch = screen.getByLabelText('Codex launch command')
-    fireEvent.change(launch, { target: { value: 'wrap-codex' } })
-    expect(onChange).toHaveBeenLastCalledWith({ agentLaunchCommands: { codex: 'wrap-codex' } })
-
-    rerender(
-      <SettingsPanel
-        settings={{ ...DEFAULT_SETTINGS, agentLaunchCommands: { codex: 'wrap-codex' } }}
-        onChange={onChange}
-        onClose={vi.fn()}
-      />,
-    )
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
-    fireEvent.change(screen.getByLabelText('Codex launch command'), { target: { value: '' } })
-    expect(onChange).toHaveBeenLastCalledWith({ agentLaunchCommands: {} })
-    // Claude has no row here any more: it is configured through the launch profiles card.
-    expect(screen.queryByLabelText('Claude Code launch command')).toBeNull()
+    for (const label of ['Codex', 'Gemini', 'Claude Code']) expect(screen.queryByLabelText(`${label} launch command`)).toBeNull()
     expect(screen.getByRole('region', { name: 'Default' })).toBeTruthy()
+    // The Agents-in-Add-menu checklist lists Claude Code and the custom agent, no retired CLI.
+    expect(screen.queryByText('Codex')).toBeNull()
+    expect(screen.getAllByText('Claude Code').length).toBeGreaterThan(0)
   })
 
   it('adds a custom agent with a stable id prefix', () => {

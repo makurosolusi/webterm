@@ -7,14 +7,11 @@ import type { AgentPermissionMode } from '../shared/workspace'
 import {
   canResumeWith,
   hasClaudeHookSettings,
-  capabilityAgentId,
   isSafeSessionId,
   resumeCommandWith,
   withSessionId,
 } from '../shared/workspace'
 import { buildClaudeFlags } from './hooks'
-import { codexInstructionsFlag } from './webtermAwareness'
-import { codexMcpFlags } from './mcp/mcp.launch'
 import { parsePort } from './serverConfig'
 
 /** Port yang ditulis ke env hook agent bila pemanggil tidak menyebutkannya. */
@@ -30,8 +27,8 @@ export const wrapperMissingNotice = (bin: string): string =>
  * resume sesuai grammar agent-nya. Murni (tanpa PTY) supaya perakitan flag bisa dites langsung.
  *
  * Grammar TIDAK dirakit di sini — ia milik `src/shared/workspace.ts` (`withSessionId`,
- * `resumeCommandWith`), karena bentuknya beda per harness: `copilot` memakai `--session-id=<sid>`
- * dan `cursor` sama sekali tidak punya flag itu (ia mengadopsi id lewat `--resume <uuid-baru>`).
+ * `resumeCommandWith`). Agent tanpa kapabilitas (CLI lain yang dijalankan sebagai program terminal
+ * biasa, termasuk node warisan `agentId: 'codex'`) mendapat `cmd` apa adanya, tanpa flag tambahan.
  *
  * CATATAN RISIKO (beda dari nodeterm, sengaja): nodeterm menggerbangi minting session id di balik
  * probe versi CLI per agent (`supportsSessionIdFlag`, yang menyelidiki `claude --version` dan
@@ -65,13 +62,9 @@ export function launchLine(
       permissionMode: opts?.permissionMode,
     })}`
   }
-  // codex tidak punya hook webterm: aturan rumah + identitas masuk sekali lewat `-c
-  // developer_instructions` (webtermAwareness). Root option, jadi letaknya sebelum `resume`.
-  // The webterm MCP server rides along the same way (`-c mcp_servers.webterm.*`, mcp/mcp.launch.ts).
-  const base = capabilityAgentId(agentId) === 'codex' ? `${cmd} ${codexInstructionsFlag(msg.id)} ${codexMcpFlags(msg.id, port)}` : cmd
   if (resume) {
     // Perintah client dipakai utuh sebagai program, jadi pembungkus apa pun tetap terpasang.
-    return canResumeWith(agentId, sid) ? resumeCommandWith(base, agentId, sid) ?? base : base
+    return canResumeWith(agentId, sid) ? resumeCommandWith(cmd, agentId, sid) ?? cmd : cmd
   }
-  return withSessionId(base, agentId, sid)
+  return withSessionId(cmd, agentId, sid)
 }

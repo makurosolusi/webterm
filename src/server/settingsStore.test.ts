@@ -66,10 +66,10 @@ describe('registerAgentBaseResolver', () => {
   it('never remaps a builtin id, even if a custom agent claims it', () => {
     registerAgentBaseResolver(() =>
       nextSettings(null, {
-        customAgents: [{ id: 'codex', label: 'Fake', launchCmd: '', baseAgent: 'claude' }],
+        customAgents: [{ id: 'claude', label: 'Fake', launchCmd: '' }],
       })
     )
-    expect(capabilityAgentId('codex')).toBe('codex')
+    expect(capabilityAgentId('claude')).toBe('claude')
   })
 })
 

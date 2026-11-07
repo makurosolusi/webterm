@@ -1,6 +1,6 @@
 // Session-mutating `/api/control/*` routes: spawn, prompt, close. Split out of `controlApi.ts`.
 import npath from 'node:path'
-import { assembleCmd, isBuiltinAgent, isSafeNodeId } from '../../shared/workspace'
+import { isBuiltinAgent, isSafeNodeId } from '../../shared/workspace'
 import { spawnAgent } from '../spawn/agentSpawn'
 import { claudeProfileLine } from '../../shared/claudeLaunch/claudeLaunch.builtin'
 import { authorize, badRequest, capabilityHolder } from './controlAuth'
@@ -51,9 +51,8 @@ export async function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: A
   const sid = resolveSpawnSessionId(agentId, body.sessionId)
   if (!sid.ok) return badRequest('invalid_session_id')
 
-  // claude launches through the default launch profile; the other builtins keep their override.
-  const settings = deps.settings()
-  const cmd = agentId === 'claude' ? claudeProfileLine(settings) : assembleCmd(agentId, settings.agentLaunchCommands[agentId])
+  // claude (the only builtin) launches through the default launch profile.
+  const cmd = claudeProfileLine(deps.settings())
   // Thin adapter over `agent.spawn` (F2-h): depth, per-parent cap, lineage (K3) and events live there.
   const spawned = await spawnAgent(
     {

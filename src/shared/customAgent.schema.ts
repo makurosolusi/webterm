@@ -181,7 +181,12 @@ export function normalizeCustomAgents(
   const agents: CustomAgent[] = []
   const errors: CustomAgentError[] = []
   const seen = new Set<string>()
-  raw.forEach((el, index) => {
+  raw.forEach((item, index) => {
+    // Load keeps an entry whose `baseAgent` is no longer a builtin (codex, gemini, … before
+    // Claude-first) as a standalone CLI instead of dropping the whole agent; strict still rejects it.
+    const el = !strict && isObj(item) && typeof item.baseAgent === 'string' && !isBuiltinAgent(item.baseAgent)
+      ? { ...item, baseAgent: undefined }
+      : item
     const found = isObj(el) ? entryErrors(el, strict) : [['', 'not_object'] as [string, string]]
     if (strict && isObj(el) && typeof el.id === 'string' && seen.has(el.id)) found.push(['id', 'duplicate'])
     if (isObj(el) && typeof el.id === 'string') seen.add(el.id)

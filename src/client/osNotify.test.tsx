@@ -119,7 +119,7 @@ describe('osNotify', () => {
     await vi.advanceTimersByTimeAsync(COALESCE_MS)
     expect(FakeNotification.shown).toHaveLength(1)
     expect(FakeNotification.shown[0].title).toBe('3 agents need attention')
-    expect(FakeNotification.shown[0].opts.body).toBe('Claude Code finished\nReviewer needs input\nCodex finished')
+    expect(FakeNotification.shown[0].opts.body).toBe('Claude Code finished\nReviewer needs input\nAgent finished')
     expect(FakeNotification.shown[0].opts.tag).toBe('webterm-attention')
   })
 

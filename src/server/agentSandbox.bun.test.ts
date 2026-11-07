@@ -82,7 +82,7 @@ test('an agent PTY finds no root token: not in its env, not in auth.json, not in
   expect(out.includes(ROOT)).toBe(false)
 }, 90_000)
 
-test('a non-Claude agent PTY gets the same env guarantees (its label stays "mitigation")', async () => {
+test('a legacy non-Claude agent PTY (a plain terminal program now) gets the same env guarantees', async () => {
   const out = await runAgentShell('node-c', 'codex', `printf 'ENV_ROOT=%s\\n' "$(env | grep -c ${ROOT})"; echo DONE_C`, 'DONE_C')
   expect(out).toContain('ENV_ROOT=0')
 }, 90_000)

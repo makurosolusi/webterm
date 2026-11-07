@@ -16,14 +16,14 @@ describe('scrubExecEnv', () => {
 
 describe('startExec', () => {
   it('runs with a scrubbed env: no WEBTERM_/NODETERM_/wcap values reach the child', async () => {
-    const source = { PATH: process.env.PATH, WEBTERM_ROOT_TOKEN: 'secret-root', NODETERM_NODE_ID: 'n1', MY_TOKEN: 'wcap_abc', OPENAI_API_KEY: 'sk-test-provider' }
+    const source = { PATH: process.env.PATH, WEBTERM_ROOT_TOKEN: 'secret-root', NODETERM_NODE_ID: 'n1', MY_TOKEN: 'wcap_abc', ANTHROPIC_API_KEY: 'sk-test-provider' }
     const out = await node('console.log(JSON.stringify(process.env))', { env: source }).done
     const env = JSON.parse(out.tail.trim()) as Record<string, string>
     expect(Object.keys(env).some((k) => /^(WEBTERM_|NODETERM_)/.test(k))).toBe(false)
     expect(out.tail).not.toContain('secret-root')
     expect(out.tail).not.toContain('wcap_')
     expect(env.MY_TOKEN).toBeUndefined()
-    expect(env.OPENAI_API_KEY).toBe('sk-test-provider')
+    expect(env.ANTHROPIC_API_KEY).toBe('sk-test-provider')
   })
   it('passes argv as an array: shell metacharacters stay literal data', async () => {
     const hostile = '$(echo pwned); `id` && echo pwned2'

@@ -7,7 +7,7 @@ import { realpathSync } from 'node:fs'
 import { resolve as resolvePath, sep } from 'node:path'
 import { canonicalDefJson, type CustomAgent } from '../../../shared/customAgent.schema'
 import type { Settings } from '../../../shared/settings'
-import { AGENT_CONFIG, assembleCmd, customLaunchCmd, type BuiltinAgentId } from '../../../shared/workspace'
+import { AGENT_CONFIG, customLaunchCmd, type BuiltinAgentId } from '../../../shared/workspace'
 import { binaryExists } from '../../ptyShell'
 import { claudeProfileLine } from '../../../shared/claudeLaunch/claudeLaunch.builtin'
 import { shq } from '../../hooksQuote'
@@ -93,7 +93,7 @@ function customEntry(agent: CustomAgent, s: Settings, deps: CatalogDeps): Catalo
   const launch = agent.launch
   if (launch && !programUsable(launch.program, deps.denyRoots?.() ?? DEFAULT_DENY_ROOTS)) return null
   // A claude-based custom agent without its own command inherits the default launch profile.
-  const line = launch ? argvLine(launch.program, launch.args ?? []) : customLaunchCmd(agent, { ...s.agentLaunchCommands, claude: claudeProfileLine(s) })
+  const line = launch ? argvLine(launch.program, launch.args ?? []) : customLaunchCmd(agent, { claude: claudeProfileLine(s) })
   if (!line) return null
   const refs = agent.env ?? {}
   return {
@@ -119,11 +119,8 @@ export function createAgentCatalog(deps: CatalogDeps): AgentCatalog {
   const settings = deps.settings
   function resolve(kind: string): CatalogEntry | null {
     const s = settings()
-    if (Object.hasOwn(AGENT_CONFIG, kind)) {
-      // claude launches through the default launch profile; the other builtins keep their override.
-      const launchLine = kind === 'claude' ? claudeProfileLine(s) : assembleCmd(kind as BuiltinAgentId, s.agentLaunchCommands?.[kind as BuiltinAgentId])
-      return { kind, builtin: true, tier: 'R2', launchLine, headlessArgv: null, childEnv: () => ({}) }
-    }
+    // claude (the only builtin) launches through the default launch profile.
+    if (kind === 'claude') return { kind, builtin: true, tier: 'R2', launchLine: claudeProfileLine(s), headlessArgv: null, childEnv: () => ({}) }
     const agent = s.customAgents?.find((c) => c.id === kind)
     return agent?.centralSpawn === true ? customEntry(agent, s, deps) : null
   }

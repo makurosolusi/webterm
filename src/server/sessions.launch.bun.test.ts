@@ -22,9 +22,6 @@ afterAll(() => {
 
 import type { OpenMsg } from '../shared/protocol'
 import { launchLine } from './sessions'
-import { codexInstructionsFlag, tomlString } from './webtermAwareness'
-import { shq } from './hooksQuote'
-import { codexMcpFlags } from './mcp/mcp.launch'
 import { binaryExists, shellArgv, unwrapMissingWrapper } from './pty'
 import { resolveShell } from './ptyShell'
 import { BUILTIN_AGENT_IDS, assembleCmd, setCustomAgentBaseResolver } from '../shared/workspace'
@@ -33,29 +30,10 @@ import { claudeNodeSettings, writeClaudeSettings } from './hooks'
 // --- Perakitan baris peluncuran (murni, tanpa PTY) -------------------------------------------
 
 const SID = '11111111-2222-3333-4444-555555555555'
-/** Flag aturan rumah codex untuk node `n1`, dihitung lewat fungsi produksi (isinya diuji terpisah). */
-const CODEX_N1 = codexInstructionsFlag('n1')
-
-test('codex developer_instructions is one colon-free, TOML-escaped, shell-quoted argument', () => {
-  expect(CODEX_N1.startsWith(`-c 'developer_instructions="You are running inside webterm`)).toBe(true)
-  // envman memindai argv untuk `slug:path`: tidak boleh ada `:` sama sekali, juga dari id pane.
-  const pane = codexInstructionsFlag('n1:p2')
-  expect(pane).not.toContain(':')
-  expect(pane).toContain('agent node n1.p2.')
-  expect(CODEX_N1).toContain('IS the explicit permission of the user to drive that browser')
-  expect(CODEX_N1.length < 1500).toBe(true)
-  // TOML basic string: kutip, backslash, kontrol, dan DEL di-escape; hasilnya terbaca kembali utuh.
-  const nasty = 'a"b\\c\nd\u007fe\u0001'
-  const t = tomlString(nasty)
-  expect(t).toBe('"a\\"b\\\\c\\nd\\u007Fe\\u0001"')
-  expect(JSON.parse(t)).toBe(nasty)
-  // Kutip tunggal di teks tidak bisa menutup quoting shell.
-  expect(shq(`developer_instructions=${tomlString("it's")}`)).toBe(`'developer_instructions="it'\\''s"'`)
-})
 const open = (over: Partial<OpenMsg>): OpenMsg =>
   ({ t: 'open', id: 'n1', cols: 80, rows: 24, ...over })
 
-test('launchLine mints the session id with each harness own grammar', () => {
+test('launchLine mints the session id with the claude grammar', () => {
   // claude: flag id spasi-terpisah PLUS path file hook --settings.
   const claude = launchLine(open({ cmd: 'claude', agentId: 'claude', sessionId: SID }), 9999)
   expect(claude).toContain(`--session-id ${SID}`)
@@ -64,19 +42,6 @@ test('launchLine mints the session id with each harness own grammar', () => {
   // URL callback hidup di dalam file, bukan di argv (lihat regresi envman di hooks.test.ts).
   expect(claude).not.toContain('://')
 
-  // copilot: bentuk `=`, dan TIDAK mengerti --settings.
-  const copilot = launchLine(open({ cmd: 'copilot', agentId: 'copilot', sessionId: SID }), 9999)
-  expect(copilot).toBe(`copilot --session-id=${SID}`)
-
-  // cursor: tak punya flag session-id sama sekali — ia mengadopsi id lewat --resume <id baru>.
-  const cursor = launchLine(open({ cmd: 'cursor-agent', agentId: 'cursor', sessionId: SID }), 9999)
-  expect(cursor).toBe(`cursor-agent --resume ${SID}`)
-
-  // codex & gemini resumable tapi BUKAN session-id-capable: tanpa flag session id. gemini tetap
-  // identik byte demi byte; codex hanya mendapat `-c developer_instructions` (aturan rumah webterm)
-  // dan `-c mcp_servers.webterm.*` (server MCP webterm).
-  expect(launchLine(open({ cmd: 'gemini', agentId: 'gemini', sessionId: SID }), 9999)).toBe('gemini')
-  expect(launchLine(open({ cmd: 'codex', agentId: 'codex', sessionId: SID }), 9999)).toBe(`codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)}`)
 
   // Terminal biasa (tanpa agentId) dan agent tanpa session id: perintah apa adanya.
   expect(launchLine(open({ cmd: 'htop' }), 9999)).toBe('htop')
@@ -100,8 +65,7 @@ test('no builtin launch command carries a wrapper webterm invented', () => {
   // Override peluncuran milik pengguna menggantikan bagian program secara utuh — ini mekanisme
   // pemilihan akun/profil yang sebenarnya (`settings.agentLaunchCommands`), seperti di nodeterm.
   expect(assembleCmd('claude', 'claude-via-work-account')).toBe('claude-via-work-account')
-  expect(assembleCmd('codex', '   ')).toBe('codex')
-  expect(assembleCmd('antigravity', undefined)).toBe('agy')
+  expect(assembleCmd('claude', '   ')).toBe('claude')
 })
 
 test('the claude hook flags are gated by capability, not by the agent id', () => {
@@ -121,9 +85,9 @@ test('the claude hook flags are gated by capability, not by the agent id', () =>
     setCustomAgentBaseResolver(null)
   }
 
-  // `--settings` adalah grammar claude. Builtin lain TIDAK boleh menerimanya: flag yang tidak
-  // dikenal membuat CLI-nya menolak di peluncuran, yaitu node mati.
-  for (const id of BUILTIN_AGENT_IDS.filter((a) => a !== 'claude')) {
+  // `--settings` adalah grammar claude. CLI lain TIDAK boleh menerimanya: flag yang tidak dikenal
+  // membuat CLI-nya menolak di peluncuran, yaitu node mati.
+  for (const id of ['codex', 'gemini', 'copilot']) {
     expect(launchLine(open({ cmd: id, agentId: id, sessionId: SID }), 9999)).not.toContain('--settings')
   }
 })
@@ -142,13 +106,33 @@ test('launchLine resumes with the harness resume grammar', () => {
   const r = (agentId: string, cmd: string) =>
     launchLine(open({ cmd, agentId, sessionId: SID, resume: true }), 9999)
   expect(r('claude', 'claude')).toContain(`--resume ${SID}`)
-  expect(r('codex', 'codex')).toBe(`codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)} resume ${SID}`)
-  expect(r('copilot', 'copilot')).toBe(`copilot --resume=${SID}`)
-  expect(r('antigravity', 'agy')).toBe(`agy --conversation=${SID}`)
   // Pembungkus tetap utuh: perintah client dipakai sebagai program secara keseluruhan.
-  expect(r('codex', 'envman -e p -- codex')).toBe(`envman -e p -- codex ${CODEX_N1} ${codexMcpFlags('n1', 9999)} resume ${SID}`)
+  expect(r('claude', 'envman -e p -- claude')).toMatch(new RegExp(`^envman -e p -- claude .*--resume ${SID}`))
   // Agent tak dikenal tanpa kapabilitas apa pun: tidak ada flag yang ditempelkan.
   expect(r('custom', 'mycli')).toBe('mycli')
+})
+
+test('a custom agent with baseAgent claude keeps hooks, the launch profile grammar and resume', () => {
+  setCustomAgentBaseResolver((id) => (id === 'custom:proxy' ? 'claude' : undefined))
+  try {
+    const fresh = launchLine(open({ cmd: 'my-claude-proxy', agentId: 'custom:proxy', sessionId: SID }), 9999) ?? ''
+    expect(fresh.startsWith('my-claude-proxy ')).toBe(true)
+    for (const flag of ['--settings ', `--session-id ${SID}`, '--mcp-config ']) expect(fresh).toContain(flag)
+    const resumed = launchLine(open({ cmd: 'my-claude-proxy', agentId: 'custom:proxy', sessionId: SID, resume: true }), 9999) ?? ''
+    expect(resumed).toContain(`--resume ${SID}`)
+    expect(resumed).toContain('--settings ')
+  } finally {
+    setCustomAgentBaseResolver(null)
+  }
+})
+
+test('a stored agentId:codex node launches its cmd with no flags added (fresh and resumed)', () => {
+  // Claude-first migration: nodes are not converted; a retired builtin is a plain terminal program.
+  for (const resume of [false, true]) {
+    for (const [agentId, cmd] of [['codex', 'codex'], ['codex', 'envman -e p -- codex'], ['gemini', 'gemini'], ['cursor', 'cursor-agent'], ['antigravity', 'agy']]) {
+      expect(launchLine(open({ cmd, agentId, sessionId: SID, resume }), 9999)).toBe(cmd)
+    }
+  }
 })
 
 test('launchLine mints the id again when the transcript it would resume is gone', () => {

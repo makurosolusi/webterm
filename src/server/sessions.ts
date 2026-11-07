@@ -10,7 +10,6 @@ import { SessionsAdopt } from './sessionsAdopt'
 import { ptyLog } from './sessionsLog'
 import { spawnAgent } from './spawn/agentSpawn'
 import { createLogger } from './logs'
-import { mcpEnv } from './mcp/mcp.launch'
 import { cliPath } from './cli/cli.launcher'
 import { delimiter, dirname, join } from 'node:path'
 import { resolveShell } from './ptyShell'
@@ -127,12 +126,9 @@ export class Sessions extends SessionsAdopt {
       ...(msg.agentId && hasClaudeHookSettings(msg.agentId)
         ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })
         : {}),
-      // `webterm mcp` for CLIs configured through env (opencode, gemini); claude/codex get it as flags
-      // in `launchLine`. An injected spawn writes no file (same rule as `writeNodeHeaders` above).
       // `<dataDir>/bin` first on PATH so the `webterm` CLI resolves by name; it carries no token
       // (curl reads the header file above), so this adds a command, not a credential.
       ...(msg.agentId ? { PATH: agentPath() } : {}),
-      ...(msg.agentId ? mcpEnv(msg.agentId, msg.id, PORT, this.options.spawn ? () => {} : undefined) : {}),
     }
     const spawnOpts = {
       cols: msg.cols,

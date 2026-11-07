@@ -78,10 +78,13 @@ export function putIndexed(db: HistoryDb, f: IndexedFile): void {
     .run(f.path, f.agent, f.id, f.cwd, f.title, f.startedAt, f.endedAt, f.messageCount, f.mtimeMs, f.size, f.parsedBytes)
 }
 
-/** Buang baris untuk file yang sudah tidak ada di disk (dihapus CLI / pembersihan 30 hari). */
-export function pruneIndexed(db: HistoryDb, present: ReadonlySet<string>): void {
-  const rows = db.query('SELECT path FROM agent_session').all() as { path: string }[]
-  for (const { path } of rows) if (!present.has(path)) db.query('DELETE FROM agent_session WHERE path = ?').run(path)
+/** Buang baris `agents` untuk file yang sudah tidak ada di disk (dihapus CLI / pembersihan 30 hari).
+ *  Baris agent lain (mis. `codex` dari sebelum Claude-first) tidak disentuh. */
+export function pruneIndexed(db: HistoryDb, present: ReadonlySet<string>, agents: ReadonlySet<string>): void {
+  const rows = db.query('SELECT path, agent FROM agent_session').all() as { path: string; agent: string }[]
+  for (const { path, agent } of rows) {
+    if (agents.has(agent) && !present.has(path)) db.query('DELETE FROM agent_session WHERE path = ?').run(path)
+  }
 }
 
 /** Satu sesi di respons API. `path` sengaja tidak ikut: klien tidak butuh lokasi file. */
@@ -108,14 +111,15 @@ export const PAGE_MAX = 100
 const likeEscape = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 /** Halaman sesi terbaru dulu. `cwd` = workspace: sesi di cwd itu ATAU subdirektorinya. Sesi tanpa
- *  pesan disembunyikan (Orca "Hide empty sessions"): tidak ada yang bisa dilanjutkan di sana. */
+ *  pesan disembunyikan (Orca "Hide empty sessions"): tidak ada yang bisa dilanjutkan di sana.
+ *  Claude sessions only: indexed `codex` rows from before Claude-first stay in the DB but are hidden. */
 export function listSessions(
   db: HistoryDb,
   opts: { cwd?: string; q?: string; limit?: number; offset?: number },
 ): SessionPage {
   const limit = Math.min(Math.max(Math.trunc(opts.limit ?? PAGE_DEFAULT) || PAGE_DEFAULT, 1), PAGE_MAX)
   const offset = Math.max(Math.trunc(opts.offset ?? 0) || 0, 0)
-  const where = ['message_count > 0']
+  const where = ["agent = 'claude'", 'message_count > 0']
   const params: unknown[] = []
   const cwd = opts.cwd?.replace(/\/+$/, '')
   if (cwd) {

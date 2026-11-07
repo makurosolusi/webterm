@@ -44,7 +44,7 @@ describe('SessionHistory panel', () => {
     })
     const addNode = vi.fn()
     const active = ws('w1', '/repo')
-    render(<SessionHistory open activeWs={active} workspaces={[active]} launch={{}}
+    render(<SessionHistory open activeWs={active} workspaces={[active]}
       deps={{ activeId: 'w1', addNode, setWorkspaces: vi.fn(), selectWorkspace: vi.fn() }} />)
 
     await screen.findByText('Prompt 1')
@@ -66,7 +66,7 @@ describe('SessionHistory panel', () => {
     const other = ws('w2', '/other')
     const selectWorkspace = vi.fn(async () => {})
     const addNode = vi.fn()
-    render(<SessionHistory open activeWs={active} workspaces={[active, other]} launch={{}}
+    render(<SessionHistory open activeWs={active} workspaces={[active, other]}
       deps={{ activeId: 'w1', addNode, setWorkspaces: vi.fn(), selectWorkspace }} />)
     fireEvent.click(screen.getByText('All'))
     await screen.findByText('Prompt 3')
@@ -84,7 +84,7 @@ describe('SessionHistory panel', () => {
 
   it('renders nothing when the sidebar is closed', () => {
     stubPages({})
-    const { container } = render(<SessionHistory open={false} activeWs={null} workspaces={[]} launch={{}}
+    const { container } = render(<SessionHistory open={false} activeWs={null} workspaces={[]}
       deps={{ activeId: null, addNode: vi.fn(), setWorkspaces: vi.fn(), selectWorkspace: vi.fn() }} />)
     expect(container.innerHTML).toBe('')
   })

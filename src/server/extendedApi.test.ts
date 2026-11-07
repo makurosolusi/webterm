@@ -227,7 +227,7 @@ describe('extended API mount', () => {
           requireApproval: false, // bawaan produksi ON; tes ini bukan tentang approval
           planStore: plan,
           dataDir: () => '/tmp/data',
-          settings: () => ({ agentLaunchCommands: {} }), claudeOnPath: () => true,
+          settings: () => ({}), claudeOnPath: () => true,
           createRuntime: (compose) => {
             repo = compose.repo
             return {

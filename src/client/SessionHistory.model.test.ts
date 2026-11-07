@@ -10,30 +10,24 @@ const id = () => 'node-1'
 
 describe('resumeNode', () => {
   it('claude: agent node carrying the transcript id as sessionId (AgentNode launches it with --resume)', () => {
-    expect(resumeNode(session(), {}, id)).toMatchObject({
+    expect(resumeNode(session(), id)).toMatchObject({
       id: 'node-1', kind: 'agent', agentId: 'claude', cmd: 'claude', cwd: '/repo/app',
       sessionId: '11111111-2222-3333-4444-555555555555',
     })
   })
 
-  it('claude: carries the launch profile (the server builds the command from it), not the legacy override', () => {
-    const n = resumeNode(session(), { claude: 'envman -e work -- claude' }, id, 'm')
+  it('claude: carries the launch profile (the server builds the command from it)', () => {
+    const n = resumeNode(session(), id, 'm')
     expect(n).toMatchObject({ cmd: 'claude', claudeProfileId: 'm' })
   })
 
-  it('codex: resume lives in the command, no sessionId', () => {
-    const n = resumeNode(session({ agent: 'codex', id: 'cdx-9' }), {}, id)
-    expect(n?.cmd).toBe('codex resume cdx-9')
-    expect(n?.sessionId).toBeUndefined()
-  })
-
   it('refuses ids that are unsafe on a shell command line', () => {
-    expect(resumeNode(session({ id: '-rf; rm' }), {}, id)).toBeNull()
-    expect(resumeNode(session({ agent: 'codex', id: 'a b' }), {}, id)).toBeNull()
+    expect(resumeNode(session({ id: '-rf; rm' }), id)).toBeNull()
+    expect(resumeNode(session({ id: 'a b' }), id)).toBeNull()
   })
 
   it('omits cwd when the transcript had none (node falls back to the workspace cwd)', () => {
-    expect(resumeNode(session({ cwd: null }), {}, id)).not.toHaveProperty('cwd')
+    expect(resumeNode(session({ cwd: null }), id)).not.toHaveProperty('cwd')
   })
 })
 
@@ -44,10 +38,9 @@ describe('resumeProfile', () => {
     const wss = [{ nodes: [] }, { nodes: [{ id: 'a', kind: 'agent' as const, x: 0, y: 0, agentId: 'claude' as const, sessionId: sid, claudeProfileId: 'w' }] }]
     expect(resumeProfile(session(), wss, S)).toBe('w')
   })
-  it('else the default profile; codex gets none', () => {
+  it('else the default profile', () => {
     expect(resumeProfile(session(), [{ nodes: [] }], S)).toBe('m')
     expect(resumeProfile(session(), [], {})).toBe('default')
-    expect(resumeProfile(session({ agent: 'codex' }), [], S)).toBeUndefined()
   })
 })
 
