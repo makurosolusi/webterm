@@ -12,6 +12,7 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 
 ### Added
+- Central chat accepts images and text files: paste a screenshot, drop files or use the + button.
 - Central chat: start a new conversation with the + button and switch between past conversations from History.
 - The Choose a folder dialog can create a new folder.
 - Closing a node (× button, tab, sessions panel or Delete key) now asks for confirmation and says what will end: a running terminal or agent session, unsaved editor changes, or a browser page.
