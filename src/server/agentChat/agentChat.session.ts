@@ -203,9 +203,10 @@ export class AgentChatSession {
 
   private handle(m: SDKMessage): void {
     this.last = this.now()
-    // Turn frames only: a warm Query's system frames (commands_changed, ...) are no turn.
+    // Turn frames only: a warm Query's system frames (commands_changed, ...), a rate-limit update and
+    // the echo of a streamed user message (replay-user-messages) are no turn.
     if (m.type === 'result') this.running = false
-    else if (m.type !== 'system') this.running = true
+    else if (m.type !== 'system' && m.type !== 'rate_limit_event' && !(m.type === 'user' && 'isReplay' in m)) this.running = true
     for (const e of this.mapper.map(m)) {
       // canUseTool runs as soon as the SDK reads the request, often before the tool_use is mapped here: keep 'awaiting'.
       if (e.t === 'status' && this.pending.size > 0 && (e.status === 'tool' || e.status === 'thinking')) continue

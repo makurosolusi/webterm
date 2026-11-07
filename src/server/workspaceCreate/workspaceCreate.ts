@@ -25,6 +25,8 @@ export interface CreateDeps {
   git?: string
   /** webterm data dir; tests inject a temp dir. Default: config `dataDir()`. */
   dataDir?: string
+  /** Bound on how long a cancel waits for the clone's pipes to close; tests shorten it. */
+  abortMaxMs?: number
 }
 
 /** gitExec.ts argv/env (filtered env, no prompt); the user's own clone/new project keeps hooks. */
@@ -63,15 +65,51 @@ async function claimTarget(parent: string, target: string): Promise<boolean> {
   return false
 }
 
-interface ActiveClone { child: ChildProcess | null; aborted: boolean }
+/** Re-signal cadence while a cancel waits for `close`. */
+const CLONE_RESIGNAL_MS = 100
+/** SIGTERM phase of a cancel; after it the group gets SIGKILL. */
+export const CLONE_KILL_GRACE_MS = 2_000
+/** Give up waiting for `close` after this; the clone is reported cancelled and the slot freed. */
+export const CLONE_ABORT_MAX_MS = 10_000
+
+interface ActiveClone {
+  child: ChildProcess | null
+  aborted: boolean
+  abortMaxMs: number
+  /** Set once the kill loop runs; clears its timer. */
+  stopKilling?: () => void
+  /** Settles the clone when the kill loop runs past abortMaxMs. */
+  giveUp?: () => void
+}
 let activeClone: ActiveClone | null = null
+
+function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  try { process.kill(-child.pid!, signal) } catch { child.kill(signal) } // group gone: signal the leader (never throws)
+}
+
+/**
+ * One group SIGTERM is not enough: a child git/the shell forks at that instant misses it, stays in
+ * the group and holds the stderr pipe, so `close` never fires. Keep re-signalling the group (SIGKILL
+ * after the grace) until `close` stops the loop, or give up after abortMaxMs.
+ */
+function startKilling(rec: ActiveClone): void {
+  const child = rec.child
+  if (!child || rec.stopKilling) return
+  const started = Date.now()
+  killGroup(child, 'SIGTERM')
+  const tick = setInterval(() => {
+    const elapsed = Date.now() - started
+    if (elapsed >= rec.abortMaxMs) { rec.giveUp?.(); return }
+    killGroup(child, elapsed >= CLONE_KILL_GRACE_MS ? 'SIGKILL' : 'SIGTERM')
+  }, CLONE_RESIGNAL_MS)
+  rec.stopKilling = () => clearInterval(tick)
+}
 
 /** Kill the in-flight clone's process group (git plus its ssh/remote helpers). false when idle. */
 export function abortClone(): boolean {
   if (!activeClone) return false
   activeClone.aborted = true
-  const pid = activeClone.child?.pid
-  if (pid) try { process.kill(-pid, 'SIGTERM') } catch { activeClone.child?.kill('SIGTERM') }
+  startKilling(activeClone)
   return true
 }
 
@@ -87,27 +125,38 @@ export async function cloneRepo(input: CloneInput, onProgress: (p: CloneProgress
   await refuseDataDir(target, deps)
   if (activeClone) throw new CreateError('busy', 'A clone is already running.')
   // Reserve the slot before the first await so a second request cannot slip past the guard.
-  const rec: ActiveClone = { child: null, aborted: false }
+  const rec: ActiveClone = { child: null, aborted: false, abortMaxMs: deps.abortMaxMs ?? CLONE_ABORT_MAX_MS }
   activeClone = rec
   let created = false
   try {
     created = await claimTarget(input.parent, target)
-    const { code, tail } = await new Promise<{ code: number | null; tail: string }>((done) => {
+    const { code, tail, stuck } = await new Promise<{ code: number | null; tail: string; stuck?: boolean }>((done) => {
+      let settled = false
+      let tail = ''
+      const finish = (r: { code: number | null; tail: string; stuck?: boolean }) => {
+        if (settled) return
+        settled = true
+        rec.stopKilling?.()
+        rec.stopKilling = () => {} // a late abortClone must not start a loop nobody stops
+        done(r)
+      }
       // detached = own session, no controlling TTY: ssh cannot sit on a passphrase/host-key prompt.
       const g = userGit(['-c', 'protocol.file.allow=never', '-c', 'protocol.ext.allow=never', 'clone', '--progress', '--', url, target], deps)
       const child = spawn(g.file, g.args, { cwd: input.parent, env: g.env, stdio: ['ignore', 'ignore', 'pipe'], detached: true })
       rec.child = child
-      if (rec.aborted) abortClone()
-      let tail = ''
+      rec.giveUp = () => finish({ code: null, tail, stuck: true })
+      if (rec.aborted) startKilling(rec)
       child.stderr?.on('data', (d: Buffer) => {
+        if (settled) return
         const text = d.toString('utf8')
         tail = (tail + text).slice(-4096)
         const p = parseCloneProgress(text)
         if (p) onProgress(p)
       })
-      child.on('error', (e) => done({ code: -1, tail: `fatal: git could not start: ${e.message}` }))
-      child.on('close', (c) => done({ code: c, tail }))
+      child.on('error', (e) => finish({ code: -1, tail: `fatal: git could not start: ${e.message}` }))
+      child.on('close', (c) => finish({ code: c, tail }))
     })
+    if (stuck) throw new CreateError('aborted', `Clone cancelled, but git (process group ${rec.child?.pid}) did not exit within ${Math.round(rec.abortMaxMs / 1000)}s and may still be running.`)
     if (rec.aborted) throw new CreateError('aborted', 'Clone cancelled.')
     if (code !== 0) throw new CreateError('git_failed', cloneErrorMessage(tail))
     return target

@@ -37,7 +37,7 @@ const q = new URLSearchParams({ path: folder, root: folder, dir: folder, name: '
 const body = JSON.stringify({ path: join(folder, 'a.txt'), content: 'pwned', paths: [folder], name: 'w', cwd: folder, parent: folder })
 const PROBES: [string, string][] = [
   ...FS_VERB_METHODS.map(([verb, m]) => [m, `/api/fs/${verb}?${q}`] as [string, string]),
-  ['GET', `/api/fs?${q}`],
+  ['GET', `/api/fs?${q}`], ['POST', '/api/fs'],
   ['GET', '/api/workspaces'], ['POST', '/api/workspaces'], ['PUT', '/api/workspaces/w1'], ['DELETE', '/api/workspaces/w1'],
   ['GET', '/api/active'], ['PUT', '/api/active'],
   ['POST', '/api/git/info'],
@@ -106,6 +106,11 @@ describe('file and workspace routes are human-UI only', () => {
     expect(list.body).toContain('a.txt')
     expect((await call('GET', '/api/workspaces', UI)).status).toBe(200)
     expect((await call('POST', '/api/git/info', UI)).status).toBe(200)
+    // Folder picker "New Folder": POST {parent, name} on the same gated path.
+    const made = await call('POST', '/api/fs', UI, JSON.stringify({ parent: folder, name: 'made-by-ui' }))
+    expect(made.status).toBe(200)
+    expect(JSON.parse(made.body)).toEqual({ path: join(folder, 'made-by-ui') })
+    expect((await call('POST', '/api/fs', UI, 'not json')).status).toBe(400)
   })
 
   // sec-208-10: name-gen spends model tokens on a node's terminal; a GET was fireable by any <img>.

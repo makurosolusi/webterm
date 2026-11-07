@@ -1,7 +1,7 @@
 // HTTP surface of the agent chat node (PLAN/AGENT-CHAT.md D6, D7): `/api/agent-chat/:nodeId/<verb>`.
 // UI-only: its entry is wrapped in `uiOnly` (routes/agentChat.routes.ts); node tokens never reach
 // it (not in `isNodeTokenPath`). Verbs live in agentChat.route.{stream,attach,controls}.ts; this file
-// dispatches and keeps send / permission / mode / interrupt / history.
+// dispatches (rewind / fork: agentChat.route.branch.ts) and keeps send / permission / mode / interrupt / history.
 import { json } from '../routes/route.core'
 import { createLogger } from '../logs'
 import { AGENT_CHAT_TEXT_MAX, type AgentChatPermissionAnswer } from '../../shared/agentChat.wire'
@@ -11,6 +11,7 @@ import type { AgentChatSession } from './agentChat.session'
 import { historyPage, loadTranscript, toolResultText, type LoadTranscript } from './agentChat.history'
 import { AGENT_CHAT_SEND_BODY_MAX_BYTES, imageVerb, parseSend, uploadVerb } from './agentChat.route.attach'
 import { CONTROL_VERBS, controlVerb, type ListSessions } from './agentChat.route.controls'
+import { BRANCH_VERBS, branchVerb, type ForkSession } from './agentChat.route.branch'
 import { AGENT_CHAT_BODY_MAX_BYTES, bad, fail, ok, readObject, uint, type Body, type Ctx, type Fail } from './agentChat.route.core'
 import { AGENT_CHAT_SSE_EVENT, streamVerb } from './agentChat.route.stream'
 
@@ -20,7 +21,7 @@ export { AGENT_CHAT_BODY_MAX_BYTES, AGENT_CHAT_SSE_EVENT, AGENT_CHAT_TEXT_MAX } 
 
 const PATH = /^\/api\/agent-chat\/([^/]+)\/([a-z]+)$/
 const VERB_METHOD: Record<string, 'GET' | 'POST'> = {
-  stream: 'GET', history: 'GET', send: 'POST', upload: 'POST', interrupt: 'POST', permission: 'POST', mode: 'POST', ...CONTROL_VERBS,
+  stream: 'GET', history: 'GET', send: 'POST', upload: 'POST', interrupt: 'POST', permission: 'POST', mode: 'POST', ...CONTROL_VERBS, ...BRANCH_VERBS,
 }
 
 export interface AgentChatRouteDeps {
@@ -31,6 +32,8 @@ export interface AgentChatRouteDeps {
   uploadsDir?: string
   /** SDK `listSessions` (GET sessions); tests inject a fake. */
   listSessions?: ListSessions
+  /** SDK `forkSession` (POST fork); tests inject a fake. */
+  forkSession?: ForkSession
 }
 
 function decodeNodeId(raw: string): string | undefined {
@@ -128,6 +131,7 @@ export async function agentChatRoute(c: Ctx, deps: AgentChatRouteDeps): Promise<
   if (c.method !== want) return fail(c, { status: 405, error: 'method_not_allowed', reason: `${verb} takes ${want}.` })
   if (verb === 'stream') return streamVerb(c, deps, nodeId, s)
   if (verb in CONTROL_VERBS) return controlVerb(c, deps, nodeId, verb, s)
+  if (verb in BRANCH_VERBS) return branchVerb(c, deps, nodeId, verb, s)
   if (verb === 'history') return history(c, deps, nodeId, s)
   return post(c, deps, nodeId, verb, s)
 }

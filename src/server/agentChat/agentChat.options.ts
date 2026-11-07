@@ -76,7 +76,10 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     abortController: i.abort,
     settings: writeClaudeSettings(i.nodeId, i.port),
     plugins: [{ type: 'local', path: writeExplorePlugin() }],
-    extraArgs: { 'append-system-prompt-file': writeHouseRules(), 'mcp-config': writeClaudeMcpConfig(i.nodeId, i.port) },
+    // Checkpoints for "Rewind to here" (Query.rewindFiles); the docs (agent-sdk/file-checkpointing) require
+    // `replay-user-messages` next to it so the CLI acknowledges each user message uuid. Replays map to nothing.
+    enableFileCheckpointing: true,
+    extraArgs: { 'append-system-prompt-file': writeHouseRules(), 'mcp-config': writeClaudeMcpConfig(i.nodeId, i.port), 'replay-user-messages': null },
     // Required next to the hook: the SDK resolves its bundled binary before calling the hook (S0 gate 3).
     pathToClaudeCodeExecutable: launch.bin || DEFAULT_CLAUDE_BIN,
     // `o.command` (the bundled binary) is ignored: the profile argv runs, SDK args appended. `o.env` only,

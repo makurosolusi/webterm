@@ -35,6 +35,8 @@ export interface ChatComposerProps {
   completion?: ComposerCompletion
   /** Focus the textarea on mount (a freshly created chat). */
   autoFocus?: boolean
+  /** Replaces the text and focuses the box whenever a new seed arrives (Agent Chat "Edit message"). */
+  seed?: { text: string; key: number }
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -64,6 +66,13 @@ export default function ChatComposer(props: ChatComposerProps) {
   const tooLong = props.maxLength !== undefined && text.length > props.maxLength
   const hasContent = text.trim() !== '' || files.images.length > 0
   const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy
+
+  const seed = props.seed
+  useEffect(() => {
+    if (!seed) return
+    setText(seed.text)
+    area.current?.focus()
+  }, [seed]) // a new seed object (new key) is the request, even with the same text
 
   // Auto-grow: measure from `auto` so the box also shrinks after a send or a deletion.
   useLayoutEffect(() => {

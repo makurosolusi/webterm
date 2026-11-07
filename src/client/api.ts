@@ -97,6 +97,15 @@ export function listDir(path?: string): Promise<{ path: string; parent: string |
   return jsonFetch('/api/fs' + (path ? `?path=${encodeURIComponent(path)}` : ''))
 }
 
+/** Creates one new folder `name` inside `parent` (folder picker "New Folder"); resolves its path. */
+export function makeFolder(parent: string, name: string): Promise<{ path: string }> {
+  return jsonFetch('/api/fs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parent, name }),
+  })
+}
+
 export function generateName(nodeId: string): Promise<{ ok: boolean; message: string }> {
   return jsonFetch('/api/generate-name', {
     method: 'POST',

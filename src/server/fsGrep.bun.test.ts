@@ -1,6 +1,8 @@
 // Find in Files: rg --json pages, .gitignore, cancellation by searchId, and the no-rg fallback.
 import { afterAll, expect, test as it } from 'bun:test'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { EventEmitter } from 'node:events'
+import { PassThrough } from 'node:stream'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -97,4 +99,30 @@ it('route verbs read offset/limit/searchId from the query', async () => {
   expect(r.nextOffset).toBeNull()
   const c = (await GREP_VERBS['grep-cancel'].run({ searchId: 'nope' }, {}, {}, new URLSearchParams())) as { cancelled: boolean }
   expect(c.cancelled).toBe(false)
+})
+
+// test-only: a spawn that fails like the runtime does (async 'error', then 'close', no process).
+const spawnFailing = (code: string) => (() => {
+  const p = Object.assign(new EventEmitter(), { stdout: new PassThrough(), exitCode: null, kill: () => true })
+  queueMicrotask(() => { p.emit('error', Object.assign(new Error(`spawn rg ${code}`), { code })); p.emit('close', -2) })
+  return p
+}) as unknown as typeof spawn
+
+it('only ENOENT means rg is missing; EMFILE/EAGAIN are errors, never an empty success', async () => {
+  const missing = await ok(repo, 'needle', { spawn: spawnFailing('ENOENT') })
+  expect(missing.engine).toBe('fallback')
+  expect(missing.matches.length).toBe(3)
+  for (const code of ['EMFILE', 'EAGAIN']) {
+    const r = await grepFiles(repo, 'needle', { spawn: spawnFailing(code) })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain(`could not run rg (${code})`)
+  }
+})
+
+it('a failed fallback listing is an error, not zero matches', async () => {
+  const r = await grepFiles(repo, 'needle', { spawn: spawnFailing('ENOENT'), list: async () => ({ ok: false, code: 'EIO', error: 'search failed: spawn git EMFILE' }) })
+  expect(r.ok).toBe(false)
+  if (!r.ok) expect(r.error).toBe('content search fallback could not list files (EIO): search failed: spawn git EMFILE')
+  const empty = await ok(repo, 'zzz-no-such-text') // a real empty search stays ok
+  expect(empty.matches).toEqual([])
 })

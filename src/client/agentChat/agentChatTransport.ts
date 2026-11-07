@@ -4,7 +4,9 @@
 import { ChatApiError, chatErrorMessage, isAbortError, requestJson } from '../chat/chatTransport'
 import { openSseStream } from '../chat/chatStream'
 import type { ChatEventSource, ChatStream, ChatStreamStatus } from '../chat/chatTypes'
-import type { AgentChatCommand, AgentChatConfig, AgentChatEvent, AgentChatImage, AgentChatModel, AgentChatPermissionAnswer, AgentChatSessionSummary } from '../../shared/agentChat.wire'
+import type {
+  AgentChatCommand, AgentChatConfig, AgentChatEvent, AgentChatImage, AgentChatModel, AgentChatPermissionAnswer, AgentChatRewindResult, AgentChatSessionSummary,
+} from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import type { HistoryItem } from './agentChatStore'
 
@@ -15,10 +17,10 @@ export const AGENT_CHAT_SSE_EVENT = 'agent-chat'
 export const AGENT_CHAT_HISTORY_PAGE = 50
 
 const EVENT_TYPES = new Set<string>(['status', 'init', 'delta', 'message', 'tool', 'permission', 'permissionResolved', 'result', 'notice', 'mode',
-  'config', 'context', 'commandOutput', 'compact', 'reset', 'commandsChanged', 'queued'])
+  'config', 'context', 'commandOutput', 'compact', 'reset', 'commandsChanged', 'queued', 'rateLimit', 'task'])
 
 export type AgentChatOperation = 'send' | 'interrupt' | 'permission' | 'mode' | 'history' | 'tool result' | 'upload'
-  | 'catalog' | 'models' | 'config' | 'sessions' | 'resume' | 'new conversation'
+  | 'catalog' | 'models' | 'config' | 'sessions' | 'resume' | 'new conversation' | 'rewind' | 'fork' | 'stop task'
 
 /** A failed agent chat request: `message` is user-facing; operation, node and status are for code. */
 export class AgentChatApiError extends ChatApiError {
@@ -38,6 +40,9 @@ export function agentChatErrorMessage(op: AgentChatOperation, error: unknown): s
   if (!(error instanceof ChatApiError)) return chatErrorMessage(error)
   const s = error.status
   if (s === 401 || s === 403) return 'Not allowed. Reload and sign in again.'
+  if (s === 404 && op === 'fork') return 'That message is not in the saved transcript of this chat, so it cannot be edited.'
+  if (s === 409 && op === 'stop task') return 'This task is no longer running.'
+  if (s === 409 && op === 'rewind') return 'Too many Claude sessions are open. Close another chat, then try again.'
   if (s === 404) return op === 'tool result' ? 'The full output is not in the transcript.' : 'This chat is not on the server yet. Wait for the board to save, then retry.'
   if (s === 409 && error.code === 'busy') return 'Claude is working in this chat. Stop the turn or wait for it to end, then try again.'
   if (s === 409 && op === 'resume') return 'That conversation is open in another chat node. Close it there first.'
@@ -84,6 +89,12 @@ export interface AgentChatTransport {
   resume(sessionId: string): Promise<void>
   /** Start a fresh conversation (the old one stays resumable). */
   newConversation(): Promise<void>
+  /** Restore the files Claude edited since user message `messageId`; `dryRun` only reports what would change. */
+  rewind(messageId: string, dryRun: boolean): Promise<AgentChatRewindResult>
+  /** Edit a sent message: fork the conversation before `messageId` into a new session and send `text` there. */
+  fork(messageId: string, text: string, images?: AgentChatImage[]): Promise<void>
+  /** Stop a running subagent or background task. */
+  stopTask(taskId: string): Promise<void>
 }
 
 /** One SSE frame -> event; null for anything malformed or of an unknown kind (newer server). */
@@ -160,5 +171,16 @@ export function createAgentChatTransport(nodeId: string, createSource?: (url: st
     sessions: async () => listOf<AgentChatSessionSummary>(await call<unknown>('sessions', 'sessions'), 'sessions', (x) => typeof x.sessionId === 'string'),
     resume: (sessionId) => post('resume', 'resume', { sessionId }),
     newConversation: () => post('new conversation', 'new', {}),
+    rewind: async (messageId, dryRun) => {
+      const b = await call<Partial<AgentChatRewindResult> | null>('rewind', 'rewind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageId, dryRun }) })
+      if (typeof b?.canRewind !== 'boolean') throw new AgentChatApiError('rewind', nodeId, 502, 'bad_response', 'The server did not say what the rewind changes.')
+      return {
+        canRewind: b.canRewind, ...(typeof b.error === 'string' ? { error: b.error } : {}), filesChanged: Array.isArray(b.filesChanged) ? b.filesChanged.filter((f) => typeof f === 'string') : [],
+        insertions: typeof b.insertions === 'number' ? b.insertions : 0, deletions: typeof b.deletions === 'number' ? b.deletions : 0,
+        ...(typeof b.skippedLinks === 'number' ? { skippedLinks: b.skippedLinks } : {}),
+      }
+    },
+    fork: (messageId, text, images) => post('fork', 'fork', { messageId, text, ...(images?.length ? { images } : {}) }),
+    stopTask: (taskId) => post('stop task', 'stoptask', { taskId }),
   }
 }
