@@ -117,6 +117,8 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- When a Central chat reply fails because Claude could not start, the chat now says why (for example Claude not found, not signed in, or an unsupported option) instead of only "claude runtime failed".
+- A Central chat that was used with OpenCode and then switched to Claude no longer fails every reply: Claude now starts its own session instead of trying to resume the OpenCode one.
 - The Central chat no longer gets stuck on "Reconnecting…" when a turn fails: the failure was mistaken for a lost connection, so the chat reconnected over and over and the reply stayed on "streaming".
 - Remaining Indonesian text in the app (labels, errors and messages) is now English.
 - A failed Central reply now says why (for example "claude timed out", or "The server restarted before this reply finished."), also after a reload, and the newest failed message or reply has a Retry button that sends it again.
