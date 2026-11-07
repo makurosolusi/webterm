@@ -1,6 +1,6 @@
 import { createElement, useCallback, useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { useInboxBadge, useInboxHotkey } from './inboxDockState'
+import { useNeedsYouCount } from './chat/needsYouApi'
 import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
 import { useOutputStatusItems } from './output/outputStatusItem'
 import { resolveTerminalTheme } from './themes'
@@ -80,18 +80,15 @@ export const ACTIVITY_STATUS_ITEM: VscodeStatusItem = {
   tooltip: 'Toggle Activity timeline', ariaLabel: 'Toggle Activity timeline', onClick: toggleTimeline,
 }
 
-/** Badge + hotkey Inbox dan item status/palette panel Output untuk Dock. */
-export function useDockFeeds(inboxOpen: boolean, setInboxOpen: (open: boolean) => void, inboxReady: boolean) {
-  // Inbox + badge berbagi satu endpoint (`GET /api/inbox`), jadi hanya SATU yang memuat pada satu
-  // waktu: panel saat terbuka (pollMs di bawah), hook badge saat tertutup. Sebelum hidrasi dan di
-  // layar Welcome keduanya diam. Tombol `i` hanya hidup ketika memang ada board.
-  const inboxUnread = useInboxBadge({ panelOpen: inboxOpen, enabled: inboxReady })
-  useInboxHotkey(() => setInboxOpen(!inboxOpen), inboxReady)
+/** Badge Needs-you ikon Chat dan item status/palette panel Output untuk Dock. */
+export function useDockFeeds() {
+  // Badge berbagi SATU poller dengan strip Needs-you dan kartu persetujuan (`chat/needsYouApi`).
+  const needsYouCount = useNeedsYouCount()
   // Panel Output (log sistem): state-nya modul bersama, jadi menu View, palette, dan status bar
   // tak perlu prop. Lihat `./output/outputCommands`.
   useOutputToggleHotkey()
   const outputItems = useOutputStatusItems()
   const outputStatusItems = useMemo(() => [...outputItems, ACTIVITY_STATUS_ITEM], [outputItems])
   const outputCommands = useMemo(() => outputPaletteCommands(), [])
-  return { inboxUnread, outputStatusItems, outputCommands }
+  return { needsYouCount, outputStatusItems, outputCommands }
 }

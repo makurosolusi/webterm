@@ -1,9 +1,9 @@
-/* VS Code bottom panel surface, shared by Inbox, Chat, and the combined shell.
+/* VS Code bottom panel surface, shared by the bottom panel and the secondary side bar.
 
    Metrics follow VS Code's panel (verified against workbench `panelpart.css` and
    `paneCompositePart.css`): 35px title row, uppercase 11px tab labels with `0 10px` padding, a
    1px TOP border on the active tab, a 16px count badge, a 4px sash on the top edge, and 22px
-   list rows (declared in inbox.css / chat.css because those selectors are panel-scoped).
+   list rows (`.inbox-item` below for plain panes such as Problems; chat.css scopes its own).
 
    The panel is flush: no radius, no shadow, docked above the status bar (the canvas ends where it starts, see tab-layout.css). One surface hosts every view (bottomPanelHost.tsx). It starts after
    the activity bar (and the 300px sidebar column while that is open). Height comes from
@@ -209,7 +209,6 @@
 }
 
 /* Embedded panes are flex columns that fill the pane; their content scrolls inside, never out. */
-.inbox-panel--embedded,
 .chat-panel--embedded,
 .problems-panel {
   flex: 1 1 0;
@@ -227,4 +226,20 @@
     left: var(--activity-bar-w, 48px);
     right: 0;
   }
+}
+
+/* Plain list row of a panel pane (Problems). Was in the removed Inbox sheet. */
+.inbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--bottom-panel-row-h, 22px);
+  box-sizing: border-box;
+  padding: 0 12px 0 28px;
+  outline: none;
+}
+.inbox-item:hover { background: var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.2)); }
+.inbox-item:focus-visible {
+  outline: 1px solid var(--vscode-list-focusOutline, var(--vscode-focusBorder, #007fd4));
+  outline-offset: -1px;
 }

@@ -17,6 +17,7 @@ import { claudePreflightOf, type RuntimeReadiness } from './centralChatHealth'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import { createPortfolioReadExecutor } from './central/chat/toolExecutors'
 import { StreamHub } from './central/chat/streamHub'
+import { registerApprovalStream } from './central/chat/approvalPublish'
 import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
 } from './central/chat/turnService'
@@ -63,6 +64,8 @@ function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDep
   const stream = new StreamHub({
     replay: (conversationId, afterSeq) => listConversationEvents(db, conversationId, afterSeq, 500),
   })
+  // Subscribers get approval frames live even before this hub carried a turn.
+  registerApprovalStream(db, stream, now)
   const runtime = kind === 'mock'
     ? new MockRuntime({ toolExecutor: createPortfolioReadExecutor(db, { now }), stepDelayMs: 5 })
     : kind === 'claude'

@@ -180,7 +180,7 @@ export function createPrReviewService(ports: PrReviewPorts) {
     const item = getInboxItem(ctx.db, itemId)
     if (!item || item.source !== PRREVIEW_SOURCE || !item.approvalId) throw new PrReviewError('not_found', `draft review ${itemId} not found`)
     const approval = getApproval(ctx, item.approvalId)
-    if (!approval || approval.status !== 'approved') throw new PrReviewError('not_approved', `draft review ${itemId} is ${approval?.status ?? 'missing'}; approve it in the Inbox first`)
+    if (!approval || approval.status !== 'approved') throw new PrReviewError('not_approved', `draft review ${itemId} is ${approval?.status ?? 'missing'}; approve it in the Central chat first`)
     // Single use: a second click, a retry or the Telegram button can never post the same consent twice.
     if (!consumeApproval(ctx, item.approvalId, { digest: approvalDigest(approval.request) })) throw new PrReviewError('not_approved', `draft review ${itemId} was already posted`)
     const draft = parseDraft(approvedArgsFor(ctx.db, item.approvalId) ?? (approval.request as { args?: unknown }).args)

@@ -140,7 +140,6 @@ test('the channels runtime pushes gate cards on its own and stops with it (fake 
         intervalMs: 60_000,
         fetch: async (_url, init) => { sent.push(JSON.parse(init.body) as Record<string, unknown>); return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1 } }) } },
       },
-      subscribe: () => () => {},
     })
     expect(runtime).not.toBeNull()
     runtime?.store.bind("telegram", "42", { projectId: "p1", role: "owner" })

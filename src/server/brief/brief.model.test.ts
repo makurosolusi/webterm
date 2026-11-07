@@ -38,7 +38,7 @@ describe('buildBrief', () => {
     expect(brief.lines.map((l) => [l.category, l.text, l.target])).toEqual([
       ['stuck', 'Build in web needs your input', { kind: 'node', nodeId: 'b' }],
       ['stuck', 'Codex in api is waiting for permission', { kind: 'node', nodeId: 'c' }],
-      ['gates', '2 approval or blocked tasks waiting in the Inbox', { kind: 'inbox' }],
+      ['gates', '2 approval or blocked tasks waiting in the Central chat', { kind: 'inbox' }],
       ['gates', '1 task ready for review', { kind: 'inbox' }],
       ['tests', 'A test run failed', { kind: 'inbox' }],
       ['tests', 'Terminal in api exited with code 2 (2 times)', { kind: 'node', nodeId: 't' }],

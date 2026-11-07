@@ -1,4 +1,6 @@
-// Pushes inbox items to Telegram under the attention policy (F3-a). A sweep, not an event hook,
+// Telegram mirror of inbox items under the attention policy (F3-a): the Central notice for each item
+// is written by central/centralNotices.ts (always on); this sweep sends the matching card to the
+// bound approver chats, once per item, while a Telegram channel is up. A sweep, not an event hook,
 // because gates come from several producers (Claude permission prompts, task reviews, Central) that
 // all end in one `approval` table: one cheap SELECT finds them all. Each item is pushed at most once
 // (`pushed_at`; a snooze clears it so the item pings again when it resurfaces); a held item is

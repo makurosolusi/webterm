@@ -140,7 +140,6 @@ test('the channel runtime uses the ledger row by default, importing <dataDir>/ch
       env: { WEBTERM_TELEGRAM: 'on' } as NodeJS.ProcessEnv,
       ledgerDb: db,
       sender: { intervalMs: 60_000 },
-      subscribe: () => () => {},
     })
     expect(runtime?.store.storePath).toBe('ledger:channel_store')
     expect(runtime?.store.binding('telegram', '42')?.projectId).toBe('p1')

@@ -115,7 +115,7 @@ export function buildBrief(input: BriefInput): Brief {
     if (status === 'blocked') lines.push({ id: `stuck:${id}`, category: 'stuck', text: `${label} is waiting for permission`, target: { kind: 'node', nodeId: id } })
   }
   if (input.inbox && input.inbox.needsYou > 0) {
-    lines.push({ id: 'gates:needs_you', category: 'gates', text: `${plural(input.inbox.needsYou, 'approval or blocked task')} waiting in the Inbox`, target: { kind: 'inbox' } })
+    lines.push({ id: 'gates:needs_you', category: 'gates', text: `${plural(input.inbox.needsYou, 'approval or blocked task')} waiting in the Central chat`, target: { kind: 'inbox' } })
   }
   if (input.inbox && input.inbox.review > 0) {
     lines.push({ id: 'gates:review', category: 'gates', text: `${plural(input.inbox.review, 'task')} ready for review`, target: { kind: 'inbox' } })

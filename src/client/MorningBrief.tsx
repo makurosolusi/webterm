@@ -1,7 +1,7 @@
 // Morning brief card (PLAN F3-e): what happened while you were away, served from the server's
 // cached deterministic brief (src/server/brief). Shown once per visit when the app opens; Dismiss
 // is persisted server-side. ⌘K "Brief: Show morning brief" brings it back. Each line is a link:
-// focus the node, open the Inbox, or open a Diff node for the workspace. Optional (F5-c): an AI paragraph
+// focus the node, open the Central chat on its Needs-you strip, or open a Diff node for the workspace. Optional (F5-c): an AI paragraph
 // over the lines (off by default, server-checked against their counts) and "Continue from yesterday".
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BRIEF_CATEGORIES, briefHeading, type BriefLine, type BriefTarget } from '../server/brief/brief.model'
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useRegisterCommands, type Command } from './commandRegistry'
 import { request } from './inboxTransport'
+import { expandNeedsYou } from './secondarySideBar.store'
 import { ContinueSection, useContinue } from './MorningBriefContinue'
 import { MorningBriefLlmToggle } from './MorningBriefSettings'
 import './MorningBrief.css'
@@ -19,7 +20,6 @@ export const BRIEF_PATH = '/api/brief'
 
 export interface MorningBriefProps {
   onFocusNode: (nodeId: string) => void
-  onOpenInbox: () => void
   onOpenDiff: (workspaceId: string) => void
   /** Opens a workspace after "Continue from yesterday" so its agents resume. */
   onOpenWorkspace?: (workspaceId: string) => void
@@ -32,7 +32,7 @@ const sinceText = (ts: number): string =>
 export function openTarget(target: BriefTarget, props: MorningBriefProps): void {
   if (!target) return
   if (target.kind === 'node') props.onFocusNode(target.nodeId)
-  else if (target.kind === 'inbox') props.onOpenInbox()
+  else if (target.kind === 'inbox') expandNeedsYou()
   else props.onOpenDiff(target.workspaceId)
 }
 

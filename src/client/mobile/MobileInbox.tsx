@@ -1,10 +1,10 @@
 // Inbox on the phone: the same items and the same `/api/approvals/inbox/act` calls as the desktop
-// panel (InboxPanel.items), limited to approve once / deny / reply / snooze. "Always allow" and
+// Central chat (chat/needsYouApi), limited to approve once / deny / reply / snooze. "Always allow" and
 // edits stay on the desktop: a permanent rule is not something to grant from a lock screen (K4).
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { INBOX_ITEMS_PATH, impactText, snoozeUntil, type UnifiedItem } from '../InboxPanel.items'
+import { INBOX_ITEMS_PATH, impactText, snoozeUntil, type UnifiedItem } from '../chat/needsYouApi'
 import { inboxErrorMessage } from '../inboxApi'
 import { request } from '../inboxTransport'
 import { usePoll } from './mobile.poll'

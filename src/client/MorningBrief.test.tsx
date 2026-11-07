@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import MorningBrief, { openTarget, type MorningBriefProps } from './MorningBrief'
 import { listCommands } from './commandRegistry'
+import { reloadSideBarFromStorage, setNeedsYouExpanded, setSideBar, useNeedsYouExpanded, useSideBar } from './secondarySideBar.store'
 import type { BriefResponse } from '../server/brief/brief.service'
 import type { HandoffWorkspace } from './MorningBriefContinue'
 
@@ -20,7 +21,7 @@ const brief = (over: Partial<BriefResponse> = {}): BriefResponse => ({
   since: T0, generatedAt: T0 + 1, headSeq: 3, visitStartedAt: T0 + 1, dismissed: false, llm: false,
   lines: [
     { id: 'stuck:a', category: 'stuck', text: 'Claude in api needs your input', target: { kind: 'node', nodeId: 'a' } },
-    { id: 'gates:needs_you', category: 'gates', text: '1 approval or blocked task waiting in the Inbox', target: { kind: 'inbox' } },
+    { id: 'gates:needs_you', category: 'gates', text: '1 approval or blocked task waiting in the Central chat', target: { kind: 'inbox' } },
     { id: 'checkpoints:w1', category: 'checkpoints', text: '2 checkpoints in api', target: { kind: 'diff', workspaceId: 'w1' } },
     { id: 'cost:total', category: 'cost', text: '1.0k input / 10 output tokens across 1 call, $0.01', target: null },
   ],
@@ -48,21 +49,30 @@ beforeEach(() => {
     return ok(briefs.shift() ?? brief())
   })
   vi.stubGlobal('fetch', fetchMock)
-  props = { onFocusNode: vi.fn(), onOpenInbox: vi.fn(), onOpenDiff: vi.fn(), onOpenWorkspace: vi.fn() }
+  props = { onFocusNode: vi.fn(), onOpenDiff: vi.fn(), onOpenWorkspace: vi.fn() }
+  setSideBar({ open: false, view: 'central' })
+  setNeedsYouExpanded(false)
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); reloadSideBarFromStorage() })
+
+/** Side bar + strip state as one string, so a test reads where the gates line went. */
+function SideBarProbe(): React.JSX.Element {
+  const { open, view } = useSideBar()
+  return <output data-testid="side">{`${open ? view : 'closed'}:${useNeedsYouExpanded() ? 'expanded' : 'collapsed'}`}</output>
+}
 
 test('shows the card on open with headings, and each line opens its target', async () => {
   respond(brief())
-  render(<MorningBrief {...props} />)
+  render(<><MorningBrief {...props} /><SideBarProbe /></>)
   expect(await screen.findByRole('dialog', { name: 'Morning brief' })).toBeTruthy()
   expect(calls('/api/brief')).toHaveLength(1)
+  expect(screen.getByTestId('side').textContent).toBe('closed:collapsed')
   expect(screen.getByText('Needs you')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Claude in api needs your input' }))
-  fireEvent.click(screen.getByRole('button', { name: /waiting in the Inbox/ }))
+  fireEvent.click(screen.getByRole('button', { name: /waiting in the Central chat/ }))
+  expect(screen.getByTestId('side').textContent).toBe('chat:expanded') // the Needs-you strip, not an Inbox
   fireEvent.click(screen.getByRole('button', { name: '2 checkpoints in api' }))
   expect(props.onFocusNode).toHaveBeenCalledWith('a')
-  expect(props.onOpenInbox).toHaveBeenCalledTimes(1)
   expect(props.onOpenDiff).toHaveBeenCalledWith('w1')
   expect(screen.queryByRole('button', { name: /tokens/ })).toBeNull() // usage line has no target
 })

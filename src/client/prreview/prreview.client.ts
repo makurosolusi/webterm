@@ -7,13 +7,13 @@ export const PRREVIEW_POLL_MS = 3000
 
 export const PRREVIEW_TEXT = {
   title: 'Pull request review',
-  intro: 'Claude Code reviews the PR head in a fresh read-only worktree. Findings land in the Inbox as a draft; nothing is posted to GitHub until you click Post review.',
+  intro: 'Claude Code reviews the PR head in a fresh read-only worktree. Findings land as a draft in the Needs-you list of the Central chat; nothing is posted to GitHub until you click Post review.',
   prLabel: 'Pull request number',
   review: (pr: string) => (pr ? `Review PR #${pr}` : 'Review PR'),
   noGh: 'Install the GitHub CLI (gh) to review pull requests.',
   post: 'Post review',
   posted: (url: string) => `Review posted: ${url}`,
-  status: { running: 'Reviewing…', drafted: 'Draft in the Inbox', clean: 'No findings', failed: 'Failed' },
+  status: { running: 'Reviewing…', drafted: 'Draft in the Central chat', clean: 'No findings', failed: 'Failed' },
   draft: (d: DraftView) => `PR #${d.pr}: ${d.findings} finding${d.findings === 1 ? '' : 's'}, ${d.inline} inline`,
 } as const
 

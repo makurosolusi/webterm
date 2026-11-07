@@ -1,4 +1,4 @@
-// Approval dialog for InboxPanel. Split out so the panel stays inside the repo's file-size
+// Approval dialog for the Needs-you task review (`chat/needsYouReview`). Split out so the hook stays inside the repo's file-size
 // budget, and so the consent surface is one reviewable unit.
 //
 // It renders no decisions by itself: every button calls back. The caller owns the challenge and

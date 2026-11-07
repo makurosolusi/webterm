@@ -32,21 +32,6 @@ export type AgentAction = 'relay' | 'close'
 /** Result of an agent action: it ran, or the server turned it into an approval card. */
 export type AgentActionResult = { status: 'done' } | { status: 'needs_approval'; approvalId: string }
 
-/** One pending approval. `summary` and `args` are produced by the server from the real call. */
-export interface ApprovalCard {
-  id: string
-  tool: string
-  tier: Tier
-  summary: string
-  args: { key: string; value: string }[]
-  digest: string
-  nonce: string
-  expiresAt: number
-  projectId: string
-  /** Server-chosen phrase for R3; the client falls back to its default. */
-  confirmPhrase?: string
-}
-
 export interface SkillReviewRow {
   record: SkillRecord
   lint: { ok: boolean; findings: string[] }
@@ -69,8 +54,6 @@ export interface CentralControlClient {
   halt(reason: string): Promise<void>
   listAgents(offset: number, signal?: AbortSignal): Promise<AgentRow[]>
   agentAction(id: string, action: AgentAction, message?: string): Promise<AgentActionResult>
-  listApprovals(signal?: AbortSignal): Promise<ApprovalCard[]>
-  decide(card: ApprovalCard, approve: boolean): Promise<void>
   listSkills(signal?: AbortSignal): Promise<SkillReviewRow[]>
   approveSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>

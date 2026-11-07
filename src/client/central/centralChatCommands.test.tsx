@@ -6,7 +6,9 @@ import ChatPanel from '../ChatPanel'
 import type { ChatClient, ChatConversation } from '../chat/chatTypes'
 import type { StreamFactory } from '../chat/chatConversation'
 import { InboxApiError } from '../inboxTypes'
-import { reloadSideBarFromStorage, setSideBar, useSideBar } from '../secondarySideBar.store'
+import { openCentralTab, reloadSideBarFromStorage, setNeedsYouExpanded, setSideBar, useSideBar, type CentralTab } from '../secondarySideBar.store'
+import { GATE, serveLedger } from '../chat/needsYou.fixtures'
+import { resetNeedsYou } from '../chat/needsYouApi'
 import CentralControlPanel from './CentralControlPanel'
 import { fakeClient } from './centralFixtures.testutil'
 
@@ -43,6 +45,8 @@ let host: HTMLElement
 beforeEach(() => {
   localStorage.clear()
   reloadSideBarFromStorage()
+  resetNeedsYou()
+  setNeedsYouExpanded(false)
   skills.list.mockReset()
   skills.list.mockResolvedValue([{ name: 'webterm-demo', description: 'Summarize project status' }])
   host = document.createElement('div')
@@ -113,14 +117,25 @@ describe('Central chat / menu', () => {
     expect(client.sendMessage).not.toHaveBeenCalled()
   })
 
-  it('/approvals opens the Central tab on Approvals', async () => {
-    const { client, control } = await setup()
-    setSideBar({ open: false, view: 'chat' })
+  it('/approvals opens the side bar on Chat with the Needs-you strip expanded, not a Central tab', async () => {
+    serveLedger({ items: [GATE], tasks: [] })
+    const { client } = await setup()
+    setSideBar({ open: false, view: 'central' })
+    const head = await screen.findByRole('button', { name: /1 needs you/ })
+    expect(head.getAttribute('aria-expanded')).toBe('false')
     await send('/approvals')
-    expect(screen.getByTestId('sidebar').textContent).toBe('central')
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Approvals' }).getAttribute('aria-selected')).toBe('true'))
-    await waitFor(() => expect(control.listApprovals).toHaveBeenCalled())
+    expect(screen.getByTestId('sidebar').textContent).toBe('chat')
+    expect(head.getAttribute('aria-expanded')).toBe('true')
+    expect(await screen.findByText('Run migration')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Approvals' })).toBeNull()
     expect(client.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('a request for the removed Approvals tab falls back to Control', async () => {
+    await setup()
+    fireEvent.click(screen.getByRole('tab', { name: 'Memory' }))
+    act(() => openCentralTab('approvals' as CentralTab)) // test-only: a stale request from an older build
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Control' }).getAttribute('aria-selected')).toBe('true'))
   })
 
   it('/halt asks for the kill-switch confirmation and does not halt by itself', async () => {
@@ -185,12 +200,12 @@ describe('Central chat / menu', () => {
     expect(names).not.toContain('/webterm-demo')
   })
 
-  it('without the Central panel, panel shortcuts and skills are not offered', async () => {
+  it('without the Central panel, panel shortcuts and skills are not offered; /approvals still is', async () => {
     await setup(false)
     type('/')
     const names = await options()
     expect(names).toContain('/projects')
-    expect(names).not.toContain('/approvals')
+    expect(names).toContain('/approvals') // the Needs-you strip works with Central off
     expect(names).not.toContain('/halt')
     expect(skills.list).not.toHaveBeenCalled()
   })
