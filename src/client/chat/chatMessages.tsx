@@ -4,6 +4,7 @@
 // goes through the shared sanitizer (`../markdown`), never raw HTML. Auto-scroll only sticks when
 // the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
 import { useEffect, useRef, useState } from 'react'
+import { ChatApprovalCard } from './chatApprovalCard'
 import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
@@ -99,9 +100,7 @@ function PartView(props: { part: ChatPart; assistant: boolean; imageUrl?: ImageU
   const { part, assistant } = props
   if (part.type === 'image' || part.type === 'file') return <AttachmentView part={part} imageUrl={props.imageUrl} />
   if (part.type === 'tool') return <ToolCard part={part} />
-  if (part.type === 'approval') {
-    return <div className="chat-approval-note">Approval requested ({part.state})</div>
-  }
+  if (part.type === 'approval') return <ChatApprovalCard approvalId={part.approvalId} partState={part.state} />
   if (part.type === 'error') return <div className="chat-error-inline" role="note">{clip(part.message, MAX_REASON)}</div>
   if (part.type === 'notice') return <div className="chat-notice-inline" role="note">{clip(part.text, MAX_REASON)}</div>
   if (part.type !== 'text') return null

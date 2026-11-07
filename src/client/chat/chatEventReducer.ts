@@ -172,6 +172,26 @@ function notice(state: ChatState, event: ChatEvent): ChatState {
   return { ...state, messages: upsert(state.messages, { ...target, parts: [{ type: 'notice', text }, ...target.parts] }) }
 }
 
+/** `approval.*` frame state → the part's (tool card) state vocabulary the server persists. */
+const APPROVAL_STATE: Record<string, ChatToolState> = {
+  pending: 'awaiting_approval', approved: 'succeeded', rejected: 'denied', expired: 'cancelled',
+}
+
+/** Live gate state: updates the part wherever it is, or adds it to the turn's reply. */
+function approval(state: ChatState, event: ChatEvent): ChatState {
+  const payload = payloadOf(event)
+  const approvalId = textField(payload.approvalId)
+  const next = APPROVAL_STATE[textField(payload.state) ?? '']
+  if (!approvalId || !next) return state
+  const part: ChatPart = { type: 'approval', approvalId, state: next }
+  const owner = state.messages.find((m) => m.parts.some((p) => p.type === 'approval' && p.approvalId === approvalId))
+  const target = owner ?? assistantTarget(state, event)
+  const parts = owner
+    ? target.parts.map((p) => (p.type === 'approval' && p.approvalId === approvalId ? part : p))
+    : [...target.parts, part]
+  return { ...state, messages: upsert(state.messages, { ...target, parts }) }
+}
+
 function applyOnce(state: ChatState, event: ChatEvent): ChatState {
   switch (event.type) {
     case 'message.created':
@@ -190,6 +210,9 @@ function applyOnce(state: ChatState, event: ChatEvent): ChatState {
       return turnError(state, event)
     case 'notice':
       return notice(state, event)
+    case 'approval.requested':
+    case 'approval.updated':
+      return approval(state, event)
     case 'done':
       return {
         ...state,

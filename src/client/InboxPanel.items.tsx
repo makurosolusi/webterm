@@ -9,56 +9,22 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Textarea } from '@/components/ui/textarea'
-import { APPROVAL_PATH, inboxErrorMessage, isAbortError } from './inboxApi'
+import { inboxErrorMessage, isAbortError } from './inboxApi'
 import { InboxPanelError } from './inboxPanelChrome'
 import { request } from './inboxTransport'
+import {
+  INBOX_ITEMS_PATH, approveLabel, impactText, shownAsCard as shownHere, snoozeUntil,
+  type Action, type ActionType, type UnifiedItem, type UnifiedKind as Kind,
+} from './chat/needsYouApi'
+import { ItemDraft } from './chat/chatApprovalCard'
 
-export const INBOX_ITEMS_PATH = `${APPROVAL_PATH}/inbox`
+// Moved to `chat/needsYouApi` (the Central chat hub); re-exported until this file is deleted.
+export { INBOX_ITEMS_PATH, approveLabel, impactText, snoozeUntil, type UnifiedItem }
+
 const POLL_MS = 2000
-const HOUR_MS = 3_600_000
-const PERMISSION_KIND = 'agent.permission'
-
-type Kind = 'notify' | 'question' | 'review' | 'gate'
-type ActionType = 'approve' | 'deny' | 'edit' | 'reply' | 'ignore' | 'snooze' | 'always'
-interface Impact { what: string; tier: string; rewindable: boolean }
-export interface UnifiedItem {
-  id: string
-  kind: Kind
-  source: string
-  approvalKind: string | null
-  title: string
-  body: string | null
-  impact: Impact | null
-  args: unknown
-  count: number
-  actions: ActionType[]
-}
-type Action = { type: ActionType; args?: unknown; text?: string; until?: number }
 
 const ICON: Record<Kind, string> = { gate: 'shield', question: 'question', review: 'git-pull-request', notify: 'bell' }
 const KIND_LABEL: Record<Kind, string> = { gate: 'Needs approval', question: 'Question', review: 'Review', notify: 'Update' }
-/** Other ledger approvals have their own consent dialog below; only Claude prompts and inbox gates render here. */
-const shownHere = (i: UnifiedItem): boolean => !(i.kind === 'gate' && i.source === 'approval' && i.approvalKind !== PERMISSION_KIND)
-
-/** A PR review draft (src/server/prreview) is approved by posting it, so its button says what happens. */
-export const approveLabel = (item: Pick<UnifiedItem, 'kind' | 'source'>): string =>
-  item.source === 'prreview' ? 'Post review' : item.kind === 'review' ? 'Accept' : 'Approve once'
-
-export function impactText(impact: Impact): string {
-  return `${impact.what} · ${impact.tier} · ${impact.rewindable ? 'rewindable from a checkpoint' : 'cannot be rewound'}`
-}
-
-/** Snooze presets: an hour, or tomorrow 09:00 local time. */
-export function snoozeUntil(choice: '1h' | 'tomorrow', now: number): number {
-  if (choice === 'tomorrow') {
-    const d = new Date(now)
-    d.setDate(d.getDate() + 1)
-    d.setHours(9, 0, 0, 0)
-    return d.getTime()
-  }
-  return now + HOUR_MS
-}
 
 interface ItemsPage { items?: UnifiedItem[]; nextCursor?: string | null }
 
@@ -176,7 +142,7 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
               {can('ignore') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(item.id, { type: 'ignore' })}>{item.kind === 'notify' ? 'Dismiss' : 'Ignore'}</Button>}
               {item.impact && <span className="inbox-item__desc" style={{ flexBasis: '100%' }}>{impactText(item.impact)}</span>}
               {item.body && <span className="inbox-item__desc" style={{ flexBasis: '100%', whiteSpace: 'pre-wrap' }}>{item.body}</span>}
-              {editing && <Draft key={editing.mode} draft={editing} busy={busy} onText={(text) => setDraft({ ...editing, text })} onCancel={() => setDraft(null)}
+              {editing && <ItemDraft key={editing.mode} draft={editing} busy={busy} onText={(text) => setDraft({ ...editing, text })} onCancel={() => setDraft(null)}
                 onSubmit={() => {
                   if (editing.mode === 'reply') return act(item.id, { type: 'reply', text: editing.text })
                   try { act(item.id, { type: 'edit', args: JSON.parse(editing.text) as unknown }) } catch { setError('The edited arguments are not valid JSON.') }
@@ -191,17 +157,5 @@ export function InboxItems(props: { pollMs?: number; now?: () => number }): Reac
         </Button>
       )}
     </section>
-  )
-}
-
-function Draft(props: { draft: { mode: 'edit' | 'reply'; text: string }; busy: boolean; onText(t: string): void; onSubmit(): void; onCancel(): void }) {
-  const reply = props.draft.mode === 'reply'
-  return (
-    <span style={{ flexBasis: '100%', display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-      <Textarea aria-label={reply ? 'Reply to the agent' : 'Edit arguments'} rows={reply ? 2 : 4} style={{ flex: 1, fontFamily: reply ? undefined : 'monospace' }}
-        value={props.draft.text} onChange={(e) => props.onText(e.target.value)} />
-      <Button size="sm" disabled={props.busy || props.draft.text.trim() === ''} onClick={props.onSubmit}>{reply ? 'Send reply' : 'Approve with edits'}</Button>
-      <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onCancel}>Cancel</Button>
-    </span>
   )
 }
