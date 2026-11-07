@@ -1,5 +1,6 @@
 import { callFingerprint, createMemoryReceiptLog, type Receipt, type ReceiptLog, runOnce } from '../../capability/capability.receipt'
 import { checkpointBeforeAction } from '../../checkpoint/checkpoint.service'
+import { type ApprovalStatus, getApproval } from '../../ledger/ledgerApproval'
 import { auditTool } from './toolAudit'
 import { type ControlGuard, type ExecResult, type ToolCtx, type ToolDef, type ToolInput, type ToolResult, defEnabled, tierWithin } from './toolTypes'
 import { validateToolInput } from './toolValidate'
@@ -48,23 +49,43 @@ async function runHandler(def: ToolDef, ctx: ToolCtx, args: ToolInput, projectId
 }
 
 /** Codes meaning "not allowed" rather than "went wrong"; they map to receipt outcome `denied`. */
-const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open'])
+const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'approval_rejected', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open'])
 /** What the caller can do next for codes that have one obvious follow-up. */
 const NEXT: Record<string, string> = {
   unknown_tool: 'cap.search {"query":"<words>"} lists the tools that exist',
   invalid_shape: 'cap.describe {"name":"<tool>"} shows the exact input schema',
-  approval_required: 'wait for a human approval, then retry with its approvalId',
+  approval_required: 'an approval card is shown in the Central chat; tell the human, then retry the same call after they approve',
+  approval_rejected: 'the human rejected this; do not retry it, tell them',
   tier_denied: 'propose it instead; a human approves higher tiers',
+}
+/** `approval_required` next step by the card's ledger status, so the model never points at a dead card. */
+const APPROVAL_NEXT: Partial<Record<ApprovalStatus, string>> = {
+  expired: 'the approval card expired before a decision; retry the same call to put a fresh card in the chat',
+  rejected: NEXT['approval_rejected'],
+  approved: 'the approval was already used or no longer matches this call; retry the same call for a fresh card',
+}
+
+const STATUSES: readonly string[] = ['pending', 'approved', 'rejected', 'expired']
+
+/** Card status of an approval-gated result: the handler's own, else the ledger status of the approvalId the call named. */
+function approvalStatusOf(ctx: ToolCtx, result: ExecResult, args: ToolInput): ApprovalStatus | undefined {
+  const own = result.data?.approvalStatus
+  if (typeof own === 'string' && STATUSES.includes(own)) return own as ApprovalStatus
+  if (result.ok || result.code !== 'approval_required') return undefined
+  const named = typeof result.data?.approvalId === 'string' ? result.data.approvalId : args.approvalId
+  if (typeof named !== 'string' || named === '') return undefined
+  return getApproval({ db: ctx.db, now: ctx.now }, named)?.status
 }
 
 /** Maps an exec result to the uniform receipt; evidence is the audit event the gate itself wrote. */
-export function toReceipt(result: ExecResult, auditSeq: number): Receipt {
+export function toReceipt(result: ExecResult, auditSeq: number, approvalStatus?: ApprovalStatus): Receipt {
   const detail = result.ok ? 'ok' : (result.code ?? 'error')
   const outcome = result.ok ? 'ok' : DENIED.has(detail) ? 'denied' : 'error'
   const keys = result.data ? Object.keys(result.data) : []
+  const next = result.ok ? null : (detail === 'approval_required' && approvalStatus ? APPROVAL_NEXT[approvalStatus] : undefined) ?? NEXT[detail] ?? null
   return {
-    outcome, detail, next: result.ok ? null : (NEXT[detail] ?? null), operationId: null,
-    evidence: { tool: result.tool, auditSeq, ...(result.projectId ? { projectId: result.projectId } : {}), ...(keys.length ? { dataKeys: keys } : {}) },
+    outcome, detail, next, operationId: null,
+    evidence: { tool: result.tool, auditSeq, ...(result.projectId ? { projectId: result.projectId } : {}), ...(keys.length ? { dataKeys: keys } : {}), ...(approvalStatus ? { approvalStatus } : {}) },
   }
 }
 
@@ -83,7 +104,7 @@ export async function execToolReceipt(ctx: ToolCtx, name: string, args: ToolInpu
   const receipt = await runOnce(options.log ?? sharedLog, options.operationId, callFingerprint(name, { conversationId: ctx.conversationId, args }), async () => {
     const run = await execAudited(ctx, name, args, options)
     result = run.result
-    return toReceipt(run.result, run.auditSeq)
+    return toReceipt(run.result, run.auditSeq, approvalStatusOf(ctx, run.result, args))
   })
   return { receipt, ...(result ? { result } : {}) }
 }

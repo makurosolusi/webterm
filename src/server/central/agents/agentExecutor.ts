@@ -2,7 +2,8 @@
 // those come from the injected `AgentHost`. Guard and host are injected so tests use fakes.
 import type { Database } from 'bun:sqlite'
 import { appendEvent } from '../../ledger/ledgerEvent'
-import { requestApproval } from '../../ledger/ledgerApproval'
+import { consumeApproval, getApproval, requestApproval } from '../../ledger/ledgerApproval'
+import { execWrite, getRow } from '../../ledger/ledgerCore'
 import type { AgentRecord, AgentRole, AgentRunner, AgentState, ControlGuard, Tier } from '../contracts'
 import type { ToolResult } from '../tools/toolTypes'
 import { AGENT_TRANSITIONS } from '../contracts'
@@ -96,6 +97,8 @@ export interface AgentExecutor {
   spawn(input: SpawnInput): Promise<ToolResult>
   /** Starts an `approval_pending` agent after a human approved its card (never reachable from a tool). */
   resume(agentId: string): Promise<ToolResult>
+  /** Cancels an `approval_pending` agent whose card a human rejected (resume sweep). */
+  reject(agentId: string): ToolResult
   prompt(agent: AgentRecord, text: string, mode: 'steer' | 'followup'): Promise<ToolResult>
   close(agent: AgentRecord, reason: string, force: boolean): Promise<ToolResult>
   read(agent: AgentRecord, tail: number): Promise<ToolResult>
@@ -180,23 +183,69 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     }
   }
 
+  /** Spawn card ids of one agent: `agent-<id>`, then `agent-<id>-2`, ... each time an earlier card expired. */
+  function nextCardId(agent: AgentRecord): string {
+    const base = `agent-${agent.id}`
+    if (!agent.approvalId) return base
+    const m = agent.approvalId.match(/-(\d+)$/)
+    let n = agent.approvalId === base ? 2 : m ? Number(m[1]) + 1 : 2
+    while (getApproval({ db, now }, `${base}-${n}`)) n++
+    return `${base}-${n}`
+  }
+
   async function pendApproval(agent: AgentRecord): Promise<ToolResult> {
+    const id = nextCardId(agent)
     let challenge: { id: string }
     try {
-      challenge = requestApproval({ db, now }, { id: `agent-${agent.id}`, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(agent.taskId ? { taskId: agent.taskId } : {}) })
+      challenge = requestApproval({ db, now }, { id, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(agent.taskId ? { taskId: agent.taskId } : {}) })
     } catch (err) {
       // Without a card the agent must not stay launchable: close the row and surface a code, not the message.
       tryMove(agent.id, 'cancelled', { reason: `approval_request_failed:${err instanceof Error ? err.name : 'unknown'}` })
       return { ok: false, code: 'invalid_request' }
     }
-    const pending = store.transition(agent.id, 'approval_pending', { approvalId: challenge.id })
+    let pending: AgentRecord
+    if (agent.state === 'approval_pending') {
+      // Re-pend after an expired card: the state machine has no self edge, so only the card id moves.
+      if (execWrite(db, "UPDATE central_agents SET approval_id = ?, last_event_at = ? WHERE id = ? AND state = 'approval_pending'", challenge.id, now(), agent.id) !== 1) {
+        return snapshot(store.get(agent.id) ?? agent, { reused: true })
+      }
+      pending = store.get(agent.id) as AgentRecord
+    } else {
+      pending = store.transition(agent.id, 'approval_pending', { approvalId: challenge.id })
+    }
     audit(pending, 'spawn.approval', { approvalId: challenge.id })
-    return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id } }
+    return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id, approvalStatus: 'pending' } }
+  }
+
+  const rejected = (agent: AgentRecord): ToolResult => ({ ok: false, code: 'approval_rejected', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'rejected' } })
+
+  function rejectPending(agent: AgentRecord): ToolResult {
+    const cancelled = tryMove(agent.id, 'cancelled', { reason: 'approval_rejected' })
+    if (cancelled) audit(cancelled, 'spawn.rejected', { approvalId: agent.approvalId })
+    return rejected(cancelled ?? agent)
+  }
+
+  /**
+   * A retry of a spawn parked on a card answers from the ledger, never from the stored id alone:
+   * pending -> same card; approved -> consume and start; rejected -> cancelled; expired -> a fresh card.
+   */
+  async function settlePending(agent: AgentRecord): Promise<ToolResult> {
+    const status = agent.approvalId ? getApproval({ db, now }, agent.approvalId)?.status ?? 'expired' : 'expired'
+    if (status === 'pending') return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'pending' } }
+    if (status === 'rejected') return rejectPending(agent)
+    if (status === 'expired') return pendApproval(agent)
+    const digest = getRow(db, 'SELECT d.action_digest AS digest FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?', agent.approvalId)?.['digest']
+    // Single use: when the resume sweep consumed it first, that sweep starts the agent; report where it is.
+    if (typeof digest !== 'string' || !consumeApproval({ db, now }, agent.approvalId as string, { digest })) {
+      return snapshot(store.get(agent.id) ?? agent, { reused: true, approvalStatus: 'approved' })
+    }
+    const started = await launch(agent)
+    return { ...started, data: { ...started.data, approvalStatus: 'approved' } }
   }
 
   /** Adds kind (+ custom definition hash) to a spawn result so the audit trail ties a spawn to one definition. */
   const withDefHash = (r: ToolResult, kind: string): ToolResult => {
-    if (!r.ok && r.code !== 'approval_required') return r
+    if (!r.ok && r.code !== 'approval_required' && r.code !== 'approval_rejected') return r
     const defHash = host.defHashOf?.(kind)
     return { ...r, data: { ...r.data, kind, ...(defHash ? { defHash } : {}) } }
   }
@@ -216,7 +265,8 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const existing = store.getByReqId(input.reqId)
     if (existing) {
       if (existing.projectId !== input.projectId || existing.kind !== input.kind || existing.role !== input.role || existing.taskId !== (input.taskId ?? null)) return { ok: false, code: 'request_conflict' }
-      if (existing.state === 'approval_pending') return { ok: false, code: 'approval_required', data: { agentId: existing.id, approvalId: existing.approvalId } }
+      if (existing.state === 'approval_pending') return settlePending(existing)
+      if (existing.state === 'cancelled' && existing.endReason === 'approval_rejected') return rejected(existing)
       if (existing.state !== 'requested') return snapshot(existing, { reused: true })
       // Crash remnant before the launch claim: judge it again, the earlier verdict is not trusted.
       const again = await gate(input.projectId, 'agent.spawn', tier)
@@ -250,6 +300,10 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     async resume(agentId) {
       const agent = store.get(agentId)
       return agent?.state === 'approval_pending' ? launch(agent) : { ok: false, code: 'not_pending' }
+    },
+    reject(agentId) {
+      const agent = store.get(agentId)
+      return agent?.state === 'approval_pending' ? rejectPending(agent) : { ok: false, code: 'not_pending' }
     },
     async prompt(agent, text, mode) {
       if (agent.runner !== 'pty' || !agent.nodeId) return { ok: false, code: 'prompt_unsupported' }

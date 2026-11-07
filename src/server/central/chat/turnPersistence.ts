@@ -9,7 +9,7 @@ import { allRows, execWrite, getRow } from '../../ledger/ledgerCore'
 import { projectRepository } from '../../ledger/ledgerEntity'
 import {
   type CentralEventType, conversationIdForScope, isActiveTurnStatus,
-  scopeFromConversationId, type MessagePart, type TurnStatus,
+  scopeFromConversationId, type MessagePart, type ToolCardState, type TurnStatus,
 } from '../conversationModel'
 import { PERSIST_LIMITS, redactValue } from '../../redactSecrets'
 import { brokerSecretValues, maskValue } from '../runtime/runtimeEvents'
@@ -22,6 +22,7 @@ import type { RuntimeResult } from '../runtime/centralRuntime'
 import { lookupWorkspace } from '../workspaceLookup'
 import { CentralChatError } from './chatErrors'
 import type { StreamHub } from './streamHub'
+import { currentPartState, registerApprovalStream } from './approvalPublish'
 import type { RunState } from './turnEvents'
 
 export interface StoredMessage {
@@ -53,6 +54,8 @@ export function recordEvent(
   db: Database, stream: StreamHub, conversationId: string, type: CentralEventType,
   payload: unknown, turnId: string | null, messageId: string | null, now: () => number
 ): void {
+  // A hub that carries turns also carries the approval frames of its conversations.
+  registerApprovalStream(db, stream, now)
   const event = appendConversationEvent(db, { conversationId, type, turnId, messageId, payload, now: now() })
   stream.publish(conversationId, event)
 }
@@ -120,7 +123,9 @@ export function appendAssistantMessage(
 /** Reason shown on a failed reply when the runtime gave none (it ended with an error code only). */
 const FAILED_FALLBACK = 'The central agent stopped with an error.'
 
-function assistantParts(state: RunState, text: string, failure: { code: string; message: string } | null): MessagePart[] {
+function assistantParts(
+  state: RunState, text: string, failure: { code: string; message: string } | null, cardState: (approvalId: string) => ToolCardState
+): MessagePart[] {
   const parts: MessagePart[] = state.notices.map((notice) => ({ type: 'notice' as const, text: notice }))
   if (text !== '') parts.push({ type: 'text', text })
   for (const tool of state.tools.values()) {
@@ -129,8 +134,8 @@ function assistantParts(state: RunState, text: string, failure: { code: string; 
       ...(tool.args === undefined ? {} : { args: tool.args }),
       ...(tool.result === undefined ? {} : { result: tool.result }),
     })
-    // The chat's approval note; the decision itself happens on the ledger card (inbox / Telegram).
-    if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: 'awaiting_approval' })
+    // The chat's approval card, in the state the ledger has now (it may be decided before the turn ends).
+    if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: cardState(tool.approvalId) })
   }
   if (failure) parts.push({ type: 'error', ...failure })
   return parts
@@ -154,7 +159,7 @@ export function finalizeTurn(
   execWrite(
     db, 'UPDATE central_message SET parts_json = ?, state = ? WHERE id = ?',
     // Masked again as a whole: a broker value split across two text deltas only reassembles here.
-    JSON.stringify(redactValue(maskValue(assistantParts(state, text, failure), brokerSecretValues()), PERSIST_LIMITS)),
+    JSON.stringify(redactValue(maskValue(assistantParts(state, text, failure, (id) => currentPartState(db, id, now)), brokerSecretValues()), PERSIST_LIMITS)),
     status === 'succeeded' ? 'complete' : status, assistantId
   )
   const turn = updateTurn(db, {
