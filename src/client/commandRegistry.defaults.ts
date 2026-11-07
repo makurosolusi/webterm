@@ -41,7 +41,6 @@ export interface AppCommandDeps {
   /** Maximize/restore the focused (or the one selected) node inside the canvas area. */
   toggleMaximizeNode: () => void
   toggleSessions: () => void
-  toggleInbox: () => void
   toggleChat: () => void
   toggleSecondarySideBar: () => void
   toggleBoard: () => void
@@ -62,7 +61,6 @@ export function appCommands(d: AppCommandDeps): Command[] {
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
     { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },
     { id: 'view.sessions', label: 'View: Toggle Sessions', run: d.toggleSessions },
-    { id: 'view.inbox', label: 'View: Toggle Inbox', run: d.toggleInbox },
     { id: 'view.chat', label: 'View: Toggle Chat', run: d.toggleChat },
     { id: 'view.secondarySideBar', label: 'View: Toggle Secondary Side Bar (Chat, Central)', defaultKey: 'Mod+Alt+B', run: d.toggleSecondarySideBar },
     { id: 'view.board', label: 'View: Toggle Board', run: d.toggleBoard },

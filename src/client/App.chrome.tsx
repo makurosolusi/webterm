@@ -9,13 +9,12 @@ import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
 import { useTabLayout } from './tabLayout.store'
 import { toggleLayoutMode } from './tabLayout.commands'
-import { toggleBottomView } from './bottomPanelHost'
-import { toggleSideBarView, useSideBar } from './secondarySideBar.store'
+import { toggleChatView, toggleSideBarView, useSideBar } from './secondarySideBar.store'
 import { SecondarySideBarToggle, shownSideBarView } from './App.secondarySideBar'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
-type PassThrough = 'onAddTerminal' | 'onAddBrowser' | 'onAddAgent' | 'onCreateWorkspace' | 'onUndo' | 'onRedo' | 'canUndo' | 'canRedo' | 'inboxUnread' | 'agentSummary' | 'extraStatusItems'
+type PassThrough = 'onAddTerminal' | 'onAddBrowser' | 'onAddAgent' | 'onCreateWorkspace' | 'onUndo' | 'onRedo' | 'canUndo' | 'canRedo' | 'needsYouCount' | 'agentSummary' | 'extraStatusItems'
 
 export interface AppDockProps extends Pick<DockProps, PassThrough> {
   vp: CanvasViewport
@@ -27,8 +26,6 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
   setBoard: Toggle
   sessionsOpen: boolean
   setSessionsOpen: Toggle
-  inboxOpen: boolean
-  setInboxOpen: (open: boolean) => void
   locked: boolean
   setLocked: Toggle
   cleanView: boolean
@@ -39,7 +36,7 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
 
 /** Dock wired to App's state: its toggles, canvas viewport controls, and status-bar chips. */
 export default function AppDock({
-  vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
+  vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
 }: AppDockProps) {
   const side = useSideBar()
   const sideShown = side.open ? shownSideBarView(side.view, centralEnabled) : null
@@ -56,10 +53,8 @@ export default function AppDock({
       boardOpen={board}
       sessionsOpen={sessionsOpen}
       onToggleSessions={() => setSessionsOpen((v) => !v)}
-      inboxOpen={inboxOpen}
-      onToggleInbox={() => toggleBottomView('inbox', inboxOpen, setInboxOpen)}
       chatOpen={sideShown === 'chat'}
-      onToggleChat={() => toggleSideBarView('chat')}
+      onToggleChat={() => toggleChatView(pass.needsYouCount ?? 0)}
       centralOpen={sideShown === 'central'}
       onToggleCentral={centralEnabled ? () => toggleSideBarView('central') : undefined}
       zoomPct={Math.round(vp.zoom * 100)}

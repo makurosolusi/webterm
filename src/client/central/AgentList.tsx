@@ -1,5 +1,5 @@
 // Central-managed agents with relay/close. Both actions may come back as an approval request
-// (R2 on a user-owned agent); the decision itself happens in the Approvals tab.
+// (R2 on a user-owned agent); the decision itself happens in the Central chat's Needs-you list.
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
@@ -8,14 +8,13 @@ import { CL } from './centralLabels'
 import { AGENTS_OFF, centralControlApi } from './centralControlApi'
 import type { AgentAction, AgentRow, CentralControlClient } from './centralControlTypes'
 import { centralErrorMessage, usePaged } from './centralLoad'
+import { refreshNeedsYou } from '../chat/needsYouApi'
 
 export interface AgentListProps {
   client?: CentralControlClient
-  /** Called when an action became an approval, so the host can refresh the Approvals tab. */
-  onApprovalRequested?: () => void
 }
 
-export default function AgentList({ client = centralControlApi, onApprovalRequested }: AgentListProps) {
+export default function AgentList({ client = centralControlApi }: AgentListProps) {
   const agents = usePaged((offset, signal) => client.listAgents(offset, signal))
   const [relayFor, setRelayFor] = useState<string | null>(null)
   const [text, setText] = useState('')
@@ -27,7 +26,7 @@ export default function AgentList({ client = centralControlApi, onApprovalReques
       const res = await client.agentAction(row.id, action, message)
       if (res.status === 'needs_approval') {
         setNote({ ok: true, text: CL.approvalRequested })
-        onApprovalRequested?.()
+        void refreshNeedsYou()
       } else {
         setNote({ ok: true, text: CL.actionDone })
         agents.reload()

@@ -83,7 +83,7 @@ describe('CentralControlPanel', () => {
   it('has tab roles, a privacy label for free models, and switches tabs by keyboard', async () => {
     render(<CentralControlPanel open enabled client={fakeClient()} />)
     const tabs = screen.getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(expect.arrayContaining(['Control', 'Agents', 'Approvals', 'Skills', 'Memory']))
+    expect(tabs.map((t) => t.textContent)).toEqual(['Control', 'Agents', 'Skills', 'Memory'])
     const note = await screen.findByRole('note')
     expect(note.textContent).toContain('sent to the model provider')
     expect(note.textContent).toContain('opencode/free')
@@ -104,7 +104,7 @@ describe('Dock item', () => {
   const props: DockProps = {
     onAddTerminal: noop, onAddAgent: noop, onCreateWorkspace: noop, onBrowse: noop,
     onUndo: noop, onRedo: noop, canUndo: false, canRedo: false, onBack: noop, onForward: noop, canBack: false, canForward: false,
-    onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop, inboxOpen: false, onToggleInbox: noop,
+    onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
     zoomPct: 100, onZoomIn: noop, onZoomOut: noop, locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
   }
 
@@ -133,19 +133,16 @@ describe('Dock item', () => {
 })
 
 describe('centralControlApi wire', () => {
-  it('parses control, drops malformed approval rows, and halts via POST', async () => {
+  it('parses control and halts via POST', async () => {
     const calls: { url: string; method: string }[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, method: init?.method ?? 'GET' })
       const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200 })
       if (url === CONTROL_PATH) return json({ ceiling: 'act_gated', effective: 'observe', global: { level: 'propose', version: 2, reason: null } })
       if (url === HALT_PATH) return json({ halted: true })
-      return json({ items: [{ id: 'a', tool: 't', tier: 'R2', summary: 's', digest: 'd', nonce: 'n', expiresAt: 1, projectId: 'p', args: [{ key: 'k', value: 'v' }] }, { id: 'bad' }] })
+      return json({ items: [] })
     }))
     expect((await centralControlApi.getControl()).effective).toBe('observe')
-    const cards = await centralControlApi.listApprovals()
-    expect(cards).toHaveLength(1)
-    expect(cards[0]?.args).toEqual([{ key: 'k', value: 'v' }])
     await centralControlApi.halt('why')
     await waitFor(() => expect(calls.at(-1)).toEqual({ url: HALT_PATH, method: 'POST' }))
   })

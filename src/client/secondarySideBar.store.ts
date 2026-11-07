@@ -81,6 +81,33 @@ export function toggleSideBarView(view: SideBarView): void {
   else setSideBar({ open: true, view })
 }
 
+// The Central chat's Needs-you strip: expanded or not. Lives here (not in the strip) so `/approvals`,
+// the Dock's Chat icon and the morning brief can expand it before the lazy chat pane mounted.
+// Not persisted: a reload starts collapsed.
+let needsYouExpanded = false
+
+/** Expand or collapse the Needs-you strip. */
+export function setNeedsYouExpanded(expanded: boolean): void {
+  needsYouExpanded = expanded
+  listeners.forEach((listener) => listener())
+}
+
+/** Show the side bar on Chat with the Needs-you strip expanded (`/approvals`, morning brief). */
+export function expandNeedsYou(): void {
+  needsYouExpanded = true
+  setSideBar({ open: true, view: 'chat' })
+}
+
+export function useNeedsYouExpanded(): boolean {
+  return useSyncExternalStore(subscribe, () => needsYouExpanded)
+}
+
+/** Activity-bar Chat icon: with items waiting it opens on the expanded strip; otherwise a plain toggle. */
+export function toggleChatView(waiting: number): void {
+  if (waiting > 0 && !(state.open && state.view === 'chat')) expandNeedsYou()
+  else toggleSideBarView('chat')
+}
+
 /** Test seam: reload from storage (runs the migration again when the key is absent). */
 export function reloadSideBarFromStorage(): void {
   state = readStored()
@@ -94,7 +121,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** Sub-tabs of the Central control panel. */
-export type CentralTab = 'control' | 'agents' | 'approvals' | 'skills' | 'memory'
+export type CentralTab = 'control' | 'agents' | 'skills' | 'memory'
 /** The last "show this Central tab" request; `seq` makes a repeat of the same tab a new request. */
 export interface CentralTabRequest { tab: CentralTab; seq: number; halt?: boolean }
 let centralRequest: CentralTabRequest | null = null

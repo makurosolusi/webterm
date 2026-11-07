@@ -36,7 +36,7 @@ describe('number check', () => {
     expect(numbersIn('Two agents, 3 approvals, $0.12 and 12.3k tokens')).toEqual(['3', '0.12', '12.3', '2'])
   })
   it('accepts a paragraph using only the brief numbers and rejects any other count', () => {
-    expect(brief.lines.map((l) => l.text)).toContain('3 approval or blocked tasks waiting in the Inbox')
+    expect(brief.lines.map((l) => l.text)).toContain('3 approval or blocked tasks waiting in the Central chat')
     expect(agreesWithBrief('Three approvals wait in the Inbox; Agent a finished 2 turns.', brief)).toBe(true)
     expect(agreesWithBrief('Four approvals wait in the Inbox.', brief)).toBe(false)
     expect(agreesWithBrief('5 approvals wait.', brief)).toBe(false)

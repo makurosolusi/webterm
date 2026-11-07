@@ -1,9 +1,9 @@
 /** @vitest-environment jsdom */
-// Inbox, Activity, Problems and Output are tabs of one bottom panel; Chat and Central are tabs of
-// the secondary side bar on the right. Dock icons and status bar items highlight the SHOWN view
+// Activity, Problems and Output are tabs of one bottom panel; Chat (with the Needs-you strip that
+// replaced the Inbox) and Central are tabs of the secondary side bar on the right. Dock icons and status bar items highlight the SHOWN view
 // (not merely open ones). Real AppDock + AppBottomPanel + SecondarySideBar.
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { useRef, useState } from 'react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Node } from '@xyflow/react'
 import AppDock from './App.chrome'
@@ -18,6 +18,8 @@ import { useOutputStatusItems } from './output/outputStatusItem'
 import { useProblems } from './ProblemsPanel'
 import { LEGACY_CENTRAL_OPEN_KEY, LEGACY_CHAT_OPEN_KEY, reloadSideBarFromStorage, setSideBar } from './secondarySideBar.store'
 import { setTimelineOpen } from './Timeline'
+import { GATE, QUESTION } from './chat/needsYou.fixtures'
+import { resetNeedsYou, useNeedsYouCount, type UnifiedItem } from './chat/needsYouApi'
 
 const noop = () => {}
 const VP: CanvasViewport = {
@@ -25,6 +27,8 @@ const VP: CanvasViewport = {
   onBack: noop, onForward: noop, canBack: false, canForward: false, resetViewport: noop,
 }
 const PROBLEMS = { problems: [], errors: 0, warnings: 0, running: false }
+/** What `/api/approvals/inbox` lists (the Needs-you strip and the Chat badge). */
+let waiting: UnifiedItem[] = []
 
 beforeEach(() => {
   localStorage.clear()
@@ -32,12 +36,14 @@ beforeEach(() => {
   revealBottomView(null)
   resetOutputStateForTest()
   setTimelineOpen(false)
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(String(url).includes('problems') ? JSON.stringify(PROBLEMS) : '[]')))
+  waiting = []
+  resetNeedsYou()
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(
+    String(url).includes('problems') ? JSON.stringify(PROBLEMS) : String(url).startsWith('/api/approvals/inbox') ? JSON.stringify({ items: waiting }) : '[]')))
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); reloadSideBarFromStorage() })
 
 function App() {
-  const [inboxOpen, setInboxOpen] = useState(false)
   const nodesRef = useRef<Node[]>([])
   const problems = useProblems('ws1')
   const outputItems = useOutputStatusItems()
@@ -45,13 +51,13 @@ function App() {
     <>
       <AppDock
         vp={VP} settings={DEFAULT_SETTINGS} activeWs={null} centralEnabled board={false} setBoard={noop}
-        sessionsOpen={false} setSessionsOpen={noop} inboxOpen={inboxOpen} setInboxOpen={setInboxOpen}
+        sessionsOpen={false} setSessionsOpen={noop} needsYouCount={useNeedsYouCount()}
         locked={false} setLocked={noop} cleanView={false}
         toggleCleanView={noop} setPicker={noop} setShowSettings={noop} onAddTerminal={noop} onAddAgent={noop}
         onCreateWorkspace={noop} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
         extraStatusItems={[...problems.statusItems, ACTIVITY_STATUS_ITEM, ...outputItems]}
       />
-      <AppBottomPanel inboxOpen={inboxOpen} setInboxOpen={setInboxOpen} problems={problems} nodes={[]} nodesRef={nodesRef}
+      <AppBottomPanel problems={problems} nodes={[]} nodesRef={nodesRef}
         addFlowNode={noop} onFocus={noop} workspaces={[]} />
       <SecondarySideBar centralEnabled />
     </>
@@ -59,8 +65,7 @@ function App() {
 }
 
 const central = () => screen.getByRole('button', { name: 'Toggle central control panel' })
-const chat = () => screen.getByRole('button', { name: 'Toggle chat panel' })
-const inbox = () => screen.getByRole('button', { name: /^Toggle inbox panel/ })
+const chat = () => screen.getByRole('button', { name: /^Toggle chat panel/ })
 const sideTab = (name: RegExp) => within(screen.getByRole('tablist', { name: 'Secondary Side Bar tabs' })).getByRole('tab', { name })
 const shownTab = () => [...document.querySelectorAll('[role=tab][aria-selected=true]')].map((t) => t.textContent).join()
 
@@ -94,9 +99,9 @@ describe('Chat and Central in the secondary side bar', () => {
     localStorage.setItem(LEGACY_CENTRAL_OPEN_KEY, '1')
     reloadSideBarFromStorage()
     render(<App />)
-    fireEvent.click(inbox())
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Activity timeline' }))
     const bottomTabs = within(screen.getByRole('tablist', { name: 'Panel tabs' })).getAllByRole('tab').map((t) => t.textContent)
-    expect(bottomTabs).toEqual(['Inbox'])
+    expect(bottomTabs).toEqual(['Activity'])
     expect(sideTab(/^Chat/).getAttribute('aria-selected')).toBe('true') // migrated into the side bar
     expect(sideTab(/^Central/)).toBeTruthy()
   })
@@ -132,5 +137,43 @@ describe('shown-view highlight', () => {
     fireEvent.click(activity) // hidden: reveal
     expect(activity.getAttribute('aria-pressed')).toBe('true')
     expect(output.getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+describe('Needs-you replaces the Inbox', () => {
+  it('the activity bar has no Inbox icon; the Chat icon badges what waits', async () => {
+    waiting = [GATE, QUESTION]
+    render(<App />)
+    expect(screen.queryByRole('button', { name: /inbox/i })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Toggle chat panel, 2' })).toBeTruthy()
+  })
+
+  it('with items waiting, the Chat icon opens the side bar on Chat with the strip expanded', async () => {
+    waiting = [GATE]
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Toggle chat panel, 1' }))
+    expect(sideTab(/^Chat/).getAttribute('aria-selected')).toBe('true')
+    const head = await screen.findByRole('button', { name: /1 needs you/ })
+    expect(head.getAttribute('aria-expanded')).toBe('true')
+    expect(await screen.findByText('Run migration')).toBeTruthy()
+    fireEvent.click(chat()) // shown: the icon closes it again
+    expect(document.querySelector('.vscode-secondary-side-bar')).toBeNull()
+  })
+
+  it('with nothing waiting, the Chat icon is a plain toggle without a badge', async () => {
+    render(<App />)
+    await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some((c) => String(c[0]).startsWith('/api/approvals/inbox'))).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle chat panel' }))
+    expect(sideTab(/^Chat/).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('button', { name: /needs? you/ })).toBeNull()
+  })
+
+  it('a stored open Inbox (webterm.inboxOpen) falls back to no bottom panel and no Inbox tab', () => {
+    localStorage.setItem('webterm.inboxOpen', '1') // test-only: the removed panel's old key
+    render(<App />)
+    expect(document.querySelector('.vscode-bottom-panel')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Activity timeline' }))
+    const bottomTabs = within(screen.getByRole('tablist', { name: 'Panel tabs' })).getAllByRole('tab').map((t) => t.textContent)
+    expect(bottomTabs).toEqual(['Activity'])
   })
 })

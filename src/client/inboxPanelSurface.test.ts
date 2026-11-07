@@ -13,7 +13,7 @@ describe('bottom panel metrics', () => {
 
   it('uses one 22px row token for both list panes', () => {
     expect(surface).toContain('--bottom-panel-row-h: var(--list-row-h, 22px)')
-    expect(readFileSync('src/client/inbox.css', 'utf8')).toContain(
+    expect(surface).toContain(
       'min-height: var(--bottom-panel-row-h, 22px)'
     )
     expect(readFileSync('src/client/chat/chat.css', 'utf8')).toContain(

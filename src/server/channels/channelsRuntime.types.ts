@@ -14,7 +14,7 @@ import type { SenderBootOptions } from './channelSenderBoot'
 import type { FlushResult } from './telegramSender'
 import type { TelegramMode } from './telegramMode'
 import type { WorldCountsPort } from './channelWorld'
-import type { ForwarderDeps, PresenceTracker } from './channelPresence'
+import type { PresenceTracker } from './channelPresence'
 
 /** Production approval port: the real ledger, unchanged, behind the dispatcher's narrow slice. */
 export function ledgerApprovalPort(ledger: Ledger): ChannelApprovalPort {
@@ -72,12 +72,8 @@ export interface ChannelsRuntimeOptions {
   bots?: Partial<BotManagerDeps>
   /** Secret store untuk secret webhook otomatis (KE-9); produksi: `<dataDir>/secrets`. */
   secrets?: SecretStore
-  /** Tab presence for desktop -> Telegram forwarding; omitted = the process-wide tracker. */
+  /** Tab presence for the gate-card attention policy; omitted = the process-wide tracker. */
   presence?: PresenceTracker
-  /** Hook-event subscription seam (tests); omitted = the Senses event bus. */
-  subscribe?: ForwarderDeps['subscribe']
-  /** Node label lookup for agent notices (tests); omitted = the workspace DB. */
-  describe?: ForwarderDeps['describe']
   /** Pending-chat list owned by the caller so it survives a runtime rebuild (telegramHot.refresh). */
   pending?: PendingChatStore
 }

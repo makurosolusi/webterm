@@ -92,7 +92,7 @@ describe('tab shortcuts', () => {
 })
 
 describe('chords', () => {
-  const base = { newTerminal: vi.fn(), newFiles: vi.fn(), newDiff: vi.fn(), newBrowser: vi.fn(), fitView: vi.fn(), toggleMaximizeNode: vi.fn(), openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(), toggleSessions: vi.fn(), toggleInbox: vi.fn(), toggleChat: vi.fn(), toggleSecondarySideBar: vi.fn(), toggleBoard: vi.fn() }
+  const base = { newTerminal: vi.fn(), newFiles: vi.fn(), newDiff: vi.fn(), newBrowser: vi.fn(), fitView: vi.fn(), toggleMaximizeNode: vi.fn(), openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(), toggleSessions: vi.fn(), toggleChat: vi.fn(), toggleSecondarySideBar: vi.fn(), toggleBoard: vi.fn() }
   it.each([true, false])('no default-key conflict with the built-ins (isMac=%s)', (isMac) => {
     const all = [...appCommands(base), ...FIXED_COMMANDS, ...tabLayoutCommands(vi.fn(), true, isMac)]
     expect([...findConflicts(all, {}).keys()]).toEqual([])

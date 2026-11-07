@@ -13,9 +13,9 @@ const dockProps: DockProps = {
   onUndo: noop, onRedo: noop, canUndo: false, canRedo: true,
   onBack: noop, onForward: noop, canBack: false, canForward: false,
   onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
-  inboxOpen: false, onToggleInbox: noop, zoomPct: 100, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
+  zoomPct: 100, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop, onOpenSettings: noop,
-  inboxUnread: 2,
+  needsYouCount: 2, onToggleChat: noop,
 }
 
 const tipOf = (el: Element): string | null | undefined => {
@@ -31,11 +31,11 @@ afterEach(cleanup)
 describe('activity bar', () => {
   it('exposes every entry by name and shows its tooltip', () => {
     render(<Dock {...dockProps} />)
-    for (const name of ['Toggle sessions panel', 'Toggle inbox panel, 2', 'Toggle central control panel', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
+    for (const name of ['Toggle sessions panel', 'Toggle chat panel, 2', 'Toggle central control panel', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
       const btn = screen.getByRole('button', { name })
       expect(btn.hasAttribute('title'), name).toBe(false)
     }
-    expect(tipOf(screen.getByRole('button', { name: 'Toggle inbox panel, 2' }))).toBe('Toggle inbox panel (2 unread)')
+    expect(tipOf(screen.getByRole('button', { name: 'Toggle chat panel, 2' }))).toBe('Toggle chat panel (2 need you)')
     expect(tipOf(screen.getByRole('button', { name: 'Board' }))).toBe('Toggle Kanban board')
   })
 

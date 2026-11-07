@@ -44,7 +44,7 @@ describe('PR review section', () => {
     const calls = stubApi((c) => (c.method === 'POST' ? { body: { url: 'https://github.com/o/r/pull/7#pullrequestreview-1' } } : { body: { jobs: [job('drafted')], drafts: [draft] } }))
     render(<PrReviewSection root="/r" gh pollMs={0} />)
     expect(await screen.findByText('PR #7: 2 findings, 1 inline')).toBeTruthy()
-    expect(screen.getByText('PR #7: Draft in the Inbox')).toBeTruthy()
+    expect(screen.getByText('PR #7: Draft in the Central chat')).toBeTruthy()
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
     expect(tipOf(screen.getByRole('button', { name: 'Post review' }))).toBe('Posts one review with inline comments to GitHub. Cannot be undone.')
     fireEvent.click(screen.getByRole('button', { name: 'Post review' }))

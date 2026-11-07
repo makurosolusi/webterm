@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { requestApproval } from '../ledger/ledgerApproval'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
 import { type Ca2Handle, bootCa2, setActiveCa2 } from './ca2Boot'
@@ -61,18 +60,8 @@ describe('status', () => {
 })
 
 describe('approvals', () => {
-  it('lists pending cards with digest and nonce, never a secret, and pages', async () => {
-    requestApproval({ db: h.db, now: () => T0 }, { id: 'ap1', projectId: 'p1', kind: 'agent.spawn', request: { agentId: 'a1', kind: 'opencode', botToken: BOT_TOKEN, note: `x ${BOT_TOKEN}` } })
-    const res = await get('/api/central/approvals?status=pending&limit=10')
-    const items = (res?.body as { items: Array<Record<string, unknown>> }).items
-    expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ id: 'ap1', tool: 'agent.spawn', tier: 'R2', projectId: 'p1' })
-    expect(String(items[0]?.digest)).toMatch(/^[0-9a-f]{16,}$/)
-    expect(String(items[0]?.nonce).length).toBeGreaterThan(8)
-    expect(Number(items[0]?.expiresAt)).toBeGreaterThan(T0)
-    expect(JSON.stringify(res?.body)).not.toContain(BOT_TOKEN)
-    expect((await get('/api/central/approvals?limit=0'))?.status).toBe(400)
-    expect(((await get('/api/central/approvals?offset=5'))?.body as { items: unknown[] }).items).toHaveLength(0)
+  it('has no Central approvals view: the Central chat lists approvals (Needs-you strip)', async () => {
+    expect(await get('/api/central/approvals')).toBeNull()
   })
 })
 
@@ -193,7 +182,7 @@ describe('a family whose feature is off answers 503 <feature>_off, not a fall-th
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/approve'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/rollback'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect((await ca2Dispatch(off, req('POST', '/api/central/skills')))?.status).toBe(405)
-    for (const p of ['/api/central/status', '/api/central/approvals', '/api/central/memory', '/api/central/control']) expect((await ca2Dispatch(off, req('GET', p)))?.status).toBe(200)
+    for (const p of ['/api/central/status', '/api/central/memory', '/api/central/control']) expect((await ca2Dispatch(off, req('GET', p)))?.status).toBe(200)
   })
   it('with the feature on the same reads list as before', async () => {
     expect(await get('/api/central/agents')).toMatchObject({ status: 200, body: { items: expect.any(Array) } })

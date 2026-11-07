@@ -8,7 +8,6 @@ import type { VscodeActivityBarItem } from '@/components/vscode/vscodeActivityBa
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import { IconButton } from '@/components/ui/icon-button'
-import { useShownBottomView } from './bottomPanelHost'
 import { codicon } from './dockCodicon'
 import { useCommands } from './commandRegistry'
 import { AGENT_CHAT_COMMAND_ID } from './agentChat.add'
@@ -34,12 +33,10 @@ const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
 
-/** Ikon rail yang menyala: Sessions (sidebar), Inbox bila TAMPIL di panel bawah (bukan sekadar terbuka),
- *  view yang tampil di secondary side bar (Chat/Central), dan Board. */
-function activeActivityIds(props: DockProps, shown: string | null): string[] {
+/** Ikon rail yang menyala: Sessions (sidebar), view yang tampil di secondary side bar (Chat/Central), dan Board. */
+function activeActivityIds(props: DockProps): string[] {
   return [
     ...(props.sessionsOpen ? ['sessions'] : []),
-    ...(shown === 'inbox' ? ['inbox'] : []),
     ...(props.chatOpen ? ['chat'] : []),
     ...(props.centralOpen ? ['central'] : []),
     ...(props.boardOpen ? ['board'] : []),
@@ -49,7 +46,7 @@ function activeActivityIds(props: DockProps, shown: string | null): string[] {
 /**
  * Chrome kiri + bawah aplikasi.
  *
- * Activity bar 48px memuat permukaan (Sessions, Inbox, Chat, Board) dan aksi Add; lock/clean view
+ * Activity bar 48px memuat permukaan (Sessions, Chat, Board) dan aksi Add; lock/clean view
  * adalah toggle mode sehingga dirender sendiri dengan `aria-pressed`. Status bar 22px memuat
  * aksi kanvas (`Dock.statusBar.tsx`). Quick Pick Add tetap di sini karena tombol pembukanya ada di rail.
  */
@@ -57,7 +54,6 @@ export default function Dock(props: DockProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const canvasMode = useTabLayout().mode !== 'tabs'
-  const shown = useShownBottomView()
   const { onAddBrowser, onToggleCentral } = props
   const { setOffer, dialog: offerDialog } = useCapabilityOffer(onAddBrowser, onToggleCentral)
   const disabled = props.disabledAgents ?? DEFAULT_SETTINGS.disabledAgents
@@ -139,15 +135,14 @@ export default function Dock(props: DockProps) {
     if (custom) addCustom(custom)
   }
 
-  const unread = props.inboxUnread ?? 0
+  const waiting = props.needsYouCount ?? 0
   const items: VscodeActivityBarItem[] = [
     { id: 'sessions', label: 'Toggle sessions panel', icon: codicon('layout-sidebar-left'), commandId: 'view.sessions' },
-    {
-      id: 'inbox', label: 'Toggle inbox panel', icon: codicon('inbox'), commandId: 'view.inbox',
-      badge: props.inboxUnread, tooltip: unread > 0 ? `Toggle inbox panel (${unread} unread)` : undefined,
-    },
     ...(props.onToggleChat
-      ? [{ id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion'), commandId: 'view.chat' }]
+      ? [{
+          id: 'chat', label: 'Toggle chat panel', icon: codicon('comment-discussion'), commandId: 'view.chat',
+          badge: props.needsYouCount, tooltip: waiting > 0 ? `Toggle chat panel (${waiting} need${waiting === 1 ? 's' : ''} you)` : undefined,
+        }]
       : []),
     { id: 'central', label: 'Toggle central control panel', icon: codicon('shield') },
     { id: 'board', label: 'Board', tooltip: 'Toggle Kanban board', icon: codicon('project'), commandId: 'view.board' },
@@ -158,9 +153,6 @@ export default function Dock(props: DockProps) {
     switch (id) {
       case 'sessions':
         props.onToggleSessions()
-        break
-      case 'inbox':
-        props.onToggleInbox()
         break
       case 'chat':
         props.onToggleChat?.()
@@ -185,7 +177,7 @@ export default function Dock(props: DockProps) {
       <div className="dock">
         <VscodeActivityBar
           items={items}
-          activeIds={activeActivityIds(props, shown)}
+          activeIds={activeActivityIds(props)}
           onSelect={onActivitySelect}
           ariaLabel="Activity bar"
         />

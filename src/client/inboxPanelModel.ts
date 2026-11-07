@@ -1,21 +1,10 @@
-// Small helpers/state for InboxPanel. Dipisah supaya komponen utama tetap di bawah batas file.
+// Consent helpers for the Needs-you task review (`chat/needsYouReview`), kept from the old Inbox panel.
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import type { ApprovalChallenge, ApprovalRequestInput, ApprovedApproval, InboxClient, InboxItem, InboxState } from './inboxApi'
+import type { ApprovalChallenge, ApprovalRequestInput, ApprovedApproval, InboxClient, InboxItem } from './inboxApi'
 import type { ReviewState } from './inboxApprovalDialog'
-import { publishInboxCount } from './inboxDockState'
 
-export const SECTION_ORDER: readonly InboxState[] = ['needs_you', 'review', 'broken']
-
-export const SECTION_LABEL: Record<InboxState, string> = {
-  needs_you: 'Needs you',
-  review: 'Review',
-  broken: 'Broken',
-}
-
-export const OPEN_KEY = 'webterm.inboxOpen'
-
-export const FOCUSABLE =
+const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
@@ -45,7 +34,7 @@ export function approvalRequest(item: InboxItem): ApprovalRequestInput {
 export function reviewBlockedReason(item: InboxItem): string | null {
   if (item.kind !== 'task') return null
   return item.fence === undefined
-    ? 'This task has no fence yet, so it cannot be reviewed. Refresh the inbox.'
+    ? 'This task has no fence yet, so it cannot be reviewed. Try again in a moment.'
     : null
 }
 
@@ -97,25 +86,8 @@ export function useApprovedApprovals(
   return list
 }
 /**
- * Mirror the open panel's count into the Dock badge. While the panel owns `/api/inbox` it is the
- * only poller; publishing here (instead of a second `fetch` loop) is what keeps the badge correct
- * on boot and immediately after a consume/reject. `null` clears the value on close so a reopened
- * panel never inherits a stale number.
- */
-export function useInboxCountPublisher(open: boolean, items: readonly InboxItem[] | null): void {
-  useEffect(() => {
-    if (!open) {
-      publishInboxCount(null)
-      return
-    }
-    if (items === null) return
-    publishInboxCount(items.length)
-  }, [open, items])
-}
-
-/**
  * Focus trap + Escape for the approval dialog. `pending` mirrors the phase: while a request is in
- * flight Escape must not abandon it. Split out of the panel so the component stays inside the
+ * flight Escape must not abandon it. Split out of the review hook so it stays inside the
  * repo's file-size budget.
  */
 export function useInboxDialogKeys(options: {
@@ -168,33 +140,4 @@ export function useInboxDialogKeys(options: {
       if (previous?.isConnected) previous.focus()
     }
   }, [open, dialogRef])
-}
-
-/** Open/closed state for the Dock toggle, persisted like `useSessionsOpen`. */
-export function useInboxOpen(): readonly [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(() => {
-    try {
-      return localStorage.getItem(OPEN_KEY) !== '0'
-    } catch {
-      return true
-    }
-  })
-  useEffect(() => {
-    try {
-      localStorage.setItem(OPEN_KEY, open ? '1' : '0')
-    } catch {
-      // Private mode: the choice lasts for this tab only.
-    }
-  }, [open])
-  return [open, setOpen] as const
-}
-
-export function formatAge(ageMs: number): string {
-  const seconds = Math.max(0, Math.floor(ageMs / 1000))
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  return `${Math.floor(hours / 24)}d`
 }

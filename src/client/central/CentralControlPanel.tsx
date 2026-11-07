@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import AgentList from './AgentList'
-import { ApprovalQueue } from './ApprovalCardR2'
 import LevelPanel from './LevelPanel'
 import MemoryView from './MemoryView'
 import SkillReview from './SkillReview'
@@ -18,13 +17,15 @@ import './central.css'
 type TabId = CentralTab
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
-const TABS = [
+const TABS: { id: TabId; label: string }[] = [
   { id: 'control', label: CL.tabControl },
   { id: 'agents', label: CL.tabAgents },
-  { id: 'approvals', label: CL.tabApprovals },
   { id: 'skills', label: CL.tabSkills },
   { id: 'memory', label: CL.tabMemory },
 ]
+
+/** A tab this panel has; anything else (a removed tab such as the old Approvals) opens Control. */
+export const knownTab = (tab: string | undefined): TabId => TABS.find((t) => t.id === tab)?.id ?? 'control'
 
 export interface CentralControlPanelProps {
   open: boolean
@@ -36,17 +37,16 @@ export interface CentralControlPanelProps {
 
 export default function CentralControlPanel({ open, enabled: enabledProp, client = centralControlApi, actionsHost }: CentralControlPanelProps) {
   const enabled = useCentralControlEnabled(enabledProp)
-  // A Central chat command (`/approvals`, `/halt`) may pick the tab, also before this lazy panel mounted.
+  // A Central chat command (`/status`, `/halt`) may pick the tab, also before this lazy panel mounted.
   const request = useCentralTabRequest()
-  const [tab, setTab] = useState<TabId>(request?.tab ?? 'control')
+  const [tab, setTab] = useState<TabId>(knownTab(request?.tab))
   const [askHalt, setAskHalt] = useState(false)
   useEffect(() => {
     if (!request) return
-    setTab(request.tab)
+    setTab(knownTab(request.tab))
     if (request.halt && request.seq > haltSeen) { haltSeen = request.seq; setAskHalt(true) }
   }, [request])
   const [status, setStatus] = useState<StatusView | null>(null)
-  const [approvalsKey, setApprovalsKey] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
   if (!enabled || !open) return null
   return (
@@ -65,8 +65,7 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
         {/* refreshKey remounts the active section so it reloads its data. */}
         <div key={`${tab}-${refreshKey}`} className="ccp-section-host">
           {tab === 'control' && <LevelPanel client={client} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
-          {tab === 'agents' && <AgentList client={client} onApprovalRequested={() => setApprovalsKey((k) => k + 1)} />}
-          {tab === 'approvals' && <ApprovalQueue key={approvalsKey} client={client} />}
+          {tab === 'agents' && <AgentList client={client} />}
           {tab === 'skills' && <SkillReview client={client} />}
           {tab === 'memory' && <MemoryView client={client} />}
         </div>

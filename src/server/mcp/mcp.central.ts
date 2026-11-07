@@ -23,7 +23,8 @@ import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
 /**
  * Tools whose handler runs its own approval (agent.spawn cards + resume sweep, task.run's worker.run
  * approval, channel.bot.propose's typed-confirm approval). A second generic card would ask twice, so
- * for these the guard's `needs_approval` passes and the handler decides; denies still deny.
+ * for these the guard's `needs_approval` passes and the handler decides; denies still deny. Their receipts
+ * still carry the card's ledger `approvalStatus` (toolExec.ts), so an expired/rejected card is never reported as waiting.
  */
 const OWN_APPROVAL_TOOLS: ReadonlySet<string> = new Set(['agent.spawn', 'task.run', 'channel.bot.propose'])
 const APPROVAL_ID_PREFIX = 'ct-'
@@ -87,7 +88,7 @@ function approvalRequest(conversationId: string, tool: string, args: Record<stri
 }
 
 const pendingReceipt = (approvalId: string, expiresAt: number | null): McpReceipt => receipt('denied', 'approval_required', { approvalId, status: APPROVAL_PENDING, expiresAt },
-  'a webterm approval card is waiting for the human; tell them, then call the same tool with the same input again after they approve',
+  'an approval card is shown in the Central chat; tell the human what it asks, then call the same tool with the same input again after they approve',
   { approvalId, approvalStatus: APPROVAL_PENDING })
 
 async function exec(c: CentralMcpDeps, conversationId: string, tool: string, args: Record<string, unknown>, approved: boolean): Promise<{ receipt: McpReceipt; projectId?: string; ownCard: boolean }> {
@@ -116,13 +117,13 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   const expired = latest !== undefined && latest.status === 'pending' && latest.expiresAt !== null && latest.expiresAt <= now
   if (latest && !expired) {
     if (latest.status === 'pending') return pendingReceipt(latest.id, latest.expiresAt)
-    if (latest.status === 'rejected') return receipt('denied', 'approval_rejected', { approvalId: latest.id }, 'the human rejected this exact call; do not retry it', { approvalId: latest.id })
+    if (latest.status === 'rejected') return receipt('denied', 'approval_rejected', { approvalId: latest.id }, 'the human rejected this exact call; do not retry it', { approvalId: latest.id, approvalStatus: 'rejected' })
     if (latest.status === 'approved' && latest.unused) {
       const digest = approvalDigest(approvalRequest(conversationId, tool, args))
       // Single use: a concurrent poll that lost the race sees false and must not run the tool again.
-      if (!consumeApproval({ db: c.db, now: () => now }, latest.id, { digest })) return receipt('denied', 'approval_used', { approvalId: latest.id }, null, { approvalId: latest.id })
+      if (!consumeApproval({ db: c.db, now: () => now }, latest.id, { digest })) return receipt('denied', 'approval_used', { approvalId: latest.id }, null, { approvalId: latest.id, approvalStatus: 'approved' })
       const ran = await exec(c, conversationId, tool, args, true)
-      return { ...ran.receipt, evidence: { ...ran.receipt.evidence, approvalId: latest.id } }
+      return { ...ran.receipt, evidence: { ...ran.receipt.evidence, approvalId: latest.id, approvalStatus: 'approved' } }
     }
   }
   const first = await exec(c, conversationId, tool, args, false)

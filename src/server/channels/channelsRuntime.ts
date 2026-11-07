@@ -16,11 +16,10 @@ import type { Ledger } from '../ledger/ledger'
 import { CHANNEL_STORE_FILE, ChannelStore } from './channelStore'
 import { ledgerPersistence } from './channelStoreLedger'
 import { defaultWorldCounts } from './channelWorld'
-import { presence as processPresence, startAgentForwarder } from './channelPresence'
-import { describeAgentNode } from './channelPresenceDescribe'
+import { presence as processPresence } from './channelPresence'
 import { startInboxTelegramPush } from '../inbox/inboxPush'
+import { setTelegramNoticeMirror } from '../central/centralNotices'
 import { handleChannelPresenceApi } from './channelPresenceHttp'
-import { eventBus } from '../events/eventBus'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import {
   ensureWebhookSecret,
@@ -162,14 +161,9 @@ export function startChannelsRuntime(
 
   const bots = mountBotManager(env, dataDir(), options.bots)
   const presence = options.presence ?? processPresence
-  const stopForwarder = startAgentForwarder({
-    store,
-    presence,
-    subscribe: options.subscribe ?? ((pattern, fn) => eventBus.subscribe(pattern, fn)),
-    describe: options.describe ?? describeAgentNode,
-  })
-  // F3-a: every inbox gate goes to the bound approver chats as a card (Approve once / Deny), under
-  // the attention policy. Same env + fetch seam as the egress sender, so a test never hits Telegram.
+  // Central owns every notice (central/centralNotices.ts, on with or without Telegram). This runtime
+  // only mirrors: its store relays agent notices, and the card sweep sends each gate card once.
+  const unplugMirror = setTelegramNoticeMirror(store)
   const stopInboxPush = ledgerDb
     ? startInboxTelegramPush({ db: ledgerDb, store, presence, send: { env, ...(options.sender?.fetch ? { fetch: options.sender.fetch } : {}) }, ...(options.now ? { now: options.now } : {}) })
     : () => undefined
@@ -202,7 +196,7 @@ export function startChannelsRuntime(
     flushNow: () => flushChannelSender(sender),
     stop() {
       stopChannelSender(sender)
-      stopForwarder()
+      unplugMirror()
       stopInboxPush()
       log.info('channels.stop', 'telegram channel stopped', { mode })
     },

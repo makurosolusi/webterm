@@ -42,6 +42,7 @@ export const TELEGRAM_CHANNEL = 'telegram'
  */
 export const CHANNEL_REPLY_MAX_CHARS = 32_000
 export const CHANNEL_REPLY_CLIPPED_SUFFIX = '\n\n… (truncated)'
+export const CENTRAL_QUEUED_REPLY = 'Queued: Central is busy with another message. I will answer right after it.'
 
 export interface ChannelReply {
   channel: string
@@ -68,7 +69,7 @@ export interface ChannelStorePort {
 }
 
 export interface TelegramCentralPort {
-  ask(input: { projectId: string; text: string; updateId: number }): Promise<
+  ask(input: { projectId: string; text: string; updateId: number; onQueued?: () => void }): Promise<
     { ok: true; text: string } | { ok: false; code: string }
   >
 }
@@ -116,11 +117,7 @@ function registryFor(identity: ChannelMessageIdentity, binding: ChannelBinding):
   return registry
 }
 
-async function replyTo(
-  deps: TelegramDispatchDeps,
-  message: NormalizedMessage,
-  text: string
-): Promise<string | null> {
+async function replyTo(deps: TelegramDispatchDeps, message: NormalizedMessage, text: string, keySuffix = ''): Promise<string | null> {
   const clipped = text.length <= CHANNEL_REPLY_MAX_CHARS
     ? text
     : text.slice(0, CHANNEL_REPLY_MAX_CHARS - CHANNEL_REPLY_CLIPPED_SUFFIX.length) + CHANNEL_REPLY_CLIPPED_SUFFIX
@@ -129,7 +126,7 @@ async function replyTo(
     chatId: message.chatId,
     text: clipped,
     ...(message.threadId === undefined ? {} : { threadId: message.threadId }),
-    dedupeKey: `${TELEGRAM_CHANNEL}:${message.chatId}:${message.updateId}`,
+    dedupeKey: `${TELEGRAM_CHANNEL}:${message.chatId}:${message.updateId}${keySuffix}`,
   }
   try {
     if (deps.enqueue) {
@@ -170,7 +167,8 @@ async function runCentralTurn(
   projectId: string
 ): Promise<void> {
   try {
-    const result = await central.ask({ projectId, text: message.text, updateId: message.updateId })
+    const onQueued = (): void => void replyTo(deps, message, CENTRAL_QUEUED_REPLY, ':queued')
+    const result = await central.ask({ projectId, text: message.text, updateId: message.updateId, onQueued })
     await replyTo(deps, message, result.ok ? result.text : `Central agent unavailable (${result.code}).`)
   } catch (err) {
     log.error('channel.dispatch', 'telegram central turn failed', { updateId: message.updateId, error: safeErrorText(err, 'unknown error') })

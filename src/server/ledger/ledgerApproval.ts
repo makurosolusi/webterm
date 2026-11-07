@@ -15,6 +15,9 @@ import {
   requireText,
   tx,
 } from './ledgerCore'
+import { createLogger } from '../logs'
+
+const log = createLogger('ledger.approval')
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired'
 
@@ -53,6 +56,27 @@ export interface DecideApprovalInput {
   digest: string
   nonce: string
   now?: number
+}
+
+/** Called after a card is created, decided or expired: the one hook every surface (UI, Telegram, routes) passes. */
+export type ApprovalListener = (ctx: LedgerContext, approval: Approval) => void
+const listeners = new Set<ApprovalListener>()
+
+/** Subscribes to approval changes; returns the unsubscribe. */
+export function onApprovalChange(listener: ApprovalListener): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+function notify(ctx: LedgerContext, approval: Approval): void {
+  for (const listener of listeners) {
+    try {
+      listener(ctx, approval)
+    } catch (err) {
+      // The ledger row is already durable; a listener (stream fan-out) must never undo or block it.
+      log.error('approval.listener_failed', 'approval change listener threw', { approvalId: approval.id, status: approval.status, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
 }
 
 const DEFAULT_TTL_MS = 15 * 60_000
@@ -146,6 +170,7 @@ export function requestApproval(
       now
     )
   })
+  notify(ctx, approvalById(ctx, id))
   return { id, digest, nonce, expiresAt }
 }
 
@@ -185,7 +210,7 @@ export function listApprovals(
 export function decideApproval(ctx: LedgerContext, id: string, input: DecideApprovalInput): Approval {
   const actor = requireText(input.actor, 'approval.actor')
   const at = input.now ?? ctx.now()
-  return tx(ctx, () => {
+  const decided = tx(ctx, () => {
     const row = getRow(
       ctx.db,
       `SELECT a.*, d.action_digest, d.nonce, d.single_use
@@ -217,6 +242,8 @@ export function decideApproval(ctx: LedgerContext, id: string, input: DecideAppr
     )
     return approvalById(ctx, id)
   })
+  notify(ctx, decided)
+  return decided
 }
 
 /**
@@ -252,10 +279,12 @@ export function consumeApproval(
 
 export function expireApprovals(ctx: LedgerContext, now?: number): number {
   const at = now ?? ctx.now()
-  return execWrite(
-    ctx.db,
-    "UPDATE approval SET status = 'expired', updated_at = ? WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?",
-    at,
-    at
-  )
+  const due = "status = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?"
+  const expired = tx(ctx, () => {
+    const ids = allRows(ctx.db, `SELECT id FROM approval WHERE ${due}`, at).map((r) => String(r['id']))
+    execWrite(ctx.db, `UPDATE approval SET status = 'expired', updated_at = ? WHERE ${due}`, at, at)
+    return ids
+  })
+  for (const id of expired) notify(ctx, approvalById(ctx, id))
+  return expired.length
 }

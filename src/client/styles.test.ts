@@ -317,7 +317,7 @@ describe('dock.css — activity bar rail', () => {
   })
 
   it('derives the shared panel offset from the 48px activity bar', () => {
-    // Satu sumber lebar rail: `sessions-panel.css` dan `inbox.css` membaca token ini.
+    // Satu sumber lebar rail: `sessions-panel.css` membaca token ini.
     const token = dock.slice(dock.indexOf(':root {'), dock.indexOf('/* Grid item'))
     expect(token).toContain('--dock-w: var(--activity-bar-w)')
     expect(dock).not.toContain('--dock-btn-size: 38px')

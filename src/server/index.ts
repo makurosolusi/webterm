@@ -19,6 +19,7 @@ import { buildButtonDeps } from './channels/channelButtons'
 import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
 import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
+import { bootCentralNotices } from './central/centralNotices'
 import { ensureRoutines } from './routines/routinesRuntime'
 import { startCostCapture } from './cost/costRuntime'
 import { armDagLoop } from './dag/dag.runtime'
@@ -105,6 +106,8 @@ if (isEnabled('telegram')) await telegramHot.start()
 // liveness probe feeds the autonomy reconciler.
 const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: telegramHot.channels?.bots ?? null, settings: () => db.getSettings() })
 startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAlive: ca2.agentAlive } : {}) })
+// Central is the notification hub with or without Telegram: gate and agent notices land in its chat.
+if (process.env.NODE_ENV !== 'test') bootCentralNotices()
 // Schedules and event triggers must fire without the UI open (otherwise the first /api/routines call starts them); never under a test runner.
 if (process.env.NODE_ENV !== 'test') {
   try { ensureRoutines() } catch (e) { log.warn('routines.start.failed', 'Cannot start routines at boot', { cause: e instanceof Error ? e.message : String(e) }) }

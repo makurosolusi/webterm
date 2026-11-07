@@ -101,7 +101,7 @@ function PlanNode({ id, data, selected }: NodeProps) {
           <span className="plan-node__intent">{plan.intent}</span>
           {tasks.length > 0 && <span>{tasks.length} task{tasks.length === 1 ? '' : 's'} · {waves.length} wave{waves.length === 1 ? '' : 's'} · {gates} gate{gates === 1 ? '' : 's'}</span>}
           {(view?.estimate ?? preview?.estimate) && <span>{estimateText(view?.estimate ?? preview?.estimate)}</span>}
-          {pendingGates > 0 && <span className="plan-node__wait">{pendingGates} decision{pendingGates === 1 ? '' : 's'} waiting in Inbox</span>}
+          {pendingGates > 0 && <span className="plan-node__wait">{pendingGates} decision{pendingGates === 1 ? '' : 's'} waiting in the Central chat</span>}
         </div>
         {(msg || previewError || viewError) && <div className="plan-node__msg nodrag" role="status">{msg || previewError || viewError}</div>}
         <div className="node-body plan-node__body nodrag nowheel nokey">{body()}</div>

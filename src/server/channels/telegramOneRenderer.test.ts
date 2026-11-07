@@ -1,5 +1,5 @@
 // F2-g "one renderer": every outgoing Telegram text (command replies, approvals, Central replies,
-// agent notices, the status card) is sent as `telegramMarkdownChunks(text)` with parse_mode HTML.
+// agent notices) is sent as `telegramMarkdownChunks(text)` with parse_mode HTML.
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,7 +9,6 @@ import { ChannelStore } from './channelStore'
 import { dispatchTelegramUpdate } from './channelDispatch'
 import { createPresenceTracker, startAgentForwarder } from './channelPresence'
 import type { SenseEvent } from '../events/eventModel'
-import { createStatusCards } from './statusCard'
 import { telegramMarkdownChunks } from './telegramSend'
 import { TelegramChannelSender, type TelegramSenderFetch } from './telegramSender'
 
@@ -73,16 +72,5 @@ describe('one Telegram renderer', () => {
     expect(bodies.every((b) => b['parse_mode'] === 'HTML')).toBe(true)
     expect(bodies.some((b) => String(b['text']).includes('<b>Done</b>'))).toBe(true)
     expect(bodies.some((b) => String(b['text']).includes('Claude &lt;1&gt; finished in'))).toBe(true)
-  })
-
-  it('the status card is rendered by the same function', async () => {
-    const params: Array<Record<string, unknown>> = []
-    const cards = createStatusCards({
-      call: async (_a, _m, p) => { params.push(p); return { message_id: 1 } },
-      provider: () => ({ level: 'observe', activeWorkers: 1, budgetUsedTokens: 1, budgetLimitTokens: 2 }),
-    })
-    await cards.refresh({ accountId: 'default', chatId: '1', projectId: null })
-    expect(params[0]?.['text']).toBe(telegramMarkdownChunks('Central level: observe\nActive workers: 1\nBudget: 1/2 tokens (50%)')[0])
-    expect(params[0]?.['parse_mode']).toBe('HTML')
   })
 })

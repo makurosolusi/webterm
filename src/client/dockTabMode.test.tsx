@@ -14,7 +14,7 @@ const props: DockProps = {
   onUndo: noop, onRedo: noop, canUndo: false, canRedo: false,
   onBack: noop, onForward: noop, canBack: false, canForward: false,
   onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
-  inboxOpen: false, onToggleInbox: noop, zoomPct: 100, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
+  zoomPct: 100, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
 }
 const viewportLabels = ['Fit view', 'Zoom out', 'Zoom presets', 'Zoom in', 'Go back', 'Go forward', 'Lock view']

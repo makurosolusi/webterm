@@ -2,11 +2,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentList from './AgentList'
-import ApprovalCardR2, { ApprovalQueue } from './ApprovalCardR2'
 import LevelPanel from './LevelPanel'
 import MemoryView, { looksSecret } from './MemoryView'
 import SkillReview from './SkillReview'
-import { fakeClient, R2, R3 } from './centralFixtures.testutil'
+import { fakeClient } from './centralFixtures.testutil'
+import * as needsYou from '../chat/needsYouApi'
 
 afterEach(cleanup)
 
@@ -54,64 +54,18 @@ describe('AgentList', () => {
     expect(await screen.findByText('Done.')).toBeTruthy()
   })
 
-  it('relay that needs approval points to the Approvals tab', async () => {
-    const onApprovalRequested = vi.fn()
+  it('relay that needs approval points to the Needs-you list and refreshes it', async () => {
+    const refresh = vi.spyOn(needsYou, 'refreshNeedsYou').mockResolvedValue(undefined)
     const client = fakeClient({ agentAction: vi.fn(async () => ({ status: 'needs_approval' as const, approvalId: 'ap1' })) })
-    render(<AgentList client={client} onApprovalRequested={onApprovalRequested} />)
+    render(<AgentList client={client} />)
     await screen.findByTestId('state-ag1')
     fireEvent.click(screen.getByRole('button', { name: 'Relay ag1' }))
     fireEvent.change(screen.getByLabelText('Message to relay'), { target: { value: 'hello' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(client.agentAction).toHaveBeenCalledWith('ag1', 'relay', 'hello'))
-    expect(await screen.findByText(/Approval requested/)).toBeTruthy()
-    expect(onApprovalRequested).toHaveBeenCalled()
-  })
-})
-
-describe('ApprovalCardR2', () => {
-  it('R2 shows the server summary, tier and key args, and approves in one click', async () => {
-    const onDecide = vi.fn(async () => undefined)
-    render(<ApprovalCardR2 card={R2} onDecide={onDecide} />)
-    expect(screen.getByTestId('server-summary').textContent).toBe(R2.summary)
-    expect(screen.getByText('R2')).toBeTruthy()
-    expect(screen.getByText('/work/webterm')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    await waitFor(() => expect(onDecide).toHaveBeenCalledWith(R2, true))
-  })
-
-  it('R3 refuses approve until the exact phrase is typed', async () => {
-    const onDecide = vi.fn(async () => undefined)
-    render(<ApprovalCardR2 card={R3} onDecide={onDecide} />)
-    const approve = screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    fireEvent.click(approve)
-    expect(onDecide).not.toHaveBeenCalled()
-    const input = screen.getByLabelText(/Type APPROVE to confirm/)
-    fireEvent.change(input, { target: { value: 'approve' } })
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(input, { target: { value: 'APPROVE' } })
-    expect(approve.disabled).toBe(false)
-    fireEvent.click(approve)
-    await waitFor(() => expect(onDecide).toHaveBeenCalledWith(R3, true))
-  })
-
-  it('an expired card cannot be approved but can be rejected', async () => {
-    const onDecide = vi.fn(async () => undefined)
-    render(<ApprovalCardR2 card={{ ...R2, expiresAt: 5 }} onDecide={onDecide} now={() => 10} />)
-    expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('Expired')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
-    await waitFor(() => expect(onDecide).toHaveBeenCalledWith(expect.anything(), false))
-  })
-
-  it('queue decides through the client and reloads', async () => {
-    const client = fakeClient()
-    render(<ApprovalQueue client={client} />)
-    await screen.findByRole('article', { name: 'agent.spawn R2' })
-    expect(screen.getByRole('article', { name: 'project.merge R3' })).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0]!)
-    await waitFor(() => expect(client.decide).toHaveBeenCalledWith(R2, true))
-    await waitFor(() => expect(client.listApprovals).toHaveBeenCalledTimes(2))
+    expect((await screen.findByText(/Approval requested/)).textContent).toContain('Needs-you list of the Central chat')
+    expect(refresh).toHaveBeenCalled()
+    refresh.mockRestore()
   })
 })
 

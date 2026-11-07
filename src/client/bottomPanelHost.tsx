@@ -1,4 +1,4 @@
-// The single VS Code bottom panel: one surface, a tab per open view (Inbox, Chat, Central, Problems,
+// The single VS Code bottom panel: one surface, a tab per open view (Problems,
 // Activity, Output), exactly one view shown. Opening a view selects its tab instead of stacking another
 // surface on top. Views stay mounted while open (hidden when inactive) so switching tabs never
 // restarts a fetch, drops an approval dialog, or reopens a stream.

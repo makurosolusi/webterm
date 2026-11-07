@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { INBOX_ITEMS_PATH, type UnifiedItem } from '../InboxPanel.items'
+import { INBOX_ITEMS_PATH, type UnifiedItem } from '../chat/needsYouApi'
 import { MobileAgents } from './MobileAgents'
 import { MobileInbox } from './MobileInbox'
 import { tabFromHash } from './MobileApp'

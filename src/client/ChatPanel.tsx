@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { IconTooltip } from '@/components/ui/icon-button'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
+import { NeedsYouStrip } from './chat/needsYouStrip'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
 import { chatApi, chatErrorMessage, isAbortError, openChatStream } from './chatApi'
@@ -53,7 +54,7 @@ export interface ChatPanelProps {
   actionsHost?: HTMLElement | null
   /** Narrow host (side bar): the conversation list sits behind a History toggle instead of a column. */
   compact?: boolean
-  /** The Central control panel is on: `/status`, `/approvals`, `/halt`… and skills join the `/` menu. */
+  /** The Central control panel is on: `/status`, `/halt`… and skills join the `/` menu. */
   centralEnabled?: boolean
 }
 
@@ -209,6 +210,7 @@ export default function ChatPanel(props: ChatPanelProps) {
         </div>
       )}
 
+      <NeedsYouStrip />
       <div className={cn('chat-body', compact && 'chat-body--compact')}>
         {(!compact || history) && <nav className="chat-conversations" aria-label="Conversations">
           {conversations === null ? (

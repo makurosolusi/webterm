@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ChannelStore } from './channelStore'
 import {
+  CENTRAL_QUEUED_REPLY,
   dispatchTelegramUpdate,
   extractRejectChallenge,
   type ApprovalSummary,
@@ -319,8 +320,8 @@ describe('telegram dispatch idempotency and scrubbing', () => {
 
   it('routes bound free text to central chat and preserves idempotency', async () => {
     const store = boundStore('viewer')
-    const ask = vi.fn(async (input: { projectId: string; text: string; updateId: number }) => {
-      expect(input).toEqual({ projectId: 'p1', text: 'hello central', updateId: 18 })
+    const ask = vi.fn(async (input: { projectId: string; text: string; updateId: number; onQueued?: () => void }) => {
+      expect(input).toEqual({ projectId: 'p1', text: 'hello central', updateId: 18, onQueued: expect.any(Function) })
       return { ok: true as const, text: 'assistant answer' }
     })
     const replies: ChannelReply[] = []
@@ -339,5 +340,20 @@ describe('telegram dispatch idempotency and scrubbing', () => {
     expect(second.status).toBe('duplicate')
     expect(ask).toHaveBeenCalledTimes(1)
     expect(replies[0]?.text).toBe('assistant answer')
+  })
+
+  it('says "queued" on its own outbox key when Central is busy, then sends the answer', async () => {
+    const store = boundStore('viewer')
+    const replies: ChannelReply[] = []
+    const tasks: Promise<void>[] = []
+    await dispatchTelegramUpdate(update(19, 100, 7, 'later please'), {
+      store,
+      centralChat: { ask: async ({ onQueued }: { onQueued?: () => void }) => { onQueued?.(); return { ok: true as const, text: 'done now' } } },
+      enqueue: (reply: ChannelReply): void => { replies.push(reply) },
+      background: (task: Promise<void>): void => { tasks.push(task) },
+    })
+    await Promise.all(tasks)
+    expect(replies.map((r) => r.text)).toEqual([CENTRAL_QUEUED_REPLY, 'done now'])
+    expect(new Set(replies.map((r) => r.dedupeKey)).size).toBe(2)
   })
 })

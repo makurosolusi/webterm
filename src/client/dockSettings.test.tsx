@@ -13,7 +13,7 @@ const baseProps: DockProps = {
   onUndo: noop, onRedo: noop, canUndo: false, canRedo: false,
   onBack: noop, onForward: noop, canBack: false, canForward: false,
   onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
-  inboxOpen: false, onToggleInbox: noop, zoomPct: 100, onZoomIn: noop, onZoomOut: noop,
+  zoomPct: 100, onZoomIn: noop, onZoomOut: noop,
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
 }
 
