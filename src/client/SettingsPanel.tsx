@@ -133,6 +133,11 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
           if ((event.target as Element | null)?.closest?.(`[data-slot="${SETTINGS_UNDO_TOAST_SLOT}"]`)) event.preventDefault()
         }}
         onEscapeKeyDown={(event) => {
+          // An inline editor marked data-settings-escape handles Escape itself (cancel), so the dialog stays open.
+          if ((event.target as Element | null)?.closest?.('[data-settings-escape]')) {
+            event.preventDefault()
+            return
+          }
           // Escape mengosongkan pencarian dulu; baru Escape kedua menutup dialog.
           if (query) {
             event.preventDefault()

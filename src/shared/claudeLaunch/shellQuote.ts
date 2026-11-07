@@ -22,6 +22,13 @@ export const joinArgv = (argv: readonly string[]): string => argv.map(shellQuote
  * backslash escapes). Deliberately NOT a shell: no variable expansion, no substitution, no tilde.
  */
 export function shellSplit(input: string): string[] {
+  return scan(input).tokens
+}
+
+/** True when a quote is opened and never closed (shellSplit would silently take the rest as one token). */
+export const hasUnclosedQuote = (input: string): boolean => scan(input).open
+
+function scan(input: string): { tokens: string[]; open: boolean } {
   const tokens: string[] = []
   let buf = ''
   let inSingle = false
@@ -58,5 +65,5 @@ export function shellSplit(input: string): string[] {
     }
   }
   push()
-  return tokens
+  return { tokens, open: inSingle || inDouble }
 }

@@ -272,6 +272,52 @@
   padding: 6px 14px 0;
 }
 
+/* Claude launch profiles: one bordered row per profile; the inline editor uses the same frame.
+   Not .st-card: that class hides itself when it holds no .st-field (search filtering). */
+.st-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-editorWidget-border, var(--border));
+  border-radius: 4px;
+}
+
+.st-profile--editing {
+  border-color: var(--vscode-focusBorder, var(--accent));
+}
+
+.st-profile-name {
+  font-weight: 600;
+}
+
+.st-profile-badge {
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--vscode-badge-background, var(--border));
+  color: var(--vscode-badge-foreground, inherit);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.st-profile-command,
+.st-profile-preview {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.8;
+  word-break: break-all;
+}
+
+.st-profile-label {
+  font-size: 12px;
+}
+
+.st-profile-error {
+  margin: 0;
+  color: var(--vscode-errorForeground, var(--destructive));
+  font-size: 12px;
+}
+
 /* ------------------------------------------------------------------ narrow */
 @media (max-width: 720px) {
   .st-sidebar {
