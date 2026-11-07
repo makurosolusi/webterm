@@ -12,6 +12,7 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 
 ### Added
+- The Choose a folder dialog can create a new folder.
 - Closing a node (× button, tab, sessions panel or Delete key) now asks for confirmation and says what will end: a running terminal or agent session, unsaved editor changes, or a browser page.
 - "Clone Repository…" next to "Open Folder…" in the workspace "+" menu, the File menu, the Welcome screen and ⌘K. Paste an `https://`, `ssh://` or `git@host:path` URL, or `owner/repo` for GitHub. The clone shows its progress, can be cancelled, and opens as a new workspace. The parent folder defaults to `~/webterm/projects`, which is created the first time something is cloned or created there. The last parent you used is suggested next time, and if that folder is gone the default is used instead. If a private repository fails to authenticate, the error tells you to run `gh auth login` or set up an SSH key.
 - "New Project…" in the same places: it creates an empty folder under the parent you choose and opens it as a workspace. "Initialize git repository" is on by default and runs `git init` with an empty initial commit on `main`. Untick it to get a plain folder. A folder that already exists and is not empty is refused.
