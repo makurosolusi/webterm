@@ -7,7 +7,7 @@ import type { EditorConflict } from './useEditorFile'
 /** Jeda sebelum `stat` karena event `dirty` direktori (watcher memicu beruntun saat satu simpan). */
 export const SYNC_STAT_DEBOUNCE_MS = 300
 
-const logStat = (p: string) => (err: unknown): void => console.error(`editor sync: stat gagal untuk ${p}`, err)
+const logStat = (p: string) => (err: unknown): void => console.error(`editor sync: stat failed for ${p}`, err)
 
 type StatFn = (path: string) => Promise<FsResult<{ version: FsVersion }>>
 

@@ -123,7 +123,7 @@ function connect() {
     queue.clear()
     for (const m of pending) ws!.send(JSON.stringify(m))
     if (wasReconnect) for (const cb of [...reconnectListeners]) {
-      try { cb() } catch (err) { console.warn('ws: onReconnect listener gagal', err) }
+      try { cb() } catch (err) { console.warn('ws: onReconnect listener failed', err) }
     }
   }
   ws.onmessage = (ev) => {

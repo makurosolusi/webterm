@@ -221,7 +221,7 @@ export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof 
   vi.stubGlobal('fetch', routeFetch(fx))
   const view = render(<App />)
   await waitFor(() => {
-    if (!document.querySelector('.react-flow__pane')) throw new Error('canvas belum hidrat')
+    if (!document.querySelector('.react-flow__pane')) throw new Error('canvas not hydrated yet')
   })
   // Pane yang muncul BELUM berarti React Flow siap: `onInit` dipanggil dari dalam sebuah
   // `setTimeout`, jadi `rf.current` App masih null sesaat sesudahnya — dan tanpa instance itu
@@ -239,7 +239,7 @@ export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof 
 async function settleReady(): Promise<void> {
   await waitFor(() => {
     const zoomPane = document.querySelector('.react-flow__renderer') as (HTMLElement & { __zoom?: unknown }) | null
-    if (!zoomPane?.__zoom) throw new Error('panZoom React Flow belum terpasang')
+    if (!zoomPane?.__zoom) throw new Error('React Flow panZoom not attached yet')
   })
   // Dua giliran: yang pertama menguras render + effect yang menjadwalkan timer `onInit`; yang kedua
   // dimulai SESUDAH timer itu terjadwal, jadi timer 1ms-nya pasti jatuh tempo lebih dulu.
@@ -278,7 +278,7 @@ export function renderedViewport(): Viewport {
   const el = document.querySelector('.react-flow__viewport')
   const t = (el as HTMLElement | null)?.style.transform ?? ''
   const m = /translate\((-?[\d.]+)px,\s*(-?[\d.]+)px\)\s*scale\(([\d.]+)\)/.exec(t)
-  if (!m) throw new Error(`viewport tanpa transform terbaca: "${t}"`)
+  if (!m) throw new Error(`viewport has no readable transform: "${t}"`)
   return { x: parseFloat(m[1]), y: parseFloat(m[2]), zoom: parseFloat(m[3]) }
 }
 

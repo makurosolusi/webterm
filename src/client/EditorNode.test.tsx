@@ -212,7 +212,7 @@ describe('EditorNode biner & non-UTF-8', () => {
   it('non-utf8: editor read-only + banner, tanpa Save', async () => {
     mount({ meta: { content: 'caf?', version: 'v1', encoding: 'non-utf8' } })
     await waitFor(() => expect(fake.state.createdWith).toMatchObject({ readOnly: true }))
-    expect(screen.getByText(/Bukan UTF-8/)).toBeTruthy()
+    expect(screen.getByText(/Not UTF-8/)).toBeTruthy()
     expect(screen.queryByText('Save')).toBeNull()
   })
 

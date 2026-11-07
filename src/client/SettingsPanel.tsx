@@ -224,7 +224,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
                       </section>
                     ))}
                     <p className="st-no-results" role="status">
-                      Tidak ada setting yang cocok dengan “{query.trim()}”.
+                      No settings match “{query.trim()}”.
                     </p>
                   </>
                 ) : (

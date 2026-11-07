@@ -209,7 +209,7 @@ function EditorNode({
               terlihat, dan tombol Save tetap `dirty` sehingga bisa dicoba ulang. */}
           {editable && readOnly && (
             <div className="editor-node__banner nodrag" role="status">
-              Bukan UTF-8 — dibuka read-only supaya byte aslinya tidak rusak.
+              Not UTF-8: opened read-only so the original bytes are not corrupted.
             </div>
           )}
           {lspHint && (

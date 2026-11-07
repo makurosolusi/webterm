@@ -11,7 +11,7 @@ export function emitFsEvent(e: FsEvent): void {
     try {
       l(e)
     } catch (err) {
-      console.error(`fsEvents: listener gagal untuk ${e.kind} ${e.path}`, err)
+      console.error(`fsEvents: listener failed for ${e.kind} ${e.path}`, err)
     }
   }
 }
