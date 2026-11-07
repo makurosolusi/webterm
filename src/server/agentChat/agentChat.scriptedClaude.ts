@@ -30,8 +30,8 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 const empty = (async function* (): AsyncGenerator<SDKUserMessage> {})()
 const promptText = (p: SDKUserMessage): string => (typeof p.message.content === 'string' ? p.message.content : JSON.stringify(p.message.content))
 
-/** Opener playing the script; `stepMs` slows the stream down so a browser can see it in flight. */
-export function scriptedClaude(o: { stepMs?: number } = {}): { opener: AgentChatOpen; opens: ScriptedOpen[] } {
+/** Opener playing the script; `stepMs` slows the stream down so a browser can see it in flight; `answer` replaces SCRIPTED_ANSWER. */
+export function scriptedClaude(o: { stepMs?: number; answer?: string } = {}): { opener: AgentChatOpen; opens: ScriptedOpen[] } {
   const opens: ScriptedOpen[] = []
   const step = () => (o.stepMs ? sleep(o.stepMs) : Promise.resolve())
   const opener: AgentChatOpen = (resume, canUseTool, abort, input) => {
@@ -54,7 +54,7 @@ export function scriptedClaude(o: { stepMs?: number } = {}): { opener: AgentChat
         x.prompts.push(promptText(p))
         turnCtl = new AbortController()
         if (abort.signal.aborted) return
-        await playTurn(fq, canUseTool, turnCtl.signal, ++turn, `${x.id}-${turn}`, promptText(p), input.mode ?? 'manual', step)
+        await playTurn(fq, canUseTool, turnCtl.signal, ++turn, `${x.id}-${turn}`, promptText(p), input.mode ?? 'manual', step, o.answer ?? SCRIPTED_ANSWER)
       }
     })().catch((err: unknown) => fq.fail(err instanceof Error ? err : new Error(String(err))))
     return fq.asQuery()
@@ -63,7 +63,7 @@ export function scriptedClaude(o: { stepMs?: number } = {}): { opener: AgentChat
 }
 
 async function playTurn(
-  fq: FakeQuery, canUseTool: CanUseTool, signal: AbortSignal, turn: number, tag: string, text: string, mode: string, step: () => Promise<void>,
+  fq: FakeQuery, canUseTool: CanUseTool, signal: AbortSignal, turn: number, tag: string, text: string, mode: string, step: () => Promise<void>, final: string,
 ): Promise<void> {
   const gone = (): boolean => signal.aborted
   if (gone()) return
@@ -99,7 +99,7 @@ async function playTurn(
   fq.emit(fx.messageStart(closing))
   await step()
   if (gone()) return
-  fq.emit(fx.textDelta(SCRIPTED_ANSWER))
-  fq.emit(fx.assistant(closing, [{ type: 'text', text: SCRIPTED_ANSWER }]))
+  fq.emit(fx.textDelta(final))
+  fq.emit(fx.assistant(closing, [{ type: 'text', text: final }]))
   fq.emit(fx.result({ cost: 0.01 * turn, denials: answer.behavior === 'deny' ? 1 : 0 }))
 }

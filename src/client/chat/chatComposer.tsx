@@ -6,7 +6,7 @@
 // With `attach` the composer also takes files (chatComposerAttach): an image-only message may be sent.
 // With `completion` it opens a `/` command and `@` file menu (agentChat/completionMenu). Escape while
 // a turn runs stops it, unless a menu is open (then Escape only closes the menu).
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
 import type { KeyboardEvent, RefObject } from 'react'
 import type { ComposerImage } from './chatAttach'
@@ -33,6 +33,8 @@ export interface ChatComposerProps {
   dropZone?: RefObject<HTMLElement | null>
   /** Opt-in `/` and `@` completion menu; absent = plain composer (the Central chat). */
   completion?: ComposerCompletion
+  /** Replaces the text and focuses the box whenever a new seed arrives (Agent Chat "Edit message"). */
+  seed?: { text: string; key: number }
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -60,6 +62,13 @@ export default function ChatComposer(props: ChatComposerProps) {
   const tooLong = props.maxLength !== undefined && text.length > props.maxLength
   const hasContent = text.trim() !== '' || files.images.length > 0
   const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy
+
+  const seed = props.seed
+  useEffect(() => {
+    if (!seed) return
+    setText(seed.text)
+    area.current?.focus()
+  }, [seed]) // a new seed object (new key) is the request, even with the same text
 
   // Auto-grow: measure from `auto` so the box also shrinks after a send or a deletion.
   useLayoutEffect(() => {

@@ -159,6 +159,24 @@ describe('agent chat transport: control verbs', () => {
       { seq: 1, t: 'config', config: { thinking: true } }, { seq: 2, t: 'context', context: { used: 1, window: 2 } },
       { seq: 3, t: 'commandOutput', id: 'o', text: 'x' }, { seq: 4, t: 'compact', id: 'k', trigger: 'auto' },
       { seq: 5, t: 'reset', sessionId: 's' }, { seq: 6, t: 'commandsChanged' }, { seq: 7, t: 'queued', messageId: 'm', queued: true },
+      { seq: 8, t: 'rateLimit', status: 'rejected', resetsAt: 1 }, { seq: 9, t: 'task', task: { id: 't', status: 'running', description: 'd' } },
     ]) expect(parseAgentChatFrame(JSON.stringify(e))).toEqual(e)
+  })
+
+  it('rewind / fork / stoptask post to their verbs; a rewind answer is normalized', async () => {
+    const t = createAgentChatTransport('n 1')
+    fetchMock.mockResolvedValueOnce(reply({ canRewind: true, filesChanged: ['/a', 3], insertions: 2 }))
+    expect(await t.rewind('u-1', true)).toEqual({ canRewind: true, filesChanged: ['/a'], insertions: 2, deletions: 0 })
+    expect(call(0).url).toBe('/api/agent-chat/n%201/rewind')
+    expect(JSON.parse(call(0).init.body as string)).toEqual({ messageId: 'u-1', dryRun: true })
+    fetchMock.mockResolvedValueOnce(reply({ nope: 1 }))
+    expect(await t.rewind('u-1', true).catch((e: unknown) => e)).toMatchObject({ operation: 'rewind', status: 502 })
+    await t.fork('u-2', 'again', [{ mediaType: 'image/png', data: 'AA==' }])
+    expect(call(2).url).toBe('/api/agent-chat/n%201/fork')
+    expect(JSON.parse(call(2).init.body as string)).toEqual({ messageId: 'u-2', text: 'again', images: [{ mediaType: 'image/png', data: 'AA==' }] })
+    await t.stopTask('t1')
+    expect(JSON.parse(call(3).init.body as string)).toEqual({ taskId: 't1' })
+    fetchMock.mockResolvedValueOnce(reply({ error: 'not_found' }, 404))
+    expect(await t.fork('x', 'y').catch((e: unknown) => e)).toMatchObject({ message: expect.stringContaining('not in the saved transcript') })
   })
 })

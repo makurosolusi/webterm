@@ -68,6 +68,13 @@ describe('buildAgentChatOptions', () => {
     expect(options.extraArgs?.['mcp-config']?.startsWith('{')).toBe(false)
   })
 
+  test('file checkpointing on, with the replay-user-messages flag the docs require for rewind', () => {
+    const { options } = build()
+    expect(options.enableFileCheckpointing).toBe(true)
+    expect(options.extraArgs?.['replay-user-messages']).toBe(null)
+    expect(Object.keys(options.extraArgs ?? {})).toContain('replay-user-messages')
+  })
+
   test('child env is the allowlisted parent plus node identity, with a temp CLAUDE_CONFIG_DIR', () => {
     const env = build({ parentEnv: { ...parentEnv, CLAUDECODE: '1' } }).options.env ?? {}
     expect(env.CLAUDE_CONFIG_DIR).toBe(configDir)

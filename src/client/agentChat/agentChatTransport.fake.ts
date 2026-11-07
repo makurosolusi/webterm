@@ -2,7 +2,7 @@
 import { act } from '@testing-library/react'
 import { vi } from 'vitest'
 import type { ChatStreamStatus } from '../chat/chatTypes'
-import type { AgentChatCommand, AgentChatConfig, AgentChatEvent, AgentChatModel, AgentChatSessionSummary } from '../../shared/agentChat.wire'
+import type { AgentChatCommand, AgentChatConfig, AgentChatEvent, AgentChatModel, AgentChatRewindResult, AgentChatSessionSummary } from '../../shared/agentChat.wire'
 import type { AgentChatStreamOptions, AgentChatTransport } from './agentChatTransport'
 
 export function fakeAgentChatTransport() {
@@ -24,6 +24,9 @@ export function fakeAgentChatTransport() {
     sessions: vi.fn(async (): Promise<AgentChatSessionSummary[]> => []),
     resume: vi.fn(async (_sessionId: string) => undefined),
     newConversation: vi.fn(async () => undefined),
+    rewind: vi.fn(async (_id: string, _dryRun: boolean): Promise<AgentChatRewindResult> => ({ canRewind: true, filesChanged: ['/w/a.ts'], insertions: 2, deletions: 1 })),
+    fork: vi.fn(async (_id: string, _text: string) => undefined),
+    stopTask: vi.fn(async (_id: string) => undefined),
   } satisfies AgentChatTransport
   /** Opens the stream (if not yet) and delivers `events`. */
   const emit = (...events: AgentChatEvent[]): void => act(() => {
