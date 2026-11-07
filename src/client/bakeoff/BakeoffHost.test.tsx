@@ -2,7 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { listCommands } from '../commandRegistry'
-import BakeoffHost, { BakeoffDialog } from './BakeoffHost'
+import BakeoffHost from './BakeoffHost'
+import { BakeoffDialog } from './BakeoffDialog'
 import type { BakeoffView, CandidateView } from './bakeoff.client'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })

@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Node, Edge, ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import AppDock, { AppWorkspaceBar } from './App.chrome'
-import Kanban from './Kanban'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import SignInScreen from './SignInScreen'
@@ -15,7 +14,6 @@ import { toggleSideBar, toggleSideBarView } from './secondarySideBar.store'
 import { useCentralControlEnabled } from './central/centralControlApi'
 import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
-import HelpOverlay from './HelpOverlay'
 import Omnibox from './Omnibox'
 import { openEditorAt, useOmnibox } from './Omnibox.open'
 import { setLspFileOpener } from './editorLsp.store'
@@ -49,6 +47,10 @@ import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
+
+// Rarely opened overlays load on first open, not with the board (keeps the start-up chunk small).
+const Kanban = lazy(() => import('./Kanban'))
+const HelpOverlay = lazy(() => import('./HelpOverlay'))
 
 export default function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -275,7 +277,7 @@ export default function App() {
             onCreated={(ws) => { setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}
             onPlace={(placed, bridges) => { for (const n of placed) addFlowNode(() => n); restoreBridges(bridges, placed.map((n) => n.id)) }}
           />
-          {board && <Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} />}
+          {board && <Suspense fallback={null}><Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} /></Suspense>}
           {paneMenu}
         </>
       )}
@@ -284,7 +286,7 @@ export default function App() {
       {cleanView && <CleanViewHint />}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
       <SettingsHost open={showSettings} setOpen={setShowSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
-      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
       {omni.state && (
         <Omnibox
           key={`${omni.state.scope}:${omni.state.initialQuery}`} scope={omni.state.scope} initialQuery={omni.state.initialQuery}

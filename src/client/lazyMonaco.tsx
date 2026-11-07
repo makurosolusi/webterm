@@ -4,8 +4,6 @@ import { defineWebtermThemes } from './monacoTheme'
 import { getBrowserWorkspace } from './browser.stream'
 import * as fsClient from './fsClient'
 import { LSP_WS_PATH } from './editorLsp.client'
-import { wireEditorLsp } from './editorLsp.monaco'
-import { forwardTabChords } from './editorChords'
 
 /**
  * Monaco di-muat MALAS, satu kali, lewat dynamic import.
@@ -40,13 +38,16 @@ export function loadMonaco(): Promise<MonacoApi> {
     // Path specifier-nya SENGAJA tanpa prefiks `esm/vs`: sejak 0.56 exports map monaco memetakan
     // `"./*" -> "./esm/vs/*.js"`, jadi path dalam gaya lama `monaco-editor/esm/vs/...` jadi dobel
     // prefiks dan gagal resolve.
-    const [monaco, editorWorker, jsonWorker, cssWorker, htmlWorker, tsWorker] = await Promise.all([
+    // The LSP bridge and chord forwarding only act on Monaco, so they ride in its chunk too.
+    const [monaco, editorWorker, jsonWorker, cssWorker, htmlWorker, tsWorker, { wireEditorLsp }, { forwardTabChords }] = await Promise.all([
       import('monaco-editor'),
       import('monaco-editor/editor/editor.worker.js?worker'),
       import('monaco-editor/language/json/json.worker.js?worker'),
       import('monaco-editor/language/css/css.worker.js?worker'),
       import('monaco-editor/language/html/html.worker.js?worker'),
-      import('monaco-editor/language/typescript/ts.worker.js?worker')
+      import('monaco-editor/language/typescript/ts.worker.js?worker'),
+      import('./editorLsp.monaco'),
+      import('./editorChords'),
     ])
 
     self.MonacoEnvironment = {

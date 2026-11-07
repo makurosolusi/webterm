@@ -188,11 +188,12 @@ function OutputTab() {
 }
 
 describe('OutputPanelHost', () => {
-  it('shows an OUTPUT tab with the panel only while open, and closes from the tab', () => {
+  it('shows an OUTPUT tab with the panel only while open, and closes from the tab', async () => {
     render(<><Probe /><OutputPanelHost /><OutputTab /><StatusHarness /></>)
     expect(screen.queryByTestId('output-body')).toBeNull()
     fireEvent.click(screen.getAllByRole('button', { name: /Toggle Output/ })[0]!)
-    expect(screen.getByTestId('output-body')).not.toBeNull()
+    // The panel body is lazy (outputPanelHost.tsx): it lands a tick after the tab opens.
+    expect(await screen.findByTestId('output-body')).not.toBeNull()
     expect(screen.getByRole('tab', { name: /Output/ })).not.toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Close Output' }))
     expect(screen.queryByTestId('output-body')).toBeNull()
