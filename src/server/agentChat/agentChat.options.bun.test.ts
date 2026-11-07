@@ -5,10 +5,10 @@ import { join } from 'node:path'
 import type { CanUseTool, SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
 import type { AgentPermissionMode } from '../../shared/workspace'
+import { PassThrough } from 'node:stream'
 import { registerClaudeLaunchSettings } from '../claudeLauncher/claudeLauncher'
-import {
-  AGENT_CHAT_SETTING_SOURCES, agentChatPermissionMode, buildAgentChatOptions, createStderrTail, type SpawnImpl,
-} from './agentChat.options'
+import type { SpawnImpl } from '../claudeLauncher/claudeSdkSpawn'
+import { AGENT_CHAT_SETTING_SOURCES, agentChatPermissionMode, buildAgentChatOptions, createStderrTail } from './agentChat.options'
 
 const allow: CanUseTool = async (_n, input) => ({ behavior: 'allow', updatedInput: input })
 const configDir = mkdtempSync(join(tmpdir(), 'agent-chat-cfg-')) // test-only: never the real ~/.claude
@@ -105,9 +105,15 @@ describe('buildAgentChatOptions', () => {
     expect(notice?.startsWith('\r\n')).toBe(false)
   })
 
-  test('stderr chunks go to the caller, never stored in options', () => {
+  test('the hook drains child stderr to the caller (the SDK never reads it from a custom spawn)', async () => {
     const got: string[] = []
-    build({ stderr: (c) => got.push(c) }).options.stderr?.('oops')
+    const stderr = new PassThrough()
+    const spawn: SpawnImpl = () => ({ stderr }) as unknown as SpawnedProcess // test-only child: stderr only
+    const { options } = build({ spawn, stderr: (c) => got.push(c) })
+    expect(options.stderr).toBe(undefined)
+    options.spawnClaudeCodeProcess?.({ command: 'x', args: [], env: {}, signal: new AbortController().signal })
+    stderr.end('oops')
+    await new Promise((r) => setImmediate(r))
     expect(got).toEqual(['oops'])
   })
 })

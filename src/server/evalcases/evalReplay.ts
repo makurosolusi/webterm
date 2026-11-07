@@ -35,7 +35,6 @@ import { normalizeTool, type EvalCase } from './evalCase.model'
 
 /** Same ceiling as the golden suite: R1 runs, R2 asks for a card. */
 const GUARD_ENV = { WEBTERM_CENTRAL_AGENTS: 'propose' }
-const KILL_GRACE_MS = 50
 
 export type ReplayModel =
   | { kind: 'fake'; steps: (c: EvalCase) => readonly FakeStep[] }
@@ -132,7 +131,7 @@ async function replayOne(source: Database, c: EvalCase, model: ReplayModel): Pro
     if (model.kind === 'fake') {
       const stepsFile = join(dir, 'steps.json')
       writeFileSync(stepsFile, JSON.stringify(model.steps(c)))
-      runtime = new ClaudeRuntime({ executable: writeFakeClaude(dir, fakeSource(stepsFile)), workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir }, killGraceMs: KILL_GRACE_MS, mcp })
+      runtime = new ClaudeRuntime({ executable: writeFakeClaude(dir, fakeSource(stepsFile)), workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir }, mcp })
     } else {
       runtime = new ClaudeRuntime({ ...(model.executable ? { executable: model.executable } : {}), workDir: join(dir, 'work'), mcp })
     }

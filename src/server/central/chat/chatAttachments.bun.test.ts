@@ -1,9 +1,9 @@
 // Bun-only (bun:sqlite). Central chat attachments end to end through the HTTP seam: images reach the
-// fake `claude` as stream-json image blocks, text files are inlined into the prompt, history keeps a
+// (fake) Agent SDK query as image blocks of the user message, text files are inlined into the prompt, history keeps a
 // reference / name + size only, the image is served back by reference, caps and refusals. Never the
 // real CLI; the data dir is a temp dir.
 import { afterAll, describe, expect, it } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -16,7 +16,8 @@ import type { CentralRuntime } from '../runtime/centralRuntime'
 import { ClaudeRuntime } from '../runtime/claudeRuntime'
 import { MockRuntime } from '../runtime/mockRuntime'
 import { createCentralMcpLink } from '../runtime/claudeMcp'
-import { captureSource, emitSource, successRecords, writeFakeClaude } from '../runtime/claude.fakeBin'
+import { successRecords } from '../runtime/claude.fakeBin'
+import { type FakeCall, fakeQuery } from '../runtime/claude.fakeQuery'
 import { StreamHub } from './streamHub'
 import { TurnService } from './turnService'
 import { parseAttachments, withFiles } from './chatAttachments'
@@ -36,12 +37,13 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-function claude(capture: string): ClaudeRuntime {
+/** A Claude runtime on a fake SDK query; `calls` records what each turn sent. */
+function claude(calls: FakeCall[] = []): ClaudeRuntime {
+  const fake = fakeQuery((call) => { calls.push(call); return successRecords() })
   return new ClaudeRuntime({
-    executable: writeFakeClaude(dir, captureSource(capture) + emitSource(successRecords())),
+    query: fake.query,
     workDir: join(dir, 'work'),
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: dir },
-    killGraceMs: 50,
     // test-only token: keeps the process capability store out of this test
     mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
   })
@@ -108,9 +110,9 @@ describe('parseAttachments (caps and kinds)', () => {
 })
 
 describe('send with attachments (claude runtime)', () => {
-  it('sends images as stream-json image blocks plus the inlined file, keeps refs in history and serves the image', async () => {
-    const capture = join(dir, 'cap-1.json')
-    const { service, deps } = setup(claude(capture))
+  it('sends images as image blocks plus the inlined file, keeps refs in history and serves the image', async () => {
+    const calls: FakeCall[] = []
+    const { service, deps } = setup(claude(calls))
     const sent = await call(deps, MESSAGES(), {
       clientMessageId: 'c1', text: 'What is this?',
       images: [{ mediaType: 'image/png', data: PNG }], files: [{ name: 'notes.txt', data: b64('remember the milk') }],
@@ -118,9 +120,7 @@ describe('send with attachments (claude runtime)', () => {
     expect(sent.status).toBe(202)
     await service.waitFor(String(sent.json['turnId']))
 
-    const child = JSON.parse(readFileSync(capture, 'utf8')) as { argv: string[]; stdin: string }
-    expect(child.argv.join(' ')).toContain('--output-format stream-json --input-format stream-json')
-    const line = JSON.parse(child.stdin.trim()) as { type: string; message: { role: string; content: Array<Record<string, unknown>> } }
+    const line = calls[0]?.message as unknown as { type: string; message: { role: string; content: Array<Record<string, unknown>> } }
     expect(line.type).toBe('user')
     expect(line.message.content[0]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG } })
     const textBlock = line.message.content[1] as { type: string; text: string }
@@ -148,19 +148,17 @@ describe('send with attachments (claude runtime)', () => {
     expect((await call(deps, `${MESSAGES()}?image=${String(file?.['ref'])}`)).status).toBe(404)
   })
 
-  it('sends plain text stdin without images and allows a files-only message', async () => {
-    const capture = join(dir, 'cap-2.json')
-    const { service, deps } = setup(claude(capture))
+  it('sends a plain text prompt without images and allows a files-only message', async () => {
+    const calls: FakeCall[] = []
+    const { service, deps } = setup(claude(calls))
     const sent = await call(deps, MESSAGES(), { clientMessageId: 'c2', text: '  ', files: [{ name: 'a.json', data: b64('{"k":1}') }] })
     expect(sent.status).toBe(202)
     await service.waitFor(String(sent.json['turnId']))
-    const child = JSON.parse(readFileSync(capture, 'utf8')) as { argv: string[]; stdin: string }
-    expect(child.argv).not.toContain('--input-format')
-    expect(child.stdin).toBe('Attached file "a.json":\n```\n{"k":1}\n```')
+    expect(calls[0]?.message?.message.content).toBe('Attached file "a.json":\n```\n{"k":1}\n```')
   })
 
   it('answers 400 invalid_attachment for a refused file, before any turn starts', async () => {
-    const { db, deps } = setup(claude(join(dir, 'cap-3.json')))
+    const { db, deps } = setup(claude())
     const r = await call(deps, MESSAGES(), { clientMessageId: 'c3', text: 'hi', files: [{ name: 'a.png.bin', data: b64(new Uint8Array([0, 1, 2, 3])) }] })
     expect(r.status).toBe(400)
     expect(errorOf(r.json)).toEqual({ code: 'invalid_attachment', message: 'a.png.bin is not a UTF-8 text file. Central can read text files and images only.' })
@@ -181,8 +179,7 @@ describe('send with attachments (non-Claude runtime)', () => {
 
 describe('retry resends the stored attachments', () => {
   it('a send naming stored refs reaches Claude with the same image and file, no re-upload', async () => {
-    const first = join(dir, 'cap-r1.json')
-    const a = setup(claude(first))
+    const a = setup(claude())
     const sent = await call(a.deps, MESSAGES(), {
       clientMessageId: 'r1', text: 'again', images: [{ mediaType: 'image/png', data: PNG }], files: [{ name: 'f.txt', data: b64('file body') }],
     })
@@ -193,12 +190,12 @@ describe('retry resends the stored attachments', () => {
     const fileRef = parts[1]?.['ref'] as string
     expect(fileRef).toMatch(/^[0-9a-f]{64}$/)
 
-    const second = join(dir, 'cap-r2.json')
+    const second: FakeCall[] = []
     const b = setup(claude(second))
     const again = await call(b.deps, MESSAGES(), { clientMessageId: 'r2', text: 'again', images: [{ ref: imageRef }], files: [{ name: 'f.txt', ref: fileRef }] })
     expect(again.status).toBe(202)
     await b.service.waitFor(String(again.json['turnId']))
-    const line = JSON.parse((JSON.parse(readFileSync(second, 'utf8')) as { stdin: string }).stdin) as { message: { content: Array<{ type: string; source?: { data: string }; text?: string }> } }
+    const line = second[0]?.message as unknown as { message: { content: Array<{ type: string; source?: { data: string }; text?: string }> } }
     expect(line.message.content[0]?.source?.data).toBe(PNG)
     expect(line.message.content[1]?.text).toContain('Attached file "f.txt":\n```\nfile body\n```')
   })

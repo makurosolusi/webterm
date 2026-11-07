@@ -2,7 +2,7 @@
 // send to a non-default chat, `central:global` back-compat, id validation, and a fresh Claude
 // session per conversation through the fake `claude` executable (never the real CLI).
 import { afterAll, describe, expect, it } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -15,7 +15,8 @@ import { listConversationEvents } from '../conversationStore'
 import { MockRuntime } from '../runtime/mockRuntime'
 import { ClaudeRuntime } from '../runtime/claudeRuntime'
 import { createCentralMcpLink } from '../runtime/claudeMcp'
-import { initRecord, resultRecord, writeFakeClaude } from '../runtime/claude.fakeBin'
+import { initRecord, resultRecord } from '../runtime/claude.fakeBin'
+import { fakeQuery } from '../runtime/claude.fakeQuery'
 import { StreamHub } from './streamHub'
 import { TurnService } from './turnService'
 import { createChatConversation, listConversationSummaries } from './turnPersistence'
@@ -146,21 +147,16 @@ describe('multi-line messages', () => {
 
 describe('Claude session per conversation', () => {
   it('a new chat starts a fresh session instead of resuming the previous one', async () => {
-    // One fake CLI for every turn: logs its argv, answers with session `sess-<n>` for the n-th run.
-    const log = join(dir, 'argv.jsonl')
-    const executable = writeFakeClaude(dir, `const prev = fs.existsSync(${JSON.stringify(log)})
-  ? fs.readFileSync(${JSON.stringify(log)}, 'utf8').split('\\n').filter(Boolean).length : 0
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n')
-readStdin()
-const session = 'sess-' + (prev + 1)
-emit({ ...${JSON.stringify(initRecord())}, session_id: session })
-emit({ ...${JSON.stringify(resultRecord())}, session_id: session })`)
+    // One fake query for every turn: answers with session `sess-<n>` for the n-th run.
+    const { query, calls } = fakeQuery((call) => {
+      const session = `sess-${calls.indexOf(call) + 1}`
+      return [{ ...initRecord(), session_id: session }, { ...resultRecord(), session_id: session }]
+    })
     let fresh = 0
     const runtime = new ClaudeRuntime({
-      executable,
+      query,
       workDir: join(dir, 'work'),
       env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: dir },
-      killGraceMs: 50,
       newSessionId: () => `new-${++fresh}`,
       // test-only token: keeps the process capability store out of this test
       mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
@@ -177,12 +173,7 @@ emit({ ...${JSON.stringify(resultRecord())}, session_id: session })`)
     await turn(chat, 'c1')
     await turn(chat, 'c2')
 
-    const argvs = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as string[])
-    expect(argvs).toHaveLength(4)
-    expect(argvs[0]).not.toContain('--resume')
-    expect(argvs[1]![argvs[1]!.indexOf('--resume') + 1]).toBe('sess-1')
-    expect(argvs[2]).not.toContain('--resume')
-    expect(argvs[2]).toContain('--session-id')
-    expect(argvs[3]![argvs[3]!.indexOf('--resume') + 1]).toBe('sess-3')
+    expect(calls.map((c) => c.options.resume)).toEqual([undefined, 'sess-1', undefined, 'sess-3'])
+    expect(calls[2]?.options.sessionId).toBe('new-3')
   }, 20_000)
 })

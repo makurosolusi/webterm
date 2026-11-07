@@ -4,15 +4,13 @@
 // plugin and the webterm MCP server via `--mcp-config` file. Files, not inline JSON, for the same
 // reason as the terminal: launch wrappers (envman) scan argv and misread `:` (writeClaudeSettings).
 // The process starts through the node's launch profile argv (spawn hook), never the bundled binary.
-import { spawn as nodeSpawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
-import {
-  query, type CanUseTool, type Options, type PermissionMode, type Query, type SDKUserMessage, type SpawnOptions, type SpawnedProcess,
-} from '@anthropic-ai/claude-agent-sdk'
+import { query, type CanUseTool, type Options, type PermissionMode, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentChatConfig } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
 import { configOptions } from './agentChat.controls'
 import { missingProfileNotice, resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
+import { claudeSdkSpawn, type SpawnImpl } from '../claudeLauncher/claudeSdkSpawn'
 import { writeClaudeSettings, writeHouseRules } from '../hooksSettings'
 import { writeClaudeMcpConfig } from '../mcp/mcp.launch'
 import { writeExplorePlugin } from '../subagents/exploreAgent'
@@ -21,12 +19,8 @@ import { agentChatEnv } from './agentChat.env'
 
 /** Same layers the terminal agent loads: CLAUDE.md, skills, hooks, permissions. */
 export const AGENT_CHAT_SETTING_SOURCES: NonNullable<Options['settingSources']> = ['user', 'project', 'local']
-/** Fallback executable name when a profile has no claude token. */
-const DEFAULT_CLAUDE_BIN = 'claude'
 /** Chars of child stderr kept in memory for an error notice (never logged). */
 export const AGENT_CHAT_STDERR_TAIL_MAX = 4_000
-
-export type SpawnImpl = (command: string, args: string[], opts: { cwd?: string; env: NodeJS.ProcessEnv; stdio: 'pipe'; signal: AbortSignal }) => SpawnedProcess
 
 /** webterm mode -> SDK mode: `manual` is the CLI's own `default`, every other mode is identical. */
 export function agentChatPermissionMode(m: AgentPermissionMode): PermissionMode {
@@ -56,8 +50,6 @@ export interface AgentChatOptionsInput {
 /** SDK options for one `query()`; `notice` is set when the node's launch profile no longer exists. */
 export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Options; notice?: string } {
   const launch = resolveClaudeLaunch(i.profileId)
-  const argv = launch.argv
-  const spawnImpl = i.spawn ?? (nodeSpawn as unknown as SpawnImpl) // ChildProcess satisfies SpawnedProcess (sdk.d.ts)
   const mode = agentChatPermissionMode(i.mode)
   // Only this node's staged files, never other nodes': created first, the CLI expects an existing dir.
   const uploads = agentChatUploadsDir(i.nodeId, i.uploadsRoot)
@@ -80,13 +72,8 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     // `replay-user-messages` next to it so the CLI acknowledges each user message uuid. Replays map to nothing.
     enableFileCheckpointing: true,
     extraArgs: { 'append-system-prompt-file': writeHouseRules(), 'mcp-config': writeClaudeMcpConfig(i.nodeId, i.port), 'replay-user-messages': null },
-    // Required next to the hook: the SDK resolves its bundled binary before calling the hook (S0 gate 3).
-    pathToClaudeCodeExecutable: launch.bin || DEFAULT_CLAUDE_BIN,
-    // `o.command` (the bundled binary) is ignored: the profile argv runs, SDK args appended. `o.env` only,
-    // since the SDK already applied `options.env`; merging process.env back would reintroduce CLAUDECODE.
-    spawnClaudeCodeProcess: (o: SpawnOptions) =>
-      spawnImpl(argv[0] as string, [...argv.slice(1), ...o.args], { cwd: o.cwd, env: o.env, stdio: 'pipe', signal: o.signal }),
-    stderr: (chunk: string) => i.stderr?.(chunk),
+    // The profile argv runs (not the bundled binary); the hook also drains stderr into `i.stderr`.
+    ...claudeSdkSpawn({ launch, ...(i.spawn ? { spawn: i.spawn } : {}), ...(i.stderr ? { stderr: i.stderr } : {}) }),
   }
   return { options, ...(launch.missingId ? { notice: missingProfileNotice(launch.profile.name).trim() } : {}) }
 }

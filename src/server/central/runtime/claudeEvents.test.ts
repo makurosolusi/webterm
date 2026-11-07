@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { RuntimeEvent } from './centralRuntime'
-import { applyClaudeEvent, parseClaudeLine } from './claudeEvents'
-import { MAX_LINE_BYTES, createLineReader } from './claudeOptions'
+import { applyClaudeEvent, parseClaudeMessage } from './claudeEvents'
 import { newTurnState } from './claudeSession'
 import { createTurnEmitter } from './runtimeEvents'
 import { assistantRecord, deltaRecord, initRecord, resultRecord, toolResultRecord, toolUseRecord } from './claude.fakeBin'
 
-const parse = (record: unknown) => parseClaudeLine(JSON.stringify(record))
+const parse = parseClaudeMessage
 
-describe('parseClaudeLine', () => {
+describe('parseClaudeMessage', () => {
   it('parses init with tool and MCP server names', () => {
     expect(parse(initRecord())).toEqual({ type: 'init', sessionId: 'sess-1', tools: [], servers: [] })
     expect(parse(initRecord({ tools: ['Bash'], mcp_servers: [{ name: 'x', status: 'connected' }] }))).toMatchObject({ tools: ['Bash'], servers: ['x'] })
@@ -52,27 +51,10 @@ describe('parseClaudeLine', () => {
     expect(parse({ type: 'system', subtype: 'api_retry' })).toEqual({ type: 'retry' })
   })
 
-  it('returns null for junk, non-objects and unknown types', () => {
-    for (const line of ['not json', '{"broken":', '42', 'null', '[]', '{"type":"mystery"}']) {
-      expect(parseClaudeLine(line)).toBeNull()
+  it('returns null for non-objects and unknown types', () => {
+    for (const message of ['text', 42, null, [], { type: 'mystery' }, { type: 'rate_limit_event' }]) {
+      expect(parse(message)).toBeNull()
     }
-  })
-})
-
-describe('createLineReader', () => {
-  it('joins lines split across chunks and flushes an unterminated tail on end', () => {
-    const reader = createLineReader()
-    expect(reader.push('{"a":1}\n{"b"')).toEqual(['{"a":1}'])
-    expect(reader.push(':2}\n\n{"c":3}')).toEqual(['{"b":2}'])
-    expect(reader.end()).toEqual(['{"c":3}'])
-  })
-
-  it('drops an over-long line (even when it spans chunks) and resumes at the next line', () => {
-    const reader = createLineReader()
-    const half = 'x'.repeat(MAX_LINE_BYTES)
-    expect(reader.push(half)).toEqual([])
-    expect(reader.push(`${half}\nok\n`)).toEqual(['ok'])
-    expect(reader.push('x'.repeat(MAX_LINE_BYTES + 1) + '\nnext\n')).toEqual(['next'])
   })
 })
 

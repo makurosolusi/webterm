@@ -107,7 +107,7 @@ srv.stdin.end()
 
 function service(approvalWaitMs: number): TurnService {
   const mcp = createCentralMcpLink({ dir: join(root, 'mcp'), port, approvalWaitMs, command: { command: process.execPath, args: [MCP_MAIN] } })
-  const runtime = new ClaudeRuntime({ executable: FAKE, workDir: join(root, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: root }, killGraceMs: 50, mcp })
+  const runtime = new ClaudeRuntime({ executable: FAKE, workDir: join(root, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: root }, mcp })
   return new TurnService({ db, runtime, stream: new StreamHub({ heartbeatMs: 0 }), env: {} })
 }
 

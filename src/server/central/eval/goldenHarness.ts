@@ -44,7 +44,6 @@ export const GOLDEN_PROJECT = 'p1' // test-only
 export const GOLDEN_CONVERSATION = 'central:global'
 /** The Worker card ceiling: R1 runs, R2 asks for a card (same level the MCP e2e uses). */
 const GUARD_ENV = { WEBTERM_CENTRAL_AGENTS: 'propose' } // test-only
-const KILL_GRACE_MS = 50
 const HUNG_POLL_MS = 20
 
 /** One scripted step of the fake model. `call` takes the MCP name (`goal_propose`), as Claude sees it. */
@@ -181,7 +180,7 @@ export async function createHarness(options: HarnessOptions): Promise<GoldenHarn
     }
     const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port, approvalWaitMs: 0, command: { command: process.execPath, args: [MCP_MAIN] } })
     const runtime = new ClaudeRuntime({
-      executable: fake, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir }, killGraceMs: KILL_GRACE_MS, mcp,
+      executable: fake, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir }, mcp,
       ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
     })
     const stream = new StreamHub({ replay: (id, after) => listConversationEvents(db, id, after, 500), heartbeatMs: 0 })
