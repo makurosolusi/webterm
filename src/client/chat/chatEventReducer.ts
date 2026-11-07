@@ -139,14 +139,28 @@ function turnStatus(state: ChatState, event: ChatEvent): ChatState {
     ...state,
     turnStatus: status,
     activeTurnId: isActiveTurnStatus(status) ? event.turnId ?? state.activeTurnId : null,
-    ...(status === 'cancelled'
+    // `done` would otherwise settle a still-streaming reply of a failed turn as `complete`.
+    ...(status === 'cancelled' || status === 'failed'
       ? {
           messages: state.messages.map((message) =>
-            message.state === 'streaming' ? { ...message, state: 'cancelled' as const } : message
+            message.state === 'streaming' ? { ...message, state: status } : message
           ),
         }
       : {}),
   }
+}
+
+/** Reason on the failed reply itself (same `error` part the server persists), not a detached banner. */
+function turnError(state: ChatState, event: ChatEvent): ChatState {
+  const payload = payloadOf(event)
+  const target = assistantTarget(state, event)
+  const part: ChatPart = {
+    type: 'error',
+    code: textField(payload.code) ?? 'error',
+    message: textField(payload.message) ?? 'The turn failed.',
+  }
+  const parts = target.parts.some((p) => p.type === 'error') ? target.parts : [...target.parts, part]
+  return { ...state, messages: upsert(state.messages, { ...target, parts, state: 'failed' }) }
 }
 
 function applyOnce(state: ChatState, event: ChatEvent): ChatState {
@@ -163,10 +177,8 @@ function applyOnce(state: ChatState, event: ChatEvent): ChatState {
       return tool(state, event, 'succeeded')
     case 'turn.status':
       return turnStatus(state, event)
-    case 'error': {
-      const payload = payloadOf(event)
-      return { ...state, error: textField(payload.message) ?? 'The turn failed.' }
-    }
+    case 'error':
+      return turnError(state, event)
     case 'done':
       return {
         ...state,

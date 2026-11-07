@@ -59,6 +59,8 @@ export const MAX_PARTS = 100
 export const MAX_PART_JSON = 64_000
 const MAX_ID = 200
 const CONTROL = /[\u0000-\u001f\u007f]/
+/** Message text is prose: tab, newline and carriage return are content, the other control characters are not. */
+const TEXT_CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
 
 function fail(code: ConversationErrorCode, message: string): never {
   throw new ConversationError(code, message)
@@ -121,9 +123,9 @@ export function validateMessageText(value: unknown): string {
   return text
 }
 
-function partText(value: unknown, label: string, max = MAX_ID): string {
+function partText(value: unknown, label: string, max = MAX_ID, control = CONTROL): string {
   const text = typeof value === 'string' ? value.trim() : ''
-  if (text === '' || text.length > max || CONTROL.test(text)) fail('invalid_parts', `${label} is invalid`)
+  if (text === '' || text.length > max || control.test(text)) fail('invalid_parts', `${label} is invalid`)
   return text
 }
 function jsonable(value: unknown, label: string): unknown {
@@ -138,7 +140,7 @@ function jsonable(value: unknown, label: string): unknown {
 function validatePart(raw: unknown, index: number): MessagePart {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('invalid_parts', `parts[${index}] must be an object`)
   const part = raw as Record<string, unknown>
-  if (part['type'] === 'text') return { type: 'text', text: partText(part['text'], `parts[${index}].text`, MAX_MESSAGE_CHARS) }
+  if (part['type'] === 'text') return { type: 'text', text: partText(part['text'], `parts[${index}].text`, MAX_MESSAGE_CHARS, TEXT_CONTROL) }
   if (part['type'] === 'error') {
     return { type: 'error', code: partText(part['code'], `parts[${index}].code`), message: partText(part['message'], `parts[${index}].message`) }
   }

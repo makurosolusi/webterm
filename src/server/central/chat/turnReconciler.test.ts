@@ -6,7 +6,7 @@ import {
   getTurn, listConversationEvents, updateTurn,
 } from '../conversationStore'
 import { appendAssistantMessage } from './turnPersistence'
-import { reconcileTurns } from './turnReconciler'
+import { INTERRUPTED_MESSAGE, reconcileTurns } from './turnReconciler'
 
 const T0 = 1_700_000_000_000
 let fixture: Fixture
@@ -44,7 +44,7 @@ describe('reconcileTurns (B2)', () => {
     expect(getConversation(fixture.db, 'central:global')!.activeTurnId).toBe(null)
     const row = getRow(fixture.db, 'SELECT parts_json, state FROM central_message WHERE id = ?', assistant.id)!
     expect(row['state']).toBe('failed')
-    expect(JSON.parse(String(row['parts_json']))).toEqual([{ type: 'text', text: 'Hello' }])
+    expect(JSON.parse(String(row['parts_json']))).toEqual([{ type: 'text', text: 'Hello' }, { type: 'error', code: 'interrupted', message: INTERRUPTED_MESSAGE }])
     const types = listConversationEvents(fixture.db, 'central:global', 0, 500).map((event) => event.type)
     expect(types.slice(-2)).toEqual(['turn.status', 'done'])
   })

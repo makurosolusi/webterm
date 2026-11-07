@@ -187,7 +187,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         </div>
       )}
 
-      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} />
+      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send} />
       <ChatComposer busy={busy} onSend={send} onStop={stop} />
     </section>
   )

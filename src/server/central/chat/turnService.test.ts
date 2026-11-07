@@ -28,7 +28,7 @@ afterEach(() => {
   fixture.close()
 })
 
-function service(mode: 'success' | 'cancel' = 'success', stepDelayMs = 0, chunks?: string[]): TurnService {
+function service(mode: 'success' | 'cancel' | 'error' = 'success', stepDelayMs = 0, chunks?: string[]): TurnService {
   const runtime = new MockRuntime({
     mode,
     stepDelayMs,
@@ -234,5 +234,37 @@ describe('event history immutability', () => {
     await submitted.done
     const seqs = listConversationEvents(fixture.db, 'central:global', 0, 500).map((event) => event.seq)
     expect(seqs).toEqual(seqs.map((_, index) => index + 1))
+  })
+})
+
+describe('failed turn reason', () => {
+  function assistantRow() {
+    return allRows(fixture.db, `SELECT * FROM central_message WHERE role = 'assistant'`)[0]!
+  }
+
+  it('persists the runtime error as an error part on the failed reply', async () => {
+    const turn = await service('error').submit({ conversationId: 'central:global', clientMessageId: 'e1', text: 'hi' }).done
+    expect(turn.status).toBe('failed')
+    const row = assistantRow()
+    expect(row['state']).toBe('failed')
+    const parts = JSON.parse(String(row['parts_json'])) as { type: string }[]
+    expect(parts[parts.length - 1]).toEqual({ type: 'error', code: 'runtime_error', message: 'mock runtime: runtime_error' })
+  })
+
+  it('a runtime that throws streams and persists a stable reason, never the thrown message', async () => {
+    const runtime = new MockRuntime({ mode: 'success' })
+    runtime.turn = async () => { throw new Error('secret prompt text sk-123') }
+    const svc = new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW })
+    await svc.submit({ conversationId: 'central:global', clientMessageId: 'e2', text: 'hi' }).done
+    const parts = JSON.parse(String(assistantRow()['parts_json'])) as { type: string; message?: string }[]
+    expect(parts).toEqual([{ type: 'error', code: 'runtime_error', message: 'The central agent runtime failed unexpectedly.' }])
+    const events = listConversationEvents(fixture.db, 'central:global', 0, 500)
+    expect(JSON.stringify(events)).not.toContain('sk-123')
+  })
+
+  it('a succeeded reply carries no error part', async () => {
+    await service().submit({ conversationId: 'central:global', clientMessageId: 'ok', text: 'hi' }).done
+    const parts = JSON.parse(String(assistantRow()['parts_json'])) as { type: string }[]
+    expect(parts.some((part) => part.type === 'error')).toBe(false)
   })
 })
