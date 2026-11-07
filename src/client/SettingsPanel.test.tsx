@@ -158,6 +158,7 @@ describe('SettingsPanel persistence', () => {
     fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Cursor blink' }))
 
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: DEFAULT_SETTINGS.cursorBlink })
+    expect(screen.queryByRole('alertdialog')).toBeNull() // a scalar resets instantly, no confirm
   })
 
   it('does not show Modified or a reset gear for a default value', () => {

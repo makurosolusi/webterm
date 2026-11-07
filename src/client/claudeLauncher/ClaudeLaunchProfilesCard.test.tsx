@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../../shared/set
 import { resolveProfileLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { joinArgv } from '../../shared/claudeLaunch/shellQuote'
 import { SettingsItemScopeProvider, isModified } from '../settingsContext'
+import { resetConfirmTitle } from '../SettingsFields'
 import { ClaudeLaunchProfilesCard } from './ClaudeLaunchProfilesCard'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -197,5 +198,27 @@ describe('ClaudeLaunchProfilesCard', () => {
     expect(isModified(mergeSettings({ fontSize: 13 }), 'claudeLaunchProfiles')).toBe(false)
     expect(isModified(mergeSettings({ claudeLaunchProfiles: [] }), 'claudeLaunchProfiles')).toBe(false)
     expect(isModified(mergeSettings({ claudeLaunchProfiles: [{ id: 'a', name: 'Profile 1', command: '' }] }), 'claudeLaunchProfiles')).toBe(true)
+  })
+  it('Reset Setting on the profile list asks first, naming what is lost; Cancel keeps them', () => {
+    const spy = setup({ claudeLaunchProfiles: [MALIK, { id: 'w', name: 'Work', command: 'claude' }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Claude launch profiles' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Remove all 2 Claude launch profiles?' })
+    expect(spy).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(spy).not.toHaveBeenCalled()
+    expect(row('Work')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Claude launch profiles' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Reset' }))
+    expect(spy).toHaveBeenLastCalledWith({ claudeLaunchProfiles: [] })
+    expect(screen.queryByRole('region', { name: 'Work' })).toBeNull()
+  })
+
+  it('resetConfirmTitle: only non-empty lists and maps ask', () => {
+    expect(resetConfirmTitle([1, 2], 'Claude launch profiles')).toBe('Remove all 2 Claude launch profiles?')
+    expect(resetConfirmTitle({ a: 1 }, 'Keybindings')).toBe('Reset Keybindings? 1 entry will be removed.')
+    expect(resetConfirmTitle([], 'X')).toBeNull()
+    expect(resetConfirmTitle({}, 'X')).toBeNull()
+    expect(resetConfirmTitle(false, 'X')).toBeNull()
+    expect(resetConfirmTitle('abc', 'X')).toBeNull()
   })
 })

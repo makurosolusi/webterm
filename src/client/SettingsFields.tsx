@@ -9,11 +9,15 @@
 // Pencarian: `SettingsSearchProvider` membawa query yang sudah dinormalisasi, dan `Field`
 // menyembunyikan dirinya sendiri ketika label + hint tidak cocok. Itu membuat filter bekerja
 // untuk semua section sekaligus tanpa daftar indeks terpisah yang bisa basi.
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 // Here, not in the lazily loaded SettingsPanel: these fields also render outside it (canvas background,
 // projects folder), and their `.st-*` styles must not wait for the panel's first open.
 import './settings.css'
 import './settings-controls.css'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -56,6 +60,19 @@ function highlightMatches(text: string, query: string): ReactNode {
   })
 }
 
+/**
+ * Confirm title for resetting `value`, or null for an instant reset. Only user-built data (a
+ * non-empty list or map) asks first: one click on the gear would otherwise wipe all of it.
+ */
+export function resetConfirmTitle(value: unknown, label: string): string | null {
+  if (Array.isArray(value)) return value.length ? `Remove all ${value.length} ${label}?` : null
+  if (value && typeof value === 'object') {
+    const n = Object.keys(value).length
+    return n ? `Reset ${label}? ${n} ${n === 1 ? 'entry' : 'entries'} will be removed.` : null
+  }
+  return null
+}
+
 export function useSettingsSearch(): string {
   return useContext(SearchContext)
 }
@@ -92,6 +109,7 @@ export function Field({
 }): React.JSX.Element | null {
   const query = useSettingsSearch()
   const { category, settings, onChange } = useSettingsItemScope()
+  const [confirming, setConfirming] = useState<string | null>(null)
   if (!matchesSearch(`${label} ${hintText(hint)}`, query)) return null
 
   const modified = setting !== undefined && settings !== undefined && isModified(settings, setting)
@@ -111,13 +129,31 @@ export function Field({
               type="button"
               className="st-gear"
               aria-label={`Reset Setting: ${label}`}
-              onClick={() => onChange(resetPatch(setting))}
+              onClick={() => {
+                const ask = resetConfirmTitle(settings?.[setting], label)
+                if (ask) setConfirming(ask)
+                else onChange(resetPatch(setting))
+              }}
             >
               <span className="codicon codicon-gear" aria-hidden="true" />
             </button>
           </IconTooltip>
         ) : null}
       </div>
+      {confirming !== null && setting && onChange ? (
+        <AlertDialog open onOpenChange={(open) => { if (!open) setConfirming(null) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirming}</AlertDialogTitle>
+              <AlertDialogDescription>{`"${label}" goes back to its default. Undo is offered right after.`}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel autoFocus>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={() => onChange(resetPatch(setting))}>Reset</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
       {inline ? (
         <div className="st-checkline">
           <div className="st-control">{children}</div>
