@@ -108,6 +108,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Central chat accepts messages with several lines.
 - The Central panel's Skills and Agents tabs no longer show a 404 error when that feature is off; they explain what it does and offer a switch to turn it on, which applies right away. Other failures in the panel now read as a short message instead of a raw request line. Central skills also have their own switch on the Central Agent card in Settings.
 - Arrow keys, Enter and Escape in menus opened from a node (model picker, mode picker, dropdowns) no longer move or deselect the node.
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).
