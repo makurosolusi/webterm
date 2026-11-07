@@ -80,8 +80,10 @@ describe('Central chat Retry through the panel', () => {
 
   it('resends the failed text as a new message', async () => {
     const failed = reply('a1', { state: 'failed', parts: [{ type: 'error', code: 'runtime_error', message: 'claude timed out' }] })
+    const conversation = { id: 'central:global', scope: 'global', projectId: null, activeTurnId: null, lastEventSeq: 3, lastMessageSeq: 2, updatedAt: 1, title: null }
     const client: ChatClient = {
-      listConversations: vi.fn(async () => [{ id: 'central:global', scope: 'global', projectId: null, activeTurnId: null, lastEventSeq: 3, lastMessageSeq: 2, updatedAt: 1 }]),
+      listConversations: vi.fn(async () => ({ items: [conversation], nextOffset: null })),
+      createConversation: vi.fn(async () => conversation),
       listMessages: vi.fn(async () => [human('h1', 'summarize the board'), failed]),
       sendMessage: vi.fn(async () => ({ messageId: 'h2', seq: 3, turnId: 't2', status: 'queued' as const })),
       cancelTurn: vi.fn(async () => ({ status: 'cancelled' as const })),

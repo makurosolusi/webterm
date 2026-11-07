@@ -21,6 +21,7 @@ import { StreamHub } from './central/chat/streamHub'
 import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
 } from './central/chat/turnService'
+import { createChatConversation } from './central/chat/turnPersistence'
 import { readCappedRequestBody } from './cappedRequestBody'
 import { createLogger } from './logs'
 
@@ -164,9 +165,26 @@ export function handleHealth(
   sendJson(res, 200, { runtime: kind, chat: true, ledger: db !== null, ...readiness })
 }
 
-export function handleConversations(res: ServerResponse, db: Database, now?: number): void {
+export function handleConversations(res: ServerResponse, db: Database, url: URL, now?: number): void {
+  const limit = positiveInteger(url.searchParams.get('limit'))
+  const offset = nonNegativeInteger(url.searchParams.get('offset'))
+  if (limit === null) return failJson(res, 'invalid_limit', 'limit must be a positive integer')
+  if (offset === null) return failJson(res, 'invalid_cursor', 'offset must be a non-negative integer')
   try {
-    sendJson(res, 200, { items: listConversationSummaries(db, now) })
+    sendJson(res, 200, listConversationSummaries(db, {
+      ...(limit === undefined ? {} : { limit }),
+      ...(offset === undefined ? {} : { offset }),
+      ...(now === undefined ? {} : { now }),
+    }))
+  } catch (err) {
+    failFromError(res, err)
+  }
+}
+
+/** `POST /conversations`: a new empty chat (body ignored), 201 with its list row. */
+export function handleCreateConversation(res: ServerResponse, db: Database, now?: number): void {
+  try {
+    sendJson(res, 201, createChatConversation(db, now))
   } catch (err) {
     failFromError(res, err)
   }

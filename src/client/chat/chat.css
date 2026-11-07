@@ -69,6 +69,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.chat-list-item__time {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
+}
 .chat-list-item__live {
   flex: 0 0 auto;
   width: 6px;

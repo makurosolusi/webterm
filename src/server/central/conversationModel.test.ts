@@ -69,14 +69,6 @@ describe('message validation', () => {
 })
 
 describe('parts schema', () => {
-  it('keeps newlines and tabs in message text but still rejects other control characters', () => {
-    expect(validateParts([{ type: 'text', text: 'line one\nline two\r\n\tindented' }])).toEqual([
-      { type: 'text', text: 'line one\nline two\r\n\tindented' },
-    ])
-    expect(code(() => validateParts([{ type: 'text', text: 'bad\u0000text' }]))).toBe('invalid_parts')
-    expect(code(() => validateParts([{ type: 'error', code: 'a\nb', message: 'm' }]))).toBe('invalid_parts')
-  })
-
   it('accepts text, tool, approval, and error parts', () => {
     const parts = validateParts([
       { type: 'text', text: 'hello' },

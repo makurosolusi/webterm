@@ -16,7 +16,7 @@ const ITEMS: InboxItem[] = [
 
 const GLOBAL: ChatConversation = {
   id: 'central:global', scope: 'global', projectId: null, activeTurnId: null,
-  lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10,
+  lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10, title: null,
 }
 
 function makeInboxClient(): InboxClient {
@@ -31,7 +31,8 @@ function makeInboxClient(): InboxClient {
 
 function makeChatClient(): ChatClient {
   return {
-    listConversations: vi.fn(async () => [GLOBAL]),
+    listConversations: vi.fn(async () => ({ items: [GLOBAL], nextOffset: null })),
+    createConversation: vi.fn(async () => GLOBAL),
     listMessages: vi.fn(async () => []),
     sendMessage: vi.fn(async () => ({ messageId: 'm1', seq: 1, turnId: 't1', status: 'queued' as const })),
     cancelTurn: vi.fn(async () => ({ status: 'cancelled' as const })),
