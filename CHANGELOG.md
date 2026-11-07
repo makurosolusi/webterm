@@ -67,6 +67,7 @@ Operator notes:
 - Agent Chat: when a turn ends or Claude asks for permission, an answer or a plan approval while you are not looking at the chat, you get the same unread mark, notification and chime as a terminal agent. A turn that ends while its subagents still run is marked unread without a notification.
 
 ### Changed
+- The app loads less JavaScript on start (about 19% less, 14% fewer bytes over the wire, on a board with a terminal): Settings, the Central side bar views, the keyboard shortcuts overlay, the Kanban board, the Activity, Output and SCM panels, the bake-off, replay, template and new-workspace dialogs, and the Agent Chat body now load the first time they are opened. Markdown preview loads together with the editor.
 - The Central chat and control panel now open in a resizable side bar on the right, like Copilot Chat in VS Code, instead of the bottom panel, so they no longer cover the canvas. Toggle it with the title-bar button or ⌥⌘B / Ctrl+Alt+B.
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
 - Nodes are resized only through the Resize toggle in the node header, or ⌘⌥R ("Node: Resize Focused Node" in ⌘K). Clicking or selecting a node no longer shows the blue resize frame. Resize mode ends on Esc, a click outside, typing in the node, collapsing or removing it, or locking the view.
