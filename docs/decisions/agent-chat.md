@@ -66,6 +66,6 @@ yang di-Stop atau crash di tengah teks tidak pernah mengirim pesan final.
 
 - Menu `/` dari `supportedCommands()`, paste gambar, picker/rename sesi, "Open in terminal" (SHOULD).
 - Rewind/fork, @-mention file, komentar inline di plan, pre-warm proses (LATER).
-- Provider non-Claude. Node ini juga bukan pengganti Central (Central tetap `claude -p` per turn).
+- Provider non-Claude. Node ini juga bukan pengganti Central: Central memakai SDK yang sama, tapi satu `query()` sekali jalan per turn (bukan sesi hidup), dan spawn hook profil + drain stderr dibagi lewat `claudeLauncher/claudeSdkSpawn.ts`.
 - Proses yang sedang turn tidak bertahan lewat restart server (tidak ada tmux): turn itu terpotong,
   izin pending hilang, pesan berikutnya me-resume session.

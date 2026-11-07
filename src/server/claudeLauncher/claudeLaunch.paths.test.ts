@@ -76,11 +76,12 @@ afterEach(() => {
 describe('Central paths use the Central launch profile', () => {
   it('Central runtime turn: envman wraps claude, its env reaches claude', async () => {
     await new ClaudeRuntime({
-      workDir: join(dir, 'work'), killGraceMs: 50, newSessionId: () => 'sid', env: { PATH, HOME: dir },
+      workDir: join(dir, 'work'), newSessionId: () => 'sid', env: { PATH, HOME: dir },
       mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }), // test-only
     }).turn(turnInput(), recorder().emit)
-    expect(envmanLog()[0]).toMatch(/^-e claude:malik-opus -- claude -p /)
-    expect(claudeLog()).toEqual(['-p --output-format|env=test-only'])
+    // The Agent SDK's args follow the profile argv (claudeSdkSpawn).
+    expect(envmanLog()[0]).toMatch(/^-e claude:malik-opus -- claude --output-format stream-json /)
+    expect(claudeLog()).toEqual(['--output-format stream-json|env=test-only'])
   })
 
   it('summarizer, policy classifier and memory consolidator (claude -p)', async () => {

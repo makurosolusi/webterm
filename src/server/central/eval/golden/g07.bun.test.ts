@@ -10,7 +10,7 @@ import { adversarialTools, goalInput, proposeGoal } from '../adversarialPayloads
 import { createHarness, GOLDEN_CONVERSATION, GOLDEN_PROJECT, setDailyUsage, type GoldenHarness } from '../goldenHarness'
 
 const PROPOSAL_AUDITS = `SELECT COUNT(*) AS c FROM event WHERE kind = 'central.proposal'`
-/** Longer than the kill ladder needs, so a call after it only happens if the runtime failed to stop the turn. */
+/** Longer than stopping the child takes, so a call after it only happens if the runtime failed to stop the turn. */
 const AFTER_LIMIT_PAUSE_MS = 1_500
 const DAY = budgetLimits({})
 const lateCall = () => [{ pause: AFTER_LIMIT_PAUSE_MS }, proposeGoal(goalInput(GOLDEN_PROJECT, 'Must not exist'))]

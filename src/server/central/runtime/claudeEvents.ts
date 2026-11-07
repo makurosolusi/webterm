@@ -1,4 +1,5 @@
-// stream-json parsing and event mapping for the Claude adapter (PLAN CENTRAL-RUNTIME-b 1.2).
+// SDK message normalization and event mapping for the Claude adapter (PLAN CENTRAL-RUNTIME-b 1.2).
+// The Agent SDK yields the same records the CLI writes as stream-json (SDKMessage in sdk.d.ts).
 //
 // [BT] Every field name below (`system/init`.`tools`/`mcp_servers`/`session_id`,
 // `stream_event`.`event`.`delta`.`text`, `assistant`.`message`.`id`/`content`/`usage`/`error`,
@@ -68,16 +69,9 @@ function parseUser(obj: Rec): ClaudeEvent | null {
   return results.length > 0 ? { type: 'tool_results', results } : null
 }
 
-/** Parses one stdout line; non-JSON or unknown shapes yield null (they are ignored by design). */
-export function parseClaudeLine(line: string): ClaudeEvent | null {
-  let raw: unknown
-  try {
-    raw = JSON.parse(line)
-  } catch {
-    // CLI banners or truncated lines are not events; dropping them is the documented behaviour.
-    return null
-  }
-  const obj = rec(raw)
+/** Normalizes one SDK message (SDKMessage, read defensively); unknown shapes yield null (ignored by design). */
+export function parseClaudeMessage(message: unknown): ClaudeEvent | null {
+  const obj = rec(message)
   if (obj === null) return null
   switch (obj.type) {
     case 'system':
@@ -109,7 +103,7 @@ export interface ApplyContext {
   state: ClaudeTurnState
   maxTurns: number
   maxTokens?: number
-  /** Starts the kill ladder on the child. */
+  /** Stops the query (aborts the SDK child). */
   kill: () => void
   /** Clock for tool durations; defaults to `Date.now`. */
   now?: () => number

@@ -1,6 +1,5 @@
-// Per-turn state, error messages, child work dir and kill ladder for the Claude adapter
+// Per-turn state, error messages and child work dir for the Claude adapter
 // (split from `claudeRuntime` for Rule 8; PLAN CENTRAL-RUNTIME-b 1.1/1.2).
-import type { ChildProcess } from 'node:child_process'
 import { chmodSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir } from '../../config'
@@ -11,7 +10,6 @@ import { type ClaudeUnavailableCode, MICROS_PER_USD } from './claudeOptions'
 import { classifyClaudeFailure } from './claudeFailure'
 
 const WORK_DIR_MODE = 0o700
-const KILL_LADDER: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGKILL']
 
 export interface TurnFailure {
   code: RuntimeErrorCode
@@ -35,7 +33,7 @@ export interface ClaudeTurnState {
   result: ClaudeResultEvent | null
   retries: number
   spawnError: NodeJS.ErrnoException | null
-  /** Bounded tail of the child's stderr, in memory only; redacted before it is logged or surfaced. */
+  /** Bounded tail of the child's stderr (or the SDK's error when the child said nothing), in memory only; redacted before it is logged or surfaced. */
   stderrTail: string
   /** MCP tool calls requested and not yet answered: tool_use id -> name + start time. */
   openTools: Map<string, { name: string; at: number }>
@@ -94,25 +92,6 @@ export function ensureWorkDir(dir: string = defaultWorkDir()): string {
 /** `<dataDir>/central/work`: an empty directory so project files and CLAUDE.md are not picked up. */
 export function defaultWorkDir(): string {
   return join(dataDir(), 'central', 'work')
-}
-
-/** SIGINT, then SIGTERM, then SIGKILL, `graceMs` apart; stops escalating once the child has exited. */
-export function createKillLadder(child: ChildProcess, graceMs: number): { start(): void; clear(): void } {
-  let step = 0
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const next = (): void => {
-    if (child.exitCode !== null || child.signalCode !== null) return
-    child.kill(KILL_LADDER[step])
-    step += 1
-    if (step < KILL_LADDER.length) {
-      timer = setTimeout(next, graceMs)
-      timer.unref?.()
-    }
-  }
-  return {
-    start: () => { if (step === 0) next() },
-    clear: () => { if (timer !== undefined) clearTimeout(timer) },
-  }
 }
 
 /** Terminal outcome implied by a `result` event. */

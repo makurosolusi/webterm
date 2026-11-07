@@ -1,16 +1,22 @@
-// Test support: writes a fake `claude` executable (a Node `.mjs`) and builds stream-json
-// records for it. [BT] The record shapes are our own fixtures of the documented stream-json
-// format, not recordings of a real CLI (confirmed only at GATE-S). No network, no real claude.
+// Test support: writes a fake `claude` executable (a Node `.mjs`) that the real Agent SDK `query()` drives
+// through the spawn hook, and builds the SDK/stream-json records both it and claude.fakeQuery.ts play.
+// [BT] The record shapes are our own fixtures of the documented format, not recordings of a real CLI
+// (confirmed only at GATE-S). No network, no real claude.
 import { chmodSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RuntimeEvent, TurnInput } from './centralRuntime'
 
 let counter = 0
 
-/** Source prelude every fake starts with: `emit(record)` and `readStdin()`. */
-export const PRELUDE = `import fs from 'node:fs'
+/**
+ * Source prelude every fake starts with: `emit(record)`, `readStdin()` (the SDK's initialize request and the
+ * user message, as JSON lines; the SDK ends stdin after the one-message prompt) and `flag(name)` (the SDK
+ * passes `--name=value`).
+ */
+const PRELUDE = `import fs from 'node:fs'
 const emit = (record) => process.stdout.write(JSON.stringify(record) + '\\n')
 const readStdin = () => fs.readFileSync(0, 'utf8')
+const flag = (name) => process.argv.find((a) => a.startsWith(name + '='))?.slice(name.length + 1)
 `
 
 /** Writes an executable fake into `dir` and returns its path. */
@@ -20,13 +26,6 @@ export function writeFakeClaude(dir: string, body: string): string {
   writeFileSync(file, `#!/usr/bin/env node\n${PRELUDE}${body}\n`, { mode: 0o755 })
   chmodSync(file, 0o755)
   return file
-}
-
-/** Source that records argv, env keys, cwd and stdin to `file` (JSON). */
-export function captureSource(file: string): string {
-  return `fs.writeFileSync(${JSON.stringify(file)}, JSON.stringify({
-    argv: process.argv.slice(2), envKeys: Object.keys(process.env), cwd: process.cwd(), stdin: readStdin(),
-  }))\n`
 }
 
 /** Source that emits each record in order. */
