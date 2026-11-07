@@ -1,6 +1,6 @@
-// Bun-only (bun:sqlite): Telegram as a door into the Central conversation. Notifications have one
+// Bun-only (bun:sqlite): Central as the hub, Telegram as a door into it. Notifications have one
 // source: a gate or an agent that needs input becomes ONE notice in `central:global` (live on the
-// chat stream), and Telegram mirrors it once. `/inbox` is the Central "Needs you" list. Fake fetch
+// chat stream) with or without Telegram, and a Telegram channel mirrors it once. `/inbox` is the Central "Needs you" list. Fake fetch
 // and fake buses only: nothing reaches Telegram.
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -9,12 +9,13 @@ import { join } from 'node:path'
 import type { Database } from 'bun:sqlite'
 import { rows, run } from '../central/guard/controlGuard.testutil'
 import { appendCentralNotice } from '../central/chat/conversationNotice'
+import { setTelegramNoticeMirror, startCentralNotices } from '../central/centralNotices'
 import { resolveChatService } from '../centralChatHandlers'
 import type { SenseEvent } from '../events/eventModel'
 import { createInboxItem } from '../inbox/inboxItemStore'
 import { gate, setup } from '../inbox/inboxItems.testutil'
 import { readNeedsYou } from '../inbox/needsYou'
-import { createPresenceTracker, startAgentForwarder } from './channelPresence'
+import { createPresenceTracker } from './channelPresence'
 import { runCommand } from './channelCommands'
 import { ChannelStore } from './channelStore'
 
@@ -55,11 +56,25 @@ test('a notice is appended once per key and published live on the chat stream', 
   expect(frames.filter((f) => f.event === 'message.created')).toHaveLength(1)
 })
 
-test('a new gate makes one Central notice and one Telegram card; the next sweep adds neither', async () => {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const GATE_NOTICE = 'Approval needed: Run migration 0042 — Runs the migration · R2 · rewindable from a checkpoint — project One'
+
+test('Telegram off: a new gate still makes exactly one Central notice', async () => {
+  const s = setup()
+  const stop = startCentralNotices({ db: () => s.db, subscribe: () => () => {}, now: s.ctx.now, intervalMs: 20 })
+  try {
+    gate(s)
+    await sleep(200) // several sweeps
+    expect(notices(s.db)).toEqual([GATE_NOTICE])
+  } finally { stop() }
+})
+
+test('Telegram on: still one Central notice, and the channel mirrors one card', async () => {
   const { startChannelsRuntime } = await import('./channelsRuntime')
   const { harnessLedger } = await import('./channelsRuntimeHarness')
   const s = setup()
   const sent: Array<Record<string, unknown>> = []
+  const stopNotices = startCentralNotices({ db: () => s.db, subscribe: () => () => {}, now: s.ctx.now, intervalMs: 20 })
   const runtime = startChannelsRuntime(harnessLedger(), {
     env: { WEBTERM_TELEGRAM: 'on', WEBTERM_TELEGRAM_BOT_TOKEN: 'test-token' } as NodeJS.ProcessEnv, // test-only token
     ledgerDb: s.db,
@@ -69,37 +84,43 @@ test('a new gate makes one Central notice and one Telegram card; the next sweep 
       intervalMs: 60_000,
       fetch: async (_url, init) => { sent.push(JSON.parse(init.body) as Record<string, unknown>); return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1 } }) } },
     },
-    subscribe: () => () => {},
   })
   try {
     runtime?.store.bind('telegram', '42', { projectId: 'p1', role: 'owner' })
     gate(s)
-    await new Promise((r) => setTimeout(r, 6800)) // two sweeps (3 s each)
-    expect(sent).toHaveLength(1)
-    expect(sent[0]?.['chat_id']).toBe('42')
-    expect(notices(s.db)).toEqual(['Approval needed: Run migration 0042 — Runs the migration · R2 · rewindable from a checkpoint — project One'])
-  } finally { runtime?.stop() }
+    await sleep(6800) // two card sweeps (3 s each), many notice sweeps
+    expect(sent.map((b) => b['chat_id'])).toEqual(['42'])
+    expect(notices(s.db)).toEqual([GATE_NOTICE])
+  } finally { runtime?.stop(); stopNotices() }
 }, 15_000)
 
-test('an agent that needs input: one Central notice, the same text mirrored once to the bound chat', () => {
+test('agent needs input: a Central notice without Telegram; with the mirror plugged, the same text once to the bound chat', () => {
   const s = setup()
-  const store = new ChannelStore(join(dir, 'channels.json'))
-  store.bind('telegram', '42', { projectId: 'w1', role: 'owner' })
   let emit: (e: SenseEvent) => void = () => {}
   const clock = { t: 0 }
   const presence = createPresenceTracker(() => clock.t)
   clock.t = 10 * 60_000 // away longer than the default 3 minutes
-  startAgentForwarder({
-    store, presence,
+  const stop = startCentralNotices({
+    db: () => s.db, presence, intervalMs: 60_000,
     subscribe: (_p, fn) => { emit = fn; return () => {} },
     describe: () => ({ label: 'Claude 1', workspace: 'One' }),
-    notice: (key, text) => void appendCentralNotice(s.db, { key, text }),
   })
-  const event = { seq: 3, ts: 5, kind: 'hook.Notification', nodeId: 'n1', workspaceId: 'w1', payload: { status: 'waiting' } } as SenseEvent
-  emit(event)
-  emit(event) // repeated status: not news
-  expect(notices(s.db)).toEqual(['Claude 1 needs input in One.'])
-  expect(store.pendingReplies().map((r) => [r.chatId, r.text])).toEqual([['42', 'Claude 1 needs input in One.']])
+  const hook = (seq: number, status: string) =>
+    emit({ seq, ts: 5, kind: 'hook.Notification', nodeId: 'n1', workspaceId: 'w1', payload: { status } } as SenseEvent)
+  try {
+    hook(1, 'waiting')
+    hook(2, 'waiting') // repeated status: not news
+    expect(notices(s.db)).toEqual(['Claude 1 needs input in One.'])
+
+    const store = new ChannelStore(join(dir, 'channels.json'))
+    store.bind('telegram', '42', { projectId: 'w1', role: 'owner' })
+    const unplug = setTelegramNoticeMirror(store)
+    hook(3, 'blocked')
+    unplug()
+    hook(4, 'done')
+    expect(notices(s.db)).toEqual(['Claude 1 needs input in One.', 'Claude 1 needs approval in One.', 'Claude 1 finished in One.'])
+    expect(store.pendingReplies().map((r) => [r.chatId, r.text])).toEqual([['42', 'Claude 1 needs approval in One.']])
+  } finally { stop() }
 })
 
 test('/inbox answers with the Needs-you list: open items and the task projection, grouped like the strip', async () => {

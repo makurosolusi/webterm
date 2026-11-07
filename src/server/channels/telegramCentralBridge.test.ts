@@ -5,7 +5,7 @@ import { TurnService } from '../central/chat/turnService'
 import { StreamHub } from '../central/chat/streamHub'
 import { registerWorkspaceLookup } from '../central/chat/turnPersistence'
 import type { CentralRuntime, RuntimeEmit, RuntimeResult, TurnInput } from '../central/runtime/centralRuntime'
-import { centralTelegramEnabled, createTelegramCentralPort } from './telegramCentralBridge'
+import { TELEGRAM_QUEUE_MAX, centralTelegramEnabled, createTelegramCentralPort } from './telegramCentralBridge'
 
 function makeService(db: Database, runtime: CentralRuntime, now = () => Date.now()): TurnService {
   return new TurnService({ db, runtime, stream: new StreamHub(), now })
@@ -75,19 +75,38 @@ describe('telegram central bridge', () => {
     } finally { fixture.close() }
   })
 
-  it('reports busy while the first turn is blocked', async () => {
+  it('queues a message that arrives during a running turn and runs it as the next turn', async () => {
     const fixture = openFixture()
     const runtime = new BlockingRuntime()
     try {
       seedPortfolio(fixture.db)
-      const port = createTelegramCentralPort({ db: fixture.db, kind: 'mock', service: makeService(fixture.db, runtime) })
+      const port = createTelegramCentralPort({ db: fixture.db, kind: 'mock', service: makeService(fixture.db, runtime), pollMs: 5 })
       const first = port.ask({ projectId: 'p1', text: 'first', updateId: 4 })
-      await Promise.resolve()
-      await Promise.resolve()
-      expect(runtime.resolve).toBeTypeOf('function')
-      await expect(port.ask({ projectId: 'p1', text: 'second', updateId: 5 })).resolves.toEqual({ ok: false, code: 'conversation_busy' })
+      await vi.waitFor(() => expect(runtime.resolve).toBeTypeOf('function'))
+      const releaseFirst = runtime.resolve
+      const onQueued = vi.fn()
+      const second = port.ask({ projectId: 'p1', text: 'second', updateId: 5, onQueued })
+      await vi.waitFor(() => expect(onQueued).toHaveBeenCalledTimes(1))
+      releaseFirst()
+      await expect(first).resolves.toEqual({ ok: true, text: 'released' })
+      await vi.waitFor(() => expect(runtime.resolve).not.toBe(releaseFirst)) // the queued one is now the running turn
       runtime.resolve()
-      await first
+      await expect(second).resolves.toEqual({ ok: true, text: 'released' })
+      expect(fixture.db.query('SELECT COUNT(*) AS count FROM central_turn').get()).toMatchObject({ count: 2 })
+    } finally { fixture.close() }
+  })
+
+  it('refuses a message once the queue is full, without touching the running turn', async () => {
+    const fixture = openFixture()
+    const runtime = new BlockingRuntime()
+    try {
+      seedPortfolio(fixture.db)
+      const port = createTelegramCentralPort({ db: fixture.db, kind: 'mock', service: makeService(fixture.db, runtime), pollMs: 5 })
+      void port.ask({ projectId: 'p1', text: 'running', updateId: 20 })
+      await vi.waitFor(() => expect(runtime.resolve).toBeTypeOf('function'))
+      const waiting = Array.from({ length: TELEGRAM_QUEUE_MAX }, (_, i) => port.ask({ projectId: 'p1', text: `q${i}`, updateId: 21 + i }))
+      await expect(port.ask({ projectId: 'p1', text: 'one too many', updateId: 99 })).resolves.toEqual({ ok: false, code: 'central_queue_full' })
+      expect(waiting).toHaveLength(TELEGRAM_QUEUE_MAX)
     } finally { fixture.close() }
   })
 

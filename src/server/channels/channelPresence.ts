@@ -1,8 +1,10 @@
-// Desktop -> Telegram forwarding (F2-g). When every browser tab has been away longer than the
-// configured minutes (default 3, like Orca DESKTOP_AWAY_SECONDS = 180) and an agent finishes or
-// needs input, ONE notice is appended to the Central conversation (`notice` dep, the single source
-// the UI shows) and the same text is mirrored to the chats bound to that workspace, through the same
-// outbox (and so the same renderer and retry) as every other reply. Muted workspaces never forward.
+// Agent notices (F2-g). When every browser tab has been away longer than the configured minutes
+// (default 3, like Orca DESKTOP_AWAY_SECONDS = 180) and an agent finishes or needs input, ONE notice
+// is appended to the Central conversation (`notice` dep, the single source the UI shows), whether or
+// not Telegram is on. When a Telegram channel is up (`store` returns it) the same text is mirrored to
+// the chats bound to that workspace, through the same outbox (and so the same renderer and retry) as
+// every other reply. Muted workspaces never forward. One process-wide forwarder owns this
+// (central/centralNotices.ts); the channel runtime only plugs its store in as the mirror.
 //
 // Presence is a heartbeat: a visible tab pings `POST /api/channels/presence` (channelPresenceHttp);
 // hidden or closed tabs send nothing, so "away" = time since the last visible ping. The tracker is
@@ -12,6 +14,7 @@ import { createLogger } from '../logs'
 import { TELEGRAM_CHANNEL } from './channelDispatch'
 import type { EnqueueReplyInput, EnqueueReplyOutcome } from './channelStore'
 import type { ChannelBinding } from './identity'
+import { DEFAULT_FORWARD_AWAY_MINUTES } from './channelStoreSchema'
 
 const log = createLogger('channels')
 const MINUTE_MS = 60_000
@@ -54,12 +57,16 @@ export function createPresenceTracker(now: () => number = Date.now): PresenceTra
 /** Process-wide tracker used by the HTTP ping and the production forwarder. */
 export const presence = createPresenceTracker()
 
+/** The Telegram side of a notice: the delay setting, the bound chats and the outbox. */
+export interface ForwarderStore {
+  readonly forwardAwayMinutes: number
+  listBindings(channel?: string): Array<{ chatId: string; binding: ChannelBinding }>
+  enqueueReply(input: EnqueueReplyInput): EnqueueReplyOutcome
+}
+
 export interface ForwarderDeps {
-  store: {
-    readonly forwardAwayMinutes: number
-    listBindings(channel?: string): Array<{ chatId: string; binding: ChannelBinding }>
-    enqueueReply(input: EnqueueReplyInput): EnqueueReplyOutcome
-  }
+  /** The live Telegram store, or a getter for it (null = Telegram off: Central notice only, default delay). */
+  store: ForwarderStore | (() => ForwarderStore | null)
   presence: PresenceTracker
   /** `hook.*` subscription; returns the unsubscribe function (production: eventBus). */
   subscribe(pattern: string, fn: (event: SenseEvent) => void): () => void
@@ -85,7 +92,8 @@ export function startAgentForwarder(deps: ForwarderDeps): () => void {
     last.set(event.nodeId, status)
     // Transition only: a repeated status (or a replay) is not news. `working` never notifies.
     if (!(status in VERB) || prev === status) return
-    const minutes = deps.store.forwardAwayMinutes
+    const store = typeof deps.store === 'function' ? deps.store() : deps.store
+    const minutes = store ? store.forwardAwayMinutes : DEFAULT_FORWARD_AWAY_MINUTES
     if (minutes === 0 || deps.presence.awayMs() < minutes * MINUTE_MS) return
     if (deps.presence.isMuted(event.workspaceId)) return
     let who: { label: string; workspace: string } | null = null
@@ -103,10 +111,11 @@ export function startAgentForwarder(deps: ForwarderDeps): () => void {
     }
     // ponytail: a chat bound to project id == workspace id (how synced projects are created);
     // a ledger lookup is needed only if projects ever get ids of their own.
-    const chats = deps.store.listBindings(TELEGRAM_CHANNEL).filter((b) => b.binding.projectId === event.workspaceId)
+    if (!store) return
+    const chats = store.listBindings(TELEGRAM_CHANNEL).filter((b) => b.binding.projectId === event.workspaceId)
     for (const { chatId } of chats) {
       try {
-        deps.store.enqueueReply({ key: `notice:${key}:${chatId}`, channel: TELEGRAM_CHANNEL, chatId, text })
+        store.enqueueReply({ key: `notice:${key}:${chatId}`, channel: TELEGRAM_CHANNEL, chatId, text })
       } catch (err) {
         log.warn('channels.forward_failed', 'agent notice enqueue failed', { error: err instanceof Error ? err.name : typeof err })
       }

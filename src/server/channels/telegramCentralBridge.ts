@@ -11,6 +11,18 @@ import type { RuntimeKind } from '../central/runtime/centralRuntime'
 import type { TelegramCentralPort } from './channelDispatch'
 
 const TIMEOUT_MS = 120_000
+/** Telegram messages that may wait behind a running turn; one more is refused (`central_queue_full`). */
+export const TELEGRAM_QUEUE_MAX = 5
+/** How long a queued message waits for the conversation before giving up (`central_queue_timeout`). */
+const QUEUE_WAIT_MS = 10 * 60_000
+const QUEUE_POLL_MS = 500
+
+/** A Telegram message the queue could not take or could not run; `code` is the reply code. */
+class TelegramQueueError extends Error {
+  constructor(readonly code: 'central_queue_full' | 'central_queue_timeout', message: string) {
+    super(`${code}: ${message}`)
+  }
+}
 // Persisted turn error code (RuntimeErrorCode) that maps to a fast, distinct Telegram reply.
 const RUNTIME_UNAVAILABLE = 'runtime_unavailable'
 
@@ -40,15 +52,42 @@ export function createTelegramCentralPort(input: {
   kind: RuntimeKind
   now?: () => number
   service?: TurnService
+  /** Test seam: how often a queued message re-checks the conversation. */
+  pollMs?: number
 }): TelegramCentralPort {
   const chat = resolveChatService({ now: input.now, service: input.service }, input.db, input.kind)
+  const conversationId = GLOBAL_CONVERSATION_ID
+  // FIFO of update ids waiting for `central:global` (one conversation, so one queue). The turn
+  // service has no queue of its own: a submit while a turn runs throws `conversation_busy`.
+  const queue: number[] = []
+  const isBusy = (error: unknown): boolean => error instanceof CentralChatError && error.code === 'conversation_busy'
+  /** Submits now, or waits its turn in the FIFO and submits as the next turn. */
+  async function submitQueued(updateId: number, text: string, onQueued?: () => void): Promise<ReturnType<TurnService['submit']>> {
+    const submit = () => chat.service.submit({ conversationId, clientMessageId: `telegram:${updateId}`, text })
+    if (queue.length === 0) {
+      try { return submit() } catch (error) { if (!isBusy(error)) throw error }
+    }
+    if (queue.length >= TELEGRAM_QUEUE_MAX) throw new TelegramQueueError('central_queue_full', `${TELEGRAM_QUEUE_MAX} Telegram messages are already waiting`)
+    queue.push(updateId)
+    onQueued?.()
+    const deadline = Date.now() + QUEUE_WAIT_MS
+    try {
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, input.pollMs ?? QUEUE_POLL_MS))
+        if (queue[0] !== updateId) continue
+        try { return submit() } catch (error) { if (!isBusy(error)) throw error }
+        if (Date.now() > deadline) throw new TelegramQueueError('central_queue_timeout', 'the Central conversation stayed busy')
+      }
+    } finally {
+      queue.splice(queue.indexOf(updateId), 1)
+    }
+  }
   return {
-    async ask({ projectId, text, updateId }) {
-      const conversationId = GLOBAL_CONVERSATION_ID
+    async ask({ projectId, text, updateId, onQueued }) {
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
         const contextual = `[via Telegram, project: ${projectLabel(input.db, projectId)}]\n${text}`
-        const submitted = chat.service.submit({ conversationId, clientMessageId: `telegram:${updateId}`, text: contextual })
+        const submitted = await submitQueued(updateId, contextual, onQueued)
         const timeout = new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('central_timeout')), TIMEOUT_MS)
         })
@@ -65,7 +104,7 @@ export function createTelegramCentralPort(input: {
         const answer = assistant?.parts.filter((part) => part.type === 'text').map((part) => part.text).join('') ?? ''
         return answer ? { ok: true, text: answer } : { ok: false, code: 'central_empty' }
       } catch (error) {
-        if (error instanceof CentralChatError || error instanceof ConversationError) return { ok: false, code: error.code }
+        if (error instanceof CentralChatError || error instanceof ConversationError || error instanceof TelegramQueueError) return { ok: false, code: error.code }
         if (error instanceof Error && error.message === 'central_timeout') return { ok: false, code: 'central_timeout' }
         return { ok: false, code: input.kind === 'off' ? 'central_runtime_off' : 'central_runtime_error' }
       } finally {
