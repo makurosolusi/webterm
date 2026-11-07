@@ -6,6 +6,8 @@
 // (2026-11-04): --tools, --mcp-config, --strict-mcp-config, --allowedTools, --permission-mode,
 // --permission-prompts, --setting-sources, --disable-slash-commands, --append-system-prompt, --include-partial-messages,
 // --session-id, --resume, --max-budget-usd, --model. `--max-turns` is documented upstream.
+// `--input-format stream-json` (only with --print; "realtime streaming input") checked on `claude --help` of
+// 2.1.319 (2026-11-07): used only for a turn with images, its stdin line is the Agent SDK's SDKUserMessage.
 // Tools (PLAN F2-c, K7): no built-in tools (`--tools ""`), only webterm's own MCP server
 // (`--mcp-config` + `--strict-mcp-config`), its tools pre-allowed (`mcp__webterm__*`, permissions doc:
 // allow globs need a literal `mcp__<server>__` prefix); anything else would prompt, and with
@@ -106,12 +108,14 @@ export interface ClaudeArgvInput {
   model?: string
   maxTurns: number
   maxBudgetUsd?: number
+  /** The turn carries images: stdin is one stream-json user message instead of plain text. */
+  streamInput?: boolean
 }
 
 /** Fixed-order argv: no built-in tools, webterm MCP only, deny-by-default; `--resume` only with a sessionRef. */
 export function claudeArgv(a: ClaudeArgvInput): string[] {
   const args = [
-    '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
+    '-p', '--output-format', 'stream-json', ...(a.streamInput ? ['--input-format', 'stream-json'] : []), '--verbose', '--include-partial-messages',
     '--tools', NO_TOOLS_ARG, '--mcp-config', a.mcpConfig, '--strict-mcp-config', '--allowedTools', WEBTERM_MCP_ALLOW,
     '--permission-mode', 'dontAsk', '--permission-prompts', 'none',
     '--setting-sources', NO_SETTING_SOURCES, '--disable-slash-commands',

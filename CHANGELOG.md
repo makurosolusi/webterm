@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 Operator notes:
+- Central chat attachments (images and text files) are stored in `<data dir>/central/attachments/` and removed 30 days after they were last sent.
 - New dependency `@ghostery/adblocker` (MPL-2.0) for browser-node ad and tracker blocking. Its prebuilt filter lists are downloaded into `<data dir>/browser/adblock/` and refreshed weekly in the background; startup never waits for the download.
 - New files in the data dir: `<data dir>/browser/adblock/` (filter cache), `shields-off.json` (sites where Shields is turned off) and `<data dir>/backgrounds/` (uploaded canvas background images).
 - A stored `agentLaunchCommands.claude` is moved into a Claude launch profile named "Custom" on first load (see below); nothing to do by hand.
@@ -12,6 +13,7 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 
 ### Added
+- Central chat accepts images and text files: paste a screenshot, drop files or use the + button.
 - Central chat: type / for commands (new chat, history, status, approvals, halt…) and shortcuts such as /projects and /nodes.
 - Central chat: start a new conversation with the + button and switch between past conversations from History.
 - The Choose a folder dialog can create a new folder.

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // The Central chat's `/` menu end to end: ChatPanel (side bar mount) + the Central control panel.
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatPanel from '../ChatPanel'
 import type { ChatClient, ChatConversation } from '../chat/chatTypes'
@@ -200,5 +200,31 @@ describe('Central chat / menu', () => {
     type('show @web')
     const list = await screen.findByRole('listbox', { name: 'Projects' })
     await waitFor(() => expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['@webtermproject']))
+  })
+})
+
+describe('Central chat / commands with attachments', () => {
+  // test-only fixture: a text file the composer queues as an attachment.
+  const attach = async (): Promise<void> => {
+    fireEvent(box(), createEvent.paste(box(), { clipboardData: { files: [new File(['ctx'], 'ctx.txt', { type: 'text/plain' })], items: [], getData: () => '' } }))
+    await screen.findByText('ctx.txt')
+  }
+
+  it('a prompt shortcut sends the expanded prompt with the attachments', async () => {
+    const { client } = await setup()
+    await attach()
+    await send('/projects')
+    await waitFor(() => expect(client.sendMessage).toHaveBeenCalledTimes(1))
+    const [, payload] = (client.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload['text']).toBe('List my projects with their status.')
+    expect(payload['files']).toEqual([{ name: 'ctx.txt', data: btoa('ctx') }])
+  })
+
+  it('a UI-action command runs and sends nothing, attachments included', async () => {
+    const { client } = await setup()
+    await attach()
+    await send('/history')
+    expect(screen.getByRole('navigation', { name: 'Conversations' })).not.toBeNull()
+    expect(client.sendMessage).not.toHaveBeenCalled()
   })
 })

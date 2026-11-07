@@ -81,6 +81,19 @@ function normalizePart(raw: unknown): ChatPart | null {
     const value = optionalText(part.text)
     return value === undefined ? null : { type: 'notice', text: value }
   }
+  if (part.type === 'image') {
+    const mediaType = optionalText(part.mediaType)
+    const ref = optionalText(part.ref)
+    // A ref goes into a URL: only the server's content-hash shape is taken.
+    return mediaType?.startsWith('image/') && ref && /^[0-9a-f]{64}$/.test(ref) ? { type: 'image', mediaType, ref } : null
+  }
+  if (part.type === 'file') {
+    const name = optionalText(part.name)
+    const size = finite(part.size)
+    const ref = optionalText(part.ref)
+    if (!name || size === undefined) return null
+    return { type: 'file', name, size, ...(ref && /^[0-9a-f]{64}$/.test(ref) ? { ref } : {}) }
+  }
   if (part.type === 'tool') {
     const toolCallId = optionalText(part.toolCallId)
     if (!toolCallId) return null

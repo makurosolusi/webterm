@@ -131,7 +131,9 @@ export function AttachTray({ a }: { a: ComposerAttach }) {
         <ul className="chat-attach__list" aria-label="Attached images">
           {a.images.map((img, i) => (
             <li key={`${img.name}-${i}`} className="chat-attach__chip">
-              <img className="chat-attach__thumb" src={`data:${img.mediaType};base64,${img.data}`} alt={img.name} />
+              {img.mediaType.startsWith('image/')
+                ? <img className="chat-attach__thumb" src={`data:${img.mediaType};base64,${img.data}`} alt={img.name} />
+                : <span className="codicon codicon-file" aria-hidden="true" />}
               <span className="chat-attach__name">{img.name}</span>
               <IconButton label={`Remove ${img.name}`} size="icon-xs" onClick={() => a.remove(i)}>
                 <span className="codicon codicon-close" aria-hidden="true" />

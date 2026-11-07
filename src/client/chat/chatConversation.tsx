@@ -13,7 +13,10 @@ import { isActiveTurnStatus, newClientMessageId } from './chatTypes'
 import {
   buildOptimisticMessage, chatReducer, initialChatState, orderedMessages,
 } from './chatStore'
-import { ChatApiError, chatErrorMessage, isAbortError } from '../chatApi'
+import { ChatApiError, chatErrorMessage, chatImageUrl, isAbortError } from '../chatApi'
+import type { ComposerImage } from './chatAttach'
+import { centralChatAttach, centralParts, centralWire } from './chatCentralAttach'
+import type { ChatPart } from './chatTypes'
 import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
@@ -68,6 +71,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     activeTurnId: row.activeTurnId,
   }))
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const section = useRef<HTMLElement | null>(null)
 
   // Refs, not effect deps: an inline client/stream factory must not restart the stream.
   const clientRef = useRef(props.client)
@@ -132,10 +136,16 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const busy = state.activeTurnId !== null || isActiveTurnStatus(state.turnStatus)
   const status = statusText(state.stream, state.turnStatus, busy)
 
-  const send = (text: string): void => {
+  /** Sends text plus attachments (image/file parts: fresh bytes, or stored refs on a Retry). */
+  const send = (text: string, attached: ChatPart[] = []): void => {
     const clientMessageId = newClientMessageId()
-    dispatch({ type: 'optimistic', message: buildOptimisticMessage(clientMessageId, text) })
-    clientRef.current.sendMessage(conversation.id, { clientMessageId, text }).then(
+    dispatch({ type: 'optimistic', message: buildOptimisticMessage(clientMessageId, text, attached) })
+    const wire = centralWire(attached)
+    if ('reason' in wire) {
+      dispatch({ type: 'send-failed', clientMessageId, error: wire.reason })
+      return
+    }
+    clientRef.current.sendMessage(conversation.id, { clientMessageId, text, ...wire }).then(
       (result) => {
         dispatch({
           type: 'send-ok',
@@ -168,11 +178,13 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     )
   }
 
-  const cmd = useCentralChatCommands(props.commands, send, (error) => dispatch({ type: 'error', error }))
+  // A command that sends (a prompt shortcut) keeps the composer's attachments; a UI-action command ignores them.
+  const sendComposed = (text: string, items: ComposerImage[]): void => send(text, centralParts(items))
+  const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }))
   const error = state.error ?? historyError
 
   return (
-    <section className="chat-conversation" aria-label="Conversation">
+    <section ref={section} className="chat-conversation" aria-label="Conversation">
       <header className="chat-conversation__head">
         {status.live
           ? <span className="chat-progress" aria-hidden="true" />
@@ -193,9 +205,10 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         </div>
       )}
 
-      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send} />
+      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send}
+        imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
       <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
-        completion={cmd.completion} seed={cmd.seed} />
+        completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section} />
     </section>
   )
 }

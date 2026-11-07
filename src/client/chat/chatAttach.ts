@@ -4,7 +4,8 @@
 // is over the edge or byte limit, as Claude Code does for a pasted image, instead of refusing it).
 import { AGENT_CHAT_IMAGE_MAX_B64, AGENT_CHAT_IMAGE_MAX_EDGE, AGENT_CHAT_IMAGE_TYPES } from '../../shared/agentChat.wire'
 
-/** One pending image of the composer: base64 without the data: prefix. */
+/** One pending attachment of the composer: base64 without the data: prefix. A host may queue non-image
+ * files here too (Central's text files, `text/plain`); the tray shows those as a file chip. */
 export interface ComposerImage { name: string; mediaType: string; data: string }
 
 const EXT_BY_TYPE: Record<string, string> = {

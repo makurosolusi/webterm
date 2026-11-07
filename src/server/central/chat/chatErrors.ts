@@ -3,7 +3,7 @@
 export type ChatErrorCode =
   | 'central_runtime_off' | 'conversation_busy' | 'conversation_not_found' | 'turn_not_found'
   | 'turn_not_active' | 'project_not_found' | 'invalid_message' | 'invalid_limit'
-  | 'invalid_body' | 'invalid_cursor' | 'budget_exhausted'
+  | 'invalid_body' | 'invalid_cursor' | 'budget_exhausted' | 'images_unsupported'
 
 export class CentralChatError extends Error {
   constructor(readonly code: ChatErrorCode, message: string, readonly status: number) {

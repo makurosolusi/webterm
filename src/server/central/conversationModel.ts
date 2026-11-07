@@ -37,6 +37,10 @@ export type MessagePart =
   | { type: 'error'; code: string; message: string }
   /** Runtime note shown on the reply (e.g. a fresh Claude session); never model text. */
   | { type: 'notice'; text: string }
+  /** Attached image, stored by content hash (chat/chatAttachments.ts); never its bytes. */
+  | { type: 'image'; mediaType: string; ref: string }
+  /** Attached text file: name, byte size and the stored copy's ref (its content goes to the model, not to history). */
+  | { type: 'file'; name: string; size: number; ref?: string }
 
 /** `chatId` set = one of the user's extra global chats ("New chat"); unset = the default `central:global`. */
 export type ConversationScope = { kind: 'global'; chatId?: string } | { kind: 'project'; projectId: string }
@@ -165,8 +169,20 @@ function validatePart(raw: unknown, index: number): MessagePart {
     return { type: 'error', code: partText(part['code'], `parts[${index}].code`), message: partText(part['message'], `parts[${index}].message`) }
   }
   if (part['type'] === 'notice') return { type: 'notice', text: partText(part['text'], `parts[${index}].text`) }
+  if (part['type'] === 'image') {
+    const ref = partText(part['ref'], `parts[${index}].ref`)
+    if (!/^[0-9a-f]{64}$/.test(ref)) fail('invalid_parts', `parts[${index}].ref is invalid`)
+    return { type: 'image', mediaType: partText(part['mediaType'], `parts[${index}].mediaType`), ref }
+  }
+  if (part['type'] === 'file') {
+    const size = part['size']
+    if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) fail('invalid_parts', `parts[${index}].size is invalid`)
+    const ref = part['ref']
+    if (ref !== undefined && (typeof ref !== 'string' || !/^[0-9a-f]{64}$/.test(ref))) fail('invalid_parts', `parts[${index}].ref is invalid`)
+    return { type: 'file', name: partText(part['name'], `parts[${index}].name`), size, ...(ref === undefined ? {} : { ref }) }
+  }
   if (part['type'] !== 'tool' && part['type'] !== 'approval') {
-    fail('invalid_parts', `parts[${index}].type must be text|tool|approval|error|notice`)
+    fail('invalid_parts', `parts[${index}].type must be text|tool|approval|error|notice|image|file`)
   }
   const state = pick(TOOL_STATES, 'invalid_parts', `parts[${index}].state`, part['state'])
   const digest = part['digest'] === undefined ? {} : { digest: partText(part['digest'], `parts[${index}].digest`) }
