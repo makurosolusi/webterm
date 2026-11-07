@@ -75,6 +75,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Claude launch profiles have a proper editor: Add profile opens a form with name, command presets, a live preview of what will run, Test, and one-click use for new agents or Central. Each profile is a row with its resolved command, "Default for new agents" / "Central" badges, and Edit, Test and Delete (Delete asks first). Save stays disabled while the name is empty or already used, the command is empty, or a quote is not closed. Test runs on the saved profile.
 - Chat messages you send now appear in a bubble on the right in Agent Chat and the Central chat, with replies on the left.
 - The app loads less JavaScript on start (about 19% less, 14% fewer bytes over the wire, on a board with a terminal): Settings, the Central side bar views, the keyboard shortcuts overlay, the Kanban board, the Activity, Output and SCM panels, the bake-off, replay, template and new-workspace dialogs, and the Agent Chat body now load the first time they are opened. Markdown preview loads together with the editor.
 - The Central chat and control panel now open in a resizable side bar on the right, like Copilot Chat in VS Code, instead of the bottom panel, so they no longer cover the canvas. Toggle it with the title-bar button or ⌥⌘B / Ctrl+Alt+B.
@@ -117,6 +118,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Settings > Agent > Claude launch profiles: "Add profile" created a profile you could not see (only the Reset gear and "(Modified)" appeared), because profile rows were hidden by the settings search filter style. Profiles now always show, so a blank one left behind by the old button can be edited or deleted. "(Modified)" itself was right: it appears only when the saved list differs from the default.
 - The Central chat no longer gets stuck on "Reconnecting…" when a turn fails: the failure was mistaken for a lost connection, so the chat reconnected over and over and the reply stayed on "streaming".
 - Remaining Indonesian text in the app (labels, errors and messages) is now English.
 - A failed Central reply now says why (for example "claude timed out", or "The server restarted before this reply finished."), also after a reload, and the newest failed message or reply has a Retry button that sends it again.
