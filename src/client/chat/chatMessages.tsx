@@ -178,23 +178,31 @@ function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | unde
   )
 }
 
-/** Text to resend for a failed row: its own text (unsent message), else the message that started the failed reply. */
-function retryText(messages: readonly ChatMessage[], index: number): string {
+/** Message to resend for a failed row: itself (unsent message), else the message that started the failed reply. */
+function retrySource(messages: readonly ChatMessage[], index: number): ChatMessage | undefined {
   const message = messages[index]
-  if (!message || message.state !== 'failed') return ''
-  if (message.role === 'human') return messageText(message)
+  if (!message || message.state !== 'failed') return undefined
+  if (message.role === 'human') return message
   for (let i = index - 1; i >= 0; i -= 1) {
     const prior = messages[i]
-    if (prior?.role === 'human') return messageText(prior)
+    if (prior?.role === 'human') return prior
   }
-  return ''
+  return undefined
+}
+
+/** Text and attachments (image/file parts, by bytes or stored ref) a Retry resends. */
+function retryPayload(message: ChatMessage | undefined): { text: string; attached: ChatPart[] } | null {
+  if (!message) return null
+  const attached = message.parts.filter((p) => p.type === 'image' || p.type === 'file')
+  const text = messageText(message)
+  return text || attached.length ? { text, attached } : null
 }
 
 export interface ChatMessagesProps {
   messages: ChatMessage[]
   streaming: boolean
   /** Resends a message; offers Retry on a failed message or reply while no turn runs. */
-  onRetry?: (text: string) => void
+  onRetry?: (text: string, attached: ChatPart[]) => void
   /** URL of a stored image (history `image` part reference). */
   imageUrl?: (ref: string) => string
 }
@@ -236,9 +244,9 @@ export default function ChatMessages(props: ChatMessagesProps) {
         ) : (
           props.messages.map((message, index) => {
             // Only the newest message: retrying an old failure in the middle of the thread would be out of context.
-            const text = props.onRetry && !props.streaming && index === props.messages.length - 1 ? retryText(props.messages, index) : ''
+            const again = props.onRetry && !props.streaming && index === props.messages.length - 1 ? retryPayload(retrySource(props.messages, index)) : null
             const retry = props.onRetry
-            return <MessageRow key={message.id} message={message} onRetry={text && retry ? () => retry(text) : undefined} imageUrl={props.imageUrl} />
+            return <MessageRow key={message.id} message={message} onRetry={again && retry ? () => retry(again.text, again.attached) : undefined} imageUrl={props.imageUrl} />
           })
         )}
       </div>

@@ -15,7 +15,8 @@ import {
 } from './chatStore'
 import { ChatApiError, chatErrorMessage, chatImageUrl, isAbortError } from '../chatApi'
 import type { ComposerImage } from './chatAttach'
-import { CENTRAL_TEXT_FILE_TYPE, centralChatAttach } from './chatCentralAttach'
+import { centralChatAttach, centralParts, centralWire } from './chatCentralAttach'
+import type { ChatPart } from './chatTypes'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -132,19 +133,16 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const busy = state.activeTurnId !== null || isActiveTurnStatus(state.turnStatus)
   const status = statusText(state.stream, state.turnStatus, busy)
 
-  const send = (text: string, items: ComposerImage[] = []): void => {
+  /** Sends text plus attachments (image/file parts: fresh bytes, or stored refs on a Retry). */
+  const send = (text: string, attached: ChatPart[] = []): void => {
     const clientMessageId = newClientMessageId()
-    const images = items.filter((i) => i.mediaType !== CENTRAL_TEXT_FILE_TYPE).map(({ mediaType, data }) => ({ mediaType, data }))
-    const files = items.filter((i) => i.mediaType === CENTRAL_TEXT_FILE_TYPE).map(({ name, data }) => ({ name, data }))
-    const echo = [
-      ...images.map((i) => ({ type: 'image' as const, ...i })),
-      // Bytes of base64: 3 per 4 chars, minus the padding.
-      ...files.map((f) => ({ type: 'file' as const, name: f.name, size: (f.data.length * 3) / 4 - (f.data.match(/=*$/)?.[0].length ?? 0) })),
-    ]
-    dispatch({ type: 'optimistic', message: buildOptimisticMessage(clientMessageId, text, echo) })
-    clientRef.current.sendMessage(conversation.id, {
-      clientMessageId, text, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}),
-    }).then(
+    dispatch({ type: 'optimistic', message: buildOptimisticMessage(clientMessageId, text, attached) })
+    const wire = centralWire(attached)
+    if ('reason' in wire) {
+      dispatch({ type: 'send-failed', clientMessageId, error: wire.reason })
+      return
+    }
+    clientRef.current.sendMessage(conversation.id, { clientMessageId, text, ...wire }).then(
       (result) => {
         dispatch({
           type: 'send-ok',
@@ -203,7 +201,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
 
       <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send}
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
-      <ChatComposer busy={busy} onSend={send} onStop={stop} autoFocus={props.focusComposer}
+      <ChatComposer busy={busy} onSend={(text: string, items: ComposerImage[]) => send(text, centralParts(items))} onStop={stop} autoFocus={props.focusComposer}
         attach={centralChatAttach} dropZone={section} />
     </section>
   )

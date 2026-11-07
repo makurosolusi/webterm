@@ -8,6 +8,17 @@ export const CENTRAL_FILE_MAX_BYTES = 200 * 1024
 export const CENTRAL_FILES_TOTAL_BYTES = 500 * 1024
 /** Text files per message. */
 export const CENTRAL_FILES_MAX = 20
+/**
+ * Base64 chars of all images of one message. Claude Code caps piped stdin at 10 MB (code.claude.com
+ * docs/en/headless, "Piped stdin is capped at 10MB") and nothing documented exempts `--input-format
+ * stream-json`, where the images travel. 8 MiB of base64 (6 MiB of image bytes) leaves room in that one
+ * JSONL line for the prompt and up to CENTRAL_FILES_TOTAL_BYTES of inlined text, JSON-escaped.
+ * Agent Chat's caps (AGENT_CHAT_IMAGES_TOTAL_B64) are unchanged: it goes through the Agent SDK.
+ */
+export const CENTRAL_IMAGES_TOTAL_B64 = 8 * 1024 * 1024
+/** Refusal for images over CENTRAL_IMAGES_TOTAL_B64, shared by composer and route. */
+export const centralImagesTooLarge = (): string =>
+  `Images are over ${CENTRAL_IMAGES_TOTAL_B64 / 1024 / 1024} MB in total, the most Central can send to Claude at once. Remove some and send again.`
 /** Refusal for anything that is neither an image nor UTF-8 text. */
 export const CENTRAL_ATTACH_KINDS_MESSAGE = 'Central can read text files and images only.'
 

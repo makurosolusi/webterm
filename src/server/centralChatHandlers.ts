@@ -155,7 +155,7 @@ export function nonNegativeInteger(raw: string | null): number | null | undefine
 
 type SendBody = { clientMessageId: string; text: string; attachments: CentralAttachments }
 
-function parseBody(raw: string): SendBody | { reason: string } | null {
+function parseBody(raw: string, conversationId: string): SendBody | { reason: string } | null {
   let value: unknown
   try {
     value = JSON.parse(raw)
@@ -165,7 +165,7 @@ function parseBody(raw: string): SendBody | { reason: string } | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const body = value as Record<string, unknown>
   if (typeof body['clientMessageId'] !== 'string' || typeof body['text'] !== 'string') return null
-  const attachments = parseAttachments(body)
+  const attachments = parseAttachments(body, conversationId)
   if ('reason' in attachments) return attachments
   return { clientMessageId: body['clientMessageId'], text: body['text'], attachments }
 }
@@ -229,7 +229,12 @@ export async function handleMessagesPost(
     sendJson(res, read.reason === 'too_large' ? 413 : 400, { error: { code, message: read.reason } })
     return
   }
-  const body = parseBody(read.body)
+  let body: ReturnType<typeof parseBody>
+  try {
+    body = parseBody(read.body, conversationId)
+  } catch (err) {
+    return failFromError(res, err)
+  }
   if (!body) return failJson(res, 'invalid_body', 'body must be {clientMessageId,text}')
   if ('reason' in body) return failJson(res, 'invalid_attachment', body.reason)
   try {

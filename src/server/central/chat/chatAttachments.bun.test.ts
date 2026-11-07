@@ -20,6 +20,9 @@ import { captureSource, emitSource, successRecords, writeFakeClaude } from '../r
 import { StreamHub } from './streamHub'
 import { TurnService } from './turnService'
 import { parseAttachments, withFiles } from './chatAttachments'
+import { CENTRAL_ATTACH_TTL_MS, attachRoot, readBlob, resetSweepClock, storeBlob, sweepAttachments } from './chatAttachStore'
+import { centralImagesTooLarge } from '../../../shared/centralAttach'
+import { existsSync, readdirSync, statSync, utimesSync } from 'node:fs'
 
 // test-only fixtures: a 1x1 PNG and the data dir isolation.
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
@@ -74,14 +77,17 @@ const errorOf = (json: Record<string, unknown>) => json['error'] as { code: stri
 
 describe('parseAttachments (caps and kinds)', () => {
   it('takes a text file and an image, sniffing the image type', () => {
-    const r = parseAttachments({ images: [{ mediaType: 'image/jpeg', data: PNG }], files: [{ name: 'a.ts', data: b64('const a = 1\n') }] })
+    const r = parseAttachments({ images: [{ mediaType: 'image/jpeg', data: PNG }], files: [{ name: 'a.ts', data: b64('const a = 1\n') }] }, 'central:global')
     if ('reason' in r) throw new Error(r.reason)
     expect(r.images[0]?.mediaType).toBe('image/png')
     expect(r.files).toEqual([{ name: 'a.ts', text: 'const a = 1\n', size: 12 }])
   })
 
   it('refuses a bad media type, a non-image, a binary file and oversize files', () => {
-    const reason = (body: Record<string, unknown>) => ('reason' in parseAttachments(body) ? (parseAttachments(body) as { reason: string }).reason : '')
+    const reason = (body: Record<string, unknown>) => {
+      const r = parseAttachments(body, 'central:global')
+      return 'reason' in r ? r.reason : ''
+    }
     expect(reason({ images: [{ mediaType: 'image/svg+xml', data: PNG }] })).toContain('PNG, JPEG, GIF or WebP')
     expect(reason({ images: [{ mediaType: 'image/png', data: b64('not an image') }] })).toContain('is not a PNG')
     expect(reason({ files: [{ name: 'x.bin', data: b64(new Uint8Array([0x7f, 0x45, 0x00, 0x01])) }] })).toBe('x.bin is not a UTF-8 text file. Central can read text files and images only.')
@@ -89,6 +95,11 @@ describe('parseAttachments (caps and kinds)', () => {
     const third = b64('a'.repeat(190 * 1024))
     expect(reason({ files: [1, 2, 3].map((n) => ({ name: `${n}.txt`, data: third })) })).toBe('Files are over 500 KB in total.')
     expect(reason({ images: new Array(21).fill({ mediaType: 'image/png', data: PNG }) })).toBe('At most 20 images per message.')
+    // Under Agent Chat's 5 MB / 20 MB caps, over Central's 8 MB stdin-safe total.
+    const big = b64(Buffer.concat([Buffer.from(PNG, 'base64'), Buffer.alloc(3 * 1024 * 1024)]))
+    expect(reason({ images: [1, 2, 3].map(() => ({ mediaType: 'image/png', data: big })) })).toBe(centralImagesTooLarge())
+    expect(reason({ images: [{ ref: 'f'.repeat(64) }] })).toContain('Image 1 is no longer stored')
+    expect(reason({ files: [{ name: 'gone.txt', ref: 'f'.repeat(64) }] })).toContain('gone.txt is no longer stored')
   })
 
   it('fences a file with more backticks than it holds', () => {
@@ -121,7 +132,7 @@ describe('send with attachments (claude runtime)', () => {
     const human = (history.json['items'] as Array<{ role: string; parts: Array<Record<string, unknown>> }>).find((m) => m.role === 'human')
     const [image, file, text] = human?.parts ?? []
     expect(image).toMatchObject({ type: 'image', mediaType: 'image/png' })
-    expect(file).toEqual({ type: 'file', name: 'notes.txt', size: 17 })
+    expect(file).toMatchObject({ type: 'file', name: 'notes.txt', size: 17 })
     expect(text).toEqual({ type: 'text', text: 'What is this?' })
     expect(JSON.stringify(history.json)).not.toContain(PNG)
 
@@ -133,6 +144,8 @@ describe('send with attachments (claude runtime)', () => {
     // A reference only resolves inside its own conversation.
     expect((await call(deps, `${MESSAGES('central:chat:other')}?image=${ref}`)).status).toBe(404)
     expect((await call(deps, `${MESSAGES()}?image=../../x`)).status).toBe(404)
+    // A stored text file is not an image: never served by this route.
+    expect((await call(deps, `${MESSAGES()}?image=${String(file?.['ref'])}`)).status).toBe(404)
   })
 
   it('sends plain text stdin without images and allows a files-only message', async () => {
@@ -163,5 +176,66 @@ describe('send with attachments (opencode runtime)', () => {
     expect(errorOf(r.json).code).toBe('images_unsupported')
     expect(errorOf(r.json).message).toContain('Images need the Claude runtime')
     expect(db.query('SELECT count(*) AS n FROM central_message').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('retry resends the stored attachments', () => {
+  it('a send naming stored refs reaches Claude with the same image and file, no re-upload', async () => {
+    const first = join(dir, 'cap-r1.json')
+    const a = setup(claude(first))
+    const sent = await call(a.deps, MESSAGES(), {
+      clientMessageId: 'r1', text: 'again', images: [{ mediaType: 'image/png', data: PNG }], files: [{ name: 'f.txt', data: b64('file body') }],
+    })
+    await a.service.waitFor(String(sent.json['turnId']))
+    const history = await call(a.deps, MESSAGES())
+    const parts = (history.json['items'] as Array<{ role: string; parts: Array<Record<string, string>> }>).find((m) => m.role === 'human')?.parts ?? []
+    const imageRef = parts[0]?.['ref'] as string
+    const fileRef = parts[1]?.['ref'] as string
+    expect(fileRef).toMatch(/^[0-9a-f]{64}$/)
+
+    const second = join(dir, 'cap-r2.json')
+    const b = setup(claude(second))
+    const again = await call(b.deps, MESSAGES(), { clientMessageId: 'r2', text: 'again', images: [{ ref: imageRef }], files: [{ name: 'f.txt', ref: fileRef }] })
+    expect(again.status).toBe(202)
+    await b.service.waitFor(String(again.json['turnId']))
+    const line = JSON.parse((JSON.parse(readFileSync(second, 'utf8')) as { stdin: string }).stdin) as { message: { content: Array<{ type: string; source?: { data: string }; text?: string }> } }
+    expect(line.message.content[0]?.source?.data).toBe(PNG)
+    expect(line.message.content[1]?.text).toContain('Attached file "f.txt":\n```\nfile body\n```')
+  })
+})
+
+describe('attachment store sweep', () => {
+  it('removes blobs unreferenced past the TTL and their empty folder; a re-send keeps a blob alive; work is bounded', () => {
+    const now = Date.now()
+    const old = (now - CENTRAL_ATTACH_TTL_MS - 60_000) / 1000
+    const stale = storeBlob('central:chat:sweep-a', Buffer.from('stale'), now)
+    const kept = storeBlob('central:chat:sweep-b', Buffer.from('kept'), now)
+    const fresh = storeBlob('central:chat:sweep-b', Buffer.from('fresh'), now)
+    const folderOf = (ref: string) => readdirSync(attachRoot()).find((d) => existsSync(join(attachRoot(), d, ref))) as string
+    const folderA = folderOf(stale)
+    const pathOf = (ref: string) => join(attachRoot(), folderOf(ref), ref)
+    utimesSync(pathOf(stale), old, old)
+    utimesSync(pathOf(kept), old, old)
+    // Re-sent (Retry or the same bytes again): its TTL restarts.
+    storeBlob('central:chat:sweep-b', Buffer.from('kept'), now)
+    expect(statSync(pathOf(kept)).mtimeMs).toBeGreaterThan(old * 1000 + 1000)
+
+    expect(sweepAttachments(now, 1)).toBe(0)
+    expect(sweepAttachments(now) >= 1).toBe(true)
+    expect(readBlob('central:chat:sweep-a', stale) === undefined).toBe(true)
+    expect(existsSync(join(attachRoot(), folderA))).toBe(false)
+    expect(readBlob('central:chat:sweep-b', kept)?.toString()).toBe('kept')
+    expect(readBlob('central:chat:sweep-b', fresh)?.toString()).toBe('fresh')
+  })
+
+  it('runs lazily on a store once the sweep interval passed', () => {
+    const now = Date.now()
+    const ref = storeBlob('central:chat:lazy', Buffer.from('lazy'), now)
+    const file = join(attachRoot(), readdirSync(attachRoot()).find((d) => existsSync(join(attachRoot(), d, ref))) as string, ref)
+    const old = (now - CENTRAL_ATTACH_TTL_MS - 60_000) / 1000
+    utimesSync(file, old, old)
+    resetSweepClock()
+    storeBlob('central:chat:other', Buffer.from('trigger'), now)
+    expect(existsSync(file)).toBe(false)
   })
 })

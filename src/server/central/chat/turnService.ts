@@ -25,7 +25,7 @@ import { createLegacyContextAssembler, type ContextAssembler } from '../context/
 import { ContextRejectedError } from '../context/contextAssembler'
 import type { Summarize } from '../context/checkpointSummarizer'
 import { recordTurnContext } from './turnContextLog'
-import { type CentralAttachments, storeImages, withFiles } from './chatAttachments'
+import { type CentralAttachments, storeAttachments, withFiles } from './chatAttachments'
 import { resolveLimits } from './turnLimits'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
@@ -131,8 +131,7 @@ export class TurnService {
       conversationId: conversation.id, role: 'human',
       // The model still gets the raw text (it may need to relay a pasted secret to a tool); history never keeps it.
       parts: [
-        ...storeImages(conversation.id, images),
-        ...files.map((f) => ({ type: 'file' as const, name: f.name, size: f.size })),
+        ...storeAttachments(conversation.id, { images, files }),
         ...(text ? [{ type: 'text' as const, text: redactSecrets(text) }] : []),
       ],
       clientMessageId, now: this.now(),

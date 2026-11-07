@@ -59,7 +59,7 @@ describe('Central chat bubbles', () => {
     expect(within(agent).getByText('failed')).toBeTruthy()
     expect(within(agent).getByRole('note').textContent).toBe(`${'x'.repeat(300)}…`)
     fireEvent.click(within(agent).getByRole('button', { name: 'Retry' }))
-    expect(onRetry).toHaveBeenCalledWith('deploy main')
+    expect(onRetry).toHaveBeenCalledWith('deploy main', [])
     cleanup()
     render(<ChatMessages messages={[human('h1', 'deploy main'), failed, human('h2', 'next', { seq: 3 })]} streaming={false} onRetry={onRetry} />)
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull() // an older failure is not retried
@@ -77,7 +77,7 @@ describe('Central chat bubbles', () => {
     const { rerender } = render(<ChatMessages messages={[unsent]} streaming={false} onRetry={onRetry} />)
     expect(screen.getByText('Not sent')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(onRetry).toHaveBeenCalledWith('again')
+    expect(onRetry).toHaveBeenCalledWith('again', [])
     rerender(<ChatMessages messages={[unsent]} streaming onRetry={onRetry} />)
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })

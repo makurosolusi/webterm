@@ -39,8 +39,8 @@ export type MessagePart =
   | { type: 'notice'; text: string }
   /** Attached image, stored by content hash (chat/chatAttachments.ts); never its bytes. */
   | { type: 'image'; mediaType: string; ref: string }
-  /** Attached text file: name and byte size only (its content went to the model, not to history). */
-  | { type: 'file'; name: string; size: number }
+  /** Attached text file: name, byte size and the stored copy's ref (its content goes to the model, not to history). */
+  | { type: 'file'; name: string; size: number; ref?: string }
 
 /** `chatId` set = one of the user's extra global chats ("New chat"); unset = the default `central:global`. */
 export type ConversationScope = { kind: 'global'; chatId?: string } | { kind: 'project'; projectId: string }
@@ -177,7 +177,9 @@ function validatePart(raw: unknown, index: number): MessagePart {
   if (part['type'] === 'file') {
     const size = part['size']
     if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) fail('invalid_parts', `parts[${index}].size is invalid`)
-    return { type: 'file', name: partText(part['name'], `parts[${index}].name`), size }
+    const ref = part['ref']
+    if (ref !== undefined && (typeof ref !== 'string' || !/^[0-9a-f]{64}$/.test(ref))) fail('invalid_parts', `parts[${index}].ref is invalid`)
+    return { type: 'file', name: partText(part['name'], `parts[${index}].name`), size, ...(ref === undefined ? {} : { ref }) }
   }
   if (part['type'] !== 'tool' && part['type'] !== 'approval') {
     fail('invalid_parts', `parts[${index}].type must be text|tool|approval|error|notice|image|file`)

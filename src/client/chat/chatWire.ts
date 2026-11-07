@@ -90,7 +90,9 @@ function normalizePart(raw: unknown): ChatPart | null {
   if (part.type === 'file') {
     const name = optionalText(part.name)
     const size = finite(part.size)
-    return name && size !== undefined ? { type: 'file', name, size } : null
+    const ref = optionalText(part.ref)
+    if (!name || size === undefined) return null
+    return { type: 'file', name, size, ...(ref && /^[0-9a-f]{64}$/.test(ref) ? { ref } : {}) }
   }
   if (part.type === 'tool') {
     const toolCallId = optionalText(part.toolCallId)

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatPanel from './ChatPanel'
 import type { ChatClient, ChatConversation, ChatMessage } from './chat/chatTypes'
 import type { StreamFactory } from './chat/chatConversation'
+import { centralWire } from './chat/chatCentralAttach'
+import { centralImagesTooLarge } from '../shared/centralAttach'
 
 // test-only fixtures
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
@@ -97,5 +99,44 @@ describe('Central chat attachments', () => {
     expect(img.getAttribute('src')).toBe(`/api/central/conversations/central%3Aglobal/messages?image=${REF}`)
     expect(screen.getByText('log.txt')).not.toBeNull()
     expect(screen.getByText('2 KB')).not.toBeNull()
+  })
+
+  it('Retry after a failed send resends the same image and file bytes', async () => {
+    const client = makeClient()
+    client.sendMessage.mockRejectedValueOnce(new Error('network down'))
+    const box = await open(client)
+    paste(box, [png(), new File(['abc'], 'a.txt', { type: 'text/plain' })])
+    await screen.findByText('a.txt')
+    fireEvent.change(box, { target: { value: 'look' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('button', { name: /Retry/ }))
+
+    await waitFor(() => expect(client.sendMessage).toHaveBeenCalledTimes(2))
+    const [first, second] = client.sendMessage.mock.calls.map((c) => c[1] as Record<string, unknown>)
+    expect(second?.['text']).toBe('look')
+    expect(second?.['images']).toEqual(first?.['images'])
+    expect(second?.['files']).toEqual([{ name: 'a.txt', data: btoa('abc') }])
+  })
+
+  it('Retry of a failed reply resends the stored image and file by reference', async () => {
+    const client = makeClient([
+      { id: 'h1', role: 'human', seq: 1, state: 'complete', parts: [
+        { type: 'image', mediaType: 'image/png', ref: REF }, { type: 'file', name: 'log.txt', size: 3, ref: 'b'.repeat(64) }, { type: 'text', text: 'why' },
+      ] },
+      { id: 'a1', role: 'assistant', seq: 2, state: 'failed', parts: [{ type: 'error', code: 'runtime_error', message: 'boom' }] },
+    ])
+    await open(client)
+    fireEvent.click(await screen.findByRole('button', { name: /Retry/ }))
+    await waitFor(() => expect(client.sendMessage).toHaveBeenCalledTimes(1))
+    const [, payload] = client.sendMessage.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload['text']).toBe('why')
+    expect(payload['images']).toEqual([{ ref: REF }])
+    expect(payload['files']).toEqual([{ name: 'log.txt', ref: 'b'.repeat(64) }])
+  })
+
+  it('refuses images over Central\'s stdin-safe total before posting', () => {
+    const data = 'A'.repeat(3 * 1024 * 1024)
+    expect(centralWire([1, 2, 3].map(() => ({ type: 'image' as const, mediaType: 'image/png', data })))).toEqual({ reason: centralImagesTooLarge() })
+    expect(centralWire([{ type: 'image', mediaType: 'image/png', data: PNG }])).toEqual({ images: [{ mediaType: 'image/png', data: PNG }] })
   })
 })

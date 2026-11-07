@@ -3,8 +3,9 @@
 // files are queued as `text/plain` items whose content the server inlines into the prompt, anything
 // else is refused. One failure never drops the other files.
 import {
-  CENTRAL_ATTACH_KINDS_MESSAGE, CENTRAL_FILE_MAX_BYTES, isUtf8Text,
+  CENTRAL_ATTACH_KINDS_MESSAGE, CENTRAL_FILE_MAX_BYTES, CENTRAL_IMAGES_TOTAL_B64, centralImagesTooLarge, isUtf8Text,
 } from '../../shared/centralAttach'
+import type { ChatPart, SendMessageInput } from './chatTypes'
 import { isClaudeImage, prepareImage, readAsBase64, uploadNameFor, type ComposerImage } from './chatAttach'
 import type { AttachFiles } from './chatComposerAttach'
 
@@ -31,4 +32,30 @@ export const centralChatAttach: AttachFiles = async (files) => {
     text: '',
     failed: done.flatMap((d) => (d.failed ? [d.failed] : [])),
   }
+}
+
+/** Composer items as message parts (the optimistic echo keeps the bytes, so a failed send can be retried). */
+export function centralParts(items: readonly ComposerImage[]): ChatPart[] {
+  return [
+    ...items.filter((i) => i.mediaType !== CENTRAL_TEXT_FILE_TYPE).map((i): ChatPart => ({ type: 'image', mediaType: i.mediaType, data: i.data })),
+    // Bytes of base64: 3 per 4 chars, minus the padding.
+    ...items.filter((i) => i.mediaType === CENTRAL_TEXT_FILE_TYPE).map((i): ChatPart => ({
+      type: 'file', name: i.name, data: i.data, size: (i.data.length * 3) / 4 - (i.data.match(/=*$/)?.[0].length ?? 0),
+    })),
+  ]
+}
+
+/** The send body's `images`/`files` for these parts: bytes when held, else the stored ref; or why not to send. */
+export function centralWire(parts: readonly ChatPart[]): Pick<SendMessageInput, 'images' | 'files'> | { reason: string } {
+  const images: NonNullable<SendMessageInput['images']> = []
+  const files: NonNullable<SendMessageInput['files']> = []
+  let b64 = 0
+  for (const p of parts) {
+    if (p.type === 'image' && p.data) { images.push({ mediaType: p.mediaType, data: p.data }); b64 += p.data.length }
+    else if (p.type === 'image' && p.ref) images.push({ ref: p.ref })
+    else if (p.type === 'file' && p.data) files.push({ name: p.name, data: p.data })
+    else if (p.type === 'file' && p.ref) files.push({ name: p.name, ref: p.ref })
+  }
+  if (b64 > CENTRAL_IMAGES_TOTAL_B64) return { reason: centralImagesTooLarge() }
+  return { ...(images.length ? { images } : {}), ...(files.length ? { files } : {}) }
 }
