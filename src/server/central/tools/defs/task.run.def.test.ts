@@ -38,7 +38,7 @@ function setup(opts: { env?: Record<string, string>; maxTier?: Tier; guard?: Con
     requireApproval: opts.env?.WEBTERM_RUN_REQUIRE_APPROVAL === 'on',
     planStore: plan(opts.version ?? 1),
     dataDir: () => dataDir,
-    settings: () => ({ agentLaunchCommands: {} }),
+    settings: () => ({ agentLaunchCommands: {} }), claudeOnPath: () => true,
     approval: {
       getApproval: () => opts.approval ?? null,
       consumeApproval: (id) => {

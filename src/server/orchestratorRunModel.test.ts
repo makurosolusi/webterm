@@ -102,17 +102,16 @@ describe('orchestratorRunModel', () => {
 })
 
 describe('resolveWorkerKind', () => {
-  it('picks the first configured kind: claude, then opencode, then other builtins', () => {
+  it('picks the first configured kind: claude, then other builtins', () => {
     expect(resolveWorkerKind({ codex: 'codex', claude: 'claude-work' })).toBe('claude')
-    expect(resolveWorkerKind({ codex: 'codex', opencode: 'opencode' })).toBe('opencode')
     expect(resolveWorkerKind({ gemini: 'gemini', codex: 'codex' })).toBe('codex')
     expect(resolveWorkerKind({ claude: '   ', gemini: 'gemini' })).toBe('gemini')
   })
 
-  it('keeps legacy claude when nothing is configured, and falls back to opencode without claude', () => {
+  it('uses claude when nothing is configured, and never falls back to opencode without claude', () => {
     expect(resolveWorkerKind({})).toBe('claude')
     expect(resolveWorkerKind({}, true)).toBe('claude')
-    expect(resolveWorkerKind({}, false)).toBe('opencode')
+    expect(resolveWorkerKind({}, false)).toBeNull()
     expect(resolveWorkerKind({ codex: 'codex' }, false)).toBe('codex')
   })
 })

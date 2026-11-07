@@ -70,14 +70,6 @@ describe('claude wiring: health', () => {
     await expect(runtimeReadiness('claude', boom)).resolves.toEqual({ runtimeReady: false, runtimeIssue: 'claude_check_failed' })
     await expect(runtimeReadiness('off', boom)).resolves.toEqual({ runtimeReady: false })
     await expect(runtimeReadiness('mock', boom)).resolves.toEqual({ runtimeReady: true })
-    await expect(runtimeReadiness('opencode', boom, async () => ({ ok: true }))).resolves.toEqual({ runtimeReady: true })
-  })
-
-  it('reports opencode not-ready with its code and reason when the model is unavailable', async () => {
-    const unavailable = async () => ({ ok: false as const, code: 'opencode_model_unavailable' as const, reason: 'model "m" unavailable' })
-    await expect(runtimeReadiness('opencode', async () => ({ ok: true }), unavailable)).resolves.toEqual({
-      runtimeReady: false, runtimeIssue: 'opencode_model_unavailable', runtimeHint: 'model "m" unavailable',
-    })
   })
 
   it('warns once per wrapped preflight, with the code and nothing else', async () => {

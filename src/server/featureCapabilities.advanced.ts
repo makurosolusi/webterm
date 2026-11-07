@@ -7,9 +7,9 @@ import { detectAgentEngine } from './central/runtime/runtimeDetect'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
 import type { EnvChange } from './envSettings.service'
 
-/** Mesin yang boleh dipilih pengguna; `auto` = hapus override. Mock (simulasi) dan codex (tanpa adapter) tidak. */
-const ENGINES = ['claude', 'opencode'] as const
-/** Nilai tersimpan yang dilaporkan apa adanya; `mock` hanya bisa datang dari env eksplisit (tes). */
+/** Mesin yang boleh dipilih pengguna; `auto` = hapus override. Mock (simulasi) tidak. */
+const ENGINES = ['claude'] as const
+/** Nilai tersimpan yang dilaporkan apa adanya; `mock` hanya dari env eksplisit (tes); nilai lain (opencode lama) = auto. */
 const SHOWN = [...ENGINES, 'mock'] as const
 const AUTO = 'auto'
 /** Batas panjang path agar body tak membengkak; validasi isi tetap oleh registry. */

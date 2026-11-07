@@ -56,7 +56,7 @@ export const CHANNEL_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Bridges central chat to Telegram (needs Central, Central chat, and a central runtime).',
     requires: [
       TELEGRAM_ON, { key: 'WEBTERM_CENTRAL' }, { key: 'WEBTERM_CENTRAL_CHAT' },
-      { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', 'opencode', 'mock', ''], note: 'The central runtime is still off (empty = auto-detect).' },
+      { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', 'mock', ''], note: 'The central runtime is still off (empty = auto-detect).' },
     ],
   }),
 ]

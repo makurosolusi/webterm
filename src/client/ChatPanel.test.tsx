@@ -216,7 +216,7 @@ describe('ChatPanel busy + errors', () => {
     renderPanel(client)
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('runtime is off')
+    expect(alert.textContent).toContain('Central needs Claude')
     expect(tipOf(within(alert).getByRole('button', { name: 'Dismiss error' }))).toBe('Dismiss error')
   })
 

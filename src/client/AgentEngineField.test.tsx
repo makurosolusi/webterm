@@ -19,14 +19,10 @@ const status = (): string => screen.getByRole('status').textContent ?? ''
 
 describe('AgentEngineField', () => {
   it('belum diperiksa / siap: menyebut mesin terdeteksi', () => {
-    setup({ value: 'auto', detected: 'opencode' })
-    expect(status()).toBe('Detected: OpenCode')
+    setup({ value: 'auto', detected: 'claude' })
+    expect(status()).toBe('Detected: Claude')
   })
 
-  it('tidak ada CLI: belum terpasang', () => {
-    setup({ value: 'auto', detected: 'off' })
-    expect(status()).toBe('Not installed: install Claude Code, then check again.')
-  })
 
   it('Claude not ready: shows the Central launch profile and the failing stage, not "not signed in"', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({
@@ -46,11 +42,10 @@ describe('AgentEngineField', () => {
     window.removeEventListener('webterm:open-settings', opened)
   })
 
-  it('a chosen non-Claude engine keeps the generic sentence; OpenCode is offered only to whoever chose it', () => {
-    setup({ value: 'opencode', detected: 'claude' }, false)
-    expect(status()).toBe('OpenCode is not ready: it is not installed or not signed in.')
-    cleanup()
-    setup({ value: 'auto', detected: 'claude' })
+  it('without Claude it says to set Claude up, and OpenCode is never offered', () => {
+    setup({ value: 'auto', detected: 'off' })
+    expect(status()).toContain('Set up Claude')
+    expect(status()).toContain('Settings › Agent › Claude launch profiles')
     expect(screen.queryByRole('option', { name: /OpenCode/ })).toBeNull()
   })
 

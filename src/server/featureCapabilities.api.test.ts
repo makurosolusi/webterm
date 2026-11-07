@@ -9,6 +9,7 @@ import type { AuditEntry } from './featureCapabilities.audit'
 import { settingsGuard } from './featureCapabilities.guard'
 import { TEST_UI_COOKIE } from './uiSession.testutil'
 import { onCapabilityChange } from './featureCapabilities.runtime'
+import { advancedView } from './featureCapabilities.advanced'
 
 // test-only: server nyata untuk semua hal kecuali jaringan; guard asli, pemanggil = halaman webterm bercookie (kecuali `cookie: false`).
 const ORIGIN = 'http://127.0.0.1:8700'
@@ -131,18 +132,26 @@ describe('POST /:id/sub', () => {
   })
 })
 
+describe('advancedView', () => {
+  it('a persisted opencode engine choice reads as Automatic', () => {
+    expect(advancedView({ WEBTERM_CENTRAL_RUNTIME: 'opencode' }, '/d').agentEngine.value).toBe('auto')
+  })
+})
+
 describe('PUT /advanced', () => {
   it('200 menulis mesin agen dan lokasi Chrome; GET mencerminkannya', async () => {
     const h = harness()
-    const r = await h.call('PUT', '/api/capabilities/advanced', { agentEngine: 'opencode', chromiumPath: '/opt/chrome' })
+    const r = await h.call('PUT', '/api/capabilities/advanced', { agentEngine: 'claude', chromiumPath: '/opt/chrome' })
     expect(r.status).toBe(200)
-    expect(r.json?.advanced).toMatchObject({ agentEngine: { value: 'opencode' }, chromiumPath: { value: '/opt/chrome', detected: false, active: null, source: null, overrideInvalid: true } })
+    expect(r.json?.advanced).toMatchObject({ agentEngine: { value: 'claude' }, chromiumPath: { value: '/opt/chrome', detected: false, active: null, source: null, overrideInvalid: true } })
     expect(h.audits.at(-1)).toMatchObject({ capability: 'advanced', action: 'advanced', detail: 'agentEngine,chromiumPath' })
   })
   it('400 invalid_value hanya dengan nama field; 400 invalid_body; 403', async () => {
     const h = harness()
     const bad = await h.call('PUT', '/api/capabilities/advanced', { agentEngine: 'gpt' })
     expect([bad.status, bad.json]).toEqual([400, { error: 'invalid_value', field: 'agentEngine' }])
+    const retired = await h.call('PUT', '/api/capabilities/advanced', { agentEngine: 'opencode' })
+    expect([retired.status, retired.json]).toEqual([400, { error: 'invalid_value', field: 'agentEngine' }])
     expect((await h.call('PUT', '/api/capabilities/advanced', [])).json).toEqual({ error: 'invalid_body' })
     expect((await h.call('PUT', '/api/capabilities/advanced', {}, { origin: null })).status).toBe(403)
   })

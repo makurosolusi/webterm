@@ -5,18 +5,13 @@ import {
   type ClaudeReady, type ClaudeRuntimeOptions, type ClaudeUnavailableCode, claudeChildEnv,
 } from './central/runtime/claudeOptions'
 import { createClaudePreflight } from './central/runtime/claudePreflight'
-import { type OpencodeIssue, type OpencodeReady, freshSharedOpencodePreflight, sharedOpencodePreflight } from './central/runtime/opencodeAuth'
-import { opencodeBin, opencodeModel } from './central/runtime/opencodeOptions'
-import { defaultOpencodeHomeDir } from './central/runtime/opencodeSession'
 import { createLogger } from './logs'
 
 const log = createLogger('central')
 
 export interface RuntimeReadiness {
   runtimeReady: boolean
-  runtimeIssue?: ClaudeUnavailableCode | OpencodeIssue
-  /** Human-readable cause, set for opencode not-ready (model/credential/binary). */
-  runtimeHint?: string
+  runtimeIssue?: ClaudeUnavailableCode
 }
 
 type Preflight = () => Promise<ClaudeReady>
@@ -52,29 +47,10 @@ export function freshClaudePreflight(): Preflight {
   return claudePreflightOf()
 }
 
-const opencodeDeps = () => ({ executable: opencodeBin(), model: opencodeModel(), homeDir: defaultOpencodeHomeDir(), env: process.env })
-
-/** The same cached probe the opencode runtime runs before a turn (model/bin read per call: hot env). */
-export function defaultOpencodePreflight(): Promise<OpencodeReady> {
-  return sharedOpencodePreflight(opencodeDeps())()
-}
-
-/** Explicit re-check for opencode: a new probe that replaces the shared cache, so later polls see it too. */
-export function freshOpencodePreflight(): Promise<OpencodeReady> {
-  return freshSharedOpencodePreflight(opencodeDeps())
-}
-
-/** `off` is never ready; `mock` (explicit only) needs no probe; `claude` and `opencode` run their (cached) preflight; anything else has no adapter. */
-export async function runtimeReadiness(
-  kind: RuntimeKind, preflight: Preflight, opencodePreflight: () => Promise<OpencodeReady> = defaultOpencodePreflight
-): Promise<RuntimeReadiness> {
+/** `off` is never ready; `mock` (explicit only) needs no probe; `claude` runs its (cached) preflight. */
+export async function runtimeReadiness(kind: RuntimeKind, preflight: Preflight): Promise<RuntimeReadiness> {
   if (kind === 'off') return { runtimeReady: false }
-  if (kind === 'opencode') {
-    const ready = await opencodePreflight()
-    return ready.ok ? { runtimeReady: true } : { runtimeReady: false, runtimeIssue: ready.code, runtimeHint: ready.reason }
-  }
   if (kind === 'mock') return { runtimeReady: true }
-  if (kind !== 'claude') return { runtimeReady: false }
   try {
     const ready = await preflight()
     return ready.ok ? { runtimeReady: true } : { runtimeReady: false, runtimeIssue: ready.code }

@@ -1,16 +1,16 @@
 // Context-size bookkeeping (RND/23 F5): context size is the LAST step_finish of a turn,
 // not the sum over steps (every step repeats the history, so a sum is the bill, not the window).
 import type { Database } from 'bun:sqlite'
-import type { OpencodeUsageDelta } from '../runtime/opencodeEvents'
+import type { RuntimeUsage } from '../runtime/centralRuntime'
 
 /** Prompt-side tokens of one step: fresh input plus cache reads and writes. */
-export function ctxTokensOf(usage: Pick<OpencodeUsageDelta, 'inputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>): number {
+export function ctxTokensOf(usage: Pick<RuntimeUsage, 'inputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>): number {
   return usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
 }
 
 /** Keeps the context size of the most recent usage event (overwrite, never add). */
 export interface CtxTracker {
-  observe(usage: Pick<OpencodeUsageDelta, 'inputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>): void
+  observe(usage: Pick<RuntimeUsage, 'inputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'>): void
   /** Null until a usage event was observed. */
   value(): number | null
 }

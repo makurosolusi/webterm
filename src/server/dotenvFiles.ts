@@ -4,7 +4,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseEnv } from 'node:util'
-import { PROVIDER_ENV_ALLOWLIST } from './central/runtime/opencodeOptions'
+import { PROVIDER_ENV_ALLOWLIST } from './agentEnv'
 
 /** Berkas lebih besar dari ini dilewati (bukan dotenv wajar; jangan muatkan ke memori). */
 export const DOTENV_MAX_BYTES = 256 * 1024

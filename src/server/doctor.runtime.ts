@@ -6,13 +6,11 @@ import { join } from 'node:path'
 import { AGENT_SANDBOX_ENV, agentSandboxOn, claudeSandboxSupported } from './agentSandbox'
 import { binaryOnPath } from './binaryOnPath'
 import { BROWSER_SKILL_NAME, browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
-import { defaultOpencodePreflight } from './centralChatHealth'
 import { resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
 import { probeClaudeLaunch } from './claudeLauncher/claudeLaunch.probe'
 import { claudeChildEnv } from './central/runtime/claudeOptions'
 import { toClaudeReady } from './central/runtime/claudePreflight'
 import { launchLabel } from './central/runtime/runtimeDetect'
-import { opencodeBin } from './central/runtime/opencodeOptions'
 import { callBotApi, PollApiError } from './channels/telegramPollApi'
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './channels/telegramSend'
 import { dataDir } from './config'
@@ -79,11 +77,6 @@ export function doctorDeps(i: DoctorRuntimeInput): DoctorDeps {
       return { ok: false, reason: r.hint || r.code, missing: r.failed === 'wrapper_not_found' || r.failed === 'claude_not_found', ...via }
     },
     claudeProvider: () => ({ view: providerView(), lastTest: lastProviderTest() }),
-    opencodeBin: opencodeBin(),
-    opencodeReady: async () => {
-      const r = await defaultOpencodePreflight()
-      return r.ok ? { ok: true } : { ok: false, reason: r.reason }
-    },
     generated: () => generated(env),
     readFile: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } }, // absent = stale, reported by the check
     installGenerated: () => {

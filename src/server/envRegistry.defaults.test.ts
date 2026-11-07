@@ -12,7 +12,6 @@ import { contextWindowTokens } from './central/context/rotationPolicy'
 import { budgetLimits } from './central/guard/budgetStore'
 import { envCeiling } from './central/guard/levelStore'
 import { centralRuntimeKind } from './central/runtime/runtimeFlag'
-import { opencodeBin, opencodeToolsAllowed } from './central/runtime/opencodeOptions'
 import { approvalButtonsOn } from './channels/channelButtons'
 import { telegramChannelEnabled } from './channels/channelsRuntime'
 import { trustProxyEnabled } from './channels/webhookPeer'
@@ -39,8 +38,6 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_CENTRAL_AUTONOMY', () => onOff(autonomyEnabled('')), 'central/centralAutonomy.ts:99'],
   ['WEBTERM_CENTRAL_RELIABILITY', () => onOff(reliabilityEnabled('')), 'central/autonomyDispatch.ts:12'],
   ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'propose' ? 'off' : '?'), 'central/guard/levelStore.ts:37 (off = hanya propose)'],
-  ['WEBTERM_OPENCODE_BIN', () => opencodeBin(''), 'central/runtime/opencodeOptions.ts:61'],
-  ['WEBTERM_OPENCODE_ALLOW_TOOLS', () => onOff(opencodeToolsAllowed('')), 'central/runtime/opencodeOptions.ts:66'],
   ['WEBTERM_CENTRAL_TURN_STEPS', () => String(resolveLimits(E).maxTurns), 'central/chat/turnLimits.ts:27'],
   ['WEBTERM_CENTRAL_TURN_WALL_MS', () => String(resolveLimits(E).maxWallMs), 'central/chat/turnLimits.ts:28'],
   ['WEBTERM_CENTRAL_TURN_TOKENS', () => String(resolveLimits(E).maxTokens), 'central/chat/turnLimits.ts:29'],

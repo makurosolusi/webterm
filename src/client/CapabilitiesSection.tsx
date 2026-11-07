@@ -50,7 +50,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
 
   // fixChain = nyalakan kartu ini lewat toggle biasa: server ikut menyalakan prasyaratnya
   // (`closure`), pilihan kartu lain tidak disentuh. Dulu memanggil /reset yang menghapus semuanya.
-  // `kind` dilebarkan ke string: 'agentEngine' (central butuh Claude Code/OpenCode) bisa datang dari server
+  // `kind` dilebarkan ke string: 'agentEngine' (central butuh Claude Code) bisa datang dari server
   // sebelum tipe bersama memuatnya. Mesin agen dipilih di Lanjutan, sama seperti lokasi Chrome.
   const onStep = (id: CapabilityId, kind: NonNullable<CapabilityView['step']>['kind'] | (string & {})): void => {
     if (kind === 'chromiumPath' || kind === 'agentEngine') setAdvancedOpen(true)

@@ -1,9 +1,9 @@
 // Central runtime port (RND/08 §4, RND/13 §3 B1). One narrow seam every adapter
-// (mock now, Claude/Codex later) implements; the turn service owns persistence.
+// (Claude, plus the mock for tests) implements; the turn service owns persistence.
 // Pure types and cancellation primitives: no network, PTY, SDK, or database.
 
 /** Flag-visible runtime selector. `off` means no adapter may be constructed. */
-export type RuntimeKind = 'off' | 'claude' | 'codex' | 'opencode' | 'mock'
+export type RuntimeKind = 'off' | 'claude' | 'mock'
 
 /** A runtime that can actually run turns (everything except `off`). */
 export type AdapterRuntimeKind = Exclude<RuntimeKind, 'off'>

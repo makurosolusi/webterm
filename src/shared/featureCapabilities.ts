@@ -29,7 +29,7 @@ export interface CapabilityView {
 export interface CapabilitiesResponse {
   capabilities: CapabilityView[] // urut CAPABILITY_IDS
   advanced: {
-    agentEngine: { value: 'auto' | 'claude' | 'opencode' | 'mock'; detected: string }
+    agentEngine: { value: 'auto' | 'claude' | 'mock'; detected: string }
     /** `value` = override tersimpan ('' = otomatis); `active` = biner yang akan dipakai (null = tidak ada);
      *  `overrideInvalid` = override ada tapi berkasnya hilang (TIDAK jatuh ke otomatis); `candidates` = yang ada di disk. */
     chromiumPath: {

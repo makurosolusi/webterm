@@ -26,11 +26,6 @@ const CONTROL_CHARS = /[\x00-\x1f\x7f]/g
 /** Program paths under these roots are agent-writable, so a custom program may not live there. */
 export const DEFAULT_DENY_ROOTS: readonly string[] = ['/tmp', '/private/tmp']
 
-/** Headless argv builders of builtin kinds (P3: opencode headless is the default non-Claude worker). */
-const BUILTIN_HEADLESS: Readonly<Record<string, (prompt: string) => readonly string[]>> = {
-  opencode: (prompt) => ['opencode', 'run', prompt],
-}
-
 export interface CatalogEntry {
   kind: string
   builtin: boolean
@@ -127,7 +122,7 @@ export function createAgentCatalog(deps: CatalogDeps): AgentCatalog {
     if (Object.hasOwn(AGENT_CONFIG, kind)) {
       // claude launches through the default launch profile; the other builtins keep their override.
       const launchLine = kind === 'claude' ? claudeProfileLine(s) : assembleCmd(kind as BuiltinAgentId, s.agentLaunchCommands?.[kind as BuiltinAgentId])
-      return { kind, builtin: true, tier: 'R2', launchLine, headlessArgv: BUILTIN_HEADLESS[kind] ?? null, childEnv: () => ({}) }
+      return { kind, builtin: true, tier: 'R2', launchLine, headlessArgv: null, childEnv: () => ({}) }
     }
     const agent = s.customAgents?.find((c) => c.id === kind)
     return agent?.centralSpawn === true ? customEntry(agent, s, deps) : null
@@ -135,7 +130,7 @@ export function createAgentCatalog(deps: CatalogDeps): AgentCatalog {
   return {
     resolve,
     kinds() {
-      const builtin = (Object.keys(AGENT_CONFIG) as BuiltinAgentId[]).map((id) => ({ id, label: AGENT_CONFIG[id].label, builtin: true, headless: !!BUILTIN_HEADLESS[id] }))
+      const builtin = (Object.keys(AGENT_CONFIG) as BuiltinAgentId[]).map((id) => ({ id, label: AGENT_CONFIG[id].label, builtin: true, headless: false }))
       const custom = (settings().customAgents ?? []).flatMap((a) => {
         const entry = a.centralSpawn === true ? resolve(a.id) : null
         return entry ? [{ id: a.id, label: clean(a.label), builtin: false, headless: entry.headlessArgv !== null }] : []

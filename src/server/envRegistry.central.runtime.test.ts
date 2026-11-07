@@ -4,6 +4,7 @@ import { DEFAULT_RUNTIME_KIND, parseRuntimeKind } from './central/runtime/runtim
 import { specFor } from './envRegistry'
 import type { EnvSpec } from './envRegistry.types'
 import { validateEnvValue } from './envSettings.validate'
+import { parseOverrides } from './envSettings.store'
 
 const RUNTIME = 'WEBTERM_CENTRAL_RUNTIME'
 const spec = (key: string): EnvSpec => {
@@ -13,13 +14,11 @@ const spec = (key: string): EnvSpec => {
 }
 
 describe('WEBTERM_CENTRAL_RUNTIME', () => {
-  it('opsi berurutan claude, opencode, mock, off dengan label kanonik', () => {
+  it('opsi berurutan claude, mock, off dengan label kanonik (tanpa OpenCode)', () => {
     const s = spec(RUNTIME)
     expect(s.kind).toBe('enum')
-    expect(s.options).toEqual(['claude', 'opencode', 'mock', 'off'])
-    expect(s.optionLabels).toEqual({
-      claude: 'Claude Code', opencode: 'OpenCode (free/third-party models)', mock: 'Demo (canned replies)', off: 'Off',
-    })
+    expect(s.options).toEqual(['claude', 'mock', 'off'])
+    expect(s.optionLabels).toEqual({ claude: 'Claude Code', mock: 'Demo (canned replies)', off: 'Off' })
     expect(s.label).toBe('Central agent engine')
   })
 
@@ -40,21 +39,26 @@ describe('WEBTERM_CENTRAL_RUNTIME', () => {
 })
 
 describe('WEBTERM_CENTRAL_MODEL', () => {
-  it('tanpa default model (kosong = bawaan runtime), berlaku untuk opencode dan claude', () => {
+  it('tanpa default model (kosong = bawaan runtime), berlaku untuk claude (juga otomatis)', () => {
     const s = spec('WEBTERM_CENTRAL_MODEL')
     expect(s.kind).toBe('string')
     expect(s.default ?? '').toBe('')
     expect(s.unsetLabel).toBe('Runtime default')
-    expect(s.label).toBe('Model (OpenCode / Claude)')
-    expect(s.requires).toEqual([expect.objectContaining({ key: RUNTIME, oneOf: ['opencode', 'claude'] })])
+    expect(s.label).toBe('Model (Claude)')
+    expect(s.requires).toEqual([expect.objectContaining({ key: RUNTIME, oneOf: ['claude', ''] })])
   })
 })
 
-describe('entri khusus OpenCode dan CA2 netral-runtime', () => {
-  it('BIN dan ALLOW_TOOLS diawali "Hanya bila mesin = OpenCode."', () => {
-    for (const k of ['WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS']) {
-      expect(spec(k).description.startsWith('Only when the engine is OpenCode.'), k).toBe(true)
-    }
+describe('OpenCode dipensiunkan dan CA2 netral-runtime', () => {
+  it('stale OpenCode keys and a stored opencode engine are ignored, not applied', () => {
+    for (const k of ['WEBTERM_OPENCODE_BIN', 'WEBTERM_OPENCODE_ALLOW_TOOLS']) expect(specFor(k), k).toBeUndefined()
+    const warns: string[] = []
+    const parsed = parseOverrides(JSON.stringify({
+      WEBTERM_OPENCODE_BIN: '/opt/opencode', WEBTERM_OPENCODE_ALLOW_TOOLS: 'on', WEBTERM_CENTRAL_RUNTIME: 'opencode',
+    }), specFor, (m) => warns.push(m))
+    expect(parsed.values).toEqual({})
+    expect(Object.keys(parsed.unknownKept).sort()).toEqual(['WEBTERM_OPENCODE_ALLOW_TOOLS', 'WEBTERM_OPENCODE_BIN'])
+    expect(warns.some((m) => m.includes('invalid stored override for WEBTERM_CENTRAL_RUNTIME'))).toBe(true)
   })
 
   it('CHECKPOINT tanpa requires runtime dan tanpa klausa "butuh runtime opencode"', () => {

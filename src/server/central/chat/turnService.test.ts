@@ -132,7 +132,7 @@ describe('turn lifecycle', () => {
     expect(count('central_message')).toBe(0)
   })
 
-  it.each(['claude', 'opencode', 'mock'] as const)('%s: no tool catalog in the prompt and a tool request in reply text is inert', async (kind) => {
+  it.each(['claude', 'mock'] as const)('%s: no tool catalog in the prompt and a tool request in reply text is inert', async (kind) => {
     const previousPlanner = process.env.WEBTERM_CENTRAL_PLANNER
     const previousTools = process.env.WEBTERM_CENTRAL_TOOLS
     process.env.WEBTERM_CENTRAL_PLANNER = 'on'

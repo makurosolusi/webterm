@@ -34,7 +34,7 @@ describe('builtin kinds', () => {
     expect(c.resolve('claude')).toMatchObject({ builtin: true, tier: 'R2', launchLine: 'envman -e w -- claude', headlessArgv: null })
     expect(c.resolve('codex')?.launchLine).toBe('codex --ci')
     expect(createAgentCatalog({ settings: () => DEFAULT_SETTINGS }).resolve('codex')?.launchLine).toBe(AGENT_CONFIG.codex.launchCmd)
-    expect(c.resolve('opencode')?.headlessArgv?.('hi')).toEqual(['opencode', 'run', 'hi'])
+    expect(c.resolve('opencode')?.headlessArgv).toBeNull() // no opencode headless worker: workers run on Claude
     expect(c.resolve('claude')?.childEnv()).toEqual({})
   })
 
@@ -96,7 +96,7 @@ describe('custom kinds', () => {
   it('kinds() lists builtins plus opened customs, with only id/label/builtin/headless', () => {
     const kinds = catalogOf([agent({ label: 'A\u0007gent' }), agent({ id: 'custom:off', centralSpawn: false })]).kinds()
     expect(kinds.filter((k) => k.builtin).map((k) => k.id)).toEqual(Object.keys(AGENT_CONFIG))
-    expect(kinds.find((k) => k.id === 'opencode')?.headless).toBe(true)
+    expect(kinds.filter((k) => k.builtin).every((k) => !k.headless)).toBe(true)
     expect(kinds.find((k) => k.id === 'custom:a')).toEqual({ id: 'custom:a', label: 'Agent', builtin: false, headless: true })
     expect(JSON.stringify(kinds)).not.toContain(BUN)
   })

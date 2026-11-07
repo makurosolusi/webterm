@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto'
 import { detectChromium } from './browser/chromium.launch'
 import { centralRuntimeKind, CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
-import { claudePreflightOf, defaultOpencodePreflight, freshClaudePreflight, freshOpencodePreflight, runtimeReadiness } from './centralChatHealth'
+import { claudePreflightOf, freshClaudePreflight, runtimeReadiness } from './centralChatHealth'
 import { PollApiError, callBotApi } from './channels/telegramPollApi'
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './channels/telegramSend'
 import { isEnabled } from './featureCapabilities.runtime'
@@ -56,9 +56,7 @@ export interface DetectOptions { fresh?: boolean }
 /** Mesin agen Central siap dipakai: terpasang DAN login (preflight yang sama dengan `/api/central/health`). */
 export async function agentEngineReady(env: NodeJS.ProcessEnv, opts: DetectOptions = {}): Promise<boolean> {
   const kind = centralRuntimeKind(env[CENTRAL_RUNTIME_FLAG])
-  return opts.fresh
-    ? (await runtimeReadiness(kind, freshClaudePreflight(), freshOpencodePreflight)).runtimeReady
-    : (await runtimeReadiness(kind, claudePreflightOf(), defaultOpencodePreflight)).runtimeReady
+  return (await runtimeReadiness(kind, opts.fresh ? freshClaudePreflight() : claudePreflightOf())).runtimeReady
 }
 
 /** Deteksi nyata untuk produksi. */

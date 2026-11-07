@@ -3,7 +3,7 @@
 // and capped by `stderrReason`; the prompt never reaches here (it only goes to stdin).
 import type { RuntimeResult, TurnInput } from './centralRuntime'
 import type { ClaudeTurnState, TurnFailure } from './claudeSession'
-import { stderrReason } from './opencodeSession'
+import { stderrReason } from './runtimeShared'
 import { createLogger } from '../../logs'
 
 const log = createLogger('central')

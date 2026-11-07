@@ -11,7 +11,6 @@ import { activeCa2 } from './central/ca2Active'
 import { createContextAssembler } from './central/context/contextAssembler'
 import { createCentralSummarize } from './central/context/checkpointLlm'
 import { MockRuntime } from './central/runtime/mockRuntime'
-import { OpenCodeRuntime } from './central/runtime/opencodeRuntime'
 import { ClaudeRuntime } from './central/runtime/claudeRuntime'
 import type { ClaudeRuntimeOptions } from './central/runtime/claudeOptions'
 import { claudePreflightOf, type RuntimeReadiness } from './centralChatHealth'
@@ -69,11 +68,9 @@ function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDep
   registerApprovalStream(db, stream, now)
   const runtime = kind === 'mock'
     ? new MockRuntime({ toolExecutor: createPortfolioReadExecutor(db, { now }), stepDelayMs: 5 })
-    : kind === 'opencode'
-      ? new OpenCodeRuntime()
-      : kind === 'claude'
-        ? new ClaudeRuntime({ ...deps.claudeOptions, preflight: claudePreflightOf(deps.claudeOptions) })
-        : null
+    : kind === 'claude'
+      ? new ClaudeRuntime({ ...deps.claudeOptions, preflight: claudePreflightOf(deps.claudeOptions) })
+      : null
   // With CA2 armed on this db, retrieval uses its memory provider; the assembler delegates to the
   // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
   const ca2 = activeCa2()

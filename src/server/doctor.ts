@@ -6,7 +6,7 @@ import type { VerifyResult } from './events/eventModel'
 import type { ProviderView } from './claudeProvider/claudeProvider.model'
 
 export type DoctorStatus = 'ok' | 'warn' | 'fail' | 'off'
-export const DOCTOR_IDS = ['claude', 'opencode', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'] as const
+export const DOCTOR_IDS = ['claude', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'] as const
 export type DoctorId = (typeof DOCTOR_IDS)[number]
 
 export interface DoctorCheck {
@@ -21,7 +21,6 @@ export interface DoctorCheck {
 
 /** A file webterm generates (shim, skill, house rules): `expected` is what the current build writes. */
 export interface GeneratedFile { label: string; path: string; expected: string }
-export type Ready = { ok: true } | { ok: false; reason: string }
 /** Claude readiness through the default launch profile: `via` names a wrapper (`envman (via profile X)`), `missing` = binary not found. */
 export type ClaudeLaunchReady = { ok: true; via?: string } | { ok: false; reason: string; via?: string; missing?: boolean }
 export type TelegramProbe = { state: 'unset' } | { state: 'ok'; name?: string } | { state: 'rejected' | 'unreachable' }
@@ -32,8 +31,6 @@ export interface DoctorDeps {
   claudeReady(): Promise<ClaudeLaunchReady>
   /** Saved Claude provider (never the secret) + the last Test connection of this process; absent = login. */
   claudeProvider?(): { view: ProviderView; lastTest: { ok: boolean; message: string } | null }
-  opencodeBin: string
-  opencodeReady(): Promise<Ready>
   generated(): GeneratedFile[]
   readFile(path: string): string | null
   installGenerated(): void
@@ -69,13 +66,6 @@ const PROBES: Record<DoctorId, Probe> = {
     }
     return r.ok ? check('claude', t, 'ok', `Installed and logged in.${via}`)
       : check('claude', t, 'fail', `Installed but not ready (${r.reason}). Open a terminal node, run claude and log in.${via}`)
-  },
-  async opencode(d) {
-    const t = 'OpenCode CLI'
-    if (!d.onPath(d.opencodeBin)) return check('opencode', t, 'off', 'Not installed. Optional: only needed for OpenCode agent nodes or the OpenCode engine.')
-    const r = await d.opencodeReady()
-    return r.ok ? check('opencode', t, 'ok', 'Installed, with a model and credentials.')
-      : check('opencode', t, 'warn', `Installed but not ready: ${r.reason}`)
   },
   skills(d) {
     const stale = d.generated().filter((f) => d.readFile(f.path) !== f.expected).map((f) => f.label)

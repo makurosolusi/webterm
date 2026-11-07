@@ -115,10 +115,10 @@ function rowOf(e: EnvEntryV2, i: EffectiveInput): EffectiveRow {
   const secret = e.kind === 'secret'
   let value = secret ? '' : e.effective
   let reason = reasonOf(e, source, ui, i.env)
-  // Unset runtime = auto-detect (Claude Code, then OpenCode, never mock): show what it resolves to.
+  // Unset runtime = auto-detect (Claude Code or off, never mock): show what it resolves to.
   if (e.key === CENTRAL_RUNTIME_FLAG && source === 'default') {
     value = `auto (${detectAgentEngine({ ...i.env, [CENTRAL_RUNTIME_FLAG]: undefined })})`
-    reason = 'Auto-detected: Claude Code, then OpenCode, then off. Auto never picks the mock engine.'
+    reason = 'Auto-detected: Claude Code when it is set up, otherwise off. Auto never picks the mock engine.'
   }
   const mock = e.key === CENTRAL_RUNTIME_FLAG && e.effective === 'mock'
   if (mock) reason = `${MOCK_REASON} ${reason}`

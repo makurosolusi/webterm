@@ -20,7 +20,7 @@ import {
   type ClaudeTurnState, createKillLadder, defaultWorkDir, ensureWorkDir, failTurn, finishTurn, newTurnState,
 } from './claudeSession'
 import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
-import { CENTRAL_MODEL_FLAG } from './opencodeOptions'
+import { CENTRAL_MODEL_FLAG } from './runtimeShared'
 import { FRESH_SESSION_NOTICE, isMissingSession, logTurnFailed } from './claudeFailure'
 import { createLogger } from '../../logs'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
