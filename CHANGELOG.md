@@ -65,6 +65,12 @@ Operator notes:
 - Agent Chat: copy any message with its copy button.
 - Agent Chat: Escape stops the running turn (when no menu is open).
 - Agent Chat: when a turn ends or Claude asks for permission, an answer or a plan approval while you are not looking at the chat, you get the same unread mark, notification and chime as a terminal agent. A turn that ends while its subagents still run is marked unread without a notification.
+- Agent Chat: "Rewind files to here" on any of your messages restores the files Claude changed since then. It first lists the files that would change (with line counts) and rewinds only after you confirm. Only edits made with Claude's Write, Edit and NotebookEdit tools are restored: changes from Bash commands and from subagents are not undone, and the conversation itself stays as it is.
+- Agent Chat: "Edit message" on any of your messages puts its text back in the composer; sending it starts a new branch of the conversation from that point, as a new conversation of the node. The original stays in History.
+- Agent Chat: code blocks in Claude's replies are syntax-highlighted (TypeScript, Python, shell and the other languages the editor knows) in light and dark theme.
+- Agent Chat: when you are close to or over your plan's usage limit, one notice says so and when the limit resets; it goes away after the next successful turn.
+- Agent Chat: a Tasks list above the composer shows the subagents and background tasks Claude starts, with their progress and a Stop button for a running one.
+- Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
 - The Central chat and control panel now open in a resizable side bar on the right, like Copilot Chat in VS Code, instead of the bottom panel, so they no longer cover the canvas. Toggle it with the title-bar button or ⌥⌘B / Ctrl+Alt+B.
