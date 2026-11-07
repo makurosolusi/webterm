@@ -14,6 +14,7 @@ import {
   buildOptimisticMessage, chatReducer, initialChatState, orderedMessages,
 } from './chatStore'
 import { ChatApiError, chatErrorMessage, isAbortError } from '../chatApi'
+import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -23,6 +24,8 @@ export interface ChatConversationViewProps {
   streamFactory: StreamFactory
   /** Focus the composer on mount (New chat). */
   focusComposer?: boolean
+  /** Enables the `/` command menu (central/centralCommands); absent = plain composer. */
+  commands?: CentralChatHost
 }
 
 function schedule(callback: () => void): number {
@@ -165,6 +168,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     )
   }
 
+  const cmd = useCentralChatCommands(props.commands, send, (error) => dispatch({ type: 'error', error }))
   const error = state.error ?? historyError
 
   return (
@@ -190,7 +194,8 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
       )}
 
       <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send} />
-      <ChatComposer busy={busy} onSend={send} onStop={stop} autoFocus={props.focusComposer} />
+      <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
+        completion={cmd.completion} seed={cmd.seed} />
     </section>
   )
 }

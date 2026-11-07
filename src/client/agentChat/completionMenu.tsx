@@ -6,7 +6,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import {
   applyCompletion, completionTriggerAt,
-  type CompletionItem, type CompletionKind, type ComposerCompletion, type CompletionTrigger,
+  type CompletionItem, type CompletionKind, type CompletionKindText, type ComposerCompletion, type CompletionTrigger,
 } from './composerCompletion'
 import './completionMenu.css'
 
@@ -30,11 +30,14 @@ interface MenuProps {
   active: number
   onHover: (i: number) => void
   onPick: (item: CompletionItem) => void
+  /** Overrides MENU_TEXT for this kind (the source's own words). */
+  text?: CompletionKindText
 }
 
 /** The listbox. Plain text nodes only: names and descriptions come from repository files. */
-export function CompletionMenu({ id, kind, state, active, onHover, onPick }: MenuProps) {
+export function CompletionMenu({ id, kind, state, active, onHover, onPick, text }: MenuProps) {
   const items = state.status === 'ready' ? state.items : []
+  const words = text ?? { label: MENU_TEXT.label[kind], empty: MENU_TEXT.empty[kind], loading: MENU_TEXT.loading[kind] }
   useEffect(() => {
     document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: 'nearest' })
   }, [id, active, items])
@@ -42,7 +45,7 @@ export function CompletionMenu({ id, kind, state, active, onHover, onPick }: Men
   return (
     // Mouse down keeps the textarea's focus: its blur would close the menu before the click lands.
     <div className="cmp-menu" onMouseDown={(e) => e.preventDefault()}>
-      <div id={id} role="listbox" aria-label={MENU_TEXT.label[kind]} aria-busy={state.status === 'loading'}>
+      <div id={id} role="listbox" aria-label={words.label} aria-busy={state.status === 'loading'}>
         {items.map((item, i) => (
           <div key={item.value} id={`${id}-${i}`} role="option" aria-selected={i === active}
             className={`cmp-item${i === active ? ' is-active' : ''}`}
@@ -55,8 +58,8 @@ export function CompletionMenu({ id, kind, state, active, onHover, onPick }: Men
           </div>
         ))}
       </div>
-      {state.status === 'loading' && <div className="cmp-status" role="status">{MENU_TEXT.loading[kind]}</div>}
-      {state.status === 'ready' && !items.length && <div className="cmp-status" role="status">{MENU_TEXT.empty[kind]}</div>}
+      {state.status === 'loading' && <div className="cmp-status" role="status">{words.loading}</div>}
+      {state.status === 'ready' && !items.length && <div className="cmp-status" role="status">{words.empty}</div>}
       {state.status === 'error' && <div className="cmp-status cmp-status--error" role="alert">{MENU_TEXT.failed}{state.error}</div>}
     </div>
   )
@@ -169,7 +172,9 @@ export function useComposerCompletion(
     onKeyDown,
     sync,
     close: () => setSnap(null),
-    /** Combobox attributes for the textarea; empty without `completion` (the Central chat stays as it was). */
+    /** Opens the menu on `value` with the caret at its end (a seeded `/` shows the whole list). */
+    reveal: (value: string) => { setDismissedAt(null); setSnap({ value, start: value.length, end: value.length }) },
+    /** Combobox attributes for the textarea; empty without `completion`. */
     inputProps: completion
       ? {
           role: 'combobox' as const,
@@ -180,7 +185,7 @@ export function useComposerCompletion(
         }
       : {},
     menu: open && trigger
-      ? <CompletionMenu id={id} kind={trigger.kind} state={state} active={at} onHover={setActive} onPick={accept} />
+      ? <CompletionMenu id={id} kind={trigger.kind} state={state} active={at} onHover={setActive} onPick={accept} text={completion?.text?.[trigger.kind]} />
       : null,
   }
 }

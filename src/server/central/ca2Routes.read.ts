@@ -117,9 +117,14 @@ function activeText(h: Ca2Handle, name: string): string | null {
   try { return readFileSync(join(skillDir(h.skillsRoot, bucket, name, active.record.version), SKILL_FILE), 'utf8') } catch { return null }
 }
 
-/** Skills awaiting review, with lint findings and a line diff against the active version (all-added when none). */
+/**
+ * Skills awaiting review, with lint findings and a line diff against the active version (all-added when none).
+ * `?status=active` answers the approved skills Central can load instead (`{name, description}`, the prompt index),
+ * which the Central chat lists as `/` commands.
+ */
 export function skillsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
+  if (q.get('status') === 'active') return { status: 200, body: { items: h.skills.index().map((e) => ({ name: clip(e.name), description: clip(e.description) })) } }
   const page = pageOf(q)
   if (!page) return fail(400, 'invalid_page')
   const records = REVIEW_STATUSES.flatMap((s) => h.skills?.list(s, { limit: page.limit, offset: page.offset }) ?? [])

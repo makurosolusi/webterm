@@ -53,6 +53,8 @@ export interface ChatPanelProps {
   actionsHost?: HTMLElement | null
   /** Narrow host (side bar): the conversation list sits behind a History toggle instead of a column. */
   compact?: boolean
+  /** The Central control panel is on: `/status`, `/approvals`, `/halt`… and skills join the `/` menu. */
+  centralEnabled?: boolean
 }
 
 export default function ChatPanel(props: ChatPanelProps) {
@@ -257,6 +259,7 @@ export default function ChatPanel(props: ChatPanelProps) {
               client={clientRef.current}
               streamFactory={streamRef.current}
               focusComposer={current.id === fresh}
+              commands={{ centralEnabled: props.centralEnabled === true, newChat, showHistory: () => setHistory(true) }}
             />
           ) : (
             conversations !== null && (
