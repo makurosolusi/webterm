@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 Operator notes:
+- Central chat attachments (images and text files) are stored in `<data dir>/central/attachments/` and removed 30 days after they were last sent.
 - New dependency `@ghostery/adblocker` (MPL-2.0) for browser-node ad and tracker blocking. Its prebuilt filter lists are downloaded into `<data dir>/browser/adblock/` and refreshed weekly in the background; startup never waits for the download.
 - New files in the data dir: `<data dir>/browser/adblock/` (filter cache), `shields-off.json` (sites where Shields is turned off) and `<data dir>/backgrounds/` (uploaded canvas background images).
 - A stored `agentLaunchCommands.claude` is moved into a Claude launch profile named "Custom" on first load (see below); nothing to do by hand.
