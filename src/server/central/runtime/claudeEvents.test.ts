@@ -42,8 +42,13 @@ describe('parseClaudeLine', () => {
   it('parses result fields and maps api_retry', () => {
     expect(parse(resultRecord())).toEqual({
       type: 'result', subtype: 'success', isError: false, sessionId: 'sess-1', costUsd: 0.00025, durationMs: 1200,
-      usage: { inputTokens: 10, outputTokens: 7, cacheReadTokens: 3, cacheWriteTokens: 1 },
+      usage: { inputTokens: 10, outputTokens: 7, cacheReadTokens: 3, cacheWriteTokens: 1 }, errorText: null,
     })
+    // A failed result keeps the CLI's error text (errors[] first, else result); a success never does.
+    expect(parse(resultRecord({ subtype: 'error_during_execution', is_error: true, errors: ['No conversation found with session ID: x'] })))
+      .toMatchObject({ errorText: 'No conversation found with session ID: x' })
+    expect(parse(resultRecord({ is_error: true, result: 'Invalid API key' }))).toMatchObject({ errorText: 'Invalid API key' })
+    expect(parse(resultRecord({ result: 'the reply' }))).toMatchObject({ errorText: null })
     expect(parse({ type: 'system', subtype: 'api_retry' })).toEqual({ type: 'retry' })
   })
 

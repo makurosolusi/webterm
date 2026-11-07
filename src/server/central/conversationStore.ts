@@ -178,13 +178,18 @@ export function appendMessage(db: Database, input: AppendMessageInput): AppendMe
   })
 }
 
-/** Resume handle of the newest succeeded turn in the conversation (B1), or null. */
-export function sessionRefFor(db: Database, conversationId: string): string | null {
+/**
+ * Resume handle of the newest succeeded turn in the conversation (B1), or null. With `runtime`, only
+ * that runtime's turns count: a session id belongs to the runtime that made it (an OpenCode `ses_…`
+ * id handed to `claude --resume` fails every turn), so switching runtimes starts a fresh session.
+ */
+export function sessionRefFor(db: Database, conversationId: string, runtime?: string | null): string | null {
+  const byRuntime = runtime ? ' AND runtime = ?' : ''
   const row = getRow(
     db,
     `SELECT session_ref FROM central_turn WHERE conversation_id = ? AND status = 'succeeded'
-     AND session_ref IS NOT NULL ORDER BY started_at DESC, rowid DESC LIMIT 1`,
-    conversationId
+     AND session_ref IS NOT NULL${byRuntime} ORDER BY started_at DESC, rowid DESC LIMIT 1`,
+    ...(runtime ? [conversationId, runtime] : [conversationId])
   )
   return row ? optional(row['session_ref']) : null
 }
@@ -214,7 +219,7 @@ export function createTurn(db: Database, input: CreateTurnInput): Turn {
       txDb,
       `INSERT INTO central_turn (id, conversation_id, message_id, status, runtime, session_ref, started_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      id, conversationId, input.messageId, status, input.runtime ?? null, sessionRefFor(txDb, conversationId), ts
+      id, conversationId, input.messageId, status, input.runtime ?? null, sessionRefFor(txDb, conversationId, input.runtime), ts
     )
     execWrite(txDb, 'UPDATE central_conversation SET active_turn_id = ?, updated_at = ? WHERE id = ?', id, ts, conversationId)
     execWrite(txDb, 'UPDATE central_message SET turn_id = ? WHERE id = ? AND turn_id IS NULL', id, input.messageId)

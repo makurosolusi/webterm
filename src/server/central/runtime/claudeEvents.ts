@@ -12,6 +12,7 @@ import type { TurnEmitter } from './runtimeEvents'
 import { type ClaudeTurnState, failTurn } from './claudeSession'
 import { MCP_SERVER_NAME } from '../../mcp/mcp.paths'
 import { WEBTERM_MCP_TOOL_PREFIX } from './claudeOptions'
+import { stderrReason } from './opencodeSession'
 
 export interface ClaudeUsage {
   inputTokens: number
@@ -28,6 +29,8 @@ export interface ClaudeResultEvent {
   usage: ClaudeUsage | null
   costUsd: number | null
   durationMs: number | null
+  /** CLI error text of a failed result (`errors[]` or `result`); never set on success (that text is the reply). */
+  errorText: string | null
 }
 
 export interface ClaudeToolUse { id: string; name: string; input: unknown }
@@ -106,6 +109,13 @@ function parseUser(obj: Rec): ClaudeEvent | null {
   return results.length > 0 ? { type: 'tool_results', results } : null
 }
 
+/** `error_during_execution` carries `errors: string[]`; an `is_error` success carries the text in `result`. */
+function resultErrorText(obj: Rec): string | null {
+  const errors = Array.isArray(obj.errors) ? obj.errors.filter((e): e is string => typeof e === 'string') : []
+  const text = errors.length > 0 ? errors.join('\n') : str(obj.result)
+  return text && text.trim().length > 0 ? text : null
+}
+
 /** Parses one stdout line; non-JSON or unknown shapes yield null (they are ignored by design). */
 export function parseClaudeLine(line: string): ClaudeEvent | null {
   let raw: unknown
@@ -141,6 +151,7 @@ export function parseClaudeLine(line: string): ClaudeEvent | null {
         sessionId: str(obj.session_id), usage: parseUsage(obj.usage),
         costUsd: typeof obj.total_cost_usd === 'number' ? obj.total_cost_usd : null,
         durationMs: typeof obj.duration_ms === 'number' ? obj.duration_ms : null,
+        errorText: obj.is_error === true || obj.subtype !== 'success' ? resultErrorText(obj) : null,
       }
     default:
       return null
@@ -237,7 +248,9 @@ function applyAssistant(event: Extract<ClaudeEvent, { type: 'assistant' }>, ctx:
     if (event.error === 'authentication_failed') {
       failTurn(emitter, state, { code: 'runtime_unavailable', unavailable: 'claude_not_authenticated' })
     } else {
-      failTurn(emitter, state, { code: 'runtime_error', retryable: RETRYABLE_ASSISTANT_ERRORS.has(event.error) })
+      // The CLI's own error line (e.g. "API Error: 400 ..."), redacted and capped; never model output.
+      const reason = stderrReason(event.text) || `Claude reported "${event.error}"`
+      failTurn(emitter, state, { code: 'runtime_error', retryable: RETRYABLE_ASSISTANT_ERRORS.has(event.error), reason })
     }
     return
   }
@@ -259,8 +272,13 @@ export function applyClaudeEvent(event: ClaudeEvent, ctx: ApplyContext): void {
   switch (event.type) {
     case 'init':
       if (event.sessionId !== null) state.sessionRef = event.sessionId
+      state.sawInit = true
       if (!initAllowed(event)) {
-        failTurn(emitter, state, { code: 'runtime_error' })
+        const foreign = [...event.tools.filter((t) => !isWebtermTool(t)), ...event.servers.filter((n) => n !== MCP_SERVER_NAME)]
+        failTurn(emitter, state, {
+          code: 'runtime_error',
+          reason: `Claude started with tools or MCP servers webterm does not allow (${foreign.slice(0, 5).join(', ')}); check managed Claude settings or plugins`,
+        })
         ctx.kill()
       }
       return

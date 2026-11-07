@@ -252,3 +252,23 @@ test('createTurn inherits session_ref from the newest succeeded turn only', () =
   expect(createTurn(db, { conversationId: 'central:global', messageId: m.id, now: 30 }).sessionRef).toBe('ses_A')
   close(db)
 })
+
+test('createTurn only inherits a session_ref made by the same runtime', () => {
+  const db = freshDb()
+  getOrCreateConversation(db, 'global')
+  const run = (n: number, runtime: string, sessionRef: string) => {
+    const m = appendMessage(db, { conversationId: 'central:global', role: 'human', parts: text, now: n }).message
+    const turn = createTurn(db, { conversationId: 'central:global', messageId: m.id, runtime, now: n })
+    updateTurn(db, { turnId: turn.id, status: 'succeeded', sessionRef, now: n })
+    return turn
+  }
+  run(10, 'opencode', 'ses_opencode') // test-only ids
+  const m = appendMessage(db, { conversationId: 'central:global', role: 'human', parts: text, now: 20 }).message
+  // The live bug: an OpenCode `ses_…` id handed to `claude --resume` failed every Claude turn.
+  const first = createTurn(db, { conversationId: 'central:global', messageId: m.id, runtime: 'claude', now: 20 })
+  expect(first.sessionRef).toBe(null)
+  updateTurn(db, { turnId: first.id, status: 'succeeded', sessionRef: 'claude-uuid', now: 21 })
+  expect(sessionRefFor(db, 'central:global', 'claude')).toBe('claude-uuid')
+  expect(sessionRefFor(db, 'central:global', 'opencode')).toBe('ses_opencode')
+  close(db)
+})

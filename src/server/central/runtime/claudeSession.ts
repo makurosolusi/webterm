@@ -8,6 +8,7 @@ import type { RuntimeErrorCode, RuntimeResult } from './centralRuntime'
 import type { TurnEmitter } from './runtimeEvents'
 import type { ClaudeResultEvent, ClaudeUsage } from './claudeEvents'
 import { type ClaudeUnavailableCode, MICROS_PER_USD } from './claudeOptions'
+import { classifyClaudeFailure } from './claudeFailure'
 
 const WORK_DIR_MODE = 0o700
 const KILL_LADDER: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGKILL']
@@ -17,12 +18,14 @@ export interface TurnFailure {
   retryable?: boolean
   /** Which input-free message to use when `code` is `runtime_unavailable`. */
   unavailable?: ClaudeUnavailableCode
-  /** Redacted one-line cause (stderr / exit status) appended to `runtime_error`. */
+  /** Redacted human cause shown instead of the bare `runtime_error` message. */
   reason?: string
 }
 
 export interface ClaudeTurnState {
   sessionRef: string | null
+  /** The `system/init` record arrived: Claude itself started. */
+  sawInit: boolean
   sawDelta: boolean
   /** Latest usage per unique assistant `message.id` (partial mode repeats ids). */
   messages: Map<string, ClaudeUsage>
@@ -41,7 +44,7 @@ export interface ClaudeTurnState {
 }
 
 export function newTurnState(): ClaudeTurnState {
-  return { sessionRef: null, sawDelta: false, messages: new Map(), failure: null,
+  return { sessionRef: null, sawInit: false, sawDelta: false, messages: new Map(), failure: null,
     termination: null, result: null, retries: 0, spawnError: null, stderrTail: '', openTools: new Map(), seenTools: new Set() }
 }
 
@@ -51,7 +54,7 @@ const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
   claude_check_failed: 'Claude Code could not be checked',
 }
 
-/** Stable messages, never the prompt; `reason` (already redacted) is appended to runtime failures. */
+/** Stable messages, never the prompt; a `runtime_error` with a (redacted) `reason` shows that reason. */
 export function runtimeErrorMessage(code: RuntimeErrorCode, unavailable?: ClaudeUnavailableCode, reason?: string): string {
   switch (code) {
     case 'runtime_unavailable':
@@ -67,7 +70,7 @@ export function runtimeErrorMessage(code: RuntimeErrorCode, unavailable?: Claude
     case 'unknown_tool':
       return 'claude requested a tool that is not allowed'
     default:
-      return reason ? `claude runtime failed: ${reason}` : 'claude runtime failed'
+      return reason || 'claude runtime failed'
   }
 }
 
@@ -137,8 +140,10 @@ export interface FinishInput {
   elapsedMs: number
   /** Session id used for this turn (the resumed one or the freshly generated one). */
   fallbackSessionRef: string
-  /** Why the child ended without a result (redacted stderr line or exit status). */
-  exitReason?: string
+  /** How the child ended (absent when it never ran); its cause comes from this, stderr and the result text. */
+  exit?: { code: number | null; signal: NodeJS.Signals | null }
+  /** Child env secret values redacted out of any reason. */
+  secrets?: readonly string[]
 }
 
 /** Decides the outcome, emits the missing `error` + one `usage`, and closes the turn. */
@@ -165,12 +170,17 @@ export function finishTurn(emitter: TurnEmitter, f: FinishInput): RuntimeResult 
       code = failed
     }
   }
-  if (outcome === 'error' && code !== undefined) {
-    failTurn(emitter, state, {
-      code,
-      ...(code === 'runtime_unavailable' ? { unavailable: 'claude_not_found' as const } : {}),
-      ...(code === 'runtime_error' && f.exitReason ? { reason: f.exitReason } : {}),
-    })
+  if (outcome === 'error' && code !== undefined && state.failure === null) {
+    const failure: TurnFailure = state.spawnError !== null || code === 'runtime_error'
+      ? classifyClaudeFailure({
+        ...(state.spawnError?.code ? { spawnCode: state.spawnError.code } : {}),
+        exitCode: f.exit?.code ?? null, signal: f.exit?.signal ?? null, stderr: state.stderrTail,
+        sawInit: state.sawInit, resultText: state.result?.errorText ?? null, secrets: f.secrets ?? [],
+      })
+      : { code }
+    failTurn(emitter, state, failure)
+    // The classifier may narrow the code (e.g. an auth failure on stderr is `runtime_unavailable`).
+    code = failure.code
   }
   const usage = state.result?.usage ?? totalsOf(state)
   const runtimeUsage = {
