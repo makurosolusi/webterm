@@ -16,6 +16,8 @@ let fakeGit: string
 let argvLog: string
 
 // test-only: argv goes to a log; "slowrepo" sleeps (cancel window), "authfail" fails like GitHub auth does.
+// "trapfork" forks a pipe-holding `sleep` the instant SIGTERM lands (the child that escapes a single
+// group kill); "escape" leaves a pipe holder in its own session, out of reach of any group signal.
 const FAKE_GIT = `#!/bin/sh
 printf '%s\\n' "$@" > "$ARGV_LOG"
 for a; do target="$a"; done
@@ -24,6 +26,8 @@ printf 'Receiving objects:  10%% (1/10)\\r' >&2
 printf 'Receiving objects:  100%% (10/10), done.\\n' >&2
 case "$*" in
   *slowrepo*) printf 'Resolving deltas:  50%% (1/2)\\n' >&2; sleep 30 ;;
+  *trapfork*) trap 'sleep 30 & echo $! > "$STRAY_PID"; exit 143' TERM; while :; do sleep 0.05; done ;;
+  *escape*) perl -MPOSIX -e 'if (my $p = fork) { open my $f, ">", $ENV{STRAY_PID}; print $f $p; exit } POSIX::setsid(); sleep 30'; sleep 30 ;;
   *authfail*) echo "fatal: Authentication failed for 'https://bob:s3cret@github.com/o/authfail.git/'" >&2; exit 128 ;;
 esac
 exit 0
@@ -36,10 +40,17 @@ beforeEach(() => {
   writeFileSync(fakeGit, FAKE_GIT)
   chmodSync(fakeGit, 0o755)
   process.env.ARGV_LOG = argvLog
+  process.env.STRAY_PID = join(tmp, 'stray.pid')
   for (const k of ['GIT_AUTHOR_NAME', 'GIT_COMMITTER_NAME']) process.env[k] = 't'
   for (const k of ['GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_EMAIL']) process.env[k] = 't@t'
 })
-afterEach(() => rmSync(tmp, { recursive: true, force: true }))
+afterEach(() => {
+  // Only the stray this test's fake git spawned (pid it wrote itself).
+  const pid = Number(existsSync(process.env.STRAY_PID!) ? readFileSync(process.env.STRAY_PID!, 'utf8') : 0)
+  if (pid > 0) try { process.kill(pid, 'SIGKILL') } catch { /* already gone: nothing to clean */ }
+  rmSync(tmp, { recursive: true, force: true })
+})
+const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch { return false } }
 
 const codeOf = (p: Promise<unknown>) => p.then(() => 'resolved', (e: CreateError) => e.code)
 const until = async (ok: () => boolean) => { for (let i = 0; i < 200 && !ok(); i++) await new Promise((r) => setTimeout(r, 25)) }
@@ -67,6 +78,30 @@ test('cancel kills the clone and removes the partial folder', async () => {
   expect(await codeOf(p)).toBe('aborted')
   expect(existsSync(join(tmp, 'slowrepo'))).toBe(false)
   expect(abortClone()).toBe(false) // idle again
+}, TEST_TIMEOUT_MS)
+
+test('cancel closes even when a child forks at the kill instant, and the next clone is not busy', async () => {
+  const p = cloneRepo({ url: 'https://example.com/o/trapfork.git', parent: tmp }, () => {}, { git: fakeGit })
+  await until(() => existsSync(join(tmp, 'trapfork', 'README.md')))
+  const t0 = Date.now()
+  expect(abortClone()).toBe(true)
+  expect(await codeOf(p)).toBe('aborted') // a single SIGTERM left the forked sleep holding stderr for 30 s
+  expect(Date.now() - t0 < 5_000).toBe(true) // bound: SIGTERM loop, no SIGKILL grace needed
+  const stray = Number(readFileSync(process.env.STRAY_PID!, 'utf8'))
+  await until(() => !alive(stray))
+  expect(alive(stray)).toBe(false)
+  expect(await cloneRepo({ url: 'o/after', parent: tmp }, () => {}, { git: fakeGit })).toBe(join(tmp, 'after'))
+}, TEST_TIMEOUT_MS)
+
+test('cancel gives up after the bound with a clear error and frees the slot', async () => {
+  const p = cloneRepo({ url: 'https://example.com/o/escape.git', parent: tmp }, () => {}, { git: fakeGit, abortMaxMs: 500 })
+  await until(() => existsSync(process.env.STRAY_PID!) && readFileSync(process.env.STRAY_PID!, 'utf8') !== '')
+  expect(abortClone()).toBe(true)
+  const err = await p.catch((e: CreateError) => e)
+  expect((err as CreateError).code).toBe('aborted')
+  expect((err as CreateError).message).toMatch(/did not exit within 1s and may still be running/)
+  expect(abortClone()).toBe(false)
+  expect(await cloneRepo({ url: 'o/next', parent: tmp }, () => {}, { git: fakeGit })).toBe(join(tmp, 'next'))
 }, TEST_TIMEOUT_MS)
 
 test('auth failure reads as gh auth login and never echoes the credential', async () => {
