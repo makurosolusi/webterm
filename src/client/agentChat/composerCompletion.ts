@@ -2,7 +2,8 @@
 // (renderer/lib/chatComposerComplete.ts + shared/chat-catalog.ts): which token the caret is in
 // (`/command` at the start of the message, `@path` at the start of any word), how a list is ranked,
 // and what accepting an item does to the draft. Accepting only INSERTS text; sending stays the
-// composer's own Enter. `agentChatCompletion` is the factory the Agent Chat node passes to ChatComposer.
+// composer's own Enter. `agentChatCompletion` is the factory the Agent Chat node passes to ChatComposer;
+// the Central chat builds its own `ComposerCompletion` (central/centralCommands) on the same pieces.
 import { AGENT_CHAT_FALLBACK_COMMANDS, type AgentChatCommand } from '../../shared/agentChat.wire'
 import { fuzzyFilter } from '../fuzzy'
 
@@ -28,10 +29,18 @@ export interface CompletionItem {
   dir?: boolean
 }
 
+/** The menu's words for one kind of token. */
+export interface CompletionKindText { label: string; empty: string; loading: string }
+
 /** What a composer needs to complete: the items for a trigger (sync or async; a rejection is shown as an error). */
 export interface ComposerCompletion {
   provider: (trigger: CompletionTrigger) => CompletionItem[] | Promise<CompletionItem[]>
+  /** Menu wording per kind when the source is not commands/files (e.g. `@` lists projects). */
+  text?: Partial<Record<CompletionKind, CompletionKindText>>
 }
+
+/** What `rankCommands` needs of a command: Agent Chat's catalog entries and Central's table both fit. */
+export interface RankableCommand { name: string; description: string; aliases?: readonly string[] }
 
 const NAME_CHAR = /[A-Za-z0-9._:-]/
 
@@ -81,9 +90,9 @@ export const FILE_RESULT_LIMIT = 30
  * then description-only matches (3+ chars); within a band shorter names first, then alphabetical.
  * Case-insensitive; an empty query lists everything in that order.
  */
-export function rankCommands(commands: readonly AgentChatCommand[], query: string, limit = COMMAND_RESULT_LIMIT): AgentChatCommand[] {
+export function rankCommands<C extends RankableCommand>(commands: readonly C[], query: string, limit = COMMAND_RESULT_LIMIT): C[] {
   const q = query.toLowerCase()
-  const scored: { c: AgentChatCommand; band: number }[] = []
+  const scored: { c: C; band: number }[] = []
   for (const c of commands) {
     const names = [c.name, ...(c.aliases ?? [])].map((n) => n.toLowerCase())
     let band: number

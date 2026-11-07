@@ -14,6 +14,7 @@ Operator notes:
 
 ### Added
 - Central chat accepts images and text files: paste a screenshot, drop files or use the + button.
+- Central chat: type / for commands (new chat, history, status, approvals, halt…) and shortcuts such as /projects and /nodes.
 - Central chat: start a new conversation with the + button and switch between past conversations from History.
 - The Choose a folder dialog can create a new folder.
 - Closing a node (× button, tab, sessions panel or Delete key) now asks for confirmation and says what will end: a running terminal or agent session, unsaved editor changes, or a browser page.

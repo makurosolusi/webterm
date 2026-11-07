@@ -17,6 +17,7 @@ import { ChatApiError, chatErrorMessage, chatImageUrl, isAbortError } from '../c
 import type { ComposerImage } from './chatAttach'
 import { centralChatAttach, centralParts, centralWire } from './chatCentralAttach'
 import type { ChatPart } from './chatTypes'
+import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -26,6 +27,8 @@ export interface ChatConversationViewProps {
   streamFactory: StreamFactory
   /** Focus the composer on mount (New chat). */
   focusComposer?: boolean
+  /** Enables the `/` command menu (central/centralCommands); absent = plain composer. */
+  commands?: CentralChatHost
 }
 
 function schedule(callback: () => void): number {
@@ -175,6 +178,9 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     )
   }
 
+  // A command that sends (a prompt shortcut) keeps the composer's attachments; a UI-action command ignores them.
+  const sendComposed = (text: string, items: ComposerImage[]): void => send(text, centralParts(items))
+  const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }))
   const error = state.error ?? historyError
 
   return (
@@ -201,8 +207,8 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
 
       <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send}
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
-      <ChatComposer busy={busy} onSend={(text: string, items: ComposerImage[]) => send(text, centralParts(items))} onStop={stop} autoFocus={props.focusComposer}
-        attach={centralChatAttach} dropZone={section} />
+      <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
+        completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section} />
     </section>
   )
 }

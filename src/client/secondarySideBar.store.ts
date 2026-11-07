@@ -93,6 +93,23 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener) }
 }
 
+/** Sub-tabs of the Central control panel. */
+export type CentralTab = 'control' | 'agents' | 'approvals' | 'skills' | 'memory'
+/** The last "show this Central tab" request; `seq` makes a repeat of the same tab a new request. */
+export interface CentralTabRequest { tab: CentralTab; seq: number; halt?: boolean }
+let centralRequest: CentralTabRequest | null = null
+
+/** Opens the side bar on the Central view at `tab` (Central chat commands); `halt` also asks the kill-switch confirmation. */
+export function openCentralTab(tab: CentralTab, halt = false): void {
+  centralRequest = { tab, seq: (centralRequest?.seq ?? 0) + 1, ...(halt ? { halt } : {}) }
+  setSideBar({ open: true, view: 'central' })
+}
+
+/** The latest `openCentralTab` request (not persisted: a reload starts on the panel's default tab). */
+export function useCentralTabRequest(): CentralTabRequest | null {
+  return useSyncExternalStore(subscribe, () => centralRequest)
+}
+
 export function useSideBar(): SideBarState {
   return useSyncExternalStore(subscribe, () => state)
 }

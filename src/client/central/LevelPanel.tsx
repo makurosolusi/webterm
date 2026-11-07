@@ -12,6 +12,9 @@ export interface LevelPanelProps {
   client?: CentralControlClient
   /** Reports the status (model, budget) to the host so it can show the privacy label. */
   onStatus?: (status: StatusView) => void
+  /** `/halt` from the Central chat: open the same kill-switch confirmation, then report it via `onHaltAsked`. */
+  askHalt?: boolean
+  onHaltAsked?: () => void
 }
 
 /** `limit` 0 means unlimited for tokens; spawns 0 means none allowed, so callers pass `zeroIsUnlimited`. */
@@ -31,7 +34,7 @@ export function budgetMeters(b: BudgetView) {
   return [meter(CL.tokens, b.used.tokens, b.limits.tokens, true), meter(CL.spawns, b.used.spawns, b.limits.spawns, false)]
 }
 
-export default function LevelPanel({ client = centralControlApi, onStatus }: LevelPanelProps) {
+export default function LevelPanel({ client = centralControlApi, onStatus, askHalt, onHaltAsked }: LevelPanelProps) {
   const control = useLoad((s) => client.getControl(s))
   const status = useLoad((s) => client.getStatus(s))
   const [confirming, setConfirming] = useState(false)
@@ -41,6 +44,12 @@ export default function LevelPanel({ client = centralControlApi, onStatus }: Lev
   const statusData = status.data
   useEffect(() => { if (statusData) onStatus?.(statusData) }, [statusData, onStatus])
   useEffect(() => { if (confirming) cancelRef.current?.focus() }, [confirming])
+  useEffect(() => {
+    if (!askHalt) return
+    setMsg(null)
+    setConfirming(true)
+    onHaltAsked?.()
+  }, [askHalt, onHaltAsked])
 
   const doHalt = async () => {
     try {
