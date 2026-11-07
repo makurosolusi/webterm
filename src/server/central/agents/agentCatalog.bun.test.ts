@@ -29,12 +29,11 @@ const catalogOf = (agents: CustomAgent[], over: Partial<Settings> = {}, env: Nod
   createAgentCatalog({ settings: () => ({ ...DEFAULT_SETTINGS, customAgents: agents, ...over }), env: () => env, denyRoots: () => denyRoots })
 
 describe('builtin kinds', () => {
-  it('keep tier R2; claude launches through the default profile, others through their override', () => {
-    const c = createAgentCatalog({ settings: () => ({ ...DEFAULT_SETTINGS, agentLaunchCommands: { claude: 'ignored-legacy', codex: 'codex --ci' }, claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'envman -e w --' }], defaultClaudeProfileId: 'w' }) })
+  it('keep tier R2; claude launches through the default profile; retired CLIs are not kinds', () => {
+    const c = createAgentCatalog({ settings: () => ({ ...DEFAULT_SETTINGS, agentLaunchCommands: { claude: 'ignored-legacy' }, claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'envman -e w --' }], defaultClaudeProfileId: 'w' }) })
     expect(c.resolve('claude')).toMatchObject({ builtin: true, tier: 'R2', launchLine: 'envman -e w -- claude', headlessArgv: null })
-    expect(c.resolve('codex')?.launchLine).toBe('codex --ci')
-    expect(createAgentCatalog({ settings: () => DEFAULT_SETTINGS }).resolve('codex')?.launchLine).toBe(AGENT_CONFIG.codex.launchCmd)
-    expect(c.resolve('opencode')?.headlessArgv).toBeNull() // no opencode headless worker: workers run on Claude
+    for (const k of ['codex', 'opencode', 'gemini']) expect(c.resolve(k)).toBeNull()
+    expect(c.kinds().filter((k) => k.builtin).map((k) => k.id)).toEqual(['claude'])
     expect(c.resolve('claude')?.childEnv()).toEqual({})
   })
 
@@ -178,7 +177,13 @@ describe('spawn through the real guard', () => {
 
   it('a builtin kind still spawns without approval', async () => {
     const s = setup()
-    expect(await s.spawn('opencode', 2)).toMatchObject({ ok: true, data: { kind: 'opencode' } })
+    expect(await s.spawn('claude', 2)).toMatchObject({ ok: true, data: { kind: 'claude' } })
     expect(s.opened).toHaveLength(1)
+  })
+
+  it('a retired builtin (opencode, codex) is an unknown kind now', async () => {
+    const s = setup()
+    for (const [i, kind] of ['opencode', 'codex'].entries()) expect(await s.spawn(kind, 10 + i)).toMatchObject({ ok: false, code: 'agent_kind_unknown' })
+    expect(s.opened).toHaveLength(0)
   })
 })

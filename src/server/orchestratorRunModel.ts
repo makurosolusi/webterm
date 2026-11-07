@@ -4,7 +4,6 @@
 // resolved SERVER-SIDE (project.path + settings), never taken from the payload: a run spawns a
 // real PTY, so a client-supplied repo/cmd would be remote command execution.
 import type { RouteResult } from './apiShared.types'
-import { BUILTIN_AGENT_IDS } from '../shared/workspace'
 import { flagOr } from './envFlag'
 import { CAPABILITIES } from '../shared/featureCapabilities'
 import { isEnabled } from './featureCapabilities.runtime'
@@ -46,20 +45,6 @@ export function orchestratorRunRequireApproval(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   return flagOr(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG], true)
-}
-
-/**
- * Worker kind from `settings.agentLaunchCommands`: the first configured kind (claude, then the other
- * builtins). Nothing configured = `claude`, or null when `claudeOnPath` is false (Claude needed).
- */
-export function resolveWorkerKind(
-  configured: Partial<Record<string, string>>,
-  claudeOnPath = true
-): string | null {
-  const order = [DEFAULT_AGENT_ID, ...BUILTIN_AGENT_IDS.filter((id) => id !== DEFAULT_AGENT_ID)]
-  const hit = order.find((id) => (configured[id]?.trim() ?? '') !== '')
-  if (hit !== undefined) return hit
-  return claudeOnPath ? DEFAULT_AGENT_ID : null
 }
 
 function text(value: unknown, max: number): string | null {

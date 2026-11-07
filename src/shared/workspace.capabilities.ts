@@ -47,76 +47,37 @@ const includes = (list: readonly string[], id: AgentId): boolean =>
 // CLI berikutnya yang menumbuhkan kemampuan bergabung dengan ditambahkan ke daftar, tidak ada
 // yang lain berubah.
 
+// Claude-first: only Claude Code is a first-class harness, so every list holds `claude` alone. A
+// custom agent with `baseAgent: 'claude'` inherits all of them through `capabilityAgentId`.
+
 /** Agent yang bisa melanjutkan percakapan lewat session id. */
-export const RESUMABLE_AGENTS = [
-  'claude',
-  'codex',
-  'gemini',
-  'opencode',
-  'grok',
-  'copilot',
-  'antigravity',
-  'cursor',
-] as const
+export const RESUMABLE_AGENTS = ['claude'] as const
 
 // Agent yang session id-nya KITA cetak saat peluncuran (`--session-id <uuid>`) alih-alih hanya
 // dipelajari dari event hook. Minting menjamin sebuah node selalu punya SEBUAH id yang bisa
 // di-resume, sehingga kasus terburuk turun dari "percakapan hilang" menjadi "kontinuitas sejak
 // /clear terakhir hilang".
-//
-// CATATAN (beda dari nodeterm): nodeterm menggerbangi claude dan grok di balik probe versi CLI
-// masing-masing (`supportsSessionIdFlag`). webterm tidak memprobe CLI sama sekali, jadi daftar ini
-// dipakai apa adanya. Risikonya terbatas: CLI yang tidak mengenal flag akan menolak di peluncuran
-// pertama, bukan merusak data. Kalau itu muncul di lapangan, tambahkan probe — jangan diam-diam
-// mengecilkan daftar.
-export const SESSION_ID_CAPABLE = ['claude', 'copilot', 'grok', 'cursor'] as const
+export const SESSION_ID_CAPABLE = ['claude'] as const
 
 // Agent yang bisa membaca konteks node tertaut (skill `get-linked-context` di ~/.claude/skills).
-// copilot TIDAK termasuk — ia tidak memindai direktori skill Claude.
-export const CONTEXT_LINK_CAPABLE = [
-  'claude',
-  'codex',
-  'gemini',
-  'opencode',
-  'grok',
-  'cursor',
-  'antigravity',
-] as const
+export const CONTEXT_LINK_CAPABLE = ['claude'] as const
 
 // Agent yang meter konteks per-node-nya bisa kita isi. Tiap anggota butuh DUA angka: jumlah
 // terpakai dan window yang bisa dipercaya.
-export const USAGE_CAPABLE = ['claude', 'codex', 'gemini', 'grok', 'cursor', 'antigravity'] as const
+export const USAGE_CAPABLE = ['claude'] as const
 
 // Agent yang harness-nya menerima mode permission saat peluncuran.
-export const PERMISSION_MODE_CAPABLE = [
-  'claude',
-  'grok',
-  'gemini',
-  'codex',
-  'cursor',
-  'antigravity',
-] as const
+export const PERMISSION_MODE_CAPABLE = ['claude'] as const
 
 // Agent yang harness-nya menerima override model per-peluncuran.
-export const MODEL_SWITCH_CAPABLE = [
-  'claude',
-  'codex',
-  'copilot',
-  'grok',
-  'cursor',
-  'antigravity',
-] as const
+export const MODEL_SWITCH_CAPABLE = ['claude'] as const
 
 // Agent yang menerima konfigurasi hook webterm INLINE di baris peluncuran, lewat flag `--settings`
 // milik Claude Code (lihat `claudeHooksSettings` di src/server/hooks.ts). Itu grammar claude: tidak
 // ada harness lain yang mengerti flag maupun bentuk JSON-nya.
 //
-// SENGAJA LEBIH SEMPIT dari nodeterm. `AGENT_HOOK_TARGETS` nodeterm v0.4.5 memuat kedelapan builtin
-// (diverifikasi), tapi di sana hook dipasang lewat installer PER AGENT di luar baris perintah —
-// bukan lewat `--settings`. Jadi JANGAN melebarkan daftar ini untuk "menyamai nodeterm": begitu
-// codex/gemini/grok masuk, mereka diluncurkan dengan flag claude yang tidak mereka kenal dan node
-// mereka mati di peluncuran. Agent baru boleh masuk hanya bila harness-nya benar-benar menerima
-// `--settings` claude; kalau hook-nya butuh jalur lain, ia butuh daftarnya sendiri.
+// Agent baru boleh masuk hanya bila harness-nya benar-benar menerima `--settings` claude; CLI lain
+// yang diluncurkan dengan flag itu mati di peluncuran.
 export const CLAUDE_HOOK_SETTINGS_CAPABLE = ['claude'] as const
 
 export const canResume = (id: AgentId): boolean => includes(RESUMABLE_AGENTS, id)

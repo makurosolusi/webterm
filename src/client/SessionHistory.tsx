@@ -1,4 +1,4 @@
-// Panel "Agent History" di bawah sidebar Sessions: sesi Claude/Codex lampau yang terindeks dari
+// Panel "Agent History" di bawah sidebar Sessions: sesi Claude lampau yang terindeks dari
 // transcript di disk, difilter per workspace, dengan Resume yang membuka node agent di workspace
 // yang tepat. Meniru Orca `docs/site/content/docs/agents/session-history.mdx` (scope Workspace/All,
 // pencarian, Refresh, Resume). Teks produk bahasa Inggris.
@@ -12,7 +12,6 @@ import { fetchSessionPage, type AgentSession } from './SessionHistory.api'
 import { relativeTime, resumeNode, resumeProfile, targetWorkspace } from './SessionHistory.model'
 import { useLiveSettings } from './useSettings'
 import { randomId } from './randomId'
-import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
 
 export interface SessionHistoryProps {
@@ -20,15 +19,14 @@ export interface SessionHistoryProps {
   open: boolean
   activeWs: Workspace | null
   workspaces: readonly Workspace[]
-  launch: Settings['agentLaunchCommands']
   deps: ReopenDeps
 }
 
 type Scope = 'workspace' | 'all'
 const SEARCH_DEBOUNCE_MS = 250
-const AGENT_LABEL: Record<AgentSession['agent'], string> = { claude: 'Claude', codex: 'Codex' }
+const AGENT_LABEL: Record<AgentSession['agent'], string> = { claude: 'Claude' }
 
-export default function SessionHistory({ open, activeWs, workspaces, launch, deps }: SessionHistoryProps) {
+export default function SessionHistory({ open, activeWs, workspaces, deps }: SessionHistoryProps) {
   const settings = useLiveSettings()
   const [expanded, setExpanded] = useState(true)
   const [scope, setScope] = useState<Scope>('workspace')
@@ -72,7 +70,7 @@ export default function SessionHistory({ open, activeWs, workspaces, launch, dep
   }, [open, expanded, noFolder, load])
 
   const resume = (s: AgentSession) => {
-    const node = resumeNode(s, launch, randomId, resumeProfile(s, workspaces, settings))
+    const node = resumeNode(s, randomId, resumeProfile(s, workspaces, settings))
     const wsId = targetWorkspace(s, workspaces, activeWs?.id ?? null)
     if (!node || !wsId) {
       setError('This session cannot be resumed.')

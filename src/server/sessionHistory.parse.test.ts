@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { consumeLine, isInjectedTurn, newParseState, sessionIdFromFile, TITLE_MAX } from './sessionHistory.parse'
 
 const line = (r: unknown) => JSON.stringify(r)
-const feed = (agent: 'claude' | 'codex', lines: string[], id = 'f') => {
+const feed = (agent: 'claude', lines: string[], id = 'f') => {
   const s = newParseState(agent, id)
   for (const l of lines) consumeLine(s, l)
   return s
@@ -37,24 +37,6 @@ describe('claude transcript', () => {
   })
 })
 
-describe('codex transcript', () => {
-  it('reads id/cwd from session_meta, skips environment_context, counts response_item messages once', () => {
-    const s = feed('codex', [
-      line({ timestamp: '2026-05-01T10:00:00Z', type: 'session_meta', payload: { id: 'cdx-1', cwd: '/repo/app' } }),
-      line({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '<environment_context>cwd</environment_context>' }] } }),
-      line({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'add tests' }] } }),
-      line({ type: 'event_msg', payload: { type: 'user_message', message: 'add tests' } }),
-      line({ timestamp: '2026-05-01T10:01:00Z', type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'done' } }),
-    ], 'from-file')
-    expect(s).toMatchObject({ id: 'cdx-1', cwd: '/repo/app', title: 'add tests', messageCount: 3 })
-  })
-
-  it('falls back to event_msg user_message for the title', () => {
-    const s = feed('codex', [line({ type: 'event_msg', payload: { type: 'user_message', message: 'legacy prompt' } })])
-    expect(s.title).toBe('legacy prompt')
-  })
-})
-
 describe('helpers', () => {
   it('isInjectedTurn keeps unknown tags as real input', () => {
     expect(isInjectedTurn('<command-name>/clear</command-name>')).toBe(true)
@@ -63,8 +45,6 @@ describe('helpers', () => {
   })
 
   it('sessionIdFromFile', () => {
-    expect(sessionIdFromFile('claude', 'abc-123.jsonl')).toBe('abc-123')
-    expect(sessionIdFromFile('codex', 'rollout-2026-05-01T10-00-00-019f0000-1111-7222-8333-444444444444.jsonl'))
-      .toBe('019f0000-1111-7222-8333-444444444444')
+    expect(sessionIdFromFile('abc-123.jsonl')).toBe('abc-123')
   })
 })

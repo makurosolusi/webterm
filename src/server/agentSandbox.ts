@@ -5,11 +5,10 @@
 //  - Claude Code `permissions.deny`: covers its own file tools (Read/Edit/Write/Grep) plus the file
 //    commands it recognises in Bash (cat/head/tail/sed). A python/node script bypasses it, so on its
 //    own it is a mitigation, not a boundary.
-// Other CLIs (codex, gemini, opencode, ...) get no webterm-managed sandbox: they are labelled
-// "mitigation" so the UI never overstates what holds.
+// Other CLIs run by hand in a terminal node get no webterm-managed sandbox and no row in the panel.
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { BUILTIN_AGENT_IDS, type BuiltinAgentId } from '../shared/workspace'
+import type { BuiltinAgentId } from '../shared/workspace'
 import { flagOr } from './envFlag'
 
 /** Settings knob (on|off, default on): write the Claude Code sandbox block into node settings. */
@@ -35,7 +34,7 @@ export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'worktr
  * `*` is a gitignore glob in permission rules; the sandbox gets the whole data dir instead.
  */
 export const AGENT_SECRET_ENTRIES = [
-  'secrets', 'node-settings', 'node-tokens', 'codex-bin', 'channels', 'browser', 'central', 'relay', 'sock', 'memory', 'logs', 'run',
+  'secrets', 'node-settings', 'node-tokens', 'channels', 'browser', 'central', 'relay', 'sock', 'memory', 'logs', 'run',
   'webterm.db*', 'ledger.db*', 'auth.json', 'node-auth-key.bin', 'settings.json', 'sessions.json',
   'agent-status.json', 'integration-receipts.json',
 ] as const
@@ -154,10 +153,11 @@ export interface AgentProtection {
 const NO_ROOT = 'The root access token is never passed to the session.'
 const OWN_TOKEN = 'Its node token lives in a file only this node may read, never in the process environment.'
 
-/** What actually holds for each agent kind, in plain English for the Control panel. */
+/** What actually holds for each agent kind (Claude Code only), in plain English for the Control panel. */
 export function agentProtection(platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): AgentProtection[] {
-  return BUILTIN_AGENT_IDS.map((kind): AgentProtection => {
-    if (kind === 'claude' && claudeSandboxSupported(platform) && agentSandboxOn(env)) {
+  const kind: BuiltinAgentId = 'claude'
+  return [((): AgentProtection => {
+    if (claudeSandboxSupported(platform) && agentSandboxOn(env)) {
       // 'protected' (sec-208-1 closed, docs/decisions/ui-session-cookie.md): the webterm API stays
       // reachable from the sandbox, but every request needs a credential the sandbox cannot read:
       // the root token (data dir `secrets`), the HttpOnly `wt_ui` cookie (browser profiles denied
@@ -176,27 +176,16 @@ export function agentProtection(platform: NodeJS.Platform = process.platform, en
         ],
       }
     }
-    if (kind === 'claude') {
-      return {
-        kind,
-        level: 'mitigation',
-        reasons: [
-          claudeSandboxSupported(platform)
-            ? `Agent sandbox is switched off (${AGENT_SANDBOX_ENV}=off).`
-            : 'Claude Code sandbox is not enabled on this platform.',
-          'Permission rules cover Claude file tools and cat/head/tail, but a script can still read the webterm data dir.',
-          NO_ROOT,
-        ],
-      }
-    }
     return {
       kind,
       level: 'mitigation',
       reasons: [
-        'No sandbox is configured for this CLI: it can read the webterm data dir like any process of your user.',
-        OWN_TOKEN,
+        claudeSandboxSupported(platform)
+          ? `Agent sandbox is switched off (${AGENT_SANDBOX_ENV}=off).`
+          : 'Claude Code sandbox is not enabled on this platform.',
+        'Permission rules cover Claude file tools and cat/head/tail, but a script can still read the webterm data dir.',
         NO_ROOT,
       ],
     }
-  })
+  })()]
 }

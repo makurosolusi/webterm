@@ -8,7 +8,7 @@
 //  - Kunci khusus Electron (`notch*`, `uiScale`, `tabBarHeight`, `runInBackgroundOnClose`,
 //    `confirmBeforeQuit`, `keepAwakeWhileAgentsWork`, `phoneAccessEnabled`, `telemetryEnabled`,
 //    `license`): tidak ada permukaan yang mewujudkannya di browser.
-//  - `modelGateway` / `claudeAccounts` / `codexAccounts`.
+//  - `modelGateway` / `claudeAccounts`.
 //
 // KEAMANAN. Di nodeterm `settings.json` memuat kredensial dan ditulis mode 0600. Di webterm
 // settings melintas HTTP tanpa redaksi (`GET /api/settings`), jadi TIDAK ADA kunci yang boleh
@@ -135,6 +135,9 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 
+/** Builtin ids before the Claude-first cut; only used to scrub stale settings keys. */
+const RETIRED_AGENT_IDS: readonly string[] = ['codex', 'gemini', 'opencode', 'grok', 'copilot', 'antigravity', 'cursor']
+
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
 
 /**
@@ -176,6 +179,11 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   // balik); `onInvalidAgents` memberi pemanggil server kesempatan `log.warn` tanpa isi.
   // Nilai `keybindings` disaring per entri (bentuk objek saja tidak cukup: nilainya wajib string/null).
   out.keybindings = normalizeKeybindings(src.keybindings)
+  // Claude-first: only the claude launch override survives; stale keys of the retired builtins
+  // (codex, gemini, …) are dropped on load. Their ids leave `disabledAgents` too — custom ids stay.
+  const claudeCmd = out.agentLaunchCommands.claude
+  out.agentLaunchCommands = typeof claudeCmd === 'string' ? { claude: claudeCmd } : {}
+  out.disabledAgents = out.disabledAgents.filter((id) => !RETIRED_AGENT_IDS.includes(id))
   out.claudeLaunchProfiles = normalizeClaudeProfiles(src.claudeLaunchProfiles)
   // Nested object with a non-empty default: normalized field by field, never shallow-taken.
   out.canvasBackground = normalizeCanvasBackground(src.canvasBackground)

@@ -58,10 +58,10 @@ describe('recordDotenvBoot + ptyEnv', () => {
   })
 
   it('kunci asal .env dibuang, nilai beda dipertahankan, provider/OS dipertahankan', () => {
-    const strip = new Set(['APP_SECRET', 'OPENAI_API_KEY', 'PATH', 'LC_ALL'])
-    const env = ptyEnv({ APP_SECRET: MARK, SAMA: 'dari-shell', OPENAI_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' }, { interactive: false, strip })
+    const strip = new Set(['APP_SECRET', 'ANTHROPIC_API_KEY', 'PATH', 'LC_ALL'])
+    const env = ptyEnv({ APP_SECRET: MARK, SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' }, { interactive: false, strip })
     expect('APP_SECRET' in env).toBe(false)
-    expect(env).toMatchObject({ SAMA: 'dari-shell', OPENAI_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' })
+    expect(env).toMatchObject({ SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' })
   })
 
   it('TELEGRAM_BOT_TOKEN tidak pernah masuk PTY, walau bukan asal .env', () => {
@@ -70,7 +70,7 @@ describe('recordDotenvBoot + ptyEnv', () => {
   })
 
   it('PTY_KEEP_FROM_DOTENV: provider, OS, LC_*; bukan kunci aplikasi', () => {
-    for (const k of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'SSH_AUTH_SOCK', 'LC_TIME']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(true)
-    for (const k of ['DATABASE_URL', 'STRIPE_KEY', 'LCX']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(false)
+    for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'PATH', 'HOME', 'SSH_AUTH_SOCK', 'LC_TIME']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(true)
+    for (const k of ['DATABASE_URL', 'STRIPE_KEY', 'LCX', 'OPENAI_API_KEY']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(false)
   })
 })

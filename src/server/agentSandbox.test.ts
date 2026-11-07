@@ -108,7 +108,7 @@ describe('agentProtection', () => {
     const off = agentProtection('darwin', { WEBTERM_AGENT_SANDBOX: 'off' }).find((r) => r.kind === 'claude')!
     expect(off.level).toBe('mitigation')
     expect(off.reasons[0]).toContain('WEBTERM_AGENT_SANDBOX')
-    for (const k of ['codex', 'gemini', 'opencode']) expect(level('darwin', k)).toBe('mitigation')
+    for (const k of ['codex', 'gemini', 'opencode']) expect(level('darwin', k)).toBeUndefined() // plain terminal programs, no row
   })
 })
 

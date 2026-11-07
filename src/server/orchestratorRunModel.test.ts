@@ -7,7 +7,6 @@ import {
   parseRunBody,
   orchestratorRunEnabled,
   orchestratorRunRequireApproval,
-  resolveWorkerKind,
 } from './orchestratorRunModel'
 import {
   parseRunBody as parseViaApi,
@@ -101,17 +100,3 @@ describe('orchestratorRunModel', () => {
   })
 })
 
-describe('resolveWorkerKind', () => {
-  it('picks the first configured kind: claude, then other builtins', () => {
-    expect(resolveWorkerKind({ codex: 'codex', claude: 'claude-work' })).toBe('claude')
-    expect(resolveWorkerKind({ gemini: 'gemini', codex: 'codex' })).toBe('codex')
-    expect(resolveWorkerKind({ claude: '   ', gemini: 'gemini' })).toBe('gemini')
-  })
-
-  it('uses claude when nothing is configured, and never falls back to opencode without claude', () => {
-    expect(resolveWorkerKind({})).toBe('claude')
-    expect(resolveWorkerKind({}, true)).toBe('claude')
-    expect(resolveWorkerKind({}, false)).toBeNull()
-    expect(resolveWorkerKind({ codex: 'codex' }, false)).toBe('codex')
-  })
-})

@@ -18,13 +18,7 @@ import type { CustomAgent } from './settings'
 export function withSessionId(cmd: string, id: AgentId, sessionId: string): string {
   if (!mintsSessionId(id)) return cmd
   if (!isSafeSessionId(sessionId)) return cmd
-  const sid = sessionId.trim()
-  const base = capabilityAgentId(id)
-  if (base === 'copilot') return `${cmd} --session-id=${sid}`
-  // cursor tidak punya flag session-id: `--resume <uuid> yang belum ada` membuka chat kosong yang
-  // MENGADOPSI id itu. Ia root option, jadi letaknya sebelum subcommand.
-  if (base === 'cursor') return `${cmd} --resume ${sid}`
-  return `${cmd} --session-id ${sid}`
+  return `${cmd} --session-id ${sessionId.trim()}`
 }
 
 /**
@@ -39,26 +33,10 @@ export function resumeCommandWith(
   grammarId: AgentId,
   sessionId: string
 ): string | null {
+  // Only the claude grammar remains (`canResume` is claude or a claude-based custom agent).
   if (!canResume(grammarId)) return null
   if (!isSafeSessionId(sessionId)) return null
-  const sid = sessionId.trim()
-  switch (capabilityAgentId(grammarId)) {
-    case 'codex':
-      return `${launchCmd} resume ${sid}`
-    case 'opencode':
-      return `${launchCmd} --session ${sid}`
-    case 'copilot':
-      return `${launchCmd} --resume=${sid}`
-    case 'antigravity':
-      return `${launchCmd} --conversation=${sid}`
-    case 'claude':
-    case 'gemini':
-    case 'grok':
-    case 'cursor':
-      return `${launchCmd} --resume ${sid}`
-    default:
-      return null
-  }
+  return `${launchCmd} --resume ${sessionId.trim()}`
 }
 
 /**

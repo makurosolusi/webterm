@@ -11,62 +11,22 @@ import { canResume, capabilityAgentId, isSafeSessionId, type AgentId, type Agent
 
 /**
  * Perintah exit in-band per CLI agent. Hanya agent yang terdaftar di sini yang bisa di-restart
- * in-place — CLI tak dikenal tidak punya cara aman untuk diminta keluar.
- *
- * Tiap nilai adalah PRIMARY yang didokumentasikan CLI-nya sendiri, dan dikirim POLOS. Polos itu
- * aturan keamanan, bukan gaya: `/quit` gemini juga menerima flag `--delete` yang keluar SEKALIGUS
- * MENGHAPUS PERMANEN riwayat sesi — persis percakapan yang `--resume` di belakangnya mau kembalikan.
- * Tidak ada yang boleh menambahkan argumen ke nilai di sini.
- *
- * Nilai dibaca dari nodeterm `EXIT_SEQUENCES`; `antigravity` memang tidak punya entry, jadi ia
- * tidak bisa di-restart in-place.
+ * in-place — CLI tak dikenal (termasuk CLI non-Claude yang dijalankan di terminal) tidak punya cara
+ * aman untuk diminta keluar. Nilai dibaca dari nodeterm `EXIT_SEQUENCES`.
  */
-const EXIT_SEQUENCES: Record<string, string> = {
-  claude: '/exit',
-  codex: '/quit',
-  grok: '/quit',
-  gemini: '/quit',
-  cursor: '/quit',
-  copilot: '/exit',
-  opencode: '/exit',
-}
+const EXIT_SEQUENCES: Record<string, string> = { claude: '/exit' }
 
 /**
- * Agent yang keluar lewat beberapa Ctrl-C, bukan lewat exit yang diketik — dan berapa banyak.
- * Entry-nya di `EXIT_SEQUENCES` tetap yang menggerbangi restart (pertanyaannya "bisakah CLI ini
- * diminta keluar sama sekali"), tapi urutan tombolnya datang dari sini.
- *
- * Angka diukur nodeterm terhadap binary terpasang: satu Ctrl-C membersihkan composer, berikutnya
- * mempersenjatai "press again to exit", yang ketiga keluar — dengan composer kosong yang kedua
- * sudah keluar. Jumlah tetap ini keluar dengan ATAU tanpa draft.
- *
- * gemini dan cursor satu-satunya yang masih memakai exit yang diketik: composer gemini tidak
- * terukur (hanya terjangkau setelah login), dan `/quit` cursor terukur bersih.
+ * Berapa Ctrl-C yang mengeluarkan agent. Diukur nodeterm terhadap binary terpasang: satu Ctrl-C
+ * membersihkan composer, berikutnya mempersenjatai "press again to exit", yang ketiga keluar —
+ * dengan composer kosong yang kedua sudah keluar. Jumlah tetap ini keluar dengan ATAU tanpa draft.
  */
-const CTRL_C_QUITS: Record<string, number> = {
-  codex: 2,
-  claude: 3,
-  grok: 3,
-  opencode: 2,
-  copilot: 2,
-}
+const CTRL_C_QUITS: Record<string, number> = { claude: 3 }
 
-/** Agent yang TUI-nya mengabaikan Enter yang datang dalam write yang SAMA dengan teksnya: teksnya
- *  mendarat di composer dan tak pernah dikirim. Terukur untuk cursor. */
-const SEPARATE_SUBMIT_AGENTS = ['cursor']
-
-/** Ctrl-U — kill-line di shell POSIX dan percobaan clear-line default di TUI agent.
- *
- *  PEMISAHAN YANG MENANGGUNG BEBAN: jangan pernah ganti ini dengan Escape (`\x1b`). Escape tunggal
- *  ke agent yang hidup adalah gestur INTERRUPT pengguna (membatalkan turn/thinking), bukan
- *  clear-line. */
-const KILL_LINE = '\x15'
 const CTRL_C = '\x03'
 
 /** Jeda antar Ctrl-C berurutan: window "press again to quit" perlu melihat tekan yang terpisah. */
 export const CTRL_C_GAP_MS = 150
-/** Jeda antar write exit yang terbelah (Ctrl-U, teks exit, Enter) untuk TUI yang mem-batch input. */
-export const EXIT_KEY_GAP_MS = 150
 
 /**
  * Perintah exit sebuah agent, atau null bila tidak ada cara aman meminta CLI-nya keluar.
@@ -83,8 +43,7 @@ export type IneligibleReason = 'working' | 'no-session' | 'not-resumable'
 /**
  * State yang panenya harus dibiarkan. `blocked` ada di sini dengan alasan yang lebih tajam
  * daripada kesopanan: ia berarti dialog permission/pertanyaan sedang MEMEGANG prompt, jadi menulis
- * baris exit berarti mengetikkannya SEBAGAI JAWABAN dialog itu alih-alih menutup CLI — baris mana
- * pun (`/exit` untuk claude, `/quit` untuk sisanya). Keduanya melaporkan alasan `'working'`: bagi
+ * baris exit berarti mengetikkannya SEBAGAI JAWABAN dialog itu alih-alih menutup CLI. Keduanya melaporkan alasan `'working'`: bagi
  * pengguna keduanya sama-sama "sedang sibuk, coba lagi sebentar".
  */
 const BUSY_STATES: readonly AgentStatus[] = ['working', 'blocked']
@@ -131,40 +90,18 @@ export interface ExitWrite {
 
 /**
  * Urutan write yang meminta sebuah agent keluar, atau null bila agent-nya tidak bisa diminta keluar.
- *
- * Tiga bentuk, persis seperti nodeterm:
- *  - Ctrl-C berulang (claude, codex, grok, opencode, copilot). TIDAK ada Ctrl-U di depan: Ctrl-C
- *    sudah membersihkan seluruh composer, dan tidak ada CR yang dikirim sehingga draft tidak
- *    pernah ikut terkirim sebagai prompt.
- *  - Ctrl-U, exit yang diketik, lalu Enter TERPISAH (cursor). TUI-nya menjatuhkan baris exit kalau
- *    ia mendarat dalam burst input yang sama dengan Ctrl-U, dan membiarkan teks+CR dari satu write
- *    tak terkirim.
- *  - Ctrl-U lalu exit+CR dalam satu write (gemini). Ctrl-U membersihkan prompt dulu: panenya REPL
- *    yang diketiki pengguna, dan prompt setengah tertulis yang tertinggal akan terkirim sebagai
- *    `…refactor the/quit` — draft-nya hilang dan turn sungguhan dimulai.
+ * Ctrl-C berulang, persis seperti nodeterm. TIDAK ada Ctrl-U di depan: Ctrl-C sudah membersihkan
+ * seluruh composer, dan tidak ada CR yang dikirim sehingga draft tidak pernah ikut terkirim.
  */
 export function exitWrites(agentId: AgentId | undefined): ExitWrite[] | null {
   const exit = exitSequence(agentId)
   if (!exit || !agentId) return null
-  const base = capabilityAgentId(agentId)
-  const ctrlCs = CTRL_C_QUITS[base] ?? 0
-  if (ctrlCs > 0) {
-    return Array.from({ length: ctrlCs }, (_, i) => ({
-      data: CTRL_C,
-      gapAfterMs: i === ctrlCs - 1 ? 0 : CTRL_C_GAP_MS,
-    }))
-  }
-  if (SEPARATE_SUBMIT_AGENTS.includes(base)) {
-    return [
-      { data: KILL_LINE, gapAfterMs: EXIT_KEY_GAP_MS },
-      { data: exit, gapAfterMs: EXIT_KEY_GAP_MS },
-      { data: '\r', gapAfterMs: 0 },
-    ]
-  }
-  return [
-    { data: KILL_LINE, gapAfterMs: EXIT_KEY_GAP_MS },
-    { data: exit + '\r', gapAfterMs: 0 },
-  ]
+  const ctrlCs = CTRL_C_QUITS[capabilityAgentId(agentId)] ?? 0
+  if (ctrlCs === 0) return null
+  return Array.from({ length: ctrlCs }, (_, i) => ({
+    data: CTRL_C,
+    gapAfterMs: i === ctrlCs - 1 ? 0 : CTRL_C_GAP_MS,
+  }))
 }
 
 /**

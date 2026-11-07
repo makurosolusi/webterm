@@ -6,18 +6,11 @@ export const BASE_ENV_ALLOWLIST: readonly string[] = [
   'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE',
   'TERM', 'TMPDIR', 'TMP', 'TEMP',
   'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME',
-  'OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT',
 ]
 
-/** Provider credentials an agent CLI may need; only forwarded when already present. */
-export const PROVIDER_ENV_ALLOWLIST: readonly string[] = [
-  'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENCODE_API_KEY',
-  'GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY',
-  'GROQ_API_KEY', 'MISTRAL_API_KEY', 'XAI_API_KEY', 'DEEPSEEK_API_KEY',
-  'OPENROUTER_API_KEY', 'TOGETHER_API_KEY', 'PERPLEXITY_API_KEY',
-  'CEREBRAS_API_KEY', 'AZURE_OPENAI_API_KEY', 'AZURE_OPENAI_ENDPOINT',
-  'AZURE_RESOURCE_NAME', 'OLLAMA_HOST',
-]
+/** Claude provider credentials and endpoint (incl. an `ANTHROPIC_BASE_URL` proxy); only forwarded
+ *  when already present. Other CLIs' provider keys are not forwarded (Claude-first). */
+export const PROVIDER_ENV_ALLOWLIST: readonly string[] = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL']
 
 /** Prefixes that must never reach the child, even if allowlisted by mistake. */
 const FORBIDDEN_PREFIXES = ['WEBTERM_', 'NODETERM_']

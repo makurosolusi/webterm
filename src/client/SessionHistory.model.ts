@@ -4,13 +4,10 @@
 // Resume meniru Orca `docs/agents/session-history.mdx` ("opens a new terminal in the session's cwd
 // and runs the agent's resume command") tetapi lewat jalur peluncuran node agent yang SUDAH ada,
 // bukan baris shell rakitan sendiri:
-// - claude: node membawa `sessionId` = id transcript. `resumesOnFirstLaunch` (AgentNode) lalu
-//   meluncurkannya dengan `--resume <id>` plus hook/settings webterm, dan node itu tetap bisa
-//   di-restart/di-resume di id yang sama sesudahnya.
-// - codex: tidak mencetak session id sendiri, jadi `sessionId` node tak berarti untuknya; resume
-//   ditaruh di perintahnya (`codex resume <id>`, grammar `resumeCommandWith`).
-import { agentConfig, assembleCmd, resumeCommandWith, isSafeSessionId } from '../shared/workspace'
-import type { Settings } from '../shared/settings'
+// node membawa `sessionId` = id transcript Claude. `resumesOnFirstLaunch` (AgentNode) lalu
+// meluncurkannya dengan `--resume <id>` plus hook/settings webterm, dan node itu tetap bisa
+// di-restart/di-resume di id yang sama sesudahnya.
+import { agentConfig, assembleCmd, isSafeSessionId } from '../shared/workspace'
 import { resolveClaudeProfileIn } from '../shared/claudeLaunch/claudeLaunch.builtin'
 import type { ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import type { Workspace } from '../shared/workspace'
@@ -18,19 +15,13 @@ import type { PlacedNode } from './closedHistory'
 import type { AgentSession } from './SessionHistory.api'
 
 /** Node agent yang melanjutkan `s`, atau `null` bila id-nya tidak aman masuk baris perintah. */
-export function resumeNode(
-  s: AgentSession,
-  launch: Settings['agentLaunchCommands'],
-  newId: () => string,
-  claudeProfileId?: string,
-): PlacedNode | null {
+export function resumeNode(s: AgentSession, newId: () => string, claudeProfileId?: string): PlacedNode | null {
   if (!isSafeSessionId(s.id, true)) return null
-  const common = { id: newId(), kind: 'agent' as const, agentId: s.agent, color: agentConfig(s.agent)?.color, ...(s.cwd ? { cwd: s.cwd } : {}) }
-  // claude: the launch command comes from `claudeProfileId` on the server; `cmd` is the stock line.
-  if (s.agent === 'claude') return { ...common, cmd: assembleCmd('claude'), sessionId: s.id, ...(claudeProfileId ? { claudeProfileId } : {}) }
-  const base = assembleCmd(s.agent, launch[s.agent])
-  const cmd = resumeCommandWith(base, s.agent, s.id)
-  return cmd ? { ...common, cmd } : null
+  // The launch command comes from `claudeProfileId` on the server; `cmd` is the stock line.
+  return {
+    id: newId(), kind: 'agent', agentId: s.agent, color: agentConfig(s.agent)?.color, ...(s.cwd ? { cwd: s.cwd } : {}),
+    cmd: assembleCmd('claude'), sessionId: s.id, ...(claudeProfileId ? { claudeProfileId } : {}),
+  }
 }
 
 /**
@@ -38,11 +29,10 @@ export function resumeNode(
  * (any workspace), else the current default profile.
  */
 export function resumeProfile(
-  s: Pick<AgentSession, 'agent' | 'id'>,
+  s: Pick<AgentSession, 'id'>,
   workspaces: readonly Pick<Workspace, 'nodes'>[],
   settings: Partial<ClaudeLaunchSettings>,
-): string | undefined {
-  if (s.agent !== 'claude') return undefined
+): string {
   for (const w of workspaces) {
     const n = w.nodes?.find((x) => x.agentId === 'claude' && x.sessionId === s.id && x.claudeProfileId)
     if (n?.claudeProfileId) return n.claudeProfileId

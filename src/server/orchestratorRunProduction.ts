@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs'
 import { binaryExists } from './ptyShell'
 import { gitCommand } from './gitExec'
 import { resolveClaudeProfileIn } from '../shared/claudeLaunch/claudeLaunch.builtin'
-import { DEFAULT_CLAUDE_PROFILE, type ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
+import type { ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { joinArgv } from '../shared/claudeLaunch/shellQuote'
 import type { Database } from 'bun:sqlite'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
@@ -24,11 +24,10 @@ import { recordWorkerResult, startWorker } from './orchestrator/orchestratorRun'
 import { verifyWorktree, type VerifyInput, type VerifyOutcome } from './orchestrator/verify'
 import { createProcessExec } from './orchestrator/verifier'
 import { dataDir } from './config'
-import { DEFAULT_AGENT_ID, resolveWorkerKind, type RawRun, type RouteResult } from './orchestratorRunModel'
+import { DEFAULT_AGENT_ID, type RawRun, type RouteResult } from './orchestratorRunModel'
 import type { ApprovalPort } from './orchestrator/approvalGate'
 import { idleDoneMs, withCandidateSignal, type GitProbe } from './orchestrator/workerSignal'
 import { createLogger } from './logs'
-import { assembleCmd, isBuiltinAgent } from '../shared/workspace'
 
 export { approvalMissing, approvalPortOf, guardedRun } from './orchestratorRunApproval'
 
@@ -59,7 +58,7 @@ export interface OrchestratorRunDeps {
   worktrees?: WorktreeService
   sessions?: WorkerSessionPort
   verify?: (input: VerifyInput) => Promise<VerifyOutcome>
-  settings?: () => { agentLaunchCommands: Partial<Record<string, string>> } & Partial<ClaudeLaunchSettings>
+  settings?: () => Partial<ClaudeLaunchSettings>
   dataDir?: () => string
   gitExec?: Exec
   /** Approval ledger port; production defaults to `ledger.ledger.approval`. */
@@ -136,32 +135,22 @@ export function runItemTaskId(
 }
 
 /**
- * Worker kind + launch line. Claude launches through the default launch profile (a non-Default
- * profile whose program exists counts as "claude configured"); other kinds use their
- * `agentLaunchCommands` override.
+ * Worker kind + launch line. Workers run on Claude only, through the default launch profile.
  * The legacy `agentLaunchCommands.claude` is ignored: settings load seeds it into a profile.
- * Null = nothing configured and Claude cannot start: the caller refuses with "Claude needed".
+ * Null = Claude (the program the profile runs first) cannot start: the caller refuses with "Claude needed".
  */
 export async function workerLaunch(deps: OrchestratorRunDeps): Promise<{ agentId: string; cmd: string } | null> {
-  let configured: Partial<Record<string, string>> = {}
   let claude = resolveClaudeProfileIn({})
   try {
     const settings = deps.settings ? deps.settings() : (await import('./db')).db.getSettings()
-    const { claude: _legacy, ...others } = settings.agentLaunchCommands
-    configured = others
     claude = resolveClaudeProfileIn(settings)
   } catch {
     // A broken settings read must not block an otherwise valid run: fall back to the default launcher.
     log.warn('orchestrator.worker.settings', 'settings unreadable; using default worker launcher', { code: 'settings_unreadable' })
   }
-  const claudeLine = joinArgv(claude.argv)
   // Profile-aware: the program the profile runs first (its wrapper, else claude) must exist.
   const claudeOnPath = (deps.claudeOnPath ?? (() => binaryExists(claude.argv[0] as string)))()
-  if (claudeOnPath && claude.profile.id !== DEFAULT_CLAUDE_PROFILE.id) configured = { ...configured, claude: claudeLine }
-  const agentId = resolveWorkerKind(configured, claudeOnPath)
-  if (agentId === null) return null
-  const cmd = agentId === 'claude' ? claudeLine : isBuiltinAgent(agentId) ? assembleCmd(agentId, configured[agentId]) : agentId
-  return { agentId, cmd }
+  return claudeOnPath ? { agentId: DEFAULT_AGENT_ID, cmd: joinArgv(claude.argv) } : null
 }
 
 function gitExecFor(deps: OrchestratorRunDeps, root: string): Exec {

@@ -29,12 +29,6 @@ export const MENU_LABELS = {
   fitView: 'Fit View',
 } as const
 
-/**
- * Agent yang naik ke level atas menu, sisanya masuk submenu `New agent ▸`. Dua ini dipromosikan
- * karena merekalah yang dipakai sehari-hari; mengikuti pilihan yang sama di menu canvas nodeterm.
- */
-export const PROMOTED_AGENT_IDS: readonly BuiltinAgentId[] = ['claude', 'codex']
-
 /** Alasan `Select all` nonaktif. Baris yang mati tanpa alasan tidak mengajari apa pun. */
 export const EMPTY_CANVAS_HINT = 'This canvas has no nodes to select yet.'
 
@@ -90,17 +84,15 @@ export interface CanvasMenuContext {
 /** Baris agent builtin. `assembleCmd` yang menyusun perintahnya, sama seperti jalur dock. */
 function builtinItem(
   id: BuiltinAgentId,
-  prefix: string,
   h: CanvasMenuHandlers,
   cmds: CanvasMenuContext['agentLaunchCommands'],
 ): CanvasMenuItem {
   const cfg = agentConfig(id)
   return {
     key: `agent:${id}`,
-    label: `${prefix}${cfg?.label ?? id}`,
+    label: `New ${cfg?.label ?? id}`,
     icon: 'agent',
     dot: cfg?.color ?? FALLBACK_AGENT_COLOR,
-    hint: cfg?.notice,
     // cwd dibiarkan ke pemanggil: server memakai cwd workspace, persis seperti dock yang menambah
     // agent dengan satu klik tanpa form.
     onClick: () => h.addAgent(assembleCmd(id, cmds[id]), id),
@@ -129,20 +121,17 @@ export function buildCanvasMenuRows(
   ctx: CanvasMenuContext,
 ): CanvasMenuRow[] {
   const hidden = new Set(ctx.disabledAgents)
-  const promoted = PROMOTED_AGENT_IDS.filter((a) => !hidden.has(a))
-  const rest = BUILTIN_AGENT_IDS.filter((a) => !hidden.has(a) && !PROMOTED_AGENT_IDS.includes(a))
+  // Builtins (Claude Code) sit at the top level; custom agents go in the `New agent ▸` submenu.
+  const promoted = BUILTIN_AGENT_IDS.filter((a) => !hidden.has(a))
   const customs = ctx.customAgents.filter((c) => !hidden.has(c.id))
 
   const rows: CanvasMenuRow[] = [
     { key: 'terminal', label: MENU_LABELS.terminal, icon: 'terminal', onClick: handlers.addTerminal },
-    ...promoted.map((a) => builtinItem(a, 'New ', handlers, ctx.agentLaunchCommands)),
+    ...promoted.map((a) => builtinItem(a, handlers, ctx.agentLaunchCommands)),
   ]
   if (handlers.addAgentChat) rows.push({ key: 'agentChat', label: MENU_LABELS.agentChat, icon: 'agentChat', onClick: handlers.addAgentChat })
 
-  const grouped = [
-    ...rest.map((a) => builtinItem(a, '', handlers, ctx.agentLaunchCommands)),
-    ...customs.map((c) => customItem(c, handlers, ctx.agentLaunchCommands)),
-  ]
+  const grouped = customs.map((c) => customItem(c, handlers, ctx.agentLaunchCommands))
   if (grouped.length > 0) {
     rows.push({ key: 'agent-group', label: MENU_LABELS.agentGroup, icon: 'agent', children: grouped })
   }

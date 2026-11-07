@@ -97,7 +97,7 @@ function deps(
       requireApproval: false, // bawaan produksi kini ON (ENVSIMPLE Q3); tes alur run menyematkan off
       planStore: planStore(item()),
       dataDir: () => dataDir,
-      settings: () => ({ agentLaunchCommands: {} }), claudeOnPath: () => true,
+      settings: () => ({}), claudeOnPath: () => true,
       createRuntime: (compose) => {
         captured.compose = compose
         return {
@@ -256,7 +256,7 @@ describe('orchestrator run route', () => {
 
   it('uses the ledger project path as repo and the settings launcher as cmd', async () => {
     const run = deps(async () => outcome(), {
-      settings: () => ({ agentLaunchCommands: {}, claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' }),
+      settings: () => ({ claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' }),
       claudeOnPath: () => true,
     })
     const result = await orchestratorRunRoute(

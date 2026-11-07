@@ -40,8 +40,8 @@ export const AGENT_TRANSITIONS: Readonly<Record<AgentState, readonly AgentState[
   orphaned: [],
 }
 
-/** Harness of the worker: builtin ids (`claude`, `opencode`, ...) or a custom id; open on purpose. */
-export type AgentKind = 'claude' | 'codex' | 'gemini' | 'opencode' | (string & {})
+/** Harness of the worker: `claude` or a custom id; open on purpose. */
+export type AgentKind = 'claude' | (string & {})
 
 /** Worker (does the task) or reviewer (checks another agent's result). */
 export type AgentRole = 'worker' | 'reviewer'

@@ -38,6 +38,9 @@ const DEFAULT_SPAWN = {
  *  ke koordinat flow lebih dulu, lalu DIPUSATKAN di situ — aturan yang sama dengan spawn biasa yang
  *  dipusatkan di tengah pandangan. (`getBoundingClientRect` jsdom selalu di origin, jadi konversinya
  *  cuma soal viewport.) */
+/** Claude-first: the `New agent ▸` submenu holds custom agents only, so submenu tests seed one. */
+const WITH_CUSTOM = { settings: { customAgents: [{ id: 'custom:a1', label: 'My Proxy', launchCmd: 'proxy' }] } }
+
 const AT_CLICK = {
   x: (CLICK.clientX - PANNED.x) / PANNED.zoom - DEFAULT_SETTINGS.defaultNodeWidth / 2,
   y: (CLICK.clientY - PANNED.y) / PANNED.zoom - DEFAULT_SETTINGS.defaultNodeHeight / 2,
@@ -192,7 +195,7 @@ describe('menu konteks canvas', () => {
   // Flyout submenu adalah portal tersendiri; pembubar luar harus mengenalinya lewat registri menu.
   // Kalau tidak, klik baris submenu akan menutup menu tanpa aksi dan test ini yang merah.
   it('baris di dalam flyout submenu tetap bisa dipilih', async () => {
-    await mountCanvas({ nodes: [], dirs: {} })
+    await mountCanvas({ nodes: [], dirs: {}, ...WITH_CUSTOM })
     fireEvent.contextMenu(pane(), CLICK)
     fireEvent.pointerEnter(await screen.findByText(MENU_LABELS.agentGroup))
 
@@ -251,7 +254,7 @@ describe('menu konteks canvas', () => {
 
 describe('menu konteks canvas — fidelity VS Code', () => {
   it('memakai VscodeMenu: baris menuitem 22px-class, ikon codicon, caret submenu, tooltip alasan', async () => {
-    await mountCanvas({ nodes: [], dirs: {} })
+    await mountCanvas({ nodes: [], dirs: {}, ...WITH_CUSTOM })
     fireEvent.contextMenu(pane(), CLICK)
     await screen.findByText(MENU_LABELS.terminal)
 
@@ -266,7 +269,7 @@ describe('menu konteks canvas — fidelity VS Code', () => {
   })
 
   it('ArrowRight membuka submenu dan ArrowLeft menutupnya tanpa menutup menu induk', async () => {
-    await mountCanvas({ nodes: [], dirs: {} })
+    await mountCanvas({ nodes: [], dirs: {}, ...WITH_CUSTOM })
     fireEvent.contextMenu(pane(), CLICK)
     const group = (await screen.findByText(MENU_LABELS.agentGroup)).closest('button') as HTMLElement
     fireEvent.pointerEnter(group)

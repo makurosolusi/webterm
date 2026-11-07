@@ -1,10 +1,7 @@
-// Section Agent: dua kunci di sini butuh lebih dari satu input — `customAgents` (daftar record)
-// dan `agentLaunchCommands` (override per builtin). Bentuknya mengikuti nodeterm
-// `src/renderer/components/settings/sections/{AgentsSection,CustomAgentsSection}.tsx`: satu kartu
-// per agent custom, dan satu baris input per agent builtin untuk launch command.
-import type { CSSProperties } from 'react'
+// Section Agent: `customAgents` (daftar record) butuh lebih dari satu input. Bentuknya mengikuti
+// nodeterm `src/renderer/components/settings/sections/CustomAgentsSection.tsx`: satu kartu per agent
+// custom. Claude's launch command lives in the launch profiles card; other CLIs have no builtin row.
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
-import { Input } from '@/components/ui/input'
 import {
   AGENT_CONFIG,
   BUILTIN_AGENT_IDS,
@@ -112,43 +109,6 @@ export function AgentSettings({
       </Field>
 
       <ClaudeLaunchProfilesCard settings={s} onChange={onChange} />
-
-      <Field
-        label="Launch command"
-        setting="agentLaunchCommands"
-        hint={
-          'Launch a builtin agent with your own command — e.g. a wrapper script that picks an account. ' +
-          'Used on every launch path (new session, resume, restart), with flags such as --resume ' +
-          'appended AFTER it, so the command must pass its arguments through (end a shell script with ' +
-          '`exec claude "$@"`). Empty = builtin default. Claude uses the launch profiles above.'
-        }
-        block
-      >
-        <div className="st-rows">
-          {BUILTIN_AGENT_IDS.filter((id) => id !== 'claude').map((id: BuiltinAgentId) => (
-            <div key={id} className="st-row">
-              <span className="st-row-label" style={{ '--agent-color': AGENT_CONFIG[id].color } as CSSProperties}>
-                {AGENT_CONFIG[id].label}
-              </span>
-              <Input
-                className="st-input st-mono"
-                type="text"
-                aria-label={`${AGENT_CONFIG[id].label} launch command`}
-                placeholder={AGENT_CONFIG[id].launchCmd}
-                value={s.agentLaunchCommands[id] ?? ''}
-                onChange={(e) => {
-                  // Field yang dikosongkan MENGHAPUS kuncinya alih-alih menyimpan '': absen adalah
-                  // satu-satunya ejaan "default" yang disepakati semua konsumen.
-                  const next = { ...s.agentLaunchCommands }
-                  if (e.target.value) next[id] = e.target.value
-                  else delete next[id]
-                  onChange({ agentLaunchCommands: next })
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </Field>
 
       <Field
         label="Agent custom"

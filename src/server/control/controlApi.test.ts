@@ -127,14 +127,14 @@ describe('spawn', () => {
     )
   })
 
-  it('does not invent a session id for agents that take no such flag', async () => {
+  it('refuses a retired builtin (codex is a plain terminal program now)', async () => {
     const h = harness()
     const cap = h.token('node.spawn', 'node:node-a')
     const res = await h.call('POST', 'spawn', { ...spawnBody('req-sid-002'), agentId: 'codex' }, {
       'x-webterm-capability': cap,
     })
-    expect(res?.status).toBe(201)
-    expect(h.opened[0]?.sessionId).toBeUndefined()
+    expect(res?.status).toBe(400)
+    expect(h.opened).toHaveLength(0)
   })
 
   it('validates a client-supplied session id instead of trusting it', async () => {

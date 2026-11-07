@@ -1,7 +1,8 @@
 // Klien REST untuk Agent History (`src/server/sessionHistory.route.ts`). Token hanya di header.
 import type { ClosedEntry } from './closedHistory'
 
-export type HistoryAgent = 'claude' | 'codex'
+/** Agent History lists Claude Code sessions only (the server hides older codex rows). */
+export type HistoryAgent = 'claude'
 
 /** Satu sesi agent yang terindeks dari transcript di disk. */
 export interface AgentSession {

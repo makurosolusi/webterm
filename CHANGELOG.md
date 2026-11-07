@@ -12,6 +12,7 @@ Operator notes:
 - `WEBTERM_ALLOWED_HOSTS` is no longer read (see Removed). A leftover entry in `.env` is ignored and can be deleted.
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 - A stored WEBTERM_CENTRAL_RUNTIME=opencode now means automatic (Claude); WEBTERM_OPENCODE_* keys are ignored.
+- Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
 
 ### Added
 - Central chat accepts images and text files: paste a screenshot, drop files or use the + button.
@@ -189,6 +190,7 @@ Operator notes:
 
 ### Removed
 - OpenCode as a Central runtime and as the fallback worker: Central and workers run on Claude only; without Claude they ask you to set it up.
+- Built-in integration for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity (launch command settings, status signals, resume and history). They still run in a terminal node; existing nodes keep launching their command. Codex sessions no longer appear in Agent History.
 - The Inbox panel and the Central › Approvals tab; both are replaced by the Central chat.
 - `WEBTERM_ALLOWED_HOSTS` and the Host allowlist. They could never switch on now that every start enforces an access token, and a DNS-rebinding page is still refused because it has no credential for webterm.
 

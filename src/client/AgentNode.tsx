@@ -314,9 +314,8 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
             onClose={() => { setSearchOpen(false); termRef.current?.clearSearch() }}
           />
         )}
-        {/* copilot sengaja TIDAK context-capable (ia tak memindai ~/.claude/skills), jadi
-            `isContextCapable` yang memutuskan — bukan "ini node agent" — supaya ia tidak dapat
-            handle yang hanya menghasilkan edge mati. */}
+        {/* `isContextCapable` yang memutuskan — bukan "ini node agent" — supaya node CLI lain
+            (mis. node warisan `codex`) tidak dapat handle yang hanya menghasilkan edge mati. */}
         {isContextCapable(agentId) && (<>
           <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />
           <Handle id="link-in"  type="target" position={Position.Left}  className="bridge-handle" />

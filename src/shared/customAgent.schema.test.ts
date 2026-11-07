@@ -95,6 +95,14 @@ describe('normalizeCustomAgents load', () => {
     const long = { id: 'custom:y', label: 'x'.repeat(80), launchCmd: 'y', zzz: 1 }
     expect(normalizeCustomAgents([legacy, long], 'load').agents).toEqual([legacy, { id: 'custom:y', label: long.label, launchCmd: 'y' }])
   })
+
+  it('keeps an agent based on a retired builtin (codex) as a standalone CLI, keeps claude-based ones whole', () => {
+    const codexBased = { id: 'custom:c', label: 'My Codex', launchCmd: 'codex-wrap', baseAgent: 'codex' }
+    const claudeBased = { id: 'custom:p', label: 'Proxy', launchCmd: '', baseAgent: 'claude' }
+    const out = normalizeCustomAgents([codexBased, claudeBased], 'load')
+    expect(out.agents).toEqual([{ id: 'custom:c', label: 'My Codex', launchCmd: 'codex-wrap' }, claudeBased])
+    expect(out.errors).toEqual([])
+  })
 })
 
 describe('mergeSettings dengan customAgents', () => {

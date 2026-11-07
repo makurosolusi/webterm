@@ -15,13 +15,11 @@ const base = mkdtempSync(join(tmpdir(), 'wt-hist-'))
 afterAll(() => rmSync(base, { recursive: true, force: true }))
 
 let n = 0
-function fixture(): { roots: ScanRoot[]; claude: string; codex: string } {
+function fixture(): { roots: ScanRoot[]; claude: string } {
   const dir = join(base, `case${n++}`)
   const claude = join(dir, 'claude-projects')
-  const codex = join(dir, 'codex-sessions')
   mkdirSync(claude, { recursive: true })
-  mkdirSync(codex, { recursive: true })
-  return { roots: [{ agent: 'claude', dir: claude }, { agent: 'codex', dir: codex }], claude, codex }
+  return { roots: [{ agent: 'claude', dir: claude }], claude }
 }
 
 const L = (r: unknown) => `${JSON.stringify(r)}\n`
@@ -54,26 +52,34 @@ const freshDb = (): Database => {
 }
 
 describe('scan', () => {
-  it('indexes claude + codex fixture transcripts with id, title, cwd, times, count', async () => {
+  it('indexes claude fixture transcripts with id, title, cwd, times, count', async () => {
     const f = fixture()
     claudeSession(f.claude, '-repo-app', 'c1', '/repo/app', 'first prompt', '2026-03-01T10:00:00Z')
     mkdirSync(join(f.claude, '-repo-app', 'c1', 'subagents'), { recursive: true })
     writeFileSync(join(f.claude, '-repo-app', 'c1', 'subagents', 'agent-x.jsonl'), user('sub', '/repo/app', '2026-03-01T10:00:00Z'))
-    mkdirSync(join(f.codex, '2026', '05', '01'), { recursive: true })
-    writeFileSync(
-      join(f.codex, '2026', '05', '01', 'rollout-2026-05-01T10-00-00-019f0000-1111-7222-8333-444444444444.jsonl'),
-      L({ timestamp: '2026-05-01T10:00:00Z', type: 'session_meta', payload: { id: '019f0000-1111-7222-8333-444444444444', cwd: '/repo/app' } }) +
-        L({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'codex ask' }] } }),
-    )
     const db = freshDb()
     await scanSessions(db, f.roots)
     const page = listSessions(db, {})
-    expect(page.total).toBe(2) // subagent transcript is not a resumable session
-    expect(page.items[0]).toMatchObject({ agent: 'codex', id: '019f0000-1111-7222-8333-444444444444', title: 'codex ask', cwd: '/repo/app', messageCount: 1 })
-    expect(page.items[1]).toMatchObject({
+    expect(page.total).toBe(1) // subagent transcript is not a resumable session
+    expect(page.items[0]).toMatchObject({
       agent: 'claude', id: 'c1', title: 'first prompt', cwd: '/repo/app', messageCount: 2,
       startedAt: Date.parse('2026-03-01T10:00:00Z'), endedAt: Date.parse('2026-03-01T10:00:00Z'),
     })
+  })
+
+  it('Agent History hides codex rows but the DB keeps them, and a scan does not prune them', async () => {
+    const f = fixture()
+    claudeSession(f.claude, 'proj', 'c1', '/repo/app', 'claude ask')
+    const db = freshDb()
+    // A row indexed before Claude-first, when Codex transcripts were still scanned.
+    db.query(`INSERT INTO agent_session (path, agent, id, cwd, title, started_at, ended_at, message_count, mtime_ms, size, parsed_bytes)
+      VALUES ('/old/.codex/sessions/rollout-cdx-1.jsonl', 'codex', 'cdx-1', '/repo/app', 'codex ask', 1, 1, 3, 1, 10, 10)`).run()
+    await scanSessions(db, f.roots)
+    const page = listSessions(db, { q: 'ask' })
+    expect(page.total).toBe(1)
+    expect(page.items.map((i) => i.agent)).toEqual(['claude'])
+    const kept = db.query("SELECT id FROM agent_session WHERE agent = 'codex'").all()
+    expect(kept).toEqual([{ id: 'cdx-1' }])
   })
 
   it('is incremental: unchanged files are skipped, appended bytes are parsed from parsed_bytes', async () => {

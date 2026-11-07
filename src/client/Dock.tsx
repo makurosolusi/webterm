@@ -115,7 +115,7 @@ export default function Dock(props: DockProps) {
     ...(commands.some((c) => c.id === AGENT_CHAT_COMMAND_ID && c.run) ? [{ id: AGENT_CHAT_COMMAND_ID, label: 'Agent Chat', icon: codicon('comment-discussion') }] : []),
     ...builtins.map((a) => {
       const cfg = agentConfig(a)
-      return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, detail: cfg?.notice, icon: codicon('hubot') }
+      return { id: `${ADD_BUILTIN_PREFIX}${a}`, label: cfg?.label ?? a, icon: codicon('hubot') }
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },

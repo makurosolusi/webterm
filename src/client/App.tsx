@@ -255,7 +255,7 @@ export default function App() {
             closedSessions={closedSessions}
             onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           />
-          <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
+          <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
               menutup lewat Escape/X tab-nya. Persetujuan tinggal di strip Needs-you chat Central. */}
           <AppBottomPanel

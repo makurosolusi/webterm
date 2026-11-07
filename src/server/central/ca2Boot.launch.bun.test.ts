@@ -22,9 +22,8 @@ describe('catalog launch line (was launchLineFor)', () => {
     expect(lineOf('claude', DEFAULT_SETTINGS)).toBe(AGENT_CONFIG.claude.launchCmd)
   })
 
-  it('claude memakai profil default; override agentLaunchCommands dipakai untuk builtin lain', () => {
+  it('claude memakai profil default', () => {
     expect(lineOf('claude', withSettings({ claudeLaunchProfiles: [{ id: 'w', name: 'W', command: 'claude-work' }], defaultClaudeProfileId: 'w' }))).toBe('claude-work')
-    expect(lineOf('codex', withSettings({ agentLaunchCommands: { codex: 'codex-work' } }))).toBe('codex-work')
   })
 
   it('custom (centralSpawn): launchCmd sendiri; kosong + baseAgent => base (dengan override)', () => {

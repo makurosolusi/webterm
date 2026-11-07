@@ -37,30 +37,24 @@ const item = (rows: CanvasMenuRow[], key: string) => {
 }
 
 describe('buildCanvasMenuRows — bentuk menu', () => {
-  it('menaikkan Claude Code dan Codex ke level atas, sisanya ke submenu', () => {
+  it('menaikkan Claude Code ke level atas; tanpa agent custom tidak ada submenu', () => {
     const rows = buildCanvasMenuRows(handlers(), ctx())
     expect(keys(rows)).toEqual([
       'terminal',
       'agent:claude',
-      'agent:codex',
-      'agent-group',
       'files',
       'select-all',
       'fit-view',
     ])
     expect(item(rows, 'terminal').label).toBe(MENU_LABELS.terminal)
-    expect(item(rows, 'agent-group').label).toBe(MENU_LABELS.agentGroup)
     expect(item(rows, 'agent:claude').label).toBe('New Claude Code')
-    expect(item(rows, 'agent:codex').label).toBe('New Codex')
   })
 
-  it('submenu memuat builtin yang tersisa, TANPA yang sudah dipromosikan', () => {
-    const rows = buildCanvasMenuRows(handlers(), ctx())
-    const subKeys = item(rows, 'agent-group').children?.map((c) => c.key)
-    expect(subKeys).toContain('agent:gemini')
-    expect(subKeys).toContain('agent:cursor')
-    expect(subKeys).not.toContain('agent:claude')
-    expect(subKeys).not.toContain('agent:codex')
+  it('submenu memuat agent custom saja, tanpa CLI non-Claude', () => {
+    const rows = buildCanvasMenuRows(handlers(), ctx({ customAgents: [{ id: 'custom:a1', label: 'My Proxy', launchCmd: 'proxy' }] }))
+    expect(item(rows, 'agent-group').label).toBe(MENU_LABELS.agentGroup)
+    expect(item(rows, 'agent-group').children?.map((c) => c.key)).toEqual(['agent:custom:a1'])
+    for (const gone of ['codex', 'gemini', 'cursor']) expect(keys(rows)).not.toContain(`agent:${gone}`)
   })
 
   it('tepat satu separator, tepat sebelum aksi canvas', () => {
@@ -91,16 +85,15 @@ describe('buildCanvasMenuRows — bentuk menu', () => {
 })
 
 describe('buildCanvasMenuRows — gerbang', () => {
-  it('menghormati disabledAgents, termasuk saat yang disembunyikan adalah yang dipromosikan', () => {
-    const rows = buildCanvasMenuRows(handlers(), ctx({ disabledAgents: ['codex', 'gemini'] }))
-    expect(keys(rows)).not.toContain('agent:codex')
-    expect(keys(rows)).toContain('agent:claude')
-    expect(item(rows, 'agent-group').children?.map((c) => c.key)).not.toContain('agent:gemini')
+  it('menghormati disabledAgents untuk builtin yang dipromosikan', () => {
+    const rows = buildCanvasMenuRows(handlers(), ctx({ disabledAgents: ['claude'] }))
+    expect(keys(rows)).not.toContain('agent:claude')
   })
 
   it('submenu HILANG, bukan kosong, saat tidak ada agent yang tersisa', () => {
     const all = ctx({
-      disabledAgents: ['claude', 'codex', 'antigravity', 'gemini', 'opencode', 'grok', 'copilot', 'cursor'],
+      disabledAgents: ['claude', 'custom:a1'],
+      customAgents: [{ id: 'custom:a1', label: 'My Proxy', launchCmd: 'proxy' }],
     })
     const rows = buildCanvasMenuRows(handlers(), all)
     expect(keys(rows)).toEqual(['terminal', 'files', 'select-all', 'fit-view'])
@@ -125,7 +118,7 @@ describe('buildCanvasMenuRows — gerbang', () => {
         disabledAgents: ['custom:a1'],
       }),
     )
-    expect(item(rows, 'agent-group').children?.map((c) => c.key)).not.toContain('agent:custom:a1')
+    expect(keys(rows)).not.toContain('agent-group')
   })
 
   it('Select all nonaktif DAN beralasan saat canvas kosong', () => {
@@ -207,7 +200,7 @@ describe('buildCanvasMenuRows — diff row', () => {
     expect(keys(buildCanvasMenuRows(handlers(), ctx()))).not.toContain('diff')
     const addDiff = vi.fn()
     const rows = buildCanvasMenuRows(handlers({ addDiff }), ctx())
-    expect(keys(rows).slice(4, 6)).toEqual(['files', 'diff'])
+    expect(keys(rows).slice(2, 4)).toEqual(['files', 'diff'])
     expect(item(rows, 'diff').label).toBe(MENU_LABELS.diff)
     item(rows, 'diff').onClick?.()
     expect(addDiff).toHaveBeenCalledOnce()
