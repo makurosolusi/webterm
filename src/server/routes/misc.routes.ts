@@ -9,6 +9,9 @@ import { BodyReadError } from '../cappedRequestBody'
 /** `{"node": "<id>"}` is tens of bytes; 4 KiB leaves room without buffering junk. */
 const GENERATE_NAME_BODY_MAX = 4 * 1024
 const BAD_NODE = 'Expected a JSON body {"node": "<id>"}.'
+/** `{"parent": "<abs path>", "name": "<folder>"}`: a path plus a 255-byte name. */
+const PICKER_MKDIR_BODY_MAX = 16 * 1024
+const BAD_MKDIR = 'Expected a JSON body {"parent": "<absolute path>", "name": "<folder name>"}.'
 
 export const miscRoutes: ApiRoute[] = [
   // AI name-gen: spawn claude -p on a node's terminal buffer, return a suggested title. POST + UI-only
@@ -36,11 +39,27 @@ export const miscRoutes: ApiRoute[] = [
       return true
     },
   }),
-  // Server-side folder picker: list subdirectories of a dir (dotfiles hidden). UI-only (route.uiOnly.ts).
+  // Server-side folder picker: GET lists subdirectories of a dir (dotfiles hidden), POST {parent, name}
+  // makes one new folder there (folderPicker.mkdir.ts). UI-only (route.uiOnly.ts).
   uiOnly({
     name: 'folder-picker',
-    match: (c) => c.path === '/api/fs' && c.method === 'GET',
+    match: (c) => c.path === '/api/fs' && (c.method === 'GET' || c.method === 'POST'),
     handle: async (c) => {
+      if (c.method === 'POST') {
+        let b: { parent?: unknown; name?: unknown } | null
+        try {
+          b = JSON.parse(await c.body(PICKER_MKDIR_BODY_MAX)()) as typeof b
+        } catch (err) {
+          if (err instanceof BodyReadError && err.reason === 'too_large') json(c.res, 413, { error: 'payload_too_large', message: 'Request body is too large.' })
+          else if (err instanceof BodyReadError || err instanceof SyntaxError) json(c.res, 400, { error: 'bad_body', message: BAD_MKDIR })
+          else throw err
+          return true
+        }
+        const [{ pickerMkdir }, { dataDir }] = await Promise.all([import('../folderPicker.mkdir'), import('../config')])
+        const r = await pickerMkdir(b?.parent, b?.name, dataDir())
+        json(c.res, r.status, r.body)
+        return true
+      }
       const dir = c.url.searchParams.get('path') || homedir()
       try {
         const entries = await readdir(dir, { withFileTypes: true })

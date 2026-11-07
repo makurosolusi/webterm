@@ -1,9 +1,11 @@
 // Pemilih folder (modal VS Code): daftar subfolder server-side, naik satu level, lalu pilih.
+// "New Folder" meniru panel Open macOS: buat satu folder di folder aktif lalu masuk ke dalamnya.
 import { useEffect, useState } from 'react'
 import { VscodeDialog } from './components/vscode/vscodeDialog'
 import { IconTooltip } from './components/ui/icon-button'
 import { arrangeDialogButtons } from './components/vscode/vscodeDialogButtons'
-import { listDir } from './api'
+import { listDir, makeFolder, type HttpError } from './api'
+import { folderNameError } from '../shared/folderName'
 import './folderPicker.css'
 
 interface Props {
@@ -38,6 +40,26 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
   }
   useEffect(() => { load(initialPath) }, [])
 
+  // null = no inline "new folder" row; otherwise the name being typed.
+  const [newName, setNewName] = useState<string | null>(null)
+  const [newError, setNewError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const cancelNew = () => { setNewName(null); setNewError(null) }
+  const createNew = () => {
+    if (newName === null || creating) return
+    const invalid = folderNameError(newName)
+    if (invalid) { setNewError(invalid); return }
+    setCreating(true)
+    setNewError(null)
+    makeFolder(path, newName)
+      .then((r) => { cancelNew(); load(r.path) })
+      .catch((err: unknown) => {
+        const e = err as Partial<HttpError>
+        setNewError(e.serverMessage ?? `Cannot create "${newName}": ${e.message ?? 'request failed'}`)
+      })
+      .finally(() => setCreating(false))
+  }
+
   const select = (
     <button key="select" type="button" className="fp-button fp-button--primary" onClick={() => onPick(path)}>
       Select this folder
@@ -71,10 +93,43 @@ export default function FolderPicker({ initialPath, onPick, onClose }: Props) {
           </button>
         </IconTooltip>
         <span className="fp-path" title={path}>{path}</span>
+        <IconTooltip label="New Folder" disabled={!path} disabledReason="no folder open">
+          <button
+            type="button"
+            className="fp-up"
+            aria-label="New Folder"
+            onClick={() => { setNewName(''); setNewError(null) }}
+            disabled={!path}
+          >
+            <span className="codicon codicon-new-folder" aria-hidden />
+          </button>
+        </IconTooltip>
       </div>
       {error && <div className="fp-error" role="alert">{error}</div>}
       <div className="fp-list" role="list">
-        {dirs.length === 0 && <span className="fp-empty">No subfolders</span>}
+        {newName !== null && (
+          <div className="fp-row fp-new" role="listitem">
+            <span className="codicon codicon-folder" aria-hidden />
+            <input
+              className="fp-new__input"
+              aria-label="New folder name"
+              aria-invalid={newError !== null}
+              autoFocus
+              value={newName}
+              disabled={creating}
+              onChange={(e) => { setNewName(e.target.value); setNewError(null) }}
+              onBlur={() => { if (newName === '' && !creating) cancelNew() }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); createNew() }
+                // Escape closes the row only; stopPropagation keeps the dialog open.
+                else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelNew() }
+              }}
+            />
+            {creating && <span className="fp-new__status">Creating…</span>}
+          </div>
+        )}
+        {newError && <div className="fp-error fp-new__error" role="alert">{newError}</div>}
+        {dirs.length === 0 && newName === null && <span className="fp-empty">No subfolders</span>}
         {dirs.map((d) => (
           <button key={d} type="button" className="fp-row" role="listitem" onClick={() => load(joinPath(path, d))}>
             <span className="codicon codicon-folder" aria-hidden />
