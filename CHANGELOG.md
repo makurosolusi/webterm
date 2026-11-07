@@ -74,6 +74,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Chat messages you send now appear in a bubble on the right in Agent Chat and the Central chat, with replies on the left.
 - The Central chat and control panel now open in a resizable side bar on the right, like Copilot Chat in VS Code, instead of the bottom panel, so they no longer cover the canvas. Toggle it with the title-bar button or ⌥⌘B / Ctrl+Alt+B.
 - Canvas cables are thicker and higher contrast, with a soft halo so they stay readable over custom backgrounds. Hovering a cable thickens it, and the clickable area around it is larger.
 - Nodes are resized only through the Resize toggle in the node header, or ⌘⌥R ("Node: Resize Focused Node" in ⌘K). Clicking or selecting a node no longer shows the blue resize frame. Resize mode ends on Esc, a click outside, typing in the node, collapsing or removing it, or locking the view.
@@ -114,6 +115,9 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- The Central chat no longer gets stuck on "Reconnecting…" when a turn fails: the failure was mistaken for a lost connection, so the chat reconnected over and over and the reply stayed on "streaming".
+- A failed Central reply now says why (for example "claude timed out", or "The server restarted before this reply finished."), also after a reload, and the newest failed message or reply has a Retry button that sends it again.
+- Central chat messages with more than one line (Shift+Enter) were refused with "The message could not be sent."; they are now sent with their line breaks.
 - Cancelling a repository clone no longer hangs and blocks the next clone.
 - File search reports an error when it cannot run instead of showing no matches.
 - The Central panel's Skills and Agents tabs no longer show a 404 error when that feature is off; they explain what it does and offer a switch to turn it on, which applies right away. Other failures in the panel now read as a short message instead of a raw request line. Central skills also have their own switch on the Central Agent card in Settings.
