@@ -35,12 +35,14 @@ function textOf(partsJson: string): string {
 }
 
 /** Last `limit` messages with plain text, oldest first (state ids stay in `facts`, not here). */
-export function recentMessages(db: Database, conversationId: string, limit: number, afterSeq = 0): CheckpointMessage[] {
+export function recentMessages(
+  db: Database, conversationId: string, limit: number, afterSeq = 0, beforeSeq = Number.MAX_SAFE_INTEGER
+): CheckpointMessage[] {
   return list(
     db,
     `SELECT id, seq, role, parts_json FROM central_message
-     WHERE conversation_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?`,
-    conversationId, afterSeq, limit
+     WHERE conversation_id = ? AND seq > ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
+    conversationId, afterSeq, beforeSeq, limit
   ).reverse().map((r) => ({ id: String(r['id']), seq: Number(r['seq']), role: String(r['role']), text: textOf(String(r['parts_json'])) }))
 }
 

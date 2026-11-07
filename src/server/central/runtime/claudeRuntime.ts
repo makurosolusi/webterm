@@ -139,7 +139,7 @@ export class ClaudeRuntime implements CentralRuntime {
         log.info('central.session.reset', 'resumed claude session missing; retrying in a fresh session', {
           conversationId: input.conversationId, turnId: input.turnId, oldSessionPrefix: attempt.sessionRef.slice(0, 8),
         })
-        attempt = { ...attempt }
+        attempt = { ...attempt, text: this.freshText(input) }
         delete attempt.sessionRef
         sessionId = (this.options.newSessionId ?? randomUUID)()
         Object.assign(state, newTurnState())
@@ -178,6 +178,20 @@ export class ClaudeRuntime implements CentralRuntime {
   private cancelled(state: ClaudeTurnState, finish: () => RuntimeResult): RuntimeResult {
     state.termination = 'cancelled'
     return finish()
+  }
+
+  /** The rotated-session prompt for a fresh session; the turn's own prompt if it cannot be built. */
+  private freshText(input: TurnInput): string {
+    if (input.freshSessionText === undefined) return input.text
+    try {
+      return input.freshSessionText()
+    } catch (err) {
+      // The retry still runs, only without the earlier conversation; the notice already says the session is new.
+      log.warn('central.session.reseed_failed', 'fresh-session context could not be built', {
+        turnId: input.turnId, error: err instanceof Error ? err.name : typeof err,
+      })
+      return input.text
+    }
   }
 
   /** Runs the injected preflight; a throwing check counts as "could not check", never as ready. */

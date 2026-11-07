@@ -15,6 +15,13 @@ export interface ContextBuildInput {
   text: string
   memoryEnabled: boolean
   now: () => number
+  /**
+   * Seed a fresh runtime session (checkpoint of the conversation so far), as a context rotation does;
+   * used when the resumed session turned out to be gone. Only the real assembler can seed.
+   */
+  rotate?: boolean
+  /** With `rotate`: ignore messages at or after this seq (the turn already in progress). */
+  beforeSeq?: number
 }
 
 export interface ContextBuildOutput {
