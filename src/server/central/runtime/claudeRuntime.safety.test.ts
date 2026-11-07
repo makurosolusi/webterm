@@ -172,8 +172,8 @@ describe('ClaudeRuntime child exit without a result', () => {
     const result = await runtime(exe).turn(turnInput({ turnId: 't-exit' }), emit)
     expect(result).toMatchObject({ outcome: 'error', errorCode: 'runtime_error' })
     const error = events.find((e) => e.type === 'error') as { message: string } | undefined
-    expect(error?.message).toBe('claude runtime failed: exit 3: Error: profile "p" not found in envman [redacted]')
-    const logged = logBus.query({}).slice(before).find((e) => e.event === 'central.claude_exit_failed')
+    expect(error?.message).toBe('Claude exited with code 3 before starting: Error: profile "p" not found in envman [redacted]')
+    const logged = logBus.query({}).slice(before).find((e) => e.event === 'central.turn.failed')
     expect(logged?.level).toBe('error')
     expect(logged?.data).toMatchObject({ turnId: 't-exit', exitCode: 3 })
     expect(JSON.stringify(logged)).not.toContain('sk-ant-abcdef')
@@ -182,6 +182,6 @@ describe('ClaudeRuntime child exit without a result', () => {
   it('falls back to the exit status when stderr is empty', async () => {
     const { events, emit } = recorder()
     await runtime(writeFakeClaude(dir, 'readStdin(); process.exit(7)')).turn(turnInput(), emit)
-    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'claude runtime failed: exit 7' })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ message: 'Claude exited with code 7 before starting' })
   })
 })

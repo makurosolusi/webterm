@@ -114,6 +114,8 @@ export function createTurnEmitter(options: TurnEmitterOptions): TurnEmitter {
         }
       case 'usage':
         return { ...base, type: 'usage', usage: normalizeUsage(body.usage) }
+      case 'notice':
+        return { ...base, type: 'notice', text: scrubText(body.text) }
     }
   }
 

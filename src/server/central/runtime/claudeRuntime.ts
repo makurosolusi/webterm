@@ -5,7 +5,7 @@
 // never logs the prompt or stdout; stderr only as a redacted one-line failure cause.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import {
   type AdapterRuntimeKind, type CancelToken, type CentralRuntime, type RuntimeEmit,
   type RuntimeResult, type TurnInput, createCancelToken,
@@ -21,7 +21,7 @@ import {
 } from './claudeSession'
 import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
 import { CENTRAL_MODEL_FLAG } from './opencodeOptions'
-import { stderrReason } from './opencodeSession'
+import { FRESH_SESSION_NOTICE, isMissingSession, logTurnFailed } from './claudeFailure'
 import { createLogger } from '../../logs'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
@@ -56,14 +56,22 @@ export class ClaudeRuntime implements CentralRuntime {
     const emitter = createTurnEmitter({ turnId: input.turnId, emit, now: this.now })
     const startedAt = this.now()
     const state = newTurnState()
-    const sessionId = (this.options.newSessionId ?? randomUUID)()
-    const finish = (exitReason?: string): RuntimeResult => finishTurn(emitter, {
-      state, elapsedMs: this.now() - startedAt, fallbackSessionRef: input.sessionRef ?? sessionId,
-      ...(exitReason === undefined ? {} : { exitReason }),
-    })
+    let sessionId = (this.options.newSessionId ?? randomUUID)()
+    // The input of the current attempt: a fresh-session retry drops `sessionRef`.
+    let attempt: TurnInput = input
     let child: ChildProcess | null = null
     let link: OpenedMcp | null = null
     let secrets: string[] = []
+    let launch: { argv0: string; profileId: string } | null = null
+    let exit: { code: number | null; signal: NodeJS.Signals | null } | undefined
+    const finish = (): RuntimeResult => {
+      const result = finishTurn(emitter, {
+        state, elapsedMs: this.now() - startedAt, fallbackSessionRef: attempt.sessionRef ?? sessionId,
+        ...(exit === undefined ? {} : { exit }), secrets,
+      })
+      if (result.outcome === 'error') logTurnFailed(input, state, result, exit, launch, secrets)
+      return result
+    }
     let ladder: ReturnType<typeof createKillLadder> | null = null
     let wallTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -91,50 +99,65 @@ export class ClaudeRuntime implements CentralRuntime {
         link = await this.mcp.open({ conversationId: input.conversationId, turnId: input.turnId, wallMs: input.limits.maxWallMs ?? DEFAULT_WALL_MS })
       } catch (err) {
         log.error('central.claude_mcp_failed', 'central MCP wiring failed; turn not started', { turnId: input.turnId, error: err instanceof Error ? err.message : String(err) })
-        failTurn(emitter, state, { code: 'runtime_error' })
+        failTurn(emitter, state, { code: 'runtime_error', reason: 'webterm could not prepare its tool server for Claude' })
         return finish()
       }
       if (token.cancelled) return this.cancelled(state, finish)
-      try {
-        ;({ child, secrets } = this.spawnChild(input, sessionId, link.configPath))
-      } catch (err) {
-        state.spawnError = err instanceof Error ? err : new Error('claude spawn failed')
-        return finish()
-      }
-      const live = child
-      ladder = createKillLadder(live, this.options.killGraceMs ?? DEFAULT_KILL_GRACE_MS)
-      const kill = (): void => ladder?.start()
-      let exit: { code: number | null; signal: NodeJS.Signals | null } = { code: null, signal: null }
-      const closed = new Promise<void>((resolve) => {
-        live.once('close', (code: number | null, signal: NodeJS.Signals | null) => { exit = { code, signal }; resolve() })
-        live.once('error', (err) => {
-          state.spawnError = err
-          resolve()
-        })
-      })
-      this.pump(live, input, emitter, state, kill)
-
       const wallMs = input.limits.maxWallMs ?? DEFAULT_WALL_MS
       if (wallMs > 0) {
         wallTimer = setTimeout(() => {
           if (state.termination === null) state.termination = 'timeout'
-          kill()
+          ladder?.start()
         }, wallMs)
         wallTimer.unref?.()
       }
-      await closed
+      const runChild = async (): Promise<void> => {
+        try {
+          ;({ child, secrets, launch } = this.spawnChild(attempt, sessionId, (link as OpenedMcp).configPath))
+        } catch (err) {
+          state.spawnError = err instanceof Error ? err : new Error('claude spawn failed')
+          return
+        }
+        const live = child
+        ladder?.clear()
+        ladder = createKillLadder(live, this.options.killGraceMs ?? DEFAULT_KILL_GRACE_MS)
+        const closed = new Promise<void>((resolve) => {
+          live.once('close', (code: number | null, signal: NodeJS.Signals | null) => { exit = { code, signal }; resolve() })
+          live.once('error', (err) => {
+            state.spawnError = err
+            resolve()
+          })
+        })
+        this.pump(live, attempt, emitter, state, () => ladder?.start())
+        await closed
+      }
+      await runChild()
+      // A resumed session Claude no longer has (deleted, other machine, other runtime's id) would fail
+      // every turn: retry once in a fresh session, but only while nothing has reached the user yet.
+      if (attempt.sessionRef !== undefined && state.failure === null && state.termination === null
+        && !state.sawDelta && state.seenTools.size === 0 && isMissingSession(state.result?.errorText, state.stderrTail)) {
+        log.info('central.session.reset', 'resumed claude session missing; retrying in a fresh session', {
+          conversationId: input.conversationId, turnId: input.turnId, oldSessionPrefix: attempt.sessionRef.slice(0, 8),
+        })
+        attempt = { ...attempt, text: this.freshText(input) }
+        delete attempt.sessionRef
+        sessionId = (this.options.newSessionId ?? randomUUID)()
+        Object.assign(state, newTurnState())
+        exit = undefined
+        emitter.emit({ type: 'notice', text: FRESH_SESSION_NOTICE })
+        if (token.cancelled) return this.cancelled(state, finish)
+        await runChild()
+      }
       if (state.retries > 0) log.info('central.claude_retries', 'claude api retried', { retries: state.retries })
-      if (state.result !== null || state.failure !== null || state.termination !== null || state.spawnError !== null) return finish()
-      // Ended without a result event (broken profile, auth, wrapper crash): the exit status and stderr are the only cause.
-      const status = exit.code !== null ? `exit ${exit.code}` : `signal ${exit.signal ?? 'unknown'}`
-      const reason = stderrReason(state.stderrTail, secrets) || status
-      log.error('central.claude_exit_failed', 'claude exited without a result', { turnId: input.turnId, exitCode: exit.code, signal: exit.signal, reason })
-      return finish(reason === status ? status : `${status}: ${reason}`)
+      // Without a result event (broken profile, auth, wrapper crash) the exit status and stderr are the only cause.
+      return finish()
     } finally {
       if (wallTimer !== undefined) clearTimeout(wallTimer)
-      ladder?.clear()
+      // Both are assigned inside runChild, which TS flow analysis does not see.
+      ;(ladder as ReturnType<typeof createKillLadder> | null)?.clear()
       token.signal.removeEventListener('abort', onAbort)
-      if (child !== null && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      const last = child as ChildProcess | null
+      if (last !== null && last.exitCode === null && last.signalCode === null) last.kill('SIGKILL')
       link?.close()
       this.active.delete(input.turnId)
     }
@@ -157,6 +180,20 @@ export class ClaudeRuntime implements CentralRuntime {
     return finish()
   }
 
+  /** The rotated-session prompt for a fresh session; the turn's own prompt if it cannot be built. */
+  private freshText(input: TurnInput): string {
+    if (input.freshSessionText === undefined) return input.text
+    try {
+      return input.freshSessionText()
+    } catch (err) {
+      // The retry still runs, only without the earlier conversation; the notice already says the session is new.
+      log.warn('central.session.reseed_failed', 'fresh-session context could not be built', {
+        turnId: input.turnId, error: err instanceof Error ? err.name : typeof err,
+      })
+      return input.text
+    }
+  }
+
   /** Runs the injected preflight; a throwing check counts as "could not check", never as ready. */
   private async ready(): Promise<Awaited<ReturnType<NonNullable<ClaudeRuntimeOptions['preflight']>>>> {
     const check = this.options.preflight
@@ -169,7 +206,9 @@ export class ClaudeRuntime implements CentralRuntime {
     }
   }
 
-  private spawnChild(input: TurnInput, sessionId: string, mcpConfig: string): { child: ChildProcess; secrets: string[] } {
+  private spawnChild(input: TurnInput, sessionId: string, mcpConfig: string): {
+    child: ChildProcess; secrets: string[]; launch: { argv0: string; profileId: string }
+  } {
     const model = claudeModelArg(this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
     const argv = claudeArgv({
       mcpConfig,
@@ -180,13 +219,15 @@ export class ClaudeRuntime implements CentralRuntime {
       ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
     })
     // Central launch profile (e.g. `envman -e p -- claude`) read per turn, so a profile edit reaches the next turn.
-    const [cmd, ...args] = this.options.executable ? [this.options.executable, ...argv] : [...centralClaudeLaunch().argv, ...argv]
+    const profile = this.options.executable ? null : centralClaudeLaunch()
+    const [cmd, ...args] = profile ? [...profile.argv, ...argv] : [this.options.executable as string, ...argv]
+    const launch = { argv0: basename(cmd as string), profileId: profile?.profile.id ?? 'executable-override' }
     // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
     // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
     const env = claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv })
     const secrets = Object.entries(env).filter(([name, value]) => SECRET_ENV_NAME.test(name) && typeof value === 'string').map(([, value]) => value as string)
     const child = spawn(cmd as string, args, { cwd: ensureWorkDir(this.options.workDir), env, stdio: ['pipe', 'pipe', 'pipe'], shell: false })
-    return { child, secrets }
+    return { child, secrets, launch }
   }
 
   /** Wires stdin (prompt then EOF), stdout (JSONL to events) and keeps a bounded stderr tail for the failure cause. */

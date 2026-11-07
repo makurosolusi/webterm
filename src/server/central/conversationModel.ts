@@ -15,7 +15,7 @@ export const RISK_CLASSES = ['R0', 'R1', 'R2', 'R3'] as const
 export type RiskClass = (typeof RISK_CLASSES)[number]
 export const CENTRAL_EVENT_TYPES = [
   'message.created', 'part.delta', 'part.completed', 'tool.requested', 'tool.completed',
-  'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done',
+  'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done', 'notice',
 ] as const
 export type CentralEventType = (typeof CENTRAL_EVENT_TYPES)[number]
 
@@ -35,6 +35,8 @@ export type MessagePart =
   | { type: 'tool'; toolCallId: string; name: string; state: ToolCardState; args?: unknown; result?: unknown; digest?: string; risk?: RiskClass }
   | { type: 'approval'; approvalId: string; state: ToolCardState; digest?: string; expiresAt?: number }
   | { type: 'error'; code: string; message: string }
+  /** Runtime note shown on the reply (e.g. a fresh Claude session); never model text. */
+  | { type: 'notice'; text: string }
 
 /** `chatId` set = one of the user's extra global chats ("New chat"); unset = the default `central:global`. */
 export type ConversationScope = { kind: 'global'; chatId?: string } | { kind: 'project'; projectId: string }
@@ -162,8 +164,9 @@ function validatePart(raw: unknown, index: number): MessagePart {
   if (part['type'] === 'error') {
     return { type: 'error', code: partText(part['code'], `parts[${index}].code`), message: partText(part['message'], `parts[${index}].message`) }
   }
+  if (part['type'] === 'notice') return { type: 'notice', text: partText(part['text'], `parts[${index}].text`) }
   if (part['type'] !== 'tool' && part['type'] !== 'approval') {
-    fail('invalid_parts', `parts[${index}].type must be text|tool|approval|error`)
+    fail('invalid_parts', `parts[${index}].type must be text|tool|approval|error|notice`)
   }
   const state = pick(TOOL_STATES, 'invalid_parts', `parts[${index}].state`, part['state'])
   const digest = part['digest'] === undefined ? {} : { digest: partText(part['digest'], `parts[${index}].digest`) }

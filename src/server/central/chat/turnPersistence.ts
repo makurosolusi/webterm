@@ -121,7 +121,7 @@ export function appendAssistantMessage(
 const FAILED_FALLBACK = 'The central agent stopped with an error.'
 
 function assistantParts(state: RunState, text: string, failure: { code: string; message: string } | null): MessagePart[] {
-  const parts: MessagePart[] = []
+  const parts: MessagePart[] = state.notices.map((notice) => ({ type: 'notice' as const, text: notice }))
   if (text !== '') parts.push({ type: 'text', text })
   for (const tool of state.tools.values()) {
     parts.push({

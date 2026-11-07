@@ -139,7 +139,12 @@ export class TurnService {
     this.active.set(conversation.id, turn.id)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
-    const done = this.runTurn(conversation, turn, prompt, history, rotate, cacheEnv)
+    // Rotated-session context, built only if the runtime finds its resumed session gone.
+    const freshSessionText = (): string => this.context.build({
+      db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
+      rotate: true, beforeSeq: message.seq,
+    }).prompt
+    const done = this.runTurn(conversation, turn, prompt, history, rotate, cacheEnv, freshSessionText)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -181,7 +186,7 @@ export class TurnService {
 
   private async runTurn(
     conversation: Conversation, turn: Turn, prompt: string, history: string[], rotate: boolean,
-    cacheEnv: Record<string, string>
+    cacheEnv: Record<string, string>, freshSessionText: () => string
   ): Promise<Turn> {
     const runtime = this.runtime
     if (runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
@@ -202,6 +207,7 @@ export class TurnService {
       // A rotated conversation starts a fresh runtime session seeded from the checkpoint.
       ...(turn.sessionRef === null || rotate ? {} : { sessionRef: turn.sessionRef }),
       ...(Object.keys(cacheEnv).length ? { cacheEnv } : {}),
+      freshSessionText,
     }
     try {
       const result = await runtime.turn(input, emit)

@@ -28,6 +28,8 @@ export interface RunState {
   tools: Map<string, ToolRecord>
   /** First runtime `error` of the turn: persisted as the failed reply's `error` part so a reload still shows why. */
   failure?: { code: string; message: string }
+  /** Runtime notices of the turn, persisted ahead of the reply text. */
+  notices: string[]
 }
 
 export interface ProjectedEvent {
@@ -36,7 +38,7 @@ export interface ProjectedEvent {
 }
 
 export function createRunState(): RunState {
-  return { text: '', usage: zeroUsage(), tools: new Map() }
+  return { text: '', usage: zeroUsage(), tools: new Map(), notices: [] }
 }
 
 /** `usage` only updates state; `turn.result` is consumed by the service, not persisted here. */
@@ -78,6 +80,10 @@ export function projectRuntimeEvent(
       type: 'error',
       payload: { messageId, code: event.code, message: event.message, retryable: event.retryable },
     }
+  }
+  if (event.type === 'notice') {
+    state.notices.push(event.text)
+    return { type: 'notice', payload: { messageId, text: event.text } }
   }
   if (event.type === 'usage') {
     state.usage = event.usage

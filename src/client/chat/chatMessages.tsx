@@ -74,6 +74,7 @@ function PartView(props: { part: ChatPart; assistant: boolean }) {
     return <div className="chat-approval-note">Approval requested ({part.state})</div>
   }
   if (part.type === 'error') return <div className="chat-error-inline" role="note">{clip(part.message, MAX_REASON)}</div>
+  if (part.type === 'notice') return <div className="chat-notice-inline" role="note">{clip(part.text, MAX_REASON)}</div>
   if (part.type !== 'text') return null
   if (!assistant) return <p className="chat-text chat-text--plain">{part.text}</p>
   const parsed = splitProposalBlocks(part.text)

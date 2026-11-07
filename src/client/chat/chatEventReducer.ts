@@ -163,6 +163,15 @@ function turnError(state: ChatState, event: ChatEvent): ChatState {
   return { ...state, messages: upsert(state.messages, { ...target, parts, state: 'failed' }) }
 }
 
+/** Runtime note (e.g. a fresh Claude session) shown on the reply, ahead of its text, once. */
+function notice(state: ChatState, event: ChatEvent): ChatState {
+  const text = textField(payloadOf(event).text)
+  if (text === undefined) return state
+  const target = assistantTarget(state, event)
+  if (target.parts.some((p) => p.type === 'notice' && p.text === text)) return state
+  return { ...state, messages: upsert(state.messages, { ...target, parts: [{ type: 'notice', text }, ...target.parts] }) }
+}
+
 function applyOnce(state: ChatState, event: ChatEvent): ChatState {
   switch (event.type) {
     case 'message.created':
@@ -179,6 +188,8 @@ function applyOnce(state: ChatState, event: ChatEvent): ChatState {
       return turnStatus(state, event)
     case 'error':
       return turnError(state, event)
+    case 'notice':
+      return notice(state, event)
     case 'done':
       return {
         ...state,

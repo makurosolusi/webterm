@@ -112,15 +112,20 @@ export function createContextAssembler(deps: ContextAssemblerDeps = {}): { build
   const scheduleIdle = deps.scheduleIdle ?? debouncedIdle()
   return {
     build(input: ContextBuildInput): AssembledContext | ContextBuildOutput {
-      if (!flagOn((deps.env ?? process.env)[CHECKPOINT_FLAG])) return legacy.build(input)
+      // A forced seed (the resumed session is gone) runs even with the flag off: without it the fresh
+      // session would start blind. Deterministic, no model call.
+      const forced = input.rotate === true
+      if (!forced && !flagOn((deps.env ?? process.env)[CHECKPOINT_FLAG])) return legacy.build(input)
       const { db, conversationId } = input
       const windowTokens = contextWindowTokens(deps.env)
       const ctxTokens = lastCtxTokens(db, conversationId)
-      const decision = decideRotation(ctxTokens, windowTokens)
+      const decision = forced ? 'rotate' : decideRotation(ctxTokens, windowTokens)
       if (decision === 'reject') throw new ContextRejectedError(ctxTokens ?? 0, windowTokens)
       const rotate = decision === 'rotate'
       // Seed a fresh session: make sure a checkpoint covers the newest message before the prompt reads it.
-      const checkpoint = rotate ? createFallbackCheckpoint(db, conversationId, input.now()) ?? latestCheckpoint(db, conversationId) : latestCheckpoint(db, conversationId)
+      const checkpoint = rotate
+        ? createFallbackCheckpoint(db, conversationId, input.now(), input.beforeSeq) ?? latestCheckpoint(db, conversationId)
+        : latestCheckpoint(db, conversationId)
       const stable = checkpointBlock(checkpoint)
       const parts = [
         stable,

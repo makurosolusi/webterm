@@ -41,15 +41,18 @@ export function fallbackNarrative(messages: readonly CheckpointMessage[], previo
   return [previous ?? '', ...heads].filter((p) => p !== '').join('\n').slice(-CHECKPOINT_NARRATIVE_MAX)
 }
 
-function span(db: Database, conversationId: string): { messages: CheckpointMessage[]; previous: Checkpoint | null } {
+function span(db: Database, conversationId: string, beforeSeq?: number): { messages: CheckpointMessage[]; previous: Checkpoint | null } {
   const previous = latestCheckpoint(db, conversationId)
   const afterSeq = previous?.toMessageId ? messageSeq(db, previous.toMessageId) : 0
-  return { messages: recentMessages(db, conversationId, SUMMARY_SPAN_MESSAGES, afterSeq), previous }
+  return { messages: recentMessages(db, conversationId, SUMMARY_SPAN_MESSAGES, afterSeq, beforeSeq), previous }
 }
 
-/** Synchronous checkpoint (source `fallback`) so rotation always has a seed; reuses an up-to-date one. */
-export function createFallbackCheckpoint(db: Database, conversationId: string, now: number): Checkpoint | null {
-  const { messages, previous } = span(db, conversationId)
+/**
+ * Synchronous checkpoint (source `fallback`) so rotation always has a seed; reuses an up-to-date one.
+ * `beforeSeq` leaves out the turn already in progress (its human message and empty reply).
+ */
+export function createFallbackCheckpoint(db: Database, conversationId: string, now: number, beforeSeq?: number): Checkpoint | null {
+  const { messages, previous } = span(db, conversationId, beforeSeq)
   const last = messages.at(-1)
   if (last === undefined) return previous
   return insertCheckpoint(db, {
