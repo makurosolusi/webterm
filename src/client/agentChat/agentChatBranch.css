@@ -1,0 +1,26 @@
+/* Edit banner and Rewind panel of the agent chat (agentChatBranch.tsx), above the composer. */
+.agent-chat-branch,
+.agent-chat-rewind {
+  margin: 4px 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background, transparent);
+  font-size: 12px;
+}
+.agent-chat-branch { display: flex; align-items: center; gap: 6px; }
+.agent-chat-branch > span:nth-child(2) { flex: 1; min-width: 0; }
+.agent-chat-rewind p { margin: 4px 0; }
+.agent-chat-rewind__head { display: flex; align-items: center; gap: 6px; }
+.agent-chat-rewind__title { flex: 1; font-weight: 600; }
+.agent-chat-rewind__files {
+  margin: 4px 0;
+  padding-left: 18px;
+  max-height: 120px;
+  overflow: auto;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+}
+.agent-chat-rewind__limits { color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d)); }
+.agent-chat-rewind__error { color: var(--vscode-errorForeground, #f48771); }
+.agent-chat-rewind__actions { display: flex; justify-content: flex-end; gap: 6px; }

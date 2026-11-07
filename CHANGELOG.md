@@ -12,6 +12,8 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 
 ### Added
+- Central chat: start a new conversation with the + button and switch between past conversations from History.
+- The Choose a folder dialog can create a new folder.
 - Closing a node (× button, tab, sessions panel or Delete key) now asks for confirmation and says what will end: a running terminal or agent session, unsaved editor changes, or a browser page.
 - "Clone Repository…" next to "Open Folder…" in the workspace "+" menu, the File menu, the Welcome screen and ⌘K. Paste an `https://`, `ssh://` or `git@host:path` URL, or `owner/repo` for GitHub. The clone shows its progress, can be cancelled, and opens as a new workspace. The parent folder defaults to `~/webterm/projects`, which is created the first time something is cloned or created there. The last parent you used is suggested next time, and if that folder is gone the default is used instead. If a private repository fails to authenticate, the error tells you to run `gh auth login` or set up an SSH key.
 - "New Project…" in the same places: it creates an empty folder under the parent you choose and opens it as a workspace. "Initialize git repository" is on by default and runs `git init` with an empty initial commit on `main`. Untick it to get a plain folder. A folder that already exists and is not empty is refused.
@@ -65,6 +67,12 @@ Operator notes:
 - Agent Chat: copy any message with its copy button.
 - Agent Chat: Escape stops the running turn (when no menu is open).
 - Agent Chat: when a turn ends or Claude asks for permission, an answer or a plan approval while you are not looking at the chat, you get the same unread mark, notification and chime as a terminal agent. A turn that ends while its subagents still run is marked unread without a notification.
+- Agent Chat: "Rewind files to here" on any of your messages restores the files Claude changed since then. It first lists the files that would change (with line counts) and rewinds only after you confirm. Only edits made with Claude's Write, Edit and NotebookEdit tools are restored: changes from Bash commands and from subagents are not undone, and the conversation itself stays as it is.
+- Agent Chat: "Edit message" on any of your messages puts its text back in the composer; sending it starts a new branch of the conversation from that point, as a new conversation of the node. The original stays in History.
+- Agent Chat: code blocks in Claude's replies are syntax-highlighted (TypeScript, Python, shell and the other languages the editor knows) in light and dark theme.
+- Agent Chat: when you are close to or over your plan's usage limit, one notice says so and when the limit resets; it goes away after the next successful turn.
+- Agent Chat: a Tasks list above the composer shows the subagents and background tasks Claude starts, with their progress and a Stop button for a running one.
+- Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
 - The app loads less JavaScript on start (about 19% less, 14% fewer bytes over the wire, on a board with a terminal): Settings, the Central side bar views, the keyboard shortcuts overlay, the Kanban board, the Activity, Output and SCM panels, the bake-off, replay, template and new-workspace dialogs, and the Agent Chat body now load the first time they are opened. Markdown preview loads together with the editor.
@@ -108,6 +116,9 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Central chat accepts messages with several lines.
+- Cancelling a repository clone no longer hangs and blocks the next clone.
+- File search reports an error when it cannot run instead of showing no matches.
 - The Central panel's Skills and Agents tabs no longer show a 404 error when that feature is off; they explain what it does and offer a switch to turn it on, which applies right away. Other failures in the panel now read as a short message instead of a raw request line. Central skills also have their own switch on the Central Agent card in Settings.
 - Arrow keys, Enter and Escape in menus opened from a node (model picker, mode picker, dropdowns) no longer move or deselect the node.
 - Panels that seemed impossible to open because another panel was covering them (Activity/Central under Chat/Inbox).

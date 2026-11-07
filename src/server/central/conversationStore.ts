@@ -120,7 +120,7 @@ export function getOrCreateConversation(db: Database, rawScope: unknown, now?: n
       txDb,
       `INSERT INTO central_conversation (id, scope, project_id, active_turn_id, last_event_seq,
         last_message_seq, created_at, updated_at) VALUES (?, ?, ?, NULL, 0, 0, ?, ?)`,
-      id, scope.kind === 'global' ? 'global' : `project:${scope.projectId}`,
+      id, scope.kind === 'project' ? `project:${scope.projectId}` : scope.chatId === undefined ? 'global' : `chat:${scope.chatId}`,
       scope.kind === 'project' ? scope.projectId : null, ts, ts
     )
     return requireConversation(txDb, id)

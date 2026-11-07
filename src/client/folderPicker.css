@@ -129,3 +129,29 @@
   outline: 1px solid var(--vscode-focusBorder, var(--accent));
   outline-offset: 1px;
 }
+
+/* Inline "New Folder" row: the list row with a VS Code input in place of the name. */
+.fp-new__input {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  background: var(--vscode-input-background, var(--sunken));
+  border: 1px solid var(--vscode-focusBorder, var(--accent));
+  color: var(--vscode-input-foreground, var(--text));
+  font: inherit;
+  outline: none;
+}
+
+.fp-new__input[aria-invalid='true'] {
+  border-color: var(--vscode-inputValidation-errorBorder, var(--state-attention));
+}
+
+.fp-new__status {
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+}
+
+.fp-new__error {
+  padding: 2px 8px;
+}

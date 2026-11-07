@@ -11,9 +11,13 @@
 //    queued message at the first `message_start` after a result (the next turn started).
 //  - Context use = the last top-level API call's input + cache + output tokens; window from
 //    `result.modelUsage[model].contextWindow` (no getContextUsage call: it costs API requests).
+//  - `replay-user-messages` (file checkpointing) echoes every streamed user message back with
+//    `isReplay: true`: the session already emitted it, so a replay maps to nothing.
+//  - task_* and rate_limit_event frames: agentChat.events.tasks.ts.
 // Unknown message types map to nothing (forward-compat with newer CLIs).
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AGENT_CHAT_TOOL_RESULT_MAX, type AgentChatEventBody, type AgentChatPart } from '../../shared/agentChat.wire'
+import { createTaskMapper } from './agentChat.events.tasks'
 
 const MS_PER_S = 1_000
 
@@ -57,6 +61,7 @@ export function createAgentChatMapper(): AgentChatMapper {
   let turnOver = false
   let turnOutput = false
   let lastUsage: { model?: string; used: number } | undefined
+  const taskMapper = createTaskMapper()
 
   function pickedUp(msg: Stamped): AgentChatEventBody[] {
     const ids = [...(msg.user_message_uuids ?? []), ...(msg.user_message_uuid ? [msg.user_message_uuid] : [])].filter((id) => queued.delete(id))
@@ -163,6 +168,7 @@ export function createAgentChatMapper(): AgentChatMapper {
   }
 
   function user(msg: Extract<SDKMessage, { type: 'user' }>): AgentChatEventBody[] {
+    if ((msg as { isReplay?: boolean }).isReplay) return []
     const content = msg.message.content
     if (!Array.isArray(content)) return []
     const out: AgentChatEventBody[] = []
@@ -198,6 +204,8 @@ export function createAgentChatMapper(): AgentChatMapper {
 
   return {
     map(msg) {
+      const task = taskMapper.map(msg)
+      if (task) return task
       switch (msg.type) {
         case 'system': return system(msg)
         case 'stream_event': return streamEvent(msg)
@@ -207,6 +215,7 @@ export function createAgentChatMapper(): AgentChatMapper {
         case 'conversation_reset':
           endTurn()
           lastUsage = undefined
+          taskMapper.reset()
           return [{ t: 'reset', sessionId: msg.new_conversation_id }]
         default: return []
       }

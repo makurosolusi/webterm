@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatPanel from './ChatPanel'
 import { ChatApiError } from './chatApi'
 import type {
-  ChatClient, ChatConversation, ChatEvent, ChatStreamOptions,
+  ChatClient, ChatConversation, ChatConversationPage, ChatEvent, ChatStreamOptions,
 } from './chat/chatTypes'
 import type { StreamFactory } from './chat/chatConversation'
 
@@ -19,16 +19,17 @@ const tipOf = (el: Element): string | null => {
 
 const GLOBAL: ChatConversation = {
   id: 'central:global', scope: 'global', projectId: null, activeTurnId: null,
-  lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10,
+  lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10, title: null,
 }
 const PROJECT: ChatConversation = {
   id: 'central:project:webterm', scope: 'project:webterm', projectId: 'webterm',
-  activeTurnId: null, lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 9,
+  activeTurnId: null, lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 9, title: null,
 }
 
 function makeClient(overrides: Partial<ChatClient> = {}): ChatClient {
   return {
-    listConversations: vi.fn(async () => [GLOBAL, PROJECT]),
+    listConversations: vi.fn(async () => ({ items: [GLOBAL, PROJECT], nextOffset: null })),
+    createConversation: vi.fn(async () => GLOBAL),
     listMessages: vi.fn(async () => []),
     sendMessage: vi.fn(async () => ({ messageId: 'm1', seq: 1, turnId: 't1', status: 'queued' as const })),
     cancelTurn: vi.fn(async () => ({ status: 'cancelled' as const })),
@@ -71,7 +72,7 @@ function renderPanel(client: ChatClient, streams = makeStreams()) {
 
 describe('ChatPanel list + empty states', () => {
   it('shows an empty state when the server lists no conversations', async () => {
-    const client = makeClient({ listConversations: vi.fn(async () => []) })
+    const client = makeClient({ listConversations: vi.fn(async () => ({ items: [], nextOffset: null })) })
     renderPanel(client)
 
     await waitFor(() => expect(screen.getAllByText('No conversations yet').length).toBeGreaterThan(0))
@@ -83,8 +84,8 @@ describe('ChatPanel list + empty states', () => {
     const streams = makeStreams()
     renderPanel(client, streams)
 
-    expect(await screen.findByRole('button', { name: 'Global' })).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'webterm' }))
+    expect(await screen.findByRole('button', { name: /^Global/ })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^webterm/ }))
 
     await waitFor(() => expect(client.listMessages).toHaveBeenCalledWith(
       'central:project:webterm', expect.anything()
@@ -93,7 +94,7 @@ describe('ChatPanel list + empty states', () => {
   })
 
   it('opens the SSE stream at the conversation cursor', async () => {
-    const client = makeClient({ listConversations: vi.fn(async () => [{ ...GLOBAL, lastEventSeq: 42 }]) })
+    const client = makeClient({ listConversations: vi.fn(async () => ({ items: [{ ...GLOBAL, lastEventSeq: 42 }], nextOffset: null })) })
     const streams = makeStreams()
     renderPanel(client, streams)
 
@@ -129,6 +130,22 @@ describe('ChatPanel send + stream', () => {
 
     expect(client.sendMessage).not.toHaveBeenCalled()
     expect((input as HTMLTextAreaElement).value).toBe('line one')
+  })
+
+  it('posts multi-line text (typed with Shift+Enter) intact on Enter', async () => {
+    const client = makeClient()
+    renderPanel(client)
+
+    const input = await screen.findByLabelText('Message the central agent')
+    fireEvent.change(input, { target: { value: 'line one' } })
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    // jsdom does not apply the browser's default newline insertion; the change event stands in for it.
+    fireEvent.change(input, { target: { value: 'line one\n\tline two' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(client.sendMessage).toHaveBeenCalledTimes(1)
+    const [, payload] = (client.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(payload.text).toBe('line one\n\tline two')
   })
 
   it('renders streaming assistant text from part.delta frames', async () => {
@@ -207,7 +224,7 @@ describe('ChatPanel busy + errors', () => {
     const listConversations = vi
       .fn<ChatClient['listConversations']>()
       .mockRejectedValueOnce(new ChatApiError('off', 503, 'central_runtime_off'))
-      .mockResolvedValueOnce([GLOBAL])
+      .mockResolvedValueOnce({ items: [GLOBAL], nextOffset: null })
     renderPanel(makeClient({ listConversations }))
 
     const alert = await screen.findByRole('alert')
@@ -219,7 +236,7 @@ describe('ChatPanel busy + errors', () => {
   })
 
   it('G-17: Loading is shown only while the first list request is pending', () => {
-    renderPanel(makeClient({ listConversations: vi.fn(() => new Promise<ChatConversation[]>(() => {})) }))
+    renderPanel(makeClient({ listConversations: vi.fn(() => new Promise<ChatConversationPage>(() => {})) }))
     expect(screen.getByText('Loading…')).toBeDefined()
     expect(screen.queryByText(/No conversations yet/)).toBeNull()
   })
@@ -240,7 +257,7 @@ describe('compact (secondary side bar)', () => {
     expect(history.getAttribute('aria-pressed')).toBe('true')
     const nav = screen.getByRole('navigation', { name: 'Conversations' })
     expect(streams.opened[0]!.closed).toBe(false) // hidden behind the list, not unmounted
-    fireEvent.click(within(nav).getByRole('button', { name: 'webterm' }))
+    fireEvent.click(within(nav).getByRole('button', { name: /^webterm/ }))
     expect(screen.queryByRole('navigation', { name: 'Conversations' })).toBeNull()
     await waitFor(() => expect(streams.opened.map((s) => s.id)).toContain('central:project:webterm'))
     host.remove()

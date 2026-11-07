@@ -1,4 +1,5 @@
-// Per-message actions in the agent chat timeline (Claude Code VS Code view: Copy on hover/focus).
+// Per-message actions in the agent chat timeline (Claude Code VS Code view: Copy on hover/focus; on a
+// user message Edit and Rewind to here).
 // CopyButton is shared with the command output block so every copy control behaves the same.
 import { useEffect, useState } from 'react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -37,13 +38,27 @@ export function messageText(message: ChatMessageView): string {
   return message.parts.map((p) => (p.k === 'text' ? p.text : '')).filter(Boolean).join('\n\n')
 }
 
-/** Hover/focus action row of one user or assistant message; nothing when there is no text to copy. */
-export function MessageActions({ message }: { message: ChatMessageView }) {
+/** Edit / Rewind of a user message (agentChatBranch.tsx); absent while a turn runs. */
+export interface BranchActions { edit: (id: string, text: string) => void; rewind: (id: string) => void }
+
+/** Hover/focus action row of one user or assistant message: Copy, and on a user message Edit and Rewind to here. */
+export function MessageActions({ message, branch }: { message: ChatMessageView; branch?: BranchActions }) {
   const text = messageText(message)
-  if (!text) return null
+  const user = branch && message.role === 'user' && !message.queued
+  if (!text && !user) return null
   return (
     <div className="act-row" role="toolbar" aria-label="Message actions">
-      <CopyButton text={() => text} label="Copy message" />
+      {text && <CopyButton text={() => text} label="Copy message" />}
+      {user && text && (
+        <IconButton label="Edit message" tooltip="Edit and resend (starts a new branch)" size="icon-xs" onClick={() => branch.edit(message.id, text)}>
+          <span className="codicon codicon-edit" aria-hidden="true" />
+        </IconButton>
+      )}
+      {user && (
+        <IconButton label="Rewind files to here" tooltip="Rewind files to before this message" size="icon-xs" onClick={() => branch.rewind(message.id)}>
+          <span className="codicon codicon-discard" aria-hidden="true" />
+        </IconButton>
+      )}
     </div>
   )
 }

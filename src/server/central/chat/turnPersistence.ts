@@ -4,6 +4,7 @@
 // keeps orchestration/lock logic only.
 import type { Database } from 'bun:sqlite'
 import { homedir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 import { allRows, execWrite, getRow } from '../../ledger/ledgerCore'
 import { projectRepository } from '../../ledger/ledgerEntity'
 import {
@@ -16,7 +17,7 @@ import {
   appendConversationEvent, appendMessage, getConversation, getOrCreateConversation, getTurn,
   updateTurn, type Conversation, type Message, type Turn,
 } from '../conversationStore'
-import type { ConversationSummary } from '../centralTypes'
+import type { ConversationPage, ConversationSummary } from '../centralTypes'
 import type { RuntimeResult } from '../runtime/centralRuntime'
 import { lookupWorkspace } from '../workspaceLookup'
 import { CentralChatError } from './chatErrors'
@@ -84,7 +85,9 @@ export function resolveOrCreateConversation(db: Database, rawId: string): Conver
   const scope = scopeFromConversationId(rawId)
   const existing = getConversation(db, conversationIdForScope(scope))
   if (existing) return existing
-  if (scope.kind === 'global') return getOrCreateConversation(db, 'global')
+  if (scope.kind === 'global' && scope.chatId === undefined) return getOrCreateConversation(db, 'global')
+  // Extra chats exist only through `createChatConversation`: a made-up id is a 404, never a new row.
+  if (scope.kind === 'global') throw new CentralChatError('conversation_not_found', `conversation not found: ${rawId}`, 404)
   const projectId = ensureLedgerProjectId(db, scope.projectId)
   return getOrCreateConversation(db, `project:${projectId}`)
 }
@@ -164,21 +167,56 @@ export function finalizeTurn(
   return turn
 }
 
-/** Global conversation plus every existing project conversation, global first. */
-export function listConversationSummaries(db: Database, now?: number): ConversationSummary[] {
-  getOrCreateConversation(db, 'global', now)
-  return allRows(
+export const DEFAULT_CONVERSATION_LIMIT = 50
+export const MAX_CONVERSATION_LIMIT = 200
+const TITLE_CHARS = 80
+
+/** A fresh global chat ("New chat"): its own id, so its first turn has no session to resume. */
+export function createChatConversation(db: Database, now?: number): ConversationSummary {
+  const conversation = getOrCreateConversation(db, `chat:${randomUUID()}`, now)
+  return { ...conversation, title: null, turnCount: 0 }
+}
+
+/** First line of the first human message, trimmed for the list; null until one is sent. */
+function titleOf(partsJson: unknown): string | null {
+  if (typeof partsJson !== 'string') return null
+  const parts = JSON.parse(partsJson) as MessagePart[]
+  const text = parts.map((part) => (part.type === 'text' ? part.text : '')).join(' ').trim().split('\n')[0]?.trim() ?? ''
+  if (text === '') return null
+  return text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1)}…` : text
+}
+
+/** Every conversation (global, extra chats, projects), newest first, one page at a time. */
+export function listConversationSummaries(
+  db: Database, options: { limit?: number; offset?: number; now?: number } = {}
+): ConversationPage {
+  const limit = options.limit ?? DEFAULT_CONVERSATION_LIMIT
+  const offset = options.offset ?? 0
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_CONVERSATION_LIMIT) {
+    throw new CentralChatError('invalid_limit', `limit must be 1..${MAX_CONVERSATION_LIMIT}`, 400)
+  }
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new CentralChatError('invalid_cursor', 'offset must be a non-negative integer', 400)
+  }
+  getOrCreateConversation(db, 'global', options.now)
+  const rows = allRows(
     db,
-    `SELECT * FROM central_conversation
-     ORDER BY CASE WHEN id = 'central:global' THEN 0 ELSE 1 END, updated_at DESC, id ASC`
-  ).map((row) => ({
-    id: String(row['id']), scope: String(row['scope']),
-    projectId: row['project_id'] === null || row['project_id'] === undefined ? null : String(row['project_id']),
-    activeTurnId: row['active_turn_id'] === null || row['active_turn_id'] === undefined
-      ? null : String(row['active_turn_id']),
+    `SELECT c.*,
+       (SELECT m.parts_json FROM central_message m WHERE m.conversation_id = c.id AND m.role = 'human'
+        ORDER BY m.seq ASC LIMIT 1) AS first_human,
+       (SELECT COUNT(*) FROM central_turn t WHERE t.conversation_id = c.id) AS turn_count
+     FROM central_conversation c ORDER BY c.updated_at DESC, c.id ASC LIMIT ? OFFSET ?`,
+    limit + 1, offset
+  )
+  const optional = (value: unknown): string | null => (value === null || value === undefined ? null : String(value))
+  const items = rows.slice(0, limit).map((row) => ({
+    id: String(row['id']), scope: String(row['scope']), projectId: optional(row['project_id']),
+    activeTurnId: optional(row['active_turn_id']),
     lastEventSeq: Number(row['last_event_seq']), lastMessageSeq: Number(row['last_message_seq']),
-    updatedAt: Number(row['updated_at']),
+    createdAt: Number(row['created_at']), updatedAt: Number(row['updated_at']),
+    title: titleOf(row['first_human']), turnCount: Number(row['turn_count']),
   }))
+  return { items, nextOffset: rows.length > limit ? offset + limit : null }
 }
 
 /** One page of history, ascending; `nextBefore` pages backwards (seq < before). */
