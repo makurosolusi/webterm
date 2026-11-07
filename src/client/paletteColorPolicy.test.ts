@@ -18,7 +18,6 @@ const FROZEN: Record<string, number> = {
   'src/client/ControlPanelField.tsx': 1,
   'src/client/TerminalCore.offline.tsx': 1,
   'src/client/bakeoff/BakeoffDialog.tsx': 3,
-  'src/client/claudeLauncher/ClaudeLaunchProfilesCard.tsx': 1,
   'src/client/claudeLauncher/LaunchSteps.tsx': 1,
   'src/client/replay/ReplayDialog.tsx': 2,
   'src/client/templates/TemplatesDialogs.tsx': 3,

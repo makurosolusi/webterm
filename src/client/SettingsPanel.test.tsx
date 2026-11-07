@@ -158,6 +158,7 @@ describe('SettingsPanel persistence', () => {
     fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Cursor blink' }))
 
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: DEFAULT_SETTINGS.cursorBlink })
+    expect(screen.queryByRole('alertdialog')).toBeNull() // a scalar resets instantly, no confirm
   })
 
   it('does not show Modified or a reset gear for a default value', () => {
@@ -269,6 +270,18 @@ describe('SettingsPanel search', () => {
 })
 
 describe('SettingsPanel agents', () => {
+  it('Escape in the launch profile editor cancels the editor, not the Settings dialog', () => {
+    const { onClose } = renderPanel()
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add profile' }))
+    const name = screen.getByLabelText('Name')
+    expect(document.activeElement).toBe(name)
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(screen.queryByRole('form', { name: 'New launch profile' })).toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Add profile' })).toBeTruthy()
+  })
+
   it('writes a builtin launch command and deletes the key when the field is emptied', () => {
     const { onChange, rerender } = renderPanel()
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeClaudeCommand, splitLaunch } from './claudeLaunch.normalize'
-import { shellSplit } from './shellQuote'
+import { hasUnclosedQuote, shellSplit } from './shellQuote'
 
 const n = normalizeClaudeCommand
 
@@ -80,5 +80,14 @@ describe('shellSplit (copied from nodeterm)', () => {
     expect(shellSplit("--msg 'hello world'")).toEqual(['--msg', 'hello world'])
     expect(shellSplit('a\\ b "c d"')).toEqual(['a b', 'c d'])
     expect(shellSplit('$HOME/x')).toEqual(['$HOME/x'])
+  })
+})
+
+describe('hasUnclosedQuote', () => {
+  it('flags an open single or double quote, not a closed or escaped one', () => {
+    expect(hasUnclosedQuote("claude --model 'opus")).toBe(true)
+    expect(hasUnclosedQuote('claude --model "opus')).toBe(true)
+    expect(hasUnclosedQuote("claude --model 'opus 4'")).toBe(false)
+    expect(hasUnclosedQuote("claude --msg it\\'s")).toBe(false)
   })
 })

@@ -16,8 +16,8 @@ export const SAVE_COALESCE_MS = 300
 export interface Coalescer<T> {
   /** Catat nilai terbaru; jadwalkan flush bila belum ada yang terjadwal. */
   push(value: T): void
-  /** Kirim nilai tertunda SEKARANG (dipakai `beforeunload`). No-op bila tidak ada. */
-  flush(): void
+  /** Send the pending value NOW (used by `beforeunload`); resolves once the last send settled. */
+  flush(): Promise<void>
 }
 
 /**
@@ -46,11 +46,13 @@ export function createCoalescer<T>(
   const onError = opts.onError ?? ((err: unknown) => console.error('settings save failed', err))
   let timer: ReturnType<typeof setTimeout> | null = null
   let pending: { value: T } | null = null
-  const fire = (): void => {
-    if (!pending) return
+  let last: Promise<void> = Promise.resolve()
+  const fire = (): Promise<void> => {
+    if (!pending) return last
     const { value } = pending
     pending = null
-    send(value).catch(onError)
+    last = send(value).catch(onError)
+    return last
   }
   return {
     push(value) {
@@ -64,7 +66,7 @@ export function createCoalescer<T>(
     flush() {
       if (timer) clearTimeout(timer)
       timer = null
-      fire()
+      return fire()
     },
   }
 }
@@ -85,6 +87,14 @@ async function putSettings(patch: SettingsPatch): Promise<void> {
   })
   if (!res.ok) throw new Error(`PUT /api/settings -> ${res.status}`)
 }
+
+/** Saves of the mounted useSettings; `flushSettingsSaves` waits for them. */
+const savers = new Set<Coalescer<SettingsPatch>>()
+
+/** Send pending settings edits now and wait for them: for a server call that reads stored settings
+ *  right after an edit (e.g. testing a launch profile just saved), which would otherwise race the
+ *  300 ms save window. */
+export const flushSettingsSaves = async (): Promise<void> => { await Promise.all([...savers].map((c) => c.flush())) }
 
 // Snapshot modul supaya resolver `baseAgent` di bawah bisa dibaca sinkron dari luar React.
 let current: Settings = DEFAULT_SETTINGS
@@ -157,7 +167,9 @@ export function useSettings(): UseSettings {
   // Reload/close/hide inside the coalesce window must not drop the last edit. `pagehide` and
   // `visibilitychange` too: mobile browsers and the bfcache skip `beforeunload` (data-209-4).
   useEffect(() => {
-    const flush = (): void => saver.current?.flush()
+    const own = saver.current as Coalescer<SettingsPatch>
+    savers.add(own)
+    const flush = (): void => { void own.flush() }
     const onVisibility = (): void => { if (document.visibilityState === 'hidden') flush() }
     window.addEventListener('beforeunload', flush)
     window.addEventListener('pagehide', flush)
@@ -166,6 +178,7 @@ export function useSettings(): UseSettings {
       window.removeEventListener('beforeunload', flush)
       window.removeEventListener('pagehide', flush)
       document.removeEventListener('visibilitychange', onVisibility)
+      savers.delete(own)
     }
   }, [])
 

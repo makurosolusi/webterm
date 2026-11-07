@@ -1,4 +1,5 @@
 // Client side of POST /api/claude-launch/test (server/claudeLauncher/claudeLauncher.api.ts).
+import { flushSettingsSaves } from '../useSettings'
 
 export interface LaunchStep { stage: 'wrapper' | 'claude' | 'auth'; ok: boolean; message: string; hint?: string }
 export interface LaunchTest {
@@ -17,6 +18,7 @@ export const openLaunchProfileSettings = (): void => {
 
 /** Probe a saved profile, or the one Central uses. Throws with the server's error code. */
 export async function testClaudeLaunch(target: { profileId: string } | { central: true }): Promise<LaunchTest> {
+  await flushSettingsSaves() // the server tests what is STORED: a profile saved a moment ago must be there
   const headers: Record<string, string> = { Accept: 'application/json', 'Content-Type': 'application/json' }
   const res = await fetch('/api/claude-launch/test', { method: 'POST', headers, cache: 'no-store', body: JSON.stringify(target) })
   let data: unknown
