@@ -79,6 +79,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Central now runs on the Claude Agent SDK, the same engine as Agent Chat; behaviour is unchanged.
 - The Central chat is now the single hub for everything that needs you: a Needs-you strip on top of the chat lists approvals, reviews and broken tasks, approval requests appear in the chat as cards you can approve, deny or edit there, and the Chat icon shows how many items wait.
 - Telegram is a remote door to the Central chat: messages land in the same conversation as the app (with the bound project noted) and are queued while Central is busy, gates and agent alerts appear once in the chat and are mirrored to Telegram, and /inbox shows the same Needs-you list.
 - Settings: "Reset Setting" (the gear next to "(Modified)") on a setting that holds a list or map you built, such as Claude launch profiles, now asks first and says what will be removed ("Remove all 2 Claude launch profiles?"). Simple settings still reset in one click.
@@ -125,6 +126,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Agent Chat: when Claude stops while streaming, the error notice now shows the end of what Claude printed on stderr (it was always empty), and Claude can no longer stall on an unread stderr pipe.
 - Central no longer asks you to approve an agent card that has expired or been rejected: an expired or lapsed card is replaced with a fresh one in the chat, a rejected spawn is cancelled, and cards update live wherever they are decided.
 - When a Central chat reply fails because Claude could not start, the chat now says why (for example Claude not found, not signed in, or an unsupported option) instead of only "claude runtime failed".
 - A Central chat that was used with OpenCode and then switched to Claude no longer fails every reply: Claude now starts its own session instead of trying to resume the OpenCode one.

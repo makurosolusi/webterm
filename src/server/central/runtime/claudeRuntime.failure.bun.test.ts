@@ -1,5 +1,7 @@
 // Why a Claude turn failed must reach the chat (specific reason, right retryable flag) and the
-// server log (`central.turn.failed`), with stderr secrets redacted. Fake `claude` executables only.
+// server log (`central.turn.failed`), with stderr secrets redacted. The real Agent SDK `query()` drives
+// fake `claude` executables: this suite pins how the SDK transport surfaces a spawn errno, an exit status,
+// a signal and stderr (which the SDK itself never reads from a custom spawn).
 // Only toBe/toContain matchers are typed (see src/server/bun-test.d.ts).
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -7,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ClaudeRuntime } from './claudeRuntime'
 import { createCentralMcpLink } from './claudeMcp'
-import { emitSource, initRecord, recorder, resultRecord, turnInput, writeFakeClaude } from './claude.fakeBin'
+import { alive, emitSource, initRecord, recorder, resultRecord, turnInput, waitFor, writeFakeClaude } from './claude.fakeBin'
 import { logBus } from '../../logs/logBus'
 
 const FAKE_TOKEN = 'sk-ant-abcdefghijklmnopqrstuvwx' // test-only, must never surface
@@ -19,7 +21,7 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 async function run(executable: string, turnId: string) {
   const rt = new ClaudeRuntime({
     executable, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
-    killGraceMs: 50, newSessionId: () => 'new-session-id',
+    newSessionId: () => 'new-session-id',
     mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
   })
   const before = logBus.query({}).length
@@ -112,14 +114,14 @@ test('failed result with plain error text', async () => {
   expect(error.retryable).toBe(false)
 })
 
-/** Fake that fails `--resume <id>` with the CLI's real message; `fresh` is its body without `--resume`. */
+/** Fake that fails `--resume=<id>` with the CLI's real message; `fresh` is its body without `--resume`. */
 function resumeFake(fresh: string): { exe: string; spawns: () => string[][] } {
   const log = join(dir, 'spawns.jsonl')
   const exe = fake(`fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n')
 readStdin()
-const at = process.argv.indexOf('--resume')
-if (at >= 0) {
-  emit({ ...${JSON.stringify(resultRecord({ subtype: 'error_during_execution', is_error: true, duration_ms: 0 }))}, errors: ['No conversation found with session ID: ' + process.argv[at + 1]] })
+const resume = flag('--resume')
+if (resume) {
+  emit({ ...${JSON.stringify(resultRecord({ subtype: 'error_during_execution', is_error: true, duration_ms: 0 }))}, errors: ['No conversation found with session ID: ' + resume] })
   process.exit(1)
 }
 ${fresh}`)
@@ -130,13 +132,13 @@ ${fresh}`)
 function plainRuntime(executable: string) {
   return new ClaudeRuntime({
     executable, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
-    killGraceMs: 50, newSessionId: () => 'fresh-session-id',
+    newSessionId: () => 'fresh-session-id',
     mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
   })
 }
 
 test('missing resumed session: one retry in a fresh session, notice, new id, logged without the full id', async () => {
-  const sid = `process.argv[process.argv.indexOf('--session-id') + 1]`
+  const sid = `flag('--session-id')`
   const { exe, spawns } = resumeFake(`for (const r of ${JSON.stringify([initRecord(), resultRecord()])}) emit({ ...r, session_id: ${sid} })
 emit({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } } })`)
   const before = logBus.query({}).length
@@ -150,9 +152,9 @@ emit({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, del
   expect(notices[0]!.text).toBe('Started a fresh Claude session; the previous one was no longer available.')
   const runs = spawns()
   expect(runs.length).toBe(2)
-  expect(runs[0]!.includes('--resume')).toBe(true)
-  expect(runs[1]!.includes('--resume')).toBe(false)
-  expect(runs[1]![runs[1]!.indexOf('--session-id') + 1]).toBe('fresh-session-id')
+  expect(runs[0]!.includes('--resume=stale-session-1234567890')).toBe(true)
+  expect(runs[1]!.some((a) => a.startsWith('--resume'))).toBe(false)
+  expect(runs[1]!.includes('--session-id=fresh-session-id')).toBe(true)
   const reset = logBus.query({}).slice(before).filter((e) => e.event === 'central.session.reset')
   expect(reset.length).toBe(1)
   expect((reset[0]!.data as Record<string, unknown>).oldSessionPrefix).toBe('stale-se')
@@ -168,4 +170,40 @@ test('missing resumed session whose fresh retry also fails: surfaced normally, n
   const errors = events.filter((e) => e.type === 'error') as Array<{ message: string }>
   expect(errors.length).toBe(1)
   expect(errors[0]!.message).toBe('Claude exited with code 1 before starting: Error: fresh run broke')
+})
+
+test('exit 3 with stderr noise: the redacted Error line, logged with the exit code', async () => {
+  const { error, data } = await run(fake(`process.stderr.write('warming up\\nError: profile "p" not found in envman ${FAKE_TOKEN}\\n'); process.exit(3)`), 't-exit3')
+  expect(error.message).toBe('Claude exited with code 3 before starting: Error: profile "p" not found in envman [redacted]')
+  expect(data.exitCode).toBe(3)
+})
+
+test('exit without stderr falls back to the exit status', async () => {
+  const { error } = await run(fake('process.exit(7)'), 't-exit7')
+  expect(error.message).toBe('Claude exited with code 7 before starting')
+})
+
+test('cancel stops the real child and the turn ends cancelled', async () => {
+  const pidFile = join(dir, 'pid')
+  const exe = fake(`fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid))\n${emitSource([initRecord(), { type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'partial' } } }])}\nsetInterval(() => {}, 1000)`)
+  const rt = plainRuntime(exe)
+  const { events, emit } = recorder()
+  const pending = rt.turn(turnInput({ turnId: 't-cancel' }), emit)
+  await waitFor(() => events.some((e) => e.type === 'text.delta'), 5_000)
+  rt.cancel('t-cancel')
+  const result = await pending
+  expect(result.outcome).toBe('cancelled')
+  expect(result.text).toBe('partial')
+  await waitFor(() => !alive(Number(readFileSync(pidFile, 'utf8'))), 10_000)
+}, 20_000)
+
+test('missing resumed session reported on stderr only (no result) still retries fresh', async () => {
+  const exe = fake(`const resume = flag('--resume')
+if (resume) { process.stderr.write('No conversation found with session ID: ' + resume + '\\n'); process.exit(1) }
+for (const r of ${JSON.stringify([initRecord(), resultRecord()])}) emit({ ...r, session_id: flag('--session-id') })`)
+  const { events, emit } = recorder()
+  const result = await plainRuntime(exe).turn(turnInput({ turnId: 't-reset-stderr', sessionRef: 'stale-session-3' }), emit)
+  expect(result.outcome).toBe('success')
+  expect(result.sessionRef).toBe('fresh-session-id')
+  expect(events.filter((e) => e.type === 'notice').length).toBe(1)
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CENTRAL_STEWARD_PROMPT, claudeArgv, claudeChildEnv, claudeModelArg } from './claudeOptions'
+import { CENTRAL_STEWARD_PROMPT, centralQueryOptions, claudeChildEnv, claudeModelArg } from './claudeOptions'
 
 describe('claudeChildEnv', () => {
   it('keeps only allowlisted variables and drops root tokens, provider keys and capability tokens', () => {
@@ -19,39 +19,45 @@ describe('claudeChildEnv', () => {
   })
 })
 
-describe('claudeArgv', () => {
-  const base = { newSessionId: 'uuid-1', maxTurns: 3, mcpConfig: '/run/t.mcp.json' }
+describe('centralQueryOptions', () => {
+  const abort = new AbortController()
+  const base = { newSessionId: 'uuid-1', maxTurns: 3, mcpConfig: '/run/t.mcp.json', cwd: '/work', env: { PATH: '/bin' }, abort }
 
-  it('builds the fixed locked-down argv for a first turn: no built-ins, webterm MCP only', () => {
-    expect(claudeArgv(base)).toEqual([
-      '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-      '--tools', '', '--mcp-config', '/run/t.mcp.json', '--strict-mcp-config', '--allowedTools', 'mcp__webterm__*',
-      '--permission-mode', 'dontAsk', '--permission-prompts', 'none',
-      '--setting-sources', '', '--disable-slash-commands',
-      '--append-system-prompt', CENTRAL_STEWARD_PROMPT,
-      '--max-turns', '3', '--session-id', 'uuid-1',
-    ])
+  it('builds the locked-down SDK options for a first turn: no built-ins, webterm MCP only, deny-by-default', () => {
+    expect(centralQueryOptions(base)).toEqual({
+      tools: [],
+      extraArgs: { 'mcp-config': '/run/t.mcp.json', 'disable-slash-commands': null },
+      strictMcpConfig: true,
+      allowedTools: ['mcp__webterm__*'],
+      permissionMode: 'dontAsk',
+      permissionPrompts: 'none',
+      settingSources: [],
+      systemPrompt: { type: 'preset', preset: 'claude_code', append: CENTRAL_STEWARD_PROMPT },
+      includePartialMessages: true,
+      maxTurns: 3,
+      sessionId: 'uuid-1',
+      cwd: '/work',
+      env: { PATH: '/bin' },
+      abortController: abort,
+    })
     expect(CENTRAL_STEWARD_PROMPT).toContain('approval_required')
   })
 
-  it('never uses --safe-mode, which would drop the --mcp-config server', () => {
-    expect(claudeArgv(base)).not.toContain('--safe-mode')
-  })
-
   it('resumes instead of creating a session when a sessionRef exists, and adds model and budget', () => {
-    const argv = claudeArgv({ ...base, sessionRef: ' sess-9 ', model: 'sonnet', maxBudgetUsd: 0.5 })
-    expect(argv.slice(-2)).toEqual(['--resume', 'sess-9'])
-    expect(argv).not.toContain('--session-id')
-    expect(argv[argv.indexOf('--model') + 1]).toBe('sonnet')
-    expect(argv[argv.indexOf('--max-budget-usd') + 1]).toBe('0.5')
+    const o = centralQueryOptions({ ...base, sessionRef: ' sess-9 ', model: 'sonnet', maxBudgetUsd: 0.5 })
+    expect(o.resume).toBe('sess-9')
+    expect(o.sessionId).toBeUndefined()
+    expect(o.model).toBe('sonnet')
+    expect(o.maxBudgetUsd).toBe(0.5)
   })
 
-  it('never contains a permission bypass or an unrequested mode', () => {
-    const joined = claudeArgv({ ...base, model: 'opus' }).join(' ')
-    for (const banned of ['bypassPermissions', '--dangerously-skip-permissions', '--bare',
-      '--no-session-persistence', '--fork-session', '--permission-prompt-tool', '--add-dir']) {
-      expect(joined).not.toContain(banned)
+  it('never sets a permission bypass, a permission callback or extra MCP servers', () => {
+    const o = centralQueryOptions({ ...base, model: 'opus' })
+    expect(o.permissionMode).not.toBe('bypassPermissions')
+    for (const banned of ['allowDangerouslySkipPermissions', 'canUseTool', 'permissionPromptToolName', 'mcpServers', 'plugins', 'hooks', 'additionalDirectories', 'forkSession']) {
+      expect(banned in o).toBe(false)
     }
+    expect(JSON.stringify(o)).not.toMatch(/bypassPermissions|dangerously|safe-mode/)
   })
 })
 

@@ -1,13 +1,14 @@
 // The 1h prompt-cache TTL (TurnInput.cacheEnv) reaches the Central `claude` child next to the provider
-// env, and cannot override it. Real child process against a fake `claude`; it reports lengths, never the key.
+// env, and cannot override it. Reads the SDK `env` option (the child's whole environment); lengths only, never the key.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { saveProvider } from '../../claudeProvider/claudeProvider.store'
 import { ClaudeRuntime } from './claudeRuntime'
 import { createCentralMcpLink } from './claudeMcp'
-import { recorder, turnInput, writeFakeClaude } from './claude.fakeBin'
+import { recorder, turnInput } from './claude.fakeBin'
+import { fakeQuery } from './claude.fakeQuery'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
 let dir = ''
@@ -26,20 +27,14 @@ afterEach(() => {
 })
 
 async function run(cacheEnv?: Record<string, string>) {
-  const out = join(dir, 'seen.json')
-  const bin = writeFakeClaude(dir, `fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify({
-    ttl: process.env.ENABLE_PROMPT_CACHING_1H ?? null,
-    keyLen: (process.env.ANTHROPIC_API_KEY || '').length,
-    scrub: process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB ?? null,
-  }))
-try { readStdin() } catch {}
-process.exit(1)`)
+  const fake = fakeQuery([])
   await new ClaudeRuntime({
-    executable: bin, workDir: join(dir, 'work'), killGraceMs: 50, newSessionId: () => 'sid',
+    query: fake.query, workDir: join(dir, 'work'), newSessionId: () => 'sid',
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
     mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }), // test-only
   }).turn(turnInput(cacheEnv ? { cacheEnv } : {}), recorder().emit)
-  return JSON.parse(readFileSync(out, 'utf8')) as { ttl: string | null; keyLen: number; scrub: string | null }
+  const env = fake.calls[0]?.options.env ?? {}
+  return { ttl: env.ENABLE_PROMPT_CACHING_1H ?? null, keyLen: (env.ANTHROPIC_API_KEY || '').length, scrub: env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB ?? null }
 }
 
 describe('Central runtime applies TurnInput.cacheEnv', () => {

@@ -1,23 +1,22 @@
-// Claude Code CLI invocation policy for the central runtime (PLAN CENTRAL-RUNTIME-b 1.2).
-// Pure functions: build argv, an allowlisted child environment, and the stdout line framing.
-// No spawning, no I/O.
+// Claude Agent SDK options for one Central turn (PLAN CENTRAL-RUNTIME-b 1.2): the same engine as Agent Chat,
+// locked down to webterm's MCP tools. Pure functions plus the allowlisted child environment; no I/O.
 //
-// Flags verified against `claude --help` of Claude Code 2.1.318 and code.claude.com/docs/en/cli-reference
-// (2026-11-04): --tools, --mcp-config, --strict-mcp-config, --allowedTools, --permission-mode,
-// --permission-prompts, --setting-sources, --disable-slash-commands, --append-system-prompt, --include-partial-messages,
-// --session-id, --resume, --max-budget-usd, --model. `--max-turns` is documented upstream.
-// `--input-format stream-json` (only with --print; "realtime streaming input") checked on `claude --help` of
-// 2.1.319 (2026-11-07): used only for a turn with images, its stdin line is the Agent SDK's SDKUserMessage.
-// Tools (PLAN F2-c, K7): no built-in tools (`--tools ""`), only webterm's own MCP server
-// (`--mcp-config` + `--strict-mcp-config`), its tools pre-allowed (`mcp__webterm__*`, permissions doc:
-// allow globs need a literal `mcp__<server>__` prefix); anything else would prompt, and with
-// `--permission-mode dontAsk` + `--permission-prompts none` a prompt is denied. Approval for R2+ is
-// webterm's guard + ledger card behind the MCP call (mcp/mcp.central.ts), not a Claude permission prompt.
-// `--safe-mode` is NOT used: it disables MCP servers, `--mcp-config` included (docs, and observed: init
-// `mcp_servers: []`). Its isolation is rebuilt with `--setting-sources ""` (no user/project/local
-// settings: no hooks, plugins, skills from settings) + `--disable-slash-commands` + the empty work dir.
-// The prompt is never in argv (it goes to stdin) and no permission-bypass flag is ever built.
+// Names checked against @anthropic-ai/claude-agent-sdk 0.3.318 sdk.d.ts `Options` (2026-11-07), and the argv
+// the SDK builds from them probed with a fake child: `tools: []` -> `--tools=`, `settingSources: []` ->
+// `--setting-sources=`, `strictMcpConfig` -> `--strict-mcp-config`, `permissionMode` -> `--permission-mode=dontAsk`,
+// `permissionPrompts` -> `--permission-prompts=none`, `extraArgs` -> `--mcp-config <file>` `--disable-slash-commands`.
+// `systemPrompt` (preset + append) travels in the SDK initialize request, not argv.
+// Tools (PLAN F2-c, K7): no built-in tools, only webterm's own MCP server (`--mcp-config` file +
+// `strictMcpConfig`), its tools pre-allowed (`mcp__webterm__*`, permissions doc: allow globs need a literal
+// `mcp__<server>__` prefix); anything else would prompt, and with `dontAsk` + `permissionPrompts: 'none'`
+// a prompt is denied. Approval for R2+ is webterm's guard + ledger card behind the MCP call
+// (mcp/mcp.central.ts), never `canUseTool`. The MCP config is a file, not `mcpServers`: the SDK would
+// inline it as JSON in argv, which launch wrappers (envman) misread (same reason as Agent Chat).
+// `--safe-mode` is NOT used: it disables MCP servers. Its isolation is rebuilt with no setting sources
+// (no hooks, plugins, skills from settings) + `--disable-slash-commands` + the empty work dir.
+// No permission-bypass mode is ever built.
 import { createLogger } from '../../logs'
+import type { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { CentralMcpLink } from './claudeMcp'
 
 const log = createLogger('central')
@@ -29,6 +28,9 @@ export type ClaudeReady =
 
 export type ClaudeUnavailableCode = 'claude_not_found' | 'claude_not_authenticated' | 'claude_check_failed'
 
+/** The SDK `query()` shape; tests inject a scripted one (claude.fakeQuery.ts). */
+export type CentralQuery = (params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => Query
+
 export interface ClaudeRuntimeOptions {
   /** Bare executable override (tests: fake `.mjs`); default is the Central launch profile's argv. */
   executable?: string
@@ -38,8 +40,6 @@ export interface ClaudeRuntimeOptions {
   env?: NodeJS.ProcessEnv
   /** Readiness check; `ok:false` fails the turn with `runtime_unavailable` and spawns nothing. */
   preflight?: () => Promise<ClaudeReady>
-  /** Grace between SIGINT, SIGTERM and SIGKILL when cancelling. */
-  killGraceMs?: number
   newSessionId?: () => string
   /** Raw model setting; defaults to `WEBTERM_CENTRAL_MODEL` (see `claudeModelArg`). */
   model?: string
@@ -48,19 +48,14 @@ export interface ClaudeRuntimeOptions {
   now?: () => number
   /** Per-turn webterm MCP wiring; defaults to the process capability store + this server's port. */
   mcp?: CentralMcpLink
+  /** SDK entry point; defaults to the real `query()`. */
+  query?: CentralQuery
 }
 
-export const DEFAULT_KILL_GRACE_MS = 2_000
 export const DEFAULT_WALL_MS = 10 * 60_000
-/** Fallback `--max-turns`; each MCP tool round trip is one more assistant turn. */
+/** Fallback `maxTurns`; each MCP tool round trip is one more assistant turn. */
 export const DEFAULT_MAX_TURNS = 8
-/** Largest single stdout JSON line kept; longer lines are dropped (also bounds the read buffer). */
-export const MAX_LINE_BYTES = 256 * 1024
 export const MICROS_PER_USD = 1_000_000
-/** Placeholder meaning "no tools at all" for `--tools`. */
-const NO_TOOLS_ARG = ''
-/** `--setting-sources` value that loads none of user/project/local. */
-const NO_SETTING_SOURCES = ''
 /** Every tool of the webterm MCP server, and nothing else (tool names are `mcp__webterm__<tool>`). */
 export const WEBTERM_MCP_TOOL_PREFIX = 'mcp__webterm__'
 export const WEBTERM_MCP_ALLOW = `${WEBTERM_MCP_TOOL_PREFIX}*`
@@ -101,41 +96,49 @@ export function claudeChildEnv(parent: NodeJS.ProcessEnv): Record<string, string
   return out
 }
 
-export interface ClaudeArgvInput {
-  /** Per-turn `--mcp-config` file naming the webterm MCP server only (claudeMcp.ts). */
+export interface CentralQueryInput {
+  /** Per-turn MCP config file naming the webterm MCP server only (claudeMcp.ts). */
   mcpConfig: string
   sessionRef?: string
   newSessionId: string
   model?: string
   maxTurns: number
   maxBudgetUsd?: number
-  /** The turn carries images: stdin is one stream-json user message instead of plain text. */
-  streamInput?: boolean
+  /** Empty work dir. */
+  cwd: string
+  /** The child's whole environment (the SDK does not merge process.env into it). */
+  env: Record<string, string>
+  abort: AbortController
 }
 
-/** Fixed-order argv: no built-in tools, webterm MCP only, deny-by-default; `--resume` only with a sessionRef. */
-export function claudeArgv(a: ClaudeArgvInput): string[] {
-  const args = [
-    '-p', '--output-format', 'stream-json', ...(a.streamInput ? ['--input-format', 'stream-json'] : []), '--verbose', '--include-partial-messages',
-    '--tools', NO_TOOLS_ARG, '--mcp-config', a.mcpConfig, '--strict-mcp-config', '--allowedTools', WEBTERM_MCP_ALLOW,
-    '--permission-mode', 'dontAsk', '--permission-prompts', 'none',
-    '--setting-sources', NO_SETTING_SOURCES, '--disable-slash-commands',
-    '--append-system-prompt', CENTRAL_STEWARD_PROMPT,
-  ]
-  if (a.model !== undefined) args.push('--model', a.model)
-  args.push('--max-turns', String(a.maxTurns))
-  if (a.maxBudgetUsd !== undefined) args.push('--max-budget-usd', String(a.maxBudgetUsd))
+/** SDK options: no built-in tools, webterm MCP only, deny-by-default; `resume` only with a sessionRef. */
+export function centralQueryOptions(a: CentralQueryInput): Options {
   const ref = (a.sessionRef ?? '').trim()
-  if (ref.length > 0) args.push('--resume', ref)
-  else args.push('--session-id', a.newSessionId)
-  return args
+  return {
+    tools: [],
+    extraArgs: { 'mcp-config': a.mcpConfig, 'disable-slash-commands': null },
+    strictMcpConfig: true,
+    allowedTools: [WEBTERM_MCP_ALLOW],
+    permissionMode: 'dontAsk',
+    permissionPrompts: 'none',
+    settingSources: [],
+    systemPrompt: { type: 'preset', preset: 'claude_code', append: CENTRAL_STEWARD_PROMPT },
+    includePartialMessages: true,
+    ...(a.model === undefined ? {} : { model: a.model }),
+    maxTurns: a.maxTurns,
+    ...(a.maxBudgetUsd === undefined ? {} : { maxBudgetUsd: a.maxBudgetUsd }),
+    ...(ref.length > 0 ? { resume: ref } : { sessionId: a.newSessionId }),
+    cwd: a.cwd,
+    env: a.env,
+    abortController: a.abort,
+  }
 }
 
 const MODEL_ALIAS = /^(sonnet|opus|haiku)$/
 const MODEL_FULL_ID = /^claude-[A-Za-z0-9._-]+$/
 let warnedModel = false
 
-/** Maps `WEBTERM_CENTRAL_MODEL` to `--model`: alias or `claude-*` pass; blank/other ids use the CLI default. */
+/** Maps `WEBTERM_CENTRAL_MODEL` to the SDK `model`: alias or `claude-*` pass; blank/other ids use the CLI default. */
 export function claudeModelArg(raw: string | undefined): { arg?: string; ignored: boolean } {
   const value = (raw ?? '').trim()
   if (value.length === 0) return { ignored: false }
@@ -145,37 +148,4 @@ export function claudeModelArg(raw: string | undefined): { arg?: string; ignored
     log.warn('central.claude_model_ignored', 'central model is not a Claude alias or id; using the CLI default')
   }
   return { ignored: true }
-}
-
-/** Incremental newline splitter; lines over `MAX_LINE_BYTES` are dropped so the buffer stays bounded. */
-export function createLineReader(): { push(chunk: string): string[]; end(): string[] } {
-  let buf = ''
-  let dropping = false
-  return {
-    push(chunk) {
-      const lines: string[] = []
-      let start = 0
-      for (let nl = chunk.indexOf('\n'); nl >= 0; nl = chunk.indexOf('\n', start)) {
-        const line = buf + chunk.slice(start, nl)
-        start = nl + 1
-        const skip = dropping
-        buf = ''
-        dropping = false
-        if (!skip && line.length <= MAX_LINE_BYTES && line.trim().length > 0) lines.push(line)
-      }
-      if (!dropping) {
-        buf += chunk.slice(start)
-        if (buf.length > MAX_LINE_BYTES) {
-          buf = ''
-          dropping = true
-        }
-      }
-      return lines
-    },
-    end() {
-      const line = buf
-      buf = ''
-      return !dropping && line.trim().length > 0 ? [line] : []
-    },
-  }
 }

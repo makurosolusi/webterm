@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { saveProvider } from './claudeProvider.store'
 import { writeFakeClaude, recorder, turnInput } from '../central/runtime/claude.fakeBin'
+import { fakeQuery } from '../central/runtime/claude.fakeQuery'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
 let dir = ''
@@ -46,13 +47,20 @@ describe('claudeEnv() reaches every Claude process', () => {
   it('Central runtime', async () => {
     const { ClaudeRuntime } = await import('../central/runtime/claudeRuntime')
     const { createCentralMcpLink } = await import('../central/runtime/claudeMcp')
-    const out = join(dir, 'central.json')
+    const fake = fakeQuery([])
     await new ClaudeRuntime({
-      executable: reporter(out), workDir: join(dir, 'work'), killGraceMs: 50, newSessionId: () => 'sid',
+      query: fake.query, workDir: join(dir, 'work'), newSessionId: () => 'sid',
       env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir, ANTHROPIC_API_KEY: 'inherited-test-only' },
       mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }), // test-only
     }).turn(turnInput(), recorder().emit)
-    expect(seen(out)).toEqual(EXPECTED)
+    // The SDK `env` option is the child's whole environment; nothing else carries the key.
+    const options = fake.calls[0]?.options ?? {}
+    const env = options.env ?? {}
+    const { env: _env, ...rest } = options
+    expect({
+      tokenLen: (env.ANTHROPIC_AUTH_TOKEN || '').length, baseUrl: env.ANTHROPIC_BASE_URL ?? null, apiKey: 'ANTHROPIC_API_KEY' in env,
+      scrub: env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB ?? null, keyInArgv: JSON.stringify(rest).includes(KEY),
+    }).toEqual(EXPECTED)
   })
 
   it('policy classifier and structured summaries (claude -p)', async () => {

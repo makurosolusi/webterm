@@ -1,7 +1,7 @@
 // A stale Claude resume id must heal inside one turn: the runtime retries in a fresh session, the
 // reply carries the notice, the new session id is stored, and the human message is recorded once.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
@@ -10,7 +10,8 @@ import {
 } from '../conversationStore'
 import { ClaudeRuntime } from '../runtime/claudeRuntime'
 import { createCentralMcpLink } from '../runtime/claudeMcp'
-import { initRecord, resultRecord, writeFakeClaude } from '../runtime/claude.fakeBin'
+import { deltaRecord, initRecord, resultRecord } from '../runtime/claude.fakeBin'
+import { type FakeCall, fakeQuery } from '../runtime/claude.fakeQuery'
 import { listMessages } from './turnPersistence'
 import { createContextAssembler } from '../context/contextAssembler'
 import { StreamHub } from './streamHub'
@@ -35,22 +36,15 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-/** Fails `--resume stale…` exactly like Claude Code 2.1.319 print mode; answers "hi" in a fresh session. */
-function fakeClaude(): { exe: string; spawns: () => string[][]; stdins: () => string[] } {
-  const log = join(dir, 'spawns.jsonl')
+/** Fails a `stale…` resume exactly like Claude Code 2.1.319 print mode; answers "hi" in a fresh session. */
+function fakeClaude(): { query: ReturnType<typeof fakeQuery>['query']; spawns: () => FakeCall[]; stdins: () => string[] } {
   const failed = resultRecord({ subtype: 'error_during_execution', is_error: true, duration_ms: 0 })
-  const exe = writeFakeClaude(dir, `fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ argv: process.argv.slice(2), stdin: readStdin() }) + '\\n')
-const at = process.argv.indexOf('--resume')
-if (at >= 0 && process.argv[at + 1].startsWith('stale')) {
-  emit({ ...${JSON.stringify(failed)}, errors: ['No conversation found with session ID: ' + process.argv[at + 1]] })
-  process.exit(1)
-}
-const sid = at >= 0 ? process.argv[at + 1] : process.argv[process.argv.indexOf('--session-id') + 1]
-emit({ ...${JSON.stringify(initRecord())}, session_id: sid })
-emit({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } } })
-emit({ ...${JSON.stringify(resultRecord())}, session_id: sid })`)
-  const runs = () => readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { argv: string[]; stdin: string })
-  return { exe, spawns: () => runs().map((r) => r.argv), stdins: () => runs().map((r) => r.stdin) }
+  const { query, calls } = fakeQuery(({ options }) => {
+    if (options.resume?.startsWith('stale')) return [{ ...failed, errors: [`No conversation found with session ID: ${options.resume}`] }]
+    const sid = options.resume ?? options.sessionId
+    return [{ ...initRecord(), session_id: sid }, deltaRecord('hi'), { ...resultRecord(), session_id: sid }]
+  })
+  return { query, spawns: () => calls, stdins: () => calls.map((c) => c.text) }
 }
 
 /** A succeeded Claude turn whose session Claude no longer has. */
@@ -61,11 +55,11 @@ function seedStaleClaudeSession(ref: string): void {
   updateTurn(fixture.db, { turnId: turn.id, status: 'succeeded', sessionRef: ref, now: NOW })
 }
 
-function claudeRuntime(exe: string): ClaudeRuntime {
+function claudeRuntime(query: ReturnType<typeof fakeQuery>['query']): ClaudeRuntime {
   let ids = 0
   return new ClaudeRuntime({
-    executable: exe, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
-    killGraceMs: 50, newSessionId: () => `fresh-${++ids}`,
+    query, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
+    newSessionId: () => `fresh-${++ids}`,
     // test-only token
     mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
   })
@@ -74,8 +68,8 @@ function claudeRuntime(exe: string): ClaudeRuntime {
 describe('stale Claude session', () => {
   it('heals in one turn: success, notice on the reply, new id stored, no loop', async () => {
     seedStaleClaudeSession('stale-claude-session')
-    const { exe, spawns } = fakeClaude()
-    const runtime = claudeRuntime(exe)
+    const { query, spawns } = fakeClaude()
+    const runtime = claudeRuntime(query)
     const svc = new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW })
 
     const turn = await svc.submit({ conversationId: 'central:global', clientMessageId: 'c1', text: 'hello' }).done
@@ -95,15 +89,15 @@ describe('stale Claude session', () => {
     await svc.submit({ conversationId: 'central:global', clientMessageId: 'c2', text: 'again' }).done
     const runs = spawns()
     expect(runs).toHaveLength(3)
-    expect(runs[2]![runs[2]!.indexOf('--resume') + 1]).toBe('fresh-2')
+    expect(runs[2]!.options.resume).toBe('fresh-2')
   })
 
   it('seeds the fresh session with the conversation so far, like a rotated session; a normal resume does not', async () => {
     seedStaleClaudeSession('stale-claude-session')
-    const { exe, stdins } = fakeClaude()
+    const { query, stdins } = fakeClaude()
     // The real assembler, checkpoint flag off: normal turns stay legacy (plain text), the forced seed still runs.
     const context = createContextAssembler({ env: {}, scheduleIdle: () => undefined })
-    const svc = new TurnService({ db: fixture.db, runtime: claudeRuntime(exe), stream: hub, now: () => NOW, context })
+    const svc = new TurnService({ db: fixture.db, runtime: claudeRuntime(query), stream: hub, now: () => NOW, context })
 
     await svc.submit({ conversationId: 'central:global', clientMessageId: 'c1', text: 'hello' }).done
     const [resumed, retried] = stdins()

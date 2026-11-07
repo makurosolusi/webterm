@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,7 +10,8 @@ import { openFixture, seedPortfolio, type Fixture } from './central/centralTestF
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import type { ClaudeReady } from './central/runtime/claudeOptions'
 import type { ClaudeReady as PreflightReady } from './central/runtime/claudePreflight'
-import { emitSource, successRecords, waitFor, writeFakeClaude } from './central/runtime/claude.fakeBin'
+import { successRecords, waitFor } from './central/runtime/claude.fakeBin'
+import { fakeQuery } from './central/runtime/claude.fakeQuery'
 import { logBus } from './logs/logBus'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 
@@ -88,19 +89,17 @@ describe('claude wiring: health', () => {
 
 describe('claude wiring: chat service', () => {
   it('builds a real runtime for claude: an unready CLI fails the turn, not the request', async () => {
-    const marker = join(dir, 'spawned')
-    const exe = writeFakeClaude(dir, `import fs from 'node:fs'\nfs.writeFileSync(${JSON.stringify(marker)}, '1')`)
-    const claudeOptions = { executable: exe, workDir: join(dir, 'work'), preflight: async () => NOT_LOGGED_IN }
+    const fake = fakeQuery(successRecords())
+    const claudeOptions = { query: fake.query, workDir: join(dir, 'work'), preflight: async () => NOT_LOGGED_IN }
     const accepted = await call(deps('claude', { claudeOptions }), MESSAGES, { clientMessageId: 'c1', text: 'hi' })
     expect(accepted.status).toBe(202)
     await waitFor(() => turnRow()?.status === 'failed', WAIT_MS)
     expect(turnRow()?.error_code).toBe('runtime_unavailable')
-    expect(existsSync(marker)).toBe(false)
+    expect(fake.calls).toHaveLength(0)
   })
 
   it('streams a fake claude turn to success', async () => {
-    const exe = writeFakeClaude(dir, `readStdin()\n${emitSource(successRecords())}`)
-    const claudeOptions = { executable: exe, workDir: join(dir, 'work'), preflight: async () => ({ ok: true as const }) }
+    const claudeOptions = { query: fakeQuery(successRecords()).query, workDir: join(dir, 'work'), preflight: async () => ({ ok: true as const }) }
     const accepted = await call(deps('claude', { claudeOptions }), MESSAGES, { clientMessageId: 'c2', text: 'hi' })
     expect(accepted.status).toBe(202)
     await waitFor(() => turnRow()?.status === 'succeeded', WAIT_MS)

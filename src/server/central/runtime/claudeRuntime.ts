@@ -1,30 +1,29 @@
-// Claude Code CLI runtime adapter (PLAN CENTRAL-RUNTIME-b 1.2). Spawns
-// `claude -p --output-format stream-json` without a shell or PTY, writes the prompt to
-// stdin, and maps the JSONL stdout onto the central runtime port. No built-in tools; webterm's
-// registry arrives as native MCP tools through a per-turn `--mcp-config` (claudeMcp.ts, PLAN F2-c);
-// never logs the prompt or stdout; stderr only as a redacted one-line failure cause.
-import { spawn, type ChildProcess } from 'node:child_process'
+// Claude runtime adapter for Central (PLAN CENTRAL-RUNTIME-b 1.2) on the Claude Agent SDK, the engine Agent
+// Chat uses. One `query()` per turn (one-shot, unlike Agent Chat's long-lived session), started through the
+// Central launch profile; its messages map onto the central runtime port. No built-in tools; webterm's
+// registry arrives as native MCP tools through a per-turn MCP config file (claudeMcp.ts, PLAN F2-c).
+// Never logs the prompt or output; stderr only as a redacted one-line failure cause.
 import { randomUUID } from 'node:crypto'
+import type { ChildProcess } from 'node:child_process'
 import { basename, dirname, join } from 'node:path'
+import { query as sdkQuery, type Query, type SDKUserMessage, type SpawnedProcess } from '@anthropic-ai/claude-agent-sdk'
 import {
   type AdapterRuntimeKind, type CancelToken, type CentralRuntime, type RuntimeEmit,
   type RuntimeResult, type TurnInput, createCancelToken,
 } from './centralRuntime'
-import { createTurnEmitter, type TurnEmitter } from './runtimeEvents'
-import { applyClaudeEvent, parseClaudeLine } from './claudeEvents'
+import { createTurnEmitter } from './runtimeEvents'
+import { applyClaudeEvent, parseClaudeMessage } from './claudeEvents'
 import {
-  type ClaudeRuntimeOptions, DEFAULT_KILL_GRACE_MS, DEFAULT_MAX_TURNS,
-  DEFAULT_WALL_MS, MICROS_PER_USD, claudeArgv, claudeChildEnv, claudeModelArg, createLineReader,
+  type ClaudeRuntimeOptions, DEFAULT_MAX_TURNS, DEFAULT_WALL_MS, MICROS_PER_USD, centralQueryOptions, claudeChildEnv, claudeModelArg,
 } from './claudeOptions'
-import {
-  type ClaudeTurnState, createKillLadder, defaultWorkDir, ensureWorkDir, failTurn, finishTurn, newTurnState,
-} from './claudeSession'
+import { type ClaudeTurnState, defaultWorkDir, ensureWorkDir, failTurn, finishTurn, newTurnState } from './claudeSession'
 import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
 import { CENTRAL_MODEL_FLAG } from './runtimeShared'
 import { FRESH_SESSION_NOTICE, isMissingSession, logTurnFailed } from './claudeFailure'
 import { createLogger } from '../../logs'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
+import { claudeSdkSpawn } from '../../claudeLauncher/claudeSdkSpawn'
 import { userContent } from '../../agentChat/agentChat.attach'
 
 const log = createLogger('central')
@@ -32,6 +31,11 @@ const log = createLogger('central')
 const MAX_STDERR_CHARS = 8 * 1024
 /** Child env names whose values are redacted out of the stderr reason. */
 const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|AUTH/i
+/** How long a finished query waits for its child's stdio to close, so the stderr tail is complete. */
+const CHILD_CLOSE_WAIT_MS = 1_000
+
+type ChildExit = { code: number | null; signal: NodeJS.Signals | null }
+type Launch = { argv0: string; profileId: string }
 
 interface ActiveTurn {
   token: CancelToken
@@ -60,11 +64,20 @@ export class ClaudeRuntime implements CentralRuntime {
     let sessionId = (this.options.newSessionId ?? randomUUID)()
     // The input of the current attempt: a fresh-session retry drops `sessionRef`.
     let attempt: TurnInput = input
-    let child: ChildProcess | null = null
     let link: OpenedMcp | null = null
     let secrets: string[] = []
-    let launch: { argv0: string; profileId: string } | null = null
-    let exit: { code: number | null; signal: NodeJS.Signals | null } | undefined
+    let launch: Launch | null = null
+    let exit: ChildExit | undefined
+    // The running query of the current attempt. Stopping it signals the child at once: the SDK's own close
+    // gives it ~2 s after stdin EOF, long enough for one more MCP call past a limit (golden G7). The SDK
+    // still escalates to SIGKILL if SIGTERM is ignored.
+    let running: { abort: AbortController; q: Query | null; child: SpawnedProcess | null } | null = null
+    const stop = (): void => {
+      running?.abort.abort()
+      running?.q?.close()
+      const child = running?.child
+      if (child && child.exitCode === null && !child.signalCode) child.kill('SIGTERM')
+    }
     const finish = (): RuntimeResult => {
       const result = finishTurn(emitter, {
         state, elapsedMs: this.now() - startedAt, fallbackSessionRef: attempt.sessionRef ?? sessionId,
@@ -73,13 +86,12 @@ export class ClaudeRuntime implements CentralRuntime {
       if (result.outcome === 'error') logTurnFailed(input, state, result, exit, launch, secrets)
       return result
     }
-    let ladder: ReturnType<typeof createKillLadder> | null = null
     let wallTimer: ReturnType<typeof setTimeout> | undefined
 
     this.active.set(input.turnId, { token })
     const onAbort = (): void => {
       if (state.termination === null) state.termination = 'cancelled'
-      ladder?.start()
+      stop()
     }
     token.signal.addEventListener('abort', onAbort, { once: true })
 
@@ -108,31 +120,50 @@ export class ClaudeRuntime implements CentralRuntime {
       if (wallMs > 0) {
         wallTimer = setTimeout(() => {
           if (state.termination === null) state.termination = 'timeout'
-          ladder?.start()
+          stop()
         }, wallMs)
         wallTimer.unref?.()
       }
-      const runChild = async (): Promise<void> => {
-        try {
-          ;({ child, secrets, launch } = this.spawnChild(attempt, sessionId, (link as OpenedMcp).configPath))
-        } catch (err) {
-          state.spawnError = err instanceof Error ? err : new Error('claude spawn failed')
-          return
-        }
-        const live = child
-        ladder?.clear()
-        ladder = createKillLadder(live, this.options.killGraceMs ?? DEFAULT_KILL_GRACE_MS)
-        const closed = new Promise<void>((resolve) => {
-          live.once('close', (code: number | null, signal: NodeJS.Signals | null) => { exit = { code, signal }; resolve() })
-          live.once('error', (err) => {
-            state.spawnError = err
-            resolve()
+      const runQuery = async (): Promise<void> => {
+        const abort = new AbortController()
+        const live = { abort, q: null as Query | null, child: null as SpawnedProcess | null }
+        running = live
+        let closed: Promise<void> = Promise.resolve()
+        let failed: unknown = null
+        const onChild = (child: SpawnedProcess): void => {
+          live.child = child
+          // A ChildProcess at runtime; 'close' (not 'exit') so the stderr tail is complete.
+          const c = child as unknown as ChildProcess
+          closed = new Promise((resolve) => {
+            c.once('close', (code: number | null, sig: NodeJS.Signals | null) => { exit = { code, signal: sig }; resolve() })
+            c.once('error', (err: NodeJS.ErrnoException) => { state.spawnError = err; resolve() })
           })
-        })
-        this.pump(live, attempt, emitter, state, () => ladder?.start())
-        await closed
+        }
+        try {
+          const built = this.queryOptions(attempt, sessionId, (link as OpenedMcp).configPath, abort, state, onChild)
+          ;({ secrets, launch } = built)
+          const q = (this.options.query ?? sdkQuery)({ prompt: promptOf(attempt), options: built.options })
+          live.q = q
+          const ctx = { emitter, state, maxTurns: attempt.limits.maxTurns ?? DEFAULT_MAX_TURNS, kill: stop, now: this.now, ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }) }
+          for await (const message of q) {
+            const event = parseClaudeMessage(message)
+            if (event !== null) applyClaudeEvent(event, ctx)
+          }
+        } catch (err) {
+          // The SDK throws when the child fails or is stopped; the exit status, spawn errno and stderr explain it.
+          failed = err
+        } finally {
+          live.q?.close()
+        }
+        let waited: ReturnType<typeof setTimeout> | undefined
+        await Promise.race([closed, new Promise<void>((resolve) => { waited = setTimeout(resolve, CHILD_CLOSE_WAIT_MS) })])
+        clearTimeout(waited)
+        // Nothing else explains a throw (no child status, no stderr): its message is the only cause left.
+        if (failed !== null && exit === undefined && state.spawnError === null && state.stderrTail === '' && state.termination === null && state.failure === null) {
+          state.stderrTail = failed instanceof Error ? failed.message : String(failed)
+        }
       }
-      await runChild()
+      await runQuery()
       // A resumed session Claude no longer has (deleted, other machine, other runtime's id) would fail
       // every turn: retry once in a fresh session, but only while nothing has reached the user yet.
       if (attempt.sessionRef !== undefined && state.failure === null && state.termination === null
@@ -147,18 +178,15 @@ export class ClaudeRuntime implements CentralRuntime {
         exit = undefined
         emitter.emit({ type: 'notice', text: FRESH_SESSION_NOTICE })
         if (token.cancelled) return this.cancelled(state, finish)
-        await runChild()
+        await runQuery()
       }
       if (state.retries > 0) log.info('central.claude_retries', 'claude api retried', { retries: state.retries })
       // Without a result event (broken profile, auth, wrapper crash) the exit status and stderr are the only cause.
       return finish()
     } finally {
       if (wallTimer !== undefined) clearTimeout(wallTimer)
-      // Both are assigned inside runChild, which TS flow analysis does not see.
-      ;(ladder as ReturnType<typeof createKillLadder> | null)?.clear()
       token.signal.removeEventListener('abort', onAbort)
-      const last = child as ChildProcess | null
-      if (last !== null && last.exitCode === null && last.signalCode === null) last.kill('SIGKILL')
+      ;(running as { q: Query | null } | null)?.q?.close()
       link?.close()
       this.active.delete(input.turnId)
     }
@@ -207,63 +235,43 @@ export class ClaudeRuntime implements CentralRuntime {
     }
   }
 
-  private spawnChild(input: TurnInput, sessionId: string, mcpConfig: string): {
-    child: ChildProcess; secrets: string[]; launch: { argv0: string; profileId: string }
-  } {
+  /** SDK options for one attempt, run through the Central launch profile (read per turn, so an edit reaches the next turn). */
+  private queryOptions(
+    input: TurnInput, sessionId: string, mcpConfig: string, abort: AbortController, state: ClaudeTurnState,
+    onChild: (child: SpawnedProcess) => void,
+  ): { options: ReturnType<typeof centralQueryOptions>; secrets: string[]; launch: Launch } {
     const model = claudeModelArg(this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
-    const argv = claudeArgv({
-      mcpConfig,
-      ...(input.sessionRef === undefined ? {} : { sessionRef: input.sessionRef }),
-      newSessionId: sessionId,
-      ...(model.arg === undefined ? {} : { model: model.arg }),
-      maxTurns: input.limits.maxTurns ?? DEFAULT_MAX_TURNS,
-      ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
-      ...(input.images?.length ? { streamInput: true } : {}),
-    })
-    // Central launch profile (e.g. `envman -e p -- claude`) read per turn, so a profile edit reaches the next turn.
-    const profile = this.options.executable ? null : centralClaudeLaunch()
-    const [cmd, ...args] = profile ? [...profile.argv, ...argv] : [this.options.executable as string, ...argv]
-    const launch = { argv0: basename(cmd as string), profileId: profile?.profile.id ?? 'executable-override' }
+    const exe = this.options.executable
+    const profile = exe ? null : centralClaudeLaunch()
+    const resolved = profile ?? { argv: [exe as string], bin: exe as string }
+    const launch = { argv0: basename(resolved.argv[0] as string), profileId: profile?.profile.id ?? 'executable-override' }
     // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
     // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
     const env = claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv })
     const secrets = Object.entries(env).filter(([name, value]) => SECRET_ENV_NAME.test(name) && typeof value === 'string').map(([, value]) => value as string)
-    const child = spawn(cmd as string, args, { cwd: ensureWorkDir(this.options.workDir), env, stdio: ['pipe', 'pipe', 'pipe'], shell: false })
-    return { child, secrets, launch }
-  }
-
-  /** Wires stdin (prompt then EOF), stdout (JSONL to events) and keeps a bounded stderr tail for the failure cause. */
-  private pump(child: ChildProcess, input: TurnInput, emitter: TurnEmitter, state: ClaudeTurnState, kill: () => void): void {
-    const reader = createLineReader()
-    const maxTurns = input.limits.maxTurns ?? DEFAULT_MAX_TURNS
-    const ctx = { emitter, state, maxTurns, kill, now: this.now, ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }) }
-    const apply = (lines: string[]): void => {
-      for (const line of lines) {
-        const event = parseClaudeLine(line)
-        if (event !== null) applyClaudeEvent(event, ctx)
-      }
+    const options = {
+      ...centralQueryOptions({
+        mcpConfig,
+        ...(input.sessionRef === undefined ? {} : { sessionRef: input.sessionRef }),
+        newSessionId: sessionId,
+        ...(model.arg === undefined ? {} : { model: model.arg }),
+        maxTurns: input.limits.maxTurns ?? DEFAULT_MAX_TURNS,
+        ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
+        cwd: ensureWorkDir(this.options.workDir), env, abort,
+      }),
+      ...claudeSdkSpawn({
+        launch: resolved, onChild,
+        stderr: (chunk) => { state.stderrTail = (state.stderrTail + chunk).slice(-MAX_STDERR_CHARS) },
+      }),
     }
-    child.stdout?.setEncoding('utf8')
-    child.stdout?.on('data', (chunk: string | Buffer) => apply(reader.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'))))
-    child.stdout?.on('end', () => apply(reader.end()))
-    child.stderr?.setEncoding('utf8')
-    child.stderr?.on('data', (chunk: string | Buffer) => {
-      state.stderrTail = (state.stderrTail + (typeof chunk === 'string' ? chunk : chunk.toString('utf8'))).slice(-MAX_STDERR_CHARS)
-    })
-    child.stdin?.on('error', (err: NodeJS.ErrnoException) => {
-      // EPIPE when the child exits before reading the prompt; its exit path reports the failure.
-      log.warn('central.claude_stdin_failed', 'claude stdin write failed', { code: err.code ?? 'unknown' })
-    })
-    child.stdin?.end(stdinPayload(input))
+    return { options, secrets, launch }
   }
 }
 
 /**
- * What the child reads on stdin: the plain prompt, or with images one `--input-format stream-json` line,
- * an SDKUserMessage (@anthropic-ai/claude-agent-sdk sdk.d.ts: `{type:'user', message: MessageParam,
- * parent_tool_use_id}`) holding image blocks then the text block, as Agent Chat sends a paste.
+ * The prompt: one SDKUserMessage, the plain text or with images the image blocks then the text block (as
+ * Agent Chat sends a paste). The SDK ends the child's stdin once it is consumed, as `-p` did.
  */
-export function stdinPayload(input: Pick<TurnInput, 'text' | 'images'>): string {
-  if (!input.images?.length) return input.text
-  return `${JSON.stringify({ type: 'user', message: { role: 'user', content: userContent(input.text, input.images) }, parent_tool_use_id: null })}\n`
+async function* promptOf(input: TurnInput): AsyncGenerator<SDKUserMessage> {
+  yield { type: 'user', message: { role: 'user', content: userContent(input.text, input.images ?? []) }, parent_tool_use_id: null }
 }
