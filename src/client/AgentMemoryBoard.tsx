@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ctl, MEMORY_TEXT, type MemoryAct, memoryRequest } from './AgentMemory'
+import { ctl, MEMORY_TEXT, type MemoryAct, memoryRequest } from './AgentMemory.api'
 
 export const PROPOSALS_PATH = '/api/memory-proposals'
 export const BLACKBOARD_PATH = '/api/blackboard'

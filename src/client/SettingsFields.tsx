@@ -10,6 +10,10 @@
 // menyembunyikan dirinya sendiri ketika label + hint tidak cocok. Itu membuat filter bekerja
 // untuk semua section sekaligus tanpa daftar indeks terpisah yang bisa basi.
 import { createContext, useContext, type ReactNode } from 'react'
+// Here, not in the lazily loaded SettingsPanel: these fields also render outside it (canvas background,
+// projects folder), and their `.st-*` styles must not wait for the panel's first open.
+import './settings.css'
+import './settings-controls.css'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

@@ -32,8 +32,6 @@ import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
-import './settings.css'
-import './settings-controls.css'
 
 const SECTIONS = [
   { id: 'terminal', label: 'Terminal' },

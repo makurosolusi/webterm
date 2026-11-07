@@ -1,9 +1,11 @@
 // Owns which add-workspace dialog is open and registers the ⌘K commands. Mounted once inside
 // WorkspaceBar (rendered on the Welcome screen too); other entry points call `openWorkspaceCreate`.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRegisterCommands } from '../commandRegistry'
-import { CloneRepoDialog } from './CloneRepoDialog'
-import { NewProjectDialog } from './NewProjectDialog'
+
+// The dialogs load on first use; the host (commands + open state) stays mounted with the board.
+const CloneRepoDialog = lazy(() => import('./CloneRepoDialog').then((m) => ({ default: m.CloneRepoDialog })))
+const NewProjectDialog = lazy(() => import('./NewProjectDialog').then((m) => ({ default: m.NewProjectDialog })))
 
 export type WorkspaceCreateKind = 'clone' | 'project'
 
@@ -39,7 +41,7 @@ export default function WorkspaceCreateHost({ onOpenFolder, onCreated, onOpenWor
   useRegisterCommands(commands)
   const close = () => setOpen(null)
   const openExisting: OpenExisting = (path, id) => { if (id && onOpenWorkspace) onOpenWorkspace(id); else onCreated(path) }
-  if (open === 'clone') return <CloneRepoDialog onClose={close} onCreated={onCreated} onOpenExisting={openExisting} />
-  if (open === 'project') return <NewProjectDialog onClose={close} onCreated={onCreated} />
+  if (open === 'clone') return <Suspense fallback={null}><CloneRepoDialog onClose={close} onCreated={onCreated} onOpenExisting={openExisting} /></Suspense>
+  if (open === 'project') return <Suspense fallback={null}><NewProjectDialog onClose={close} onCreated={onCreated} /></Suspense>
   return null
 }

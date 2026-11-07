@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { listCommands } from '../commandRegistry'
-import ReplayHost, { ReplayDialog } from './ReplayHost'
+import ReplayHost from './ReplayHost'
+import { ReplayDialog } from './ReplayDialog'
 import { pct, rangeFrom, type ReplayItem } from './replay.client'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })

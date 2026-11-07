@@ -31,7 +31,7 @@ import { isMacPlatform } from './terminalKeys'
 import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
-import { openWorkspaceCanvasBackground } from './CanvasBackgroundSection'
+import { openWorkspaceCanvasBackground } from './canvasBackground.open'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */

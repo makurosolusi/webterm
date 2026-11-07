@@ -1,11 +1,10 @@
 // Owns the log stream that feeds the status bar counts and the clear / set-level commands, and
 // describes Output as a tab of the shared bottom panel (`bottomPanelHost`). The body is `OutputPanel`.
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
 import type { LogLevel } from '../../shared/logEntry'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import type { BottomPanelView } from '../bottomPanelHost'
-import OutputPanel from './OutputPanel'
 import { useLogStream } from './useLogStream'
 import {
   closeLevelPicker, closeOutput, publishOutputCounts, registerOutputActions, setOutputLevel,
@@ -21,12 +20,15 @@ const LEVEL_ITEMS: ReadonlyArray<{ level: LogLevel; label: string }> = [
   { level: 'error', label: 'Error' },
 ]
 
+// The log view loads when the Output tab first shows; the stream and level picker below stay eager.
+const OutputPanel = lazy(() => import('./OutputPanel'))
+
 /** Output as a bottom-panel tab; the tab's close button replaces the toolbar's. */
 export function useOutputView(): BottomPanelView {
   const { open, focusToken } = useOutputPanelState()
   return {
     id: 'output', label: 'Output', tooltip: 'Output', open, onClose: closeOutput,
-    render: () => <OutputPanel focusFilterToken={focusToken} />,
+    render: () => <Suspense fallback={null}><OutputPanel focusFilterToken={focusToken} /></Suspense>,
   }
 }
 

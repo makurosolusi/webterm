@@ -17,11 +17,11 @@ const FROZEN: Record<string, number> = {
   'src/client/ControlPanel.tsx': 2,
   'src/client/ControlPanelField.tsx': 1,
   'src/client/TerminalCore.offline.tsx': 1,
-  'src/client/bakeoff/BakeoffHost.tsx': 3,
+  'src/client/bakeoff/BakeoffDialog.tsx': 3,
   'src/client/claudeLauncher/ClaudeLaunchProfilesCard.tsx': 1,
   'src/client/claudeLauncher/LaunchSteps.tsx': 1,
-  'src/client/replay/ReplayHost.tsx': 2,
-  'src/client/templates/TemplatesHost.tsx': 3,
+  'src/client/replay/ReplayDialog.tsx': 2,
+  'src/client/templates/TemplatesDialogs.tsx': 3,
 }
 
 async function filesUnder(directory: string): Promise<string[]> {

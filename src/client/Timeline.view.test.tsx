@@ -31,14 +31,15 @@ beforeEach(() => { localStorage.clear(); setTimelineOpen(false); revealBottomVie
 afterEach(() => { cleanup(); localStorage.clear() })
 
 describe('Activity as a bottom panel view', () => {
-  it('opening Activity while Chat is open yields ONE host with both tabs and Activity shown', () => {
+  it('opening Activity while Chat is open yields ONE host with both tabs and Activity shown', async () => {
     render(<Harness />)
     act(() => toggleTimeline())
     expect(document.querySelectorAll('.bottom-panel-host')).toHaveLength(1)
     expect(document.querySelector('.timeline-panel-host')).toBeNull()
     expect(tabs().map((t) => t.textContent)).toEqual([expect.stringMatching(/^Chat/), expect.stringMatching(/^Activity/)])
     expect(visiblePanes()).toHaveLength(1)
-    expect(within(visiblePanes()[0] as HTMLElement).getByLabelText('Activity timeline')).not.toBeNull()
+    // The panel body is lazy (Timeline.panel.tsx): it lands a tick after the tab shows.
+    expect(await within(visiblePanes()[0] as HTMLElement).findByLabelText('Activity timeline')).not.toBeNull()
     expect(screen.getByText('chat body').closest('.vscode-bottom-panel__pane')?.hasAttribute('hidden')).toBe(true)
   })
 
@@ -50,13 +51,14 @@ describe('Activity as a bottom panel view', () => {
     expect(localStorage.getItem('webterm.timelineOpen')).toBe('0')
   })
 
-  it('toggling Activity while hidden behind another tab reveals it without closing', () => {
+  it('toggling Activity while hidden behind another tab reveals it without closing', async () => {
     render(<Harness />)
     act(() => toggleTimeline())
     fireEvent.click(screen.getByRole('tab', { name: /^Chat/ }))
     expect(screen.getByText('chat body').closest('.vscode-bottom-panel__pane')?.hasAttribute('hidden')).toBe(false)
     act(() => toggleTimeline())
     expect(tabs()).toHaveLength(2)
-    expect(within(visiblePanes()[0] as HTMLElement).getByLabelText('Activity timeline')).not.toBeNull()
+    // The panel body is lazy (Timeline.panel.tsx): it lands a tick after the tab shows.
+    expect(await within(visiblePanes()[0] as HTMLElement).findByLabelText('Activity timeline')).not.toBeNull()
   })
 })

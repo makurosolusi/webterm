@@ -4,7 +4,6 @@ import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import type { FsResult, FsVersion, ReadEncoding, ReadMeta } from '../shared/fsContract'
 import { loadMonaco } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
-import { renderMarkdown } from './markdown'
 import { loadRefusal, opensInPreview } from './editorFile'
 
 export type EditorConflict = { kind: 'version'; current?: FsVersion } | { kind: 'missing' }
@@ -48,6 +47,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
   // GERBANG KEHILANGAN DATA: hanya true setelah pembacaan selesai dan isinya benar-benar masuk ke
   // model. Tanpa ini, ⌘S pada node yang gagal memuat akan menulis buffer kosong ke file pengguna.
   const loadedRef = useRef(false)
+  // marked + DOMPurify load with Monaco (not with the board); set before `loadedRef`, which guards every use.
+  const renderMarkdownRef = useRef<((src: string) => string) | null>(null)
   const [dirty, setDirty] = useState(false)
   const [preview, setPreview] = useState(false)
   const [previewHtml, setPreviewHtml] = useState('')
@@ -61,7 +62,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
     if (!enabled || !loadedRef.current) return
     setPreview((p) => {
       const next = !p
-      if (next && editorRef.current) setPreviewHtml(renderMarkdown(editorRef.current.getValue()))
+      if (next && editorRef.current && renderMarkdownRef.current) setPreviewHtml(renderMarkdownRef.current(editorRef.current.getValue()))
       return next
     })
   }
@@ -176,7 +177,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
           setEncoding('binary')
           return
         }
-        const m = await loadMonaco()
+        const [m, md] = await Promise.all([loadMonaco(), import('./markdown')])
+        renderMarkdownRef.current = md.renderMarkdown
         const host = hostRef.current
         if (disposed || !host) return
         readOnlyRef.current = meta.encoding === 'non-utf8'
@@ -198,7 +200,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
         // Cmd+S saves the focused node's file, like VS Code's save on the active editor.
         saveAction = editor.addAction({ id: SAVE_ACTION_ID, label: 'File: Save', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS], run: () => saveRef.current() })
         if (opensInPreview(ext, a.openMarkdownPreview)) {
-          setPreviewHtml(renderMarkdown(meta.content))
+          setPreviewHtml(md.renderMarkdown(meta.content))
           setPreview(true)
         }
       })

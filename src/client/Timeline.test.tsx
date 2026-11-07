@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Workspace } from '../shared/workspace'
-import { TimelinePanel } from './Timeline'
+import { TimelinePanel } from './Timeline.panel'
 import type { TimelineEvent } from './Timeline.model'
 
 /** Visible tooltip of `el` (focus opens it); the label is the tooltip, not a native `title`. */
