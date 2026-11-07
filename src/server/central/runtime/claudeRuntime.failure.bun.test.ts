@@ -2,7 +2,7 @@
 // server log (`central.turn.failed`), with stderr secrets redacted. Fake `claude` executables only.
 // Only toBe/toContain matchers are typed (see src/server/bun-test.d.ts).
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ClaudeRuntime } from './claudeRuntime'
@@ -110,4 +110,62 @@ test('failed result with plain error text', async () => {
   const { error } = await run(fake(`readStdin()\n${emitSource(records)}`), 't-result')
   expect(error.message).toBe('Claude reported an error: API Error: 400 bad request')
   expect(error.retryable).toBe(false)
+})
+
+/** Fake that fails `--resume <id>` with the CLI's real message; `fresh` is its body without `--resume`. */
+function resumeFake(fresh: string): { exe: string; spawns: () => string[][] } {
+  const log = join(dir, 'spawns.jsonl')
+  const exe = fake(`fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n')
+readStdin()
+const at = process.argv.indexOf('--resume')
+if (at >= 0) {
+  emit({ ...${JSON.stringify(resultRecord({ subtype: 'error_during_execution', is_error: true, duration_ms: 0 }))}, errors: ['No conversation found with session ID: ' + process.argv[at + 1]] })
+  process.exit(1)
+}
+${fresh}`)
+  const spawns = () => readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as string[])
+  return { exe, spawns }
+}
+
+function plainRuntime(executable: string) {
+  return new ClaudeRuntime({
+    executable, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir },
+    killGraceMs: 50, newSessionId: () => 'fresh-session-id',
+    mcp: createCentralMcpLink({ dir: join(dir, 'mcp'), port: 1, mint: () => ({ token: 'wcap_test-only', revoke: () => undefined }) }),
+  })
+}
+
+test('missing resumed session: one retry in a fresh session, notice, new id, logged without the full id', async () => {
+  const sid = `process.argv[process.argv.indexOf('--session-id') + 1]`
+  const { exe, spawns } = resumeFake(`for (const r of ${JSON.stringify([initRecord(), resultRecord()])}) emit({ ...r, session_id: ${sid} })
+emit({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } } })`)
+  const before = logBus.query({}).length
+  const { events, emit } = recorder()
+  const result = await plainRuntime(exe).turn(turnInput({ turnId: 't-reset', sessionRef: 'stale-session-1234567890' }), emit)
+  expect(result.outcome).toBe('success')
+  expect(result.sessionRef).toBe('fresh-session-id')
+  expect(events.filter((e) => e.type === 'error').length).toBe(0)
+  const notices = events.filter((e) => e.type === 'notice') as Array<{ text: string }>
+  expect(notices.length).toBe(1)
+  expect(notices[0]!.text).toBe('Started a fresh Claude session; the previous one was no longer available.')
+  const runs = spawns()
+  expect(runs.length).toBe(2)
+  expect(runs[0]!.includes('--resume')).toBe(true)
+  expect(runs[1]!.includes('--resume')).toBe(false)
+  expect(runs[1]![runs[1]!.indexOf('--session-id') + 1]).toBe('fresh-session-id')
+  const reset = logBus.query({}).slice(before).filter((e) => e.event === 'central.session.reset')
+  expect(reset.length).toBe(1)
+  expect((reset[0]!.data as Record<string, unknown>).oldSessionPrefix).toBe('stale-se')
+  expect(JSON.stringify(reset).includes('stale-session-1234567890')).toBe(false)
+})
+
+test('missing resumed session whose fresh retry also fails: surfaced normally, no third spawn', async () => {
+  const { exe, spawns } = resumeFake(`process.stderr.write('Error: fresh run broke\\n'); process.exit(1)`)
+  const { events, emit } = recorder()
+  const result = await plainRuntime(exe).turn(turnInput({ turnId: 't-reset-fail', sessionRef: 'stale-session-2' }), emit)
+  expect(result.outcome).toBe('error')
+  expect(spawns().length).toBe(2)
+  const errors = events.filter((e) => e.type === 'error') as Array<{ message: string }>
+  expect(errors.length).toBe(1)
+  expect(errors[0]!.message).toBe('Claude exited with code 1 before starting: Error: fresh run broke')
 })

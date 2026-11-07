@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { dataDir } from '../../config'
 import type { RuntimeErrorCode, RuntimeResult } from './centralRuntime'
 import type { TurnEmitter } from './runtimeEvents'
-import type { ClaudeResultEvent, ClaudeUsage } from './claudeEvents'
+import type { ClaudeResultEvent, ClaudeUsage } from './claudeResult'
 import { type ClaudeUnavailableCode, MICROS_PER_USD } from './claudeOptions'
 import { classifyClaudeFailure } from './claudeFailure'
 

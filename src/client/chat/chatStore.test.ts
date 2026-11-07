@@ -216,4 +216,14 @@ describe('chatStore failed turn', () => {
     ])
     expect(state.messages[0].state).toBe('failed')
   })
+  it('shows a runtime notice once, ahead of the reply text', () => {
+    const note = 'Started a fresh Claude session; the previous one was no longer available.'
+    const state = reduce([
+      { type: 'event', event: event(1, 'notice', { turnId: 't1', messageId: 'a1', payload: { messageId: 'a1', text: note } }) },
+      { type: 'event', event: event(2, 'part.delta', { turnId: 't1', messageId: 'a1', payload: { text: 'hi' } }) },
+      { type: 'event', event: event(3, 'notice', { turnId: 't1', messageId: 'a1', payload: { messageId: 'a1', text: note } }) },
+    ])
+    expect(state.messages[0].parts).toEqual([{ type: 'notice', text: note }, { type: 'text', text: 'hi' }])
+  })
+
 })

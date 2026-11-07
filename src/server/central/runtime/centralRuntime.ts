@@ -98,6 +98,12 @@ export interface ErrorEvent extends EventBase {
   retryable: boolean
 }
 
+/** Short runtime-authored note for the user (never model text, never fed back to the model). */
+export interface NoticeEvent extends EventBase {
+  type: 'notice'
+  text: string
+}
+
 export interface UsageEvent extends EventBase {
   type: 'usage'
   usage: RuntimeUsage
@@ -119,6 +125,7 @@ export type RuntimeEvent =
   | ToolCompletedEvent
   | ErrorEvent
   | UsageEvent
+  | NoticeEvent
   | TurnResultEvent
 
 /** Non-terminal payloads accepted by `TurnEmitter.emit`; `turn.result` is result-only. */
@@ -136,6 +143,7 @@ export type RuntimeEventInput =
     }
   | { type: 'error'; code: RuntimeErrorCode; message: string; retryable?: boolean }
   | { type: 'usage'; usage: RuntimeUsage }
+  | { type: 'notice'; text: string }
 
 export interface RuntimeResult {
   turnId: string

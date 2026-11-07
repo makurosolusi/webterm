@@ -13,25 +13,7 @@ import { type ClaudeTurnState, failTurn } from './claudeSession'
 import { MCP_SERVER_NAME } from '../../mcp/mcp.paths'
 import { WEBTERM_MCP_TOOL_PREFIX } from './claudeOptions'
 import { stderrReason } from './opencodeSession'
-
-export interface ClaudeUsage {
-  inputTokens: number
-  outputTokens: number
-  cacheReadTokens: number
-  cacheWriteTokens: number
-}
-
-export interface ClaudeResultEvent {
-  type: 'result'
-  subtype: string
-  isError: boolean
-  sessionId: string | null
-  usage: ClaudeUsage | null
-  costUsd: number | null
-  durationMs: number | null
-  /** CLI error text of a failed result (`errors[]` or `result`); never set on success (that text is the reply). */
-  errorText: string | null
-}
+import { type ClaudeResultEvent, type ClaudeUsage, type Rec, parseClaudeResult, parseUsage, rec, str } from './claudeResult'
 
 export interface ClaudeToolUse { id: string; name: string; input: unknown }
 export interface ClaudeToolResult { toolUseId: string; isError: boolean; text: string }
@@ -43,29 +25,6 @@ export type ClaudeEvent =
   | { type: 'tool_results'; results: ClaudeToolResult[] }
   | { type: 'retry' }
   | ClaudeResultEvent
-
-type Rec = Record<string, unknown>
-
-function rec(value: unknown): Rec | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Rec) : null
-}
-function str(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-function num(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
-}
-
-function parseUsage(value: unknown): ClaudeUsage | null {
-  const u = rec(value)
-  if (u === null) return null
-  return {
-    inputTokens: num(u.input_tokens),
-    outputTokens: num(u.output_tokens),
-    cacheReadTokens: num(u.cache_read_input_tokens),
-    cacheWriteTokens: num(u.cache_creation_input_tokens),
-  }
-}
 
 /** Names of an init list whose items are strings or `{name}` objects (tools are strings, servers objects). */
 function names(value: unknown): string[] {
@@ -109,13 +68,6 @@ function parseUser(obj: Rec): ClaudeEvent | null {
   return results.length > 0 ? { type: 'tool_results', results } : null
 }
 
-/** `error_during_execution` carries `errors: string[]`; an `is_error` success carries the text in `result`. */
-function resultErrorText(obj: Rec): string | null {
-  const errors = Array.isArray(obj.errors) ? obj.errors.filter((e): e is string => typeof e === 'string') : []
-  const text = errors.length > 0 ? errors.join('\n') : str(obj.result)
-  return text && text.trim().length > 0 ? text : null
-}
-
 /** Parses one stdout line; non-JSON or unknown shapes yield null (they are ignored by design). */
 export function parseClaudeLine(line: string): ClaudeEvent | null {
   let raw: unknown
@@ -146,13 +98,7 @@ export function parseClaudeLine(line: string): ClaudeEvent | null {
     case 'user':
       return parseUser(obj)
     case 'result':
-      return {
-        type: 'result', subtype: str(obj.subtype) ?? '', isError: obj.is_error === true,
-        sessionId: str(obj.session_id), usage: parseUsage(obj.usage),
-        costUsd: typeof obj.total_cost_usd === 'number' ? obj.total_cost_usd : null,
-        durationMs: typeof obj.duration_ms === 'number' ? obj.duration_ms : null,
-        errorText: obj.is_error === true || obj.subtype !== 'success' ? resultErrorText(obj) : null,
-      }
+      return parseClaudeResult(obj)
     default:
       return null
   }

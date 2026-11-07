@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatMessages from './chatMessages'
 import type { ChatClient, ChatMessage } from './chatTypes'
+import { normalizeParts } from './chatWire'
 import ChatPanel from '../ChatPanel'
 import { initialAgentChatState, type ChatMessageView } from '../agentChat/agentChatStore'
 import { AgentChatThread, type ThreadActions } from '../agentChat/agentChatThread'
@@ -37,6 +38,16 @@ describe('Central chat bubbles', () => {
     expect(agent.classList.contains('chat-bubble-row')).toBe(false)
     expect(within(agent).getByText('Central agent').className).toBe('chat-message__role')
     expect(agent.querySelector('.codicon-sparkle')).not.toBeNull()
+  })
+
+  it('a runtime notice renders as a note on the reply, persisted parts included', () => {
+    const note = 'Started a fresh Claude session; the previous one was no longer available.'
+    const parts = normalizeParts([{ type: 'notice', text: note }, { type: 'text', text: 'hi' }])
+    render(<ChatMessages messages={[human('h1', 'hello'), reply('a1', { parts })]} streaming={false} />)
+    const agent = screen.getByLabelText('assistant message')
+    const shown = within(agent).getByRole('note')
+    expect(shown.textContent).toBe(note)
+    expect(shown.className).toBe('chat-notice-inline')
   })
 
   it('a failed reply shows its reason (long text clipped) and Retry resends the message that started it', () => {

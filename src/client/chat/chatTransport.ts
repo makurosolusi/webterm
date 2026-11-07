@@ -11,7 +11,7 @@ export const CHAT_PATH = '/api/central'
 /** Mirrors `CENTRAL_EVENT_TYPES` in `src/server/central/conversationModel.ts`. */
 export const CHAT_EVENT_TYPES = [
   'message.created', 'part.delta', 'part.completed', 'tool.requested', 'tool.completed',
-  'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done',
+  'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done', 'notice',
 ] as const
 
 /** Typed API failure. `code` is the server's stable error code; the message is not contract. */

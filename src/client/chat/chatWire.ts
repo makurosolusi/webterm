@@ -77,6 +77,10 @@ function normalizePart(raw: unknown): ChatPart | null {
       message: optionalText(part.message) ?? 'The turn failed.',
     }
   }
+  if (part.type === 'notice') {
+    const value = optionalText(part.text)
+    return value === undefined ? null : { type: 'notice', text: value }
+  }
   if (part.type === 'tool') {
     const toolCallId = optionalText(part.toolCallId)
     if (!toolCallId) return null

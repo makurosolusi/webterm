@@ -16,6 +16,7 @@ export type ChatPart =
   | { type: 'tool'; toolCallId: string; name: string; state: ChatToolState; args?: unknown; result?: unknown }
   | { type: 'approval'; approvalId: string; state: ChatToolState }
   | { type: 'error'; code: string; message: string }
+  | { type: 'notice'; text: string }
 
 /** One message as rendered. `seq` is null only for the optimistic human echo. */
 export interface ChatMessage {

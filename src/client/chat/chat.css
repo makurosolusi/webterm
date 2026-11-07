@@ -370,6 +370,7 @@
   font-size: 12px;
 }
 .chat-error-inline { color: var(--vscode-errorForeground, #f48771); }
+.chat-notice-inline { color: var(--vscode-descriptionForeground, #9d9d9d); font-size: 12px; }
 
 /* ---- composer (1px box, focusBorder on focus) -------------------------------------------- */
 .chat-composer {
