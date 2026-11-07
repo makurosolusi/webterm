@@ -3,13 +3,16 @@
 // canvas shrinks beside it (styles.css); maximized or below SIDE_BAR_OVERLAY_BREAKPOINT it
 // overlays the canvas area instead. Views stay mounted while the side bar is open (hidden when
 // inactive) so switching tabs never drops a stream or a draft.
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
-import CentralControlPanel from './central/CentralControlPanel'
-import ChatPanel from './ChatPanel'
 import { InboxPanelSurface } from './inboxPanelSurface'
 import { setSideBar, toggleSideBar, useNarrowWindow, useSideBar, type SideBarView } from './secondarySideBar.store'
+import { LazyPaneFallback } from './lazyPaneFallback'
 import './secondarySideBar.css'
+
+// The views load when the side bar first opens; its chrome (tabs, actions) stays in the start-up chunk.
+const ChatPanel = lazy(() => import('./ChatPanel'))
+const CentralControlPanel = lazy(() => import('./central/CentralControlPanel'))
 
 const VIEWS: { id: SideBarView; label: string; tooltip: string }[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Central agent chat' },
@@ -40,11 +43,15 @@ export default function SecondarySideBar({ centralEnabled }: { centralEnabled: b
       actionsSlotRef={setSlot}
     >
       <div className="vscode-bottom-panel__pane" hidden={shown !== 'chat'}>
-        <ChatPanel open embedded compact actionsHost={shown === 'chat' ? slot : null} />
+        <Suspense fallback={<LazyPaneFallback />}>
+          <ChatPanel open embedded compact actionsHost={shown === 'chat' ? slot : null} />
+        </Suspense>
       </div>
       {centralEnabled && (
         <div className="vscode-bottom-panel__pane" hidden={shown !== 'central'}>
-          <CentralControlPanel open enabled actionsHost={shown === 'central' ? slot : null} />
+          <Suspense fallback={<LazyPaneFallback />}>
+            <CentralControlPanel open enabled actionsHost={shown === 'central' ? slot : null} />
+          </Suspense>
         </div>
       )}
     </InboxPanelSurface>

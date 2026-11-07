@@ -9,19 +9,11 @@ import { removeCanvasImage, uploadCanvasImage } from './canvasBackground.api'
 import { needsContrastWarning } from './canvasBackground.style'
 import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import { ColorControls, GradientControls, ImageControls } from './CanvasBackgroundControls'
-import { OPEN_SETTINGS_EVENT } from './claudeLauncher/claudeLaunch.client'
 import { Field, useSettingsSearch } from './SettingsFields'
 import { SettingsSelect } from './SettingsControls'
 import './canvasBackground.css'
 
-/** Settings section id; the `:workspace` suffix opens it scoped to the active workspace. */
-export const CANVAS_BG_SECTION = 'background'
-export const CANVAS_BG_WORKSPACE_SECTION = `${CANVAS_BG_SECTION}:workspace`
-
-/** Open Settings on the Canvas background section, scoped to the active workspace. */
-export function openWorkspaceCanvasBackground(): void {
-  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: CANVAS_BG_WORKSPACE_SECTION } }))
-}
+export { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, openWorkspaceCanvasBackground } from './canvasBackground.open'
 
 const MODE_LABELS: Record<CanvasBackgroundMode, string> = { default: 'Default', color: 'Solid color', gradient: 'Gradient', image: 'Image' }
 type Scope = 'global' | 'workspace'

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
@@ -9,8 +9,12 @@ import { AGENT_CHAT_TITLE } from './agentChat.add'
 import { agentConfig, FALLBACK_AGENT_COLOR } from '../shared/workspace'
 import type { Comment } from '../shared/workspace'
 import type { AgentChatData } from '../shared/agentChat.shape'
-import { AgentChatView, type AgentChatPatch } from './agentChat/agentChatView'
+import type { AgentChatPatch } from './agentChat/agentChatView'
+import { LazyPaneFallback } from './lazyPaneFallback'
 import { unwatchNode, watchNode } from './unread'
+
+// The chat body (and its markdown/tool-card tree) loads with the first chat node; the chrome stays eager.
+const AgentChatView = lazy(() => import('./agentChat/agentChatView').then((m) => ({ default: m.AgentChatView })))
 
 const COLLAPSED_H = 40
 const DEFAULT_H = 400
@@ -55,7 +59,9 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
         <div className="node-body">
-          <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} onNodeData={onNodeData} />
+          <Suspense fallback={<LazyPaneFallback />}>
+            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} onNodeData={onNodeData} />
+          </Suspense>
         </div>
         {/* Same cable handles as AgentNode: `agentId: 'claude'` makes it a context-link end (`canLink`). */}
         <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />

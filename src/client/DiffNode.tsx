@@ -6,7 +6,7 @@
 //
 // Root = the cwd of the agent wired to it, else the node's own `cwd` (the workspace folder). A wired agent also gets the
 // notes, and its turn ending (`waiting`/`done`) refreshes the diff.
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow, useStore, type NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
@@ -18,8 +18,10 @@ import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
 import { useDiffEditor } from './DiffNode.editor'
 import { enqueueNotes, sendRefusal, type DiffNote } from './DiffNode.notes'
 import { randomId } from './randomId'
-import { ScmPanel } from './ScmPanel'
 import { getStatus, subscribeStatus } from './ws'
+
+// The commit/stage panel loads with the first diff node; the node chrome and file list stay eager.
+const ScmPanel = lazy(() => import('./ScmPanel').then((m) => ({ default: m.ScmPanel })))
 import './DiffNode.css'
 
 const STATUS_LETTER: Record<GitChangeStatus, string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', untracked: 'U' }
@@ -164,7 +166,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
           </ToolbarContainer>
         </div>
         {msg && <div className="diff-node__msg nodrag" role="status">{msg}</div>}
-        {root && <ScmPanel root={root} agentId={agent?.id ?? null} onChanged={refresh} />}
+        {root && <Suspense fallback={null}><ScmPanel root={root} agentId={agent?.id ?? null} onChanged={refresh} /></Suspense>}
         <div className="node-body diff-node__body nodrag nowheel nokey">
           {!root ? (
             <span className="diff-node__notice">Wire an agent to this node, or open it on a workspace folder, to see changes.</span>

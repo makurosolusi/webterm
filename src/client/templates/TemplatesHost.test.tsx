@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { listCommands } from '../commandRegistry'
 import type { Workspace } from '../../shared/workspace'
-import TemplatesHost, { NewFromTemplateDialog, SaveAsTemplateDialog } from './TemplatesHost'
+import TemplatesHost from './TemplatesHost'
+import { NewFromTemplateDialog, SaveAsTemplateDialog } from './TemplatesDialogs'
 import { reviewOf, type WebtermTemplate } from './templates.client'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
