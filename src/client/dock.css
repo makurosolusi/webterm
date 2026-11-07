@@ -2,7 +2,7 @@
    menggambar item, badge, indikator 2px, dan navigasi panah; file ini hanya menempatkannya di
    grid shell dan menyediakan dua tombol MODE (lock/clean view) yang butuh `aria-pressed`.
 
-   `--dock-w` tetap hidup meski kolomnya kini 48px: panel Inbox yang mengapung memakai token ini
+   `--dock-w` tetap hidup meski kolomnya kini 48px: panel Sessions memakai token ini
    untuk meminggirkan dirinya dari rail. Nilainya diturunkan dari lebar activity bar, bukan angka
    mati, jadi rail yang berubah tidak pernah menabrak panel. */
 :root {

@@ -13,7 +13,7 @@ export const NEEDS_YOU_POLL_MS = 2000
 const HOUR_MS = 3_600_000
 export const PERMISSION_KIND = 'agent.permission'
 
-export type UnifiedKind = 'notify' | 'question' | 'review' | 'gate'
+type UnifiedKind = 'notify' | 'question' | 'review' | 'gate'
 export type ActionType = 'approve' | 'deny' | 'edit' | 'reply' | 'ignore' | 'snooze' | 'always'
 export interface Impact { what: string; tier: string; rewindable: boolean }
 export interface UnifiedItem {
@@ -50,7 +50,7 @@ export function snoozeUntil(choice: '1h' | 'tomorrow', now: number): number {
 }
 
 /** Ledger approvals other than Claude prompts keep the APPROVE-phrase dialog (projection row). */
-export const shownAsCard = (i: UnifiedItem): boolean =>
+const shownAsCard = (i: UnifiedItem): boolean =>
   !(i.kind === 'gate' && i.source === 'approval' && i.approvalKind !== PERMISSION_KIND)
 
 export interface NeedsYouSnapshot {

@@ -1,6 +1,6 @@
 // The Central chat's `/` commands: a table plus the pure decision of what a sent message does.
 // Central is webterm's orchestrator, not a raw Claude session, so its commands are its own: chat
-// actions (new chat, history), shortcuts into the Central control panel (status, approvals, halt…),
+// actions (new chat, history), `/approvals` (expands the chat's Needs-you strip), shortcuts into the Central control panel (status, halt…),
 // and prompt shortcuts that expand into a well-formed request its tools can serve (`project.list`,
 // `node.list`, `task.status`, `plan.propose`). Approved skills are listed as `/skill-name`. The menu
 // itself is the shared composer completion (agentChat/completionMenu); only the source lives here.
@@ -8,9 +8,12 @@ import { COMMAND_RESULT_LIMIT, rankCommands, type ComposerCompletion } from '../
 import { fuzzyFilter } from '../fuzzy'
 import type { CentralTab } from '../secondarySideBar.store'
 
+/** Chat-side actions; `approvals` expands the Needs-you strip (works with the Central panel off). */
+export type ChatAction = 'new' | 'history' | 'help' | 'approvals'
+
 /** What a command does: a chat action, a Central panel tab, or a prompt sent to Central. */
 export type CentralCommandAction =
-  | { kind: 'chat'; action: 'new' | 'history' | 'help' }
+  | { kind: 'chat'; action: ChatAction }
   | { kind: 'panel'; tab: CentralTab; halt?: boolean }
   | { kind: 'prompt'; prompt: (arg: string) => string }
 
@@ -36,9 +39,9 @@ export const CENTRAL_COMMANDS: readonly CentralCommand[] = [
   { name: 'clear', description: 'Start a new conversation (same as /new)', run: { kind: 'chat', action: 'new' } },
   { name: 'history', description: 'Show past conversations', run: { kind: 'chat', action: 'history' } },
   { name: 'help', description: 'List the chat commands', run: { kind: 'chat', action: 'help' } },
+  { name: 'approvals', description: 'Show everything that needs you (approvals, reviews, broken tasks)', run: { kind: 'chat', action: 'approvals' } },
   { name: 'status', description: "Show Central's budget and model", run: { kind: 'panel', tab: 'control' } },
   { name: 'level', description: 'Show the autonomy level', run: { kind: 'panel', tab: 'control' } },
-  { name: 'approvals', description: 'Review pending approvals', run: { kind: 'panel', tab: 'approvals' } },
   { name: 'agents', description: 'Show the agents Central runs', run: { kind: 'panel', tab: 'agents' } },
   { name: 'skills', description: 'Review proposed skills', run: { kind: 'panel', tab: 'skills' } },
   { name: 'memory', description: 'Show what Central remembers', run: { kind: 'panel', tab: 'memory' } },
@@ -52,7 +55,7 @@ export const CENTRAL_COMMANDS: readonly CentralCommand[] = [
 /** What sending a message does. `usage`: an argument is missing, nothing is sent and `draft` goes back in the box. */
 export type CentralDecision =
   | { kind: 'send'; text: string }
-  | { kind: 'chat'; action: 'new' | 'history' | 'help' }
+  | { kind: 'chat'; action: ChatAction }
   | { kind: 'panel'; tab: CentralTab; halt?: boolean }
   | { kind: 'usage'; message: string; draft: string }
 

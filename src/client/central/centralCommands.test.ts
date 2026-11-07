@@ -14,7 +14,7 @@ describe('resolveCentralInput', () => {
     expect(resolveCentralInput('  /CLEAR', ALL)).toEqual({ kind: 'chat', action: 'new' })
     expect(resolveCentralInput('/history', ALL)).toEqual({ kind: 'chat', action: 'history' })
     expect(resolveCentralInput('/help', ALL)).toEqual({ kind: 'chat', action: 'help' })
-    expect(resolveCentralInput('/approvals', ALL)).toEqual({ kind: 'panel', tab: 'approvals' })
+    expect(resolveCentralInput('/approvals', ALL)).toEqual({ kind: 'chat', action: 'approvals' })
     expect(resolveCentralInput('/status', ALL)).toEqual({ kind: 'panel', tab: 'control' })
     expect(resolveCentralInput('/memory', ALL)).toEqual({ kind: 'panel', tab: 'memory' })
     expect(resolveCentralInput('/halt', ALL)).toEqual({ kind: 'panel', tab: 'control', halt: true })
@@ -38,8 +38,9 @@ describe('resolveCentralInput', () => {
 
   it('panel shortcuts only exist while the Central panel is on', () => {
     const off = centralCommandList(false)
-    expect(off.map((c) => c.name)).toEqual(['new', 'clear', 'history', 'help', 'projects', 'nodes', 'tasks', 'plan'])
-    expect(resolveCentralInput('/approvals', off)).toEqual({ kind: 'send', text: '/approvals' })
+    expect(off.map((c) => c.name)).toEqual(['new', 'clear', 'history', 'help', 'approvals', 'projects', 'nodes', 'tasks', 'plan'])
+    expect(resolveCentralInput('/status', off)).toEqual({ kind: 'send', text: '/status' })
+    expect(resolveCentralInput('/approvals', off)).toEqual({ kind: 'chat', action: 'approvals' })
   })
 
   it('a skill never shadows a command of the table', () => {
@@ -84,7 +85,8 @@ describe('createCentralCommands completion', () => {
     const loadSkills = vi.fn(async () => [SKILL])
     const c = createCentralCommands({ centralEnabled: false, loadSkills })
     const items = names(await c.completion.provider(slash('')))
-    expect(items).not.toContain('approvals')
+    expect(items).toContain('approvals')
+    expect(items).not.toContain('status')
     expect(items).not.toContain('webterm-demo')
     expect(loadSkills).not.toHaveBeenCalled()
   })

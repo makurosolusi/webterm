@@ -28,12 +28,9 @@ const vscodeScreens = new Set([
   // Sessions sidebar
   "src/client/SessionsFilter.tsx",
   "src/client/SessionsGroupingTabs.tsx",
-  // Bottom panel / Inbox / Chat
+  // Bottom panel / Chat (the Needs-you strip and its approval cards use the chat's VS Code-metric row buttons)
   "src/client/bottomPanelTabs.tsx",
   "src/client/inboxApprovalDialog.tsx",
-  "src/client/inboxItemRow.tsx",
-  "src/client/inboxPanelChrome.tsx",
-  "src/client/inboxPanelSections.tsx",
   "src/client/inboxPanelSurface.tsx",
   "src/client/ChatPanel.tsx",
   // Secondary side bar: its title-bar toggle is a `titlebar__action` like the title bar's own (WorkspaceBar).
@@ -41,6 +38,8 @@ const vscodeScreens = new Set([
   "src/client/chat/chatComposer.tsx",
   "src/client/chat/chatConversation.tsx",
   "src/client/chat/chatMessages.tsx",
+  "src/client/chat/chatApprovalCard.tsx",
+  "src/client/chat/needsYouStrip.tsx",
 ]);
 
 async function filesUnder(directory: string): Promise<string[]> {

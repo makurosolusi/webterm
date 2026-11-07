@@ -192,11 +192,4 @@ describe('G-11/G-12/G-18 CSS fidelity', () => {
     expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):hover .ss-meta')
     expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):focus-within .ss-meta')
   })
-
-  it('filter chip Inbox netral dan tombol Retry sekunder, bukan biru inputOption', () => {
-    const c = css('inbox.css')
-    const active = c.slice(c.indexOf(".inbox-filter-toggle[data-active='true']"))
-    expect(active.slice(0, active.indexOf('}'))).not.toContain('inputOption')
-    expect(css('inboxPanelChrome.tsx')).toContain('inbox-action inbox-action--secondary')
-  })
 })

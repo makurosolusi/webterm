@@ -54,7 +54,7 @@ export interface ChatPanelProps {
   actionsHost?: HTMLElement | null
   /** Narrow host (side bar): the conversation list sits behind a History toggle instead of a column. */
   compact?: boolean
-  /** The Central control panel is on: `/status`, `/approvals`, `/halt`… and skills join the `/` menu. */
+  /** The Central control panel is on: `/status`, `/halt`… and skills join the `/` menu. */
   centralEnabled?: boolean
 }
 

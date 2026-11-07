@@ -1,13 +1,12 @@
 // Human transport client for the central control panel. Same credential as the rest of the client
 // (the `wt_ui` session cookie, via `request`); never a node capability. Paths mirror server handlers:
-// CONTROL/HALT exist (guard/haltApi.ts); STATUS, AGENTS, APPROVALS, SKILLS, MEMORY are the
+// CONTROL/HALT exist (guard/haltApi.ts); STATUS, AGENTS, SKILLS, MEMORY are the
 // contract this panel expects and are mounted by WS-19. Malformed rows are dropped, not thrown.
 import { useCapabilities } from '../useCapabilities'
-import { decideApproval } from '../inboxApi'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import type {
-  AgentActionResult, AgentRow, ApprovalCard, CentralControlClient, ControlView, MemoryRow,
+  AgentActionResult, AgentRow, CentralControlClient, ControlView, MemoryRow,
   SkillReviewRow, StatusView,
 } from './centralControlTypes'
 
@@ -16,7 +15,6 @@ export const CONTROL_PATH = `${CENTRAL_API}/control`
 export const HALT_PATH = `${CENTRAL_API}/halt`
 export const STATUS_PATH = `${CENTRAL_API}/status`
 export const AGENTS_PATH = `${CENTRAL_API}/agents`
-export const APPROVALS_PATH = `${CENTRAL_API}/approvals`
 export const SKILLS_PATH = `${CENTRAL_API}/skills`
 export const MEMORY_PATH = `${CENTRAL_API}/memory`
 
@@ -45,18 +43,6 @@ function rowsOf(body: unknown): unknown[] {
   const items = Array.isArray(body) ? body : isRec(body) ? body.items : undefined
   if (!Array.isArray(items)) throw new InboxApiError('List response malformed', 502, 'bad_response')
   return items
-}
-
-function toCard(raw: unknown): ApprovalCard | null {
-  if (!isRec(raw) || !str(raw.id) || !str(raw.digest) || !str(raw.nonce) || !str(raw.summary)) return null
-  const tier = raw.tier
-  if (tier !== 'R0' && tier !== 'R1' && tier !== 'R2' && tier !== 'R3') return null
-  const args = Array.isArray(raw.args) ? raw.args.filter(isRec).map((a) => ({ key: str(a.key), value: str(a.value) })) : []
-  return {
-    id: str(raw.id), tool: str(raw.tool), tier, summary: str(raw.summary), args,
-    digest: str(raw.digest), nonce: str(raw.nonce), expiresAt: num(raw.expiresAt), projectId: str(raw.projectId),
-    ...(str(raw.confirmPhrase) ? { confirmPhrase: str(raw.confirmPhrase) } : {}),
-  }
 }
 
 const toAgent = (r: unknown): AgentRow | null => (isRec(r) && str(r.id)
@@ -103,8 +89,6 @@ export const centralControlApi: CentralControlClient = {
     const approvalId = isRec(body) ? str(body.approvalId) : ''
     return approvalId ? { status: 'needs_approval', approvalId } : ({ status: 'done' } satisfies AgentActionResult)
   },
-  async listApprovals(signal) { return compact(rowsOf(await request(`${APPROVALS_PATH}?status=pending`, { signal })).map(toCard)) },
-  async decide(card, approve) { await decideApproval({ id: card.id, digest: card.digest, nonce: card.nonce, approve }) },
   async listSkills(signal) { return compact(rowsOf(await request(SKILLS_PATH, { signal })).map(toSkill)) },
   async approveSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version }) },
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },

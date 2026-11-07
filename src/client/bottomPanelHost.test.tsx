@@ -2,31 +2,28 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import BottomPanelHost, { revealBottomView, toggleBottomView, type BottomPanelView } from './bottomPanelHost'
-import InboxPanel from './InboxPanel'
 import ChatPanel from './ChatPanel'
-import type { InboxClient, InboxItem } from './inboxApi'
 import type { ChatClient, ChatConversation, ChatStreamOptions } from './chat/chatTypes'
 import type { StreamFactory } from './chat/chatConversation'
 
-const ITEMS: InboxItem[] = [
-  { id: 'i1', kind: 'deploy', state: 'needs_you', projectId: 'proj-a', title: 'Deploy main', ageMs: 60_000 },
-]
 
 const GLOBAL: ChatConversation = {
   id: 'central:global', scope: 'global', projectId: null, activeTurnId: null,
   lastEventSeq: 0, lastMessageSeq: 0, updatedAt: 10, title: null,
 }
 
-function makeInboxClient(): InboxClient {
-  return {
-    listInbox: vi.fn(async () => ITEMS),
-    getApprovalChallenge: vi.fn(),
-    requestApproval: vi.fn(),
-    decideApproval: vi.fn(),
-    consumeApproval: vi.fn(),
-  } as unknown as InboxClient
+/** A stand-in pane (the bottom panel's own views need a workspace): counts mounts, owns one action. */
+function NotesPane(props: { host: HTMLElement | null; onMount: () => void }): React.JSX.Element {
+  useEffect(() => props.onMount(), [])
+  return (
+    <>
+      {props.host && createPortal(<button type="button" aria-label="Refresh notes" />, props.host)}
+      <p>Deploy main</p>
+    </>
+  )
 }
 
 function makeChatClient(): ChatClient {
@@ -64,7 +61,7 @@ afterEach(() => {
 })
 
 interface HarnessProps {
-  inbox: InboxClient
+  onMountNotes: () => void
   chat: ChatClient
   factory: StreamFactory
   onCloseInbox?: () => void
@@ -72,7 +69,7 @@ interface HarnessProps {
   initial?: { inbox: boolean; chat: boolean }
 }
 
-/** The app's wiring in miniature: Inbox and Chat as views of one host, toggled from outside. */
+/** The host's wiring in miniature: a Notes pane and Chat as views of one host, toggled from outside. */
 function Harness(props: HarnessProps) {
   const [inboxOpen, setInboxOpen] = useState(props.initial?.inbox ?? false)
   const [chatOpen, setChatOpen] = useState(props.initial?.chat ?? false)
@@ -80,8 +77,8 @@ function Harness(props: HarnessProps) {
   const closeChat = () => { props.onCloseChat?.(); setChatOpen(false) }
   const views: BottomPanelView[] = [
     {
-      id: 'inbox', label: 'Inbox', open: inboxOpen, onClose: closeInbox,
-      render: (host) => <InboxPanel open embedded actionsHost={host} client={props.inbox} onClose={closeInbox} />,
+      id: 'inbox', label: 'Notes', open: inboxOpen, onClose: closeInbox,
+      render: (host) => <NotesPane host={host} onMount={props.onMountNotes} />,
     },
     {
       id: 'chat', label: 'Chat', open: chatOpen, onClose: closeChat,
@@ -98,9 +95,9 @@ function Harness(props: HarnessProps) {
 }
 
 function mount(extra: Partial<HarnessProps> = {}) {
-  const inbox = makeInboxClient()
+  const inbox = { mounts: vi.fn() }
   const streams = makeStreams()
-  const view = render(<Harness inbox={inbox} chat={makeChatClient()} factory={streams.factory} {...extra} />)
+  const view = render(<Harness onMountNotes={inbox.mounts} chat={makeChatClient()} factory={streams.factory} {...extra} />)
   return { inbox, streams, ...view }
 }
 
@@ -109,7 +106,7 @@ const panelTabs = () => within(screen.getByRole('tablist', { name: 'Panel tabs' 
 const selectedTab = () => panelTabs().find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent
 
 describe('BottomPanelHost', () => {
-  it('opening Chat then Inbox keeps ONE surface and ONE visible pane; the newest tab is selected', async () => {
+  it('opening Chat then Notes keeps ONE surface and ONE visible pane; the newest tab is selected', async () => {
     mount()
     expect(document.querySelector('.vscode-bottom-panel')).toBeNull()
 
@@ -119,8 +116,8 @@ describe('BottomPanelHost', () => {
 
     fireEvent.click(screen.getByText('toggle-inbox'))
     expect(document.querySelectorAll('.vscode-bottom-panel')).toHaveLength(1)
-    expect(panelTabs().map((t) => t.textContent)).toEqual([expect.stringMatching(/^Inbox/), expect.stringMatching(/^Chat/)])
-    expect(selectedTab()).toMatch(/^Inbox/)
+    expect(panelTabs().map((t) => t.textContent)).toEqual([expect.stringMatching(/^Notes/), expect.stringMatching(/^Chat/)])
+    expect(selectedTab()).toMatch(/^Notes/)
     expect(visiblePanes()).toHaveLength(1)
     expect(await screen.findByText('Deploy main')).not.toBeNull()
   })
@@ -129,55 +126,47 @@ describe('BottomPanelHost', () => {
     mount({ initial: { inbox: true, chat: true } })
     await screen.findByText('Deploy main')
     expect(screen.getAllByRole('toolbar')).toHaveLength(1)
-    expect(screen.getByLabelText('Refresh inbox')).not.toBeNull()
+    expect(screen.getByLabelText('Refresh notes')).not.toBeNull()
     expect(screen.queryByLabelText('Refresh conversations')).toBeNull()
 
     fireEvent.click(screen.getByRole('tab', { name: /^Chat/ }))
     expect(screen.getByLabelText('Refresh conversations')).not.toBeNull()
-    expect(screen.queryByLabelText('Refresh inbox')).toBeNull()
+    expect(screen.queryByLabelText('Refresh notes')).toBeNull()
     expect(screen.getAllByLabelText('Close Panel')).toHaveLength(1)
   })
 
-  it('keeps views mounted: switching tabs does not refetch inbox or reopen the stream', async () => {
+  it('keeps views mounted: switching tabs does not remount a pane or reopen the stream', async () => {
     const { inbox, streams } = mount({ initial: { inbox: true, chat: true } })
     await waitFor(() => expect(streams.opened).toHaveLength(1))
     fireEvent.click(screen.getByRole('tab', { name: /^Chat/ }))
     expect(await screen.findByLabelText('Message the central agent')).not.toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: /^Inbox/ }))
-    expect(inbox.listInbox).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('tab', { name: /^Notes/ }))
+    expect(inbox.mounts).toHaveBeenCalledTimes(1)
     expect(streams.opened).toHaveLength(1)
   })
 
   it('Dock toggle on a view open behind another tab reveals it; on the shown tab it closes it', async () => {
     mount({ initial: { inbox: true, chat: true } })
     await screen.findByText('Deploy main')
-    expect(selectedTab()).toMatch(/^Inbox/)
+    expect(selectedTab()).toMatch(/^Notes/)
     fireEvent.click(screen.getByText('toggle-chat'))
     expect(selectedTab()).toMatch(/^Chat/)
     expect(panelTabs()).toHaveLength(2)
     fireEvent.click(screen.getByText('toggle-chat'))
     expect(panelTabs()).toHaveLength(1)
-    expect(selectedTab()).toMatch(/^Inbox/)
+    expect(selectedTab()).toMatch(/^Notes/)
   })
 
   it('closes one view from its tab; Close Panel closes every open view', async () => {
     const onCloseInbox = vi.fn()
     const onCloseChat = vi.fn()
     mount({ initial: { inbox: true, chat: true }, onCloseInbox, onCloseChat })
-    fireEvent.click(await screen.findByRole('button', { name: 'Close Inbox' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close Notes' }))
     expect(onCloseInbox).toHaveBeenCalledTimes(1)
     expect(onCloseChat).not.toHaveBeenCalled()
     fireEvent.click(screen.getByLabelText('Close Panel'))
     expect(onCloseChat).toHaveBeenCalledTimes(1)
     expect(document.querySelector('.vscode-bottom-panel')).toBeNull()
-  })
-
-  it('Escape closes the active Inbox view only', async () => {
-    const onCloseInbox = vi.fn()
-    mount({ initial: { inbox: true, chat: true }, onCloseInbox })
-    await screen.findByText('Deploy main')
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(onCloseInbox).toHaveBeenCalledTimes(1)
   })
 
   it('Chat composer and the scroll area live in the same pane of the panel, composer after the log', async () => {

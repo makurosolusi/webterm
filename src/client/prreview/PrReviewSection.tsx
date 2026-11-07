@@ -1,6 +1,6 @@
 // "Review PR #…" inside the Source Control panel (F6 PR review bot). Starts a review, shows its
 // progress and the open drafts with a Post review button. Posting is the human approval: the server
-// decides the draft's Inbox gate and posts one review; approving it in the Inbox does the same.
+// decides the draft's Inbox gate and posts one review; approving it in the Central chat does the same.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'

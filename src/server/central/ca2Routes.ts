@@ -10,7 +10,7 @@ import { createLogger } from '../logs'
 import { activeCa2 } from './ca2Active'
 import type { Ca2Handle } from './ca2Boot'
 import { closeAgent, closeAllAgents, relayAgent, skillAction } from './ca2Routes.act'
-import { agentsView, approvalsView, memoryView, skillsView, statusView } from './ca2Routes.read'
+import { agentsView, memoryView, skillsView, statusView } from './ca2Routes.read'
 import { type ControlRequest, controlRoute } from './guard/haltApi'
 
 const BASE = '/api/central'
@@ -24,7 +24,7 @@ const log = createLogger('central.ca2')
 
 /** Whether `path` belongs to the CA2 panel families (used to answer 405 instead of falling through). */
 export const isCa2Path = (path: string): boolean =>
-  ['/status', '/agents', '/approvals', '/skills', '/memory', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path)
+  ['/status', '/agents', '/skills', '/memory', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path)
 
 const notAllowed: RouteResult = { status: 405, body: { error: 'method_not_allowed' } }
 const decode = (s: string): string | null => { try { return decodeURIComponent(s) } catch { return null } }
@@ -36,7 +36,7 @@ export async function ca2Dispatch(
   const { method, path, query } = req
   if (!isCa2Path(path)) return null
   const reads: Record<string, () => RouteResult> = {
-    '/status': () => statusView(h), '/approvals': () => approvalsView(h, query), '/memory': () => memoryView(h, query),
+    '/status': () => statusView(h), '/memory': () => memoryView(h, query),
     '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query),
   }
   const read = reads[path.slice(BASE.length)]

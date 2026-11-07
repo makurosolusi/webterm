@@ -1,5 +1,5 @@
 // Task / ledger-approval review from the "Needs you" strip: the Inbox's consent flow (typed
-// APPROVE, server challenge, explicit Consume, task fence), moved here so it outlives InboxPanel.
+// APPROVE, server challenge, explicit Consume, task fence), moved here from the removed Inbox panel.
 // Opens the same `inboxApprovalDialog` through `InboxPanelDialog`. Owns no list: after every
 // decision it re-reads the shared needs-you snapshot.
 import { useCallback, useEffect, useId, useRef, useState } from 'react'

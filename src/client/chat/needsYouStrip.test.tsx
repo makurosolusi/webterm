@@ -9,8 +9,9 @@ import {
 } from './needsYou.fixtures'
 import { INBOX_ITEMS_PATH, resetNeedsYou, useNeedsYouCount } from './needsYouApi'
 import { NeedsYouStrip } from './needsYouStrip'
+import { setNeedsYouExpanded } from '../secondarySideBar.store'
 
-beforeEach(() => resetNeedsYou())
+beforeEach(() => { resetNeedsYou(); setNeedsYouExpanded(false) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const head = () => screen.getByRole('button', { expanded: false })

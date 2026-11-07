@@ -18,9 +18,6 @@ export interface DockProps {
   /** Panel Sessions terbuka? Item `Sessions` di activity bar mengikuti keadaan ini. */
   sessionsOpen: boolean
   onToggleSessions: () => void
-  /** Inbox terbuka? Item `Inbox` duduk sebaris dengan Sessions di activity bar. */
-  inboxOpen: boolean
-  onToggleInbox: () => void
   /** Chat TAMPIL di secondary side bar (menyalakan ikonnya)? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
    *  itemnya hanya dirender ketika integrator menyediakan handler. */
   chatOpen?: boolean
@@ -28,9 +25,9 @@ export interface DockProps {
   /** Panel kontrol Central tampil di secondary side bar. Item SELALU tampil; tidak ada handler = Agent Pusat mati, klik memunculkan tawaran "Nyalakan". */
   centralOpen?: boolean
   onToggleCentral?: () => void
-  /** Item yang menunggu operator. 0 = tidak ada badge. Angkanya datang dari `useInboxBadge`;
-   *  dock tidak pernah memanggil `fetch` sendiri. */
-  inboxUnread?: number
+  /** Item yang menunggu operator (strip Needs-you), badge di ikon Chat. 0 = tidak ada badge. Angkanya
+   *  datang dari `useNeedsYouCount`; dock tidak pernah memanggil `fetch` sendiri. */
+  needsYouCount?: number
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
   /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
   onZoomTo?: (pct: number) => void

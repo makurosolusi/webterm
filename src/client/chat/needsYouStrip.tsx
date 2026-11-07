@@ -1,9 +1,10 @@
-// "N need you" strip at the top of the Central chat: the one place that replaces the Inbox panel.
+// "N need you" strip at the top of the Central chat: the one place for everything that needs you (it replaced the Inbox panel).
 // Collapsed it is a single line with a chip per category; expanded it lists every waiting item.
 // Unified items decide inline (`ChatApprovalCard`); task reviews and other ledger approvals open
 // the Inbox's APPROVE-phrase dialog (`useTaskReview`). Hidden when nothing waits. It needs only
 // ledger endpoints, so it renders when Central is off.
-import { useState } from 'react'
+import { setNeedsYouExpanded, useNeedsYouExpanded } from '../secondarySideBar.store'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { InboxClient, InboxItem } from '../inboxApi'
 import { ChatApprovalCard } from './chatApprovalCard'
 import { needsYouRows, useNeedsYou, type UnifiedItem } from './needsYouApi'
@@ -25,7 +26,8 @@ export interface NeedsYouStripProps {
 
 export function NeedsYouStrip(props: NeedsYouStripProps): React.JSX.Element | null {
   const { cards, tasks } = needsYouRows(useNeedsYou())
-  const [expanded, setExpanded] = useState(false)
+  // Shared store, so `/approvals` and the Dock's Chat icon can expand it from outside.
+  const expanded = useNeedsYouExpanded()
   const review = useTaskReview({ client: props.client, now: props.now })
   const total = cards.length + tasks.length
   if (total === 0 && !review.dialog) return null
@@ -37,7 +39,7 @@ export function NeedsYouStrip(props: NeedsYouStripProps): React.JSX.Element | nu
   return (
     <section className="needs-strip" aria-label="Needs you">
       {total > 0 && (
-        <button type="button" className="needs-strip__head" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+        <button type="button" className="needs-strip__head" aria-expanded={expanded} onClick={() => setNeedsYouExpanded(!expanded)}>
           <span className={`codicon codicon-chevron-${expanded ? 'down' : 'right'}`} aria-hidden="true" />
           <span className="needs-strip__total">{total} need{total === 1 ? 's' : ''} you</span>
           {ORDER.filter((c) => counts[c] > 0).map((c) => (
@@ -56,8 +58,11 @@ export function NeedsYouStrip(props: NeedsYouStripProps): React.JSX.Element | nu
               <li key={item.id} className="needs-task" data-category={taskCategory(item)}>
                 <span className="needs-card__title">{item.title}</span>
                 <span className="needs-card__summary">{[CATEGORY_LABEL[taskCategory(item)], item.projectId, item.detail].filter(Boolean).join(' · ')}</span>
-                <button type="button" className="chat-retry needs-task__open" aria-label={`Review ${item.title}`} disabled={blocked !== null}
-                  title={blocked ?? undefined} onClick={() => review.open(item)}>Review</button>
+                {/* Blocked: a disabled button fires no hover, so IconTooltip wraps it and says why. */}
+                <IconTooltip label={blocked ?? `Review ${item.title}`} disabled={blocked !== null}>
+                  <button type="button" className="chat-retry needs-task__open" aria-label={`Review ${item.title}`} disabled={blocked !== null}
+                    onClick={() => review.open(item)}>Review</button>
+                </IconTooltip>
               </li>
             )
           })}

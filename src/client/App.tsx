@@ -8,11 +8,9 @@ import SignInScreen from './SignInScreen'
 import BootScreen from './BootScreen'
 import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
 import AppBottomPanel from './App.bottomPanel'
-import { toggleBottomView } from './bottomPanelHost'
 import SecondarySideBar from './App.secondarySideBar'
 import { toggleSideBar, toggleSideBarView } from './secondarySideBar.store'
 import { useCentralControlEnabled } from './central/centralControlApi'
-import { useInboxOpen } from './inboxPanelModel'
 import { CleanViewHint, useCleanView } from './cleanView'
 import Omnibox from './Omnibox'
 import { openEditorAt, useOmnibox } from './Omnibox.open'
@@ -73,8 +71,6 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   // Di App, bukan di dalam panel: tombol pembukanya ada di Dock dan geseran dock ikut keadaan ini.
   const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
-  // Sama seperti Sessions: tombolnya di Dock, jadi keadaannya milik App yang merender keduanya.
-  const [inboxOpen, setInboxOpen] = useInboxOpen()
   // Chat & Central tinggal di secondary side bar kanan; buka/tutup & view-nya milik
   // `secondarySideBar.store` (dibaca Dock, title bar, dan side bar itu sendiri), bukan state App.
   const centralEnabled = useCentralControlEnabled()
@@ -179,8 +175,7 @@ export default function App() {
 
   const noWorkspaces = workspaces.length === 0
 
-  const inboxReady = hydrated && !noWorkspaces
-  const { inboxUnread, outputStatusItems, outputCommands } = useDockFeeds(inboxOpen, setInboxOpen, inboxReady)
+  const { needsYouCount, outputStatusItems, outputCommands } = useDockFeeds()
   // Senses chips: detected ports, Problems counter, Run Task (src/server/ports|problems|tasks).
   const portItems = usePortsStatusItems(activeId, nodeActions.openBrowserAt)
   const problems = useProblems(activeId)
@@ -198,7 +193,7 @@ export default function App() {
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
     newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
     toggleMaximizeNode: () => toggleMaximizeTarget(nodesRef.current),
-    toggleSessions: () => setSessionsOpen((v) => !v), toggleInbox: () => toggleBottomView('inbox', inboxOpen, setInboxOpen), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
+    toggleSessions: () => setSessionsOpen((v) => !v), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
     toggleBoard: () => setBoard((v) => !v),
   })
   useKeybindingsSync(settings.keybindings, settingsHydrated, update)
@@ -243,8 +238,8 @@ export default function App() {
       {hydrated && !noWorkspaces && (
         <>
           <AppDock
-            {...{ vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, inboxOpen, setInboxOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
-            {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, inboxUnread, agentSummary }}
+            {...{ vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
+            {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary }}
             extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SessionsPanel
@@ -261,9 +256,9 @@ export default function App() {
             onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           />
           <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} launch={settings.agentLaunchCommands} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
-          {/* Inbox, Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
-              menutup lewat Escape/X tab-nya; dialog persetujuan Inbox yang memegang consent. */}
-          <AppBottomPanel inboxOpen={inboxOpen} setInboxOpen={setInboxOpen}
+          {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
+              menutup lewat Escape/X tab-nya. Persetujuan tinggal di strip Needs-you chat Central. */}
+          <AppBottomPanel
             problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
             onFocus={(id) => void onFocus(id)}
             workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} />
@@ -271,7 +266,7 @@ export default function App() {
           <SecondarySideBar centralEnabled={centralEnabled} />
           <OutputPanelHost />
           {tasks.menu}
-          <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenInbox={() => setInboxOpen(true)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
+          <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
           <AppHosts
             activeWs={activeWs}
             onCreated={(ws) => { setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}

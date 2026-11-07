@@ -36,7 +36,7 @@ export function prReviewService(): PrReviewService | null {
 /** Routine `prreview` action: one poll of the repo's open PRs, summed up in one line. */
 export async function pollPrReviews(input: { repo: string; workspaceId: string | null; parent: string }): Promise<string> {
   const service = prReviewService()
-  if (!service) throw new Error('the webterm ledger is off; PR review drafts need the Inbox')
+  if (!service) throw new Error('the webterm ledger is off; PR review drafts need it')
   const r = await service.poll({ repo: input.repo, workspaceId: input.workspaceId, parent: input.parent, door: 'routine' })
-  return r.reviewed.length ? `reviewed PR ${r.reviewed.map((n) => `#${n}`).join(', ')}; drafts are in the Inbox` : `no new PR heads (${r.skipped} already reviewed)`
+  return r.reviewed.length ? `reviewed PR ${r.reviewed.map((n) => `#${n}`).join(', ')}; drafts wait in the Central chat` : `no new PR heads (${r.skipped} already reviewed)`
 }

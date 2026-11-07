@@ -3,13 +3,13 @@
 // instead of sending it. Kept out of chat/chatConversation so that file only passes three props.
 import { useMemo, useRef, useState } from 'react'
 import { fetchWorkspaces } from '../api'
-import { openCentralTab } from '../secondarySideBar.store'
+import { expandNeedsYou, openCentralTab } from '../secondarySideBar.store'
 import { listActiveSkills } from './centralControlApi'
 import { createCentralCommands, type CentralSkill } from './centralCommands'
 
 /** What the chat host (ChatPanel) lends the commands. */
 export interface CentralChatHost {
-  /** The Central control panel is on: its tab shortcuts (/status, /approvals, /halt…) and skills are offered. */
+  /** The Central control panel is on: its tab shortcuts (/status, /halt…) and skills are offered. */
   centralEnabled: boolean
   newChat: () => void
   showHistory: () => void
@@ -43,6 +43,7 @@ export function useCentralChatCommands<R extends unknown[]>(
     else if (d.kind === 'panel') openCentralTab(d.tab, d.halt)
     else if (d.action === 'new') hostRef.current?.newChat()
     else if (d.action === 'history') hostRef.current?.showHistory()
+    else if (d.action === 'approvals') expandNeedsYou()
     else reseed('/', true)
   }
 

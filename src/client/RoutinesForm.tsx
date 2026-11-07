@@ -25,7 +25,7 @@ export const ROUTINE_FORM_TEXT = {
   cron: 'Cron (minute hour day month weekday), e.g. 0 9 * * 1', pattern: 'Event kind, e.g. hook.Stop or fs.*', debounce: 'Debounce (s)',
   precheck: 'Precheck command (exit 0 = run, otherwise skip; optional)', precheckTimeout: 'Timeout (s)',
   action: 'Action', spawn: 'Start a headless Claude agent', outbox: 'Message a wired agent', prreview: 'Review new pull requests',
-  prreviewHint: 'Reviews open pull requests of the workspace folder whose head is new. Drafts land in the Inbox; nothing is posted to GitHub until you approve it.',
+  prreviewHint: 'Reviews open pull requests of the workspace folder whose head is new. Drafts wait in the Needs-you list of the Central chat; nothing is posted to GitHub until you approve it.',
   prreviewNeedsWorkspace: 'Pick a workspace: its folder is the repo whose pull requests are reviewed.',
   prompt: 'Prompt', to: 'Agent node id', body: 'Message',
   maxRuns: 'Max runs / 24h', maxCost: 'Max cost USD / 24h (optional)', enabled: 'Enabled',

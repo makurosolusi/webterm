@@ -23,7 +23,7 @@ function Shell() {
   useAppCommands({
     openOmnibox: noop, openQuickOpen: noop, openFindInFiles: noop, openShortcuts: noop, openSettings: noop,
     newTerminal: noop, newFiles: noop, fitView: noop, toggleMaximizeNode: noop, toggleSessions: noop,
-    toggleInbox: noop, toggleChat: noop, toggleSecondarySideBar: toggleSideBar, toggleBoard: noop,
+    toggleChat: noop, toggleSecondarySideBar: toggleSideBar, toggleBoard: noop,
   })
   useCommandKeybindings()
   return (
