@@ -31,12 +31,13 @@ export interface ChatComposerProps {
   attach?: AttachFiles
   /** Where files may be dropped (default: the composer itself). */
   dropZone?: RefObject<HTMLElement | null>
-  /** Opt-in `/` and `@` completion menu; absent = plain composer (the Central chat). */
+  /** Opt-in `/` and `@` completion menu; absent = plain composer. */
   completion?: ComposerCompletion
   /** Focus the textarea on mount (a freshly created chat). */
   autoFocus?: boolean
-  /** Replaces the text and focuses the box whenever a new seed arrives (Agent Chat "Edit message"). */
-  seed?: { text: string; key: number }
+  /** Replaces the text and focuses the box whenever a new seed arrives (Agent Chat "Edit message");
+   *  with `menu` the completion menu opens on it (Central `/help` seeds `/`). */
+  seed?: { text: string; key: number; menu?: boolean }
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -72,6 +73,7 @@ export default function ChatComposer(props: ChatComposerProps) {
     if (!seed) return
     setText(seed.text)
     area.current?.focus()
+    if (seed.menu) complete.reveal(seed.text)
   }, [seed]) // a new seed object (new key) is the request, even with the same text
 
   // Auto-grow: measure from `auto` so the box also shrinks after a send or a deletion.

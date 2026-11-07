@@ -170,6 +170,15 @@ describe('skills admin', () => {
     expect(await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })).toMatchObject({ status: 200, body: { status: 'done' } })
     expect(h.skills?.load(SKILL.name)?.record.approvedBy).toBe('human:root')
   })
+
+  it('?status=active lists the approved skills with their description (the Central chat / list)', async () => {
+    await pend()
+    const before = ((await get('/api/central/skills?status=active'))?.body as { items: unknown[] }).items
+    expect(before.some((s) => (s as { name: string }).name === SKILL.name)).toBe(false)
+    await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })
+    const items = ((await get('/api/central/skills?status=active'))?.body as { items: Array<{ name: string; description: string }> }).items
+    expect(items.find((s) => s.name === SKILL.name)).toEqual({ name: SKILL.name, description: SKILL.description })
+  })
 })
 
 describe('a family whose feature is off answers 503 <feature>_off, not a fall-through 404', () => {
@@ -178,6 +187,7 @@ describe('a family whose feature is off answers 503 <feature>_off, not a fall-th
     const req = (method: string, path: string) => ({ method, path, query: new URLSearchParams(), body: async () => ({ message: 'hi', version: '1' }) })
     expect(await ca2Dispatch(off, req('GET', '/api/central/agents'))).toEqual({ status: 503, body: { error: 'agents_off' } })
     expect(await ca2Dispatch(off, req('GET', '/api/central/skills'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect(await ca2Dispatch(off, { ...req('GET', '/api/central/skills'), query: new URLSearchParams('status=active') })).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/agents/a1/relay'))).toEqual({ status: 503, body: { error: 'agents_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/agents/a1/close'))).toEqual({ status: 503, body: { error: 'agents_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/approve'))).toEqual({ status: 503, body: { error: 'skills_off' } })

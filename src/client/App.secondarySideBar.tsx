@@ -44,7 +44,7 @@ export default function SecondarySideBar({ centralEnabled }: { centralEnabled: b
     >
       <div className="vscode-bottom-panel__pane" hidden={shown !== 'chat'}>
         <Suspense fallback={<LazyPaneFallback />}>
-          <ChatPanel open embedded compact actionsHost={shown === 'chat' ? slot : null} />
+          <ChatPanel open embedded compact centralEnabled={centralEnabled} actionsHost={shown === 'chat' ? slot : null} />
         </Suspense>
       </div>
       {centralEnabled && (

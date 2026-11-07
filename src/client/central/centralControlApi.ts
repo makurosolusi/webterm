@@ -110,3 +110,9 @@ export const centralControlApi: CentralControlClient = {
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
   async listMemory(offset, signal) { return compact(rowsOf(await request(`${MEMORY_PATH}?${page(offset)}`, { signal })).map(toMemory)) },
 }
+
+/** Approved skills Central can load (`GET skills?status=active`), for the Central chat `/` list; rejects with `skills_off` when off. */
+export async function listActiveSkills(signal?: AbortSignal): Promise<Array<{ name: string; description: string }>> {
+  return compact(rowsOf(await request(`${SKILLS_PATH}?status=active`, { signal }))
+    .map((r) => (isRec(r) && str(r.name) ? { name: str(r.name), description: str(r.description) } : null)))
+}
