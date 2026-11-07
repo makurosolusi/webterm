@@ -8,6 +8,23 @@ afterEach(() => vi.useRealTimers())
 const spread = { merge: (p: Record<string, unknown>, n: Record<string, unknown>) => ({ ...p, ...n }) }
 
 describe('createCoalescer', () => {
+  it('flush resolves only after the pending send settled, and again for an already-sent value', async () => {
+    let done!: () => void
+    const send = vi.fn(() => new Promise<void>((r) => { done = r }))
+    const c = createCoalescer(send, spread)
+    c.push({ a: 1 })
+    let flushed = false
+    const f = c.flush().then(() => { flushed = true })
+    expect(send).toHaveBeenCalledTimes(1)
+    await Promise.resolve()
+    expect(flushed).toBe(false)
+    done()
+    await f
+    expect(flushed).toBe(true)
+    await c.flush() // nothing pending: resolves with the last send, no new send
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
   it('turns a burst of pushes into one send carrying the merged payload', () => {
     const send = vi.fn(async () => {})
     const c = createCoalescer(send, spread)
