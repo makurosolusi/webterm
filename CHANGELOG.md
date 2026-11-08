@@ -15,6 +15,7 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 - A stored WEBTERM_CENTRAL_RUNTIME=opencode now means automatic (Claude); WEBTERM_OPENCODE_* keys are ignored.
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
+- Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 
 ### Added
 - Model ladder for headless Claude runs (task planner and workers, routines, PR review, bake-off, Central agent spawns): each kind starts on a fitting model and effort, and a task that fails verification or produces no changes is retried one step up (at most two steps, never above Opus on its own; a timeout raises effort first).
@@ -93,6 +94,9 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Central Agent settings are in one place, Settings › Central Agent, grouped as Status & setup, Autonomy & approvals, Model & cost, Abilities, Telegram and Advanced, in plain words; other sections link there instead of repeating them.
+- Settings use switches, selects, steppers and sliders wherever possible; fields that still take typing offer presets and remember what you entered before.
+- The side bar's Central levels read in plain words, with a button to Central settings.
 - Central and Agent Chat (when no model is picked) run on the ladder's default, Sonnet · medium; a workspace override in Settings › Agent › Models applies to Agent Chat, and Agent Chat's "Auto" entry names what will actually run.
 - Background helpers (classifier, checkpoints, handoff, brief, memory review) run at low effort.
 - The default daily Central token budget is now 10,000,000 input-equivalent tokens (was 1,000,000), since cache tokens now count.
@@ -217,6 +221,7 @@ Operator notes:
 - Canvas nodes saved by a newer webterm version, or partly corrupted, are no longer deleted on the next save, and their running terminal sessions are no longer cleaned up as left behind.
 
 ### Removed
+- The unused per-reply token limit setting.
 - OpenCode as a Central runtime and as the fallback worker: Central and workers run on Claude only; without Claude they ask you to set it up.
 - Built-in integration for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity (launch command settings, status signals, resume and history). They still run in a terminal node; existing nodes keep launching their command. Codex sessions no longer appear in Agent History.
 - The Inbox panel and the Central › Approvals tab; both are replaced by the Central chat.
