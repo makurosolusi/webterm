@@ -18,7 +18,7 @@ const withBody = (v: unknown) => () => Promise.resolve(JSON.stringify(v))
 const noBody = () => Promise.resolve('')
 const put = (store: Db, id: string, v: unknown) => workspacesRoute(store, `/api/workspaces/${id}`, 'PUT', withBody(v))
 const post = (store: Db, v: unknown) => workspacesRoute(store, '/api/workspaces', 'POST', withBody(v))
-const NODE = { id: 'n1', kind: 'terminal', x: 1, y: 2 }
+const NODE = { id: 'n1', kind: 'terminal', name: 'Mango', x: 1, y: 2 }
 const VALID = { name: 'p', viewport: DEFAULT_VIEWPORT, nodes: [NODE] }
 
 test('malformed PUT bodies are 400 naming the field, and the stored row stays unchanged', async () => {
@@ -61,7 +61,7 @@ test('a valid PUT keeps unknown node fields and sanitizes the node blobs it know
 })
 
 test('an agent chat node round-trips through the schema, a PUT and a load without a downgrade', async () => {
-  const chat = { id: 'c1', kind: AGENT_CHAT_KIND, x: 3, y: 4, title: 'chat' }
+  const chat = { id: 'c1', kind: AGENT_CHAT_KIND, name: 'Kiwi', x: 3, y: 4, title: 'chat' }
   const board = { ...VALID, nodes: [NODE, chat] }
   expect(normalizeWorkspace(board)).toEqual({ board: { ...board, cwd: undefined, color: undefined, bridges: [] }, issues: [], preserved: [] })
   const store = new Db(openDb(':memory:'))

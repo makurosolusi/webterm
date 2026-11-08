@@ -9,7 +9,7 @@ export const SUMMARY_LIMIT = { min: 1, max: 200, default: 50 } as const
 export function toSummary(ws: Workspace): WorkspaceSummary {
   return {
     id: ws.id, name: ws.name, cwd: ws.cwd, color: ws.color, updatedAt: ws.updatedAt,
-    nodes: ws.nodes.map((n) => ({ id: n.id, kind: n.kind, title: n.title, agentId: n.agentId })),
+    nodes: ws.nodes.map((n) => ({ id: n.id, kind: n.kind, name: n.name, title: n.title, agentId: n.agentId })),
   }
 }
 

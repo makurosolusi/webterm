@@ -8,7 +8,7 @@ export interface WorkspaceSummary {
   cwd?: string
   color?: string
   updatedAt: number
-  nodes: Array<{ id: string; kind: string; title?: string; agentId?: string }>
+  nodes: Array<{ id: string; kind: string; name?: string; title?: string; agentId?: string }>
 }
 
 /** A page of summaries; `nextCursor` absent = last page. The cursor is opaque to the client. */

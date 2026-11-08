@@ -24,8 +24,8 @@ test('save round-trips nodes with cmd/agentId intact', () => {
   const db = freshDb()
   const ws = db.create('proj')
   const nodes: WsNode[] = [
-    { id: 'n1', kind: 'terminal', x: 1, y: 2 },
-    { id: 'n2', kind: 'agent', x: 3, y: 4, cmd: 'envman -e work -- claude', agentId: 'claude' },
+    { id: 'n1', kind: 'terminal', x: 1, y: 2, name: 'Mango' },
+    { id: 'n2', kind: 'agent', x: 3, y: 4, cmd: 'envman -e work -- claude', agentId: 'claude', name: 'Kiwi' },
   ]
   ws.nodes = nodes
   db.save(ws)
