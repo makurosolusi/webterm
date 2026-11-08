@@ -28,6 +28,9 @@ const vscodeScreens = new Set([
   // Native <select>/checkbox restyled with VS Code metrics (hybrid settings screen).
   "src/client/SettingsControls.tsx",
   "src/client/SettingsFields.tsx",
+  // Settings pickers: the combobox (ARIA combobox: native input + listbox) and stepper / slider / number select.
+  "src/client/SettingsCombobox.tsx",
+  "src/client/SettingsPickerFields.tsx",
   // Sessions sidebar
   "src/client/SessionsFilter.tsx",
   "src/client/SessionsGroupingTabs.tsx",

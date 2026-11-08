@@ -18,6 +18,7 @@ import { normalizeCustomAgents, type CustomAgentError } from '../shared/customAg
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { applySettingsPatch } from '../shared/settings.patch'
 import { projectModelsPatchErrors } from '../shared/settings.projectModels'
+import { inputHistoryPatchErrors } from '../shared/settings.inputHistory'
 import { seedClaudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 import { createLogger } from './logs'
@@ -86,7 +87,8 @@ function acceptsShape(key: string, v: unknown): boolean {
  * settings in settings.json untouched. Unknown or wrong-shaped PATCH keys are dropped, so the
  * HTTP input cannot add junk. Entry keys (`settings.patch.ts`) merge one entry, `null` deletes.
  * `patch.customAgents` is validated `strict` and THROWS `SettingsValidationError`, so a broken PUT
- * is refused (400) instead of silently dropped; so is a `patch.projectModels` entry with an unknown model/effort.
+ * is refused (400) instead of silently dropped; so is a `patch.projectModels` entry with an unknown model/effort
+ * and a `patch.inputHistory` list not in stored form.
  */
 export function nextSettingsDocument(storedJson: string | null, patch: unknown): { doc: Record<string, unknown>; settings: Settings } {
   const p = asRecord(patch)
@@ -96,6 +98,8 @@ export function nextSettingsDocument(storedJson: string | null, patch: unknown):
   }
   const modelErrors = projectModelsPatchErrors(p.projectModels)
   if (modelErrors.length) throw new SettingsValidationError(modelErrors)
+  const historyErrors = inputHistoryPatchErrors(p.inputHistory)
+  if (historyErrors.length) throw new SettingsValidationError(historyErrors)
   const accepted = Object.fromEntries(Object.entries(p).filter(([k, v]) => acceptsShape(k, v)))
   const doc = applySettingsPatch(storedDocument(storedJson), accepted)
   const settings = mergeSettings(doc, warnDropped)

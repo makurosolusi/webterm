@@ -6,7 +6,7 @@
 import type { Settings } from './settings'
 
 /** Map-valued keys patched per entry. `keybindings` is NOT one: `null` there means "unbind". */
-export const ENTRY_PATCH_KEYS = ['canvasBackgroundByWorkspace', 'projectModels'] as const
+export const ENTRY_PATCH_KEYS = ['canvasBackgroundByWorkspace', 'projectModels', 'inputHistory'] as const
 type EntryKey = (typeof ENTRY_PATCH_KEYS)[number]
 
 /** A settings PATCH: entry keys carry changed entries only, `null` = delete that entry. */

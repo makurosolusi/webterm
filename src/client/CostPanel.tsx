@@ -4,7 +4,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { SettingsCombobox } from './SettingsCombobox'
+import { dollarsToMicros, validateDollars } from './SettingsCostLimit'
+import { COST_CAP_FIELD_ID, COST_CAP_PRESETS } from './settingsPresets'
 import { controlRequest } from './ControlPanel'
 import type { CostResponse } from '../server/cost/cost.route'
 import type { SpendGroup, SpendSummary } from '../server/cost/costStore'
@@ -31,8 +33,7 @@ export const COST_TEXT = {
   central: 'Central',
   none: 'Nothing yet.',
   caps: 'Caps',
-  dayCap: 'Daily cap (USD, 0 = none)',
-  save: 'Save',
+  dayCap: 'Daily cap (USD)',
   resume: 'Resume',
   paused: 'Paused',
   pricing: 'Prices from',
@@ -63,7 +64,6 @@ export function CostPanel(): React.JSX.Element {
   const [data, setData] = useState<CostResponse | null>(null)
   const [failed, setFailed] = useState(false)
   const [range, setRange] = useState<'today' | 'week'>('today')
-  const [cap, setCap] = useState('')
 
   const load = useCallback(() => {
     controlRequest('GET', undefined, '', COST_API_PATH)
@@ -119,12 +119,14 @@ export function CostPanel(): React.JSX.Element {
                 </li>
               ))}
             </ul>
-            <label className="mt-1 flex items-center gap-2 text-xs">
-              {COST_TEXT.dayCap}
-              <Input className="h-7 w-24" inputMode="decimal" value={cap} placeholder={day ? String(day.limitMicros / 1e6) : '0'} onChange={(e) => setCap(e.target.value)} />
-              <Button size="sm" variant="secondary" disabled={!(Number(cap) >= 0) || cap.trim() === ''}
-                onClick={() => write('PUT', `${COST_API_PATH}/caps`, { scope: 'day', limitMicros: Math.round(Number(cap) * 1e6) })}>{COST_TEXT.save}</Button>
-            </label>
+            <div className="mt-1 flex items-center gap-2 text-xs">
+              <label htmlFor="cost-day-cap">{COST_TEXT.dayCap}</label>
+              <span className="w-40">
+                <SettingsCombobox id="cost-day-cap" fieldId={COST_CAP_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"
+                  value={day && day.limitMicros > 0 ? String(day.limitMicros / 1e6) : ''} validate={validateDollars}
+                  onCommit={(v) => write('PUT', `${COST_API_PATH}/caps`, { scope: 'day', limitMicros: dollarsToMicros(v) ?? 0 })} />
+              </span>
+            </div>
           </div>
           <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">{data.pricing.source}</a> ({data.pricing.checkedAt})</p>
         </div>

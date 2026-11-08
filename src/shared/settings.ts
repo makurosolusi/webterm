@@ -28,6 +28,7 @@ import type { AppTheme, TerminalSettings } from './settings.terminal'
 import type { AgentSettings } from './settings.agent'
 import { normalizeKeybindings } from './settings.keybindings'
 import { normalizeProjectModels } from './settings.projectModels'
+import { normalizeInputHistory } from './settings.inputHistory'
 
 export type { TerminalCursorStyle, TerminalCursorInactiveStyle, TerminalShortcutPolicy, TerminalGpuRendering, AppTheme } from './settings.terminal'
 export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
@@ -80,6 +81,11 @@ export interface Settings extends TerminalSettings, AgentSettings {
    *  the server at use (absolute, not inside the data dir, not a file); an invalid value falls back
    *  to the default instead of failing a clone. */
   defaultProjectsFolder: string
+
+  // --- Input history ---------------------------------------------------------------------------
+  /** Values typed into settings comboboxes, per field id, most recent first (`settings.inputHistory.ts`).
+   *  Shown as "Recent" suggestions on every device; never holds secrets. */
+  inputHistory: Record<string, string[]>
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -134,6 +140,7 @@ export const DEFAULT_SETTINGS: Settings = {
   browserSearchEngine: 'google',
   keybindings: {},
   defaultProjectsFolder: '',
+  inputHistory: {},
 }
 
 
@@ -191,6 +198,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.canvasBackground = normalizeCanvasBackground(src.canvasBackground)
   out.canvasBackgroundByWorkspace = normalizeWorkspaceBackgrounds(src.canvasBackgroundByWorkspace)
   out.projectModels = normalizeProjectModels(src.projectModels)
+  out.inputHistory = normalizeInputHistory(src.inputHistory)
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents

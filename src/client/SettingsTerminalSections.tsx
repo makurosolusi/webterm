@@ -8,13 +8,9 @@ import {
 } from './terminalConfig'
 import { TERMINAL_THEMES } from './themes'
 import { ProjectsFolderSetting } from './workspaceCreate/ProjectsFolderSetting'
-import {
-  NumberField,
-  SelectField,
-  TextField,
-  ToggleField,
-  useSettingsSearch,
-} from './SettingsFields'
+import { SelectField, ToggleField, useSettingsSearch } from './SettingsFields'
+import { ComboboxField, integerIn, NumberSelectField, SliderField, StepperField } from './SettingsPickerFields'
+import { FONT_FAMILY_PRESETS, FONT_WEIGHT_OPTIONS, REPLAY_BUFFER_OPTIONS, SCROLLBACK_PRESETS, SHELL_PRESETS, withSpace, WORD_SEPARATOR_PRESETS } from './settingsPresets'
 
 interface P {
   settings: Settings
@@ -28,23 +24,24 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
       {query ? null : (
         <p className="st-note">Changes in this section apply immediately to open terminals.</p>
       )}
-      <NumberField setting="fontSize" id="st-fontSize" label="Font size" value={s.fontSize} min={6} max={48} unit="px"
+      <StepperField setting="fontSize" id="st-fontSize" label="Font size" value={s.fontSize} range="fontSize" unit="px"
         onChange={(v) => onChange({ fontSize: v })} />
-      <TextField setting="fontFamily" id="st-fontFamily" label="Font family" value={s.fontFamily} mono
+      <ComboboxField setting="fontFamily" id="st-fontFamily" fieldId="terminal.fontFamily" label="Font family" value={s.fontFamily} mono
+        presets={FONT_FAMILY_PRESETS} validate={(v) => (v ? null : 'Pick or enter a font.')}
         hint="A CSS font list. Monospace fonts only — proportional fonts break TUI column alignment."
-        onChange={(v) => onChange({ fontFamily: v })} />
-      <NumberField setting="fontWeight" id="st-fontWeight" label="Normal text weight" value={s.fontWeight} min={100} max={900} step={100}
+        onCommit={(v) => onChange({ fontFamily: v })} />
+      <NumberSelectField setting="fontWeight" id="st-fontWeight" label="Normal text weight" value={s.fontWeight} options={FONT_WEIGHT_OPTIONS}
         hint="xterm’s own default is normal (400)." onChange={(v) => onChange({ fontWeight: v })} />
-      <NumberField setting="fontWeightBold" id="st-fontWeightBold" label="Bold text weight" value={s.fontWeightBold} min={100} max={900} step={100}
+      <NumberSelectField setting="fontWeightBold" id="st-fontWeightBold" label="Bold text weight" value={s.fontWeightBold} options={FONT_WEIGHT_OPTIONS}
         hint="xterm’s own default is bold (700). Lowering it keeps bold readable on thin fonts that render 700 as a blob."
         onChange={(v) => onChange({ fontWeightBold: v })} />
       <ToggleField setting="drawBoldTextInBrightColors" id="st-drawBold" label="Draw bold text in bright colors" value={s.drawBoldTextInBrightColors}
         hint="The xterm default and a historical terminal convention. Off makes bold purely about weight, so colors keep the meaning the program intended."
         onChange={(v) => onChange({ drawBoldTextInBrightColors: v })} />
-      <NumberField setting="terminalLineHeight" id="st-lineHeight" label="Line height" value={s.terminalLineHeight} min={0.8} max={3} step={0.05}
+      <SliderField setting="terminalLineHeight" id="st-lineHeight" label="Line height" value={s.terminalLineHeight} range="terminalLineHeight"
         hint="A multiple of the font size. 1 = the xterm default, no extra leading."
         onChange={(v) => onChange({ terminalLineHeight: v })} />
-      <NumberField setting="terminalLetterSpacing" id="st-letterSpacing" label="Letter spacing" value={s.terminalLetterSpacing} min={-2} max={10} step={0.5} unit="px"
+      <SliderField setting="terminalLetterSpacing" id="st-letterSpacing" label="Letter spacing" value={s.terminalLetterSpacing} range="terminalLetterSpacing" unit="px"
         hint="Extra horizontal space between cells. 0 = the xterm default." onChange={(v) => onChange({ terminalLetterSpacing: v })} />
       <SelectField setting="terminalTheme" id="st-terminalTheme" label="Color scheme" value={s.terminalTheme}
         hint="Unknown ids fall back to the default theme — the value can be edited by hand."
@@ -58,7 +55,7 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
           { value: 'light', label: 'light' },
         ]}
         onChange={(v) => onChange({ appTheme: v })} />
-      <NumberField setting="terminalMinContrast" id="st-minContrast" label="Minimum contrast" value={s.terminalMinContrast} min={1} max={21} step={0.5}
+      <SliderField setting="terminalMinContrast" id="st-minContrast" label="Minimum contrast" value={s.terminalMinContrast} range="terminalMinContrast"
         hint="Foreground/background contrast ratio. 1 (the xterm default) turns adjustment off entirely; 4.5 = WCAG AA, 7 = AAA, 21 forces black or white. It costs work per cell in the renderer, so it stays off unless requested."
         onChange={(v) => onChange({ terminalMinContrast: v })} />
       <SelectField setting="cursorStyle" id="st-cursorStyle" label="Cursor style" value={s.cursorStyle}
@@ -87,10 +84,11 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
           { value: 'off', label: 'off (DOM renderer)' },
         ]}
         onChange={(v) => onChange({ terminalGpuRendering: v })} />
-      <NumberField setting="scrollbackLines" id="st-scrollbackLines" label="Terminal scrollback" value={s.scrollbackLines}
-        min={TERMINAL_SCROLLBACK_LINES_MIN} max={TERMINAL_SCROLLBACK_LINES_MAX} step={1000} unit="lines"
+      <ComboboxField setting="scrollbackLines" id="st-scrollbackLines" fieldId="terminal.scrollbackLines" label="Terminal scrollback"
+        value={String(s.scrollbackLines)} presets={SCROLLBACK_PRESETS}
+        validate={integerIn(TERMINAL_SCROLLBACK_LINES_MIN, TERMINAL_SCROLLBACK_LINES_MAX, 'a number of lines')}
         hint="In LINES: how far up you can scroll inside a terminal node. The cost is per node. Default 10000."
-        onChange={(v) => onChange({ scrollbackLines: v })} />
+        onCommit={(v) => onChange({ scrollbackLines: Number(v) })} />
     </>
   )
 }
@@ -98,9 +96,10 @@ export function TerminalSection({ settings: s, onChange }: P): React.JSX.Element
 export function InteractionSection({ settings: s, onChange }: P): React.JSX.Element {
   return (
     <>
-      <TextField setting="terminalWordSeparator" id="st-wordSep" label="Word separators" value={s.terminalWordSeparator} mono
-        hint="Characters that end a word on double-click selection. The default keeps hyphens, underscores, slashes, and dots inside words so identifiers and paths are selected whole."
-        onChange={(v) => onChange({ terminalWordSeparator: v })} />
+      <ComboboxField setting="terminalWordSeparator" id="st-wordSep" fieldId="terminal.wordSeparator" label="Word separators"
+        value={s.terminalWordSeparator} mono trim={false} presets={WORD_SEPARATOR_PRESETS}
+        hint="Characters that end a word on double-click selection; a space always does. The default keeps hyphens, underscores, slashes, and dots inside words so identifiers and paths are selected whole."
+        onCommit={(v) => onChange({ terminalWordSeparator: withSpace(v) })} />
       <ToggleField setting="copyOnSelect" id="st-copyOnSelect" label="Copy on select" value={s.copyOnSelect}
         hint="Copy a finished MOUSE selection to the system clipboard. Off by default: replacing the clipboard unasked is a surprise you should opt into."
         onChange={(v) => onChange({ copyOnSelect: v })} />
@@ -127,10 +126,11 @@ export function InteractionSection({ settings: s, onChange }: P): React.JSX.Elem
 export function ShellSection({ settings: s, onChange }: P): React.JSX.Element {
   return (
     <>
-      <TextField setting="defaultShell" id="st-defaultShell" label="Default shell" value={s.defaultShell} mono placeholder="(system default shell)"
-        hint="Empty = use the system default shell." onChange={(v) => onChange({ defaultShell: v })} />
-      <NumberField setting="scrollbackBytes" id="st-scrollback" label="Server replay buffer" value={s.scrollbackBytes} min={16 * 1024} max={64 * 1024 * 1024} step={16 * 1024} unit="bytes"
-        hint="In BYTES: a ring buffer of raw PTY bytes on the server, replayed when the tab reloads. Default 256 KiB (262144)."
+      <ComboboxField setting="defaultShell" id="st-defaultShell" fieldId="terminal.defaultShell" label="Default shell" value={s.defaultShell} mono
+        presets={SHELL_PRESETS} placeholder="(system default shell)"
+        hint="Empty = use the system default shell." onCommit={(v) => onChange({ defaultShell: v })} />
+      <NumberSelectField setting="scrollbackBytes" id="st-scrollback" label="Server replay buffer" value={s.scrollbackBytes} options={REPLAY_BUFFER_OPTIONS}
+        hint="A ring buffer of raw terminal output on the server, replayed when the tab reloads. Default 256 KiB."
         onChange={(v) => onChange({ scrollbackBytes: v })} />
       <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
     </>

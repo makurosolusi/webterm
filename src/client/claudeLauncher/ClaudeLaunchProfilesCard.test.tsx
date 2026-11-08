@@ -69,13 +69,17 @@ describe('ClaudeLaunchProfilesCard', () => {
     setup()
     openAdd()
     const cmd = within(editor()).getByLabelText('Launch command') as HTMLInputElement
-    fireEvent.click(within(editor()).getByRole('button', { name: 'Wrapper ending in --' }))
+    const pick = (name: string): void => {
+      fireEvent.click(within(editor()).getByRole('button', { name: 'Show suggestions' }))
+      fireEvent.click(within(editor()).getByRole('option', { name: new RegExp(name) }))
+    }
+    pick('Wrapper ending in --')
     expect(cmd.value).toBe('<wrapper> --')
     expect(document.activeElement).toBe(cmd)
     expect(cmd.value.slice(cmd.selectionStart!, cmd.selectionEnd!)).toBe('<wrapper>')
-    fireEvent.click(within(editor()).getByRole('button', { name: 'Custom claude path' }))
+    pick('Custom claude path')
     expect(cmd.value).toBe('/path/to/claude')
-    fireEvent.click(within(editor()).getByRole('button', { name: 'Extra flags' }))
+    pick('Extra flags')
     expect(cmd.value).toBe('claude --model opus')
     expect(cmd.value.slice(cmd.selectionStart!, cmd.selectionEnd!)).toBe('opus')
   })

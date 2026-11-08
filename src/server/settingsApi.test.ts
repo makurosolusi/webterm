@@ -190,6 +190,17 @@ describe('PUT /api/settings customAgents strict', () => {
     expect(res.body).not.toContain('sekrit-value')
   })
 
+  it('inputHistory not in stored form => 400 invalid_settings; the value is not echoed', async () => {
+    const store: SettingsStore = { getSettings: () => SNAPSHOT, saveSettings: (p) => (nextSettings(null, p), SNAPSHOT) }
+    const req = trackedReq('PUT')
+    feed(req, [JSON.stringify({ inputHistory: { 'claude.gatewayUrl': ['  https://remembered.example  '] } })]) // test-only
+    const res = recorder()
+    await settingsRoute(req, res, 'PUT', store)
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toEqual({ error: 'invalid_settings', errors: [{ index: 0, field: 'inputHistory.list', code: 'invalid_list' }] })
+    expect(res.body).not.toContain('remembered.example')
+  })
+
   it('galat non-validasi tetap dilempar ke pemanggil', async () => {
     const store: SettingsStore = { getSettings: () => SNAPSHOT, saveSettings: () => { throw new Error('disk') } }
     const req = trackedReq('PUT')

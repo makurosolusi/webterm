@@ -2,25 +2,30 @@
 // setting type (boolean -> checkbox, enum -> dropdown, number/string -> text box, contributes.configuration
 // docs), a "Reset Setting" action on modified values, and settings set outside the editor (VS Code
 // policy, `@haspolicy`) shown read-only with the reason. code.visualstudio.com/docs/configure/settings
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import type { EffectiveRow } from './ControlPanel'
 import { CONTROL_TEXT } from './controlPanelLabels'
 import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
+import { SettingsCombobox } from './SettingsCombobox'
 
 /** A write: set one key, or reset it (unset). Resolves to an error sentence, or null when saved. */
 export type ControlWrite = (key: string, value: string | null) => Promise<string | null>
 
+const isNumber = (v: string): string | null => (v === '' || Number.isFinite(Number(v)) ? null : CONTROL_TEXT.notANumber)
+
+/** Plain (non-secret) text or number: combobox with the default and known options as suggestions,
+ *  plus the values entered before. Range checks stay on the server, the one validator. */
 function TextField({ row, write }: { row: EffectiveRow; write: ControlWrite }): React.JSX.Element {
-  const [draft, setDraft] = useState(row.setting)
-  useEffect(() => setDraft(row.setting), [row.setting])
-  const commit = (): void => { if (draft !== row.setting) void write(row.key, draft) }
+  const presets = [...new Set([row.default ?? '', ...(row.options ?? [])].filter(Boolean))]
+    .map((v) => ({ value: v, label: v === row.default ? `${v} (default)` : row.optionLabels?.[v] ?? v }))
   return (
-    <Input aria-label={row.label} data-control={row.key} value={draft} placeholder={row.default}
-      type={row.kind === 'number' ? 'number' : 'text'} min={row.min} max={row.max} className="h-7 text-xs"
-      onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') commit() }} />
+    <span data-control={row.key} className="min-w-40 flex-1">
+      <SettingsCombobox ariaLabel={row.label} fieldId={`control.${row.key}`} value={row.setting} placeholder={row.default}
+        presets={presets} validate={row.kind === 'number' ? isNumber : undefined} onCommit={(v) => void write(row.key, v)} />
+    </span>
   )
 }
 

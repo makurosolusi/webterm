@@ -200,6 +200,8 @@ describe('Settings › Central Agent', () => {
     fireEvent.change(input, { target: { value: '2.5' } })
     fireEvent.blur(input)
     await waitFor(() => expect(puts).toEqual([{ set: { [COST_CAP_KEY]: '2500000' }, unset: [] }]))
+    // The field is locked while saving and shows the saved amount after; type only once it is back.
+    await waitFor(() => expect(input.disabled).toBe(false))
     fireEvent.change(input, { target: { value: '' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() => expect(puts[1]).toEqual({ set: {}, unset: [COST_CAP_KEY] }))

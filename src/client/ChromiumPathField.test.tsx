@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// Chromium location: path otomatis tampil, kandidat bisa dipilih lalu disimpan, "Use automatic" menghapus override.
+// Chromium location: path otomatis tampil, kandidat jadi saran combobox dan tersimpan saat dipilih, "Use automatic" menghapus override.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
@@ -28,17 +28,18 @@ describe('ChromiumPathField', () => {
     expect(screen.queryByRole('button', { name: 'Use automatic' })).toBeNull()
   })
 
-  it('picking a candidate fills the input; Save location saves it', () => {
+  it('candidates are combobox suggestions; picking one saves it, a typed path saves on Enter', () => {
     const { save } = setup(auto)
-    const list = screen.getByRole('list', { name: 'Found on this computer' })
-    expect(within(list).getAllByRole('button').map((b) => b.textContent)).toEqual([CHROME, BRAVE])
-    const save_ = screen.getByRole('button', { name: 'Save location' }) as HTMLButtonElement
-    expect(save_.disabled).toBe(true)
-    fireEvent.click(within(list).getByRole('button', { name: BRAVE }))
-    expect((screen.getByLabelText('Chromium location') as HTMLInputElement).value).toBe(BRAVE)
-    expect(within(list).getByRole('button', { name: BRAVE }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(save_)
+    const input = screen.getByRole('combobox', { name: 'Chromium location' }) as HTMLInputElement
+    fireEvent.click(screen.getByRole('button', { name: 'Show suggestions' }))
+    const list = screen.getByRole('listbox')
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual([CHROME, BRAVE])
+    fireEvent.click(within(list).getByRole('option', { name: BRAVE }))
+    expect(input.value).toBe(BRAVE)
     expect(save).toHaveBeenCalledWith(BRAVE)
+    fireEvent.change(input, { target: { value: ' /opt/chromium ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(save).toHaveBeenLastCalledWith('/opt/chromium')
   })
 
   it('override active: labelled as yours, "Use automatic" saves an empty path', () => {
@@ -59,6 +60,7 @@ describe('ChromiumPathField', () => {
     setup({ value: '', detected: false, active: null, source: null, overrideInvalid: false, candidates: [] })
     expect(screen.getByRole('status').textContent).toBe('Chromium was not found. Enter its location here.')
     expect(screen.getByLabelText('Chromium location').getAttribute('placeholder')).toBe('Path to the Chromium app')
-    expect(screen.queryByRole('list')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show suggestions' }))
+    expect(screen.queryByRole('option')).toBeNull()
   })
 })

@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
+import { SettingsSelect } from './SettingsControls'
+import { SettingsCombobox } from './SettingsCombobox'
 
 export const POLICY_CLASSIFIER_PATH = '/api/policy/classifier'
 export const POLICY_SIMULATE_PATH = '/api/policy/simulate'
@@ -25,7 +26,7 @@ export const SIM_TEXT = {
   switchFailed: (why: string) => `Could not change the switch: ${why}`,
   switchMissing: 'The classifier switch is unavailable while the ledger is off.',
   simTitle: 'Simulate the last 7 days',
-  subject: 'Who (e.g. node:*)', capability: 'Capability (e.g. claude.tool:Bash)', scope: 'Scope (e.g. npm test*)', effect: 'Effect',
+  subject: 'Who', capability: 'Capability (e.g. claude.tool:Bash)', scope: 'Scope (e.g. npm test*)', effect: 'Effect',
   classifierOn: 'Classifier on in the simulation',
   run: 'Simulate', running: 'Simulating…',
   simFailed: (why: string) => `Simulation failed: ${why}`,
@@ -47,6 +48,18 @@ async function request(method: string, path: string, body?: unknown): Promise<un
 }
 
 const EFFECTS = ['allow', 'ask', 'deny'] as const
+/** Principal patterns (server policy.model.ts `Principal`). */
+const SUBJECTS = [
+  { value: 'node:*', label: 'Any agent node (node:*)' },
+  { value: 'central', label: 'Central (central)' },
+  { value: 'routine:*', label: 'Any routine (routine:*)' },
+  { value: 'telegram:*', label: 'Any Telegram chat (telegram:*)' },
+  { value: '*', label: 'Anyone (*)' },
+]
+/** Capability patterns: Claude Code tools and the control-plane verbs (server capability registry). */
+const CAPABILITY_PRESETS = ['claude.tool:Bash', 'claude.tool:Edit', 'claude.tool:Write', 'claude.tool:*', 'browser.read', 'browser.act', 'browser.*',
+  'node.prompt', 'node.spawn', 'node.close', 'secret.run', '*'].map((value) => ({ value }))
+const SCOPE_PRESETS = [{ value: '*', label: 'Anything (*)' }, { value: 'npm test*' }, { value: 'git status*' }]
 const ROWS: SimEffect[] = ['allow', 'ask', 'deny', 'classifier']
 
 export function PolicySimulator(): React.JSX.Element {
@@ -104,9 +117,15 @@ export function PolicySimulator(): React.JSX.Element {
 
       <h4 className="text-xs font-semibold">{SIM_TEXT.simTitle}</h4>
       <div className="flex flex-wrap items-center gap-2">
-        <Input aria-label={SIM_TEXT.subject} placeholder={SIM_TEXT.subject} value={rule.subject} onChange={(e) => setRule({ ...rule, subject: e.target.value })} className="w-32" />
-        <Input aria-label={SIM_TEXT.capability} placeholder={SIM_TEXT.capability} value={rule.capability} onChange={(e) => setRule({ ...rule, capability: e.target.value })} className="w-56" />
-        <Input aria-label={SIM_TEXT.scope} placeholder={SIM_TEXT.scope} value={rule.scope} onChange={(e) => setRule({ ...rule, scope: e.target.value })} className="w-32" />
+        <SettingsSelect ariaLabel={SIM_TEXT.subject} value={rule.subject} options={SUBJECTS} onChange={(v) => setRule((r) => ({ ...r, subject: v }))} />
+        <span className="w-56">
+          <SettingsCombobox ariaLabel={SIM_TEXT.capability} fieldId="policy.capability" mono presets={CAPABILITY_PRESETS} placeholder={SIM_TEXT.capability}
+            value={rule.capability} onDraft={(v) => setRule((r) => ({ ...r, capability: v }))} onCommit={(v) => setRule((r) => ({ ...r, capability: v }))} />
+        </span>
+        <span className="w-40">
+          <SettingsCombobox ariaLabel={SIM_TEXT.scope} fieldId="policy.scope" mono presets={SCOPE_PRESETS} placeholder={SIM_TEXT.scope}
+            value={rule.scope} onDraft={(v) => setRule((r) => ({ ...r, scope: v }))} onCommit={(v) => setRule((r) => ({ ...r, scope: v }))} />
+        </span>
         <span role="group" aria-label={SIM_TEXT.effect} className="flex gap-1">
           {EFFECTS.map((x) => (
             <Button key={x} size="sm" variant={x === rule.effect ? 'default' : 'outline'} aria-pressed={x === rule.effect} onClick={() => setRule({ ...rule, effect: x })}>{x}</Button>

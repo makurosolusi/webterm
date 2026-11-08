@@ -1,4 +1,4 @@
-// Inline add/edit form for one Claude launch profile: name, command (with template chips), a live
+// Inline add/edit form for one Claude launch profile: name, command (combobox: templates + recent), a live
 // "Will run:" preview from the same normaliser the server launches with, typo fixes, validation.
 // Nothing is stored until Save. Escape cancels. The pattern follows VS Code's settings list editor.
 import { useEffect, useRef, useState } from 'react'
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { normalizeClaudeCommand } from '../../shared/claudeLaunch/claudeLaunch.normalize'
 import { CLAUDE_PROFILE_LIMITS, type ClaudeLaunchProfile } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { hasUnclosedQuote, joinArgv } from '../../shared/claudeLaunch/shellQuote'
+import { SettingsCombobox } from '../SettingsCombobox'
 
 export const EDITOR_TEXT = {
   addTitle: 'New launch profile',
@@ -27,7 +28,7 @@ export const EDITOR_TEXT = {
   placeholderLeft: (p: string): string => `Replace ${p} with your own value.`,
 }
 
-/** Template chips: `select` is the part the user is expected to type over. */
+/** Command templates (combobox suggestions): `select` is the part the user is expected to type over. */
 export const PRESETS: readonly { label: string; text: string; select: string }[] = [
   { label: 'Wrapper ending in --', text: '<wrapper> --', select: '<wrapper>' },
   { label: 'Custom claude path', text: '/path/to/claude', select: '/path/to' },
@@ -36,16 +37,22 @@ export const PRESETS: readonly { label: string; text: string; select: string }[]
 
 export interface ProfileDraft { name: string; command: string }
 
+/** The command's error sentence, or null. */
+export function validateProfileCommand(command: string): string | null {
+  const placeholder = /<[A-Za-z-]+>/.exec(command)?.[0]
+  if (!command.trim()) return EDITOR_TEXT.commandRequired
+  if (hasUnclosedQuote(command)) return EDITOR_TEXT.unclosedQuote
+  return placeholder ? EDITOR_TEXT.placeholderLeft(placeholder) : null
+}
+
 /** Errors per field; empty object = savable. `taken` = names of the OTHER profiles (Default included). */
 export function validateProfileDraft(d: ProfileDraft, taken: readonly string[]): { name?: string; command?: string } {
   const out: { name?: string; command?: string } = {}
   const name = d.name.trim()
   if (!name) out.name = EDITOR_TEXT.nameRequired
   else if (taken.some((t) => t.trim().toLowerCase() === name.toLowerCase())) out.name = EDITOR_TEXT.nameTaken
-  const placeholder = /<[A-Za-z-]+>/.exec(d.command)?.[0]
-  if (!d.command.trim()) out.command = EDITOR_TEXT.commandRequired
-  else if (hasUnclosedQuote(d.command)) out.command = EDITOR_TEXT.unclosedQuote
-  else if (placeholder) out.command = EDITOR_TEXT.placeholderLeft(placeholder)
+  const command = validateProfileCommand(d.command)
+  if (command) out.command = command
   return out
 }
 
@@ -83,6 +90,11 @@ export function ClaudeProfileEditor({ profile, taken, onSave, onCancel }: {
     if (valid) onSave({ name: draft.name.trim(), command: draft.command.trim() })
   }
   const setCommand = (command: string): void => setDraft((d) => ({ ...d, command }))
+  const onDraft = (command: string): void => {
+    const preset = PRESETS.find((p) => p.text === command)
+    if (preset) { pendingSelect.current = preset.select; setTouched((t) => ({ ...t, command: true })) }
+    setCommand(command)
+  }
 
   return (
     <form className="st-profile st-profile--editing" data-settings-escape aria-label={profile ? EDITOR_TEXT.editTitle(profile.name) : EDITOR_TEXT.addTitle}
@@ -95,17 +107,12 @@ export function ClaudeProfileEditor({ profile, taken, onSave, onCancel }: {
       {show('name') ? <p id={`cp-name-err-${id}`} className="st-profile-error">{show('name')}</p> : null}
 
       <label className="st-profile-label" htmlFor={`cp-cmd-${id}`}>{EDITOR_TEXT.command}</label>
-      <Input ref={commandRef} id={`cp-cmd-${id}`} className="st-input st-mono" value={draft.command} maxLength={CLAUDE_PROFILE_LIMITS.command}
-        placeholder={EDITOR_TEXT.commandPlaceholder} aria-invalid={!!show('command')} aria-describedby={show('command') ? `cp-cmd-err-${id}` : undefined}
-        spellCheck={false} autoCapitalize="off" autoCorrect="off"
-        onChange={(e) => setCommand(e.target.value)} onBlur={() => setTouched((t) => ({ ...t, command: true }))} />
-      <div className="st-chips st-profile-chips" role="group" aria-label={EDITOR_TEXT.presets}>
-        {PRESETS.map((p) => (
-          <Button key={p.label} type="button" size="xs" variant="outline"
-            onClick={() => { pendingSelect.current = p.select; setCommand(p.text); setTouched((t) => ({ ...t, command: true })) }}>{p.label}</Button>
-        ))}
-      </div>
-      {show('command') ? <p id={`cp-cmd-err-${id}`} className="st-profile-error">{show('command')}</p> : null}
+      <span className="st-profile-combo" onBlur={() => setTouched((t) => ({ ...t, command: true }))}>
+        <SettingsCombobox inputRef={commandRef} id={`cp-cmd-${id}`} fieldId="claude.profileCommand" mono value={draft.command}
+          presets={PRESETS.map((p) => ({ value: p.text, label: p.label }))} placeholder={EDITOR_TEXT.commandPlaceholder}
+          maxLength={CLAUDE_PROFILE_LIMITS.command} validate={validateProfileCommand} error={show('command')}
+          onDraft={onDraft} onCommit={setCommand} />
+      </span>
 
       <p className="st-profile-preview" aria-live="polite"><span>{EDITOR_TEXT.willRun}</span> <code className="st-mono" data-testid="cp-preview">{joinArgv(n.argv)}</code></p>
       {n.warnings.length > 0 ? (

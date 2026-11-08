@@ -1,10 +1,11 @@
 // Settings › Central Agent › Daily spending limit (dollars) over the existing env override `WEBTERM_CENTRAL_DAILY_COST_MICROS`,
 // written through the same `/api/settings/env` PUT the Control tab uses: no env advice, the field is the switch.
 import { useEffect, useState } from 'react'
-import { Input } from '@/components/ui/input'
 import type { EnvStateV2 } from '../shared/envSettings.contract'
 import { request } from './inboxTransport'
 import { Field } from './SettingsFields'
+import { SettingsCombobox } from './SettingsCombobox'
+import { COST_CAP_FIELD_ID, COST_CAP_PRESETS } from './settingsPresets'
 
 export const COST_CAP_KEY = 'WEBTERM_CENTRAL_DAILY_COST_MICROS'
 const ENV_PATH = '/api/settings/env'
@@ -20,6 +21,10 @@ export function dollarsToMicros(text: string): number | null | undefined {
   return micros === 0 ? null : micros
 }
 
+/** Combobox validator for a dollar amount ('' = no limit). */
+export const validateDollars = (v: string): string | null =>
+  dollarsToMicros(v) === undefined ? 'Enter an amount in dollars, e.g. 5 or 2.50.' : null
+
 const microsToDollars = (micros: string): string => {
   const n = Number(micros)
   return Number.isFinite(n) && n > 0 ? String(n / MICROS_PER_DOLLAR) : ''
@@ -27,10 +32,9 @@ const microsToDollars = (micros: string): string => {
 
 type Load = { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; editable: boolean; reason?: string }
 
-/** The cost cap as a dollars field; commits on blur/Enter, empty clears to unlimited. `disabledReason` = shown, field locked. */
+/** The cost cap as a dollars combobox (presets + recent); commits on pick/blur/Enter, empty clears to unlimited. `disabledReason` = shown, field locked. */
 export function CostLimitField({ disabledReason }: { disabledReason?: string } = {}): React.JSX.Element | null {
   const [load, setLoad] = useState<Load>({ status: 'loading' })
-  const [text, setText] = useState('')
   const [saved, setSaved] = useState('')
   const [saveError, setSaveError] = useState<string>()
   const [saving, setSaving] = useState(false)
@@ -40,17 +44,15 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
     request<EnvStateV2>(ENV_PATH).then((st) => {
       const e = st.entries.find((x) => x.key === COST_CAP_KEY)
       const dollars = microsToDollars(e?.value ?? '')
-      setText(dollars)
       setSaved(dollars)
       setLoad({ status: 'ready', editable: !!e?.editable && !st.locked, reason: e ? undefined : 'Not available on this server.' })
     }).catch((err: unknown) => setLoad({ status: 'error', error: err instanceof Error ? err.message : String(err) }))
   }
   useEffect(read, [])
 
-  const commit = async (): Promise<void> => {
-    if (text.trim() === saved) return
+  const commit = async (text: string): Promise<void> => {
     const micros = dollarsToMicros(text)
-    if (micros === undefined) { setSaveError('Enter an amount in dollars, e.g. 5 or 2.50.'); return }
+    if (micros === undefined) return
     setSaving(true)
     setSaveError(undefined)
     const change = micros === null ? { set: {}, unset: [COST_CAP_KEY] } : { set: { [COST_CAP_KEY]: String(micros) }, unset: [] }
@@ -58,7 +60,6 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
       await request(ENV_PATH, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(change) })
       const next = micros === null ? '' : String(micros / MICROS_PER_DOLLAR)
       setSaved(next)
-      setText(next)
     } catch (err) {
       setSaveError(`Could not save the limit: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -74,11 +75,8 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
       hint="Dollars per UTC day; empty = no limit. At 80% work moves to cheaper models, at 100% only Haiku runs."
     >
       <span className="st-unit">$</span>
-      <Input id="st-costLimit" className="st-input st-input-num" type="number" min={0} step={0.01}
-        placeholder="No limit" value={text} disabled={disabled}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => void commit()}
-        onKeyDown={(e) => { if (e.key === 'Enter') void commit() }} />
+      <SettingsCombobox id="st-costLimit" fieldId={COST_CAP_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"
+        value={saved} disabled={disabled} validate={validateDollars} onCommit={(v) => void commit(v)} />
       {disabledReason ? <span className="st-hint" data-reason>{disabledReason}</span> : null}
       {load.status === 'loading' ? <span className="st-hint" role="status">Loading…</span> : null}
       {saving ? <span className="st-hint" role="status">Saving…</span> : null}
