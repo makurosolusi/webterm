@@ -78,7 +78,7 @@ describe('AgentChatPool', () => {
     const dir = tmpdir()
     const ws = workspace('w1', [{ id: 'a' }, { id: 'b', cwd: '/definitely/not/here', permissionMode: 'acceptEdits', claudeProfileId: 'p1' }], dir)
     const [a, b] = ws.nodes as [WsNode, WsNode]
-    expect(agentChatOpenConfig({ ws, node: a }, { port: 8700, mode: 'auto' })).toEqual({ nodeId: 'a', port: 8700, cwd: dir, profileId: undefined, mode: 'auto' })
+    expect(agentChatOpenConfig({ ws, node: a }, { port: 8700, mode: 'auto' })).toEqual({ nodeId: 'a', port: 8700, cwd: dir, profileId: undefined, mode: 'auto', workspaceId: 'w1' })
     expect(agentChatOpenConfig({ ws, node: b }, { port: 8700, mode: 'auto' })).toMatchObject({ cwd: process.env.HOME || homedir(), profileId: 'p1', mode: 'acceptEdits' })
   })
 

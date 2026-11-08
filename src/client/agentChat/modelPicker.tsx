@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
 import { portalContainer } from '@/components/vscode/portalContainer'
 import type { AgentChatModel } from '../../shared/agentChat.wire'
-import { TIER_TABLE } from '../../server/models/modelLadder'
 import { errorText } from './toolCards'
 import './agentChatToolbar.css'
 
@@ -36,9 +35,9 @@ export function ChangeError({ message, onRetry, onDismiss, disabled }: { message
 /** Value Claude Code lists for "use the default model"; an unset model maps to it. */
 export const DEFAULT_MODEL = 'default'
 
-const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
-/** Label of the "no explicit model" entry: the ladder's default rung (T2). Label only, the chat's own choice is unchanged. */
-export const AUTO_MODEL_LABEL = `Auto (ladder: ${cap(TIER_TABLE.T2.model ?? '')} · ${TIER_TABLE.T2.effort ?? ''})`
+/** Unset model before the list loads. Once loaded, the server names the `default` entry after what the
+ *  ladder resolved for this node's workspace (agentChat.ladder.ts), e.g. "Auto (ladder: Sonnet · medium)". */
+export const AUTO_MODEL_LABEL = 'Auto (model ladder)'
 
 export interface ModelPickerProps {
   /** Fetches the selectable models; called when the menu opens until it succeeds. */
@@ -75,7 +74,7 @@ export function ModelPicker({ loadModels, models: known, value, onChange, disabl
   // Only a new request opens it; `openChange` is rebuilt every render, so it is not a dependency.
   useEffect(() => { if (openRequest && !disabled && !pending) openChange(true) }, [openRequest])
   const shown = pending ? pending.value : value
-  const nameOf = (v?: string) => (v ?? DEFAULT_MODEL) === DEFAULT_MODEL ? AUTO_MODEL_LABEL : models?.find((m) => m.value === v)?.displayName ?? v
+  const nameOf = (v?: string) => models?.find((m) => m.value === (v ?? DEFAULT_MODEL))?.displayName ?? v ?? AUTO_MODEL_LABEL
   const name = nameOf(shown)
 
   return (
@@ -108,7 +107,7 @@ export function ModelPicker({ loadModels, models: known, value, onChange, disabl
                   <DropdownMenu.RadioItem key={m.value} value={m.value} className="act-menu__item act-menu__item--radio">
                     <DropdownMenu.ItemIndicator className="act-menu__check"><span className="codicon codicon-check" aria-hidden="true" /></DropdownMenu.ItemIndicator>
                     <span className="act-menu__text">
-                      <span>{m.value === DEFAULT_MODEL ? AUTO_MODEL_LABEL : m.displayName}</span>
+                      <span>{m.displayName}</span>
                       {m.description && <span className="act-menu__desc">{m.description}</span>}
                     </span>
                   </DropdownMenu.RadioItem>

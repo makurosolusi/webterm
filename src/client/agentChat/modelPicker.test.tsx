@@ -13,7 +13,7 @@ beforeAll(() => {
 })
 
 const MODELS: AgentChatModel[] = [ // test-only
-  { value: 'default', displayName: 'Default (recommended)', description: 'Opus for complex work' },
+  { value: 'default', displayName: 'Auto (ladder: Sonnet · medium)', description: 'Picked by the model ladder' },
   { value: 'sonnet', displayName: 'Sonnet', description: 'Fast everyday model', efforts: ['low', 'high'] },
 ]
 const trigger = () => screen.getByRole('button', { name: /^Model:/ })
@@ -35,7 +35,7 @@ describe('ModelPicker', () => {
     expect(trigger().getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByRole('status').textContent).toBe('Loading models…')
     const items = await screen.findAllByRole('menuitemradio')
-    expect(items.map((i) => i.textContent)).toEqual(['Auto (ladder: Sonnet · medium)Opus for complex work', 'SonnetFast everyday model'])
+    expect(items.map((i) => i.textContent)).toEqual(['Auto (ladder: Sonnet · medium)Picked by the model ladder', 'SonnetFast everyday model'])
     expect(items[1].getAttribute('aria-checked')).toBe('true')
     expect(trigger().textContent).toContain('Sonnet')
     expect(loadModels).toHaveBeenCalledTimes(1)
@@ -97,11 +97,14 @@ describe('ModelPicker', () => {
     expect(loadModels).not.toHaveBeenCalled()
   })
 
-  it('labels the no-explicit-model entry Auto (ladder default) before any list loads; an explicit model keeps its name', () => {
+  it('an unset model shows the server-resolved Auto entry (workspace override included); before a list, a generic Auto', () => {
     const { unmount } = render(<ModelPicker loadModels={vi.fn(async () => MODELS)} onChange={vi.fn(async () => undefined)} />)
     expect(trigger().getAttribute('aria-label')).toBe(`Model: ${AUTO_MODEL_LABEL}`)
-    expect(AUTO_MODEL_LABEL).toBe('Auto (ladder: Sonnet · medium)')
     unmount()
+    const withOverride = [{ value: 'default', displayName: 'Auto (workspace: Opus · high)' }, ...MODELS.slice(1)]
+    const { unmount: u2 } = render(<ModelPicker loadModels={vi.fn(async () => withOverride)} models={withOverride} onChange={vi.fn(async () => undefined)} />)
+    expect(trigger().getAttribute('aria-label')).toBe('Model: Auto (workspace: Opus · high)')
+    u2()
     render(<ModelPicker loadModels={vi.fn(async () => MODELS)} models={MODELS} value="sonnet" onChange={vi.fn(async () => undefined)} />)
     expect(trigger().getAttribute('aria-label')).toBe('Model: Sonnet')
   })

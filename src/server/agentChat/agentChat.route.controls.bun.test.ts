@@ -59,9 +59,10 @@ describe('agent chat control verbs', () => {
     expect(opens).toHaveLength(1)
   })
 
-  test('GET models lists models with their effort levels', async () => {
+  test('GET models lists models with their effort levels, led by the ladder-resolved Auto entry', async () => {
     const r = await get('chat/models')
     expect(await r.json()).toEqual({ models: [
+      { value: 'default', displayName: 'Auto (ladder: Sonnet · medium)', description: 'Picked by the model ladder' },
       { value: 'opus', displayName: 'Opus', description: 'Best', efforts: ['low', 'high'] },
       { value: 'haiku', displayName: 'Haiku', description: 'Fast' },
     ] })

@@ -13,6 +13,7 @@ import { AGENT_CHAT_CONTROL_TIMEOUT_MS, withTimeout } from './agentChat.controls
 import { AgentChatSession } from './agentChat.session'
 import { AgentChatBroker } from './agentChat.broker'
 import { AgentChatLock } from './agentChat.lock'
+import { agentChatLadderPick } from './agentChat.ladder'
 
 /** Open Claude processes at once (same default as the browser's DEFAULT_MAX_LIVE). */
 export const AGENT_CHAT_MAX_LIVE = 3
@@ -45,7 +46,7 @@ export interface AgentChatPoolDeps {
  * own mode else the settings default.
  */
 export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; mode: AgentPermissionMode }) {
-  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: t.node.permissionMode ?? d.mode }
+  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: t.node.permissionMode ?? d.mode, workspaceId: t.ws.id }
 }
 
 interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void }
@@ -79,6 +80,7 @@ export class AgentChatPool {
       nodeId,
       open: (resume, canUseTool, abort, input) => this.deps.opener(this.deps.lookup(nodeId) ?? t)(resume, canUseTool, abort, input),
       gate: this.gate,
+      ladder: () => agentChatLadderPick((this.deps.lookup(nodeId) ?? t).ws.id),
       onSessionId: (id) => {
         // A fresh id cannot clash; a resumed one was claimed in send(). Old ids of this node are dropped.
         this.lock.release(nodeId)

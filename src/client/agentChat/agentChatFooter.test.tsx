@@ -20,7 +20,7 @@ const resize = (width: number) => act(() => {
   observers.forEach((cb) => cb([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver))
 })
 const MODELS: AgentChatModel[] = [ // test-only
-  { value: 'default', displayName: 'Default', efforts: ['low', 'high'] },
+  { value: 'default', displayName: 'Auto (ladder: Sonnet · medium)', efforts: ['low', 'high'] },
   { value: 'haiku', displayName: 'Haiku' },
 ]
 function mount(over: Partial<AgentChatFooterProps> = {}) {
