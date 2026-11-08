@@ -1,7 +1,7 @@
-// Verb aksi agent: navigate, click, type, press, scroll. Semuanya wajib lease agent (`lease_human` bila tidak).
+// Verb aksi agent: navigate, click, type, press, scroll. Semuanya mengambil lease agent sendiri (`driving`).
 // Input disalurkan lewat `host.input` (bertipe), navigasi lewat `host.navigate` (penjaga SSRF); CDP generik hanya via allowlist.
 import { URL_MAX_CHARS } from '../../shared/browser.contract'
-import type { BrowserInputEvent, MouseInput } from '../../shared/browser.contract'
+import type { BrowserInputEvent, BrowserState, MouseInput } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { AGENT_CDP } from './browserAgent.cdpAllowlist'
 import { asRecord, badRequest, domCall, needString, stateOf } from './browserAgent.verbs.ctx'
@@ -71,13 +71,19 @@ async function gateCrossOrigin(ctx: AgentCtx, nodeId: string, backendNodeId: num
   }
 }
 
+/** Node harus ada sebelum lease diambil; state dibaca ulang karena halaman bisa berubah selama menunggu manusia idle. */
+async function driving(ctx: AgentCtx, nodeId: string): Promise<BrowserState> {
+  stateOf(ctx, nodeId)
+  await ctx.leases.acquire(nodeId, ctx.agentAllowed(nodeId), ctx.sleep)
+  return stateOf(ctx, nodeId)
+}
+
 export function actVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'navigate' | 'click' | 'type' | 'press' | 'scroll'> {
   const input = (nodeId: string, ev: BrowserInputEvent) => ctx.host.input(nodeId, ev)
   return {
     async navigate(nodeId, raw) {
       const url = needString(asRecord(raw).url, 'url', URL_MAX_CHARS)
-      stateOf(ctx, nodeId)
-      ctx.leases.requireAgent(nodeId)
+      await driving(ctx, nodeId)
       await ctx.host.navigate(nodeId, url) // BlockedError -> 403 di handler
       ctx.snapshots.drop(nodeId)
       return { ok: true }
@@ -85,8 +91,7 @@ export function actVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'navigate' | 'click' |
 
     async click(nodeId, raw) {
       const { ref, snapId } = refBody(raw)
-      const s = stateOf(ctx, nodeId)
-      ctx.leases.requireAgent(nodeId)
+      const s = await driving(ctx, nodeId)
       const target = ctx.snapshots.resolve(nodeId, snapId, ref, s.url)
       await gateCrossOrigin(ctx, nodeId, target)
       const { x, y } = await centerOf(ctx, nodeId, target)
@@ -101,8 +106,7 @@ export function actVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'navigate' | 'click' |
       const { ref, snapId, body } = refBody(raw)
       const text = needString(body.text, 'text')
       if (body.submit !== undefined && typeof body.submit !== 'boolean') throw badRequest('submit must be boolean')
-      const s = stateOf(ctx, nodeId)
-      ctx.leases.requireAgent(nodeId)
+      const s = await driving(ctx, nodeId)
       const target = ctx.snapshots.resolve(nodeId, snapId, ref, s.url)
       await domCall(ctx, nodeId, AGENT_CDP.scrollIntoView, { backendNodeId: target })
       await domCall(ctx, nodeId, AGENT_CDP.focus, { backendNodeId: target })
@@ -113,8 +117,7 @@ export function actVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'navigate' | 'click' |
 
     async press(nodeId, raw) {
       const key = needString(asRecord(raw).key, 'key', 16)
-      stateOf(ctx, nodeId)
-      ctx.leases.requireAgent(nodeId)
+      await driving(ctx, nodeId)
       await pressKey(ctx, nodeId, key)
       return { ok: true }
     },
@@ -122,8 +125,7 @@ export function actVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'navigate' | 'click' |
     async scroll(nodeId, raw) {
       const dy = asRecord(raw).dy
       if (typeof dy !== 'number' || !Number.isFinite(dy) || dy === 0 || Math.abs(dy) > SCROLL_MAX_PX) throw badRequest(`dy must be a non-zero number within ±${SCROLL_MAX_PX}`)
-      stateOf(ctx, nodeId)
-      ctx.leases.requireAgent(nodeId)
+      await driving(ctx, nodeId)
       const vp = await viewportOf(ctx, nodeId)
       await input(nodeId, mouse('wheel', vp.w / 2, vp.h / 2, 0, { dy }))
       return { ok: true }

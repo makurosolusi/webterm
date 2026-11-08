@@ -100,7 +100,7 @@ const CONTROL = [
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
   }),
   defineCapability({
-    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, handoff or release.',
+    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll or release.',
     tier: 'R1', scope: 'node', projections: ['control-http'], route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.act')), ...browserActArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),

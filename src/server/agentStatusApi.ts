@@ -15,7 +15,7 @@ import { hookStatus, type HookStatusBody } from './hookStatus'
 import { stateVerified } from './hooks'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
-import { linkedBrowsers, nextBrowserNotice } from './linkAwareness'
+import { linkedBrowsers, nextBrowserNotice, releaseCabledBrowsers } from './linkAwareness'
 import { nextAwareness } from './webtermAwareness'
 import { linkNoteTold, startLinkNotes } from './linkNoteDelivery'
 import { outboxHookContext } from './outbox/outboxRuntime'
@@ -26,6 +26,7 @@ import { createLogger } from './logs'
 import { produceHookEvent } from './events/producers'
 import { doomLoopBlock } from './permission/permission.loop'
 import { takeCheckpointSafe } from './checkpoint/checkpoint.service'
+import { activeBrowser } from './browser/browser.state'
 import type { PermissionOutput } from './permission/permission.model'
 import type { PermissionAsk } from './permission/permission.wait'
 import {
@@ -54,6 +55,8 @@ export interface AgentStatusDeps {
   setStatus(nodeId: string, status: AgentStatus): void
   setTranscript(nodeId: string, path: string): void
   workspaceFor(nodeId: string): Workspace | null | undefined
+  /** Gives a browser node's lease back to the human; absent = browser runtime not wired (tests). */
+  releaseBrowser?(browserNodeId: string): void
   /** Holds a `PermissionRequest` for a human decision (F3-b); absent = no decision, Claude prompts. */
   answerPermission?(ask: PermissionAsk): Promise<PermissionOutput | null>
 }
@@ -84,6 +87,7 @@ async function defaultDeps(): Promise<AgentStatusDeps> {
     setStatus: (nodeId, status) => sessions.setStatus(nodeId, status),
     setTranscript: (nodeId, path) => sessions.setTranscript(nodeId, path),
     workspaceFor: (nodeId) => findWorkspaceFor(db.list(), nodeId),
+    releaseBrowser: (id) => activeBrowser()?.releaseLease(id),
     // Read per request: the Settings toggle applies to the very next prompt, no restart.
     answerPermission: (ask) => answerPermissionLive(ask, db.getSettings().hookReplyApprovals !== false),
   }
@@ -184,6 +188,7 @@ export async function agentStatusRoute(
   // is permanent growth (temporary mitigation; retention/GC is a later wave).
   if (ws) produceHookEvent({ nodeId: node, workspaceId: ws.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
   await checkpointBeforePrompt(event, ws, node)
+  if (ws && deps.releaseBrowser) releaseCabledBrowsers(event, ws, node, deps.releaseBrowser)
   const mail = outboxHookContext(node, event)
   const text = [aware, extras, peers?.additionalContext, browsers, mail].filter(Boolean).join('\n\n')
   const out: Record<string, unknown> = text && event ? { hookEventName: event, additionalContext: text } : {}

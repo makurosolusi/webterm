@@ -8,12 +8,15 @@ import { NODE_HEADERS_ENV } from '../hooksPaths'
 const verbsOf = (cap: 'browser.read' | 'browser.act'): string =>
   Object.entries(BROWSER_VERB_CAP).filter(([, c]) => c === cap).map(([v]) => v).join('|')
 
+/** `handoff` stays accepted for sessions that already know it, but is no longer advertised: act verbs take control themselves. */
+const advertised = (cap: 'browser.read' | 'browser.act'): string => verbsOf(cap).split('|').filter((v) => v !== 'handoff').join('|')
+
 /** JSON string escape (backslash, quote, tab, newlines); shared by `browser` and `skills get --json`. */
 export const ESC_FN = `esc() { printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g' -e 's/	/\\\\t/g' | awk 'NR>1{printf "\\\\n"}{printf "%s",$0}'; }`
 
 /** `webterm browser <verb> [args] [--node <id>]`; the server picks the cabled browser at call time. */
 export const BROWSER_COMMAND = `cmd_browser() {
-usage() { echo "usage: webterm-browser <${verbsOf('browser.read')}|${verbsOf('browser.act')}> [args] [--node <browserNodeId>]" >&2; exit 2; }
+usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>]" >&2; exit 2; }
 hdr="\${${NODE_HEADERS_ENV}:-}"
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
 PORT="\${NODETERM_PORT:-8700}"

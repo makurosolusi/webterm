@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { claudeProtectionSettings } from './agentSandbox'
+import { browserAllowRules } from './browserAgentShim'
 import { TOKEN_HEADER } from './auth'
 import { dataDir } from './config'
 import { NODE_TOKEN_HEADER, nodeToken } from './hooksTokens'
@@ -126,7 +127,8 @@ export function claudeNodeSettings(nodeId: string, port: number): Record<string,
   const protection = claudeProtectionSettings(dataDir(), { ownHeaders: claudeHeadersPath(nodeId) })
   // The webterm MCP tools are pre-allowed in Claude: the webterm policy engine already decides every
   // call server-side (mcp/mcp.tools.ts), so a second Claude prompt per tool would only add friction.
-  const permissions = { ...(protection.permissions as Record<string, unknown>), allow: [`mcp__${MCP_SERVER_NAME}`] }
+  // Same for the browser CLI: the server checks the cable, agent control and policy on every verb.
+  const permissions = { ...(protection.permissions as Record<string, unknown>), allow: [`mcp__${MCP_SERVER_NAME}`, ...browserAllowRules()] }
   return { ...claudeHooksSettings(nodeId, port), ...protection, permissions }
 }
 

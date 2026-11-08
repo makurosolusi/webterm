@@ -7,6 +7,9 @@ import { BrowserError } from './browserHost.targets'
 
 const log = createLogger('browser.lease')
 
+/** Longest an agent action waits for the user to stop typing/clicking before answering `human_active`. */
+export const HUMAN_WAIT_MAX_MS = 2 * HUMAN_IDLE_MS
+
 interface Rec { agentAt?: number; humanAt?: number }
 
 export class LeaseService implements LeaseView {
@@ -25,14 +28,30 @@ export class LeaseService implements LeaseView {
     return 'human'
   }
 
-  /** Catat input manusia (dasar penolakan `handoff` dalam `HUMAN_IDLE_MS`). */
+  /** Catat input manusia (agent menunggu sampai `HUMAN_IDLE_MS` berlalu sejak input terakhir). */
   noteHumanInput(nodeId: string): void {
     this.rec(nodeId).humanAt = this.now()
   }
 
-  /** Aksi `takeover` dari UI: lease kembali ke human. */
+  /** Aksi `takeover` dari UI: lease kembali ke human; dihitung input agar aksi agent berikutnya tidak langsung merebutnya lagi. */
   takeover(nodeId: string): void {
+    this.noteHumanInput(nodeId)
     this.release(nodeId)
+  }
+
+  /**
+   * Ambil lease untuk aksi agent: tanpa langkah handoff. Input manusia baru-baru ini ditunggu di server sampai
+   * idle; bila terus berlanjut melewati `HUMAN_WAIT_MAX_MS`, melempar `human_active`. Mati = `disabled`.
+   */
+  async acquire(nodeId: string, allowed: boolean, sleep: (ms: number) => Promise<void>): Promise<{ lease: 'agent'; ttlMs: number }> {
+    if (allowed && this.holder(nodeId) === 'human') {
+      const deadline = this.now() + HUMAN_WAIT_MAX_MS
+      for (let left = this.humanIdleIn(nodeId); left > 0; left = this.humanIdleIn(nodeId)) {
+        if (this.now() + left > deadline) throw new BrowserError('human_active', `node ${nodeId}: the user is using this browser right now`)
+        await sleep(left)
+      }
+    }
+    return this.handoff(nodeId, allowed) // tanpa await sejak cek terakhir: tidak ada celah input manusia
   }
 
   /** human -> agent. `allowed` = agentControl node + env agent; melempar `disabled` / `human_active`. */
@@ -66,12 +85,6 @@ export class LeaseService implements LeaseView {
     return this.holder(nodeId) === 'agent'
   }
 
-  /** Verb aksi wajib lease agent: `lease_human` bila tidak; sekaligus memperpanjang TTL. */
-  requireAgent(nodeId: string): void {
-    if (this.holder(nodeId) !== 'agent') throw new BrowserError('lease_human', `node ${nodeId}: agent does not hold the lease`)
-    this.touch(nodeId)
-  }
-
   /** Dengarkan perubahan lease (untuk menyiarkan ke UI); mengembalikan fungsi berhenti. */
   onChange(cb: (nodeId: string, lease: Lease) => void): () => void {
     this.listeners.add(cb)
@@ -85,6 +98,12 @@ export class LeaseService implements LeaseView {
       if (rec.agentAt !== undefined && this.holder(id) === 'human') expired.push(id)
     }
     return expired
+  }
+
+  /** Sisa ms sampai manusia dianggap idle (<= 0 = sudah idle). */
+  private humanIdleIn(nodeId: string): number {
+    const at = this.nodes.get(nodeId)?.humanAt
+    return at === undefined ? 0 : at + HUMAN_IDLE_MS - this.now()
   }
 
   private rec(nodeId: string): Rec {

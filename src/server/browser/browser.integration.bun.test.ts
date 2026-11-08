@@ -144,6 +144,33 @@ describe('runtime menyala di atas CDP tiruan', () => {
     expect(await status()).toMatchObject({ status: 403, body: { error: 'disabled' } })
   })
 
+  test('agent bertali: navigate pada node segar langsung jalan tanpa handoff, end of turn mengembalikan ke human', async () => {
+    const board: Workspace = { ...WS, bridges: [{ id: 'l1', source: 'a1', target: 'b1', kind: 'context' }] }
+    const { rt, fake, capabilities } = await boot(ON, undefined, () => [board])
+    if (!rt) throw new Error('runtime tidak menyala')
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
+    await new Promise<void>((r) => wss.once('listening', () => r()))
+    wss.on('connection', (ws) => rt.gateway(ws, 'w1'))
+    const client = new WebSocket(`ws://127.0.0.1:${(wss.address() as AddressInfo).port}/`)
+    const json: Array<Record<string, unknown>> = []
+    client.on('message', (d, bin) => { if (!bin) json.push(JSON.parse(String(d))) })
+    cleanup.push(() => new Promise<void>((r) => { client.terminate(); wss.close(() => r()) }))
+    await new Promise<void>((r) => client.once('open', () => r()))
+    client.send(JSON.stringify({ t: 'attach', id: 'b1', w: 800, h: 600, dpr: 1 }))
+    const until = async (cond: () => boolean) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 10)); expect(cond()).toBe(true) }
+    await until(() => json.some((m) => m.t === 'state' && m.live === 'live'))
+    const tok = nodeToken('a1')
+    cleanup.push(() => forgetNodeToken('a1'))
+    const caps = { verify: (t: string) => capabilities.verify(t), allows }
+    const asAgent = (verb: string, payload: unknown = {}) => rt.control({ method: verb === 'status' ? 'GET' : 'POST', path: `/api/control/browser/${verb}`, body: payload, headers: { [TOKEN_HEADER]: tok } }, caps)
+    const navigates = fake.methods().filter((m) => m === 'Page.navigate').length
+    expect(await asAgent('navigate', { url: 'https://example.com/next' })).toMatchObject({ status: 200 })
+    expect(fake.methods().filter((m) => m === 'Page.navigate').length).toBe(navigates + 1)
+    await until(() => json.some((m) => m.t === 'state' && m.lease === 'agent'))
+    rt.releaseLease('b1')
+    await until(() => (json.filter((m) => m.t === 'state').at(-1) as { lease?: string }).lease === 'human')
+  })
+
   test('capability (Agent Pusat) tetap jalan: read boleh status, read tak boleh act, node wajib di path', async () => {
     const { rt, capabilities } = await boot()
     if (!rt) throw new Error('runtime tidak menyala')
