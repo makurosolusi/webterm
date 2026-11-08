@@ -9,8 +9,8 @@ import type { Settings } from '../shared/settings'
 import type { Workspace } from '../shared/workspace'
 import { useTabLayout } from './tabLayout.store'
 import { toggleLayoutMode } from './tabLayout.commands'
-import { toggleChatView, toggleSideBarView, useSideBar } from './secondarySideBar.store'
-import { SecondarySideBarToggle, shownSideBarView } from './App.secondarySideBar'
+import { toggleChatView, useSideBar } from './secondarySideBar.store'
+import { SecondarySideBarToggle } from './App.secondarySideBar'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
@@ -20,8 +20,6 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
   vp: CanvasViewport
   settings: Settings
   activeWs: Workspace | null
-  /** Central capability flag: off = the Dock's Central icon offers to turn it on. */
-  centralEnabled: boolean
   board: boolean
   setBoard: Toggle
   sessionsOpen: boolean
@@ -36,10 +34,9 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
 
 /** Dock wired to App's state: its toggles, canvas viewport controls, and status-bar chips. */
 export default function AppDock({
-  vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
+  vp, settings, activeWs, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
 }: AppDockProps) {
   const side = useSideBar()
-  const sideShown = side.open ? shownSideBarView(side.view, centralEnabled) : null
   return (
     <Dock
       {...pass}
@@ -53,10 +50,9 @@ export default function AppDock({
       boardOpen={board}
       sessionsOpen={sessionsOpen}
       onToggleSessions={() => setSessionsOpen((v) => !v)}
-      chatOpen={sideShown === 'chat'}
+      // One door: the Central icon is lit while the side bar is open on either tab (Chat or Control).
+      chatOpen={side.open}
       onToggleChat={() => toggleChatView(pass.needsYouCount ?? 0)}
-      centralOpen={sideShown === 'central'}
-      onToggleCentral={centralEnabled ? () => toggleSideBarView('central') : undefined}
       zoomPct={Math.round(vp.zoom * 100)}
       onZoomIn={vp.onZoomIn}
       onZoomOut={vp.onZoomOut}

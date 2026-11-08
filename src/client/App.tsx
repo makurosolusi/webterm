@@ -238,7 +238,7 @@ export default function App() {
       {hydrated && !noWorkspaces && (
         <>
           <AppDock
-            {...{ vp, settings, activeWs, centralEnabled, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
+            {...{ vp, settings, activeWs, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
             {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary }}
             extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />

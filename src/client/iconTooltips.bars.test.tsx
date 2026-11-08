@@ -6,6 +6,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import Dock, { type DockProps } from './Dock'
+import { useAppCommands } from './commandRegistry.defaults'
 
 const noop = () => {}
 const dockProps: DockProps = {
@@ -31,12 +32,32 @@ afterEach(cleanup)
 describe('activity bar', () => {
   it('exposes every entry by name and shows its tooltip', () => {
     render(<Dock {...dockProps} />)
-    for (const name of ['Toggle sessions panel', 'Toggle chat panel, 2', 'Toggle central control panel', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
+    for (const name of ['Toggle sessions panel', 'Central, 2', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
       const btn = screen.getByRole('button', { name })
       expect(btn.hasAttribute('title'), name).toBe(false)
     }
-    expect(tipOf(screen.getByRole('button', { name: 'Toggle chat panel, 2' }))).toBe('Toggle chat panel (2 need you)')
+    expect(tipOf(screen.getByRole('button', { name: 'Central, 2' }))).toBe('Central (2 need you)')
     expect(tipOf(screen.getByRole('button', { name: 'Board' }))).toBe('Toggle Kanban board')
+  })
+
+  it('the Central icon tooltip shows the side bar shortcut (⌥⌘B) from the registry, plus the waiting count', () => {
+    function WithCommands(props: Partial<DockProps>) {
+      useAppCommands({
+        openOmnibox: noop, openQuickOpen: noop, openFindInFiles: noop, openShortcuts: noop, openSettings: noop,
+        newTerminal: noop, newFiles: noop, fitView: noop, toggleMaximizeNode: noop, toggleSessions: noop,
+        toggleChat: noop, toggleSecondarySideBar: noop, toggleBoard: noop,
+      })
+      return <Dock {...dockProps} {...props} />
+    }
+    const { rerender } = render(<WithCommands needsYouCount={0} />)
+    const kbd = () => document.querySelector('[role="tooltip"] [data-slot="tooltip-shortcut"]')?.textContent
+    fireEvent.keyDown(document, { key: 'Tab' })
+    fireEvent.focus(screen.getByRole('button', { name: 'Central' }))
+    expect(kbd()).toMatch(/^(⌥⌘B|Ctrl\+Alt\+B)$/)
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toMatch(/^Central /)
+    fireEvent.blur(screen.getByRole('button', { name: 'Central' }))
+    rerender(<WithCommands needsYouCount={1} />)
+    expect(tipOf(screen.getByRole('button', { name: 'Central, 1' }))).toMatch(/^Central \(1 needs you\) (⌥⌘B|Ctrl\+Alt\+B)$/)
   })
 
   it('toggle tooltips state the current state and the click action', () => {
