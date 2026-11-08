@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 // Test DOM pertama di repo ini. Yang diuji BUKAN sebuah helper murni: ia alur pengguna lengkap —
-// node file manager di canvas sungguhan, klik ganda sebuah file, node editor lahir, dan kabel
+// node file manager di canvas sungguhan, satu klik sebuah file, node editor lahir, dan kabel
 // penanda "file ini sedang terbuka" terpasang di antara keduanya.
 //
 // Sebabnya ada: keputusannya (`./fileOpen`) sudah punya test node-env sendiri dan HIJAU, tapi kabel
@@ -44,7 +44,7 @@ describe('buka file dari node files', () => {
     await mountCanvas({ nodes: [filesNode], dirs: { [DIR]: LISTING }, files: { [`${DIR}/test.txt`]: 'ini test menulis' } })
 
     // Listing mendarat lewat `fsClient.list` → fetch yang distub harness.
-    fireEvent.doubleClick(await screen.findByText('test.txt'))
+    fireEvent.click(await screen.findByText('test.txt'))
 
     // Node editor-nya: judulnya nama file, dan ia node React Flow bertipe editor.
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-editor')).toHaveLength(1))
@@ -55,15 +55,16 @@ describe('buka file dari node files', () => {
 
   it('kabelnya berlabel "open", bukan "context" — agent tidak membaca file ini', async () => {
     await mountCanvas({ nodes: [filesNode], dirs: { [DIR]: LISTING } })
-    fireEvent.doubleClick(await screen.findByText('package.json'))
+    fireEvent.click(await screen.findByText('package.json'))
     await waitFor(() => expect(fileOpenEdges()).toHaveLength(1))
     // Label hidup di `<text>` SVG milik edge; `decorateEdges` memilihnya dari `data.kind`.
     expect(document.querySelector('.react-flow__edge-textwrapper')?.textContent).toContain('open')
   })
 
-  it('folder dibuka dengan navigasi, TANPA node editor dan tanpa kabel', async () => {
+  // One click on a folder expands it in place (tree): no editor node, no cable.
+  it('folder expands in place, WITHOUT an editor node and without a cable', async () => {
     await mountCanvas({ nodes: [filesNode], dirs: { [DIR]: LISTING, [`${DIR}/data`]: [{ name: 'inner.txt', dir: false }] } })
-    fireEvent.doubleClick(await screen.findByText('data'))
+    fireEvent.click(await screen.findByText('data'))
     await screen.findByText('inner.txt')
     expect(document.querySelectorAll('.react-flow__node-editor')).toHaveLength(0)
     expect(fileOpenEdges()).toHaveLength(0)
@@ -71,7 +72,7 @@ describe('buka file dari node files', () => {
 
   it('kabel punya halo di BELAKANG garis utama, tak menangkap pointer; panah idle bukan penanda terpilih', async () => {
     await mountCanvas({ nodes: [filesNode], dirs: { [DIR]: LISTING } })
-    fireEvent.doubleClick(await screen.findByText('package.json'))
+    fireEvent.click(await screen.findByText('package.json'))
     await waitFor(() => expect(fileOpenEdges()).toHaveLength(1))
     const edgeEl = document.querySelector('.react-flow__edge') as Element
     const halos = edgeEl.querySelectorAll('.edge-halo')

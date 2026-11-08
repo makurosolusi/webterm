@@ -1,0 +1,2 @@
+/* Rows cut to the file clipboard (filesSlot.clipboard.ts) stay dimmed until pasted or Escape. */
+.files-row--cut { opacity: 0.5; }

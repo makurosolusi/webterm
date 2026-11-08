@@ -13,7 +13,7 @@ import { FILES_SLOTS, type FilesSlot, type FilesSlotCtx } from './filesSlots'
 
 const ctx: FilesSlotCtx = {
   cwd: '/p', dir: '/p', entries: [{ name: 'a.txt', dir: false, ignored: false }], selection: ['a.txt'], nodeId: 'policy',
-  refresh: () => {}, open: () => {}, startInput: () => {}, notify: () => '', dismiss: () => {},
+  expanded: new Set(), toggle: () => {}, collapseAll: () => {}, startRenameAt: () => {}, refresh: () => {}, open: () => {}, startInput: () => {}, notify: () => '', dismiss: () => {},
 }
 
 function Host({ slot }: { slot: FilesSlot }): ReactNode {

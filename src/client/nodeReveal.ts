@@ -33,23 +33,24 @@ function focusNodeRoot(id: string): void {
  * Mode tab: tampilkan node tanpa menyentuh canvas. Tab diaktifkan; node Files (bukan tab) membuka
  * panel Files. `kind` kosong = anggap tab. Fokus ditunda satu frame sampai pane aktif ter-render.
  */
-export function revealInTabs(id: string, kind?: string): void {
+export function revealInTabs(id: string, kind?: string, focus = true): void {
   if (kind !== undefined && !isTabKind(kind as WsNodeKind)) setFilesPanelOpen(true)
   else {
     activateTab(id)
     // Node baru belum direkonsiliasi ke `order` saat dipanggil; coba lagi sekali setelah render.
     if (!getTabLayout().tabs.order.includes(id)) requestAnimationFrame(() => activateTab(id))
   }
-  requestAnimationFrame(() => focusNodeRoot(id))
+  if (focus) requestAnimationFrame(() => focusNodeRoot(id))
 }
 
-/** Bawa node ke pandangan (hanya bila tidak sepenuhnya terlihat) lalu fokuskan wrapper-nya, bukan isi node. Mode tab: aktifkan tab, tanpa fitView. */
-export function revealNode(rf: RevealRf | null, id: string, rect: Rect): void {
-  if (getTabLayout().mode === 'tabs') return revealInTabs(id, rf?.getNode?.(id)?.type)
+/** Bawa node ke pandangan (hanya bila tidak sepenuhnya terlihat) lalu fokuskan wrapper-nya, bukan isi node. Mode tab: aktifkan tab, tanpa fitView.
+ *  `focus: false` (buka preview dari Files): kamera boleh pindah, fokus keyboard tetap di tempatnya. */
+export function revealNode(rf: RevealRf | null, id: string, rect: Rect, { focus = true } = {}): void {
+  if (getTabLayout().mode === 'tabs') return revealInTabs(id, rf?.getNode?.(id)?.type, focus)
   if (!rf) return
   const screen = { width: window.innerWidth, height: window.innerHeight }
   if (!rectInView(rect, rf.getViewport(), screen)) {
     void rf.fitView({ nodes: [{ id }], padding: FIT_PADDING, minZoom: FIT_MIN_ZOOM, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS })
   }
-  focusNodeRoot(id)
+  if (focus) focusNodeRoot(id)
 }

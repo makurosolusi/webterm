@@ -48,7 +48,7 @@ let slots: FilesSlot[]
 beforeEach(() => { slots = FILES_SLOTS as FilesSlot[] })
 afterEach(() => {
   cleanup()
-  while (slots.length > 6) slots.pop()
+  while (slots.length > 7) slots.pop()
   vi.restoreAllMocks()
   Object.values(fs).forEach((m) => m.mockReset())
   reveal.mockReset()

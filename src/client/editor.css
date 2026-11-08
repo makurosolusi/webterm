@@ -34,6 +34,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Editor preview (VS Code): judul miring sampai di-pin. */
+.editor-node__name--preview {
+  font-style: italic;
+}
+
 /* Ikon file di judul (codicon, 16px) dan titik "dirty" tab VS Code (circle-filled, 8px). */
 .editor-node__icon {
   flex-shrink: 0;

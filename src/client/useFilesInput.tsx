@@ -1,14 +1,17 @@
 // State + baris input nama inline FilesNode (New File/Folder dan Rename). Dipisah dari FilesNode:
 // shell tinggal memanggil `start(req)` dan menaruh `row` di daftar.
 import { useEffect, useState, type ReactNode, type RefObject } from 'react'
+import { childPath } from './fileBrowse'
 import FilesInput from './FilesInput'
 import { createEntry } from './filesCreate'
+import { joinRel } from './filesMutate'
+import { relTo } from './filesMutate.report'
 import type { InputRequest } from './filesSlots'
 
 interface Deps {
   cwd: string
   listRef: RefObject<HTMLDivElement | null>
-  /** Nama yang harus terpilih begitu listing berikutnya mendarat. */
+  /** Path (relative to cwd) to select once the next listing lands. */
   pendingSel: RefObject<string | null>
   refresh: () => void
   setNotice: (msg: string) => void
@@ -16,13 +19,20 @@ interface Deps {
 }
 type Active = { req: InputRequest; base: string }
 
-/** `start` membuka input, `row` adalah elemen input (null bila tertutup). */
-export function useFilesInput(d: Deps): { start: (req: InputRequest) => void; row: ReactNode } {
+/** Where the list renders `row`: in place of row `rel` (`replace`, rename) or first under folder `rel`
+ *  (create). null = at the top of the list. */
+export type InputAt = { rel: string; replace: boolean } | null
+
+/** `start` membuka input, `row` adalah elemen input (null bila tertutup), `at` tempatnya. */
+export function useFilesInput(d: Deps): { start: (req: InputRequest) => void; row: ReactNode; at: InputAt } {
   const [active, setActive] = useState<Active | null>(null)
   // Input adalah pertanyaan tentang SATU direktori; pindah folder membatalkannya.
   useEffect(() => { setActive(null) }, [d.cwd])
 
-  const start = (req: InputRequest) => setActive({ req, base: req.kind === 'rename' ? d.cwd : (req.base ?? d.cwd) })
+  const start = (req: InputRequest) => {
+    const fromAt = req.at ? childPath(d.cwd, req.at) : d.cwd
+    setActive({ req, base: req.kind === 'rename' ? d.cwd : (req.base ?? fromAt) })
+  }
 
   const commit = async (name: string) => {
     const a = active
@@ -33,7 +43,8 @@ export function useFilesInput(d: Deps): { start: (req: InputRequest) => void; ro
     const r = await createEntry(a.base, name, a.req.kind === 'folder')
     if (!r.ok) { d.setNotice(r.notice); return }
     if (r.notice) d.setNotice(r.notice)
-    d.pendingSel.current = r.first
+    // Rows are keyed by path relative to cwd: "src/new.ts", not "new.ts", for a create inside src/.
+    d.pendingSel.current = joinRel(relTo(d.cwd, a.base) ?? '', r.first)
     d.refresh()
     if (a.req.kind === 'file') d.openFile(r.target, r.leaf)
   }
@@ -46,5 +57,6 @@ export function useFilesInput(d: Deps): { start: (req: InputRequest) => void; ro
       onCancel={(refocus) => { setActive(null); if (refocus) d.listRef.current?.focus() }}
     />
   )
-  return { start, row }
+  const at: InputAt = active?.req.at ? { rel: active.req.at, replace: active.req.kind === 'rename' } : null
+  return { start, row, at }
 }

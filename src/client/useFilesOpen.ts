@@ -6,6 +6,8 @@ import { useReactFlow } from '@xyflow/react'
 import { childOnPath, childPath, fileOpenTarget, folderTitle } from './fileBrowse'
 import { EDITOR_SIZE, planFileOpen } from './fileOpen'
 import { rectOfNode, revealNode, selectOnly } from './nodeReveal'
+import type { Rect } from './browser.open.place'
+import { fileBaseName } from './editorFile'
 import { randomId } from './randomId'
 
 interface Args {
@@ -37,21 +39,38 @@ export function useFilesOpen({ id, cwd, title, swatch, setNotice, pendingSel }: 
     return position
   }
 
-  const openFile = (p: string, name: string) => {
+  /**
+   * Buka `p` di editor. `preview: true` (satu klik, VS Code): pakai ulang editor preview milik node ini
+   * bila ada, dan fokus keyboard + seleksi TETAP di Files — kamera pindah hanya bila editornya di luar
+   * layar. `preview: false` (Enter/menu): editor di-pin, dipilih, dan menerima fokus seperti sebelumnya.
+   */
+  const openFile = (p: string, { preview }: { preview: boolean }) => {
+    const name = fileBaseName(p)
     // Tab browser tidak bisa menyerahkan file ke OS mesin server — katakan, jangan buka buffer sampah.
     if (fileOpenTarget(p) !== 'canvas') { setNotice(`${name} needs an application on the server to open.`); return }
-    const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, randomId())
-    // Buka = antar pengguna ke editornya, termasuk saat file sudah terbuka (mis. dari node files lain):
-    // tanpa kamera + fokus, editor yang sudah ada di luar layar terasa "tidak terjadi apa-apa".
-    if (plan.focus) {
-      const hit = rf.getNode(plan.nodeId)
-      selectOnly(rf, plan.nodeId)
-      if (hit) revealNode(rf, plan.nodeId, rectOfNode(hit))
+    const plan = planFileOpen(rf.getNodes(), rf.getEdges(), id, p, randomId(), preview)
+    const reveal = (rect: Rect) => {
+      // Buka = antar pengguna ke editornya, termasuk saat file sudah terbuka (mis. dari node files lain):
+      // tanpa kamera + fokus, editor yang sudah ada di luar layar terasa "tidak terjadi apa-apa".
+      if (!preview) selectOnly(rf, plan.nodeId)
+      revealNode(rf, plan.nodeId, rect, { focus: !preview })
+    }
+    const hit = rf.getNode(plan.nodeId)
+    if (plan.focus || plan.swap) {
+      if (plan.swap) {
+        // `openSeq` menyuruh `useEditorFile` membaca ulang: path saja tidak cukup, karena rename juga
+        // mengganti path dan justru harus MEMPERTAHANKAN buffer.
+        const seq = ((hit?.data as { openSeq?: number } | undefined)?.openSeq ?? 0) + 1
+        rf.updateNodeData(plan.nodeId, { filePath: p, title: name, openSeq: seq })
+      } else if (!preview && (hit?.data as { preview?: boolean } | undefined)?.preview) {
+        rf.updateNodeData(plan.nodeId, { preview: undefined })
+      }
+      if (hit) reveal(rectOfNode(hit))
     } else {
-      const position = addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: name }, EDITOR_SIZE)
-      selectOnly(rf, plan.nodeId)
+      const position = addNodeBeside(plan.nodeId, 'editor', { filePath: p, title: name, ...(preview ? { preview: true } : {}) }, EDITOR_SIZE)
       // Node baru belum ada di DOM sampai commit; rect-nya sudah diketahui dari posisi + EDITOR_SIZE.
-      requestAnimationFrame(() => revealNode(rf, plan.nodeId, { ...position, ...EDITOR_SIZE }))
+      if (!preview) selectOnly(rf, plan.nodeId)
+      requestAnimationFrame(() => revealNode(rf, plan.nodeId, { ...position, ...EDITOR_SIZE }, { focus: !preview }))
     }
     // Kabel penanda "file ini sedang terbuka". Dibuat langsung, BUKAN lewat `onConnect`: `canLink`
     // hanya meloloskan pasangan agent context-capable.
@@ -64,10 +83,10 @@ export function useFilesOpen({ id, cwd, title, swatch, setNotice, pendingSel }: 
     }
   }
 
-  const open = (e: { name: string; dir: boolean }) => {
+  const open = (e: { name: string; dir: boolean }, opts = { preview: false }) => {
     const p = childPath(cwd, e.name)
     if (e.dir) navigate(p)
-    else openFile(p, e.name)
+    else openFile(p, opts)
   }
 
   return { navigate, addNodeBeside, open, openFile }

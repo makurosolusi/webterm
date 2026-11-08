@@ -1,7 +1,7 @@
 // Diadaptasi dari nodeterm `src/renderer/lib/filesNode.test.ts` — bagian interaksi keyboard; sisi
 // semantik path/listing ada di `./fileBrowse.test.ts`.
 import { describe, expect, it } from 'vitest'
-import { listKeyAction, scrollTopToReveal, TYPEAHEAD_RESET_MS, typeAhead, typeAheadIndex } from './filesKeys'
+import { listKeyAction, scrollTopToReveal, TYPEAHEAD_RESET_MS, typeAhead, typeAheadIndex, type KeyRow } from './filesKeys'
 
 describe('typeAheadIndex', () => {
   const names = ['build', 'bun.lock', 'bundle', 'src']
@@ -55,49 +55,54 @@ describe('typeAhead', () => {
   })
 })
 
+/** n flat file rows at depth 0. */
+const flat = (n: number): KeyRow[] => Array.from({ length: n }, () => ({ entry: { dir: false }, open: false, depth: 0 }))
+const dir = (depth: number, open: boolean): KeyRow => ({ entry: { dir: true }, open, depth })
+const file = (depth: number): KeyRow => ({ entry: { dir: false }, open: false, depth })
+
 describe('listKeyAction', () => {
   it('moves the selection with the arrows, clamping at both ends', () => {
-    expect(listKeyAction({ key: 'ArrowDown' }, -1, 3)).toEqual({ kind: 'select', index: 0 })
-    expect(listKeyAction({ key: 'ArrowDown' }, 1, 3)).toEqual({ kind: 'select', index: 2 })
-    expect(listKeyAction({ key: 'ArrowDown' }, 2, 3)).toEqual({ kind: 'select', index: 2 })
-    expect(listKeyAction({ key: 'ArrowUp' }, -1, 3)).toEqual({ kind: 'select', index: 2 })
-    expect(listKeyAction({ key: 'ArrowUp' }, 0, 3)).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'ArrowDown' }, -1, flat(3))).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'ArrowDown' }, 1, flat(3))).toEqual({ kind: 'select', index: 2 })
+    expect(listKeyAction({ key: 'ArrowDown' }, 2, flat(3))).toEqual({ kind: 'select', index: 2 })
+    expect(listKeyAction({ key: 'ArrowUp' }, -1, flat(3))).toEqual({ kind: 'select', index: 2 })
+    expect(listKeyAction({ key: 'ArrowUp' }, 0, flat(3))).toEqual({ kind: 'select', index: 0 })
   })
 
   it('jumps to the ends with Home and End', () => {
-    expect(listKeyAction({ key: 'Home' }, 2, 3)).toEqual({ kind: 'select', index: 0 })
-    expect(listKeyAction({ key: 'End' }, 0, 3)).toEqual({ kind: 'select', index: 2 })
+    expect(listKeyAction({ key: 'Home' }, 2, flat(3))).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'End' }, 0, flat(3))).toEqual({ kind: 'select', index: 2 })
   })
 
   it('opens the selection with Enter and Cmd+ArrowDown', () => {
-    expect(listKeyAction({ key: 'Enter' }, 1, 3)).toEqual({ kind: 'open', index: 1 })
-    expect(listKeyAction({ key: 'ArrowDown', meta: true }, 1, 3)).toEqual({ kind: 'open', index: 1 })
+    expect(listKeyAction({ key: 'Enter' }, 1, flat(3))).toEqual({ kind: 'open', index: 1 })
+    expect(listKeyAction({ key: 'ArrowDown', meta: true }, 1, flat(3))).toEqual({ kind: 'open', index: 1 })
   })
 
   it('does not open when nothing is selected', () => {
-    expect(listKeyAction({ key: 'Enter' }, -1, 3)).toBeNull()
-    expect(listKeyAction({ key: 'ArrowDown', meta: true }, -1, 3)).toBeNull()
+    expect(listKeyAction({ key: 'Enter' }, -1, flat(3))).toBeNull()
+    expect(listKeyAction({ key: 'ArrowDown', meta: true }, -1, flat(3))).toBeNull()
   })
 
-  // Chord Windows dan Finder dua-duanya naik: tangan pengguna meraih yang ia hafal.
-  it('goes up on Backspace, Alt+ArrowUp and Cmd+ArrowUp', () => {
-    expect(listKeyAction({ key: 'Backspace' }, 0, 3)).toEqual({ kind: 'up' })
-    expect(listKeyAction({ key: 'ArrowUp', alt: true }, 0, 3)).toEqual({ kind: 'up' })
-    expect(listKeyAction({ key: 'ArrowUp', meta: true }, 0, 3)).toEqual({ kind: 'up' })
+  // Finder chords go to the parent folder; Backspace alone no longer does (the breadcrumb does).
+  it('goes up on Alt+ArrowUp and Cmd+ArrowUp; Backspace alone is claimed but inert', () => {
+    expect(listKeyAction({ key: 'Backspace' }, 0, flat(3))).toEqual({ kind: 'none' })
+    expect(listKeyAction({ key: 'ArrowUp', alt: true }, 0, flat(3))).toEqual({ kind: 'up' })
+    expect(listKeyAction({ key: 'ArrowUp', meta: true }, 0, flat(3))).toEqual({ kind: 'up' })
   })
 
   // Naik tetap jalan di listing kosong — di situlah pengguna justru paling butuh keluar.
   it('still goes up from an empty listing', () => {
-    expect(listKeyAction({ key: 'Backspace' }, -1, 0)).toEqual({ kind: 'up' })
-    expect(listKeyAction({ key: 'ArrowDown' }, -1, 0)).toBeNull()
+    expect(listKeyAction({ key: 'ArrowUp', meta: true }, -1, flat(0))).toEqual({ kind: 'up' })
+    expect(listKeyAction({ key: 'ArrowDown' }, -1, flat(0))).toBeNull()
   })
 
   it('releases keys that are not listing navigation', () => {
-    expect(listKeyAction({ key: 'a' }, 0, 3)).toBeNull()
-    expect(listKeyAction({ key: 'Tab' }, 0, 3)).toBeNull()
+    expect(listKeyAction({ key: 'a' }, 0, flat(3))).toBeNull()
+    expect(listKeyAction({ key: 'Tab' }, 0, flat(3))).toBeNull()
     // Ctrl dan modifier lain milik shortcut lain (atau browser) — jangan dibajak.
-    expect(listKeyAction({ key: 'ArrowDown', ctrl: true }, 0, 3)).toBeNull()
-    expect(listKeyAction({ key: 'Home', alt: true }, 2, 3)).toBeNull()
+    expect(listKeyAction({ key: 'ArrowDown', ctrl: true }, 0, flat(3))).toBeNull()
+    expect(listKeyAction({ key: 'Home', alt: true }, 2, flat(3))).toBeNull()
   })
 })
 
@@ -118,54 +123,82 @@ describe('scrollTopToReveal', () => {
 
 describe('listKeyAction — fase 2', () => {
   it('Delete dan F2 dilaporkan (Shift+Delete = permanen), bukan dilepas ke canvas', () => {
-    expect(listKeyAction({ key: 'Delete' }, 0, 3)).toEqual({ kind: 'delete', permanent: false })
-    expect(listKeyAction({ key: 'Delete', shift: true }, 0, 3)).toEqual({ kind: 'delete', permanent: true })
-    expect(listKeyAction({ key: 'F2' }, 0, 3)).toEqual({ kind: 'rename' })
+    expect(listKeyAction({ key: 'Delete' }, 0, flat(3))).toEqual({ kind: 'delete', permanent: false })
+    expect(listKeyAction({ key: 'Delete', shift: true }, 0, flat(3))).toEqual({ kind: 'delete', permanent: true })
+    expect(listKeyAction({ key: 'F2' }, 0, flat(3))).toEqual({ kind: 'rename' })
     // Tanpa baris pun Delete tetap diklaim: node tidak boleh terhapus.
-    expect(listKeyAction({ key: 'Delete' }, -1, 0)).toEqual({ kind: 'delete', permanent: false })
-  })
-
-  it('Backspace, ArrowLeft naik; ArrowRight hanya membuka folder', () => {
-    expect(listKeyAction({ key: 'Backspace' }, 0, 3)).toEqual({ kind: 'up' })
-    expect(listKeyAction({ key: 'ArrowLeft' }, 0, 3)).toEqual({ kind: 'up' })
-    expect(listKeyAction({ key: 'ArrowRight' }, 1, 3)).toEqual({ kind: 'open', index: 1, dirOnly: true })
-    expect(listKeyAction({ key: 'ArrowRight' }, -1, 3)).toBeNull()
+    expect(listKeyAction({ key: 'Delete' }, -1, flat(0))).toEqual({ kind: 'delete', permanent: false })
   })
 
   it('PageUp/PageDown melompat satu halaman dan terjepit di ujung', () => {
-    expect(listKeyAction({ key: 'PageDown' }, 2, 50, 10)).toEqual({ kind: 'select', index: 12 })
-    expect(listKeyAction({ key: 'PageDown' }, 45, 50, 10)).toEqual({ kind: 'select', index: 49 })
-    expect(listKeyAction({ key: 'PageUp' }, 4, 50, 10)).toEqual({ kind: 'select', index: 0 })
-    expect(listKeyAction({ key: 'PageDown' }, -1, 50, 10)).toEqual({ kind: 'select', index: 10 })
+    expect(listKeyAction({ key: 'PageDown' }, 2, flat(50), 10)).toEqual({ kind: 'select', index: 12 })
+    expect(listKeyAction({ key: 'PageDown' }, 45, flat(50), 10)).toEqual({ kind: 'select', index: 49 })
+    expect(listKeyAction({ key: 'PageUp' }, 4, flat(50), 10)).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'PageDown' }, -1, flat(50), 10)).toEqual({ kind: 'select', index: 10 })
   })
 
   it('Home/End dan Shift+panah memperluas seleksi', () => {
-    expect(listKeyAction({ key: 'Home' }, 5, 9)).toEqual({ kind: 'select', index: 0 })
-    expect(listKeyAction({ key: 'End', shift: true }, 5, 9)).toEqual({ kind: 'select', index: 8, extend: true })
-    expect(listKeyAction({ key: 'ArrowDown', shift: true }, 2, 9)).toEqual({ kind: 'select', index: 3, extend: true })
-    expect(listKeyAction({ key: 'ArrowUp', shift: true }, 0, 9)).toEqual({ kind: 'select', index: 0, extend: true })
+    expect(listKeyAction({ key: 'Home' }, 5, flat(9))).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'End', shift: true }, 5, flat(9))).toEqual({ kind: 'select', index: 8, extend: true })
+    expect(listKeyAction({ key: 'ArrowDown', shift: true }, 2, flat(9))).toEqual({ kind: 'select', index: 3, extend: true })
+    expect(listKeyAction({ key: 'ArrowUp', shift: true }, 0, flat(9))).toEqual({ kind: 'select', index: 0, extend: true })
   })
 
   it('⌘A / Ctrl+A memilih semua hanya bila ada baris', () => {
-    expect(listKeyAction({ key: 'a', meta: true }, 0, 3)).toEqual({ kind: 'selectAll' })
-    expect(listKeyAction({ key: 'A', ctrl: true }, 0, 3)).toEqual({ kind: 'selectAll' })
-    expect(listKeyAction({ key: 'a', meta: true }, -1, 0)).toBeNull()
+    expect(listKeyAction({ key: 'a', meta: true }, 0, flat(3))).toEqual({ kind: 'selectAll' })
+    expect(listKeyAction({ key: 'A', ctrl: true }, 0, flat(3))).toEqual({ kind: 'selectAll' })
+    expect(listKeyAction({ key: 'a', meta: true }, -1, flat(0))).toBeNull()
   })
 
   it('ContextMenu dan Shift+F10 membuka menu', () => {
-    expect(listKeyAction({ key: 'ContextMenu' }, 0, 3)).toEqual({ kind: 'menu' })
-    expect(listKeyAction({ key: 'F10', shift: true }, 0, 3)).toEqual({ kind: 'menu' })
-    expect(listKeyAction({ key: 'F10' }, 0, 3)).toBeNull()
+    expect(listKeyAction({ key: 'ContextMenu' }, 0, flat(3))).toEqual({ kind: 'menu' })
+    expect(listKeyAction({ key: 'F10', shift: true }, 0, flat(3))).toEqual({ kind: 'menu' })
+    expect(listKeyAction({ key: 'F10' }, 0, flat(3))).toBeNull()
   })
 
   it('⌥⌘C menyalin path, dengan Shift path relatif (pakai code, bukan key)', () => {
-    expect(listKeyAction({ key: 'ç', code: 'KeyC', alt: true, meta: true }, 0, 3)).toEqual({ kind: 'copyPath', relative: false })
-    expect(listKeyAction({ key: 'Ç', code: 'KeyC', alt: true, meta: true, shift: true }, 0, 3)).toEqual({ kind: 'copyPath', relative: true })
+    expect(listKeyAction({ key: 'ç', code: 'KeyC', alt: true, meta: true }, 0, flat(3))).toEqual({ kind: 'copyPath', relative: false })
+    expect(listKeyAction({ key: 'Ç', code: 'KeyC', alt: true, meta: true, shift: true }, 0, flat(3))).toEqual({ kind: 'copyPath', relative: true })
   })
 
   it('⌥⌘R reveals in the OS file manager (by code); Shift or no Alt is not reveal', () => {
-    expect(listKeyAction({ key: '®', code: 'KeyR', alt: true, meta: true }, 0, 3)).toEqual({ kind: 'reveal' })
-    expect(listKeyAction({ key: 'R', code: 'KeyR', alt: true, meta: true, shift: true }, 0, 3)).toBeNull()
-    expect(listKeyAction({ key: 'r', code: 'KeyR', meta: true }, 0, 3)).toBeNull()
+    expect(listKeyAction({ key: '®', code: 'KeyR', alt: true, meta: true }, 0, flat(3))).toEqual({ kind: 'reveal' })
+    expect(listKeyAction({ key: 'R', code: 'KeyR', alt: true, meta: true, shift: true }, 0, flat(3))).toBeNull()
+    expect(listKeyAction({ key: 'r', code: 'KeyR', meta: true }, 0, flat(3))).toBeNull()
+  })
+})
+
+describe('listKeyAction: tree keys', () => {
+  // src/ (open) > [lib/ (closed), a.ts], b.ts
+  const tree = [dir(0, true), dir(1, false), file(1), file(0)]
+
+  it('Right expands a closed folder, steps into an open one, and is inert on files', () => {
+    expect(listKeyAction({ key: 'ArrowRight' }, 1, tree)).toEqual({ kind: 'toggle', index: 1 })
+    expect(listKeyAction({ key: 'ArrowRight' }, 0, tree)).toEqual({ kind: 'select', index: 1 })
+    expect(listKeyAction({ key: 'ArrowRight' }, 2, tree)).toEqual({ kind: 'none' })
+    // An open folder with no loaded children stays put.
+    expect(listKeyAction({ key: 'ArrowRight' }, 0, [dir(0, true), file(0)])).toEqual({ kind: 'none' })
+  })
+
+  it('Left collapses an open folder, otherwise jumps to the parent; top level is inert', () => {
+    expect(listKeyAction({ key: 'ArrowLeft' }, 0, tree)).toEqual({ kind: 'toggle', index: 0 })
+    expect(listKeyAction({ key: 'ArrowLeft' }, 2, tree)).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'ArrowLeft' }, 1, tree)).toEqual({ kind: 'select', index: 0 })
+    expect(listKeyAction({ key: 'ArrowLeft' }, 3, tree)).toEqual({ kind: 'none' })
+    expect(listKeyAction({ key: 'ArrowLeft' }, -1, flat(0))).toEqual({ kind: 'none' })
+  })
+
+  it('Enter opens a file pinned and toggles a folder; Space opens as preview keeping focus', () => {
+    expect(listKeyAction({ key: 'Enter' }, 2, tree)).toEqual({ kind: 'open', index: 2 })
+    expect(listKeyAction({ key: 'Enter' }, 1, tree)).toEqual({ kind: 'toggle', index: 1 })
+    expect(listKeyAction({ key: ' ' }, 2, tree)).toEqual({ kind: 'open', index: 2, preview: true })
+    expect(listKeyAction({ key: ' ' }, 0, tree)).toEqual({ kind: 'toggle', index: 0 })
+  })
+
+  it('Cmd+Backspace / Delete trash; Cmd+Alt+Backspace / Shift+Delete are permanent', () => {
+    expect(listKeyAction({ key: 'Backspace', meta: true }, 0, tree)).toEqual({ kind: 'delete', permanent: false })
+    expect(listKeyAction({ key: 'Backspace', meta: true, alt: true }, 0, tree)).toEqual({ kind: 'delete', permanent: true })
+    expect(listKeyAction({ key: 'Delete' }, 0, tree)).toEqual({ kind: 'delete', permanent: false })
+    expect(listKeyAction({ key: 'Delete', shift: true }, 0, tree)).toEqual({ kind: 'delete', permanent: true })
   })
 })

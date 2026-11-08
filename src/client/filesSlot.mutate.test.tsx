@@ -330,7 +330,7 @@ describe('flag/capability mati', () => {
   })
 
   it('slot langsung: menu() kosong dan onKey() false untuk node yang belum terbukti aktif', () => {
-    const ctx = { cwd: '/p', dir: '/p', entries: [], selection: ['a'], nodeId: 'never', refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), notify: vi.fn(), dismiss: vi.fn() }
+    const ctx = { cwd: '/p', dir: '/p', entries: [], selection: ['a'], nodeId: 'never', refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), notify: vi.fn(), dismiss: vi.fn(), expanded: new Set<string>(), toggle: vi.fn(), collapseAll: vi.fn(), startRenameAt: vi.fn() }
     expect(mutateSlot.menu?.(ctx)).toEqual([])
     expect(mutateSlot.onKey?.({ key: 'Delete', shiftKey: false, metaKey: false, ctrlKey: false, altKey: false } as never, ctx)).toBe(false)
     expect(ctx.startInput).not.toHaveBeenCalled()
