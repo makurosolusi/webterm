@@ -26,6 +26,8 @@ export interface SsrfProxyOptions {
   port?: number
   resolver?: Resolver
   dial?: Dial
+  /** Every refusal (host normalized); the runtime turns it into node state, since Chromium only sees a 403. */
+  onDeny?: (hostname: string, reason: BlockReason) => void
 }
 export interface SsrfProxy { port: number; close(): Promise<void> }
 
@@ -68,8 +70,10 @@ async function decide(rawHost: string, port: number, o: Required<Pick<SsrfProxyO
 export async function startSsrfProxy(opts: SsrfProxyOptions): Promise<SsrfProxy> {
   const o = { allow: opts.allow, webtermPort: opts.webtermPort, allowLoopback: opts.allowLoopback ?? false, resolver: opts.resolver ?? systemResolver }
   const dial = opts.dial ?? systemDial
-  const deny = (hostname: string, reason: BlockReason): void =>
+  const deny = (hostname: string, reason: BlockReason): void => {
     log.warn('browser.ssrf.block', 'blocked outbound connection', { hostname, reason })
+    opts.onDeny?.(hostname, reason)
+  }
   const sockets = new Set<Socket>()
 
   const server: Server = createServer()

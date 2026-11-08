@@ -81,6 +81,8 @@ export interface BrowserState {
   canBack: boolean; canForward: boolean; lease: Lease; live: LiveState; blocked?: BlockReason
   /** Shields (ad/tracker blocking): undefined = no blocker on the server; counts reset on each page load. */
   shieldsOff?: boolean; blockedAds?: number; blockedPopups?: number
+  /** Chromium net error name of the last failed main-frame navigation (e.g. "net::ERR_NAME_NOT_RESOLVED"); cleared on the next page that loads. */
+  netError?: string
 }
 
 /**

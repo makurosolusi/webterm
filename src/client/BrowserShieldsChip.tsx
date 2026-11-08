@@ -15,7 +15,7 @@ export default function BrowserShieldsChip({ state, onToggle }: { state?: Browse
   const total = ads + popups
   return (
     <IconButton
-      size="xs" label={SHIELDS_TEXT.label} aria-pressed={!off}
+      type="button" size="xs" label={SHIELDS_TEXT.label} aria-pressed={!off}
       tooltip={off ? SHIELDS_TEXT.off(host) : SHIELDS_TEXT.on(ads, popups, host)}
       className={off ? 'opacity-60' : undefined}
       onClick={() => onToggle(off)}

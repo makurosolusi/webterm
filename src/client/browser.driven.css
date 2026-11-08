@@ -1,0 +1,7 @@
+/* Browser node while an agent holds the lease: the whole frame is tinted so it reads as
+   "not yours right now" at any canvas zoom, not only where the chip is visible. */
+.term-node.browser-node--driven {
+  --browser-driven-tint: var(--vscode-charts-orange, #d18616);
+  border-color: var(--browser-driven-tint);
+  box-shadow: 0 0 0 1px var(--browser-driven-tint);
+}

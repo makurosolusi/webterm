@@ -17,7 +17,10 @@ import { useNodeActions } from './nodeActions'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
-import { ZOOM_DEFAULT, stepZoom } from './browser.zoom'
+import { ZOOM_DEFAULT, ZOOM_MAX, ZOOM_MIN, stepZoom } from './browser.zoom'
+import { browserChord } from './browser.keys'
+import type { BrowserChord } from './browser.keys'
+import { isMacPlatform } from './terminalKeys'
 import { randomId } from './randomId'
 import { useLiveSettings } from './useSettings'
 import { toSearchEngine } from '../shared/browser.omnibox'
@@ -29,10 +32,13 @@ import { useConsoleDrawer } from './BrowserConsole'
 import type { ConsoleSlot } from './BrowserConsole'
 import { useNodeHost } from './tabLayout.context'
 import './browser.css'
+import './browser.driven.css'
 
 const COLLAPSED_H = 40
 const DEFAULT_H = 400
 const DEFAULT_TITLE = 'Browser'
+/** Accumulated Ctrl+wheel delta (px) per zoom step: one mouse notch (~100) is a step, a trackpad pinch needs a deliberate spread. */
+const WHEEL_ZOOM_PX = 50
 
 /** Konteks untuk slot UI (toolbar URL, chip lease; ditempel WS-11 dari komponen WS-09). */
 export interface BrowserSlotCtx {
@@ -44,9 +50,11 @@ export interface BrowserSlotCtx {
   target?: string
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
   takeover: () => void
-  /** Zoom halaman (1 = 100%) dan langkahnya; murni klien, lihat browser.zoom.ts. */
+  /** Page zoom (1 = 100%) and its step; client-side (browser.zoom.ts), saved in node data `zoom`. */
   zoom: number
   stepZoom: (dir: -1 | 1) => void
+  /** Back to 100% (⌘0, toolbar zoom pill). */
+  resetZoom: () => void
   /** Nyalakan/matikan Shields untuk situs halaman ini. */
   setShields: (on: boolean) => void
   /** Device mode saved on the node (absent = Responsive) and its setter (null = Responsive). */
@@ -71,7 +79,7 @@ export interface BrowserNodeProps extends NodeProps {
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
 function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay, menuItems }: BrowserNodeProps) {
-  const d = data as { url?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice }
+  const d = data as { url?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
@@ -83,7 +91,15 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   // Popup sah (window.open / target=_blank) dari halaman ini: node baru di sebelahnya, seperti tab baru di Brave/Chrome.
   const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (url) => { openBrowserAt?.({ url, anchorNodeId: id }) })
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
-  const [zoom, setZoom] = useState(ZOOM_DEFAULT)
+  const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
+  // Ref, not state, as the step base: a pinch fires many wheel events before React re-renders.
+  const zoomRef = useRef(zoom)
+  const setZoom = (z: number) => {
+    zoomRef.current = z
+    setZoomState(z)
+    rf.updateNodeData(id, { zoom: z === ZOOM_DEFAULT ? undefined : z })
+  }
+  const bodyRef = useRef<HTMLDivElement>(null)
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
   const lastGo = useRef<string | undefined>(undefined)
@@ -113,10 +129,57 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
     takeover: () => send({ t: 'takeover' }),
     setShields: (on) => send({ t: 'shields', on }),
     device: d.device, setDevice: (dev) => { rf.updateNodeData(id, { device: dev ?? undefined }); send({ t: 'device', device: dev }) },
-    zoom, stepZoom: (dir) => setZoom((z) => stepZoom(z, dir)),
+    zoom, stepZoom: (dir) => setZoom(stepZoom(zoomRef.current, dir)), resetZoom: () => setZoom(ZOOM_DEFAULT),
     console: consoleDrawer.slot,
   }
   // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.
+  // Browser-level shortcuts (browser.keys.ts): handled here, never forwarded to the page.
+  const runChord = (a: BrowserChord): boolean => {
+    switch (a) {
+      case 'stop': if (!state?.loading) return false; ctx.nav('stop'); return true // idle: Esc belongs to the page
+      case 'reload': case 'hardReload': ctx.nav('reload'); return true // TODO(browser): hardReload = cache-bypassing reload once the nav contract has one
+      case 'back': ctx.nav('back'); return true
+      case 'forward': ctx.nav('forward'); return true
+      case 'zoomIn': ctx.stepZoom(1); return true
+      case 'zoomOut': ctx.stepZoom(-1); return true
+      case 'zoomReset': ctx.resetZoom(); return true
+      case 'focusUrl': {
+        const input = bodyRef.current?.querySelector<HTMLInputElement>('[data-browser-omnibox]')
+        input?.focus()
+        input?.select()
+        return true
+      }
+    }
+  }
+  const runChordRef = useRef(runChord)
+  runChordRef.current = runChord
+  const stepZoomRef = useRef(ctx.stepZoom)
+  stepZoomRef.current = ctx.stepZoom
+  // Capture phase on the node body: runs before the surface's React onKeyDown/wheel, which would forward to the page.
+  useEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    let wheelAcc = 0
+    const onKey = (e: KeyboardEvent) => {
+      const a = browserChord(e, isMacPlatform())
+      if (!a || !runChordRef.current(a)) return
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return // Ctrl+wheel = mouse zoom and trackpad pinch
+      e.preventDefault()
+      e.stopPropagation()
+      wheelAcc += e.deltaY
+      if (Math.abs(wheelAcc) < WHEEL_ZOOM_PX) return
+      stepZoomRef.current(wheelAcc < 0 ? 1 : -1)
+      wheelAcc = 0
+    }
+    el.addEventListener('keydown', onKey, true)
+    el.addEventListener('wheel', onWheel, { capture: true, passive: false })
+    return () => { el.removeEventListener('keydown', onKey, true); el.removeEventListener('wheel', onWheel, { capture: true }) }
+  }, [])
+  const driven = state?.lease === 'agent'
   const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked
 
   const toggleCollapse = () => {
@@ -128,7 +191,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
   return (
     <>
       <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
-      <div className={termNodeClass({ selected: !!selected, collapsed })} style={{ '--node-swatch': swatch } as CSSProperties}>
+      <div className={termNodeClass({ selected: !!selected, collapsed }) + (driven ? ' browser-node--driven' : '')} style={{ '--node-swatch': swatch } as CSSProperties}>
         <NodeChrome
           title={d.title || state?.title || DEFAULT_TITLE}
           icon="globe"
@@ -144,7 +207,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
           menuItems={menuItems}
         />
-        <div className="node-body browser-node">
+        <div ref={bodyRef} className="node-body browser-node">
           {renderToolbar?.(ctx)}
           <BrowserDeviceHeader device={device} onRotate={() => d.device && ctx.setDevice({ ...d.device, landscape: !d.device.landscape })} />
           <div className="browser-body">

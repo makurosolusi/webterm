@@ -16,7 +16,7 @@ import type { ShieldPolicy } from './adblock.shields'
 import { createConsoleLog } from './browserHost.console'
 import { createTargetLifecycle } from './browserHost.lifecycle'
 import type { TargetLifecycle } from './browserHost.lifecycle'
-import { blockOf, BrowserError, mergeState, notePendingInput, readHistory, TargetTable } from './browserHost.targets'
+import { blockOf, BrowserError, isAbortedNav, mergeState, notePendingInput, readHistory, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
 export { BrowserError } from './browserHost.targets'
@@ -36,6 +36,8 @@ export interface HostDeps {
   now?: () => number
 }
 
+
+const TUNNEL_FAILED = /ERR_TUNNEL_CONNECTION_FAILED$/
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
   private readonly stateCbs = new Set<(s: BrowserState) => void>()
@@ -213,7 +215,13 @@ export class BrowserHost implements BrowserHostApi {
 
   private async goto(rec: NodeRec, url: string): Promise<void> {
     const r = await this.send<{ errorText?: string }>(rec, CDP.navigate, { url })
-    if (r.errorText) log.warn('browser.nav', 'navigation failed', { ids: { nodeId: rec.nodeId }, host: hostOnly(url), error: r.errorText })
+    if (!r.errorText) return
+    log.warn('browser.nav', 'navigation failed', { ids: { nodeId: rec.nodeId }, host: hostOnly(url), error: r.errorText })
+    // ERR_ABORTED = stopped by the user, a download or a 204: no error page to explain. The address bar keeps the failed URL, like Chrome.
+    if (isAbortedNav(r.errorText)) return
+    // https through the egress proxy: its refusal of CONNECT reaches Chromium only as a tunnel failure; name the DNS case.
+    const dns = TUNNEL_FAILED.test(r.errorText) && this.deps.guard.onFrameNavigated(url) === 'dns_fail'
+    this.patch(rec, { url, netError: dns ? 'net::ERR_NAME_NOT_RESOLVED' : r.errorText, loading: false })
   }
 
   private patch(rec: NodeRec, part: Partial<BrowserState>): void {

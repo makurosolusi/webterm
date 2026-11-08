@@ -20,16 +20,14 @@ export interface BrowserDevicePickerProps {
   onChange: (device: DeviceChoice | null) => void
 }
 
-/** Picking keeps the current orientation; the popover closes after a choice. */
-export default function BrowserDevicePicker({ value, onChange }: BrowserDevicePickerProps) {
-  const [open, setOpen] = useState(false)
-  const anchor = useRef<HTMLSpanElement>(null)
+/** The picker list on its own, anchored to any element (the toolbar's ⋯ menu opens it via "Device mode…"). */
+export function BrowserDevicePopover({ anchor, value, onChange, onClose }: BrowserDevicePickerProps & { anchor: HTMLElement; onClose: () => void }) {
   const current = resolveDevice(value)
   const custom = value?.id === DEVICE_CUSTOM ? { w: String(value.w), h: String(value.h), dpr: String(value.dpr) } : CUSTOM_DEFAULT
   const [draft, setDraft] = useState(custom)
   const [error, setError] = useState(false)
   const landscape = value?.landscape ? { landscape: true } : {}
-  const pick = (d: DeviceChoice | null) => { onChange(d); setOpen(false) }
+  const pick = (d: DeviceChoice | null) => { onChange(d); onClose() }
 
   const applyCustom = (e: FormEvent) => {
     e.preventDefault()
@@ -43,6 +41,28 @@ export default function BrowserDevicePicker({ value, onChange }: BrowserDevicePi
   )
 
   return (
+    <VscodePopover anchor={anchor} open onOpenChange={(o) => { if (!o) onClose() }} ariaLabel={T.picker} className="browser-device-pop">
+      <Button size="xs" variant="ghost" aria-pressed={current === null} onClick={() => pick(null)}>{T.responsive}</Button>
+      {DEVICE_PRESETS.map((p) => (
+        <Button key={p.id} size="xs" variant="ghost" aria-pressed={current?.id === p.id} onClick={() => pick({ id: p.id, ...landscape })}>
+          <span>{p.name}</span><span className="tabular-nums opacity-70">{p.w}×{p.h}</span>
+        </Button>
+      ))}
+      <form className="browser-device-custom" aria-label={T.custom} onSubmit={applyCustom}>
+        {field('w', T.width)}{field('h', T.height)}{field('dpr', T.dpr)}
+        <Button type="submit" size="xs" variant="secondary" className="col-span-3">{T.custom}: {T.apply}</Button>
+        {error && <p role="alert" className="col-span-3 m-0 text-xs text-(--vscode-errorForeground)">{T.invalid(DEVICE_DIM_MIN, DEVICE_DIM_MAX, DEVICE_DPR_MIN, DEVICE_DPR_MAX)}</p>}
+      </form>
+    </VscodePopover>
+  )
+}
+
+/** Standalone button + picker. Picking keeps the current orientation; the popover closes after a choice. */
+export default function BrowserDevicePicker({ value, onChange }: BrowserDevicePickerProps) {
+  const [open, setOpen] = useState(false)
+  const anchor = useRef<HTMLSpanElement>(null)
+  const current = resolveDevice(value)
+  return (
     <span ref={anchor} className="inline-flex">
       <IconButton
         size="icon-xs" label={T.button} aria-pressed={current !== null} aria-expanded={open}
@@ -51,21 +71,7 @@ export default function BrowserDevicePicker({ value, onChange }: BrowserDevicePi
       >
         <span className="codicon codicon-device-mobile" aria-hidden="true" />
       </IconButton>
-      {open && anchor.current && (
-        <VscodePopover anchor={anchor.current} open onOpenChange={setOpen} ariaLabel={T.picker} className="browser-device-pop">
-          <Button size="xs" variant="ghost" aria-pressed={current === null} onClick={() => pick(null)}>{T.responsive}</Button>
-          {DEVICE_PRESETS.map((p) => (
-            <Button key={p.id} size="xs" variant="ghost" aria-pressed={current?.id === p.id} onClick={() => pick({ id: p.id, ...landscape })}>
-              <span>{p.name}</span><span className="tabular-nums opacity-70">{p.w}×{p.h}</span>
-            </Button>
-          ))}
-          <form className="browser-device-custom" aria-label={T.custom} onSubmit={applyCustom}>
-            {field('w', T.width)}{field('h', T.height)}{field('dpr', T.dpr)}
-            <Button type="submit" size="xs" variant="secondary" className="col-span-3">{T.custom}: {T.apply}</Button>
-            {error && <p role="alert" className="col-span-3 m-0 text-xs text-(--vscode-errorForeground)">{T.invalid(DEVICE_DIM_MIN, DEVICE_DIM_MAX, DEVICE_DPR_MIN, DEVICE_DPR_MAX)}</p>}
-          </form>
-        </VscodePopover>
-      )}
+      {open && anchor.current && <BrowserDevicePopover anchor={anchor.current} value={value} onChange={onChange} onClose={() => setOpen(false)} />}
     </span>
   )
 }

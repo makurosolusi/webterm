@@ -9,9 +9,39 @@ export const TOOLBAR_TEXT = {
   stop: 'Stop loading',
   urlLabel: 'Address',
   urlPlaceholder: 'Search or enter address',
-  go: 'Go',
   agentControl: 'Let agents drive',
   agentControlHint: 'On by default: terminal agents cabled to this browser can control it right away. Uncheck to turn this off.',
+  agentPill: 'Agents',
+  agentPillHint: 'Terminal agents cabled to this browser can drive it: click to turn this off',
+  more: 'More actions',
+  menu: 'Browser actions',
+} as const
+
+/** Tooltips of the icon-only toolbar buttons: what the click does, plus why when disabled. */
+export const TOOLBAR_TIP = {
+  back: 'Go back one page', backOff: 'no earlier page',
+  forward: 'Go forward one page', forwardOff: 'no later page',
+  reload: 'Reload this page', stop: 'Stop loading this page',
+  more: 'Zoom, device mode, Shields, Design Mode and more',
+} as const
+
+/** Site-info icon at the start of the address field, picked from the page URL scheme (like Chrome's). */
+export const SITE_INFO_TEXT = {
+  secure: { label: 'Secure connection', tip: 'Connection is secure (https)', icon: 'lock' },
+  insecure: { label: 'Not secure', tip: 'Connection is not secure (http): do not enter passwords or card numbers here', icon: 'warning' },
+  other: { label: 'Page info', tip: 'This page is not loaded over the web', icon: 'info' },
+} as const
+
+/** "⋯" menu rows of the browser toolbar. */
+export const TOOLBAR_MENU_TEXT = {
+  zoomReset: (pct: string) => `Reset zoom (${pct})`,
+  device: 'Device mode…',
+  shields: 'Shields for this site',
+  design: 'Design Mode',
+  copyUrl: 'Copy URL',
+  openExternal: 'Open in system browser',
+  agentOffer: 'Let agents drive…',
+  copyFailed: 'Could not copy the address.',
 } as const
 
 /** Shields chip (ad/tracker and popup blocking, like Brave Shields). */
@@ -50,9 +80,9 @@ export const URL_ERROR_TEXT: Record<UrlRejectReason, string> = {
 }
 
 export const CHIP_TEXT = {
-  driving: 'An agent is driving this browser',
-  stop: 'Stop',
-  stopLabel: 'Stop the agent and take over this browser',
+  driving: 'Agent is driving',
+  stop: 'Take control',
+  stopLabel: 'Stop the agent and take control of this browser',
 } as const
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -121,6 +151,9 @@ export const ZOOM_TEXT = {
   out: 'Zoom out',
   in: 'Zoom in',
   level: 'Page zoom level',
+  /** Pill in the address field, shown only away from 100%; the accessible name keeps the visible percent. */
+  pill: (pct: string) => `Zoom ${pct}, reset to 100%`,
+  pillTip: (pct: string) => `Page zoom is ${pct}: click to reset to 100%`,
 } as const
 
 export const START_TEXT = {
