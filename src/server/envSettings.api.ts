@@ -14,7 +14,7 @@ const log = createLogger('settings')
 
 export const ENV_SETTINGS_PATH = '/api/settings/env'
 export const IMPORT_ENDPOINT = '/api/settings/env/import'
-// Control tab route (read model, writes, Doctor) lives in envSettings.control.ts; re-exported for its mount.
+// Settings › Developer route (read model, writes, Doctor) lives in envSettings.control.ts; re-exported for its mount.
 export { CONTROL_EFFECTIVE_PATH, controlEffectiveRoute } from './envSettings.control'
 
 export interface EnvSettingsApiDeps {

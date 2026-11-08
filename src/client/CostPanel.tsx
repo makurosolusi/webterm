@@ -1,4 +1,4 @@
-// Cost section of the Control tab (F4-e): what Claude Code agents and Central spent today / over 7
+// Spending panel (Settings › Spending, F4-e): what Claude Code agents and Central spent today / over 7
 // days by workspace, agent, routine and model, the cache hit rate, and the caps that auto-pause work.
 // Numbers come from GET /api/cost (src/server/cost/cost.route.ts); prices are estimates, not a bill.
 import { useCallback, useEffect, useState } from 'react'
@@ -6,38 +6,57 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SettingsCombobox } from './SettingsCombobox'
 import { dollarsToMicros, validateDollars } from './SettingsCostLimit'
-import { COST_CAP_FIELD_ID, COST_CAP_PRESETS } from './settingsPresets'
+import { COST_CAP_PRESETS } from './settingsPresets'
+import { Segmented } from './centralSettings.controls'
 import { controlRequest } from './ControlPanel'
 import type { CostResponse } from '../server/cost/cost.route'
 import type { SpendGroup, SpendSummary } from '../server/cost/costStore'
 
 export const COST_API_PATH = '/api/cost'
+/** Own Recent list: this cap pauses all work, unlike Central's "Daily spending limit" (cheaper models). */
+export const PAUSE_ALL_FIELD_ID = 'cost.pauseAllAt'
 
 export const COST_TEXT = {
-  title: 'Cost',
-  intro: 'Estimated spend of Claude Code agents and Central, from their own usage data. Not a bill.',
+  /** Region name only: the Settings › Spending page heading already says it, so no visible heading here. */
+  title: 'Spending',
+  intro: 'Estimated spend of Claude Code agents and the Central Agent, from their own usage data. Not a bill.',
+  period: 'Period',
   today: 'Today',
   week: '7 days',
-  unavailable: 'Cost data is unavailable (the ledger is off).',
-  loading: 'Loading cost…',
-  spend: 'Spend',
+  unavailable: 'Spending data is unavailable (the cost ledger is off).',
+  loading: 'Loading spending…',
+  spend: 'Spent',
   responses: 'Responses',
+  details: 'Details',
   cacheHit: 'Cache hit rate',
-  prefixReuse: 'Central prefix reuse (7 days)',
+  prefixReuse: 'Central Agent prefix reuse (7 days)',
   prefixValue: (rate: number | null, n: number) => (rate === null ? '—' : `${Math.round(rate * 100)}% of ${n} prefix${n === 1 ? '' : 'es'}`),
   unpriced: (n: number) => `${n} responses from models without a price are not counted.`,
   byWorkspace: 'By workspace',
   topSpenders: 'Top spenders',
-  byRoutine: 'By routine / DAG',
+  byRoutine: 'By routine or plan',
   byModel: 'By model',
-  central: 'Central',
+  central: 'Central Agent',
   none: 'Nothing yet.',
-  caps: 'Caps',
-  dayCap: 'Daily cap (USD)',
+  caps: 'Limits',
+  pauseAll: "Pause all work when today's spend reaches",
+  pauseAllHint: 'When reached, no new routine, plan or bake-off starts until you raise the limit, press Resume, or the day ends (UTC).',
   resume: 'Resume',
   paused: 'Paused',
   pricing: 'Prices from',
 } as const
+
+const KIND_NAME: Record<string, string> = { day: 'All work today', routine: 'Routine', dag: 'Plan', bakeoff: 'Bake-off', central: COST_TEXT.central }
+/** Plain name for a cap scope or routine key: `routine:x` -> "Routine x", `day` -> "All work today". */
+export function scopeName(scope: string): string {
+  if (scope === '') return COST_TEXT.central
+  const i = scope.indexOf(':')
+  const kind = i < 0 ? scope : scope.slice(0, i)
+  const ref = i < 0 ? '' : scope.slice(i + 1)
+  const name = KIND_NAME[kind]
+  if (!name) return scope
+  return ref ? `${name} ${ref}` : name
+}
 
 export const formatUsd = (micros: number): string => `$${(micros / 1e6).toFixed(micros > 0 && micros < 10_000 ? 4 : 2)}`
 const isCost = (v: unknown): v is CostResponse => !!v && typeof (v as CostResponse).today === 'object' && Array.isArray((v as CostResponse).caps)
@@ -81,26 +100,22 @@ export function CostPanel(): React.JSX.Element {
   return (
     <section aria-label={COST_TEXT.title} data-testid="cost-panel">
       <div className="flex items-center gap-2">
-        <h3 className="font-semibold">{COST_TEXT.title}</h3>
-        <Button size="sm" variant={range === 'today' ? 'default' : 'secondary'} onClick={() => setRange('today')}>{COST_TEXT.today}</Button>
-        <Button size="sm" variant={range === 'week' ? 'default' : 'secondary'} onClick={() => setRange('week')}>{COST_TEXT.week}</Button>
+        <Segmented label={COST_TEXT.period} value={range} onChange={(v) => setRange(v === 'week' ? 'week' : 'today')}
+          options={[{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]} />
       </div>
       <p className="text-xs opacity-70">{COST_TEXT.intro}</p>
       {failed ? <p className="text-xs opacity-70">{COST_TEXT.unavailable}</p> : null}
       {!data && !failed ? <p className="text-xs opacity-70">{COST_TEXT.loading}</p> : null}
       {data && s ? (
         <div className="flex flex-col gap-2">
-          <dl className="grid grid-cols-4 gap-2 text-xs">
-            <div><dt className="opacity-70">{COST_TEXT.spend}</dt><dd data-testid="cost-total" className="text-base font-semibold">{formatUsd(s.costMicros)}</dd></div>
+          <dl className="flex items-end gap-6 text-xs">
+            <div><dt className="opacity-70">{COST_TEXT.spend}</dt><dd data-testid="cost-total" className="text-2xl font-semibold">{formatUsd(s.costMicros)}</dd></div>
             <div><dt className="opacity-70">{COST_TEXT.responses}</dt><dd>{s.byModel.reduce((n, g) => n + g.responses, 0)}</dd></div>
-            <div><dt className="opacity-70">{COST_TEXT.cacheHit}</dt><dd data-testid="cost-cache">{s.cacheHitRate === null ? '—' : `${Math.round(s.cacheHitRate * 100)}%`}</dd></div>
-            <div><dt className="opacity-70">{COST_TEXT.prefixReuse}</dt><dd data-testid="cost-prefix">{COST_TEXT.prefixValue(data.prefix?.reuseRate ?? null, data.prefix?.prefixes ?? 0)}</dd></div>
           </dl>
-          {s.unpriced > 0 ? <p className="text-xs opacity-70">{COST_TEXT.unpriced(s.unpriced)}</p> : null}
           <div className="grid grid-cols-2 gap-3">
             <Groups title={COST_TEXT.byWorkspace} rows={s.byWorkspace} name={(k) => label(data, 'workspace', k)} />
             <Groups title={COST_TEXT.topSpenders} rows={s.byNode} name={(k) => label(data, 'node', k)} />
-            <Groups title={COST_TEXT.byRoutine} rows={s.byRoutine} name={(k) => k} />
+            <Groups title={COST_TEXT.byRoutine} rows={s.byRoutine} name={scopeName} />
             <Groups title={COST_TEXT.byModel} rows={s.byModel} name={(k) => k || COST_TEXT.central} />
           </div>
           <div>
@@ -108,7 +123,7 @@ export function CostPanel(): React.JSX.Element {
             <ul className="text-xs">
               {data.caps.map((c) => (
                 <li key={c.scope} data-scope={c.scope} className="flex items-center gap-2">
-                  <span>{c.scope}</span>
+                  <span>{scopeName(c.scope)}</span>
                   <span>{formatUsd(c.spentMicros)}{c.limitMicros > 0 ? ` / ${formatUsd(c.limitMicros)}` : ''}</span>
                   {c.pausedAt !== null ? (
                     <>
@@ -119,16 +134,25 @@ export function CostPanel(): React.JSX.Element {
                 </li>
               ))}
             </ul>
-            <div className="mt-1 flex items-center gap-2 text-xs">
-              <label htmlFor="cost-day-cap">{COST_TEXT.dayCap}</label>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <label htmlFor="cost-day-cap">{COST_TEXT.pauseAll}</label>
               <span className="w-40">
-                <SettingsCombobox id="cost-day-cap" fieldId={COST_CAP_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"
+                <SettingsCombobox id="cost-day-cap" fieldId={PAUSE_ALL_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"
                   value={day && day.limitMicros > 0 ? String(day.limitMicros / 1e6) : ''} validate={validateDollars}
                   onCommit={(v) => write('PUT', `${COST_API_PATH}/caps`, { scope: 'day', limitMicros: dollarsToMicros(v) ?? 0 })} />
               </span>
+              <span className="w-full opacity-70">{COST_TEXT.pauseAllHint}</span>
             </div>
           </div>
-          <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">{data.pricing.source}</a> ({data.pricing.checkedAt})</p>
+          <details data-testid="cost-details" className="text-xs">
+            <summary>{COST_TEXT.details}</summary>
+            <dl className="mt-1 grid grid-cols-2 gap-2">
+              <div><dt className="opacity-70">{COST_TEXT.cacheHit}</dt><dd data-testid="cost-cache">{s.cacheHitRate === null ? '—' : `${Math.round(s.cacheHitRate * 100)}%`}</dd></div>
+              <div><dt className="opacity-70">{COST_TEXT.prefixReuse}</dt><dd data-testid="cost-prefix">{COST_TEXT.prefixValue(data.prefix?.reuseRate ?? null, data.prefix?.prefixes ?? 0)}</dd></div>
+            </dl>
+            {s.unpriced > 0 ? <p className="opacity-70">{COST_TEXT.unpriced(s.unpriced)}</p> : null}
+            <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">{data.pricing.source}</a> ({data.pricing.checkedAt})</p>
+          </details>
         </div>
       ) : null}
     </section>

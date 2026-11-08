@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
 import { SETTING_RANGES } from '../shared/settings.ranges'
-import { SETTINGS_SECTIONS, SettingsPanel, toSectionId } from './SettingsPanel'
+import { SETTINGS_GROUPS, SETTINGS_SECTIONS, SettingsPanel, toSectionId } from './SettingsPanel'
 
 // Tab Kemampuan memuat dari server; tes layout ini tak membutuhkannya (D8 ada di SettingsPanel.capabilities.test.tsx).
 vi.mock('./useCapabilities', () => ({
@@ -16,7 +16,7 @@ vi.mock('./useCapabilities', () => ({
   capabilityErrorMessage: () => '',
 }))
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 // Render Settings membangun Dialog + enam section di jsdom; saat suite lain berjalan paralel
 // durasinya bisa jauh melewati 5 detik default (load mesin tinggi).
@@ -48,7 +48,8 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Canvas', 'Canvas background', 'Capabilities', 'Control']
+    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations',
+      'Spending', 'Canvas', 'Canvas background', 'Capabilities', 'Health', 'Developer']
     // Accessible name stays the title alone; the description is the item's accessible description.
     expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
@@ -57,6 +58,23 @@ describe('SettingsPanel VS Code layout', () => {
     const fontSize = screen.getByRole('spinbutton', { name: 'Font size' })
     expect(fontSize.getAttribute('aria-valuenow')).toBe(String(DEFAULT_SETTINGS.fontSize))
     expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
+  })
+
+  it('groups the sidebar under Editor, Agents, Workspace and System headings, in that order', () => {
+    renderPanel()
+    const groups = within(nav()).getAllByRole('group')
+    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['Editor', 'Agents', 'Workspace', 'System'])
+    const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
+    expect(byGroup).toEqual([
+      ['Terminal', 'Interaction', 'Shell & buffer'],
+      ['Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations', 'Spending'],
+      ['Canvas', 'Canvas background'],
+      ['Capabilities', 'Health', 'Developer'],
+    ])
+    expect(within(groups[1]!).getByRole('button', { name: 'Rules & approvals' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
+    expect(SETTINGS_GROUPS).toEqual(['Editor', 'Agents', 'Workspace', 'System'])
+    // SETTINGS_SECTIONS is listed in group order, so the sidebar order equals the array order.
+    expect(SETTINGS_SECTIONS.map((x) => x.group)).toEqual([...SETTINGS_SECTIONS.map((x) => x.group)].sort((a, b) => SETTINGS_GROUPS.indexOf(a) - SETTINGS_GROUPS.indexOf(b)))
   })
 
   it('switches section from the sidebar and keeps the active item marked', () => {
@@ -93,9 +111,11 @@ describe('SettingsPanel section icons and descriptions', () => {
     })
   })
 
-  it('shows the same icon, title and description in the section header', () => {
+  it('shows the same icon, title and description in the section header, for every section id', () => {
+    // The purpose sections load from the server; a 404 is enough here, the header does not wait for them.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
     renderPanel()
-    for (const section of SETTINGS_SECTIONS.filter((x) => x.id !== 'capabilities' && x.id !== 'control')) {
+    for (const section of SETTINGS_SECTIONS.filter((x) => x.id !== 'capabilities')) {
       fireEvent.click(within(nav()).getByRole('button', { name: section.label }))
       const heading = screen.getByRole('heading', { level: 2, name: section.label })
       expect(heading.querySelector('.codicon')?.classList).toContain(`codicon-${section.icon}`)
@@ -136,6 +156,8 @@ describe('SettingsPanel item placement', () => {
     expect(toSectionId('canvas')).toBe('canvas')
     expect(toSectionId('env')).toBe('capabilities')
     expect(toSectionId('channels')).toBe('capabilities')
+    expect(toSectionId('control')).toBe('health')
+    for (const section of SETTINGS_SECTIONS) expect(toSectionId(section.id)).toBe(section.id)
   })
 })
 
@@ -151,6 +173,11 @@ describe('SettingsPanel keyboard', () => {
     expect(document.activeElement).toBe(items[items.length - 1])
     fireEvent.keyDown(items[items.length - 1]!, { key: 'Home' })
     expect(document.activeElement).toBe(items[0])
+    // Across a group heading: the last Editor item steps down into the first Agents item.
+    items[2]!.focus()
+    fireEvent.keyDown(items[2]!, { key: 'ArrowDown' })
+    expect(document.activeElement?.textContent).toContain('Agent')
+    expect(document.activeElement).toBe(items[3])
   })
 })
 

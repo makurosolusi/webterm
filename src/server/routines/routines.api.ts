@@ -1,4 +1,4 @@
-// `/api/routines` (Settings › Control › Routines).
+// `/api/routines` (Settings › Automations).
 //   GET    /api/routines              routines + last run + templates
 //   POST   /api/routines              create
 //   PUT    /api/routines/:id          replace the definition

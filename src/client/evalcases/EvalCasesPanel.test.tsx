@@ -28,7 +28,7 @@ function server(cases: EvalCaseView[]) {
   return { calls }
 }
 
-describe('Eval cases (Settings › Control)', () => {
+describe('Eval cases (Settings › Developer)', () => {
   it('lists new cases with source, summary, input and who rejected them', async () => {
     server([PLAN])
     render(<EvalCasesPanel />)
@@ -37,6 +37,7 @@ describe('Eval cases (Settings › Control)', () => {
     expect(item.textContent).toContain('goal.propose')
     expect(item.textContent).toContain('Free some disk on staging')
     expect(item.textContent).toContain('rejected by human:loopback')
+    expect(screen.getByText(/^Saved examples used to test agent behaviour\./)).toBeTruthy()
   })
 
   it('Promote to golden sends the typed reason; an empty reason is not sent', async () => {
@@ -52,13 +53,16 @@ describe('Eval cases (Settings › Control)', () => {
     expect(calls.filter((c) => c.method === 'POST')[1]).toEqual({ method: 'POST', url: '/api/evalcases/c1/dismiss', body: {} })
   })
 
-  it('status buttons switch the list; Export JSON downloads the dataset', async () => {
+  it('the status segmented control switches the list; Export JSON downloads the dataset', async () => {
     const { calls } = server([PLAN, { ...PLAN, id: 'c2', status: 'promoted', proposed: { tool: 'Bash', summary: 'Bash: rm -rf build' } }])
     const createObjectURL = vi.fn(() => 'blob:x')
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }))
     render(<EvalCasesPanel />)
     await screen.findByText('Central plan rejected')
-    fireEvent.click(screen.getByRole('button', { name: 'Golden' }))
+    expect(screen.getByRole('radiogroup', { name: 'Show' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'New' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Golden' }))
+    expect(screen.getByRole('radio', { name: 'Golden' }).getAttribute('aria-checked')).toBe('true')
     expect(await screen.findByText(/Bash: rm -rf build/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Promote to golden' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))

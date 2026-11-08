@@ -79,3 +79,6 @@ export interface EnvStateV2 {
 
 /** Cermin klien-aman dari server `flagOn`: trim + lowercase === 'on'. */
 export const flagIsOn = (raw: string | undefined): boolean => (raw ?? '').trim().toLowerCase() === 'on'
+
+/** Where a behaviour key without its own card or notice is edited (Settings › Developer); server row `ui` and client filter share it. */
+export const CONTROL_WHERE = 'Settings › Developer'

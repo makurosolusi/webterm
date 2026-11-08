@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PREFILL_RULE_EVENT, type PrefillRule } from './policyPresets'
 import { SecretsPanel, type SecretEntry, type SecretUse } from './SecretsPanel'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -25,17 +26,39 @@ function server(initial: SecretEntry[], usage: SecretUse[] | null = []) {
   return { writes }
 }
 
-describe('Secrets (Settings › Control)', () => {
+describe('Secrets (Settings › Rules & approvals)', () => {
+  it('opens with the plain intro, no policy jargon', async () => {
+    server([])
+    render(<SecretsPanel />)
+    await screen.findByText('No secrets yet.')
+    expect(screen.getByText('Agents ask before using a secret. Allow it in Rules & approvals.')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/secret\.run|secret:<|scope|capability/)
+  })
+
+  it('"Allow an agent to use this" asks the rules row to pre-fill that secret', async () => {
+    server([{ name: 'NPM_TOKEN', lastUsedAt: null }])
+    const seen: PrefillRule[] = []
+    const on = (e: Event): void => { seen.push((e as CustomEvent<PrefillRule>).detail) }
+    window.addEventListener(PREFILL_RULE_EVENT, on)
+    render(<SecretsPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Allow an agent to use this' }))
+    window.removeEventListener(PREFILL_RULE_EVENT, on)
+    expect(seen).toEqual([{ capability: 'secret.run', scope: 'secret:NPM_TOKEN:*' }])
+  })
+
   it('lists names with last use and the usage log, never a value', async () => {
     server([{ name: 'NPM_TOKEN', lastUsedAt: AT }, { name: 'GH_KEY', lastUsedAt: null }],
-      [{ seq: 7, ts: AT, name: 'NPM_TOKEN', principal: 'node:a1', commandHash: 'abcdef0123456789', exitCode: 0 }])
+      [{ seq: 7, ts: AT, name: 'NPM_TOKEN', principal: 'node:a1', commandHash: 'abcdef0123456789', exitCode: 0 },
+        { seq: 8, ts: AT, name: 'NPM_TOKEN', principal: 'central', commandHash: 'ffff', exitCode: 2 }])
     render(<SecretsPanel />)
     expect(await screen.findByText('NPM_TOKEN', { selector: 'code.flex-1' })).toBeTruthy()
     expect(screen.getByText('never used')).toBeTruthy()
     expect(screen.getByText(/last used/)).toBeTruthy()
-    const log = screen.getByRole('list', { name: 'Usage log' })
-    expect(log.textContent).toContain('node:a1')
-    expect(log.textContent).toContain('abcdef012345')
+    const log = screen.getByRole('table', { name: 'Usage log' })
+    expect([...log.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['When', 'Secret', 'Used by', 'Command', 'Result'])
+    const [first, second] = [...log.querySelectorAll('tbody tr')].map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent))
+    expect(first!.slice(1)).toEqual(['NPM_TOKEN', 'Agent a1', 'abcdef012345', 'OK'])
+    expect(second!.slice(1)).toEqual(['NPM_TOKEN', 'Central', 'ffff', 'Failed (exit 2)'])
   })
 
   it('adds a secret, clears the value field, and deletes one', async () => {

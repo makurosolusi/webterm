@@ -1,9 +1,10 @@
-// Eval cases section of Settings › Control (PLAN F6): every user rejection becomes a case (approval
+// Eval cases section of Settings › Developer (PLAN F6): every user rejection becomes a case (approval
 // denied, consolidator proposal dismissed, Central plan rejected, rewind). The human reviews them here,
 // LangSmith-style: Promote to golden (replayed by `webterm eval run`), Dismiss, or Export JSON.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Segmented } from '../centralSettings.controls'
 
 export const EVAL_CASES_PATH = '/api/evalcases'
 const PAGE = 50
@@ -23,7 +24,8 @@ export interface EvalCaseView {
 
 export const EVAL_TEXT = {
   title: 'Eval cases',
-  intro: 'Each time you reject something (an approval, a memory proposal, a Central plan, a rewind) it is saved here with its context, scrubbed of secrets and personal data. Promote a case to the golden set and `webterm eval run` replays it against Central to catch regressions.',
+  intro: 'Saved examples used to test agent behaviour. Each time you turn something down (an approval, a memory suggestion, a Central Agent plan, a rewind) it is saved here with its context, with secrets and personal data removed. Mark a case as golden and `webterm eval run` replays it to catch regressions.',
+  show: 'Show',
   loading: 'Loading eval cases…',
   loadFailed: 'Cannot load eval cases.',
   empty: 'No cases here.',
@@ -88,10 +90,9 @@ export function EvalCasesPanel(): React.JSX.Element {
     <section aria-label={EVAL_TEXT.title} data-testid="eval-cases-panel">
       <h3 className="font-semibold">{EVAL_TEXT.title}</h3>
       <p className="text-xs opacity-70">{EVAL_TEXT.intro}</p>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Status">
-        {(Object.keys(EVAL_TEXT.status) as EvalStatus[]).map((s) => (
-          <Button key={s} size="sm" variant={s === status ? 'default' : 'secondary'} aria-pressed={s === status} onClick={() => setStatus(s)}>{EVAL_TEXT.status[s]}</Button>
-        ))}
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <Segmented label={EVAL_TEXT.show} value={status} onChange={(v) => setStatus(v as EvalStatus)}
+          options={(Object.keys(EVAL_TEXT.status) as EvalStatus[]).map((s) => ({ value: s, label: EVAL_TEXT.status[s] }))} />
         <Button size="sm" variant="secondary" onClick={() => void exportJson()}>{EVAL_TEXT.exportJson}</Button>
       </div>
       {loadError ? <p className="text-xs opacity-70">{EVAL_TEXT.loadFailed}</p> : null}

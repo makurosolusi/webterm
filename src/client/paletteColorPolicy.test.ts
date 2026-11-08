@@ -14,7 +14,7 @@ const PALETTE_CLASS = /[a-z]-(?:amber|red|green|yellow)-\d{3}\b/g
 /** Files that predate the policy, with how many palette classes each still has. Fix, then lower. */
 const FROZEN: Record<string, number> = {
   'src/client/ClaudeProviderCommand.tsx': 3,
-  'src/client/ControlPanel.tsx': 2,
+  'src/client/ControlPanel.tsx': 1,
   'src/client/ControlPanelField.tsx': 1,
   'src/client/TerminalCore.offline.tsx': 1,
   'src/client/bakeoff/BakeoffDialog.tsx': 3,

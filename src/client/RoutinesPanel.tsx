@@ -1,11 +1,12 @@
-// Routines section of Settings › Control (F4-a): agent runs fired by a schedule, a Senses event or
-// the API, with a shell precheck, a daily budget and a history that keeps skipped runs and why.
+// Routines section of Settings › Automations (F4-a): agent runs fired by a schedule, a Senses event or
+// the API, with an optional check command, a daily budget and a history that keeps skipped runs and why.
 // Imitates Orca automations and Claude Code Desktop scheduled tasks (list, Run now, history).
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { fetchWorkspaces } from './api'
 import { EMPTY_ROUTINE, RoutinesForm, type RoutineDef } from './RoutinesForm'
 import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
+import { scheduleText } from './routineSchedule.presets'
 
 export const ROUTINES_PATH = '/api/routines'
 
@@ -18,7 +19,7 @@ interface ListView { routines: RoutineView[]; templates: Template[] }
 
 export const ROUTINES_TEXT = {
   title: 'Routines',
-  intro: 'Run an agent on a schedule, when an event happens, or from a script. The precheck runs first: a non-zero exit skips the run and spends no tokens. Missed runs while the machine slept collapse into one catch-up run.',
+  intro: 'Run an agent on a schedule, when an event happens, or from a script. A routine can first run a check command: if the command fails, the run is skipped and costs nothing. Runs missed while the computer was asleep are made up by a single run.',
   loading: 'Loading routines…', loadFailed: 'Cannot load routines.', empty: 'No routines yet.',
   add: 'New routine', fromTemplate: 'Start from a template…',
   runNow: 'Run now', edit: 'Edit', delete: 'Delete', history: 'History', hideHistory: 'Hide history', enabled: 'Enabled',
@@ -37,7 +38,7 @@ async function request(method: string, path = ROUTINES_PATH, body?: unknown): Pr
 }
 
 const triggerText = (r: RoutineDef): string =>
-  r.trigger.type === 'schedule' ? `cron ${r.trigger.cron}` : r.trigger.type === 'event' ? `on ${r.trigger.pattern}` : 'API / manual'
+  r.trigger.type === 'schedule' ? scheduleText(r.trigger.cron) : r.trigger.type === 'event' ? `When ${r.trigger.pattern} happens` : 'By hand or from a script'
 const money = (usd: number): string => `$${usd.toFixed(2)}`
 /** ` · $spent · est. $estimate`, each part only when known. */
 export const costText = (run: Pick<RoutineRun, 'costUsd' | 'estimateUsd'>): string =>

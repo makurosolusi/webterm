@@ -1,10 +1,13 @@
-// Settings › Control: the F4-d classifier switch (default off) and the policy simulator, which replays the last
-// 7 days of decisions against a proposed rule and shows what would have changed. Nothing runs while simulating.
+// Settings › Rules & approvals: the F4-d classifier switches (default off, always shown) and the policy
+// simulator (collapsed), which replays the last 7 days of decisions against a proposed rule and shows what
+// would have changed. Nothing runs while simulating.
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { Segmented } from './centralSettings.controls'
 import { SettingsSelect } from './SettingsControls'
 import { SettingsCombobox } from './SettingsCombobox'
+import { CAPABILITY_PRESETS, SCOPE_PRESETS, SUBJECTS, whatText, whoText } from './policyPresets'
 
 export const POLICY_CLASSIFIER_PATH = '/api/policy/classifier'
 export const POLICY_SIMULATE_PATH = '/api/policy/simulate'
@@ -19,22 +22,23 @@ export interface SimReport {
 }
 
 export const SIM_TEXT = {
-  title: 'Auto-approval and policy simulator',
-  intro: 'A small model can approve low-risk gated actions instead of you. Destructive actions, pushes, branch deletes, secrets, paths outside the project and rule changes always ask. Off until you turn it on.',
-  central: 'Let the classifier approve Central\'s gated actions',
-  permissions: 'Let the classifier approve Claude Code permission prompts',
+  title: 'Auto-approval',
+  intro: 'A small model can approve low-risk actions instead of you. Deleting things, pushing code, removing branches, using secrets, touching files outside the project and changing rules always ask you. Off until you turn it on.',
+  central: 'Let a small model approve low-risk actions for Central',
+  permissions: 'Let a small model approve low-risk Claude Code prompts',
   switchFailed: (why: string) => `Could not change the switch: ${why}`,
-  switchMissing: 'The classifier switch is unavailable while the ledger is off.',
-  simTitle: 'Simulate the last 7 days',
-  subject: 'Who', capability: 'Capability (e.g. claude.tool:Bash)', scope: 'Scope (e.g. npm test*)', effect: 'Effect',
-  classifierOn: 'Classifier on in the simulation',
-  run: 'Simulate', running: 'Simulating…',
-  simFailed: (why: string) => `Simulation failed: ${why}`,
+  switchMissing: 'Auto-approval is unavailable while the ledger is off.',
+  simTitle: 'Try a rule on the last 7 days',
+  simIntro: 'See what a rule would have changed. Nothing runs and nothing is saved.',
+  subject: 'Who', capability: 'What', scope: 'Where', effect: 'Effect',
+  classifierOn: 'Include the small model',
+  run: 'Try it', running: 'Trying…',
+  simFailed: (why: string) => `The try failed: ${why}`,
   summary: (total: number, changed: number) => `${total} decisions replayed, ${changed} would change.`,
   truncated: 'Only the newest events were replayed.',
-  held: (n: number) => `${n} asks stay with you because of the never-auto list.`,
-  colEffect: 'Outcome', colNow: 'Now', colProposed: 'Proposed',
-  effect_: { allow: 'Allowed', ask: 'Asked you', deny: 'Denied', classifier: 'Sent to classifier' } as Record<SimEffect, string>,
+  held: (n: number) => `${n} would still ask you: those actions always ask.`,
+  colEffect: 'Outcome', colNow: 'Now', colProposed: 'With this rule',
+  effect_: { allow: 'Allowed', ask: 'Asked you', deny: 'Denied', classifier: 'Sent to the small model' } as Record<SimEffect, string>,
   noChange: 'Nothing would change.',
 } as const
 
@@ -47,26 +51,15 @@ async function request(method: string, path: string, body?: unknown): Promise<un
   return out
 }
 
-const EFFECTS = ['allow', 'ask', 'deny'] as const
-/** Principal patterns (server policy.model.ts `Principal`). */
-const SUBJECTS = [
-  { value: 'node:*', label: 'Any agent node (node:*)' },
-  { value: 'central', label: 'Central (central)' },
-  { value: 'routine:*', label: 'Any routine (routine:*)' },
-  { value: 'telegram:*', label: 'Any Telegram chat (telegram:*)' },
-  { value: '*', label: 'Anyone (*)' },
-]
-/** Capability patterns: Claude Code tools and the control-plane verbs (server capability registry). */
-const CAPABILITY_PRESETS = ['claude.tool:Bash', 'claude.tool:Edit', 'claude.tool:Write', 'claude.tool:*', 'browser.read', 'browser.act', 'browser.*',
-  'node.prompt', 'node.spawn', 'node.close', 'secret.run', '*'].map((value) => ({ value }))
-const SCOPE_PRESETS = [{ value: '*', label: 'Anything (*)' }, { value: 'npm test*' }, { value: 'git status*' }]
+const EFFECTS = [{ value: 'allow', label: 'Allow' }, { value: 'ask', label: 'Ask' }, { value: 'deny', label: 'Deny' }] as const
+type SimRuleEffect = (typeof EFFECTS)[number]['value']
 const ROWS: SimEffect[] = ['allow', 'ask', 'deny', 'classifier']
 
 export function PolicySimulator(): React.JSX.Element {
   const [sw, setSw] = useState<ClassifierSwitch | null>(null)
   const [swError, setSwError] = useState<string | null>(null)
   const [swMissing, setSwMissing] = useState(false)
-  const [rule, setRule] = useState({ subject: 'node:*', capability: '', scope: '*', effect: 'allow' as (typeof EFFECTS)[number] })
+  const [rule, setRule] = useState({ subject: 'node:*', capability: '', scope: '*', effect: 'allow' as SimRuleEffect })
   const [classifier, setClassifier] = useState(false)
   const [report, setReport] = useState<SimReport | null>(null)
   const [busy, setBusy] = useState(false)
@@ -109,55 +102,54 @@ export function PolicySimulator(): React.JSX.Element {
       <p className="text-xs opacity-80">{SIM_TEXT.intro}</p>
       {(['central', 'permissions'] as const).map((k) => (
         <label key={k} htmlFor={`cls-${k}`} className="flex items-center gap-2 text-xs">
-          <Checkbox id={`cls-${k}`} disabled={!sw} checked={sw?.[k] === true} onCheckedChange={(v) => { void flip(k, v === true) }} />{SIM_TEXT[k]}
+          <Switch id={`cls-${k}`} disabled={!sw} checked={sw?.[k] === true} onCheckedChange={(v) => { void flip(k, v) }} />{SIM_TEXT[k]}
         </label>
       ))}
       {swMissing ? <p className="text-xs opacity-70">{SIM_TEXT.switchMissing}</p> : null}
       {swError ? <p role="alert" className="text-xs text-destructive">{swError}</p> : null}
 
-      <h4 className="text-xs font-semibold">{SIM_TEXT.simTitle}</h4>
-      <div className="flex flex-wrap items-center gap-2">
-        <SettingsSelect ariaLabel={SIM_TEXT.subject} value={rule.subject} options={SUBJECTS} onChange={(v) => setRule((r) => ({ ...r, subject: v }))} />
-        <span className="w-56">
-          <SettingsCombobox ariaLabel={SIM_TEXT.capability} fieldId="policy.capability" mono presets={CAPABILITY_PRESETS} placeholder={SIM_TEXT.capability}
-            value={rule.capability} onDraft={(v) => setRule((r) => ({ ...r, capability: v }))} onCommit={(v) => setRule((r) => ({ ...r, capability: v }))} />
-        </span>
-        <span className="w-40">
-          <SettingsCombobox ariaLabel={SIM_TEXT.scope} fieldId="policy.scope" mono presets={SCOPE_PRESETS} placeholder={SIM_TEXT.scope}
-            value={rule.scope} onDraft={(v) => setRule((r) => ({ ...r, scope: v }))} onCommit={(v) => setRule((r) => ({ ...r, scope: v }))} />
-        </span>
-        <span role="group" aria-label={SIM_TEXT.effect} className="flex gap-1">
-          {EFFECTS.map((x) => (
-            <Button key={x} size="sm" variant={x === rule.effect ? 'default' : 'outline'} aria-pressed={x === rule.effect} onClick={() => setRule({ ...rule, effect: x })}>{x}</Button>
-          ))}
-        </span>
-        <label htmlFor="sim-classifier" className="flex items-center gap-1 text-xs">
-          <Checkbox id="sim-classifier" checked={classifier} onCheckedChange={(v) => setClassifier(v === true)} />{SIM_TEXT.classifierOn}
-        </label>
-        <Button size="sm" disabled={busy} onClick={() => { void simulate() }}>{busy ? SIM_TEXT.running : SIM_TEXT.run}</Button>
-      </div>
-      {simError ? <p role="alert" className="text-xs text-destructive">{simError}</p> : null}
-      {report ? (
-        <div className="text-xs" role="status">
-          <p>{SIM_TEXT.summary(report.total, report.changed)}{report.truncated ? ` ${SIM_TEXT.truncated}` : ''}</p>
-          {report.neverAutoHeld > 0 ? <p>{SIM_TEXT.held(report.neverAutoHeld)}</p> : null}
-          <table className="mt-1 border-collapse">
-            <thead><tr className="text-left opacity-70"><th className="pr-4">{SIM_TEXT.colEffect}</th><th className="pr-4">{SIM_TEXT.colNow}</th><th>{SIM_TEXT.colProposed}</th></tr></thead>
-            <tbody>
-              {ROWS.map((e) => (
-                <tr key={e} data-effect={e}><td className="pr-4">{SIM_TEXT.effect_[e]}</td><td className="pr-4">{report.before[e]}</td><td>{report.after[e]}</td></tr>
-              ))}
-            </tbody>
-          </table>
-          {report.examples.length === 0 ? <p className="opacity-70">{SIM_TEXT.noChange}</p> : (
-            <ul className="mt-1">
-              {report.examples.map((x) => (
-                <li key={x.seq}><code>{x.principal}</code> {x.capability}{x.resource ? ` (${x.resource})` : ''}: {SIM_TEXT.effect_[x.before]} → {SIM_TEXT.effect_[x.after]}</li>
-              ))}
-            </ul>
-          )}
+      <details data-testid="policy-simulator-try">
+        <summary className="cursor-default text-xs font-semibold">{SIM_TEXT.simTitle}</summary>
+        <p className="text-xs opacity-70">{SIM_TEXT.simIntro}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <SettingsSelect ariaLabel={SIM_TEXT.subject} value={rule.subject} options={SUBJECTS} onChange={(v) => setRule((r) => ({ ...r, subject: v }))} />
+          <span className="w-56">
+            <SettingsCombobox ariaLabel={SIM_TEXT.capability} fieldId="policy.capability" mono presets={CAPABILITY_PRESETS} placeholder={SIM_TEXT.capability}
+              value={rule.capability} onDraft={(v) => setRule((r) => ({ ...r, capability: v }))} onCommit={(v) => setRule((r) => ({ ...r, capability: v }))} />
+          </span>
+          <span className="w-40">
+            <SettingsCombobox ariaLabel={SIM_TEXT.scope} fieldId="policy.scope" mono presets={SCOPE_PRESETS} placeholder={SIM_TEXT.scope}
+              value={rule.scope} onDraft={(v) => setRule((r) => ({ ...r, scope: v }))} onCommit={(v) => setRule((r) => ({ ...r, scope: v }))} />
+          </span>
+          <Segmented label={SIM_TEXT.effect} value={rule.effect} options={EFFECTS} onChange={(v) => setRule((r) => ({ ...r, effect: v as SimRuleEffect }))} />
+          <label htmlFor="sim-classifier" className="flex items-center gap-1 text-xs">
+            <Switch id="sim-classifier" checked={classifier} onCheckedChange={setClassifier} />{SIM_TEXT.classifierOn}
+          </label>
+          <Button size="sm" disabled={busy} onClick={() => { void simulate() }}>{busy ? SIM_TEXT.running : SIM_TEXT.run}</Button>
         </div>
-      ) : null}
+        {simError ? <p role="alert" className="text-xs text-destructive">{simError}</p> : null}
+        {report ? (
+          <div className="text-xs" role="status">
+            <p>{SIM_TEXT.summary(report.total, report.changed)}{report.truncated ? ` ${SIM_TEXT.truncated}` : ''}</p>
+            {report.neverAutoHeld > 0 ? <p>{SIM_TEXT.held(report.neverAutoHeld)}</p> : null}
+            <table className="mt-1 border-collapse">
+              <thead><tr className="text-left opacity-70"><th className="pr-4">{SIM_TEXT.colEffect}</th><th className="pr-4">{SIM_TEXT.colNow}</th><th>{SIM_TEXT.colProposed}</th></tr></thead>
+              <tbody>
+                {ROWS.map((e) => (
+                  <tr key={e} data-effect={e}><td className="pr-4">{SIM_TEXT.effect_[e]}</td><td className="pr-4">{report.before[e]}</td><td>{report.after[e]}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            {report.examples.length === 0 ? <p className="opacity-70">{SIM_TEXT.noChange}</p> : (
+              <ul className="mt-1">
+                {report.examples.map((x) => (
+                  <li key={x.seq}>{whoText(x.principal)} → {whatText(x.capability)}{x.resource ? ` (${x.resource})` : ''}: {SIM_TEXT.effect_[x.before]} → {SIM_TEXT.effect_[x.after]}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </details>
     </section>
   )
 }

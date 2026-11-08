@@ -1,16 +1,20 @@
-// F5-b sections of the "What agents remember" panel (AgentMemory.tsx): what the sleep-time consolidator
-// proposed while agents were idle (Confirm all / per item / Dismiss = forget, so it is never proposed again),
-// and the shared blackboard (goal status, decisions) with agent proposals waiting for Confirm / Reject.
+// F5-b sections of the "What agents remember" panel (AgentMemory.tsx): "Waiting for your OK", what the
+// sleep-time consolidator proposed while agents were idle (Confirm all / per item / Dismiss = forget, so it is
+// never proposed again), and "Shared notes", the blackboard (goal status, decisions) with agent proposals
+// waiting for Confirm / Reject. The note key is picked from the keys already on the board (or typed).
 // Split out of AgentMemory.tsx for the file-size budget; it imports the panel's request helper and labels
 // back (a render-time-only cycle).
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SettingsCombobox } from './SettingsCombobox'
 import { ctl, MEMORY_TEXT, type MemoryAct, memoryRequest } from './AgentMemory.api'
 
 export const PROPOSALS_PATH = '/api/memory-proposals'
 export const BLACKBOARD_PATH = '/api/blackboard'
+/** Recent list (Settings.inputHistory) of note keys typed in Shared notes. */
+export const BOARD_KEY_FIELD_ID = 'memory.boardKey'
 
 /** Mirror of the server `ProposalView` (src/server/memory/consolidator/consolidator.store.ts). */
 export interface MemoryProposal {
@@ -20,17 +24,17 @@ export interface MemoryProposal {
 export interface BoardEntry { id: string; key: string; value: string; status: string; by: string; at: number }
 
 export const BOARD_TEXT = {
-  proposalsTitle: 'Proposed while agents were idle',
-  proposalsIntro: 'A small model reviewed recent sessions. Nothing here is remembered until you confirm it.',
-  proposalsNone: 'No proposals.', confirmAll: 'Confirm all', dismiss: 'Dismiss', reviewNow: 'Review now',
+  proposalsTitle: 'Waiting for your OK',
+  proposalsIntro: 'Suggested from recent sessions while agents were idle. Nothing here is remembered until you confirm it.',
+  proposalsNone: 'Nothing is waiting.', confirmAll: 'Confirm all', dismiss: 'Dismiss', reviewNow: 'Review',
   ops: { add: 'new', update: 'update', invalidate: 'no longer true' } as Record<MemoryProposal['op'], string>,
   was: (text: string) => `was: ${text}`,
   tokens: (used: number, cap: number) => `Used in the last 24 h: ${used.toLocaleString()} of ${cap.toLocaleString()} tokens`,
-  boardTitle: 'Shared blackboard',
-  boardIntro: 'Goal status and decisions every agent reads. Changes proposed by agents wait here for you.',
-  boardNone: 'The blackboard is empty.', boardKey: 'Key', boardValue: 'Value', boardSet: 'Set', reject: 'Reject',
+  boardTitle: 'Shared notes',
+  boardIntro: 'Notes agents share on this board, such as goal status and decisions. Changes agents suggest wait here for you.',
+  boardNone: 'No shared notes yet.', boardKey: 'Key', boardValue: 'Value', boardSet: 'Set', reject: 'Reject',
   boardPlaceholder: 'goal:auth/status',
-  proposedBy: (by: string) => `proposed by ${by}`,
+  proposedBy: (by: string) => `suggested by ${by}`,
 } as const
 
 const listOf = <T,>(v: unknown, key: string): T[] | null => (v && Array.isArray((v as Record<string, unknown>)[key]) ? (v as Record<string, T[]>)[key]! : null)
@@ -50,7 +54,7 @@ export function ProposalsSection({ act, tick }: { act: MemoryAct; tick: number }
   return (
     <div className="mt-3 flex flex-col gap-1 text-xs" data-testid="memory-proposals">
       <h4 className="font-semibold">{BOARD_TEXT.proposalsTitle}</h4>
-      <p className="opacity-70">{BOARD_TEXT.proposalsIntro} {BOARD_TEXT.tokens(state.used, state.cap)}</p>
+      <p className="opacity-70" title={BOARD_TEXT.tokens(state.used, state.cap)}>{BOARD_TEXT.proposalsIntro}</p>
       <div className="flex gap-1">
         {confirmable.length > 1 ? <Button size="sm" onClick={() => void act(BOARD_TEXT.confirmAll, 'POST', `${PROPOSALS_PATH}/confirm-all`)}>{BOARD_TEXT.confirmAll}</Button> : null}
         <Button size="sm" variant="secondary" onClick={() => void act(BOARD_TEXT.reviewNow, 'POST', `${PROPOSALS_PATH}/run`)}>{BOARD_TEXT.reviewNow}</Button>
@@ -106,7 +110,10 @@ export function BoardSection({ act, tick }: { act: MemoryAct; tick: number }): R
         </ul>
       ) : null}
       <div className="flex items-center gap-2">
-        <Input aria-label={BOARD_TEXT.boardKey} placeholder={BOARD_TEXT.boardPlaceholder} value={key} maxLength={160} onChange={(e) => setKey(e.target.value)} className="w-40" />
+        <span className="w-48">
+          <SettingsCombobox ariaLabel={BOARD_TEXT.boardKey} fieldId={BOARD_KEY_FIELD_ID} mono placeholder={BOARD_TEXT.boardPlaceholder} maxLength={160}
+            presets={[...new Set(board.entries.map((e) => e.key))].map((value) => ({ value }))} value={key} onDraft={setKey} onCommit={setKey} />
+        </span>
         <Input aria-label={BOARD_TEXT.boardValue} value={value} maxLength={500} onChange={(e) => setValue(e.target.value)} className="min-w-32 flex-1" />
         <Button size="sm" disabled={key.trim() === '' || value.trim() === ''}
           onClick={() => { void act(BOARD_TEXT.boardSet, 'POST', BLACKBOARD_PATH, { key: key.trim(), value: value.trim() }); setValue('') }}>{BOARD_TEXT.boardSet}</Button>

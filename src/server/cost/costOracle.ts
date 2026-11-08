@@ -71,7 +71,7 @@ export function endCostRun(db: Database, id: string, outcome: { producedDiff?: b
   if (recent.length === ROI_NO_DIFF_RUNS && recent.every((r) => r['produced_diff'] === 0) && !isPaused(db, scope)) {
     const spent = Number(getRow(db, 'SELECT COALESCE(SUM(cost_micros), 0) AS c FROM (SELECT cost_micros FROM cost_run WHERE kind = ? AND ref = ? AND ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT ?)', kind, ref, ROI_NO_DIFF_RUNS)?.['c'] ?? 0)
     pauseScope(db, scope, `low ROI: last ${ROI_NO_DIFF_RUNS} runs produced no diff`)
-    notify(db, { scope, workspaceId, title: `Paused ${kind} ${ref}: low ROI`, body: `The last ${ROI_NO_DIFF_RUNS} runs produced no diff and cost ${usd(spent)}. Resume it from Settings › Control › Cost.` })
+    notify(db, { scope, workspaceId, title: `Paused ${kind} ${ref}: low ROI`, body: `The last ${ROI_NO_DIFF_RUNS} runs produced no diff and cost ${usd(spent)}. Resume it from Settings › Spending.` })
     return { costMicros: cost, paused: scope }
   }
   const over = overCap(db, scope, now())

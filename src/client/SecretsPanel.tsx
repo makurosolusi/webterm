@@ -1,9 +1,10 @@
-// Secrets section of Settings › Control: the secret broker's names, add/replace, delete and usage log
+// Secrets part of Settings › Rules & approvals: the secret broker's names, add/replace, delete and usage log
 // (`/api/secrets`, UI-only on the server). Values go out once on save and never come back: like a
 // password manager field, the list shows names only and the input is cleared after a save.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { prefillRule, secretRule, whoText } from './policyPresets'
 
 export const SECRETS_PATH = '/api/secrets'
 
@@ -13,12 +14,15 @@ interface SecretsView { secrets: SecretEntry[]; usage: SecretUse[] | null }
 
 export const SECRETS_TEXT = {
   title: 'Secrets',
-  intro: 'Agents use these through secret.run without seeing them: the value is injected into one command as an env var and masked in its output. Nodes are asked by default; allow one in Policy rules with capability secret.run and scope secret:<NAME>:<command pattern>, e.g. secret:NPM_TOKEN:npm publish*.',
+  intro: 'Agents ask before using a secret. Allow it in Rules & approvals.',
+  detail: 'An agent never sees the value: it goes into one command and is hidden in that command\'s output.',
   loading: 'Loading secrets…',
   loadFailed: 'Cannot load secrets.',
   empty: 'No secrets yet.',
-  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete',
+  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete', allow: 'Allow an agent to use this',
   neverUsed: 'never used', lastUsed: (at: number) => `last used ${new Date(at).toLocaleString()}`,
+  colWhen: 'When', colName: 'Secret', colWho: 'Used by', colCommand: 'Command', colResult: 'Result',
+  ok: 'OK', exitFailed: (code: number) => `Failed (exit ${code})`, noResult: 'Unknown',
   usageTitle: 'Usage log', usageEmpty: 'No uses yet.', usageOff: 'The usage log is unavailable while the ledger is off.',
   failed: (what: string, why: string) => `${what} failed: ${why}`,
 } as const
@@ -71,6 +75,7 @@ export function SecretsPanel(): React.JSX.Element {
     <section aria-label={SECRETS_TEXT.title} data-testid="secrets-panel">
       <h3 className="font-semibold">{SECRETS_TEXT.title}</h3>
       <p className="text-xs opacity-70">{SECRETS_TEXT.intro}</p>
+      <p className="text-xs opacity-70">{SECRETS_TEXT.detail}</p>
       {loadError ? <p className="text-xs opacity-70">{SECRETS_TEXT.loadFailed}</p> : null}
       {!view && !loadError ? <p role="status" className="text-xs opacity-70">{SECRETS_TEXT.loading}</p> : null}
       {view?.secrets.length === 0 ? <p className="text-xs opacity-70">{SECRETS_TEXT.empty}</p> : null}
@@ -80,6 +85,7 @@ export function SecretsPanel(): React.JSX.Element {
             <li key={s.name} data-secret={s.name} className="flex items-center gap-2">
               <code className="flex-1">{s.name}</code>
               <span className="opacity-70">{s.lastUsedAt === null ? SECRETS_TEXT.neverUsed : SECRETS_TEXT.lastUsed(s.lastUsedAt)}</span>
+              <Button size="sm" variant="outline" onClick={() => prefillRule(secretRule(s.name))}>{SECRETS_TEXT.allow}</Button>
               <Button size="sm" variant="secondary" onClick={() => void remove(s.name)}>{SECRETS_TEXT.delete}</Button>
             </li>
           ))}
@@ -99,13 +105,25 @@ export function SecretsPanel(): React.JSX.Element {
           {view.usage === null ? <p className="text-xs opacity-70">{SECRETS_TEXT.usageOff}</p> : null}
           {view.usage?.length === 0 ? <p className="text-xs opacity-70">{SECRETS_TEXT.usageEmpty}</p> : null}
           {view.usage && view.usage.length > 0 ? (
-            <ul className="flex flex-col text-xs" aria-label={SECRETS_TEXT.usageTitle}>
-              {view.usage.map((u) => (
-                <li key={`${u.seq}`} data-use={u.seq}>
-                  {new Date(u.ts).toLocaleString()} · <code>{u.name}</code> · {u.principal} · cmd <code>{u.commandHash.slice(0, 12)}</code> · exit {u.exitCode ?? '—'}
-                </li>
-              ))}
-            </ul>
+            <table className="mt-1 border-collapse text-xs" aria-label={SECRETS_TEXT.usageTitle}>
+              <thead>
+                <tr className="text-left opacity-70">
+                  {[SECRETS_TEXT.colWhen, SECRETS_TEXT.colName, SECRETS_TEXT.colWho, SECRETS_TEXT.colCommand, SECRETS_TEXT.colResult].map((h) => <th key={h} className="pr-4">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {view.usage.map((u) => (
+                  <tr key={u.seq} data-use={u.seq}>
+                    <td className="pr-4">{new Date(u.ts).toLocaleString()}</td>
+                    <td className="pr-4"><code>{u.name}</code></td>
+                    <td className="pr-4">{whoText(u.principal)}</td>
+                    {/* The broker logs a hash, never the command line itself. */}
+                    <td className="pr-4"><code>{u.commandHash.slice(0, 12)}</code></td>
+                    <td>{u.exitCode === null ? SECRETS_TEXT.noResult : u.exitCode === 0 ? SECRETS_TEXT.ok : SECRETS_TEXT.exitFailed(u.exitCode)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : null}
         </div>
       ) : null}

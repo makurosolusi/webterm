@@ -1,5 +1,5 @@
 // Settings › Central Agent › Daily spending limit (dollars) over the existing env override `WEBTERM_CENTRAL_DAILY_COST_MICROS`,
-// written through the same `/api/settings/env` PUT the Control tab uses: no env advice, the field is the switch.
+// written through the same `/api/settings/env` PUT Settings › Developer uses: no env advice, the field is the switch.
 import { useEffect, useState } from 'react'
 import type { EnvStateV2 } from '../shared/envSettings.contract'
 import { request } from './inboxTransport'

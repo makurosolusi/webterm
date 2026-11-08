@@ -3,7 +3,7 @@
 //
 // Each entry stores the BEFORE and AFTER values of only the keys a patch touched, so undo is a
 // patch too and goes through the same coalesced PUT as any edit. Covered: every key of `Settings`
-// (`/api/settings`). Not covered by design: env-registry rows of the Control tab
+// (`/api/settings`). Not covered by design: env-registry rows of Settings › Developer
 // (`/api/settings/env`), which have their own store and can be env-locked (shell env wins), so an
 // undo there could not be applied anyway.
 //
