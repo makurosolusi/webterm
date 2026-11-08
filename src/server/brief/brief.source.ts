@@ -3,7 +3,8 @@
 import type { Database } from 'bun:sqlite'
 import { allRows, getRow } from '../ledger/ledgerCore'
 import { inboxCounts } from '../inbox'
-import { BRIEF_KINDS, type BriefEvent, type BriefUsage } from './brief.model'
+import { ensureCostSchema } from '../cost/costStore'
+import { BRIEF_KINDS, type BriefEvent, type BriefUsage, type BriefWeekly } from './brief.model'
 
 /** Most events one brief reads; a week of fs/hook chatter stays far below it. */
 export const BRIEF_EVENT_CAP = 20_000
@@ -13,6 +14,26 @@ export interface BriefSource {
   headSeq: number
   inbox: { needsYou: number; review: number } | null
   usage: BriefUsage | null
+  weekly?: BriefWeekly | null
+}
+
+/** Window of the weekly cost lines. */
+export const WEEK_MS = 7 * 24 * 60 * 60_000
+
+/** Last 7 days of spend from the cost ledger, DAG verification and Central turn outcomes. */
+export function readWeekly(db: Database, now: number): BriefWeekly {
+  ensureCostSchema(db)
+  const since = now - WEEK_MS
+  const group = (col: 'source' | 'model') => allRows(db, `SELECT ${col} AS k, COALESCE(SUM(cost_micros), 0) AS c FROM cost_usage WHERE ts > ? GROUP BY ${col}`, since)
+  const dag = getRow(db, "SELECT COALESCE(SUM(cost_micros), 0) AS c FROM cost_run WHERE kind = 'dag' AND ended_at > ?", since)
+  const verified = getRow(db, "SELECT COUNT(*) AS n FROM dag_task WHERE kind = 'work' AND status = 'done' AND updated_at > ?", since)
+  const turns = getRow(db, "SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS f FROM central_turn WHERE ended_at > ?", since)
+  return {
+    bySource: group('source').map((r) => ({ source: String(r['k']), costMicros: Number(r['c']) })),
+    byModel: group('model').map((r) => ({ model: r['k'] == null ? null : String(r['k']), costMicros: Number(r['c']) })),
+    dagCostMicros: Number(dag?.['c'] ?? 0), verifiedTasks: Number(verified?.['n'] ?? 0),
+    centralTurns: Number(turns?.['n'] ?? 0), centralFailed: Number(turns?.['f'] ?? 0),
+  }
 }
 
 function parse(json: unknown): unknown {
@@ -52,5 +73,5 @@ export function readBriefSource(db: Database, since: number, now: number): Brief
   const usage: BriefUsage | null = u
     ? { calls: Number(u['calls']), inputTokens: Number(u['i']), outputTokens: Number(u['o']), costMicros: Number(u['c']), unpriced: Number(u['unpriced']) }
     : null
-  return { events, headSeq: headSeq(db), inbox: { needsYou: counts.needsYou, review: counts.review }, usage }
+  return { events, headSeq: headSeq(db), inbox: { needsYou: counts.needsYou, review: counts.review }, usage, weekly: readWeekly(db, now) }
 }

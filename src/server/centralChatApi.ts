@@ -14,7 +14,7 @@ import { centralRuntimeKind } from './central/runtime/runtimeFlag'
 import type { RuntimeKind } from './central/runtime/centralRuntime'
 import {
   CENTRAL_CHAT_BODY_MAX_BYTES, type CentralChatDeps, decodeSegment, failJson,
-  handleCancel, handleConversations, handleCreateConversation, handleHealth, handleMessagesGet, handleMessagesPost,
+  handleCancel, handleConversations, handleModel, handleCreateConversation, handleHealth, handleMessagesGet, handleMessagesPost,
   methodNotAllowed, resolveChatService, sendJson,
 } from './centralChatHandlers'
 import { handleStream } from './centralChatSse'
@@ -25,13 +25,14 @@ export type { CentralChatDeps }
 const CONVERSATIONS_PATH = '/api/central/conversations'
 const MESSAGES = /^\/api\/central\/conversations\/([^/]+)\/messages$/
 const STREAM = /^\/api\/central\/conversations\/([^/]+)\/stream$/
+const MODEL = /^\/api\/central\/conversations\/([^/]+)\/model$/
 const CANCEL = /^\/api\/central\/turns\/([^/]+)\/cancel$/
 const HEALTH_PATH = '/api/central/health'
 
 /** True only for the exact chat families; `false` keeps falling through to 404. */
 export function isCentralChatPath(path: string): boolean {
   return path === CONVERSATIONS_PATH || path === HEALTH_PATH ||
-    MESSAGES.test(path) || STREAM.test(path) || CANCEL.test(path)
+    MESSAGES.test(path) || STREAM.test(path) || CANCEL.test(path) || MODEL.test(path)
 }
 
 /** `true` = response taken over (including SSE). */
@@ -80,6 +81,15 @@ export async function centralChatRoute(
     const conversationId = decodeSegment(streamMatch[1] ?? '')
     if (conversationId === null) return failJson(res, 'invalid_body', 'invalid conversation id'), true
     handleStream(req, res, url, conversationId, db, chat)
+    return true
+  }
+
+  const modelMatch = MODEL.exec(path)
+  if (modelMatch) {
+    const conversationId = decodeSegment(modelMatch[1] ?? '')
+    if (conversationId === null) return failJson(res, 'invalid_body', 'invalid conversation id'), true
+    if (method !== 'GET' && method !== 'POST') return methodNotAllowed(res, method), true
+    await handleModel(req, res, chat, conversationId, kind, deps.now)
     return true
   }
 

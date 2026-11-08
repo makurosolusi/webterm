@@ -29,6 +29,8 @@ export interface StoredMessage {
   id: string; conversationId: string; seq: number; role: string
   parts: MessagePart[]; clientMessageId: string | null; turnId: string | null
   state: string; createdAt: number
+  /** Assistant rows: the turn's usage (tokens, cost, model, tier) for the per-turn cost chip. */
+  usage?: unknown
 }
 
 export interface MessagePage {
@@ -254,5 +256,10 @@ export function listMessages(
         ORDER BY seq DESC LIMIT ?`, conversationId, before, limit + 1)
   const hasMore = rows.length > limit
   const page = rows.slice(0, limit).map(asMessage).reverse()
+  // One query for the page's turns (no N+1): replies carry their turn's usage.
+  const turnIds = page.filter((m) => m.role === 'assistant' && m.turnId !== null).map((m) => m.turnId as string)
+  const usage = new Map(turnIds.length === 0 ? [] : allRows(db, `SELECT id, usage_json FROM central_turn WHERE usage_json IS NOT NULL
+    AND id IN (${turnIds.map(() => '?').join(',')})`, ...turnIds).map((r) => [String(r['id']), JSON.parse(String(r['usage_json'])) as unknown]))
+  for (const m of page) if (m.turnId !== null && usage.has(m.turnId)) m.usage = usage.get(m.turnId)
   return { items: page, nextBefore: hasMore && page.length > 0 ? page[0]!.seq : null }
 }

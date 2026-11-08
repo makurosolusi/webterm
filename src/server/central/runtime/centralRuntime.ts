@@ -1,6 +1,7 @@
 // Central runtime port (RND/08 §4, RND/13 §3 B1). One narrow seam every adapter
 // (Claude, plus the mock for tests) implements; the turn service owns persistence.
 // Pure types and cancellation primitives: no network, PTY, SDK, or database.
+import type { Effort } from '../../models/modelLadder'
 
 /** Flag-visible runtime selector. `off` means no adapter may be constructed. */
 export type RuntimeKind = 'off' | 'claude' | 'mock'
@@ -33,6 +34,9 @@ export interface RuntimeUsage {
   model?: string
   /** Prompt-side size of the LAST model step (the window actually used); absent when unknown. */
   contextTokens?: number
+  /** Ladder tier and effort the turn was asked to run on (stamped by the turn service). */
+  tier?: string
+  effort?: string
 }
 
 /** Usage emitted or returned before a turn has done any work. */
@@ -71,6 +75,10 @@ export interface TurnInput {
   freshSessionText?: () => string
   /** Base64 images of the human message (validated at the route); only the Claude runtime accepts them. */
   images?: readonly { mediaType: string; data: string }[]
+  /** Model alias or `claude-*` id (model ladder); absent = the runtime's own setting/default. */
+  model?: string
+  /** Reasoning effort for this turn; absent = the CLI default for the model. */
+  effort?: Effort
 }
 
 interface EventBase {

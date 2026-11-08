@@ -90,7 +90,8 @@ test('daily spawn limit and token budget, reset by the UTC day', () => {
   expect(code(guard.check(spawn))).toBe('spawn_daily')
   expect(code(guard.check(req()))).toBe('allow')
 
-  guard.recordUsage({ projectId: 'p2', turns: 1, tokens: 1_000_000, costMicros: 0, spawns: 0, wallMs: 0 })
+  // 10M input-equivalent tokens = the registry default daily budget
+  guard.recordUsage({ projectId: 'p2', turns: 1, tokens: 10_000_000, costMicros: 0, spawns: 0, wallMs: 0 })
   expect(code(guard.check(req({ action: 'turn', tool: 'chat', tier: 'R0' })))).toBe('budget_exhausted')
   expect(code(guard.check(req()))).toBe('budget_exhausted')
   expect(code(guard.check(req({ tier: 'R0' })))).toBe('allow')

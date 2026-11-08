@@ -240,7 +240,7 @@ export class ClaudeRuntime implements CentralRuntime {
     input: TurnInput, sessionId: string, mcpConfig: string, abort: AbortController, state: ClaudeTurnState,
     onChild: (child: SpawnedProcess) => void,
   ): { options: ReturnType<typeof centralQueryOptions>; secrets: string[]; launch: Launch } {
-    const model = claudeModelArg(this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
+    const model = claudeModelArg(input.model ?? this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
     const exe = this.options.executable
     const profile = exe ? null : centralClaudeLaunch()
     const resolved = profile ?? { argv: [exe as string], bin: exe as string }
@@ -255,6 +255,7 @@ export class ClaudeRuntime implements CentralRuntime {
         ...(input.sessionRef === undefined ? {} : { sessionRef: input.sessionRef }),
         newSessionId: sessionId,
         ...(model.arg === undefined ? {} : { model: model.arg }),
+        ...(input.effort === undefined ? {} : { effort: input.effort }),
         maxTurns: input.limits.maxTurns ?? DEFAULT_MAX_TURNS,
         ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
         cwd: ensureWorkDir(this.options.workDir), env, abort,

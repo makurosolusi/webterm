@@ -50,7 +50,7 @@ const CACHE_WRITE_WEIGHT = 1.25
  * The guard's daily token measure: input-equivalent tokens, i.e. input + output + cache reads at 0.1x +
  * cache writes at 1.25x. Counting only input + output let a cache-heavy day (millions of cache reads,
  * dollars of spend) read as a few thousand tokens; counting cache reads 1:1 would trip the default
- * 1,000,000 limit after a handful of cached turns. The weights follow what the tokens cost, while
+ * daily token limit after a handful of cached turns. The weights follow what the tokens cost, while
  * `cost_micros` (and WEBTERM_CENTRAL_DAILY_COST_MICROS) stays the exact money limit.
  */
 export function guardTokens(u: { input: number; output: number; cacheRead: number; cacheWrite: number }): number {

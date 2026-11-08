@@ -123,7 +123,7 @@ export function createBriefService(deps: BriefServiceDeps) {
     if (cache && cache.key === key && t - cache.at < CACHE_MAX_AGE_MS) return cache.brief
     const src = deps.read(since, t)
     const brief = buildBrief({
-      since, now: t, headSeq: src?.headSeq ?? 0, events: src?.events ?? [], inbox: src?.inbox ?? null, usage: src?.usage ?? null,
+      since, now: t, headSeq: src?.headSeq ?? 0, events: src?.events ?? [], inbox: src?.inbox ?? null, usage: src?.usage ?? null, weekly: src?.weekly ?? null,
       nodeLabel: deps.nodeLabel, workspaceLabel: deps.workspaceLabel,
     })
     cache = { key, at: t, brief }

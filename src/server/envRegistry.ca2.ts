@@ -6,7 +6,11 @@ import { enumOf, flag, num, type EnvSpec } from './envRegistry.types'
 
 const DEFAULT_TURN_WALL_MS = 120_000
 const DEFAULT_TURN_TOKENS = 60_000
-const DEFAULT_DAILY_TOKENS = 1_000_000
+// Input-equivalent tokens (cache reads 0.1x, writes 1.25x, budgetStore.guardTokens). Was 1M before cache
+// tokens were counted: an observed heavy day reached ~1.13M, which would have halted Central.
+const DEFAULT_DAILY_TOKENS = 10_000_000
+/** Soft daily spend warning: crossing it raises one Needs-you notice per UTC day; it never blocks work. */
+export const DAILY_COST_WARNING_MICROS = 10_000_000
 const DEFAULT_DAILY_SPAWNS = 20
 const DEFAULT_AGENT_IDLE_DONE_MS = 45_000
 const DEFAULT_TURN_STEPS = 12
@@ -30,9 +34,9 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, label: 'Conversation checkpoint', description: 'Summarize the central conversation into a checkpoint (deterministic summary, no model call).' }),
   num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central-turn', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, hot: true, label: 'Turn time limit (ms)', description: 'Time limit for one central turn; re-read every turn. The 1,000-600,000 ms range is a conservative Settings bound.' }),
   num('WEBTERM_CENTRAL_TURN_TOKENS', 'central-turn', 1000, MAX_NUMBER, DEFAULT_TURN_TOKENS, { ...C, label: 'Turn token limit', description: 'Recorded; not yet enforced by the production runtime.' }),
-  num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, label: 'Daily token budget', description: 'Central token limit per UTC day; 0 = unlimited. Applies at the next check.' }),
+  num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, label: 'Daily token budget', description: 'Central token limit per UTC day in input-equivalent tokens (input + output + cache reads at 0.1x + cache writes at 1.25x); default 10,000,000; 0 = unlimited. Applies at the next check.' }),
   num('WEBTERM_CENTRAL_DAILY_SPAWNS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_SPAWNS, { ...C, hot: true, label: 'Daily spawn budget', description: 'Limit on workers central may spawn per UTC day; 0 = no spawning. Applies at the next check.' }),
-  num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central-budget', 0, MAX_NUMBER, 0, { ...C, hot: true, label: 'Daily cost budget (micros)', description: 'Central cost limit per day in micro-units; 0 = unlimited. Applies at the next check.' }),
+  num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central-budget', 0, MAX_NUMBER, 0, { ...C, hot: true, label: 'Daily cost budget (micros)', description: 'Hard Central cost limit per UTC day in micro-USD (1,000,000 = $1); 0 = unlimited (default). Separately, once total spend today passes $10 webterm raises one Needs-you notice for the day; that warning never stops work. Applies at the next check.' }),
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Central skills', description: 'Central reads skills from <dataDir>/central/skills (needs tools).' }),
   flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_SKILLS' }], label: 'Central skill proposals', description: 'Central may propose new skills for human approval (needs Central skills).' }),
   flag('WEBTERM_CENTRAL_BOTS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_CHANNELS', oneOf: ['on'] }], label: 'Bot per project', description: 'One bot with a topic per project (needs Telegram and WEBTERM_CHANNELS).' }),

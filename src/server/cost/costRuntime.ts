@@ -5,6 +5,7 @@ import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import { eventBus } from '../events/eventBus'
 import { createLogger } from '../logs'
 import { captureTranscript, syncCentralTurns } from './costCapture'
+import { warnDailyCost } from './costDailyWarning'
 import { beginCostRun, costGate, endCostRun, type BeginRunInput, type CostRunKind, type EndRunResult, type GateResult } from './costOracle'
 
 const log = createLogger('cost')
@@ -44,7 +45,9 @@ export function syncCentral(): number {
   const db = deps?.db()
   if (!db) return 0
   try {
-    return syncCentralTurns(db)
+    const added = syncCentralTurns(db)
+    warnDailyCost(db)
+    return added
   } catch (err) {
     log.warn('cost.central_sync_failed', 'Cannot sync Central turn usage', { error: err instanceof Error ? err.message : String(err) })
     return 0

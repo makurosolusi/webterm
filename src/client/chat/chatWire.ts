@@ -2,7 +2,7 @@
 // validate only what the UI consumes and drop malformed rows instead of crashing a whole thread.
 // No transport, no React, no authority: every identity/digest field stays server-owned.
 import type {
-  ChatConversation, ChatEvent, ChatMessage, ChatMessageState, ChatPart, ChatRole, ChatToolState,
+  ChatConversation, ChatEvent, ChatMessage, ChatMessageState, ChatPart, ChatRole, ChatToolState, ChatUsage,
 } from './chatTypes'
 
 const ROLES: readonly ChatRole[] = ['human', 'assistant', 'tool', 'system']
@@ -130,6 +130,7 @@ export function normalizeMessage(raw: unknown): ChatMessage | null {
   const state = MESSAGE_STATES.includes(row.state as ChatMessageState)
     ? (row.state as ChatMessageState)
     : 'complete'
+  const usage = normalizeUsage(row.usage)
   return {
     id,
     role,
@@ -138,6 +139,22 @@ export function normalizeMessage(raw: unknown): ChatMessage | null {
     parts: normalizeParts(row.parts),
     ...(optionalText(row.clientMessageId) ? { clientMessageId: optionalText(row.clientMessageId) } : {}),
     ...(optionalText(row.turnId) ? { turnId: optionalText(row.turnId) } : {}),
+    ...(usage ? { usage } : {}),
+  }
+}
+
+/** A turn's usage object; null unless it carries a numeric cost. */
+export function normalizeUsage(raw: unknown): ChatUsage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const u = raw as Record<string, unknown>
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  if (typeof u.costMicros !== 'number') return null
+  return {
+    inputTokens: num(u.inputTokens), outputTokens: num(u.outputTokens), cacheReadTokens: num(u.cacheReadTokens),
+    cacheWriteTokens: num(u.cacheWriteTokens), costMicros: num(u.costMicros),
+    ...(optionalText(u.model) ? { model: optionalText(u.model) } : {}),
+    ...(optionalText(u.tier) ? { tier: optionalText(u.tier) } : {}),
+    ...(optionalText(u.effort) ? { effort: optionalText(u.effort) } : {}),
   }
 }
 

@@ -5,6 +5,7 @@
 // the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
 import { useEffect, useRef, useState } from 'react'
 import { ChatApprovalCard } from './chatApprovalCard'
+import { ChatCostChip } from './chatCostChip'
 import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
@@ -165,6 +166,7 @@ function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | unde
         {message.state === 'streaming' && <span className="chat-message__live">streaming</span>}
         {message.state === 'failed' && <span className="chat-message__failed">failed</span>}
         {message.state === 'cancelled' && <span className="chat-message__cancelled">cancelled</span>}
+        {message.usage && message.state !== 'streaming' && <ChatCostChip usage={message.usage} />}
       </div>
       {message.parts.map((part, index) => (
         <PartView key={`${message.id}-${index}`} part={part} assistant={assistant} />

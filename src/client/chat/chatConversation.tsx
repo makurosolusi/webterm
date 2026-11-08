@@ -18,6 +18,7 @@ import type { ComposerImage } from './chatAttach'
 import { centralChatAttach, centralParts, centralWire } from './chatCentralAttach'
 import type { ChatPart } from './chatTypes'
 import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
+import { CentralModelBadge } from '../central/centralModel'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -180,7 +181,9 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
 
   // A command that sends (a prompt shortcut) keeps the composer's attachments; a UI-action command ignores them.
   const sendComposed = (text: string, items: ComposerImage[]): void => send(text, centralParts(items))
-  const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }))
+  // The model badge reloads after `/model` and after each settled turn (the session may have switched).
+  const [modelKey, setModelKey] = useState(0)
+  const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }), conversation.id, () => setModelKey((k) => k + 1))
   const error = state.error ?? historyError
 
   return (
@@ -190,6 +193,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
           ? <span className="chat-progress" aria-hidden="true" />
           : <span className="chat-status-dot" aria-hidden="true" />}
         <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
+        {props.commands && <CentralModelBadge conversationId={conversation.id} refreshKey={modelKey + (busy ? 0 : state.lastEventSeq)} />}
       </header>
 
       {error !== null && (

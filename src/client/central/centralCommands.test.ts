@@ -20,6 +20,14 @@ describe('resolveCentralInput', () => {
     expect(resolveCentralInput('/halt', ALL)).toEqual({ kind: 'panel', tab: 'control', halt: true })
   })
 
+  it('/model picks a model and optional effort for the conversation; bad input is a usage hint', () => {
+    expect(resolveCentralInput('/model opus high', ALL)).toEqual({ kind: 'model', model: 'opus', effort: 'high' })
+    expect(resolveCentralInput('/model Haiku', ALL)).toEqual({ kind: 'model', model: 'haiku' })
+    expect(resolveCentralInput('/model auto', ALL)).toEqual({ kind: 'model', model: 'auto' })
+    const usage = { kind: 'usage', message: 'Usage: /model [haiku|sonnet|opus|fable|auto] [low|medium|high|xhigh|max]', draft: '/model ' }
+    for (const bad of ['/model', '/model gpt', '/model opus turbo', '/model auto high', '/model opus high extra']) expect(resolveCentralInput(bad, ALL)).toEqual(usage)
+  })
+
   it('prompt shortcuts expand into an English request; arguments are required where hinted', () => {
     expect(resolveCentralInput('/projects', ALL)).toEqual({ kind: 'send', text: 'List my projects with their status.' })
     expect(resolveCentralInput('/nodes webterm.', ALL)).toEqual({ kind: 'send', text: 'List the nodes in project webterm.' })
@@ -38,7 +46,7 @@ describe('resolveCentralInput', () => {
 
   it('panel shortcuts only exist while the Central panel is on', () => {
     const off = centralCommandList(false)
-    expect(off.map((c) => c.name)).toEqual(['new', 'clear', 'history', 'help', 'approvals', 'projects', 'nodes', 'tasks', 'plan'])
+    expect(off.map((c) => c.name)).toEqual(['new', 'clear', 'history', 'help', 'approvals', 'model', 'projects', 'nodes', 'tasks', 'plan'])
     expect(resolveCentralInput('/status', off)).toEqual({ kind: 'send', text: '/status' })
     expect(resolveCentralInput('/approvals', off)).toEqual({ kind: 'chat', action: 'approvals' })
   })
@@ -51,7 +59,7 @@ describe('resolveCentralInput', () => {
 
   it('every command has a description; argument commands have a hint', () => {
     for (const c of CENTRAL_COMMANDS) expect(c.description.length).toBeGreaterThan(5)
-    expect(CENTRAL_COMMANDS.filter((c) => c.argumentHint).map((c) => c.name)).toEqual(['nodes', 'tasks', 'plan'])
+    expect(CENTRAL_COMMANDS.filter((c) => c.argumentHint).map((c) => c.name)).toEqual(['model', 'nodes', 'tasks', 'plan'])
   })
 })
 
@@ -62,7 +70,7 @@ describe('createCentralCommands completion', () => {
     expect(names(all)).toContain('approvals')
     expect(all.find((i) => i.value === 'nodes')).toMatchObject({ description: 'Ask Central for the nodes of a project', argumentHint: '<project>', badge: 'ask' })
     expect(all.find((i) => i.value === 'halt')?.badge).toBe('panel')
-    expect(names(await c.completion.provider(slash('app')))).toEqual(['approvals'])
+    expect(names(await c.completion.provider(slash('app')))).toEqual(['approvals', 'model'])
     expect(names(await c.completion.provider(slash('his')))[0]).toBe('history')
     // A name prefix ranks above a name containing it (approvals) and above description-only matches.
     const pro = names(await c.completion.provider(slash('pro')))

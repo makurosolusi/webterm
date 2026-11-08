@@ -94,6 +94,12 @@ describe('ClaudeRuntime success', () => {
     expect(result.sessionRef).toBeNull()
     expect(events.filter((e) => e.type === 'error')).toHaveLength(1)
   })
+
+  it('passes the turn\'s model and effort to the query options, over the runtime setting', async () => {
+    const rt = runtime(successRecords(), { model: 'sonnet' })
+    await rt.turn(turnInput({ model: 'opus', effort: 'high' }), recorder().emit)
+    expect(rt.calls[0]!.options).toMatchObject({ model: 'opus', effort: 'high' })
+  })
 })
 
 describe('ClaudeRuntime failures', () => {
