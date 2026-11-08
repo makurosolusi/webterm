@@ -18,14 +18,11 @@ export interface DockProps {
   /** Panel Sessions terbuka? Item `Sessions` di activity bar mengikuti keadaan ini. */
   sessionsOpen: boolean
   onToggleSessions: () => void
-  /** Chat TAMPIL di secondary side bar (menyalakan ikonnya)? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
-   *  itemnya hanya dirender ketika integrator menyediakan handler. */
+  /** Secondary side bar terbuka, tab apa pun (menyalakan ikon Central)? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
+   *  item Central hanya dirender ketika integrator menyediakan handler. Satu-satunya pintu ke side bar Central. */
   chatOpen?: boolean
   onToggleChat?: () => void
-  /** Panel kontrol Central tampil di secondary side bar. Item SELALU tampil; tidak ada handler = Agent Pusat mati, klik memunculkan tawaran "Nyalakan". */
-  centralOpen?: boolean
-  onToggleCentral?: () => void
-  /** Item yang menunggu operator (strip Needs-you), badge di ikon Chat. 0 = tidak ada badge. Angkanya
+  /** Item yang menunggu operator (strip Needs-you), badge di ikon Central. 0 = tidak ada badge. Angkanya
    *  datang dari `useNeedsYouCount`; dock tidak pernah memanggil `fetch` sendiri. */
   needsYouCount?: number
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void

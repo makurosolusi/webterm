@@ -101,3 +101,15 @@
   padding: 6px 6px 6px 10px;
   border-radius: 6px;
 }
+
+/* Central not ready: its turn-on / Set up Claude Code offer above the chat (App.secondarySideBar.tsx).
+   Empty while the capabilities load or once Central is on. */
+.chat-setup {
+  flex: none;
+  margin: 6px 12px;
+  padding: 8px;
+  border: 1px solid var(--vscode-notifications-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  border-radius: 4px;
+  background: var(--vscode-notifications-background, var(--vscode-editorWidget-background, transparent));
+}
+.chat-setup:empty { display: none; }

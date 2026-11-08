@@ -8,6 +8,8 @@ import CentralControlPanel from './CentralControlPanel'
 import { centralControlApi, useCentralControlEnabled, CONTROL_PATH, HALT_PATH } from './centralControlApi'
 import { resetCapabilitiesCache } from '../useCapabilities'
 import { fakeClient } from './centralFixtures.testutil'
+import SecondarySideBar from '../App.secondarySideBar'
+import { reloadSideBarFromStorage, setSideBar } from '../secondarySideBar.store'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -108,27 +110,58 @@ describe('Dock item', () => {
     zoomPct: 100, onZoomIn: noop, onZoomOut: noop, locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
   }
 
-  it('stays visible when Central Agent is off; clicking offers to turn it on, then opens the panel', async () => {
-    resetCapabilitiesCache()
-    const caps = (status: string) => new Response(JSON.stringify({ capabilities: [{ id: 'central', title: 'Central Agent', blurb: 'Asisten.', status }], advanced: {} }))
-    const f = vi.fn().mockResolvedValueOnce(caps('off')).mockResolvedValue(caps('on'))
-    vi.stubGlobal('fetch', f)
-    const { rerender } = render(<Dock {...props} />)
-    fireEvent.click(screen.getByLabelText('Toggle central control panel'))
-    expect(await screen.findByRole('dialog', { name: 'Turn on Central Agent' })).toBeTruthy()
-    fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Turn on Central Agent' })).toBeNull())
-    expect(f.mock.calls.some(([url, init]) => url === '/api/capabilities/central' && JSON.parse(init.body).enabled === true)).toBe(true)
-    const onToggleCentral = vi.fn()
-    rerender(<Dock {...props} onToggleCentral={onToggleCentral} />) // App menerbitkan toggle setelah central on
-    expect(onToggleCentral).toHaveBeenCalledTimes(1)
+  it('one Central icon toggles the side bar on Chat; the shield icon is gone', () => {
+    const onToggleChat = vi.fn()
+    const { container } = render(<Dock {...props} onToggleChat={onToggleChat} needsYouCount={0} />)
+    expect(container.querySelector('.codicon-shield')).toBeNull()
+    expect(screen.queryByLabelText(/central control panel/i)).toBeNull()
+    expect(screen.getAllByRole('button', { name: /^Central/ })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Central' }))
+    expect(onToggleChat).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Central not ready: the Chat tab offers it', () => {
+  const caps = (status: string, step?: { kind: string; label: string }) => new Response(JSON.stringify({
+    capabilities: [{ id: 'central', title: 'Central Agent', blurb: 'Assistant.', status, ...(step ? { step } : {}) }],
+    advanced: { agentEngine: { value: 'auto', detected: 'off' } },
+  }))
+  // Capabilities GET answers `capsRes`; the launch-profile check (a POST) fails, so its card shows the fix link.
+  const route = (capsRes: () => Response) => vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    if (String(url).startsWith('/api/capabilities')) return method === 'GET' ? capsRes() : new Response('{}')
+    return method === 'GET' ? new Response('[]') : new Response('{}', { status: 500 })
+  })
+  beforeEach(() => { resetCapabilitiesCache(); localStorage.clear(); reloadSideBarFromStorage(); setSideBar({ open: true, view: 'chat' }) })
+  afterEach(() => { localStorage.clear(); reloadSideBarFromStorage() })
+
+  it('shows Set up Claude Code above the chat, leading to Settings › Agent launch profiles', async () => {
+    vi.stubGlobal('fetch', route(() => caps('needs-step', { kind: 'agentEngine', label: 'Set up Claude Code' })))
+    render(<SecondarySideBar centralEnabled={false} />)
+    const setup = await screen.findByRole('button', { name: 'Set up Claude Code' })
+    expect(setup.closest('[data-slot="central-setup"]')?.closest('.vscode-bottom-panel__pane')?.hasAttribute('hidden')).toBe(false)
+    fireEvent.click(setup)
+    // Claude launch profile card: its link opens Settings › Agent (Claude launch profiles, Test).
+    const opened = vi.fn()
+    window.addEventListener('webterm:open-settings', opened)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit launch profile' }))
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'agent' })
+    window.removeEventListener('webterm:open-settings', opened)
   })
 
-  it('toggles when the handler is given', () => {
-    const onToggleCentral = vi.fn()
-    render(<Dock {...props} onToggleCentral={onToggleCentral} />)
-    fireEvent.click(screen.getByLabelText('Toggle central control panel'))
-    expect(onToggleCentral).toHaveBeenCalledTimes(1)
+  it('off: Turn on posts the Central switch; ready: no offer and the Control tab is listed', async () => {
+    const f = route(() => caps('off'))
+    vi.stubGlobal('fetch', f)
+    const { unmount } = render(<SecondarySideBar centralEnabled={false} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }))
+    await waitFor(() => expect(f.mock.calls.some(([url, init]) => url === '/api/capabilities/central' && JSON.parse(String(init?.body)).enabled === true)).toBe(true))
+    unmount()
+    resetCapabilitiesCache()
+    vi.stubGlobal('fetch', route(() => caps('on')))
+    render(<SecondarySideBar centralEnabled />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Chat', 'Control'])
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    expect(document.querySelector('[data-slot="central-setup"]')).toBeNull()
   })
 })
 

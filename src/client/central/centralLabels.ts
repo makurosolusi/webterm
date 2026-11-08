@@ -3,7 +3,6 @@ import type { ControlLevel } from '../../server/central/contracts/level.types'
 
 export const CL = {
   panelTitle: 'Central control',
-  openLabel: 'Toggle central control panel',
   tabsLabel: 'Central control sections',
   tabControl: 'Control',
   tabAgents: 'Agents',

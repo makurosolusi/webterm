@@ -82,7 +82,7 @@ export function toggleSideBarView(view: SideBarView): void {
 }
 
 // The Central chat's Needs-you strip: expanded or not. Lives here (not in the strip) so `/approvals`,
-// the Dock's Chat icon and the morning brief can expand it before the lazy chat pane mounted.
+// the Dock's Central icon and the morning brief can expand it before the lazy chat pane mounted.
 // Not persisted: a reload starts collapsed.
 let needsYouExpanded = false
 
@@ -102,7 +102,7 @@ export function useNeedsYouExpanded(): boolean {
   return useSyncExternalStore(subscribe, () => needsYouExpanded)
 }
 
-/** Activity-bar Chat icon: with items waiting it opens on the expanded strip; otherwise a plain toggle. */
+/** Activity-bar Central icon: with items waiting it opens on the expanded strip; otherwise a plain toggle. */
 export function toggleChatView(waiting: number): void {
   if (waiting > 0 && !(state.open && state.view === 'chat')) expandNeedsYou()
   else toggleSideBarView('chat')

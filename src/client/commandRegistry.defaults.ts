@@ -72,7 +72,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
     { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },
     { id: 'view.sessions', label: 'View: Toggle Sessions', run: d.toggleSessions },
     { id: 'view.chat', label: 'View: Toggle Chat', run: d.toggleChat },
-    { id: 'view.secondarySideBar', label: 'View: Toggle Secondary Side Bar (Chat, Central)', defaultKey: 'Mod+Alt+B', run: d.toggleSecondarySideBar },
+    { id: 'view.secondarySideBar', label: 'View: Toggle Secondary Side Bar (Central: Chat, Control)', defaultKey: 'Mod+Alt+B', run: d.toggleSecondarySideBar },
     { id: 'view.board', label: 'View: Toggle Board', run: d.toggleBoard },
   ]
 }

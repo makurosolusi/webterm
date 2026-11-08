@@ -86,6 +86,7 @@ Operator notes:
 
 ### Changed
 - Every node of the open workspace now has a tab in a strip above the canvas: click to jump to it, see agent status at a glance, close or reorder it; the Nodes list in the Sessions side bar is gone. Turn the strip off with View > Show Node Tabs.
+- One Central icon in the activity bar (with the Needs-you count) opens the Central side bar; the separate shield icon is gone and the side bar's second tab is now called Control. When Central is not ready yet, its turn-on / Set up Claude Code offer now sits at the top of the Chat tab.
 - Closing an editor asks only when it has unsaved changes, with Save / Don't Save / Cancel (Save All for several files); clean and preview editors close immediately.
 - The browser node toolbar is a single Chrome-style row: a site-security icon, zoom pill and Shields count sit inside the address bar, Enter navigates (no Go button), console errors show as a badge only when there are some, and zoom, device mode, Shields, Design Mode, console, copy/open URL and agent control move into a ⋯ menu; the Design Mode bar appears only while Design Mode is on.
 - The Files node is now a tree like VS Code's Explorer: one click opens a file (as a preview that reuses the same editor until you edit it), one click on a folder expands it, a double click renames, and Right/Left expand and collapse.
