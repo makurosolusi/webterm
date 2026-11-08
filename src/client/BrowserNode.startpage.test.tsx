@@ -25,8 +25,7 @@ vi.mock('./browser.stream', () => ({ browserStream: fake.stream, getBrowserWorks
 import BrowserNode from './BrowserNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { RECENT_STORAGE_KEY } from './browser.recent'
-import { START_TEXT, ZOOM_TEXT } from './browser.uxText'
-import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
+import { START_TEXT, TOOLBAR_MENU_TEXT, TOOLBAR_TEXT, ZOOM_TEXT } from './browser.uxText'
 
 const state = (o: Partial<BrowserState> = {}): { t: 'state' } & BrowserState =>
   ({ t: 'state', id: 'b1', url: 'about:blank', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live', ...o })
@@ -84,17 +83,22 @@ describe('BrowserNode start page', () => {
 })
 
 describe('BrowserNode zoom', () => {
-  it('steps the toolbar zoom, scales the surface wrapper and clamps at the limits', () => {
+  it('zooms from the ⋯ menu, shows the pill, scales the surface wrapper and resets to 100%', () => {
     const { container } = mount({}, BrowserNodeType)
     const wrap = container.querySelector('.browser-zoom') as HTMLElement
-    const level = () => screen.getByRole('group', { name: ZOOM_TEXT.level }).textContent
-    expect(level()).toBe('100%')
-    fireEvent.click(screen.getByRole('button', { name: ZOOM_TEXT.in }))
-    expect(level()).toBe('110%')
+    const menu = (name: string) => {
+      fireEvent.click(screen.getByRole('button', { name: TOOLBAR_TEXT.more }))
+      fireEvent.click(screen.getByRole('menuitem', { name }))
+    }
+    expect(screen.queryByRole('button', { name: ZOOM_TEXT.pill('100%') })).toBeNull()
+    menu(ZOOM_TEXT.in)
+    expect(screen.getByRole('button', { name: ZOOM_TEXT.pill('110%') }).textContent).toBe('110%')
     expect(wrap.style.getPropertyValue('--browser-zoom')).toBe('1.1')
-    for (let i = 0; i < 20; i++) fireEvent.click(screen.getByRole('button', { name: ZOOM_TEXT.in }))
-    expect(level()).toBe(`${ZOOM_MAX * 100}%`)
-    for (let i = 0; i < 30; i++) fireEvent.click(screen.getByRole('button', { name: ZOOM_TEXT.out }))
-    expect(level()).toBe(`${ZOOM_MIN * 100}%`)
-  })
+    // Clamping at ZOOM_MIN/ZOOM_MAX is pinned by stepZoom's unit test (browser.startpage.test.ts); here only the wiring.
+    menu(ZOOM_TEXT.out); menu(ZOOM_TEXT.out)
+    expect(wrap.style.getPropertyValue('--browser-zoom')).toBe('0.9')
+    menu(TOOLBAR_MENU_TEXT.zoomReset('90%'))
+    expect(screen.queryByRole('button', { name: /^Zoom \d+%/ })).toBeNull()
+    expect(wrap.style.getPropertyValue('--browser-zoom')).toBe('1')
+  }, 15_000) // full node + 4 portal menus: ~2s alone, >5s under the parallel full suite
 })

@@ -76,3 +76,24 @@
 .browser-console__hint { display: flex; align-items: center; gap: 6px; padding: 1px 6px; border-bottom: 1px solid var(--vscode-panel-border, #444); opacity: .85; }
 .browser-console__note { padding: 1px 6px; opacity: .7; font-style: italic; }
 .browser-console__prompt { display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-top: 1px solid var(--vscode-panel-border, #444); }
+
+/* Toolbar (BrowserToolbar.tsx): one row like Chrome / VS Code Simple Browser. The address field is a pill holding the
+   site-info icon, the input, the zoom pill and the Shields chip. Container queries on the toolbar width (the node, not the
+   window) drop forward first, then the in-field extras; the ⋯ menu still reaches both. */
+.browser-toolbar { container: browser-toolbar / inline-size; display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+.browser-toolbar__row { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; min-width: 0; }
+.browser-toolbar__row > * { flex: none; }
+.browser-omnibox {
+  flex: 1 1 auto !important; min-width: 0; display: flex; align-items: center; gap: 2px; height: 25px; padding: 0 2px 0 6px;
+  border: 1px solid var(--vscode-input-border, transparent); border-radius: 12px; background: var(--vscode-input-background, var(--bg));
+}
+.browser-omnibox:focus-within { border-color: var(--vscode-focusBorder, var(--accent)); }
+.browser-omnibox__site { flex: none; font-size: 14px; opacity: .8; border-radius: 3px; outline: none; }
+.browser-omnibox__site:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
+.browser-omnibox__site[data-site-info="insecure"] { color: var(--vscode-editorWarning-foreground, #cca700); opacity: 1; }
+/* The input sits inside the pill: the pill draws the border and focus ring. */
+.browser-omnibox .browser-omnibox__input { flex: 1; height: 23px; border: 0; background: transparent; outline: none; }
+.browser-omnibox__extra { flex: none; }
+.browser-toolbar__errors { color: var(--vscode-errorForeground, #f48771); }
+@container browser-toolbar (max-width: 360px) { .browser-toolbar__forward { display: none; } }
+@container browser-toolbar (max-width: 260px) { .browser-omnibox__extra, .browser-toolbar__agent > span:not(.codicon) { display: none; } }

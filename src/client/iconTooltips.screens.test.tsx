@@ -40,6 +40,18 @@ describe('BrowserToolbar tooltips', () => {
     const fwd = screen.getByRole('button', { name: 'Forward' }).closest('[data-slot="icon-tooltip-disabled"]')!
     expect(tipOf(fwd)).toBe('Go forward one page (no later page)')
   })
+
+  it('site-info icon, zoom pill and ⋯ have visible tooltips', () => {
+    render(<BrowserToolbar
+      state={{ id: 'n1', url: 'http://a.com/', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' }}
+      nav={() => {}} agentControl={false} agentEnabled onAgentControl={() => {}} zoom={1.3} onZoom={() => {}}
+    />)
+    expect(tipOf(screen.getByRole('img', { name: 'Not secure' }))).toBe('Connection is not secure (http): do not enter passwords or card numbers here')
+    expect(tipOf(screen.getByRole('button', { name: 'Zoom 130%, reset to 100%' }))).toBe('Page zoom is 130%: click to reset to 100%')
+    const more = screen.getByRole('button', { name: 'More actions' })
+    expect(more.hasAttribute('title')).toBe(false)
+    expect(tipOf(more)).toBe('Zoom, device mode, Shields, Design Mode and more')
+  })
 })
 
 describe('FilesToolbar tooltips', () => {
