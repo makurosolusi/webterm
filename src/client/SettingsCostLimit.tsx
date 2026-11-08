@@ -1,4 +1,4 @@
-// Daily spending limit (dollars) over the existing env override `WEBTERM_CENTRAL_DAILY_COST_MICROS`,
+// Settings › Central Agent › Daily spending limit (dollars) over the existing env override `WEBTERM_CENTRAL_DAILY_COST_MICROS`,
 // written through the same `/api/settings/env` PUT the Control tab uses: no env advice, the field is the switch.
 import { useEffect, useState } from 'react'
 import { Input } from '@/components/ui/input'
@@ -27,8 +27,8 @@ const microsToDollars = (micros: string): string => {
 
 type Load = { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; editable: boolean; reason?: string }
 
-/** The cost cap as a dollars field; commits on blur/Enter, empty clears to unlimited. */
-export function CostLimitField(): React.JSX.Element | null {
+/** The cost cap as a dollars field; commits on blur/Enter, empty clears to unlimited. `disabledReason` = shown, field locked. */
+export function CostLimitField({ disabledReason }: { disabledReason?: string } = {}): React.JSX.Element | null {
   const [load, setLoad] = useState<Load>({ status: 'loading' })
   const [text, setText] = useState('')
   const [saved, setSaved] = useState('')
@@ -66,7 +66,7 @@ export function CostLimitField(): React.JSX.Element | null {
     }
   }
 
-  const disabled = load.status !== 'ready' || !load.editable || saving
+  const disabled = load.status !== 'ready' || !load.editable || saving || disabledReason !== undefined
   return (
     <Field
       label="Daily spending limit"
@@ -79,6 +79,7 @@ export function CostLimitField(): React.JSX.Element | null {
         onChange={(e) => setText(e.target.value)}
         onBlur={() => void commit()}
         onKeyDown={(e) => { if (e.key === 'Enter') void commit() }} />
+      {disabledReason ? <span className="st-hint" data-reason>{disabledReason}</span> : null}
       {load.status === 'loading' ? <span className="st-hint" role="status">Loading…</span> : null}
       {saving ? <span className="st-hint" role="status">Saving…</span> : null}
       {load.status === 'ready' && !load.editable ? <span className="st-hint">{load.reason ?? 'Locked by the server environment.'}</span> : null}

@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAPABILITIES, CAPABILITY_IDS } from '../shared/featureCapabilities'
 import type { CapabilitiesResponse, CapabilityId, CapabilityView } from '../shared/featureCapabilities'
@@ -13,10 +13,11 @@ import { DEFAULT_SETTINGS } from '../shared/settings'
 import { SettingsPanel, toSectionId } from './SettingsPanel'
 import { resetCapabilitiesCache } from './useCapabilities'
 
-const BANNED_WORDS = /webhook|polling|secret|mode|restart|berbahaya|operator/i
+// `mode` as a whole word (jargon), not inside "model": Central Agent has a Model & cost group.
+const BANNED_WORDS = /webhook|polling|secret|\bmodes?\b|restart|berbahaya|operator/i
 const ENV_NAMES = /\b(WEBTERM|NODETERM)_[A-Z0-9_]+/
-const NEW_LABELS = ['advancedLabels.ts', 'capabilitiesLabels.ts', 'telegramCardLabels.ts']
-const UI_SOURCES = [...NEW_LABELS, 'CapabilitiesSection.tsx', 'AdvancedSection.tsx', 'CapabilityCard.tsx', 'CapabilityOffer.tsx', 'TelegramCard.tsx']
+const NEW_LABELS = ['advancedLabels.ts', 'capabilitiesLabels.ts', 'telegramCardLabels.ts', 'centralSettingsLabels.ts']
+const UI_SOURCES = [...NEW_LABELS, 'CapabilitiesSection.tsx', 'AdvancedSection.tsx', 'CapabilityCard.tsx', 'CapabilityOffer.tsx', 'TelegramCard.tsx', 'CentralSettingsSection.tsx', 'centralSettings.controls.tsx']
 const OLD_UI = /Diubah|Perlu restart|Berbahaya|Segarkan|Default|Aktif sekarang|Tersimpan|Atur ulang|Ledger|Bayangan|Belum berpengaruh|tab Channels|Dikunci|Token root|Info server/
 
 const read = (f: string): string => readFileSync(join(dirname(fileURLToPath(import.meta.url)), f), 'utf8')
@@ -99,10 +100,10 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     expect(toSectionId('channels')).toBe('capabilities')
   })
 
-  it('enam kartu bersakelar (Telegram memakai Hubungkan/Putuskan, deviasi sah D8) dan tujuh kartu total', async () => {
+  it('tiga kartu bersakelar (Central/Worker/Otonomi = satu baris ringkasan, Telegram = Hubungkan/Putuskan), lima kartu total', async () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
-    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 1)
-    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length)
+    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 4)
+    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length - 2)
   })
 
   it('Lanjutan tertutup dengan tepat empat butir', async () => {
@@ -112,11 +113,17 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     expect(details.querySelectorAll(':scope > div').length).toBe(4) // butir, bukan kontrol: Chromium punya beberapa tombol
   })
 
-  it('sub-opsi worker hanya muncul saat Worker on', async () => {
-    await openCapabilities(new Set<CapabilityId>(['central']))
-    expect(screen.queryByLabelText('Ask for approval before a worker runs')).toBeNull()
+  it('Central Agent: persetujuan worker hanya aktif saat Worker on, halaman bebas kata terlarang dan env var', async () => {
+    const openCentral = async (on: ReadonlySet<CapabilityId>): Promise<HTMLElement> => {
+      await openCapabilities(on)
+      fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central Agent' }))
+      return screen.findByRole('switch', { name: 'Ask before each worker runs' })
+    }
+    expect((await openCentral(new Set<CapabilityId>(['central']))).hasAttribute('disabled')).toBe(true)
+    const text = screen.getByRole('main', { name: 'Settings' }).textContent ?? ''
+    expect(text).not.toMatch(BANNED_WORDS)
+    expect(text).not.toMatch(ENV_NAMES)
     cleanup()
-    await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
-    await waitFor(() => expect(screen.getByLabelText('Ask for approval before a worker runs')).toBeTruthy())
+    expect((await openCentral(new Set<CapabilityId>(['central', 'workers']))).hasAttribute('disabled')).toBe(false)
   })
 })

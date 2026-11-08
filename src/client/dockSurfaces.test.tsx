@@ -65,13 +65,13 @@ function App() {
   )
 }
 
-const central = () => screen.getByRole('button', { name: /^Central/ })
+const central = () => screen.getByRole('button', { name: /^Central(?! settings)/ })
 const sideTab = (name: RegExp) => within(screen.getByRole('tablist', { name: 'Secondary Side Bar tabs' })).getByRole('tab', { name })
 
 describe('Chat and Control in the secondary side bar', () => {
   it('the activity bar has one Central icon (no shield); it opens the side bar on Chat, tabs CHAT and CONTROL', async () => {
     render(<App />)
-    expect(screen.getAllByRole('button', { name: /^Central/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^Central(?! settings)/ })).toHaveLength(1)
     expect(document.querySelector('.dock .codicon-shield')).toBeNull()
     fireEvent.click(central())
     expect(document.querySelectorAll('.vscode-secondary-side-bar')).toHaveLength(1)

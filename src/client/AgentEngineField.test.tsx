@@ -38,7 +38,7 @@ describe('AgentEngineField', () => {
     expect(screen.queryByText(/not signed in/)).toBeNull()
     expect(JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ central: true })
     fireEvent.click(screen.getByRole('button', { name: 'Edit launch profile' }))
-    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'agent' })
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'central' })
     window.removeEventListener('webterm:open-settings', opened)
   })
 

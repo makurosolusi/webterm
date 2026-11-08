@@ -2,6 +2,7 @@
 import { CAPABILITIES, closure, dependents } from '../shared/featureCapabilities'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import { CAPABILITY_STATUS_LABEL, CAPABILITY_TEXT, joinTitles } from './capabilitiesLabels'
+import { CENTRAL_TEXT } from './centralSettingsLabels'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -73,6 +74,19 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
         </div>
       ))}
       {error ? <p role="alert" className="m-0 text-xs text-destructive">{error}</p> : null}
+    </section>
+  )
+}
+
+/** Capabilities › Central Agent: status + a link; its switches are in Settings › Central Agent. */
+export function CentralSummaryRow({ view, onOpen }: { view: CapabilityView; onOpen?(): void }): React.JSX.Element {
+  return (
+    <section aria-label={CENTRAL_TEXT.summaryTitle} data-capability="central" className="flex items-center justify-between gap-2 border-b border-(--vscode-widget-border,transparent) py-3">
+      <span className="text-[13px] font-semibold">{CENTRAL_TEXT.summaryTitle}</span>
+      <div className="flex items-center gap-2">
+        <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view.status]}</span>
+        <Button size="xs" variant="link" className="px-0" disabled={!onOpen} onClick={onOpen}>{CENTRAL_TEXT.summaryLink}</Button>
+      </div>
     </section>
   )
 }

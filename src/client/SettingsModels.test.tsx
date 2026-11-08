@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-// Settings › Agent › Models: ladder defaults table, per-workspace overrides (entry patches), and the
-// daily spending limit written as micros through /api/settings/env.
+// Settings › Agent › Models: ladder defaults table and per-workspace overrides (entry patches).
+// The daily spending limit moved to Settings › Central Agent (CentralSettingsSection.test.tsx).
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
@@ -8,20 +8,13 @@ import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { applySettingsPatch, type SettingsPatch } from '../shared/settings.patch'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { ModelsSettings } from './SettingsModels'
-import { COST_CAP_KEY, dollarsToMicros } from './SettingsCostLimit'
 
 const WORKSPACES = [{ id: 'w1', name: 'Alpha' }, { id: 'w2', name: 'Beta' }] // test-only
-let envValue = ''
-let puts: unknown[] = []
 
 beforeEach(() => {
-  envValue = '5000000'
-  puts = []
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/api/workspaces') return ok(WORKSPACES)
-    if (url === '/api/settings/env' && init?.method === 'PUT') { puts.push(JSON.parse(String(init.body))); return ok({ entries: [] }) }
-    if (url === '/api/settings/env') return ok({ locked: false, entries: [{ key: COST_CAP_KEY, value: envValue, editable: true }] })
     return new Response('{}', { status: 404 })
   }))
 })
@@ -83,34 +76,5 @@ describe('Settings › Models', () => {
     expect(screen.getByRole('alertdialog').textContent).toContain('1 entry will be removed')
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
     expect(state()).toEqual({})
-  })
-
-  it('daily spending limit shows dollars, writes micros, and clears to unlimited', async () => {
-    render(<Harness />)
-    const input = screen.getByLabelText('Daily spending limit') as HTMLInputElement
-    await waitFor(() => expect(input.value).toBe('5'))
-    fireEvent.change(input, { target: { value: '2.5' } })
-    fireEvent.blur(input)
-    await waitFor(() => expect(puts).toEqual([{ set: { [COST_CAP_KEY]: '2500000' }, unset: [] }]))
-    fireEvent.change(input, { target: { value: '' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(puts[1]).toEqual({ set: {}, unset: [COST_CAP_KEY] }))
-  })
-
-  it('a bad amount is refused inline without a write', async () => {
-    render(<Harness />)
-    const input = screen.getByLabelText('Daily spending limit') as HTMLInputElement
-    await waitFor(() => expect(input.disabled).toBe(false))
-    fireEvent.change(input, { target: { value: '-3' } })
-    fireEvent.blur(input)
-    expect((await screen.findByRole('alert')).textContent).toContain('Enter an amount in dollars')
-    expect(puts).toEqual([])
-  })
-
-  it('dollarsToMicros', () => {
-    expect(dollarsToMicros('')).toBeNull()
-    expect(dollarsToMicros('0')).toBeNull()
-    expect(dollarsToMicros('1.234567')).toBe(1_234_567)
-    expect(dollarsToMicros('abc')).toBeUndefined()
   })
 })
