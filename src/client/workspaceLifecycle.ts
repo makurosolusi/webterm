@@ -28,6 +28,7 @@ import { useWorkspaceBoot, type BootState } from './workspaceLifecycle.boot'
 import { useLatestSelect } from './workspaceLifecycle.select'
 import { reported } from './workspaceActionError'
 import { confirmNodeClose } from './nodeCloseConfirm'
+import { useCanvasPush } from './workspaceCanvasPush'
 import type { Workspace } from '../shared/workspace'
 
 /** Yang dibutuhkan hook ini dari App. Setter & ref dipinjam APA ADANYA — ref harus ref yang sama
@@ -80,6 +81,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   } = deps
 
   const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired })
+  useCanvasPush({ activeWsRef, nodesRef, edgesRef, setNodes, setEdges })
 
   // Save yang menggantung ditulis oleh `applyWorkspace` (flush, lihat `useWorkspaceSaver`) SEBELUM
   // board baru dipasang — bukan dibatalkan di sini, karena itu membuang edit terakhir pengguna.

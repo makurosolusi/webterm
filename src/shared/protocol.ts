@@ -2,7 +2,7 @@
 // One socket multiplexes many terminals by `id` (client-generated, stable across
 // reconnects so the server can re-attach a surviving PTY and replay its scrollback).
 
-import type { AgentId, AgentStatus } from './workspace'
+import type { AgentId, AgentStatus, BridgeLink, WsNode } from './workspace'
 
 // `since` = the last chunk this client already drew of session `epoch`: a re-attach to that same
 // session replays only what came after it. Absent, stale or out of range = `reset` + full replay.
@@ -34,6 +34,9 @@ export interface ResetMsg { t: 'reset'; id: string; epoch: string }
 export interface StatusMsg { t: 'status'; id: string; status?: AgentStatus }
 // Petunjuk "isi `dir` berubah" (bukan diff): klien menjawab dengan me-refresh listing.
 export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg
+// The server added `nodes`/`bridges` to board `workspaceId`, on top of stored version `base`, storing
+// version `updatedAt`: the UI merges ids it lacks (`base` tells a window whether it knew what lay underneath).
+export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[] }
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg
 
 export const WS_PATH = '/ws'
