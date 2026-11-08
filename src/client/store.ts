@@ -2,6 +2,7 @@
 // The DB (via api.ts) is the source of truth; these functions carry no DOM/IO.
 import type { Node, Edge } from '@xyflow/react'
 import { validChatConfig } from '../shared/agentChat.shape'
+import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
 import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
 
 export function toFlow(n: WsNode): Node {
@@ -11,7 +12,7 @@ export function toFlow(n: WsNode): Node {
     position: { x: n.x, y: n.y },
     width: n.width ?? 400,
     height: n.height ?? 300,
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, preview: n.preview, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, preview: n.preview, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig },
   }
 }
 
@@ -44,6 +45,7 @@ export function toWsNode(n: Node): WsNode {
     url: d.url,
     agentControl: d.agentControl,
     device: d.device,
+    zoom: typeof d.zoom === 'number' && d.zoom >= ZOOM_MIN && d.zoom <= ZOOM_MAX ? d.zoom : undefined,
     chatSessionId: d.chatSessionId,
     permissionMode: isPermissionMode(d.permissionMode) ? d.permissionMode : undefined,
     chatConfig: d.chatConfig === undefined ? undefined : validChatConfig(d.chatConfig),

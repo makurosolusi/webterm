@@ -23,14 +23,16 @@ afterAll(async () => {
 
 async function setup(resolve: Resolver, allow: string[] | (() => ReadonlySet<string>) = [], toPort = echoPort, allowLoopback = false) {
   const dialed: string[] = []
+  const denied: string[] = []
   const resolved: string[] = []
   const proxy = await startSsrfProxy({
     allow: Array.isArray(allow) ? new Set(allow) : allow, webtermPort: SELF_PORT, allowLoopback,
     resolver: async (h) => { resolved.push(h); return resolve(h) },
     dial: (ip, port) => { dialed.push(`${ip}:${port}`); return connect({ host: '127.0.0.1', port: toPort }) },
+    onDeny: (h, r) => { denied.push(`${h} ${r}`) },
   })
   closers.push(proxy.close)
-  return { proxy, dialed, resolved }
+  return { proxy, dialed, resolved, denied }
 }
 
 /** Kirim teks mentah ke proxy, kembalikan seluruh respons sampai koneksi ditutup / `until` terlihat. */
@@ -95,6 +97,9 @@ test('port webterm pada loopback tak pernah lolos walau ada di allowlist', async
 test('DNS gagal atau kosong = 403 dns_fail; target malformed = 403', async () => {
   const bad = await setup(async () => { throw new Error('ENOTFOUND') })
   expect(await raw(bad.proxy.port, connectReq('nope.example:443'))).toContain('blocked: dns_fail')
+  expect(bad.denied).toEqual(['nope.example dns_fail']) // reported to the runtime, which names it on the node
+  expect(await raw(bad.proxy.port, 'GET http://Nope.Example/ HTTP/1.1\r\nHost: nope.example\r\n\r\n')).toContain('blocked: dns_fail')
+  expect(bad.denied).toEqual(['nope.example dns_fail', 'nope.example dns_fail'])
   const empty = await setup(async () => [])
   expect(await raw(empty.proxy.port, connectReq('empty.example:443'))).toContain('blocked: dns_fail')
   expect(await raw(empty.proxy.port, connectReq('x.example:99999'))).toContain('blocked: not_allowed_port')

@@ -8,6 +8,7 @@ import BrowserNode from './BrowserNode'
 import type { BrowserSlotCtx } from './BrowserNode'
 import BrowserToolbar from './BrowserToolbar'
 import DesignModeBar from './browser/design/DesignModeBar'
+import { useDesignMode } from './browser/design/useDesignMode'
 import BrowserLeaseChip from './BrowserLeaseChip'
 import BrowserCookieDialog from './BrowserCookieDialog'
 import { setAgentControl } from './browser.api'
@@ -24,6 +25,7 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   const rf = useReactFlow()
   const status = useBrowserStatus()
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
+  const design = useDesignMode(p.id)
   const agentControl = (p.data as { agentControl?: boolean }).agentControl !== false // default on; hanya off eksplisit
   const onAgentControl = useCallback((enabled: boolean) => {
     // Server dulu: bila gagal, flag tersimpan tidak berubah dan toggle tetap menunjukkan kenyataan.
@@ -31,8 +33,8 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   }, [p.id, rf])
   return (
     <>
-      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} searchEngine={searchEngine} onShields={ctx.setShields} device={ctx.device} onDevice={ctx.setDevice} console={ctx.console} />
-      <DesignModeBar nodeId={p.id} />
+      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} onZoomReset={ctx.resetZoom} searchEngine={searchEngine} onShields={ctx.setShields} device={ctx.device} onDevice={ctx.setDevice} console={ctx.console} design={design} />
+      {design.on && <DesignModeBar nodeId={p.id} design={design} />}
     </>
   )
 }

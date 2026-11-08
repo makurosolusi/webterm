@@ -1,7 +1,7 @@
 // Pesan overlay node browser (Indonesia) + tombol pemulihan `noticeAction`.
 import { describe, expect, it } from 'vitest'
 import type { BrowserState } from '../shared/browser.contract'
-import { browserNotice, noticeAction } from './browser.status'
+import { browserNotice, netErrorText, noticeAction } from './browser.status'
 
 const blocked = (b: BrowserState['blocked'], url = 'https://old.example/'): BrowserState =>
   ({ id: 'n1', url, title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live', blocked: b })
@@ -42,5 +42,28 @@ describe('noticeAction', () => {
   it('blokir lain (port webterm, skema) tanpa tombol', () => {
     expect(noticeAction({ state: blocked('not_allowed_port'), target: 'http://localhost:8700/' })).toBeNull()
     expect(noticeAction({ state: blocked('scheme'), target: 'file:///etc/passwd' })).toBeNull()
+  })
+})
+
+describe('netErrorText', () => {
+  it('maps Chromium net error names to a title + hint', () => {
+    expect(netErrorText('net::ERR_NAME_NOT_RESOLVED')).toEqual({ title: "This site can't be reached", hint: 'Check the address for typos.', retryable: true })
+    expect(netErrorText('net::ERR_INTERNET_DISCONNECTED')?.hint).toBe('Check your connection.')
+    expect(netErrorText('net::ERR_CONNECTION_REFUSED')?.title).toBe("This site can't be reached")
+    expect(netErrorText('net::ERR_CERT_AUTHORITY_INVALID')).toMatchObject({ title: 'Your connection is not private', hint: "The site's certificate isn't trusted." })
+    expect(netErrorText('net::ERR_CERT_DATE_INVALID')?.title).toBe('Your connection is not private')
+    expect(netErrorText('net::ERR_BLOCKED_BY_CLIENT')?.retryable).toBe(false)
+  })
+
+  it('ERR_ABORTED is not an error; unknown names fall back to a generic sentence', () => {
+    expect(netErrorText('net::ERR_ABORTED')).toBeNull()
+    expect(netErrorText('net::ERR_SOMETHING_NEW')).toEqual({ title: "This page couldn't load", hint: '', retryable: true })
+  })
+
+  it('noticeAction turns state.netError into a plate with the host; blocked wins', () => {
+    const st = { ...blocked(undefined, 'https://nope.invalid/x?q=1'), netError: 'net::ERR_NAME_NOT_RESOLVED' }
+    expect(noticeAction({ state: st })).toMatchObject({ kind: 'netError', code: 'net::ERR_NAME_NOT_RESOLVED', host: 'nope.invalid', retryable: true })
+    expect(noticeAction({ state: { ...st, netError: 'net::ERR_ABORTED' } })).toBeNull()
+    expect(noticeAction({ state: { ...st, blocked: 'scheme' } })).toBeNull()
   })
 })

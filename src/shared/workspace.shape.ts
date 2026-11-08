@@ -135,6 +135,7 @@ export interface WsNode {
   plan?: PlanNodeData     // node 'plan': draft / approved dag (validPlanData)
   agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
   device?: DeviceChoice   // node 'browser': device mode (browser.devices.ts); absent = Responsive
+  zoom?: number           // node 'browser': page zoom (1 = 100%, browser.zoom.ts); absent = 100%
   chatSessionId?: string  // node 'agentChat': Claude session id from system/init (agentChat.shape.ts)
   permissionMode?: AgentPermissionMode // node 'agentChat': per-node mode; absent = settings default
   chatConfig?: AgentChatNodeConfig // node 'agentChat': model / effort / thinking picked in the footer (validChatConfig)
