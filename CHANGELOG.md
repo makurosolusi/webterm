@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 Operator notes:
+- New dependency `marked-footnote` (MIT) for markdown footnotes.
 - Central chat attachments (images and text files) are stored in `<data dir>/central/attachments/` and removed 30 days after they were last sent.
 - New dependency `@ghostery/adblocker` (MPL-2.0) for browser-node ad and tracker blocking. Its prebuilt filter lists are downloaded into `<data dir>/browser/adblock/` and refreshed weekly in the background; startup never waits for the download.
 - New files in the data dir: `<data dir>/browser/adblock/` (filter cache), `shields-off.json` (sites where Shields is turned off) and `<data dir>/backgrounds/` (uploaded canvas background images).
@@ -15,6 +16,7 @@ Operator notes:
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
 
 ### Added
+- Markdown preview: GitHub alerts, footnotes and highlighted code blocks.
 - Files node: copy, cut and paste files (also between Files nodes), undo with Cmd+Z, drag rows onto a folder to move them (Alt to copy), Cmd+Backspace to move to Trash, git marks inside subfolders, Collapse All and Open in Browser for HTML files.
 - Central chat accepts images and text files: paste a screenshot, drop files or use the + button.
 - Central chat: type / for commands (new chat, history, status, approvals, halt…) and shortcuts such as /projects and /nodes.
@@ -81,6 +83,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Closing an editor asks only when it has unsaved changes, with Save / Don't Save / Cancel (Save All for several files); clean and preview editors close immediately.
 - The Files node is now a tree like VS Code's Explorer: one click opens a file (as a preview that reuses the same editor until you edit it), one click on a folder expands it, a double click renames, and Right/Left expand and collapse.
 - Central now runs on the Claude Agent SDK, the same engine as Agent Chat; behaviour is unchanged.
 - The Central chat is now the single hub for everything that needs you: a Needs-you strip on top of the chat lists approvals, reviews and broken tasks, approval requests appear in the chat as cards you can approve, deny or edit there, and the Chat icon shows how many items wait.
@@ -129,6 +132,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Markdown preview: frontmatter shows as a small table, links no longer leave webterm (web links open in a browser node, file links as editors), relative images load, the preview follows edits and reloads, and headings can be linked.
 - Agent Chat: when Claude stops while streaming, the error notice now shows the end of what Claude printed on stderr (it was always empty), and Claude can no longer stall on an unread stderr pipe.
 - Central no longer asks you to approve an agent card that has expired or been rejected: an expired or lapsed card is replaced with a fresh one in the chat, a rejected spawn is cancelled, and cards update live wherever they are decided.
 - When a Central chat reply fails because Claude could not start, the chat now says why (for example Claude not found, not signed in, or an unsupported option) instead of only "claude runtime failed".
