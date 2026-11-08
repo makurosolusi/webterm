@@ -1,6 +1,7 @@
 /* Panel kontrol Central Agent v2: hanya variabel tema VS Code, tanpa warna literal. */
 .ccp-body { padding: 8px 16px; overflow-y: auto; color: var(--vscode-foreground); font-size: 13px; line-height: 20px; }
 .ccp-body :focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.ccp-group-h { margin: 8px 0 2px; font-size: 12px; font-weight: 600; }
 .ccp-section h3 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
 .ccp-privacy { margin: 0 0 8px; padding: 4px 8px; border-left: 3px solid var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); }
 .ccp-error { color: var(--vscode-errorForeground); margin: 4px 0; }

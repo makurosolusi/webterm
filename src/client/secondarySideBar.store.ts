@@ -121,7 +121,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** Sub-tabs of the Central control panel. */
-export type CentralTab = 'control' | 'agents' | 'skills' | 'memory'
+export type CentralTab = 'status' | 'abilities' | 'agents' | 'skills'
 /** The last "show this Central tab" request; `seq` makes a repeat of the same tab a new request. */
 export interface CentralTabRequest { tab: CentralTab; seq: number; halt?: boolean }
 let centralRequest: CentralTabRequest | null = null

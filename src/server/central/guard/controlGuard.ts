@@ -56,6 +56,26 @@ export interface GuardDeps {
   record?: (e: AppendEventInput) => void
 }
 
+/** Guard action for a registry tool: worker-starting tools are judged as `spawn`. */
+export function guardActionOf(tool: string): 'spawn' | 'tool' { return SPAWN_TOOLS.includes(tool) ? 'spawn' : 'tool' }
+
+export type LadderDecision =
+  | { verdict: 'deny'; need: ControlLevel }
+  | { verdict: 'needs_approval' | 'allow'; tier: Tier }
+
+/**
+ * The pure level x tier part of the guard (no caps, budget, breaker or policy rules): `deny` below the
+ * level the action needs, else R3 always asks and R2 asks below act_envelope. A spawn needs act_gated
+ * and is judged at least R2; a turn only needs observe. `tierMinimum` is read only for plain tool calls.
+ */
+export function ladderDecision(action: GuardRequest['action'], tier: Tier, level: ControlLevel, tierMinimum: (tier: Tier) => ControlLevel): LadderDecision {
+  const spawn = action === 'spawn'
+  const need: ControlLevel = spawn ? 'act_gated' : action === 'turn' ? 'observe' : tierMinimum(tier)
+  if (level === 'off' || levelRank(level) < levelRank(need)) return { verdict: 'deny', need }
+  const judged: Tier = spawn && tier < 'R2' ? 'R2' : tier
+  return { verdict: judged === 'R3' || (judged === 'R2' && level !== 'act_envelope') ? 'needs_approval' : 'allow', tier: judged }
+}
+
 function activeAgents(db: Database, projectId: string | null): number {
   const marks = SLOT_FREE_STATES.map(() => '?').join(',')
   const where = projectId ? ' AND project_id = ?' : ''
@@ -93,8 +113,8 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
       if (status === PROJECT_PAUSED) return deny('project_paused', 'project is paused')
     }
     const spawn = req.action === 'spawn'
-    const need: ControlLevel = spawn ? 'act_gated' : req.action === 'turn' ? 'observe' : policy.store.tierMinimum(req.tier)
-    if (level === 'off' || levelRank(level) < levelRank(need)) return deny('level_denied', `level ${level} is below ${need}`)
+    const ladder = ladderDecision(req.action, req.tier, level, (t) => policy.store.tierMinimum(t))
+    if (ladder.verdict === 'deny') return deny('level_denied', `level ${level} is below ${ladder.need}`)
 
     if (spawn) {
       if (req.projectId && activeAgents(db, req.projectId) >= MAX_WORKERS_PER_PROJECT) return deny('cap_project', `project already has ${MAX_WORKERS_PER_PROJECT} active workers`)
@@ -118,7 +138,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     }
     if (req.projectId && !breaker.allow(`project:${req.projectId}`).allowed) return deny('breaker_open', 'project breaker is open')
 
-    const tier: Tier = spawn && req.tier < 'R2' ? 'R2' : req.tier
+    const tier = ladder.tier
     // Rules last: the ladder above still bounds Central; a human rule can only narrow it further.
     // Builtin `central * allow` keeps the pre-policy verdicts. A turn is not a capability.
     if (req.action !== 'turn') {
@@ -126,8 +146,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
       if (d.effect === 'deny') return deny('policy_denied', d.reason)
       if (d.effect === 'ask') return { verdict: 'needs_approval', level, tier }
     }
-    if (tier === 'R3' || (tier === 'R2' && level !== 'act_envelope')) return { verdict: 'needs_approval', level, tier }
-    return { verdict: 'allow', level }
+    return ladder.verdict === 'needs_approval' ? { verdict: 'needs_approval', level, tier } : { verdict: 'allow', level }
   }
 
   return {
@@ -173,7 +192,7 @@ export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean;
     check(req) {
       try {
         const digest = createHash('sha256').update(`${req.tool}\n${canonical(req.input)}`).digest('hex').slice(0, 32)
-        const action = SPAWN_TOOLS.includes(req.tool) ? 'spawn' : 'tool'
+        const action = guardActionOf(req.tool)
         const d = guard.check({ action, projectId: req.projectId ?? null, tool: req.tool, tier: req.tier, digest })
         if (d.verdict === 'allow' || (d.verdict === 'needs_approval' && opts.approved)) return { ok: true }
         // F4-d: off by default; never blocks the caller, a failure leaves the card for the human.

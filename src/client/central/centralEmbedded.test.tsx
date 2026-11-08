@@ -12,11 +12,11 @@ describe('CentralControlPanel body', () => {
     const { container } = render(<CentralControlPanel open enabled client={fakeClient()} />)
     expect(container.querySelector('.vscode-bottom-panel')).toBeNull()
     const nav = screen.getByRole('tablist', { name: 'Central control sections' })
-    expect(within(nav).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Control', 'Agents', 'Skills', 'Memory'])
-    expect(await screen.findByText('Control level')).toBeTruthy()
-    fireEvent.mouseDown(within(nav).getByRole('tab', { name: 'Memory' }), { button: 0 })
-    expect(await screen.findByRole('table')).toBeTruthy()
-    expect(screen.queryByText('Control level')).toBeNull()
+    expect(within(nav).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Status', 'Abilities', 'Agents', 'Skills'])
+    expect(await screen.findByText('What Central may do')).toBeTruthy()
+    fireEvent.mouseDown(within(nav).getByRole('tab', { name: 'Abilities' }), { button: 0 })
+    expect(await screen.findByText('Projects & nodes (2)')).toBeTruthy()
+    expect(screen.queryByText('What Central may do')).toBeNull()
   })
 
   it('portals the refresh control into actionsHost', () => {

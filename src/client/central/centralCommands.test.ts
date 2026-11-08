@@ -15,9 +15,10 @@ describe('resolveCentralInput', () => {
     expect(resolveCentralInput('/history', ALL)).toEqual({ kind: 'chat', action: 'history' })
     expect(resolveCentralInput('/help', ALL)).toEqual({ kind: 'chat', action: 'help' })
     expect(resolveCentralInput('/approvals', ALL)).toEqual({ kind: 'chat', action: 'approvals' })
-    expect(resolveCentralInput('/status', ALL)).toEqual({ kind: 'panel', tab: 'control' })
-    expect(resolveCentralInput('/memory', ALL)).toEqual({ kind: 'panel', tab: 'memory' })
-    expect(resolveCentralInput('/halt', ALL)).toEqual({ kind: 'panel', tab: 'control', halt: true })
+    expect(resolveCentralInput('/status', ALL)).toEqual({ kind: 'panel', tab: 'status' })
+    expect(resolveCentralInput('/tools', ALL)).toEqual({ kind: 'panel', tab: 'abilities' })
+    expect(resolveCentralInput('/memory', ALL)).toEqual({ kind: 'chat', action: 'memory' })
+    expect(resolveCentralInput('/halt', ALL)).toEqual({ kind: 'panel', tab: 'status', halt: true })
   })
 
   it('/model picks a model and optional effort for the conversation; bad input is a usage hint', () => {

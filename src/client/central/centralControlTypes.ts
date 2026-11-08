@@ -47,6 +47,25 @@ export interface MemoryRow {
   value: string
 }
 
+export type ToolGroup = 'projects' | 'workers' | 'tasks' | 'memory' | 'browser' | 'skills' | 'channels' | 'approvals' | 'other'
+/** How a tool runs at the current level: on its own, after asking you, refused by the level, or switched off. */
+export type ToolAccess = 'auto' | 'asks' | 'blocked' | 'off'
+
+export interface ToolRow {
+  name: string
+  summary: string
+  group: ToolGroup
+  tier: Tier
+  on: boolean
+  access: ToolAccess
+}
+
+/** `GET /api/central/tools`: every tool Central has and what the current level lets it do. */
+export interface ToolsView {
+  level: ControlLevel
+  tools: ToolRow[]
+}
+
 /** Injectable client; the module default is `centralControlApi`. */
 export interface CentralControlClient {
   getControl(signal?: AbortSignal): Promise<ControlView>
@@ -58,4 +77,6 @@ export interface CentralControlClient {
   approveSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>
   listMemory(offset: number, signal?: AbortSignal): Promise<MemoryRow[]>
+  listTools(signal?: AbortSignal): Promise<ToolsView>
+  listActiveSkills(signal?: AbortSignal): Promise<Array<{ name: string; description: string }>>
 }

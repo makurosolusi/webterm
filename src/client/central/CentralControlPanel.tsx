@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import AgentList from './AgentList'
 import LevelPanel from './LevelPanel'
-import MemoryView from './MemoryView'
+import AbilitiesView from './AbilitiesView'
 import SkillReview from './SkillReview'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
@@ -18,14 +18,14 @@ type TabId = CentralTab
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'control', label: CL.tabControl },
+  { id: 'status', label: CL.tabStatus },
+  { id: 'abilities', label: CL.tabAbilities },
   { id: 'agents', label: CL.tabAgents },
   { id: 'skills', label: CL.tabSkills },
-  { id: 'memory', label: CL.tabMemory },
 ]
 
-/** A tab this panel has; anything else (a removed tab such as the old Approvals) opens Control. */
-export const knownTab = (tab: string | undefined): TabId => TABS.find((t) => t.id === tab)?.id ?? 'control'
+/** A tab this panel has; anything else (a removed tab such as the old Approvals or Memory) opens Status. */
+export const knownTab = (tab: string | undefined): TabId => TABS.find((t) => t.id === tab)?.id ?? 'status'
 
 export interface CentralControlPanelProps {
   open: boolean
@@ -64,10 +64,10 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
         {status?.model.free && <p className="ccp-privacy" role="note">{CL.privacyLabel} ({status.model.id})</p>}
         {/* refreshKey remounts the active section so it reloads its data. */}
         <div key={`${tab}-${refreshKey}`} className="ccp-section-host">
-          {tab === 'control' && <LevelPanel client={client} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
+          {tab === 'status' && <LevelPanel client={client} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
           {tab === 'agents' && <AgentList client={client} />}
           {tab === 'skills' && <SkillReview client={client} />}
-          {tab === 'memory' && <MemoryView client={client} />}
+          {tab === 'abilities' && <AbilitiesView client={client} />}
         </div>
       </div>
     </div>

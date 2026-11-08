@@ -85,18 +85,18 @@ describe('CentralControlPanel', () => {
   it('has tab roles, a privacy label for free models, and switches tabs by keyboard', async () => {
     render(<CentralControlPanel open enabled client={fakeClient()} />)
     const tabs = screen.getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Control', 'Agents', 'Skills', 'Memory'])
+    expect(tabs.map((t) => t.textContent)).toEqual(['Status', 'Abilities', 'Agents', 'Skills'])
     const note = await screen.findByRole('note')
     expect(note.textContent).toContain('sent to the model provider')
     expect(note.textContent).toContain('opencode/free')
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Memory' }), { button: 0 })
-    expect(await screen.findByRole('table')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Abilities' }), { button: 0 })
+    expect(await screen.findByText('Everything Central can do at your current level.')).toBeTruthy()
   })
 
   it('shows no privacy label for a non-free model', async () => {
     const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 0, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false } })) })
     render(<CentralControlPanel open enabled client={client} />)
-    await screen.findByText(/unlimited/)
+    await screen.findByText(/No limit/)
     expect(screen.queryByRole('note')).toBeNull()
   })
 })
