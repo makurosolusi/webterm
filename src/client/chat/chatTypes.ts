@@ -22,6 +22,18 @@ export type ChatPart =
   /** Attached text file: name, byte size, `data` (base64) on the optimistic echo, `ref` of the stored copy in history. */
   | { type: 'file'; name: string; size: number; ref?: string; data?: string }
 
+/** A reply's turn usage (server `RuntimeUsage`): what the cost chip shows. */
+export interface ChatUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  costMicros: number
+  model?: string
+  tier?: string
+  effort?: string
+}
+
 /** One message as rendered. `seq` is null only for the optimistic human echo. */
 export interface ChatMessage {
   id: string
@@ -33,6 +45,8 @@ export interface ChatMessage {
   turnId?: string
   /** True until the server's `message.created` frame replaces this row. */
   optimistic?: boolean
+  /** Assistant replies: the turn's usage, from history or the `done` frame. */
+  usage?: ChatUsage
 }
 
 export interface ChatConversation {

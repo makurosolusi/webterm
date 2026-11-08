@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentChatModel } from '../../shared/agentChat.wire'
-import { ModelPicker } from './modelPicker'
+import { AUTO_MODEL_LABEL, ModelPicker } from './modelPicker'
 
 afterEach(cleanup)
 // jsdom lacks the ResizeObserver / pointer-capture APIs the Radix popper menu calls when it opens.
@@ -13,7 +13,7 @@ beforeAll(() => {
 })
 
 const MODELS: AgentChatModel[] = [ // test-only
-  { value: 'default', displayName: 'Default (recommended)', description: 'Opus for complex work' },
+  { value: 'default', displayName: 'Auto (ladder: Sonnet · medium)', description: 'Picked by the model ladder' },
   { value: 'sonnet', displayName: 'Sonnet', description: 'Fast everyday model', efforts: ['low', 'high'] },
 ]
 const trigger = () => screen.getByRole('button', { name: /^Model:/ })
@@ -35,7 +35,7 @@ describe('ModelPicker', () => {
     expect(trigger().getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByRole('status').textContent).toBe('Loading models…')
     const items = await screen.findAllByRole('menuitemradio')
-    expect(items.map((i) => i.textContent)).toEqual(['Default (recommended)Opus for complex work', 'SonnetFast everyday model'])
+    expect(items.map((i) => i.textContent)).toEqual(['Auto (ladder: Sonnet · medium)Picked by the model ladder', 'SonnetFast everyday model'])
     expect(items[1].getAttribute('aria-checked')).toBe('true')
     expect(trigger().textContent).toContain('Sonnet')
     expect(loadModels).toHaveBeenCalledTimes(1)
@@ -57,14 +57,14 @@ describe('ModelPicker', () => {
     const onChange = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce(undefined)
     render(<ModelPicker loadModels={async () => MODELS} value="default" onChange={onChange} />)
     open()
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Sonnet/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /^Sonnet/ }))
     expect(onChange).toHaveBeenCalledWith('sonnet')
     expect(screen.getByRole('status', { name: 'Switching model' })).toBeTruthy()
-    expect(trigger().textContent).toContain('Sonnet')
+    expect(trigger().getAttribute('aria-label')).toBe('Model: Sonnet')
     expect((trigger() as HTMLButtonElement).disabled).toBe(true)
     await act(async () => first.reject(new Error('HTTP 409')))
     expect(screen.getByRole('alert').textContent).toContain('Could not switch to Sonnet: HTTP 409')
-    expect(trigger().textContent).toContain('Default (recommended)')
+    expect(trigger().textContent).toContain('Auto (ladder: Sonnet · medium)')
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(onChange).toHaveBeenLastCalledWith('sonnet')
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
@@ -74,7 +74,7 @@ describe('ModelPicker', () => {
     const onChange = vi.fn(async () => undefined)
     render(<ModelPicker loadModels={async () => MODELS} value="sonnet" onChange={onChange} />)
     open()
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Sonnet/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /^Sonnet/ }))
     expect(onChange).not.toHaveBeenCalled()
   })
 
@@ -91,10 +91,22 @@ describe('ModelPicker', () => {
   it('maps an unset model to the default entry and uses a known list without loading', () => {
     const loadModels = vi.fn(async () => MODELS)
     render(<ModelPicker loadModels={loadModels} models={MODELS} onChange={vi.fn(async () => undefined)} />)
-    expect(trigger().getAttribute('aria-label')).toBe('Model: Default (recommended)')
+    expect(trigger().getAttribute('aria-label')).toBe('Model: Auto (ladder: Sonnet · medium)')
     open()
     expect(screen.getAllByRole('menuitemradio')[0].getAttribute('aria-checked')).toBe('true')
     expect(loadModels).not.toHaveBeenCalled()
+  })
+
+  it('an unset model shows the server-resolved Auto entry (workspace override included); before a list, a generic Auto', () => {
+    const { unmount } = render(<ModelPicker loadModels={vi.fn(async () => MODELS)} onChange={vi.fn(async () => undefined)} />)
+    expect(trigger().getAttribute('aria-label')).toBe(`Model: ${AUTO_MODEL_LABEL}`)
+    unmount()
+    const withOverride = [{ value: 'default', displayName: 'Auto (workspace: Opus · high)' }, ...MODELS.slice(1)]
+    const { unmount: u2 } = render(<ModelPicker loadModels={vi.fn(async () => withOverride)} models={withOverride} onChange={vi.fn(async () => undefined)} />)
+    expect(trigger().getAttribute('aria-label')).toBe('Model: Auto (workspace: Opus · high)')
+    u2()
+    render(<ModelPicker loadModels={vi.fn(async () => MODELS)} models={MODELS} value="sonnet" onChange={vi.fn(async () => undefined)} />)
+    expect(trigger().getAttribute('aria-label')).toBe('Model: Sonnet')
   })
 
   it('compact hides the label but keeps the accessible name; disabled blocks opening', () => {

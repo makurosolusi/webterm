@@ -22,6 +22,7 @@ import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
 } from './central/chat/turnService'
 import { createChatConversation } from './central/chat/turnPersistence'
+import { conversationModelState, parseModelChoice, setConversationModel } from './central/chat/conversationModelChoice'
 import { readCappedRequestBody } from './cappedRequestBody'
 import { createLogger } from './logs'
 import { AGENT_CHAT_SEND_BODY_MAX_BYTES } from './agentChat/agentChat.route.attach'
@@ -29,6 +30,7 @@ import { CENTRAL_FILES_TOTAL_BYTES } from '../shared/centralAttach'
 import { type CentralAttachments, parseAttachments, readImage } from './central/chat/chatAttachments'
 
 /** Bytes of a send body: Agent Chat's image budget, the text files as base64, and the text. */
+const MODEL_BODY_MAX_BYTES = 1024
 export const CENTRAL_CHAT_BODY_MAX_BYTES = AGENT_CHAT_SEND_BODY_MAX_BYTES + Math.ceil(CENTRAL_FILES_TOTAL_BYTES / 3) * 4 + 64 * 1024
 /** Browser cache of a stored image: its reference is its content hash, so it never changes. */
 const IMAGE_CACHE = 'private, max-age=86400'
@@ -241,6 +243,24 @@ export async function handleMessagesPost(
     const result = chat.service.submit({ conversationId, ...body })
     sendJson(res, 202, result.response)
     void result.done.catch(() => undefined)
+  } catch (err) {
+    failFromError(res, err)
+  }
+}
+
+/** GET: the model the chat runs on next; POST `{model, effort?}`: the conversation's `/model` choice (`auto` clears it). */
+export async function handleModel(
+  req: IncomingMessage, res: ServerResponse, chat: ChatService, conversationId: string, runtime: string, now: () => number = Date.now,
+): Promise<void> {
+  try {
+    if (req.method !== 'POST') return sendJson(res, 200, conversationModelState(chat.db, conversationId, process.env, runtime))
+    const read = await readCappedRequestBody(req, MODEL_BODY_MAX_BYTES)
+    if (!read.ok) return failJson(res, 'invalid_body', read.reason)
+    let body: { model?: unknown; effort?: unknown } | null
+    try { body = JSON.parse(read.body) as typeof body } catch { body = null } // malformed JSON is a 400 below
+    if (!body || typeof body !== 'object') return failJson(res, 'invalid_body', 'body must be {model, effort?}')
+    const choice = parseModelChoice(body.model, body.effort)
+    sendJson(res, 200, setConversationModel(chat.db, chat.stream, conversationId, choice, process.env, runtime, now))
   } catch (err) {
     failFromError(res, err)
   }

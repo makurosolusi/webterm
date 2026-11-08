@@ -1,64 +1,129 @@
-// One `claude -p` call on a small model with a strict JSON schema, for the summaries of F5-c (checkpoint
-// summarizer, handoff card narrative, morning brief narrative). Copied from the proven policy classifier
-// (policy/policy.classifier.claude.ts): structured outputs (`structured_output`, subtype `success`), no tools,
-// no MCP, no user settings/hooks, no session file, per-call budget, hourly cap; the caller's abort kills the child.
-// ponytail: the classifier keeps its own copy; fold it onto this runner when that file is next touched.
+// The one `claude -p` runner for Central's helpers (policy classifier, checkpoint summarizer, handoff card
+// narrative, morning brief narrative, memory consolidator): a small model with a strict JSON schema
+// (structured outputs: `structured_output`, subtype `success`), no tools, no MCP, no user settings/hooks,
+// no session file, per-call budget, hourly cap; the caller's abort kills the child. Every answer carries the
+// CLI's usage (tokens, `total_cost_usd`, the real model from `modelUsage`), and `createClaudeStructured`
+// books it in the cost ledger under the helper's kind, so helper spend is visible next to Central's own.
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
+import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk'
 import { claudeChildEnv } from '../runtime/claudeOptions'
+import { mainModel } from '../runtime/claudeResult'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
+import { createLogger } from '../../logs'
+import type { HelperKind, HelperUsage } from '../../cost/costCapture'
 
 export const SUMMARY_MODEL = 'haiku'
+/** Helpers do short, schema-bound work: low effort unless a caller asks for more. */
+export const HELPER_EFFORT: EffortLevel = 'low'
 export const SUMMARY_BUDGET_USD = 0.05
 export const SUMMARY_MAX_PER_HOUR = 60
 const MAX_TURNS = 3
 const STDOUT_MAX = 512 * 1024
 const HOUR_MS = 3_600_000
+const USD_TO_MICROS = 1e6
+
+const log = createLogger('central')
 
 /** The model port: prompt + schema in, the validated-by-the-CLI JSON value out. Tests inject a fake. */
 export type StructuredCall = (req: { prompt: string; schema: object }, signal: AbortSignal) => Promise<unknown>
+/** Structured output plus the usage it cost. */
+export interface StructuredAnswer { output: unknown; usage: HelperUsage }
+/** The raw runner: like StructuredCall, but returns usage too (the consolidator books it itself). */
+export type StructuredRun = (req: { prompt: string; schema: object }, signal: AbortSignal) => Promise<StructuredAnswer>
 
-/** `structured_output` of `claude -p --output-format json` stdout; throws on anything else. */
-export function parseStructuredOutput(stdout: string): unknown {
-  const out = JSON.parse(stdout) as { subtype?: string; is_error?: boolean; structured_output?: unknown }
-  if (out.subtype !== 'success' || out.is_error || out.structured_output === undefined || out.structured_output === null) {
-    throw new Error(`no structured output (${out.subtype ?? 'unknown'})`)
-  }
-  return out.structured_output
+/** Where a helper answer's usage goes; the default books it in the active ledger. */
+export type BookUsage = (kind: HelperKind, usage: HelperUsage) => void | Promise<void>
+
+export interface StructuredOptions {
+  /** Overridable so tests never reach a real model. */
+  bin?: string
+  now?: () => number
+  model?: string
+  effort?: EffortLevel
+  maxPerHour?: number
 }
 
-export function structuredArgv(schema: object, model = SUMMARY_MODEL): string[] {
-  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', model,
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0)
+
+/** `claude -p --output-format json` stdout -> structured output + usage; throws on anything but success. */
+export function parseStructuredAnswer(stdout: string, requestedModel: string = SUMMARY_MODEL): StructuredAnswer {
+  const o = JSON.parse(stdout) as {
+    subtype?: string; is_error?: boolean; structured_output?: unknown; total_cost_usd?: unknown
+    usage?: Record<string, unknown>; modelUsage?: unknown
+  }
+  if (o.subtype !== 'success' || o.is_error || o.structured_output === undefined || o.structured_output === null) {
+    throw new Error(`no structured output (${o.subtype ?? 'unknown'})`)
+  }
+  const u = o.usage ?? {}
+  const cost = typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) ? Math.round(o.total_cost_usd * USD_TO_MICROS) : null
+  return {
+    output: o.structured_output,
+    usage: {
+      input: num(u['input_tokens']), output: num(u['output_tokens']), cacheRead: num(u['cache_read_input_tokens']),
+      cacheWrite: num(u['cache_creation_input_tokens']), costMicros: cost, model: mainModel(o.modelUsage) ?? requestedModel,
+    },
+  }
+}
+
+export function structuredArgv(schema: object, opts: { model?: string; effort?: EffortLevel } = {}): string[] {
+  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', opts.model ?? SUMMARY_MODEL,
+    '--effort', opts.effort ?? HELPER_EFFORT,
     '--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
     '--max-turns', String(MAX_TURNS), '--max-budget-usd', String(SUMMARY_BUDGET_USD)]
 }
 
-/** `claude -p` runner; `bin` is overridable so tests never reach a real model. */
-export function createClaudeStructured(opts: { bin?: string; now?: () => number } = {}): StructuredCall {
+/** The `claude -p` runner for helper `kind`; the hourly cap is per runner. */
+export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions = {}): StructuredRun {
   const now = opts.now ?? Date.now
+  const maxPerHour = opts.maxPerHour ?? SUMMARY_MAX_PER_HOUR
+  const model = opts.model ?? SUMMARY_MODEL
+  const argv = (schema: object): string[] => structuredArgv(schema, { model, ...(opts.effort ? { effort: opts.effort } : {}) })
   const calls: number[] = []
-  return (req, signal) => new Promise<unknown>((resolve, reject) => {
+  return (req, signal) => new Promise<StructuredAnswer>((resolve, reject) => {
     const at = now()
     while (calls.length && at - calls[0]! >= HOUR_MS) calls.shift()
-    if (calls.length >= SUMMARY_MAX_PER_HOUR) { reject(new Error('hourly summary cap reached')); return }
-    if (signal.aborted) { reject(new Error('aborted before start')); return }
+    if (calls.length >= maxPerHour) { reject(new Error(`${kind}: hourly cap reached`)); return }
+    if (signal.aborted) { reject(new Error(`${kind}: aborted before start`)); return }
     calls.push(at)
-    const [cmd, ...args] = opts.bin ? [opts.bin, ...structuredArgv(req.schema)] : [...centralClaudeLaunch().argv, ...structuredArgv(req.schema)]
+    const [cmd, ...args] = opts.bin ? [opts.bin, ...argv(req.schema)] : [...centralClaudeLaunch().argv, ...argv(req.schema)]
     const child = spawn(cmd as string, args, { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
     let out = ''
     const kill = (): void => { child.kill('SIGKILL') }
     signal.addEventListener('abort', kill, { once: true })
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => { if (out.length < STDOUT_MAX) out += chunk })
-    child.on('error', (err) => reject(new Error(`claude spawn failed: ${err.message}`)))
+    child.on('error', (err) => reject(new Error(`${kind}: claude spawn failed: ${err.message}`)))
     child.on('close', (code) => {
       signal.removeEventListener('abort', kill)
-      if (code !== 0) { reject(new Error(`claude exited ${code}`)); return }
-      try { resolve(parseStructuredOutput(out)) } catch (err) { reject(err) }
+      if (code !== 0) { reject(new Error(`${kind}: claude exited ${code}`)); return }
+      try { resolve(parseStructuredAnswer(out, model)) } catch (err) { reject(new Error(`${kind}: ${(err as Error).message}`, { cause: err })) }
     })
     child.stdin.end(req.prompt)
   })
+}
+
+/** Books one helper answer in the active ledger (none in tests/before boot). Lazy imports keep bun:sqlite out of node-env tests. */
+async function bookInLedger(kind: HelperKind, usage: HelperUsage): Promise<void> {
+  const [{ activeLedgerRuntime }, { recordHelperUsage }] = await Promise.all([
+    import('../../ledger/ledgerRuntimeState'), import('../../cost/costCapture'),
+  ])
+  const ledger = activeLedgerRuntime()
+  if (ledger) recordHelperUsage(ledger.db, kind, usage)
+}
+
+/** Output-only call for helper `kind`; every answer's usage is booked (`book` is injectable for tests). */
+export function createClaudeStructured(kind: HelperKind, opts: StructuredOptions & { book?: BookUsage } = {}): StructuredCall {
+  const run = createStructuredRunner(kind, opts)
+  const book = opts.book ?? bookInLedger
+  return async (req, signal) => {
+    const answer = await run(req, signal)
+    // Booking never fails the helper: the answer is already paid for and useful.
+    await Promise.resolve().then(() => book(kind, answer.usage)).catch((err: unknown) =>
+      log.warn('central.helper.usage_book_failed', 'helper usage could not be booked', { kind, error: err instanceof Error ? err.message : String(err) }))
+    return answer.output
+  }
 }
 
 /** Runs `call` with a wall-clock cap; the abort reaches the child. */

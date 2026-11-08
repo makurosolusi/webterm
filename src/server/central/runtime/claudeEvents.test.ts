@@ -41,8 +41,11 @@ describe('parseClaudeMessage', () => {
   it('parses result fields and maps api_retry', () => {
     expect(parse(resultRecord())).toEqual({
       type: 'result', subtype: 'success', isError: false, sessionId: 'sess-1', costUsd: 0.00025, durationMs: 1200,
-      usage: { inputTokens: 10, outputTokens: 7, cacheReadTokens: 3, cacheWriteTokens: 1 }, errorText: null,
+      usage: { inputTokens: 10, outputTokens: 7, cacheReadTokens: 3, cacheWriteTokens: 1 }, errorText: null, model: null,
     })
+    // The real model is the modelUsage entry that cost the most (a haiku side call must not win).
+    expect(parse(resultRecord({ modelUsage: { 'claude-haiku-5-5': { costUSD: 0.001 }, 'claude-opus-5-5': { costUSD: 0.2 } } })))
+      .toMatchObject({ model: 'claude-opus-5-5' })
     // A failed result keeps the CLI's error text (errors[] first, else result); a success never does.
     expect(parse(resultRecord({ subtype: 'error_during_execution', is_error: true, errors: ['No conversation found with session ID: x'] })))
       .toMatchObject({ errorText: 'No conversation found with session ID: x' })

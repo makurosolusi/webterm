@@ -6,7 +6,7 @@
 // The op and its target travel in the row key: `consolidate.<op>.<targetId|new>.<hash16>`.
 import type { Database } from 'bun:sqlite'
 import { addProcedural, HUMAN_UI } from '../../awareness/proceduralMemory'
-import { insertCostUsage } from '../../cost/costStore'
+import { recordHelperUsage, type HelperUsage } from '../../cost/costCapture'
 import { allRows, execWrite, getRow, newId, tx } from '../../ledger/ledgerCore'
 import { redactSecrets } from '../../redactSecrets'
 import { archiveExpiredClaims, contentHash } from '../memoryConsolidate'
@@ -64,14 +64,11 @@ export function tokensToday(db: Database, now: number): number {
   return Number(r?.['n'] ?? 0)
 }
 
-export interface RunUsage { input: number; output: number; cacheRead: number; cacheWrite: number; costMicros: number | null; model: string | null }
+export type RunUsage = HelperUsage
 
-/** Books one run in the cost ledger, so the cap, the spend dashboard and the day budget all see it. */
+/** Books one run as helper `consolidator` (key `consolidator:<run>`), so the cap, the spend dashboard and the day budget all see it. */
 export function recordRunUsage(db: Database, runId: string, nodeId: string | null, u: RunUsage, now: number): void {
-  insertCostUsage(db, {
-    key: `${USAGE_PREFIX}${runId}`, ts: now, source: 'central', workspaceId: null, nodeId, sessionId: CONSOLIDATOR_SOURCE, model: u.model,
-    input: u.input, output: u.output, cacheRead: u.cacheRead, write5m: u.cacheWrite, write1h: 0, costMicros: u.costMicros,
-  })
+  recordHelperUsage(db, 'consolidator', u, { id: runId, nodeId, now: () => now })
 }
 
 const hasActiveHash = (db: Database, hash: string): boolean =>

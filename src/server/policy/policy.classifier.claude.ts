@@ -1,22 +1,12 @@
-// Production classifier: one `claude -p` call on a small model with a strict JSON schema (structured outputs,
-// code.claude.com/docs/en/agent-sdk/structured-outputs: the result carries `structured_output`; subtype other
-// than `success` or a missing value is a failure). Flags verified in code.claude.com/docs/en/cli-reference:
-// `--json-schema`, `--output-format json`, `--model haiku`, `--tools ""`, `--max-turns`, `--max-budget-usd`,
-// `--no-session-persistence`, `--strict-mcp-config`, `--setting-sources ""` (no user hooks fire back into webterm).
-// Bounded: per-call budget, the caller's timeout (abort kills the child), and an hourly call cap.
-import { spawn } from 'node:child_process'
-import { tmpdir } from 'node:os'
-import { claudeChildEnv } from '../central/runtime/claudeOptions'
-import { claudeEnv } from '../claudeProvider/claudeProvider.store'
+// Production classifier: one structured `claude -p` call through the shared helper runner
+// (central/context/claudeStructured.ts: structured outputs, no tools, no MCP, no user settings or hooks, no
+// session file, per-call budget, hourly cap, the caller's abort kills the child). Its usage is booked as
+// helper `classifier` in the cost ledger like every other helper call.
+import { createClaudeStructured, parseStructuredAnswer, structuredArgv, type BookUsage, type StructuredOptions } from '../central/context/claudeStructured'
 import type { Classifier, ClassifierInput, ClassifierVerdict } from './policy.classifier'
-import { centralClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 
 export const CLASSIFIER_MODEL = 'haiku'
-export const CLASSIFIER_BUDGET_USD = 0.05
 export const CLASSIFIER_MAX_PER_HOUR = 60
-const MAX_TURNS = 3
-const STDOUT_MAX = 256 * 1024
-const HOUR_MS = 3_600_000
 
 export const VERDICT_SCHEMA = {
   type: 'object',
@@ -35,44 +25,24 @@ export function classifierPrompt(input: ClassifierInput): string {
     + JSON.stringify(input)
 }
 
-/** Parses `claude -p --output-format json` stdout into a verdict; throws on anything else. */
-export function parseClaudeVerdict(stdout: string): ClassifierVerdict {
-  const out = JSON.parse(stdout) as { subtype?: string; is_error?: boolean; structured_output?: unknown }
-  const v = out.structured_output as ClassifierVerdict | undefined
-  if (out.subtype !== 'success' || out.is_error || !v || (v.decision !== 'allow' && v.decision !== 'ask')) {
-    throw new Error(`no structured verdict (${out.subtype ?? 'unknown'})`)
-  }
+/** A structured value as a verdict; throws when it is not one. */
+function toVerdict(value: unknown): ClassifierVerdict {
+  const v = value as ClassifierVerdict | undefined
+  if (!v || (v.decision !== 'allow' && v.decision !== 'ask')) throw new Error('no structured verdict')
   return { decision: v.decision, reason: typeof v.reason === 'string' ? v.reason : '' }
 }
 
+/** Parses `claude -p --output-format json` stdout into a verdict; throws on anything else. */
+export function parseClaudeVerdict(stdout: string): ClassifierVerdict {
+  return toVerdict(parseStructuredAnswer(stdout).output)
+}
+
 export function classifierArgv(model = CLASSIFIER_MODEL): string[] {
-  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(VERDICT_SCHEMA), '--model', model,
-    '--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
-    '--max-turns', String(MAX_TURNS), '--max-budget-usd', String(CLASSIFIER_BUDGET_USD)]
+  return structuredArgv(VERDICT_SCHEMA, { model })
 }
 
 /** `claude -p` classifier; `bin` is overridable for tests that must not reach a real model. */
-export function createClaudeClassifier(opts: { bin?: string; now?: () => number } = {}): Classifier {
-  const now = opts.now ?? Date.now
-  const calls: number[] = []
-  return (input, signal) => new Promise<ClassifierVerdict>((resolve, reject) => {
-    const at = now()
-    while (calls.length && at - calls[0]! >= HOUR_MS) calls.shift()
-    if (calls.length >= CLASSIFIER_MAX_PER_HOUR) { reject(new Error('hourly classifier cap reached')); return }
-    calls.push(at)
-    const [cmd, ...args] = opts.bin ? [opts.bin, ...classifierArgv()] : [...centralClaudeLaunch().argv, ...classifierArgv()]
-    const child = spawn(cmd as string, args, { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
-    let out = ''
-    const kill = (): void => { child.kill('SIGKILL') }
-    signal.addEventListener('abort', kill, { once: true })
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => { if (out.length < STDOUT_MAX) out += chunk })
-    child.on('error', (err) => reject(new Error(`claude spawn failed: ${err.message}`)))
-    child.on('close', (code) => {
-      signal.removeEventListener('abort', kill)
-      if (code !== 0) { reject(new Error(`claude exited ${code}`)); return }
-      try { resolve(parseClaudeVerdict(out)) } catch (err) { reject(err) }
-    })
-    child.stdin.end(classifierPrompt(input))
-  })
+export function createClaudeClassifier(opts: Pick<StructuredOptions, 'bin' | 'now'> & { book?: BookUsage } = {}): Classifier {
+  const call = createClaudeStructured('classifier', { ...opts, model: CLASSIFIER_MODEL, maxPerHour: CLASSIFIER_MAX_PER_HOUR })
+  return async (input, signal) => toVerdict(await call({ prompt: classifierPrompt(input), schema: VERDICT_SCHEMA }, signal))
 }

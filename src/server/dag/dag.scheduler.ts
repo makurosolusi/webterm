@@ -10,6 +10,8 @@
 // - Completion only from the server verifier with the task's lease and verify_cmd (F4-c).
 import { randomBytes } from 'node:crypto'
 import { createLogger } from '../logs'
+import type { ResolveInput } from '../models/modelLadder'
+import { pickModel } from '../models/modelPick'
 import { evidenceVerified } from '../orchestrator/orchestratorModel'
 import type { AgentSpawnResult } from '../spawn/agentSpawn'
 import type { ExecOutcome } from '../central/agents/execRunner'
@@ -30,6 +32,9 @@ export type EscalationResult = 'rejected' | 'retry' | 'circuit_broken'
 export function createDagScheduler(ports: DagPorts) {
   const store: DagStore = createDagStore(ports.ctx)
   const inflight = new Map<string, Promise<void>>()
+  // Why each task's last attempt failed, for the model ladder's escalation on the next dispatch.
+  // ponytail: in memory, so a restart retries on the default tier; persist on dag_task if that matters.
+  const lastFailure = new Map<string, NonNullable<ResolveInput['lastFailure']>>()
   let ticking = false
 
   function emit(kind: string, dag: Dag, task: DagTask | null, payload: Record<string, unknown> = {}, dedupeKey?: string): void {
@@ -47,8 +52,10 @@ export function createDagScheduler(ports: DagPorts) {
   }
 
   /** Orca `failDispatch`: below the threshold the task is requeued, the 3rd failure breaks the circuit. */
-  function failAttempt(dag: Dag, task: DagTask, dispatchId: string | null, reason: string): EscalationResult {
+  function failAttempt(dag: Dag, task: DagTask, dispatchId: string | null, reason: string, failure: ResolveInput['lastFailure'] = null): EscalationResult {
     if (dispatchId) store.endDispatch(dispatchId, 'failed')
+    if (failure) lastFailure.set(task.id, failure)
+    else lastFailure.delete(task.id)
     const failures = task.failureCount + 1
     if (failures >= BREAKER_THRESHOLD) {
       store.setTask(task.id, { status: 'failed', failureCount: failures, lastError: `Circuit broken: ${reason}` })
@@ -118,9 +125,11 @@ export function createDagScheduler(ports: DagPorts) {
     // Only sealed server evidence (verifier.seal) with the lease respected can make a task done.
     if (verdict.status === 'done' && evidenceVerified(verdict.evidence)) {
       store.endDispatch(dispatchId, 'succeeded')
+      lastFailure.delete(task.id)
       setStatus(dag, task, 'done', { lastError: null }, { dispatchId, summary: verdict.summary, files: verdict.filesChanged.length })
     } else {
-      failAttempt(dag, task, dispatchId, verdict.message)
+      // A worker killed by its wall clock retries with more effort first; the verifier's reason otherwise.
+      failAttempt(dag, task, dispatchId, verdict.message, outcome.timedOut ? 'timeout' : verdict.reason === 'verified' ? null : verdict.reason)
     }
     converge(dag)
     return verdict.filesChanged.length > 0
@@ -139,11 +148,16 @@ export function createDagScheduler(ports: DagPorts) {
     const nodeId = `dag-${dispatchId}`
     store.addDispatch({ id: dispatchId, taskId: task.id, nodeId, worktree: alloc.path, branch: alloc.branch, baseSha: alloc.baseSha })
     const prompt = renderBrief(task)
+    // attempt = failed attempts so far; the breaker (BREAKER_THRESHOLD) still ends the task, the ladder only picks the model.
+    const pick = pickModel(ports.ctx.db, {
+      kind: 'dag-worker', complexity: task.brief.effort, attempt: task.failureCount, lastFailure: lastFailure.get(task.id) ?? null,
+      projectId: dag.projectId, runRef: `dag:${dag.id}`,
+    }, ports.ctx.now)
     let res: AgentSpawnResult
     try {
       res = await ports.spawn({
         mode: 'headless', door: 'orchestrator', parent: DAG_PARENT, cwd: alloc.path, nodeId, prompt, title: `${dag.title}: ${task.key}`,
-        headless: { argv: dagWorkerArgv(prompt, task.brief.tools), timeoutMs: EFFORT_SCALE[task.brief.effort].timeoutMs },
+        headless: { argv: dagWorkerArgv(prompt, task.brief.tools, pick), timeoutMs: EFFORT_SCALE[task.brief.effort].timeoutMs },
       })
     } catch (err) {
       res = { ok: false, code: 'spawn_invalid', message: err instanceof Error ? err.message : String(err) }
@@ -152,13 +166,13 @@ export function createDagScheduler(ports: DagPorts) {
       failAttempt(dag, task, dispatchId, `spawn: ${res.ok ? 'no process handle' : res.message}`)
       return
     }
-    emit('task.running', dag, task, { dispatchId, nodeId, branch: alloc.branch, effort: task.brief.effort })
+    emit('task.running', dag, task, { dispatchId, nodeId, branch: alloc.branch, effort: task.brief.effort, tier: pick.tier, model: pick.model, modelReason: pick.reason })
     const handle = res.handle
     const done = (async () => {
       let costId: string | null = null
       let producedDiff: boolean | undefined = false
       try {
-        if (ports.cost) costId = await ports.cost.begin({ kind: 'dag', ref: dag.id, label: `${dag.title}: ${task.key}`, nodeId })
+        if (ports.cost) costId = await ports.cost.begin({ kind: 'dag', ref: dag.id, label: `${dag.title}: ${task.key}`, nodeId, tier: pick.tier, model: pick.model })
         producedDiff = await settle(dispatchId, await handle.done)
       } finally {
         if (ports.cost) await ports.cost.end(costId, { ...(producedDiff === undefined ? {} : { producedDiff }) })

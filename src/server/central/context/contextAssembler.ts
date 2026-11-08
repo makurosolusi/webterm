@@ -112,13 +112,16 @@ export function createContextAssembler(deps: ContextAssemblerDeps = {}): { build
   const scheduleIdle = deps.scheduleIdle ?? debouncedIdle()
   return {
     build(input: ContextBuildInput): AssembledContext | ContextBuildOutput {
-      // A forced seed (the resumed session is gone) runs even with the flag off: without it the fresh
-      // session would start blind. Deterministic, no model call.
-      const forced = input.rotate === true
-      if (!forced && !flagOn((deps.env ?? process.env)[CHECKPOINT_FLAG])) return legacy.build(input)
+      // A forced seed (the resumed session is gone, or the window is near full) runs even with the flag
+      // off: without it the fresh session would start blind. Deterministic, no model call.
       const { db, conversationId } = input
       const windowTokens = contextWindowTokens(deps.env)
       const ctxTokens = lastCtxTokens(db, conversationId)
+      const flag = flagOn((deps.env ?? process.env)[CHECKPOINT_FLAG])
+      // Flag off, a session near the window still rotates (seeded like the forced case) instead of running
+      // into the limit; it is never refused, since the legacy path never refused either.
+      const forced = input.rotate === true || (!flag && decideRotation(ctxTokens, windowTokens) !== 'ok')
+      if (!forced && !flag) return legacy.build(input)
       const decision = forced ? 'rotate' : decideRotation(ctxTokens, windowTokens)
       if (decision === 'reject') throw new ContextRejectedError(ctxTokens ?? 0, windowTokens)
       const rotate = decision === 'rotate'

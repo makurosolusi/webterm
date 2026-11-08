@@ -8,6 +8,7 @@ import { decodeSummaryCursor, encodeSummaryCursor, toSummary } from './db.summar
 import type { Settings } from '../shared/settings'
 import { nextSettingsDocument, parseStored, registerAgentBaseResolver } from './settingsStore'
 import { registerClaudeLaunchSettings, registerDefaultProfileOverride } from './claudeLauncher/claudeLauncher'
+import { registerModelSettings } from './models/modelOverride'
 import { commandProfileOverride } from './claudeProvider/claudeProvider.store'
 import { chmodSync } from 'node:fs'
 import { dbPath, warnPermsNotTightened } from './config'
@@ -233,4 +234,5 @@ export const db = new Db(openDb())
 // satu-satunya modul yang memegang store settings sisi server.
 registerAgentBaseResolver(() => db.getSettings())
 registerClaudeLaunchSettings(() => db.getSettings())
+registerModelSettings(() => db.getSettings()) // per-project model override (models/modelOverride.ts)
 registerDefaultProfileOverride(() => commandProfileOverride()) // Claude provider command mode picks the default launch profile

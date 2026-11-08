@@ -9,6 +9,8 @@ import { createLogger } from '../logs'
 import { capLogImages, userTurn } from './agentChat.attach'
 import { AGENT_CHAT_DEFAULT_CONFIG, applyConfigLive, mergeConfig, type AgentChatConfigPatch } from './agentChat.controls'
 import { createAgentChatMapper } from './agentChat.events'
+import { withLadderDefault } from './agentChat.ladder'
+import type { ModelPick } from '../models/modelLadder'
 import { Inbox } from './agentChat.inbox'
 import { agentChatPermissionMode, createStderrTail, type AgentChatOpen } from './agentChat.options'
 import { createCanUseTool, type PermissionGate } from './agentChat.permission'
@@ -24,6 +26,8 @@ export interface AgentChatSessionDeps {
   /** Opens the Query; production = `agentChatQueryOpener(...)` (agentChat.options.ts), tests inject a fake. */
   open: AgentChatOpen
   gate: PermissionGate
+  /** The ladder's default for a config without model/effort (the opener applies the same); absent = Claude Code's default. */
+  ladder?: () => ModelPick
   /** A new session_id (first init, /clear reset): the pool re-locks it, the client persists it. */
   onSessionId(id: string): void
   now?: () => number
@@ -111,7 +115,12 @@ export class AgentChatSession {
   /** Merge a config change: live on an open Query, else stored for the next open. Emits `config`. */
   async setConfig(patch: AgentChatConfigPatch): Promise<void> {
     const next = mergeConfig(this.config, patch)
-    if (this.q) await applyConfigLive(this.q, this.config, next)
+    if (this.q) {
+      // Compare what actually runs: clearing an explicit model goes back to the ladder's pick, not the CLI's default.
+      const pick = this.deps.ladder?.()
+      const runs = (c: AgentChatConfig): AgentChatConfig => (pick ? withLadderDefault(c, pick) : c)
+      await applyConfigLive(this.q, runs(this.config), runs(next))
+    }
     this.config = next
     this.emit({ t: 'config', config: next })
   }

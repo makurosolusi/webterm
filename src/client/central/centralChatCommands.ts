@@ -6,6 +6,8 @@ import { fetchWorkspaces } from '../api'
 import { expandNeedsYou, openCentralTab } from '../secondarySideBar.store'
 import { listActiveSkills } from './centralControlApi'
 import { createCentralCommands, type CentralSkill } from './centralCommands'
+import { setCentralModel } from './centralModel'
+import { chatErrorMessage } from '../chat/chatTransport'
 
 /** What the chat host (ChatPanel) lends the commands. */
 export interface CentralChatHost {
@@ -16,6 +18,7 @@ export interface CentralChatHost {
   /** Test seams; default to the live skills route and the workspace list. */
   loadSkills?: () => Promise<CentralSkill[]>
   loadProjects?: () => Promise<string[]>
+  setModel?: typeof setCentralModel
 }
 
 const liveProjects = (): Promise<string[]> => fetchWorkspaces().then((ws) => ws.map((w) => w.name))
@@ -24,6 +27,10 @@ export function useCentralChatCommands<R extends unknown[]>(
   host: CentralChatHost | undefined,
   send: (text: string, ...rest: R) => void,
   notice: (message: string) => void,
+  /** Conversation `/model` applies to; absent = `/model` only reports that it is unavailable. */
+  conversationId?: string,
+  /** Called once the server stored a `/model` choice (the header badge reloads). */
+  onModelSet?: () => void,
 ) {
   const hostRef = useRef(host)
   hostRef.current = host
@@ -41,6 +48,10 @@ export function useCentralChatCommands<R extends unknown[]>(
     if (d.kind === 'send') send(d.text, ...rest)
     else if (d.kind === 'usage') { notice(d.message); reseed(d.draft) }
     else if (d.kind === 'panel') openCentralTab(d.tab, d.halt)
+    else if (d.kind === 'model') {
+      if (!conversationId) notice('This chat cannot change its model.')
+      else (hostRef.current?.setModel ?? setCentralModel)(conversationId, d.model, d.effort).then(() => onModelSet?.(), (e: unknown) => notice(chatErrorMessage(e)))
+    }
     else if (d.action === 'new') hostRef.current?.newChat()
     else if (d.action === 'history') hostRef.current?.showHistory()
     else if (d.action === 'approvals') expandNeedsYou()

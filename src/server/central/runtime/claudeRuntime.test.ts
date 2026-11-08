@@ -49,6 +49,17 @@ describe('ClaudeRuntime success', () => {
     expect(typesOf(events)).toEqual(['text.delta', 'text.delta', 'usage', 'turn.result'])
   })
 
+  it('reports the real model and the last step\'s context size, not the turn total', async () => {
+    const result = await runtime([
+      initRecord(),
+      assistantRecord('m1', 'step one', {}, { input_tokens: 100, cache_read_input_tokens: 1000 }),
+      assistantRecord('m2', 'step two', {}, { input_tokens: 50, cache_read_input_tokens: 1200, cache_creation_input_tokens: 30 }),
+      assistantRecord('m1', 'step one', {}, { input_tokens: 100, cache_read_input_tokens: 1000 }), // partial-mode repeat of an older id
+      resultRecord({ modelUsage: { 'claude-sonnet-5-5': { costUSD: 0.01 } } }),
+    ]).turn(turnInput(), recorder().emit)
+    expect(result.usage).toMatchObject({ model: 'claude-sonnet-5-5', contextTokens: 50 + 1200 + 30 })
+  })
+
   it('falls back to the full assistant text when no deltas arrived', async () => {
     const result = await runtime([initRecord(), assistantRecord('m1', 'Whole text'), resultRecord()]).turn(turnInput(), recorder().emit)
     expect(result.text).toBe('Whole text')
@@ -82,6 +93,12 @@ describe('ClaudeRuntime success', () => {
     expect(result.outcome).toBe('error')
     expect(result.sessionRef).toBeNull()
     expect(events.filter((e) => e.type === 'error')).toHaveLength(1)
+  })
+
+  it('passes the turn\'s model and effort to the query options, over the runtime setting', async () => {
+    const rt = runtime(successRecords(), { model: 'sonnet' })
+    await rt.turn(turnInput({ model: 'opus', effort: 'high' }), recorder().emit)
+    expect(rt.calls[0]!.options).toMatchObject({ model: 'opus', effort: 'high' })
   })
 })
 

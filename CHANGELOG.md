@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 Operator notes:
+- Ledger schema v24 adds nullable `tier` and `model` columns to `cost_run`; existing databases are upgraded in place, nothing to backfill.
 - New dependency `marked-footnote` (MIT) for markdown footnotes.
 - Central chat attachments (images and text files) are stored in `<data dir>/central/attachments/` and removed 30 days after they were last sent.
 - New dependency `@ghostery/adblocker` (MPL-2.0) for browser-node ad and tracker blocking. Its prebuilt filter lists are downloaded into `<data dir>/browser/adblock/` and refreshed weekly in the background; startup never waits for the download.
@@ -16,6 +17,13 @@ Operator notes:
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
 
 ### Added
+- Model ladder for headless Claude runs (task planner and workers, routines, PR review, bake-off, Central agent spawns): each kind starts on a fitting model and effort, and a task that fails verification or produces no changes is retried one step up (at most two steps, never above Opus on its own; a timeout raises effort first).
+- Budget-aware models: as the day's spending nears its limit, new runs move to cheaper models, and a "Needs you" notice says when a large run was limited.
+- Settings › Agent › Models: see the ladder's defaults, pin a model and/or effort per workspace, and set a daily spending limit in dollars.
+- Central chat: `/model [haiku|sonnet|opus|fable|auto] [effort]` chooses the model for that conversation. It takes effect from a fresh session on your next message, and the chat header shows the current model, effort and tier (with "next session" while a switch is waiting).
+- Central chat: every reply shows what it cost, with model and tier (hover for the cache share and tokens).
+- Morning Brief: weekly cost lines with last-7-day spend by kind and by model/tier, cost per verified task, and the Central turn failure rate.
+- Once today's total spend passes $10, one "Needs you" notice is raised for the day (a warning only; nothing is stopped).
 - Markdown preview: GitHub alerts, footnotes and highlighted code blocks.
 - Browser node shortcuts work like in Chrome: ⌘L (Ctrl+L) focuses the address bar, ⌘R reloads, ⌘[ / ⌘] or Alt+Left/Right go back and forward, ⌘+ / ⌘- / ⌘0 and Ctrl+wheel or pinch zoom, and Esc stops loading; they are listed in Help. Each browser node remembers its zoom, and while an agent drives a browser its frame is tinted and an "Agent is driving · Take control" chip stays visible.
 - A browser page that fails to load (unknown host, refused connection, certificate problem…) shows a readable panel with the reason, the host, a hint and Try again, instead of Chromium's raw error page.
@@ -85,6 +93,10 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Central and Agent Chat (when no model is picked) run on the ladder's default, Sonnet · medium; a workspace override in Settings › Agent › Models applies to Agent Chat, and Agent Chat's "Auto" entry names what will actually run.
+- Background helpers (classifier, checkpoints, handoff, brief, memory review) run at low effort.
+- The default daily Central token budget is now 10,000,000 input-equivalent tokens (was 1,000,000), since cache tokens now count.
+- `fable` is accepted as a model alias next to haiku, sonnet and opus.
 - Every node of the open workspace now has a tab in a strip above the canvas: click to jump to it, see agent status at a glance, close or reorder it; the Nodes list in the Sessions side bar is gone. Turn the strip off with View > Show Node Tabs.
 - One Central icon in the activity bar (with the Needs-you count) opens the Central side bar; the separate shield icon is gone and the side bar's second tab is now called Control. When Central is not ready yet, its turn-on / Set up Claude Code offer now sits at the top of the Chat tab.
 - Closing an editor asks only when it has unsaved changes, with Save / Don't Save / Cancel (Save All for several files); clean and preview editors close immediately.
@@ -137,6 +149,11 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Cost estimates use the correct Sonnet 5.5 cache-read price.
+- Central spending is listed under the model that actually ran, not the runtime name, and helper calls (classifier, checkpoints, handoff, brief, memory review) appear in spending.
+- The daily token budget counts cache tokens, so cache-heavy days are no longer under-counted.
+- Long Central sessions rotate before the context window fills even with conversation checkpoints off.
+- Central turns are no longer dropped from spending after a memory review.
 - Markdown preview: frontmatter shows as a small table, links no longer leave webterm (web links open in a browser node, file links as editors), relative images load, the preview follows edits and reloads, and headings can be linked.
 - Agent Chat: when Claude stops while streaming, the error notice now shows the end of what Claude printed on stderr (it was always empty), and Claude can no longer stall on an unread stderr pipe.
 - Central no longer asks you to approve an agent card that has expired or been rejected: an expired or lapsed card is replaced with a fresh one in the chat, a rejected spawn is cancelled, and cards update live wherever they are decided.

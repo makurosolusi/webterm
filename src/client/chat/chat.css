@@ -234,6 +234,15 @@
 .chat-message__live { color: var(--vscode-descriptionForeground, #9d9d9d); }
 .chat-message__failed { color: var(--vscode-errorForeground, #f48771); }
 .chat-message__cancelled { color: var(--vscode-editorWarning-foreground, #cca700); }
+/* Per-turn cost chip and the conversation's model badge: small, muted, never wrap. */
+.chat-cost-chip,
+.chat-model-badge {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+}
 /* Turn body is indented under the 16px role icon, as in the Chat view. */
 .chat-message > :not(.chat-message__meta) { margin-left: 22px; }
 

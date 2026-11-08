@@ -4,6 +4,7 @@
 import type { CustomAgent } from './customAgent.schema'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 import type { ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
+import type { ProjectModelOverride } from './settings.projectModels'
 
 export interface AgentSettings {
   // --- Agent -----------------------------------------------------------------------------------
@@ -30,4 +31,6 @@ export interface AgentSettings {
    *  `PERM_WAIT_SECS_INTERACTIVE` menunggu Approve/Deny dari canvas sebelum jatuh ke prompt
    *  interaktif biasa (permission/permission.runtime.ts). Off ⇒ tanpa penahanan, langsung ke prompt interaktif. */
   hookReplyApprovals: boolean
+  /** Per-workspace model/effort override of the model ladder, by workspace id; absent = ladder. */
+  projectModels: Record<string, ProjectModelOverride>
 }

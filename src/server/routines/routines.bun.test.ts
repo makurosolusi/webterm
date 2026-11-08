@@ -93,6 +93,8 @@ test('a run spawns a headless agent (fake claude), records cost, creates an inbo
   expect(last).toMatchObject({ status: 'ran', trigger: 'manual', costUsd: 0.5 })
   expect(last!.childId).toMatch(/^node:headless-/)
   expect(s.spawns[0]).toMatchObject({ mode: 'headless', parent: `routine:${r.id}`, cwd: dir, prompt: 'find missing tests', door: 'routine' })
+  // Model ladder: a routine runs on its T2 default, and its cost run records the pick.
+  expect(s.spawns[0]!.headless?.pick).toMatchObject({ tier: 'T2', model: 'sonnet', effort: 'medium' })
   expect(s.spawnEvents.find((e) => e.kind === 'agent.spawn')?.payload).toMatchObject({ door: 'routine', mode: 'headless' })
   const items = rows(s.db, 'SELECT kind, source, title, body FROM inbox_item WHERE id = ?', last!.inboxItemId)
   expect(items[0]).toMatchObject({ kind: 'review', source: 'routines', title: 'Routine "Find tests" finished', body: 'Found 2 untested files' })
@@ -272,6 +274,7 @@ test('cost window wraps an agent run; no diff 5x pauses the routine and the next
   const runs = rows(s.db, 'SELECT kind, ref, node_id, produced_diff, ended_at FROM cost_run WHERE ref = ?', r.id)
   expect(runs).toHaveLength(ROI_NO_DIFF_RUNS)
   expect(runs.every((c) => c['kind'] === 'routine' && c['node_id'] === 'headless-x' && c['produced_diff'] === 0 && c['ended_at'] !== null)).toBe(true)
+  expect(rows(s.db, 'SELECT DISTINCT tier, model FROM cost_run WHERE ref = ?', r.id)).toEqual([{ tier: 'T2', model: 'sonnet' }]) // the ladder pick
   expect(s.store.runs(r.id)[0]!.estimateUsd).toBe(0) // history exists now: median of $0 windows (fake agent bills nothing)
   await s.runner.fire(r, 'manual').done
   expect(s.spawns).toHaveLength(ROI_NO_DIFF_RUNS)

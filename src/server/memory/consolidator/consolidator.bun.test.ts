@@ -16,7 +16,8 @@ import { forgetMemory, nodeRef, setIncognito } from '../memoryControls'
 import { T0, fixture, seedRow } from '../memoryV2.fixture'
 import { consolidationPrompt, parseOps, type ProposedOp } from './consolidator.model'
 import { PROPOSALS_PATH, handleProposalsApi } from './consolidator.api'
-import { parseModelAnswer, type ConsolidatorModel } from './consolidator.runner'
+import { parseStructuredAnswer as parseModelAnswer } from '../../central/context/claudeStructured'
+import type { ConsolidatorModel } from './consolidator.runner'
 import { consolidateNode, createConsolidator, type ConsolidatorDeps } from './consolidator.runtime'
 import {
   confirmAllConsolidatorProposals, confirmConsolidatorProposal, listConsolidatorProposals, recordRunUsage, tokensToday, writeProposals,

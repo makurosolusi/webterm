@@ -16,6 +16,8 @@ export type CentralCommandAction =
   | { kind: 'chat'; action: ChatAction }
   | { kind: 'panel'; tab: CentralTab; halt?: boolean }
   | { kind: 'prompt'; prompt: (arg: string) => string }
+  /** `/model`: the conversation's model + effort, stored server-side (applies from a fresh session). */
+  | { kind: 'model' }
 
 export interface CentralCommand {
   name: string
@@ -28,10 +30,16 @@ export interface CentralCommand {
 export interface CentralSkill { name: string; description: string }
 
 /** Badge per command kind, shown at the right of a menu row. */
-export const CENTRAL_BADGE = { chat: 'chat', panel: 'panel', prompt: 'ask', skill: 'skill' } as const
+export const CENTRAL_BADGE = { chat: 'chat', panel: 'panel', prompt: 'ask', skill: 'skill', model: 'chat' } as const
 
 /** An argument without the full stop the template adds itself. */
 const bare = (arg: string): string => arg.trim().replace(/[.!?]+$/, '')
+
+export const MODEL_ARGS = ['haiku', 'sonnet', 'opus', 'fable', 'auto'] as const
+export const EFFORT_ARGS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+export type ModelArg = (typeof MODEL_ARGS)[number]
+export type EffortArg = (typeof EFFORT_ARGS)[number]
+const MODEL_HINT = `[${MODEL_ARGS.join('|')}] [${EFFORT_ARGS.join('|')}]`
 
 /** Every command (panel ones only while the Central panel is on). Prompts are English, for the model. */
 export const CENTRAL_COMMANDS: readonly CentralCommand[] = [
@@ -40,6 +48,7 @@ export const CENTRAL_COMMANDS: readonly CentralCommand[] = [
   { name: 'history', description: 'Show past conversations', run: { kind: 'chat', action: 'history' } },
   { name: 'help', description: 'List the chat commands', run: { kind: 'chat', action: 'help' } },
   { name: 'approvals', description: 'Show everything that needs you (approvals, reviews, broken tasks)', run: { kind: 'chat', action: 'approvals' } },
+  { name: 'model', description: 'Choose the model for this chat (applies from a fresh session); auto = default', argumentHint: MODEL_HINT, run: { kind: 'model' } },
   { name: 'status', description: "Show Central's budget and model", run: { kind: 'panel', tab: 'control' } },
   { name: 'level', description: 'Show the autonomy level', run: { kind: 'panel', tab: 'control' } },
   { name: 'agents', description: 'Show the agents Central runs', run: { kind: 'panel', tab: 'agents' } },
@@ -58,6 +67,7 @@ export type CentralDecision =
   | { kind: 'chat'; action: ChatAction }
   | { kind: 'panel'; tab: CentralTab; halt?: boolean }
   | { kind: 'usage'; message: string; draft: string }
+  | { kind: 'model'; model: ModelArg; effort?: EffortArg }
 
 const COMMAND = /^\s*\/([A-Za-z0-9._:-]+)(?:\s+([\s\S]*))?$/
 
@@ -79,8 +89,20 @@ export function resolveCentralInput(text: string, commands: readonly CentralComm
   const arg = (m[2] ?? '').trim()
   if (cmd.run.kind === 'chat') return { kind: 'chat', action: cmd.run.action }
   if (cmd.run.kind === 'panel') return { kind: 'panel', tab: cmd.run.tab, ...(cmd.run.halt ? { halt: true } : {}) }
+  if (cmd.run.kind === 'model') return modelDecision(arg)
   if (cmd.argumentHint && !arg) return { kind: 'usage', message: `Usage: /${cmd.name} ${cmd.argumentHint}`, draft: `/${cmd.name} ` }
   return { kind: 'send', text: cmd.run.prompt(arg) }
+}
+
+/** `/model <model> [effort]`; anything else is a usage hint, nothing is sent. */
+function modelDecision(arg: string): CentralDecision {
+  const [model, effort, extra] = arg.toLowerCase().split(/\s+/).filter(Boolean)
+  const okModel = MODEL_ARGS.includes(model as ModelArg)
+  const okEffort = effort === undefined || EFFORT_ARGS.includes(effort as EffortArg)
+  if (!okModel || !okEffort || extra !== undefined || (model === 'auto' && effort !== undefined)) {
+    return { kind: 'usage', message: `Usage: /model ${MODEL_HINT}`, draft: '/model ' }
+  }
+  return { kind: 'model', model: model as ModelArg, ...(effort ? { effort: effort as EffortArg } : {}) }
 }
 
 const badgeOf = (c: CentralCommand, skills: readonly CentralSkill[]): string =>

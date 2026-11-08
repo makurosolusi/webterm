@@ -60,7 +60,7 @@ export interface CentralSummarizeOptions {
  * summary otherwise. `createCheckpoint` still falls back deterministically if the model fails or times out.
  */
 export function createCentralSummarize(opts: CentralSummarizeOptions = {}): Summarize {
-  const llm = createLlmSummarize(opts.call ?? createClaudeStructured())
+  const llm = createLlmSummarize(opts.call ?? createClaudeStructured('checkpoint'))
   const minRatio = opts.minRatio ?? LLM_SUMMARY_RATIO
   return (input, signal) => ((input.ctxRatio ?? 0) >= minRatio ? llm(input, signal) : rollingSummarize(input, signal))
 }

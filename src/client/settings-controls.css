@@ -334,3 +334,8 @@
     width: 92px;
   }
 }
+
+/* Model ladder defaults (Settings › Agent › Models): compact, theme tokens only. */
+.st-table { border-collapse: collapse; font-size: 12px; }
+.st-table th, .st-table td { padding: 2px 12px 2px 0; text-align: left; }
+.st-table th { color: var(--vscode-descriptionForeground, var(--text-muted)); font-weight: 600; }

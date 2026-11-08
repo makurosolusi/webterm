@@ -132,7 +132,7 @@ export function Field({
               onClick={() => {
                 const ask = resetConfirmTitle(settings?.[setting], label)
                 if (ask) setConfirming(ask)
-                else onChange(resetPatch(setting))
+                else onChange(resetPatch(setting, settings))
               }}
             >
               <span className="codicon codicon-gear" aria-hidden="true" />
@@ -149,7 +149,7 @@ export function Field({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel autoFocus>Cancel</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={() => onChange(resetPatch(setting))}>Reset</AlertDialogAction>
+              <AlertDialogAction variant="destructive" onClick={() => onChange(resetPatch(setting, settings))}>Reset</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

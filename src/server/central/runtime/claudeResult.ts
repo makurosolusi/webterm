@@ -17,6 +17,8 @@ export interface ClaudeResultEvent {
   usage: ClaudeUsage | null
   costUsd: number | null
   durationMs: number | null
+  /** Model that did most of the work (`modelUsage` key with the highest cost); null when absent. */
+  model: string | null
   /** CLI error text of a failed result (`errors[]` or `result`); never set on success (that text is the reply). */
   errorText: string | null
 }
@@ -47,6 +49,19 @@ export function parseUsage(value: unknown): ClaudeUsage | null {
   }
 }
 
+/** The `modelUsage` key with the highest `costUSD` (ties: first); null when there is none. */
+export function mainModel(modelUsage: unknown): string | null {
+  const m = rec(modelUsage)
+  if (m === null) return null
+  let best: string | null = null
+  let bestCost = -1
+  for (const [id, u] of Object.entries(m)) {
+    const cost = num(rec(u)?.costUSD)
+    if (cost > bestCost) { best = id; bestCost = cost }
+  }
+  return best
+}
+
 /** `error_during_execution` carries `errors: string[]`; an `is_error` success carries the text in `result`. */
 function resultErrorText(obj: Rec): string | null {
   const errors = Array.isArray(obj.errors) ? obj.errors.filter((e): e is string => typeof e === 'string') : []
@@ -61,6 +76,7 @@ export function parseClaudeResult(obj: Rec): ClaudeResultEvent {
     sessionId: str(obj.session_id), usage: parseUsage(obj.usage),
     costUsd: typeof obj.total_cost_usd === 'number' ? obj.total_cost_usd : null,
     durationMs: typeof obj.duration_ms === 'number' ? obj.duration_ms : null,
+    model: mainModel(obj.modelUsage),
     errorText: obj.is_error === true || obj.subtype !== 'success' ? resultErrorText(obj) : null,
   }
 }

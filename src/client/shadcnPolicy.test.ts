@@ -22,6 +22,9 @@ const vscodeScreens = new Set([
   // Settings / Env / Channels
   "src/client/SettingsPanel.tsx",
   "src/client/SettingsAgents.tsx",
+  // Agent › Models and its spending limit: same hybrid Agent tab, `st-button` rows like SettingsAgents.
+  "src/client/SettingsModels.tsx",
+  "src/client/SettingsCostLimit.tsx",
   // Native <select>/checkbox restyled with VS Code metrics (hybrid settings screen).
   "src/client/SettingsControls.tsx",
   "src/client/SettingsFields.tsx",

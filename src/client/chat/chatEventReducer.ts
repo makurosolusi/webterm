@@ -3,7 +3,7 @@
 // inside the repo budget. The wire payload shapes are the server's `ConversationEvent` rows.
 import type { ChatEvent, ChatMessage, ChatPart, ChatToolState, ChatTurnStatus } from './chatTypes'
 import { isActiveTurnStatus } from './chatTypes'
-import { createdMessage, normalizeParts } from './chatWire'
+import { createdMessage, normalizeParts, normalizeUsage } from './chatWire'
 import type { ChatState } from './chatStore'
 
 const TURN_STATUSES: readonly ChatTurnStatus[] = [
@@ -213,14 +213,17 @@ function applyOnce(state: ChatState, event: ChatEvent): ChatState {
     case 'approval.requested':
     case 'approval.updated':
       return approval(state, event)
-    case 'done':
+    case 'done': {
+      const usage = normalizeUsage(payloadOf(event).usage)
       return {
         ...state,
         activeTurnId: null,
-        messages: state.messages.map((row) =>
-          row.state === 'streaming' ? { ...row, state: 'complete' as const } : row
-        ),
+        messages: state.messages.map((row) => {
+          const settled = row.state === 'streaming' ? { ...row, state: 'complete' as const } : row
+          return usage && row.id === event.messageId ? { ...settled, usage } : settled
+        }),
       }
+    }
     default:
       return state
   }

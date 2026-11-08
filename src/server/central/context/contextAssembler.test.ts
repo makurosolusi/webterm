@@ -134,6 +134,17 @@ describe('rotation', () => {
     expect(run).toThrow(/budget_exhausted/)
   })
 
+  it('flag off: stays legacy below 70%, rotates (never refuses) at 70% and at 85%', () => {
+    const W = { WEBTERM_CENTRAL_CONTEXT_WINDOW: '100000' }
+    say(1)
+    turnCtx('t1', 60_000, 10)
+    expect((build(W) as AssembledContext).rotateSession).toBeUndefined()
+    turnCtx('t2', 70_000, 20)
+    expect(build(W)).toMatchObject({ decision: 'rotate', rotateSession: true })
+    turnCtx('t3', 95_000, 30)
+    expect(build(W)).toMatchObject({ decision: 'rotate', rotateSession: true })
+  })
+
   it('uses the newest succeeded turn context size', () => {
     turnCtx('t1', 90_000, 10)
     turnCtx('t2', 1_000, 20)

@@ -51,6 +51,11 @@ describe('centralQueryOptions', () => {
     expect(o.maxBudgetUsd).toBe(0.5)
   })
 
+  it('passes effort through only when set (absent = CLI default)', () => {
+    expect('effort' in centralQueryOptions(base)).toBe(false)
+    expect(centralQueryOptions({ ...base, effort: 'xhigh' }).effort).toBe('xhigh')
+  })
+
   it('never sets a permission bypass, a permission callback or extra MCP servers', () => {
     const o = centralQueryOptions({ ...base, model: 'opus' })
     expect(o.permissionMode).not.toBe('bypassPermissions')
@@ -64,6 +69,8 @@ describe('centralQueryOptions', () => {
 describe('claudeModelArg', () => {
   it('passes aliases and claude-* ids, treats blank as the CLI default', () => {
     expect(claudeModelArg('sonnet')).toEqual({ arg: 'sonnet', ignored: false })
+    expect(claudeModelArg('fable')).toEqual({ arg: 'fable', ignored: false })
+    expect(claudeModelArg('claude-fable-5-1')).toEqual({ arg: 'claude-fable-5-1', ignored: false })
     expect(claudeModelArg(' claude-opus-x.y ')).toEqual({ arg: 'claude-opus-x.y', ignored: false })
     expect(claudeModelArg('')).toEqual({ ignored: false })
     expect(claudeModelArg(undefined)).toEqual({ ignored: false })

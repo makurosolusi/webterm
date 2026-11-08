@@ -22,6 +22,7 @@ import { applyV20 } from './ledgerSchemaV20'
 import { applyV21 } from './ledgerSchemaV21'
 import { applyV22 } from './ledgerSchemaV22'
 import { applyV23 } from './ledgerSchemaV23'
+import { applyV24 } from './ledgerSchemaV24'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -73,4 +74,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 22, up: applyV22 },
   // v23: retention — event chain base (prefix prune keeps the chain verifiable) + settle-time indexes; no backfill.
   { version: 23, up: applyV23 },
+  // v24: cost_run.tier + cost_run.model (model ladder); nullable, no backfill.
+  { version: 24, up: applyV24 },
 ]

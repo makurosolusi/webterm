@@ -127,6 +127,13 @@ describe('agent.spawn headless mode', () => {
     return { specs, exec, finish: (o: ExecOutcome) => finish(o) }
   }
 
+  it('a door\'s ladder pick (routines pass one, no argv) lands as --model/--effort on the default argv', async () => {
+    const fx = fakeExec()
+    const r = rig({ exec: fx.exec })
+    await r.spawner.spawn({ door: 'routine', mode: 'headless', parent: 'routine:r1', cwd: '/tmp/wt', prompt: 'go', headless: { pick: { model: 'sonnet', effort: 'medium', tier: 'T2', reason: 'default for routine' } } })
+    expect(fx.specs[0]!.argv.slice(-4)).toEqual(['--model', 'sonnet', '--effort', 'medium'])
+  })
+
   it('defaults to Claude Code print mode, returns the handle and emits agent.exit when it ends', async () => {
     const fx = fakeExec()
     const r = rig({ exec: fx.exec })

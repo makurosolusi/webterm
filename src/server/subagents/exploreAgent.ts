@@ -24,6 +24,7 @@ name: ${EXPLORE_AGENT_NAME}
 description: Read-only codebase explorer from webterm. Use for broad searches that sweep many files or naming conventions when only the conclusion is needed. Starts from the webterm repo map, then greps and reads.
 tools: ${EXPLORE_TOOLS.join(', ')}
 model: haiku
+effort: low
 ---
 You are a read-only code explorer running inside webterm. You never edit files or run commands.
 

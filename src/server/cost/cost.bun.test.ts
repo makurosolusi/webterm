@@ -8,7 +8,10 @@ import { join } from 'node:path'
 import { openLedgerDb } from '../ledger/migration'
 import { registerWorkspaceLookup } from '../central/workspaceLookup'
 import { readBudget, utcDay } from '../central/guard/budgetStore'
-import { captureTranscript, syncCentralTurns } from './costCapture'
+import { captureTranscript, recordHelperUsage, syncCentralTurns } from './costCapture'
+import { createClaudeStructured } from '../central/context/claudeStructured'
+import { writeFakeClaude } from '../central/runtime/claude.fakeBin'
+import { setActiveLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import { bakeoffGate, beginCostRun, costGate, endCostRun, estimateCost, listCaps, median, ROI_NO_DIFF_RUNS, setCostCap, type Notice } from './costOracle'
 import { insertCostUsage, spendSummary, spentMicros } from './costStore'
 import { costRoute, type CostResponse } from './cost.route'
@@ -85,9 +88,62 @@ describe('syncCentralTurns', () => {
     expect(syncCentralTurns(db, () => T0)).toBe(2)
     expect(syncCentralTurns(db, () => T0)).toBe(0)
     const global = readBudget(db, utcDay(T0), 'global')
-    expect(global).toMatchObject({ turns: 2, tokens: 515, costMicros: 4200 })
-    expect(readBudget(db, utcDay(T0), 'project:p1')).toMatchObject({ turns: 1, tokens: 500 })
+    // Input-equivalent tokens: 300 + 200 + 50 cache reads at 0.1x = 505; + 15 for t2.
+    expect(global).toMatchObject({ turns: 2, tokens: 520, costMicros: 4200 })
+    expect(readBudget(db, utcDay(T0), 'project:p1')).toMatchObject({ turns: 1, tokens: 505 })
     expect(spentMicros(db, { since: 0, source: 'central' })).toEqual({ costMicros: 4200, unpriced: 1 })
+  })
+})
+
+describe('syncCentralTurns: real model and cache-aware budget', () => {
+  const ins = (id: string, usage: Record<string, unknown>, endedAt: number): void => {
+    db.query('INSERT INTO central_turn (id, conversation_id, message_id, status, runtime, usage_json, started_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, 'central:global', `m-${id}`, 'succeeded', 'claude', JSON.stringify(usage), T0, endedAt)
+  }
+
+  test('stores the model id the runtime reported, priced from the table when the runtime had no estimate', () => {
+    ins('r1', { inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, costMicros: 0, model: 'claude-sonnet-5-5' }, T0 + 1)
+    ins('r2', { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costMicros: 9 }, T0 + 2)
+    syncCentralTurns(db, () => T0)
+    expect(all("SELECT key, model, cost_micros FROM cost_usage WHERE source = 'central' ORDER BY key")).toEqual([
+      { key: 'central-turn:r1', model: 'claude-sonnet-5-5', cost_micros: 1000 * 2 + 100 * 10 },
+      { key: 'central-turn:r2', model: 'central:claude', cost_micros: 9 },
+    ])
+  })
+
+  test('a cache-heavy day no longer reads as a few thousand tokens', () => {
+    // 2,000 in + 2,230 out + 10M cache reads + 100K writes, $2.28: before, the guard saw 4,230 tokens.
+    ins('big', { inputTokens: 2000, outputTokens: 2230, cacheReadTokens: 10_000_000, cacheWriteTokens: 100_000, costMicros: 2_280_000 }, T0 + 1)
+    syncCentralTurns(db, () => T0)
+    expect(readBudget(db, utcDay(T0), 'global')).toMatchObject({ tokens: 4230 + 1_000_000 + 125_000, costMicros: 2_280_000 })
+  })
+
+  test('a helper row newer than an unsynced turn does not hide that turn', () => {
+    recordHelperUsage(db, 'consolidator', { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, costMicros: 1, model: 'claude-haiku-5-5' }, { now: () => T0 + 500 })
+    insertCostUsage(db, { key: 'consolidator:legacy', ts: T0 + 600, source: 'central', workspaceId: null, nodeId: null, sessionId: 'consolidator', model: null, input: 0, output: 0, cacheRead: 0, write5m: 0, write1h: 0, costMicros: null })
+    ins('late', { inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, costMicros: 3 }, T0 + 100)
+    expect(syncCentralTurns(db, () => T0)).toBe(1)
+  })
+})
+
+describe('helper usage', () => {
+  test('every helper kind books a priced row under source helper with the real model', () => {
+    const kinds = ['classifier', 'checkpoint', 'handoff', 'brief', 'consolidator'] as const
+    for (const k of kinds) recordHelperUsage(db, k, { input: 1000, output: 100, cacheRead: 0, cacheWrite: 0, costMicros: null, model: 'claude-haiku-5-5' }, { now: () => T0 })
+    expect(all("SELECT session_id AS kind, model, cost_micros, price_known FROM cost_usage WHERE source = 'helper' ORDER BY session_id"))
+      .toEqual([...kinds].sort().map((kind) => ({ kind, model: 'claude-haiku-5-5', cost_micros: 1000 * 0.1 + 100 * 0.5, price_known: 1 })))
+    expect(spendSummary(db, 0).byModel[0]).toMatchObject({ key: 'claude-haiku-5-5', responses: 5 })
+  })
+
+  test('a real helper call books into the active ledger through the default path', async () => {
+    const bin = writeFakeClaude(root, `readStdin()
+process.stdout.write(${JSON.stringify(JSON.stringify({ subtype: 'success', structured_output: { a: [] }, total_cost_usd: 0.000123, usage: { input_tokens: 7, output_tokens: 3 }, modelUsage: { 'claude-haiku-5-5': { costUSD: 0.000123 } } }))})`)
+    setActiveLedgerRuntime({ db } as never)
+    try {
+      await createClaudeStructured('checkpoint', { bin })({ prompt: 'x', schema: {} }, new AbortController().signal)
+    } finally { setActiveLedgerRuntime(null) }
+    expect(all("SELECT session_id, model, input, output, cost_micros FROM cost_usage WHERE source = 'helper'"))
+      .toEqual([{ session_id: 'checkpoint', model: 'claude-haiku-5-5', input: 7, output: 3, cost_micros: 123 }])
   })
 })
 
@@ -110,6 +166,24 @@ describe('oracle', () => {
     expect(estimateCost(db, { kind: 'routine', ref: 'tests-weekly' })).toEqual({ medianMicros: 200, samples: 3, basis: 'ref' })
     expect(estimateCost(db, { kind: 'routine', ref: 'never-ran' })).toEqual({ medianMicros: 200, samples: 3, basis: 'kind' })
     expect(estimateCost(db, { kind: 'dag', ref: 'd1' })).toEqual({ medianMicros: null, samples: 0, basis: 'none' })
+  })
+
+  test('beginCostRun stores the ladder tier/model; estimateCost by tier falls back ref+tier -> kind+tier -> kind -> none', () => {
+    const run = (ref: string, tier: 'T1' | 'T3' | null, cost: number, at: number): string => {
+      const id = beginCostRun(db, { kind: 'dag', ref, nodeId: 'n1', tier, model: tier === 'T3' ? 'opus' : tier ? 'haiku' : null }, () => at)
+      endCostRun(db, id, { producedDiff: true, costMicros: cost }, () => at + 1, () => {})
+      return id
+    }
+    const first = run('d1', 'T3', 900, T0)
+    run('d1', 'T1', 10, T0 + 10)
+    run('d2', 'T3', 700, T0 + 20)
+    run('d3', null, 50, T0 + 30)
+    expect(all('SELECT tier, model FROM cost_run WHERE id = ?', first)).toEqual([{ tier: 'T3', model: 'opus' }])
+    expect(estimateCost(db, { kind: 'dag', ref: 'd1', tier: 'T3' })).toEqual({ medianMicros: 900, samples: 1, basis: 'ref' })
+    expect(estimateCost(db, { kind: 'dag', ref: 'd9', tier: 'T3' })).toEqual({ medianMicros: 800, samples: 2, basis: 'tier' })
+    expect(estimateCost(db, { kind: 'dag', ref: 'd9', tier: 'T2' })).toEqual({ medianMicros: 375, samples: 4, basis: 'kind' })
+    expect(estimateCost(db, { kind: 'dag', ref: 'd1' })).toEqual({ medianMicros: 455, samples: 2, basis: 'ref' })
+    expect(estimateCost(db, { kind: 'routine', ref: 'x', tier: 'T3' })).toEqual({ medianMicros: null, samples: 0, basis: 'none' })
   })
 
   test(`${ROI_NO_DIFF_RUNS} runs in a row without a diff pause the routine and leave one Inbox notify`, () => {

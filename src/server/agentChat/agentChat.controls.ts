@@ -43,7 +43,8 @@ export function parseConfigPatch(b: Record<string, unknown>): { patch: AgentChat
   const patch: AgentChatConfigPatch = {}
   if ('model' in b) {
     if (b.model !== null && (typeof b.model !== 'string' || b.model.length > MODEL_MAX)) return { reason: `model must be a string of at most ${MODEL_MAX} characters, or null.` }
-    patch.model = (b.model as string | null) || null
+    // The picker's Auto entry (`default`) means "no explicit model": the ladder picks (agentChat.ladder.ts).
+    patch.model = b.model === 'default' ? null : (b.model as string | null) || null
   }
   if ('effort' in b) {
     if (b.effort !== null && b.effort !== '' && !AGENT_CHAT_EFFORTS.includes(b.effort as EffortLevel)) return { reason: `effort must be one of ${AGENT_CHAT_EFFORTS.join(', ')}, or null.` }

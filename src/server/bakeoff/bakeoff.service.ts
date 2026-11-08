@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto'
 import type { ExecOutcome } from '../central/agents/execRunner'
 import { bakeoffGate, beginCostRun, endCostRun } from '../cost/costOracle'
 import { dagWorkerArgv } from '../dag/dag.ports'
+import { pickModel } from '../models/modelPick'
 import { git } from '../gitScm'
 import { createInboxItem, resolveItem } from '../inbox/inboxItemStore'
 import type { LedgerContext } from '../ledger/ledgerCore'
@@ -146,6 +147,9 @@ export function createBakeoffService(ports: BakeoffPorts) {
       throw err
     }
     store.insert({ id, workspaceId: input.workspaceId ?? null, repo: created[0]!.primary, baseBranch, baseSha, prompt })
+    // One pick for every candidate: a bake-off compares runs of the same prompt, so they must share a model
+    // or the comparison measures the model, not the run. (Candidates carry no model of their own today.)
+    const pick = pickModel(ports.ctx.db, { kind: 'bakeoff', workspaceId: input.workspaceId ?? null, runRef: `bakeoff:${id}` }, ports.ctx.now)
     const settled: Promise<void>[] = []
     for (const [i, w] of created.entries()) {
       const candId = `${id}-${i + 1}`
@@ -157,7 +161,7 @@ export function createBakeoffService(ports: BakeoffPorts) {
         res = await ports.spawn({
           mode: 'headless', door: 'orchestrator', parent: 'human-ui', cwd: w.path, nodeId, prompt, title: `Bake-off #${i + 1}`,
           ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
-          headless: { argv: dagWorkerArgv(prompt, BAKEOFF_TOOLS), timeoutMs: ports.timeoutMs ?? BAKEOFF_TIMEOUT_MS },
+          headless: { argv: dagWorkerArgv(prompt, BAKEOFF_TOOLS, pick), timeoutMs: ports.timeoutMs ?? BAKEOFF_TIMEOUT_MS },
         })
       } catch (err) {
         res = { ok: false, code: 'spawn_invalid', message: err instanceof Error ? err.message : String(err) }
@@ -167,7 +171,7 @@ export function createBakeoffService(ports: BakeoffPorts) {
         store.finishCandidate(candId, { status: 'failed', exitCode: null, error: `spawn: ${message}`, costMicros: null, durationMs: 0, verified: false, verdict: null })
         continue
       }
-      const costRunId = beginCostRun(ports.ctx.db, { kind: 'bakeoff', ref: id, label: `Bake-off #${i + 1}`, workspaceId: input.workspaceId ?? null, nodeId }, () => startedAt)
+      const costRunId = beginCostRun(ports.ctx.db, { kind: 'bakeoff', ref: id, label: `Bake-off #${i + 1}`, workspaceId: input.workspaceId ?? null, nodeId, tier: pick.tier, model: pick.model }, () => startedAt)
       settled.push(res.handle.done.then((o) => settle({ id: candId, bakeoffId: id, idx: i + 1, path: w.path, startedAt, costRunId }, o, baseSha)))
     }
     const all = Promise.all(settled).then(() => maybeReady(id))

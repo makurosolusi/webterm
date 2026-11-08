@@ -8,7 +8,8 @@ import { mkdirSync } from 'node:fs'
 import { query, type CanUseTool, type Options, type PermissionMode, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentChatConfig } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
-import { configOptions } from './agentChat.controls'
+import { AGENT_CHAT_DEFAULT_CONFIG, configOptions } from './agentChat.controls'
+import { agentChatLadderPick, withLadderDefault } from './agentChat.ladder'
 import { missingProfileNotice, resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import { claudeSdkSpawn, type SpawnImpl } from '../claudeLauncher/claudeSdkSpawn'
 import { writeClaudeSettings, writeHouseRules } from '../hooksSettings'
@@ -34,8 +35,10 @@ export interface AgentChatOptionsInput {
   profileId?: string
   mode: AgentPermissionMode
   resume?: string
-  /** Model / effort / thinking picked in the node; absent = Claude Code's defaults. */
+  /** Model / effort / thinking picked in the node; an absent model/effort comes from the model ladder. */
   config?: AgentChatConfig
+  /** Workspace of the node: its `projectModels` override steers the ladder default. */
+  workspaceId?: string
   canUseTool: CanUseTool
   abort: AbortController
   parentEnv?: NodeJS.ProcessEnv
@@ -63,7 +66,7 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     settingSources: AGENT_CHAT_SETTING_SOURCES,
     includePartialMessages: true,
     ...(i.resume ? { resume: i.resume } : {}),
-    ...(i.config ? configOptions(i.config) : {}),
+    ...configOptions(withLadderDefault(i.config ?? AGENT_CHAT_DEFAULT_CONFIG, agentChatLadderPick(i.workspaceId))),
     canUseTool: i.canUseTool,
     abortController: i.abort,
     settings: writeClaudeSettings(i.nodeId, i.port),
@@ -101,7 +104,7 @@ export interface AgentChatOpenInput {
 export type AgentChatOpen = (resumeId: string | undefined, canUseTool: CanUseTool, abort: AbortController, input: AgentChatOpenInput) => Query
 
 /** Production opener: SDK `query()` in streaming-input mode, options rebuilt from the profile on every open. */
-export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode }): AgentChatOpen {
+export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string }): AgentChatOpen {
   return (resumeId, canUseTool, abort, input) => {
     const { options, notice } = buildAgentChatOptions({ ...cfg, mode: input.mode ?? cfg.mode, ...(input.config ? { config: input.config } : {}), resume: resumeId, canUseTool, abort, stderr: input.stderr })
     if (notice) input.notice(notice)

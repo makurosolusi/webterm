@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../../shared/settings'
 import { resolveProfileLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { joinArgv } from '../../shared/claudeLaunch/shellQuote'
+import { applySettingsPatch, type SettingsPatch } from '../../shared/settings.patch'
 import { SettingsItemScopeProvider, isModified } from '../settingsContext'
 import { resetConfirmTitle } from '../SettingsFields'
 import { ClaudeLaunchProfilesCard } from './ClaudeLaunchProfilesCard'
@@ -15,7 +16,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 function Harness({ initial, spy }: { initial: Partial<Settings>; spy: (p: Partial<Settings>) => void }): React.JSX.Element {
   const [s, setS] = useState<Settings>({ ...DEFAULT_SETTINGS, ...initial })
-  const onChange = (p: Partial<Settings>): void => { spy(p); setS((cur) => ({ ...cur, ...p })) }
+  const onChange = (p: SettingsPatch): void => { spy(p as Partial<Settings>); setS((cur) => applySettingsPatch(cur, p)) }
   return (
     <SettingsItemScopeProvider category="Agent" settings={s} onChange={onChange}>
       <button type="button">outside</button>

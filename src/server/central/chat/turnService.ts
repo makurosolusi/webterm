@@ -27,6 +27,7 @@ import type { Summarize } from '../context/checkpointSummarizer'
 import { recordTurnContext } from './turnContextLog'
 import { type CentralAttachments, storeAttachments, withFiles } from './chatAttachments'
 import { resolveLimits } from './turnLimits'
+import { centralTurnModel, modelSwitchPending } from './conversationModelChoice'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
 
@@ -113,10 +114,13 @@ export class TurnService {
     if (this.active.has(conversation.id) || conversation.activeTurnId !== null) {
       throw busyError(conversation, this.active.get(conversation.id))
     }
+    // A `/model` choice since the last good turn: this turn opens a fresh session (reseeded like a rotation).
+    const switchModel = modelSwitchPending(this.db, conversation.id)
     let built: ReturnType<ContextAssembler['build']>
     try {
       built = this.context.build({
         db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
+        ...(switchModel ? { rotate: true } : {}),
       })
     } catch (err) {
       if (err instanceof ContextRejectedError) throw new CentralChatError('budget_exhausted', err.message, chatErrorStatus(err.code))
@@ -125,7 +129,7 @@ export class TurnService {
     const { history } = built
     const prompt = withFiles(built.prompt, files)
     // Only the real assembler reports rotation; the legacy one never sets it.
-    const rotate = (built as { rotateSession?: boolean }).rotateSession === true
+    const rotate = (built as { rotateSession?: boolean }).rotateSession === true || switchModel
     const cacheEnv = (built as { cacheEnv?: Record<string, string> }).cacheEnv ?? {}
     const appended = appendMessage(this.db, {
       conversationId: conversation.id, role: 'human',
@@ -214,28 +218,33 @@ export class TurnService {
       const projected = projectRuntimeEvent(state, assistant.id, event)
       if (projected) this.record(conversation.id, projected.type, projected.payload, event.turnId, assistant.id)
     }
+    const resume = turn.sessionRef === null || rotate ? null : turn.sessionRef
+    const pick = centralTurnModel(this.db, conversation.id, this.env, resume)
+    const stamp = (r: RuntimeResult): RuntimeResult => ({ ...r, usage: { ...r.usage, tier: pick.tier, ...(pick.effort ? { effort: pick.effort } : {}) } })
     const input: TurnInput = {
       conversationId: conversation.id, turnId: turn.id,
       text: ask.prompt, history,
       ...(ask.images?.length ? { images: ask.images } : {}),
       tools: [...DEFAULT_CENTRAL_TOOLS], limits: resolveLimits(this.env),
       // A rotated conversation starts a fresh runtime session seeded from the checkpoint.
-      ...(turn.sessionRef === null || rotate ? {} : { sessionRef: turn.sessionRef }),
+      ...(resume === null ? {} : { sessionRef: resume }),
+      ...(pick.model ? { model: pick.model } : {}),
+      ...(pick.effort ? { effort: pick.effort } : {}),
       ...(Object.keys(cacheEnv).length ? { cacheEnv } : {}),
       freshSessionText,
     }
     try {
-      const result = await runtime.turn(input, emit)
+      const result = stamp(await runtime.turn(input, emit))
       const finished = finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
       recordTurnContext({ db: this.db, env: this.env, now: this.now, ...(this.summarize ? { summarize: this.summarize } : {}) }, conversation.id, turn.id, result)
       return finished
     } catch (err) {
       // Name only: runtime error messages can quote the conversation.
       log.error('central.turn.error', 'central chat runtime failed', { turnId: turn.id, error: err instanceof Error ? err.name : typeof err })
-      const result: RuntimeResult = {
+      const result: RuntimeResult = stamp({
         turnId: turn.id, outcome: 'error', text: state.text,
         usage: state.usage, errorCode: 'runtime_error', sessionRef: null,
-      }
+      })
       // Stable text, never err.message: it is persisted, streamed and shown on the failed reply.
       state.failure ??= { code: 'runtime_error', message: RUNTIME_THREW_MESSAGE }
       this.record(conversation.id, 'error', {

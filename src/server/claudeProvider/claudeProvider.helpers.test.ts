@@ -69,7 +69,7 @@ describe('claudeEnv() reaches every Claude process', () => {
     const a = join(dir, 'classifier.json')
     const b = join(dir, 'structured.json')
     await createClaudeClassifier({ bin: reporter(a) })({ tool: 'Bash', input: {} } as never, new AbortController().signal).catch(() => undefined)
-    await createClaudeStructured({ bin: reporter(b) })({ prompt: 'x', schema: {} }, new AbortController().signal).catch(() => undefined)
+    await createClaudeStructured('brief', { bin: reporter(b) })({ prompt: 'x', schema: {} }, new AbortController().signal).catch(() => undefined)
     expect(seen(a)).toEqual(EXPECTED)
     expect(seen(b)).toEqual(EXPECTED)
   })

@@ -8,6 +8,7 @@ import { createLogger } from '../logs'
 import { json } from '../routes/route.core'
 import { AGENT_CHAT_SESSIONS_MAX, parseConfigPatch, sessionSummaries, toCommand, toModel } from './agentChat.controls'
 import { AGENT_CHAT_BUSY_SWITCH_REASON, type AgentChatPool } from './agentChat.pool'
+import { agentChatLadderPick, withLadderEntry } from './agentChat.ladder'
 import type { AgentChatSession } from './agentChat.session'
 import { bad, fail, ok, readObject, type Ctx } from './agentChat.route.core'
 
@@ -40,7 +41,7 @@ export async function controlVerb(c: Ctx, deps: ControlDeps, nodeId: string, ver
   if (verb === 'catalog' || verb === 'models') {
     const r = verb === 'catalog'
       ? await deps.pool.control(nodeId, async (q) => ({ commands: (await q.supportedCommands()).map(toCommand) }))
-      : await deps.pool.control(nodeId, async (q) => ({ models: (await q.supportedModels()).map(toModel) }))
+      : await deps.pool.control(nodeId, async (q) => ({ models: withLadderEntry((await q.supportedModels()).map(toModel), agentChatLadderPick(deps.pool.target(nodeId)?.ws.id)) }))
     if (r?.ok) { json(c.res, 200, r.value); return true }
     const reason = r?.reason ?? 'No agent chat node with this id.'
     if (r) log.warn('agent_chat.control_refused', 'agent chat control request refused', { ids: { nodeId }, operation: verb, status: r.status })

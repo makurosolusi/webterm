@@ -35,6 +35,10 @@ export function ChangeError({ message, onRetry, onDismiss, disabled }: { message
 /** Value Claude Code lists for "use the default model"; an unset model maps to it. */
 export const DEFAULT_MODEL = 'default'
 
+/** Unset model before the list loads. Once loaded, the server names the `default` entry after what the
+ *  ladder resolved for this node's workspace (agentChat.ladder.ts), e.g. "Auto (ladder: Sonnet · medium)". */
+export const AUTO_MODEL_LABEL = 'Auto (model ladder)'
+
 export interface ModelPickerProps {
   /** Fetches the selectable models; called when the menu opens until it succeeds. */
   loadModels: () => Promise<AgentChatModel[]>
@@ -70,7 +74,7 @@ export function ModelPicker({ loadModels, models: known, value, onChange, disabl
   // Only a new request opens it; `openChange` is rebuilt every render, so it is not a dependency.
   useEffect(() => { if (openRequest && !disabled && !pending) openChange(true) }, [openRequest])
   const shown = pending ? pending.value : value
-  const nameOf = (v?: string) => models?.find((m) => m.value === (v ?? DEFAULT_MODEL))?.displayName ?? v ?? 'Default model'
+  const nameOf = (v?: string) => models?.find((m) => m.value === (v ?? DEFAULT_MODEL))?.displayName ?? v ?? AUTO_MODEL_LABEL
   const name = nameOf(shown)
 
   return (

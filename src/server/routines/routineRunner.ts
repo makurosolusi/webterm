@@ -10,6 +10,7 @@ import type { AppendEventInput } from '../events/eventModel'
 import { createInboxItem } from '../inbox/inboxItemStore'
 import type { LedgerContext } from '../ledger/ledgerCore'
 import { createLogger } from '../logs'
+import { pickModel } from '../models/modelPick'
 import { redactSecrets } from '../redactSecrets'
 import type { AgentSpawnRequest, AgentSpawnResult } from '../spawn/agentSpawn'
 import { routineTier, untrustedMayFire, type Routine, type RoutineRun, type RunTrigger } from './routineModel'
@@ -93,9 +94,10 @@ export function createRoutineRunner(deps: RunnerDeps) {
       return settle(r, runId, trigger, { status: 'ran', reason: await deps.prReview({ repo: cwd, workspaceId: r.workspaceId, parent: `routine:${r.id}` }) })
     }
     const before = deps.treeState ? await deps.treeState(cwd) : null
+    const pick = pickModel(deps.ctx.db, { kind: 'routine', workspaceId: r.workspaceId, runRef: `routine:${runId}` }, deps.ctx.now)
     const spawned = await deps.spawn({
       mode: 'headless', parent: `routine:${r.id}`, cwd, prompt: r.action.prompt, title: r.name,
-      door: 'routine', ...(r.workspaceId ? { workspaceId: r.workspaceId } : {}),
+      door: 'routine', ...(r.workspaceId ? { workspaceId: r.workspaceId } : {}), headless: { pick },
     })
     if (!spawned.ok) return settle(r, runId, trigger, { status: 'failed', reason: `${spawned.code}: ${spawned.message}` })
     children.add(spawned.nodeId)
@@ -105,7 +107,7 @@ export function createRoutineRunner(deps: RunnerDeps) {
     let costId: string | null = null
     let producedDiff = false
     try {
-      if (deps.cost) costId = await deps.cost.begin({ kind: 'routine', ref: r.id, label: r.name, workspaceId: r.workspaceId, nodeId: spawned.nodeId })
+      if (deps.cost) costId = await deps.cost.begin({ kind: 'routine', ref: r.id, label: r.name, workspaceId: r.workspaceId, nodeId: spawned.nodeId, tier: pick.tier, model: pick.model })
       const outcome = spawned.handle ? await spawned.handle.done : null
       const last = outcome?.lastEvent ?? null
       const costUsd = typeof last?.['total_cost_usd'] === 'number' ? last['total_cost_usd'] : null

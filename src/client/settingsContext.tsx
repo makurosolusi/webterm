@@ -3,11 +3,12 @@
 // `DEFAULT_SETTINGS`) dan menawarkan Reset Setting tanpa tiap pemanggil meneruskan keduanya.
 import { createContext, useContext, type ReactNode } from 'react'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
+import { isEntryKey, type SettingsPatch } from '../shared/settings.patch'
 
 interface SettingsItemScope {
   category?: string
   settings?: Settings
-  onChange?: (patch: Partial<Settings>) => void
+  onChange?: (patch: SettingsPatch) => void
 }
 
 const ItemContext = createContext<SettingsItemScope>({})
@@ -31,7 +32,9 @@ export function isModified(settings: Settings, key: keyof Settings): boolean {
   return JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_SETTINGS[key])
 }
 
-/** Patch yang mengembalikan satu kunci ke defaultnya. */
-export function resetPatch(key: keyof Settings): Partial<Settings> {
+/** Patch yang mengembalikan satu kunci ke defaultnya. Entry keys (`settings.patch.ts`) merge per
+ *  entry, so `{}` would remove nothing: their reset deletes each entry of `current` with `null`. */
+export function resetPatch(key: keyof Settings, current?: Settings): SettingsPatch {
+  if (isEntryKey(key)) return { [key]: Object.fromEntries(Object.keys(current?.[key] ?? {}).map((id) => [id, null])) }
   return { [key]: DEFAULT_SETTINGS[key] }
 }

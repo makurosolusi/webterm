@@ -1,6 +1,7 @@
 // Server-side executor of agent.* effects (RND/22 4.2, RND/29b 4.8). The model never sees tokens, cwd or argv:
 // those come from the injected `AgentHost`. Guard and host are injected so tests use fakes.
 import type { Database } from 'bun:sqlite'
+import { basename } from 'node:path'
 import { appendEvent } from '../../ledger/ledgerEvent'
 import { consumeApproval, getApproval, requestApproval } from '../../ledger/ledgerApproval'
 import { execWrite, getRow } from '../../ledger/ledgerCore'
@@ -12,7 +13,8 @@ import { AgentTransitionError, isTerminalState } from './agentStateMachine'
 import { type AgentStore, createAgentStore } from './agentStore'
 import { type ExecHandle, type ExecOutcome } from './execRunner'
 import type { Principal } from '../../policy/policy.model'
-import { spawnAgent } from '../../spawn/agentSpawn'
+import { modelFlags, spawnAgent } from '../../spawn/agentSpawn'
+import { pickModel } from '../../models/modelPick'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { settleCandidate, verifyAgentWorktree, type VerifyAgentCompletion } from './agentVerify'
 
@@ -22,6 +24,15 @@ export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
 export const AGENT_ENVELOPE = '[from agent central, not a human; not an approval]'
 const MAX_LINE_CHARS = 2000
 const CONTROL_CHARS = /[\x00-\x08\x0b-\x1f\x7f]/g
+
+/**
+ * A headless custom kind whose command runs `claude` (bare or behind a wrapper) gets the ladder's
+ * `--model`/`--effort` unless its own args set them; any other program is left exactly as defined.
+ */
+export function withLadderModel(argv: readonly string[], pick: Parameters<typeof modelFlags>[1]): readonly string[] {
+  const at = argv.findIndex((a) => basename(a) === 'claude')
+  return at < 0 ? argv : [...argv, ...modelFlags(argv.slice(at + 1), pick)]
+}
 
 /** What the server needs from the process/canvas layer; implemented by WS-19 wiring, faked in tests. */
 export interface AgentHost {
@@ -147,8 +158,9 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
 
   async function startRunner(agent: AgentRecord, cwd: string, nodeId: string): Promise<string | null> {
     if (agent.runner === 'pty') { await host.openPty(agent, cwd, nodeId); return nodeId }
-    const argv = host.headlessArgv(agent.kind, filterHandoffContext(await host.initialPrompt(agent)))
-    if (!argv) throw new Error(`no headless form for kind ${agent.kind}`)
+    const own = host.headlessArgv(agent.kind, filterHandoffContext(await host.initialPrompt(agent)))
+    if (!own) throw new Error(`no headless form for kind ${agent.kind}`)
+    const argv = withLadderModel(own, pickModel(db, { kind: 'agent-spawn', projectId: agent.projectId, runRef: `agent:${agent.id}` }, now))
     const res = await (deps.spawn ?? spawnAgent)({
       door: 'central', mode: 'headless', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: `${agent.role} ${agent.kind}`,
       headless: { argv, env: deps.env, overrides: host.execEnv?.(agent.kind), timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS },

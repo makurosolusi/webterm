@@ -57,7 +57,7 @@ async function productionDeps(): Promise<HandoffRouteDeps | null> {
   const log = activeEventLog()
   if (!ledger || !log) return null
   const outbox = await startOutbox()
-  narrate ??= createClaudeStructured()
+  narrate ??= createClaudeStructured('handoff')
   return {
     workspaces: () => db.list(),
     deps: {

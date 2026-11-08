@@ -3,6 +3,7 @@
 //
 // Imitated: GitHub's notification digest and Linear's "Pulse" — one line per thing that changed,
 // what needs you first, each line a link to where you act on it.
+import { MODEL_IDS, TIER_TABLE, type LadderModel, type Tier } from '../models/modelLadder'
 
 /** Display order: what needs you first, then what broke, then what simply happened. */
 export const BRIEF_CATEGORIES = ['stuck', 'gates', 'tests', 'restored', 'finished', 'checkpoints', 'cost'] as const
@@ -46,6 +47,19 @@ export interface BriefUsage {
   unpriced: number
 }
 
+/** Last 7 days of spend (cost ledger), for the weekly cost lines. */
+export interface BriefWeekly {
+  /** Spend per cost source (central / agent / helper). */
+  bySource: ReadonlyArray<{ source: string; costMicros: number }>
+  /** Spend per model id as recorded (null = unknown model). */
+  byModel: ReadonlyArray<{ model: string | null; costMicros: number }>
+  /** DAG run spend and the work tasks that passed verification in the window. */
+  dagCostMicros: number
+  verifiedTasks: number
+  centralTurns: number
+  centralFailed: number
+}
+
 export interface BriefInput {
   since: number
   now: number
@@ -54,6 +68,7 @@ export interface BriefInput {
   events: readonly BriefEvent[]
   inbox: { needsYou: number; review: number } | null
   usage: BriefUsage | null
+  weekly?: BriefWeekly | null
   nodeLabel: (nodeId: string) => string
   workspaceLabel: (workspaceId: string) => string
 }
@@ -140,7 +155,44 @@ export function buildBrief(input: BriefInput): Brief {
     const cost = `$${(u.costMicros / 1_000_000).toFixed(2)}${u.unpriced > 0 ? '+ (some prices unknown)' : ''}`
     lines.push({ id: 'cost:total', category: 'cost', text: `${compactCount(u.inputTokens)} input / ${compactCount(u.outputTokens)} output tokens across ${plural(u.calls, 'call')}, ${cost}`, target: null })
   }
+  lines.push(...weeklyLines(input.weekly ?? null))
   return { since: input.since, generatedAt: input.now, headSeq: input.headSeq, lines }
+}
+
+const usd = (micros: number): string => `$${(micros / 1_000_000).toFixed(2)}`
+
+/** `claude-opus-5-5` -> `opus (T3)`; an id outside the ladder keeps its name. */
+function modelLabel(model: string | null): string {
+  if (model === null) return 'unknown model'
+  const m = model.toLowerCase()
+  const alias = (Object.keys(MODEL_IDS) as LadderModel[]).find((a) => m.includes(a))
+  const tier = alias ? (Object.keys(TIER_TABLE) as Tier[]).find((t) => TIER_TABLE[t].model === alias) : undefined
+  return alias ? `${alias} (${tier})` : model
+}
+
+/** Weekly cost lines: spend by kind, by model/tier, cost per verified task, Central turn failure rate. */
+export function weeklyLines(w: BriefWeekly | null): BriefLine[] {
+  if (!w) return []
+  const total = w.bySource.reduce((sum, r) => sum + r.costMicros, 0)
+  const lines: BriefLine[] = []
+  const line = (key: string, text: string) => lines.push({ id: `cost:week:${key}`, category: 'cost', text, target: null })
+  const sorted = <T extends { costMicros: number }>(rows: readonly T[], label: (r: T) => string): string =>
+    [...rows].filter((r) => r.costMicros > 0).sort((a, b) => b.costMicros - a.costMicros || label(a).localeCompare(label(b)))
+      .map((r) => `${label(r)} ${usd(r.costMicros)}`).join(', ')
+  if (total > 0) {
+    line('kind', `Last 7 days: ${usd(total)} (${sorted(w.bySource, (r) => r.source)})`)
+    // Ids of one alias (e.g. two opus versions) merge into one entry.
+    const byLabel = new Map<string, number>()
+    for (const r of w.byModel) byLabel.set(modelLabel(r.model), (byLabel.get(modelLabel(r.model)) ?? 0) + r.costMicros)
+    line('model', `By model: ${sorted([...byLabel].map(([label, costMicros]) => ({ label, costMicros })), (r) => r.label)}`)
+  }
+  if (w.verifiedTasks > 0 && w.dagCostMicros > 0) {
+    line('verified', `Cost per verified task: ${usd(w.dagCostMicros / w.verifiedTasks)} (${plural(w.verifiedTasks, 'task')})`)
+  }
+  if (w.centralTurns > 0) {
+    line('central', `Central turns: ${w.centralTurns}, ${w.centralFailed} failed (${Math.round((w.centralFailed / w.centralTurns) * 100)}%)`)
+  }
+  return lines
 }
 
 const HEADINGS: Record<BriefCategory, string> = {
