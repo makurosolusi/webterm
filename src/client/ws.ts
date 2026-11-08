@@ -6,7 +6,7 @@
 // a fresh PTY and wipe the final scrollback the user is looking at.
 import { emitFsEvent } from './fsEvents'
 import { WS_PATH } from '../shared/protocol'
-import type { CanvasMsg, ClientMsg, ExitMsg, OpenMsg, ServerMsg } from '../shared/protocol'
+import type { CanvasMsg, ClientMsg, ExitMsg, OpenMsg, ServerMsg, ShotMsg, ViewMsg } from '../shared/protocol'
 import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
 import { noteStatus } from './unread'
@@ -67,6 +67,20 @@ const canvasListeners = new Set<(msg: CanvasMsg) => void>()
 export function subscribeCanvas(cb: (msg: CanvasMsg) => void): () => void {
   canvasListeners.add(cb)
   return () => { canvasListeners.delete(cb) }
+}
+
+const viewListeners = new Set<(msg: ViewMsg) => void>()
+/** The central agent asks this window to show a board (and maybe one node): `t:'view'`. */
+export function subscribeView(cb: (msg: ViewMsg) => void): () => void {
+  viewListeners.add(cb)
+  return () => { viewListeners.delete(cb) }
+}
+
+const shotListeners = new Set<(msg: ShotMsg) => void>()
+/** The central agent asks for a screenshot of what the user sees: `t:'shot'`. */
+export function subscribeShot(cb: (msg: ShotMsg) => void): () => void {
+  shotListeners.add(cb)
+  return () => { shotListeners.delete(cb) }
 }
 let ws: WebSocket | null = null
 let everConnected = false
@@ -160,6 +174,8 @@ function connect() {
     // Petunjuk watcher file manager (flag WATCH): lewat bus, bukan sub terminal.
     if (msg.t === 'fsdirty') { emitFsEvent({ kind: 'dirty', path: msg.dir, origin: 'remote' }); return }
     if (msg.t === 'canvas') { for (const l of [...canvasListeners]) l(msg); return }
+    if (msg.t === 'view') { for (const l of [...viewListeners]) l(msg); return }
+    if (msg.t === 'shot') { for (const l of [...shotListeners]) l(msg); return }
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'reset') {

@@ -45,6 +45,19 @@ const complete = (body: Record<string, unknown>) => ({ resultType: 'complete', .
 
 const asObj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {})
 
+/**
+ * A receipt's `data.image` ({mimeType, data: base64}, canvas.screenshot) lifted out as an MCP image
+ * content block (spec 2025-11-25 server/tools "Image Content"); the text and structuredContent copies
+ * keep every other field but never the base64, so the model sees the picture once, not as text.
+ */
+export function splitImage(raw: Record<string, unknown>): { receipt: Record<string, unknown>; image?: { mimeType: string; data: string } } {
+  const data = asObj(raw.data)
+  const img = asObj(data.image)
+  if (typeof img.mimeType !== 'string' || typeof img.data !== 'string') return { receipt: raw }
+  const { image: _image, ...rest } = data
+  return { receipt: { ...raw, data: rest }, image: { mimeType: img.mimeType, data: img.data } }
+}
+
 /** Answers one JSON-RPC message; null for notifications (no `id`), which never get a response. */
 export async function handleRpc(msg: RpcMessage, backend: McpBackend): Promise<RpcResponse | null> {
   if (msg.id === undefined || msg.id === null) return null
@@ -71,9 +84,9 @@ export async function handleRpc(msg: RpcMessage, backend: McpBackend): Promise<R
     }
     case 'tools/call': {
       if (typeof params.name !== 'string' || !params.name) return rpcError(id, RPC.invalidParams, 'name is required')
-      const receipt = await backend.call(params.name, asObj(params.arguments))
+      const { receipt, image } = splitImage(await backend.call(params.name, asObj(params.arguments)))
       return ok(id, complete({
-        content: [{ type: 'text', text: JSON.stringify(receipt) }],
+        content: [...(image ? [{ type: 'image', data: image.data, mimeType: image.mimeType }] : []), { type: 'text', text: JSON.stringify(receipt) }],
         structuredContent: receipt,
         isError: receipt.outcome !== 'ok',
       }))

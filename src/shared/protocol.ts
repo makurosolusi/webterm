@@ -39,6 +39,10 @@ export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // `removed` = node ids the server took off the board (their sessions already ended) along with every
 // cable touching them; such a frame carries empty `nodes`/`bridges`.
 export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[] }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg
+// Central asked the UI to show workspace `workspaceId` (and centre/reveal `nodeId` when given).
+export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string }
+// Central asked for a screenshot: the visible UI tab captures its view and POSTs it to /api/canvas-shot/<reqId>.
+export interface ShotMsg { t: 'shot'; reqId: string; maxWidth: number }
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg
 
 export const WS_PATH = '/ws'
