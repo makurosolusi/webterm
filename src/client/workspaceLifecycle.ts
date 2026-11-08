@@ -81,7 +81,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   } = deps
 
   const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired })
-  useCanvasPush({ activeWsRef, nodesRef, edgesRef, setNodes, setEdges })
+  useCanvasPush({ activeWsRef, nodesRef, edgesRef, setNodes, setEdges, recordClosed })
 
   // Save yang menggantung ditulis oleh `applyWorkspace` (flush, lihat `useWorkspaceSaver`) SEBELUM
   // board baru dipasang — bukan dibatalkan di sini, karena itu membuang edit terakhir pengguna.

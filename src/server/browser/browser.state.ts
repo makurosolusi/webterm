@@ -19,6 +19,8 @@ export interface BrowserRuntime {
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
   /** Hand a browser node's lease back to the human (idempotent); an agent's turn ended. */
   releaseLease(nodeId: string): void
+  /** The node was removed from its board: close its page and drop its lease/lifecycle tracking. */
+  closeNode(nodeId: string): Promise<void>
   /** Matikan proxy, koneksi CDP, timer, dan proses Chromium. Idempoten. */
   shutdown(): Promise<void>
 }

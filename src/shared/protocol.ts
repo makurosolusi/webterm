@@ -36,7 +36,9 @@ export interface StatusMsg { t: 'status'; id: string; status?: AgentStatus }
 export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // The server added `nodes`/`bridges` to board `workspaceId`, on top of stored version `base`, storing
 // version `updatedAt`: the UI merges ids it lacks (`base` tells a window whether it knew what lay underneath).
-export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[] }
+// `removed` = node ids the server took off the board (their sessions already ended) along with every
+// cable touching them; such a frame carries empty `nodes`/`bridges`.
+export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[] }
 export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg
 
 export const WS_PATH = '/ws'

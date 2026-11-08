@@ -102,6 +102,10 @@ describe('runtime menyala di atas CDP tiruan', () => {
     fake.emit('Page.screencastFrame', { data: Buffer.from('jpeg').toString('base64'), sessionId: 7, metadata: {} }, 'S-T1')
     await until(() => frames > 0)
     expect(rt?.status().live).toBe(1)
+    // Central removed the node from its board: the page closes now, not on the idle timer.
+    await rt?.closeNode('b1')
+    expect(fake.methods()).toContain('Target.closeTarget')
+    await until(() => rt?.status().live === 0)
   })
 
   test('default on: shim dipasang saat start; kabel dipasang SETELAH sesi jalan langsung berlaku, dilepas = ditolak', async () => {

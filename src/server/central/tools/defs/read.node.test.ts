@@ -4,7 +4,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixtu
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ToolCtx } from '../toolTypes'
-import { NODE_READ_DEFS } from './read.node'
+import { createNodeReadDefs, type NodeReadDeps } from './read.node'
 import { READ_TOOLS_FLAG } from './read.shared'
 
 let f: Fixture
@@ -12,9 +12,9 @@ let unregister = (): void => undefined
 beforeEach(() => { f = openFixture(); seedPortfolio(f.db) })
 afterEach(() => { unregister(); f.close() })
 
-function ctx(): ToolCtx {
+function ctx(deps: NodeReadDeps = {}): ToolCtx {
   const registry = createRegistry()
-  NODE_READ_DEFS.forEach((d) => registry.register(d))
+  createNodeReadDefs(deps).forEach((d) => registry.register(d))
   return { db: f.db, registry, guard: ALLOW_ALL_GUARD, maxTier: 'R0', conversationId: 'central:global', now: () => 1, env: { [READ_TOOLS_FLAG]: 'on' } }
 }
 /** The workspace store is a separate file (webterm.db) in production: the ledger fixture has no workspace table. */
@@ -51,5 +51,24 @@ describe('node.list', () => {
     for (const bad of [{ limit: 0 }, { limit: 51 }, { offset: -1 }, { limit: 'x' }]) {
       expect(await execTool(ctx(), 'node.list', { projectId: 'p1', ...bad })).toMatchObject({ ok: false, code: 'invalid_shape' })
     }
+  })
+
+  it('reports live for terminal/agent nodes (any pane) and only the host of a browser url', async () => {
+    workspace([
+      { id: 't1', kind: 'terminal' },
+      { id: 't2', kind: 'terminal', panes: { dir: 'h', ratio: 0.5, a: { id: 'p-a' }, b: { id: 'p-b' } } },
+      { id: 'a1', kind: 'agent', agentId: 'claude' },
+      { id: 'b1', kind: 'browser', url: 'https://github.com/org/repo?token=abc#x' },
+      { id: 'b2', kind: 'browser' },
+      { id: 'f1', kind: 'files' },
+    ])
+    const live = new Set(['p-b', 'a1'])
+    const res = await execTool(ctx({ live: () => (id) => live.has(id) }), 'node.list', { projectId: 'p1' })
+    const items = (res.data as { items: Array<Record<string, unknown>> }).items
+    expect(items.map((i) => [i.id, i.live, i.host])).toEqual([
+      ['t1', false, undefined], ['t2', true, undefined], ['a1', true, undefined],
+      ['b1', undefined, 'github.com'], ['b2', undefined, undefined], ['f1', undefined, undefined],
+    ])
+    expect(JSON.stringify(items)).not.toContain('token=abc')
   })
 })

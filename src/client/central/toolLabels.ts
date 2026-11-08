@@ -4,7 +4,9 @@
 export interface ToolLabel { title: string; text: string }
 
 export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
-  'node.list': { title: 'List nodes', text: 'Lists the terminals, agents and files on a project canvas.' },
+  'node.list': { title: 'List nodes', text: 'Lists the terminals, agents, browsers and files on a project canvas.' },
+  'canvas.open': { title: 'Open nodes', text: 'Opens new terminals, Claude sessions or a browser on a project canvas.' },
+  'canvas.close': { title: 'Close nodes', text: 'Closes nodes on a project canvas after you approve; you can reopen them.' },
   'project.brief': { title: 'Project summary', text: 'Gives a short status of a project and what to do next.' },
   'project.discover': { title: 'Find new folders', text: 'Finds folders that are not a project yet.' },
   'project.list': { title: 'List projects', text: 'Lists your projects with their tasks and approvals.' },

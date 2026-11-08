@@ -101,3 +101,84 @@ test('workspaceOfNode finds the owning board; workspaceForCwd picks the nearest 
   expect(push.workspaceForCwd('/repository')?.id).toBe(nested.id) // a string prefix, not a parent dir
   expect(push.workspaceForCwd('/tmp/unrelated')?.id).toBe(nested.id)
 })
+
+function removeSetup() {
+  const db = new Db(openDb(':memory:'))
+  const sent: ServerMsg[] = []
+  const tornDown: WsNode[][] = []
+  const push = createCanvasPush({ db, broadcast: (m) => sent.push(m), teardown: (n) => { tornDown.push(n) } })
+  const ws = db.create('p', '/repo')
+  const nodes: WsNode[] = [
+    { id: 'agent-1', kind: 'agent', x: 0, y: 0 },
+    { id: 'b1', kind: 'browser', x: 500, y: 0 },
+    { id: 't1', kind: 'terminal', x: 0, y: 400, panes: { dir: 'h', ratio: 0.5, a: { id: 't1' }, b: { id: 't1-p2' } } },
+  ]
+  const bridges = [
+    { id: 'l-agent-b1', source: 'agent-1', target: 'b1', kind: 'context' as const },
+    { id: 'l-t1-agent', source: 't1', target: 'agent-1', kind: 'context' as const },
+  ]
+  db.save({ ...ws, nodes, bridges }, ws.updatedAt)
+  return { db, sent, tornDown, push, ws: db.get(ws.id)! }
+}
+
+test('remove takes nodes and every cable touching them off the board, then tears them down and broadcasts the ids', () => {
+  const { db, sent, tornDown, push, ws } = removeSetup()
+  const res = push.remove({ workspaceId: ws.id, nodeIds: ['b1', 't1', 'b1'] })
+  if (!res.ok) throw new Error(`remove refused: ${res.code}`)
+  const stored = db.get(ws.id)!
+  expect(stored.nodes.map((n) => n.id)).toEqual(['agent-1'])
+  expect(stored.bridges).toEqual([])
+  expect(res.workspace).toEqual(stored)
+  expect(res.removed.map((n) => n.id)).toEqual(['b1', 't1'])
+  expect(tornDown).toEqual([res.removed]) // once, with the panes the session close needs
+  expect(tornDown[0][1].panes).toBeDefined()
+  expect(sent).toEqual([{ t: 'canvas', workspaceId: ws.id, base: ws.updatedAt, updatedAt: stored.updatedAt, nodes: [], bridges: [], removed: ['b1', 't1'] }])
+})
+
+test('remove refuses the whole request when any id is not on that board, and an unknown board', () => {
+  const { db, sent, tornDown, push, ws } = removeSetup()
+  const other = db.create('q')
+  db.save({ ...other, nodes: [{ id: 'elsewhere', kind: 'terminal', x: 0, y: 0 }] }, other.updatedAt)
+  expect(push.remove({ workspaceId: ws.id, nodeIds: ['b1', 'missing'] })).toEqual({ ok: false, code: 'node_not_found' })
+  expect(push.remove({ workspaceId: ws.id, nodeIds: ['b1', 'elsewhere'] })).toEqual({ ok: false, code: 'node_not_found' })
+  expect(push.remove({ workspaceId: 'nope', nodeIds: ['b1'] })).toEqual({ ok: false, code: 'workspace_not_found' })
+  expect(db.get(ws.id)).toEqual(ws)
+  expect(sent).toHaveLength(0)
+  expect(tornDown).toHaveLength(0)
+})
+
+test('a UI save that wins the race is kept: remove re-reads and removes from it; a failing teardown never undoes the removal', () => {
+  const { db, sent, ws } = removeSetup()
+  let raced = false
+  const racing = {
+    get: (id: string) => db.get(id),
+    list: () => db.list(),
+    getActive: () => db.getActive(),
+    nodeIds: () => db.nodeIds(),
+    save: (next: Workspace, base?: number) => {
+      if (!raced) {
+        raced = true
+        const cur = db.get(next.id)!
+        db.save({ ...cur, name: 'renamed by the UI' }, cur.updatedAt)
+      }
+      return db.save(next, base)
+    },
+  }
+  const teardown = () => { throw new Error('pty gone') }
+  const res = createCanvasPush({ db: racing, broadcast: (m) => sent.push(m), teardown }).remove({ workspaceId: ws.id, nodeIds: ['agent-1'] })
+  expect(res.ok).toBe(true)
+  const stored = db.get(ws.id)!
+  expect(stored.name).toBe('renamed by the UI')
+  expect(stored.nodes.map((n) => n.id)).toEqual(['b1', 't1'])
+  expect(stored.bridges).toEqual([])
+  expect((sent[0] as CanvasMsg).updatedAt).toBe(stored.updatedAt)
+})
+
+test('remove throws after losing every save race', () => {
+  const { db, ws } = removeSetup()
+  const alwaysStale = { get: (id: string) => db.get(id), list: () => db.list(), getActive: () => db.getActive(), nodeIds: () => db.nodeIds(), save: () => 'stale' as const }
+  let thrown: unknown
+  try { createCanvasPush({ db: alwaysStale, broadcast: () => {} }).remove({ workspaceId: ws.id, nodeIds: ['b1'] }) } catch (err) { thrown = err }
+  expect(thrown instanceof Error && thrown.message).toMatch(/lost 5 save races/)
+  expect(db.get(ws.id)!.nodes).toHaveLength(3)
+})

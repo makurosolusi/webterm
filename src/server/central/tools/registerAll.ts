@@ -16,7 +16,8 @@ import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
 import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
 import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
-import { NODE_READ_DEFS } from './defs/read.node'
+import { createCanvasActDefs } from './defs/canvas.act.defs'
+import { createNodeReadDefs } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
@@ -42,13 +43,19 @@ export interface Ca2ToolDeps {
 type Env = Record<string, string | undefined>
 const on = (env: Env, name: string): boolean => flagOn(env[name])
 const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?? '').trim().toLowerCase())
+// Loaded on first call, not at import: the board runtime opens webterm.db and `sessions` boots the PTY
+// supervisor, neither of which a module that merely registers tools (or its tests) should trigger.
+const nodeDefs = (): ToolDef[] => [
+  ...createNodeReadDefs({ live: async () => { const { sessions } = await import('../../sessions'); return (id) => sessions.isLive(id) } }),
+  ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser') }),
+]
 
 /** Registers the groups whose flag is on and returns the names added (already-registered names are skipped). */
 export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env: Env = process.env): string[] {
   // Read tools dan memori ikut `central` (turunan, ENVSIMPLE D5); env efektif dari boot sudah memuat kunci turunannya.
   const central = isEnabled('central', env)
   const groups: Array<[boolean, () => readonly ToolDef[]]> = [
-    [central, () => [...CAP_DEFS, ...PROJECT_READ_DEFS, ...NODE_READ_DEFS, ...TASK_READ_DEFS]],
+    [central, () => [...CAP_DEFS, ...PROJECT_READ_DEFS, ...nodeDefs(), ...TASK_READ_DEFS]],
     [agentsOn(env) && !!deps.executor, () => createAgentDefs(deps.executor as AgentExecutor)],
     [agentsOn(env), () => [TASK_RUN_DEF]],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],

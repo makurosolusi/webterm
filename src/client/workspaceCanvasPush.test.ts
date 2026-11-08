@@ -1,11 +1,12 @@
 // A server canvas push (`t:'canvas'`) while this window holds unsent saves: the next save carries
-// the pushed nodes and is based on the push's version (no 409, no dropped edit), and the mounted
-// board merges them live.
+// the pushed nodes (and lacks the removed ones) and is based on the push's version (no 409, no
+// dropped edit, no resurrected node), and the mounted board applies them live.
 import { describe, expect, it, vi } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasMsg } from '../shared/protocol'
 import { DEFAULT_VIEWPORT, type Workspace, type WsNode } from '../shared/workspace'
-import { createSaveQueue, mergeCanvasAdd } from './workspaceSaveQueue'
+import { createSaveQueue } from './workspaceSaveQueue'
+import { mergeCanvasPush } from './workspaceCanvasMerge'
 import { applyCanvasPush, type LiveBoard } from './workspaceCanvasPush'
 
 const AGENT: WsNode = { id: 'agent-1', kind: 'agent', x: 0, y: 0 }
@@ -37,10 +38,16 @@ function fakeServer(start: Workspace) {
   /** The server-side push: stores the browser + cable on top of the current row, returns the frame. */
   const push = (): CanvasMsg => {
     const base = stored.updatedAt
-    stored = mergeCanvasAdd({ ...stored, updatedAt: base + 1 }, { nodes: [BROWSER], bridges: [CABLE] })
+    stored = mergeCanvasPush({ ...stored, updatedAt: base + 1 }, { nodes: [BROWSER], bridges: [CABLE] })
     return { t: 'canvas', workspaceId: stored.id, base, updatedAt: stored.updatedAt, nodes: [BROWSER], bridges: [CABLE] }
   }
-  return { save, sent, hooks, push, get: () => stored, set: (ws: Workspace) => { stored = ws } }
+  /** The server-side remove: drops `ids` and their cables from the current row, returns the frame. */
+  const remove = (ids: string[]): CanvasMsg => {
+    const base = stored.updatedAt
+    stored = mergeCanvasPush({ ...stored, updatedAt: base + 1 }, { nodes: [], bridges: [], removed: ids })
+    return { t: 'canvas', workspaceId: stored.id, base, updatedAt: stored.updatedAt, nodes: [], bridges: [], removed: ids }
+  }
+  return { save, sent, hooks, push, remove, get: () => stored, set: (ws: Workspace) => { stored = ws } }
 }
 
 const setup = (start = board(10)) => {
@@ -109,16 +116,40 @@ describe('save queue absorbs a canvas push', () => {
     expect(srv.get().nodes.map((n) => n.id)).toEqual(['agent-1'])
   })
 
+  it('a payload locked before a remove is sent without the removed node and its cable, on the push version', async () => {
+    const withBrowser = { ...board(10, 'w', [AGENT, BROWSER]), bridges: [CABLE] }
+    const { srv, hooks, q } = setup(withBrowser)
+    void q.enqueue({ ...withBrowser, name: 'first' })
+    srv.hooks.after = () => q.absorb(srv.remove(['b1'])) // Central closes b1 right after 'first' is stored
+    await q.enqueue({ ...withBrowser, name: 'locked before the remove' }) // still holds b1 + cable
+    expect(hooks.onStale).not.toHaveBeenCalled()
+    expect(srv.get().name).toBe('locked before the remove')
+    expect(srv.get().nodes.map((n) => n.id)).toEqual(['agent-1'])
+    expect(srv.get().bridges).toEqual([])
+  })
+
+  it('a save in flight that a remove beat is resent without the removed node', async () => {
+    const withBrowser = { ...board(10, 'w', [AGENT, BROWSER]), bridges: [CABLE] }
+    const { srv, hooks, q } = setup(withBrowser)
+    srv.hooks.before = () => q.absorb(srv.remove(['b1']))
+    await q.enqueue({ ...withBrowser, name: 'mine' })
+    expect(srv.sent).toEqual([10, 11])
+    expect(hooks.onStale).not.toHaveBeenCalled()
+    expect(srv.get().nodes.map((n) => n.id)).toEqual(['agent-1'])
+    expect(srv.get().bridges).toEqual([])
+  })
+
   it('merging ignores ids the board already has', () => {
     const ws = { ...board(10, 'w', [AGENT, BROWSER]), bridges: [CABLE] }
-    expect(mergeCanvasAdd(ws, { nodes: [{ ...BROWSER, url: 'changed' }], bridges: [CABLE] })).toBe(ws)
+    expect(mergeCanvasPush(ws, { nodes: [{ ...BROWSER, url: 'changed' }], bridges: [CABLE] })).toBe(ws)
   })
 })
 
 describe('applyCanvasPush (mounted board)', () => {
-  const live = (activeId: string) => {
-    const state = { nodes: [{ id: 'agent-1', type: 'agent', position: { x: 0, y: 0 }, data: {}, selected: true }] as Node[], edges: [] as Edge[] }
+  const live = (activeId: string, nodes: Node[] = [{ id: 'agent-1', type: 'agent', position: { x: 0, y: 0 }, data: {}, selected: true }], edges: Edge[] = []) => {
+    const state = { nodes, edges }
     const b: LiveBoard = {
+      recordClosed: vi.fn(),
       activeWsRef: { current: { ...board(10), id: activeId } },
       nodesRef: { current: state.nodes },
       edgesRef: { current: state.edges },
@@ -151,5 +182,45 @@ describe('applyCanvasPush (mounted board)', () => {
     expect(state.nodes).toHaveLength(1)
     expect(b.setNodes).not.toHaveBeenCalled()
     expect(b.setEdges).not.toHaveBeenCalled()
+  })
+
+  it('drops removed nodes and every cable touching them, records them for Reopen, and sends no close', () => {
+    const flow = (id: string, type: string): Node => ({ id, type, position: { x: 0, y: 0 }, data: {} })
+    const keep = { id: 'bridge-agent-1-t2', source: 'agent-1', target: 't2' }
+    const { b, state } = live('w1', [flow('agent-1', 'agent'), flow('b1', 'browser'), flow('t1', 'terminal'), flow('t2', 'terminal')], [
+      { id: CABLE.id, source: 'agent-1', target: 'b1' }, { id: 'bridge-t1-agent-1', source: 't1', target: 'agent-1' }, keep,
+    ])
+    const removal: CanvasMsg = { t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], removed: ['b1', 't1', 'unknown'] }
+    expect(applyCanvasPush(b, removal)).toBe(true)
+    expect(state.nodes.map((n) => n.id)).toEqual(['agent-1', 't2'])
+    expect(b.nodesRef.current.map((n) => n.id)).toEqual(['agent-1', 't2'])
+    expect(state.edges.map((e) => e.id)).toEqual([keep.id])
+    expect(b.edgesRef.current.map((e) => e.id)).toEqual([keep.id])
+    expect(b.recordClosed).toHaveBeenCalledTimes(1)
+    const [ids, snapshot, owner, cables] = vi.mocked(b.recordClosed).mock.calls[0]
+    expect(ids).toEqual(['b1', 't1'])
+    expect(snapshot.map((n) => n.id)).toEqual(['agent-1', 'b1', 't1', 't2']) // taken before the removal
+    expect(owner?.id).toBe('w1')
+    expect(cables?.map((c) => c.id)).toEqual([CABLE.id, 'bridge-t1-agent-1', keep.id])
+    // The same frame again (another subscriber, a replay) records nothing twice.
+    applyCanvasPush(b, removal)
+    expect(b.recordClosed).toHaveBeenCalledTimes(1)
+  })
+
+  it('a removal for another board leaves the mounted board and its history alone', () => {
+    const { b, state } = live('w2')
+    expect(applyCanvasPush(b, { t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], removed: ['agent-1'] })).toBe(false)
+    expect(state.nodes).toHaveLength(1)
+    expect(b.setNodes).not.toHaveBeenCalled()
+    expect(b.recordClosed).not.toHaveBeenCalled()
+  })
+
+  it('the workspaces list entry of a board that is not mounted loses the removed nodes and cables', () => {
+    const listed = { ...board(10, 'w', [AGENT, BROWSER]), bridges: [CABLE] }
+    const after = mergeCanvasPush(listed, { nodes: [], bridges: [], removed: ['b1'] })
+    expect(after.nodes.map((n) => n.id)).toEqual(['agent-1'])
+    expect(after.bridges).toEqual([])
+    expect(after.updatedAt).toBe(10) // the list keeps the version this window knew
+    expect(mergeCanvasPush(after, { nodes: [], bridges: [], removed: ['b1'] })).toBe(after)
   })
 })

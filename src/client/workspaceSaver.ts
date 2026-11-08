@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import { toBridge, toWsNode } from './store'
-import { createSaveQueue, mergeCanvasAdd, type SaveState } from './workspaceSaveQueue'
+import { createSaveQueue, type SaveState } from './workspaceSaveQueue'
+import { mergeCanvasPush } from './workspaceCanvasMerge'
 import { subscribeCanvas } from './ws'
 import { DELETED_NOTICE, STALE_RELOADED_NOTICE, showSaveNotice, staleNotSavedNotice } from './workspaceSave.notice'
 import { useSaveLifecycle } from './workspaceSave.lifecycle'
@@ -117,13 +118,14 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
     saveTimer.current = setTimeout(fire, SAVE_DEBOUNCE_MS)
   }, [activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, cancelSave, queue, store])
 
-  // Server pushes are already stored: they only have to survive in every payload not yet sent, and
-  // show in the list (the mounted canvas merges them in `workspaceCanvasPush.ts`).
+  // Server pushes are already stored: added nodes have to survive in every payload not yet sent and
+  // removed ones must not come back from it, and the list shows both, for every board (the mounted
+  // canvas applies them in `workspaceCanvasPush.ts`).
   useEffect(() => subscribeCanvas((msg) => {
     queue.absorb(msg)
     const box = locked.current
-    if (box?.payload.id === msg.workspaceId) box.payload = mergeCanvasAdd(box.payload, msg)
-    setWorkspaces((prev) => prev.map((w) => (w.id === msg.workspaceId ? mergeCanvasAdd(w, msg) : w)))
+    if (box?.payload.id === msg.workspaceId) box.payload = mergeCanvasPush(box.payload, msg)
+    setWorkspaces((prev) => prev.map((w) => (w.id === msg.workspaceId ? mergeCanvasPush(w, msg) : w)))
   }), [queue, setWorkspaces])
 
   const flushSave = useCallback(() => {
