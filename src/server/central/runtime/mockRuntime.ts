@@ -179,7 +179,7 @@ export class MockRuntime implements CentralRuntime {
     const outputTokens = estimateTokens(text)
     return { inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0,
       costMicros: inputTokens * INPUT_COST_MICROS_PER_TOKEN + outputTokens * OUTPUT_COST_MICROS_PER_TOKEN,
-      durationMs }
+      durationMs, ...(input.model ? { model: input.model } : {}) }
   }
 
   private overBudget(input: TurnInput, text: string): boolean {

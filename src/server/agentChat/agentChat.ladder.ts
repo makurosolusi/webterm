@@ -9,7 +9,7 @@ import { projectModelOverride } from '../models/modelOverride'
 /** Value Claude Code lists for "use the default model" (mirrors the client's DEFAULT_MODEL). */
 export const AGENT_CHAT_DEFAULT_MODEL = 'default'
 
-// TODO(models): 'central' stands in until the ladder gets its own 'agent-chat' CallKind (coordinator's call).
+// Kind 'central': Agent Chat is interactive like Central, so it shares Central's T2 (Sonnet · medium) default.
 export function agentChatLadderPick(workspaceId?: string): ModelPick {
   return resolveModel({ kind: 'central', override: projectModelOverride(workspaceId) })
 }
