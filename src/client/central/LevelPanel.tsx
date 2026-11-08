@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
 import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
+import { useLiveSettings } from '../useSettings'
 import { CL, LEVEL_MEANING, LEVEL_NAMES } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
 import type { BudgetView, CentralControlClient, StatusView } from './centralControlTypes'
@@ -47,9 +48,16 @@ export const openCentralSettings = (): void => {
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: CENTRAL_SETTINGS_SECTION } }))
 }
 
+/** Settings section id of the Agent section, where Skip approvals lives. */
+export const AGENT_SETTINGS_SECTION = 'agent'
+const openAgentSettings = (): void => {
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: AGENT_SETTINGS_SECTION } }))
+}
+
 export default function LevelPanel({ client = centralControlApi, onStatus, askHalt, onHaltAsked }: LevelPanelProps) {
   const control = useLoad((s) => client.getControl(s))
   const status = useLoad((s) => client.getStatus(s))
+  const { skipApprovals } = useLiveSettings()
   const [confirming, setConfirming] = useState(false)
   const [reason, setReason] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -89,6 +97,12 @@ export default function LevelPanel({ client = centralControlApi, onStatus, askHa
         </div>
       )}
       <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={openCentralSettings}>{CL.change}</Button>
+      {skipApprovals && (
+        <p className="ccp-row__meta">
+          {CL.approvalsSkipped}{' '}
+          <Button type="button" size="sm" variant="secondary" aria-label={CL.changeApprovalsLabel} onClick={openAgentSettings}>{CL.change}</Button>
+        </p>
+      )}
       <h3 id="ccp-budget-h">{CL.budgetHeading}</h3>
       {status.error && <p role="alert" className="ccp-error">{status.error}</p>}
       {statusData && <div role="group" aria-labelledby="ccp-budget-h">{budgetMeters(statusData.budget)}</div>}
