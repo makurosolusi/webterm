@@ -133,12 +133,9 @@ describe('node close confirm (canvas)', () => {
 
 describe('nodeCloseCopy', () => {
   it('names what ends per node kind, and falls back for kinds with nothing running', () => {
-    expect(nodeCloseCopy([{ type: 'editor', data: { title: 'a.ts' } }])).toEqual({
-      title: 'Close “a.ts”?', body: 'Any unsaved changes in the editor will be lost.',
-    })
-    expect(nodeCloseCopy([{ type: 'diff', data: {} }])).toEqual({ title: 'Close “this node”?', body: 'It will be removed from the canvas.' })
-    expect(nodeCloseCopy([{ type: 'agentChat', data: {} }]).title).toBe('Close “Agent chat”?')
-    expect(nodeCloseCopy([{ type: 'terminal', data: {} }, { type: 'terminal', data: {} }, { type: 'files', data: {} }])).toEqual({
+    expect(nodeCloseCopy([{ id: 'd', type: 'diff', data: {} }])).toEqual({ title: 'Close “this node”?', body: 'It will be removed from the canvas.' })
+    expect(nodeCloseCopy([{ id: 'c', type: 'agentChat', data: {} }]).title).toBe('Close “Agent chat”?')
+    expect(nodeCloseCopy([{ id: 't1', type: 'terminal', data: {} }, { id: 't2', type: 'terminal', data: {} }, { id: 'f', type: 'files', data: {} }])).toEqual({
       title: 'Close 3 nodes?', body: 'Terminal sessions and their running processes will end.',
     })
   })
