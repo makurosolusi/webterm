@@ -24,7 +24,8 @@ import { ensureRoutines } from './routines/routinesRuntime'
 import { startCostCapture } from './cost/costRuntime'
 import { armDagLoop } from './dag/dag.runtime'
 import { bootCa2 } from './central/ca2Boot'
-import { registerCanvasBroadcast } from './canvas/canvasPush.runtime'
+import { registerCanvasBroadcast, registerCanvasTeardown } from './canvas/canvasPush.runtime'
+import { createCanvasTeardown } from './canvas/canvasTeardown'
 import { initEnvSettings } from './envSettings.runtime'
 import { bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
@@ -231,6 +232,7 @@ registerCanvasBroadcast((msg) => {
   const frame = JSON.stringify(msg)
   for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(frame)
 })
+registerCanvasTeardown(createCanvasTeardown({ sessions, browser: activeBrowser }))
 const browserWss = new WebSocketServer({ noServer: true }) // terpisah: handler 'connection' PTY tidak boleh melihat socket browser
 server.on('upgrade', (req, socket, head) => {
   // Only /ws is ours. In dev Vite's upgrade listener (same server) already claimed its HMR upgrade,

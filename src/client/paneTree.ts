@@ -8,6 +8,9 @@
 // Tipenya (`Pane`/`PaneLeaf`/`PaneSplit`) hidup di `shared/workspace.ts` bersama bentuk persisted
 // lainnya, dengan pola yang sama seperti `Comment`: tipe di shared, logikanya di sini.
 import type { Pane, PaneLeaf, PaneSplit } from '../shared/workspace'
+import { paneLeafIds, sessionIdsOf } from '../shared/paneSessions'
+
+export { sessionIdsOf }
 
 export const isLeaf = (p: Pane): p is PaneLeaf => 'id' in p
 
@@ -25,10 +28,8 @@ export function rootPane(nodeId: string, panes?: Pane): Pane {
   return panes ?? { id: nodeId }
 }
 
-/** Semua id PTY di dalam pohon, urut kiri-ke-kanan / atas-ke-bawah. */
-export function leafIds(p: Pane): string[] {
-  return isLeaf(p) ? [p.id] : [...leafIds(p.a), ...leafIds(p.b)]
-}
+/** Semua id PTY di dalam pohon, urut kiri-ke-kanan / atas-ke-bawah (shared: server ikut memakainya). */
+export const leafIds = paneLeafIds
 
 /**
  * Ganti daun `targetId` dengan split dua: daun itu jadi `a`, pane baru jadi `b`.
@@ -161,18 +162,6 @@ export function boxRect(host: { left: number; top: number; width: number; height
     width: (host.width * box.width) / 100,
     height: (host.height * box.height) / 100,
   }
-}
-
-/**
- * Semua id PTY yang dipegang satu node, yaitu semua yang harus ditutup saat node itu hilang.
- *
- * KENAPA ADA: tiap jalur close dulu mengirim `close` untuk id NODE saja. Begitu satu node bisa
- * punya banyak PTY, itu membocorkan setiap pane kedua dan seterusnya — shell-nya hidup tanpa
- * pemilik sampai server restart, tak terlihat di canvas mana pun. Node tanpa `panes` memulangkan
- * id-nya sendiri, jadi jalur lama tetap persis sama.
- */
-export function sessionIdsOf(panes: Pane | undefined, nodeId: string): string[] {
-  return panes ? leafIds(panes) : [nodeId]
 }
 
 /**

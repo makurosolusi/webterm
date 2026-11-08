@@ -10,11 +10,12 @@
 // - any other failure (offline, 5xx, 413, server restarting) keeps the payload DIRTY: it is
 //   retried with backoff, on `retry()` (the Retry button, a socket reconnect) and on the next
 //   edit, VS Code "Failed to save … Retry" style.
-// - a server push (`absorb`, nodes/cables the server added) is folded into every payload already
-//   locked, and when it sits on a version this window knew, its version becomes the next base.
+// - a server push (`absorb`, nodes/cables the server added or nodes it removed) is folded into every
+//   payload already locked, and when it sits on a version this window knew, its version becomes the next base.
 import type { CanvasMsg } from '../shared/protocol'
 import type { Workspace } from '../shared/workspace'
 import { saveWorkspace } from './api'
+import { mergeCanvasPush } from './workspaceCanvasMerge'
 import { reconnectDelay } from './ws.connection'
 
 const HTTP_NOT_FOUND = 404
@@ -49,7 +50,7 @@ export interface SaveQueueOptions {
 export interface SaveQueue {
   /** Queue a save; resolves once the queue went idle or stopped on a failure. Never rejects. */
   enqueue: (ws: Workspace) => Promise<void>
-  /** The server stored `msg.nodes`/`msg.bridges` on this board (a canvas push). */
+  /** The server stored `msg.nodes`/`msg.bridges` on this board, or removed `msg.removed` (a canvas push). */
   absorb: (msg: CanvasMsg) => void
   /** Resend the dirty boards now (no-op unless a save failed). */
   retry: () => Promise<void>
@@ -59,15 +60,6 @@ export interface SaveQueue {
 }
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
-
-/** `ws` plus the pushed nodes/cables whose ids it lacks; everything else (`updatedAt` too) unchanged. */
-export function mergeCanvasAdd(ws: Workspace, add: Pick<CanvasMsg, 'nodes' | 'bridges'>): Workspace {
-  const nodeIds = new Set(ws.nodes.map((n) => n.id))
-  const bridgeIds = new Set(ws.bridges.map((b) => b.id))
-  const nodes = add.nodes.filter((n) => !nodeIds.has(n.id))
-  const bridges = add.bridges.filter((b) => !bridgeIds.has(b.id))
-  return nodes.length || bridges.length ? { ...ws, nodes: [...ws.nodes, ...nodes], bridges: [...ws.bridges, ...bridges] } : ws
-}
 
 type Entry = { ws: Workspace; epoch: number }
 
@@ -193,9 +185,10 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
     absorb(msg) {
       const id = msg.workspaceId
       if (gone.has(id)) return
-      // Payloads locked before the push lack its nodes; ones built after it carry them (or a delete).
+      // Payloads locked before the push lack its nodes and still hold the removed ones; ones built
+      // after it already match (or carry a later local delete).
       for (const entry of new Set([dirty.get(id), inflight?.id === id ? inflight.entry : undefined])) {
-        if (entry) entry.ws = mergeCanvasAdd(entry.ws, msg)
+        if (entry) entry.ws = mergeCanvasPush(entry.ws, msg)
       }
       pushes.set(id, [...(pushes.get(id) ?? []), { base: msg.base, updatedAt: msg.updatedAt }])
       advance(id)

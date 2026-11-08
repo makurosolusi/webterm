@@ -1,15 +1,13 @@
 import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { isSafeNodeId, type Pane } from '../shared/workspace'
+import { sessionIdsOf } from '../shared/paneSessions'
 import { forgetNodeToken } from './hooks'
 import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
 import { producePtyExit } from './events/producers'
 import { openFailedNotice } from './sessionsNotices'
 
-/** Every session id of a node: its pane leaves, or the node id itself (client `sessionIdsOf`). */
-const leafIds = (p: Pane): string[] => ('a' in p ? [...leafIds(p.a), ...leafIds(p.b)] : [p.id])
-
-/** Ending sessions: close (one node), closeNodes (a deleted workspace) and failOpen (an open that threw). */
+/** Ending sessions: close (one node), closeNodes (a deleted workspace, nodes Central closed) and failOpen (an open that threw). */
 export class SessionsEnd extends SessionsCore {
   /** `send` = socket PEMANGGIL close, bukan socket sesi. Opsional supaya pemanggil non-socket tetap
    *  bisa membersihkan node tanpa punya tujuan pengiriman. */
@@ -65,7 +63,7 @@ export class SessionsEnd extends SessionsCore {
    *  statuses go too: no node remains to show one. */
   closeNodes(nodes: readonly { id: string; panes?: Pane }[]): void {
     for (const n of nodes) {
-      for (const id of n.panes ? leafIds(n.panes) : [n.id]) {
+      for (const id of sessionIdsOf(n.panes, n.id)) {
         this.close(id)
         this.registry.deleteStatus(id)
       }
