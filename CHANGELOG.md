@@ -85,6 +85,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Every node of the open workspace now has a tab in a strip above the canvas: click to jump to it, see agent status at a glance, close or reorder it; the Nodes list in the Sessions side bar is gone. Turn the strip off with View > Show Node Tabs.
 - Closing an editor asks only when it has unsaved changes, with Save / Don't Save / Cancel (Save All for several files); clean and preview editors close immediately.
 - The browser node toolbar is a single Chrome-style row: a site-security icon, zoom pill and Shields count sit inside the address bar, Enter navigates (no Go button), console errors show as a badge only when there are some, and zoom, device mode, Shields, Design Mode, console, copy/open URL and agent control move into a ⋯ menu; the Design Mode bar appears only while Design Mode is on.
 - The Files node is now a tree like VS Code's Explorer: one click opens a file (as a preview that reuses the same editor until you edit it), one click on a folder expands it, a double click renames, and Right/Left expand and collapse.
