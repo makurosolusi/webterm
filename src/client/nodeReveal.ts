@@ -44,13 +44,17 @@ export function revealInTabs(id: string, kind?: string, focus = true): void {
 }
 
 /** Bawa node ke pandangan (hanya bila tidak sepenuhnya terlihat) lalu fokuskan wrapper-nya, bukan isi node. Mode tab: aktifkan tab, tanpa fitView.
- *  `focus: false` (buka preview dari Files): kamera boleh pindah, fokus keyboard tetap di tempatnya. */
-export function revealNode(rf: RevealRf | null, id: string, rect: Rect, { focus = true } = {}): void {
+ *  `focus: false` (buka dari Files sambil tetap di tree): kamera boleh pindah, fokus keyboard tetap di tempatnya.
+ *  `alongside`: node yang harus ikut terlihat saat kamera pindah (Files yang sedang diklik pengguna). */
+export function revealNode(rf: RevealRf | null, id: string, rect: Rect, { focus = true, alongside }: { focus?: boolean; alongside?: string } = {}): void {
   if (getTabLayout().mode === 'tabs') return revealInTabs(id, rf?.getNode?.(id)?.type, focus)
   if (!rf) return
-  const screen = { width: window.innerWidth, height: window.innerHeight }
+  // Viewport React Flow relatif terhadap PANE, bukan jendela: dengan sidebar terbuka, ukuran jendela
+  // menganggap node di balik tepi kanan pane masih terlihat. Pane 0×0 = belum ada layout (jsdom).
+  const pane = document.querySelector('.react-flow')?.getBoundingClientRect()
+  const screen = pane?.width ? { width: pane.width, height: pane.height } : { width: window.innerWidth, height: window.innerHeight }
   if (!rectInView(rect, rf.getViewport(), screen)) {
-    void rf.fitView({ nodes: [{ id }], padding: FIT_PADDING, minZoom: FIT_MIN_ZOOM, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS })
+    void rf.fitView({ nodes: alongside ? [{ id }, { id: alongside }] : [{ id }], padding: FIT_PADDING, minZoom: FIT_MIN_ZOOM, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS })
   }
   if (focus) focusNodeRoot(id)
 }

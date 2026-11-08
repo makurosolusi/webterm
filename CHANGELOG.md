@@ -116,9 +116,9 @@ Operator notes:
 - `fable` is accepted as a model alias next to haiku, sonnet and opus.
 - Every node of the open workspace now has a tab in a strip above the canvas: click to jump to it, see agent status at a glance, close or reorder it; the Nodes list in the Sessions side bar is gone. Turn the strip off with View > Show Node Tabs.
 - One Central icon in the activity bar (with the Needs-you count) opens the Central side bar; the separate shield icon is gone and the side bar's second tab is now called Control. When Central is not ready yet, its turn-on / Set up Claude Code offer now sits at the top of the Chat tab.
-- Closing an editor asks only when it has unsaved changes, with Save / Don't Save / Cancel (Save All for several files); clean and preview editors close immediately.
+- Closing an editor asks only when it has unsaved changes, with Save / Don't Save / Cancel (Save All for several files); clean editors close immediately.
 - The browser node toolbar is a single Chrome-style row: a site-security icon, zoom pill and Shields count sit inside the address bar, Enter navigates (no Go button), console errors show as a badge only when there are some, and zoom, device mode, Shields, Design Mode, console, copy/open URL and agent control move into a ⋯ menu; the Design Mode bar appears only while Design Mode is on.
-- The Files node is now a tree like VS Code's Explorer: one click opens a file (as a preview that reuses the same editor until you edit it), one click on a folder expands it, a double click renames, and Right/Left expand and collapse.
+- The Files node is now a tree like VS Code's Explorer: one click opens a file while the keyboard stays in the tree, one click on a folder expands it, a double click renames, and Right/Left expand and collapse.
 - Central now runs on the Claude Agent SDK, the same engine as Agent Chat; behaviour is unchanged.
 - The Central chat is now the single hub for everything that needs you: a Needs-you strip on top of the chat lists approvals, reviews and broken tasks, approval requests appear in the chat as cards you can approve, deny or edit there, and the Chat icon shows how many items wait.
 - Telegram is a remote door to the Central chat: messages land in the same conversation as the app (with the bound project noted) and are queued while Central is busy, gates and agent alerts appear once in the chat and are mirrored to Telegram, and /inbox shows the same Needs-you list.
@@ -166,6 +166,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Files node: every file you open gets its own editor node, placed in free space beside the Files node, so you can keep many files open. Clicking a file that is already open shows its node instead of opening a second one. Single clicks no longer replace the file in the last editor; the italic title and Keep open button are gone.
 - A Claude node cabled to a browser now drives it straight away: no handoff step and no refusal asking you to hand it over. If you are using the browser at that moment the agent waits a few seconds for you to stop, and control comes back to you as soon as its turn ends.
 - Browser commands from a cabled Claude node are pre-approved in that node's settings, and the `webterm` command can now run inside the agent sandbox (it failed there before). Reopen Claude nodes that were already open for this to apply.
 - Cost estimates use the correct Sonnet 5.5 cache-read price.

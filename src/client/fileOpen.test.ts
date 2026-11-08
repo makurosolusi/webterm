@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { splitNodes } from '../shared/workspace.schema'
 import { EDITOR_SIZE, openEditorFor, planFileOpen } from './fileOpen'
+import { toFlow, toWsNode } from './store'
 
 const files = { id: 'f1', type: 'files', data: {} }
 const editor = (id: string, filePath: string) => ({ id, type: 'editor', data: { filePath } })
@@ -32,7 +34,7 @@ describe('planFileOpen', () => {
     const nodes = [files, editor('e1', '/w/a.ts')]
     const edges = [{ source: 'f1', target: 'e1' }]
     const plan = planFileOpen(nodes, edges, 'f1', '/w/a.ts', 'new1')
-    expect(plan).toEqual({ focus: true, swap: false, nodeId: 'e1', edge: null })
+    expect(plan).toEqual({ focus: true, nodeId: 'e1', edge: null })
   })
 
   it('re-attaches the cable when the node is still open but the cable was deleted', () => {
@@ -59,22 +61,20 @@ describe('planFileOpen', () => {
   })
 })
 
-describe('planFileOpen preview', () => {
-  const pv = (id: string, filePath: string) => ({ id, type: 'editor', data: { filePath, preview: true } })
-
-  it('swaps the preview editor cabled from this files node instead of minting one', () => {
-    const plan = planFileOpen([files, pv('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'new1', true)
-    expect(plan).toEqual({ focus: false, swap: true, nodeId: 'e1', edge: null })
+describe('one node per file', () => {
+  it('a different file always gets a new node, even with an editor cabled from this files node', () => {
+    const plan = planFileOpen([files, editor('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'new1')
+    expect(plan).toEqual({ focus: false, nodeId: 'new1', edge: { id: 'bridge-f1-new1', source: 'f1', target: 'new1', kind: 'file' } })
   })
 
-  it('never swaps for preview:false, nor a pinned editor', () => {
-    expect(planFileOpen([files, pv('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'n', false).nodeId).toBe('n')
-    expect(planFileOpen([files, editor('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'n', true).nodeId).toBe('n')
-  })
-
-  it('a file already open wins over the swap', () => {
-    const nodes = [files, pv('e1', '/w/a.ts'), editor('e2', '/w/b.ts')]
-    const plan = planFileOpen(nodes, [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'n', true)
-    expect(plan).toMatchObject({ focus: true, swap: false, nodeId: 'e2' })
+  it('a saved node holding preview:true loads as a normal node and is never reused', () => {
+    const { nodes } = splitNodes([{ id: 'e1', kind: 'editor', x: 0, y: 0, filePath: '/w/a.ts', preview: true }])
+    const flow = toFlow(nodes[0])
+    expect(flow.type).toBe('editor')
+    expect(flow.data.filePath).toBe('/w/a.ts')
+    expect(flow.data).not.toHaveProperty('preview')
+    expect(toWsNode(flow)).not.toHaveProperty('preview')
+    const plan = planFileOpen([files, { ...flow, data: flow.data as { filePath?: string } }], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'new1')
+    expect(plan.nodeId).toBe('new1')
   })
 })

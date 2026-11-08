@@ -88,7 +88,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
   const refresh = () => setVersion((v) => v + 1)
   const { navigate, addNodeBeside, open, openFile } = useFilesOpen({ id, cwd, title: d.title, swatch, setNotice, pendingSel })
 
-  const input = useFilesInput({ cwd, listRef, pendingSel, refresh, setNotice, openFile: (p) => openFile(p, { preview: false }) })
+  const input = useFilesInput({ cwd, listRef, pendingSel, refresh, setNotice, openFile: (p) => openFile(p, { focusEditor: true }) })
   const ctx: FilesSlotCtx = {
     cwd, dir: cwd, entries: all, selection: selectedNames(all, sel), open, nodeId: id,
     expanded: tree.expanded, toggle: tree.toggle, collapseAll: tree.collapseAll,
@@ -185,7 +185,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
             loading={loading} verdict={verdict} query={query} decorate={decorate}
             listRef={listRef} treeRef={treeRef}
             inputRow={input.row} inputAt={input.at}
-            onPick={act.onPick} onToggle={act.toggle} onOpen={(rel) => act.openRel(rel, true)}
+            onPick={act.onPick} onToggle={act.toggle} onOpen={(rel) => act.openRel(rel, false)}
             onRename={(rel) => ctx.startRenameAt(rel)} onContext={act.onContext}
             onKeyDown={act.onListKeyDown} onRetry={refresh} onNewFile={() => startCreate(false)}
           />
@@ -206,7 +206,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
           slotRows={FILES_SLOTS.flatMap((s) => s.menu?.(ctx) ?? [])}
           onClose={() => setMenu(null)}
           actions={{
-            open: (e) => open(e, { preview: false }),
+            open: (e) => open(e, { focusEditor: true }),
             terminal: () => addNodeBeside(randomId(), 'terminal', { cwd: menu.entry?.dir ? menuTarget : cwd }),
             newEntry: startCreate,
             refresh,

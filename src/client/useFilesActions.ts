@@ -32,7 +32,7 @@ interface Deps {
   setMenu: (m: Menu | null) => void
   setNotice: (s: string) => void
   navigate: (to: string, cameFrom?: string) => void
-  openFile: (path: string, opts: { preview: boolean }) => void
+  openFile: (path: string, opts: { focusEditor: boolean }) => void
 }
 
 /** DOM host of row `index` inside the list (rows carry `data-index`; the tree may be split around an input). */
@@ -43,7 +43,7 @@ export function useFilesActions(d: Deps) {
   const typed = useRef({ buffer: '', at: 0 })
   const { rows, cursor, sel, setSel, ctx } = d
 
-  const openRel = (rel: string, preview: boolean) => d.openFile(childPath(d.cwd, rel), { preview })
+  const openRel = (rel: string, focusEditor: boolean) => d.openFile(childPath(d.cwd, rel), { focusEditor })
 
   /** Expand/collapse `rel`; collapsing over the cursor moves the cursor onto the folder (VS Code). */
   const toggle = (rel: string) => {
@@ -83,7 +83,7 @@ export function useFilesActions(d: Deps) {
     const cur = rows[cursor]
     switch (act.kind) {
       case 'up': d.navigate(parentDir(d.cwd), d.cwd); break
-      case 'open': if (at && !at.entry.dir) openRel(at.rel, !!act.preview); break
+      case 'open': if (at && !at.entry.dir) openRel(at.rel, !act.keepFocus); break
       case 'toggle': if (at) toggle(at.rel); break
       case 'select': if (at) setSel(act.extend ? selectRange(sel, rows.map((x) => x.entry), act.index) : selectOne(at.rel)); break
       case 'selectAll': setSel(selectAll(sel, rows.map((x) => x.entry))); break

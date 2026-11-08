@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-// Editors close like VS Code's on the REAL canvas: a clean one (preview or not) closes without a
+// Editors close like VS Code's on the REAL canvas: a clean one closes without a
 // question, a dirty one asks Save / Don't Save / Cancel, and a selection mixing dirty editors with
 // terminals gets ONE dialog for both. Dirtiness is set through the editorDirty registry the editor
 // node reports to; the save is a stub that the test resolves.
@@ -21,7 +21,7 @@ vi.mock('./ws', async (importOriginal) => {
 vi.mock('./lazyMonaco', () => ({ loadMonaco: () => new Promise(() => {}) }))
 
 // test-only fixtures
-const ed = (id: string, file: string, preview = false): WsNode => ({ id, kind: 'editor', x: 0, y: 0, width: 420, height: 320, filePath: file, preview })
+const ed = (id: string, file: string): WsNode => ({ id, kind: 'editor', x: 0, y: 0, width: 420, height: 320, filePath: file })
 const edA = ed('ed-a', '/p/a.ts')
 const edB = { ...ed('ed-b', '/p/b.ts'), x: 600 }
 const term: WsNode = { id: 'term-1', kind: 'terminal', x: 0, y: 400, width: 420, height: 320, cwd: '/', title: 'shell' }
@@ -68,8 +68,8 @@ async function selectAllAndDelete(ids: string[]): Promise<void> {
 }
 
 describe('editor close (canvas)', () => {
-  it('a clean editor closes without a prompt, a preview editor too', async () => {
-    await mount([edA, ed('ed-p', '/p/b.ts', true)])
+  it('two clean editors close without a prompt', async () => {
+    await mount([edA, ed('ed-p', '/p/b.ts')])
     fireEvent.click(closeBtn('ed-a'))
     await waitFor(() => expect(nodeIds()).toEqual(['ed-p']))
     fireEvent.click(closeBtn('ed-p'))

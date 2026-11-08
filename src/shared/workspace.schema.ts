@@ -40,7 +40,6 @@ function nodeIssue(n: unknown): string | null {
 function cleanNode(n: Record<string, unknown>): WsNode {
   const node = { ...n } as unknown as WsNode
   if (n.diffNotes !== undefined) node.diffNotes = validDiffNotes(n.diffNotes)
-  if (n.preview !== undefined && n.preview !== true) delete node.preview // editor preview flag: only `true` means anything
   if (n.expanded !== undefined) node.expanded = validExpanded(n.expanded)
   if (n.plan !== undefined) {
     const plan = validPlanData(n.plan)

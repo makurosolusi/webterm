@@ -58,8 +58,8 @@ export const DEFAULT_PAGE_ROWS = 10
 
 export type ListKeyAction =
   | { kind: 'select'; index: number; extend?: true }
-  /** Open a file: pinned, or `preview` (reuses the preview editor; focus stays in the tree). */
-  | { kind: 'open'; index: number; preview?: true }
+  /** Open a file in its own editor node; `keepFocus` leaves focus and selection in the tree. */
+  | { kind: 'open'; index: number; keepFocus?: true }
   /** Expand/collapse the folder row `index`. */
   | { kind: 'toggle'; index: number }
   | { kind: 'up' }
@@ -95,7 +95,7 @@ function parentIndex(rows: readonly KeyRow[], i: number): number {
 /**
  * What a key does in the tree (VS Code Explorer model). `current` is the cursor index (-1 = none),
  * `rows` the visible rows and `page` rows per PageUp/PageDown. Up/Down move; Right expands a folder
- * or steps to its first child; Left collapses or jumps to the parent; Enter opens a file pinned or
+ * or steps to its first child; Left collapses or jumps to the parent; Enter opens a file or
  * toggles a folder; Space opens keeping focus in the tree; ⌘↑/Alt+↑ go to the parent FOLDER of
  * the node (the breadcrumb does the same). Backspace alone is claimed and does nothing.
  * `Delete`/`F2`/⌘⌫ are only reported (the mutate slot acts on them first); they stay claimed so
@@ -158,10 +158,10 @@ export function listKeyAction(
   }
 }
 
-/** Enter/Space/⌘↓ on a row: a folder toggles, a file opens (Space = preview, focus stays). */
+/** Enter/Space/⌘↓ on a row: a folder toggles, a file opens (Space keeps focus in the tree). */
 function activate(row: KeyRow, index: number, space: boolean): ListKeyAction {
   if (row.entry.dir) return { kind: 'toggle', index }
-  return space ? { kind: 'open', index, preview: true } : { kind: 'open', index }
+  return space ? { kind: 'open', index, keepFocus: true } : { kind: 'open', index }
 }
 
 /**
