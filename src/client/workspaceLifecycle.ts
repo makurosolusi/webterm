@@ -29,6 +29,8 @@ import { useLatestSelect } from './workspaceLifecycle.select'
 import { reported } from './workspaceActionError'
 import { confirmNodeClose } from './nodeCloseConfirm'
 import { useCanvasPush } from './workspaceCanvasPush'
+import { useViewPush } from './workspaceView.push'
+import { useCanvasShot } from './canvasShot'
 import type { Workspace } from '../shared/workspace'
 
 /** Yang dibutuhkan hook ini dari App. Setter & ref dipinjam APA ADANYA — ref harus ref yang sama
@@ -103,6 +105,8 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     else rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
     setBoard(false)
   }, [onSelect, workspaces])
+  useViewPush({ activeWsRef, onSelect, onFocus, setBoard }) // central agent's `canvas.show`
+  useCanvasShot() // central agent's `canvas.screenshot`
 
   // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di
   // canvas yang ter-mount. The owner is found in the client store (fed by every save and switch),

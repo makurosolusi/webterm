@@ -343,7 +343,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const wantGpu = settings.terminalGpuRendering === 'auto'
     if (wantGpu && !webglRef.current) {
       try {
-        const addon = new WebglAddon()
+        // `true` = preserveDrawingBuffer: without it the WebGL canvas reads back blank, and the
+        // central agent's screenshot (`./canvasShot`) shows empty terminals.
+        const addon = new WebglAddon(true)
         // Konteks WebGL bisa hilang (GPU reset, driver, tab lama di background). Dispose membuat
         // xterm jatuh ke renderer DOM secara sinkron; tanpa ini terminal berhenti mengecat.
         addon.onContextLoss(() => {
