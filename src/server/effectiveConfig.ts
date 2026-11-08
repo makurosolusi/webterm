@@ -1,6 +1,6 @@
 // Read model for `GET /api/control/effective` (Control panel, F0-c): every behaviour key of the env
 // registry plus the WEBTERM_* bootstrap keys, each with its effective value, source, a reason sentence,
-// and where the UI controls it. Rows owned by the Control tab (F1-f) also carry what the editor needs
+// and where the UI controls it. Rows owned by Settings › Developer (F1-f) also carry what the editor needs
 // (kind, options, bounds, restart class) and, when they cannot be written there, a lock reason
 // (VS Code policy settings: a value set outside the editor wins and is shown read-only, `@haspolicy`).
 // Pure: callers pass the env-settings state and the env. Secrets and bootstrap keys never carry a value, only `set`.
@@ -36,7 +36,7 @@ export interface EffectiveRow {
   mock?: true
   pendingRestart: boolean
   valid: boolean
-  /** Writable from the Control tab right now. */
+  /** Writable from Settings › Developer right now. */
   editable: boolean
   /** Why a Control-owned row cannot be written (shell env wins, settings locked, bootstrap). */
   lockReason?: string

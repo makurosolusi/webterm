@@ -1,4 +1,4 @@
-// `/api/control/effective` (Control tab, F0-c read model + F1-f writes + Doctor). One path because
+// `/api/control/effective` (Settings › Developer and Health, F0-c read model + F1-f writes + Doctor). One path because
 // featureCapabilities.api.ts mounts exactly this path ahead of the /api/control/* family:
 //   GET               effective config (every knob: value, source, reason, UI location, lock)
 //   PUT {set, unset}  write Control-owned knobs; shell-env and locked keys are refused (409)
@@ -85,7 +85,7 @@ async function doctorDepsOf(d: ControlDeps, m: EffectiveConfig): Promise<DoctorD
   return doctorDeps({ service: d.service, env: d.env ?? process.env, ...(sandboxLock ? { sandboxLock } : {}) })
 }
 
-/** Writes only keys the Control tab owns and may write; everything else is named in the error. */
+/** Writes only keys Settings › Developer owns and may write; everything else is named in the error. */
 async function write(req: IncomingMessage, res: ServerResponse, d: ControlDeps, via: 'ui' | 'token'): Promise<void> {
   const body = await readJson(req, res)
   if (!body.ok) return

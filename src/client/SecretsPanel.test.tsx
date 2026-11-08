@@ -26,7 +26,7 @@ function server(initial: SecretEntry[], usage: SecretUse[] | null = []) {
   return { writes }
 }
 
-describe('Secrets (Settings › Control)', () => {
+describe('Secrets (Settings › Rules & approvals)', () => {
   it('opens with the plain intro, no policy jargon', async () => {
     server([])
     render(<SecretsPanel />)

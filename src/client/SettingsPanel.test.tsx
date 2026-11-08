@@ -94,8 +94,7 @@ describe('SettingsPanel section icons and descriptions', () => {
     for (const section of SETTINGS_SECTIONS) {
       expect(section.icon, section.id).toMatch(/^[a-z-]+$/)
       expect(section.description.length, section.id).toBeGreaterThan(0)
-      // 45: the longest approved description ("What agents spent, and limits that pause work").
-      expect(section.description.length, section.id).toBeLessThanOrEqual(45)
+      expect(section.description.length, section.id).toBeLessThanOrEqual(40)
     }
   })
 

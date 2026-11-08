@@ -28,7 +28,7 @@ function server(cases: EvalCaseView[]) {
   return { calls }
 }
 
-describe('Eval cases (Settings › Control)', () => {
+describe('Eval cases (Settings › Developer)', () => {
   it('lists new cases with source, summary, input and who rejected them', async () => {
     server([PLAN])
     render(<EvalCasesPanel />)

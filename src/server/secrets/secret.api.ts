@@ -1,4 +1,4 @@
-// `/api/secrets[/:name]`: the UI-only side of the secret broker (Settings > Control > Secrets).
+// `/api/secrets[/:name]`: the UI-only side of the secret broker (Settings › Rules & approvals › Secrets).
 //   GET    /api/secrets         names + last used + usage log (never values)
 //   PUT    /api/secrets/:name   add or replace a value ({ value }); the answer never echoes it
 //   DELETE /api/secrets/:name   remove

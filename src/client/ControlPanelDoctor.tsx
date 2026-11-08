@@ -1,4 +1,4 @@
-// Doctor section of the Control tab (F1-f): the server runs the checks (GET /api/control/doctor) and applies a
+// Doctor in Settings › Health (F1-f): the server runs the checks (GET /api/control/doctor) and applies a
 // safe fix (POST {fix}); this only renders status, explanation and the Fix button, then shows the re-run result.
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-// Settings › Control › Cost: today/7d totals, cache hit rate, labelled top spenders, paused cap resume, degrade.
+// Settings › Spending: today/7d totals, cache hit rate, labelled top spenders, paused cap resume, degrade.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { COST_API_PATH, COST_TEXT, CostPanel, formatUsd, PAUSE_ALL_FIELD_ID, scopeName } from './CostPanel'
@@ -38,6 +38,9 @@ describe('CostPanel', () => {
     render(<CostPanel />)
     expect(await screen.findByTestId('cost-total')).toHaveProperty('textContent', '$1.25')
     expect(screen.getByTestId('cost-cache').textContent).toBe('75%')
+    // The Settings › Spending page heading names it; the panel itself has no second "Spending" heading.
+    expect(screen.queryByRole('heading', { name: COST_TEXT.title })).toBeNull()
+    expect(screen.getByRole('region', { name: COST_TEXT.title })).toBeTruthy()
     expect(screen.getByTestId('cost-prefix').textContent).toBe(COST_TEXT.prefixValue(0.75, 2))
     expect(screen.getByText('Alpha')).toBeTruthy()
     expect(screen.getByText('Claude in Alpha')).toBeTruthy()

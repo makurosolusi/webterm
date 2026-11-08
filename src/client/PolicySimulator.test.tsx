@@ -26,7 +26,7 @@ function server() {
   return { writes }
 }
 
-describe('Policy simulator (Settings › Control)', () => {
+describe('Policy simulator (Settings › Rules & approvals)', () => {
   it('shows both auto-approval switches OFF by default, in plain words, and flips one through PUT', async () => {
     const { writes } = server()
     render(<PolicySimulator />)

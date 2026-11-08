@@ -1,6 +1,6 @@
 // Switch for the optional LLM paragraph of the morning brief (F5-c; off by default). The deterministic lines
 // are always shown; this only adds a model-phrased summary that the server checks against their counts.
-// Self-loading so Settings › Control can mount it as is; the brief card passes its known state instead.
+// Self-loading when mounted without props; the brief card passes its known state instead.
 import { useEffect, useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { BriefResponse } from '../server/brief/brief.service'

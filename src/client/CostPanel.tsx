@@ -17,6 +17,7 @@ export const COST_API_PATH = '/api/cost'
 export const PAUSE_ALL_FIELD_ID = 'cost.pauseAllAt'
 
 export const COST_TEXT = {
+  /** Region name only: the Settings › Spending page heading already says it, so no visible heading here. */
   title: 'Spending',
   intro: 'Estimated spend of Claude Code agents and the Central Agent, from their own usage data. Not a bill.',
   period: 'Period',
@@ -99,7 +100,6 @@ export function CostPanel(): React.JSX.Element {
   return (
     <section aria-label={COST_TEXT.title} data-testid="cost-panel">
       <div className="flex items-center gap-2">
-        <h3 className="font-semibold">{COST_TEXT.title}</h3>
         <Segmented label={COST_TEXT.period} value={range} onChange={(v) => setRange(v === 'week' ? 'week' : 'today')}
           options={[{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]} />
       </div>

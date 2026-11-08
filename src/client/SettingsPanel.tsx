@@ -54,7 +54,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'rules', group: 'Agents', label: 'Rules & approvals', icon: 'shield', description: 'What agents may do without asking' },
   { id: 'memory', group: 'Agents', label: 'Memory', icon: 'book', description: 'What agents remember and share' },
   { id: 'automations', group: 'Agents', label: 'Automations', icon: 'clock', description: 'Routines that run agents for you' },
-  { id: 'spending', group: 'Agents', label: 'Spending', icon: 'credit-card', description: 'What agents spent, and limits that pause work' },
+  { id: 'spending', group: 'Agents', label: 'Spending', icon: 'credit-card', description: 'Spending and limits that pause work' },
   { id: 'canvas', group: 'Workspace', label: 'Canvas', icon: 'layout', description: 'Grid, new node size, search engine' },
   { id: CANVAS_BG_SECTION, group: 'Workspace', label: 'Canvas background', icon: 'paintcan', description: 'Color, gradient or image behind nodes' },
   { id: 'capabilities', group: 'System', label: 'Capabilities', icon: 'extensions', description: 'Turn features on or off' },

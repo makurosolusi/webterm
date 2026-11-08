@@ -36,7 +36,7 @@ const routine: RoutineView = {
   lastRun: { id: 'x', trigger: 'schedule', status: 'skipped', reason: 'precheck exited 1', startedAt: AT, costUsd: null },
 }
 
-describe('Routines (Settings › Control)', () => {
+describe('Routines (Settings › Automations)', () => {
   it('lists routines with trigger, tier and the last skip reason; Run now and history', async () => {
     const { writes } = server([routine], [{ id: 'a', trigger: 'catch_up', status: 'ran', reason: null, startedAt: AT, costUsd: 0.5, estimateUsd: 0.4 }])
     render(<RoutinesPanel />)

@@ -204,7 +204,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     },
     { label: PROVENANCE_TEXT.menu, hint: PROVENANCE_TEXT.menuHint, onClick: () => setProvenanceOpen(true) },
     {
-      // Same switch as Settings › Control (IncognitoToggle / setNodeIncognito); a menu row cannot host a
+      // Same switch as Settings › Memory (IncognitoToggle / setNodeIncognito); a menu row cannot host a
       // Switch, so the label flips. A failed switch is reported in the node thread, like AI naming.
       label: incognito ? MEMORY_TEXT.leaveIncognito : MEMORY_TEXT.goIncognito,
       hint: MEMORY_TEXT.incognitoIntro,

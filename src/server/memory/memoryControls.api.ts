@@ -1,4 +1,4 @@
-// `/api/memory2[...]`: the memory panel (Settings › Control "What agents remember"). UI-only, the same gate
+// `/api/memory2[...]`: the memory panel (Settings › Memory). UI-only, the same gate
 // as `/api/awareness/procedural` (approvalAuth.uiOnlyDenial): an agent credential is refused before any
 // memory code runs, and only a same-origin webterm page acts, as the human principal `human-ui`.
 //   GET  ?kind=semantic|episodic|procedural   list         GET/PUT /incognito {nodeId, on}  incognito sessions

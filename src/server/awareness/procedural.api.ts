@@ -1,4 +1,4 @@
-// `/api/awareness/procedural[/:id[/confirm]]`: Settings › Control "What agents remember". UI-only, the
+// `/api/awareness/procedural[/:id[/confirm]]`: Settings › Memory. UI-only, the
 // same gate as `/api/policy/grants` (policy.api.ts, Orca rpc-caller-scope): an agent credential is
 // refused before any memory code runs, and only a same-origin webterm page becomes `human-ui`.
 //   GET    list            POST {text}  add verified      POST /:id/confirm  suggestion → verified
