@@ -5,6 +5,7 @@ import { briefRoutes, logEventRoutes, outboxRoutes } from './routes/events.route
 import { workspaceRoutes } from './routes/workspaces.routes'
 import { browserRoutes } from './routes/browser.routes'
 import { settingsRoutes } from './routes/settings.routes'
+import { canvasShotRoutes } from './routes/canvasShot.routes'
 import { fsRoutes } from './routes/fs.routes'
 import { gitRoutes, worktreeRoutes } from './routes/git.routes'
 import { controlRoutes } from './routes/control.routes'
@@ -48,6 +49,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...browserRoutes,
   ...agentChatRoutes,
   ...settingsRoutes,
+  ...canvasShotRoutes,
   ...fsRoutes,
   ...gitRoutes,
   ...briefRoutes,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { handleLine, handleRpc, LEGACY_VERSIONS, MODERN_VERSION, RPC, type McpBackend } from './mcp.protocol'
 
+const SHOT_B64 = '/9j/4A==' // test-only: 4 jpeg magic bytes
 const calls: Array<[string, Record<string, unknown>]> = []
 const backend: McpBackend = {
   list: async () => [
@@ -9,6 +10,7 @@ const backend: McpBackend = {
   ],
   call: async (name, args) => {
     calls.push([name, args])
+    if (name === 'canvas_screenshot') return { outcome: 'ok', detail: 'ok', data: { mimeType: 'image/jpeg', bytes: 4, image: { mimeType: 'image/jpeg', data: SHOT_B64 } } }
     return name === 'browser_act' ? { outcome: 'denied', detail: 'policy_denied' } : { outcome: 'ok', detail: 'ok', data: { total: 1 } }
   },
 }
@@ -55,6 +57,20 @@ describe('webterm mcp protocol (dual-era 2026-07-28)', () => {
     expect(calls.at(-1)).toEqual(['project_list', { limit: 5 }])
     const denied = result(await handleRpc({ id: 6, method: 'tools/call', params: { name: 'browser_act' } }, backend))
     expect(denied.isError).toBe(true)
+  })
+
+  it('lifts data.image into an MCP image block and keeps the base64 out of text and structuredContent', async () => {
+    const r = result(await handleRpc({ id: 9, method: 'tools/call', params: { name: 'canvas_screenshot', arguments: {} } }, backend))
+    const content = r.content as Array<Record<string, unknown>>
+    expect(content[0]).toEqual({ type: 'image', data: SHOT_B64, mimeType: 'image/jpeg' })
+    expect(content[1].type).toBe('text')
+    expect(content[1].text).not.toContain(SHOT_B64)
+    expect(JSON.stringify(r.structuredContent)).not.toContain(SHOT_B64)
+    expect(r.structuredContent).toEqual({ outcome: 'ok', detail: 'ok', data: { mimeType: 'image/jpeg', bytes: 4 } })
+    expect(r.isError).toBe(false)
+    // A receipt without a well-formed image keeps the single text block.
+    const plain = result(await handleRpc({ id: 10, method: 'tools/call', params: { name: 'project_list' } }, backend))
+    expect((plain.content as unknown[]).length).toBe(1)
   })
 
   it('answers nothing to notifications, -32601 to unknown methods, -32700 to garbage', async () => {
