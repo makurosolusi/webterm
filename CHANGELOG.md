@@ -166,6 +166,8 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- A Claude node cabled to a browser now drives it straight away: no handoff step and no refusal asking you to hand it over. If you are using the browser at that moment the agent waits a few seconds for you to stop, and control comes back to you as soon as its turn ends.
+- Browser commands from a cabled Claude node are pre-approved in that node's settings, and the `webterm` command can now run inside the agent sandbox (it failed there before). Reopen Claude nodes that were already open for this to apply.
 - Cost estimates use the correct Sonnet 5.5 cache-read price.
 - Central spending is listed under the model that actually ran, not the runtime name, and helper calls (classifier, checkpoints, handoff, brief, memory review) appear in spending.
 - The daily token budget counts cache tokens, so cache-heavy days are no longer under-counted.
