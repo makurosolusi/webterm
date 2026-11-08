@@ -1,11 +1,12 @@
 /* Syntax colors of chat code blocks (chatHighlight.ts). Default Dark+ / Light+ token colors of VS Code,
-   switched by the app theme (`data-theme="light"` on <html>), so blocks recolor with the theme. */
-.chat-markdown {
+   switched by the app theme (`data-theme="light"` on <html>), so blocks recolor with the theme.
+   Every surface that runs highlightCodeBlocks must be listed here: the colors are variables. */
+.chat-markdown, .editor-node__md-body {
   --chat-tok-keyword: #569cd6; --chat-tok-string: #ce9178; --chat-tok-comment: #6a9955; --chat-tok-number: #b5cea8;
   --chat-tok-type: #4ec9b0; --chat-tok-regexp: #d16969; --chat-tok-tag: #569cd6; --chat-tok-attribute: #9cdcfe;
   --chat-tok-variable: #9cdcfe; --chat-tok-constant: #4fc1ff; --chat-tok-predefined: #dcdcaa; --chat-tok-key: #9cdcfe;
 }
-:root[data-theme='light'] .chat-markdown {
+:root[data-theme='light'] .chat-markdown, :root[data-theme='light'] .editor-node__md-body {
   --chat-tok-keyword: #0000ff; --chat-tok-string: #a31515; --chat-tok-comment: #008000; --chat-tok-number: #098658;
   --chat-tok-type: #267f99; --chat-tok-regexp: #811f3f; --chat-tok-tag: #800000; --chat-tok-attribute: #e50000;
   --chat-tok-variable: #001080; --chat-tok-constant: #0070c1; --chat-tok-predefined: #795e26; --chat-tok-key: #0451a5;

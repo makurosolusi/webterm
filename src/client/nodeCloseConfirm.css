@@ -1,0 +1,19 @@
+/* Save All dialog: the dirty files as a compact VS Code list (22px rows, scrolls past ~8 files). */
+.node-close-confirm__files {
+  max-height: 176px;
+  margin: 0 0 12px;
+  padding: 4px 0;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--vscode-widget-border, var(--border));
+  border-radius: 2px;
+  background: var(--vscode-input-background, transparent);
+}
+.node-close-confirm__files li {
+  overflow: hidden;
+  padding: 0 8px;
+  line-height: 22px;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Node, OnBeforeDelete } from '@xyflow/react'
 import { VscodeDialog } from './components/vscode/vscodeDialog'
+import './nodeCloseConfirm.css'
 import { arrangeDialogButtons } from './components/vscode/vscodeDialogButtons'
 import { Button } from './components/ui/button'
 import { isEditorDirty, saveEditor } from './editorDirty'
