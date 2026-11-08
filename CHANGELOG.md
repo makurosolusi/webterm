@@ -18,6 +18,7 @@ Operator notes:
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 
 ### Added
+- Central panel › Abilities: everything Central can do at your current level, grouped (Projects & nodes, Workers, Tasks & plans, Memory, Browser, Skills, Telegram & channels, Approvals, Other), each tool with a plain name and sentence and whether it runs on its own, asks you first, is not allowed at this level, or is turned off. A count line and All / Runs on its own / Asks you / Not allowed buttons filter the list, a note links to Settings › Rules & approvals (your rules, the daily budget and worker limits can still stop a tool), and the skills Central can use are listed below. Open it with `/tools`. The list comes from the server's own tool registry and level check, so it cannot drift from what Central is really allowed to do.
 - Model ladder for headless Claude runs (task planner and workers, routines, PR review, bake-off, Central agent spawns): each kind starts on a fitting model and effort, and a task that fails verification or produces no changes is retried one step up (at most two steps, never above Opus on its own; a timeout raises effort first).
 - Budget-aware models: as the day's spending nears its limit, new runs move to cheaper models, and a "Needs you" notice says when a large run was limited.
 - Settings › Agent › Models: see the ladder's defaults, pin a model and/or effort per workspace, and set a daily spending limit in dollars.
@@ -94,6 +95,8 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Central panel: the Control tab is now Status. It shows the level Central works at in plain words with what it means (and says when your highest allowed level holds it lower), today's budget in short numbers ("13K of 10M tokens today", "0 of 20 workers started today", "No limit"), and a "Stop Central" button with the same confirmation. "Change" opens Settings › Central Agent, still the only place the level is set. Tabs are now Status · Abilities · Agents · Skills.
+- Central's memory moved from the Central panel to Settings › Memory (read-only, below what agents remember), and `/memory` opens it there.
 - The Settings sidebar shows an icon and a short description for each section.
 - Settings are reorganized by purpose. The sidebar is grouped under Editor, Agents, Workspace and System, and the old Control page is split into six sections: Rules & approvals, Memory, Automations, Spending, Health and Developer. Links to the old Control page open Health.
   - Health: the Doctor checks, whether your agents are protected ("Agents are protected", or "Partly protected" with the reason), and a notice when Central is running in demo mode.
