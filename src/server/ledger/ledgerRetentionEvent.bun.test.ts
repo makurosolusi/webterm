@@ -9,7 +9,7 @@ import { anchorStatus } from '../events/eventAnchor'
 import { GENESIS_HASH, chainHash, type HashedColumns } from '../events/eventModel'
 import { MIGRATIONS } from './ledgerSchema'
 import { applyV23 } from './ledgerSchemaV23'
-import { migrate, openLedgerDb } from './migration'
+import { LATEST_VERSION, migrate, openLedgerDb } from './migration'
 import { EVENT_MAX_AGE_MS, pruneEventChain } from './ledgerRetentionEvent'
 import { sweepRetention } from './ledgerRetention'
 
@@ -105,7 +105,7 @@ test('a v22 ledger file with chained events upgrades to v23, verifies, prunes; r
 
   const db = openLedgerDb(file)
   const log = createEventLog(db, { now: () => NOW })
-  expect(Number((db.query('PRAGMA user_version').get() as { user_version: number }).user_version)).toBe(23)
+  expect(Number((db.query('PRAGMA user_version').get() as { user_version: number }).user_version)).toBe(LATEST_VERSION)
   expect(log.prunedThrough()).toBe(0) // no base row = genesis, nothing to backfill
   expect(log.verifyChain()).toMatchObject({ ok: true, checked: 11 })
   applyV23(db)

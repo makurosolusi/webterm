@@ -6,6 +6,7 @@ import { allRows, execWrite, getRow, newId } from '../ledger/ledgerCore'
 import { createInboxItem } from '../inbox'
 import { utcDayStart as dayStart } from '../central/guard/budgetStore'
 import { ensureCostSchema, spentMicros } from './costStore'
+import type { Tier } from '../models/modelLadder'
 
 export type CostRunKind = 'routine' | 'dag' | 'bakeoff'
 /** `day` = all spend per UTC day; `routine:<id>` = that routine per UTC day; `dag:<id>` / `bakeoff:<id>` = that DAG / bake-off in total. */
@@ -16,7 +17,8 @@ const ESTIMATE_WINDOW = 20
 /** This many ended runs in a row without a diff pauses the scope (low ROI). */
 export const ROI_NO_DIFF_RUNS = 5
 
-export interface BeginRunInput { kind: CostRunKind; ref: string; label?: string; workspaceId?: string | null; nodeId?: string | null }
+/** `tier`/`model`: what the model ladder picked for the run (null = CLI default / unknown). */
+export interface BeginRunInput { kind: CostRunKind; ref: string; label?: string; workspaceId?: string | null; nodeId?: string | null; tier?: Tier | null; model?: string | null }
 
 export interface Notice { scope: CostScope; title: string; body: string; workspaceId: string | null }
 export type Notify = (db: Database, n: Notice) => void
@@ -36,8 +38,8 @@ const usd = (micros: number): string => `$${(micros / 1e6).toFixed(2)}`
 export function beginCostRun(db: Database, input: BeginRunInput, now: () => number = Date.now): string {
   ensureCostSchema(db)
   const id = newId()
-  execWrite(db, 'INSERT INTO cost_run (id, kind, ref, label, workspace_id, node_id, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    id, input.kind, input.ref, input.label ?? null, input.workspaceId ?? null, input.nodeId ?? null, now())
+  execWrite(db, 'INSERT INTO cost_run (id, kind, ref, label, workspace_id, node_id, started_at, tier, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    id, input.kind, input.ref, input.label ?? null, input.workspaceId ?? null, input.nodeId ?? null, now(), input.tier ?? null, input.model ?? null)
   return id
 }
 
@@ -77,7 +79,7 @@ export function endCostRun(db: Database, id: string, outcome: { producedDiff?: b
   return { costMicros: cost, paused: null }
 }
 
-export interface Estimate { medianMicros: number | null; samples: number; basis: 'ref' | 'kind' | 'none' }
+export interface Estimate { medianMicros: number | null; samples: number; basis: 'ref' | 'tier' | 'kind' | 'none' }
 
 export function median(values: number[]): number | null {
   if (values.length === 0) return null
@@ -86,12 +88,21 @@ export function median(values: number[]): number | null {
   return s.length % 2 ? s[mid]! : Math.round((s[mid - 1]! + s[mid]!) / 2)
 }
 
-/** Median cost of the last 20 runs of the same routine/DAG; falls back to all runs of that kind. */
-export function estimateCost(db: Database, q: { kind: CostRunKind; ref: string }): Estimate {
+/**
+ * Median cost of the last 20 runs of the same routine/DAG; falls back to all runs of that kind.
+ * With `tier`: same ref on that tier, then that kind on that tier (`basis: 'tier'`), then the kind on any tier.
+ */
+export function estimateCost(db: Database, q: { kind: CostRunKind; ref: string; tier?: Tier | null }): Estimate {
   ensureCostSchema(db)
   const pick = (sql: string, ...args: unknown[]): number[] => allRows(db, sql, ...args).map((r) => Number(r['cost_micros']))
-  const own = pick('SELECT cost_micros FROM cost_run WHERE kind = ? AND ref = ? AND cost_micros IS NOT NULL ORDER BY ended_at DESC LIMIT ?', q.kind, q.ref, ESTIMATE_WINDOW)
+  const onTier = q.tier ? ' AND tier = ?' : ''
+  const tierArg = q.tier ? [q.tier] : []
+  const own = pick(`SELECT cost_micros FROM cost_run WHERE kind = ? AND ref = ?${onTier} AND cost_micros IS NOT NULL ORDER BY ended_at DESC LIMIT ?`, q.kind, q.ref, ...tierArg, ESTIMATE_WINDOW)
   if (own.length > 0) return { medianMicros: median(own), samples: own.length, basis: 'ref' }
+  if (q.tier) {
+    const tiered = pick('SELECT cost_micros FROM cost_run WHERE kind = ? AND tier = ? AND cost_micros IS NOT NULL ORDER BY ended_at DESC LIMIT ?', q.kind, q.tier, ESTIMATE_WINDOW)
+    if (tiered.length > 0) return { medianMicros: median(tiered), samples: tiered.length, basis: 'tier' }
+  }
   const kin = pick('SELECT cost_micros FROM cost_run WHERE kind = ? AND cost_micros IS NOT NULL ORDER BY ended_at DESC LIMIT ?', q.kind, ESTIMATE_WINDOW)
   return kin.length > 0 ? { medianMicros: median(kin), samples: kin.length, basis: 'kind' } : { medianMicros: null, samples: 0, basis: 'none' }
 }

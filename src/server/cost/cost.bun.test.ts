@@ -112,6 +112,24 @@ describe('oracle', () => {
     expect(estimateCost(db, { kind: 'dag', ref: 'd1' })).toEqual({ medianMicros: null, samples: 0, basis: 'none' })
   })
 
+  test('beginCostRun stores the ladder tier/model; estimateCost by tier falls back ref+tier -> kind+tier -> kind -> none', () => {
+    const run = (ref: string, tier: 'T1' | 'T3' | null, cost: number, at: number): string => {
+      const id = beginCostRun(db, { kind: 'dag', ref, nodeId: 'n1', tier, model: tier === 'T3' ? 'opus' : tier ? 'haiku' : null }, () => at)
+      endCostRun(db, id, { producedDiff: true, costMicros: cost }, () => at + 1, () => {})
+      return id
+    }
+    const first = run('d1', 'T3', 900, T0)
+    run('d1', 'T1', 10, T0 + 10)
+    run('d2', 'T3', 700, T0 + 20)
+    run('d3', null, 50, T0 + 30)
+    expect(all('SELECT tier, model FROM cost_run WHERE id = ?', first)).toEqual([{ tier: 'T3', model: 'opus' }])
+    expect(estimateCost(db, { kind: 'dag', ref: 'd1', tier: 'T3' })).toEqual({ medianMicros: 900, samples: 1, basis: 'ref' })
+    expect(estimateCost(db, { kind: 'dag', ref: 'd9', tier: 'T3' })).toEqual({ medianMicros: 800, samples: 2, basis: 'tier' })
+    expect(estimateCost(db, { kind: 'dag', ref: 'd9', tier: 'T2' })).toEqual({ medianMicros: 375, samples: 4, basis: 'kind' })
+    expect(estimateCost(db, { kind: 'dag', ref: 'd1' })).toEqual({ medianMicros: 455, samples: 2, basis: 'ref' })
+    expect(estimateCost(db, { kind: 'routine', ref: 'x', tier: 'T3' })).toEqual({ medianMicros: null, samples: 0, basis: 'none' })
+  })
+
   test(`${ROI_NO_DIFF_RUNS} runs in a row without a diff pause the routine and leave one Inbox notify`, () => {
     const notices: Notice[] = []
     let last = null as string | null
