@@ -28,6 +28,15 @@ describe('resolveLinkedBrowser', () => {
     expect(resolveLinkedBrowser([w], 'a1', 'b3')).toMatchObject({ ok: false, result: { status: 403, body: { error: 'not_linked' } } })
   })
 
+  it('--node may be a wired browser\'s name (any case): the real node id comes back; an unwired name is still refused', () => {
+    const w = ws([node('a1', 'agent'), { ...node('b1', 'browser'), name: 'Fox' }, { ...node('b2', 'browser'), name: 'Owl' }, { ...node('b3', 'browser'), name: 'Elk' }],
+      [edge('a1', 'b1'), edge('a1', 'b2')])
+    expect(resolveLinkedBrowser([w], 'a1', 'fox')).toMatchObject({ ok: true, nodeId: 'b1' })
+    expect(resolveLinkedBrowser([w], 'a1', 'Owl')).toMatchObject({ ok: true, nodeId: 'b2' })
+    expect(resolveLinkedBrowser([w], 'a1', 'Elk')).toMatchObject({ ok: false, result: { status: 403, body: { error: 'not_linked' } } })
+    expect(resolveLinkedBrowser([w], 'a1')).toMatchObject({ ok: false, result: { body: { linked: [{ id: 'b1', name: 'Fox' }, { id: 'b2', name: 'Owl' }] } } })
+  })
+
   it('a cable to a non-browser node does not count; another agent wired to the browser grants nothing to this one', () => {
     const w = ws([node('a1', 'agent'), node('a2', 'agent'), node('b1', 'browser')], [edge('a1', 'a2'), edge('a2', 'b1')])
     expect(resolveLinkedBrowser([w], 'a1')).toMatchObject({ ok: false, result: { body: { error: 'no_linked_browser' } } })

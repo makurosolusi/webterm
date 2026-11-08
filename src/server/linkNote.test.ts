@@ -27,6 +27,11 @@ describe('buildLinkNote', () => {
     expect(buildLinkNote([peer('Builder')], [])).toContain('You are no longer linked to "Builder"')
   })
 
+  it('names the node when it has a name', () => {
+    expect(buildLinkNote([], [{ ...peer('Builder'), name: 'Kiwi' }])).toContain('You are now linked to Kiwi "Builder" (id p1);')
+    expect(buildLinkNote([{ ...web('a'), name: 'Fox' }], [{ ...web('b'), name: 'Fox' }])).toContain('The wired browser node Fox (id web1) is now titled "b".')
+  })
+
   it('no net change (wire then unwire, or nothing at all) = no note', () => {
     expect(buildLinkNote([], [])).toBeNull()
     expect(buildLinkNote([web('a')], [web('a')])).toBeNull()
@@ -44,10 +49,10 @@ describe('linkEntries', () => {
     const ws = {
       nodes: [
         { id: 'a', kind: 'agent', title: 'Claude' }, { id: 'web1', kind: 'browser', title: 'makuro-browser' },
-        { id: 'p1', kind: 'agent', title: 'Builder' }, { id: 'z', kind: 'browser', title: 'loose' },
+        { id: 'p1', kind: 'agent', title: 'Builder', name: 'Kiwi' }, { id: 'z', kind: 'browser', title: 'loose' },
       ],
       bridges: [{ id: 'b1', source: 'web1', target: 'a' }, { id: 'b2', source: 'a', target: 'p1' }],
     } as unknown as Workspace
-    expect(linkEntries(ws, 'a')).toEqual([web('makuro-browser'), peer('Builder')])
+    expect(linkEntries(ws, 'a')).toEqual([web('makuro-browser'), { ...peer('Builder'), name: 'Kiwi' }])
   })
 })

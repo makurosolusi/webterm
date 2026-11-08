@@ -12,13 +12,13 @@ import { BROWSER_SKILL_NAME } from './browserAgentShim'
 import { linkedBrowsers } from './linkAwareness'
 
 /** One node at the other end of a cable. `browser` = a browser node (a tool), else a context peer. */
-export interface LinkEntry { id: string; title: string; browser: boolean }
+export interface LinkEntry { id: string; name?: string; title: string; browser: boolean }
 
 /** Everything wired to `nodeId` right now: browser nodes and context-link peers. */
 export function linkEntries(ws: Workspace, nodeId: string): LinkEntry[] {
   return [
-    ...linkedBrowsers(ws, nodeId).map((b) => ({ id: b.id, title: b.title, browser: true })),
-    ...buildLinkDoc(ws, nodeId).links.map((p) => ({ id: p.id, title: p.title, browser: false })),
+    ...linkedBrowsers(ws, nodeId).map((b) => ({ id: b.id, name: b.name, title: b.title, browser: true })),
+    ...buildLinkDoc(ws, nodeId).links.map((p) => ({ id: p.id, name: p.name, title: p.title, browser: false })),
   ]
 }
 
@@ -34,17 +34,19 @@ export function oneLine(s: string): string {
   return flat.length > TITLE_MAX_CHARS ? `${flat.slice(0, TITLE_MAX_CHARS)}…` : flat
 }
 
-const q = (e: LinkEntry): string => `"${oneLine(e.title) || e.id}" (id ${oneLine(e.id)})`
+/** `Kiwi "title" (id x)`; the name is left out when the node has none. */
+const nameOf = (e: LinkEntry): string => (e.name ? `${oneLine(e.name)} ` : '')
+const q = (e: LinkEntry): string => `${nameOf(e)}"${oneLine(e.title) || e.id}" (id ${oneLine(e.id)})`
 
 function sentence(kind: 'added' | 'removed' | 'renamed', e: LinkEntry): string {
   if (e.browser) {
     if (kind === 'added') return `The user wired browser node ${q(e)} to you, giving you this browser to use for the tasks they ask; drive it with the ${BROWSER_SKILL_NAME} skill.`
     if (kind === 'removed') return `Browser node ${q(e)} was unwired from you; you can no longer drive it.`
-    return `The wired browser node (id ${oneLine(e.id)}) is now titled "${oneLine(e.title)}".`
+    return `The wired browser node ${nameOf(e)}(id ${oneLine(e.id)}) is now titled "${oneLine(e.title)}".`
   }
   if (kind === 'added') return `You are now linked to ${q(e)}; use the ${SKILL_NAME} skill to read its context when you need it.`
   if (kind === 'removed') return `You are no longer linked to ${q(e)}.`
-  return `The linked node (id ${oneLine(e.id)}) is now titled "${oneLine(e.title)}".`
+  return `The linked node ${nameOf(e)}(id ${oneLine(e.id)}) is now titled "${oneLine(e.title)}".`
 }
 
 /**

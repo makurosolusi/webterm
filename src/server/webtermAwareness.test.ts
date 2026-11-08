@@ -85,6 +85,16 @@ describe('blok kesadaran lewat hook', () => {
     expect(r.ctx).toContain('on board "Renamed Board"')
     expect((await hook('aw3', 'UserPromptSubmit', w)).status).toBe(204)
   })
+
+  it('nama node ada di baris identitas; nama yang muncul setelah SessionStart diumumkan sekali', async () => {
+    const w = board('aw7')
+    expect((await hook('aw7', 'SessionStart', w)).ctx).toContain('You are node "Claude main" (id aw7)')
+    w.nodes[0].name = 'Mango'
+    const r = await hook('aw7', 'UserPromptSubmit', w)
+    expect(r.ctx).toContain('webterm context changed. You are node Mango (title "Claude main", id aw7) on board "My Board" (cwd /home/u/proj).')
+    expect((await hook('aw7', 'UserPromptSubmit', w)).status).toBe(204)
+    expect((await hook('aw7', 'SessionStart', w)).ctx).toContain('You are node Mango (title "Claude main", id aw7)')
+  })
 })
 
 describe('nextAwareness / renderAwareness', () => {
@@ -126,6 +136,7 @@ describe('aturan rumah (system prompt)', () => {
     expect(readFileSync(path, 'utf8')).toBe(`${HOUSE_RULES}\n`)
     if (process.platform !== 'win32') expect(statSync(path).mode & 0o777).toBe(0o600)
     expect(HOUSE_RULES).toContain("IS the user's explicit permission to drive that browser")
+    expect(HOUSE_RULES).toContain('short unique name (like Mango); the user and the Central agent refer to nodes by that name')
     expect(HOUSE_RULES.length).toBeLessThan(AWARENESS_MAX_CHARS)
   })
 })
