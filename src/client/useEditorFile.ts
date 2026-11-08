@@ -21,6 +21,8 @@ export interface UseEditorFileArgs {
   readMeta: (path: string) => Promise<ReadMeta>
   writeChecked: WriteChecked
   setLoadError: (msg: string) => void
+  /** Berubah = muat ulang dari `filePath` (editor preview berganti file). Rename TIDAK mengubahnya. */
+  loadKey?: number
 }
 
 /** Per-editor Save action id; Monaco prefixes it with the editor id, so every node owns its own. */
@@ -150,6 +152,9 @@ export function useEditorFile(a: UseEditorFileArgs) {
 
   // Teks: baca dulu (versi + encoding), baru muat Monaco — biner tidak boleh memicu pemuatan Monaco.
   useEffect(() => {
+    // Sisa error file sebelumnya (editor preview berganti file) tidak boleh menempel di file baru.
+    a.setLoadError('')
+    setSaveError('')
     if (!enabled || !pathRef.current) return
     // Berganti jenis (mis. rename .txt -> .png lalu balik) = muat ulang bersih, bukan sisa state lama.
     setDirty(false)
@@ -222,8 +227,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
       model?.dispose()
       editorRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) yang memuat ulang
-  }, [enabled])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) dan loadKey yang memuat ulang
+  }, [enabled, a.loadKey])
 
   return { dirty, preview, previewHtml, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }
