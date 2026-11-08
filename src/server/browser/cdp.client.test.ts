@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { CDP, CdpClient } from './cdp.client'
+import { CDP, CdpClient, ignoreClosed } from './cdp.client'
+import { logBus } from '../logs'
 import { SILENT, startFakeCdp, waitFor } from './fakeCdp.testkit'
 import type { FakeCdp } from './fakeCdp.testkit'
 
@@ -77,6 +78,47 @@ describe('CdpClient', () => {
 
   it('connect rejects with context when nothing listens', async () => {
     await expect(CdpClient.connect('ws://127.0.0.1:1/devtools')).rejects.toThrow(/cdp connect failed/)
+  })
+})
+
+describe('ignoreClosed (fire-and-forget sends)', () => {
+  const fireLogs = () => logBus.snapshot().filter((e) => e.event === 'cdp.fire')
+
+  it('drops a pending send aborted by close(): no unhandled rejection, no log', async () => {
+    await setup()
+    logBus.clear()
+    const unhandled: unknown[] = []
+    const onUnhandled = (r: unknown) => { unhandled.push(r) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      fake.handle(CDP.screencastFrameAck, () => SILENT)
+      client.send(CDP.screencastFrameAck, { sessionId: 1 }, 'S1').catch(ignoreClosed(CDP.screencastFrameAck, { sessionId: 'S1' }))
+      await waitFor(() => fake.calls.length === 1, 'ack received')
+      client.close()
+      client.send(CDP.screencastFrameAck, { sessionId: 2 }, 'S1').catch(ignoreClosed(CDP.screencastFrameAck)) // after close: not sent
+      await new Promise((r) => setTimeout(r, 20))
+      expect(unhandled).toEqual([])
+      expect(fireLogs()).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('logs any other failure with method, ids and cause', async () => {
+    logBus.clear()
+    ignoreClosed(CDP.screencastFrameAck, { sessionId: 'S1' })(new Error('cdp Page.screencastFrameAck (#3) send failed: EPIPE', { cause: new Error('EPIPE') }))
+    const entry = fireLogs()[0]
+    expect(entry?.ids).toMatchObject({ sessionId: 'S1' })
+    expect(entry?.data).toMatchObject({ method: CDP.screencastFrameAck, error: expect.stringContaining('send failed'), cause: 'EPIPE' })
+  })
+
+  it('logs a CDP error reply on a live connection', async () => {
+    await setup()
+    logBus.clear()
+    fake.handle(CDP.screencastFrameAck, () => ({ __error: { code: -32000, message: 'No session' } }))
+    client.send(CDP.screencastFrameAck, {}, 'S1').catch(ignoreClosed(CDP.screencastFrameAck))
+    await waitFor(() => fireLogs().length === 1, 'warn logged')
+    expect(fireLogs()[0]?.data).toMatchObject({ method: CDP.screencastFrameAck, error: expect.stringContaining('No session') })
   })
 })
 

@@ -4,7 +4,7 @@
 import type { BrowserState } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
-import { CDP } from './cdp.client'
+import { CDP, ignoreClosed } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import type { AdblockVerdict } from './adblock.engine'
 import type { ShieldPolicy } from './adblock.shields'
@@ -12,7 +12,6 @@ import { BrowserError } from './browserHost.targets'
 import type { HostEvent, NodeRec, TargetTable } from './browserHost.targets'
 
 const log = createLogger('browser.shields')
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /** Popup sah maksimum yang dibuka jadi node baru per node pembuka dalam satu jendela waktu. */
 export const POPUP_BURST_MAX = 3
@@ -66,7 +65,7 @@ export function createShieldRouter(ops: ShieldOps): ShieldRouter {
   const owner = (sid: string | undefined) => table.session(sid) ?? (sid ? frames.get(sid) : undefined)
   const shielded = (rec: NodeRec) => !!policy && !policy.isOff(hostOnly(rec.state.url))
   const send = (cdp: CdpClient, method: string, params: object, sid: string | undefined) => {
-    cdp.send(method, params, sid).catch((err) => log.warn('shields.cdp', 'shields command failed (target may be gone)', { method, error: errMsg(err) }))
+    cdp.send(method, params, sid).catch(ignoreClosed(method, { sessionId: sid }))
   }
 
   const verdict = (rec: NodeRec, sid: string | undefined, p: Record<string, unknown>): AdblockVerdict => {
