@@ -16,7 +16,7 @@
 // (no hooks, plugins, skills from settings) + `--disable-slash-commands` + the empty work dir.
 // No permission-bypass mode is ever built.
 import { createLogger } from '../../logs'
-import type { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { EffortLevel, Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { CentralMcpLink } from './claudeMcp'
 
 const log = createLogger('central')
@@ -102,6 +102,8 @@ export interface CentralQueryInput {
   sessionRef?: string
   newSessionId: string
   model?: string
+  /** SDK `effort` (low|medium|high|xhigh|max); absent = the CLI default for the model. */
+  effort?: EffortLevel
   maxTurns: number
   maxBudgetUsd?: number
   /** Empty work dir. */
@@ -125,6 +127,7 @@ export function centralQueryOptions(a: CentralQueryInput): Options {
     systemPrompt: { type: 'preset', preset: 'claude_code', append: CENTRAL_STEWARD_PROMPT },
     includePartialMessages: true,
     ...(a.model === undefined ? {} : { model: a.model }),
+    ...(a.effort === undefined ? {} : { effort: a.effort }),
     maxTurns: a.maxTurns,
     ...(a.maxBudgetUsd === undefined ? {} : { maxBudgetUsd: a.maxBudgetUsd }),
     ...(ref.length > 0 ? { resume: ref } : { sessionId: a.newSessionId }),
@@ -134,7 +137,7 @@ export function centralQueryOptions(a: CentralQueryInput): Options {
   }
 }
 
-const MODEL_ALIAS = /^(sonnet|opus|haiku)$/
+const MODEL_ALIAS = /^(sonnet|opus|haiku|fable)$/
 const MODEL_FULL_ID = /^claude-[A-Za-z0-9._-]+$/
 let warnedModel = false
 

@@ -1,8 +1,9 @@
-// Usage capture: Claude Code transcripts of agent nodes (read-only, incremental by byte offset) and
-// finished Central turns. Each new response goes to `cost_usage`, is mirrored into the ledger
-// `run`/`usage` tables when its workspace has a ledger project (the brief and checkBudget read
-// those), and Central turns also feed the guard's daily `central_budget` counters.
+// Usage capture: Claude Code transcripts of agent nodes (read-only, incremental by byte offset),
+// finished Central turns, and Central's `claude -p` helpers. Each new response goes to `cost_usage`, is
+// mirrored into the ledger `run`/`usage` tables when its workspace has a ledger project (the brief and
+// checkBudget read those), and Central turns also feed the guard's daily `central_budget` counters.
 import type { Database } from 'bun:sqlite'
+import { randomUUID } from 'node:crypto'
 import { closeSync, existsSync, fstatSync, openSync, readSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -10,7 +11,7 @@ import { getRow, allRows } from '../ledger/ledgerCore'
 import { projectRepository } from '../ledger/ledgerEntity'
 import { getRun, recordUsage, startRun } from '../ledger/ledgerUsage'
 import { lookupWorkspace } from '../central/workspaceLookup'
-import { addUsage } from '../central/guard/budgetStore'
+import { addUsage, guardTokens } from '../central/guard/budgetStore'
 import { transcriptPathAllowed } from '../transcriptPath'
 import { costMicros } from './costPricing'
 import { parseTranscriptUsage } from './costTranscript'
@@ -21,6 +22,7 @@ const READ_CAP = 8 * 1024 * 1024
 /** Central turns synced per call; a backlog drains over several calls. */
 const TURN_BATCH = 500
 const CENTRAL_PROJECT_PREFIX = 'central:project:'
+const CENTRAL_TURN_KEY = 'central-turn:'
 
 // ponytail: offsets live in memory; after a restart files are re-read from 0 and dedupe by message id.
 const offsets = new Map<string, number>()
@@ -99,7 +101,9 @@ const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) &
 /** Finished Central turns not yet recorded. Their cost is the runtime's own estimate (`total_cost_usd`). */
 export function syncCentralTurns(db: Database, now: () => number = Date.now): number {
   ensureCostSchema(db)
-  const mark = Number(getRow(db, "SELECT COALESCE(MAX(ts), 0) AS m FROM cost_usage WHERE source = 'central'")?.['m'] ?? 0)
+  // Keyed on turn rows only: other `central` rows (older consolidator bookings) must not move the mark past unsynced turns.
+  const mark = Number(getRow(db, "SELECT COALESCE(MAX(ts), 0) AS m FROM cost_usage WHERE source = 'central' AND substr(key, 1, ?) = ?",
+    CENTRAL_TURN_KEY.length, CENTRAL_TURN_KEY)?.['m'] ?? 0)
   const rows = allRows(db, `SELECT id, conversation_id, runtime, usage_json, ended_at FROM central_turn
     WHERE ended_at IS NOT NULL AND usage_json IS NOT NULL AND ended_at >= ? ORDER BY ended_at ASC LIMIT ?`, mark, TURN_BATCH)
   let added = 0
@@ -110,18 +114,41 @@ export function syncCentralTurns(db: Database, now: () => number = Date.now): nu
     const projectId = conv.startsWith(CENTRAL_PROJECT_PREFIX) ? conv.slice(CENTRAL_PROJECT_PREFIX.length) : null
     const project = projectId ? getRow(db, 'SELECT id, workspace_id FROM project WHERE id = ?', projectId) : null
     const ts = Number(t['ended_at'])
-    const cost = n(u.costMicros)
+    // The real model id when the runtime reported one (`modelUsage`); older turns keep the runtime kind.
+    const model = typeof u.model === 'string' && u.model !== '' ? u.model : t['runtime'] == null ? null : `central:${String(t['runtime'])}`
+    const tokens = { input: n(u.inputTokens), output: n(u.outputTokens), cacheRead: n(u.cacheReadTokens), write5m: n(u.cacheWriteTokens), write1h: 0 }
+    const runtimeCost = n(u.costMicros)
+    const cost = runtimeCost > 0 ? runtimeCost : costMicros(model, tokens)
     const row: CostUsageRow = {
-      key: `central-turn:${String(t['id'])}`, ts, source: 'central', workspaceId: project ? String(project['workspace_id']) : null,
-      nodeId: null, sessionId: null, model: t['runtime'] == null ? null : `central:${String(t['runtime'])}`,
-      input: n(u.inputTokens), output: n(u.outputTokens), cacheRead: n(u.cacheReadTokens), write5m: n(u.cacheWriteTokens), write1h: 0,
-      costMicros: cost > 0 ? cost : null,
+      key: `${CENTRAL_TURN_KEY}${String(t['id'])}`, ts, source: 'central', workspaceId: project ? String(project['workspace_id']) : null,
+      nodeId: null, sessionId: null, model, ...tokens, costMicros: cost,
     }
     if (!insertCostUsage(db, row)) continue
     added++
     mirror(db, project ? String(project['id']) : null, row.key, 'central', row, now)
     // The guard's daily token/cost limits count Central's own turns, on the day the turn ended.
-    addUsage(db, { turns: 1, tokens: row.input + row.output, costMicros: cost, spawns: 0, wallMs: n(u.durationMs), projectId: project ? String(project['id']) : null }, () => ts)
+    addUsage(db, {
+      turns: 1, tokens: guardTokens({ input: row.input, output: row.output, cacheRead: row.cacheRead, cacheWrite: row.write5m + row.write1h }),
+      costMicros: cost ?? 0, spawns: 0, wallMs: n(u.durationMs), projectId: project ? String(project['id']) : null,
+    }, () => ts)
   }
   return added
+}
+
+/** Central's `claude -p` helpers; each is its own `session_id` under source `helper`. */
+export type HelperKind = 'classifier' | 'checkpoint' | 'handoff' | 'brief' | 'consolidator'
+/** One helper answer's usage: tokens, the CLI's cost estimate (null = unknown) and the model that ran. */
+export interface HelperUsage { input: number; output: number; cacheRead: number; cacheWrite: number; costMicros: number | null; model: string | null }
+
+/**
+ * Books one helper call (key `<kind>:<id>`); true when new. Without the CLI's cost estimate the row is
+ * priced from the table. Helpers stay out of `central_budget`: that guard counts Central's own turns.
+ */
+export function recordHelperUsage(db: Database, kind: HelperKind, u: HelperUsage, opts: { id?: string; nodeId?: string | null; now?: () => number } = {}): boolean {
+  ensureCostSchema(db)
+  const tokens = { input: u.input, output: u.output, cacheRead: u.cacheRead, write5m: u.cacheWrite, write1h: 0 }
+  return insertCostUsage(db, {
+    key: `${kind}:${opts.id ?? randomUUID()}`, ts: (opts.now ?? Date.now)(), source: 'helper', workspaceId: null, nodeId: opts.nodeId ?? null,
+    sessionId: kind, model: u.model, ...tokens, costMicros: u.costMicros ?? costMicros(u.model, tokens),
+  })
 }

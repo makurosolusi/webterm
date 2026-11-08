@@ -21,7 +21,8 @@ export function ensureCostSchema(db: Database): void {
 export interface CostUsageRow {
   key: string
   ts: number
-  source: 'agent' | 'central'
+  /** `helper` = Central's `claude -p` helpers (classifier, summaries, consolidator); `session_id` names which. */
+  source: 'agent' | 'central' | 'helper'
   workspaceId: string | null
   nodeId: string | null
   sessionId: string | null
@@ -50,7 +51,7 @@ export function insertCostUsage(db: Database, r: CostUsageRow): boolean {
 }
 
 /** Filter for `spent`; all fields optional and ANDed. `until` is exclusive. */
-export interface SpendFilter { since: number; until?: number; workspaceId?: string; nodeId?: string; source?: 'agent' | 'central' }
+export interface SpendFilter { since: number; until?: number; workspaceId?: string; nodeId?: string; source?: 'agent' | 'central' | 'helper' }
 
 function where(f: SpendFilter): { sql: string; args: unknown[] } {
   const parts = ['ts >= ?']

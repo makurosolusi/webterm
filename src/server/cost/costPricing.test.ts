@@ -22,13 +22,30 @@ describe('costMicros', () => {
   it('matches the longest prefix and tolerates suffixes', () => {
     expect(priceFor('claude-opus-4-1-20250805')?.input).toBe(15)
     expect(priceFor('claude-opus-4-5')?.input).toBe(5)
-    expect(priceFor('claude-sonnet-5-5[1m]')?.cacheRead).toBe(0.1)
+    expect(priceFor('claude-sonnet-5-5[1m]')?.cacheRead).toBe(0.2)
     expect(priceFor('claude-sonnet-5')?.cacheRead).toBe(0.2)
+  })
+
+  // Locks the Claude 5 rows to the published table (claude-api skill, pricing page re-checked 2026-11-08).
+  // Writes are 1.25x (5m) / 2x (1h) of input on every row. Sonnet 5.5 once carried a 0.1 cache read here.
+  it.each([
+    ['claude-fable-5-1', { input: 10, output: 50, cacheRead: 0.25 }],
+    ['claude-fable-5', { input: 10, output: 50, cacheRead: 1 }],
+    ['claude-opus-5-5', { input: 4, output: 20, cacheRead: 0.2 }],
+    ['claude-opus-5', { input: 5, output: 25, cacheRead: 0.5 }],
+    ['claude-sonnet-5-5', { input: 2, output: 10, cacheRead: 0.2 }],
+    ['claude-sonnet-5', { input: 2, output: 10, cacheRead: 0.2 }],
+    ['claude-haiku-5-5', { input: 0.1, output: 0.5, cacheRead: 0.01 }],
+  ] as const)('%s matches the published price', (model, want) => {
+    const p = priceFor(model)!
+    expect({ input: p.input, output: p.output, cacheRead: p.cacheRead }).toEqual(want)
+    expect([p.write5m, p.write1h]).toEqual([want.input * 1.25, want.input * 2])
   })
 
   it('switches Haiku 5.5 to the long-prompt tier above 100K input-side tokens', () => {
     expect(costMicros('claude-haiku-5-5', { ...zero, input: 100_000 })).toBe(10_000)
     expect(costMicros('claude-haiku-5-5', { ...zero, input: 60_000, cacheRead: 50_000 })).toBe(60_000 * 0.5 + 50_000 * 0.05)
+    expect(costMicros('claude-haiku-5-5', { ...zero, input: 200_000, output: 1_000_000 })).toBe(200_000 * 0.5 + 2_500_000)
   })
 
   it('applies fast mode (2x) and US-only inference (1.1x)', () => {

@@ -1,12 +1,12 @@
 // Claude per-token prices and the cost math for one API response. One table, one source:
-// https://platform.claude.com/docs/en/about-claude/pricing (fetched 2026-11-04). Update the table
+// https://platform.claude.com/docs/en/about-claude/pricing (fetched 2026-11-04, re-checked 2026-11-08). Update the table
 // and PRICING_CHECKED_AT together when Anthropic changes a price; unknown models stay unpriced.
 
 /** USD per million tokens. `cacheRead` already carries the per-model multiplier (0.1x / 0.05x / 0.025x). */
 export interface ModelPrice { input: number; output: number; write5m: number; write1h: number; cacheRead: number }
 
 export const PRICING_SOURCE_URL = 'https://platform.claude.com/docs/en/about-claude/pricing'
-export const PRICING_CHECKED_AT = '2026-11-04'
+export const PRICING_CHECKED_AT = '2026-11-08'
 
 const p = (input: number, write5m: number, write1h: number, cacheRead: number, output: number): ModelPrice => ({ input, output, write5m, write1h, cacheRead })
 
@@ -24,7 +24,7 @@ export const CLAUDE_PRICING: ReadonlyArray<readonly [prefix: string, price: Mode
   ['claude-opus-4-5', p(5, 6.25, 10, 0.5, 25)],
   ['claude-opus-4-1', p(15, 18.75, 30, 1.5, 75)],
   ['claude-opus-4', p(15, 18.75, 30, 1.5, 75)],
-  ['claude-sonnet-5-5', p(2, 2.5, 4, 0.1, 10)],
+  ['claude-sonnet-5-5', p(2, 2.5, 4, 0.2, 10)],
   ['claude-sonnet-5', p(2, 2.5, 4, 0.2, 10)],
   ['claude-sonnet-4-6', p(3, 3.75, 6, 0.3, 15)],
   ['claude-sonnet-4-5', p(3, 3.75, 6, 0.3, 15)],

@@ -38,7 +38,9 @@ function count(value: unknown): number {
 export function normalizeUsage(usage: Partial<RuntimeUsage> | null | undefined): RuntimeUsage {
   return { inputTokens: count(usage?.inputTokens), outputTokens: count(usage?.outputTokens),
     cacheReadTokens: count(usage?.cacheReadTokens), cacheWriteTokens: count(usage?.cacheWriteTokens),
-    costMicros: count(usage?.costMicros), durationMs: count(usage?.durationMs) }
+    costMicros: count(usage?.costMicros), durationMs: count(usage?.durationMs),
+    ...(typeof usage?.model === 'string' && usage.model !== '' ? { model: usage.model } : {}),
+    ...(count(usage?.contextTokens) > 0 ? { contextTokens: count(usage?.contextTokens) } : {}) }
 }
 
 /** `now` is injectable for deterministic tests. */

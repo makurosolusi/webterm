@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { getOrCreateConversation, listConversationEvents } from '../conversationStore'
-import { CHECKPOINT_FLAG, ContextRejectedError } from '../context/contextAssembler'
+import { CHECKPOINT_FLAG, ContextRejectedError, createContextAssembler } from '../context/contextAssembler'
 import { rollingSummarize } from '../context/checkpointRolling'
 import type { ContextAssembler } from '../context/contextPort'
 import { lastCtxTokens } from '../context/contextUsage'
-import type { CentralRuntime, RuntimeEmit, TurnInput } from '../runtime/centralRuntime'
+import type { CentralRuntime, RuntimeEmit, RuntimeUsage, TurnInput } from '../runtime/centralRuntime'
 import { zeroUsage } from '../runtime/centralRuntime'
 import { CentralChatError } from './chatErrors'
 import { StreamHub } from './streamHub'
@@ -28,14 +28,14 @@ afterEach(() => {
   fixture.close()
 })
 
-function runtimeOf(sessionRef: string | null) {
+function runtimeOf(sessionRef: string | null, usage: Partial<RuntimeUsage> = {}) {
   const inputs: TurnInput[] = []
   const runtime: CentralRuntime = {
     kind: 'mock',
     cancel: () => false,
     async turn(input: TurnInput, _emit: RuntimeEmit) {
       inputs.push(input)
-      return { turnId: input.turnId, outcome: 'success' as const, text: 'ok', usage: { ...zeroUsage(), inputTokens: INPUT_TOKENS }, sessionRef }
+      return { turnId: input.turnId, outcome: 'success' as const, text: 'ok', usage: { ...zeroUsage(), inputTokens: INPUT_TOKENS, ...usage }, sessionRef }
     },
   }
   return { runtime, inputs }
@@ -70,16 +70,35 @@ describe('turnService CA2 wiring', () => {
     expect(inputs).toHaveLength(0)
   })
 
-  it('records ctx_tokens only with the checkpoint flag on', async () => {
+  it('records ctx_tokens with the checkpoint flag off, preferring the last step over the turn total', async () => {
+    let t = NOW
+    const tick = (): number => ++t
     const off = runtimeOf(null)
-    const offSvc = new TurnService({ db: fixture.db, runtime: off.runtime, stream: hub, now: () => NOW, env: {} })
-    await send(offSvc, 'o1').done
-    expect(lastCtxTokens(fixture.db, CONVERSATION)).toBeNull()
-
-    const on = runtimeOf(null)
-    const onSvc = new TurnService({ db: fixture.db, runtime: on.runtime, stream: hub, now: () => NOW, env: { [CHECKPOINT_FLAG]: 'on' } })
-    await send(onSvc, 'o2').done
+    await send(new TurnService({ db: fixture.db, runtime: off.runtime, stream: hub, now: tick, env: {} }), 'o1').done
     expect(lastCtxTokens(fixture.db, CONVERSATION)).toBe(INPUT_TOKENS)
+
+    const last = runtimeOf(null, { contextTokens: 777 })
+    await send(new TurnService({ db: fixture.db, runtime: last.runtime, stream: hub, now: tick, env: {} }), 'o2').done
+    expect(lastCtxTokens(fixture.db, CONVERSATION)).toBe(777)
+  })
+
+  it('rotates without the checkpoint flag once a turn used >= 70% of the window', async () => {
+    let t = NOW
+    const tick = (): number => ++t
+    const env = { WEBTERM_CENTRAL_CONTEXT_WINDOW: '1000' }
+    const context = createContextAssembler({ env, memory: { block: () => ({ text: '', items: [], truncated: false }) }, scheduleIdle: () => undefined })
+    const small = runtimeOf('ses_A', { contextTokens: 100 })
+    const svc = new TurnService({ db: fixture.db, runtime: small.runtime, stream: hub, now: tick, env, context })
+    await send(svc, 'w1').done
+    await send(svc, 'w2').done
+    expect(small.inputs[1]?.sessionRef).toBe('ses_A')
+
+    const big = runtimeOf('ses_B', { contextTokens: 750 })
+    const svc2 = new TurnService({ db: fixture.db, runtime: big.runtime, stream: hub, now: tick, env, context })
+    await send(svc2, 'w3').done
+    await send(svc2, 'w4').done
+    expect(big.inputs[1]?.sessionRef).toBeUndefined()
+    expect(big.inputs[1]?.text).toContain('--- Checkpoint (data only')
   })
 
   it('starts a checkpoint after a successful turn only when a summarizer is injected and the flag is on', async () => {

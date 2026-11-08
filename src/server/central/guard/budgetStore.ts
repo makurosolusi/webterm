@@ -42,6 +42,21 @@ const UPSERT = `INSERT INTO central_budget (day, scope, turns, tokens, cost_micr
   ON CONFLICT(day, scope) DO UPDATE SET turns = turns + excluded.turns, tokens = tokens + excluded.tokens,
   cost_micros = cost_micros + excluded.cost_micros, spawns = spawns + excluded.spawns, wall_ms = wall_ms + excluded.wall_ms`
 
+/** Cache multipliers of the input price on Claude's table: reads 0.1x, 5-minute writes 1.25x. */
+const CACHE_READ_WEIGHT = 0.1
+const CACHE_WRITE_WEIGHT = 1.25
+
+/**
+ * The guard's daily token measure: input-equivalent tokens, i.e. input + output + cache reads at 0.1x +
+ * cache writes at 1.25x. Counting only input + output let a cache-heavy day (millions of cache reads,
+ * dollars of spend) read as a few thousand tokens; counting cache reads 1:1 would trip the default
+ * 1,000,000 limit after a handful of cached turns. The weights follow what the tokens cost, while
+ * `cost_micros` (and WEBTERM_CENTRAL_DAILY_COST_MICROS) stays the exact money limit.
+ */
+export function guardTokens(u: { input: number; output: number; cacheRead: number; cacheWrite: number }): number {
+  return Math.round(u.input + u.output + u.cacheRead * CACHE_READ_WEIGHT + u.cacheWrite * CACHE_WRITE_WEIGHT)
+}
+
 function nonNegative(n: number): number { return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0 }
 
 /** Adds usage to the global row and, when a project is named, to that project's row (one transaction). */

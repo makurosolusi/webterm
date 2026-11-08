@@ -69,7 +69,7 @@ async function productionService(): Promise<BriefService> {
     lastVisibleAt: () => { const v = Date.now() - presence.awayMs(); return v > bootVisible + 1000 ? v : null },
     subscribe: (pattern, fn) => eventBus.subscribe(pattern, fn),
     sampleEveryMs: PRESENCE_SAMPLE_MS,
-    narrate: createClaudeStructured(),
+    narrate: createClaudeStructured('brief'),
   })
   return active
 }

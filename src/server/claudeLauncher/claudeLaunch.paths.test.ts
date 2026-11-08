@@ -87,7 +87,7 @@ describe('Central paths use the Central launch profile', () => {
   it('summarizer, policy classifier and memory consolidator (claude -p)', async () => {
     process.env.PATH = PATH // these derive the child env from process.env
     const signal = new AbortController().signal
-    await createClaudeStructured()({ prompt: 'x', schema: {} }, signal)
+    await createClaudeStructured('checkpoint')({ prompt: 'x', schema: {} }, signal)
     await createClaudeClassifier()({ tool: 'Bash', input: {} } as never, signal)
     await createClaudeConsolidatorModel()({ prompt: 'x', schema: {} }, signal)
     expect(envmanLog()).toHaveLength(3)

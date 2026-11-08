@@ -113,6 +113,14 @@ function totalsOf(state: ClaudeTurnState): ClaudeUsage {
   return sum
 }
 
+/** Prompt-side tokens of the newest assistant message: the context window the turn ended at. */
+function lastStepContext(state: ClaudeTurnState): { contextTokens?: number } {
+  let last: ClaudeUsage | undefined
+  for (const u of state.messages.values()) last = u
+  const tokens = last ? last.inputTokens + last.cacheReadTokens + last.cacheWriteTokens : 0
+  return tokens > 0 ? { contextTokens: tokens } : {}
+}
+
 export interface FinishInput {
   state: ClaudeTurnState
   /** Elapsed wall time, used when the CLI reports no duration. */
@@ -166,6 +174,8 @@ export function finishTurn(emitter: TurnEmitter, f: FinishInput): RuntimeResult 
     ...usage,
     costMicros: Math.round((state.result?.costUsd ?? 0) * MICROS_PER_USD),
     durationMs: state.result?.durationMs ?? f.elapsedMs,
+    ...(state.result?.model ? { model: state.result.model } : {}),
+    ...lastStepContext(state),
   }
   emitter.emit({ type: 'usage', usage: runtimeUsage })
   return emitter.result(outcome, {

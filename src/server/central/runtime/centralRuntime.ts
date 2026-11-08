@@ -29,6 +29,10 @@ export interface RuntimeUsage {
   /** Client-side estimate in micro-USD, never a bill. */
   costMicros: number
   durationMs: number
+  /** Real model id that served the turn (from the runtime's `modelUsage`); absent when unknown. */
+  model?: string
+  /** Prompt-side size of the LAST model step (the window actually used); absent when unknown. */
+  contextTokens?: number
 }
 
 /** Usage emitted or returned before a turn has done any work. */
