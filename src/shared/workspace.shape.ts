@@ -94,6 +94,14 @@ export function validPlanData(v: unknown): PlanNodeData | undefined {
   return { intent: p['intent'] as string, ...wired, ...text('workspaceId'), ...text('planId'), ...text('projectId'), ...text('repo'), ...text('dagId'), ...text('error'), ...draft }
 }
 
+/** Expanded folders of a Files node: relative, non-empty, no `..`/absolute segments, deduped. */
+export function validExpanded(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  const ok = v.filter((p): p is string =>
+    typeof p === 'string' && p !== '' && !p.startsWith('/') && !p.split('/').some((s) => s === '' || s === '.' || s === '..'))
+  return [...new Set(ok)]
+}
+
 /** Opsi tampilan node 'files' yang dipersist per node (P-15). Absen = default (hidden tampil, nama naik). */
 export interface ViewOpts { hidden: boolean; sortKey: 'name' | 'size' | 'mtime'; sortDir: 'asc' | 'desc' }
 
@@ -118,7 +126,9 @@ export interface WsNode {
   comments?: Comment[]    // thread aktivitas/catatan per node
   dirPath?: string        // node 'files': direktori akar yang ditampilkan
   filePath?: string       // node 'editor': file yang dibuka
+  preview?: boolean       // node 'editor': editor preview VS Code (judul miring, diganti buka satu-klik berikutnya); absen = pinned
   viewOpts?: ViewOpts     // node 'files': opsi tampilan (hidden/sort); absen = default
+  expanded?: string[]     // node 'files': expanded tree folders, paths relative to dirPath (validExpanded)
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node
   url?: string            // node 'browser': URL terakhir (pemulihan setelah discard/restart)
   diffNotes?: DiffNoteData[] // node 'diff': review notes not yet sent (validDiffNotes)

@@ -17,7 +17,7 @@ export const entries: FileMeta[] = [{ name: 'a.txt', dir: false, ignored: false 
 export const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => {
   const nodeId = o.nodeId ?? 'n1'
   return {
-    cwd: '/p', dir: '/p', entries, selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId,
+    cwd: '/p', dir: '/p', entries, selection: [], expanded: new Set(), toggle: vi.fn(), collapseAll: vi.fn(), startRenameAt: vi.fn(), refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId,
     notify: (n) => notify(nodeId, n), dismiss: (id) => dismissNotice(nodeId, id), ...o,
   }
 }

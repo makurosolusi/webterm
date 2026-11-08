@@ -36,7 +36,12 @@
   gap: 6px;
   min-width: 0;
   user-select: none;
+  /* Tree indent: rows are flat items, depth comes from FilesRow (--files-depth). */
+  padding-left: calc(var(--files-depth, 0) * 12px);
 }
+/* Chevron column; files keep the empty slot so names line up with their folder siblings. */
+.files-chevron { flex: none; width: 16px; margin-right: -4px; }
+.files-input-slot { padding-left: calc(var(--files-depth, 0) * 12px + 16px); }
 
 /* Ikon codicon 16px; file dan folder sama-sama netral (tema ikon default VS Code tanpa warna). */
 .files-icon { flex: none; font-size: 16px; color: var(--vscode-icon-foreground, var(--muted)); }

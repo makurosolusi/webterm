@@ -8,13 +8,15 @@ import { dndSlot } from './filesSlot.dnd'
 import { gitSlot } from './filesSlot.git'
 import { mutateSlot } from './filesSlot.mutate'
 import { searchSlot } from './filesSlot.search'
+import { treeSlot } from './filesSlot.tree'
 import { uploadSlot } from './filesSlot.upload'
 import { watchSlot } from './filesSlot.watch'
 
-/** Permintaan input nama inline dari slot: buat file/folder (FilesNode yang membuatnya) atau ganti nama. */
+/** Inline name input request from a slot: create file/folder (FilesNode creates it) or rename.
+ *  `at` = path RELATIVE to cwd of the row the input renders on (rename) / under (create). */
 export type InputRequest =
-  | { kind: 'file' | 'folder'; base?: string }
-  | { kind: 'rename'; initial: string; onCommit(name: string): void | Promise<void> }
+  | { kind: 'file' | 'folder'; base?: string; at?: string }
+  | { kind: 'rename'; initial: string; onCommit(name: string): void | Promise<void>; at?: string }
 
 /** Baris menu slot; `keybinding` (teks shortcut) opsional dan hanya ditampilkan. */
 export type SlotMenuRow = (MenuItem & { keybinding?: string }) | Extract<MenuRow, { type: 'separator' }>
@@ -22,10 +24,19 @@ export type SlotMenuRow = (MenuItem & { keybinding?: string }) | Extract<MenuRow
 export interface FilesSlotCtx {
   cwd: string
   dir: string
+  /** Visible tree rows, in display order; each `name` is the path RELATIVE to cwd ("src/a.ts"). */
   entries: FileMeta[]
-  /** Nama entri terpilih (bukan indeks). */
+  /** Selected rows as paths relative to cwd (not indexes). */
   selection: string[]
-  /** Muat ulang listing; `select` = nama yang harus terpilih begitu listing mendarat. */
+  /** Folders currently expanded in the tree (relative paths). */
+  expanded: ReadonlySet<string>
+  /** Expand/collapse the folder at relative path `rel`. */
+  toggle(rel: string): void
+  /** Collapse every expanded folder. */
+  collapseAll(): void
+  /** Start the inline rename input on row `rel` (the mutate slot owns the actual rename). */
+  startRenameAt(rel: string): void
+  /** Reload the listing (expanded folders too); `select` = relative path to select once it lands. */
   refresh(select?: string): void
   /** Tampilkan input nama inline (pengganti prompt); Enter -> commit, Esc/blur -> batal. */
   startInput(req: InputRequest): void
@@ -43,6 +54,7 @@ export interface FilesSlot {
   menu?(ctx: FilesSlotCtx): SlotMenuRow[]
   /** true = tombol ditangani slot (FilesNode berhenti memproses). */
   onKey?(e: KeyboardEvent, ctx: FilesSlotCtx): boolean
+  /** `entry.name` is the path relative to cwd; the row renders only its last segment. */
   decorate?(entry: FileMeta, ctx: FilesSlotCtx): Decoration | undefined
   /** Icon controls only (no visible text; filesToolbarPolicy.test locks this). Messages go to `ctx.notify`. */
   toolbar?(ctx: FilesSlotCtx): ReactNode
@@ -54,5 +66,5 @@ export interface FilesSlot {
   useSlot?(ctx: FilesSlotCtx): void
 }
 
-/** Urutan tetap: mutate, git, watch, search, dnd, upload. */
-export const FILES_SLOTS: readonly FilesSlot[] = [mutateSlot, gitSlot, watchSlot, searchSlot, dndSlot, uploadSlot]
+/** Fixed order: mutate, git, watch, search, dnd, upload, tree. */
+export const FILES_SLOTS: readonly FilesSlot[] = [mutateSlot, gitSlot, watchSlot, searchSlot, dndSlot, uploadSlot, treeSlot]

@@ -32,7 +32,7 @@ describe('planFileOpen', () => {
     const nodes = [files, editor('e1', '/w/a.ts')]
     const edges = [{ source: 'f1', target: 'e1' }]
     const plan = planFileOpen(nodes, edges, 'f1', '/w/a.ts', 'new1')
-    expect(plan).toEqual({ focus: true, nodeId: 'e1', edge: null })
+    expect(plan).toEqual({ focus: true, swap: false, nodeId: 'e1', edge: null })
   })
 
   it('re-attaches the cable when the node is still open but the cable was deleted', () => {
@@ -56,5 +56,25 @@ describe('planFileOpen', () => {
 
   it('carries nodeterm EDITOR_SIZE so the editor is not born unreadably small', () => {
     expect(EDITOR_SIZE).toEqual({ width: 660, height: 460 })
+  })
+})
+
+describe('planFileOpen preview', () => {
+  const pv = (id: string, filePath: string) => ({ id, type: 'editor', data: { filePath, preview: true } })
+
+  it('swaps the preview editor cabled from this files node instead of minting one', () => {
+    const plan = planFileOpen([files, pv('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'new1', true)
+    expect(plan).toEqual({ focus: false, swap: true, nodeId: 'e1', edge: null })
+  })
+
+  it('never swaps for preview:false, nor a pinned editor', () => {
+    expect(planFileOpen([files, pv('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'n', false).nodeId).toBe('n')
+    expect(planFileOpen([files, editor('e1', '/w/a.ts')], [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'n', true).nodeId).toBe('n')
+  })
+
+  it('a file already open wins over the swap', () => {
+    const nodes = [files, pv('e1', '/w/a.ts'), editor('e2', '/w/b.ts')]
+    const plan = planFileOpen(nodes, [{ source: 'f1', target: 'e1' }], 'f1', '/w/b.ts', 'n', true)
+    expect(plan).toMatchObject({ focus: true, swap: false, nodeId: 'e2' })
   })
 })

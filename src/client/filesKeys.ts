@@ -58,7 +58,10 @@ export const DEFAULT_PAGE_ROWS = 10
 
 export type ListKeyAction =
   | { kind: 'select'; index: number; extend?: true }
-  | { kind: 'open'; index: number; dirOnly?: true }
+  /** Open a file: pinned, or `preview` (reuses the preview editor; focus stays in the tree). */
+  | { kind: 'open'; index: number; preview?: true }
+  /** Expand/collapse the folder row `index`. */
+  | { kind: 'toggle'; index: number }
   | { kind: 'up' }
   | { kind: 'selectAll' }
   | { kind: 'rename' }
@@ -66,6 +69,8 @@ export type ListKeyAction =
   | { kind: 'menu' }
   | { kind: 'copyPath'; relative: boolean }
   | { kind: 'reveal' }
+  /** Claimed but does nothing (Backspace, Left on a top-level row): it must not reach the canvas. */
+  | { kind: 'none' }
   | null
 
 export interface ListKeyEvent {
@@ -78,41 +83,64 @@ export interface ListKeyEvent {
   shift?: boolean
 }
 
+/** What the keys need to know about a visible tree row (a `TreeRow` fits). */
+export interface KeyRow { entry: { dir: boolean }; open: boolean; depth: number }
+
+/** Index of the nearest row above `i` that is shallower (its parent folder); -1 at top level. */
+function parentIndex(rows: readonly KeyRow[], i: number): number {
+  for (let j = i - 1; j >= 0; j--) if (rows[j].depth < rows[i].depth) return j
+  return -1
+}
+
 /**
- * Apa yang dilakukan tombol navigasi di listing. `current` adalah indeks kursor (-1 bila tidak
- * ada), `count` jumlah entry yang ditampilkan dan `page` baris per PageUp/PageDown. Chord Windows
- * maupun Finder keduanya bekerja, karena tangan pengguna meraih yang ia hafal: Enter / ⌘↓ membuka,
- * Backspace / ← / Alt+↑ / ⌘↑ naik, → membuka FOLDER. `Delete`/`F2` hanya dilaporkan (aksi nyatanya
- * milik slot mutate); tetap diklaim supaya Delete tak ikut menghapus node. `null` = bukan tombol
- * listing; pemanggil melepaskannya.
+ * What a key does in the tree (VS Code Explorer model). `current` is the cursor index (-1 = none),
+ * `rows` the visible rows and `page` rows per PageUp/PageDown. Up/Down move; Right expands a folder
+ * or steps to its first child; Left collapses or jumps to the parent; Enter opens a file pinned or
+ * toggles a folder; Space opens keeping focus in the tree; ⌘↑/Alt+↑ go to the parent FOLDER of
+ * the node (the breadcrumb does the same). Backspace alone is claimed and does nothing.
+ * `Delete`/`F2`/⌘⌫ are only reported (the mutate slot acts on them first); they stay claimed so
+ * they never delete the canvas NODE. `null` = not a tree key; the caller releases it.
  */
 export function listKeyAction(
   e: ListKeyEvent,
   current: number,
-  count: number,
+  rows: readonly KeyRow[],
   page = DEFAULT_PAGE_ROWS
 ): ListKeyAction {
+  const count = rows.length
   const cmd = e.meta || e.ctrl
+  const row = current >= 0 ? rows[current] : undefined
   if (cmd && !e.alt && e.key.toLowerCase() === 'a') return count > 0 ? { kind: 'selectAll' } : null
   if (cmd && e.alt && e.code === 'KeyC') return { kind: 'copyPath', relative: !!e.shift }
   if (cmd && e.alt && !e.shift && e.code === 'KeyR') return { kind: 'reveal' }
+  if (cmd && e.key === 'Backspace') return { kind: 'delete', permanent: !!e.alt }
   if (e.ctrl) return null
   if (e.key === 'ContextMenu' || (e.shift && e.key === 'F10')) return { kind: 'menu' }
   if (e.key === 'ArrowUp' && (e.alt || e.meta)) return { kind: 'up' }
-  if (e.key === 'ArrowDown' && e.meta) return current >= 0 ? { kind: 'open', index: current } : null
+  if (e.key === 'ArrowDown' && e.meta) return row ? activate(row, current, false) : null
   if (e.alt || e.meta) return null
-  if (e.key === 'Backspace' || e.key === 'ArrowLeft') return { kind: 'up' }
-  if (e.key === 'ArrowRight') return current >= 0 ? { kind: 'open', index: current, dirOnly: true } : null
-  if (e.key === 'Enter') return current >= 0 ? { kind: 'open', index: current } : null
+  if (e.key === 'Backspace') return { kind: 'none' }
+  if (e.key === 'Enter') return row ? activate(row, current, false) : null
+  if (e.key === ' ') return row ? activate(row, current, true) : null
   if (e.key === 'F2') return { kind: 'rename' }
   if (e.key === 'Delete') return { kind: 'delete', permanent: !!e.shift }
-  if (count === 0) return null
+  if (count === 0) return e.key === 'ArrowLeft' || e.key === 'ArrowRight' ? { kind: 'none' } : null
   const last = count - 1
   const at = (index: number): ListKeyAction => {
     const clamped = Math.max(0, Math.min(index, last))
     return e.shift ? { kind: 'select', index: clamped, extend: true } : { kind: 'select', index: clamped }
   }
   switch (e.key) {
+    case 'ArrowRight':
+      if (!row || !row.entry.dir) return { kind: 'none' }
+      if (!row.open) return { kind: 'toggle', index: current }
+      return (rows[current + 1]?.depth ?? -1) > row.depth ? at(current + 1) : { kind: 'none' }
+    case 'ArrowLeft': {
+      if (!row) return { kind: 'none' }
+      if (row.entry.dir && row.open) return { kind: 'toggle', index: current }
+      const parent = parentIndex(rows, current)
+      return parent >= 0 ? at(parent) : { kind: 'none' }
+    }
     case 'ArrowDown':
       return at(current < 0 ? 0 : current + 1)
     case 'ArrowUp':
@@ -128,6 +156,12 @@ export function listKeyAction(
     default:
       return null
   }
+}
+
+/** Enter/Space/⌘↓ on a row: a folder toggles, a file opens (Space = preview, focus stays). */
+function activate(row: KeyRow, index: number, space: boolean): ListKeyAction {
+  if (row.entry.dir) return { kind: 'toggle', index }
+  return space ? { kind: 'open', index, preview: true } : { kind: 'open', index }
 }
 
 /**

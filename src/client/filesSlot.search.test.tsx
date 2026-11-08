@@ -12,7 +12,7 @@ import { quickOpenNode, resetSearchSlot, searchSlot } from './filesSlot.search'
 
 const caps = (o: object) => ({ mutate: false, viewers: false, watch: false, git: false, quickOpen: true, upload: false, listMax: 1, ...o })
 const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => ({
-  cwd: '/p', dir: '/p', entries: [], selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(), ...o,
+  cwd: '/p', dir: '/p', entries: [], selection: [], expanded: new Set(), toggle: vi.fn(), collapseAll: vi.fn(), startRenameAt: vi.fn(), refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(), ...o,
 })
 
 /** Meniru FilesNode: useSlot tiap render, overlay di dalam elemen node ber-data-id, dan elemen lain di luar. */
