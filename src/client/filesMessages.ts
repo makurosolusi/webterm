@@ -5,9 +5,9 @@ import type { NameProblem } from './filesName'
 import { isAuthFail } from './filesView'
 
 /** Kata kerja mutasi untuk kalimat galat: "Could not <aksi> “nama”". */
-export type MutateAction = 'delete' | 'rename' | 'duplicate' | 'restore'
+export type MutateAction = 'delete' | 'rename' | 'duplicate' | 'restore' | 'copy' | 'move' | 'undo'
 const ACTION_WORD: Record<MutateAction, string> = {
-  delete: 'delete', rename: 'rename', duplicate: 'duplicate', restore: 'restore',
+  delete: 'delete', rename: 'rename', duplicate: 'duplicate', restore: 'restore', copy: 'copy', move: 'move', undo: 'undo',
 }
 
 /** Alasan per kode galat (satu-satunya peta; `Record` penuh = kode baru di kontrak memaksa kalimat baru). */
@@ -60,8 +60,11 @@ const items = (n: number, first: string): string => (n === 1 ? `“${first}”` 
 
 export const MENU = {
   rename: 'Rename…', duplicate: 'Duplicate', trash: 'Delete', permanent: 'Delete Permanently…',
+  cut: 'Cut', copy: 'Copy', paste: 'Paste', undo: 'Undo',
 } as const
-export const KEYS = { rename: 'F2', trash: 'Delete', permanent: '⇧Delete' } as const
+export const KEYS = {
+  rename: 'F2', trash: 'Delete', permanent: '⇧Delete', cut: '⌘X', copy: '⌘C', paste: '⌘V', undo: '⌘Z',
+} as const
 
 export const CONFIRM = {
   cancel: 'Cancel',
@@ -79,5 +82,9 @@ export const TOAST = {
   deleted: (n: number, first: string) => `Permanently deleted ${items(n, first)}.`,
   duplicated: (n: number, first: string) => `Duplicated ${items(n, first)}.`,
   restored: (n: number, first: string) => `Restored ${items(n, first)}.`,
+  pasted: (n: number, first: string) => `Pasted ${items(n, first)}.`,
+  moved: (n: number, first: string) => `Moved ${items(n, first)}.`,
+  undone: (n: number, first: string) => `Undid the change to ${items(n, first)}.`,
+  nothingToUndo: 'Nothing to undo.',
   failedSome: (failed: number, total: number) => (total === 1 ? 'The operation failed.' : `${failed} of ${total} items failed.`),
 } as const

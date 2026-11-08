@@ -32,6 +32,16 @@ describe('filesMutate', () => {
     expect(fs.remove).toHaveBeenCalledWith('/d/a', true)
   })
 
+  it('tree rows (relative paths): duplicate/rename stay in the row\'s own folder, even under a dotted folder', async () => {
+    fs.copy.mockResolvedValue({ ok: true })
+    fs.rename.mockResolvedValue({ ok: true })
+    const r = await duplicateMany('/d', ['my.dir/README'], ['my.dir/README', 'README copy'])
+    expect(fs.copy).toHaveBeenCalledWith('/d/my.dir/README', '/d/my.dir/README copy')
+    expect(r.created).toEqual(['my.dir/README copy'])
+    await renameOne('/d', 'my.dir/README', 'NOTES')
+    expect(fs.rename).toHaveBeenCalledWith('/d/my.dir/README', '/d/my.dir/NOTES', false)
+  })
+
   it('restoreMany: mengembalikan path dan emit created', async () => {
     fs.restore.mockResolvedValue({ ok: true, path: '/d/a' })
     expect((await restoreMany([{ name: 'a', trashId: 't1' }])).paths).toEqual(['/d/a'])
