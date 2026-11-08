@@ -11,6 +11,9 @@ import type { Workspace } from '../shared/workspace'
 import { BROWSER_KIND } from '../shared/browser.contract'
 import { linkedPeerIds } from './contextLinkRoute'
 import { BROWSER_SKILL_NAME } from './browserAgentShim'
+import { createLogger } from './logs'
+
+const log = createLogger('hooks')
 
 export interface WiredBrowser { id: string; title: string }
 
@@ -25,6 +28,21 @@ export function linkedBrowsers(ws: Workspace, nodeId: string): WiredBrowser[] {
   return ws.nodes
     .filter((n) => n.kind === BROWSER_KIND && ids.has(n.id))
     .map((n) => ({ id: n.id, title: n.title || n.id }))
+}
+
+/**
+ * The agent's turn ended: hand its cabled browsers back so the user is not locked out until the lease
+ * expires (the next agent action takes control again). Never throws: a hook reply must not fail for this.
+ */
+export function releaseCabledBrowsers(event: string | undefined, ws: Workspace, nodeId: string, release: (browserNodeId: string) => void): void {
+  if (event !== 'Stop' && event !== 'StopFailure') return
+  for (const browser of linkedBrowsers(ws, nodeId)) {
+    try {
+      release(browser.id)
+    } catch (err) {
+      log.warn('hooks.browser_release', 'Could not release browser lease at end of turn', { ids: { nodeId }, browserNodeId: browser.id, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
 }
 
 /** Judul = teks bebas user: satu baris, dipotong, dikutip sebagai DATA (lihat `peerLine` di hookContext). */

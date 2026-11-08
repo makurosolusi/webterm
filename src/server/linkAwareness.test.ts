@@ -54,6 +54,42 @@ async function hook(node: string, event: string, w: Workspace, token = nodeToken
   return { status: r.statusCode, ctx: r.body ? JSON.parse(r.body).hookSpecificOutput?.additionalContext as string | undefined : undefined }
 }
 
+describe('akhir turn mengembalikan browser ke user', () => {
+  const fire = async (event: string, w: Workspace, releaseBrowser: (id: string) => void) => {
+    const r = res()
+    await agentStatusRoute(req(event, nodeToken('a9')), r, new URL('http://127.0.0.1/api/agent-status?node=a9'), {
+      strictAuth: false, deps: { setStatus() {}, setTranscript() {}, workspaceFor: () => w, releaseBrowser },
+    })
+    return r
+  }
+
+  it.each(['Stop', 'StopFailure'])('%s melepas lease browser yang terkabel saja', async (event) => {
+    const b = board('a9')
+    b.wire('web1')
+    const released: string[] = []
+    await fire(event, b.w, (id) => released.push(id))
+    expect(released).toEqual(['web1'])
+  })
+
+  it('event lain tidak melepas apa pun', async () => {
+    const b = board('a9')
+    b.wire('web1')
+    const released: string[] = []
+    for (const e of ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Notification']) await fire(e, b.w, (id) => released.push(id))
+    expect(released).toEqual([])
+  })
+
+  it('kegagalan release tidak menggagalkan balasan hook dan browser berikutnya tetap dilepas', async () => {
+    const b = board('a9')
+    b.wire('web1')
+    b.wire('web2')
+    const released: string[] = []
+    const r = await fire('Stop', b.w, (id) => { if (id === 'web1') throw new Error('boom'); released.push(id) })
+    expect(r.statusCode).toBe(204)
+    expect(released).toEqual(['web2'])
+  })
+})
+
 describe('kesadaran kabel browser lewat hook', () => {
   it('kabel dipasang → prompt berikutnya menerima notice connect SEKALI', async () => {
     const b = board('a1')

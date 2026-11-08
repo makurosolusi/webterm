@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { HUMAN_IDLE_MS, LEASE_TTL_MS } from '../../shared/browser.contract'
-import { LeaseService } from './browserLease.service'
+import { HUMAN_WAIT_MAX_MS, LeaseService } from './browserLease.service'
 
 function setup() {
   let t = 1_000_000
@@ -44,14 +44,54 @@ describe('LeaseService', () => {
     expect(seen).toEqual(['n1:agent', 'n1:human'])
   })
 
-  it('touch/requireAgent extend the ttl; requireAgent throws lease_human for a human lease', () => {
+  it('acquire takes a fresh node at once and emits agent; a later acquire extends the ttl', async () => {
     const { svc, advance } = setup()
-    expect(codeOf(() => svc.requireAgent('n1'))).toBe('lease_human')
-    svc.handoff('n1', true)
+    const seen: string[] = []
+    svc.onChange((id, l) => seen.push(`${id}:${l}`))
+    const sleep = vi.fn(async () => undefined)
+    expect(await svc.acquire('n1', true, sleep)).toEqual({ lease: 'agent', ttlMs: LEASE_TTL_MS })
+    expect(sleep).not.toHaveBeenCalled()
+    expect(seen).toEqual(['n1:agent'])
     advance(LEASE_TTL_MS - 1)
-    svc.requireAgent('n1')
+    await svc.acquire('n1', true, sleep)
     advance(LEASE_TTL_MS - 1)
     expect(svc.holder('n1')).toBe('agent')
+    expect(seen).toEqual(['n1:agent'])
+  })
+
+  it('acquire with agent control off is disabled and takes no lease', async () => {
+    const { svc } = setup()
+    await expect(svc.acquire('n1', false, async () => undefined)).rejects.toMatchObject({ code: 'disabled' })
+    expect(svc.holder('n1')).toBe('human')
+  })
+
+  it('acquire waits out recent human input, then proceeds', async () => {
+    const { svc, advance } = setup()
+    svc.noteHumanInput('n1')
+    advance(1_000)
+    const waits: number[] = []
+    await svc.acquire('n1', true, async (ms) => { waits.push(ms); advance(ms) })
+    expect(waits).toEqual([HUMAN_IDLE_MS - 1_000])
+    expect(svc.holder('n1')).toBe('agent')
+  })
+
+  it('acquire gives up with human_active when the human keeps going past the bound', async () => {
+    const { svc, advance } = setup()
+    svc.noteHumanInput('n1')
+    let waited = 0
+    const typing = async (ms: number) => { waited += ms; advance(ms - 1); svc.noteHumanInput('n1'); advance(1) }
+    await expect(svc.acquire('n1', true, typing)).rejects.toMatchObject({ code: 'human_active' })
+    expect(waited).toBeLessThanOrEqual(HUMAN_WAIT_MAX_MS)
+    expect(svc.holder('n1')).toBe('human')
+  })
+
+  it('takeover holds the agent off for the idle window instead of being re-acquired at once', async () => {
+    const { svc, advance } = setup()
+    svc.handoff('n1', true)
+    svc.takeover('n1')
+    const waits: number[] = []
+    await svc.acquire('n1', true, async (ms) => { waits.push(ms); advance(ms) })
+    expect(waits).toEqual([HUMAN_IDLE_MS])
   })
 
   it('takeover and release return the lease to human (idempotent)', () => {

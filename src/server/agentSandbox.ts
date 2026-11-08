@@ -21,10 +21,11 @@ export function agentSandboxOn(env: NodeJS.ProcessEnv = process.env): boolean {
 
 /**
  * Data-dir entries an agent shell must still READ: the skill shims it runs (`context-links`,
- * `browser-agent`) and orchestrator worktrees, which can be an agent's cwd. None of them holds a
- * credential. The node's OWN header file is added per node (`ownHeaders`).
+ * `browser-agent`), the `webterm` launcher those shims exec (`bin`; unreadable = exit 126, then an
+ * unsandboxed retry that prompts) and orchestrator worktrees, which can be an agent's cwd. None of
+ * them holds a credential. The node's OWN header file is added per node (`ownHeaders`).
  */
-export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'worktrees'] as const
+export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'bin', 'worktrees'] as const
 
 /**
  * Data-dir entries holding credentials or state an agent must never read or write directly: the
@@ -51,8 +52,8 @@ export const BROWSER_PROFILE_DIRS = [
   '~/Library/Application Support/Firefox', '~/Library/Cookies',
 ] as const
 
-/** The shims agents execute: readable, but replacing one would run code inside every other agent. */
-const AGENT_EXEC_ENTRIES = ['context-links', 'browser-agent'] as const
+/** The shims and launcher agents execute (`bin` is first on PATH): readable, but replacing one would run code inside every other agent. */
+const AGENT_EXEC_ENTRIES = ['context-links', 'browser-agent', 'bin'] as const
 
 /**
  * Dotenv files that hold real values. Listed, not `.env*`: a deny rule always beats an allow, and

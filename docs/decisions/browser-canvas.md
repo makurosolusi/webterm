@@ -42,7 +42,10 @@ scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua
 Kedua jalur lalu melewati gerbang yang sama, `agentAllowed(nodeId)`: sub-opsi `WEBTERM_BROWSER_AGENT`
 (default `on`, `agentControlOn` di `browser.runtime.parts.ts`) DAN toggle per node `agentControl` (default on;
 hanya `false` eksplisit yang mematikan). Ditolak = `403 disabled` dengan pesan "jangan retry"; `release` selalu
-boleh supaya agent bisa melepas lease.
+boleh supaya agent bisa melepas lease. Tidak ada langkah handoff: verb aksi mengambil lease sendiri
+(`LeaseService.acquire`), menunggu di server sampai user idle (maks `HUMAN_WAIT_MAX_MS`, lalu `409 human_active`);
+hook `Stop`/`StopFailure` melepas lease browser yang terkabel agar user tidak terkunci sampai TTL. Verb `handoff`
+tetap diterima untuk sesi lama, tapi tidak lagi diiklankan.
 
 Kenapa per panggilan, bukan env saat spawn: model env membuat izin beku sejak sesi lahir (browser yang dibuat
 belakangan tak terjangkau sampai respawn) dan, dengan satu browser di board, agent tanpa kabel ikut bisa

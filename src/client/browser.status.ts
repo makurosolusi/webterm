@@ -16,7 +16,6 @@ const BLOCK_TEXT: Record<BlockReason, string> = {
 
 const ERROR_TEXT: Record<BrowserErrorCode, string> = {
   lease_agent: 'An agent is driving this browser. Take over to use it.',
-  lease_human: 'You are driving this browser.',
   human_active: 'You are using this browser.',
   stale_ref: 'The page has changed. Try again.',
   no_binary: BLOCK_TEXT.no_binary,

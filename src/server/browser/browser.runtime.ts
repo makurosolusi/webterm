@@ -138,6 +138,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     status,
     state: (id) => host.state(id),
     listDomains: (workspaceId) => vault.listDomains(workspaceId),
+    releaseLease: (id) => leases.release(id),
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
     api: async (method, pathname, body) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps),
     control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted) }),

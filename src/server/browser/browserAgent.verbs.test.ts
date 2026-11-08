@@ -15,7 +15,7 @@ const AX = [
   { nodeId: '3', role: { value: 'textbox' }, name: { value: 'Q' }, backendDOMNodeId: 8 },
 ]
 
-function setup(cdp: Record<string, (p: Record<string, unknown>) => unknown> = {}) {
+function setup(cdp: Record<string, (p: Record<string, unknown>) => unknown> = {}, allowed = true) {
   let t = 0
   const inputs: BrowserInputEvent[] = []
   const calls: string[] = []
@@ -35,7 +35,7 @@ function setup(cdp: Record<string, (p: Record<string, unknown>) => unknown> = {}
   const leases = new LeaseService(() => t)
   const approve = vi.fn(async () => false)
   const verbs = createAgentVerbs({
-    host, leases, snapshots: new SnapshotStore(), agentAllowed: () => true, approve,
+    host, leases, snapshots: new SnapshotStore(), agentAllowed: () => allowed, approve,
     sleep: async (ms) => { t += ms }, now: () => t,
   })
   const base: Record<string, (p: Record<string, unknown>) => unknown> = {
@@ -61,12 +61,46 @@ describe('snapshot verb', () => {
 })
 
 describe('act verbs', () => {
-  it('refuse with lease_human while the human holds the lease', async () => {
-    const { verbs } = setup()
+  // Root-cause lock: an act verb on a node nobody handed over must just work, never demand a handoff step.
+  it.each([
+    ['navigate', () => ({ url: PAGE })], ['press', () => ({ key: 'Enter' })], ['scroll', () => ({ dy: 10 })],
+  ] as const)('%s on a fresh node succeeds with no handoff and emits agent', async (verb, body) => {
+    const { verbs, leases } = setup({ [AGENT_CDP.layout]: () => ({ cssLayoutViewport: { clientWidth: 800, clientHeight: 600 } }) })
+    const seen: string[] = []
+    leases.onChange((_id, l) => seen.push(l))
+    await verbs[verb]('n1', body() as never)
+    expect(seen).toEqual(['agent'])
+  })
+
+  it('click and type on a fresh node succeed with no handoff', async () => {
+    const { verbs, leases } = setup()
     const { snapId } = await verbs.snapshot('n1', {})
-    expect(await codeOf(verbs.click('n1', { ref: 'e1', snapId }))).toBe('lease_human')
-    expect(await codeOf(verbs.press('n1', { key: 'Enter' }))).toBe('lease_human')
-    expect(await codeOf(verbs.navigate('n1', { url: PAGE }))).toBe('lease_human')
+    expect(await verbs.click('n1', { ref: 'e1', snapId })).toEqual({ ok: true })
+    await verbs.release('n1', {})
+    expect(await verbs.type('n1', { ref: 'e2', snapId, text: 'x' })).toEqual({ ok: true })
+    expect(leases.holder('n1')).toBe('agent')
+  })
+
+  it('agent control off: disabled, no lease taken, nothing sent', async () => {
+    const { verbs, leases, host } = setup({}, false)
+    expect(await codeOf(verbs.navigate('n1', { url: PAGE }))).toBe('disabled')
+    expect(leases.holder('n1')).toBe('human')
+    expect(host.navigate).not.toHaveBeenCalled()
+  })
+
+  it('an unknown node is not_found and takes no lease', async () => {
+    const { verbs, leases, host } = setup()
+    host.state = () => undefined
+    expect(await codeOf(verbs.navigate('n1', { url: PAGE }))).toBe('not_found')
+    expect(leases.holder('n1')).toBe('human')
+  })
+
+  it('human input moments ago: the action waits for idle, then runs', async () => {
+    const { verbs, leases, host } = setup()
+    leases.noteHumanInput('n1')
+    expect(await verbs.navigate('n1', { url: PAGE })).toEqual({ ok: true })
+    expect(host.navigate).toHaveBeenCalledOnce()
+    expect(leases.holder('n1')).toBe('agent')
   })
 
   it('click: stale snapId and unknown ref give stale_ref; valid ref sends move/down/up at the quad center', async () => {
@@ -158,6 +192,13 @@ describe('screenshot and wait', () => {
 })
 
 describe('handoff / release / status', () => {
+  it('handoff still acquires for sessions that know it, and waits out the human like any act verb', async () => {
+    const { verbs, leases } = setup()
+    leases.noteHumanInput('n1')
+    expect(await verbs.handoff('n1', {})).toMatchObject({ lease: 'agent' })
+  })
+
+
   it('handoff then status reports the agent lease; release returns to human', async () => {
     const { verbs } = setup()
     expect(await verbs.handoff('n1', {})).toMatchObject({ lease: 'agent' })

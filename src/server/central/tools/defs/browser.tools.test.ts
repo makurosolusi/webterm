@@ -10,7 +10,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixtu
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ControlGuard, Tier, ToolCtx } from '../toolTypes'
-import { ACT_TEXT_MAX_CHARS, BROWSER_ACT_FLAG, createBrowserDefs, createControlCaller } from './browser.act'
+import { ACT_TEXT_MAX_CHARS, BROWSER_ACT_FLAG, createBrowserActDef, createBrowserDefs, createControlCaller } from './browser.act'
 import { BROWSER_TOOLS_FLAG, type BrowserToolDeps } from './browser.status'
 
 let f: Fixture
@@ -152,10 +152,16 @@ describe('browser_act execution', () => {
     expect(r.verbs.type).toHaveBeenCalledWith('b2', { ref: 'e4', snapId: 's1', text: 'hello', submit: true })
   })
 
-  it('lease: a node without the agent lease is refused by the control path (lease_human), not bypassed', async () => {
+  it('lease: Central gets the shared control-path answer while the user keeps using the browser (human_active)', async () => {
     seedNodes()
-    const r = rig({ navigate: async () => { throw new BrowserError('lease_human', 'human holds the lease') } })
-    expect(await execTool(ctx(deps(r.control)), 'browser_act', nav)).toMatchObject({ ok: false, code: 'lease_human' })
+    const r = rig({ navigate: async () => { throw new BrowserError('human_active', 'user is typing') } })
+    expect(await execTool(ctx(deps(r.control)), 'browser_act', nav)).toMatchObject({ ok: false, code: 'human_active' })
+  })
+
+  it('usage no longer tells Central a lease must be obtained first', () => {
+    const def = createBrowserActDef(deps(rig({}).control))
+    expect(def.usage).not.toMatch(/lease_human|agent lease/)
+    expect(def.usage).toContain('human_active')
   })
 
   it('capability: a token for another node, or an unknown token, is refused (forbidden / unauthorized)', async () => {
@@ -199,7 +205,7 @@ describe('browser_act execution', () => {
     expect(last).toMatchObject({ tool: 'browser_act', tier: 'R2', ok: true, nodeId: 'b1', action: 'navigate', host: 'docs.example.com' })
     const text = JSON.stringify(last)
     for (const leak of ['secret-query', '?', '#', 'https://', '/a']) expect(text).not.toContain(leak)
-    await execTool(ctx(deps(rig({ navigate: async () => { throw new BrowserError('lease_human', 'x') } }).control)), 'browser_act', nav)
+    await execTool(ctx(deps(rig({ navigate: async () => { throw new BrowserError('human_active', 'x') } }).control)), 'browser_act', nav)
     expect(JSON.stringify(audits().at(-1))).not.toContain('secret-query')
   })
 })
