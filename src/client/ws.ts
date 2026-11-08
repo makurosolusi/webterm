@@ -6,7 +6,7 @@
 // a fresh PTY and wipe the final scrollback the user is looking at.
 import { emitFsEvent } from './fsEvents'
 import { WS_PATH } from '../shared/protocol'
-import type { ClientMsg, ExitMsg, OpenMsg, ServerMsg } from '../shared/protocol'
+import type { CanvasMsg, ClientMsg, ExitMsg, OpenMsg, ServerMsg } from '../shared/protocol'
 import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
 import { noteStatus } from './unread'
@@ -60,6 +60,14 @@ export function subscribeStatus(cb: (id: string, status: AgentStatus | undefined
   return () => { statusListeners.delete(cb) }
 }
 export function getStatus(id: string): AgentStatus | undefined { return statuses.get(id) }
+
+const canvasListeners = new Set<(msg: CanvasMsg) => void>()
+
+/** Nodes/cables the server added to a stored board (`t:'canvas'`). */
+export function subscribeCanvas(cb: (msg: CanvasMsg) => void): () => void {
+  canvasListeners.add(cb)
+  return () => { canvasListeners.delete(cb) }
+}
 let ws: WebSocket | null = null
 let everConnected = false
 // Messages that wait for the socket, keyed so the queue stays bounded: the latest resize per
@@ -151,6 +159,7 @@ function connect() {
     }
     // Petunjuk watcher file manager (flag WATCH): lewat bus, bukan sub terminal.
     if (msg.t === 'fsdirty') { emitFsEvent({ kind: 'dirty', path: msg.dir, origin: 'remote' }); return }
+    if (msg.t === 'canvas') { for (const l of [...canvasListeners]) l(msg); return }
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'reset') {

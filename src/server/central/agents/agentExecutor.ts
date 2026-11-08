@@ -56,6 +56,8 @@ export interface AgentHost {
   scrollback(nodeId: string, lines: number): Promise<string[]>
   closePty(nodeId: string, force: boolean): Promise<void>
   hasSession(nodeId: string): boolean
+  /** Boot sweep: puts a live PTY agent back on the canvas when no board holds its node (never duplicates). */
+  ensureNode?(agent: AgentRecord, nodeId: string): void
 }
 
 export interface AgentDeps {
@@ -358,6 +360,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       for (const agent of store.listActive()) {
         if (agent.state === 'requested' || agent.state === 'approval_pending') continue
         const nodeId = agentNodeId(agent.id)
+        if (agent.runner === 'pty' && host.hasSession(nodeId)) host.ensureNode?.(agent, nodeId)
         if (agent.state === 'provisioning' || agent.state === 'starting') {
           const adopt = agent.runner === 'pty' && host.hasSession(nodeId)
           if (adopt && (agent.state === 'starting' || tryMove(agent.id, 'starting'))) {

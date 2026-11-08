@@ -23,7 +23,7 @@ export function requesterOf(headers: ControlHeaders | undefined): string | undef
   return token ? nodeIdForToken(token) : undefined
 }
 
-const WIRE_HINT = 'Ask the user to connect this terminal node to a browser node with a cable (edge) on the webterm canvas; it works immediately, no restart.'
+const WIRE_HINT = 'Run `webterm browser open <url>` to open your own browser node (cabled to you at once), or use one the user cabled to this node.'
 
 /**
  * Browser yang boleh dikemudikan `requesterId`: hanya node browser yang terhubung kabel dengannya, yaitu scope grant

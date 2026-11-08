@@ -10,6 +10,9 @@
 // - any other failure (offline, 5xx, 413, server restarting) keeps the payload DIRTY: it is
 //   retried with backoff, on `retry()` (the Retry button, a socket reconnect) and on the next
 //   edit, VS Code "Failed to save … Retry" style.
+// - a server push (`absorb`, nodes/cables the server added) is folded into every payload already
+//   locked, and when it sits on a version this window knew, its version becomes the next base.
+import type { CanvasMsg } from '../shared/protocol'
 import type { Workspace } from '../shared/workspace'
 import { saveWorkspace } from './api'
 import { reconnectDelay } from './ws.connection'
@@ -46,6 +49,8 @@ export interface SaveQueueOptions {
 export interface SaveQueue {
   /** Queue a save; resolves once the queue went idle or stopped on a failure. Never rejects. */
   enqueue: (ws: Workspace) => Promise<void>
+  /** The server stored `msg.nodes`/`msg.bridges` on this board (a canvas push). */
+  absorb: (msg: CanvasMsg) => void
   /** Resend the dirty boards now (no-op unless a save failed). */
   retry: () => Promise<void>
   /** True while any board has changes the server has not confirmed. */
@@ -55,11 +60,25 @@ export interface SaveQueue {
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
+/** `ws` plus the pushed nodes/cables whose ids it lacks; everything else (`updatedAt` too) unchanged. */
+export function mergeCanvasAdd(ws: Workspace, add: Pick<CanvasMsg, 'nodes' | 'bridges'>): Workspace {
+  const nodeIds = new Set(ws.nodes.map((n) => n.id))
+  const bridgeIds = new Set(ws.bridges.map((b) => b.id))
+  const nodes = add.nodes.filter((n) => !nodeIds.has(n.id))
+  const bridges = add.bridges.filter((b) => !bridgeIds.has(b.id))
+  return nodes.length || bridges.length ? { ...ws, nodes: [...ws.nodes, ...nodes], bridges: [...ws.bridges, ...bridges] } : ws
+}
+
+type Entry = { ws: Workspace; epoch: number }
+
 export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = {}): SaveQueue {
   const save = opts.save ?? saveWorkspace
   const retryDelay = opts.retryDelay ?? reconnectDelay
-  const dirty = new Map<string, { ws: Workspace; epoch: number }>() // newest unconfirmed payload per board
-  const confirmed = new Map<string, number>() // board id -> last version the server confirmed
+  const dirty = new Map<string, Entry>() // newest unconfirmed payload per board
+  const confirmed = new Map<string, number>() // board id -> last version the server confirmed (or pushed on top of one)
+  const built = new Map<string, number>() // board id -> newest version a payload was built on
+  const pushes = new Map<string, { base: number; updatedAt: number }[]>() // pushes not yet chained onto a known version
+  let inflight: { id: string; entry: Entry } | null = null
   const epochs = new Map<string, number>() // board id -> bumped on every refused save
   const gone = new Set<string>() // board ids the server answered 404 for
   let running: Promise<void> | null = null
@@ -78,6 +97,16 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
     hooks.onState?.(state)
   }
 
+  /** Chain pushes onto the newest version this window knows; only then is a push's version a safe base. */
+  const advance = (id: string): void => {
+    const pending = (pushes.get(id) ?? []).sort((a, b) => a.updatedAt - b.updatedAt)
+    let known = Math.max(confirmed.get(id) ?? 0, built.get(id) ?? 0)
+    let chained = false
+    for (const p of pending) if (p.base <= known && p.updatedAt > known) { known = p.updatedAt; chained = true }
+    if (chained) confirmed.set(id, known)
+    pushes.set(id, pending.filter((p) => p.updatedAt > known))
+  }
+
   const fail = (id: string, err: unknown): void => {
     // Logged once per failure streak, not once per automatic retry.
     if (attempt === 0) console.error(`[webterm] saving workspace ${id} failed, keeping it unsaved:`, err)
@@ -88,12 +117,15 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
   }
 
   /** Send one board; false = stop the pump (the save failed and stays dirty). */
-  const send = async (id: string, entry: { ws: Workspace; epoch: number }): Promise<boolean> => {
+  const send = async (id: string, entry: Entry): Promise<boolean> => {
     const drop = (): void => { if (dirty.get(id) === entry) dirty.delete(id) }
     if (gone.has(id) || (epochs.get(id) ?? 0) !== entry.epoch) { drop(); return true }
+    const base = Math.max(entry.ws.updatedAt, confirmed.get(id) ?? 0)
+    inflight = { id, entry }
     try {
-      const saved = await save({ ...entry.ws, updatedAt: Math.max(entry.ws.updatedAt, confirmed.get(id) ?? 0) })
-      confirmed.set(id, saved.updatedAt)
+      const saved = await save({ ...entry.ws, updatedAt: base })
+      confirmed.set(id, Math.max(confirmed.get(id) ?? 0, saved.updatedAt))
+      advance(id)
       drop()
       conflict = null
       attempt = 0
@@ -101,7 +133,11 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
       return true
     } catch (err) {
       const { status, body } = err as { status?: number; body?: { current?: Workspace } }
+      // Beaten only by a push this window already absorbed (into `entry` too): resend on its version.
+      if (status === HTTP_CONFLICT && body?.current && body.current.updatedAt > base && body.current.updatedAt <= (confirmed.get(id) ?? 0)) return true
       if (status === HTTP_CONFLICT && body?.current) {
+        const stored = body.current.updatedAt
+        pushes.set(id, (pushes.get(id) ?? []).filter((p) => p.updatedAt > stored))
         epochs.set(id, entry.epoch + 1)
         if (dirty.get(id)?.epoch === entry.epoch) dirty.delete(id) // newer payloads were built on the same stale board
         conflict = id
@@ -111,11 +147,14 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
       if (status === HTTP_NOT_FOUND) {
         gone.add(id)
         dirty.delete(id)
+        pushes.delete(id)
         hooks.onMissing(id)
         return true
       }
       fail(id, err)
       return false
+    } finally {
+      inflight = null
     }
   }
 
@@ -146,8 +185,20 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
     enqueue(ws) {
       if (gone.has(ws.id)) return running ?? Promise.resolve()
       dirty.set(ws.id, { ws, epoch: epochs.get(ws.id) ?? 0 })
+      built.set(ws.id, Math.max(built.get(ws.id) ?? 0, ws.updatedAt))
+      advance(ws.id)
       // A new edit while a save is failing is a retry too: it carries everything the failed one did.
       return failure && !running ? retry() : pump()
+    },
+    absorb(msg) {
+      const id = msg.workspaceId
+      if (gone.has(id)) return
+      // Payloads locked before the push lack its nodes; ones built after it carry them (or a delete).
+      for (const entry of new Set([dirty.get(id), inflight?.id === id ? inflight.entry : undefined])) {
+        if (entry) entry.ws = mergeCanvasAdd(entry.ws, msg)
+      }
+      pushes.set(id, [...(pushes.get(id) ?? []), { base: msg.base, updatedAt: msg.updatedAt }])
+      advance(id)
     },
     retry,
     isDirty: () => dirty.size > 0 || running !== null,

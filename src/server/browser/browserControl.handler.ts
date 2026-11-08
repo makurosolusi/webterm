@@ -16,6 +16,9 @@ import type { Policy } from '../policy/policy.decide'
 import type { Grant } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
 import type { LinkedTarget } from './browser.linkedTarget'
+import { parseBrowserUrl } from '../../shared/browser.url'
+import { openAgentBrowser, openedNote } from './browser.agentOpen'
+import type { AgentOpenDeps } from './browser.agentOpen'
 
 const log = createLogger('browser.control')
 const CAPABILITY_HEADER = 'x-webterm-capability'
@@ -29,7 +32,13 @@ export interface BrowserControlDeps {
   linked?(requesterId: string, wanted?: string): LinkedTarget
   /** Policy seam; absent = the process policy over the ledger (null = ledger off, no rules). */
   policy?: () => Pick<Policy, 'decide'> | null
+  /** `open` (and `navigate` with no cabled browser) on the node-token path; absent = 503 `open_unavailable`. */
+  open?: AgentOpenDeps
 }
+
+type NodeVerb = Exclude<BrowserVerb, 'open'>
+/** What an agent-made browser node adds to the reply, success or error, so the agent can target it. */
+type Opened = { nodeId: string; url: string; note: string }
 
 const STATUS_BY_CODE: Record<BrowserErrorCode, number> = {
   lease_agent: 409, human_active: 409, stale_ref: 409,
@@ -57,30 +66,65 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   const [wanted, verb] = parts.length === 1 ? [undefined, parts[0]] : parts
   if (parts.length > 2 || !verb || !Object.hasOwn(BROWSER_VERB_CAP, verb)) return fail(404, 'not_found')
   if (wanted !== undefined && !isSafeNodeId(wanted)) return fail(400, 'invalid_node_id')
-  const v = verb as BrowserVerb
-  if (req.method !== 'POST' && !(v === 'status' && req.method === 'GET')) return fail(405, 'method_not_allowed')
+  const asked = verb as BrowserVerb
+  if (req.method !== 'POST' && !(asked === 'status' && req.method === 'GET')) return fail(405, 'method_not_allowed')
 
-  let nodeId: string
-  let principal: string
-  let cable: Grant[] | undefined
   const token = headerValue(req.headers, CAPABILITY_HEADER)
   if (token) {
     const record = deps.capabilities.verify(token)
     if (!record) return fail(401, 'unauthorized')
+    if (asked === 'open') return fail(400, 'agent_node_only', { message: '`open` adds a browser node beside the calling canvas agent; it needs a node token, not a capability.' })
     if (wanted === undefined) return fail(400, 'node_required')
-    if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[v], `node:${wanted}`)) return fail(403, 'forbidden')
-    nodeId = wanted
-    principal = capabilityHolder(record)
-  } else {
-    // Token node sesi agent: hanya browser yang terhubung kabel dengannya (default-deny untuk yang lain).
-    const requester = deps.linked && requesterOf(req.headers)
-    if (!requester || !deps.linked) return fail(401, 'unauthorized')
-    const target = deps.linked(requester, wanted)
-    if (!target.ok) return target.result
-    nodeId = target.nodeId
-    principal = `node:${requester}`
-    cable = target.cable
+    if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[asked], `node:${wanted}`)) return fail(403, 'forbidden')
+    return runVerb(deps, asked, wanted, capabilityHolder(record), undefined, req.body)
   }
+  // Token node sesi agent: hanya browser yang terhubung kabel dengannya (default-deny untuk yang lain).
+  const linked = deps.linked
+  const requester = linked && requesterOf(req.headers)
+  if (!requester || !linked) return fail(401, 'unauthorized')
+  const principal = `node:${requester}`
+  if (asked !== 'open') {
+    const target = linked(requester, wanted)
+    const none = !target.ok && asked === 'navigate' && deps.open !== undefined && (target.result.body as { error?: string }).error === 'no_linked_browser'
+    if (!none) return target.ok ? runVerb(deps, asked, target.nodeId, principal, target.cable, req.body) : target.result
+  } else if (wanted !== undefined) {
+    return fail(400, 'bad_request', { message: '`open` makes a new browser node; do not pass --node.' })
+  }
+  return openThenNavigate(req.body, requester, { ...deps, linked }, asked === 'navigate')
+}
+
+/** `open`, or `navigate` with no cabled browser: add a cabled browser node, then navigate it through the normal gates. */
+async function openThenNavigate(body: unknown, requester: string, deps: BrowserControlDeps & Required<Pick<BrowserControlDeps, 'linked'>>, needUrl: boolean): Promise<ControlResult> {
+  const raw = asObject(body).url
+  const url = raw === undefined && !needUrl ? undefined : parseBrowserUrl(raw)
+  if (url && !url.ok) return fail(400, 'bad_request', { message: 'url must be an absolute http or https URL.' })
+  if (!deps.open) return fail(503, 'open_unavailable', { message: 'This server cannot open browser nodes for agents. Ask the user to add one and cable it to this node.' })
+  let made: Awaited<ReturnType<typeof openAgentBrowser>>
+  try {
+    made = await openAgentBrowser(deps.open, requester, deps.agentAllowed)
+  } catch (err) {
+    return mapError(err, requester)
+  }
+  if (!made.ok) {
+    if ('result' in made) return made.result
+    return withOpened(mapError(made.startError, made.nodeId), { nodeId: made.nodeId, url: url?.url ?? '', note: openedNote(made.nodeId, false) })
+  }
+  const opened = { nodeId: made.nodeId, url: url?.url ?? made.url, note: openedNote(made.nodeId, true) }
+  if (!url) return { status: 200, body: controlOk(opened) }
+  const target = deps.linked(requester, made.nodeId)
+  if (!target.ok) return withOpened(target.result, opened)
+  return withOpened(await runVerb(deps, 'navigate', made.nodeId, `node:${requester}`, target.cable, { url: url.url }), opened)
+}
+
+function withOpened(result: ControlResult, opened: Opened): ControlResult {
+  if (!result) return result
+  const body = asObject(result.body)
+  if (result.status === 200) return { ...result, body: { ...body, data: { ...asObject(body.data), ...opened } } }
+  return { ...result, body: { ...body, ...opened } }
+}
+
+/** Policy, the agent-control switch, then the verb itself on an existing browser node. */
+async function runVerb(deps: BrowserControlDeps, v: NodeVerb, nodeId: string, principal: string, cable: Grant[] | undefined, body: unknown): Promise<ControlResult> {
   // Rules on top of the cable/token (PLAN S2): the cable is a live `browser.*` grant, a human rule
   // written later can narrow it (last match wins). Release only hands control back, so it is never gated.
   if (v !== 'release') {
@@ -94,7 +138,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   }
 
   try {
-    const data = await deps.verbs[v](nodeId, asObject(req.body))
+    const data = await deps.verbs[v](nodeId, asObject(body))
     return { status: 200, body: controlOk(data) }
   } catch (err) {
     return mapError(err, nodeId)

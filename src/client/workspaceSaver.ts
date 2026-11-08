@@ -3,11 +3,12 @@
 // save another window beat is answered by reloading the stored board, VS Code "file changed on
 // disk" style. Every locked payload and every server answer is written into App's `workspaces`
 // list, the one client store the Sessions panel and notification focus read.
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import { toBridge, toWsNode } from './store'
-import { createSaveQueue, type SaveState } from './workspaceSaveQueue'
+import { createSaveQueue, mergeCanvasAdd, type SaveState } from './workspaceSaveQueue'
+import { subscribeCanvas } from './ws'
 import { DELETED_NOTICE, STALE_RELOADED_NOTICE, showSaveNotice, staleNotSavedNotice } from './workspaceSave.notice'
 import { useSaveLifecycle } from './workspaceSave.lifecycle'
 import { useSaveStateSurface } from './workspaceSave.status'
@@ -53,11 +54,14 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
   // Fungsi tulis yang payload-nya sudah tertangkap. Satu-satunya sumber `flushSave`. Disimpan di
   // ref, bukan di state: menembakkannya tidak boleh memicu render.
   const pending = useRef<(() => void) | null>(null)
+  // The payload `pending` will write, boxed so a server push can add its nodes (effect below).
+  const locked = useRef<{ payload: Workspace } | null>(null)
 
   const cancelSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = null
     pending.current = null
+    locked.current = null
   }, [saveTimer])
 
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' })
@@ -89,15 +93,17 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
     const ws = activeWsRef.current
     if (!ws) return
     // `updatedAt` stays the version this board was loaded/saved at: it is the save's precondition.
-    const payload: Workspace = {
+    const box: { payload: Workspace } = { payload: {
       ...ws,
       nodes: nodesRef.current.map(toWsNode),
       bridges: edgesRef.current.map(toBridge),
       viewport: { ...viewportRef.current },
-    }
+    } }
     const fire = () => {
+      const { payload } = box
       saveTimer.current = null
       pending.current = null
+      locked.current = null
       // `activeWsRef` adalah sumber payload save BERIKUTNYA. Menimpanya dengan board lama (timer
       // yang menembak setelah pengguna pindah) akan menyimpan board lama itu di workspace baru.
       if (activeWsRef.current?.id === payload.id) activeWsRef.current = payload
@@ -107,8 +113,18 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
     }
     cancelSave()
     pending.current = fire
+    locked.current = box
     saveTimer.current = setTimeout(fire, SAVE_DEBOUNCE_MS)
   }, [activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, cancelSave, queue, store])
+
+  // Server pushes are already stored: they only have to survive in every payload not yet sent, and
+  // show in the list (the mounted canvas merges them in `workspaceCanvasPush.ts`).
+  useEffect(() => subscribeCanvas((msg) => {
+    queue.absorb(msg)
+    const box = locked.current
+    if (box?.payload.id === msg.workspaceId) box.payload = mergeCanvasAdd(box.payload, msg)
+    setWorkspaces((prev) => prev.map((w) => (w.id === msg.workspaceId ? mergeCanvasAdd(w, msg) : w)))
+  }), [queue, setWorkspaces])
 
   const flushSave = useCallback(() => {
     const fire = pending.current

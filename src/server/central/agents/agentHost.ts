@@ -8,6 +8,10 @@ import type { AgentHost } from './agentExecutor'
 import type { AgentRecord, AgentRunner } from '../contracts'
 import { AGENT_KIND_UNKNOWN, type AgentCatalog } from './agentCatalog'
 import { spawnAgent } from '../../spawn/agentSpawn'
+import type { CanvasPush } from '../../canvas/canvasPush'
+import { filterHandoffContext } from '../../verifier/handoff.filter'
+import { joinArgv } from '../../../shared/claudeLaunch/shellQuote'
+import { agentSessionId, ensureAgentNode } from './agentCanvas'
 
 /** Worker owner label stored on the worktree allocation. */
 export const AGENT_WORKTREE_OWNER = 'central'
@@ -25,12 +29,22 @@ export interface AgentHostDeps {
   taskTitle?(agent: AgentRecord): string | null
   /** The `agent.spawn` path (F2-h); default = the process-wide spawner (depth, caps, lineage, events). */
   spawn?: typeof spawnAgent
+  /** Board writer: a PTY agent is added as a canvas node; absent = no node (tests, headless boot). */
+  canvas?: CanvasPush
 }
 
 export { spawnParentOf }
 
 /** Builds the host over injected sessions/worktrees (real ones in `ca2Boot`, fakes in tests). */
 export function createAgentHost(deps: AgentHostDeps): AgentHost {
+  const titleOf = (agent: AgentRecord): string => deps.taskTitle?.(agent) ?? `${agent.role} ${agent.kind}`
+  const initialPrompt = (agent: AgentRecord): string => {
+    const title = deps.taskTitle?.(agent)
+    const task = agent.taskId ? `Task ${agent.taskId}${title ? `: ${title}` : ''}.` : 'No task attached.'
+    return `${AGENT_ENVELOPE}\nRole: ${agent.role}. ${task} Work only inside this worktree; do not merge or push.`
+  }
+  const place = (agent: AgentRecord, nodeId: string, cwd: string, cmd: string): void =>
+    ensureAgentNode(deps.canvas, deps.repoOf(agent.projectId), { agent, nodeId, cwd, cmd, title: titleOf(agent) })
   return {
     runnerFor: (kind): AgentRunner => (deps.catalog.resolve(kind)?.headlessArgv ? 'exec' : 'pty'),
     spawnTier: (kind) => deps.catalog.resolve(kind)?.tier ?? null,
@@ -44,20 +58,27 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       const allocation = await deps.worktrees.allocate({ taskId: agent.id, branch: `${AGENT_BRANCH_PREFIX}${agent.id}`, repo, owner: AGENT_WORKTREE_OWNER })
       return allocation.path
     },
-    async initialPrompt(agent) {
-      const title = deps.taskTitle?.(agent)
-      const task = agent.taskId ? `Task ${agent.taskId}${title ? `: ${title}` : ''}.` : 'No task attached.'
-      return `${AGENT_ENVELOPE}\nRole: ${agent.role}. ${task} Work only inside this worktree; do not merge or push.`
-    },
+    initialPrompt: async (agent) => initialPrompt(agent),
     async openPty(agent, cwd, nodeId) {
       const entry = deps.catalog.resolve(agent.kind)
       if (!entry) throw new Error(`${AGENT_KIND_UNKNOWN}: ${agent.kind}`)
       // ponytail: PTY sessions take no env from the host (OpenMsg has no env field), so `CustomAgent.env` only reaches headless runs.
+      // A session id makes `launchLine` add the hook `--settings` (same as a canvas/control claude node).
+      const sessionId = agentSessionId(agent)
+      // Builtin claude takes its task as the positional prompt; only the PTY gets it, the node keeps the plain line.
+      const cmd = entry.builtin ? `${entry.launchLine} ${joinArgv([filterHandoffContext(initialPrompt(agent)).replace(/\s*\n\s*/g, ' ')])}` : entry.launchLine
+      const open = { nodeId, cwd, cmd, agentId: agent.kind, ...(sessionId ? { sessionId } : {}) }
       const res = await (deps.spawn ?? spawnAgent)(
-        { door: 'central', mode: 'pty', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: deps.taskTitle?.(agent) ?? `${agent.role} ${agent.kind}`, pty: { cmd: entry.launchLine, agentId: agent.kind } },
-        { openPty: () => deps.sessions.open({ nodeId, cwd, cmd: entry.launchLine, agentId: agent.kind }) }
+        { door: 'central', mode: 'pty', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: titleOf(agent), pty: open },
+        { openPty: () => deps.sessions.open(open) }
       )
       if (!res.ok) throw new Error(`${res.code}: ${res.message}`)
+      place(agent, nodeId, cwd, entry.launchLine)
+    },
+    ensureNode(agent, nodeId) {
+      const cwd = deps.worktrees.get(agent.id)?.path
+      const entry = deps.catalog.resolve(agent.kind)
+      if (cwd && entry) place(agent, nodeId, cwd, entry.launchLine)
     },
     headlessArgv: (kind, prompt) => deps.catalog.resolve(kind)?.headlessArgv?.(prompt) ?? null,
     async send(nodeId, text) { deps.sessions.input(nodeId, `${text}\r`) },

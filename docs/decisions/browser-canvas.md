@@ -23,7 +23,7 @@ dinyalakan saat drawer Console dibuka, agent memanggil `console`, atau eval; sek
 (memori saja, dinyalakan ulang saat target dibuat ulang). `Log.enable` tetap eager: tidak mengekspos objek halaman.
 
 ## Capability untuk agent
-Verb `browser.read` (status, snapshot, screenshot, wait, console) dan `browser.act` (navigate, click, type, press,
+Verb `browser.read` (status, snapshot, screenshot, wait, console) dan `browser.act` (open, navigate, click, type, press,
 scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua jalur identitas ke
 `/api/control/browser/[:nodeId/]:verb` (`browserControl.handler.ts`):
 1. **Sesi agent PTY: token node + kabel, dibaca per panggilan.** Sesi agent tidak lagi diberi capability browser
@@ -34,7 +34,8 @@ scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua
    `resolveLinkedBrowser` (`browser.linkedTarget.ts`) membaca board TERSIMPAN saat panggilan itu: hanya node
    browser yang terhubung kabel (edge, arah mana pun, `linkedPeerIds` dari `contextLinkRoute.ts`) yang boleh
    dikemudikan. Satu kabel = otomatis; beberapa = `409 ambiguous_browser`, pilih dengan `--node <id>`;
-   nol = `404 no_linked_browser` dengan pesan yang menyuruh agent minta kabel; `--node` ke browser tak terhubung =
+   nol = `404 no_linked_browser` dengan pesan yang menyuruh agent menjalankan `webterm browser open <url>`
+   (kecuali `navigate`, yang membuka browser sendiri, lihat "Agent membuka browser sendiri"); `--node` ke browser tak terhubung =
    `403 not_linked`. Menyambung kabel langsung berlaku, melepasnya langsung mencabut, tanpa respawn sesi.
 2. **Agent Pusat: capability `browser.*`** di header `x-webterm-capability`, node wajib di path
    (`400 node_required` bila tidak ada), di-scope `node:<id>`.
@@ -52,6 +53,21 @@ belakangan tak terjangkau sampai respawn) dan, dengan satu browser di board, age
 mengemudikannya. Pola ini meniru Orca (`browser-command-targets.ts`: halaman dipilih per panggilan dari
 konteks pemanggil, error jelas bila tak ada) dan nodeterm (`browser-drive.ts`: gerbang dibaca LIVE saat drive,
 identitas pemanggil terverifikasi), sama dengan pola context-link yang sudah ada di repo ini.
+
+## Agent membuka browser sendiri
+Verb `open [url]` (hanya jalur token node; jalur capability = `400 agent_node_only`) meniru nodeterm
+`open-browser --url`: `browser.agentOpen.ts` menambah node browser baru (id acak, 640x400) di samping node pemanggil
+plus kabel `bridge-<caller>-<id>` jenis `context` yang sama dengan kabel manusia, lewat `canvasPush.add` (board
+tersimpan + siaran `t:'canvas'` ke UI). Lalu halaman dimulai lewat `lifecycle.attach` (gerbang `MAX_LIVE`), dan
+bila ada `url`, verb `navigate` biasa dijalankan ke node itu (policy, `agentAllowed`, lease, guard SSRF tetap
+berlaku). Balasan memuat `nodeId`, `url` dan `note`; verb berikutnya memakai kabel itu tanpa `--node` selama itu
+satu-satunya browser terkabel. `navigate` tanpa browser terkabel = `open` otomatis, supaya agent tak perlu
+meminta user. `url` tidak ditulis ke node: klien akan mengirim `nav go` sekali saat attach (`browser.useGoto.ts`)
+dan bentrok dengan lease agent; URL kembali ke `data.url` lewat mirror biasa.
+
+Gagal setelah node ditambah (mis. `max_live`, `no_binary`): node dan kabelnya DIBIARKAN, balasan error jujur
+memuat `nodeId` dan `note` (halaman mulai saat user menampilkannya; tutup/sembunyikan browser lain bila batas
+penuh). Alasan: `CanvasPush` tidak punya hapus, dan node terlihat di board lebih jujur daripada menghilang diam-diam.
 
 ## Hapus node
 Tidak ada pesan "discard" eksplisit di protokol. Hapus node = unmount `BrowserNode` -> detach -> timer discard
@@ -93,7 +109,7 @@ dari tombol `+`. Rencana: `PLAN/BROWSER-PLACEMENT-a..c.md`. Keputusan:
   tidak pernah URL penuh/query/fragmen.
 
 ### Belum ada (ditunda, menunggu keputusan pengguna)
-- Pembukaan node browser oleh agent/central atas inisiatif sendiri (U2); butuh kanal server-ke-klien baru.
+- Pembukaan node browser oleh Agent Pusat atas inisiatif sendiri (U2); agent canvas sudah bisa (`open`).
 - Preview localhost otomatis tanpa mengisi `WEBTERM_BROWSER_ALLOW_HOSTS` (U1); melonggarkan guard SSRF.
 - Cmd/Ctrl+klik link menjadi canvas browser (U3).
 - Tempel (paste) URL ke canvas.

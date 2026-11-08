@@ -18,6 +18,8 @@ Operator notes:
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 
 ### Added
+- Worker and reviewer agents that Central starts (Workers on) now appear on the project's canvas as normal Claude nodes beside the others, so you can watch them and type into them. Each starts with its task as the first prompt and keeps webterm hooks and status. Stopping an agent leaves its node on the board, and after a server restart a still-running agent is put back without duplicates.
+- An agent on the canvas can open its own browser with `webterm browser open [url]`: a browser node appears next to it, already cabled, and the agent can drive it right away. `webterm browser navigate <url>` with no cabled browser opens one automatically. If the live-browser limit is reached the node is still added and the agent is told how it will start.
 - Central panel › Abilities: everything Central can do at your current level, grouped (Projects & nodes, Workers, Tasks & plans, Memory, Browser, Skills, Telegram & channels, Approvals, Other), each tool with a plain name and sentence and whether it runs on its own, asks you first, is not allowed at this level, or is turned off. A count line and All / Runs on its own / Asks you / Not allowed buttons filter the list, a note links to Settings › Rules & approvals (your rules, the daily budget and worker limits can still stop a tool), and the skills Central can use are listed below. Open it with `/tools`. The list comes from the server's own tool registry and level check, so it cannot drift from what Central is really allowed to do.
 - Model ladder for headless Claude runs (task planner and workers, routines, PR review, bake-off, Central agent spawns): each kind starts on a fitting model and effort, and a task that fails verification or produces no changes is retried one step up (at most two steps, never above Opus on its own; a timeout raises effort first).
 - Budget-aware models: as the day's spending nears its limit, new runs move to cheaper models, and a "Needs you" notice says when a large run was limited.
@@ -95,6 +97,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Nodes the server adds (agents, browsers) appear live in every open window, without a reload.
 - Central panel: the Control tab is now Status. It shows the level Central works at in plain words with what it means (and says when your highest allowed level holds it lower), today's budget in short numbers ("13K of 10M tokens today", "0 of 20 workers started today", "No limit"), and a "Stop Central" button with the same confirmation. "Change" opens Settings › Central Agent, still the only place the level is set. Tabs are now Status · Abilities · Agents · Skills.
 - Central's memory moved from the Central panel to Settings › Memory (read-only, below what agents remember), and `/memory` opens it there.
 - The Settings sidebar shows an icon and a short description for each section.

@@ -81,8 +81,8 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
     handler: withAgent((_ctx, input, _projectId, a) => executor.read(a, (input.tail as number | undefined) ?? DEFAULT_TAIL)),
   }
   const spawn: ToolDef = {
-    name: 'agent.spawn', summary: 'Start a worker or reviewer agent for the project; the server picks cwd and command.', tier: 'R2', auditKeys: AUDIT_KEYS,
-    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional existing task id>"}. May return approval_required.',
+    name: 'agent.spawn', summary: 'Start a worker or reviewer agent; the server picks cwd and command. A pty agent appears on the project canvas.', tier: 'R2', auditKeys: AUDIT_KEYS,
+    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional existing task id>"}. May return approval_required. A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. It starts with only its role and task id/title; give it the work with agent.prompt (mode steer).',
     input: obj({ requestId: S.str(MAX_ID), kind: S.str(MAX_KIND), role: S.oneOf(...ROLES), title: S.str(MAX_TITLE), taskId: S.str(MAX_ID) }, ['requestId', 'kind', 'role', 'title']),
     output: S.anyObj('Agent id and state, or approval_required.'),
     // `role` is a forbidden key for other tools but is this tool's own field; everything else stays forbidden.
