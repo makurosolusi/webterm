@@ -80,7 +80,7 @@ describe('AgentChatView controls', () => {
     expect(t.setConfig).toHaveBeenCalledWith({ model: 'opus', thinking: false })
     // The replayed (older) server config does not overwrite the stored one while the sync runs.
     emit({ seq: 1, t: 'config', config: { thinking: true } })
-    await waitFor(() => expect(model()).toBe('Model: Default model'))
+    await waitFor(() => expect(model()).toBe('Model: Auto (ladder: Sonnet · medium)'))
     emit({ seq: 2, t: 'config', config: { model: 'opus', thinking: false } })
     await waitFor(() => expect(model()).toBe('Model: opus'))
     await act(async () => answer())

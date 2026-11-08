@@ -27,6 +27,7 @@ import { DEFAULT_CANVAS_BACKGROUND, normalizeCanvasBackground, normalizeWorkspac
 import type { AppTheme, TerminalSettings } from './settings.terminal'
 import type { AgentSettings } from './settings.agent'
 import { normalizeKeybindings } from './settings.keybindings'
+import { normalizeProjectModels } from './settings.projectModels'
 
 export type { TerminalCursorStyle, TerminalCursorInactiveStyle, TerminalShortcutPolicy, TerminalGpuRendering, AppTheme } from './settings.terminal'
 export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
@@ -119,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledAgents: [],
   claudePermissionMode: 'auto',
   hookReplyApprovals: true,
+  projectModels: {},
   gridSize: 24,
   snapToGrid: false,
   accent: '#0a84ff',
@@ -188,6 +190,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   // Nested object with a non-empty default: normalized field by field, never shallow-taken.
   out.canvasBackground = normalizeCanvasBackground(src.canvasBackground)
   out.canvasBackgroundByWorkspace = normalizeWorkspaceBackgrounds(src.canvasBackgroundByWorkspace)
+  out.projectModels = normalizeProjectModels(src.projectModels)
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents

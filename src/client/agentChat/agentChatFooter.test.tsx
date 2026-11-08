@@ -47,7 +47,7 @@ describe('AgentChatFooter', () => {
   it('composes mode slot, pickers, meter, cost and tokens in a wide footer', async () => {
     mount()
     expect(footer().textContent).toContain('MODE')
-    expect(await screen.findByText('Default')).toBeTruthy() // model name once the prefetch lands
+    expect(await screen.findByText('Auto (ladder: Sonnet · medium)')).toBeTruthy() // unset model = the ladder's default label
     expect(screen.getByRole('button', { name: 'Conversation history' }).textContent).toBe('History')
     expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('10')
     expect(footer().textContent).toContain('$0.0123')
@@ -57,7 +57,8 @@ describe('AgentChatFooter', () => {
   it('prefetches models once even with an inline loader, and passes the current model levels to the effort picker', async () => {
     const loadModels = vi.fn(async () => MODELS)
     const { rerender, props } = mount({ loadModels })
-    await screen.findByText('Default')
+    await vi.waitFor(() => expect(loadModels).toHaveBeenCalled())
+    await act(async () => {}) // let the prefetch land (the unset-model label shows before it)
     rerender(<AgentChatFooter {...props} loadModels={() => loadModels()} />)
     rerender(<AgentChatFooter {...props} loadModels={() => loadModels()} />)
     expect(loadModels).toHaveBeenCalledTimes(1)
@@ -75,7 +76,7 @@ describe('AgentChatFooter', () => {
 
   it('routes model and effort changes to onConfigChange as patches', async () => {
     const { props } = mount()
-    await screen.findByText('Default')
+    await screen.findByText('Auto (ladder: Sonnet · medium)')
     fireEvent.keyDown(modelTrigger(), { key: 'Enter' })
     await act(async () => { fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Haiku' })) })
     expect(props.onConfigChange).toHaveBeenLastCalledWith({ model: 'haiku' })
@@ -86,7 +87,7 @@ describe('AgentChatFooter', () => {
 
   it('collapses labels to icons and hides the token count when narrow, and restores them when wide', async () => {
     mount()
-    await screen.findByText('Default')
+    await screen.findByText('Auto (ladder: Sonnet · medium)')
     resize(FOOTER_COMPACT_PX - 1)
     expect(footer().dataset.compact).toBe('true')
     expect(modelTrigger().textContent).toBe('')
@@ -96,7 +97,7 @@ describe('AgentChatFooter', () => {
     expect(footer().textContent).toContain('$0.0123')
     resize(FOOTER_COMPACT_PX + 100)
     expect(footer().dataset.compact).toBeUndefined()
-    expect(modelTrigger().textContent).toContain('Default')
+    expect(modelTrigger().textContent).toContain('Auto (ladder: Sonnet · medium)')
   })
 
   it('disabled disables the model, effort and history triggers', () => {

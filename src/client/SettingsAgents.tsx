@@ -13,6 +13,8 @@ import { ColorField, Field, SelectField, TextField, ToggleField } from './Settin
 import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
 import { ClaudeLaunchProfilesCard } from './claudeLauncher/ClaudeLaunchProfilesCard'
+import type { SettingsPatch } from '../shared/settings.patch'
+import { ModelsSettings } from './SettingsModels'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
   { value: 'manual', label: 'manual — ask for every action' },
@@ -27,7 +29,7 @@ export function AgentSettings({
   onChange,
 }: {
   settings: Settings
-  onChange: (patch: Partial<Settings>) => void
+  onChange: (patch: SettingsPatch) => void
 }): React.JSX.Element {
   const agentOptions = [
     ...BUILTIN_AGENT_IDS.map((id) => ({ value: id as string, label: AGENT_CONFIG[id].label })),
@@ -109,6 +111,8 @@ export function AgentSettings({
       </Field>
 
       <ClaudeLaunchProfilesCard settings={s} onChange={onChange} />
+
+      <ModelsSettings settings={s} onChange={onChange} />
 
       <Field
         label="Agent custom"

@@ -185,3 +185,27 @@ describe('nextSettingsDocument: a corrupt stored row', () => {
     expect(mergeSettings({})).toEqual(mergeSettings(null))
   })
 })
+
+describe('nextSettingsDocument: projectModels (per-workspace model override)', () => {
+  it('writes one entry, keeps the others, and deletes with null', () => {
+    const one = nextSettingsDocument(null, { projectModels: { a: { model: 'opus' } } })
+    const two = nextSettingsDocument(JSON.stringify(one.doc), { projectModels: { b: { effort: 'low' } } })
+    expect(two.settings.projectModels).toEqual({ a: { model: 'opus' }, b: { effort: 'low' } })
+    const gone = nextSettingsDocument(JSON.stringify(two.doc), { projectModels: { a: null } })
+    expect(gone.settings.projectModels).toEqual({ b: { effort: 'low' } })
+  })
+
+  it('refuses an unknown model or effort with SettingsValidationError, echoing no value', () => {
+    let caught: unknown
+    try { nextSettingsDocument(null, { projectModels: { a: { model: 'gpt-9' } } }) } catch (e) { caught = e }
+    expect(caught).toBeInstanceOf(SettingsValidationError)
+    expect((caught as SettingsValidationError).errors).toEqual([{ index: 0, field: 'projectModels.entry', code: 'invalid_override' }])
+    expect(() => nextSettingsDocument(null, { projectModels: { a: { effort: 'turbo' } } })).toThrow(SettingsValidationError)
+    expect(() => nextSettingsDocument(null, { projectModels: { a: {} } })).toThrow(SettingsValidationError)
+  })
+
+  it('drops a hand-edited bad stored entry on load instead of failing', () => {
+    expect(parseStored(JSON.stringify({ projectModels: { a: { model: 'nope' }, b: { model: 'haiku', effort: 'max' } } })).projectModels)
+      .toEqual({ b: { model: 'haiku', effort: 'max' } })
+  })
+})
