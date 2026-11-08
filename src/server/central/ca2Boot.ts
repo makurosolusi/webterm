@@ -19,6 +19,7 @@ import { projectRepo, resolveWorktrees, worktreeRoot } from '../orchestratorRunP
 import { type SessionsLike, createSessionsPort } from '../orchestrator/workerRuntimeSession'
 import { DERIVED_FLAGS } from '../../shared/featureCapabilities'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
+import { getCanvasPush } from '../canvas/canvasPush.runtime'
 import { type BrowserBootSources, createBrowserToolDeps } from './ca2Boot.browser'
 import { createAgentExecutor, type AgentExecutor } from './agents/agentExecutor'
 import { type AgentCatalog, createAgentCatalog, DEFAULT_DENY_ROOTS } from './agents/agentCatalog'
@@ -102,7 +103,7 @@ function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGua
   const wt = resolveWorktrees(deps, worktreeRoot(deps))
   if (!wt.ok) { log.warn('ca2.worktrees_unavailable', 'agent worktree root unavailable; agents disabled'); return null }
   const catalog = createAgentCatalog({ settings: opts.settings ?? (() => DEFAULT_SETTINGS), denyRoots: () => [...DEFAULT_DENY_ROOTS, worktreeRoot(deps)] })
-  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), catalog })
+  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), catalog, canvas: getCanvasPush() })
   return { executor: createAgentExecutor({ db, guard, host, now, env }), catalog }
 }
 
