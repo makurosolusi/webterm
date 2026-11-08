@@ -38,7 +38,13 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
   }
 
   const onFrameNavigated = (rec: NodeRec, p: Record<string, unknown>) => {
-    const f = p.frame as { parentId?: string; url?: string } | undefined
+    const f = p.frame as { parentId?: string; url?: string; unreachableUrl?: string } | undefined
+    if (f && !f.parentId && f.unreachableUrl) {
+      // Chromium committed its own error page (link click, redirect, reload): CDP gives no error name here;
+      // `goto` overwrites it with the exact name when the failure came from Page.navigate.
+      ops.patch(rec, { url: f.unreachableUrl, netError: rec.state.netError ?? 'net::ERR_FAILED' })
+      return
+    }
     if (!f?.url || f.parentId || isInternalUrl(f.url)) return // hanya frame utama; halaman internal dilewati
     const reason = ops.guard.onFrameNavigated(f.url)
     if (reason) {
@@ -47,7 +53,7 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       log.warn('browser.block', 'frame navigation blocked', { ids: { nodeId: rec.nodeId }, host: hostOnly(f.url), reason })
       return
     }
-    ops.patch(rec, { url: f.url, blocked: undefined, ...ops.pageState(f.url) })
+    ops.patch(rec, { url: f.url, blocked: undefined, netError: undefined, ...ops.pageState(f.url) })
     void ops.refresh(rec)
   }
 

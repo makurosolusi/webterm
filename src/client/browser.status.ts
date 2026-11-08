@@ -48,8 +48,51 @@ export function browserNotice(i: { state?: BrowserState; error?: BrowserErr; con
   return null
 }
 
-/** Tombol pemulihan di bawah pesan: buka tawaran kemampuan Browser, atau izinkan satu host:port privat. */
+/** A failed main-frame navigation in words a user can act on (nodeterm `webviewError.ts`, keyed by name). */
+export interface NetErrorText { title: string; hint: string; retryable: boolean }
+
+const UNREACHABLE = "This site can't be reached"
+const CHECK_ADDRESS = 'Check the address for typos.'
+const CHECK_CONNECTION = 'Check your connection.'
+const NOT_RUNNING = 'If this is a dev server, it may not be running yet.'
+const UNTRUSTED = "The site's certificate isn't trusted."
+const net = (title: string, hint: string, retryable = true): NetErrorText => ({ title, hint, retryable })
+
+const NET_ERRORS: Record<string, NetErrorText> = {
+  NAME_NOT_RESOLVED: net(UNREACHABLE, CHECK_ADDRESS),
+  NAME_RESOLUTION_FAILED: net(UNREACHABLE, CHECK_ADDRESS),
+  INTERNET_DISCONNECTED: net("You're offline", CHECK_CONNECTION),
+  NETWORK_CHANGED: net('The network changed', CHECK_CONNECTION),
+  CONNECTION_REFUSED: net(UNREACHABLE, `Nothing is listening at that address. ${NOT_RUNNING}`),
+  CONNECTION_RESET: net(UNREACHABLE, 'The connection was reset.'),
+  CONNECTION_CLOSED: net(UNREACHABLE, 'The server closed the connection.'),
+  CONNECTION_TIMED_OUT: net(UNREACHABLE, 'The server took too long to respond.'),
+  TIMED_OUT: net(UNREACHABLE, 'The server took too long to respond.'),
+  CONNECTION_FAILED: net(UNREACHABLE, CHECK_CONNECTION),
+  ADDRESS_UNREACHABLE: net(UNREACHABLE, 'That address is unreachable from this network.'),
+  SSL_PROTOCOL_ERROR: net("This site can't provide a secure connection", 'The site sent an invalid response.'),
+  TOO_MANY_REDIRECTS: net("This page isn't working", 'The site redirected too many times.'),
+  EMPTY_RESPONSE: net("This page isn't working", 'The site sent no data.'),
+  BLOCKED_BY_CLIENT: net('This page was blocked', 'Shields or a content blocker stopped it.', false),
+  BLOCKED_BY_RESPONSE: net('This page was blocked', "The site doesn't allow being shown here.", false),
+  INVALID_URL: net("This address can't be opened", CHECK_ADDRESS, false),
+}
+const CERT_ERROR = net('Your connection is not private', UNTRUSTED)
+const UNKNOWN = net("This page couldn't load", '')
+
+/**
+ * Plate text for a Chromium net error name ("net::ERR_NAME_NOT_RESOLVED"); null for ERR_ABORTED (the user,
+ * a download or a 204 cancelled it: nothing to explain). Unknown names get a generic sentence, never a guess.
+ */
+export function netErrorText(name: string): NetErrorText | null {
+  const key = name.replace(/^net::ERR_/, '')
+  if (key === 'ABORTED') return null
+  return NET_ERRORS[key] ?? (key.startsWith('CERT_') ? CERT_ERROR : UNKNOWN)
+}
+
+/** Tombol pemulihan di bawah pesan: buka tawaran kemampuan Browser, izinkan satu host:port privat, atau plate galat jaringan. */
 export type NoticeAction = { kind: 'offer' } | { kind: 'allowHost'; hostPort: string; entries: string[] }
+  | ({ kind: 'netError'; code: string; host?: string } & NetErrorText)
 
 const LOOPBACK_ALIASES = new Set(['localhost', '127.0.0.1'])
 const DEFAULT_PORT: Record<string, string> = { 'http:': '80', 'https:': '443' }
@@ -63,6 +106,9 @@ const NEVER_OFFER = /^(169\.254\.|\[?fe[89ab][0-9a-f]:)/i
 export function noticeAction(i: { state?: BrowserState; error?: BrowserErr; target?: string }): NoticeAction | null {
   const code = i.state?.blocked ?? i.error?.code
   if (code === 'no_binary' || code === 'disabled') return { kind: 'offer' }
+  const ne = !code && i.state?.netError
+  const text = ne ? netErrorText(ne) : null
+  if (ne && text) return { kind: 'netError', code: ne, host: i.state?.url ? hostOnly(i.state.url) : undefined, ...text }
   if (i.state?.blocked !== 'private_host' || !i.target) return null
   let u: URL
   try { u = new URL(i.target) } catch { return null }

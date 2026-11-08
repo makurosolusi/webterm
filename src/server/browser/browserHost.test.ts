@@ -122,6 +122,32 @@ describe('navigation', () => {
     expect(rig.host.state('n1')?.blocked).toBeUndefined()
   })
 
+  it('a failed navigation sets netError (name + failed url); the next real page clears it', async () => {
+    await openLive()
+    rig.fake.handle(CDP.navigate, () => ({ errorText: 'net::ERR_NAME_NOT_RESOLVED' }))
+    await rig.host.navigate('n1', 'https://nope.invalid/')
+    expect(rig.host.state('n1')).toMatchObject({ netError: 'net::ERR_NAME_NOT_RESOLVED', url: 'https://nope.invalid/' })
+    rig.fake.emit(CDP_EVENT.frameNavigated, { frame: { id: 'f', url: 'chrome-error://chromewebdata/', unreachableUrl: 'https://nope.invalid/' } }, SID)
+    rig.fake.emit(CDP_EVENT.frameNavigated, { frame: { id: 'f', url: 'https://example.org/' } }, SID)
+    await waitFor(() => rig.host.state('n1')?.url === 'https://example.org/', 'next page')
+    expect(rig.host.state('n1')?.netError).toBeUndefined()
+  })
+
+  it('ERR_ABORTED (stop/download) leaves no netError', async () => {
+    await openLive()
+    rig.fake.handle(CDP.navigate, () => ({ errorText: 'net::ERR_ABORTED' }))
+    await rig.host.navigate('n1', 'https://example.com/file.zip')
+    expect(rig.host.state('n1')).toMatchObject({ url: 'https://example.com/' })
+    expect(rig.host.state('n1')?.netError).toBeUndefined()
+  })
+
+  it('an error page committed outside Page.navigate (link click) still marks netError', async () => {
+    await openLive()
+    rig.fake.emit(CDP_EVENT.frameNavigated, { frame: { id: 'f', url: 'chrome-error://chromewebdata/', unreachableUrl: 'https://down.example/' } }, SID)
+    await waitFor(() => rig.host.state('n1')?.netError !== undefined, 'netError')
+    expect(rig.host.state('n1')).toMatchObject({ netError: 'net::ERR_FAILED', url: 'https://down.example/' })
+  })
+
   it('tracks loading and history (title/back/forward)', async () => {
     await openLive()
     rig.fake.handle(CDP.getNavigationHistory, () => ({ currentIndex: 1, entries: [{ id: 1, title: 'a' }, { id: 2, title: 'Now' }, { id: 3, title: 'c' }] }))

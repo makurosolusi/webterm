@@ -158,6 +158,9 @@ export function mergeState(cur: BrowserState, part: Partial<BrowserState>): Brow
   return (Object.keys(next) as Array<keyof BrowserState>).every((k) => next[k] === cur[k]) ? null : next
 }
 
+/** `net::ERR_ABORTED`: navigation cancelled (Stop, download, 204), never shown as a failure. */
+export const isAbortedNav = (errorText: string): boolean => /ERR_ABORTED$/.test(errorText)
+
 const NO_URL = /^(about|chrome-error):/i
 /** Halaman internal Chromium: tidak dicek penjaga dan tidak menimpa URL terakhir yang baik. */
 export const isInternalUrl = (u: string): boolean => NO_URL.test(u)

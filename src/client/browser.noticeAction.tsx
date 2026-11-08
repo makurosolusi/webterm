@@ -2,6 +2,7 @@
 // - `offer`: Chromium hilang / browser mati -> tawaran kemampuan Browser yang sama dengan Dock (import saja),
 //   jadi kolom lokasi Chromium muncul di tempat, bukan teks "atur lewat Pengaturan".
 // - `allowHost`: alamat privat diblokir -> "Izinkan host:port" menulis allowlist Pengaturan lalu membuka ulang.
+// - `netError`: navigasi gagal -> plate menutupi halaman galat mentah Chromium (judul, host, petunjuk, Try again = reload).
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
@@ -21,12 +22,28 @@ export interface NoticeActionProps {
 const BOX = 'nodrag nowheel absolute bottom-12 left-2 z-10 flex max-w-80 flex-col gap-1 rounded p-2 text-xs ' +
   'bg-(--vscode-editorWidget-background) text-(--vscode-foreground) border border-(--vscode-editorWidget-border)'
 
+// Plate over the stream: Chromium's own error page is another product's chrome with no way back (nodeterm WebviewErrorPlate).
+const PLATE = 'nodrag nowheel absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 p-4 text-center text-xs ' +
+  'bg-(--vscode-editor-background) text-(--vscode-foreground)'
+const TRY_AGAIN = 'Try again'
+
 export default function BrowserNoticeAction({ state, error, target, nav }: NoticeActionProps) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const action = noticeAction({ state, error, target })
   if (!action) return null
+  if (action.kind === 'netError') {
+    return (
+      <div className={PLATE} role="alert">
+        <p className="m-0 text-sm font-semibold">{action.title}</p>
+        {action.host && <p className="m-0 opacity-80">{action.host}</p>}
+        {action.hint && <p className="m-0 opacity-80">{action.hint}</p>}
+        <p className="m-0 font-mono opacity-60">{action.code}</p>
+        {action.retryable && <Button size="xs" variant="secondary" onClick={() => nav('reload')}>{TRY_AGAIN}</Button>}
+      </div>
+    )
+  }
   if (action.kind === 'offer') {
     return (
       <div className={BOX}>

@@ -46,6 +46,26 @@ describe('BrowserNoticeAction', () => {
     expect(screen.getByTestId('offer').textContent).toBe('browser')
   })
 
+  it('failed navigation -> plate with title, host, hint; Try again reloads', () => {
+    const nav = vi.fn()
+    render(<BrowserNoticeAction state={{ ...blocked(undefined), url: 'https://nope.invalid/', netError: 'net::ERR_NAME_NOT_RESOLVED' }} nav={nav} />)
+    const plate = screen.getByRole('alert')
+    expect(plate.textContent).toContain("This site can't be reached")
+    expect(plate.textContent).toContain('nope.invalid')
+    expect(plate.textContent).toContain('Check the address for typos.')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(nav).toHaveBeenCalledWith('reload')
+  })
+
+  it('not retryable -> plate without Try again; cleared netError -> nothing', () => {
+    const st = { ...blocked(undefined), url: 'https://ads.example/', netError: 'net::ERR_BLOCKED_BY_CLIENT' }
+    const { container, rerender } = render(<BrowserNoticeAction state={st} nav={vi.fn()} />)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+    rerender(<BrowserNoticeAction state={{ ...st, netError: undefined }} nav={vi.fn()} />)
+    expect(container.innerHTML).toBe('')
+  })
+
   it('halaman normal -> tidak merender apa pun', () => {
     const { container } = render(<BrowserNoticeAction state={{ ...blocked(undefined) }} nav={vi.fn()} />)
     expect(container.innerHTML).toBe('')
