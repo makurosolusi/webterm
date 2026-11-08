@@ -125,7 +125,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   const db = opts.runtime.db
   const now = opts.now ?? Date.now
   const dir = opts.dataDirPath ?? dataDir()
-  const guard = createControlGuard({ db, now, env })
+  const guard = createControlGuard({ db, now, env, skipApprovals: () => opts.settings?.().skipApprovals === true })
   const userStore = createUserMemoryStore(createMemoryFilePort(userMemoryRoot(env, dir)))
   const sessions = createSessionsPort(opts.sessions)
   let kb: Database | null = null

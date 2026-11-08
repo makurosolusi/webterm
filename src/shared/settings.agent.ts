@@ -31,6 +31,9 @@ export interface AgentSettings {
    *  `PERM_WAIT_SECS_INTERACTIVE` menunggu Approve/Deny dari canvas sebelum jatuh ke prompt
    *  interaktif biasa (permission/permission.runtime.ts). Off ⇒ tanpa penahanan, langsung ke prompt interaktif. */
   hookReplyApprovals: boolean
+  /** Skip approvals: Central's ask-tier actions run without a card and Claude agents launch with
+   *  `bypassPermissions`. Hard denies (halt, pause, caps, budget, policy deny) still apply. */
+  skipApprovals: boolean
   /** Per-workspace model/effort override of the model ladder, by workspace id; absent = ladder. */
   projectModels: Record<string, ProjectModelOverride>
 }

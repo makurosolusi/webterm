@@ -20,9 +20,9 @@ function safeId(value: unknown): value is string {
   return typeof value === 'string' && value.length >= 1 && value.length <= MAX_ID && SAFE_ID.test(value)
 }
 
-/** Gerbang run yang sama dengan POST /api/orchestrator/run (workers on; approval default ON). */
-export function runGateFlags(env: NodeJS.ProcessEnv): Pick<OrchestratorRunDeps, 'enabled' | 'requireApproval'> {
-  return { enabled: orchestratorRunEnabled(env), requireApproval: orchestratorRunRequireApproval(env) }
+/** Gerbang run yang sama dengan POST /api/orchestrator/run (workers on; approval default ON, off under Skip approvals). */
+export function runGateFlags(env: NodeJS.ProcessEnv, skipApprovals = false): Pick<OrchestratorRunDeps, 'enabled' | 'requireApproval'> {
+  return { enabled: orchestratorRunEnabled(env), requireApproval: !skipApprovals && orchestratorRunRequireApproval(env) }
 }
 
 /** Default deps: ledger facade over the tool's own db, flags from the tool env. */
@@ -30,7 +30,7 @@ async function defaultDeps(ctx: ToolCtx): Promise<OrchestratorRunDeps> {
   const { createLedger } = await import('../../../ledger/ledger')
   const env = ctx.env ?? process.env
   const ledger = { mode: 'on', path: '', db: ctx.db, ledger: createLedger(ctx.db, { now: Date.now }), close() {} } as unknown as LedgerRuntime
-  return { ledger, ...runGateFlags(env) }
+  return { ledger, ...runGateFlags(env, ctx.guard.skipsApprovals?.() === true) }
 }
 
 /** Builds the tool; `resolveDeps` is the injection point for sessions/worktrees/verifier and tests. */

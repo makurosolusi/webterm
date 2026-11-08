@@ -6,6 +6,7 @@
 import type { AgentChatEvent, AgentChatImage } from '../../shared/agentChat.wire'
 import { AGENT_CHAT_KIND } from '../../shared/agentChat.shape'
 import type { AgentPermissionMode, Workspace, WsNode } from '../../shared/workspace'
+import { effectiveClaudeMode } from '../permission/permission.mode'
 import { resolveCwd } from '../ptyShell'
 import type { Query } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentChatOpen } from './agentChat.options'
@@ -43,10 +44,10 @@ export interface AgentChatPoolDeps {
 /**
  * Opener config of one node, exactly as a terminal agent node launches: the node's cwd (set from the
  * workspace at creation, workspace cwd as fallback) resolved like the PTY, its launch profile, and its
- * own mode else the settings default.
+ * own mode else the settings default (Skip approvals overrides both).
  */
-export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; mode: AgentPermissionMode }) {
-  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: t.node.permissionMode ?? d.mode, workspaceId: t.ws.id }
+export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; mode: AgentPermissionMode; skip?: boolean }) {
+  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: effectiveClaudeMode(d.mode, t.node.permissionMode, d.skip === true), workspaceId: t.ws.id }
 }
 
 interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void }

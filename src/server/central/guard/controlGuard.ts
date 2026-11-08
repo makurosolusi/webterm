@@ -40,6 +40,7 @@ export interface SyncControlGuard extends ControlGuard {
   readonly policy: Policy
   /** F4-d: classifies the approval card of a ladder ask (switch on, R2 at act_gated); null otherwise. */
   classifyLater?(req: ToolGuardRequest, decision: GuardDecision): Promise<GatedOutcome | null>
+  skipsApprovals(): boolean
 }
 
 export interface GuardDeps {
@@ -54,6 +55,8 @@ export interface GuardDeps {
   classifier?: Classifier
   /** Classifier event sink; default the process event log. */
   record?: (e: AppendEventInput) => void
+  /** Settings > Skip approvals, read on every check. */
+  skipApprovals?: () => boolean
 }
 
 /** Guard action for a registry tool: worker-starting tools are judged as `spawn`. */
@@ -92,6 +95,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
   const policy = deps.policy ?? createPolicy({ db, now })
 
   const effectiveLevel = (projectId: string | null): ControlLevel => effectiveLevelOf(db, projectId, env())
+  const skipsApprovals = (): boolean => deps.skipApprovals?.() === true
 
   /** Counts this sighting of `digest`; true once it reaches the threshold inside the window. */
   const isDoomLoop = (digest: string): boolean => {
@@ -157,10 +161,13 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     classifyLater: (req, decision) => classifyGuardCall({
       db, now, policy, ...(deps.classifier ? { classifier: deps.classifier } : {}), ...(deps.record ? { record: deps.record } : {}),
     }, { ...req, destructive: isDestructive(req.tool) }, decision),
+    skipsApprovals,
     check(req) {
       const level = effectiveLevel(req.projectId)
-      const decision = judge(req, level)
-      const code = decision.verdict === 'deny' ? { code: decision.code, reason: decision.reason } : {}
+      const judged = judge(req, level)
+      const skipped = judged.verdict === 'needs_approval' && skipsApprovals()
+      const decision: GuardDecision = skipped ? { verdict: 'allow', level } : judged
+      const code = decision.verdict === 'deny' ? { code: decision.code, reason: decision.reason } : skipped ? { skipped: true } : {}
       appendEvent({ db, now }, {
         actor: 'guard', kind: GUARD_AUDIT_KIND, ...projectRef(db, req.projectId),
         payload: { action: req.action, tool: req.tool.slice(0, MAX_TOOL), tier: req.tier, projectId: req.projectId, level, verdict: decision.verdict, ...code },
@@ -187,8 +194,9 @@ export type ToolGuardVerdict = { ok: true } | { ok: false; code: string }
  * Adapts the guard to the registry's sync `check`. `approved` marks execution after a human approval
  * (needs_approval then passes); a guard exception denies with `guard_error` and is reported to `onError`.
  */
-export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean; onError?: (err: unknown) => void } = {}): { check(req: ToolGuardRequest): ToolGuardVerdict } {
+export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean; onError?: (err: unknown) => void } = {}): { check(req: ToolGuardRequest): ToolGuardVerdict; skipsApprovals(): boolean } {
   return {
+    skipsApprovals: () => guard.skipsApprovals(),
     check(req) {
       try {
         const digest = createHash('sha256').update(`${req.tool}\n${canonical(req.input)}`).digest('hex').slice(0, 32)

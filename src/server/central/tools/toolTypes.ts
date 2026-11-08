@@ -19,7 +19,11 @@ export type ToolCode = ToolValidationCode | 'unknown_tool' | 'flag_off' | 'tier_
 export interface GuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown> }
 export type GuardVerdict = { ok: true } | { ok: false; code: string }
 /** Port to the server-side control guard (level, budget, breaker); injected, mocked in tests. */
-export interface ControlGuard { check(request: GuardRequest): GuardVerdict }
+export interface ControlGuard {
+  check(request: GuardRequest): GuardVerdict
+  /** Settings > Skip approvals is on for this caller; handlers with their own card skip it. */
+  skipsApprovals?(): boolean
+}
 
 export type ToolInput = Record<string, unknown>
 /** Handler outcome; `data` is returned to the caller and (whitelisted by `auditKeys`) audited. */
