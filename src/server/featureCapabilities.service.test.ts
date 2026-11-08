@@ -24,7 +24,7 @@ function spy(ids: CapabilityId[]): void {
 }
 afterEach(() => { offs.splice(0).forEach((off) => off()); events.length = 0 })
 
-const viewIn = (body: unknown, id: string) => (body as { capabilities: Array<{ id: string; alsoTurnsOn?: string[]; subs?: unknown[] }> }).capabilities.find((v) => v.id === id)
+const viewIn = (body: unknown, id: string) => (body as { capabilities: Array<{ id: string; alsoTurnsOn?: string[]; subs?: Array<{ key: string; label: string; on: boolean }> }> }).capabilities.find((v) => v.id === id)
 
 describe('viewOf', () => {
   it('off dengan prasyarat belum on memberi alsoTurnsOn dari closure', () => {
@@ -122,7 +122,27 @@ describe('setSub central skills', () => {
     expect(r.status).toBe(200)
     expect(h.target.WEBTERM_CENTRAL_SKILLS).toBe('on')
     expect(events).toEqual(['stop:central', 'start:central'])
-    expect(viewIn(r.body, 'central')?.subs).toEqual([expect.objectContaining({ key: 'centralSkills', on: true })])
+    expect(viewIn(r.body, 'central')?.subs?.find((s) => s.key === 'centralSkills')).toMatchObject({ on: true })
+  })
+
+  it('skill proposals restart Central; the per-turn checkpoint switch does not', async () => {
+    const h = harness()
+    spy(['central'])
+    await toggle(h.ctx, 'central', true)
+    events.length = 0
+    expect((await setSub(h.ctx, 'central', 'centralSkillPropose', true)).status).toBe(200)
+    expect(h.target.WEBTERM_CENTRAL_SKILL_PROPOSE).toBe('on')
+    expect(events).toEqual(['stop:central', 'start:central'])
+    events.length = 0
+    const r = await setSub(h.ctx, 'central', 'centralCheckpoint', true)
+    expect(r.status).toBe(200)
+    expect(h.target.WEBTERM_CENTRAL_CHECKPOINT).toBe('on')
+    expect(events).toEqual([])
+    expect(viewIn(r.body, 'central')?.subs?.map((s) => [s.key, s.label, s.on])).toEqual([
+      ['centralSkills', 'Let Central use skills you review and approve', false],
+      ['centralSkillPropose', 'Suggest new skills', true],
+      ['centralCheckpoint', 'Summarize long conversations', true],
+    ])
   })
 })
 

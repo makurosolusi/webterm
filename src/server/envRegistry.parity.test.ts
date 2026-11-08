@@ -35,6 +35,10 @@ const HOT_PROOF: Readonly<Record<string, string>> = {
   WEBTERM_CENTRAL_READ_TOOLS: 'central/tools/defs/read.shared.ts',
   // Sub-switch of the Central card: setSub restarts Central, whose start re-reads the key and builds or drops the skill store.
   WEBTERM_CENTRAL_SKILLS: 'featureCapabilities.service.ts',
+  // Same sub-switch path as SKILLS: setSub restarts Central, whose start re-reads it (ca2Boot).
+  WEBTERM_CENTRAL_SKILL_PROPOSE: 'featureCapabilities.service.ts',
+  // Re-read every turn from the turn's env (contextAssembler buildContext, turnContextLog).
+  WEBTERM_CENTRAL_CHECKPOINT: 'central/context/contextAssembler.ts',
 }
 
 /** Kunci yang pembacanya memakai nama turunan (`derivedFlagKey`): teks sumber yang membuktikannya. */
@@ -46,7 +50,6 @@ const DERIVED_KEY_SOURCE: Readonly<Record<string, string>> = {
 const PARITY: Readonly<Record<string, () => number>> = {
   WEBTERM_CENTRAL_TURN_STEPS: () => resolveLimits({}).maxTurns ?? NaN,
   WEBTERM_CENTRAL_TURN_WALL_MS: () => resolveLimits({}).maxWallMs ?? NaN,
-  WEBTERM_CENTRAL_TURN_TOKENS: () => resolveLimits({}).maxTokens,
   // budgetLimits membaca default dari registry sendiri, jadi paritas ini tautologis; dijaga agar tak diam-diam berubah.
   WEBTERM_CENTRAL_DAILY_TOKENS: () => budgetLimits(EMPTY).tokens,
   WEBTERM_CENTRAL_DAILY_SPAWNS: () => budgetLimits(EMPTY).spawns,
@@ -82,11 +85,11 @@ describe('paritas default registry vs pembaca', () => {
 })
 
 describe('HOT_PROOF: hot:true hanya untuk pembaca yang membaca env saat dipakai', () => {
-  it('kunci hot CA2 = persis peta HOT_PROOF; MAX_INFLIGHT dan TURN_TOKENS tetap boot', () => {
+  it('kunci hot CA2 = persis peta HOT_PROOF; MAX_INFLIGHT tetap boot', () => {
     expect(CA2_ENV_SPECS.filter((s) => s.restart === 'hot').map((s) => s.key).sort()).toEqual(Object.keys(HOT_PROOF).sort())
     for (const k of Object.keys(HOT_PROOF)) expect(specFor(k), k).toMatchObject({ restart: 'hot', restartRequired: false })
-    // MAX_INFLIGHT dibaca sekali ke closure centralAutonomyBoot; TURN_TOKENS belum diberlakukan runtime produksi.
-    for (const k of ['WEBTERM_CENTRAL_MAX_INFLIGHT', 'WEBTERM_CENTRAL_TURN_TOKENS']) expect(specFor(k), k).toMatchObject({ restart: 'boot', restartRequired: true })
+    // MAX_INFLIGHT dibaca sekali ke closure centralAutonomyBoot.
+    expect(specFor('WEBTERM_CENTRAL_MAX_INFLIGHT')).toMatchObject({ restart: 'boot', restartRequired: true })
   })
   it.each(Object.entries(HOT_PROOF))('%s: pembaca ada dan memuat nama kunci', (key, file) => {
     const path = join(SERVER_DIR, file)

@@ -5,7 +5,6 @@
 import { enumOf, flag, num, type EnvSpec } from './envRegistry.types'
 
 const DEFAULT_TURN_WALL_MS = 120_000
-const DEFAULT_TURN_TOKENS = 60_000
 // Input-equivalent tokens (cache reads 0.1x, writes 1.25x, budgetStore.guardTokens). Was 1M before cache
 // tokens were counted: an observed heavy day reached ~1.13M, which would have halted Central.
 const DEFAULT_DAILY_TOKENS = 10_000_000
@@ -22,35 +21,35 @@ const MAX_NUMBER = 1_000_000_000
 const C = { owner: 'central', section: 'Central', audience: 'advanced' } as const
 // Kunci kanal yang sebelumnya dikelompokkan di Central: kini di tab Channels bersama Telegram.
 const TGC = { owner: 'channels', section: 'Telegram', audience: 'advanced' } as const
-const AGENTS_ON = { key: 'WEBTERM_CENTRAL_AGENTS', oneOf: ['propose', 'auto'], note: 'Needs Central agents set to propose or auto.' }
+const AGENTS_ON = { key: 'WEBTERM_CENTRAL_AGENTS', oneOf: ['propose', 'auto'], note: 'Needs the Worker orchestrator on.' }
 
 export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'off', {
     ...C, dangerNote: 'Central can run real workers (shell, file edits) on the server machine; auto runs without a per-action approval card.', requires: [{ key: 'WEBTERM_CENTRAL_TOOLS', oneOf: ['write'] }, { key: 'WEBTERM_CENTRAL_PLANNER' }, { key: 'WEBTERM_ORCHESTRATOR_RUN' }],
-    label: 'Central agents',
-    description: 'Set automatically by the Worker orchestrator card (propose = approval card per action) and the Autonomy card (auto = within the envelope); values from .env/shell still win.',
+    label: 'Workers Central may start',
+    description: 'Set by the Worker orchestrator card (Central asks you to approve each worker) and the Autonomy card (Central starts workers on its own within its limits). A value in .env or the shell still wins.',
     dangerous: true,
   }),
-  flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, label: 'Conversation checkpoint', description: 'Summarize the central conversation into a checkpoint (deterministic summary, no model call).' }),
-  num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central-turn', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, hot: true, label: 'Turn time limit (ms)', description: 'Time limit for one central turn; re-read every turn. The 1,000-600,000 ms range is a conservative Settings bound.' }),
-  num('WEBTERM_CENTRAL_TURN_TOKENS', 'central-turn', 1000, MAX_NUMBER, DEFAULT_TURN_TOKENS, { ...C, label: 'Turn token limit', description: 'Recorded; not yet enforced by the production runtime.' }),
-  num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, label: 'Daily token budget', description: 'Central token limit per UTC day in input-equivalent tokens (input + output + cache reads at 0.1x + cache writes at 1.25x); default 10,000,000; 0 = unlimited. Applies at the next check.' }),
-  num('WEBTERM_CENTRAL_DAILY_SPAWNS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_SPAWNS, { ...C, hot: true, label: 'Daily spawn budget', description: 'Limit on workers central may spawn per UTC day; 0 = no spawning. Applies at the next check.' }),
-  num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central-budget', 0, MAX_NUMBER, 0, { ...C, hot: true, label: 'Daily cost budget (micros)', description: 'Hard Central cost limit per UTC day in micro-USD (1,000,000 = $1); 0 = unlimited (default). Separately, once total spend today passes $10 webterm raises one Needs-you notice for the day; that warning never stops work. Applies at the next check.' }),
-  flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Central skills', description: 'Central reads skills from <dataDir>/central/skills (needs tools).' }),
-  flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_SKILLS' }], label: 'Central skill proposals', description: 'Central may propose new skills for human approval (needs Central skills).' }),
+  flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, hot: true, label: 'Summarize long conversations', description: 'Keep a short running summary of the Central conversation so long chats stay on track. Built without an extra model call.' }),
+  num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central-turn', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, hot: true, unit: 'ms', label: 'Time limit per reply', description: 'How long Central may work on one reply, in milliseconds (default 120,000 = 2 minutes). Applies from the next reply.' }),
+  num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, unit: 'tokens', label: 'Daily token limit', description: 'How many tokens Central may use per day (UTC). Cached input counts for less. Default 10,000,000; 0 = no limit.' }),
+  num('WEBTERM_CENTRAL_DAILY_SPAWNS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_SPAWNS, { ...C, hot: true, unit: 'workers', label: 'Workers per day', description: 'How many workers Central may start per day (UTC). 0 = no spawning.' }),
+  num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central-budget', 0, MAX_NUMBER, 0, { ...C, hot: true, label: 'Daily spending limit', description: 'Central stops for the day (UTC) once it has spent this many dollars. 0 = no limit (default). Stored in millionths of a dollar (1,000,000 = $1). Separately, once total spend today passes $10, webterm shows one notice for the day; that notice never stops work.' }),
+  flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central use skills', description: 'Central may use the skills you have reviewed and approved.' }),
+  flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Suggest new skills', description: 'Central may draft new skills for you to review. A draft is never used until you approve it.' }),
   flag('WEBTERM_CENTRAL_BOTS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_CHANNELS', oneOf: ['on'] }], label: 'Bot per project', description: 'One bot with a topic per project (needs Telegram and WEBTERM_CHANNELS).' }),
   flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }], label: 'Telegram approval buttons', description: 'Approve once / Deny buttons on Telegram approval cards are processed (on by default; needs Telegram). Off ignores button presses; /approve still works.' }, 'on'),
-  flag('WEBTERM_KNOWLEDGE', 'central', { ...C, label: 'Knowledge base', description: 'Project knowledge index at <dataDir>/knowledge.db.' }),
+  flag('WEBTERM_KNOWLEDGE', 'central', { ...C, label: 'Project knowledge index', description: 'Central keeps a searchable index of your project files so it can find code faster.' }),
   num('WEBTERM_AGENT_IDLE_DONE_MS', 'central', 1000, 3_600_000, DEFAULT_AGENT_IDLE_DONE_MS, {
     ...C, hot: true,
-    label: 'Idle = done candidate (ms)',
-    description: 'A non-claude worker idle this long with a non-empty diff is treated as a done candidate; re-read on every check.',
+    unit: 'ms',
+    label: 'Idle time before a worker counts as done',
+    description: 'A worker that is not Claude Code and has been quiet this long, with file changes, is treated as probably done. In milliseconds.',
   }),
-  flag('WEBTERM_CENTRAL_RELIABILITY', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_AUTONOMY' }], label: 'Autonomy reliability', description: 'Autonomy uses a non-blocking dispatcher, wake, and a per-item breaker (needs autonomy).' }),
-  num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, label: 'Max concurrent workers', description: 'Global limit on workers autonomy runs at once (reliability mode). Read at boot; applies after restart.' }),
-  flag('WEBTERM_AGENT_MAIL', 'central', { ...C, requires: [AGENTS_ON], label: 'Agent mailbox', description: 'Central may leave messages for workers through a mailbox (needs Central agents).' }),
-  flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Central read tools', description: 'Central may read projects, nodes, and tasks through read tools (needs tools).' }),
-  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, label: 'Context window (tokens)', description: 'Model window size for session rotation (70%) and turn rejection (85%); re-read every turn.' }),
-  num('WEBTERM_CENTRAL_TURN_STEPS', 'central-turn', 1, 100, DEFAULT_TURN_STEPS, { ...C, hot: true, label: 'Max runtime steps per turn', description: 'Limit on runtime steps in one central turn; re-read every turn. The 1-100 range is a conservative Settings bound.' }),
+  flag('WEBTERM_CENTRAL_RELIABILITY', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_AUTONOMY' }], label: 'Reliable autonomy', description: 'When Central works on its own, it runs several workers side by side and stops retrying a task that keeps failing (needs autonomy).' }),
+  num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, unit: 'workers', label: 'Workers at once', description: 'How many workers Central may run at the same time when it works on its own. Applies after a restart.' }),
+  flag('WEBTERM_AGENT_MAIL', 'central', { ...C, requires: [AGENTS_ON], label: 'Messages to workers', description: 'Central may send messages to workers it started (needs the Worker orchestrator).' }),
+  flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central look at projects', description: 'Central may read your projects, nodes and tasks. Follows the Central Agent switch.' }),
+  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, unit: 'tokens', label: 'Context window size', description: 'How much the model can hold at once. Central starts a fresh session at 70% and refuses a reply at 85%. Applies from the next reply.' }),
+  num('WEBTERM_CENTRAL_TURN_STEPS', 'central-turn', 1, 100, DEFAULT_TURN_STEPS, { ...C, hot: true, unit: 'steps', label: 'Steps per reply', description: 'How many steps (tool calls) Central may take in one reply. Applies from the next reply.' }),
 ]

@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
+import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
 import { CL, LEVEL_NAMES } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
 import type { BudgetView, CentralControlClient, StatusView } from './centralControlTypes'
@@ -32,6 +33,12 @@ function meter(label: string, used: number, limit: number, zeroIsUnlimited: bool
 
 export function budgetMeters(b: BudgetView) {
   return [meter(CL.tokens, b.used.tokens, b.limits.tokens, true), meter(CL.spawns, b.used.spawns, b.limits.spawns, false)]
+}
+
+/** Settings section id of the Central Agent section. */
+export const CENTRAL_SETTINGS_SECTION = 'central'
+const openCentralSettings = (): void => {
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: CENTRAL_SETTINGS_SECTION } }))
 }
 
 export default function LevelPanel({ client = centralControlApi, onStatus, askHalt, onHaltAsked }: LevelPanelProps) {
@@ -66,6 +73,7 @@ export default function LevelPanel({ client = centralControlApi, onStatus, askHa
   return (
     <section className="ccp-section" aria-labelledby="ccp-level-h">
       <h3 id="ccp-level-h">{CL.levelHeading}</h3>
+      <Button type="button" size="sm" variant="secondary" onClick={openCentralSettings}>{CL.openSettings}</Button>
       {control.error && <p role="alert" className="ccp-error">{control.error}</p>}
       {control.loading && !c && <p role="status">{CL.loading}</p>}
       {c && (

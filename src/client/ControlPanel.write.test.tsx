@@ -7,7 +7,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DoctorDeps } from '../server/doctor'
-import { CONTROL_WHERE } from '../server/effectiveConfig.ui'
+import { CENTRAL_SECTION_KEYS, CENTRAL_SETTINGS, CONTROL_WHERE } from '../server/effectiveConfig.ui'
 import { ENV_REGISTRY } from '../server/envRegistry'
 import { controlEffectiveRoute, type ControlDeps } from '../server/envSettings.control'
 import { fakeReq, recorder, setupEnv } from '../server/envSettings.testutil'
@@ -51,14 +51,18 @@ describe('Control tab writes', () => {
     render(<ControlPanel />)
     await screen.findByRole('region', { name: 'Logs' })
     const owned = ENV_REGISTRY.filter((s) => rowEl(s.key)?.textContent?.includes('Managed in') !== true).map((s) => s.key)
-    // The former ENV_ONLY_PENDING_F1 list, minus WEBTERM_CENTRAL_MAX_STEPS (K7) and WEBTERM_CENTRAL_SKILLS, which moved to its
-    // single surface as a sub-switch of the Central agent card (one key, one editor; Control answers managed_elsewhere).
-    expect(owned.length).toBeGreaterThanOrEqual(35) // 37 minus the two retired WEBTERM_OPENCODE_* keys
-    expect(owned).not.toContain('WEBTERM_CENTRAL_SKILLS')
-    expect(rowEl('WEBTERM_CENTRAL_SKILLS').textContent).toContain('Managed in Settings › Capabilities › Central agent › Let Central use skills')
+    // The former ENV_ONLY_PENDING_F1 list (37), minus the two retired WEBTERM_OPENCODE_* keys, WEBTERM_CENTRAL_MAX_STEPS (K7),
+    // the removed WEBTERM_CENTRAL_TURN_TOKENS (never enforced) and the 14 keys the Settings › Central Agent section owns
+    // (one key, one editor; Control shows them read-only and answers managed_elsewhere).
+    expect(owned.length).toBeGreaterThanOrEqual(19)
+    for (const k of CENTRAL_SECTION_KEYS) {
+      expect(owned).not.toContain(k)
+      expect(rowEl(k).textContent).toContain(`Managed in ${CENTRAL_SETTINGS} › `)
+    }
+    expect(rowEl('WEBTERM_CENTRAL_DAILY_COST_MICROS').textContent).toContain('Managed in Settings › Central Agent › Daily spending limit')
     const missing = owned.filter((k) => document.querySelector(`[data-control="${k}"]`) === null)
     expect(missing).toEqual([])
-    for (const k of ['WEBTERM_AGENT_SANDBOX', 'WEBTERM_LEDGER', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'WEBTERM_CENTRAL_MODEL']) expect(owned).toContain(k)
+    for (const k of ['WEBTERM_AGENT_SANDBOX', 'WEBTERM_LEDGER', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET']) expect(owned).toContain(k)
     expect(rowEl('WEBTERM_CENTRAL').textContent).toContain('Managed in Settings › Capabilities › Central agent')
     expect(CONTROL_WHERE).toBe('Settings › Control')
   })

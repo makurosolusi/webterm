@@ -14,7 +14,7 @@ describe('LevelPanel', () => {
   it('shows level, budget left and reports status', async () => {
     const onStatus = vi.fn()
     render(<LevelPanel client={fakeClient()} onStatus={onStatus} />)
-    expect((await screen.findByTestId('level-effective')).textContent).toBe('L2 propose')
+    expect((await screen.findByTestId('level-effective')).textContent).toBe('L2 Proposes work, you approve')
     expect(await screen.findByText(/750 left/)).toBeTruthy()
     expect(screen.getByText(/18 left/)).toBeTruthy()
     expect(screen.getByRole('progressbar', { name: 'Tokens' })).toBeTruthy()
@@ -36,6 +36,16 @@ describe('LevelPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm halt' }))
     await waitFor(() => expect(client.halt).toHaveBeenCalledWith('stop'))
     expect(await screen.findByText(/Central halted/)).toBeTruthy()
+  })
+
+  it('"Central settings" opens Settings on the Central Agent section', async () => {
+    const seen: unknown[] = []
+    const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
+    window.addEventListener('webterm:open-settings', on)
+    render(<LevelPanel client={fakeClient()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Central settings' }))
+    window.removeEventListener('webterm:open-settings', on)
+    expect(seen).toEqual([{ section: 'central' }])
   })
 
   it('surfaces a load error as an alert', async () => {

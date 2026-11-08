@@ -35,6 +35,12 @@ describe('GET', () => {
 })
 
 describe('PUT', () => {
+  it('accepts keys the Central Agent section owns (that section writes through this route, Control refuses them)', async () => {
+    const { res, s } = await call('PUT', { set: { WEBTERM_CENTRAL_DAILY_COST_MICROS: '5000000', WEBTERM_CENTRAL_TURN_STEPS: '20' } })
+    expect(res.status).toBe(200)
+    expect(s.target.WEBTERM_CENTRAL_DAILY_COST_MICROS).toBe('5000000')
+    expect(s.target.WEBTERM_CENTRAL_TURN_STEPS).toBe('20')
+  })
   it('menerapkan, membalas state baru + restartRequired', async () => {
     const { res, json, s } = await call('PUT', { set: { WEBTERM_LEDGER: 'on', WEBTERM_CENTRAL: 'on' } })
     expect(res.status).toBe(200)

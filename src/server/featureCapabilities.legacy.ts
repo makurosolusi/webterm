@@ -7,8 +7,7 @@ const log = createLogger('capabilities')
 
 /** Anak yang tak diturunkan `deriveFlags` (flag rilis CA2) tapi hanya berlaku bila induk on. */
 const CENTRAL_EXTRAS = [
-  'WEBTERM_CENTRAL_PLANNER', 'WEBTERM_CENTRAL_SKILL_PROPOSE',
-  'WEBTERM_KNOWLEDGE', 'WEBTERM_CENTRAL_RELIABILITY', 'WEBTERM_AGENT_MAIL',
+  'WEBTERM_CENTRAL_PLANNER', 'WEBTERM_KNOWLEDGE', 'WEBTERM_CENTRAL_RELIABILITY', 'WEBTERM_AGENT_MAIL',
 ]
 const TELEGRAM_EXTRAS = ['WEBTERM_CENTRAL_BOTS', 'WEBTERM_CHANNEL_APPROVAL_BUTTONS']
 const EXTRA_CHILDREN: readonly { key: string; needs: readonly CapabilityId[] }[] = [

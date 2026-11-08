@@ -28,7 +28,8 @@ export interface CapCtx {
 }
 
 const OWNER = { root: true }
-const CENTRAL_SKILLS_KEY = 'WEBTERM_CENTRAL_SKILLS'
+/** Sub-switches Central reads only when it starts (ca2Boot `start`): changing one restarts Central. */
+const CENTRAL_START_SUBS: ReadonlySet<string> = new Set(['WEBTERM_CENTRAL_SKILLS', 'WEBTERM_CENTRAL_SKILL_PROPOSE'])
 const NEEDS_LABEL = {
   chromium: 'Choose Chrome location', telegramToken: 'Connect bot', agentEngine: 'Set up Claude Code',
 } as const
@@ -155,8 +156,9 @@ export async function setSub(c: CapCtx, id: CapabilityId, key: string, on: boole
   if (!isEnabled(id, c.env)) return { status: 409, body: { error: 'parent_off' } }
   const r = c.settings.update({ set: { [sub.key]: on ? 'on' : 'off' }, unset: [] }, OWNER)
   if (!r.ok) return { status: r.status, body: { error: r.error } }
-  // Central reads its skills switch at start: restart it so the change applies without a server restart.
-  if (sub.key === CENTRAL_SKILLS_KEY) await exclusive(() => bounce(c, 'central'))
+  // Central reads its skill switches at start: restart it so the change applies without a server restart.
+  // The checkpoint switch is re-read every turn, so it needs no restart.
+  if (CENTRAL_START_SUBS.has(sub.key)) await exclusive(() => bounce(c, 'central'))
   c.audit({ capability: id, action: 'sub', detail: key })
   return { status: 200, body: await snap(c) }
 }

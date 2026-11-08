@@ -4,8 +4,19 @@
 import { ENV_BROWSER } from '../shared/browser.contract'
 import { CAPABILITIES, CAPABILITY_IDS, DERIVED_FLAGS, LINKED_SETTINGS, type CapabilityId } from '../shared/featureCapabilities'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
+import { specFor } from './envRegistry'
 
 const CAP = 'Settings › Capabilities'
+/** The Central Agent settings section (client section id `central`). */
+export const CENTRAL_SETTINGS = 'Settings › Central Agent'
+
+/** Keys the Central Agent section edits; the location uses the registry label so the two never drift. */
+export const CENTRAL_SECTION_KEYS: readonly string[] = [
+  'WEBTERM_CENTRAL_DAILY_COST_MICROS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_MODEL',
+  'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_STEPS', 'WEBTERM_CENTRAL_CONTEXT_WINDOW',
+  'WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_MAX_INFLIGHT', 'WEBTERM_KNOWLEDGE', 'WEBTERM_CENTRAL_RELIABILITY',
+  'WEBTERM_AGENT_MAIL', 'WEBTERM_CENTRAL_SKILLS', 'WEBTERM_CENTRAL_SKILL_PROPOSE', 'WEBTERM_CENTRAL_CHECKPOINT',
+]
 
 /** English card names (the catalog titles are still Indonesian; product text is English). */
 export const CAPABILITY_NAME: Readonly<Record<CapabilityId, string>> = {
@@ -15,7 +26,6 @@ export const CAPABILITY_NAME: Readonly<Record<CapabilityId, string>> = {
 const SUB_NAME: Readonly<Record<string, string>> = {
   WEBTERM_RUN_REQUIRE_APPROVAL: 'Ask before a worker runs',
   WEBTERM_BROWSER_AGENT: 'Let agents control the browser',
-  WEBTERM_CENTRAL_SKILLS: 'Let Central use skills',
 }
 
 /** Keys that have a direct UI control, mapped to where it lives. */
@@ -27,6 +37,8 @@ export const UI_SWITCHES: ReadonlyMap<string, string> = new Map<string, string>(
   [ENV_BROWSER.bin, `${CAP} › Advanced › Chrome location`],
   ['WEBTERM_TELEGRAM_BOT_TOKEN', `${CAP} › Telegram › Connect bot`],
   [ENV_BROWSER.allowHosts, 'Browser node › blocked-address notice › Allow host'],
+  // Last, so the Central card's sub-switches resolve to the Central Agent section, not the capability card.
+  ...CENTRAL_SECTION_KEYS.map((k): [string, string] => [k, `${CENTRAL_SETTINGS} › ${specFor(k)?.label ?? k}`]),
 ])
 
 /** Keys written by capability cards (never set directly): key -> capabilities it follows, in priority order. */
