@@ -95,6 +95,15 @@ Operator notes:
 
 ### Changed
 - The Settings sidebar shows an icon and a short description for each section.
+- Settings are reorganized by purpose. The sidebar is grouped under Editor, Agents, Workspace and System, and the old Control page is split into six sections: Rules & approvals, Memory, Automations, Spending, Health and Developer. Links to the old Control page open Health.
+  - Health: the Doctor checks, whether your agents are protected ("Agents are protected", or "Partly protected" with the reason), and a notice when Central is running in demo mode.
+  - Developer shows only the settings you can't change anywhere else, each with a plain label above its key. "Show everything" also lists settings managed on other pages or only set at startup. Eval cases sit in a collapsed "Show eval cases".
+  - Rules & approvals: each rule is written in plain words with Allow, Ask or Deny. New rules are built from pick lists and suggestions. Auto-approval is two switches, and the simulator is collapsed under "Try a rule on the last 7 days". Each secret has "Allow an agent to use this", which pre-fills a rule, and the secrets usage log is a table.
+  - Memory: one list with Rules, Facts and Past sessions tabs, plain statuses and Confirm, Edit, Mute and Forget on each entry. Agent suggestions wait under "Waiting for your OK". "Shared notes" suggests keys, and incognito agents are listed by node title, each with Turn off.
+  - Automations: routine schedules come from presets, and a custom cron schedule is checked as you enter it. The check command and the run limits are dropdowns under More options.
+  - Spending: a Today / 7 days switch, plain names for who spent what, and the details collapsed. The cap reads "Pause all work when today's spend reaches" and remembers its own past values. Central's own limit stays in Central Agent, which Spending links to.
+  - Eval cases have a segmented filter.
+  - The Morning Brief AI summary switch is now only on the brief card.
 - Central Agent settings are in one place, Settings › Central Agent, grouped as Status & setup, Autonomy & approvals, Model & cost, Abilities, Telegram and Advanced, in plain words; other sections link there instead of repeating them.
 - Settings use switches, selects, steppers and sliders wherever possible; fields that still take typing offer presets and remember what you entered before.
 - The side bar's Central levels read in plain words, with a button to Central settings.
