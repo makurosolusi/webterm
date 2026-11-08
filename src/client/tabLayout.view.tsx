@@ -64,7 +64,7 @@ export default function TabsView(p: TabsViewProps) {
 
   const items: TabItem[] = order.filter((id) => live.has(id)).map((id) => {
     const n = byId.get(id) as Node
-    return { id, title: titleOf(n), icon: KIND_ICON[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)) }
+    return { id, title: titleOf(n), name: (n.data as Partial<WsNode>).name, icon: KIND_ICON[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)) }
   })
   const filesId = nodes.find((n) => kindOf(n) === 'files')?.id ?? null
 

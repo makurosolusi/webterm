@@ -10,10 +10,12 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import TabOverflow, { useHiddenTabs } from './tabLayout.overflow'
+import { NodeNameLabel, withNodeName } from './nodeName.label'
 import './tab-layout.css'
 
 /** `signal`: status dot, from the selector the Sessions side bar uses (`nodeTabSignal`). */
-export interface TabItem { id: string; title: string; icon: string; signal?: SessionSignal }
+/** `title` is the editable label (the rename draft); `name` is the node's fixed name, shown before it. */
+export interface TabItem { id: string; title: string; name?: string; icon: string; signal?: SessionSignal }
 
 export interface TabStripProps {
   items: TabItem[]
@@ -97,7 +99,7 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
             key={t.id} role="tab" aria-selected={t.id === active} tabIndex={t.id === (active ?? items[0]?.id) ? 0 : -1}
             className={cn('tabs-tab', t.id === active && 'tabs-tab--active')}
             data-active={t.id === active ? '' : undefined} data-tab-id={t.id} data-drop={drop?.id === t.id ? drop.side : undefined}
-            title={editing === t.id ? undefined : t.title}
+            title={editing === t.id ? undefined : withNodeName(t.name, t.title)}
             draggable={editing !== t.id}
             onClick={() => onActivate(t.id)}
             // Middle button closes on mouseup (auxclick); mousedown would start browser autoscroll.
@@ -124,13 +126,13 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
                 onClick={(e) => e.stopPropagation()} onFocus={(e) => e.currentTarget.select()}
               />
             ) : (
-              <span className="tabs-tab__title" onDoubleClick={() => { setDraft(t.title); setEditing(t.id) }}>{t.title}</span>
+              <span className="tabs-tab__title" onDoubleClick={() => { setDraft(t.title); setEditing(t.id) }}><NodeNameLabel name={t.name} label={t.title} /></span>
             )}
             {t.signal && (
               <span className={cn('tabs-tab__status', `tabs-tab__status--${t.signal.tone}`)} role="img" aria-label={t.signal.label} />
             )}
             <IconButton
-              label={`Close ${t.title}`} side="bottom" size="icon-xs" className="tabs-tab__close"
+              label={`Close ${withNodeName(t.name, t.title)}`} side="bottom" size="icon-xs" className="tabs-tab__close"
               onClick={(e) => { e.stopPropagation(); onClose(t.id) }}
             ><span className="codicon codicon-close" aria-hidden="true" /></IconButton>
           </div>

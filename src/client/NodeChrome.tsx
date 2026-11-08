@@ -10,9 +10,13 @@ import NodeComments from './NodeComments'
 import { NodeResizeToggle, useNodeResizeMenuItem } from './nodeResize/NodeLayoutResizer'
 import { useNodeHost } from './tabLayout.context'
 import { useNodeMaximize } from './nodeMaximize.store'
+import { NodeNameLabel } from './nodeName.label'
 
 export interface NodeChromeProps {
+  /** Editable label (title or kind fallback); Rename edits this, never `name`. */
   title: string
+  /** Unique node name ("Mango"), shown first; absent until the board has named the node. */
+  name?: string
   /** Nama codicon untuk ikon tipe node di depan judul (mis. 'terminal', 'hubot'); kosong = tanpa ikon. */
   icon?: string
   /** Teks redup setelah judul, seperti deskripsi tab editor (mis. cwd). */
@@ -169,7 +173,9 @@ export default function NodeChrome(props: NodeChromeProps) {
           onKeyDown={onTitleKey} onBlur={commit}
         />
       ) : (
-        <span className="nodrag node-title" title="Rename" onClick={beginEdit}>{props.title || UNTITLED}</span>
+        <span className="nodrag node-title" title="Rename" onClick={beginEdit}>
+          <NodeNameLabel name={props.name} label={props.name ? props.title : props.title || UNTITLED} />
+        </span>
       )}
 
       {props.description && !editing && (

@@ -23,6 +23,13 @@ describe('store serializer', () => {
     expect(back.agentId).toBe('claude')
   })
 
+  it('round-trips the node name separately from the title', () => {
+    const back = toWsNode(toFlow({ id: 'm', kind: 'terminal', x: 0, y: 0, name: 'Mango', title: 'fix login bug' }))
+    expect(back.name).toBe('Mango')
+    expect(back.title).toBe('fix login bug')
+    expect(toWsNode(toFlow({ id: 't', kind: 'terminal', x: 0, y: 0 })).name).toBeUndefined()
+  })
+
   it('round-trips a diff node with its review notes, dropping malformed ones', () => {
     const note = { id: 'n1', path: 'a.ts', line: 2, body: 'why?' }
     const n: WsNode = { id: 'd', kind: 'diff', x: 0, y: 0, cwd: '/repo', diffNotes: [note] }

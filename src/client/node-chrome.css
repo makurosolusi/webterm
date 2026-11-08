@@ -180,6 +180,8 @@
   font-weight: 400;
   cursor: default;
 }
+/* Node name ("Mango") leads; the label after it is muted (nodeName.label: headers, tab strip). */
+.node-name__label { color: var(--vscode-descriptionForeground, var(--muted)); }
 /* Deskripsi redup setelah judul (cwd untuk terminal), seperti deskripsi tab editor. */
 .node-description {
   min-width: 0;

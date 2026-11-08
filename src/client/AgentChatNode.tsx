@@ -21,7 +21,7 @@ const DEFAULT_H = 400
 
 /** Canvas shell of an Agent Chat node: chrome, cable handles and resizer around the chat body. */
 function AgentChatNode({ id, data, selected, height }: NodeProps) {
-  const d = data as { color?: string; title?: string; collapsed?: boolean; comments?: Comment[] } & Pick<AgentChatData, 'chatSessionId' | 'permissionMode' | 'chatConfig'> & { cwd?: string }
+  const d = data as { color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] } & Pick<AgentChatData, 'chatSessionId' | 'permissionMode' | 'chatConfig'> & { cwd?: string }
   const rf = useReactFlow()
   const onNodeData = useCallback((patch: AgentChatPatch) => rf.updateNodeData(id, patch), [rf, id])
   const collapsed = d.collapsed ?? false
@@ -46,7 +46,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
       <NodeLayoutResizer collapsed={collapsed} minWidth={280} minHeight={200} color={swatch} />
       <div className={termNodeClass({ selected: !!selected, collapsed })} style={{ '--node-swatch': swatch } as CSSProperties}>
         <NodeChrome
-          title={d.title || AGENT_CHAT_TITLE}
+          title={d.title || AGENT_CHAT_TITLE} name={d.name}
           icon="comment-discussion"
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}

@@ -12,7 +12,7 @@ export function toFlow(n: WsNode): Node {
     position: { x: n.x, y: n.y },
     width: n.width ?? 400,
     height: n.height ?? 300,
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig },
   }
 }
 
@@ -29,6 +29,7 @@ export function toWsNode(n: Node): WsNode {
     cwd: d.cwd,
     agentId: d.agentId,
     color: d.color,
+    name: d.name,
     title: d.title,
     sessionId: d.sessionId,
     claudeProfileId: d.claudeProfileId,

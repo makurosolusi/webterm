@@ -42,7 +42,7 @@ const NODE_NOTICE = 'node'
 
 function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
-    dirPath?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; viewOpts?: ViewOpts
+    dirPath?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; viewOpts?: ViewOpts
     expanded?: string[]
   }
   const rf = useReactFlow()
@@ -142,7 +142,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         style={{ '--node-swatch': swatch } as CSSProperties}
       >
         <NodeChrome
-          title={d.title ?? ''} icon="folder" description={cwd}
+          title={d.title ?? ''} name={d.name} icon="folder" description={cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}

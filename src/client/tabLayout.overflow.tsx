@@ -5,6 +5,7 @@ import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { VscodeQuickPick } from '@/components/vscode/vscodeQuickPick'
 import type { TabItem } from './tabLayout.strip'
+import { withNodeName } from './nodeName.label'
 
 /** Ids of the tabs in `list` not fully inside its visible box (1px slack for subpixel layout). */
 export function hiddenTabIds(list: HTMLElement): string[] {
@@ -48,7 +49,7 @@ export default function TabOverflow({ items, hidden, onActivate }: TabOverflowPr
   if (hidden.length === 0) return null
   const set = new Set(hidden)
   const rows = items.filter((t) => set.has(t.id)).map((t) => ({
-    id: t.id, label: t.title, icon: <span className={`codicon codicon-${t.icon}`} aria-hidden="true" />,
+    id: t.id, label: withNodeName(t.name, t.title), icon: <span className={`codicon codicon-${t.icon}`} aria-hidden="true" />,
   }))
   return (
     <>

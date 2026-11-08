@@ -5,6 +5,7 @@
 import { act, fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultTabLayout } from '../shared/tabLayout.schema'
+import { withNodeNames } from '../shared/nodeNames'
 import type { WsNode } from '../shared/workspace'
 import { confirmNodeCloseDialog, installCanvasDom, mountCanvas, renderedViewport, unmountCanvas } from './canvasHarness'
 import { connectTabLayout, setMode } from './tabLayout.store'
@@ -19,6 +20,8 @@ vi.setConfig({ testTimeout: 60_000 })
 // test-only fixture: one agent in view, one terminal far off to the right.
 const near: WsNode = { id: 'agent-near', kind: 'agent', x: 0, y: 0, width: 420, height: 320, cmd: 'echo a', agentId: 'claude', cwd: '/', title: 'near' }
 const far: WsNode = { id: 'term-far', kind: 'terminal', x: 9000, y: 6000, width: 420, height: 320, cwd: '/', title: 'far' }
+// The names the board gives these unnamed nodes (same pure function as the server save).
+const [nearName, farName] = withNodeNames([near, far]).map((n) => n.name)
 
 beforeAll(installCanvasDom)
 beforeEach(() => { localStorage.clear(); reloadNodeTabsShown(); connectTabLayout(defaultTabLayout(), null) })
@@ -32,7 +35,7 @@ describe('node tab strip on the real App', () => {
   it('is shown by default with one tab per node, above the board', async () => {
     await mountCanvas({ nodes: [near, far], dirs: {} })
     expect(strip()?.getAttribute('aria-label')).toBe('Nodes')
-    expect(Array.from(document.querySelectorAll('.node-tabs .tabs-tab__title')).map((t) => t.textContent)).toEqual(['near', 'far'])
+    expect(Array.from(document.querySelectorAll('.node-tabs .tabs-tab__title')).map((t) => t.textContent)).toEqual([`${nearName} · near`, `${farName} · far`])
     // The board host follows the strip, which is what moves the canvas below it.
     expect(document.querySelector('.node-tabs')?.nextElementSibling?.classList.contains('board-host')).toBe(true)
   })
@@ -54,7 +57,7 @@ describe('node tab strip on the real App', () => {
 
   it('× closes through the node-close confirm', async () => {
     await mountCanvas({ nodes: [near, far], dirs: {} })
-    const close = tab('near')!.querySelector<HTMLElement>('button[aria-label="Close near"]')!
+    const close = tab('near')!.querySelector<HTMLElement>(`button[aria-label="Close ${nearName} · near"]`)!
     fireEvent.click(close)
     await confirmNodeCloseDialog()
     await waitFor(() => expect(document.querySelector('.react-flow__node[data-id="agent-near"]')).toBeNull())

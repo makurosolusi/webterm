@@ -1,32 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  autoTitleFromWork, claimAutoName, identityColor, idleAgentIds, isAutoName, pickAutoName,
+  autoTitleFromWork, identityColor, idleAgentIds, isAutoName,
   stopAgent, stopIdleAgents, uniqueTitle,
 } from './nodeIdentity'
 import type { AgentStatus } from '../shared/workspace'
 
 describe('auto names', () => {
-  it('are <adjective>-<noun> and recognised as generated, with or without a tier suffix', () => {
-    const n = pickAutoName([], () => 0)
-    expect(n).toMatch(/^[a-z]+-[a-z]+$/)
-    expect(isAutoName(n)).toBe(true)
-    expect(isAutoName(`${n}-3`)).toBe(true)
+  it('a legacy generated <adjective>-<noun> title (with or without a tier suffix) or none counts as auto', () => {
+    expect(isAutoName('brisk-otter')).toBe(true)
+    expect(isAutoName('brisk-otter-3')).toBe(true)
     expect(isAutoName(undefined)).toBe(true)
     expect(isAutoName('Fix login bug')).toBe(false)
     expect(isAutoName('my-worker')).toBe(false)
-  })
-
-  it('never repeats on a board: 1000 claims are all distinct, spilling into numbered tiers', () => {
-    const board: string[] = []
-    for (let i = 0; i < 1000; i++) board.push(claimAutoName(board, () => 0.5))
-    expect(new Set(board).size).toBe(1000)
-    expect(board.some((n) => /-\d+$/.test(n))).toBe(true)
-  })
-
-  it('claims are reserved across calls even before the board sees them (same-commit mounts)', () => {
-    const a = claimAutoName([], () => 0)
-    const b = claimAutoName([], () => 0)
-    expect(a).not.toBe(b)
   })
 
   it('uniqueTitle suffixes duplicates case-insensitively', () => {

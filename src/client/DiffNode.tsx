@@ -23,6 +23,7 @@ import { getStatus, subscribeStatus } from './ws'
 // The commit/stage panel loads with the first diff node; the node chrome and file list stay eager.
 const ScmPanel = lazy(() => import('./ScmPanel').then((m) => ({ default: m.ScmPanel })))
 import './DiffNode.css'
+import { NodeNameLabel } from './nodeName.label'
 
 const STATUS_LETTER: Record<GitChangeStatus, string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', untracked: 'U' }
 const TURN_ENDED: readonly (AgentStatus | undefined)[] = ['waiting', 'done']
@@ -46,7 +47,7 @@ function errText(e: unknown): string {
 
 function DiffNode({ id, data, selected }: NodeProps) {
   const rf = useReactFlow()
-  const d = data as { cwd?: string; color?: string; title?: string }
+  const d = data as { cwd?: string; color?: string; name?: string; title?: string }
   const swatch = d.color ?? '#0a84ff'
   const agent = useWiredAgent(id)
   // ide-parity G1: wiring an agent makes the diff follow that agent's cwd/worktree.
@@ -146,7 +147,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
         <div className="node-header">
           <span className="node-title diff-node__title" title={root}>
             <span className="codicon codicon-git-compare" aria-hidden="true" />
-            {d.title || 'Changes'}
+            <NodeNameLabel name={d.name} label={d.title || 'Changes'} />
             <span className="diff-node__desc">{root ? `${total} file${total === 1 ? '' : 's'}` : ''}</span>
           </span>
           <span className="diff-node__spacer" />
