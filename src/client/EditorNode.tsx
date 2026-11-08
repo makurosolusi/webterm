@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useReactFlow, type NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
@@ -20,6 +20,9 @@ import { loadMonaco } from './lazyMonaco'
 import { ShowInFilesButton } from './ShowInFilesButton'
 import { useEditorPreview } from './editorPreview'
 import './editor.css'
+
+// marked + DOMPurify load with the first preview, not with the board.
+const EditorMarkdownPreview = lazy(() => import('./EditorMarkdownPreview'))
 
 export interface EditorNodeProps extends NodeProps {
   /** Isi teks + `version` + `encoding`; REJECT saat gagal baca. Default `fsClient.readMeta`. */
@@ -127,9 +130,9 @@ function EditorNode({
               <span>Preview</span>
               <span className="editor-node__md-hint">⌘M to edit</span>
             </div>
-            {/* Isi file adalah input tak terpercaya; `renderMarkdown` mensanitasi lewat DOMPurify
-                dan fail-closed kalau sanitizer-nya tidak hidup. */}
-            <div className="editor-node__md-body" dangerouslySetInnerHTML={{ __html: ef.previewHtml }} />
+            <Suspense fallback={null}>
+              <EditorMarkdownPreview source={ef.previewSource} filePath={filePath} nodeId={id} />
+            </Suspense>
           </div>
         )}
       </>

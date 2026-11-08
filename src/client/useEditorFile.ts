@@ -5,6 +5,7 @@ import type { FsResult, FsVersion, ReadEncoding, ReadMeta } from '../shared/fsCo
 import { loadMonaco } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
 import { loadRefusal, opensInPreview } from './editorFile'
+import { setEditorDirty } from './editorDirty'
 
 export type EditorConflict = { kind: 'version'; current?: FsVersion } | { kind: 'missing' }
 export type WriteChecked = (path: string, content: string, opts?: { expectedVersion?: FsVersion; mustExist?: boolean }) => Promise<FsResult>
@@ -27,6 +28,8 @@ export interface UseEditorFileArgs {
 
 /** Per-editor Save action id; Monaco prefixes it with the editor id, so every node owns its own. */
 const SAVE_ACTION_ID = 'webterm.editor.save'
+/** Typing while the preview is open re-renders it after this pause, not per keystroke. */
+export const PREVIEW_DEBOUNCE_MS = 150
 
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
@@ -49,11 +52,13 @@ export function useEditorFile(a: UseEditorFileArgs) {
   // GERBANG KEHILANGAN DATA: hanya true setelah pembacaan selesai dan isinya benar-benar masuk ke
   // model. Tanpa ini, ⌘S pada node yang gagal memuat akan menulis buffer kosong ke file pengguna.
   const loadedRef = useRef(false)
-  // marked + DOMPurify load with Monaco (not with the board); set before `loadedRef`, which guards every use.
-  const renderMarkdownRef = useRef<((src: string) => string) | null>(null)
   const [dirty, setDirty] = useState(false)
   const [preview, setPreview] = useState(false)
-  const [previewHtml, setPreviewHtml] = useState('')
+  // Markdown SOURCE for the preview (rendered by EditorMarkdownPreview): refreshed on toggle, on
+  // reload, and debounced on edits while visible, so external changes and typing show up.
+  const [previewSource, setPreviewSource] = useState('')
+  const previewRef = useRef(false)
+  previewRef.current = preview
   const [encoding, setEncoding] = useState<ReadEncoding>('utf8')
   const [conflict, setConflict] = useState<EditorConflict | null>(null)
   // TERPISAH dari `loadError` dengan sengaja: gagal BACA menolak merender editor, gagal SIMPAN harus
@@ -64,18 +69,19 @@ export function useEditorFile(a: UseEditorFileArgs) {
     if (!enabled || !loadedRef.current) return
     setPreview((p) => {
       const next = !p
-      if (next && editorRef.current && renderMarkdownRef.current) setPreviewHtml(renderMarkdownRef.current(editorRef.current.getValue()))
+      if (next && editorRef.current) setPreviewSource(editorRef.current.getValue())
       return next
     })
   }
 
-  /** Satu percobaan tulis; `opts` menentukan seberapa ketat (versi / harus ada). */
-  const doWrite = (opts: { expectedVersion?: FsVersion; mustExist?: boolean }) => {
+  /** Satu percobaan tulis; `opts` menentukan seberapa ketat (versi / harus ada). Resolves true only
+   *  after the write landed; false when it was refused, failed, or could not start. */
+  const doWrite = (opts: { expectedVersion?: FsVersion; mustExist?: boolean }): Promise<boolean> => {
     const editor = editorRef.current
-    if (!editor || !loadedRef.current || readOnlyRef.current || savingRef.current) return
+    if (!editor || !loadedRef.current || readOnlyRef.current || savingRef.current) return Promise.resolve(false)
     const value = editor.getValue()
     savingRef.current = true
-    a.writeChecked(pathRef.current, value, opts).then(
+    return a.writeChecked(pathRef.current, value, opts).then(
       (r) => {
         savingRef.current = false
         if (r.ok) {
@@ -85,25 +91,26 @@ export function useEditorFile(a: UseEditorFileArgs) {
           setDirty(editor.getValue() !== value)
           setConflict(null)
           setSaveError('')
-        } else if (r.code === 'EVERSION') {
-          setConflict({ kind: 'version', current: r.current })
-        } else if (r.code === 'ENOENT') {
-          setConflict({ kind: 'missing' })
-        } else {
-          setSaveError(`Couldn’t save ${fileName}: ${r.error}`)
+          return true
         }
+        if (r.code === 'EVERSION') setConflict({ kind: 'version', current: r.current })
+        else if (r.code === 'ENOENT') setConflict({ kind: 'missing' })
+        else setSaveError(`Couldn’t save ${fileName}: ${r.error}`)
+        return false
       },
       (err: unknown) => {
         savingRef.current = false
         setSaveError(`Couldn’t save ${fileName}: ${errText(err)}`)
+        return false
       }
     )
   }
 
-  const save = () => {
+  const save = (): Promise<boolean> => {
+    if (!editorRef.current) return Promise.resolve(false)
     // Guard !dirty: ⌘S pada buffer bersih tidak menulis (menghindari mtime berubah & EVERSION palsu).
-    if (!editorRef.current || editorRef.current.getValue() === savedRef.current) return
-    doWrite({ expectedVersion: versionRef.current, mustExist: true })
+    if (editorRef.current.getValue() === savedRef.current) return Promise.resolve(true)
+    return doWrite({ expectedVersion: versionRef.current, mustExist: true })
   }
   const saveRef = useRef(save)
   saveRef.current = save
@@ -113,7 +120,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
   /** Timpa eksplisit atas pilihan pengguna di bar konflik; buffer pengguna yang menang. */
   const overwrite = () => {
     if (!conflict) return
-    doWrite(conflict.kind === 'version' ? { expectedVersion: conflict.current, mustExist: true } : {})
+    void doWrite(conflict.kind === 'version' ? { expectedVersion: conflict.current, mustExist: true } : {})
   }
 
   /** Ganti buffer dengan isi disk. `onlyIfClean`: auto-reload dari perubahan remote — batal jadi
@@ -135,6 +142,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
       savedRef.current = meta.content
       versionRef.current = meta.version
       editor.setValue(meta.content)
+      if (previewRef.current) setPreviewSource(meta.content)
       setDirty(false)
       setConflict(null)
       setSaveError('')
@@ -167,6 +175,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
     let editor: MonacoEditor.IStandaloneCodeEditor | null = null
     let themeObserver: MutationObserver | null = null
     let saveAction: IDisposable | null = null
+    let previewTimer: ReturnType<typeof setTimeout> | undefined
 
     a.readMeta(filePath)
       .then(async (meta) => {
@@ -182,8 +191,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
           setEncoding('binary')
           return
         }
-        const [m, md] = await Promise.all([loadMonaco(), import('./markdown')])
-        renderMarkdownRef.current = md.renderMarkdown
+        const m = await loadMonaco()
         const host = hostRef.current
         if (disposed || !host) return
         readOnlyRef.current = meta.encoding === 'non-utf8'
@@ -199,13 +207,18 @@ export function useEditorFile(a: UseEditorFileArgs) {
         versionRef.current = meta.version
         loadedRef.current = true
         setEncoding(meta.encoding)
-        editor.onDidChangeModelContent(() => setDirty(editor!.getValue() !== savedRef.current))
+        editor.onDidChangeModelContent(() => {
+          setDirty(editor!.getValue() !== savedRef.current)
+          if (!previewRef.current) return
+          clearTimeout(previewTimer)
+          previewTimer = setTimeout(() => { if (!disposed && editor) setPreviewSource(editor.getValue()) }, PREVIEW_DEBOUNCE_MS)
+        })
         // `addAction`, not `addCommand`: standalone `addCommand` registers a global keybinding (last
         // editor wins, never disposed), while an action's keybinding is scoped to this editor's id, so
         // Cmd+S saves the focused node's file, like VS Code's save on the active editor.
-        saveAction = editor.addAction({ id: SAVE_ACTION_ID, label: 'File: Save', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS], run: () => saveRef.current() })
+        saveAction = editor.addAction({ id: SAVE_ACTION_ID, label: 'File: Save', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS], run: () => { void saveRef.current() } })
         if (opensInPreview(ext, a.openMarkdownPreview)) {
-          setPreviewHtml(md.renderMarkdown(meta.content))
+          setPreviewSource(meta.content)
           setPreview(true)
         }
       })
@@ -217,6 +230,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
 
     return () => {
       disposed = true
+      clearTimeout(previewTimer)
       loadedRef.current = false
       themeObserver?.disconnect()
       // The action's registrations live in global registries, not on the editor: dispose them here.
@@ -230,5 +244,12 @@ export function useEditorFile(a: UseEditorFileArgs) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) dan loadKey yang memuat ulang
   }, [enabled, a.loadKey])
 
-  return { dirty, preview, previewHtml, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
+  // Unsaved-changes registry for the close gate (editorDirty.ts): the save it runs is this node's
+  // own, awaited, so "Save" before close only closes once the write landed.
+  useEffect(() => {
+    setEditorDirty(id, dirty, () => saveRef.current())
+  }, [id, dirty])
+  useEffect(() => () => setEditorDirty(id, false), [id])
+
+  return { dirty, preview, previewSource, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }
