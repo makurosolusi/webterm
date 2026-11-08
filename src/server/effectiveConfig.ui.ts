@@ -1,7 +1,8 @@
 // Where each env registry key is controlled from the UI (read model for the Control panel, F0-c).
 // Pure data over the capability catalog; the A2 drift test checks every registry key against this
-// map; any other key is edited in the Control tab, and the A2 test renders a control for each of them.
+// map; any other key is edited in Settings › Developer, and the A2 test renders a control for each of them.
 import { ENV_BROWSER } from '../shared/browser.contract'
+import { CONTROL_WHERE } from '../shared/envSettings.contract'
 import { CAPABILITIES, CAPABILITY_IDS, DERIVED_FLAGS, LINKED_SETTINGS, type CapabilityId } from '../shared/featureCapabilities'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
 import { specFor } from './envRegistry'
@@ -55,10 +56,10 @@ export const DERIVED_FROM: ReadonlyMap<string, readonly CapabilityId[]> = (() =>
 /** UI location for a derived key: the card(s) it follows. */
 export const derivedWhere = (ids: readonly CapabilityId[]): string => `${CAP} › ${ids.map((i) => CAPABILITY_NAME[i]).join(' / ')} (derived)`
 
-/** Every behaviour key without a dedicated card or notice is edited directly in the Control tab (F1-f). */
-export const CONTROL_WHERE = 'Settings › Control'
+/** Every behaviour key without a dedicated card or notice is edited directly in Settings › Developer (F1-f); shared with the client. */
+export { CONTROL_WHERE }
 
-/** UI location for a registry key: its card or notice, the card it is derived from, else the Control tab. */
+/** UI location for a registry key: its card or notice, the card it is derived from, else Settings › Developer. */
 export function uiWhere(key: string): string {
   const direct = UI_SWITCHES.get(key)
   if (direct) return direct

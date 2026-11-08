@@ -27,7 +27,7 @@ export const SECRET_RUN_TIMEOUT_MS = 120_000
 export const SECRET_OUTPUT_MAX_BYTES = 128 * 1024
 /** Joined argv cap: the policy resource rides the decision event subject (512 chars max). */
 export const SECRET_COMMAND_MAX_CHARS = 400
-const DENY_NEXT = 'Only the user can grant this secret (Settings > Control > Policy rules); do not retry.'
+const DENY_NEXT = 'Only the user can grant this secret (Settings › Rules & approvals); do not retry.'
 
 export interface BrokerDeps {
   policy?: () => Pick<Policy, 'decide'> | null

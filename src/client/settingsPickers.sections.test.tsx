@@ -72,7 +72,7 @@ describe('settings pickers per screen', () => {
   it('Control rows: text/number are comboboxes with the default as a suggestion; secrets stay password boxes', async () => {
     const row = (over: Partial<EffectiveRow>): EffectiveRow => ({
       key: 'WEBTERM_X', label: 'X', description: '', subsystem: 's', value: '', secret: false, source: 'default', reason: '', modified: false,
-      ui: null, envOnly: false, kind: 'number', editable: true, restart: 'none', setting: '', default: '500', pendingRestart: false, ...over,
+      ui: null, kind: 'number', editable: true, restart: 'none', setting: '', default: '500', pendingRestart: false, ...over,
     })
     const write = vi.fn(async () => null)
     render(<ControlField row={row({})} write={write} />)
@@ -94,8 +94,8 @@ describe('settings pickers per screen', () => {
     const f = vi.fn(async (url: string, _init?: RequestInit) => new Response(JSON.stringify(url === COST_API_PATH ? data : { ok: true })))
     vi.stubGlobal('fetch', f)
     render(<CostPanel />)
-    await waitFor(() => expect(combo('Daily cap (USD)').value).toBe('10'))
-    expect(optionsOf('Daily cap (USD)')).toEqual(['No limit', '$55', '$1010', '$2525', '$5050'])
+    await waitFor(() => expect(combo("Pause all work when today's spend reaches").value).toBe('10'))
+    expect(optionsOf("Pause all work when today's spend reaches")).toEqual(['No limit', '$55', '$1010', '$2525', '$5050'])
     fireEvent.click(screen.getByRole('option', { name: /No limit/ }))
     await waitFor(() => expect(f.mock.calls.some(([u, i]) => u === `${COST_API_PATH}/caps` && String((i as RequestInit | undefined)?.body).includes('"limitMicros":0'))).toBe(true))
   })
@@ -104,7 +104,7 @@ describe('settings pickers per screen', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ central: false, permissions: false }))))
     render(<PolicySimulator />)
     expect([...select('Who').options].map((o) => o.value)).toEqual(['node:*', 'central', 'routine:*', 'telegram:*', '*'])
-    expect(optionsOf('Capability (e.g. claude.tool:Bash)')).toContain('browser.act')
-    expect(optionsOf('Scope (e.g. npm test*)')[0]).toBe('Anything (*)*')
+    expect(optionsOf('What')).toContain('Click and type in web pagesbrowser.act')
+    expect(optionsOf('Where')[0]).toBe('Anywhere*')
   })
 })

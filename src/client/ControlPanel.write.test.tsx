@@ -1,17 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-// Control tab end to end against the REAL server route + env-settings service (in memory): the A2 drift
-// check over the full registry (every Control-owned key renders an editor), a write changing the
-// effective value, the shell-env lock, and a Doctor fix.
+// Settings › Developer end to end against the REAL server route + env-settings service (in memory): the A2 drift
+// check over the full registry (every Developer-owned key renders an editor), a write changing the
+// effective value, the shell-env lock, and a Doctor fix (Settings › Health).
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DoctorDeps } from '../server/doctor'
 import { CENTRAL_SECTION_KEYS, CENTRAL_SETTINGS, CONTROL_WHERE } from '../server/effectiveConfig.ui'
+import { CONTROL_WHERE as SHARED_CONTROL_WHERE } from '../shared/envSettings.contract'
 import { ENV_REGISTRY } from '../server/envRegistry'
 import { controlEffectiveRoute, type ControlDeps } from '../server/envSettings.control'
 import { fakeReq, recorder, setupEnv } from '../server/envSettings.testutil'
 import { ControlPanel } from './ControlPanel'
+import { HealthSection } from './HealthSection'
 
 function serve(env: NodeJS.ProcessEnv = {}, doctor: Partial<DoctorDeps> = {}) {
   const s = setupEnv(env)
@@ -45,16 +47,22 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const rowEl = (key: string): HTMLElement => document.querySelector(`[data-key="${key}"]`) as HTMLElement
 
-describe('Control tab writes', () => {
-  it('A2: every Control-owned registry key renders a live editor (no env-only behaviour key)', async () => {
+describe('Developer table writes', () => {
+  it('A2: every Developer-owned registry key renders a live editor (no env-only behaviour key)', async () => {
     serve()
     render(<ControlPanel />)
     await screen.findByRole('region', { name: 'Logs' })
+    // Default view: only the rows edited here; managed rows need "Show everything".
+    const ownedByDefault = ENV_REGISTRY.filter((s) => rowEl(s.key) !== null).map((s) => s.key)
+    expect(ownedByDefault.length).toBeGreaterThanOrEqual(21)
+    expect(rowEl('WEBTERM_CENTRAL')).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Show everything' }))
     const owned = ENV_REGISTRY.filter((s) => rowEl(s.key)?.textContent?.includes('Managed in') !== true).map((s) => s.key)
     // The former ENV_ONLY_PENDING_F1 list (37), minus the two retired WEBTERM_OPENCODE_* keys, WEBTERM_CENTRAL_MAX_STEPS (K7),
     // the removed WEBTERM_CENTRAL_TURN_TOKENS (never enforced) and the 14 keys the Settings › Central Agent section owns
     // (one key, one editor; Control shows them read-only and answers managed_elsewhere).
-    expect(owned.length).toBeGreaterThanOrEqual(19)
+    expect(owned.length).toBeGreaterThanOrEqual(21)
+    expect(owned.sort()).toEqual(ownedByDefault.sort())
     for (const k of CENTRAL_SECTION_KEYS) {
       expect(owned).not.toContain(k)
       expect(rowEl(k).textContent).toContain(`Managed in ${CENTRAL_SETTINGS} › `)
@@ -64,7 +72,8 @@ describe('Control tab writes', () => {
     expect(missing).toEqual([])
     for (const k of ['WEBTERM_AGENT_SANDBOX', 'WEBTERM_LEDGER', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET']) expect(owned).toContain(k)
     expect(rowEl('WEBTERM_CENTRAL').textContent).toContain('Managed in Settings › Capabilities › Central agent')
-    expect(CONTROL_WHERE).toBe('Settings › Control')
+    expect(CONTROL_WHERE).toBe('Settings › Developer')
+    expect(CONTROL_WHERE).toBe(SHARED_CONTROL_WHERE)
   })
 
   it('toggling a hot flag writes it and the effective value updates in place', async () => {
@@ -109,7 +118,7 @@ describe('Control tab writes', () => {
   it('Doctor: a failing check offers Fix, and the re-run result replaces it', async () => {
     let tight = false
     serve({}, { looseDirs: () => (tight ? [] : ['/data']), tightenDirs: () => { tight = true } })
-    render(<ControlPanel />)
+    render(<HealthSection />)
     const fix = await screen.findByRole('button', { name: 'Restrict to 0700' })
     expect(document.querySelector('[data-check="dataDir"]')?.getAttribute('data-status')).toBe('fail')
     fireEvent.click(fix)

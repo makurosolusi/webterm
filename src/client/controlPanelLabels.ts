@@ -1,15 +1,13 @@
-// All Control panel UI text (English product text, Rule 15).
+// UI text of the Developer table and the Health/Spending/Rules/Developer sections (English product text, Rule 15).
 export const CONTROL_TEXT = {
-  tab: 'Control',
-  intro: 'Every behaviour setting, what it is right now, where it comes from, and why. Settings owned here can be changed directly; a value set in the shell environment wins and is shown locked.',
+  intro: 'Every raw setting, its current value and where it comes from; a value set in the shell environment wins and is shown locked.',
   search: 'Filter settings',
-  envOnly: 'Bootstrap only (no UI switch)',
-  modifiedOnly: 'Modified',
+  showAll: 'Show everything',
+  showAllHint: 'Also show settings managed on other pages, derived from capability cards, or only set at startup.',
   loading: 'Loading effective configuration…',
   loadFailed: 'The effective configuration could not be loaded. Try again in a moment.',
   empty: 'No setting matches the filter.',
   mockBadge: 'MOCK',
-  mockTitle: 'A runtime is using the simulated engine: replies are not produced by a real agent.',
   colKey: 'Setting',
   colValue: 'Effective',
   colSource: 'Source',
@@ -20,9 +18,6 @@ export const CONTROL_TEXT = {
   secretUnset: 'unset',
   modifiedMark: 'Modified from the default',
   count: (shown: number, total: number): string => `${shown} of ${total} settings`,
-  protectionTitle: 'Agent protection',
-  protectionMissing: 'Agent protection status is not available yet.',
-  protectionLevel: { protected: 'Protected', mitigation: 'Mitigation only' } as Readonly<Record<string, string>>,
   managedIn: (where: string): string => `Managed in ${where}`,
   locked: 'Locked',
   reset: 'Reset',
@@ -40,7 +35,25 @@ export const CONTROL_TEXT = {
   restartPending: 'Saved; restart the webterm server to apply.',
 } as const
 
-/** Doctor (F1-f): health checks with one-click fixes, in the Control tab. */
+/** Settings › Health: demo-mode banner and agent protection, above the Doctor. */
+export const HEALTH_TEXT = {
+  mock: 'Central is running in demo mode; replies are not real.',
+  protectionTitle: 'Agent protection',
+  protectionMissing: 'Agent protection status is not available yet.',
+  allProtected: 'Agents are protected',
+  partly: (kind: string, why: string): string => `Partly protected — ${kind}${why ? `: ${why}` : ''}`,
+} as const
+
+/** Settings › Spending: the pointer to Central's own limit. */
+export const SPENDING_TEXT = {
+  centralLimit: "Central's own limit",
+  centralLink: 'Central Agent',
+} as const
+
+/** Settings › Developer: the eval cases disclosure. */
+export const DEVELOPER_TEXT = { evalCases: 'Show eval cases' } as const
+
+/** Doctor (F1-f): health checks with one-click fixes, in Settings › Health. */
 export const DOCTOR_TEXT = {
   title: 'Doctor',
   intro: 'Checks what webterm needs from this machine. A Fix button appears only where the fix is safe.',

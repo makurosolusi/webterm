@@ -55,7 +55,7 @@ export const GRID_SIZE_OPTIONS = [8, 12, 16, 20, 24, 32, 40, 48].map((n) => ({ v
 export const NODE_WIDTH_OPTIONS = [400, 480, 560, 640, 800, 960, 1200, 1600].map((n) => ({ value: n, label: `${n} px` }))
 export const NODE_HEIGHT_OPTIONS = [280, 360, 440, 520, 600, 720, 900, 1200].map((n) => ({ value: n, label: `${n} px` }))
 
-/** Cost cap suggestions in dollars; '' = no limit. Shared by Settings and the Cost panel (one history). */
+/** Cost cap suggestions in dollars; '' = no limit. The field id is Central's own limit (Settings › Central Agent); the Spending page's pause-all cap shares the presets but keeps its own history (PAUSE_ALL_FIELD_ID 'cost.pauseAllAt'). */
 export const COST_CAP_FIELD_ID = 'central.dailyCostCap'
 export const COST_CAP_PRESETS: readonly ComboPreset[] = [
   { value: '', label: 'No limit' },

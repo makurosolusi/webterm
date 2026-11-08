@@ -4,8 +4,8 @@
 // sudah ada tidak berubah; yang berubah hanya chrome dan metriknya — 35px header, 22px baris,
 // teks 13px, kontrol 26px, token `--vscode-*`.
 //
-// Pengelompokan section mengikuti komentar grup di `shared/settings.ts` supaya skema dan UI tidak
-// bisa berbeda pendapat.
+// Sidebar dikelompokkan (Editor / Agents / Workspace / System, `group` tiap section); panah/Home/End
+// melintasi grup karena navigasi menghitung semua tombol di nav.
 //
 // Tab Kemampuan (ENVSIMPLE D6) menggantikan Channels dan Environment: tujuh kartu, satu sakelar
 // tiap kartu. Pencarian di sana hanya mencocokkan judul bagian dan judul kartu; tautan lama ke
@@ -27,34 +27,86 @@ import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { CentralSettingsSection } from './CentralSettingsSection'
 import type { CentralLinkTarget } from './centralSettings.registry'
-import { ControlPanel } from './ControlPanel'
+import { AutomationsSection } from './AutomationsSection'
+import { DeveloperSection } from './DeveloperSection'
+import { HealthSection } from './HealthSection'
+import { MemorySection } from './MemorySection'
+import { RulesSection } from './RulesSection'
+import { SpendingSection } from './SpendingSection'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
+import './settings-sections.css'
 
-/** Settings sections: nav entry + page header, one place. `icon` is a codicon name; `description` says what is inside. */
+/** Sidebar group headings, in display order. */
+export const SETTINGS_GROUPS = ['Editor', 'Agents', 'Workspace', 'System'] as const
+
+/** Settings sections: nav entry + page header, one place, listed in group order. `icon` is a codicon name; `description` says what is inside. */
 export const SETTINGS_SECTIONS = [
-  { id: 'terminal', label: 'Terminal', icon: 'terminal', description: 'Font, colors, cursor, scrollback' },
-  { id: 'interaction', label: 'Interaction', icon: 'keyboard', description: 'Copy & paste, shortcuts, selection' },
-  { id: 'shell', label: 'Shell & buffer', icon: 'server-process', description: 'Which shell to start, replay buffer' },
-  { id: 'agent', label: 'Agent', icon: 'hubot', description: 'Permissions, custom agents, profiles' },
-  { id: 'central', label: 'Central Agent', icon: 'comment-discussion', description: 'Autonomy, spending, abilities' },
-  { id: 'canvas', label: 'Canvas', icon: 'layout', description: 'Grid, new node size, search engine' },
-  { id: CANVAS_BG_SECTION, label: 'Canvas background', icon: 'paintcan', description: 'Color, gradient or image behind nodes' },
-  { id: 'capabilities', label: 'Capabilities', icon: 'extensions', description: 'Turn features on or off' },
-  { id: 'control', label: 'Control', icon: 'tools', description: 'Every value and source, policies, costs' },
-] as const
+  { id: 'terminal', group: 'Editor', label: 'Terminal', icon: 'terminal', description: 'Font, colors, cursor, scrollback' },
+  { id: 'interaction', group: 'Editor', label: 'Interaction', icon: 'keyboard', description: 'Copy & paste, shortcuts, selection' },
+  { id: 'shell', group: 'Editor', label: 'Shell & buffer', icon: 'server-process', description: 'Which shell to start, replay buffer' },
+  { id: 'agent', group: 'Agents', label: 'Agent', icon: 'hubot', description: 'Permissions, custom agents, profiles' },
+  { id: 'central', group: 'Agents', label: 'Central Agent', icon: 'comment-discussion', description: 'Autonomy, spending, abilities' },
+  { id: 'rules', group: 'Agents', label: 'Rules & approvals', icon: 'shield', description: 'What agents may do without asking' },
+  { id: 'memory', group: 'Agents', label: 'Memory', icon: 'book', description: 'What agents remember and share' },
+  { id: 'automations', group: 'Agents', label: 'Automations', icon: 'clock', description: 'Routines that run agents for you' },
+  { id: 'spending', group: 'Agents', label: 'Spending', icon: 'credit-card', description: 'What agents spent, and limits that pause work' },
+  { id: 'canvas', group: 'Workspace', label: 'Canvas', icon: 'layout', description: 'Grid, new node size, search engine' },
+  { id: CANVAS_BG_SECTION, group: 'Workspace', label: 'Canvas background', icon: 'paintcan', description: 'Color, gradient or image behind nodes' },
+  { id: 'capabilities', group: 'System', label: 'Capabilities', icon: 'extensions', description: 'Turn features on or off' },
+  { id: 'health', group: 'System', label: 'Health', icon: 'pulse', description: 'Is everything working on this machine' },
+  { id: 'developer', group: 'System', label: 'Developer', icon: 'tools', description: 'Every raw value, for troubleshooting' },
+] as const satisfies ReadonlyArray<{ id: string; group: (typeof SETTINGS_GROUPS)[number]; label: string; icon: string; description: string }>
 
-type SectionId = (typeof SETTINGS_SECTIONS)[number]['id']
+export type SectionId = (typeof SETTINGS_SECTIONS)[number]['id']
 
-/** Id tab lama `env`/`channels` mendarat di Kemampuan; id tak dikenal (mis. `preview` warisan) jatuh ke Terminal. */
+/** Retired ids and where they land now: `env`/`channels` -> Capabilities, the old Control mega page -> Health. */
+const LEGACY_SECTION: Readonly<Record<string, SectionId>> = {
+  env: 'capabilities', channels: 'capabilities', control: 'health', [CANVAS_BG_WORKSPACE_SECTION]: CANVAS_BG_SECTION,
+}
+
+/** Section for an id from a link or a saved tab; unknown ids (e.g. legacy `preview`) fall back to Terminal. */
 export function toSectionId(id: string): SectionId {
-  if (id === 'env' || id === 'channels') return 'capabilities'
-  if (id === CANVAS_BG_WORKSPACE_SECTION) return CANVAS_BG_SECTION
-  return SETTINGS_SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
+  return LEGACY_SECTION[id] ?? SETTINGS_SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
+}
+
+/** What `renderSection` gets: the panel's state and callbacks. */
+interface SectionCtx {
+  s: Settings
+  onChange: (patch: SettingsPatch) => void
+  navigate: (to: CentralLinkTarget) => void
+  query: string
+  projectId: string
+  activeRaw: string
+  onCapabilityHits: (n: number) => void
+}
+
+/** Section id -> its body. A `Record` over `SectionId`, so a new section without a body fails the type check. */
+const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
+  terminal: (c) => <TerminalSection settings={c.s} onChange={c.onChange} />,
+  interaction: (c) => <InteractionSection settings={c.s} onChange={c.onChange} />,
+  shell: (c) => <ShellSection settings={c.s} onChange={c.onChange} />,
+  agent: (c) => <AgentSettings settings={c.s} onChange={c.onChange} />,
+  central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
+  rules: () => <RulesSection />,
+  memory: () => <MemorySection />,
+  automations: () => <AutomationsSection />,
+  spending: (c) => <SpendingSection onNavigate={c.navigate} />,
+  canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
+  [CANVAS_BG_SECTION]: (c) => (
+    <CanvasBackgroundSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined}
+      initialScope={c.activeRaw === CANVAS_BG_WORKSPACE_SECTION ? 'workspace' : 'global'} />
+  ),
+  capabilities: (c) => (
+    <CapabilitiesSection projectId={c.projectId} query={c.query} sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
+      onVisibleCount={c.onCapabilityHits} onSettingsChange={c.onChange} onOpenCentral={() => c.navigate({ section: 'central' })} />
+  ),
+  health: () => <HealthSection />,
+  developer: (c) => <DeveloperSection query={c.query} />,
 }
 
 interface PanelProps {
@@ -113,23 +165,8 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     return () => window.clearInterval(timer)
   }, [anchor, active])
 
-  const renderSection = (id: SectionId): React.JSX.Element => {
-    if (id === 'terminal') return <TerminalSection settings={s} onChange={onChange} />
-    if (id === 'interaction') return <InteractionSection settings={s} onChange={onChange} />
-    if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
-    if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
-    if (id === 'central') return <CentralSettingsSection settings={s} onChange={onChange} onNavigate={navigate} />
-    if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
-    if (id === CANVAS_BG_SECTION) {
-      return <CanvasBackgroundSection settings={s} onChange={onChange} projectId={projectId || undefined}
-        initialScope={activeRaw === CANVAS_BG_WORKSPACE_SECTION ? 'workspace' : 'global'} />
-    }
-    if (id === 'control') return <ControlPanel query={normalized} />
-    return (
-      <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
-        onVisibleCount={setCapabilityHits} onSettingsChange={onChange} onOpenCentral={() => navigate({ section: 'central' })} />
-    )
-  }
+  const renderSection = (id: SectionId): React.JSX.Element =>
+    SECTION_BODY[id]({ s, onChange, navigate, query: normalized, projectId, activeRaw, onCapabilityHits: setCapabilityHits })
 
   const activeSection = SETTINGS_SECTIONS.find((section) => section.id === active) ?? SETTINGS_SECTIONS[0]
   const activeLabel = activeSection.label
@@ -222,26 +259,31 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
 
           <div className="st-body">
             <nav className="st-sidebar" aria-label="Section settings" onKeyDown={onTocKeyDown}>
-              {SETTINGS_SECTIONS.map((section) => (
-                <button
-                  key={section.id}
-                  type="button"
-                  aria-current={active === section.id && !normalized}
-                  className={'st-nav' + (active === section.id && !normalized ? ' is-active' : '')}
-                  // Name = title only (aria-labelledby), the description is read as the item's description.
-                  aria-labelledby={`st-nav-${section.id}`}
-                  aria-describedby={`st-nav-${section.id}-desc`}
-                  onClick={() => {
-                    setActive(section.id)
-                    setQuery('')
-                  }}
-                >
-                  <span className={`codicon codicon-${section.icon} st-nav-icon`} aria-hidden="true" />
-                  <span className="st-nav-text">
-                    <span id={`st-nav-${section.id}`} className="st-nav-label">{section.label}</span>
-                    <span id={`st-nav-${section.id}-desc`} className="st-nav-desc">{section.description}</span>
-                  </span>
-                </button>
+              {SETTINGS_GROUPS.map((group) => (
+                <div key={group} role="group" className="st-nav-group" aria-labelledby={`st-nav-group-${group}`}>
+                  <div id={`st-nav-group-${group}`} className="st-nav-group-title">{group}</div>
+                  {SETTINGS_SECTIONS.filter((section) => section.group === group).map((section) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      aria-current={active === section.id && !normalized}
+                      className={'st-nav' + (active === section.id && !normalized ? ' is-active' : '')}
+                      // Name = title only (aria-labelledby), the description is read as the item's description.
+                      aria-labelledby={`st-nav-${section.id}`}
+                      aria-describedby={`st-nav-${section.id}-desc`}
+                      onClick={() => {
+                        setActive(section.id)
+                        setQuery('')
+                      }}
+                    >
+                      <span className={`codicon codicon-${section.icon} st-nav-icon`} aria-hidden="true" />
+                      <span className="st-nav-text">
+                        <span id={`st-nav-${section.id}`} className="st-nav-label">{section.label}</span>
+                        <span id={`st-nav-${section.id}-desc`} className="st-nav-desc">{section.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </nav>
 

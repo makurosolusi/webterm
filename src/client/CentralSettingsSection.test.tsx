@@ -213,7 +213,7 @@ describe('Settings › Central Agent', () => {
     await open()
     const title = (): string | null | undefined => document.querySelector('.st-section-title')?.textContent
     fireEvent.click(screen.getByRole('button', { name: 'Open Spending report' }))
-    expect(title()).toBe('Control')
+    expect(title()).toBe('Spending')
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central Agent' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Open Model ladder & per-workspace overrides' }))
     expect(title()).toBe('Agent')

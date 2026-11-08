@@ -30,7 +30,7 @@ describe('buildEffectiveConfig', () => {
     expect(row('WEBTERM_CENTRAL')).toMatchObject({ source: 'settings', value: 'on', ui: 'Settings › Capabilities › Central agent', envOnly: false })
     expect(row('WEBTERM_CENTRAL').reason).toBe('Set in Settings › Capabilities › Central agent.')
     expect(row('WEBTERM_CENTRAL_CHAT')).toMatchObject({ source: 'capability', reason: 'Derived from the Central agent card (Central agent on).' })
-    expect(row('WEBTERM_LOG_BUFFER').reason).toBe('Set in Settings › Control.')
+    expect(row('WEBTERM_LOG_BUFFER').reason).toBe(`Set in ${CONTROL_WHERE}.`)
   })
 
   it('derived row names the card it follows (Worker card)', () => {
