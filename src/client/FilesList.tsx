@@ -1,12 +1,13 @@
-// Daftar entri node files: wadah fokus tunggal (role="tree" + aria-activedescendant), handler
-// pointer native, dan empat keadaan kosong yang sengaja tidak digabung.
-import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+// Tree of a Files node: one focus container (role="tree" + aria-activedescendant), native pointer
+// handlers (one click opens/toggles, double click renames), and four empty states kept apart.
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { Button as VscodeButton, Tree } from '@/vscode/register'
 import type { FileMeta } from '../shared/fsContract'
 import { folderTitle } from './fileBrowse'
 import { FilesRow } from './FilesRow'
 import { nfcName, type Sel } from './filesSelection'
 import type { Decoration } from './filesSlots'
+import type { TreeRow } from './filesTree'
 import type { ListingVerdict } from './useFilesListing'
 
 export const UNREACHABLE = 'Could not reach this folder. It may be gone, or its filesystem may be unavailable.'
@@ -14,10 +15,19 @@ export const UNAUTHORIZED = 'Access was denied (401). The session may have expir
 
 export interface PickMods { shift: boolean; toggle: boolean }
 
+/** How long a single click on a FILE waits for a second click before opening it (a double click
+ *  renames instead). Folders toggle at once: there is nothing to wait for. */
+export const CLICK_OPEN_DELAY_MS = 250
+
+/** Where the inline name input sits: `replace` = instead of row `rel` (rename), else first child
+ *  under folder `rel` (create). Absent = top of the list. */
+export interface InputAt { rel: string; replace: boolean }
+
 interface Props {
   nodeId: string
   cwd: string
-  shown: FileMeta[]
+  /** Visible (filtered) tree rows. */
+  rows: readonly TreeRow[]
   total: number
   sel: Sel
   loading: boolean
@@ -26,10 +36,15 @@ interface Props {
   decorate: (e: FileMeta) => Decoration
   listRef: RefObject<HTMLDivElement | null>
   treeRef: RefObject<HTMLElement | null>
-  /** Baris input inline (FilesInput), dirender di atas daftar. */
+  /** Inline name input (FilesInput), placed by `inputAt`. */
   inputRow?: ReactNode
+  inputAt?: InputAt | null
   onPick: (index: number, mods: PickMods) => void
-  onOpen: (index: number) => void
+  onToggle: (rel: string) => void
+  /** Single click on a file (after `CLICK_OPEN_DELAY_MS`): open as preview. */
+  onOpen: (rel: string) => void
+  /** Double click: rename (never open). */
+  onRename: (rel: string) => void
   onContext: (index: number | null, x: number, y: number) => void
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void
   onRetry: () => void
@@ -45,9 +60,9 @@ function rowIndexFrom(target: EventTarget | null): number {
 }
 
 export default function FilesList(p: Props) {
-  const { shown, sel, loading, verdict, total, query } = p
+  const { rows, sel, loading, verdict, total, query } = p
   const empty = !loading && total === 0
-  const cursorIdx = sel.cursor === null ? -1 : shown.findIndex((e) => nfcName(e.name) === sel.cursor)
+  const cursorIdx = sel.cursor === null ? -1 : rows.findIndex((r) => nfcName(r.rel) === sel.cursor)
 
   // Handler baris dipasang NATIVE di fase capture, SEKALI: klik di dalam `vscode-tree-item`
   // dihentikan komponen itu di shadow DOM sebelum naik ke root React, jadi `onClick` React tak
@@ -60,36 +75,80 @@ export default function FilesList(p: Props) {
     if (!list) return
     const rowOf = (ev: Event) => {
       const index = rowIndexFrom(ev.target)
-      return index >= 0 && latest.current.shown[index] ? index : -1
+      return index >= 0 && latest.current.rows[index] ? index : -1
     }
+    // One click opens, a double click renames (file manager model). A file's open waits for a possible
+    // second click; the dblclick cancels it. A folder toggles on the first click; the dblclick toggles it
+    // back, so a double click on a folder only renames. Clicks 2+ of a multi-click (detail > 1) are ignored.
+    let pending: { timer: ReturnType<typeof setTimeout> } | null = null
+    const cancel = () => { if (pending) clearTimeout(pending.timer); pending = null }
     const onClick = (ev: MouseEvent) => {
       const index = rowOf(ev)
       if (index < 0) return
       list.focus()
-      latest.current.onPick(index, { shift: ev.shiftKey, toggle: ev.metaKey || ev.ctrlKey })
+      if (ev.detail > 1) return
+      cancel()
+      const mods = { shift: ev.shiftKey, toggle: ev.metaKey || ev.ctrlKey }
+      latest.current.onPick(index, mods)
+      if (mods.shift || mods.toggle) return
+      const r = latest.current.rows[index]
+      if (r.entry.dir) latest.current.onToggle(r.rel)
+      else pending = { timer: setTimeout(() => { pending = null; latest.current.onOpen(r.rel) }, CLICK_OPEN_DELAY_MS) }
     }
     const onDouble = (ev: MouseEvent) => {
       const index = rowOf(ev)
-      if (index < 0) return
-      latest.current.onPick(index, { shift: false, toggle: false })
-      latest.current.onOpen(index)
+      if (index < 0 || ev.shiftKey || ev.metaKey || ev.ctrlKey) return
+      cancel()
+      const r = latest.current.rows[index]
+      if (r.entry.dir) latest.current.onToggle(r.rel)
+      latest.current.onRename(r.rel)
     }
     const onContext = (ev: MouseEvent) => {
       const index = rowOf(ev)
       if (index < 0) return
       ev.preventDefault()
       ev.stopPropagation()
+      cancel()
       latest.current.onContext(index, ev.clientX, ev.clientY)
     }
     list.addEventListener('click', onClick, true)
     list.addEventListener('dblclick', onDouble, true)
     list.addEventListener('contextmenu', onContext, true)
     return () => {
+      cancel()
       list.removeEventListener('click', onClick, true)
       list.removeEventListener('dblclick', onDouble, true)
       list.removeEventListener('contextmenu', onContext, true)
     }
   }, [p.listRef])
+
+  // Split point for the inline input: instead of row `rel` (rename) or right under folder `rel` (create).
+  const atIdx = p.inputAt ? rows.findIndex((r) => r.rel === p.inputAt?.rel) : -1
+  const inputHere = atIdx >= 0 && !!p.inputRow
+  const replace = inputHere && !!p.inputAt?.replace
+  const cut = !inputHere ? rows.length : replace ? atIdx : atIdx + 1
+  const skip = replace ? 1 : 0
+  const inputDepth = inputHere ? rows[atIdx].depth + (replace ? 0 : 1) : 0
+
+  const renderTree = (part: readonly TreeRow[], offset: number, ref?: RefObject<HTMLElement | null>) => (
+    <Tree
+      ref={(node) => { if (ref) ref.current = node; node?.setAttribute('role', 'group'); node?.removeAttribute('aria-multiselectable') }}
+      className="files-tree" hideArrows indentGuides="none"
+    >
+      {part.map((r, k) => {
+        const i = offset + k
+        const d = p.decorate(r.entry)
+        const key = nfcName(r.rel)
+        return (
+          <FilesRow
+            key={r.rel} entry={r.entry} index={i} domId={`files-${p.nodeId}-${i}`} depth={r.depth} open={r.open}
+            selected={sel.names.has(key)} cursor={sel.cursor === key}
+            badge={d.badge} decoTitle={d.title} decoClass={d.className}
+          />
+        )
+      })}
+    </Tree>
+  )
 
   const retry = <VscodeButton onClick={p.onRetry}>Retry</VscodeButton>
   return (
@@ -105,26 +164,16 @@ export default function FilesList(p: Props) {
       onKeyDown={p.onKeyDown}
       onContextMenu={(e) => { e.preventDefault(); p.onContext(null, e.clientX, e.clientY) }}
     >
-      {p.inputRow}
-      {/* Host tree hanya pengelompokan visual; role tree + fokus ada di wadah di atas. Wrapper React
-          menjatuhkan prop `role`/`id`, jadi keduanya dipasang langsung pada elemen: tanpa ini ada dua
-          `role=tree` bersarang. */}
-      <Tree
-        ref={(node) => { p.treeRef.current = node; node?.setAttribute('role', 'group'); node?.removeAttribute('aria-multiselectable') }}
-        className="files-tree" hideArrows indentGuides="none"
-      >
-        {shown.map((e, i) => {
-          const d = p.decorate(e)
-          const key = nfcName(e.name)
-          return (
-            <FilesRow
-              key={e.name} entry={e} index={i} domId={`files-${p.nodeId}-${i}`}
-              selected={sel.names.has(key)} cursor={sel.cursor === key}
-              badge={d.badge} decoTitle={d.title} decoClass={d.className}
-            />
-          )
-        })}
-      </Tree>
+      {!inputHere && p.inputRow}
+      {/* The tree host is visual grouping only; role tree + focus live on the container above. The
+          React wrapper drops `role`, so it is set on the element: otherwise two `role=tree` nest.
+          The inline input sits BETWEEN two hosts, never inside one: vscode-tree stops Enter/Escape/
+          arrows natively, so an input inside it could neither commit nor cancel. */}
+      {renderTree(rows.slice(0, cut), 0, p.treeRef)}
+      {inputHere && (
+        <div className="files-input-slot" style={{ '--files-depth': inputDepth } as CSSProperties}>{p.inputRow}</div>
+      )}
+      {cut + skip < rows.length && renderTree(rows.slice(cut + skip), cut + skip)}
 
       {/* Empat keadaan berbeda, sengaja TIDAK digabung: masing-masing menyuruh pengguna melakukan
           hal yang berbeda. */}
@@ -146,7 +195,7 @@ export default function FilesList(p: Props) {
           <VscodeButton onClick={p.onNewFile}>New File…</VscodeButton>
         </div>
       )}
-      {!loading && total > 0 && shown.length === 0 && (
+      {!loading && total > 0 && rows.length === 0 && (
         <div className="files-empty">{query.trim() ? `Nothing matches “${query.trim()}”.` : 'All entries are hidden.'}</div>
       )}
     </div>

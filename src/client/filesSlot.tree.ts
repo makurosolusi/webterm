@@ -1,11 +1,11 @@
 // Tree menu rows of the Files node: "Open in Browser" for an .html file (create/reuse a browser node via
-// `openBrowserAt`, the file served by the fs `raw` verb) and "Collapse All". Served through the dnd slot's
-// menu, since FILES_SLOTS is not ours to extend; `openBrowserAt` is a hook value, so `useTreeRows` parks
-// it per node for `treeRows` (plain function, called at menu time).
+// `openBrowserAt`, the file served by the fs `raw` verb) and "Collapse All". Its own slot (`treeSlot`);
+// `openBrowserAt` is a hook value, so `useTreeRows` parks it per node for `treeRows` (plain function,
+// called at menu time).
 import { useEffect } from 'react'
 import { childPath } from './fileBrowse'
 import { codicon } from './FilesMenu'
-import type { FilesSlotCtx, SlotMenuRow } from './filesSlots'
+import type { FilesSlot, FilesSlotCtx, SlotMenuRow } from './filesSlots'
 import { rawUrl } from './fsClient'
 import { URL_ERROR_TEXT } from './browser.uxText'
 import { useNodeActions, type NodeActions } from './nodeActions'
@@ -43,3 +43,6 @@ export function treeRows(ctx: FilesSlotCtx): SlotMenuRow[] {
   if (ctx.expanded.size > 0) rows.push({ label: TREE_TEXT.collapseAll, icon: codicon('collapse-all'), onClick: () => ctx.collapseAll() })
   return rows
 }
+
+/** Slot: tree menu rows (Collapse All, Open in Browser). */
+export const treeSlot: FilesSlot = { id: 'tree', useSlot: (ctx) => useTreeRows(ctx.nodeId), menu: treeRows }

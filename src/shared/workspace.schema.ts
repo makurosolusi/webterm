@@ -7,7 +7,7 @@
 // newer build's kind, a broken shape) but that has an id is PRESERVED: hidden from the board, and
 // carried through every later write of the row (`withPreservedNodes`), so a downgrade or one bad
 // node never turns into a deleted node (and a reaped terminal) on the next save.
-import { DEFAULT_VIEWPORT, validDiffNotes, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
+import { DEFAULT_VIEWPORT, validDiffNotes, validExpanded, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
 
 const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true }
 
@@ -40,6 +40,8 @@ function nodeIssue(n: unknown): string | null {
 function cleanNode(n: Record<string, unknown>): WsNode {
   const node = { ...n } as unknown as WsNode
   if (n.diffNotes !== undefined) node.diffNotes = validDiffNotes(n.diffNotes)
+  if (n.preview !== undefined && n.preview !== true) delete node.preview // editor preview flag: only `true` means anything
+  if (n.expanded !== undefined) node.expanded = validExpanded(n.expanded)
   if (n.plan !== undefined) {
     const plan = validPlanData(n.plan)
     if (plan) node.plan = plan

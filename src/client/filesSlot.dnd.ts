@@ -7,7 +7,6 @@ import { childPath } from './fileBrowse'
 import './filesSlot.dnd.css'
 import { MOVE_MIME, rowAt, setDragged, useTreeDrop } from './filesSlot.dnd.drop'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
-import { treeRows, useTreeRows } from './filesSlot.tree'
 import { capabilities } from './fsClient'
 
 /** MIME internal pembawa path terkutip. */
@@ -56,7 +55,6 @@ export const dndSlot: FilesSlot = {
     const on = quickOpen || mutate
     const live = useRef(ctx)
     live.current = ctx
-    useTreeRows(ctx.nodeId)
     useTreeDrop(ctx, mutate)
     useEffect(() => { enabled = quickOpen }, [quickOpen])
     const nodeEl = () => document.querySelector<HTMLElement>(`[data-id="${CSS.escape(ctx.nodeId)}"]`)
@@ -90,8 +88,7 @@ export const dndSlot: FilesSlot = {
     }, [on, quickOpen, mutate, ctx.nodeId])
   },
   menu(ctx) {
-    const tree = treeRows(ctx)
-    if (!enabled || ctx.selection.length === 0) return tree
+    if (!enabled || ctx.selection.length === 0) return []
     const text = shellQuoteAll(ctx.selection.map((n) => childPath(ctx.cwd, n)))
     return [{
       label: DND_TEXT.copyQuoted,
@@ -99,6 +96,6 @@ export const dndSlot: FilesSlot = {
         // Clipboard API menolak di konteks tak aman / tanpa izin; catat, jangan diam.
         navigator.clipboard?.writeText(text).catch((err: unknown) => console.error('files dnd: copy quoted path failed', err))
       },
-    }, ...tree]
+    }]
   },
 }

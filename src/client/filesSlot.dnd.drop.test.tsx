@@ -13,7 +13,7 @@ vi.mock('./fsClient', () => fs)
 import FilesToolbar from './FilesToolbar'
 import { DND_MIME, dndSlot, resetDndSlot } from './filesSlot.dnd'
 import { DROP_TEXT, MOVE_MIME, MOVE_ROW_ATTR } from './filesSlot.dnd.drop'
-import { TREE_TEXT } from './filesSlot.tree'
+import { TREE_TEXT, treeSlot } from './filesSlot.tree'
 import type { FilesSlotCtx, SlotMenuRow } from './filesSlots'
 import { NodeActionsProvider } from './nodeActions'
 
@@ -190,11 +190,11 @@ const click = (rows: SlotMenuRow[] | undefined, label: string) => {
 describe('menu and toolbar', () => {
   it('Collapse All (menu row and toolbar button) calls ctx.collapseAll; hidden/disabled when nothing is expanded', async () => {
     const ctx = mkCtx({ expanded: new Set(['src']) })
-    renderHook(() => dndSlot.useSlot?.(ctx))
+    renderHook(() => treeSlot.useSlot?.(ctx))
     await settle()
-    click(dndSlot.menu?.(ctx), TREE_TEXT.collapseAll)
+    click(treeSlot.menu?.(ctx), TREE_TEXT.collapseAll)
     expect(ctx.collapseAll).toHaveBeenCalledTimes(1)
-    expect(labels(dndSlot.menu?.(mkCtx()))).not.toContain(TREE_TEXT.collapseAll)
+    expect(labels(treeSlot.menu?.(mkCtx()))).not.toContain(TREE_TEXT.collapseAll)
 
     const view = { hidden: false, sortKey: 'name', sortDir: 'asc' } as const
     const { rerender } = render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} />)
@@ -209,18 +209,18 @@ describe('menu and toolbar', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <NodeActionsProvider value={{ onSession: () => {}, onToggleHideLinks: () => {}, openBrowserAt }}>{children}</NodeActionsProvider>
     )
-    renderHook(() => dndSlot.useSlot?.(mkCtx()), { wrapper })
+    renderHook(() => treeSlot.useSlot?.(mkCtx()), { wrapper })
     await settle()
-    expect(labels(dndSlot.menu?.(mkCtx({ selection: ['b.txt'] })))).not.toContain(TREE_TEXT.openInBrowser)
-    expect(labels(dndSlot.menu?.(mkCtx({ selection: ['src'] })))).not.toContain(TREE_TEXT.openInBrowser)
-    expect(labels(dndSlot.menu?.(mkCtx({ selection: ['page.html', 'b.txt'] })))).not.toContain(TREE_TEXT.openInBrowser)
-    click(dndSlot.menu?.(mkCtx({ selection: ['page.html'] })), TREE_TEXT.openInBrowser)
+    expect(labels(treeSlot.menu?.(mkCtx({ selection: ['b.txt'] })))).not.toContain(TREE_TEXT.openInBrowser)
+    expect(labels(treeSlot.menu?.(mkCtx({ selection: ['src'] })))).not.toContain(TREE_TEXT.openInBrowser)
+    expect(labels(treeSlot.menu?.(mkCtx({ selection: ['page.html', 'b.txt'] })))).not.toContain(TREE_TEXT.openInBrowser)
+    click(treeSlot.menu?.(mkCtx({ selection: ['page.html'] })), TREE_TEXT.openInBrowser)
     expect(openBrowserAt).toHaveBeenCalledWith({ url: `${window.location.origin}/api/fs/raw?path=%2Fp%2Fpage.html`, anchorNodeId: 'n1' })
   })
 
   it('Open in Browser is absent when the browser feature is off', async () => {
-    renderHook(() => dndSlot.useSlot?.(mkCtx()))
+    renderHook(() => treeSlot.useSlot?.(mkCtx()))
     await settle()
-    expect(labels(dndSlot.menu?.(mkCtx({ selection: ['page.html'] })))).not.toContain(TREE_TEXT.openInBrowser)
+    expect(labels(treeSlot.menu?.(mkCtx({ selection: ['page.html'] })))).not.toContain(TREE_TEXT.openInBrowser)
   })
 })

@@ -10,7 +10,7 @@ export type ListingVerdict = EmptyListingVerdict | 'auth'
 const NO_ENTRIES: FileMeta[] = []
 
 /** Entri sebuah direktori; `withMeta` (urut size/mtime) memakai list-v2, selain itu `list` biasa. */
-async function fetchEntries(dir: string, withMeta: boolean): Promise<FileMeta[]> {
+export async function fetchEntries(dir: string, withMeta: boolean): Promise<FileMeta[]> {
   if (withMeta) {
     const r = await fsClient.listV2(dir)
     if (r.ok) return r.entries
