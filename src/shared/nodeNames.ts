@@ -39,6 +39,16 @@ export const NODE_NAMES: readonly string[] = [
 /** Longest name kept as-is; anything longer is treated as missing and replaced. */
 export const NODE_NAME_MAX = 40
 
+/** Generator format: one capitalized pool-style word, optionally a tier number >= 2 ("Mango", "Mango 2"). */
+const NODE_NAME_RE = /^[A-Z][a-z]+(?: (?:[2-9]|[1-9]\d+))?$/
+const NODE_NAME_RE_ANY_CASE = new RegExp(NODE_NAME_RE.source, 'i')
+
+/** True when `s` is a name in generator format. Names reach model-facing text, so nothing else is
+ *  kept. `anyCase` accepts the same shape in any letter case (a user's or Central's reference to a name). */
+export function isNodeName(s: unknown, anyCase = false): s is string {
+  return typeof s === 'string' && s.length <= NODE_NAME_MAX && (anyCase ? NODE_NAME_RE_ANY_CASE : NODE_NAME_RE).test(s)
+}
+
 /** FNV-1a 32-bit over UTF-16 code units: a stable start index per node id. */
 function fnv1a(s: string): number {
   let h = 0x811c9dc5
@@ -46,13 +56,13 @@ function fnv1a(s: string): number {
   return h
 }
 
-/** The nodes with a unique `name` each: existing names kept (earliest wins a clash), the rest
+/** The nodes with a unique `name` each: existing well-formed names kept (earliest wins a clash), the rest
  *  picked from the pool by id hash. Unchanged nodes keep their object identity. */
 export function withNodeNames<T extends { id: string; name?: string }>(nodes: readonly T[]): Array<T & { name: string }> {
   const taken = new Set<string>()
   const kept = nodes.map((n) => {
     const name = typeof n.name === 'string' ? n.name.trim() : ''
-    if (!name || name.length > NODE_NAME_MAX || taken.has(name.toLowerCase())) return undefined
+    if (!isNodeName(name) || taken.has(name.toLowerCase())) return undefined
     taken.add(name.toLowerCase())
     return name
   })
