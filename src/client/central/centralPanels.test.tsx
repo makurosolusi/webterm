@@ -11,39 +11,56 @@ import * as needsYou from '../chat/needsYouApi'
 afterEach(cleanup)
 
 describe('LevelPanel', () => {
-  it('shows level, budget left and reports status', async () => {
+  it('shows the level in plain words, the budget in compact numbers and reports status', async () => {
     const onStatus = vi.fn()
-    render(<LevelPanel client={fakeClient()} onStatus={onStatus} />)
+    const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 13_000, spawns: 0 }, limits: { tokens: 10_000_000, spawns: 20 } }, model: { id: 'opencode/free', free: true } })) })
+    render(<LevelPanel client={client} onStatus={onStatus} />)
     expect((await screen.findByTestId('level-effective')).textContent).toBe('L2 Proposes work, you approve')
-    expect(await screen.findByText(/750 left/)).toBeTruthy()
-    expect(screen.getByText(/18 left/)).toBeTruthy()
-    expect(screen.getByRole('progressbar', { name: 'Tokens' })).toBeTruthy()
+    expect(screen.getByText(/nothing runs until you approve it/)).toBeTruthy()
+    expect(screen.queryByText(/Limited by your highest allowed level/)).toBeNull()
+    expect(await screen.findByText('13K of 10M tokens today')).toBeTruthy()
+    expect(screen.getByText('0 of 20 workers started today')).toBeTruthy()
+    const bar = screen.getByRole('progressbar', { name: 'Tokens' }) as HTMLProgressElement
+    expect(bar.value).toBeGreaterThan(0) // tiny use still shows
+    expect(bar.getAttribute('aria-valuetext')).toBe('13K of 10M tokens today')
+    expect((screen.getByRole('progressbar', { name: 'Workers' }) as HTMLProgressElement).value).toBe(0)
     await waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({ model: { id: 'opencode/free', free: true } })))
+  })
+
+  it('says when the highest allowed level holds Central below the chosen one; no limit reads plainly', async () => {
+    const client = fakeClient({
+      getControl: vi.fn(async () => ({ ceiling: 'propose' as const, effective: 'propose' as const, global: { level: 'act_envelope' as const, version: 1, reason: null } })),
+      getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 1_500, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false } })),
+    })
+    render(<LevelPanel client={client} />)
+    expect(await screen.findByText('Limited by your highest allowed level.')).toBeTruthy()
+    expect(await screen.findByText('1.5K · No limit')).toBeTruthy()
+    expect(screen.getByText('0 · None allowed')).toBeTruthy()
   })
 
   it('halt needs confirmation and can be cancelled', async () => {
     const client = fakeClient()
     render(<LevelPanel client={client} />)
     await screen.findByTestId('level-effective')
-    fireEvent.click(screen.getByRole('button', { name: /Halt central/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Central' }))
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     expect(client.halt).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(client.halt).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: /Halt central/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Central' }))
     fireEvent.change(screen.getByLabelText('Reason (optional)'), { target: { value: ' stop ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm halt' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, stop Central' }))
     await waitFor(() => expect(client.halt).toHaveBeenCalledWith('stop'))
-    expect(await screen.findByText(/Central halted/)).toBeTruthy()
+    expect(await screen.findByText(/Central is stopped/)).toBeTruthy()
   })
 
-  it('"Central settings" opens Settings on the Central Agent section', async () => {
+  it('"Change" opens Settings on the Central Agent section', async () => {
     const seen: unknown[] = []
     const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
     window.addEventListener('webterm:open-settings', on)
     render(<LevelPanel client={fakeClient()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Central settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change in Central settings' }))
     window.removeEventListener('webterm:open-settings', on)
     expect(seen).toEqual([{ section: 'central' }])
   })
@@ -110,10 +127,10 @@ describe('SkillReview', () => {
 describe('MemoryView', () => {
   it('renders scope/trust/kind and hides secret-looking values', async () => {
     render(<MemoryView client={fakeClient()} />)
-    expect(await screen.findByRole('table', { name: 'Memory (read-only)' })).toBeTruthy()
+    expect(await screen.findByRole('table', { name: "Central's memory" })).toBeTruthy()
     expect(screen.getByText('bun + react')).toBeTruthy()
     expect(screen.queryByText(/sk_live/)).toBeNull()
-    expect(screen.getByText('[hidden: looks like a secret]')).toBeTruthy()
+    expect(screen.getByText('[hidden: looks like a password or key]')).toBeTruthy()
     expect(screen.getAllByRole('columnheader')).toHaveLength(5)
   })
 

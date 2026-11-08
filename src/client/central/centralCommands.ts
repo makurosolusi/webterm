@@ -8,8 +8,8 @@ import { COMMAND_RESULT_LIMIT, rankCommands, type ComposerCompletion } from '../
 import { fuzzyFilter } from '../fuzzy'
 import type { CentralTab } from '../secondarySideBar.store'
 
-/** Chat-side actions; `approvals` expands the Needs-you strip (works with the Central panel off). */
-export type ChatAction = 'new' | 'history' | 'help' | 'approvals'
+/** Chat-side actions; `approvals` expands the Needs-you strip, `memory` opens Settings › Memory (both work with the Central panel off). */
+export type ChatAction = 'new' | 'history' | 'help' | 'approvals' | 'memory'
 
 /** What a command does: a chat action, a Central panel tab, or a prompt sent to Central. */
 export type CentralCommandAction =
@@ -49,12 +49,13 @@ export const CENTRAL_COMMANDS: readonly CentralCommand[] = [
   { name: 'help', description: 'List the chat commands', run: { kind: 'chat', action: 'help' } },
   { name: 'approvals', description: 'Show everything that needs you (approvals, reviews, broken tasks)', run: { kind: 'chat', action: 'approvals' } },
   { name: 'model', description: 'Choose the model for this chat (applies from a fresh session); auto = default', argumentHint: MODEL_HINT, run: { kind: 'model' } },
-  { name: 'status', description: "Show Central's budget and model", run: { kind: 'panel', tab: 'control' } },
-  { name: 'level', description: 'Show the autonomy level', run: { kind: 'panel', tab: 'control' } },
+  { name: 'status', description: "Show Central's level and budget", run: { kind: 'panel', tab: 'status' } },
+  { name: 'level', description: 'Show what Central may do on its own', run: { kind: 'panel', tab: 'status' } },
+  { name: 'tools', description: 'Show what Central can do', run: { kind: 'panel', tab: 'abilities' } },
   { name: 'agents', description: 'Show the agents Central runs', run: { kind: 'panel', tab: 'agents' } },
   { name: 'skills', description: 'Review proposed skills', run: { kind: 'panel', tab: 'skills' } },
-  { name: 'memory', description: 'Show what Central remembers', run: { kind: 'panel', tab: 'memory' } },
-  { name: 'halt', description: 'Stop all Central work (kill-switch, asks first)', run: { kind: 'panel', tab: 'control', halt: true } },
+  { name: 'memory', description: 'Show what Central remembers', run: { kind: 'chat', action: 'memory' } },
+  { name: 'halt', description: 'Stop all Central work (asks first)', run: { kind: 'panel', tab: 'status', halt: true } },
   { name: 'projects', description: 'Ask Central for your projects and their status', run: { kind: 'prompt', prompt: () => 'List my projects with their status.' } },
   { name: 'nodes', description: 'Ask Central for the nodes of a project', argumentHint: '<project>', run: { kind: 'prompt', prompt: (p) => `List the nodes in project ${bare(p)}.` } },
   { name: 'tasks', description: 'Ask Central for the tasks of a project', argumentHint: '<project>', run: { kind: 'prompt', prompt: (p) => `Show the task status of project ${bare(p)}.` } },
@@ -71,9 +72,10 @@ export type CentralDecision =
 
 const COMMAND = /^\s*\/([A-Za-z0-9._:-]+)(?:\s+([\s\S]*))?$/
 
-/** The commands on offer: panel shortcuts only while the Central panel is on, skills that do not shadow a command. */
+/** The commands on offer: panel shortcuts and `/memory` only while the Central panel is on, skills that do not shadow a command. */
 export function centralCommandList(centralEnabled: boolean, skills: readonly CentralSkill[] = []): CentralCommand[] {
-  const own = CENTRAL_COMMANDS.filter((c) => centralEnabled || c.run.kind !== 'panel')
+  // `/memory` shows Central's memory, which Settings only lists while Central is on.
+  const own = CENTRAL_COMMANDS.filter((c) => centralEnabled || (c.run.kind !== 'panel' && c.name !== 'memory'))
   const taken = new Set(own.map((c) => c.name))
   const skillRows = skills.filter((s) => !taken.has(s.name)).map((s): CentralCommand => ({
     name: s.name, description: s.description, run: { kind: 'prompt', prompt: (arg) => `Use the "${s.name}" skill.${arg.trim() ? ` ${arg.trim()}` : ''}` },

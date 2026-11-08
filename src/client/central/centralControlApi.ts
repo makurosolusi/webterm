@@ -1,13 +1,13 @@
 // Human transport client for the central control panel. Same credential as the rest of the client
 // (the `wt_ui` session cookie, via `request`); never a node capability. Paths mirror server handlers:
-// CONTROL/HALT exist (guard/haltApi.ts); STATUS, AGENTS, SKILLS, MEMORY are the
+// CONTROL/HALT exist (guard/haltApi.ts); STATUS, AGENTS, SKILLS, MEMORY, TOOLS are the
 // contract this panel expects and are mounted by WS-19. Malformed rows are dropped, not thrown.
 import { useCapabilities } from '../useCapabilities'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import type {
   AgentActionResult, AgentRow, CentralControlClient, ControlView, MemoryRow,
-  SkillReviewRow, StatusView,
+  SkillReviewRow, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView,
 } from './centralControlTypes'
 
 export const CENTRAL_API = '/api/central'
@@ -17,6 +17,7 @@ export const STATUS_PATH = `${CENTRAL_API}/status`
 export const AGENTS_PATH = `${CENTRAL_API}/agents`
 export const SKILLS_PATH = `${CENTRAL_API}/skills`
 export const MEMORY_PATH = `${CENTRAL_API}/memory`
+export const TOOLS_PATH = `${CENTRAL_API}/tools`
 
 /** Server codes for a family whose feature is off (503); the tab shows an off state, not an error. */
 export const SKILLS_OFF = 'skills_off'
@@ -78,6 +79,20 @@ function toStatus(b: unknown): StatusView {
   }
 }
 
+const GROUPS: readonly ToolGroup[] = ['projects', 'workers', 'tasks', 'memory', 'browser', 'skills', 'channels', 'approvals', 'other']
+const ACCESS: readonly ToolAccess[] = ['auto', 'asks', 'blocked', 'off']
+const TIERS: readonly ToolRow['tier'][] = ['R0', 'R1', 'R2', 'R3']
+const oneOf = <T extends string>(v: unknown, all: readonly T[], fallback: T): T => (all.includes(v as T) ? (v as T) : fallback)
+
+const toTool = (r: unknown): ToolRow | null => (isRec(r) && str(r.name)
+  ? { name: str(r.name), summary: str(r.summary), group: oneOf(r.group, GROUPS, 'other'), tier: oneOf(r.tier, TIERS, 'R3'), on: r.on !== false, access: oneOf(r.access, ACCESS, 'blocked') }
+  : null)
+
+function toTools(b: unknown): ToolsView {
+  if (!isRec(b) || !Array.isArray(b.tools)) throw new InboxApiError('Tools response malformed', 502, 'bad_response')
+  return { level: b.level as ToolsView['level'], tools: compact(b.tools.map(toTool)) }
+}
+
 /** Default client over the live server. */
 export const centralControlApi: CentralControlClient = {
   async getControl(signal) { return toControl(await request(CONTROL_PATH, { signal })) },
@@ -93,6 +108,8 @@ export const centralControlApi: CentralControlClient = {
   async approveSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version }) },
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
   async listMemory(offset, signal) { return compact(rowsOf(await request(`${MEMORY_PATH}?${page(offset)}`, { signal })).map(toMemory)) },
+  async listTools(signal) { return toTools(await request(TOOLS_PATH, { signal })) },
+  listActiveSkills: (signal) => listActiveSkills(signal),
 }
 
 /** Approved skills Central can load (`GET skills?status=active`), for the Central chat `/` list; rejects with `skills_off` when off. */

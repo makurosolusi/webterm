@@ -97,11 +97,11 @@ describe('Chat and Control in the secondary side bar', () => {
 
   it('/status (and the other Control shortcuts) opens the side bar on the CONTROL header tab', async () => {
     render(<App />)
-    act(() => openCentralTab('control')) // what the chat's /status runs
+    act(() => openCentralTab('status')) // what the chat's /status runs
     expect(sideTab(/^Control/).getAttribute('aria-selected')).toBe('true')
-    act(() => openCentralTab('memory')) // /memory
+    act(() => openCentralTab('abilities')) // /tools
     expect(sideTab(/^Control/).getAttribute('aria-selected')).toBe('true')
-    expect(await screen.findByRole('tab', { name: 'Memory' })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Abilities' })).toBeTruthy()
   })
 
   it('a stored side bar on the old Central view falls back cleanly: it reopens on Control', () => {

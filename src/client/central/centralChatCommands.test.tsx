@@ -131,23 +131,36 @@ describe('Central chat / menu', () => {
     expect(client.sendMessage).not.toHaveBeenCalled()
   })
 
-  it('a request for the removed Approvals tab falls back to Control', async () => {
+  it('a request for the removed Approvals tab falls back to Status', async () => {
     await setup()
-    fireEvent.click(screen.getByRole('tab', { name: 'Memory' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }))
     act(() => openCentralTab('approvals' as CentralTab)) // test-only: a stale request from an older build
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Control' }).getAttribute('aria-selected')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Status' }).getAttribute('aria-selected')).toBe('true'))
   })
 
   it('/halt asks for the kill-switch confirmation and does not halt by itself', async () => {
     const { client, control } = await setup()
-    fireEvent.click(screen.getByRole('tab', { name: 'Memory' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }))
     await send('/halt')
     expect(await screen.findByRole('alertdialog')).not.toBeNull()
-    expect(screen.getByRole('tab', { name: 'Control' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Status' }).getAttribute('aria-selected')).toBe('true')
     expect(control.halt).not.toHaveBeenCalled()
     expect(client.sendMessage).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm halt' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, stop Central' }))
     await waitFor(() => expect(control.halt).toHaveBeenCalledTimes(1))
+  })
+
+  it('/tools opens the Abilities tab; /memory opens Settings › Memory; neither is sent', async () => {
+    const { client } = await setup()
+    await send('/tools')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Abilities' }).getAttribute('aria-selected')).toBe('true'))
+    const seen: unknown[] = []
+    const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
+    window.addEventListener('webterm:open-settings', on)
+    await send('/memory')
+    window.removeEventListener('webterm:open-settings', on)
+    expect(seen).toEqual([{ section: 'memory' }])
+    expect(client.sendMessage).not.toHaveBeenCalled()
   })
 
   it('/projects sends the expanded prompt', async () => {

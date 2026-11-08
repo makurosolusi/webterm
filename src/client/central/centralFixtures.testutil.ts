@@ -19,6 +19,14 @@ export function fakeClient(over: Partial<CentralControlClient> = {}): CentralCon
       { id: 'm1', scope: 'project' as const, trust: 'human' as const, kind: 'fact' as const, key: 'stack', value: 'bun + react' },
       { id: 'm2', scope: 'user' as const, trust: 'agent' as const, kind: 'fact' as const, key: 'note', value: 'api_key=sk_live_abcdefghijklmnop1234' },
     ]),
+    listTools: vi.fn(async () => ({ level: 'propose' as const, tools: [
+      { name: 'project.list', summary: 'List your projects and their status', group: 'projects' as const, tier: 'R0' as const, on: true, access: 'auto' as const },
+      { name: 'node.list', summary: 'List the nodes in a project', group: 'projects' as const, tier: 'R0' as const, on: true, access: 'auto' as const },
+      { name: 'plan.propose', summary: 'Propose a plan for you to approve', group: 'tasks' as const, tier: 'R1' as const, on: true, access: 'asks' as const },
+      { name: 'agent.spawn', summary: 'Start a worker', group: 'workers' as const, tier: 'R2' as const, on: true, access: 'blocked' as const },
+      { name: 'browser.open', summary: 'Open a web page', group: 'browser' as const, tier: 'R1' as const, on: false, access: 'off' as const },
+    ] })),
+    listActiveSkills: vi.fn(async () => [{ name: 'webterm-demo', description: 'Summarize project status' }]),
     ...over,
   }
 }

@@ -1,10 +1,10 @@
-// Level, daily budget and kill-switch. Display plus halt only: changing the level stays a human
-// act through the control API (ponytail: no level selector until asked).
+// Status tab: the level Central works at (in plain words), today's budget and the Stop Central switch.
+// Display plus stop only: the level is set in one place, Settings › Central Agent ("Change" opens it).
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
 import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
-import { CL, LEVEL_NAMES } from './centralLabels'
+import { CL, LEVEL_MEANING, LEVEL_NAMES } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
 import type { BudgetView, CentralControlClient, StatusView } from './centralControlTypes'
 import { centralErrorMessage, useLoad } from './centralLoad'
@@ -18,26 +18,32 @@ export interface LevelPanelProps {
   onHaltAsked?: () => void
 }
 
-/** `limit` 0 means unlimited for tokens; spawns 0 means none allowed, so callers pass `zeroIsUnlimited`. */
-function meter(label: string, used: number, limit: number, zeroIsUnlimited: boolean) {
-  const unlimited = zeroIsUnlimited && limit === 0
-  const left = unlimited ? CL.unlimited : `${Math.max(limit - used, 0)} ${CL.remaining}`
+const compactNum = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
+/** 13000 -> "13K", 10000000 -> "10M". */
+export const compact = (n: number): string => compactNum.format(n)
+
+/** `limit` 0 means no limit for tokens; spawns 0 means none allowed, so callers pass `zeroIsUnlimited`. */
+function meter(label: string, used: number, limit: number, zeroIsUnlimited: boolean, words: (u: string, l: string) => string) {
+  const text = limit === 0 ? `${compact(used)} · ${zeroIsUnlimited ? CL.noLimit : CL.noneAllowed}` : words(compact(used), compact(limit))
+  // Any use shows at least a sliver, so 13K of 10M does not read as an empty bar.
+  const shown = limit === 0 ? 0 : used > 0 ? Math.max(Math.min(used, limit), limit / 100) : 0
   return (
     <div className="ccp-meter" key={label}>
       <label htmlFor={`ccp-meter-${label}`}>{label}</label>
-      <progress id={`ccp-meter-${label}`} aria-label={label} value={unlimited ? 0 : Math.min(used, limit)} max={Math.max(limit, 1)} />
-      <span>{used} / {unlimited ? CL.unlimited : limit} ({left})</span>
+      <progress id={`ccp-meter-${label}`} aria-label={label} aria-valuetext={text} value={shown} max={Math.max(limit, 1)} />
+      <span>{text}</span>
     </div>
   )
 }
 
 export function budgetMeters(b: BudgetView) {
-  return [meter(CL.tokens, b.used.tokens, b.limits.tokens, true), meter(CL.spawns, b.used.spawns, b.limits.spawns, false)]
+  return [meter(CL.tokens, b.used.tokens, b.limits.tokens, true, CL.tokensUsed), meter(CL.spawns, b.used.spawns, b.limits.spawns, false, CL.spawnsUsed)]
 }
 
 /** Settings section id of the Central Agent section. */
 export const CENTRAL_SETTINGS_SECTION = 'central'
-const openCentralSettings = (): void => {
+/** Opens Settings › Central Agent, the one place the level is set. */
+export const openCentralSettings = (): void => {
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: CENTRAL_SETTINGS_SECTION } }))
 }
 
@@ -73,16 +79,16 @@ export default function LevelPanel({ client = centralControlApi, onStatus, askHa
   return (
     <section className="ccp-section" aria-labelledby="ccp-level-h">
       <h3 id="ccp-level-h">{CL.levelHeading}</h3>
-      <Button type="button" size="sm" variant="secondary" onClick={openCentralSettings}>{CL.openSettings}</Button>
       {control.error && <p role="alert" className="ccp-error">{control.error}</p>}
       {control.loading && !c && <p role="status">{CL.loading}</p>}
       {c && (
-        <dl className="ccp-kv">
-          <dt>{CL.effective}</dt><dd data-testid="level-effective">{LEVEL_NAMES[c.effective] ?? c.effective}</dd>
-          <dt>{CL.globalLevel}</dt><dd>{LEVEL_NAMES[c.global.level] ?? c.global.level}</dd>
-          <dt>{CL.ceiling}</dt><dd>{LEVEL_NAMES[c.ceiling] ?? c.ceiling}</dd>
-        </dl>
+        <div className="ccp-level">
+          <p><strong data-testid="level-effective">{LEVEL_NAMES[c.effective] ?? c.effective}</strong></p>
+          <p>{LEVEL_MEANING[c.effective]}</p>
+          {c.global.level !== c.effective && <p className="ccp-row__meta">{CL.limited}</p>}
+        </div>
       )}
+      <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={openCentralSettings}>{CL.change}</Button>
       <h3 id="ccp-budget-h">{CL.budgetHeading}</h3>
       {status.error && <p role="alert" className="ccp-error">{status.error}</p>}
       {statusData && <div role="group" aria-labelledby="ccp-budget-h">{budgetMeters(statusData.budget)}</div>}

@@ -1,10 +1,11 @@
-// Read-only memory table. Values that look like secrets are never rendered (defense in depth:
+// Central's memory, read-only (shown in Settings › Memory below what agents remember). Values that look like secrets are never rendered (defense in depth:
 // the server already redacts, this only guards a miss).
 import { Button } from '@/components/ui/button'
 import { CL } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
 import type { CentralControlClient } from './centralControlTypes'
 import { usePaged } from './centralLoad'
+import './central.css'
 
 const SECRET_PATTERNS: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
@@ -24,9 +25,10 @@ export default function MemoryView({ client = centralControlApi }: { client?: Ce
   return (
     <section className="ccp-section" aria-labelledby="ccp-mem-h">
       <h3 id="ccp-mem-h">{CL.memoryHeading}</h3>
+      <p>{CL.memoryIntro}</p>
       {mem.error && <p role="alert" className="ccp-error">{mem.error}</p>}
       {mem.loading && mem.items.length === 0 && <p role="status">{CL.loading}</p>}
-      {!mem.loading && !mem.error && mem.items.length === 0 && <p>{CL.empty}</p>}
+      {!mem.loading && !mem.error && mem.items.length === 0 && <p>{CL.memoryEmpty}</p>}
       {mem.items.length > 0 && (
         <table className="ccp-table" aria-labelledby="ccp-mem-h">
           <thead><tr>
