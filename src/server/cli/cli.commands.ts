@@ -52,6 +52,7 @@ case "$verb" in
     [ -z "$wref" ] || { body="$body\${sep}\\"selectorRef\\":\\"$(esc "$wref")\\""; sep=","; }
     [ "$loaded" = 0 ] || body="$body\${sep}\\"loaded\\":true"
     body="$body}" ;;
+  open) [ -z "$p1" ] || body="{\\"url\\":\\"$(esc "$p1")\\"}" ;;
   navigate) [ -n "$p1" ] || usage; body="{\\"url\\":\\"$(esc "$p1")\\"}" ;;
   click) [ -n "$p2" ] || usage; body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\"}" ;;
   type)

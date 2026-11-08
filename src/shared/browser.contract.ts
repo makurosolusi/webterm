@@ -198,7 +198,7 @@ export const BROWSER_CAPS = { read: 'browser.read', act: 'browser.act' } as cons
 export type BrowserCap = (typeof BROWSER_CAPS)[keyof typeof BROWSER_CAPS]
 export const BROWSER_VERB_CAP = {
   status: 'browser.read', snapshot: 'browser.read', screenshot: 'browser.read', wait: 'browser.read', console: 'browser.read',
-  navigate: 'browser.act', click: 'browser.act', type: 'browser.act', press: 'browser.act',
+  open: 'browser.act', navigate: 'browser.act', click: 'browser.act', type: 'browser.act', press: 'browser.act',
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
 } as const satisfies Record<string, BrowserCap>
 export type BrowserVerb = keyof typeof BROWSER_VERB_CAP
@@ -209,6 +209,8 @@ export interface VerbBodies {
   screenshot: { maxWidth?: number }
   wait: { ms?: number; selectorRef?: string; loaded?: true }
   console: { limit?: number; level?: ConsoleLevel }
+  /** Only on the node-token path: a new browser node beside the caller, cabled to it; `url` = navigate it at once. */
+  open: { url?: string }
   navigate: { url: string }
   click: { ref: string; snapId: string }
   type: { ref: string; snapId: string; text: string; submit?: boolean }
@@ -220,7 +222,10 @@ export interface VerbData {
   status: BrowserState
   snapshot: { snapId: string; content: string; truncated: boolean; url: string }
   screenshot: { mime: 'image/jpeg'; base64: string }
-  wait: { ok: true }; navigate: { ok: true }; click: { ok: true }; type: { ok: true }
+  open: { nodeId: string; url: string; note: string }
+  /** Node-token `navigate` with no cabled browser opens one first and also returns the `open` fields. */
+  navigate: { ok: true } & Partial<VerbData['open']>
+  wait: { ok: true }; click: { ok: true }; type: { ok: true }
   console: { content: string; count: number; dropped: number; note?: string }
   press: { ok: true }; scroll: { ok: true }
   handoff: { lease: 'agent'; ttlMs: number }

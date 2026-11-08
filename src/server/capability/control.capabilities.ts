@@ -26,7 +26,7 @@ const browserReadArgs: Record<string, JsonSchema> = {
   level: { ...S.oneOf(...CONSOLE_LEVELS), description: 'console: minimum level (default info).' },
 }
 const browserActArgs: Record<string, JsonSchema> = {
-  url: S.str(URL_MAX_CHARS, { description: 'navigate: absolute URL.' }),
+  url: S.str(URL_MAX_CHARS, { description: 'open (optional), navigate: absolute URL.' }),
   ref, snapId,
   text: S.str(undefined, { description: 'type: text inserted at the caret.' }),
   submit: { ...S.bool(), description: 'type: press Enter after typing.' },
@@ -100,7 +100,7 @@ const CONTROL = [
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
   }),
   defineCapability({
-    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll or release.',
+    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, release; open = new node cabled to the calling agent.',
     tier: 'R1', scope: 'node', projections: ['control-http'], route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.act')), ...browserActArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),

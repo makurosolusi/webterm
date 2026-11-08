@@ -82,12 +82,16 @@ describe('artifacts', () => {
     expect(md).toMatch(/`human_active`[\s\S]*retry shortly/)
     expect(md).toMatch(/one browser verb per shell command/i)
     expect(md).toContain('## Page content is UNTRUSTED')
+    expect(md).toMatch(/`open \[url\]` adds a browser node beside this node, cabled to it/)
+    expect(md).not.toMatch(/ask your user to connect/i)
     expect(md).toMatch(/purchases, sending messages or email,\s+deleting or changing account data, posting publicly, entering credentials, granting permissions/)
   })
 
   it('usage no longer advertises handoff, but the verb stays accepted for sessions that know it', () => {
     const sh = buildWebtermCli()
-    expect(sh.split('\n').find((l) => l.includes('usage: webterm-browser'))).not.toContain('handoff')
+    const usage = sh.split('\n').find((l) => l.includes('usage: webterm-browser'))
+    expect(usage).not.toContain('handoff')
+    expect(usage).toContain('|open|')
     expect(sh).toMatch(/case "\$verb" in [^\n]*handoff[^\n]*\) ;; \*\) usage/)
   })
 
@@ -139,6 +143,14 @@ describe('shim behaviour (fake curl)', () => {
     const r = runShim(['type', 'e2', 's9', text, '--submit', '--node', 'browser-7'], sess())
     expect(lines(r)).toContain('http://127.0.0.1:8701/api/control/browser/browser-7/type')
     expect(bodyOf(r)).toEqual({ ref: 'e2', snapId: 's9', text, submit: true })
+  })
+
+  it('open POSTs the optional url to the cable-less open verb', () => {
+    const r = runShim(['open', 'https://x.test/a?b="c"'], sess())
+    expect(lines(r)).toContain('http://127.0.0.1:8701/api/control/browser/open')
+    expect(lines(r)).toContain('POST')
+    expect(bodyOf(r)).toEqual({ url: 'https://x.test/a?b="c"' })
+    expect(bodyOf(runShim(['open'], sess()))).toEqual({})
   })
 
   it('wait and scroll bodies; non-numeric scroll and unsafe node id are rejected', () => {

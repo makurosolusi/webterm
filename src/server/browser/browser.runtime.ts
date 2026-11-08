@@ -37,6 +37,7 @@ import type { Workspace } from '../../shared/workspace'
 import { DesignMode } from './design/design.service'
 import { designRoute } from './design/design.route'
 import { OUTBOX_BODY_MAX_CHARS } from '../outbox/outbox.route'
+import type { CanvasPush } from '../canvas/canvasPush'
 
 const log = createLogger('browser.runtime')
 const SWEEP_MS = 10_000
@@ -59,6 +60,8 @@ export interface RuntimeDeps {
   exists?: (p: string) => boolean
   /** Test: mesin filter tanpa jaringan (produksi: daftar prebuilt, cache di `<dataRoot>/browser/adblock`). */
   adblock?: Adblock
+  /** Test: board writer for the agent verb `open` (production: the shared `getCanvasPush()`). */
+  canvas?: Pick<CanvasPush, 'add' | 'workspaceOfNode'>
 }
 
 export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntime | null> {
@@ -95,7 +98,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })
-  const hub = createViewerHub(adaptGatewayHost(host, lifecycle), leases, (id, v) => lifecycle.setVisible(id, v))
+  const gwHost = adaptGatewayHost(host, lifecycle)
+  const hub = createViewerHub(gwHost, leases, (id, v) => lifecycle.setVisible(id, v))
   const unLease = leases.onChange((id) => hub.refreshState(id)) // lease agent berubah: UI ikut tahu
   const sweep = setInterval(() => { for (const id of leases.sweep()) leases.release(id) }, SWEEP_MS)
   sweep.unref()
@@ -141,7 +145,10 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     releaseLease: (id) => leases.release(id),
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
     api: async (method, pathname, body) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps),
-    control: (req, capabilities) => handleBrowserControl(req, { capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted) }),
+    control: (req, capabilities) => handleBrowserControl(req, {
+      capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
+      open: { canvas: async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush(), start: (id, workspaceId) => gwHost.open(id, workspaceId) },
+    }),
     async shutdown() {
       if (down) return
       down = true

@@ -23,7 +23,8 @@ export interface AgentCtx {
   console?: Pick<ConsoleLog, 'read' | 'capture'>
 }
 
-export type AgentVerbs = { [V in BrowserVerb]: (nodeId: string, body: unknown) => Promise<VerbData[V]> }
+/** Verbs on an existing browser node; `open` has no node yet, the control handler serves it (`browser.agentOpen.ts`). */
+export type AgentVerbs = { [V in Exclude<BrowserVerb, 'open'>]: (nodeId: string, body: unknown) => Promise<VerbData[V]> }
 
 export const badRequest = (msg: string) => new BrowserError('bad_request', msg)
 
