@@ -7,6 +7,8 @@ import MemoryView, { looksSecret } from './MemoryView'
 import SkillReview from './SkillReview'
 import { fakeClient } from './centralFixtures.testutil'
 import * as needsYou from '../chat/needsYouApi'
+import { DEFAULT_SETTINGS } from '../../shared/settings'
+import { SettingsProvider } from '../useSettings'
 
 afterEach(cleanup)
 
@@ -63,6 +65,24 @@ describe('LevelPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change in Central settings' }))
     window.removeEventListener('webterm:open-settings', on)
     expect(seen).toEqual([{ section: 'central' }])
+  })
+
+  it('says approvals are skipped when the setting is on, and "Change" opens Settings › Agent', async () => {
+    const seen: unknown[] = []
+    const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
+    window.addEventListener('webterm:open-settings', on)
+    render(<SettingsProvider value={{ ...DEFAULT_SETTINGS, skipApprovals: true }}><LevelPanel client={fakeClient()} /></SettingsProvider>)
+    expect(screen.getByText(/Approvals: skipped — Central acts without asking/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Change in Agent settings' }))
+    window.removeEventListener('webterm:open-settings', on)
+    expect(seen).toEqual([{ section: 'agent' }])
+  })
+
+  it('shows no approvals line when the setting is off', async () => {
+    render(<SettingsProvider value={{ ...DEFAULT_SETTINGS, skipApprovals: false }}><LevelPanel client={fakeClient()} /></SettingsProvider>)
+    await screen.findByTestId('level-effective')
+    expect(screen.queryByText(/Approvals: skipped/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Change in Agent settings' })).toBeNull()
   })
 
   it('surfaces a load error as an alert', async () => {

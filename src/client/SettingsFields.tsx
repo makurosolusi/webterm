@@ -212,6 +212,7 @@ export function SelectField<T extends string>({
   value,
   options,
   onChange,
+  disabled,
 }: {
   id: string
   label: string
@@ -220,10 +221,11 @@ export function SelectField<T extends string>({
   value: T
   options: readonly { value: T; label: string }[]
   onChange: (v: T) => void
+  disabled?: boolean
 }): React.JSX.Element | null {
   return (
     <Field label={label} hint={hint} htmlFor={id} setting={setting}>
-      <SettingsSelect id={id} value={value} options={options} onChange={onChange} />
+      <SettingsSelect id={id} value={value} options={options} onChange={onChange} disabled={disabled} />
     </Field>
   )
 }

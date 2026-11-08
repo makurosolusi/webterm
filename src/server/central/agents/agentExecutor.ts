@@ -138,12 +138,13 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       throw err
     }
   }
+  const skip = (): boolean => guard.skipsApprovals?.() === true
   const snapshot = (a: AgentRecord, extra: Record<string, unknown> = {}): ToolResult => ({ ok: true, data: { ...agentView(a), ...extra } })
 
   async function gate(projectId: string, tool: string, tier: Tier, requireApproval = false): Promise<ToolResult | null> {
     const verdict = await guard.check({ action: tool === 'agent.spawn' ? 'spawn' : 'tool', projectId, tool, tier })
     if (verdict.verdict === 'deny') return { ok: false, code: verdict.code }
-    if (verdict.verdict === 'needs_approval' || (requireApproval && tier === 'R2')) return { ok: false, code: 'approval_required' }
+    if (verdict.verdict === 'needs_approval' || (requireApproval && tier === 'R2' && !skip())) return { ok: false, code: 'approval_required' }
     return null
   }
 
@@ -247,10 +248,12 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
    * An approval whose TTL ran out before it was used counts as expired: the ledger refuses to consume it
    * (consent is bound to its window), so a fresh card is the only way forward.
    */
-  async function settlePending(agent: AgentRecord): Promise<ToolResult> {
+  async function settlePending(agent: AgentRecord, tier: Tier): Promise<ToolResult> {
     const approval = agent.approvalId ? getApproval({ db, now }, agent.approvalId) : null
     const lapsed = approval?.status === 'approved' && approval.expiresAt !== null && approval.expiresAt <= now()
     const status = !approval || lapsed ? 'expired' : approval.status
+    // Skip approvals: an open or lapsed card no longer holds the agent; the guard's denies still do.
+    if (skip() && (status === 'pending' || status === 'expired')) return (await gate(agent.projectId, 'agent.spawn', tier)) ?? launch(agent)
     if (status === 'pending') return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'pending' } }
     if (status === 'rejected') return rejectPending(agent)
     if (status === 'expired') return pendApproval(agent)
@@ -285,7 +288,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const existing = store.getByReqId(input.reqId)
     if (existing) {
       if (existing.projectId !== input.projectId || existing.kind !== input.kind || existing.role !== input.role || existing.taskId !== (input.taskId ?? null)) return { ok: false, code: 'request_conflict' }
-      if (existing.state === 'approval_pending') return settlePending(existing)
+      if (existing.state === 'approval_pending') return settlePending(existing, tier)
       if (existing.state === 'cancelled' && existing.endReason === 'approval_rejected') return rejected(existing)
       if (existing.state !== 'requested') return snapshot(existing, { reused: true })
       // Crash remnant before the launch claim: judge it again, the earlier verdict is not trusted.
@@ -303,7 +306,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     return proceed(created.agent, created.verdict, input.requireApproval)
   }
 
-  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || requireApproval ? pendApproval(agent) : launch(agent))
+  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || (requireApproval && !skip()) ? pendApproval(agent) : launch(agent))
 
   const live = (a: AgentRecord): boolean => (a.runner === 'exec' ? handles.has(a.id) : !!a.nodeId && host.hasSession(a.nodeId))
 

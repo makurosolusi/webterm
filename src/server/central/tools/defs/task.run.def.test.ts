@@ -98,6 +98,8 @@ describe('task.run tool', () => {
     expect(runGateFlags(on)).toEqual({ enabled: true, requireApproval: true })
     expect(runGateFlags({ ...on, WEBTERM_RUN_REQUIRE_APPROVAL: 'off' })).toEqual({ enabled: true, requireApproval: false })
     expect(runGateFlags({ WEBTERM_ORCHESTRATOR_RUN: 'on' }).enabled).toBe(false) // workers implies central
+    expect(runGateFlags(on, true)).toEqual({ enabled: true, requireApproval: false })
+    expect(runGateFlags(on, false)).toEqual({ enabled: true, requireApproval: true })
   })
 
   it('consumes an approval bound to this exact item, and rejects one approved for another item', async () => {

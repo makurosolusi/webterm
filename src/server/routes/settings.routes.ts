@@ -10,17 +10,19 @@ import { capabilitiesRoute } from '../featureCapabilities.api'
 import { agentProtectionRoute } from '../agentSandbox.api'
 import type { ApiRoute } from './route.core'
 import { canvasBackgroundRoutes } from './canvasBackground.routes'
+import { effectiveClaudeMode } from '../permission/permission.mode'
 
 /** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
 export function applyPtyOptions(): void {
   const s = db.getSettings()
+  const mode = effectiveClaudeMode(s.claudePermissionMode, undefined, s.skipApprovals)
   sessions.options = {
     shell: s.defaultShell,
     scrollbackBytes: s.scrollbackBytes,
     // `--permission-mode auto` baru ada di Claude Code >= 2.1.71 dan webterm belum punya probe
     // versi CLI, jadi mode default 'auto' diteruskan sebagai ABSEN: peluncuran claude tetap polos
     // persis seperti sebelum setting ini ada. Mode pilihan user eksplisit tetap diteruskan.
-    claudePermissionMode: s.claudePermissionMode === 'auto' ? undefined : s.claudePermissionMode,
+    claudePermissionMode: mode === 'auto' ? undefined : mode,
     hookReplyApprovals: s.hookReplyApprovals,
   }
 }

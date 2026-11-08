@@ -126,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledAgents: [],
   claudePermissionMode: 'auto',
   hookReplyApprovals: true,
+  skipApprovals: true,
   projectModels: {},
   gridSize: 24,
   snapToGrid: false,

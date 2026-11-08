@@ -18,12 +18,16 @@ import type { SettingsPatch } from '../shared/settings.patch'
 import { ModelsSettings } from './SettingsModels'
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
-  { value: 'manual', label: 'manual — ask for every action' },
-  { value: 'auto', label: 'auto — default' },
-  { value: 'acceptEdits', label: 'acceptEdits — file edits are approved automatically' },
-  { value: 'plan', label: 'plan — plan first, change nothing' },
-  { value: 'bypassPermissions', label: 'bypassPermissions — no prompts' },
+  { value: 'manual', label: 'Ask before every action' },
+  { value: 'auto', label: 'Auto (default)' },
+  { value: 'acceptEdits', label: 'Approve file edits automatically' },
+  { value: 'plan', label: 'Plan only, change nothing' },
+  { value: 'bypassPermissions', label: 'Never ask (no prompts)' },
 ]
+
+const SKIP_APPROVALS_HINT = 'Central and every Claude agent act without asking you first. Fastest, but nothing stops a wrong action before it runs. Hard stops still apply: Stop Central, paused projects, budgets and your deny rules. Agents already running keep their current mode.'
+const PERMISSION_HINT = 'Used by Claude sessions at START — passed as --permission-mode at launch. Shift+Tab can still cycle modes at runtime.'
+const SKIPPED_PERMISSION_HINT = 'Skip approvals is on, so every agent runs without prompts.'
 
 export function AgentSettings({
   settings: s,
@@ -67,6 +71,14 @@ export function AgentSettings({
 
   return (
     <>
+      <ToggleField
+        id="st-skipApprovals"
+        setting="skipApprovals"
+        label="Skip approvals"
+        hint={s.skipApprovals ? <span style={{ color: 'var(--st-warning)' }}>{SKIP_APPROVALS_HINT}</span> : SKIP_APPROVALS_HINT}
+        value={s.skipApprovals}
+        onChange={(v) => onChange({ skipApprovals: v })}
+      />
       <SelectField
         id="st-defaultAgent"
         setting="defaultAgent"
@@ -80,9 +92,10 @@ export function AgentSettings({
         id="st-claudePermissionMode"
         setting="claudePermissionMode"
         label="Claude permission mode"
-        hint="Used by Claude sessions at START — passed as --permission-mode at launch. Shift+Tab can still cycle modes at runtime."
+        hint={s.skipApprovals ? SKIPPED_PERMISSION_HINT : PERMISSION_HINT}
         value={s.claudePermissionMode}
         options={PERMISSION_OPTIONS}
+        disabled={s.skipApprovals}
         onChange={(v) => onChange({ claudePermissionMode: v })}
       />
       <ToggleField

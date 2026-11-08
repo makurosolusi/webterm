@@ -15,9 +15,11 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 - A stored WEBTERM_CENTRAL_RUNTIME=opencode now means automatic (Claude); WEBTERM_OPENCODE_* keys are ignored.
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
+- Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, turn it off in Settings › Agents (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 
 ### Added
+- Settings › Agents › **Skip approvals** (on by default): Central and its workers act without approval cards, and new Claude launches (terminal Claude nodes, Agent Chat, control-API spawns, Central's workers) start with no permission prompts. An agent waiting on a card goes ahead on its next try, open cards stay in the inbox, and a card you rejected still blocks. Still stops agents: Stop Central, paused projects, the control level ("off" and "observe" still refuse actions), deny rules, the daily budget and worker limits, and the loop breaker. Telegram bot setup, the sandbox "rerun unsandboxed?" question, the autonomous run scheduler's approval and `task.run` from a canvas node's own tools still ask as before. While it is on, the Claude permission mode is locked, running sessions keep their mode until relaunched, Central panel › Status shows "Approvals: skipped" with a Change button, and the guard audit log marks skipped asks `skipped: true`.
 - Every node on the canvas now has its own short name, like Mango, Otter, Basil or Fern, unique within the project. It shows in the node header (`Mango · Agent Chat`), the tabs and the Sessions list, and Central knows it too: "close Mango and Kiwi" works. Existing nodes get names automatically; renaming a node still changes its label, not its name.
 - Agents on the canvas know node names too: each agent is told its own name ("You are node Mango"), the list of nodes wired to it shows their names, and it can pick a linked node or a wired browser by name (`webterm context --node Kiwi`, and `--node Kiwi` for the browser).
 - Central can open and close canvas nodes for you: ask it to "close all the browsers" or "close these terminals" and it closes them in one go after you approve (up to 50 at once; closed nodes can be reopened). It can also open terminals, Claude nodes, or a browser on a URL (refused while the browser is off in Settings). Central's own worker agents are still stopped through the agent controls.
@@ -100,6 +102,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- The Claude permission mode options have plainer names: "Ask before every action", "Auto (default)", "Approve file edits automatically", "Plan only, change nothing" and "Never ask (no prompts)".
 - Node names are always generated words like "Mango" or "Mango 2". Any other value saved as a node's name is replaced automatically, so a name can never carry arbitrary text into what agents read.
 - New Claude nodes no longer get a generated `brisk-otter` title; the node's name identifies it instead, and the title still updates from the agent's first task.
 - `node.list` (Central's node listing) now shows whether each terminal is still running and which site each browser shows.

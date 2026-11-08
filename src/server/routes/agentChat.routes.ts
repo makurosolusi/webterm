@@ -19,7 +19,10 @@ function productionPool(): AgentChatPool {
       const node = ws?.nodes.find((n) => n.id === nodeId)
       return ws && node ? { ws, node } : undefined
     },
-    opener: (t) => agentChatQueryOpener(agentChatOpenConfig(t, { port: PORT, mode: db.getSettings().claudePermissionMode })),
+    opener: (t) => {
+      const s = db.getSettings()
+      return agentChatQueryOpener(agentChatOpenConfig(t, { port: PORT, mode: s.claudePermissionMode, skip: s.skipApprovals }))
+    },
   })
   setAgentChatPool(pool)
   return pool
