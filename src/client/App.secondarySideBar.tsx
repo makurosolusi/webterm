@@ -18,7 +18,7 @@ const CentralControlPanel = lazy(() => import('./central/CentralControlPanel'))
 const VIEWS: { id: SideBarView; label: string; tooltip: string }[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Central agent chat' },
   // Id stays `central`: it is the persisted view (`webterm.secondarySideBar`); only the label says Control.
-  { id: 'central', label: 'Control', tooltip: 'Central control, agents, skills and memory' },
+  { id: 'central', label: 'Control', tooltip: 'Central status, abilities, agents and skills' },
 ]
 
 /** The view the side bar shows: Central falls back to Chat while its flag is off. */

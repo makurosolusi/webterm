@@ -3,12 +3,24 @@
 // what a tool may do is decided by the level, set in Settings › Central Agent.
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
+import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
+import { InboxApiError } from '../inboxTypes'
 import { Segmented } from '../centralSettings.controls'
 import { AB, CL, LEVEL_NAMES } from './centralLabels'
 import { SKILLS_OFF, centralControlApi } from './centralControlApi'
-import type { CentralControlClient, ToolAccess, ToolGroup, ToolRow } from './centralControlTypes'
+import type { CentralControlClient, ToolAccess, ToolGroup, ToolRow, ToolsView } from './centralControlTypes'
 import { useLoad } from './centralLoad'
 import { openCentralSettings } from './LevelPanel'
+import { toolLabel } from './toolLabels'
+
+/** Settings section with the allow / ask / deny rules. */
+export const RULES_SETTINGS_SECTION = 'rules'
+const openRules = (): void => { window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: RULES_SETTINGS_SECTION } })) }
+
+/** With Central fully off every /api/central path is 404: that is the off state, not an error. */
+const CENTRAL_OFF: ToolsView = { level: 'off', tools: [] }
+const toolsOrOff = (client: CentralControlClient, signal: AbortSignal): Promise<ToolsView> =>
+  client.listTools(signal).catch((err: unknown) => { if (err instanceof InboxApiError && err.status === 404) return CENTRAL_OFF; throw err })
 
 type Filter = 'all' | 'auto' | 'asks' | 'blocked'
 const ACCESS_ORDER: readonly ToolAccess[] = ['auto', 'asks', 'blocked', 'off']
@@ -25,9 +37,10 @@ export function accessCounts(tools: readonly ToolRow[]): string {
 }
 
 function ToolItem({ t }: { t: ToolRow }) {
+  const label = toolLabel(t.name, t.summary)
   return (
     <li className="ccp-row" data-access={t.access}>
-      <span className="ccp-row__main">{t.summary || t.name} <code className="ccp-row__meta">{t.name}</code></span>
+      <span className="ccp-row__main"><strong>{label.title}</strong> <code className="ccp-row__meta">{t.name}</code><br />{label.text}</span>
       <span className={t.access === 'auto' ? 'ccp-badge' : 'ccp-badge ccp-badge--warn'}>{AB.badge[t.access]}</span>
     </li>
   )
@@ -53,7 +66,7 @@ function ActiveSkills({ client }: { client: CentralControlClient }) {
 }
 
 export default function AbilitiesView({ client = centralControlApi }: { client?: CentralControlClient }) {
-  const tools = useLoad((s) => client.listTools(s))
+  const tools = useLoad((s) => toolsOrOff(client, s))
   const [filter, setFilter] = useState<Filter>('all')
   const data = tools.data
   const shown = data?.tools.filter((t) => matches(t, filter)) ?? []
@@ -77,7 +90,7 @@ export default function AbilitiesView({ client = centralControlApi }: { client?:
               <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={openCentralSettings}>{CL.change}</Button>
             </div>
           )}
-          {data.tools.length === 0 ? <p>{AB.noTools}</p> : (
+          {data.tools.length === 0 ? (data.level !== 'off' && <p>{AB.noTools}</p>) : (
             <>
               <p data-testid="ability-counts">{accessCounts(data.tools)}</p>
               <Segmented label={AB.filter} value={filter} options={FILTERS} onChange={(v) => setFilter(v as Filter)} />
@@ -92,11 +105,12 @@ export default function AbilitiesView({ client = centralControlApi }: { client?:
                   </div>
                 )
               })}
+              <p className="ccp-row__meta ccp-footnote">{AB.footnote} <Button type="button" size="xs" variant="link" onClick={openRules}>{AB.openRules}</Button></p>
             </>
           )}
         </>
       )}
-      <ActiveSkills client={client} />
+      {data && data !== CENTRAL_OFF && <ActiveSkills client={client} />}
     </section>
   )
 }

@@ -93,6 +93,8 @@ export const AB = {
   all: 'All',
   levelOff: 'Central is turned off, so it can do none of these right now.',
   none: 'Nothing matches this filter.',
+  footnote: 'Your rules in Settings › Rules & approvals, the daily budget and worker limits can still stop or pause a tool.',
+  openRules: 'Open Rules & approvals',
   noTools: 'Central has no tools yet.',
   skillsHeading: 'Skills Central can use',
   skillsNone: 'No skills yet. Skills you approve in the Skills tab show up here.',

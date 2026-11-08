@@ -14,6 +14,9 @@ describe('AbilitiesView', () => {
     const projects = screen.getByRole('group', { name: 'Projects & nodes' })
     expect(within(projects).getByText('Projects & nodes (2)')).toBeTruthy()
     expect(within(projects).getByText('project.list')).toBeTruthy()
+    expect(within(projects).getByText('List projects')).toBeTruthy() // plain label, not the model-facing summary
+    expect(within(screen.getByRole('group', { name: 'Browser' })).getByText('browser.open', { selector: 'strong' })).toBeTruthy() // unknown tool: name + server summary
+    expect(screen.getByText('Open a web page')).toBeTruthy()
     expect(within(projects).getAllByText('Runs on its own')).toHaveLength(2)
     expect(within(screen.getByRole('group', { name: 'Tasks & plans' })).getByText('Asks you first')).toBeTruthy()
     expect(within(screen.getByRole('group', { name: 'Workers' })).getByText('Not allowed at this level')).toBeTruthy()
@@ -26,16 +29,16 @@ describe('AbilitiesView', () => {
     render(<AbilitiesView client={fakeClient()} />)
     await screen.findByTestId('ability-counts')
     fireEvent.click(screen.getByRole('radio', { name: 'Asks you' }))
-    expect(screen.getByText('Propose a plan for you to approve')).toBeTruthy()
-    expect(screen.queryByText('List your projects and their status')).toBeNull()
+    expect(screen.getByText('Suggest a plan')).toBeTruthy()
+    expect(screen.queryByText('List projects')).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Not allowed' }))
     expect(screen.getByText('Start a worker')).toBeTruthy()
     expect(screen.getByText('Open a web page')).toBeTruthy()
-    expect(screen.queryByText('Propose a plan for you to approve')).toBeNull()
+    expect(screen.queryByText('Suggest a plan')).toBeNull()
   })
 
   it('a failed load is a plain error with Refresh that loads again', async () => {
-    const listTools = vi.fn().mockRejectedValueOnce(new InboxApiError('GET /api/central/tools failed (404 x)', 404, 'x'))
+    const listTools = vi.fn().mockRejectedValueOnce(new InboxApiError('GET /api/central/tools failed (500 x)', 500, 'x'))
       .mockResolvedValue({ level: 'observe', tools: [] })
     render(<AbilitiesView client={fakeClient({ listTools })} />)
     expect((await screen.findByRole('alert')).textContent).toBe('Could not load this section. Use Refresh to try again.')
@@ -56,6 +59,27 @@ describe('AbilitiesView', () => {
     cleanup()
     render(<AbilitiesView client={fakeClient({ listActiveSkills: vi.fn(async () => []) })} />)
     await waitFor(() => expect(screen.getByText(/No skills yet/)).toBeTruthy())
+  })
+
+  it('Central fully off (every /api/central path is 404) shows the off state, not an error, and no skills block', async () => {
+    const gone = () => Promise.reject(new InboxApiError('GET /api/central/tools failed (404 not_found)', 404, 'not_found'))
+    const client = fakeClient({ listTools: vi.fn(gone), listActiveSkills: vi.fn(gone) })
+    render(<AbilitiesView client={client} />)
+    expect(await screen.findByText(/Central is turned off/)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText('Skills Central can use')).toBeNull()
+    expect(client.listActiveSkills).not.toHaveBeenCalled()
+  })
+
+  it('the footnote opens Settings › Rules & approvals', async () => {
+    const seen: unknown[] = []
+    const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
+    window.addEventListener('webterm:open-settings', on)
+    render(<AbilitiesView client={fakeClient()} />)
+    expect(await screen.findByText(/can still stop or pause a tool/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Rules & approvals' }))
+    window.removeEventListener('webterm:open-settings', on)
+    expect(seen).toEqual([{ section: 'rules' }])
   })
 
   it('accessCounts leaves out kinds with no tool', () => {
