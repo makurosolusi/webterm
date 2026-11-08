@@ -14,9 +14,11 @@ export const LAYOUT_MODES: readonly LayoutMode[] = ['canvas', 'tabs']
 export interface FilesPanelState { open: boolean; width: number }
 
 export interface TabsState {
-  /** Node ids shown as tabs, left to right. Never contains a Files node. */
+  /** Every node id, left to right: the order of the node tab strip above the canvas and of tab
+   *  mode. Files nodes are in it too (draggable on the canvas strip); tab mode skips them because
+   *  it docks Files as its side panel instead of a tab. */
   order: string[]
-  /** Visible tab (an id from `order`), or null when there are no tabs. */
+  /** Visible tab in tab mode (a non-Files id from `order`), or null when there are no tabs. */
   active: string | null
   filesPanel: FilesPanelState
 }
@@ -84,19 +86,21 @@ function nearestSurvivor(oldOrder: readonly string[], active: string | null, ali
 }
 
 /**
- * Bring `layout.tabs` in line with the existing nodes: drop ids that are gone (or are not tab
- * kinds, e.g. Files), append new tab nodes at the end of `order`, and keep `active` valid
- * (nearest surviving tab, else the last tab, else null). Pure; returns the SAME object when
- * nothing changed so React callers can bail out on identity.
+ * Bring `layout.tabs` in line with the existing nodes: drop ids that are gone, append new nodes at
+ * the end of `order` (board order = creation order), and keep `active` a valid tab-mode tab
+ * (nearest surviving non-Files tab, else the last one, else null). Pure; returns the SAME object
+ * when nothing changed so React callers can bail out on identity.
  */
 export function reconcileTabs(layout: TabLayout, nodes: readonly { id: string; kind: WsNodeKind }[]): TabLayout {
-  const alive = new Set(nodes.filter((n) => isTabKind(n.kind)).map((n) => n.id))
+  const alive = new Set(nodes.map((n) => n.id))
+  const tabIds = new Set(nodes.filter((n) => isTabKind(n.kind)).map((n) => n.id))
   const { order: old, active, filesPanel } = layout.tabs
   const kept = old.filter((id, i) => alive.has(id) && old.indexOf(id) === i)
   const order = [...kept, ...[...alive].filter((id) => !kept.includes(id))]
-  const nextActive = active !== null && order.includes(active)
+  const tabs = order.filter((id) => tabIds.has(id))
+  const nextActive = active !== null && tabIds.has(active)
     ? active
-    : nearestSurvivor(old, active, new Set(order)) ?? order[order.length - 1] ?? null
+    : nearestSurvivor(old, active, tabIds) ?? tabs[tabs.length - 1] ?? null
   const same = order.length === old.length && order.every((id, i) => id === old[i]) && nextActive === active
   return same ? layout : { ...layout, tabs: { order, active: nextActive, filesPanel } }
 }

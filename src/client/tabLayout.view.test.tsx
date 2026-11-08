@@ -8,6 +8,7 @@ import { getNodeHost, releaseNodeHost } from './tabLayout.dom'
 import { connectTabLayout, getTabLayout, setMode } from './tabLayout.store'
 import TabsView, { type TabsViewProps } from './tabLayout.view'
 import { movedOrder } from './tabLayout.strip'
+import { sessionSignal } from './sessionSignal'
 
 const node = (id: string, type: string, title?: string): Node => ({ id, type, position: { x: 0, y: 0 }, data: { title } })
 const NODES = [node('a', 'terminal', 'alpha'), node('b', 'agent', 'beta'), node('c', 'browser', 'gamma'), node('f', 'files', 'tree')]
@@ -20,12 +21,13 @@ const pane = (id: string) => document.querySelector<HTMLElement>(`.tabs-area [da
 const tab = (title: string) => screen.getByText(title).closest<HTMLElement>('[role="tab"]')!
 
 beforeEach(() => connectTabLayout({ ...defaultTabLayout(), mode: 'tabs' }, null))
-afterEach(() => { cleanup(); for (const id of ['a', 'b', 'c', 'd', 'f']) releaseNodeHost(id) })
+afterEach(() => { cleanup(); for (const id of ['a', 'b', 'c', 'd', 'f', 'h']) releaseNodeHost(id) })
 
 describe('TabsView', () => {
   it('reconciles one tab per non-files node, with a pane each and only the active one shown', () => {
     render(<TabsView {...props()} />)
-    expect(getTabLayout().tabs.order).toEqual(['a', 'b', 'c'])
+    // Files is in the saved order (canvas strip) but docked here, not a tab.
+    expect(getTabLayout().tabs.order).toEqual(['a', 'b', 'c', 'f'])
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['alpha', 'beta', 'gamma'])
     const shown = ['a', 'b', 'c'].filter((id) => pane(id)!.style.display !== 'none')
     expect(shown).toEqual([getTabLayout().tabs.active])
@@ -70,24 +72,27 @@ describe('TabsView', () => {
     fireEvent.dragStart(tab('alpha'), { dataTransfer: dt })
     fireEvent.dragOver(tab('gamma'), { dataTransfer: dt, clientX: 10_000 }) // jsdom rects are 0-wide: right half
     fireEvent.drop(tab('gamma'), { dataTransfer: dt })
-    expect(getTabLayout().tabs.order).toEqual(['b', 'c', 'a'])
+    // The docked Files node keeps its slot in the shared order.
+    expect(getTabLayout().tabs.order).toEqual(['b', 'c', 'a', 'f'])
     expect(movedOrder(['a', 'b', 'c'], 'c', 'a', 'left')).toEqual(['c', 'a', 'b'])
   })
 
   it('adds and removes tabs as nodes change; a new node becomes the active tab', () => {
     const { rerender } = render(<TabsView {...props()} />)
     rerender(<TabsView {...props({ nodes: [...NODES, node('d', 'terminal', 'delta')] })} />)
-    expect(getTabLayout().tabs.order).toEqual(['a', 'b', 'c', 'd'])
+    expect(getTabLayout().tabs.order).toEqual(['a', 'b', 'c', 'f', 'd'])
     expect(getTabLayout().tabs.active).toBe('d')
     rerender(<TabsView {...props({ nodes: NODES.filter((n) => n.id !== 'd' && n.id !== 'b') })} />)
-    expect(getTabLayout().tabs.order).toEqual(['a', 'c'])
+    expect(getTabLayout().tabs.order).toEqual(['a', 'c', 'f'])
     expect(pane('b')).toBeNull()
   })
 
-  it('shows agent status as a labelled dot', () => {
-    render(<TabsView {...props({ statuses: { b: 'blocked', a: 'working' } })} />)
-    expect(within(tab('beta')).getByRole('img', { name: 'Needs you' })).toBeTruthy()
-    expect(within(tab('alpha')).getByRole('img', { name: 'Working' })).toBeTruthy()
+  it('shows agent and agent-chat status as a labelled dot, same selector as the canvas strip', () => {
+    const nodes = [...NODES, node('h', 'agentChat', 'chat')]
+    render(<TabsView {...props({ nodes, statuses: { b: 'blocked', a: 'working', h: 'done' } })} />)
+    expect(within(tab('beta')).getByRole('img', { name: sessionSignal('blocked', false).label })).toBeTruthy()
+    expect(within(tab('chat')).getByRole('img', { name: 'Done' })).toBeTruthy()
+    expect(within(tab('alpha')).queryByRole('img')).toBeNull() // terminals carry no dot
     expect(within(tab('gamma')).queryByRole('img')).toBeNull()
   })
 

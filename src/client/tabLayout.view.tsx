@@ -4,14 +4,15 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Node } from '@xyflow/react'
 import type { AgentStatus, WsNode, WsNodeKind } from '../shared/workspace'
-import { isTabKind, reconcileTabs } from '../shared/tabLayout.schema'
+import { isTabKind } from '../shared/tabLayout.schema'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { nodeRowLabel } from './nodeList'
-import { KIND_ICON } from './SessionsPanel.tree'
+import { KIND_ICON, nodeRowLabel } from './nodeList'
 import { parkNodeHost, placeNodeHost } from './tabLayout.dom'
-import { activateTab, applyReconciled, getTabLayout, reorderTabs, setMode, toggleFilesPanel, useTabLayout } from './tabLayout.store'
+import { activateTab, reconcileWithNodes, reorderTabs, setMode, toggleFilesPanel, useTabLayout } from './tabLayout.store'
+import { nodeTabSignal } from './sessionSignal'
+import { useUnreadIds } from './unread'
 import TabStrip, { type TabItem } from './tabLayout.strip'
 import FilesDock from './tabLayout.filesDock'
 import NewTabMenu, { type NewTabMenuProps } from './tabLayout.newMenu'
@@ -38,12 +39,13 @@ function TabPane({ id, active }: { id: string; active: boolean }) {
 export default function TabsView(p: TabsViewProps) {
   const { nodes } = p
   const { order, active, filesPanel } = useTabLayout().tabs
+  const unread = useUnreadIds()
 
   // Keep order/active in line with the nodes; a node that appears next to existing ones becomes the active tab (Orca opens new tabs focused).
   const seen = useRef<Set<string> | null>(null)
   useEffect(() => {
     const kinds = nodes.map((n) => ({ id: n.id, kind: kindOf(n) }))
-    applyReconciled(reconcileTabs(getTabLayout(), kinds))
+    reconcileWithNodes(kinds)
     const ids = new Set(kinds.filter((k) => isTabKind(k.kind)).map((k) => k.id))
     const prev = seen.current
     seen.current = ids
@@ -56,12 +58,13 @@ export default function TabsView(p: TabsViewProps) {
   // Panes stay in first-seen order, not tab order: re-ordering DOM siblings would reload iframes.
   const paneIds = useRef<string[]>([])
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
-  const live = new Set(order.filter((id) => byId.has(id)))
+  // Files nodes are in `order` too (canvas strip) but are docked here, not tabs.
+  const live = new Set(order.filter((id) => { const n = byId.get(id); return !!n && isTabKind(kindOf(n)) }))
   paneIds.current = [...paneIds.current.filter((id) => live.has(id)), ...order.filter((id) => live.has(id) && !paneIds.current.includes(id))]
 
   const items: TabItem[] = order.filter((id) => live.has(id)).map((id) => {
     const n = byId.get(id) as Node
-    return { id, title: titleOf(n), icon: KIND_ICON[kindOf(n)], status: p.statuses[id] }
+    return { id, title: titleOf(n), icon: KIND_ICON[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)) }
   })
   const filesId = nodes.find((n) => kindOf(n) === 'files')?.id ?? null
 

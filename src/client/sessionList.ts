@@ -22,7 +22,7 @@ export const SESSION_KINDS: readonly WsNodeKind[] = ['terminal', 'agent', 'agent
 export type StatusKind = 'working' | 'attention' | 'done' | 'unknown'
 
 /** Mode pengelompokan tingkat atas pada sidebar. */
-export type SidebarGrouping = 'project' | 'status' | 'nodes'
+export type SidebarGrouping = 'project' | 'status'
 
 // Vokabuler manusiawi, diambil apa adanya dari nodeterm `STATE_LABEL`. Bukan enum huruf besar:
 // label ini dibaca manusia di tooltip dot dan di ringkasan baris.

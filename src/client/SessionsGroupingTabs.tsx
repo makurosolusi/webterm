@@ -1,4 +1,4 @@
-// Pemilih pengelompokan sidebar (Project / Status / Nodes) sebagai tab ala VS Code: tablist native
+// Pemilih pengelompokan sidebar (Project / Status) sebagai tab ala VS Code: tablist native
 // dengan roving tabindex dan aktivasi otomatis oleh panah, supaya terbaca sebagai `tablist/tab`.
 import type { KeyboardEvent } from 'react'
 import type { SidebarGrouping } from './sessionList'
@@ -6,7 +6,6 @@ import type { SidebarGrouping } from './sessionList'
 const TABS: ReadonlyArray<readonly [SidebarGrouping, string]> = [
   ['project', 'Project'],
   ['status', 'Status'],
-  ['nodes', 'Nodes'],
 ]
 
 export interface SessionsGroupingTabsProps {

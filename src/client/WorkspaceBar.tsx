@@ -28,6 +28,7 @@ import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenu
 import { clearOutput, toggleOutput } from './output/outputCommands'
 import { outputShortcutLabel } from './output/outputChord'
 import { isMacPlatform } from './terminalKeys'
+import { toggleNodeTabs, useNodeTabsShown } from './nodeTabs.visible'
 import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
@@ -91,6 +92,7 @@ export default function WorkspaceBar({
 }: WorkspaceBarProps) {
   const paletteKey = useCommandShortcut('workbench.omnibox')
   const layoutKey = useCommandShortcut('view.layout.toggle')
+  const nodeTabsShown = useNodeTabsShown()
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
   const groups = useMemo(
@@ -165,6 +167,7 @@ export default function WorkspaceBar({
 
   const viewItems: VscodeMenuEntry[] = [
     ...(onToggleLayout ? [{ id: 'toggle-layout', label: 'Toggle Tab Layout', keybinding: layoutKey ?? undefined, disabled: !activeGroup, onSelect: onToggleLayout }] : []),
+    { id: 'node-tabs', label: 'Show Node Tabs', checked: nodeTabsShown, onSelect: toggleNodeTabs },
     { id: 'output', label: 'Output', keybinding: outputShortcutLabel(isMacPlatform()), onSelect: toggleOutput },
     { id: 'clear-output', label: 'Clear Output', onSelect: () => void clearOutput() },
   ]
