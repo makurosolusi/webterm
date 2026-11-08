@@ -178,6 +178,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Node tabs (the strip above the canvas and the tab layout) no longer shrink until names are cut to "D…": each tab keeps its icon and full node name readable, and tabs that don't fit go into the "⋯ N more" list. Hovering a tab still shows its full name.
 - Files node: every file you open gets its own editor node, placed in free space beside the Files node, so you can keep many files open. Clicking a file that is already open shows its node instead of opening a second one. Single clicks no longer replace the file in the last editor; the italic title and Keep open button are gone.
 - A Claude node cabled to a browser now drives it straight away: no handoff step and no refusal asking you to hand it over. If you are using the browser at that moment the agent waits a few seconds for you to stop, and control comes back to you as soon as its turn ends.
 - Browser commands from a cabled Claude node are pre-approved in that node's settings, and the `webterm` command can now run inside the agent sandbox (it failed there before). Reopen Claude nodes that were already open for this to apply.
