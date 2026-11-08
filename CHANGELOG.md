@@ -15,6 +15,8 @@ Operator notes:
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
 
 ### Added
+- Browser node shortcuts work like in Chrome: ⌘L (Ctrl+L) focuses the address bar, ⌘R reloads, ⌘[ / ⌘] or Alt+Left/Right go back and forward, ⌘+ / ⌘- / ⌘0 and Ctrl+wheel or pinch zoom, and Esc stops loading; they are listed in Help. Each browser node remembers its zoom, and while an agent drives a browser its frame is tinted and an "Agent is driving · Take control" chip stays visible.
+- A browser page that fails to load (unknown host, refused connection, certificate problem…) shows a readable panel with the reason, the host, a hint and Try again, instead of Chromium's raw error page.
 - Central chat accepts images and text files: paste a screenshot, drop files or use the + button.
 - Central chat: type / for commands (new chat, history, status, approvals, halt…) and shortcuts such as /projects and /nodes.
 - Central chat: start a new conversation with the + button and switch between past conversations from History.
@@ -80,6 +82,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- The browser node toolbar is a single Chrome-style row: a site-security icon, zoom pill and Shields count sit inside the address bar, Enter navigates (no Go button), console errors show as a badge only when there are some, and zoom, device mode, Shields, Design Mode, console, copy/open URL and agent control move into a ⋯ menu; the Design Mode bar appears only while Design Mode is on.
 - Central now runs on the Claude Agent SDK, the same engine as Agent Chat; behaviour is unchanged.
 - The Central chat is now the single hub for everything that needs you: a Needs-you strip on top of the chat lists approvals, reviews and broken tasks, approval requests appear in the chat as cards you can approve, deny or edit there, and the Chat icon shows how many items wait.
 - Telegram is a remote door to the Central chat: messages land in the same conversation as the app (with the bound project noted) and are queued while Central is busy, gates and agent alerts appear once in the chat and are mirrored to Telegram, and /inbox shows the same Needs-you list.
