@@ -34,6 +34,7 @@ import { createSkillStore, type SkillAdminStore } from './skills/skillStore'
 import { defaultRegistry } from './tools/defaultRegistry'
 import { createAgentKindsDef } from './tools/defs/agentKinds.defs'
 import { registerCa2Tools, toolsHash } from './tools/registerAll'
+import type { ToolRegistry } from './tools/toolTypes'
 import type { SyncMemoryBlockProvider } from './context/contextAssembler'
 
 type Env = Record<string, string | undefined>
@@ -50,7 +51,7 @@ const CENTRAL_DERIVED = DERIVED_FLAGS.filter((d) => d.needs.length === 1 && d.ne
 export function ca2Active(env: Env = process.env): boolean { return isEnabled('central', env) }
 
 /** Env efektif untuk merakit CA2: kosong saat Central off, kunci turunan menyala saat on. */
-const effectiveEnv = (env: Env): Env => (ca2Active(env) ? { ...env, ...Object.fromEntries(CENTRAL_DERIVED) } : {})
+export const effectiveEnv = (env: Env): Env => (ca2Active(env) ? { ...env, ...Object.fromEntries(CENTRAL_DERIVED) } : {})
 
 export interface Ca2BootOptions {
   runtime: LedgerRuntime | null
@@ -81,6 +82,8 @@ export interface Ca2Handle {
   /** Folder root of the skill store (the review route reads proposed drafts from it). */
   skillsRoot: string
   memory: SyncMemoryBlockProvider
+  /** The registry the tool groups were registered into (the process-wide one in production). */
+  registry: ToolRegistry
   toolNames: string[]
   toolsHash: string
   /** Resolves when the boot sweeps (agent reconcile, turn reconcile) finished. */
@@ -132,7 +135,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let built: ReturnType<typeof buildExecutor> | undefined
   const registry = opts.registry ?? defaultRegistry()
   const handle: Ca2Handle = {
-    db, env, now, guard, executor: null, skills: null, skillsRoot: join(dir, SKILLS_SUBDIR), memory: createMemoryBlockProvider(db, { now }) as SyncMemoryBlockProvider, toolNames: [], toolsHash: toolsHash(registry),
+    db, env, now, guard, executor: null, skills: null, skillsRoot: join(dir, SKILLS_SUBDIR), memory: createMemoryBlockProvider(db, { now }) as SyncMemoryBlockProvider, registry, toolNames: [], toolsHash: toolsHash(registry),
     ready: Promise.resolve(),
     agentAlive: (a) => (a.runner === 'exec' ? false : !!a.nodeId && sessions.isLive(a.nodeId)),
     sweep: () => (handle.executor ? resumeApprovedAgents(db, handle.executor, now) : Promise.resolve(0)),
