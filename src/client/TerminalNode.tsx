@@ -26,7 +26,7 @@ const COLLAPSED_H = 40
 const NO_CLIPBOARD_HINT = 'Paste needs a secure context: open webterm over https or localhost.'
 
 function TerminalNode({ id, data, selected, height }: NodeProps) {
-  const d = data as { cwd?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; panes?: Pane }
+  const d = data as { cwd?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; panes?: Pane }
   const rf = useReactFlow()
 
   const collapsed = d.collapsed ?? false
@@ -202,7 +202,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
         }}
       >
         <NodeChrome
-          title={d.title ?? ''}
+          title={d.title ?? ''} name={d.name}
           icon="terminal" description={d.cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}

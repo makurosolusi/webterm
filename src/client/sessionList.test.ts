@@ -165,6 +165,11 @@ describe('sessionLabel', () => {
     // Judul berisi spasi saja bukan judul.
     expect(sessionLabel(node('e', { title: '   ' }))).toBe('Terminal')
   })
+  it('prefixes the node name, and treats a legacy generated <adjective>-<noun> title as absent', () => {
+    expect(sessionLabel(node('f', { name: 'Mango', title: 'Deploy' }))).toBe('Mango · Deploy')
+    expect(sessionLabel(node('g', { name: 'Otter', kind: 'agent', agentId: 'claude', title: 'brisk-otter' }))).toBe('Otter · Claude Code')
+    expect(sessionLabel(node('h', { kind: 'agent', agentId: 'claude', title: 'brisk-otter-2' }))).toBe('Claude Code')
+  })
 })
 
 describe('isProjectCollapsed', () => {

@@ -13,6 +13,7 @@ import { PlanGraph } from './PlanNode.graph'
 import { usePlanNode } from './PlanNode.hooks'
 import { estimateText, removeTask, type TaskStatus } from './PlanNode.model'
 import './PlanNode.css'
+import { NodeNameLabel } from './nodeName.label'
 
 export const PLAN_TEXT = {
   drafting: 'Drafting a plan… Claude reads the repo only; nothing is changed.',
@@ -29,7 +30,7 @@ const errText = (e: unknown): string => (e instanceof Error ? e.message : String
 
 function PlanNode({ id, data, selected }: NodeProps) {
   const rf = useReactFlow()
-  const d = data as { plan?: unknown; color?: string }
+  const d = data as { plan?: unknown; color?: string; name?: string }
   const swatch = d.color ?? '#a970ff'
   const { plan, patch, preview, previewError, view, viewError } = usePlanNode(id, d.plan)
   const [editing, setEditing] = useState<string | null>(null)
@@ -82,7 +83,7 @@ function PlanNode({ id, data, selected }: NodeProps) {
         <div className="node-header">
           <span className="node-title plan-node__title" title={plan.intent}>
             <span className="codicon codicon-type-hierarchy" aria-hidden="true" />
-            {title}
+            <NodeNameLabel name={d.name} label={title} />
             <span className="plan-node__desc">{view ? view.dag.status : draft ? 'draft, not running' : ''}</span>
           </span>
           <span className="plan-node__spacer" />

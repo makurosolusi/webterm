@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import type { Database } from 'bun:sqlite'
 import { agentConfig } from '../../../../shared/workspace'
 import { parseBrowserUrl } from '../../../../shared/browser.url'
+import { withNodeNames } from '../../../../shared/nodeNames'
 import type { CanvasNode, CanvasPush } from '../../../canvas/canvasPush'
 import { claudeLaunchLine, resolveClaudeLaunch } from '../../../claudeLauncher/claudeLauncher'
 import { allRows } from '../../../ledger/ledgerCore'
@@ -37,11 +38,15 @@ const onlyKeys = (input: ToolInput, allowed: readonly string[]): boolean => Obje
 const noControl = (s: string): boolean => !/[\x00-\x08\x0b-\x1f\x7f]/.test(s)
 const text = (v: unknown, max: number): boolean => typeof v === 'string' && v.trim().length > 0 && v.length <= max && noControl(v)
 const fail = (code: string, data?: Record<string, unknown>): ToolResult => ({ ok: false, code, ...(data ? { data } : {}) })
+/** A node name as `withNodeNames` mints it ("Mango", tier "Mango 2"); custom names in other shapes close by id. */
+const NAME_REF = /^[A-Za-z][A-Za-z0-9]*( [0-9]+)?$/
+const MAX_NAME_REF = 40
+const isNodeRef = (v: unknown): boolean => isSafeId(v) || (typeof v === 'string' && v.length <= MAX_NAME_REF && NAME_REF.test(v))
 
 function closeShape(input: ToolInput): boolean {
   const ids = input.nodeIds
   return onlyKeys(input, ['projectId', 'nodeIds', 'reason']) && Array.isArray(ids) && ids.length >= 1 && ids.length <= MAX_CLOSE
-    && ids.every(isSafeId) && text(input.reason, MAX_REASON)
+    && ids.every(isNodeRef) && text(input.reason, MAX_REASON)
 }
 
 function openShape(input: ToolInput): boolean {
@@ -82,28 +87,34 @@ function buildNode(kind: (typeof KINDS)[number], cwd: string | undefined, title:
 export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
   const close: ToolDef = {
     name: 'canvas.close',
-    summary: 'Close canvas nodes (terminals, browsers, files...) of a project workspace in one call; asks the user.',
+    summary: 'Close canvas nodes (terminals, browsers, files...) of a project workspace by ids or names; asks the user.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
-    usage: '{"projectId":"<id>","nodeIds":["<id from node.list>", ... 1-50],"reason":"<why, <=200 chars>"}. '
-      + 'All-or-nothing: one unknown id refuses the whole call. Ends their sessions/pages; the user can Reopen closed nodes '
+    usage: '{"projectId":"<id>","nodeIds":["<node id or name from node.list, e.g. Mango>", ... 1-50],"reason":"<why, <=200 chars>"}. '
+      + 'Names match case-insensitively. All-or-nothing: one unknown id or name refuses the whole call. Ends their sessions/pages; the user can Reopen closed nodes '
       + 'from webterm. Workers you spawned close with agent.close instead.',
     input: obj({ nodeIds: S.arr(S.str(MAX_ID), MAX_CLOSE), reason: S.str(MAX_REASON) }, ['nodeIds', 'reason']),
     output: S.keys('closed', 'count', 'ids'),
     auditKeys: ['count', 'ids'],
     validate: (input) => (closeShape(input) ? null : 'invalid_shape'),
     async handler(ctx, input, projectId): Promise<ToolResult> {
-      const ids = [...new Set(input.nodeIds as string[])]
       const found = projectWorkspace(ctx.db, projectId)
       if (!found.ok) return fail(found.code)
-      const onBoard = new Set((found.nodes as Array<{ id?: unknown }>).map((n) => String(n.id)))
-      const unknown = ids.filter((id) => !onBoard.has(id))
+      const named = withNodeNames((found.nodes as Array<{ id?: unknown; name?: unknown }>)
+        .map((n) => ({ id: String(n.id), name: typeof n.name === 'string' ? n.name : undefined })))
+      const nameOf = new Map(named.map((n) => [n.id, n.name]))
+      const idOfName = new Map(named.map((n) => [n.name.toLowerCase(), n.id]))
+      // An exact id wins over a name; whatever matches neither refuses the whole call.
+      const refs = input.nodeIds as string[]
+      const resolved = refs.map((r) => (nameOf.has(r) ? r : idOfName.get(r.toLowerCase())))
+      const unknown = refs.filter((_, i) => resolved[i] === undefined)
       if (unknown.length) return fail('node_not_found', { unknown })
+      const ids = [...new Set(resolved as string[])]
       const agents = agentNodeIds(ctx.db, String(projectId), ids)
       if (agents.length) return fail('use_agent_close', { nodeIds: agents, hint: 'These are workers you spawned: close them with agent.close.' })
       const res = (await deps.canvas()).remove({ workspaceId: found.workspaceId, nodeIds: ids })
       if (!res.ok) return fail(res.code)
-      const closed = res.removed.map((n) => ({ id: n.id, kind: n.kind, title: n.title ? clip(n.title, MAX_TITLE) : null }))
+      const closed = res.removed.map((n) => ({ id: n.id, name: nameOf.get(n.id) ?? null, kind: n.kind, title: n.title ? clip(n.title, MAX_TITLE) : null }))
       return { ok: true, data: { closed, count: closed.length, ids: closed.map((n) => n.id) } }
     },
   }
@@ -134,7 +145,7 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       const nodes = Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url))
       const res = (await deps.canvas()).add({ workspaceId: found.workspaceId, nodes })
       if (!res.ok) return fail(res.code)
-      const opened = res.nodes.map((n) => ({ id: n.id, kind: n.kind }))
+      const opened = res.nodes.map((n) => ({ id: n.id, name: n.name ?? null, kind: n.kind }))
       return { ok: true, data: { opened, count: opened.length, kind, ids: opened.map((n) => n.id) } }
     },
   }

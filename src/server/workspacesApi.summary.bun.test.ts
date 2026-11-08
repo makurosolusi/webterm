@@ -31,7 +31,7 @@ test('summary omits viewport/layout/bridges and node geometry, and honours limit
   expect(typeof page.nextCursor).toBe('string')
   for (const item of page.items) {
     expect(Object.keys(item).sort()).toEqual(['id', 'name', 'nodes', 'updatedAt'])
-    expect(Object.keys(item.nodes[0] ?? {}).sort()).toEqual(['agentId', 'id', 'kind', 'title'])
+    expect(Object.keys(item.nodes[0] ?? {}).sort()).toEqual(['agentId', 'id', 'kind', 'name', 'title'])
   }
   expect(JSON.stringify(page)).not.toMatch(/viewport|layout|bridges|"x"|width|cmd/)
 })

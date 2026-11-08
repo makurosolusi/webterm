@@ -18,6 +18,7 @@ Operator notes:
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 
 ### Added
+- Every node on the canvas now has its own short name, like Mango, Otter, Basil or Fern, unique within the project. It shows in the node header (`Mango · Agent Chat`), the tabs and the Sessions list, and Central knows it too: "close Mango and Kiwi" works. Existing nodes get names automatically; renaming a node still changes its label, not its name.
 - Central can open and close canvas nodes for you: ask it to "close all the browsers" or "close these terminals" and it closes them in one go after you approve (up to 50 at once; closed nodes can be reopened). It can also open terminals, Claude nodes, or a browser on a URL (refused while the browser is off in Settings). Central's own worker agents are still stopped through the agent controls.
 - Worker and reviewer agents that Central starts (Workers on) now appear on the project's canvas as normal Claude nodes beside the others, so you can watch them and type into them. Each starts with its task as the first prompt and keeps webterm hooks and status. Stopping an agent leaves its node on the board, and after a server restart a still-running agent is put back without duplicates.
 - An agent on the canvas can open its own browser with `webterm browser open [url]`: a browser node appears next to it, already cabled, and the agent can drive it right away. `webterm browser navigate <url>` with no cabled browser opens one automatically. If the live-browser limit is reached the node is still added and the agent is told how it will start.
@@ -98,6 +99,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- New Claude nodes no longer get a generated `brisk-otter` title; the node's name identifies it instead, and the title still updates from the agent's first task.
 - `node.list` (Central's node listing) now shows whether each terminal is still running and which site each browser shows.
 - Nodes the server adds (agents, browsers) appear live in every open window, without a reload.
 - Central panel: the Control tab is now Status. It shows the level Central works at in plain words with what it means (and says when your highest allowed level holds it lower), today's budget in short numbers ("13K of 10M tokens today", "0 of 20 workers started today", "No limit"), and a "Stop Central" button with the same confirmation. "Change" opens Settings › Central Agent, still the only place the level is set. Tabs are now Status · Abilities · Agents · Skills.

@@ -115,7 +115,8 @@ describe('workspace list follows the saves (real App)', () => {
 
     act(() => focus()('files-there')) // to the other board
     await waitFor(() => expect(document.querySelector('.react-flow__node[data-id="files-there"]')).not.toBeNull(), WAIT)
-    expect(screen.getAllByLabelText('End session Terminal')).toHaveLength(1) // the row of the board left behind
+    // The row of the board left behind, labelled by the node's saved name and its kind.
+    expect(screen.getAllByLabelText(`End session ${added.name} · Terminal`)).toHaveLength(1)
 
     act(() => focus()(added.id)) // its owner is found in the list, not the boot snapshot
     await waitFor(() => expect(document.querySelector(`.react-flow__node[data-id="${added.id}"]`)).not.toBeNull(), WAIT)

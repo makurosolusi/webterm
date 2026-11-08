@@ -66,6 +66,17 @@ describe('TabsView', () => {
     expect(screen.queryByLabelText('Rename tab')).toBeNull()
   })
 
+  it('a named node shows "name · title"; the rename draft is the title alone', () => {
+    const named = { ...node('a', 'terminal', 'alpha'), data: { title: 'alpha', name: 'Mango' } }
+    render(<TabsView {...props({ nodes: [named, NODES[1]] })} />)
+    const t = screen.getByText('Mango').closest<HTMLElement>('[role="tab"]')!
+    expect(t.textContent).toBe('Mango · alpha')
+    expect(t.title).toBe('Mango · alpha')
+    expect(screen.getByRole('button', { name: 'Close Mango · alpha' })).toBeTruthy()
+    fireEvent.doubleClick(screen.getByText('Mango'))
+    expect((screen.getByLabelText('Rename tab') as HTMLInputElement).value).toBe('alpha')
+  })
+
   it('drag reorder writes the new order to the store', () => {
     render(<TabsView {...props()} />)
     const dt = { setData: vi.fn(), effectAllowed: '' }

@@ -11,8 +11,8 @@ import { READ_TOOLS_FLAG } from './read.shared'
 
 // test-only board of project p1 (workspace w-p1, seeded by seedPortfolio).
 const BOARD: CanvasNode[] = [
-  { id: 'n1', kind: 'terminal', x: 0, y: 0, title: 'shell', cwd: '/srv/alpha' },
-  { id: 'n2', kind: 'browser', x: 0, y: 0, url: 'https://example.com/' },
+  { id: 'n1', kind: 'terminal', x: 0, y: 0, name: 'Mango', title: 'shell', cwd: '/srv/alpha' },
+  { id: 'n2', kind: 'browser', x: 0, y: 0, name: 'Kiwi 2', url: 'https://example.com/' },
   { id: 'c-ag1', kind: 'agent', x: 0, y: 0, agentId: 'claude' },
   { id: 'c-ag2', kind: 'agent', x: 0, y: 0, agentId: 'claude' },
 ]
@@ -89,6 +89,17 @@ describe('canvas.close', () => {
     expect(JSON.stringify(res)).not.toContain('/srv/alpha')
   })
 
+  it('accepts node names (case-insensitive) next to ids, resolves them to ids, and reports the names', async () => {
+    const res = await close({ nodeIds: ['mango', 'KIWI 2', 'n1'] })
+    expect(removes).toEqual([{ workspaceId: 'w-p1', nodeIds: ['n1', 'n2'] }])
+    expect(res).toMatchObject({ ok: true, data: { ids: ['n1', 'n2'], closed: [{ id: 'n1', name: 'Mango' }, { id: 'n2', name: 'Kiwi 2' }] } })
+  })
+
+  it('a name that matches no node refuses the whole call like an unknown id', async () => {
+    expect(await close({ nodeIds: ['Mango', 'Otter'] })).toMatchObject({ ok: false, code: 'node_not_found', data: { unknown: ['Otter'] } })
+    expect(removes).toEqual([])
+  })
+
   it('passes a board write failure through as its code', async () => {
     const c = ctx()
     c.registry = createRegistry()
@@ -120,6 +131,15 @@ describe('canvas.open', () => {
     expect(call!.nodes.map((n) => [n.kind, n.cwd, n.title])).toEqual(Array(3).fill(['terminal', '/srv/alpha', 'build']))
     expect(new Set(call!.nodes.map((n) => n.id)).size).toBe(3)
     expect(res).toMatchObject({ ok: true, data: { count: 3, kind: 'terminal', opened: call!.nodes.map((n) => ({ id: n.id, kind: 'terminal' })) } })
+  })
+
+  it('lists the opened nodes with the names the saved board gave them', async () => {
+    const c = ctx()
+    c.registry = createRegistry()
+    const naming: NodeCanvas = { ...fake, add: (input) => ({ ok: true, updatedAt: 2, nodes: input.nodes.map((n, i) => ({ ...n, name: ['Otter', 'Fern'][i] })) }) }
+    createCanvasActDefs({ canvas: () => naming, browserOn: () => true }).forEach((d) => c.registry.register(d))
+    const res = await open({ kind: 'terminal', count: 2 }, c)
+    expect(res).toMatchObject({ ok: true, data: { opened: [{ name: 'Otter', kind: 'terminal' }, { name: 'Fern', kind: 'terminal' }] } })
   })
 
   it('opens a builtin claude node with a recorded launch profile and no pre-minted session', async () => {

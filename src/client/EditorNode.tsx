@@ -19,6 +19,7 @@ import { EditorRenamePreview } from './EditorRenamePreview'
 import { loadMonaco } from './lazyMonaco'
 import { ShowInFilesButton } from './ShowInFilesButton'
 import './editor.css'
+import { NodeNameLabel } from './nodeName.label'
 
 // marked + DOMPurify load with the first preview, not with the board.
 const EditorMarkdownPreview = lazy(() => import('./EditorMarkdownPreview'))
@@ -52,7 +53,7 @@ function EditorNode({
   stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
-  const d = data as { filePath?: string; color?: string }
+  const d = data as { filePath?: string; color?: string; name?: string }
   const filePath = d.filePath ?? ''
   const swatch = d.color ?? '#0a84ff'
 
@@ -152,7 +153,7 @@ function EditorNode({
             title={filePath}
           >
             <span className={`${fileIconClass(fileName)} editor-node__icon`} aria-hidden="true" />
-            {fileName}
+            <NodeNameLabel name={d.name} label={fileName} />
             {editable && ef.dirty && (
               <span className="codicon codicon-circle-filled editor-node__dirty" role="img" aria-label="Unsaved changes" />
             )}

@@ -1,6 +1,5 @@
-// Worker identity: unique human-readable node names, a stable color chip, and the rules for when
-// a name may be replaced by a task-derived title. Imitates Orca:
-//  - name pick: random unused name, then numbered tiers (`shared/worktree-name-suggestion.ts:32-52`)
+// Worker identity: a stable color chip, and the rules for when a title may be replaced by a
+// task-derived one (the node's unique name lives in `shared/nodeNames.ts`). Imitates Orca:
 //  - "is this still ours to rename?" by pool membership after stripping one `-N` suffix
 //    (`shared/branch-name-from-work.ts:13-21`), so no extra persisted flag is needed: a user rename
 //    leaves the pool and is never overwritten.
@@ -28,19 +27,6 @@ export function isAutoName(title: string | undefined): boolean {
   if (!title) return true
   const m = /^([a-z]+)-([a-z]+)(?:-\d+)?$/.exec(title.trim().toLowerCase())
   return !!m && ADJ.has(m[1]) && NOUN.has(m[2])
-}
-
-/** Random unused `<adjective>-<noun>`; when the pool is spent, the next numbered tier (`-2`, `-3`…). */
-export function pickAutoName(used: Iterable<string>, random: () => number = Math.random): string {
-  const taken = new Set([...used].map((n) => n.trim().toLowerCase()))
-  for (let tier = 1; ; tier++) {
-    const free: string[] = []
-    for (const a of ADJECTIVES) for (const n of NOUNS) {
-      const name = tier === 1 ? `${a}-${n}` : `${a}-${n}-${tier}`
-      if (!taken.has(name)) free.push(name)
-    }
-    if (free.length) return free[Math.floor(random() * free.length)]
-  }
 }
 
 /** Stable identity color for a node id (FNV-1a hue), independent of the user-picked node color. */
@@ -122,16 +108,4 @@ export async function autoTitleFromWork(nodeId: string, deps: AutoTitleDeps): Pr
   if (deps.getTitle() !== original) return false
   deps.setTitle(uniqueTitle(r.message, deps.boardTitles()))
   return true
-}
-
-// Names handed out this page session. React Flow applies `updateNodeData` asynchronously in a
-// controlled flow, so two nodes mounting in the same commit would both see the other untitled and
-// could pick the same name; claiming here closes that window.
-const claimed = new Set<string>()
-
-/** Pick and reserve a fresh auto name not used on the board nor earlier in this session. */
-export function claimAutoName(boardTitles: Iterable<string>, random?: () => number): string {
-  const name = pickAutoName([...boardTitles, ...claimed], random)
-  claimed.add(name)
-  return name
 }

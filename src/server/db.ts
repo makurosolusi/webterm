@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import type { Workspace, WsNode } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import { normalizeWorkspace, splitNodes, withPreservedNodes } from '../shared/workspace.schema'
+import { withNodeNames } from '../shared/nodeNames'
 import type { WorkspaceSummaryPage } from '../shared/workspace.summary'
 import { workspaceLog } from './workspacesLog'
 import { decodeSummaryCursor, encodeSummaryCursor, toSummary } from './db.summary'
@@ -81,7 +82,8 @@ function toWorkspace(r: Row): Workspace {
   })
   if (issues.length > 0) workspaceLog.repaired(r.id, issues)
   if (preserved.length > 0) workspaceLog.nodesPreserved(r.id, preserved)
-  return { id: r.id, ...board, name: r.name, layout: parseLayout(r.layout), updatedAt: r.updated_at }
+  // Named on read too: legacy rows get the same names `nodesColumn` will store on their next save.
+  return { id: r.id, ...board, nodes: withNodeNames(board.nodes), name: r.name, layout: parseLayout(r.layout), updatedAt: r.updated_at }
 }
 
 /** Result of `Db.save`: written, refused because the stored board is newer, or no such row. */
@@ -149,11 +151,12 @@ export class Db {
    * The value of the `nodes` column for a write of `incoming` to row `id`: the stored row's preserved
    * (unreadable) nodes ride along unless `incoming` reuses their id. EVERY write of the column goes
    * through here (db.preserveNodes policy test); the caller holds the write transaction, so the
-   * stored nodes read here are the ones the write replaces.
+   * stored nodes read here are the ones the write replaces. Also the single naming point: every
+   * stored node gets a unique handle (`withNodeNames`), whoever wrote the board.
    */
   private nodesColumn(id: string, incoming: readonly WsNode[]): string {
     const row = this.d.query('SELECT nodes FROM workspace WHERE id = ?').get(id) as Pick<Row, 'nodes'> | null
-    return JSON.stringify(withPreservedNodes(incoming, row ? parseColumn(row.nodes, '[]') : []))
+    return JSON.stringify(withPreservedNodes(withNodeNames(incoming), row ? parseColumn(row.nodes, '[]') : []))
   }
 
   /** BEGIN IMMEDIATE: the write lock is taken before `fn` reads, so no other connection writes in between. */

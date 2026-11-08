@@ -114,6 +114,8 @@ export interface WsNode {
   y: number
   width?: number          // ukuran di canvas; default diterapkan di store.toFlow
   height?: number         // ukuran di canvas; default diterapkan di store.toFlow
+  /** Stable unique handle per workspace ("Mango"), assigned by `withNodeNames` (nodeNames.ts); separate from `title`. */
+  name?: string
   title?: string
   cwd?: string            // jatuh ke cwd workspace bila tidak ada
   cmd?: string            // baris peluncuran agent, mis. "claude" atau override milik pengguna

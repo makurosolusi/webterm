@@ -8,7 +8,7 @@ import { DEFAULT_VIEWPORT, type Workspace, type WsNode } from '../shared/workspa
 import { Db, openDb } from './db'
 import { workspacesRoute } from './workspacesApi'
 
-const TERM: WsNode = { id: 't1', kind: 'terminal', x: 1, y: 2 }
+const TERM: WsNode = { id: 't1', kind: 'terminal', name: 'Mango', x: 1, y: 2 }
 const FUTURE = { id: 'x', kind: 'futureKind', position: { x: 5, y: 6 }, extra: { deep: [1, 'two'] } }
 const BROKEN = { id: 'b1', kind: 'agent', x: 'far', y: 0 }
 const HIDDEN = [FUTURE, BROKEN].map((n) => JSON.stringify(n))
@@ -50,7 +50,7 @@ test('saving with the terminal removed still keeps them, across repeated saves',
 
 test('an incoming node with the same id replaces the preserved one', () => {
   const { store, d, ws } = seeded()
-  const x: WsNode = { id: 'x', kind: 'terminal', x: 7, y: 8 }
+  const x: WsNode = { id: 'x', kind: 'terminal', name: 'Kiwi', x: 7, y: 8 }
   expect(store.save({ ...ws, nodes: [TERM, x] })).toBe('saved')
   expect(rawNodes(d, ws.id)).toEqual([TERM, x, BROKEN])
 })

@@ -13,6 +13,8 @@
 //   di dalam satu section memakai (urutan workspace, judul) alih-alih "transisi terbaru dulu".
 import type { AgentId, AgentStatus, Workspace, WsNode, WsNodeKind } from '../shared/workspace'
 import { agentConfig } from '../shared/workspace'
+import { isAutoName } from './nodeIdentity'
+import { withNodeName } from './nodeName.label'
 
 /** Kind node yang dihitung sebagai "sesi". `files`/`editor` adalah penampil, bukan shell —
  *  nodeterm juga hanya mendaftar node terminal di sidebar-nya. `agentChat` is a Claude session
@@ -119,13 +121,19 @@ export function sessionStatusGroup(kind: StatusKind, unread: boolean): StatusGro
   return 'unknown'
 }
 
-/** Nama yang dipakai baris sidebar. Rantai fallback-nya sama dengan `AgentNode`
- *  (`d.title ?? builtin?.label ?? agentId`), supaya satu node tidak bernama dua hal. */
-export function sessionLabel(n: Pick<WsNode, 'title' | 'agentId' | 'kind'>): string {
-  const title = n.title?.trim()
+/** Title of a session without its node name. Same fallback chain as `AgentNode`
+ *  (`d.title ?? builtin?.label ?? agentId`), so one node is not called two things; a legacy
+ *  generated `<adjective>-<noun>` title counts as absent there too. */
+export function sessionTitle(n: Pick<WsNode, 'title' | 'agentId' | 'kind'>): string {
+  const title = isAutoName(n.title) ? undefined : n.title?.trim()
   if (title) return title
   if (n.agentId) return agentConfig(n.agentId)?.label ?? n.agentId
   return 'Terminal'
+}
+
+/** Sidebar / Reopen label: `Mango · Deploy` (node name, then `sessionTitle`). */
+export function sessionLabel(n: Pick<WsNode, 'name' | 'title' | 'agentId' | 'kind'>): string {
+  return withNodeName(n.name, sessionTitle(n))
 }
 
 /** Nama folder terakhir dari sebuah path — cwd penuh tidak muat di baris selebar 300px. */

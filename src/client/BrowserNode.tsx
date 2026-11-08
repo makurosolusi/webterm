@@ -79,7 +79,7 @@ export interface BrowserNodeProps extends NodeProps {
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
 function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay, menuItems }: BrowserNodeProps) {
-  const d = data as { url?: string; color?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
+  const d = data as { url?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
@@ -193,7 +193,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
       <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div className={termNodeClass({ selected: !!selected, collapsed }) + (driven ? ' browser-node--driven' : '')} style={{ '--node-swatch': swatch } as CSSProperties}>
         <NodeChrome
-          title={d.title || state?.title || DEFAULT_TITLE}
+          title={d.title || state?.title || DEFAULT_TITLE} name={d.name}
           icon="globe"
           description={state?.url ? hostOnly(state.url) : ''}
           onRename={(t) => rf.updateNodeData(id, { title: t })}

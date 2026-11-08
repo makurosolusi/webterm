@@ -8,7 +8,7 @@ import { Db, openDb } from './db'
 import { workspacesRoute } from './workspacesApi'
 import { defaultTabLayout, FILES_PANEL_WIDTH, type TabLayout } from '../shared/tabLayout.schema'
 
-const NODES = [{ id: 'n1', kind: 'terminal', x: 1, y: 2 }, { id: 'n2', kind: 'files', x: 3, y: 4 }]
+const NODES = [{ id: 'n1', kind: 'terminal', name: 'Mango', x: 1, y: 2 }, { id: 'n2', kind: 'files', name: 'Kiwi', x: 3, y: 4 }]
 const BRIDGES = [{ id: 'e1', source: 'n1', target: 'n2', kind: 'context' }]
 
 const tabsLayout = (): TabLayout => ({
@@ -65,7 +65,7 @@ test('API: layout round-trips, and saving nodes without layout keeps it (no clob
   expect(JSON.stringify(store.get(ws.id)?.layout)).toBe(JSON.stringify(tabsLayout()))
 
   // Old client / partial writer: no `layout` key -> stored layout stays, nodes are updated.
-  const moved = [{ id: 'n1', kind: 'terminal', x: 99, y: 2 }]
+  const moved = [{ id: 'n1', kind: 'terminal', name: 'Mango', x: 99, y: 2 }]
   await put(store, ws.id, { ...base, nodes: moved })
   const after = store.get(ws.id)
   expect(JSON.stringify(after?.layout)).toBe(JSON.stringify(tabsLayout()))

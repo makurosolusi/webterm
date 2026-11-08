@@ -27,6 +27,7 @@ import MorningBrief from './MorningBrief'
 import { SettingsProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
+import { useBoardNodeNames } from './nodeNames.board'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
 import { decorateEdges, miniMapNodeColor, withLinkHandles } from './canvasStyle'
 import { useCanvasViewport } from './canvasViewport'
@@ -120,6 +121,8 @@ export default function App() {
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
   })
   applyRef.current = applyWorkspace // a save another window beat reloads the stored board through it
+  // Every node gets its unique name ("Mango") here, whichever path created it. See `./nodeNames.board`.
+  useBoardNodeNames(nodes, onNodesChange)
 
 
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus

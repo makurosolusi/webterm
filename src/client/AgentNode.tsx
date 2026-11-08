@@ -7,6 +7,7 @@ import type { AgentId, AgentStatus, Comment } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
+import { withNodeName } from './nodeName.label'
 import UsagePill from './UsagePill'
 import FindBar from './FindBar'
 import { useSpeechInput } from './useSpeechInput'
@@ -20,7 +21,7 @@ import { unwatchNode, watchNode } from './unread'
 import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
-import { autoTitleFromWork, canResumeAfter, claimAutoName, identityColor, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
+import { autoTitleFromWork, canResumeAfter, identityColor, isAutoName, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
 import { AgentFailedBar } from './AgentFailedBar'
 
 const COLLAPSED_H = 40
@@ -48,7 +49,7 @@ export function resumesOnFirstLaunch(agentId: AgentId | undefined, sessionId: st
 
 function AgentNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
-    cmd?: string; cwd?: string; agentId?: AgentId; color?: string; title?: string
+    cmd?: string; cwd?: string; agentId?: AgentId; color?: string; name?: string; title?: string
     sessionId?: string; collapsed?: boolean; comments?: Comment[]; agentModel?: string
     hideLinks?: boolean; claudeProfileId?: string
   }
@@ -89,9 +90,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     .map((n) => (n.data as { title?: string }).title)
     .filter((t): t is string => !!t)
   const setTitle = (t: string) => rf.updateNodeData(id, { title: uniqueTitle(t, boardTitles()) })
-  // Untitled node → unique `<adjective>-<noun>` once, persisted like the session id above.
-  useEffect(() => { if (!d.title) rf.updateNodeData(id, { title: claimAutoName(boardTitles()) }) }, [])
-  // First work (status → working) renames a still-generated name from the task; one call in flight.
+  // First work (status → working) titles a still-untitled node from the task; one call in flight.
   const autoTitling = useRef(false)
   useEffect(() => {
     if (status !== 'working' || autoTitling.current) return
@@ -106,7 +105,8 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
 
   const builtin = agentId ? agentConfig(agentId) : undefined
   const swatch = d.color ?? builtin?.color ?? '#0a84ff'
-  const label = d.title ?? builtin?.label ?? agentId ?? 'agent'
+  // A legacy generated `<adjective>-<noun>` title counts as absent: the node name is the identity now.
+  const label = (isAutoName(d.title) ? undefined : d.title) ?? builtin?.label ?? agentId ?? 'agent'
   const collapsed = d.collapsed ?? false
   const comments = d.comments ?? []
   // Pill TIDAK pernah menerima judul node: ia dirender persis di sebelah judul, jadi mengirim judul
@@ -270,7 +270,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, link: termRef.current?.hoveredLink() ?? null }) }}
       >
         <NodeChrome
-          title={label}
+          title={label} name={d.name}
           icon="hubot"
           onRename={setTitle}
           identityColor={identityColor(id)}
@@ -284,7 +284,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           micActive={micActive} onToggleMic={onToggleMicProp}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
           // VS Code shows Stop only while something runs: a working or blocked (mid-turn) agent.
-          onStop={status === 'working' || status === 'blocked' ? () => { stopAgent(id, label, send) } : undefined}
+          onStop={status === 'working' || status === 'blocked' ? () => { stopAgent(id, withNodeName(d.name, label), send) } : undefined}
           menuItems={[{
             type: 'item', id: 'stop-idle', label: 'Stop all idle agents on this board',
             onSelect: () => { stopIdleAgents(rf.getNodes(), getStatus, send) },

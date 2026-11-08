@@ -37,6 +37,7 @@ export function nodeTabItems(
     return {
       id, icon: KIND_ICON[kind],
       title: nodeRowLabel({ ...(n.data as Partial<WsNode>), id, kind } as WsNode),
+      name: (n.data as Partial<WsNode>).name,
       signal: nodeTabSignal(kind, statuses[id], unread.has(id)),
     }
   })

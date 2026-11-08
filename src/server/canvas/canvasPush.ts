@@ -4,6 +4,7 @@
 import type { Workspace } from '../../shared/workspace'
 import type { ServerMsg } from '../../shared/protocol'
 import { OPEN_GAP, placeBeside, type Rect } from '../../shared/canvasPlace'
+import { withNodeNames } from '../../shared/nodeNames'
 import type { Db } from '../db'
 import { resolveFsPath } from '../fsOps'
 import { createLogger } from '../logs'
@@ -78,10 +79,12 @@ export function createCanvasPush(deps: CanvasPushDeps): CanvasPush {
     for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
       const ws = db.get(input.workspaceId)
       if (!ws) return { ok: false, code: 'workspace_not_found' }
-      const nodes = place(ws, input.nodes, input.anchorNodeId)
+      // Named here, not only in Db.save, so the live push carries the same names the row stores.
+      const all = withNodeNames([...ws.nodes, ...place(ws, input.nodes, input.anchorNodeId)])
+      const nodes = all.slice(ws.nodes.length)
       const bridgeIds = new Set(ws.bridges.map((b) => b.id))
       const bridges = (input.bridges ?? []).filter((b) => !bridgeIds.has(b.id))
-      const outcome = db.save({ ...ws, nodes: [...ws.nodes, ...nodes], bridges: [...ws.bridges, ...bridges] }, ws.updatedAt)
+      const outcome = db.save({ ...ws, nodes: all, bridges: [...ws.bridges, ...bridges] }, ws.updatedAt)
       if (outcome === 'missing') return { ok: false, code: 'workspace_not_found' }
       if (outcome === 'stale') continue
       const updatedAt = db.get(ws.id)?.updatedAt ?? ws.updatedAt

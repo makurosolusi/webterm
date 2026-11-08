@@ -33,7 +33,7 @@ describe('node.list', () => {
     workspace(nodes)
     const first = (await execTool(ctx(), 'node.list', { projectId: 'p1', limit: 10 })).data as { total: number; items: Array<Record<string, unknown>>; nextOffset: number | null; workspace: string }
     expect([first.workspace, first.total, first.items.length, first.nextOffset]).toEqual(['Alpha WS', 25, 10, 10])
-    expect(first.items[0]).toEqual({ id: 'n0', kind: 'terminal', title: expect.stringMatching(/truncated\]$/), agentId: null })
+    expect(first.items[0]).toEqual({ id: 'n0', name: expect.any(String), kind: 'terminal', title: expect.stringMatching(/truncated\]$/), agentId: null })
     expect(first.items[1]).toMatchObject({ id: 'n1', kind: 'agent', agentId: 'claude' })
     const last = (await execTool(ctx(), 'node.list', { projectId: 'p1', limit: 10, offset: 20 })).data as { items: unknown[]; nextOffset: number | null }
     expect([last.items.length, last.nextOffset]).toEqual([5, null])
@@ -51,6 +51,15 @@ describe('node.list', () => {
     for (const bad of [{ limit: 0 }, { limit: 51 }, { offset: -1 }, { limit: 'x' }]) {
       expect(await execTool(ctx(), 'node.list', { projectId: 'p1', ...bad })).toMatchObject({ ok: false, code: 'invalid_shape' })
     }
+  })
+
+  it('gives every node its unique name: stored ones as-is, missing ones derived like the store does', async () => {
+    workspace([{ id: 't1', kind: 'terminal', name: 'Mango' }, { id: 't2', kind: 'terminal', name: 'mango' }, { id: 't3', kind: 'files' }])
+    const page = async (offset: number) => ((await execTool(ctx(), 'node.list', { projectId: 'p1', limit: 2, offset })).data as { items: Array<{ name: string }> }).items
+    const names = [...await page(0), ...await page(2)].map((i) => i.name)
+    expect(names[0]).toBe('Mango')
+    expect(names.every((n) => typeof n === 'string' && n !== '')).toBe(true)
+    expect(new Set(names.map((n) => n.toLowerCase())).size).toBe(3)
   })
 
   it('reports live for terminal/agent nodes (any pane) and only the host of a browser url', async () => {

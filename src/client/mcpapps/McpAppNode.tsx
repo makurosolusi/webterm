@@ -9,6 +9,7 @@ import { NodeLayoutResizer, NodeResizeToggle } from '../nodeResize/NodeLayoutRes
 import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { callAppTool, fetchAppView, type AppView } from './mcpApp.api'
 import { APP_SANDBOX, allowAttribute, createAppBridge } from './mcpApp.bridge'
+import { NodeNameLabel } from '../nodeName.label'
 
 export const APP_TEXT = {
   loading: 'Loading app…',
@@ -20,7 +21,8 @@ const theme = (): 'light' | 'dark' => (document.documentElement.getAttribute('da
 
 function McpAppNode({ id, data, selected }: NodeProps) {
   const rf = useReactFlow()
-  const swatch = (data as { color?: string }).color ?? '#3794ff'
+  const d = data as { color?: string; name?: string }
+  const swatch = d.color ?? '#3794ff'
   const [view, setView] = useState<AppView | null>(null)
   const [error, setError] = useState('')
   const frame = useRef<HTMLIFrameElement>(null)
@@ -66,7 +68,7 @@ function McpAppNode({ id, data, selected }: NodeProps) {
         <div className="node-header">
           <span className="node-title" title={view ? `${view.uri}\nCSP: ${view.csp}` : undefined}>
             <span className="codicon codicon-window" aria-hidden="true" />
-            {view?.uri ?? 'App'}
+            <NodeNameLabel name={d.name} label={view?.uri ?? 'App'} />
           </span>
           <span style={{ flex: 1 }} />
           <NodeResizeToggle />

@@ -26,6 +26,11 @@ describe('nodeRowLabel', () => {
     expect(nodeRowLabel(node('n1', 'files'))).toBe('Files')
     expect(nodeRowLabel(node('n2', 'editor'))).toBe('Editor')
   })
+
+  it('is the label without the node name (the tab strip shows the name itself); a legacy auto title falls back to the kind', () => {
+    expect(nodeRowLabel(node('n1', 'terminal', { name: 'Mango', title: 'api' }))).toBe('api')
+    expect(nodeRowLabel(node('n2', 'agent', { name: 'Otter', agentId: 'claude', title: 'brisk-otter' }))).toBe('Claude Code')
+  })
 })
 
 describe('KIND_ICON', () => {

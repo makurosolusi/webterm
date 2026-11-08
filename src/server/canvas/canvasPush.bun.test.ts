@@ -182,3 +182,19 @@ test('remove throws after losing every save race', () => {
   expect(thrown instanceof Error && thrown.message).toMatch(/lost 5 save races/)
   expect(db.get(ws.id)!.nodes).toHaveLength(3)
 })
+
+test('added nodes are named before the save, so the live push carries the names the row stores, unique per board', () => {
+  const { db, sent, push, ws } = setup()
+  const taken = ws.nodes.map((n) => n.name!)
+  const res = push.add({ workspaceId: ws.id, nodes: [{ id: 'n1', kind: 'terminal', x: 0, y: 0, name: taken[0] }, { id: 'n2', kind: 'terminal', x: 0, y: 0 }] })
+  if (!res.ok) throw new Error(`add refused: ${res.code}`)
+  const stored = db.get(ws.id)!
+  expect(stored.nodes.slice(2)).toEqual(res.nodes)
+  expect((sent[0] as CanvasMsg).nodes.map((n) => n.name)).toEqual(res.nodes.map((n) => n.name))
+  const names = stored.nodes.map((n) => n.name!.toLowerCase())
+  expect(new Set(names).size).toBe(4)
+  expect(stored.nodes.slice(0, 2).map((n) => n.name)).toEqual(taken) // existing names never move
+  const gone = push.remove({ workspaceId: ws.id, nodeIds: ['n2'] })
+  if (!gone.ok) throw new Error(`remove refused: ${gone.code}`)
+  expect(gone.removed[0].name).toBe(res.nodes[1].name)
+})
