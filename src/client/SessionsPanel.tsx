@@ -1,5 +1,5 @@
-// Sidebar sesi (kiri): satu pohon dari SEMUA workspace, dikelompokkan per workspace, per status,
-// atau per kind node. Kerangkanya kini VS Code tree (`Tree`/`TreeItem` dari `./vscode/register`):
+// Sidebar sesi (kiri): satu pohon dari SEMUA workspace, dikelompokkan per workspace atau per status.
+// Daftar node board yang terbuka tinggal di strip tab node di atas canvas (`tabLayout.canvasStrip`). Kerangkanya kini VS Code tree (`Tree`/`TreeItem` dari `./vscode/register`):
 // tinggi baris 22px, indent 8px, hover/seleksi VS Code — semuanya dari library, bukan tiruan CSS.
 // Props-driven untuk SEMUA data board (workspace, node, status): integrator yang menyuplainya.
 // SATU pengecualian, dan alasannya: tanda `unread` disubscribe langsung dari `./unread` di sini.
@@ -24,10 +24,9 @@ import {
   sidebarEmptyState,
   type SidebarGrouping,
 } from './sessionList'
-import { buildNodeGroups } from './nodeList'
 import { CLOSED_KEY, SessionsTree } from './SessionsPanel.tree'
 import type { ClosedEntry } from './closedHistory'
-import { subscribeUnread, unreadIds } from './unread'
+import { useUnreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import './sessions-panel.css'
 
@@ -86,8 +85,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed)
   // Snapshot awal dibaca saat mount: kanal unread tidak memancar ulang saat disubscribe, dan
   // panel ini bisa di-mount setelah status pertama sudah lewat.
-  const [unread, setUnread] = useState<ReadonlySet<string>>(unreadIds)
-  useEffect(() => subscribeUnread(setUnread), [])
+  const unread = useUnreadIds()
 
   useEffect(() => {
     try {
@@ -106,21 +104,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
   )
 
-  const nodeGroups = useMemo(
-    () => buildNodeGroups(workspaces, liveActiveNodes, activeId, filter),
-    [workspaces, liveActiveNodes, activeId, filter],
-  )
-
   const total = sections.reduce((n, s) => n + s.rows.length, 0)
-  const rowCount =
-    grouping === 'nodes'
-      ? nodeGroups.reduce((n, g) => n + g.rows.length, 0)
-      : grouping === 'status'
-        ? total
-        : groups.reduce((n, g) => n + g.sessions.length, 0)
+  const rowCount = grouping === 'status' ? total : groups.reduce((n, g) => n + g.sessions.length, 0)
   const empty = sidebarEmptyState(rowCount === 0, filter)
-  // Tab Nodes mendaftar lebih dari sesi, jadi pesan kosongnya tidak boleh bilang "sessions".
-  const noun = grouping === 'nodes' ? 'nodes' : 'sessions'
 
   const treeRef = useRef<TreeElement>(null)
   // Elemen pohon → aksi. Klik/Enter di dalam shadow tree tidak sampai ke root React, jadi satu
@@ -196,12 +182,10 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   /** Kunci semua header grup yang sedang dirender pada tab aktif (untuk Collapse All). */
   const groupKeys = (): string[] => {
     const keys =
-      grouping === 'nodes'
-        ? nodeGroups.map((g) => `nodes:${g.kind}`)
-        : grouping === 'status'
-          ? sections.map((s) => `status:${s.kind}`)
-          : groups.map((g) => projectCollapseKey(g.projectId))
-    return closedSessions.length > 0 && grouping !== 'nodes' ? [...keys, CLOSED_KEY] : keys
+      grouping === 'status'
+        ? sections.map((s) => `status:${s.kind}`)
+        : groups.map((g) => projectCollapseKey(g.projectId))
+    return closedSessions.length > 0 ? [...keys, CLOSED_KEY] : keys
   }
   const collapseAll = () =>
     setCollapsed((prev) => ({ ...prev, ...Object.fromEntries(groupKeys().map((k) => [k, true])) }))
@@ -213,10 +197,8 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   return (
     <div className="sessions-sidebar nodrag" role="complementary" aria-label="Sessions">
       <div className="sessions-sidebar__head">
-        {/* Judul DAN hitungan ikut tab aktif: tab Nodes mendaftar editor dan files juga, jadi
-            "Sessions" di atasnya menamai — dan `total` menghitung — himpunan lain dari yang
-            terbaca di bawahnya. `rowCount` selalu baris yang benar-benar dirender. */}
-        <span className="sessions-sidebar__title">{grouping === 'nodes' ? 'Nodes' : 'Sessions'}</span>
+        {/* Hitungan ikut tab aktif: `rowCount` selalu baris yang benar-benar dirender. */}
+        <span className="sessions-sidebar__title">Sessions</span>
         <span className="sessions-sidebar__count">{rowCount}</span>
         {/* Aksi view seperti toolbar judul VS Code: tampil saat view di-hover/di-fokus. */}
         <div className="sessions-sidebar__head-actions" role="toolbar" aria-label="Sessions actions">
@@ -252,7 +234,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         {empty === 'no-matches' && (
           <div className="ss-empty">
             <p>
-              No {noun} match “{filter.trim()}”.
+              No sessions match “{filter.trim()}”.
             </p>
             <button type="button" className="ss-empty__button" onClick={() => setFilter('')}>
               Clear Filter
@@ -261,14 +243,13 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         )}
         {empty === 'no-sessions' && (
           <div className="ss-empty">
-            <p>No {noun} yet.</p>
+            <p>No sessions yet.</p>
           </div>
         )}
 
         <SessionsTree
           treeRef={treeRef}
           grouping={grouping}
-          nodeGroups={nodeGroups}
           sections={sections}
           groups={groups}
           closedSessions={closedSessions}

@@ -180,19 +180,11 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     expect(screen.queryByText('Alpha')).toBeNull()
   })
 
-  it('tab Nodes merender node apa pun, termasuk yang bukan sesi', () => {
-    const withEditor = ws('p1', 'Alpha', [
-      node('t1', 'Build'),
-      node('e1', 'notes.ts', { kind: 'editor', filePath: '/tmp/notes.ts' }),
-    ])
-    render(<SessionsPanel {...baseProps()} workspaces={[withEditor]} />)
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Nodes' }))
-
-    const groups = [...document.querySelectorAll('vscode-tree-item[data-group]')].map((el) =>
-      el.getAttribute('data-group'),
-    )
-    expect(groups).toContain('nodes:editor')
-    expect(screen.getByText('notes.ts')).toBeTruthy()
+  it('hanya Project dan Status: tab Nodes hilang, Project tetap pilihan awal', () => {
+    render(<SessionsPanel {...baseProps()} />)
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs.map((t) => t.textContent)).toEqual(['Project', 'Status'])
+    expect(screen.getByRole('tab', { name: 'Project' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('tab', { name: 'Nodes' })).toBeNull()
   })
 })

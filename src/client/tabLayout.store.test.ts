@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FILES_PANEL_WIDTH, defaultTabLayout, type TabLayout } from '../shared/tabLayout.schema'
 import type { Workspace } from '../shared/workspace'
 import {
-  activateTab, connectTabLayout, getTabLayout, reorderTabs, setFilesPanelOpen, setFilesPanelWidth, setMode, toggleFilesPanel,
+  activateTab, connectTabLayout, getTabLayout, reconcileWithNodes, reorderTabs, tabModeOrder, setFilesPanelOpen, setFilesPanelWidth, setMode, toggleFilesPanel,
 } from './tabLayout.store'
 
 const seeded = (): TabLayout => ({ ...defaultTabLayout(), tabs: { ...defaultTabLayout().tabs, order: ['a', 'b', 'c'], active: 'a' } })
@@ -42,11 +42,25 @@ describe('tabLayout.store', () => {
     expect(write).toHaveBeenCalledTimes(1)
   })
 
-  it('reorderTabs keeps every tab even with a stale or partial order', () => {
+  it('reorderTabs keeps every tab even with a stale or partial order: unlisted ids stay put', () => {
     reorderTabs(['c', 'ghost', 'a'])
-    expect(getTabLayout().tabs.order).toEqual(['c', 'a', 'b'])
-    reorderTabs(['c', 'a', 'b'])
+    expect(getTabLayout().tabs.order).toEqual(['c', 'b', 'a'])
+    reorderTabs(['c', 'b', 'a'])
     expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('Files nodes are in order and reorderable, but tab mode skips them', () => {
+    reconcileWithNodes([{ id: 'a', kind: 'terminal' }, { id: 'b', kind: 'agent' }, { id: 'c', kind: 'editor' }, { id: 'f', kind: 'files' }])
+    expect(getTabLayout().tabs.order).toEqual(['a', 'b', 'c', 'f'])
+    reorderTabs(['f', 'a', 'b', 'c'])
+    expect(getTabLayout().tabs.order).toEqual(['f', 'a', 'b', 'c'])
+    expect(write.mock.calls.at(-1)?.[0].tabs.order).toEqual(['f', 'a', 'b', 'c'])
+    expect(tabModeOrder()).toEqual(['a', 'b', 'c'])
+    activateTab('f')
+    expect(getTabLayout().tabs.active).toBe('a')
+    // Tab mode reorders without Files: Files keeps its slot.
+    reorderTabs(['c', 'a', 'b'])
+    expect(getTabLayout().tabs.order).toEqual(['f', 'c', 'a', 'b'])
   })
 
   it('setFilesPanelWidth clamps; toggleFilesPanel flips open', () => {

@@ -4,9 +4,12 @@
 // out). Every action produces a new TabLayout only; nodes, edges and canvas positions are never
 // passed in, so switching mode cannot touch them.
 import { useSyncExternalStore } from 'react'
-import { clampFilesPanelWidth, defaultTabLayout, normalizeTabLayout, type LayoutMode, type TabLayout } from '../shared/tabLayout.schema'
+import { clampFilesPanelWidth, defaultTabLayout, isTabKind, normalizeTabLayout, reconcileTabs, type LayoutMode, type TabLayout } from '../shared/tabLayout.schema'
+import type { WsNodeKind } from '../shared/workspace.shape'
 
 let current: TabLayout = defaultTabLayout()
+/** Ids in `order` that tab mode docks instead of showing as a tab (Files), from the last reconcile. */
+let panels: ReadonlySet<string> = new Set()
 let persist: ((next: TabLayout) => void) | null = null
 const listeners = new Set<() => void>()
 
@@ -30,20 +33,31 @@ export function setMode(mode: LayoutMode): void {
   if (mode !== current.mode) commit({ ...current, mode })
 }
 
-/** Show a tab; ids that are not in `order` are ignored. */
+/** Tab mode's tabs: `order` without the docked panel nodes (Files). */
+export const tabModeOrder = (): string[] => current.tabs.order.filter((id) => !panels.has(id))
+
+/** Show a tab; ids that are not tab-mode tabs are ignored. */
 export function activateTab(id: string): void {
   const { tabs } = current
-  if (tabs.active !== id && tabs.order.includes(id)) commit({ ...current, tabs: { ...tabs, active: id } })
+  if (tabs.active !== id && tabs.order.includes(id) && !panels.has(id)) commit({ ...current, tabs: { ...tabs, active: id } })
 }
 
-/** Reorder tabs. Only a permutation of the current ids counts: unknown ids are dropped and
- *  missing ones keep their old relative position at the end, so a stale drag can't lose a tab. */
+/** Reorder tabs. `order` may be a subset (tab mode leaves Files out; a stale drag misses ids):
+ *  the listed known ids fill, in the new order, the slots they held; every other id stays put. */
 export function reorderTabs(order: readonly string[]): void {
   const { tabs } = current
   const known = new Set(tabs.order)
-  const next = [...new Set(order.filter((id) => known.has(id)))]
-  next.push(...tabs.order.filter((id) => !next.includes(id)))
+  const moved = [...new Set(order.filter((id) => known.has(id)))]
+  const slots = new Set(moved)
+  let k = 0
+  const next = tabs.order.map((id) => (slots.has(id) ? moved[k++] : id))
   if (next.some((id, i) => id !== tabs.order[i])) commit({ ...current, tabs: { ...tabs, order: next } })
+}
+
+/** Reconcile `order`/`active` with the board's nodes (both strips call this on every node change). */
+export function reconcileWithNodes(nodes: readonly { id: string; kind: WsNodeKind }[]): void {
+  panels = new Set(nodes.filter((n) => !isTabKind(n.kind)).map((n) => n.id))
+  commit(reconcileTabs(current, nodes))
 }
 
 export function setFilesPanelWidth(width: number): void {
@@ -61,11 +75,6 @@ export function setFilesPanelOpen(open: boolean): void {
 export function toggleFilesPanel(): void {
   const { tabs } = current
   commit({ ...current, tabs: { ...tabs, filesPanel: { ...tabs.filesPanel, open: !tabs.filesPanel.open } } })
-}
-
-/** Store a layout produced by `reconcileTabs(getTabLayout(), nodes)`; same object back = no-op. */
-export function applyReconciled(next: TabLayout): void {
-  commit(next)
 }
 
 /** React hook: the current layout, re-rendering on change. */

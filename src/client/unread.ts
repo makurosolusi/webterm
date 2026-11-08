@@ -12,6 +12,7 @@
 // yang hidup lebih lama dari status yang membenarkannya akan membuat sidebar, sesudah reload,
 // menaruh sesi di "Unread" sementara statusnya sendiri terbaca "Unknown": klaim tanpa bukti di
 // belakangnya. Jadi umurnya sengaja disamakan dengan umur `statuses` — satu tab, mati bersama.
+import { useEffect, useState } from 'react'
 import type { AgentStatus } from '../shared/workspace'
 import { noteAttention } from './osNotify'
 import { setBadgeCount } from './osNotify.badge'
@@ -89,4 +90,11 @@ export function noteStatus(id: string, status: AgentStatus, opts: { quiet?: bool
   if (!opts.quiet) noteAttention(id, status, isWatching(id))
   if (status === 'working') return
   if (!isWatching(id)) markUnread(id)
+}
+
+/** React hook: the unread ids, re-rendering on change (snapshot read at mount, then every emit). */
+export function useUnreadIds(): ReadonlySet<string> {
+  const [ids, setIds] = useState<ReadonlySet<string>>(unreadIds)
+  useEffect(() => subscribeUnread(setIds), [])
+  return ids
 }

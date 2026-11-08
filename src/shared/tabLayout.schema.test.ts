@@ -58,11 +58,12 @@ describe('reconcileTabs', () => {
     expect(reconcileTabs(layout(['a'], 'a'), []).tabs.active).toBeNull()
   })
 
-  it('never puts a Files node in order (it is the panel)', () => {
+  it('keeps Files nodes in order (canvas strip) but never makes one the tab-mode active tab', () => {
     expect(isTabKind('files')).toBe(false)
     const r = reconcileTabs(layout(['f', 'a'], 'f'), [node('f', 'files'), node('a', 'agent'), node('e', 'editor'), node('b', 'browser')])
-    expect(r.tabs.order).toEqual(['a', 'e', 'b'])
+    expect(r.tabs.order).toEqual(['f', 'a', 'e', 'b'])
     expect(r.tabs.active).toBe('a')
+    expect(reconcileTabs(layout([], null), [node('a'), node('f', 'files')]).tabs.active).toBe('a')
   })
 
   it('returns the same object when nothing changed, and keeps mode and panel', () => {

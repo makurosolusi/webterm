@@ -10,29 +10,7 @@ import {
   type buildStatusList,
   type sidebarEmptyState,
 } from './sessionList'
-import type { buildNodeGroups } from './nodeList'
 import type { ClosedEntry } from './closedHistory'
-import type { WsNodeKind } from '../shared/workspace'
-
-/** Codicon per kind untuk branch tab Nodes. Baris di sana tidak punya status, jadi slot ikonnya
- *  kosong — dan bentuk adalah satu-satunya pembeda yang terbaca tanpa membaca: judul kustom
- *  ("notes", "scratch") sama-sama mungkin milik editor, terminal, atau folder. */
-export const KIND_ICON: Record<WsNodeKind, string> = {
-  agent: 'hubot',
-  agentChat: 'comment-discussion',
-  terminal: 'terminal',
-  editor: 'file',
-  files: 'folder',
-  browser: 'globe',
-  diff: 'git-compare',
-  plan: 'type-hierarchy',
-  app: 'window',
-}
-
-/** Glyph kind (codicon) untuk header grup dan baris tab Nodes. */
-function KindIcon({ kind }: { kind: WsNodeKind }) {
-  return <span className={`codicon codicon-${KIND_ICON[kind]}`} aria-hidden />
-}
 
 /** Kunci disclosure seksi "Recently closed", berbagi `collapsed` dengan baris workspace. Tidak bisa
  *  bertabrakan: kunci workspace selalu berawalan `project:` (lihat `projectCollapseKey`). */
@@ -45,7 +23,6 @@ function monogram(name: string): string {
 export interface SessionsTreeProps {
   treeRef: RefObject<ComponentRef<typeof Tree> | null>
   grouping: SidebarGrouping
-  nodeGroups: ReturnType<typeof buildNodeGroups>
   sections: ReturnType<typeof buildStatusList>
   groups: ReturnType<typeof buildSessionList>
   closedSessions: ClosedEntry[]
@@ -56,11 +33,10 @@ export interface SessionsTreeProps {
   onCloseSession: (id: string) => void
 }
 
-/** Pohon sesi (tab project/status/nodes + seksi "Recently closed"); murni render dari props. */
+/** Pohon sesi (tab project/status + seksi "Recently closed"); murni render dari props. */
 export function SessionsTree({
   treeRef,
   grouping,
-  nodeGroups,
   sections,
   groups,
   closedSessions,
@@ -75,42 +51,9 @@ export function SessionsTree({
       ref={treeRef}
       className="ss-tree"
       indent={8}
-      aria-label={`${grouping === 'nodes' ? 'Nodes' : 'Sessions'} tree`}
+      aria-label="Sessions tree"
     >
-      {/* Satu-satunya daftar yang memuat node files/editor juga — jadi satu-satunya jalan
-          memusatkan canvas ke node yang bukan shell. */}
-      {grouping === 'nodes' ? (
-        nodeGroups.map((g) => {
-          return (
-            <SessionGroupItem
-              key={g.kind}
-              groupKey={`nodes:${g.kind}`}
-              label={g.label}
-              count={g.rows.length}
-              open={groupOpen(`nodes:${g.kind}`)}
-              register={register}
-              icon={<KindIcon kind={g.kind} />}
-            >
-              {g.rows.map((r) => (
-                <TreeItem
-                  key={r.id}
-                  className="ss-tree__leaf"
-                  aria-label={`Focus ${r.label}`}
-                  title={r.detail ?? ''}
-                  ref={(el) => register(el, { kind: 'node', id: r.id, path: r.detail })}
-                >
-                  <span slot="icon-leaf" className="ss-tree__kind" aria-hidden>
-                    <KindIcon kind={g.kind} />
-                  </span>
-                  {/* Tanpa meta: satu board saja (nama workspace sama di tiap baris), dan
-                      kind sudah disebut header seksi + ikon. */}
-                  <span className="ss-tree__label">{r.label}</span>
-                </TreeItem>
-              ))}
-            </SessionGroupItem>
-          )
-        })
-      ) : grouping === 'status' ? (
+      {grouping === 'status' ? (
         // `buildStatusList` menahan SEMUA section supaya posisinya tetap; yang memutuskan mana
         // yang layak dirender adalah di sini. Section kosong disembunyikan — header "0" tidak
         // membawa apa pun dan tiga di antaranya memakan separuh panel. Satu pengecualian:
@@ -183,7 +126,7 @@ export function SessionsTree({
 
       {/* Dirender HANYA bila ada isinya — dan di luar gerbang `empty`: board yang seluruh
           sesinya baru saja ditutup adalah justru saat daftar ini paling berguna. */}
-      {grouping !== 'nodes' && closedSessions.length > 0 && (
+      {closedSessions.length > 0 && (
         <SessionGroupItem
           groupKey={CLOSED_KEY}
           label="Recently closed"

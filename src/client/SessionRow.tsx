@@ -6,27 +6,20 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { TreeItem } from './vscode/register'
 import { rowMeta, type SessionRowVM, type SignalCounts } from './sessionList'
+import { signalOf, UNREAD_LABEL } from './sessionSignal'
 
-/** Kalimat glyph belum-dibaca, dipakai juga sebagai bagian nama aksesibel barisnya. */
-const UNREAD_TITLE = 'Finished — new for you'
-
-/** Apakah baris ini memakai glyph belum-dibaca? Bel (giliranmu) dan turn yang sedang jalan
- *  MENGALAHKANNYA — prompt izin atau turn baru lebih mendesak daripada tanda lama; sama dengan
- *  prioritas `sessionStatusGroup`. Satu predikat karena dua pembaca (glyph dan aria-label). */
-const showsUnread = (row: SessionRowVM): boolean =>
-  row.unread === true && row.statusKind !== 'attention' && row.statusKind !== 'working'
+/** Glyph rule shared with the node tab strips (`./sessionSignal`). */
+const signalOfRow = (row: SessionRowVM) => signalOf(row.statusKind, row.unread === true, row.stateLabel)
 
 /** Satu glyph status di slot decoration (kanan baris), seperti dekorasi terminal VS Code. Prioritas:
  *  bel (giliranmu) → centang belum-dibaca → centang (selesai) → spinner (jalan) → titik. Satu baris
  *  hanya punya satu slot, jadi sinyal yang paling menuntut tindakan yang menang. */
 function StatusGlyph({ row }: { row: SessionRowVM }) {
-  let icon = 'circle-small-filled'
-  let tone: string = row.statusKind
-  let title = row.stateLabel
-  if (row.statusKind === 'attention') icon = 'bell'
-  else if (showsUnread(row)) [icon, tone, title] = ['check', 'unread', UNREAD_TITLE]
-  else if (row.statusKind === 'done') icon = 'check'
-  else if (row.statusKind === 'working') icon = 'loading codicon-modifier-spin'
+  const { tone, label: title } = signalOfRow(row)
+  const icon = tone === 'attention' ? 'bell'
+    : tone === 'unread' || tone === 'done' ? 'check'
+    : tone === 'working' ? 'loading codicon-modifier-spin'
+    : 'circle-small-filled'
   return (
     <span slot="decoration" className={`ss-glyph ss-glyph--${tone}`} title={title}>
       <span className={`codicon codicon-${icon}`} aria-hidden />
@@ -95,7 +88,7 @@ export interface SessionTreeItemProps {
  *  glyph VS Code, jadi indentasi dan tinggi baris 22px datang dari library, bukan dari kita. */
 export function SessionTreeItem({ row, showProject, onCloseSession, register }: SessionTreeItemProps) {
   const meta = rowMeta(showProject ? row.projectName : undefined, row.cwd)
-  const aria = `${row.label} — ${row.stateLabel}${showsUnread(row) ? ` — ${UNREAD_TITLE}` : ''}`
+  const aria = `${row.label} — ${row.stateLabel}${signalOfRow(row).tone === 'unread' ? ` — ${UNREAD_LABEL}` : ''}`
   const closeRef = useRef(onCloseSession)
   closeRef.current = onCloseSession
 

@@ -15,9 +15,12 @@ body.clean-view .tabbar,
 body.clean-view .dock,
 body.clean-view .sessions-sidebar,
 body.clean-view .vscode-secondary-side-bar,
-body.clean-view .minimap-dock {
+body.clean-view .minimap-dock,
+body.clean-view .node-tabs {
   display: none;
 }
+/* The canvas takes the strip's 32px back. */
+body.clean-view .node-tabs + .board-host { top: 0; }
 
 /* Petunjuk jalan keluar yang redup sendiri.
 

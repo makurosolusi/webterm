@@ -31,14 +31,15 @@
 .tabs-strip__actions { flex: none; display: flex; align-items: center; gap: 2px; padding: 0 6px; }
 
 .tabs-tab {
-  position: relative; flex: 0 0 auto; width: 180px; min-width: 72px;
+  /* Shrinks to icon + truncated title (min-width) before the strip overflows. */
+  position: relative; flex: 0 1 180px; min-width: 72px;
   display: flex; align-items: center; gap: 6px; padding: 0 6px;
   font-size: var(--ui-font-size); cursor: pointer; user-select: none;
   background: var(--vscode-tab-inactiveBackground);
   color: var(--vscode-tab-inactiveForeground);
   border-right: 1px solid var(--vscode-tab-border);
 }
-@media (min-width: 1280px) { .tabs-tab { width: 220px; } }
+@media (min-width: 1280px) { .tabs-tab { flex-basis: 220px; } }
 .tabs-tab:hover { color: var(--vscode-tab-activeForeground); }
 .tabs-tab--active {
   background: var(--vscode-tab-activeBackground);
@@ -59,11 +60,19 @@
 .tabs-tab__edit { flex: 1; min-width: 72px; height: 20px; font-size: var(--ui-font-size); }
 .tabs-tab__status { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .tabs-tab__status--working { background: var(--state-working); }
-.tabs-tab__status--waiting { background: var(--state-warning); }
-.tabs-tab__status--blocked { background: var(--state-attention); }
+/* Tones of `sessionSignal`, the same signal as the Sessions side bar glyph. */
+.tabs-tab__status--attention { background: var(--state-attention); }
+.tabs-tab__status--done { background: var(--state-success); }
+.tabs-tab__status--unread { background: var(--accent); }
+.tabs-strip__more { white-space: nowrap; font-size: var(--ui-font-size); }
 /* Close: hidden until hover, always visible on the active tab (Orca). */
 .tabs-tab__close { flex: none; opacity: 0; }
 .tabs-tab:hover .tabs-tab__close, .tabs-tab:focus-within .tabs-tab__close, .tabs-tab--active .tabs-tab__close { opacity: 1; }
+
+/* ---- Node tab strip above the canvas (canvas mode); the board starts below it. ---- */
+.node-tabs { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
+.node-tabs .tabs-strip { height: 32px; }
+.node-tabs + .board-host { top: 32px; }
 
 /* ---- Files panel ---- */
 .tabs-files {
