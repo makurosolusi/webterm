@@ -115,7 +115,7 @@ describe('Dock item', () => {
     const { container } = render(<Dock {...props} onToggleChat={onToggleChat} needsYouCount={0} />)
     expect(container.querySelector('.codicon-shield')).toBeNull()
     expect(screen.queryByLabelText(/central control panel/i)).toBeNull()
-    expect(screen.getAllByRole('button', { name: /^Central/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^Central(?! settings)/ })).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Central' }))
     expect(onToggleChat).toHaveBeenCalledTimes(1)
   })
@@ -135,17 +135,17 @@ describe('Central not ready: the Chat tab offers it', () => {
   beforeEach(() => { resetCapabilitiesCache(); localStorage.clear(); reloadSideBarFromStorage(); setSideBar({ open: true, view: 'chat' }) })
   afterEach(() => { localStorage.clear(); reloadSideBarFromStorage() })
 
-  it('shows Set up Claude Code above the chat, leading to Settings › Agent launch profiles', async () => {
+  it('shows Set up Claude Code above the chat, leading to Settings › Central Agent', async () => {
     vi.stubGlobal('fetch', route(() => caps('needs-step', { kind: 'agentEngine', label: 'Set up Claude Code' })))
     render(<SecondarySideBar centralEnabled={false} />)
     const setup = await screen.findByRole('button', { name: 'Set up Claude Code' })
     expect(setup.closest('[data-slot="central-setup"]')?.closest('.vscode-bottom-panel__pane')?.hasAttribute('hidden')).toBe(false)
     fireEvent.click(setup)
-    // Claude launch profile card: its link opens Settings › Agent (Claude launch profiles, Test).
+    // Claude launch profile card: its link opens Settings › Central Agent (Claude profile pick).
     const opened = vi.fn()
     window.addEventListener('webterm:open-settings', opened)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit launch profile' }))
-    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'agent' })
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'central' })
     window.removeEventListener('webterm:open-settings', opened)
   })
 

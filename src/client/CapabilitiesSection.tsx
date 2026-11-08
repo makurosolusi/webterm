@@ -8,7 +8,7 @@ import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities
 import { AdvancedSection } from './AdvancedSection'
 import { ADVANCED_TEXT, SECTION_TEXT } from './advancedLabels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
-import { CapabilityCard } from './CapabilityCard'
+import { CapabilityCard, CentralSummaryRow } from './CapabilityCard'
 import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
 import { matchesSearch } from './SettingsFields'
 import { TelegramCard } from './TelegramCard'
@@ -30,10 +30,15 @@ export interface CapabilitiesSectionProps {
   onVisibleCount?(count: number): void
   /** Settings patches (the Claude provider card adds a launch profile; keep the panel's copy in step). */
   onSettingsChange?(patch: Partial<Settings>): void
+  /** Opens Settings › Central Agent (the Central, worker and autonomy switches live there). */
+  onOpenCentral?(): void
 }
 
+/** Shown as ONE summary row; their switches are in Settings › Central Agent. */
+const CENTRAL_IDS: readonly CapabilityId[] = ['central', 'workers', 'autonomy']
+
 /** Isi tab Kemampuan; memuat dari server dan menunggu server pada tiap perubahan. */
-export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleCount, onSettingsChange }: CapabilitiesSectionProps): React.JSX.Element {
+export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleCount, onSettingsChange, onOpenCentral }: CapabilitiesSectionProps): React.JSX.Element {
   const api = useCapabilities()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const all = api.data?.capabilities ?? []
@@ -42,7 +47,8 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
     const text = key === 'advanced' ? ADVANCED_TEXT.summary : key === 'token' ? `${TOKEN_TEXT.title} ${TOKEN_TEXT.why}` : `${CAPABILITIES[key].title} ${CAPABILITIES[key].blurb}`
     return matchesSearch(`${text} ${CAPABILITY_KEYWORDS[key].join(' ')}`, query)
   }
-  const visible = all.filter((v) => show(v.id)).length + (api.data && show('advanced') ? 1 : 0) + (show('token') ? 1 : 0)
+  const showCentral = CENTRAL_IDS.some(show)
+  const visible = all.filter((v) => !CENTRAL_IDS.includes(v.id) && show(v.id)).length + (all.length && showCentral ? 1 : 0) + (api.data && show('advanced') ? 1 : 0) + (show('token') ? 1 : 0)
   useEffect(() => {
     onVisibleCount?.(visible)
     return () => onVisibleCount?.(0)
@@ -50,10 +56,9 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
 
   // fixChain = nyalakan kartu ini lewat toggle biasa: server ikut menyalakan prasyaratnya
   // (`closure`), pilihan kartu lain tidak disentuh. Dulu memanggil /reset yang menghapus semuanya.
-  // `kind` dilebarkan ke string: 'agentEngine' (central butuh Claude Code) bisa datang dari server
-  // sebelum tipe bersama memuatnya. Mesin agen dipilih di Lanjutan, sama seperti lokasi Chrome.
-  const onStep = (id: CapabilityId, kind: NonNullable<CapabilityView['step']>['kind'] | (string & {})): void => {
-    if (kind === 'chromiumPath' || kind === 'agentEngine') setAdvancedOpen(true)
+  // 'agentEngine' hanya milik Central, yang di sini cuma baris ringkasan (langkahnya ada di Central Agent).
+  const onStep = (id: CapabilityId, kind: NonNullable<CapabilityView['step']>['kind']): void => {
+    if (kind === 'chromiumPath') setAdvancedOpen(true)
     else if (kind === 'telegramToken') document.getElementById(TELEGRAM_TOKEN_INPUT_ID)?.focus()
     else void api.toggle(id, true)
   }
@@ -63,7 +68,8 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
       {api.error ? <p role="alert" className="text-xs text-destructive">{api.error}</p> : null}
       {api.data === null && api.error === null ? <p role="status" className="text-xs opacity-70">{SECTION_TEXT.loading}</p> : null}
       {all.map((view) => {
-        if (!show(view.id)) return null
+        if (view.id === 'central') return showCentral ? <CentralSummaryRow key="central" view={view} onOpen={onOpenCentral} /> : null
+        if (CENTRAL_IDS.includes(view.id) || !show(view.id)) return null
         return view.id === 'telegram' ? (
           <div key={view.id} data-capability="telegram"><TelegramCard projectId={projectId} /></div>
         ) : (

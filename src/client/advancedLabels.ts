@@ -18,8 +18,6 @@ export const ADVANCED_TEXT = {
   chromiumUsingOverride: 'In use (your choice):',
   chromiumOverrideInvalid: 'The location you chose was not found, so the browser can’t run. Fix it or use automatic.',
   chromiumMissing: 'Chromium was not found. Enter its location here.',
-  chromiumCandidates: 'Found on this computer',
-  chromiumSave: 'Save location',
   chromiumUseAuto: 'Use automatic',
   chromiumRedetect: 'Detect again',
   dataDirLabel: 'Data folder',

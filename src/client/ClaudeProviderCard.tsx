@@ -7,10 +7,25 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
+import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
+import { SettingsCombobox } from './SettingsCombobox'
 import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State, type TestResult } from './claudeProvider.api'
 
 const MODE_LIST: Mode[] = ['login', 'apiKey', 'custom', 'command']
 const CREDENTIAL_LIST: Credential[] = ['authToken', 'apiKey']
+const MODEL_PRESETS = [{ value: '', label: 'Claude Code default' }, ...PROJECT_MODEL_ALIASES.map((m) => ({ value: m }))]
+
+/** A gateway URL: http(s), and never with a user or password in it (it would be stored and remembered). */
+export function validateGatewayUrl(v: string): string | null {
+  if (!v) return null
+  try {
+    const u = new URL(v)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return PROVIDER_TEXT.badUrl
+    return u.username || u.password ? PROVIDER_TEXT.urlCredentials : null
+  } catch {
+    return PROVIDER_TEXT.badUrl
+  }
+}
 
 /** One-of-N choice as a row of shadcn buttons (aria-pressed), no raw form controls. */
 function Choice<T extends string>(p: { label: string; options: T[]; names: Record<T, string>; value: T; onChange(v: T): void }): React.JSX.Element {
@@ -34,6 +49,8 @@ export const PROVIDER_TEXT = {
     command: 'Claude runs through your own command, e.g. envman -e claude:my-key -- claude, which supplies its credential.',
   } as Record<Mode, string>,
   baseUrl: 'Base URL',
+  badUrl: 'Enter a web address starting with https:// or http://.',
+  urlCredentials: 'Leave the user and password out of the address; put the key in Key or token.',
   credential: 'Credential type',
   credentials: { authToken: 'Auth token (Authorization: Bearer)', apiKey: 'API key (x-api-key)' } as Record<Credential, string>,
   key: 'Key or token',
@@ -145,7 +162,8 @@ export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: Claud
           ) : null}
           {mode === 'custom' ? (
             <>
-              <Input aria-label={PROVIDER_TEXT.baseUrl} placeholder="https://llm-gateway.example.com" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+              <SettingsCombobox ariaLabel={PROVIDER_TEXT.baseUrl} fieldId="claude.gatewayUrl" mono presets={[]} placeholder="https://llm-gateway.example.com"
+                value={baseUrl} validate={validateGatewayUrl} onDraft={setBaseUrl} onCommit={setBaseUrl} />
               <Choice label={PROVIDER_TEXT.credential} options={CREDENTIAL_LIST} names={PROVIDER_TEXT.credentials} value={credential} onChange={setCredential} />
             </>
           ) : null}
@@ -153,7 +171,8 @@ export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: Claud
             <>
               <Input aria-label={PROVIDER_TEXT.key} type="password" autoComplete="off" value={secret}
                 placeholder={p?.secretSet ? PROVIDER_TEXT.keySet : PROVIDER_TEXT.keyUnset} onChange={(e) => setSecret(e.target.value)} />
-              <Input aria-label={PROVIDER_TEXT.model} value={model} onChange={(e) => setModel(e.target.value)} />
+              <SettingsCombobox ariaLabel={PROVIDER_TEXT.model} fieldId="claude.providerModel" presets={MODEL_PRESETS}
+                value={model} onDraft={setModel} onCommit={setModel} />
             </>
           ) : null}
           {mode !== 'command' ? <div className="flex items-center gap-2">

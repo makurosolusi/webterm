@@ -90,7 +90,7 @@ describe('turn limits (B3)', () => {
     const { runtime, inputs } = scripted([{ outcome: 'success', sessionRef: null }, { outcome: 'success', sessionRef: null }])
     const defaults = new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, env: {} })
     await send(defaults, 'c1')
-    expect(inputs[0]!.limits).toEqual({ maxTurns: 12, maxWallMs: 120_000, maxTokens: 60_000 })
+    expect(inputs[0]!.limits).toEqual({ maxTurns: 12, maxWallMs: 120_000 })
 
     const custom = new TurnService({
       db: fixture.db, runtime, stream: hub, now: () => NOW, env: { WEBTERM_CENTRAL_TURN_WALL_MS: '30000' },

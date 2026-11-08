@@ -1,6 +1,6 @@
 // Settings › Agent › Models: what the model ladder picks by default, per-workspace overrides
-// (`projectModels`, an entry key: each row writes only its own entry, `null` removes it), and the
-// daily spending limit that pulls the ladder down.
+// (`projectModels`, an entry key: each row writes only its own entry, `null` removes it). The daily
+// spending limit that pulls the ladder down lives in Settings › Central Agent › Model & cost.
 import { useEffect, useState } from 'react'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
@@ -9,7 +9,6 @@ import {
 } from '../shared/settings.projectModels'
 import { TIER_TABLE, type Tier } from '../server/models/modelLadder'
 import { fetchWorkspaces } from './api'
-import { CostLimitField } from './SettingsCostLimit'
 import { Field } from './SettingsFields'
 import { SettingsSelect } from './SettingsControls'
 
@@ -91,7 +90,6 @@ export function ModelsSettings({ settings: s, onChange }: { settings: Settings; 
         </div>
       </Field>
 
-      <CostLimitField />
     </>
   )
 }

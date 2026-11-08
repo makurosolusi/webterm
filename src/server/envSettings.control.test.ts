@@ -112,6 +112,8 @@ describe('PUT (Control writes)', () => {
   it('card-owned keys and unknown keys are refused; invalid values come back 400 by name', async () => {
     const h = harness()
     expect((await h.call('PUT', { set: { WEBTERM_CENTRAL: 'on' } })).json()).toMatchObject({ error: 'managed_elsewhere', key: 'WEBTERM_CENTRAL' })
+    expect((await h.call('PUT', { set: { WEBTERM_CENTRAL_DAILY_COST_MICROS: '1000000' } })).json())
+      .toMatchObject({ error: 'managed_elsewhere', key: 'WEBTERM_CENTRAL_DAILY_COST_MICROS', reason: 'Managed in Settings › Central Agent › Daily spending limit.' })
     expect((await h.call('PUT', { set: { NOPE: '1' } })).json()).toMatchObject({ error: 'unknown_key' })
     const bad = await h.call('PUT', { set: { WEBTERM_FILES_LIST_MAX: 'lots' } })
     expect(bad.status).toBe(400)

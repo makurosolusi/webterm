@@ -209,3 +209,23 @@ describe('nextSettingsDocument: projectModels (per-workspace model override)', (
       .toEqual({ b: { model: 'haiku', effort: 'max' } })
   })
 })
+
+describe('nextSettingsDocument: inputHistory (remembered combobox values)', () => {
+  it('merges per field, null deletes, other fields stay', () => {
+    const one = nextSettingsDocument(null, { inputHistory: { a: ['x'] } })
+    const two = nextSettingsDocument(JSON.stringify(one.doc), { inputHistory: { b: ['y', 'x'] } })
+    expect(two.settings.inputHistory).toEqual({ a: ['x'], b: ['y', 'x'] })
+    expect(nextSettingsDocument(JSON.stringify(two.doc), { inputHistory: { a: null } }).settings.inputHistory).toEqual({ b: ['y', 'x'] })
+  })
+
+  it('a list not in stored form is refused (400 path) without echoing the value', () => {
+    const secretish = 'hunter2-not-normalized ' // test-only
+    let caught: unknown
+    try { nextSettingsDocument(null, { inputHistory: { a: [secretish] } }) } catch (e) { caught = e }
+    expect(caught).toBeInstanceOf(SettingsValidationError)
+    const errors = (caught as SettingsValidationError).errors
+    expect(errors).toEqual([{ index: 0, field: 'inputHistory.list', code: 'invalid_list' }])
+    expect(JSON.stringify(errors)).not.toContain('hunter2')
+    expect(() => nextSettingsDocument(null, { inputHistory: 'x' })).toThrow(SettingsValidationError)
+  })
+})

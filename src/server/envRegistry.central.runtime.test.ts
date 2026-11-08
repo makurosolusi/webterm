@@ -44,7 +44,7 @@ describe('WEBTERM_CENTRAL_MODEL', () => {
     expect(s.kind).toBe('string')
     expect(s.default ?? '').toBe('')
     expect(s.unsetLabel).toBe('Runtime default')
-    expect(s.label).toBe('Model (Claude)')
+    expect(s.label).toBe('Model override')
     expect(s.requires).toEqual([expect.objectContaining({ key: RUNTIME, oneOf: ['claude', ''] })])
   })
 })

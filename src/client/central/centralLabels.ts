@@ -19,9 +19,10 @@ export const CL = {
   agentsOff: 'Central agents are off. With the worker orchestrator on, the workers Central starts are listed here.',
   privacyLabel: 'Free model: prompts and repository content are sent to the model provider. Use a credentialed provider for sensitive data.',
   levelHeading: 'Control level',
-  effective: 'Effective',
-  ceiling: 'Ceiling',
-  globalLevel: 'Global',
+  effective: 'Now',
+  ceiling: 'Highest allowed',
+  globalLevel: 'Chosen level',
+  openSettings: 'Central settings',
   budgetHeading: 'Daily budget (UTC)',
   tokens: 'Tokens',
   spawns: 'Spawns',
@@ -61,11 +62,14 @@ export const CL = {
   secretMasked: '[hidden: looks like a secret]',
 } as const
 
-/** Short code and name of each ladder level (RND/28b §4.1), index-aligned with the contract. */
+/**
+ * Short code and plain name of each ladder level (RND/28b §4.1). The code comes first: the Timeline badge
+ * shows only it. Wording follows controlGuard: a worker start needs act_gated, R2 asks below act_envelope, R3 always asks.
+ */
 export const LEVEL_NAMES: Record<ControlLevel, string> = {
-  off: 'L0 off',
-  observe: 'L1 observe',
-  propose: 'L2 propose',
-  act_gated: 'L3 act (gated)',
-  act_envelope: 'L4 act (envelope)',
+  off: 'L0 Off',
+  observe: 'L1 Chat only',
+  propose: 'L2 Proposes work, you approve',
+  act_gated: 'L3 Starts workers, asks before risky steps',
+  act_envelope: 'L4 Works on its own within its limits',
 }

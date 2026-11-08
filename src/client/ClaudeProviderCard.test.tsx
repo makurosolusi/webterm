@@ -3,7 +3,7 @@
 // before Test connection, the honest test result and the restart hint; the key never reaches the console.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
+import { ClaudeProviderCard, PROVIDER_TEXT, validateGatewayUrl } from './ClaudeProviderCard'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
 type Call = { url: string; method: string; body?: string }
@@ -79,5 +79,20 @@ describe('ClaudeProviderCard', () => {
     expect(screen.getByText(new RegExp(PROVIDER_TEXT.restart(1).slice(0, 30)))).toBeTruthy()
     await waitFor(() => expect((screen.getByLabelText(PROVIDER_TEXT.key) as HTMLInputElement).value).toBe(''))
     for (const s of spies) for (const c of s.mock.calls) expect(JSON.stringify(c)).not.toContain(KEY)
+  })
+
+  it('custom endpoint: base URL and model are comboboxes; a URL with a user or password is refused, the key stays a password box', async () => {
+    serve({ mode: 'custom', baseUrl: '', credential: 'authToken', secretSet: false, ready: false })
+    render(<ClaudeProviderCard />)
+    const url = await screen.findByRole('combobox', { name: PROVIDER_TEXT.baseUrl }) as HTMLInputElement
+    fireEvent.change(url, { target: { value: 'https://me:pw@gw.example.test' } })
+    fireEvent.blur(url)
+    expect(screen.getByRole('alert').textContent).toBe(PROVIDER_TEXT.urlCredentials)
+    expect(validateGatewayUrl('ftp://gw')).toBe(PROVIDER_TEXT.badUrl)
+    expect(validateGatewayUrl('https://gw.example.test/v1')).toBeNull()
+    const model = screen.getByRole('combobox', { name: PROVIDER_TEXT.model })
+    fireEvent.keyDown(model, { key: 'ArrowDown' })
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Claude Code default', 'haiku', 'sonnet', 'opus', 'fable'])
+    expect((screen.getByLabelText(PROVIDER_TEXT.key) as HTMLInputElement).type).toBe('password')
   })
 })

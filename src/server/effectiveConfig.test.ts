@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { BOOTSTRAP_ONLY_KEYS, ENV_REGISTRY } from './envRegistry'
 import { buildEffectiveConfig, type EffectiveRow } from './effectiveConfig'
-import { CONTROL_WHERE, uiWhere } from './effectiveConfig.ui'
+import { CENTRAL_SECTION_KEYS, CENTRAL_SETTINGS, CONTROL_WHERE, uiWhere } from './effectiveConfig.ui'
 import { SENTINEL_BOT_TOKEN, setupEnv } from './envSettings.testutil'
 
 function build(env: NodeJS.ProcessEnv, stored: string | null = null, dotenv: string[] = []) {
@@ -68,6 +68,30 @@ describe('A2 drift: no behaviour key is env-only (F1 exit)', () => {
     expect(ENV_REGISTRY.filter((s) => !uiWhere(s.key)).map((s) => s.key)).toEqual([])
     const { out } = build({})
     expect(out.rows.filter((r) => r.envOnly).every((r) => r.bootstrap)).toBe(true)
+  })
+})
+
+describe('Central Agent section keys', () => {
+  it('live in Settings › Central Agent under their registry label and are read-only in Control', () => {
+    const { row } = build({})
+    expect(CENTRAL_SECTION_KEYS).toHaveLength(14)
+    for (const k of CENTRAL_SECTION_KEYS) {
+      expect(row(k), k).toMatchObject({ ui: `${CENTRAL_SETTINGS} › ${row(k).label}`, editable: false })
+    }
+    expect(row('WEBTERM_CENTRAL_DAILY_COST_MICROS').ui).toBe('Settings › Central Agent › Daily spending limit')
+    // Derived keys keep following their card.
+    expect(row('WEBTERM_CENTRAL_CHAT').ui).toBe('Settings › Capabilities › Central agent (derived)')
+  })
+
+  it('Central labels avoid internal jargon', () => {
+    const { out } = build({})
+    const central = out.rows.filter((r) => r.key.startsWith('WEBTERM_CENTRAL') || CENTRAL_SECTION_KEYS.includes(r.key))
+    for (const r of central) expect(r.label, r.key).not.toMatch(/micros|candidate|\(ms\)|\bL[0-4]\b/i)
+  })
+
+  it('the mock engine stays a valid value but is never offered as an option', () => {
+    expect(build({}).row('WEBTERM_CENTRAL_RUNTIME').options).toEqual(['claude', 'off'])
+    expect(build({ WEBTERM_CENTRAL_RUNTIME: 'mock' }).row('WEBTERM_CENTRAL_RUNTIME')).toMatchObject({ value: 'mock', valid: true })
   })
 })
 

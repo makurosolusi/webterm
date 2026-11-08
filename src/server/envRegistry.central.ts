@@ -8,38 +8,39 @@ const CENTRAL_ON = { key: 'WEBTERM_CENTRAL' }
 const RUNTIME_MODEL = { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', ''], note: 'Used by the Claude Code runtime.' }
 
 export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
-  flag('WEBTERM_CENTRAL', 'central', { ...C, audience: 'user', hot: true, label: 'Central', description: 'Portfolio projection and pause/resume at /api/central.' }),
+  flag('WEBTERM_CENTRAL', 'central', { ...C, audience: 'user', hot: true, label: 'Central Agent', description: 'Turns the Central Agent on: an assistant that knows all your projects and nodes.' }),
   flag('WEBTERM_CENTRAL_CHAT', 'central', {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
-    label: 'Central chat', description: 'Central chat panel; also gates the Telegram bridge (needs Central on).',
+    label: 'Central chat', description: 'Lets you talk to Central in the side bar and over Telegram. Follows the Central Agent switch.',
   }),
   enumOf('WEBTERM_CENTRAL_RUNTIME', 'central', ['claude', 'mock', 'off'], DEFAULT_RUNTIME_KIND, {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
     label: 'Central agent engine',
-    description: 'Central chat engine. Empty = automatic: Claude Code when it is set up, otherwise off (never Demo). Unknown value = off.',
+    description: 'What answers for Central. Empty = automatic: Claude Code when it is set up, otherwise off. Unknown value = off.',
+    // `mock` stays a valid value (tests, demo); the Control read model drops it from the offered options.
     optionLabels: { claude: 'Claude Code', mock: 'Demo (canned replies)', off: 'Off' },
   }),
   text('WEBTERM_CENTRAL_MODEL', 'central', {
     ...C, audience: 'advanced', hot: true, requires: [RUNTIME_MODEL], unsetLabel: 'Runtime default',
-    label: 'Model (Claude)', description: 'Empty = runtime default; re-read every turn.',
+    label: 'Model override', description: 'Use this model for Central instead of the automatic choice. Empty = automatic. Applies from the next reply.',
   }),
   flag('WEBTERM_CENTRAL_PLANNER', 'central', {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON, { key: 'WEBTERM_CENTRAL_TOOLS', oneOf: ['write'], note: 'The planner needs write tools.' }],
-    label: 'Central planner', description: 'Gates planner proposals (needs Central on and write tools).',
+    label: 'Let Central plan work', description: 'Central may propose a plan of tasks for you to approve. Follows the Worker orchestrator card.',
   }),
   enumOf('WEBTERM_CENTRAL_TOOLS', 'central', ['read', 'write'], 'read', {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
-    label: 'Central tools', description: 'Central tool permission: read only, or allowed to write (change projects and tasks).',
+    label: 'What Central may change', description: 'Read only, or also change projects and tasks. Follows the Worker orchestrator card.',
     optionLabels: { read: 'Read only', write: 'Can write' },
   }),
   flag('WEBTERM_CENTRAL_MEMORY', 'central', {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
-    label: 'Central memory', description: 'Include memory in the central chat context.',
+    label: 'Central memory', description: 'Central remembers useful facts between conversations. Follows the Central Agent switch.',
   }),
   flag('WEBTERM_CENTRAL_AUTONOMY', 'central', {
     ...C, audience: 'user', hot: true, dangerous: true,
     requires: [CENTRAL_ON, { key: 'WEBTERM_ORCHESTRATOR_RUN', note: 'Autonomy needs Orchestrator run.' }],
-    label: 'Central autonomy', description: 'A loop that runs real workers every interval without waiting for instructions.',
+    label: 'Central autonomy', description: 'Central keeps working on its own, starting real workers without waiting to be asked.',
     dangerNote: 'Runs real workers (shell, file edits, commits) automatically every interval.',
   }),
 ]

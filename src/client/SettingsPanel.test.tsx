@@ -7,6 +7,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
+import { SETTING_RANGES } from '../shared/settings.ranges'
 import { SettingsPanel, toSectionId } from './SettingsPanel'
 
 // Tab Kemampuan memuat dari server; tes layout ini tak membutuhkannya (D8 ada di SettingsPanel.capabilities.test.tsx).
@@ -47,12 +48,12 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Canvas', 'Canvas background', 'Capabilities', 'Control']
+    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Canvas', 'Canvas background', 'Capabilities', 'Control']
     expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
-    const fontSize = screen.getByLabelText('Font size') as HTMLInputElement
-    expect(fontSize.value).toBe(String(DEFAULT_SETTINGS.fontSize))
+    const fontSize = screen.getByRole('spinbutton', { name: 'Font size' })
+    expect(fontSize.getAttribute('aria-valuenow')).toBe(String(DEFAULT_SETTINGS.fontSize))
     expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
   })
 
@@ -118,24 +119,25 @@ describe('SettingsPanel keyboard', () => {
 })
 
 describe('SettingsPanel persistence', () => {
-  it('emits the patch for a number field change', () => {
+  it('emits the patch for a stepper change (buttons and arrow keys)', () => {
     const { onChange } = renderPanel()
 
-    fireEvent.change(screen.getByLabelText('Font size'), { target: { value: '18' } })
-
-    expect(onChange).toHaveBeenCalledWith({ fontSize: 18 })
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Font size' }))
+    expect(onChange).toHaveBeenLastCalledWith({ fontSize: DEFAULT_SETTINGS.fontSize + 1 })
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Font size' }), { key: 'ArrowDown' })
+    expect(onChange).toHaveBeenLastCalledWith({ fontSize: DEFAULT_SETTINGS.fontSize - 1 })
   })
 
-  it('clamps a number on commit without rewriting it per keystroke', () => {
+  it('the stepper stops at the setting range', () => {
     const { onChange, rerender } = renderPanel()
 
-    fireEvent.change(screen.getByLabelText('Font size'), { target: { value: '2' } })
-    expect(onChange).toHaveBeenLastCalledWith({ fontSize: 2 })
-    // Parent nyata menerapkan patch; blur membaca nilai terbaru itu, bukan nilai ketikan liar.
-    rerender(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, fontSize: 2 }} onChange={onChange} onClose={vi.fn()} />)
-    fireEvent.blur(screen.getByLabelText('Font size'))
-
-    expect(onChange).toHaveBeenLastCalledWith({ fontSize: 6 })
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Font size' }), { key: 'End' })
+    expect(onChange).toHaveBeenLastCalledWith({ fontSize: SETTING_RANGES.fontSize.max })
+    rerender(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, fontSize: SETTING_RANGES.fontSize.max }} onChange={onChange} onClose={vi.fn()} />)
+    expect((screen.getByRole('button', { name: 'Increase Font size' }) as HTMLButtonElement).disabled).toBe(true)
+    onChange.mockClear()
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Font size' }), { key: 'PageUp' })
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('toggles a boolean through a native checkbox with the same accessible name', () => {

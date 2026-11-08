@@ -109,6 +109,10 @@ function reasonOf(e: EnvEntryV2, source: EffectiveSource, ui: string | null, env
   return parts.join(' ')
 }
 
+/** Options a user may pick: the mock engine stays valid (tests, demo) but is never offered. */
+const offered = (e: EnvEntryV2): string[] | undefined =>
+  e.key === CENTRAL_RUNTIME_FLAG ? e.options?.filter((o) => o !== 'mock') : e.options
+
 function rowOf(e: EnvEntryV2, i: EffectiveInput): EffectiveRow {
   const ui = uiWhere(e.key)
   const source = sourceOf(e, i.dotenvKeys)
@@ -130,7 +134,7 @@ function rowOf(e: EnvEntryV2, i: EffectiveInput): EffectiveRow {
     source, reason, modified: source !== 'default', ui, envOnly: ui === null,
     ...(mock ? { mock: true as const } : {}), pendingRestart: e.pendingRestart, valid: e.valid,
     editable: ui === CONTROL_WHERE && lockReason === undefined, ...(lockReason ? { lockReason } : {}),
-    restart: e.restart, setting: secret ? '' : e.value, options: e.options, optionLabels: e.optionLabels,
+    restart: e.restart, setting: secret ? '' : e.value, options: offered(e), optionLabels: e.optionLabels,
     min: e.min, max: e.max, unit: e.unit, allowEmpty: e.allowEmpty, dangerNote: e.dangerNote,
   }
 }

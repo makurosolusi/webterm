@@ -29,6 +29,7 @@ export const CONTROL_TEXT = {
   resetTitle: 'Reset to the default (remove the Settings value)',
   save: 'Save',
   secretPlaceholder: 'New value (write-only)',
+  notANumber: 'Enter a number.',
   saving: 'Saving…',
   writeFailed: (why: string): string => `Not saved: ${why}`,
   restart: {

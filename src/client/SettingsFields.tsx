@@ -169,57 +169,6 @@ export function Field({
   )
 }
 
-/**
- * Number dengan clamp. Clamp terjadi saat COMMIT (blur/Enter), bukan per ketukan: mengoreksi
- * angka selagi diketik membuat "1" di jalan menuju "13" langsung melompat ke min.
- */
-export function NumberField({
-  id,
-  label,
-  hint,
-  setting,
-  value,
-  min,
-  max,
-  step,
-  unit,
-  onChange,
-}: {
-  id: string
-  label: string
-  hint?: ReactNode
-  setting?: keyof Settings
-  value: number
-  min: number
-  max: number
-  step?: number
-  unit?: string
-  onChange: (v: number) => void
-}): React.JSX.Element | null {
-  return (
-    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
-      <Input
-        id={id}
-        className="st-input st-input-num"
-        type="number"
-        min={min}
-        max={max}
-        step={step ?? 1}
-        value={value}
-        onChange={(e) => {
-          const n = Number(e.target.value)
-          if (Number.isFinite(n)) onChange(n)
-        }}
-        onBlur={(e) => {
-          const n = Number(e.target.value)
-          onChange(Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : value)
-        }}
-      />
-      {unit ? <span className="st-unit">{unit}</span> : null}
-    </Field>
-  )
-}
-
 export function TextField({
   id,
   label,

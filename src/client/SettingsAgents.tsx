@@ -10,6 +10,7 @@ import {
   type BuiltinAgentId,
 } from '../shared/workspace'
 import { ColorField, Field, SelectField, TextField, ToggleField } from './SettingsFields'
+import { ComboboxField } from './SettingsPickerFields'
 import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
 import { ClaudeLaunchProfilesCard } from './claudeLauncher/ClaudeLaunchProfilesCard'
@@ -164,8 +165,9 @@ function CustomAgentCard({
         ]}
         onChange={(v) => onPatch(agent.id, { baseAgent: (v || undefined) as BuiltinAgentId | undefined })}
       />
-      <TextField
+      <ComboboxField
         id={`st-ca-cmd-${agent.id}`}
+        fieldId="agents.customLaunchCommand"
         label="Launch command"
         hint={
           base && !agent.launchCmd.trim()
@@ -173,9 +175,10 @@ function CustomAgentCard({
             : undefined
         }
         value={agent.launchCmd}
+        presets={[{ value: AGENT_CONFIG.claude.launchCmd }]}
         placeholder={base ? base.launchCmd : 'e.g. aider'}
         mono
-        onChange={(v) => onPatch(agent.id, { launchCmd: v })}
+        onCommit={(v) => onPatch(agent.id, { launchCmd: v })}
       />
       <ColorField
         id={`st-ca-color-${agent.id}`}

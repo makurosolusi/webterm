@@ -38,7 +38,7 @@ export const PROFILES_TEXT = {
   cancel: 'Cancel',
   defaultFor: 'Default for new Claude agents',
   defaultForHint: 'New Claude agent nodes remember this profile; later edits to it apply on their next launch.',
-  central: 'Central Agent uses',
+  /** Central's own pick lives in Settings › Central Agent › Claude profile. */
   sameAsDefault: 'Same as default for new agents',
   testFailed: (code: string): string => `Test could not run (${code}). Save, then try again.`,
 }
@@ -107,9 +107,6 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange }: { settings: 
       </Field>
       <SelectField id="st-defaultClaudeProfileId" setting="defaultClaudeProfileId" label={PROFILES_TEXT.defaultFor}
         hint={PROFILES_TEXT.defaultForHint} value={defaultId} options={options} onChange={(v) => onChange({ defaultClaudeProfileId: v })} />
-      <SelectField id="st-centralClaudeProfileId" setting="centralClaudeProfileId" label={PROFILES_TEXT.central}
-        value={all.some((p) => p.id === s.centralClaudeProfileId) ? s.centralClaudeProfileId : ''}
-        options={[{ value: '', label: PROFILES_TEXT.sameAsDefault }, ...options]} onChange={(v) => onChange({ centralClaudeProfileId: v })} />
     </>
   )
 }

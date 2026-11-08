@@ -40,7 +40,6 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'propose' ? 'off' : '?'), 'central/guard/levelStore.ts:37 (off = hanya propose)'],
   ['WEBTERM_CENTRAL_TURN_STEPS', () => String(resolveLimits(E).maxTurns), 'central/chat/turnLimits.ts:27'],
   ['WEBTERM_CENTRAL_TURN_WALL_MS', () => String(resolveLimits(E).maxWallMs), 'central/chat/turnLimits.ts:28'],
-  ['WEBTERM_CENTRAL_TURN_TOKENS', () => String(resolveLimits(E).maxTokens), 'central/chat/turnLimits.ts:29'],
   ['WEBTERM_CENTRAL_DAILY_TOKENS', budget('tokens'), 'central/guard/budgetStore.ts:29 (fallback = spec registry sendiri)'],
   ['WEBTERM_CENTRAL_DAILY_SPAWNS', budget('spawns'), 'central/guard/budgetStore.ts:29 (fallback = spec registry sendiri)'],
   ['WEBTERM_CENTRAL_DAILY_COST_MICROS', budget('costMicros'), 'central/guard/budgetStore.ts:29 (fallback = spec registry sendiri)'],

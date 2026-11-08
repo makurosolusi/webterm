@@ -11,13 +11,13 @@ import { SettingsPanel } from './SettingsPanel'
 import { resetCapabilitiesCache } from './useCapabilities'
 
 const on = new Set<CapabilityId>(['central', 'workers'])
-let chainBroken = false // test-only: autonomy tersimpan on tapi prasyaratnya mati
+let chainBroken = false // test-only: filesWrite tersimpan on tapi prasyaratnya (files) mati
 let engineStep = false // test-only: central menunggu mesin agen (kind belum ada di tipe bersama)
 const mkView = (id: CapabilityId): CapabilityView => ({
   id, title: CAPABILITIES[id].title, blurb: CAPABILITIES[id].blurb,
-  status: on.has(id) ? 'on' : id === 'browser' || (chainBroken && id === 'autonomy') ? 'needs-step' : 'off',
+  status: on.has(id) ? 'on' : id === 'browser' || (chainBroken && id === 'filesWrite') ? 'needs-step' : 'off',
   ...(id === 'browser' ? { step: { kind: 'chromiumPath' as const, label: 'Pilih lokasi' } } : {}),
-  ...(chainBroken && id === 'autonomy' ? { step: { kind: 'fixChain' as const, label: 'Turn on what’s needed' } } : {}),
+  ...(chainBroken && id === 'filesWrite' ? { step: { kind: 'fixChain' as const, label: 'Turn on what’s needed' } } : {}),
   ...(engineStep && id === 'central'
     ? { status: 'needs-step' as const, step: { kind: 'agentEngine', label: 'Set up Claude Code' } as unknown as CapabilityView['step'] }
     : {}),
@@ -80,14 +80,19 @@ describe('tab Kemampuan (D8)', () => {
     expect(main.querySelector('input[type="search"]')).toBeNull()
   })
 
-  it('satu sakelar per kartu (Telegram memakai Hubungkan/Putuskan), sub-opsi hanya saat Worker on', async () => {
+  it('satu sakelar per kartu; Central, Worker, Otonomi jadi SATU baris ringkasan menuju Central Agent', async () => {
     const main = await openCapabilities()
-    // Enam kartu bersakelar; Telegram punya alur tempel-token, bukan sakelar.
-    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 1)
-    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length)
-    expect(screen.getByLabelText('Ask for approval before a worker runs')).toBeTruthy()
+    // Tiga kartu bersakelar (Browser, Files, Edit files); Telegram punya alur tempel-token; Central = ringkasan.
+    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 4)
+    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length - 2)
+    expect(screen.queryByLabelText('Ask for approval before a worker runs')).toBeNull()
+    const summary = within(main).getByRole('region', { name: 'Central Agent' })
+    expect(within(summary).getByRole('status').textContent).toBe('On')
     expect(within(main).getAllByRole('region', { name: /Telegram/ }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Pilih lokasi' })).toBeTruthy()
+    fireEvent.click(within(summary).getByRole('button', { name: 'Managed in Central Agent →' }))
+    expect(document.querySelector('.st-section-title')?.textContent).toBe('Central Agent')
+    expect(await screen.findByRole('switch', { name: 'Central Agent' })).toBeTruthy()
   })
 
   // Batasnya EMPAT BUTIR (mesin, Chromium, folder data, setel ulang), bukan empat kontrol: butir Chromium
@@ -117,7 +122,8 @@ describe('tab Kemampuan (D8)', () => {
       return [...main.querySelectorAll('[data-capability]')].map((el) => el.getAttribute('data-capability') ?? '')
     }
     expect(hits('Telegram')).toEqual(['telegram'])
-    expect(document.querySelector('.st-search-count')?.textContent).toBe('1 setting found')
+    // + the Telegram row of Settings › Central Agent
+    expect(document.querySelector('.st-search-count')?.textContent).toBe('2 settings found')
     expect(hits('chrome')).toEqual(['browser'])
     expect(main.querySelector('details')).not.toBeNull() // Lanjutan (lokasi Chrome) ikut tampil
     expect(hits('cookie')).toEqual(['browser'])
@@ -125,26 +131,25 @@ describe('tab Kemampuan (D8)', () => {
     expect(hits('token')).toEqual(['telegram'])
     expect(hits('upload')).toEqual(['filesWrite'])
     expect(hits('zzz-nothing')).toEqual([])
-    expect(hits('capabilities')).toHaveLength(CAPABILITY_IDS.length) // judul bagian: semua tampil
+    expect(hits('capabilities')).toHaveLength(CAPABILITY_IDS.length - 2) // judul bagian: semua tampil (Central = 1 ringkasan)
+    expect(hits('autonomy')).toEqual(['central'])
   })
 
-  it('langkah agentEngine (Central Agent butuh Claude Code/OpenCode) membuka Lanjutan, bukan toggle/reset', async () => {
+  it('Central menunggu mesin agen: ringkasan bilang begitu, tanpa toggle/reset (langkahnya di Central Agent)', async () => {
     engineStep = true
     const main = await openCapabilities()
-    fireEvent.click(screen.getByRole('button', { name: 'Set up Claude Code' }))
-    await waitFor(() => expect((main.querySelector('details') as HTMLDetailsElement).open).toBe(true))
+    const summary = within(main).getByRole('region', { name: 'Central Agent' })
+    expect(within(summary).getByRole('status').textContent).toBe('Needs one step')
+    expect(screen.queryByRole('button', { name: 'Set up Claude Code' })).toBeNull()
     expect(calls.filter((c) => c.startsWith('POST'))).toEqual([])
   })
 
   it('"Turn on what’s needed" menyalakan kartu itu lewat toggle, TIDAK menyetel ulang semua pilihan', async () => {
     chainBroken = true
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true) // kartu Otonomi berbahaya: menyalakan dikonfirmasi
     await openCapabilities()
     fireEvent.click(screen.getByRole('button', { name: 'Turn on what’s needed' }))
-    expect(confirm).toHaveBeenCalledTimes(1)
-    confirm.mockRestore()
-    await waitFor(() => expect(calls).toContain('POST /api/capabilities/autonomy'))
-    expect(JSON.parse(bodies['POST /api/capabilities/autonomy'] ?? '{}')).toEqual({ enabled: true })
+    await waitFor(() => expect(calls).toContain('POST /api/capabilities/filesWrite'))
+    expect(JSON.parse(bodies['POST /api/capabilities/filesWrite'] ?? '{}')).toEqual({ enabled: true })
     expect(calls).not.toContain('POST /api/capabilities/reset')
   })
 

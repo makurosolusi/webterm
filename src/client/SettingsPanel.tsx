@@ -25,6 +25,8 @@ import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
 import { AgentSettings } from './SettingsAgents'
 import { CapabilitiesSection } from './CapabilitiesSection'
+import { CentralSettingsSection } from './CentralSettingsSection'
+import type { CentralLinkTarget } from './centralSettings.registry'
 import { ControlPanel } from './ControlPanel'
 import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
@@ -38,6 +40,7 @@ const SECTIONS = [
   { id: 'interaction', label: 'Interaction' },
   { id: 'shell', label: 'Shell & buffer' },
   { id: 'agent', label: 'Agent' },
+  { id: 'central', label: 'Central Agent' },
   { id: 'canvas', label: 'Canvas' },
   { id: CANVAS_BG_SECTION, label: 'Canvas background' },
   { id: 'capabilities', label: 'Capabilities' },
@@ -59,7 +62,7 @@ interface PanelProps {
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
-  /** Section shown first (e.g. 'agent' from the Central card's "Edit launch profile"). */
+  /** Section shown first (e.g. 'central' from the Central card's "Edit launch profile"). */
   initialSection?: string
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
@@ -74,6 +77,13 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   const [found, setFound] = useState(0)
   const [capabilityHits, setCapabilityHits] = useState(0)
   const mainRef = useRef<HTMLElement>(null)
+  // A link from one section into another (Central Agent -> Agent › Models): switch, then scroll to the anchor.
+  const [anchor, setAnchor] = useState<string | undefined>()
+  const navigate = (to: CentralLinkTarget): void => {
+    setQuery('')
+    setActive(to.section)
+    setAnchor(to.anchor)
+  }
 
   // Hitungan "N setting ditemukan": Field dibaca dari DOM (menyaring dirinya sendiri, jadi tak bisa
   // berbeda dari layar) + kartu Kemampuan yang cocok, dilaporkan bagiannya sendiri.
@@ -87,11 +97,27 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     if (mainRef.current) mainRef.current.scrollTop = 0
   }, [active, normalized])
 
+  // The anchor may render after an async load (capability cards): retry for a moment, then give up.
+  useEffect(() => {
+    if (!anchor) return
+    let tries = 0
+    const timer = window.setInterval(() => {
+      const el = mainRef.current?.querySelector<HTMLElement>(anchor)
+      if (el || ++tries > 20) {
+        el?.scrollIntoView?.({ block: 'start' })
+        window.clearInterval(timer)
+        setAnchor(undefined)
+      }
+    }, 50)
+    return () => window.clearInterval(timer)
+  }, [anchor, active])
+
   const renderSection = (id: SectionId): React.JSX.Element => {
     if (id === 'terminal') return <TerminalSection settings={s} onChange={onChange} />
     if (id === 'interaction') return <InteractionSection settings={s} onChange={onChange} />
     if (id === 'shell') return <ShellSection settings={s} onChange={onChange} />
     if (id === 'agent') return <AgentSettings settings={s} onChange={onChange} />
+    if (id === 'central') return <CentralSettingsSection settings={s} onChange={onChange} onNavigate={navigate} />
     if (id === 'canvas') return <CanvasSection settings={s} onChange={onChange} />
     if (id === CANVAS_BG_SECTION) {
       return <CanvasBackgroundSection settings={s} onChange={onChange} projectId={projectId || undefined}
@@ -100,7 +126,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     if (id === 'control') return <ControlPanel query={normalized} />
     return (
       <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
-        onVisibleCount={setCapabilityHits} onSettingsChange={onChange} />
+        onVisibleCount={setCapabilityHits} onSettingsChange={onChange} onOpenCentral={() => navigate({ section: 'central' })} />
     )
   }
 
