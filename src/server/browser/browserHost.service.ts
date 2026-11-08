@@ -36,6 +36,8 @@ export interface HostDeps {
   now?: () => number
 }
 
+
+const TUNNEL_FAILED = /ERR_TUNNEL_CONNECTION_FAILED$/
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
   private readonly stateCbs = new Set<(s: BrowserState) => void>()
@@ -216,7 +218,10 @@ export class BrowserHost implements BrowserHostApi {
     if (!r.errorText) return
     log.warn('browser.nav', 'navigation failed', { ids: { nodeId: rec.nodeId }, host: hostOnly(url), error: r.errorText })
     // ERR_ABORTED = stopped by the user, a download or a 204: no error page to explain. The address bar keeps the failed URL, like Chrome.
-    if (!isAbortedNav(r.errorText)) this.patch(rec, { url, netError: r.errorText, loading: false })
+    if (isAbortedNav(r.errorText)) return
+    // https through the egress proxy: its refusal of CONNECT reaches Chromium only as a tunnel failure; name the DNS case.
+    const dns = TUNNEL_FAILED.test(r.errorText) && this.deps.guard.onFrameNavigated(url) === 'dns_fail'
+    this.patch(rec, { url, netError: dns ? 'net::ERR_NAME_NOT_RESOLVED' : r.errorText, loading: false })
   }
 
   private patch(rec: NodeRec, part: Partial<BrowserState>): void {

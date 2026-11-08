@@ -16,7 +16,7 @@ import { createCookieVault } from './cookieVault.store'
 import type { SecretStore } from '../envSecrets.store'
 import { createCookiePreviewStore } from './cookieImport.preview'
 import { createCookieInjector } from './browser.cookieInjector'
-import { toHostGuard } from './browser.guardAdapter'
+import { createProxyDenials, toHostGuard } from './browser.guardAdapter'
 import { BrowserHost } from './browserHost.service'
 import { ADBLOCK_REFRESH_MS, createAdblock } from './adblock.engine'
 import type { Adblock } from './adblock.engine'
@@ -81,7 +81,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   }
   const allowLoopback = d.loopbackBind ?? false
   const now = d.now ?? Date.now
-  const proxy = await startSsrfProxy({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
+  const denials = createProxyDenials(now)
+  const proxy = await startSsrfProxy({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort, onDeny: denials.record })
   const launcher = d.launcher ?? createChromiumPool({ env, dataRoot: d.dataRoot, proxyServer: () => `http://127.0.0.1:${proxy.port}`, exists: d.exists })
   // Shields: zero-config, default ON. Daftar filter dimuat di latar (tak menahan startup) dan disegarkan berkala.
   const adblockDir = join(d.dataRoot, 'browser', 'adblock')
@@ -90,7 +91,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const adblockTimer = setInterval(() => { void adblock.load() }, ADBLOCK_REFRESH_MS)
   adblockTimer.unref()
   const shields = createShieldPolicy(adblock, adblockDir)
-  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device })
+  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort }), denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device })
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })

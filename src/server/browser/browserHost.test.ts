@@ -15,8 +15,8 @@ afterEach(async () => { await rig?.stop() })
 
 const SID = 'S-T1' // sessionId yang dibuat server tiruan untuk target pertama
 const callsOf = (method: string) => rig.fake.calls.filter((c) => c.method === method)
-async function openLive(url = 'https://example.com/') {
-  rig = await makeHostRig(stubGuard(['evil.test']))
+async function openLive(url = 'https://example.com/', guard = stubGuard(['evil.test'])) {
+  rig = await makeHostRig(guard)
   const events: HostEvent[] = []
   const states: BrowserState[] = []
   rig.host.onEvent((e) => events.push(e))
@@ -131,6 +131,28 @@ describe('navigation', () => {
     rig.fake.emit(CDP_EVENT.frameNavigated, { frame: { id: 'f', url: 'https://example.org/' } }, SID)
     await waitFor(() => rig.host.state('n1')?.url === 'https://example.org/', 'next page')
     expect(rig.host.state('n1')?.netError).toBeUndefined()
+  })
+
+  // The egress proxy refused the host for DNS (browser.guardAdapter `createProxyDenials`): plain http commits its 403 text.
+  const dnsGuard = () => ({ navigated: [] as string[], check: () => null, onFrameNavigated: (u: string) => (new URL(u).hostname === 'nope.invalid' ? 'dns_fail' as const : null) })
+
+  it('proxy DNS refusal on http: the committed 403 page becomes netError NAME_NOT_RESOLVED on that url', async () => {
+    await openLive('https://example.com/', dnsGuard())
+    const navs = callsOf(CDP.navigate).length
+    rig.fake.emit(CDP_EVENT.frameNavigated, { frame: { id: 'f', url: 'http://nope.invalid/' } }, SID)
+    await waitFor(() => rig.host.state('n1')?.netError !== undefined, 'netError')
+    expect(rig.host.state('n1')).toMatchObject({ netError: 'net::ERR_NAME_NOT_RESOLVED', url: 'http://nope.invalid/' })
+    expect(rig.host.state('n1')?.blocked).toBeUndefined()
+    expect(callsOf(CDP.navigate)).toHaveLength(navs) // stays on the url, so Try again reloads it
+  })
+
+  it('proxy DNS refusal on https: the tunnel failure is named NAME_NOT_RESOLVED; other tunnel failures stay as-is', async () => {
+    await openLive('https://example.com/', dnsGuard())
+    rig.fake.handle(CDP.navigate, () => ({ errorText: 'net::ERR_TUNNEL_CONNECTION_FAILED' }))
+    await rig.host.navigate('n1', 'https://nope.invalid/')
+    expect(rig.host.state('n1')?.netError).toBe('net::ERR_NAME_NOT_RESOLVED')
+    await rig.host.navigate('n1', 'https://other.example/')
+    expect(rig.host.state('n1')?.netError).toBe('net::ERR_TUNNEL_CONNECTION_FAILED')
   })
 
   it('ERR_ABORTED (stop/download) leaves no netError', async () => {

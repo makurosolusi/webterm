@@ -47,6 +47,12 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
     }
     if (!f?.url || f.parentId || isInternalUrl(f.url)) return // hanya frame utama; halaman internal dilewati
     const reason = ops.guard.onFrameNavigated(f.url)
+    if (reason === 'dns_fail') {
+      // The egress proxy could not resolve the host and answered with its own 403 text: show it as the DNS
+      // failure it is (error panel + Try again on this URL), not as a page.
+      ops.patch(rec, { url: f.url, blocked: undefined, netError: 'net::ERR_NAME_NOT_RESOLVED' })
+      return
+    }
     if (reason) {
       ops.patch(rec, { blocked: reason })
       ops.fire(rec, CDP.navigate, { url: 'about:blank' })
