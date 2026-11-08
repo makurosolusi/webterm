@@ -127,6 +127,7 @@ test('reviews the PR head in a read-only worktree and drafts findings in the Inb
   const argv = argvSeen[0]!
   expect(argv.slice(0, 2)).toEqual(['claude', '-p'])
   expect(argv[argv.indexOf('--tools') + 1]).toBe('Read,Glob,Grep')
+  expect([argv[argv.indexOf('--model') + 1], argv[argv.indexOf('--effort') + 1]]).toEqual(['sonnet', 'medium']) // prreview T2
   expect(argv[2]).toContain('REPO: o/r\nPR NUMBER: 7')
   expect(argv[2]).toContain('+export const hello')
   expect(readFileSync(join(tmp, 'seen-head'), 'utf8').trim()).toBe(head)

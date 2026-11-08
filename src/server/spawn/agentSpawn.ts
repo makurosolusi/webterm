@@ -23,7 +23,8 @@ import { principalKind, type Principal } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
 import { createPolicyStore } from '../policy/policy.store'
 import { AGENT_SPAWN_CAPABILITY, type AgentSpawnMode } from './agentSpawn.capability'
-import { claudeCommand } from '../claudeLauncher/claudeLauncher'
+import { resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
+import type { ModelPick } from '../models/modelLadder'
 
 /** Deepest allowed generation: root (0) -> its agents (1) -> their sub-agents (2). */
 export const SPAWN_MAX_DEPTH_DEFAULT = 2
@@ -53,7 +54,7 @@ export interface AgentSpawnRequest {
   /** PTY launch, resolved by the door from server data (settings, catalog). */
   pty?: { cmd?: string; agentId?: string; sessionId?: string; cols?: number; rows?: number }
   /** Headless launch; `argv` absent = Claude Code print mode with `prompt`, through `claudeProfileId` (absent = default profile). */
-  headless?: { argv?: readonly string[]; claudeProfileId?: string; env?: NodeJS.ProcessEnv; overrides?: Record<string, string>; timeoutMs?: number }
+  headless?: { argv?: readonly string[]; claudeProfileId?: string; pick?: ModelPick | null; env?: NodeJS.ProcessEnv; overrides?: Record<string, string>; timeoutMs?: number }
 }
 
 export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agentId?: string; sessionId?: string; cols?: number; rows?: number }
@@ -82,8 +83,26 @@ export interface AgentSpawnerOptions {
   providerEnv?(): ProviderEnv
 }
 
-/** Claude Code non-interactive form via the launch profile (absent = default); JSON result so `execRunner` keeps the final event. */
-export const claudeHeadlessArgv = (prompt: string, profileId?: string): string[] => claudeCommand(['-p', prompt, '--output-format', 'json'], profileId)
+const hasFlag = (args: readonly string[], flag: string): boolean => args.some((a) => a === flag || a.startsWith(`${flag}=`))
+
+/**
+ * `--model`/`--effort` for a ladder pick. A flag the launch profile already sets is kept, unless the pick is
+ * the user's explicit override (then ours comes later on the line and wins).
+ */
+export function modelFlags(profileFlags: readonly string[], pick?: ModelPick | null): string[] {
+  if (!pick) return []
+  const forced = pick.reason === 'user override'
+  return [
+    ...(pick.model && (forced || !hasFlag(profileFlags, '--model')) ? ['--model', pick.model] : []),
+    ...(pick.effort && (forced || !hasFlag(profileFlags, '--effort')) ? ['--effort', pick.effort] : []),
+  ]
+}
+
+/** Claude Code non-interactive form via the launch profile (absent = default), on the ladder's model; JSON result so `execRunner` keeps the final event. */
+export function claudeHeadlessArgv(prompt: string, profileId?: string, pick?: ModelPick | null): string[] {
+  const launch = resolveClaudeLaunch(profileId)
+  return [...launch.argv, '-p', prompt, '--output-format', 'json', ...modelFlags(launch.flags, pick)]
+}
 
 const isRoot = (p: Principal): boolean => principalKind(p) !== 'node'
 
@@ -155,7 +174,7 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
         const pe = kind === DEFAULT_AGENT_KIND ? providerEnvOf() : { set: {}, unset: [] }
         const env = pe.unset.length ? applyProviderEnv(h.env ?? process.env, { set: {}, unset: pe.unset }) : h.env
         const overrides = { ...h.overrides, ...pe.set }
-        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string, h.claudeProfileId), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
+        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string, h.claudeProfileId, h.pick), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
       }
     } catch (err) {
       live.delete(childId)

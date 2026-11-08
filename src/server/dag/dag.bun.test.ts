@@ -64,9 +64,9 @@ function setup(opts: { behind?: number | null; workers?: boolean; cost?: boolean
     } } : {}),
   }
   const s = createDagScheduler(ports)
-  const exit = async (key: string, result = 'finished') => {
+  const exit = async (key: string, result = 'finished', patch: Partial<ExecOutcome> = {}) => {
     const sp = spawns.filter((x) => x.title?.endsWith(`: ${key}`)).at(-1)!
-    finish.get(sp.nodeId!)!({ exitCode: 0, timedOut: false, killed: false, lastEvent: { result }, tail: '' })
+    finish.get(sp.nodeId!)!({ exitCode: 0, timedOut: false, killed: false, lastEvent: { result }, tail: '', ...patch })
     // Only this worker settles; others stay running, so wait for its dispatch row rather than drain().
     const dispatchId = sp.nodeId!.slice('dag-'.length)
     for (let i = 0; i < 200 && s.store.dispatch(dispatchId)?.status === 'running'; i++) await new Promise((r) => setTimeout(r, 1))
@@ -97,7 +97,8 @@ test('overlapping leases are serialized into waves; disjoint ones run in paralle
   const sp = h.spawns[0]
   expect(sp).toMatchObject({ mode: 'headless', door: 'orchestrator', parent: 'central' })
   expect(sp.cwd?.startsWith('/tmp/st/wt-a-')).toBe(true)
-  expect(sp.headless?.argv).toEqual(['claude', '-p', sp.prompt, '--output-format', 'json', '--tools', 'Read,Edit', '--allowedTools', 'Read,Edit'])
+  // A simple brief runs on the ladder's dag-worker default (T2: sonnet, medium).
+  expect(sp.headless?.argv).toEqual(['claude', '-p', sp.prompt, '--output-format', 'json', '--model', 'sonnet', '--effort', 'medium', '--tools', 'Read,Edit', '--allowedTools', 'Read,Edit'])
   expect(sp.prompt).toContain('Objective: Implement it')
 })
 
@@ -271,8 +272,8 @@ test('cost: each dispatch opens a window closed with the verifier diff; a used-u
   await h.s.tick()
   await h.exit('a') // verifier: src/a/x.ts changed
   await h.s.drain() // the cost window closes after settle
-  const runs = h.db.query('SELECT kind, ref, node_id, produced_diff, ended_at FROM cost_run').all() as Record<string, unknown>[]
-  expect(runs).toEqual([{ kind: 'dag', ref: dag.id, node_id: h.spawns[0].nodeId, produced_diff: 1, ended_at: expect.any(Number) }])
+  const runs = h.db.query('SELECT kind, ref, node_id, produced_diff, ended_at, tier, model FROM cost_run').all() as Record<string, unknown>[]
+  expect(runs).toEqual([{ kind: 'dag', ref: dag.id, node_id: h.spawns[0].nodeId, produced_diff: 1, ended_at: expect.any(Number), tier: 'T2', model: 'sonnet' }])
   const now = Date.now() // the oracle's own clock
   execWrite(h.db, 'UPDATE cost_run SET started_at = ?, cost_micros = ?', now, 5_000_000)
   setCostCap(h.db, `dag:${dag.id}`, 1_000_000)
@@ -282,4 +283,44 @@ test('cost: each dispatch opens a window closed with the verifier diff; a used-u
   const refused = h.events.find((e) => e.kind === 'dag.dispatch.cost_refused')
   expect(refused?.payload).toMatchObject({ reason: 'budget', estimateMicros: 5_000_000 })
   expect(h.s.store.get(dag.id)?.status).toBe('active') // waits for the cap to be raised, not failed
+})
+
+// ---- Model ladder: the model of each attempt follows why the previous one failed. ----
+
+/** `--model`/`--effort` of the n-th spawn. */
+const modelOf = (h: ReturnType<typeof setup>, n: number) => {
+  const a = h.spawns[n]!.headless!.argv!
+  return [a[a.indexOf('--model') + 1], a[a.indexOf('--effort') + 1]]
+}
+const failing = (patch: Partial<VerifyOutcome>) => (i: VerifyTaskInput) => judgeCompletion({ taskId: i.taskId, verdict: outcome(patch) })
+
+test('ladder: verify_failed climbs sonnet -> opus once, then stays on opus until the breaker', async () => {
+  const h = setup()
+  const dag = h.make([{ key: 'a', brief: brief(['src/a/**']) }])
+  h.state.verdict = failing({ ok: false, reasons: ['tests failed'] })
+  for (let i = 0; i < 3; i++) { await h.s.tick(); await h.exit('a') }
+  expect([0, 1, 2].map((n) => modelOf(h, n))).toEqual([['sonnet', 'medium'], ['opus', 'high'], ['opus', 'high']])
+  expect(h.s.store.tasks(dag.id)[0]).toMatchObject({ status: 'failed', failureCount: 3 }) // circuit breaker unchanged
+})
+
+test('ladder: a timeout raises effort before the model; a lease violation does not escalate', async () => {
+  const h = setup()
+  h.make([{ key: 'a', brief: brief(['src/a/**']) }])
+  h.state.verdict = failing({ ok: false, reasons: ['killed'] })
+  await h.s.tick(); await h.exit('a', 'finished', { timedOut: true })
+  await h.s.tick()
+  expect(modelOf(h, 1)).toEqual(['sonnet', 'high'])
+  const g = setup()
+  g.make([{ key: 'b', brief: brief(['src/b/**']) }])
+  g.state.verdict = failing({ scopeViolations: ['src/x.ts'] })
+  await g.s.tick(); await g.exit('b')
+  await g.s.tick()
+  expect(modelOf(g, 1)).toEqual(['sonnet', 'medium'])
+})
+
+test('ladder: a complex brief starts on opus', async () => {
+  const h = setup()
+  h.make([{ key: 'a', brief: brief(['src/a/**'], { effort: 'complex' }) }])
+  await h.s.tick()
+  expect(modelOf(h, 0)).toEqual(['opus', 'high'])
 })

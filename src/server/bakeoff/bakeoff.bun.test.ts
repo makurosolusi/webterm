@@ -70,13 +70,15 @@ test('fans one prompt out to N worktrees and fills a comparison card per candida
   // Headless Claude Code print mode with the scoped tool list, never the real binary in this test.
   expect(argvSeen.map((a) => a.slice(0, 2))).toEqual([['claude', '-p'], ['claude', '-p']])
   expect(argvSeen[0]).toContain('--allowedTools')
+  // Every candidate shares one ladder pick (bakeoff T2), so the comparison is between runs, not models.
+  for (const a of argvSeen) expect([a[a.indexOf('--model') + 1], a[a.indexOf('--effort') + 1]]).toEqual(['sonnet', 'medium'])
   await svc.settled(b.id)
   const done = svc.get(b.id)
   expect(done.status).toBe('ready')
   expect(done.candidates.map((c) => c.costMicros)).toEqual([150_000, 250_000])
   // Each candidate is a cost run, so it counts toward the cost caps.
-  expect(db.query("SELECT ref, node_id, cost_micros FROM cost_run WHERE kind = 'bakeoff' ORDER BY cost_micros").all())
-    .toEqual(done.candidates.map((c) => ({ ref: b.id, node_id: c.nodeId, cost_micros: c.costMicros })))
+  expect(db.query("SELECT ref, node_id, cost_micros, tier, model FROM cost_run WHERE kind = 'bakeoff' ORDER BY cost_micros").all())
+    .toEqual(done.candidates.map((c) => ({ ref: b.id, node_id: c.nodeId, cost_micros: c.costMicros, tier: 'T2', model: 'sonnet' })))
   for (const c of done.candidates) {
     expect(c.status).toBe('done')
     expect(c.verified).toBe(true)

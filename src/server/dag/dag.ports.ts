@@ -7,6 +7,7 @@ import { claudeHeadlessArgv, type AgentSpawnRequest, type AgentSpawnResult } fro
 import type { BeginRunInput, GateResult } from '../cost/costOracle'
 import type { CompletionVerdict } from '../verifier/verifier.judge'
 import type { CompletionReport } from '../verifier/verifier.report'
+import type { ModelPick } from '../models/modelLadder'
 import type { DagTask } from './dag.model'
 import type { Dag } from './dag.store'
 
@@ -48,7 +49,7 @@ export interface DagPorts {
  * so both are needed. `--tools` takes bare names, so `Bash(git *)` contributes `Bash` there and stays a
  * scoped rule in `--allowedTools`.
  */
-export function dagWorkerArgv(prompt: string, tools: string[]): string[] {
+export function dagWorkerArgv(prompt: string, tools: string[], pick?: ModelPick | null): string[] {
   const names = [...new Set(tools.map((t) => t.replace(/\(.*$/s, '').trim()).filter(Boolean))]
-  return [...claudeHeadlessArgv(prompt), '--tools', names.join(','), ...(tools.length ? ['--allowedTools', tools.join(',')] : [])]
+  return [...claudeHeadlessArgv(prompt, undefined, pick), '--tools', names.join(','), ...(tools.length ? ['--allowedTools', tools.join(',')] : [])]
 }

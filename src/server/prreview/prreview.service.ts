@@ -11,6 +11,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { basename } from 'node:path'
 import type { ExecOutcome } from '../central/agents/execRunner'
 import { dagWorkerArgv } from '../dag/dag.ports'
+import { pickModel } from '../models/modelPick'
 import { git } from '../gitScm'
 import { approvedArgsFor, createGate, createInboxItem, getInboxItem, resolveItem } from '../inbox/inboxItemStore'
 import { approvalDigest, consumeApproval, getApproval } from '../ledger/ledgerApproval'
@@ -111,10 +112,11 @@ export function createPrReviewService(ports: PrReviewPorts) {
     const wt = await createWorkspaceWorktree({ repo: input.repo, title: `prreview-${input.pr}-${info.headRefOid.slice(0, 7)}`, base: info.headRefOid, runSetup: false }, ports.worktree)
     try {
       const prompt = reviewPrompt({ slug, pr: input.pr, title: info.title, baseRef: info.baseRefName }, diff)
+      const pick = pickModel(ctx.db, { kind: 'prreview', workspaceId: input.workspaceId ?? null, runRef: `prreview:${job.id}` }, ctx.now)
       const res = await ports.spawn({
         mode: 'headless', door: input.door ?? 'canvas', parent: input.parent ?? 'human-ui', cwd: wt.path, prompt, title: `Review PR #${input.pr}`,
         ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
-        headless: { argv: dagWorkerArgv(prompt, PRREVIEW_TOOLS), timeoutMs: ports.timeoutMs ?? PRREVIEW_TIMEOUT_MS },
+        headless: { argv: dagWorkerArgv(prompt, PRREVIEW_TOOLS, pick), timeoutMs: ports.timeoutMs ?? PRREVIEW_TIMEOUT_MS },
       })
       if (!res.ok || !res.handle) throw new Error(`spawn: ${res.ok ? 'no process handle' : res.message}`)
       const outcome = await res.handle.done

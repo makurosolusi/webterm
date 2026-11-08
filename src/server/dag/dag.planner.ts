@@ -9,6 +9,9 @@
 // `validateTasks` the DAG API applies, so a bad draft fails here and not at approval.
 import type { ExecOutcome } from '../central/agents/execRunner'
 import { DEFAULT_EXECUTABLES } from '../orchestrator/verifyCommands'
+import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
+import type { ModelPick } from '../models/modelLadder'
+import { pickModel } from '../models/modelPick'
 import { claudeHeadlessArgv, spawnAgent } from '../spawn/agentSpawn'
 import { DAG_MAX_TASKS, DagError, EFFORT_SCALE, validateTasks, type Brief, type DagTaskKind } from './dag.model'
 import { DAG_PARENT } from './dag.scheduler'
@@ -68,9 +71,9 @@ export function plannerPrompt(intent: string): string {
   ].join('\n')
 }
 
-export function plannerArgv(intent: string): string[] {
+export function plannerArgv(intent: string, pick?: ModelPick | null): string[] {
   return [
-    ...claudeHeadlessArgv(plannerPrompt(intent)), '--json-schema', JSON.stringify(PLAN_SCHEMA),
+    ...claudeHeadlessArgv(plannerPrompt(intent), undefined, pick), '--json-schema', JSON.stringify(PLAN_SCHEMA),
     '--tools', PLANNER_TOOLS.join(','), '--allowedTools', PLANNER_TOOLS.join(','), '--permission-mode', 'dontAsk',
   ]
 }
@@ -94,9 +97,11 @@ export function validateDraft(raw: unknown): PlanDraft {
 
 /** Production planner: one headless Claude Code run under Central's lineage in the workspace folder (agentSpawn applies the Claude provider). */
 export const livePlanner: Planner = async ({ intent, repo }) => {
+  // Kind dag-planner (T3): a plan sets every worker's brief, so it gets the strong model unless the budget says no.
+  const pick = pickModel(activeLedgerRuntime()?.db ?? null, { kind: 'dag-planner', runRef: `dag-plan:${repo}` })
   const res = await spawnAgent({
     mode: 'headless', door: 'central', parent: DAG_PARENT, cwd: repo, title: 'Plan draft', prompt: plannerPrompt(intent),
-    headless: { argv: plannerArgv(intent), timeoutMs: PLANNER_TIMEOUT_MS },
+    headless: { argv: plannerArgv(intent, pick), timeoutMs: PLANNER_TIMEOUT_MS },
   })
   if (!res.ok || !res.handle) throw new Error(`planner spawn failed: ${res.ok ? 'no process handle' : res.message}`)
   return plannerOutput(await res.handle.done)
