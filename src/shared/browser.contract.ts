@@ -70,7 +70,7 @@ export type LiveState = 'live' | 'paused' | 'discarded'
 export type BlockReason =
   | 'scheme' | 'private_host' | 'dns_fail' | 'not_allowed_port' | 'no_binary' | 'disabled' | 'max_live'
 export type BrowserErrorCode =
-  | 'lease_agent' | 'lease_human' | 'human_active' | 'stale_ref' | 'no_binary' | 'disabled'
+  | 'lease_agent' | 'human_active' | 'stale_ref' | 'no_binary' | 'disabled'
   | 'blocked' | 'not_found' | 'too_large' | 'bad_request' | 'crashed'
 
 /** Field baru `WsNode` (ditambahkan WS-11, bukan di sini). */

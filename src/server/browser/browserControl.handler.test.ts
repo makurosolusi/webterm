@@ -84,11 +84,18 @@ describe('handleBrowserControl success and errors', () => {
     expect(click.mock.calls).toEqual([['n1', { ref: 'e1' }], ['n1', {}]])
   })
   it.each([
-    ['stale_ref', 409], ['lease_human', 409], ['human_active', 409], ['not_found', 404], ['too_large', 413], ['bad_request', 400], ['blocked', 403], ['crashed', 502],
+    ['stale_ref', 409], ['not_found', 404], ['too_large', 413], ['bad_request', 400], ['blocked', 403], ['crashed', 502],
   ] as const)('maps BrowserError %s to %i', async (code, status) => {
     const h = setup({ click: async () => { throw new BrowserError(code, 'x https://secret.test/path') } })
     const r = await h(P('click'), 'act1')
     expect(r).toEqual({ status, body: { error: code } })
+  })
+  it('human_active is 409 with a fixed retry message for the agent, never the internal one', async () => {
+    const h = setup({ click: async () => { throw new BrowserError('human_active', 'x https://secret.test/path') } })
+    const r = await h(P('click'), 'act1')
+    expect(r?.status).toBe(409)
+    expect(r?.body).toMatchObject({ error: 'human_active', message: expect.stringMatching(/using this browser right now.*Retry shortly/) })
+    expect(JSON.stringify(r?.body)).not.toContain('secret.test')
   })
   it('maps BlockedError to 403 with reason, and unknown errors to a generic 500 without leaking the message', async () => {
     expect(await setup({ navigate: async () => { throw new BlockedError('private_host', 'intranet') } })(P('navigate'), 'act1'))

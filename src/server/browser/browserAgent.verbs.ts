@@ -16,7 +16,7 @@ export function createAgentVerbs(ctx: AgentCtx): AgentVerbs {
     ...actVerbs(ctx),
     async handoff(nodeId) {
       stateOf(ctx, nodeId)
-      return ctx.leases.handoff(nodeId, ctx.agentAllowed(nodeId))
+      return ctx.leases.acquire(nodeId, ctx.agentAllowed(nodeId), ctx.sleep)
     },
     async release(nodeId) {
       ctx.leases.release(nodeId)

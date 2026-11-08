@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AGENT_PROTECTION_PATH, agentProtectionRoute } from './agentSandbox.api'
-import { BROWSER_PROFILE_DIRS, SANDBOX_EXCLUDED_COMMANDS, UNSANDBOXED_RETRY_RULE, agentProtection, agentSandboxOn, claudeProtectionSettings } from './agentSandbox'
+import { AGENT_SECRET_ENTRIES, BROWSER_PROFILE_DIRS, SANDBOX_EXCLUDED_COMMANDS, UNSANDBOXED_RETRY_RULE, agentProtection, agentSandboxOn, claudeProtectionSettings } from './agentSandbox'
 import { forgetNodeToken, nodeToken } from './hooksTokens'
 import { nodeTokenMismatch, requesterNodeId } from './agentStatusAuth'
 import { BUILTIN_AGENT_IDS } from '../shared/workspace'
@@ -44,7 +44,7 @@ describe('claudeProtectionSettings', () => {
     const sandbox = (claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings).sandbox!
     expect(sandbox.enabled).toBe(true)
     expect(sandbox.filesystem.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS])
-    expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/worktrees`])
+    expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/bin`, `${DIR}/worktrees`])
     expect(sandbox.filesystem.allowWrite).toEqual(['~/'])
     expect(sandbox.filesystem.denyWrite).toEqual(expect.arrayContaining([
       `${DIR}/secrets`, `${DIR}/node-settings`, `${DIR}/context-links`, `${DIR}/webterm.db`, `${DIR}/webterm.db-wal`, `${DIR}/ledger.db-shm`,
@@ -56,6 +56,20 @@ describe('claudeProtectionSettings', () => {
     // Keychain/socket tools run outside the sandbox; docs syntax `x *` matches with or without args.
     expect((sandbox as unknown as { excludedCommands: string[] }).excludedCommands).toEqual(expect.arrayContaining(['gh *', 'docker *', 'brew *', 'op *', 'security *']))
     expect(SANDBOX_EXCLUDED_COMMANDS.every((c) => c.endsWith(' *'))).toBe(true)
+  })
+
+  it('the webterm launcher is runnable but not replaceable; opening it leaves every secret denied', () => {
+    const s = claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings
+    const fs = s.sandbox!.filesystem
+    expect(fs.allowRead).toContain(`${DIR}/bin`)
+    expect(fs.denyWrite).toContain(`${DIR}/bin`)
+    expect(s.permissions.deny).toContain(`Edit(/${DIR}/bin/**)`)
+    expect(fs.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS])
+    for (const e of AGENT_SECRET_ENTRIES) {
+      expect(s.permissions.deny).toContain(`Read(/${DIR}/${e})`)
+      expect(fs.allowRead).not.toContain(`${DIR}/${e}`)
+    }
+    expect(s.permissions.ask).toEqual([UNSANDBOXED_RETRY_RULE])
   })
 
   it("opens this node's own header file to its sandbox, and no other node's", () => {

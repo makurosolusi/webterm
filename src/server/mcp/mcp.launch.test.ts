@@ -2,6 +2,8 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { browserAllowRules, browserShimPath } from '../browserAgentShim'
+import { cliPath } from '../cli/cli.launcher'
 import { claudeHeadersPath } from '../hooksPaths'
 import { claudeNodeSettings } from '../hooksSettings'
 import { nodeToken } from '../hooksTokens'
@@ -29,6 +31,21 @@ describe('webterm mcp auto-configuration', () => {
     expect(cfg.mcpServers.webterm.args).toEqual([MCP_MAIN, '--headers', claudeHeadersPath('n1'), '--port', '8700'])
     // Pre-allowed in Claude; the webterm policy is the gate.
     expect((claudeNodeSettings('n1', 8700).permissions as { allow: string[] }).allow).toContain('mcp__webterm')
+  })
+
+  it('pre-allows exactly the browser CLI forms a session can run, never blanket webterm or Bash', () => {
+    const { allow } = claudeNodeSettings('n1', 8700).permissions as { allow: string[] }
+    expect(allow).toEqual(['mcp__webterm', 'Bash(webterm browser *)', `Bash(${browserShimPath()} *)`, `Bash(${cliPath()} browser *)`])
+    for (const blanket of ['Bash', 'Bash(*)', 'Bash(webterm *)', 'Bash(webterm:*)']) expect(allow).not.toContain(blanket)
+  })
+
+  it('leaves out absolute forms a shell would have to quote, since rules match the command as written', () => {
+    process.env.WEBTERM_DATA_DIR = join(DIR, 'a b') // test-only
+    try {
+      expect(browserAllowRules()).toEqual(['Bash(webterm browser *)'])
+    } finally {
+      process.env.WEBTERM_DATA_DIR = DIR
+    }
   })
 
   it('a non-Claude CLI (a plain terminal program now) gets no MCP flags', () => {

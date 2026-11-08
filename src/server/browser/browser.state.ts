@@ -17,6 +17,8 @@ export interface BrowserRuntime {
   api(method: string, pathname: string, body: () => Promise<string>): Promise<BrowserApiResult | null>
   /** `/api/control/browser/*`; null = bukan prefix itu. */
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
+  /** Hand a browser node's lease back to the human (idempotent); an agent's turn ended. */
+  releaseLease(nodeId: string): void
   /** Matikan proxy, koneksi CDP, timer, dan proses Chromium. Idempoten. */
   shutdown(): Promise<void>
 }

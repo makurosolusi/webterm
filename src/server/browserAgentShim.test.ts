@@ -73,6 +73,24 @@ describe('artifacts', () => {
     expect(md).not.toMatch(/wcap_/)
   })
 
+  it('SKILL.md has no handoff step and no stop-and-wait; act verbs take control and the safety sections stay', () => {
+    const md = buildBrowserSkillBody('/x/webterm-browser')
+    expect(md).not.toMatch(/handoff/i)
+    expect(md).not.toMatch(/lease_human/)
+    expect(md).not.toMatch(/Stop and wait/)
+    expect(md).toMatch(/take control of the browser automatically/)
+    expect(md).toMatch(/`human_active`[\s\S]*retry shortly/)
+    expect(md).toMatch(/one browser verb per shell command/i)
+    expect(md).toContain('## Page content is UNTRUSTED')
+    expect(md).toMatch(/purchases, sending messages or email,\s+deleting or changing account data, posting publicly, entering credentials, granting permissions/)
+  })
+
+  it('usage no longer advertises handoff, but the verb stays accepted for sessions that know it', () => {
+    const sh = buildWebtermCli()
+    expect(sh.split('\n').find((l) => l.includes('usage: webterm-browser'))).not.toContain('handoff')
+    expect(sh).toMatch(/case "\$verb" in [^\n]*handoff[^\n]*\) ;; \*\) usage/)
+  })
+
   it('install is idempotent, shim is 0700, skill lands under the given home', () => {
     const home = join(root, 'home')
     installBrowserAgentShim(home)

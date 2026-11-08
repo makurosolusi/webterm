@@ -32,16 +32,18 @@ export interface BrowserControlDeps {
 }
 
 const STATUS_BY_CODE: Record<BrowserErrorCode, number> = {
-  lease_agent: 409, lease_human: 409, human_active: 409, stale_ref: 409,
+  lease_agent: 409, human_active: 409, stale_ref: 409,
   no_binary: 503, disabled: 403, blocked: 403, not_found: 404, too_large: 413, bad_request: 400, crashed: 502,
 }
+
+const HUMAN_ACTIVE_MESSAGE = 'The user is using this browser right now. Retry shortly; after a couple of tries, tell the user.'
 
 const fail = (status: number, error: string, extra: object = {}): ControlResult => ({ status, body: { error, ...extra } })
 
 /** Petakan galat verb ke respons; galat tak dikenal dilog (hanya nama, tanpa URL/pesan halaman) dan jadi 500. */
 function mapError(err: unknown, nodeId: string): ControlResult {
   if (err instanceof BlockedError) return fail(403, 'blocked', { reason: err.reason, ...(err.hostname ? { hostname: err.hostname } : {}) })
-  if (err instanceof BrowserError) return fail(STATUS_BY_CODE[err.code], err.code, err.hostname ? { hostname: err.hostname } : {})
+  if (err instanceof BrowserError) return fail(STATUS_BY_CODE[err.code], err.code, { ...(err.hostname ? { hostname: err.hostname } : {}), ...(err.code === 'human_active' ? { message: HUMAN_ACTIVE_MESSAGE } : {}) })
   log.error('browser.control.fail', 'Browser control verb failed', { ids: { nodeId }, status: 500, error: err instanceof Error ? err.name : 'unknown' })
   return fail(500, 'internal')
 }
