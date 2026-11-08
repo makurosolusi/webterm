@@ -27,29 +27,41 @@ function server() {
 }
 
 describe('Policy simulator (Settings › Control)', () => {
-  it('shows both classifier switches OFF by default and flips one through PUT', async () => {
+  it('shows both auto-approval switches OFF by default, in plain words, and flips one through PUT', async () => {
     const { writes } = server()
     render(<PolicySimulator />)
-    const central = await screen.findByRole('checkbox', { name: /Central's gated actions/ })
-    await waitFor(() => expect(central.getAttribute('data-disabled')).toBeNull())
+    const central = await screen.findByRole('switch', { name: 'Let a small model approve low-risk actions for Central' })
+    await waitFor(() => expect((central as HTMLButtonElement).disabled).toBe(false))
     expect(central.getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('checkbox', { name: /permission prompts/ }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('switch', { name: 'Let a small model approve low-risk Claude Code prompts' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/never-auto|classifier/i)
     fireEvent.click(central)
     await waitFor(() => expect(central.getAttribute('aria-checked')).toBe('true'))
     expect(writes).toEqual([{ method: 'PUT', url: POLICY_CLASSIFIER_PATH, body: { central: true, permissions: false } }])
   })
 
+  it('keeps the rule try-out collapsed until opened', async () => {
+    server()
+    render(<PolicySimulator />)
+    const details = screen.getByTestId('policy-simulator-try') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(details.querySelector('summary')!.textContent).toBe('Try a rule on the last 7 days')
+    fireEvent.click(details.querySelector('summary')!)
+    expect(details.open).toBe(true)
+  })
+
   it('posts the proposed rule and renders before/after counts and examples', async () => {
     const { writes } = server()
     render(<PolicySimulator />)
-    fireEvent.change(screen.getByLabelText(/Capability/), { target: { value: 'claude.tool:Bash' } })
-    fireEvent.change(screen.getByLabelText(/Scope/), { target: { value: 'npm test*' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'What' }), { target: { value: 'claude.tool:Bash' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Where' }), { target: { value: 'npm test*' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
     expect(await screen.findByText('5 decisions replayed, 3 would change.')).toBeTruthy()
-    expect(screen.getByText(/1 asks stay with you/)).toBeTruthy()
+    expect(screen.getByText('1 would still ask you: those actions always ask.')).toBeTruthy()
     const allowRow = document.querySelector('tr[data-effect="allow"]')!
     expect(allowRow.textContent).toBe('Allowed14')
-    expect(screen.getByText(/claude.tool:Bash \(npm test\): Asked you → Allowed/)).toBeTruthy()
+    expect(screen.getByText('Agent a1 → Run commands (npm test): Asked you → Allowed')).toBeTruthy()
     expect(writes.at(-1)).toEqual({ method: 'POST', url: POLICY_SIMULATE_PATH, body: { add: [{ subject: 'node:*', capability: 'claude.tool:Bash', scope: 'npm test*', effect: 'allow' }], classifier: false } })
   })
 })
