@@ -325,6 +325,11 @@
     width: 150px;
   }
 
+  /* Narrow: icon + title only. */
+  .st-nav-desc {
+    display: none;
+  }
+
   .st-select-wrap {
     width: 100%;
   }

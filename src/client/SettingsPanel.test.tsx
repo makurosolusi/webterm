@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
 import { SETTING_RANGES } from '../shared/settings.ranges'
-import { SettingsPanel, toSectionId } from './SettingsPanel'
+import { SETTINGS_SECTIONS, SettingsPanel, toSectionId } from './SettingsPanel'
 
 // Tab Kemampuan memuat dari server; tes layout ini tak membutuhkannya (D8 ada di SettingsPanel.capabilities.test.tsx).
 vi.mock('./useCapabilities', () => ({
@@ -49,7 +49,9 @@ describe('SettingsPanel VS Code layout', () => {
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
     const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Canvas', 'Canvas background', 'Capabilities', 'Control']
-    expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels)
+    // Accessible name stays the title alone; the description is the item's accessible description.
+    expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
+    expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
     const fontSize = screen.getByRole('spinbutton', { name: 'Font size' })
@@ -66,6 +68,40 @@ describe('SettingsPanel VS Code layout', () => {
     expect(screen.getByLabelText('Grid size')).toBeTruthy()
     expect(screen.queryByLabelText('Font size')).toBeNull()
     expect(within(nav()).getByRole('button', { name: 'Canvas' }).getAttribute('aria-current')).toBe('true')
+  })
+})
+
+describe('SettingsPanel section icons and descriptions', () => {
+  it('gives every section a known codicon and a short description', () => {
+    for (const section of SETTINGS_SECTIONS) {
+      expect(section.icon, section.id).toMatch(/^[a-z-]+$/)
+      expect(section.description.length, section.id).toBeGreaterThan(0)
+      expect(section.description.length, section.id).toBeLessThanOrEqual(40)
+    }
+  })
+
+  it('renders a decorative icon and the description in each nav item', () => {
+    renderPanel()
+    const items = within(nav()).getAllByRole('button')
+    expect(items).toHaveLength(SETTINGS_SECTIONS.length)
+    SETTINGS_SECTIONS.forEach((section, i) => {
+      const icon = items[i]!.querySelector('.codicon')!
+      expect(icon.classList).toContain(`codicon-${section.icon}`)
+      expect(icon.getAttribute('aria-hidden')).toBe('true')
+      expect(items[i]!.querySelector('.st-nav-desc')?.textContent).toBe(section.description)
+      expect(items[i]!.getAttribute('aria-describedby')).toBe(items[i]!.querySelector('.st-nav-desc')!.id)
+    })
+  })
+
+  it('shows the same icon, title and description in the section header', () => {
+    renderPanel()
+    for (const section of SETTINGS_SECTIONS.filter((x) => x.id !== 'capabilities' && x.id !== 'control')) {
+      fireEvent.click(within(nav()).getByRole('button', { name: section.label }))
+      const heading = screen.getByRole('heading', { level: 2, name: section.label })
+      expect(heading.querySelector('.codicon')?.classList).toContain(`codicon-${section.icon}`)
+      expect(heading.querySelector('.codicon')?.getAttribute('aria-hidden')).toBe('true')
+      expect(heading.parentElement?.querySelector('.st-section-desc')?.textContent).toBe(section.description)
+    }
   })
 })
 
