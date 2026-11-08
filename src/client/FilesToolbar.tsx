@@ -1,16 +1,20 @@
-// Bilah kecil di bawah header node files: toggle tampilan dotfile, menu urutan, dan toolbar dari slot.
+// Bilah kecil di bawah header node files: toggle tampilan dotfile, menu urutan, Collapse All, dan toolbar dari slot.
 // Opsi dipersist lewat `viewOpts` (dipegang FilesNode); komponen ini hanya melaporkan perubahan.
 import { useState } from 'react'
 import type { ViewOpts } from '../shared/workspace'
 import { IconTooltip } from './components/ui/icon-button'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 import { FILES_SLOTS, type FilesSlotCtx } from './filesSlots'
+import { TREE_TEXT } from './filesSlot.tree'
 
 interface Props {
   view: ViewOpts
   onChange: (next: ViewOpts) => void
   ctx: FilesSlotCtx
 }
+
+/** VS Code Explorer title-bar action (label shared with the tree menu row). */
+const COLLAPSE_ALL = TREE_TEXT.collapseAll
 
 const KEYS: { key: ViewOpts['sortKey']; label: string }[] = [
   { key: 'name', label: 'Sort by Name' },
@@ -46,6 +50,14 @@ export default function FilesToolbar({ view, onChange, ctx }: Props) {
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setSortAt({ x: r.left, y: r.bottom }) }}
         >
           <span className="codicon codicon-list-ordered" aria-hidden="true" />
+        </button>
+      </IconTooltip>
+      <IconTooltip label={COLLAPSE_ALL}>
+        <button
+          type="button" className="files-tool" aria-label={COLLAPSE_ALL}
+          disabled={ctx.expanded.size === 0} onClick={() => ctx.collapseAll()}
+        >
+          <span className="codicon codicon-collapse-all" aria-hidden="true" />
         </button>
       </IconTooltip>
       {FILES_SLOTS.map((s) => {

@@ -24,7 +24,8 @@ const BADGE: Record<Exclude<GitMark, 'I'>, string> = { M: 'M', A: 'A', D: 'D', U
 /** Folder hanya diberi titik: huruf milik file; warna = mark terkuat isinya. */
 const FOLDER_BADGE = '•'
 
-interface NodeGit { marks: Map<string, GitMark>; branch?: GitBranch }
+/** `parents` = folders that have their own child records (so their mark is a rollup, not their own). */
+interface NodeGit { marks: Map<string, GitMark>; parents: Set<string>; branch?: GitBranch }
 /** State per node (kunci = nodeId; dua node pada dir sama tak saling menghapus saat unmount). */
 const store = new Map<string, NodeGit>()
 
@@ -42,10 +43,9 @@ function useGitMarks(ctx: FilesSlotCtx): void {
       const r = await gitStatus(dir)
       if (!alive || mine !== seq) return
       // Kunci NFC: macOS mengembalikan nama NFD dari readdir, git (precomposeunicode) NFC.
-      store.set(nodeId, {
-        marks: new Map(r.ok ? Object.entries(r.marks).map(([k, v]) => [k.normalize('NFC'), v]) : []),
-        branch: r.ok ? r.branch : undefined,
-      })
+      const marks = new Map<string, GitMark>(r.ok ? Object.entries(r.marks).map(([k, v]) => [k.normalize('NFC'), v]) : [])
+      const parents = new Set([...marks.keys()].map((k) => k.slice(0, Math.max(0, k.lastIndexOf('/')))))
+      store.set(nodeId, { marks, parents, branch: r.ok ? r.branch : undefined })
       bump()
     }
     // Fail-closed: galat apa pun saat menanyakan kemampuan/memuat = tanpa dekorasi, tidak merusak listing.
@@ -63,11 +63,25 @@ function useGitMarks(ctx: FilesSlotCtx): void {
   }, [nodeId, dir])
 }
 
+/** Mark of row `rel` (path relative to cwd, any depth). git reports an untracked or ignored folder as one
+ *  record ("? new/"), so rows inside it inherit that mark, as in VS Code; a folder with child records
+ *  carries only a rollup (server-side, strongest child) and is never inherited from. */
+function markAt(s: NodeGit, rel: string): GitMark | undefined {
+  const own = s.marks.get(rel)
+  if (own) return own
+  for (let i = rel.lastIndexOf('/'); i > 0; i = rel.lastIndexOf('/', i - 1)) {
+    const up = rel.slice(0, i)
+    const m = s.marks.get(up)
+    if ((m === 'U' || m === 'I') && !s.parents.has(up)) return m
+  }
+  return undefined
+}
+
 function decorate(entry: FileMeta, ctx: FilesSlotCtx): Decoration | undefined {
   const s = store.get(ctx.nodeId)
   if (!s) return undefined
-  // Children of an ignored folder get no status record; the listing's check-ignore flag covers them.
-  const mark = s.marks.get(entry.name.normalize('NFC')) ?? (entry.ignored ? 'I' : undefined)
+  // Fallback: the listing's check-ignore flag (a record may be cut by the server's mark limit).
+  const mark = markAt(s, entry.name.normalize('NFC')) ?? (entry.ignored ? 'I' : undefined)
   if (!mark) return undefined
   const className = `files-git--${mark}`
   // VS Code: ignored is colour only, no badge.

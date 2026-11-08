@@ -12,8 +12,11 @@ import { DND_MIME, DND_TEXT, dndSlot, dragNames, resetDndSlot, shellQuote, shell
 
 const caps = (o: object) => ({ mutate: false, viewers: false, watch: false, git: false, quickOpen: true, upload: false, listMax: 1, ...o })
 const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => ({
-  cwd: '/p', dir: '/p', entries: [], selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(), ...o,
+  cwd: '/p', dir: '/p', entries: [], selection: [], refresh: vi.fn(), open: vi.fn(), startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(),
+  expanded: new Set(), toggle: vi.fn(), collapseAll: vi.fn(), startRenameAt: vi.fn(), ...o,
 })
+/** Tree entries for rows named `names` (paths relative to cwd), in display order. */
+const ents = (names: string[]) => names.map((name) => ({ name, dir: false, ignored: false }))
 const NASTY = ["it's.txt", 'with space.txt', '$HOME', '`id`', 'say "hi"', 'line\nbreak', 'ünïcödé 日本語.md', "''", 'a;b&c|d', '*.{js,ts}', '\\n']
 
 describe('shellQuote', () => {
@@ -54,7 +57,8 @@ function mountNode(names: string[]): HTMLElement {
     row.setAttribute('data-index', String(i))
     const name = document.createElement('span')
     name.className = 'files-name'
-    name.textContent = n
+    name.textContent = n.split('/').pop()! // the tree row shows only the last segment
+    name.title = n
     row.appendChild(name)
     node.appendChild(row)
   })
@@ -77,7 +81,7 @@ afterEach(() => { cleanup(); document.body.innerHTML = ''; vi.clearAllMocks(); v
 describe('dragstart', () => {
   it('rows become draggable and carry the quoted path under both MIME types', async () => {
     const node = mountNode(["it's a.txt", 'b.txt'])
-    renderHook(() => dndSlot.useSlot?.(mkCtx()))
+    renderHook(() => dndSlot.useSlot?.(mkCtx({ entries: ents(["it's a.txt", 'b.txt']) })))
     await settle()
     expect(node.querySelectorAll('[draggable="true"]')).toHaveLength(2)
     const { data, dataTransfer } = drag(node.querySelector('.files-name')!)
@@ -88,7 +92,7 @@ describe('dragstart', () => {
   })
   it('dragging a row inside a multi-selection carries every selected path, space-joined', async () => {
     const node = mountNode(['a.txt', 'b c.txt', 'd.txt'])
-    renderHook(() => dndSlot.useSlot?.(mkCtx({ selection: ['a.txt', 'b c.txt'] })))
+    renderHook(() => dndSlot.useSlot?.(mkCtx({ entries: ents(['a.txt', 'b c.txt', 'd.txt']), selection: ['a.txt', 'b c.txt'] })))
     await settle()
     expect(drag(node.querySelectorAll('.files-name')[0]).data.get('text/plain')).toBe("'/p/a.txt' '/p/b c.txt'")
     expect(drag(node.querySelectorAll('.files-name')[2]).data.get('text/plain')).toBe("'/p/d.txt'")
@@ -96,7 +100,7 @@ describe('dragstart', () => {
   it('flag off: rows stay non-draggable and dragstart is ignored', async () => {
     fs.capabilities.mockResolvedValue(caps({ quickOpen: false }))
     const node = mountNode(['a.txt'])
-    renderHook(() => dndSlot.useSlot?.(mkCtx()))
+    renderHook(() => dndSlot.useSlot?.(mkCtx({ entries: ents(['a.txt']) })))
     await settle()
     expect(node.querySelectorAll('[draggable]')).toHaveLength(0)
     expect(drag(node.querySelector('.files-name')!).data.size).toBe(0)
@@ -110,6 +114,15 @@ describe('dragstart', () => {
     expect(node.querySelectorAll('[draggable]')).toHaveLength(0)
     expect(dndSlot.menu?.(mkCtx({ selection: ['a.txt'] }))).toEqual([])
     expect(err).toHaveBeenCalled()
+  })
+})
+
+describe('dragstart in a tree', () => {
+  it('a nested row carries its full path (from the label title, not its last-segment text)', async () => {
+    const node = mountNode(['src', 'src/a b.ts'])
+    renderHook(() => dndSlot.useSlot?.(mkCtx({ entries: ents(['src', 'src/a b.ts']) })))
+    await settle()
+    expect(drag(node.querySelectorAll('.files-name')[1]).data.get(DND_MIME)).toBe("'/p/src/a b.ts'")
   })
 })
 

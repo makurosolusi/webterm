@@ -14,7 +14,8 @@ vi.mock('./fsClient', () => ({ capabilities: h.caps, gitStatus: h.status }))
 
 const file = (name: string, dir = false): FileMeta => ({ name, dir, ignored: false })
 const ctx = (over: Partial<FilesSlotCtx> = {}): FilesSlotCtx =>
-  ({ cwd: '/r', dir: '/r', entries: [], selection: [], refresh: () => {}, open: () => {}, startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(), ...over })
+  ({ cwd: '/r', dir: '/r', entries: [], selection: [], refresh: () => {}, open: () => {}, startInput: vi.fn(), nodeId: 'n1', notify: vi.fn(), dismiss: vi.fn(),
+    expanded: new Set(), toggle: vi.fn(), collapseAll: vi.fn(), startRenameAt: vi.fn(), ...over })
 const ok = (marks: Record<string, GitMark>, branch?: GitBranch) => ({ ok: true, marks, ...(branch && { branch }) })
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
 const caps = (git: boolean) => ({ git }) as FsCapabilities
@@ -112,6 +113,32 @@ it('footer: branch, VS Code sync label `behind↓ ahead↑` + tooltip, detached 
   expect(footerText(c).text).toBe('0123abcd')
   await reload()
   expect(gitSlot.footer!(c)).toBe(null)
+})
+
+it('tree rows: marks by path relative to cwd at any depth; folders get the rollup dot', async () => {
+  // Server shape (fsGit.gitMarks): every changed path plus one rollup record per ancestor folder.
+  h.status.mockResolvedValue(ok({ 'src/lib/a.ts': 'M', 'src/lib': 'M', src: 'M', 'src/b.ts': 'A' }))
+  const c = ctx()
+  renderHook(() => gitSlot.useSlot!(c))
+  await flush()
+  expect(h.status).toHaveBeenCalledTimes(1)
+  expect(gitSlot.decorate!(file('src/lib/a.ts'), c)).toEqual({ badge: 'M', title: 'Modified', className: 'files-git--M' })
+  expect(gitSlot.decorate!(file('src/b.ts'), c)?.badge).toBe('A')
+  expect(gitSlot.decorate!(file('src/lib', true), c)).toEqual({ badge: '•', title: 'Contains modified items', className: 'files-git--M' })
+  expect(gitSlot.decorate!(file('src', true), c)?.badge).toBe('•')
+  expect(gitSlot.decorate!(file('src/clean.ts'), c)).toBeUndefined()
+  expect(h.status).toHaveBeenCalledTimes(1) // decorating never spawns git
+})
+
+it('rows inside a collapsed untracked/ignored folder record inherit it; a rollup folder is never inherited', async () => {
+  // `? new/` and `! dist/` come back as single records; `src` is U only because of its child record.
+  h.status.mockResolvedValue(ok({ new: 'U', dist: 'I', src: 'U', 'src/n.ts': 'U' }))
+  const c = ctx()
+  renderHook(() => gitSlot.useSlot!(c))
+  await flush()
+  expect(gitSlot.decorate!(file('new/deep/x.ts'), c)?.badge).toBe('U')
+  expect(gitSlot.decorate!(file('dist/a.js'), c)).toEqual({ title: 'Ignored', className: 'files-git--I' })
+  expect(gitSlot.decorate!(file('src/old.ts'), c)).toBeUndefined()
 })
 
 it('every gitDecoration token the slot CSS uses is defined in both VS Code theme files', () => {

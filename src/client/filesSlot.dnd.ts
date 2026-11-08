@@ -1,11 +1,14 @@
 // Slot DnD path (WS-FM-09): baris file/folder bisa diseret; payload = path dikutip shell (MIME
-// `application/x-webterm-path` + `text/plain`), multi-seleksi digabung spasi. Plus menu "Copy Path
-// (Shell-quoted)". Menjatuhkan ke terminal TIDAK dipasang di sini (TerminalNode bukan milik slot ini, lihat R-09).
-// Dikunci `capabilities().quickOpen` (flag QUICK_OPEN), fail-closed.
-import { useEffect, useRef } from 'react'
+// `application/x-webterm-path` + `text/plain`, untuk drop ke terminal), multi-seleksi digabung spasi, plus
+// menu "Copy Path (Shell-quoted)" (flag QUICK_OPEN). Bila `mutate` aktif, drag yang sama juga membawa
+// `MOVE_MIME` untuk pindah/salin di dalam tree (filesSlot.dnd.drop). Fail-closed bila capabilities gagal.
+import { useEffect, useRef, useState } from 'react'
 import { childPath } from './fileBrowse'
-import { useQuickOpenEnabled } from './filesSlot.search'
+import './filesSlot.dnd.css'
+import { MOVE_MIME, rowAt, setDragged, useTreeDrop } from './filesSlot.dnd.drop'
 import type { FilesSlot, FilesSlotCtx } from './filesSlots'
+import { treeRows, useTreeRows } from './filesSlot.tree'
+import { capabilities } from './fsClient'
 
 /** MIME internal pembawa path terkutip. */
 export const DND_MIME = 'application/x-webterm-path'
@@ -33,13 +36,29 @@ export function dragNames(dragged: string, selection: readonly string[]): string
 
 const ROW = 'vscode-tree-item[data-index]'
 
+/** `quickOpen` = terminal path payload + copy menu; `mutate` = move/copy inside the tree. */
+function useDndCaps(): { quickOpen: boolean; mutate: boolean } {
+  const [caps, setCaps] = useState({ quickOpen: false, mutate: false })
+  useEffect(() => {
+    let alive = true
+    Promise.resolve().then(() => capabilities()).then((c) => {
+      if (alive) setCaps({ quickOpen: c.quickOpen, mutate: c.mutate })
+    }).catch((err: unknown) => console.error('files dnd: capabilities failed, drag disabled', err))
+    return () => { alive = false }
+  }, [])
+  return caps
+}
+
 export const dndSlot: FilesSlot = {
   id: 'dnd',
   useSlot(ctx: FilesSlotCtx) {
-    const on = useQuickOpenEnabled()
+    const { quickOpen, mutate } = useDndCaps()
+    const on = quickOpen || mutate
     const live = useRef(ctx)
     live.current = ctx
-    useEffect(() => { enabled = on }, [on])
+    useTreeRows(ctx.nodeId)
+    useTreeDrop(ctx, mutate)
+    useEffect(() => { enabled = quickOpen }, [quickOpen])
     const nodeEl = () => document.querySelector<HTMLElement>(`[data-id="${CSS.escape(ctx.nodeId)}"]`)
     // Tanpa deps: baris baru muncul tiap listing berubah, dan atribut `draggable` tidak dimiliki React.
     useEffect(() => {
@@ -49,27 +68,37 @@ export const dndSlot: FilesSlot = {
       const el = on ? nodeEl() : null
       if (!el) return
       const onDragStart = (e: DragEvent) => {
-        const row = e.target instanceof Element ? e.target.closest(ROW) : null
-        const name = row?.querySelector('.files-name')?.textContent
-        if (!name || !e.dataTransfer) return
-        const text = shellQuoteAll(dragNames(name, live.current.selection).map((n) => childPath(live.current.dir, n)))
-        e.dataTransfer.setData(DND_MIME, text)
-        e.dataTransfer.setData('text/plain', text)
-        e.dataTransfer.effectAllowed = 'copy'
+        const c = live.current
+        const rel = rowAt(e.target, c)?.entry.name
+        if (!rel || !e.dataTransfer) return
+        const paths = dragNames(rel, c.selection).map((n) => childPath(c.cwd, n))
+        if (quickOpen) {
+          const text = shellQuoteAll(paths)
+          e.dataTransfer.setData(DND_MIME, text)
+          e.dataTransfer.setData('text/plain', text)
+        }
+        if (mutate) {
+          e.dataTransfer.setData(MOVE_MIME, JSON.stringify(paths))
+          setDragged(paths)
+        }
+        e.dataTransfer.effectAllowed = mutate ? 'copyMove' : 'copy'
       }
+      const onDragEnd = () => setDragged(null)
       el.addEventListener('dragstart', onDragStart)
-      return () => el.removeEventListener('dragstart', onDragStart)
-    }, [on, ctx.nodeId])
+      el.addEventListener('dragend', onDragEnd)
+      return () => { el.removeEventListener('dragstart', onDragStart); el.removeEventListener('dragend', onDragEnd) }
+    }, [on, quickOpen, mutate, ctx.nodeId])
   },
   menu(ctx) {
-    if (!enabled || ctx.selection.length === 0) return []
-    const text = shellQuoteAll(ctx.selection.map((n) => childPath(ctx.dir, n)))
+    const tree = treeRows(ctx)
+    if (!enabled || ctx.selection.length === 0) return tree
+    const text = shellQuoteAll(ctx.selection.map((n) => childPath(ctx.cwd, n)))
     return [{
       label: DND_TEXT.copyQuoted,
       onClick: () => {
         // Clipboard API menolak di konteks tak aman / tanpa izin; catat, jangan diam.
         navigator.clipboard?.writeText(text).catch((err: unknown) => console.error('files dnd: copy quoted path failed', err))
       },
-    }]
+    }, ...tree]
   },
 }

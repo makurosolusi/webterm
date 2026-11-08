@@ -1,0 +1,7 @@
+/* Internal tree drag (filesSlot.dnd.drop): same look as the OS upload drop in files.css; the hint text
+   reuses its `data-drop-hint` bubble. */
+.files-node[data-files-move] { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+.files-node[data-files-move="node"],
+.files-node vscode-tree-item[data-files-move-row] {
+  background: var(--vscode-list-dropBackground);
+}
