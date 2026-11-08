@@ -49,6 +49,23 @@ export async function readBrowserProduct(cdp: CdpClient): Promise<string> {
   return r.product
 }
 
+/** A command cut short because the connection died (`close()` or the socket went away), not because CDP refused it. */
+export class CdpClosedError extends Error {}
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+/**
+ * `.catch` for every fire-and-forget CDP send: a connection that closed under the command is expected
+ * (node closed mid-stream) and dropped; any other failure is logged with the method, ids and cause.
+ */
+export function ignoreClosed(method: string, ids?: Record<string, string | undefined>): (err: unknown) => void {
+  return (err) => {
+    if (err instanceof CdpClosedError) return
+    const cause = err instanceof Error && err.cause !== undefined ? errText(err.cause) : undefined
+    log.warn('cdp.fire', 'fire-and-forget cdp command failed', { ids, method, error: errText(err), cause })
+  }
+}
+
 export type CdpHandler = (params: Record<string, unknown>, sessionId: string | undefined, method: string) => void
 interface Pending { method: string; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
 
@@ -78,7 +95,7 @@ export class CdpClient {
   /** Kirim perintah CDP; hasil = `result`. Reject ber-konteks (method + id) saat error/timeout/putus. */
   send<T = Record<string, unknown>>(method: string, params?: object, sessionId?: string): Promise<T> {
     const id = this.nextId++
-    if (this.dead) return Promise.reject(new Error(`cdp ${method} (#${id}) not sent: ${this.dead.message}`))
+    if (this.dead) return Promise.reject(new CdpClosedError(`cdp ${method} (#${id}) not sent: ${this.dead.message}`))
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
@@ -151,7 +168,7 @@ export class CdpClient {
   private fail(reason: Error): void {
     if (this.dead) return
     this.dead = reason
-    for (const [id, p] of [...this.pending]) this.settle(id, new Error(`cdp ${p.method} (#${id}) aborted: ${reason.message}`))
+    for (const [id, p] of [...this.pending]) this.settle(id, new CdpClosedError(`cdp ${p.method} (#${id}) aborted: ${reason.message}`))
     const hs = [...this.closeHandlers]
     this.closeHandlers.clear()
     for (const cb of hs) cb(reason)

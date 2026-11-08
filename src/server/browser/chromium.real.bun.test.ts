@@ -6,7 +6,7 @@ import { createServer, type IncomingHttpHeaders } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CDP, CdpClient } from './cdp.client'
+import { CDP, CdpClient, ignoreClosed } from './cdp.client'
 import { headlessReason } from './chromium.flags'
 import { detectChromium, launchChromium } from './chromium.launch'
 import type { Launched } from './chromium.launch'
@@ -50,7 +50,7 @@ describe('Chrome nyata: tanpa tanda bot', () => {
     await setupConnection(cdp)
     const { sessionId } = await createPageTarget(cdp, { ...DEFAULT_VIEWPORT })
     let frames = 0
-    cdp.on('Page.screencastFrame', (p, sid) => { frames++; void cdp.send(CDP.screencastFrameAck, { sessionId: p.sessionId }, sid) })
+    cdp.on('Page.screencastFrame', (p, sid) => { frames++; cdp.send(CDP.screencastFrameAck, { sessionId: p.sessionId }, sid).catch(ignoreClosed(CDP.screencastFrameAck, { sessionId: sid })) })
     await cdp.send(CDP.navigate, { url: `http://127.0.0.1:${port}/` }, sessionId)
     const ev = async <T>(expression: string): Promise<T> =>
       (await cdp.send<{ result: { value: T } }>(CDP.evaluate, { expression, returnByValue: true }, sessionId)).result.value

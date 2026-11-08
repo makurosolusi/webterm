@@ -4,7 +4,7 @@ import { TOUCH_POINTS_MAX, BlockedError } from '../../shared/browser.contract'
 import type { BrowserHostApi, BrowserInputEvent, BrowserState, Frame, NAV_ACTIONS } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
-import { CDP } from './cdp.client'
+import { CDP, ignoreClosed } from './cdp.client'
 import type { CdpClient, CdpHandler } from './cdp.client'
 import type { BrowserLauncher } from './chromium.launch'
 import { screencastParams, toCdpCommands } from './browserHost.input'
@@ -208,9 +208,9 @@ export class BrowserHost implements BrowserHostApi {
   }
   private io(rec: NodeRec): DeviceIo { return { send: (m, p) => this.send(rec, m, p), fire: (m, p) => this.fire(rec, m, p) } }
 
-  /** Kirim tanpa menunggu; kegagalan dilog (mis. target sudah hilang), tidak melempar ke pemanggil. */
+  /** Kirim tanpa menunggu; koneksi tertutup diabaikan, kegagalan lain dilog (`ignoreClosed`), tidak melempar ke pemanggil. */
   private fire(rec: NodeRec, method: string, params?: object): void {
-    this.send(rec, method, params).catch((err) => log.warn('browser.cdp', 'fire-and-forget failed', { ids: { nodeId: rec.nodeId }, method, error: errMsg(err) }))
+    this.send(rec, method, params).catch(ignoreClosed(method, { nodeId: rec.nodeId, sessionId: rec.sessionId }))
   }
 
   private async goto(rec: NodeRec, url: string): Promise<void> {
