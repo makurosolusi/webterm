@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, waitFor } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { highlightCodeBlocks, tokenKind, type Tokenize } from './chatHighlight'
 
@@ -30,6 +32,29 @@ describe('highlightCodeBlocks', () => {
     expect(tokenKind('string.key.json')).toBe('string')
     expect(tokenKind('identifier.ts')).toBeUndefined()
     expect(tokenKind('')).toBeUndefined()
+  })
+
+  it('colors every TypeScript family Monaco emits (types recorded from its Monarch grammar)', () => {
+    // `const answer: number = 42 // c` in the real preview: const/number → keyword.ts, 42 → number.ts.
+    expect(tokenKind('keyword.ts')).toBe('keyword')
+    expect(tokenKind('number.ts')).toBe('number')
+    expect(tokenKind('number.float.ts')).toBe('number')
+    expect(tokenKind('number.hex.ts')).toBe('number')
+    expect(tokenKind('comment.ts')).toBe('comment')
+    expect(tokenKind('comment.doc.ts')).toBe('comment')
+    expect(tokenKind('type.identifier.ts')).toBe('type')
+    expect(tokenKind('string.ts')).toBe('string')
+    expect(tokenKind('regexp.ts')).toBe('regexp')
+    expect(tokenKind('delimiter.ts')).toBeUndefined()
+  })
+
+  it('the color variables exist on every surface that highlights (chat and the editor preview)', () => {
+    // The kinds are colored through CSS variables: a surface missing here renders tokens uncolored.
+    const css = readFileSync(join(__dirname, 'chatHighlight.css'), 'utf8')
+    for (const surface of ['.chat-markdown', '.editor-node__md-body']) {
+      expect(css).toMatch(new RegExp(`(^|[,\\s])${surface.replace('.', '\\.')}[^{]*\\{[^}]*--chat-tok-keyword`, 'm'))
+      expect(css).toMatch(new RegExp(`:root\\[data-theme='light'\\] ${surface.replace('.', '\\.')}[^{]*\\{[^}]*--chat-tok-keyword`))
+    }
   })
 
   it('wraps tokens in classed spans and keeps the text (and Copy) exactly the same', async () => {

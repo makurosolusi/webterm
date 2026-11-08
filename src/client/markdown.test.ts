@@ -37,7 +37,7 @@ describe('renderMarkdown', () => {
 
   it('merender markdown sah dan TIDAK membuangnya saat sanitasi', () => {
     expect(renderMarkdown('# Judul\n\n- a\n- b\n\n`kode`')).toBe(
-      '<h1>Judul</h1>\n<ul>\n<li>a</li>\n<li>b</li>\n</ul>\n<p><code>kode</code></p>\n',
+      '<h1 id="user-content-judul">Judul</h1>\n<ul>\n<li>a</li>\n<li>b</li>\n</ul>\n<p><code>kode</code></p>\n',
     )
   })
 
@@ -93,5 +93,43 @@ describe('renderMarkdown', () => {
 
   it('menerima string kosong tanpa melempar', () => {
     expect(renderMarkdown('')).toBe('')
+  })
+})
+
+describe('renderMarkdown: GitHub heading ids and alerts', () => {
+  it('gives headings GitHub-style user-content-* ids, deduped per render', () => {
+    const out = renderMarkdown('## Hi `there` & You!\n\n## Setup\n\n## Setup')
+    expect(out).toContain('<h2 id="user-content-hi-there--you">Hi <code>there</code> &amp; You!</h2>')
+    expect(out).toContain('<h2 id="user-content-setup">Setup</h2>')
+    expect(out).toContain('<h2 id="user-content-setup-1">Setup</h2>')
+    // The counter resets: a second render starts again at the bare slug.
+    expect(renderMarkdown('## Setup')).toBe('<h2 id="user-content-setup">Setup</h2>\n')
+  })
+
+  it('renders > [!NOTE] as a GitHub alert without the marker', () => {
+    const out = renderMarkdown('> [!WARNING]\n> Mind the **gap**')
+    const host = document.createElement('div')
+    host.innerHTML = out
+    const alert = host.querySelector('.markdown-alert.markdown-alert-warning')
+    expect(alert).not.toBeNull()
+    expect(alert!.querySelector('.markdown-alert-title')!.textContent).toBe('Warning')
+    expect(alert!.textContent).not.toContain('[!WARNING]')
+    expect(alert!.querySelector('strong')!.textContent).toBe('gap')
+    expect(host.querySelector('blockquote')).toBeNull()
+  })
+
+  it('leaves an ordinary blockquote alone', () => {
+    expect(renderMarkdown('> just [!quoted]')).toBe('<blockquote>\n<p>just [!quoted]</p>\n</blockquote>\n')
+  })
+})
+
+describe('renderMarkdown: footnotes', () => {
+  it('renders [^1] as a linked footnote with a clobber-safe id', () => {
+    const host = document.createElement('div')
+    host.innerHTML = renderMarkdown('Hi[^1].\n\n[^1]: The **note**.\n')
+    const ref = host.querySelector('sup a')!
+    expect(ref.getAttribute('href')).toBe('#user-content-fn-1')
+    expect(host.querySelector('#user-content-fn-1')!.textContent).toContain('The note')
+    expect(host.textContent).not.toContain('[^1]')
   })
 })

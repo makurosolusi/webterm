@@ -224,6 +224,74 @@
   text-align: start;
 }
 
+/* YAML frontmatter: a compact key/value table (or the raw YAML when nested), as GitHub shows it. */
+.editor-node__md-front {
+  margin: 16px 0;
+  font-size: 12px;
+}
+.editor-node__md-front th {
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+/* GitHub alerts (`> [!NOTE]`), markup from markdown.ts. Colors follow GitHub's per-kind accents. */
+.editor-node__md-body .markdown-alert {
+  --md-alert: var(--vscode-textLink-foreground, #4493f8);
+  margin: 0 0 10px;
+  padding: 2px 16px;
+  border-left: 4px solid var(--md-alert);
+}
+.editor-node__md-body .markdown-alert-tip { --md-alert: #3fb950; }
+.editor-node__md-body .markdown-alert-important { --md-alert: #ab7df8; }
+.editor-node__md-body .markdown-alert-warning { --md-alert: #d29922; }
+.editor-node__md-body .markdown-alert-caution { --md-alert: #f85149; }
+.editor-node__md-body .markdown-alert-title {
+  margin: 6px 0 4px;
+  color: var(--md-alert);
+  font-weight: 600;
+}
+
+/* Code-block chrome reused from chat (chatCodeBlocks.ts); chat.css only loads with the chat panel. */
+.editor-node__md-body .chat-code {
+  margin: 0 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border, var(--border));
+  border-radius: 4px;
+}
+.editor-node__md-body .chat-code pre {
+  margin: 0;
+  border-radius: 0;
+}
+.editor-node__md-body .chat-code__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  padding: 0 4px 0 12px;
+  background: var(--vscode-editorWidget-background, var(--panel));
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+}
+.editor-node__md-body .chat-code__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, inherit);
+  font-size: 16px;
+  cursor: default;
+}
+.editor-node__md-body .chat-code__copy:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
 /* Konflik simpan / banner non-UTF-8: strip DI ATAS body (tidak menggantikannya) supaya buffer
    pengguna tetap terlihat dan bisa disalin. */
 .editor-node__conflict,
@@ -265,3 +333,18 @@
 .monaco-editor .lsp-glyph--error { color: var(--vscode-problemsErrorIcon-foreground, var(--vscode-editorError-foreground, #f14c4c)); }
 .monaco-editor .lsp-glyph--warning { color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground, #cca700)); }
 .monaco-editor .lsp-glyph--info { color: var(--vscode-problemsInfoIcon-foreground, var(--vscode-editorInfo-foreground, #3794ff)); }
+
+/* Footnotes (marked-footnote): the "Footnotes" heading is for screen readers only. */
+.editor-node__md-body .footnotes {
+  margin-top: 24px;
+  border-top: 1px solid var(--editor-md-rule);
+  font-size: 12px;
+}
+.editor-node__md-body .footnotes .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
