@@ -8,7 +8,10 @@ import { useEffect, useRef } from 'react'
 import type { FileMeta } from '../shared/fsContract'
 import { childPath, folderTitle, parentDir } from './fileBrowse'
 import { copyName } from './filesName'
+import type { Moved } from './filesMutate'
 import type { FilesSlotCtx } from './filesSlots'
+import { pushUndo } from './filesUndo'
+import { emitFsEvent } from './fsEvents'
 import { copy, list, rename } from './fsClient'
 
 /** MIME of an internal tree drag: JSON array of absolute paths (works across Files nodes). */
@@ -62,11 +65,11 @@ export function intoSelf(srcs: readonly string[], dir: string): string | undefin
   return srcs.find((s) => dir === s || dir.startsWith(`${s}/`))
 }
 
-export interface TransferReport { done: string[]; failed: { name: string; error: string }[] }
+export interface TransferReport { done: string[]; failed: { name: string; error: string }[]; pairs: Moved[] }
 
 /** Move/copy every source into `dir`; a move into its own folder is skipped; a taken name keeps both. */
 export async function transfer(srcs: readonly string[], dir: string, mode: 'move' | 'copy'): Promise<TransferReport> {
-  const out: TransferReport = { done: [], failed: [] }
+  const out: TransferReport = { done: [], failed: [], pairs: [] }
   let taken: string[] | null = null
   const freeName = async (name: string) => {
     taken ??= (await list(dir)).map((e) => e.name)
@@ -82,8 +85,11 @@ export async function transfer(srcs: readonly string[], dir: string, mode: 'move
     if (to === src) to = await freeName(name) // copy into its own folder = duplicate
     let r = await op(to)
     if (!r.ok && r.code === 'EEXIST') r = await op((to = await freeName(name)))
-    if (r.ok) out.done.push(to)
-    else out.failed.push({ name, error: r.error })
+    if (!r.ok) { out.failed.push({ name, error: r.error }); continue }
+    out.done.push(to)
+    out.pairs.push({ from: src, to })
+    // Same events as paste (filesMutate): open editors follow a move, other Files nodes reload.
+    emitFsEvent(mode === 'move' ? { kind: 'renamed', path: to, from: src, origin: 'local' } : { kind: 'created', path: to, origin: 'local' })
   }
   return out
 }
@@ -93,6 +99,8 @@ export async function dropInto(ctx: FilesSlotCtx, srcs: readonly string[], dir: 
   const self = intoSelf(srcs, dir)
   if (self) { ctx.notify({ kind: 'error', text: DROP_TEXT.intoSelf(folderTitle(self)) }); return }
   const r = await transfer(srcs, dir, mode)
+  // Cmd+Z in this node reverts the drop, like a paste (filesUndo).
+  if (r.pairs.length) pushUndo(ctx.nodeId, mode === 'move' ? { kind: 'move', pairs: r.pairs } : { kind: 'copy', paths: r.pairs.map((p) => p.to) })
   if (r.failed.length) {
     const detail = r.failed.map((f) => `${f.name}: ${f.error}`).join('\n')
     console.error(`files dnd: ${mode} into ${folderTitle(dir)} failed`, detail)

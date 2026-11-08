@@ -15,6 +15,8 @@ import { DND_MIME, dndSlot, resetDndSlot } from './filesSlot.dnd'
 import { DROP_TEXT, MOVE_MIME, MOVE_ROW_ATTR } from './filesSlot.dnd.drop'
 import { TREE_TEXT, treeSlot } from './filesSlot.tree'
 import type { FilesSlotCtx, SlotMenuRow } from './filesSlots'
+import { popUndo } from './filesUndo'
+import { onFsEvent } from './fsEvents'
 import { NodeActionsProvider } from './nodeActions'
 
 const caps = { mutate: true, viewers: false, watch: false, git: false, quickOpen: true, upload: false, listMax: 1 }
@@ -97,6 +99,20 @@ describe('drag inside the tree', () => {
     expect(node.querySelector(`[${MOVE_ROW_ATTR}]`)).toBeNull()
     expect(ctx.refresh).toHaveBeenCalledWith('src/lib/b.txt')
     expect(ctx.notify).toHaveBeenCalledWith({ kind: 'info', text: DROP_TEXT.moved(1, 'lib') })
+  })
+
+  it('a drop is undoable (Cmd+Z in that node) and emits the same fs event as a paste', async () => {
+    const node = mount(ENTRIES)
+    const ctx = mkCtx()
+    const seen: unknown[] = []
+    const off = onFsEvent((e) => seen.push(e))
+    renderHook(() => dndSlot.useSlot?.(ctx))
+    await settle()
+    dragTo(rowOf(node, 3), rowOf(node, 1)).drop()
+    await settle()
+    off()
+    expect(seen).toContainEqual({ kind: 'renamed', path: '/p/src/lib/b.txt', from: '/p/b.txt', origin: 'local' })
+    expect(popUndo('n1')).toEqual({ kind: 'move', pairs: [{ from: '/p/b.txt', to: '/p/src/lib/b.txt' }] })
   })
 
   it('a multi-selection moves together; dropping on a file row targets that file’s folder', async () => {

@@ -85,7 +85,11 @@ describe('click model', () => {
 
   it('double click renames (relative path) and never opens', async () => {
     const c = await mount()
+    const canvas = vi.fn()
+    document.addEventListener('dblclick', canvas)
     click(c, 'b.ts'); click(c, 'b.ts', { detail: 2 }); fireEvent.dblClick(rowOf(c, 'b.ts'))
+    document.removeEventListener('dblclick', canvas)
+    expect(canvas).not.toHaveBeenCalled() // React Flow would zoom the canvas in on it
     await wait(CLICK_OPEN_DELAY_MS + 50)
     expect(renameAt).toHaveBeenCalledTimes(1)
     expect(renameAt.mock.calls[0][1]).toBe('b.ts')

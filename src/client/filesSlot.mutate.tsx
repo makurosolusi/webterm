@@ -2,7 +2,7 @@
 // toast Undo), permanent delete, Duplicate, clipboard Cut/Copy/Paste (filesSlot.clipboard) and Undo
 // (filesUndo). Aktif hanya bila `capabilities().mutate`; bila server menjawab mati, Rename/Delete tetap
 // tampil terkunci (gembok + alasan) dan membuka tawaran filesWrite (filesWriteOffer.tsx).
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import FilesMutateOverlay from './FilesMutateOverlay'
 import { codicon } from './FilesMenu'
 import { childPath } from './fileBrowse'
@@ -16,6 +16,7 @@ import { clearUndo, popUndo, pushUndo, type UndoEntry } from './filesUndo'
 import type { FilesSlot, FilesSlotCtx, SlotMenuRow } from './filesSlots'
 import { FilesWriteOffer, lockedRow, useFilesWriteEpoch } from './filesWriteOffer'
 import { capabilities } from './fsClient'
+import { onFsEvent } from './fsEvents'
 
 async function runDelete(s: Scope, names: string[], permanent: boolean): Promise<void> {
   const r = await deleteMany(s.dir, names, permanent)
@@ -121,6 +122,26 @@ function onKey(e: KeyboardEvent, c: FilesSlotCtx): boolean {
   return false
 }
 
+/**
+ * A paste, drop, delete or undo in ANOTHER Files node (or this one) that touches this node's tree
+ * reloads it; one reload per tick however many items moved. The watch slot covers outside changes.
+ * ponytail: the acting node reloads twice (its own refresh + this); tag events with a node id if that shows.
+ */
+function useReloadOnLocalChange(c: FilesSlotCtx): void {
+  const refresh = useRef(c.refresh)
+  refresh.current = c.refresh
+  useEffect(() => {
+    const root = c.dir.replace(/\/+$/, '')
+    const inTree = (p?: string) => !!p && p.startsWith(`${root}/`)
+    let queued = false
+    return onFsEvent((e) => {
+      if (e.origin !== 'local' || e.kind === 'dirty' || e.kind === 'written' || !(inTree(e.path) || inTree(e.from)) || queued) return
+      queued = true
+      queueMicrotask(() => { queued = false; refresh.current() })
+    })
+  }, [c.dir])
+}
+
 /** Hook per-node: tanya kemampuan server (fail-closed), daftarkan node aktif, bersihkan saat lepas. */
 function useSlot(c: FilesSlotCtx): void {
   // null = belum terjawab (fail-closed: tanpa menu sama sekali, juga tanpa baris terkunci).
@@ -138,6 +159,7 @@ function useSlot(c: FilesSlotCtx): void {
     return () => { enabled.delete(c.nodeId); locked.delete(c.nodeId); clearUi(c.nodeId) }
   }, [on, c.nodeId])
   useEffect(() => () => clearUndo(c.nodeId), [c.nodeId])
+  useReloadOnLocalChange(c)
   // Konfirmasi adalah pertanyaan tentang satu folder; pindah folder membatalkannya.
   useEffect(() => { setConfirm(c.nodeId, null) }, [c.cwd, c.nodeId])
 }

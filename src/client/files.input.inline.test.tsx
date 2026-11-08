@@ -13,8 +13,9 @@ import type { InputRequest } from './filesSlots'
 import { useFilesInput, type InputAt } from './useFilesInput'
 
 let api: { start: (r: InputRequest) => void; at: InputAt }
+const pendingSel: { current: string | null } = { current: null }
 function Host() {
-  const h = useFilesInput({ cwd: '/proj', listRef: createRef(), pendingSel: { current: null }, refresh: vi.fn(), setNotice: vi.fn(), openFile: vi.fn() })
+  const h = useFilesInput({ cwd: '/proj', listRef: createRef(), pendingSel, refresh: vi.fn(), setNotice: vi.fn(), openFile: vi.fn() })
   api = h
   return <>{h.row}</>
 }
@@ -73,6 +74,7 @@ describe('inline create under a folder', () => {
     fireEvent.keyDown(box(), { key: 'Enter' })
     await act(async () => {})
     expect(fs.create).toHaveBeenCalledWith('/proj/src/lib/n.ts')
+    expect(pendingSel.current).toBe('src/lib/n.ts') // selected by its tree path after reload
   })
 
   it('without `at` the input sits at the top (at = null) and creates in cwd', async () => {
@@ -83,5 +85,6 @@ describe('inline create under a folder', () => {
     fireEvent.keyDown(box(), { key: 'Enter' })
     await act(async () => {})
     expect(fs.mkdirChecked).toHaveBeenCalledWith('/proj/d')
+    expect(pendingSel.current).toBe('d')
   })
 })

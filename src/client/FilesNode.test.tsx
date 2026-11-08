@@ -37,6 +37,8 @@ describe('FilesNode — tampilan Explorer', () => {
       'codicon codicon-markdown files-icon',
     ])
     expect(container.querySelector('.files-row svg')).toBeNull()
+    // Double-click renames a row; without `nopan` React Flow also zooms the canvas in on that dblclick.
+    expect(container.querySelector('.files-list')?.classList.contains('nopan')).toBe(true)
   })
 
   it('folder kosong menampilkan welcome view dengan tombol New File…', async () => {

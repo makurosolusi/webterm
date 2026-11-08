@@ -98,6 +98,9 @@ export default function FilesList(p: Props) {
     const onDouble = (ev: MouseEvent) => {
       const index = rowOf(ev)
       if (index < 0 || ev.shiftKey || ev.metaKey || ev.ctrlKey) return
+      // The rename re-renders the row away before the event bubbles, so React Flow's `nopan` check
+      // no longer finds the list and the canvas zooms in: the double click ends here.
+      ev.stopPropagation()
       cancel()
       const r = latest.current.rows[index]
       if (r.entry.dir) latest.current.onToggle(r.rel)
@@ -154,7 +157,7 @@ export default function FilesList(p: Props) {
   return (
     <div
       ref={p.listRef}
-      className="files-list nodrag nowheel"
+      className="files-list nodrag nowheel nopan"
       role="tree"
       aria-label={`Files in ${folderTitle(p.cwd)}`}
       aria-multiselectable="true"

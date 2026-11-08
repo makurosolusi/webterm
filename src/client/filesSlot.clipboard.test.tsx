@@ -111,6 +111,17 @@ describe('clipboard', () => {
     expect(b.refresh).toHaveBeenCalledWith('a copy.ts')
   })
 
+  it('the SOURCE node of a cross-node move reloads too (local fs events under its tree)', async () => {
+    fs.rename.mockReturnValue(ok())
+    const a = ctxFor('na', '/proj', entries, ['readme.md'])
+    const b = ctxFor('nb', '/other', [], [])
+    await mount(a, b)
+    press(a, 'x', { meta: true })
+    press(b, 'v', { meta: true })
+    await settle()
+    expect(a.refresh).toHaveBeenCalledTimes(1)
+  })
+
   it('menu: Cut/Copy with a selection, Paste only once something is on the clipboard', async () => {
     const c = ctxFor('n1', '/proj', entries, ['readme.md'])
     await mount(c)
@@ -198,11 +209,25 @@ describe('delete keys', () => {
     await mount(c)
     expect(press(c, 'Backspace', { meta: true })).toBe(true)
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Move “src/a.ts” to Trash?')).toBeTruthy()
+    expect(within(dialog).getByText('Move “a.ts” to Trash?')).toBeTruthy()
     expect(fs.remove).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByText('Move to Trash'))
     await settle()
     expect(fs.remove).toHaveBeenCalledWith('/proj/src/a.ts', false)
+  })
+
+  it('failures name the file, adding the folder only when two rows share a name', async () => {
+    fs.remove.mockReturnValue(Promise.resolve({ ok: false, code: 'EACCES', error: 'x' }))
+    const c = ctxFor('n1', '/proj', [], ['src/index.ts', 'lib/index.ts', 'src/a.ts'])
+    await mount(c)
+    press(c, 'Delete')
+    fireEvent.click(within(await screen.findByRole('dialog')).getByText('Move to Trash'))
+    await settle()
+    const text = (await screen.findByText('3 of 3 items failed.')).closest('[role]')?.textContent ?? document.body.textContent
+    expect(text).toContain('Could not delete “index.ts (src)”.')
+    expect(text).toContain('Could not delete “index.ts (lib)”.')
+    expect(text).toContain('Could not delete “a.ts”.')
+    expect(text).not.toContain('“src/a.ts”')
   })
 
   it.each([[{ meta: true, alt: true }, 'Backspace'], [{ shift: true }, 'Delete']] as const)('%o+%s asks for permanent delete', async (m, k) => {

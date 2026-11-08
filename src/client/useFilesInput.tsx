@@ -4,12 +4,14 @@ import { useEffect, useState, type ReactNode, type RefObject } from 'react'
 import { childPath } from './fileBrowse'
 import FilesInput from './FilesInput'
 import { createEntry } from './filesCreate'
+import { joinRel } from './filesMutate'
+import { relTo } from './filesMutate.report'
 import type { InputRequest } from './filesSlots'
 
 interface Deps {
   cwd: string
   listRef: RefObject<HTMLDivElement | null>
-  /** Nama yang harus terpilih begitu listing berikutnya mendarat. */
+  /** Path (relative to cwd) to select once the next listing lands. */
   pendingSel: RefObject<string | null>
   refresh: () => void
   setNotice: (msg: string) => void
@@ -41,7 +43,8 @@ export function useFilesInput(d: Deps): { start: (req: InputRequest) => void; ro
     const r = await createEntry(a.base, name, a.req.kind === 'folder')
     if (!r.ok) { d.setNotice(r.notice); return }
     if (r.notice) d.setNotice(r.notice)
-    d.pendingSel.current = r.first
+    // Rows are keyed by path relative to cwd: "src/new.ts", not "new.ts", for a create inside src/.
+    d.pendingSel.current = joinRel(relTo(d.cwd, a.base) ?? '', r.first)
     d.refresh()
     if (a.req.kind === 'file') d.openFile(r.target, r.leaf)
   }

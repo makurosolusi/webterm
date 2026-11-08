@@ -56,7 +56,19 @@ const PROBLEM: Record<NameProblem, string> = {
 /** Pesan validasi nama untuk input rename. */
 export const nameProblemText = (p: NameProblem): string => PROBLEM[p]
 
-const items = (n: number, first: string): string => (n === 1 ? `“${first}”` : `${n} items`)
+/** Last segment of a row path ("src/a.ts" -> "a.ts"): messages name the file, not its tree path. */
+const leaf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
+const items = (n: number, first: string): string => (n === 1 ? `“${leaf(first)}”` : `${n} items`)
+
+/** File names for a list of row paths; the folder is added only where two rows share a name. */
+export function displayNames(paths: readonly string[]): string[] {
+  const count = new Map<string, number>()
+  for (const p of paths) count.set(leaf(p), (count.get(leaf(p)) ?? 0) + 1)
+  return paths.map((p) => {
+    const i = p.lastIndexOf('/')
+    return (count.get(leaf(p)) ?? 0) > 1 && i > 0 ? `${leaf(p)} (${p.slice(0, i)})` : leaf(p)
+  })
+}
 
 export const MENU = {
   rename: 'Rename…', duplicate: 'Duplicate', trash: 'Delete', permanent: 'Delete Permanently…',

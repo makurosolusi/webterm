@@ -1,6 +1,6 @@
 // Shared by the mutate slot's flows (filesSlot.mutate / .clipboard, filesUndo): which nodes are live,
 // the per-flow scope snapshot and toast reporting of results/failures.
-import { failText, TOAST, type MutateAction } from './filesMessages'
+import { displayNames, failText, TOAST, type MutateAction } from './filesMessages'
 import { pushToast, type Toast } from './filesMutate.store'
 import type { Failure } from './filesMutate'
 import { revert, takeUndo, type UndoEntry } from './filesUndo'
@@ -29,7 +29,8 @@ export const enableActions = (s: Scope, failed: Failure[]): Toast['actions'] =>
 /** Toast galat sticky: satu kegagalan = kalimat lengkap; banyak = ringkasan + beberapa alasan pertama. */
 export function reportFailures(s: Scope, action: MutateAction, failed: Failure[], total: number, subject?: string): void {
   if (failed.length === 0) return
-  const texts = failed.slice(0, MAX_LISTED).map((f) => failText(action, f.name, f.fail, subject ?? f.name))
+  const shown = displayNames(failed.map((f) => f.name))
+  const texts = failed.slice(0, MAX_LISTED).map((f, i) => failText(action, shown[i], f.fail, subject ?? shown[i]))
   const actions = enableActions(s, failed)
   if (total === 1) { toast(s, { severity: 'error', title: texts[0], actions }); return }
   const more = failed.length > MAX_LISTED ? ` (+${failed.length - MAX_LISTED} more)` : ''
