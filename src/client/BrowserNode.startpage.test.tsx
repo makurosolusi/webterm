@@ -25,7 +25,8 @@ vi.mock('./browser.stream', () => ({ browserStream: fake.stream, getBrowserWorks
 import BrowserNode from './BrowserNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { RECENT_STORAGE_KEY } from './browser.recent'
-import { START_TEXT, TOOLBAR_MENU_TEXT, TOOLBAR_TEXT, ZOOM_TEXT } from './browser.uxText'
+import { CHIP_TEXT, START_TEXT, TOOLBAR_MENU_TEXT, TOOLBAR_TEXT, ZOOM_TEXT } from './browser.uxText'
+import { isMacPlatform } from './terminalKeys'
 
 const state = (o: Partial<BrowserState> = {}): { t: 'state' } & BrowserState =>
   ({ t: 'state', id: 'b1', url: 'about:blank', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live', ...o })
@@ -101,4 +102,36 @@ describe('BrowserNode zoom', () => {
     expect(screen.queryByRole('button', { name: /^Zoom \d+%/ })).toBeNull()
     expect(wrap.style.getPropertyValue('--browser-zoom')).toBe('1')
   }, 15_000) // full node + 4 portal menus: ~2s alone, >5s under the parallel full suite
+})
+
+describe('BrowserNode toolbar seams (slots wiring)', () => {
+  const chord = (code: string) => ({ code, key: code, ...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }) })
+
+  it('⌘L focuses the real omnibox; ⌘= shows the pill and the ⋯ reset row agrees; ⌘0 hides it', () => {
+    const { container } = mount({}, BrowserNodeType)
+    push({ url: 'https://a.com/' })
+    const surface = container.querySelector('.browser-surface') as HTMLElement
+    const omnibox = screen.getByLabelText(TOOLBAR_TEXT.urlLabel) as HTMLInputElement
+    fireEvent.keyDown(surface, chord('KeyL'))
+    expect(document.activeElement).toBe(omnibox)
+    fireEvent.keyDown(surface, chord('Equal'))
+    expect(screen.getByRole('button', { name: ZOOM_TEXT.pill('110%') })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: TOOLBAR_TEXT.more }))
+    expect(screen.getByRole('menuitem', { name: TOOLBAR_MENU_TEXT.zoomReset('110%') })).toBeTruthy()
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    fireEvent.keyDown(surface, chord('Digit0'))
+    expect(screen.queryByRole('button', { name: /^Zoom \d+%/ })).toBeNull()
+    expect((container.querySelector('.browser-zoom') as HTMLElement).style.getPropertyValue('--browser-zoom')).toBe('1')
+  })
+
+  it('net-error plate covers the stream but not the toolbar; the lease chip stays above it', () => {
+    const { container } = mount({}, BrowserNodeType)
+    push({ url: 'http://nonexistent.invalid/', netError: 'net::ERR_NAME_NOT_RESOLVED', lease: 'agent' })
+    const plate = screen.getAllByRole('alert').find((el) => el.textContent?.includes("can't be reached"))!
+    expect(plate.closest('.browser-body')).not.toBeNull()
+    expect(container.querySelector('.browser-body')!.contains(screen.getByRole('toolbar', { name: TOOLBAR_TEXT.group }))).toBe(false)
+    const chip = screen.getByText(`${CHIP_TEXT.driving} ·`).closest('[role="status"]') as HTMLElement
+    expect(chip.className).toContain('z-20')
+    expect(plate.className).toContain('z-10')
+  })
 })

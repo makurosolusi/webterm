@@ -103,6 +103,11 @@ describe('BrowserToolbar', () => {
     expect(on.onAgentControl).toHaveBeenCalledExactlyOnceWith(false)
   })
 
+  it('hides the Agents pill while an agent actually drives (the lease chip says so)', () => {
+    setup(st({ lease: 'agent' }), { agentControl: true })
+    expect(screen.queryByRole('button', { name: TOOLBAR_TEXT.agentPill })).toBeNull()
+  })
+
   it('server off: no dead toggle, an offer that asks for confirmation before enabling', async () => {
     const onEnableAgent = vi.fn(async () => undefined)
     setup(st(), { agentEnabled: false, onEnableAgent })
@@ -191,6 +196,14 @@ describe('BrowserToolbar address field', () => {
     const list = document.getElementById(address().getAttribute('list')!)!
     expect(list.tagName).toBe('DATALIST')
     expect([...list.querySelectorAll('option')].map((o) => [o.value, o.textContent])).toEqual([['https://x.dev/docs', 'X docs'], ['https://y.dev/', 'y.dev']])
+  })
+
+  it('buttons inside the address form never submit it (Enter must navigate, not reset zoom or flip Shields)', () => {
+    // jsdom has no implicit submission; in Chrome, Enter clicks the form's first submit button.
+    setup(st({ shieldsOff: false }), { zoom: 1.1, onZoom: vi.fn(), onShields: vi.fn() })
+    const form = address().closest('form')!
+    expect(form.querySelectorAll('button')).toHaveLength(2)
+    expect([...form.querySelectorAll('button')].map((b) => b.getAttribute('type'))).toEqual(['button', 'button'])
   })
 
   it('Shields chip sits inside the address field and toggles', () => {

@@ -101,6 +101,8 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
         {state?.loading
           ? <IconButton size="icon-xs" label={TOOLBAR_TEXT.stop} tooltip={TIP.stop} onClick={() => nav('stop')}>{icon('debug-stop')}</IconButton>
           : <IconButton size="icon-xs" label={TOOLBAR_TEXT.reload} tooltip={TIP.reload} onClick={() => nav('reload')}>{icon('refresh')}</IconButton>}
+        {/* Every button inside this form is type="button": Enter's implicit submission would otherwise click the
+            first one (reset zoom / flip Shields) instead of navigating. */}
         <form className="browser-omnibox" onSubmit={submit}>
           <IconTooltip label={site.tip}>
             <span role="img" tabIndex={0} aria-label={site.label} data-site-info={siteInfoKind(stateUrl)} className={`browser-omnibox__site codicon codicon-${site.icon}`} />
@@ -119,7 +121,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
           </datalist>
           {onZoom && zoom !== 1 && (
             <span className="browser-omnibox__extra inline-flex">
-              <IconButton size="xs" variant="secondary" className="tabular-nums" label={ZOOM_TEXT.pill(pct)} tooltip={ZOOM_TEXT.pillTip(pct)} onClick={resetZoom}>{pct}</IconButton>
+              <IconButton type="button" size="xs" variant="secondary" className="tabular-nums" label={ZOOM_TEXT.pill(pct)} tooltip={ZOOM_TEXT.pillTip(pct)} onClick={resetZoom}>{pct}</IconButton>
             </span>
           )}
           {onShields && <span className="browser-omnibox__extra inline-flex"><BrowserShieldsChip state={state} onToggle={onShields} /></span>}
@@ -132,7 +134,8 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
             onClick={consoleSlot.toggle}
           >{icon(errors > 0 ? 'error' : 'debug-console')}{errors > 0 && <span className="tabular-nums">{errors}</span>}</IconButton>
         )}
-        {agentEnabled && agentControl && (
+        {/* Permission pill; while an agent actually drives, the lease chip on the page says it instead. */}
+        {agentEnabled && agentControl && state?.lease !== 'agent' && (
           <IconButton size="xs" variant="ghost" aria-pressed label={TOOLBAR_TEXT.agentPill} tooltip={TOOLBAR_TEXT.agentPillHint} className="browser-toolbar__agent" onClick={() => onAgentControl(false)}>
             {icon('robot')}<span>{TOOLBAR_TEXT.agentPill}</span>
           </IconButton>
