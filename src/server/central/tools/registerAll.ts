@@ -17,6 +17,8 @@ import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
 import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
 import { createCanvasActDefs } from './defs/canvas.act.defs'
+import { createCanvasShotDefs } from './defs/canvas.shot.def'
+import { createCanvasViewDefs } from './defs/canvas.view.defs'
 import { createNodeReadDefs } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
@@ -48,6 +50,13 @@ const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?
 const nodeDefs = (): ToolDef[] => [
   ...createNodeReadDefs({ live: async () => { const { sessions } = await import('../../sessions'); return (id) => sessions.isLive(id) } }),
   ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser') }),
+  ...createCanvasViewDefs({
+    ui: async () => {
+      const [{ db }, { broadcastUi }] = await Promise.all([import('../../db'), import('../../canvas/canvasPush.runtime')])
+      return { setActive: (id) => db.setActive(id), broadcast: broadcastUi }
+    },
+  }),
+  ...createCanvasShotDefs(),
 ]
 
 /** Registers the groups whose flag is on and returns the names added (already-registered names are skipped). */
