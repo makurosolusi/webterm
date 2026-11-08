@@ -21,7 +21,10 @@
 .app-shell:has(> .vscode-bottom-panel) .welcome { bottom: var(--bottom-panel-h); }
 
 /* ---- Strip: 32px like Orca ---- */
+/* Tab floor: padding 12 + icon 16 + name ~60 (7-8 letters) + dot 8 + close 20 + 3 gaps of 6 = 134px.
+   The node name stays readable; tabs that do not fit overflow into "⋯ N more". */
 .tabs-strip {
+  --tabs-tab-min-width: 134px;
   flex: none; height: 32px; display: flex; align-items: stretch;
   background: var(--vscode-editorGroupHeader-tabsBackground);
   border-bottom: 1px solid var(--vscode-tab-border);
@@ -31,8 +34,8 @@
 .tabs-strip__actions { flex: none; display: flex; align-items: center; gap: 2px; padding: 0 6px; }
 
 .tabs-tab {
-  /* Shrinks to icon + truncated title (min-width) before the strip overflows. */
-  position: relative; flex: 0 1 180px; min-width: 72px;
+  /* Shrinks to the readable floor (--tabs-tab-min-width) before the strip overflows. */
+  position: relative; flex: 0 1 180px; min-width: var(--tabs-tab-min-width);
   display: flex; align-items: center; gap: 6px; padding: 0 6px;
   font-size: var(--ui-font-size); cursor: pointer; user-select: none;
   background: var(--vscode-tab-inactiveBackground);
