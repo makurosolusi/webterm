@@ -51,7 +51,7 @@ describe('ladderDecision / toolAccess: tier x level', () => {
     const cases: Array<[string, string]> = [['project.read', 'projects'], ['node.list', 'projects'], ['agent.spawn', 'workers'], ['task.run', 'tasks'],
       ['plan.propose', 'tasks'], ['goal.propose', 'tasks'], ['run.result', 'tasks'], ['memory.get', 'memory'], ['kb.search', 'memory'],
       ['browser_act', 'browser'], ['skill.list', 'skills'], ['channel.bot.propose', 'channels'], ['central_bot', 'channels'],
-      ['approval.request', 'approvals'], ['cap.search', 'other'], ['blackboard.read', 'other']]
+      ['approval.request', 'approvals'], ['cap.search', 'other'], ['blackboard.read', 'memory'], ['repo.map', 'projects']]
     for (const [name, group] of cases) expect(toolGroupOf(name)).toBe(group)
   })
 })
