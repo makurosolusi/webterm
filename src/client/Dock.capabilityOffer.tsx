@@ -5,13 +5,13 @@ import { CapabilityOffer } from './CapabilityOffer'
 import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { resetBrowserStatusCache } from './browser.feature'
 
-type OfferId = 'browser' | 'central'
+type OfferId = 'browser'
 
 /**
- * Tawaran menyalakan kemampuan (sama dengan menu kanvas): browser untuk "Add > Browser", central
- * untuk item Central. Aksi aslinya jalan begitu handler-nya terbit (kemampuan sudah menyala).
+ * Tawaran menyalakan kemampuan (sama dengan menu kanvas) untuk "Add > Browser". Aksi aslinya jalan
+ * begitu handler-nya terbit (kemampuan sudah menyala). Central ditawarkan di tab Chat side bar.
  */
-export function useCapabilityOffer(onAddBrowser?: () => void, onToggleCentral?: () => void) {
+export function useCapabilityOffer(onAddBrowser?: () => void) {
   const [offer, setOffer] = useState<OfferId | null>(null)
   const pending = useRef<OfferId | null>(null)
   useEffect(() => {
@@ -19,14 +19,9 @@ export function useCapabilityOffer(onAddBrowser?: () => void, onToggleCentral?: 
     pending.current = null
     onAddBrowser()
   }, [onAddBrowser])
-  useEffect(() => {
-    if (pending.current !== 'central' || !onToggleCentral) return
-    pending.current = null
-    onToggleCentral()
-  }, [onToggleCentral])
   const offered = () => {
     pending.current = offer
-    if (offer === 'browser') resetBrowserStatusCache() // hook pemilik status memuat ulang lalu menerbitkan `onAddBrowser`
+    resetBrowserStatusCache() // hook pemilik status memuat ulang lalu menerbitkan `onAddBrowser`
     setOffer(null)
   }
 

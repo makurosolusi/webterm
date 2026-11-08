@@ -26,7 +26,7 @@ export interface NeedsYouStripProps {
 
 export function NeedsYouStrip(props: NeedsYouStripProps): React.JSX.Element | null {
   const { cards, tasks } = needsYouRows(useNeedsYou())
-  // Shared store, so `/approvals` and the Dock's Chat icon can expand it from outside.
+  // Shared store, so `/approvals` and the Dock's Central icon can expand it from outside.
   const expanded = useNeedsYouExpanded()
   const review = useTaskReview({ client: props.client, now: props.now })
   const total = cards.length + tasks.length

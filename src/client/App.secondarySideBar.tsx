@@ -1,5 +1,5 @@
 // The secondary side bar (VS Code's auxiliary bar, where Copilot Chat lives): Central chat and the
-// Central control panel as tabs of one right-hand surface. Docked, it takes a grid column so the
+// Central control panel (tab "Control") as tabs of one right-hand surface. Docked, it takes a grid column so the
 // canvas shrinks beside it (styles.css); maximized or below SIDE_BAR_OVERLAY_BREAKPOINT it
 // overlays the canvas area instead. Views stay mounted while the side bar is open (hidden when
 // inactive) so switching tabs never drops a stream or a draft.
@@ -8,6 +8,7 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { InboxPanelSurface } from './inboxPanelSurface'
 import { setSideBar, toggleSideBar, useNarrowWindow, useSideBar, type SideBarView } from './secondarySideBar.store'
 import { LazyPaneFallback } from './lazyPaneFallback'
+import { CapabilityOffer } from './CapabilityOffer'
 import './secondarySideBar.css'
 
 // The views load when the side bar first opens; its chrome (tabs, actions) stays in the start-up chunk.
@@ -16,7 +17,8 @@ const CentralControlPanel = lazy(() => import('./central/CentralControlPanel'))
 
 const VIEWS: { id: SideBarView; label: string; tooltip: string }[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Central agent chat' },
-  { id: 'central', label: 'Central', tooltip: 'Central control panel' },
+  // Id stays `central`: it is the persisted view (`webterm.secondarySideBar`); only the label says Control.
+  { id: 'central', label: 'Control', tooltip: 'Central control, agents, skills and memory' },
 ]
 
 /** The view the side bar shows: Central falls back to Chat while its flag is off. */
@@ -43,6 +45,9 @@ export default function SecondarySideBar({ centralEnabled }: { centralEnabled: b
       actionsSlotRef={setSlot}
     >
       <div className="vscode-bottom-panel__pane" hidden={shown !== 'chat'}>
+        {/* Central not ready: the "turn on / Set up Claude Code" offer the Dock's old shield icon held. Once on,
+            the shared capabilities cache flips `centralEnabled`, so this goes and the Control tab appears. */}
+        {!centralEnabled && <div className="chat-setup" data-slot="central-setup"><CapabilityOffer id="central" /></div>}
         <Suspense fallback={<LazyPaneFallback />}>
           <ChatPanel open embedded compact centralEnabled={centralEnabled} actionsHost={shown === 'chat' ? slot : null} />
         </Suspense>
