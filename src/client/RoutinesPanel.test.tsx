@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RoutinesPanel, type RoutineRun, type RoutineView } from './RoutinesPanel'
 
@@ -41,7 +41,7 @@ describe('Routines (Settings › Control)', () => {
     const { writes } = server([routine], [{ id: 'a', trigger: 'catch_up', status: 'ran', reason: null, startedAt: AT, costUsd: 0.5, estimateUsd: 0.4 }])
     render(<RoutinesPanel />)
     expect(await screen.findByText('Nightly tests')).toBeTruthy()
-    expect(screen.getByText(/cron 0 2 \* \* \* · R2/)).toBeTruthy()
+    expect(screen.getByText(/Custom schedule \(0 2 \* \* \*\) · R2/)).toBeTruthy()
     expect(screen.getByTestId('last-run').textContent).toBe('skipped — precheck exited 1')
     fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
     await waitFor(() => expect(writes[0]).toEqual({ method: 'POST', url: '/api/routines/r1/run' }))
@@ -72,13 +72,27 @@ describe('Routines (Settings › Control)', () => {
     expect(await screen.findByText('No routines yet.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Start from a template…'), { target: { value: 'weekly-missing-tests' } })
     const form = await screen.findByRole('form', { name: 'Routine' })
-    expect((screen.getByLabelText(/^Cron/) as HTMLInputElement).value).toBe('0 9 * * 1')
+    expect((screen.getByLabelText('Schedule') as HTMLInputElement).value).toBe('0 9 * * 1')
+    expect((screen.getByTestId('routine-more') as HTMLDetailsElement).open).toBe(true) // the template has a check command
     await waitFor(() => expect(screen.getByRole('option', { name: 'webterm' })).toBeTruthy())
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'w1' } })
     fireEvent.submit(form)
     await waitFor(() => expect(writes[0]?.method).toBe('POST'))
     expect(writes[0]!.body).toMatchObject({ name: 'Weekly: find missing tests', workspaceId: 'w1', enabled: true, precheck: { command: 'true' }, budget: { maxRunsPerDay: 1 } })
     expect(await screen.findByText('Weekly: find missing tests', { selector: 'strong' })).toBeTruthy()
+  })
+
+  it('a preset schedule shows in plain words; Edit picks another preset and saves its cron', async () => {
+    const { writes } = server([{ ...routine, trigger: { type: 'schedule', cron: '0 9 * * 1-5' } }])
+    render(<RoutinesPanel />)
+    expect(await screen.findByText(/Weekdays at 9:00 · R2/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const form = await screen.findByRole('form', { name: 'Routine' })
+    fireEvent.click(within(form).getAllByRole('button', { name: 'Show suggestions' })[0]!)
+    fireEvent.click(screen.getByRole('option', { name: /^Every hour/ }))
+    fireEvent.submit(form)
+    await waitFor(() => expect(writes[0]?.method).toBe('PUT'))
+    expect(writes[0]).toMatchObject({ url: '/api/routines/r1', body: { trigger: { type: 'schedule', cron: '0 * * * *' } } })
   })
 
   it('shows the server error when a save is refused', async () => {
