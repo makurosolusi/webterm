@@ -94,6 +94,7 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- The Settings sidebar shows an icon and a short description for each section.
 - Central Agent settings are in one place, Settings › Central Agent, grouped as Status & setup, Autonomy & approvals, Model & cost, Abilities, Telegram and Advanced, in plain words; other sections link there instead of repeating them.
 - Settings use switches, selects, steppers and sliders wherever possible; fields that still take typing offer presets and remember what you entered before.
 - The side bar's Central levels read in plain words, with a button to Central settings.

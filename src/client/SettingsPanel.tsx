@@ -1,5 +1,5 @@
 // Halaman settings dengan bentuk VS Code Settings editor: search + hitungan hasil di atas, TOC
-// section 200px (panah/Home/End berpindah fokus), satu pane daftar setting di kanan. Dialog tetap
+// section 260px with icon + description (panah/Home/End berpindah fokus), satu pane daftar setting di kanan. Dialog tetap
 // dipertahankan (full-screen, bukan popover) supaya Escape/focus-trap dan alur buka-tutup yang
 // sudah ada tidak berubah; yang berubah hanya chrome dan metriknya — 35px header, 22px baris,
 // teks 13px, kontrol 26px, token `--vscode-*`.
@@ -35,25 +35,26 @@ import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
 
-const SECTIONS = [
-  { id: 'terminal', label: 'Terminal' },
-  { id: 'interaction', label: 'Interaction' },
-  { id: 'shell', label: 'Shell & buffer' },
-  { id: 'agent', label: 'Agent' },
-  { id: 'central', label: 'Central Agent' },
-  { id: 'canvas', label: 'Canvas' },
-  { id: CANVAS_BG_SECTION, label: 'Canvas background' },
-  { id: 'capabilities', label: 'Capabilities' },
-  { id: 'control', label: 'Control' },
+/** Settings sections: nav entry + page header, one place. `icon` is a codicon name; `description` says what is inside. */
+export const SETTINGS_SECTIONS = [
+  { id: 'terminal', label: 'Terminal', icon: 'terminal', description: 'Font, colors, cursor, scrollback' },
+  { id: 'interaction', label: 'Interaction', icon: 'keyboard', description: 'Copy & paste, shortcuts, selection' },
+  { id: 'shell', label: 'Shell & buffer', icon: 'server-process', description: 'Which shell to start, replay buffer' },
+  { id: 'agent', label: 'Agent', icon: 'hubot', description: 'Permissions, custom agents, profiles' },
+  { id: 'central', label: 'Central Agent', icon: 'comment-discussion', description: 'Autonomy, spending, abilities' },
+  { id: 'canvas', label: 'Canvas', icon: 'layout', description: 'Grid, new node size, search engine' },
+  { id: CANVAS_BG_SECTION, label: 'Canvas background', icon: 'paintcan', description: 'Color, gradient or image behind nodes' },
+  { id: 'capabilities', label: 'Capabilities', icon: 'extensions', description: 'Turn features on or off' },
+  { id: 'control', label: 'Control', icon: 'tools', description: 'Every value and source, policies, costs' },
 ] as const
 
-type SectionId = (typeof SECTIONS)[number]['id']
+type SectionId = (typeof SETTINGS_SECTIONS)[number]['id']
 
 /** Id tab lama `env`/`channels` mendarat di Kemampuan; id tak dikenal (mis. `preview` warisan) jatuh ke Terminal. */
 export function toSectionId(id: string): SectionId {
   if (id === 'env' || id === 'channels') return 'capabilities'
   if (id === CANVAS_BG_WORKSPACE_SECTION) return CANVAS_BG_SECTION
-  return SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
+  return SETTINGS_SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
 }
 
 interface PanelProps {
@@ -125,12 +126,13 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     }
     if (id === 'control') return <ControlPanel query={normalized} />
     return (
-      <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
+      <CapabilitiesSection projectId={projectId} query={normalized} sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
         onVisibleCount={setCapabilityHits} onSettingsChange={onChange} onOpenCentral={() => navigate({ section: 'central' })} />
     )
   }
 
-  const activeLabel = SECTIONS.find((section) => section.id === active)?.label ?? 'Settings'
+  const activeSection = SETTINGS_SECTIONS.find((section) => section.id === active) ?? SETTINGS_SECTIONS[0]
+  const activeLabel = activeSection.label
 
   // Roving fokus ala tree VS Code: panah/Home/End memindah fokus, Enter/Space memilih.
   const onTocKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
@@ -220,18 +222,25 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
 
           <div className="st-body">
             <nav className="st-sidebar" aria-label="Section settings" onKeyDown={onTocKeyDown}>
-              {SECTIONS.map((section) => (
+              {SETTINGS_SECTIONS.map((section) => (
                 <button
                   key={section.id}
                   type="button"
                   aria-current={active === section.id && !normalized}
                   className={'st-nav' + (active === section.id && !normalized ? ' is-active' : '')}
+                  // Name = title only (aria-labelledby), the description is read as the item's description.
+                  aria-labelledby={`st-nav-${section.id}`}
+                  aria-describedby={`st-nav-${section.id}-desc`}
                   onClick={() => {
                     setActive(section.id)
                     setQuery('')
                   }}
                 >
-                  {section.label}
+                  <span className={`codicon codicon-${section.icon} st-nav-icon`} aria-hidden="true" />
+                  <span className="st-nav-text">
+                    <span id={`st-nav-${section.id}`} className="st-nav-label">{section.label}</span>
+                    <span id={`st-nav-${section.id}-desc`} className="st-nav-desc">{section.description}</span>
+                  </span>
                 </button>
               ))}
             </nav>
@@ -240,7 +249,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
               <main className="st-main" aria-label="Settings" ref={mainRef}>
                 {normalized ? (
                   <>
-                    {SECTIONS.map((section) => (
+                    {SETTINGS_SECTIONS.map((section) => (
                       <section
                         key={section.id}
                         className="st-search-group"
@@ -260,7 +269,13 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
                   </>
                 ) : (
                   <>
-                    <h2 className="st-section-title">{activeLabel}</h2>
+                    <div className="st-section-head">
+                      <h2 className="st-section-title">
+                        <span className={`codicon codicon-${activeSection.icon}`} aria-hidden="true" />
+                        {activeLabel}
+                      </h2>
+                      <p className="st-section-desc">{activeSection.description}</p>
+                    </div>
                     <SettingsItemScopeProvider category={activeLabel} settings={s} onChange={onChange}>
                       {renderSection(active)}
                     </SettingsItemScopeProvider>

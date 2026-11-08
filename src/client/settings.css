@@ -208,11 +208,11 @@
   min-height: 0;
 }
 
-/* Sidebar section: 200px, item 22px, tanpa radius/pill — VS Code memakai highlight persegi. */
+/* Sidebar section: 260px (room for the description line), square highlight like VS Code. */
 .st-sidebar {
-  flex: 0 0 200px;
+  flex: 0 0 260px;
   box-sizing: border-box;
-  width: 200px;
+  width: 260px;
   padding: 8px 0;
   overflow-y: auto;
   border-right: 1px solid var(--vscode-sideBar-border, var(--border));
@@ -224,10 +224,10 @@
   align-items: center;
   box-sizing: border-box;
   width: 100%;
-  height: 22px;
+  gap: 8px;
   min-height: 22px;
-  /* 24px kiri = ruang twisty tree VS Code; section di sini tidak punya anak. */
-  padding: 0 12px 0 24px;
+  /* Icon + title + one muted description line (VS Code list item with description). */
+  padding: 4px 12px 4px 14px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -241,6 +241,12 @@
   text-overflow: ellipsis;
   cursor: default;
 }
+
+.st-nav-icon { flex: none; font-size: 16px; }
+.st-nav-text { display: flex; flex-direction: column; min-width: 0; line-height: 16px; }
+.st-nav-label, .st-nav-desc { overflow: hidden; text-overflow: ellipsis; }
+.st-nav-desc { font-size: 11px; color: var(--vscode-descriptionForeground, var(--text-muted)); }
+.st-nav.is-active .st-nav-desc { color: inherit; opacity: 0.8; }
 
 .st-nav:hover {
   background: var(--vscode-list-hoverBackground, var(--raised));
@@ -276,18 +282,22 @@
   max-width: 900px;
 }
 
-.st-section-title {
+.st-section-head {
   position: sticky;
   top: 0;
   z-index: 1;
+  padding: 8px 14px 10px;
+  background: var(--vscode-editor-background, var(--bg));
+}
+
+.st-section-desc { margin: 2px 0 0 24px; color: var(--vscode-descriptionForeground, var(--text-muted)); font-size: 12px; }
+
+.st-section-title {
   display: flex;
   align-items: center;
-  box-sizing: border-box;
-  height: 35px;
-  min-height: 35px;
+  gap: 8px;
+  min-height: 22px;
   margin: 0;
-  padding: 0 14px;
-  background: var(--vscode-editor-background, var(--bg));
   color: var(--vscode-foreground, var(--text));
   font-size: 14px;
   font-weight: 600;
