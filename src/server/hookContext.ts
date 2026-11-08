@@ -3,7 +3,7 @@
 // pernah tahu edge itu ada. Modul ini menjawab satu pertanyaan: apa yang pantas DIUMUMKAN ke
 // sesi agent lewat `hookSpecificOutput.additionalContext` saat sebuah hook menyala.
 //
-// Hanya METADATA roster yang diumumkan — id, judul, agent. TIDAK pernah isi transcript/ringkasan/
+// Hanya METADATA roster yang diumumkan — nama, id, judul, agent. TIDAK pernah isi transcript/ringkasan/
 // terminal peer. Dua alasan: permukaan prompt-injection dibatasi jadi string pendek yang user
 // sendiri ketik, dan isi transcript bisa raksasa sehingga cap 10k jebol di pengumuman pertama.
 // Pembacaan isi tetap milik skill yang pull-based — jalur itu tidak disentuh di sini.
@@ -50,7 +50,7 @@ function peerLine(n: LinkDocEntry): string {
   const raw = n.title || n.id
   const title = raw.length > TITLE_MAX_CHARS ? `${raw.slice(0, TITLE_MAX_CHARS)}…` : raw
   const agent = n.agent ? `, agent: ${n.agent}` : ''
-  return `- "${title}" (id: ${n.id}${agent})`
+  return `- ${n.name ? `${n.name} ` : ''}"${title}" (id: ${n.id}${agent})`
 }
 
 function nodeCount(n: number): string {
@@ -111,7 +111,7 @@ function renderRoster(links: LinkDocEntry[], fresh: boolean): string {
  */
 function signatureOf(links: LinkDocEntry[]): string {
   return links
-    .map((n) => `${n.id}\u0000${n.title}\u0000${n.agent ?? ''}`)
+    .map((n) => `${n.id}\u0000${n.name ?? ''}\u0000${n.title}\u0000${n.agent ?? ''}`)
     .sort()
     .join('\u0001')
 }

@@ -34,12 +34,12 @@ description: Drive the real browser node on the webterm canvas (open, navigate, 
 # Browser node (webterm)
 
 \`\`\`sh
-${shimPath} <verb> [args] [--node <browserNodeId>]
+${shimPath} <verb> [args] [--node <name|id>]
 \`\`\`
 
 The target is the browser node wired to THIS terminal node by a cable (edge) on the canvas, looked up on
 every call: wiring a browser after this session started works at once; removing the cable revokes it.
-One cable = used automatically. Several = pass \`--node <id>\` (the error lists them). None = open your own:
+One cable = used automatically. Several = pass \`--node <name|id>\` (the error lists them). None = open your own:
 \`open [url]\` adds a browser node beside this node, cabled to it, and replies with its \`nodeId\`;
 \`navigate <url>\` with no cabled browser does the same first. You do not need the user to add or wire one.
 

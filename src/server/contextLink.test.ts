@@ -79,7 +79,17 @@ describe('pickLinkNode', () => {
   })
   it('two links, no want → several-nodes message', () => {
     const r = pickLinkNode({ links: [node('a', 'Foo'), node('b', 'Bar')] })
-    expect(r).toEqual({ message: 'Several linked nodes — re-run with --node <id|title>:\n- Foo (id: a)\n- Bar (id: b)' })
+    expect(r).toEqual({ message: 'Several linked nodes — re-run with --node <name|id|title>:\n- Foo (id: a)\n- Bar (id: b)' })
+  })
+  it('names: matched case-insensitively (id first, then name, then title) and shown in every message', () => {
+    const kiwi = { id: 'a', name: 'Kiwi', title: 'Build log' }
+    const links = [kiwi, { id: 'b', name: 'Fox', title: 'kiwi' }]
+    expect(pickLinkNode({ links }, 'KIWI')).toEqual({ node: kiwi })
+    expect(pickLinkNode({ links }, 'b')).toEqual({ node: links[1] })
+    expect(pickLinkNode({ links }, 'x')).toEqual({ message: 'No linked node matches "x". Linked: Kiwi "Build log", Fox "kiwi"' })
+    expect(pickLinkNode({ links })).toMatchObject({ message: expect.stringContaining('\n- Kiwi "Build log" (id: a)') })
+    expect(renderList({ links: [kiwi] })).toBe('Linked nodes:\n- Kiwi "Build log" (id: a)')
+    expect(renderTerminal(kiwi, 'out')).toBe('=== Kiwi "Build log" — terminal ===\nout')
   })
   it('single link, no want → that node', () => {
     expect(pickLinkNode({ links: [node('a', 'Foo')] })).toEqual({ node: node('a', 'Foo') })
@@ -142,6 +152,8 @@ describe('buildLinkDoc', () => {
     const doc: LinkDoc = buildLinkDoc(w, 'a')
     expect(doc.links.map((l) => l.id).sort()).toEqual(['b', 'c'])
     expect(doc.links.find((l) => l.id === 'b')?.title).toBe('B')
+    w.nodes[1].name = 'Kiwi'
+    expect(buildLinkDoc(w, 'a').links.find((l) => l.id === 'b')?.name).toBe('Kiwi')
   })
   it('requester z not bridged → empty', () => {
     const w = ws([{ id: 'a' }, { id: 'b' }], [{ source: 'a', target: 'b' }])

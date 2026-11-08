@@ -96,6 +96,12 @@ describe('buildHookContext — dedup', () => {
     expect(buildHookContext('UserPromptSubmit', withAgent, sigOf(d))).not.toBeNull()
   })
 
+  it('roster menyebut nama peer; nama yang baru muncul diumumkan ulang', () => {
+    const named = doc({ id: 'a', name: 'Kiwi', title: 'Foo', agent: 'claude' }, peer('b', 'Bar'))
+    expect(textOf(named)).toContain('- Kiwi "Foo" (id: a, agent: claude)\n- "Bar" (id: b)')
+    expect(buildHookContext('UserPromptSubmit', named, sigOf(doc(peer('a', 'Foo', 'claude'), peer('b', 'Bar'))))).not.toBeNull()
+  })
+
   it('teks perubahan menyebut bahwa ini keadaan terbaru', () => {
     const grown = doc(peer('a', 'Foo'), peer('b', 'Bar'), peer('c', 'Baz'))
     expect(textOf(grown, 'UserPromptSubmit', sigOf(d))).toContain('now connected')

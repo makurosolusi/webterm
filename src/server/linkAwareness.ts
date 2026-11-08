@@ -15,7 +15,7 @@ import { createLogger } from './logs'
 
 const log = createLogger('hooks')
 
-export interface WiredBrowser { id: string; title: string }
+export interface WiredBrowser { id: string; name?: string; title: string }
 
 const TITLE_MAX_CHARS = 120
 // ponytail: daftar dipotong di 10 browser per pengumuman supaya teks ini + roster peer tetap di bawah
@@ -27,7 +27,7 @@ export function linkedBrowsers(ws: Workspace, nodeId: string): WiredBrowser[] {
   const ids = linkedPeerIds(ws, nodeId)
   return ws.nodes
     .filter((n) => n.kind === BROWSER_KIND && ids.has(n.id))
-    .map((n) => ({ id: n.id, title: n.title || n.id }))
+    .map((n) => ({ id: n.id, name: n.name, title: n.title || n.id }))
 }
 
 /**
@@ -49,7 +49,7 @@ export function releaseCabledBrowsers(event: string | undefined, ws: Workspace, 
 function label(b: WiredBrowser): string {
   const one = b.title.replace(/\s+/g, ' ').trim() || b.id
   const t = one.length > TITLE_MAX_CHARS ? `${one.slice(0, TITLE_MAX_CHARS)}…` : one
-  return `"${t}" (id: ${b.id})`
+  return `${b.name ? `${b.name} ` : ''}"${t}" (id: ${b.id})`
 }
 
 function list(bs: WiredBrowser[]): string[] {
@@ -59,7 +59,7 @@ function list(bs: WiredBrowser[]): string[] {
 }
 
 // Pernyataan FAKTUAL, bukan perintah — alasan yang sama dengan `headline` di hookContext.
-const CAN = `The ${BROWSER_SKILL_NAME} skill can drive a wired browser node (navigate, snapshot, click, type, screenshot); with several, pass --node <id>.`
+const CAN = `The ${BROWSER_SKILL_NAME} skill can drive a wired browser node (navigate, snapshot, click, type, screenshot); with several, pass --node <name|id>.`
 const CANNOT = `The ${BROWSER_SKILL_NAME} skill can no longer drive it.`
 
 /**

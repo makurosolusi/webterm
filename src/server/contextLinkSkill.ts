@@ -50,7 +50,7 @@ When it is, you can READ a wired node's context on demand by running the shim be
 ever pushed to you — pull what you need, when you need it.
 
 \`\`\`sh
-${shimPath} <command> [--node <id|title>] [-n <N>]
+${shimPath} <command> [--node <name|id|title>] [-n <N>]
 \`\`\`
 
 Commands:
@@ -60,8 +60,8 @@ Commands:
 - \`terminal [--node X]\` — a linked node's terminal output, escape codes stripped. This is the
   whole scrollback webterm still holds for that session, not just the visible screen.
 
-\`--node\` is optional when exactly one node is linked; otherwise pass an id or title from
-\`list\`.
+\`--node\` is optional when exactly one node is linked; otherwise pass a name (like Kiwi), id or
+title from \`list\`.
 
 Only Claude sessions record a conversation transcript — webterm collects it through a Claude
 hook. For a peer running any other agent, \`summary\` and \`transcript\` answer "has no

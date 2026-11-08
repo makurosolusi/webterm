@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 import type { Database } from 'bun:sqlite'
 import { agentConfig } from '../../../../shared/workspace'
 import { parseBrowserUrl } from '../../../../shared/browser.url'
-import { withNodeNames } from '../../../../shared/nodeNames'
+import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import type { CanvasNode, CanvasPush } from '../../../canvas/canvasPush'
 import { claudeLaunchLine, resolveClaudeLaunch } from '../../../claudeLauncher/claudeLauncher'
 import { allRows } from '../../../ledger/ledgerCore'
@@ -38,10 +38,8 @@ const onlyKeys = (input: ToolInput, allowed: readonly string[]): boolean => Obje
 const noControl = (s: string): boolean => !/[\x00-\x08\x0b-\x1f\x7f]/.test(s)
 const text = (v: unknown, max: number): boolean => typeof v === 'string' && v.trim().length > 0 && v.length <= max && noControl(v)
 const fail = (code: string, data?: Record<string, unknown>): ToolResult => ({ ok: false, code, ...(data ? { data } : {}) })
-/** A node name as `withNodeNames` mints it ("Mango", tier "Mango 2"); custom names in other shapes close by id. */
-const NAME_REF = /^[A-Za-z][A-Za-z0-9]*( [0-9]+)?$/
-const MAX_NAME_REF = 40
-const isNodeRef = (v: unknown): boolean => isSafeId(v) || (typeof v === 'string' && v.length <= MAX_NAME_REF && NAME_REF.test(v))
+/** A node id, or a node name as `withNodeNames` mints it ("Mango", tier "Mango 2") in any case. */
+const isNodeRef = (v: unknown): boolean => isSafeId(v) || isNodeName(v, true)
 
 function closeShape(input: ToolInput): boolean {
   const ids = input.nodeIds

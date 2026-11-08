@@ -34,7 +34,7 @@ export function buildLinkDoc(ws: Workspace, requesterId: string): LinkDoc {
   for (const id of linkedPeerIds(ws, requesterId)) {
     const n = ws.nodes.find((x) => x.id === id)
     // Browser yang dikabel = target kemudi (`resolveLinkedBrowser`), bukan peer transcript/terminal.
-    if (n && n.kind !== BROWSER_KIND) links.push({ id: n.id, title: n.title || n.id, agent: n.agentId, sessionId: n.kind === AGENT_CHAT_KIND ? n.chatSessionId : n.sessionId })
+    if (n && n.kind !== BROWSER_KIND) links.push({ id: n.id, name: n.name, title: n.title || n.id, agent: n.agentId, sessionId: n.kind === AGENT_CHAT_KIND ? n.chatSessionId : n.sessionId })
   }
   return { links }
 }

@@ -159,4 +159,10 @@ describe('buildBrowserNotice', () => {
     expect(t).toContain('renamed')
     expect(t).toContain('"makuro-browser" (id: w)')
   })
+
+  it('a named browser is listed by name, and --node takes a name', () => {
+    const t = buildBrowserNotice('SessionStart', [{ id: 'w', name: 'Fox', title: 'Docs' }], undefined)
+    expect(t).toContain('- browser node Fox "Docs" (id: w)')
+    expect(t).toContain('pass --node <name|id>.')
+  })
 })
