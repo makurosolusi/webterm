@@ -18,7 +18,6 @@ import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hin
 import { EditorRenamePreview } from './EditorRenamePreview'
 import { loadMonaco } from './lazyMonaco'
 import { ShowInFilesButton } from './ShowInFilesButton'
-import { useEditorPreview } from './editorPreview'
 import './editor.css'
 
 // marked + DOMPurify load with the first preview, not with the board.
@@ -53,7 +52,7 @@ function EditorNode({
   stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
-  const d = data as { filePath?: string; color?: string; preview?: boolean; openSeq?: number }
+  const d = data as { filePath?: string; color?: string }
   const filePath = d.filePath ?? ''
   const swatch = d.color ?? '#0a84ff'
 
@@ -67,9 +66,8 @@ function EditorNode({
 
   const ef = useEditorFile({
     id, filePath, fileName, ext, hostRef, readMeta, writeChecked, setLoadError,
-    enabled: kind === 'text', openMarkdownPreview, loadKey: d.openSeq
+    enabled: kind === 'text', openMarkdownPreview
   })
-  const pv = useEditorPreview(id, d.preview === true, ef.dirty)
   const isBinary = kind === 'text' && ef.encoding === 'binary'
   // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.
   const editable = kind === 'text' && !isBinary && !loadError
@@ -150,9 +148,8 @@ function EditorNode({
       >
         <div className="node-header">
           <span
-            className={`node-title editor-node__name${pv.preview ? ' editor-node__name--preview' : ''}`}
-            title={pv.preview ? `${filePath} (preview: double-click to keep open)` : filePath}
-            onDoubleClick={pv.pin}
+            className="node-title editor-node__name"
+            title={filePath}
           >
             <span className={`${fileIconClass(fileName)} editor-node__icon`} aria-hidden="true" />
             {fileName}
@@ -161,11 +158,6 @@ function EditorNode({
             )}
           </span>
           <span className="editor-node__spacer" />
-          {pv.preview && (
-            <ToolbarButton className="nodrag" label="Keep open" title="Keep open" data-title="Keep open" onClick={pv.pin}>
-              <span className="codicon codicon-pin" aria-hidden="true" />
-            </ToolbarButton>
-          )}
           <ShowInFilesButton editorId={id} />
           <NodeResizeToggle />
           <ToolbarContainer className="nodrag editor-node__actions">

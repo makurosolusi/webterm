@@ -126,7 +126,6 @@ export interface WsNode {
   comments?: Comment[]    // thread aktivitas/catatan per node
   dirPath?: string        // node 'files': direktori akar yang ditampilkan
   filePath?: string       // node 'editor': file yang dibuka
-  preview?: boolean       // node 'editor': editor preview VS Code (judul miring, diganti buka satu-klik berikutnya); absen = pinned
   viewOpts?: ViewOpts     // node 'files': opsi tampilan (hidden/sort); absen = default
   expanded?: string[]     // node 'files': expanded tree folders, paths relative to dirPath (validExpanded)
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node

@@ -188,10 +188,10 @@ describe('listKeyAction: tree keys', () => {
     expect(listKeyAction({ key: 'ArrowLeft' }, -1, flat(0))).toEqual({ kind: 'none' })
   })
 
-  it('Enter opens a file pinned and toggles a folder; Space opens as preview keeping focus', () => {
+  it('Enter opens a file and toggles a folder; Space opens keeping focus', () => {
     expect(listKeyAction({ key: 'Enter' }, 2, tree)).toEqual({ kind: 'open', index: 2 })
     expect(listKeyAction({ key: 'Enter' }, 1, tree)).toEqual({ kind: 'toggle', index: 1 })
-    expect(listKeyAction({ key: ' ' }, 2, tree)).toEqual({ kind: 'open', index: 2, preview: true })
+    expect(listKeyAction({ key: ' ' }, 2, tree)).toEqual({ kind: 'open', index: 2, keepFocus: true })
     expect(listKeyAction({ key: ' ' }, 0, tree)).toEqual({ kind: 'toggle', index: 0 })
   })
 

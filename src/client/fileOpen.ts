@@ -8,7 +8,7 @@ import type { BridgeLink } from '../shared/workspace'
  *  ia memakai fallback 400×300 `store.toFlow` dan isi file-nya nyaris tak terbaca. */
 export const EDITOR_SIZE = { width: 660, height: 460 }
 
-interface NodeLike { id: string; type?: string; data?: { filePath?: string; preview?: boolean } }
+interface NodeLike { id: string; type?: string; data?: { filePath?: string } }
 interface EdgeLike { source: string; target: string }
 
 /** Id node editor yang SUDAH memegang `filePath`, atau null.
@@ -23,30 +23,16 @@ export function openEditorFor(nodes: NodeLike[], filePath: string): string | nul
 export interface OpenFilePlan {
   /** true = node editor sudah ada; sorot saja, jangan buat yang kedua. */
   focus: boolean
-  /** true = `nodeId` adalah editor preview milik node files ini: ganti file-nya, jangan buat node. */
-  swap: boolean
   nodeId: string
   /** Kabel yang harus dibuat, atau null kalau pasangan ini sudah terhubung. */
   edge: BridgeLink | null
 }
 
-/** Editor PREVIEW (VS Code: tab miring) yang dikabel dari `filesNodeId`, kabel terbaru menang; null bila tak ada.
- *  "Bersih" tidak perlu dicek terpisah: editan pertama mem-pin editor (`useEditorPreview`), jadi preview selalu bersih. */
-export function previewEditorOf(nodes: NodeLike[], edges: EdgeLike[], filesNodeId: string): string | null {
-  for (let i = edges.length - 1; i >= 0; i--) {
-    const e = edges[i]
-    if (e.source !== filesNodeId) continue
-    const n = nodes.find((x) => x.id === e.target)
-    if (n?.type === 'editor' && n.data?.preview === true) return n.id
-  }
-  return null
-}
-
 /**
  * Apa yang harus terjadi saat `filePath` dibuka dari node files `filesNodeId`: pakai node editor
  * yang sudah ada atau lahirkan `newNodeId`, dan pasang kabel penanda bila belum ada (termasuk saat
- * node-nya ada tapi kabelnya sudah dihapus pengguna). `preview` = buka satu-klik: editor preview yang
- * sudah dikabel ke node files ini dipakai ulang (`swap`) alih-alih melahirkan node baru.
+ * node-nya ada tapi kabelnya sudah dihapus pengguna). Satu file = satu node: node editor lain tidak
+ * pernah dipakai ulang untuk file berbeda, karena node adalah ruang kerja pengguna (nodeterm juga begitu).
  *
  * Id kabel mengikuti konvensi `bridge-<source>-<target>` supaya `bridgeExists` tetap jadi dedupe-nya.
  */
@@ -56,14 +42,11 @@ export function planFileOpen(
   filesNodeId: string,
   filePath: string,
   newNodeId: string,
-  preview = false,
 ): OpenFilePlan {
   const open = openEditorFor(nodes, filePath)
-  const reuse = open === null && preview ? previewEditorOf(nodes, edges, filesNodeId) : null
-  const nodeId = open ?? reuse ?? newNodeId
+  const nodeId = open ?? newNodeId
   return {
     focus: open !== null,
-    swap: reuse !== null,
     nodeId,
     edge: bridgeExists(edges, filesNodeId, nodeId)
       ? null

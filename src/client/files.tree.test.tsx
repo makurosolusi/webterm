@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// Files node as a TREE with the file-manager click model: one click opens a file (preview) after a
+// Files node as a TREE with the file-manager click model: one click opens a file after a
 // short wait, a double click renames instead, a folder click toggles in place; tree keys; expanded
 // folders persisted per node; selection keyed by relative path survives a refresh.
 import { readFileSync } from 'node:fs'
@@ -73,14 +73,14 @@ afterEach(() => {
 })
 
 describe('click model', () => {
-  it('one click selects at once and opens the file as preview after the delay', async () => {
+  it('one click selects at once and opens the file after the delay, focus staying in the tree', async () => {
     const c = await mount()
     click(c, 'b.ts')
     expect(cursor(c)).toBe('b.ts')
     expect(openFile).not.toHaveBeenCalled()
     await wait(CLICK_OPEN_DELAY_MS + 50)
     expect(openFile).toHaveBeenCalledTimes(1)
-    expect(openFile).toHaveBeenCalledWith('/proj/b.ts', { preview: true })
+    expect(openFile).toHaveBeenCalledWith('/proj/b.ts', { focusEditor: false })
   })
 
   it('double click renames (relative path) and never opens', async () => {
@@ -138,12 +138,12 @@ describe('tree keys', () => {
     key(c, 'ArrowLeft'); expect(names(c)).toEqual(['src', 'b.ts'])
   })
 
-  it('Enter opens a file pinned, Space opens it as preview, Enter on a folder toggles it', async () => {
+  it('Enter opens a file, Space opens it keeping focus, Enter on a folder toggles it', async () => {
     const c = await mount()
     key(c, 'End'); key(c, 'Enter')
-    expect(openFile).toHaveBeenLastCalledWith('/proj/b.ts', { preview: false })
+    expect(openFile).toHaveBeenLastCalledWith('/proj/b.ts', { focusEditor: true })
     key(c, ' ')
-    expect(openFile).toHaveBeenLastCalledWith('/proj/b.ts', { preview: true })
+    expect(openFile).toHaveBeenLastCalledWith('/proj/b.ts', { focusEditor: false })
     key(c, 'Home'); key(c, 'Enter')
     await waitFor(() => expect(names(c)).toHaveLength(4))
     expect(openFile).toHaveBeenCalledTimes(2)

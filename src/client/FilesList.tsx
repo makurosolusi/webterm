@@ -41,7 +41,7 @@ interface Props {
   inputAt?: InputAt | null
   onPick: (index: number, mods: PickMods) => void
   onToggle: (rel: string) => void
-  /** Single click on a file (after `CLICK_OPEN_DELAY_MS`): open as preview. */
+  /** Single click on a file (after `CLICK_OPEN_DELAY_MS`): open it, focus stays in the tree. */
   onOpen: (rel: string) => void
   /** Double click: rename (never open). */
   onRename: (rel: string) => void
