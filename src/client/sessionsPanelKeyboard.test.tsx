@@ -28,7 +28,7 @@ const ws = (id: string, name: string, nodes: WsNode[]): Workspace => ({
 
 const ALPHA = ws('p1', 'Alpha', [node('t1', 'Build', { cwd: '/srv/build' }), node('t2', 'Test')])
 const BETA = ws('p2', 'Beta', [node('t3', 'Deploy')])
-/** The open board: Project view leaves it out (the Layers section lists it), so p1/p2 are the tree. */
+/** The open board, listed first in the Project tab (marked Current) with no sessions. */
 const CURRENT = ws('p0', 'Current', [])
 
 const baseProps = (): SessionsPanelProps => ({
@@ -69,7 +69,7 @@ describe('navigasi keyboard pohon sesi', () => {
     openAll()
 
     press(item('Test — Done'), 'Home')
-    expect(group('project:p1').active).toBe(true)
+    expect(group('project:p0').active).toBe(true)
 
     press(group('project:p1'), 'End')
     expect(item('Deploy — Done').active).toBe(true)
@@ -165,6 +165,7 @@ describe('chrome sidebar', () => {
     fireEvent.click(screen.getByLabelText('Collapse all'))
 
     expect(JSON.parse(localStorage.getItem('webterm.sessionsCollapsed') ?? '{}')).toEqual({
+      'project:p0': true,
       'project:p1': true,
       'project:p2': true,
     })

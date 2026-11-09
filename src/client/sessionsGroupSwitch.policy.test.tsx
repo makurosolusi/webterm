@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Policy: in the Sessions view's Project tab a workspace group header ONLY expands/collapses.
-// Bug it locks: the tree lists only OTHER workspaces, and a header click used to call
-// `onSelectWorkspace`, so every attempt to expand a group jumped the whole app to that board.
+// Bug it locks: a header click used to call `onSelectWorkspace`, so every attempt to expand a
+// group jumped the whole app to that board.
 // Switching lives in the header's inline action (and the context menu / a session row).
 // `vsc-tree-select` is the event the library emits for both a click and Enter/Space on an item.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -79,5 +79,11 @@ describe('workspace group header never switches workspace', () => {
 
     fireEvent.keyDown(action, { key: 'Enter' })
     expect(onSelectWorkspace).toHaveBeenCalledTimes(2)
+  })
+
+  it('the current workspace header has no Switch to Workspace action', () => {
+    render(<SessionsPanel {...props(vi.fn())} />)
+    expect(screen.queryByLabelText('Switch to Workspace Current')).toBeNull()
+    expect(screen.getByLabelText('Switch to Workspace noc')).toBeTruthy()
   })
 })

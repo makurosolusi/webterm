@@ -187,15 +187,6 @@ export function parseCollapsed(raw: string | null): Record<string, boolean> {
   }
 }
 
-/** Apa yang dilakukan klik kiri pada header workspace — persis SATU dari dua, tidak pernah dua-duanya.
- *  Workspace tidak aktif berpindah; yang aktif melipat dirinya, supaya barisnya tak punya zona mati.
- *  Chevron adalah jalan keluarnya: ia melipat baris APA PUN (menghentikan propagasi). */
-export type ProjectHeadAction = 'switch' | 'toggle-collapse'
-
-export function projectHeadClickAction(isActive: boolean): ProjectHeadAction {
-  return isActive ? 'toggle-collapse' : 'switch'
-}
-
 /** Badge header: berapa sesi menuntut kamu sekarang, dan berapa yang sedang bekerja. */
 export interface SignalCounts {
   attention: number
@@ -415,16 +406,15 @@ export function sidebarFilterKeyAction(key: string, filter: string): SidebarFilt
 }
 
 /** Kalimat mana (kalau ada) yang harus ditampilkan daftar kosong. */
-export type SidebarEmptyState = 'none' | 'no-sessions' | 'no-matches' | 'only-active'
+export type SidebarEmptyState = 'none' | 'no-sessions' | 'no-matches'
 
-/** Project view of the side bar: the open workspace is left out, the Layers section lists it. */
+/** Groups of every workspace except the open one (the activity bar's Sessions badge counts these). */
 export const otherWorkspaceGroups = (groups: SessionGroup[]): SessionGroup[] => groups.filter((g) => !g.isActive)
 
 /** "Tidak ada apa-apa di sini" dan "tidak ada yang cocok" adalah dua fakta berbeda, dan hanya
  *  yang kedua punya undo. Filter bertahan selama bekerja, jadi daftar yang kosong karena filter
  *  lama harus mengatakannya — bukan terbaca seperti sidebar yang rusak. */
-export function sidebarEmptyState(noRows: boolean, filter: string, onlyActive = false): SidebarEmptyState {
+export function sidebarEmptyState(noRows: boolean, filter: string): SidebarEmptyState {
   if (!noRows) return 'none'
-  if (filter.trim() !== '') return 'no-matches'
-  return onlyActive ? 'only-active' : 'no-sessions'
+  return filter.trim() !== '' ? 'no-matches' : 'no-sessions'
 }

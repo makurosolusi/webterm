@@ -10,7 +10,9 @@ import {
   type buildStatusList,
   type sidebarEmptyState,
 } from './sessionList'
+import { workspaceDot, workspaceSubline } from './sessionList.workspace'
 import type { ClosedEntry } from './closedHistory'
+import './sessions-panel.workspace.css'
 
 /** Kunci disclosure seksi "Recently closed", berbagi `collapsed` dengan baris workspace. Tidak bisa
  *  bertabrakan: kunci workspace selalu berawalan `project:` (lihat `projectCollapseKey`). */
@@ -32,6 +34,8 @@ export interface SessionsTreeProps {
   register: RegisterTreeTarget
   onCloseSession: (id: string) => void
   onSelectWorkspace: (id: string) => void
+  /** Git branch by workspace cwd (`useGitBranches`); absent = unknown, the header shows none. */
+  branches: Record<string, string>
 }
 
 /** Pohon sesi (tab project/status + seksi "Recently closed"); murni render dari props. */
@@ -47,6 +51,7 @@ export function SessionsTree({
   register,
   onCloseSession,
   onSelectWorkspace,
+  branches,
 }: SessionsTreeProps) {
   return (
     <Tree
@@ -103,7 +108,8 @@ export function SessionsTree({
               count={g.sessions.length}
               open={!isCollapsed}
               register={register}
-              // Header click only expands/collapses; switching is the inline action (or menu).
+              // Header click only expands/collapses; switching is the inline action (or menu), or
+              // a session row. Every workspace is listed, so a switch never reshapes this tree.
               workspace
               projectId={g.projectId}
               isActive={g.isActive}
@@ -111,6 +117,8 @@ export function SessionsTree({
               monogram={monogram(g.projectName)}
               color={g.projectColor}
               signals={sig}
+              dot={workspaceDot(sig)}
+              sub={workspaceSubline(g.cwd, g.cwd ? branches[g.cwd] : undefined)}
             >
               {g.sessions.map((r) => (
                 <SessionTreeItem

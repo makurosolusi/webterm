@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Left side bar shell: one view at a time under a VS Code view title (LAYERS carries the node
-// count), the Sessions view without the open workspace, the hide button, and the right-edge sash
+// count), the Sessions view listing every workspace, the hide button, and the right-edge sash
 // (min 220, max 40%, right = wider).
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -55,11 +55,11 @@ describe('one view at a time', () => {
   })
 })
 
-describe('Sessions without the open workspace', () => {
-  it('Project view lists other workspaces only', () => {
+describe('Sessions lists every workspace', () => {
+  it('Project view lists the open workspace too', () => {
     render(<SessionsPanel {...sessionsProps()} />)
     expect(document.querySelector('vscode-tree-item[data-group="project:p2"]')).not.toBeNull()
-    expect(document.querySelector('vscode-tree-item[data-group="project:p1"]')).toBeNull()
+    expect(document.querySelector('vscode-tree-item[data-group="project:p1"]')).not.toBeNull()
   })
 
   it('Status view stays cross-board', () => {
@@ -70,9 +70,10 @@ describe('Sessions without the open workspace', () => {
     expect(labels.some((l) => l.startsWith('There'))).toBe(true)
   })
 
-  it('only the open workspace exists: says where other sessions will appear', () => {
+  it('only the open workspace exists: its group and session still show', () => {
     render(<SessionsPanel {...sessionsProps({ workspaces: [OPEN] })} />)
-    expect(screen.getByText("Other workspaces' sessions appear here.")).toBeTruthy()
+    expect(document.querySelector('vscode-tree-item[data-group="project:p1"]')).not.toBeNull()
+    expect(document.querySelector('vscode-tree-item[aria-label^="Here"]')).not.toBeNull()
     expect(screen.queryByText('No sessions yet.')).toBeNull()
   })
 })
