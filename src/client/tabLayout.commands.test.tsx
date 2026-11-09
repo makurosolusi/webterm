@@ -8,8 +8,8 @@ import { defaultTabLayout } from '../shared/tabLayout.schema'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
 import { connectWorkspaceLayout } from './App.tabs'
 import { useCanvasViewport } from './canvasViewport'
-import { eventChord, findConflicts, listCommands, type Command } from './commandRegistry'
-import { FIXED_COMMANDS, appCommands } from './commandRegistry.defaults'
+import { eventChord, findConflicts, listCommands, normalizeChord, type Command } from './commandRegistry'
+import { FIXED_COMMANDS, LAYERS_GROUP_KEY, LAYERS_UNGROUP_KEY, appCommands } from './commandRegistry.defaults'
 import { isTabLayoutChord } from './tabLayout.keys'
 import { TOGGLE_LAYOUT_ID, tabLayoutCommands, toggleLayoutMode, useTabLayoutCommands } from './tabLayout.commands'
 import { activateTab, connectTabLayout, getTabLayout, setMode } from './tabLayout.store'
@@ -94,8 +94,25 @@ describe('tab shortcuts', () => {
 describe('chords', () => {
   const base = { newTerminal: vi.fn(), newFiles: vi.fn(), newDiff: vi.fn(), newBrowser: vi.fn(), fitView: vi.fn(), toggleMaximizeNode: vi.fn(), openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(), toggleSessions: vi.fn(), toggleChat: vi.fn(), toggleSecondarySideBar: vi.fn(), toggleBoard: vi.fn() }
   it.each([true, false])('no default-key conflict with the built-ins (isMac=%s)', (isMac) => {
-    const all = [...appCommands(base), ...FIXED_COMMANDS, ...tabLayoutCommands(vi.fn(), true, isMac)]
+    const layers: Command[] = [
+      { id: 'layers.group', label: 'Layers: Group Selection', defaultKey: LAYERS_GROUP_KEY },
+      { id: 'layers.ungroup', label: 'Layers: Ungroup', defaultKey: LAYERS_UNGROUP_KEY },
+    ]
+    const all = [...appCommands(base), ...FIXED_COMMANDS, ...tabLayoutCommands(vi.fn(), true, isMac), ...layers]
     expect([...findConflicts(all, {}).keys()]).toEqual([])
+  })
+
+  it('Toggle Side Bar is Mod+Shift+\\ and ⇧⌘\\ (key "|") resolves to it', () => {
+    const cmd = byId(appCommands(base), 'view.sessions')
+    expect(cmd.label).toBe('View: Toggle Side Bar')
+    expect(cmd.defaultKey).toBe('Mod+Shift+\\')
+    const e = { key: '|', code: 'Backslash', metaKey: true, ctrlKey: false, altKey: false, shiftKey: true }
+    expect(eventChord(e, true)).toBe(normalizeChord(cmd.defaultKey!))
+    expect([LAYERS_GROUP_KEY, LAYERS_UNGROUP_KEY]).toEqual(['Mod+G', 'Mod+Shift+G'])
+  })
+
+  it('the node tab strip toggle command is gone', () => {
+    for (const tabsMode of [true, false]) expect(tabLayoutCommands(vi.fn(), tabsMode, true).some((c) => c.id === 'view.nodeTabs.toggle')).toBe(false)
   })
 
   it('bracket chords resolve by physical key even with Shift held', () => {
@@ -155,7 +172,7 @@ describe('layout persistence', () => {
   it('a workspace without a layout starts as canvas; a stored layout is restored', () => {
     connectWorkspaceLayout(ws('w1'), { current: null }, vi.fn())
     expect(getTabLayout().mode).toBe('canvas')
-    connectWorkspaceLayout(ws('w2', { mode: 'tabs', tabs: { order: ['x'], active: 'x', filesPanel: { open: false, width: 300 } } }), { current: null }, vi.fn())
+    connectWorkspaceLayout(ws('w2', { mode: 'tabs', tabs: { order: ['x'], active: 'x', filesPanel: { open: false, width: 300 }, groups: [] } }), { current: null }, vi.fn())
     expect(getTabLayout().mode).toBe('tabs')
     expect(getTabLayout().tabs.active).toBe('x')
   })

@@ -10,6 +10,9 @@ import { HARNESS_WS_ID, installCanvasDom, mountCanvas, unmountCanvas } from './c
 import { resetCapabilitiesCache } from './useCapabilities'
 import { COOKIE_MENU_TEXT, COOKIE_TEXT, TOOLBAR_TEXT } from './browser.uxText'
 import { MENU_LABELS } from './canvasMenu.model'
+// The Layers side bar's empty state offers the same "New Terminal" / "New Agent" buttons as the
+// canvas menu; these queries mean the menu row, so the side bar is left out.
+const OUTSIDE_SIDE_BAR = { ignore: 'script, style, .sessions-sidebar *' }
 
 const urls: string[] = []
 class FakeWs {
@@ -43,7 +46,7 @@ describe('flag browser mati (default)', () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
 
     fireEvent.contextMenu(document.querySelector('.react-flow__pane') as HTMLElement, { clientX: 50, clientY: 50 })
-    await screen.findByText(MENU_LABELS.terminal)
+    await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR)
     expect(screen.queryByText(MENU_LABELS.browser)).not.toBeNull()
     expect(urls).toEqual([])
     // Satu-satunya request browser dari klien: probe status (404 => fitur tak ada).
@@ -79,7 +82,7 @@ describe('tawaran saat kemampuan browser mati', () => {
     openPaneMenu()
     fireEvent.click(await screen.findByText(MENU_LABELS.browser))
     expect(await screen.findByText(/Turn it on now\?/)).not.toBeNull()
-    expect(screen.queryByText(MENU_LABELS.terminal)).toBeNull() // panel menu berganti isi
+    expect(screen.queryByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR)).toBeNull() // panel menu berganti isi
     expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))

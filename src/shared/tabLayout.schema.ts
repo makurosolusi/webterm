@@ -6,12 +6,26 @@
 // Values arrive over HTTP and can be hand-edited, so `normalizeTabLayout` coerces any input field
 // by field (wrong type -> default, duplicate ids dropped, width clamped). `reconcileTabs` is the
 // pure step that keeps `order`/`active` in line with the nodes that actually exist.
+//
+// Groups (the Layers panel folders) are list-only, depth 1, and live here too. `order` stays the one
+// source of position: a group is just a membership set whose members sit contiguously in `order`
+// (`packGroups` restores that after any change).
 import type { WsNodeKind } from './workspace.shape'
 
 export type LayoutMode = 'canvas' | 'tabs'
 export const LAYOUT_MODES: readonly LayoutMode[] = ['canvas', 'tabs']
 
 export interface FilesPanelState { open: boolean; width: number }
+
+/** A named, collapsible folder of nodes in the Layers list. `ids` follow their `order` sequence. */
+export interface TabGroup { id: string; name: string; collapsed: boolean; ids: string[] }
+
+export const MAX_TAB_GROUPS = 100
+export const MAX_TAB_GROUP_NAME = 80
+/** Name used when a group name is empty after trimming. */
+export const DEFAULT_TAB_GROUP_NAME = 'Group'
+/** Group ids: plain url-safe tokens (`g-<uuid>` from the store), at most 64 chars. */
+const GROUP_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 export interface TabsState {
   /** Every node id, left to right: the order of the node tab strip above the canvas and of tab
@@ -21,6 +35,8 @@ export interface TabsState {
   /** Visible tab in tab mode (a non-Files id from `order`), or null when there are no tabs. */
   active: string | null
   filesPanel: FilesPanelState
+  /** Layers folders. A node is in at most one group; members are contiguous in `order`. */
+  groups: TabGroup[]
 }
 
 export interface TabLayout { mode: LayoutMode; tabs: TabsState }
@@ -37,7 +53,7 @@ const PANEL_KINDS: readonly WsNodeKind[] = ['files']
 export const isTabKind = (kind: WsNodeKind): boolean => !PANEL_KINDS.includes(kind)
 
 export function defaultTabLayout(): TabLayout {
-  return { mode: 'canvas', tabs: { order: [], active: null, filesPanel: { open: true, width: FILES_PANEL_WIDTH.default } } }
+  return { mode: 'canvas', tabs: { order: [], active: null, filesPanel: { open: true, width: FILES_PANEL_WIDTH.default }, groups: [] } }
 }
 
 const record = (v: unknown): Record<string, unknown> =>
@@ -60,18 +76,77 @@ function cleanIds(v: unknown): string[] {
   return [...seen]
 }
 
+/** Trimmed group name cut to `MAX_TAB_GROUP_NAME`; empty or not a string -> "Group". */
+export function cleanGroupName(v: unknown): string {
+  const n = typeof v === 'string' ? v.trim().slice(0, MAX_TAB_GROUP_NAME).trim() : ''
+  return n || DEFAULT_TAB_GROUP_NAME
+}
+
+/** Valid groups of an untrusted value: bad or duplicate ids dropped, count capped, a node id kept
+ *  only in the first group that lists it. */
+function cleanGroups(v: unknown): TabGroup[] {
+  if (!Array.isArray(v)) return []
+  const out: TabGroup[] = []
+  const groupIds = new Set<string>()
+  const taken = new Set<string>()
+  for (const raw of v) {
+    if (out.length >= MAX_TAB_GROUPS) break
+    const g = record(raw)
+    if (typeof g.id !== 'string' || !GROUP_ID.test(g.id) || groupIds.has(g.id)) continue
+    groupIds.add(g.id)
+    const ids = cleanIds(g.ids).filter((id) => !taken.has(id))
+    ids.forEach((id) => taken.add(id))
+    out.push({ id: g.id, name: cleanGroupName(g.name), collapsed: g.collapsed === true, ids })
+  }
+  return out
+}
+
+/**
+ * Restore the group invariant: each group's members become contiguous in `order`, at the slot of
+ * the group's first member; each group's `ids` take their `order` sequence; members missing from
+ * `order` are dropped (empty groups stay). Expects unique ids in `order`. Pure.
+ */
+export function packGroups(order: readonly string[], groups: readonly TabGroup[]): { order: string[]; groups: TabGroup[] } {
+  const owner = new Map<string, number>()
+  groups.forEach((g, i) => g.ids.forEach((id) => { if (!owner.has(id)) owner.set(id, i) }))
+  const members: string[][] = groups.map(() => [])
+  for (const id of order) {
+    const gi = owner.get(id)
+    if (gi !== undefined) members[gi].push(id)
+  }
+  const packed: string[] = []
+  const placed = new Set<number>()
+  for (const id of order) {
+    const gi = owner.get(id)
+    if (gi === undefined) packed.push(id)
+    else if (!placed.has(gi)) { placed.add(gi); packed.push(...members[gi]) }
+  }
+  return { order: packed, groups: groups.map((g, i) => ({ ...g, ids: members[i] })) }
+}
+
+const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id, i) => id === b[i])
+
+/** Field-by-field equality of two group lists (same groups, names, collapse state and members). */
+export function sameGroups(a: readonly TabGroup[], b: readonly TabGroup[]): boolean {
+  return a.length === b.length && a.every((g, i) => {
+    const h = b[i]
+    return g.id === h.id && g.name === h.name && g.collapsed === h.collapsed && sameIds(g.ids, h.ids)
+  })
+}
+
 /** Coerce any value into a valid `TabLayout`, field by field. */
 export function normalizeTabLayout(v: unknown): TabLayout {
   const s = record(v)
   const t = record(s.tabs)
   const f = record(t.filesPanel)
-  const order = cleanIds(t.order)
+  const { order, groups } = packGroups(cleanIds(t.order), cleanGroups(t.groups))
   return {
     mode: LAYOUT_MODES.includes(s.mode as LayoutMode) ? (s.mode as LayoutMode) : 'canvas',
     tabs: {
       order,
       active: typeof t.active === 'string' && order.includes(t.active) ? t.active : null,
       filesPanel: { open: typeof f.open === 'boolean' ? f.open : true, width: clampFilesPanelWidth(f.width) },
+      groups,
     },
   }
 }
@@ -86,21 +161,22 @@ function nearestSurvivor(oldOrder: readonly string[], active: string | null, ali
 }
 
 /**
- * Bring `layout.tabs` in line with the existing nodes: drop ids that are gone, append new nodes at
- * the end of `order` (board order = creation order), and keep `active` a valid tab-mode tab
- * (nearest surviving non-Files tab, else the last one, else null). Pure; returns the SAME object
- * when nothing changed so React callers can bail out on identity.
+ * Bring `layout.tabs` in line with the existing nodes: drop ids that are gone (from `order` and from
+ * groups; empty groups stay), append new nodes at the end of `order` (board order = creation
+ * order), keep group members contiguous, and keep `active` a valid tab-mode tab (nearest surviving
+ * non-Files tab, else the last one, else null). Pure; returns the SAME object when nothing changed
+ * so React callers can bail out on identity.
  */
 export function reconcileTabs(layout: TabLayout, nodes: readonly { id: string; kind: WsNodeKind }[]): TabLayout {
   const alive = new Set(nodes.map((n) => n.id))
   const tabIds = new Set(nodes.filter((n) => isTabKind(n.kind)).map((n) => n.id))
-  const { order: old, active, filesPanel } = layout.tabs
+  const { order: old, active, filesPanel, groups: oldGroups } = layout.tabs
   const kept = old.filter((id, i) => alive.has(id) && old.indexOf(id) === i)
-  const order = [...kept, ...[...alive].filter((id) => !kept.includes(id))]
+  const { order, groups } = packGroups([...kept, ...[...alive].filter((id) => !kept.includes(id))], oldGroups)
   const tabs = order.filter((id) => tabIds.has(id))
   const nextActive = active !== null && tabIds.has(active)
     ? active
     : nearestSurvivor(old, active, tabIds) ?? tabs[tabs.length - 1] ?? null
-  const same = order.length === old.length && order.every((id, i) => id === old[i]) && nextActive === active
-  return same ? layout : { ...layout, tabs: { order, active: nextActive, filesPanel } }
+  const same = sameIds(order, old) && nextActive === active && sameGroups(groups, oldGroups)
+  return same ? layout : { ...layout, tabs: { order, active: nextActive, filesPanel, groups: sameGroups(groups, oldGroups) ? oldGroups : groups } }
 }

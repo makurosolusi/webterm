@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- **Layers** in the left side bar, like Figma: every node of the open board in tab order, with hover highlighting the node on the canvas, a filter, rename (double-click or F2), and groups. Drag rows to reorder them or move them into and out of groups; **Mod+G** groups the selected nodes and **Mod+Shift+G** ungroups them.
 - Quick move & resize: hold ⌘⌃ (Ctrl+Alt on Windows and Linux) and drag anywhere on a node. The middle moves it (with the selection), an edge or corner resizes it, a right-drag resizes from the nearest corner, and Esc puts it back. Pick ⌘⇧ (Ctrl+Shift) or turn it off in Settings › Canvas › Quick move & resize.
 - Central knows which project workspace you are looking at and which nodes are on it.
 - Central can switch your canvas to another project's workspace and centre a node for you: "show me Mango".
@@ -107,6 +108,9 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- The node tab strip above the canvas moved into the Layers section of the side bar. The side bar is now one column, Layers on top and Sessions below, and each section folds open or closed (remembered).
+- The left side bar can be resized by dragging its right edge (220 px up to 40% of the window, remembered; double-click resets it) and hides with **Mod+Shift+\\** or the new Hide Side Bar button in its top row. The dock button and the command are now called "Toggle Side Bar".
+- Sessions (Project view) no longer repeats the workspace you have open, since Layers already lists it; Status view still shows every workspace.
 - Terminals keep their drawing buffer, so screenshots show the terminal text instead of a blank area.
 - The Claude permission mode options have plainer names: "Ask before every action", "Auto (default)", "Approve file edits automatically", "Plan only, change nothing" and "Never ask (no prompts)".
 - Node names are always generated words like "Mango" or "Mango 2". Any other value saved as a node's name is replaced automatically, so a name can never carry arbitrary text into what agents read.
@@ -257,6 +261,7 @@ Operator notes:
 - Canvas nodes saved by a newer webterm version, or partly corrupted, are no longer deleted on the next save, and their running terminal sessions are no longer cleaned up as left behind.
 
 ### Removed
+- The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).
 - The unused per-reply token limit setting.
 - OpenCode as a Central runtime and as the fallback worker: Central and workers run on Claude only; without Claude they ask you to set it up.
 - Built-in integration for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity (launch command settings, status signals, resume and history). They still run in a terminal node; existing nodes keep launching their command. Codex sessions no longer appear in Agent History.

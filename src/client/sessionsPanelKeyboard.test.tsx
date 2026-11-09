@@ -28,12 +28,14 @@ const ws = (id: string, name: string, nodes: WsNode[]): Workspace => ({
 
 const ALPHA = ws('p1', 'Alpha', [node('t1', 'Build', { cwd: '/srv/build' }), node('t2', 'Test')])
 const BETA = ws('p2', 'Beta', [node('t3', 'Deploy')])
+/** The open board: Project view leaves it out (the Layers section lists it), so p1/p2 are the tree. */
+const CURRENT = ws('p0', 'Current', [])
 
 const baseProps = (): SessionsPanelProps => ({
   open: true,
   onClose: () => {},
-  workspaces: [ALPHA, BETA],
-  activeId: 'p1',
+  workspaces: [CURRENT, ALPHA, BETA],
+  activeId: 'p0',
   liveActiveNodes: null,
   statuses: { t1: 'working', t2: 'done', t3: 'done' },
   onFocusNode: () => {},

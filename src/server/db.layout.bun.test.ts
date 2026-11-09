@@ -13,7 +13,7 @@ const BRIDGES = [{ id: 'e1', source: 'n1', target: 'n2', kind: 'context' }]
 
 const tabsLayout = (): TabLayout => ({
   mode: 'tabs',
-  tabs: { order: ['n1'], active: 'n1', filesPanel: { open: false, width: FILES_PANEL_WIDTH.min } },
+  tabs: { order: ['n1'], active: 'n1', filesPanel: { open: false, width: FILES_PANEL_WIDTH.min }, groups: [] },
 })
 
 /** A database exactly as the previous release left it: workspace table WITHOUT `layout`. */
@@ -92,4 +92,31 @@ test('API: a dirty layout in the PUT body is sanitized before it is stored', asy
   expect(JSON.stringify(l?.tabs.order)).toBe('["a"]')
   expect(l?.tabs.active).toBe(null)
   expect(l?.tabs.filesPanel.width).toBe(FILES_PANEL_WIDTH.max)
+})
+
+test('groups round-trip through the API and survive a reopen of the database file', async () => {
+  const prev = process.env.WEBTERM_DATA_DIR
+  process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'wt-groups-'))
+  try {
+    const layout: TabLayout = {
+      mode: 'canvas',
+      tabs: {
+        order: ['n1', 'n2'], active: 'n1', filesPanel: { open: true, width: FILES_PANEL_WIDTH.default },
+        groups: [{ id: 'g-1', name: 'Work', collapsed: true, ids: ['n1', 'n2'] }, { id: 'g-2', name: 'Empty', collapsed: false, ids: [] }],
+      },
+    }
+    const d = openDb()
+    const store = new Db(d)
+    const ws = store.create('p')
+    await put(store, ws.id, { name: 'p', viewport: ws.viewport, nodes: NODES, bridges: BRIDGES, layout })
+    ;(d as unknown as { close(): void }).close() // the ambient bun:sqlite types omit close()
+
+    const reopened = new Db(openDb())
+    expect(JSON.stringify(reopened.get(ws.id)?.layout)).toBe(JSON.stringify(layout))
+    const got = await workspacesRoute(reopened, `/api/workspaces/${ws.id}`, 'GET', () => Promise.resolve(''))
+    expect((got?.body as { layout: TabLayout }).layout.tabs.groups).toEqual(layout.tabs.groups)
+  } finally {
+    if (prev === undefined) delete process.env.WEBTERM_DATA_DIR
+    else process.env.WEBTERM_DATA_DIR = prev
+  }
 })

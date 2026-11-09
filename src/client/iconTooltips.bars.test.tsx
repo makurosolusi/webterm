@@ -32,7 +32,7 @@ afterEach(cleanup)
 describe('activity bar', () => {
   it('exposes every entry by name and shows its tooltip', () => {
     render(<Dock {...dockProps} />)
-    for (const name of ['Toggle sessions panel', 'Central, 2', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
+    for (const name of ['Toggle Side Bar', 'Central, 2', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
       const btn = screen.getByRole('button', { name })
       expect(btn.hasAttribute('title'), name).toBe(false)
     }
