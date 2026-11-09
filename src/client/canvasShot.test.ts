@@ -33,9 +33,10 @@ beforeEach(() => {
   domToBlob.mockReset()
   fetchMock.mockReset().mockResolvedValue(new Response(null, { status: 204 }))
   vi.stubGlobal('fetch', fetchMock)
-  vi.spyOn(document.body, 'getBoundingClientRect').mockReturnValue({ width: 1600 } as DOMRect)
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1600 })
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
 })
-afterEach(() => { vi.restoreAllMocks() })
+afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren() })
 
 describe('canvas.screenshot (t:shot)', () => {
   test('ws dispatches shot frames; the hook answers them by uploading', async () => {
@@ -53,12 +54,12 @@ describe('canvas.screenshot (t:shot)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  test('visible window: captures the page scaled to maxWidth as JPEG and POSTs it', async () => {
+  test('visible window: captures the viewport scaled to maxWidth as JPEG and POSTs it', async () => {
     const { answerShot, SHOT_QUALITY } = await import('./canvasShot')
     const blob = new Blob(['jpg'], { type: 'image/jpeg' })
     domToBlob.mockResolvedValue(blob)
     await answerShot({ ...shot, reqId: 'r/1' })
-    expect(domToBlob).toHaveBeenCalledWith(document.body, expect.objectContaining({ type: 'image/jpeg', quality: SHOT_QUALITY, scale: 0.5 }))
+    expect(domToBlob).toHaveBeenCalledWith(document.body, expect.objectContaining({ type: 'image/jpeg', quality: SHOT_QUALITY, scale: 0.5, width: 1600, height: 900 }))
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/canvas-shot/r%2F1')
     expect(init.method).toBe('POST')
@@ -114,6 +115,47 @@ describe('canvas.screenshot (t:shot)', () => {
     fetchMock.mockRejectedValueOnce(new TypeError('network down'))
     await expect(answerShot(shot)).resolves.toBeUndefined()
     expect(warn).toHaveBeenCalledTimes(2)
+  })
+
+  // Root cause of the frozen tab: cloning every element under body, with ~400 computed styles plus
+  // scrollbar pseudo-elements each, synchronously; and a retry starting a second clone on top.
+  test('policy: clones only through a filter, without scrollbar pseudo-elements', async () => {
+    const { answerShot } = await import('./canvasShot')
+    domToBlob.mockResolvedValue(new Blob(['jpg'], { type: 'image/jpeg' }))
+    await answerShot(shot)
+    const opts = domToBlob.mock.calls[0][1]
+    expect(typeof opts.filter).toBe('function')
+    expect(opts.features.copyScrollbar).toBe(false)
+  })
+
+  test('policy: a page over MAX_SHOT_ELEMENTS answers page_too_large without cloning', async () => {
+    const { answerShot } = await import('./canvasShot')
+    const { MAX_SHOT_ELEMENTS } = await import('./canvasShot.scope')
+    const box = document.createElement('div')
+    for (let i = 0; i <= MAX_SHOT_ELEMENTS; i++) box.appendChild(document.createElement('span'))
+    document.body.appendChild(box)
+    await answerShot(shot)
+    expect(domToBlob).not.toHaveBeenCalled()
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ error: 'page_too_large' })
+  })
+
+  test('policy: a second request while one captures answers capture_busy; one clone only', async () => {
+    const { answerShot } = await import('./canvasShot')
+    let finish!: (b: Blob) => void
+    domToBlob.mockReturnValue(new Promise<Blob>((r) => { finish = r }))
+    const first = answerShot(shot)
+    await answerShot({ ...shot, reqId: 'r2' })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/canvas-shot/r2')
+    expect(JSON.parse(init.body)).toEqual({ error: 'capture_busy' })
+    finish(new Blob(['jpg'], { type: 'image/jpeg' }))
+    await first
+    expect(domToBlob).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/canvas-shot/r1')
+    // The flag is released: the next request captures again.
+    domToBlob.mockResolvedValue(new Blob(['jpg'], { type: 'image/jpeg' }))
+    await answerShot(shot)
+    expect(domToBlob).toHaveBeenCalledTimes(2)
   })
 
   // Root cause of blank terminals in screenshots: a WebGL canvas without preserveDrawingBuffer
