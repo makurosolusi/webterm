@@ -24,7 +24,7 @@ const there: WsNode = {
 }
 
 beforeAll(installCanvasDom)
-beforeEach(() => { sent.length = 0 })
+beforeEach(() => { sent.length = 0; localStorage.setItem('webterm.sideBarView', 'sessions') }) // side bar shows the Sessions view
 afterEach(unmountCanvas)
 
 /** Bodies of every PUT to the other workspace: the off-canvas close persists through one. */

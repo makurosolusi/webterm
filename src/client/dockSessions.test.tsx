@@ -1,14 +1,14 @@
 /**
  * @vitest-environment jsdom
  */
-// Tombol Sessions SESUDAH ia pindah masuk ke dock, diuji di canvas sungguhan (`./canvasHarness`).
+// Ikon view side bar kiri (Layers, Sessions, Agent History) di dock, diuji di canvas sungguhan (`./canvasHarness`).
 // Sebabnya satu bug nyata: dock dan panel sama-sama diangkur ke tepi kiri, dan kolom dock
 // (z-index 20) berdiri persis di atas daftar sesi (z-index 12) sehingga teksnya terpotong.
 //
 // Yang dijaga di sini:
-//   1. Pelontarnya SATU dan ada di dalam dock — tidak ada plat terapung kedua di tepi kiri.
-//   2. Klik membuka, klik lagi menutup; hover TIDAK pernah membuka (perilaku yang baru dimenangkan).
-//   3. Pilihan buka/tutup bertahan di localStorage, di bawah kunci warisan yang sama.
+//   1. Pelontarnya ada di dalam dock — tidak ada plat terapung kedua di tepi kiri.
+//   2. VS Code: ikon view lain membuka view itu, ikon view yang tampil menutup; hover TIDAK pernah membuka.
+//   3. Pilihan buka/tutup bertahan di localStorage (kunci warisan), view-nya di `webterm.sideBarView`.
 //   4. Dock DIAM di tepi kiri dan panel yang minggir ke kanannya — bukan sebaliknya.
 //
 // POSISI PIKSEL TIDAK TERUJI: jsdom tidak punya layout. (4) diuji sebagai keadaan yang bisa diamati
@@ -18,11 +18,13 @@ import { readFileSync } from 'node:fs'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
+import { isMacPlatform } from './terminalKeys'
 
 /** Kunci warisan dari masa panel ini punya hover-peek. Dipaku sebagai literal DI SINI, bukan
  *  diimpor: nilainya adalah identitas preferensi yang sudah tersimpan di browser pengguna, jadi
  *  test yang mengimpor konstantanya akan tetap hijau justru saat namanya diganti. */
 const PIN_KEY = 'webterm.sessionsPinned'
+const VIEW_KEY = 'webterm.sideBarView'
 
 /** Sheet dibaca relatif ke root repo (cwd runner), BUKAN lewat `new URL('./x', import.meta.url)`
  *  seperti `styles.test.ts`: file ini jsdom, dan di transform web Vite memperlakukan pola itu
@@ -36,23 +38,29 @@ afterEach(() => {
   localStorage.clear()
 })
 
-const toggle = () => screen.getByLabelText('Toggle Side Bar')
+const icon = (name: string) => screen.getByRole('button', { name })
+const toggle = () => icon('Layers')
 const panel = () => screen.queryByLabelText('Side Bar')
+/** Judul view yang sedang tampil (satu-satunya view yang di-mount). */
+const viewTitle = () => panel()?.querySelector('.sessions-sidebar__title')?.textContent
+/** ⇧⌘\ (Ctrl+Shift+\ di luar macOS): View: Toggle Side Bar. */
+const pressToggleChord = () =>
+  fireEvent.keyDown(document, { key: '|', code: 'Backslash', shiftKey: true, ...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }) })
 const dock = () => {
   const el = document.querySelector('.dock')
   if (!el) throw new Error('dock tidak ada')
   return el
 }
 
-describe('tombol Sessions di dalam dock', () => {
-  it('cuma satu, dan ia tombol dock — bukan plat terapung sendiri', async () => {
+describe('ikon view side bar di dalam dock', () => {
+  it('ketiganya tombol dock — bukan plat terapung sendiri', async () => {
     // Dimulai TERTUTUP: justru keadaan itu yang dulu melahirkan pelontar kedua di tepi kiri, jadi
     // guard yang dijalankan dengan panel terbuka akan hijau walau pelontarnya kembali.
     localStorage.setItem(PIN_KEY, '0')
     await mountCanvas({ nodes: [], dirs: {} })
 
-    expect(screen.getAllByLabelText('Toggle Side Bar')).toHaveLength(1)
-    expect(toggle().closest('.dock')).not.toBeNull()
+    for (const name of ['Layers', 'Sessions', 'Agent History']) expect(icon(name).closest('.dock')).not.toBeNull()
+    expect(screen.queryByLabelText('Toggle Side Bar')).toBeNull()
     // Pelontar lama: satu <div> terapung dengan tombol di dalamnya, diangkur ke tepi kiri yang sama.
     expect(document.querySelector('.sessions-icon-cluster')).toBeNull()
     expect(screen.queryByLabelText('Show sessions')).toBeNull()
@@ -95,6 +103,64 @@ describe('tombol Sessions di dalam dock', () => {
     fireEvent.mouseOver(btn)
 
     expect(panel()).toBeNull()
+  })
+})
+
+describe('satu view pada satu waktu (VS Code view containers)', () => {
+  it('default Layers; ikon Sessions menampilkan Sessions saja dan menyalakan ikonnya', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    expect(viewTitle()).toBe('Layers')
+    expect(panel()!.querySelector('.layers-panel')).not.toBeNull()
+    expect(icon('Layers').getAttribute('aria-current')).toBe('page')
+
+    fireEvent.click(icon('Sessions'))
+    await waitFor(() => expect(viewTitle()).toBe('Sessions'))
+    expect(panel()!.querySelector('.sessions-view')).not.toBeNull()
+    expect(panel()!.querySelector('.layers-panel')).toBeNull()
+    expect(panel()!.querySelector('.agent-history-view')).toBeNull()
+    expect(icon('Sessions').getAttribute('aria-current')).toBe('page')
+    expect(icon('Layers').getAttribute('aria-current')).toBeNull()
+
+    fireEvent.click(icon('Agent History'))
+    await waitFor(() => expect(viewTitle()).toBe('Agent History'))
+    expect(panel()!.querySelector('.agent-history-view')).not.toBeNull()
+    expect(panel()!.querySelector('.sessions-view')).toBeNull()
+  })
+
+  it('ikon view yang tampil menyembunyikan side bar; klik lagi membukanya di view yang sama', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.click(icon('Sessions'))
+    await waitFor(() => expect(viewTitle()).toBe('Sessions'))
+
+    fireEvent.click(icon('Sessions'))
+    await waitFor(() => expect(panel()).toBeNull())
+    expect(icon('Sessions').getAttribute('aria-current')).toBeNull()
+
+    fireEvent.click(icon('Sessions'))
+    await waitFor(() => expect(viewTitle()).toBe('Sessions'))
+  })
+
+  it('⇧⌘\\ tetap menyembunyikan/menampilkan side bar pada view terakhir', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.click(icon('Agent History'))
+    await waitFor(() => expect(viewTitle()).toBe('Agent History'))
+
+    pressToggleChord()
+    await waitFor(() => expect(panel()).toBeNull())
+    pressToggleChord()
+    await waitFor(() => expect(viewTitle()).toBe('Agent History'))
+  })
+
+  it('view yang dipilih bertahan lintas mount ulang', async () => {
+    await mountCanvas({ nodes: [], dirs: {} })
+    fireEvent.click(icon('Sessions'))
+    await waitFor(() => expect(viewTitle()).toBe('Sessions'))
+    expect(localStorage.getItem(VIEW_KEY)).toBe('sessions')
+
+    unmountCanvas()
+    await mountCanvas({ nodes: [], dirs: {} })
+    expect(viewTitle()).toBe('Sessions')
+    expect(icon('Sessions').getAttribute('aria-current')).toBe('page')
   })
 })
 

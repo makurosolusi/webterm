@@ -52,7 +52,7 @@ function App() {
     <>
       <AppDock
         vp={VP} settings={DEFAULT_SETTINGS} activeWs={null} board={false} setBoard={noop}
-        sessionsOpen={false} setSessionsOpen={noop} needsYouCount={useNeedsYouCount()}
+        sideBar={{ open: false, view: 'layers', select: noop }} sessionsAttention={0} needsYouCount={useNeedsYouCount()}
         locked={false} setLocked={noop} cleanView={false}
         toggleCleanView={noop} setPicker={noop} setShowSettings={noop} onAddTerminal={noop} onAddAgent={noop}
         onCreateWorkspace={noop} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}

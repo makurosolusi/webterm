@@ -12,7 +12,7 @@ const baseProps: DockProps = {
   onAddTerminal: noop, onAddAgent: noop, onCreateWorkspace: noop, onBrowse: noop,
   onUndo: noop, onRedo: noop, canUndo: false, canRedo: false,
   onBack: noop, onForward: noop, canBack: false, canForward: false,
-  onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
+  onFit: noop, onToggleBoard: noop, sideBarOpen: false, sideBarView: 'layers', onSideBarView: noop,
   zoomPct: 100, onZoomIn: noop, onZoomOut: noop,
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
 }
@@ -56,10 +56,10 @@ describe('pintasan Settings di activity bar', () => {
   })
 
   it('tidak pernah ditandai aktif, bahkan saat panel lain terbuka', () => {
-    render(<Dock {...baseProps} sessionsOpen onOpenSettings={noop} />)
+    render(<Dock {...baseProps} sideBarOpen sideBarView="sessions" onOpenSettings={noop} />)
     const btn = screen.getByLabelText('Settings')
     expect(btn.hasAttribute('aria-current')).toBe(false)
     expect(btn.hasAttribute('data-active')).toBe(false)
-    expect(screen.getByLabelText('Toggle Side Bar').getAttribute('aria-current')).toBe('page')
+    expect(screen.getByLabelText('Sessions').getAttribute('aria-current')).toBe('page')
   })
 })

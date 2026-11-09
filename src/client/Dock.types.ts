@@ -1,6 +1,7 @@
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
+import type { SideBarView } from './sideBar/sideBar.view'
 
 export interface DockProps {
   onAddTerminal: () => void
@@ -15,9 +16,13 @@ export interface DockProps {
   onToggleBoard: () => void
   /** Kanban terbuka? Hanya untuk menandai item `Board` di activity bar. */
   boardOpen?: boolean
-  /** Panel Sessions terbuka? Item `Sessions` di activity bar mengikuti keadaan ini. */
-  sessionsOpen: boolean
-  onToggleSessions: () => void
+  /** Left side bar open, and the view it shows: that view's activity icon is lit. */
+  sideBarOpen: boolean
+  sideBarView: SideBarView
+  /** A Layers/Sessions/Agent History icon was clicked (App applies `activityClick`). */
+  onSideBarView: (view: SideBarView) => void
+  /** Sessions in other workspaces needing attention: badge on the Sessions icon. 0 = no badge. */
+  sessionsAttention?: number
   /** Secondary side bar terbuka, tab apa pun (menyalakan ikon Central)? Opsional supaya pemakaian Dock lama (dan test-nya) tetap valid:
    *  item Central hanya dirender ketika integrator menyediakan handler. Satu-satunya pintu ke side bar Central. */
   chatOpen?: boolean

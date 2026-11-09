@@ -2,15 +2,16 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// Yang dijaga di sini hidup di JSX `SessionsPanel.tsx`: judul yang ikut tab, seksi kosong yang
+// Yang dijaga di sini hidup di JSX side bar: judul yang ikut view, seksi kosong yang
 // disembunyikan, dan ikon kind per baris. Vitest webterm jalan di node-env tanpa DOM, jadi tidak
 // ada komponen yang bisa dirender untuk membuktikannya. Yang bisa dilakukan: membaca source-nya
 // dan menolak bentuk yang salah — pola yang sama dengan `workspaceCommit.test.ts`.
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
 /** Panel dipecah: pohon JSX ada di `SessionsPanel.tree.tsx`; invarian dibaca dari gabungannya. */
 const panelSrc = () => src('SessionsPanel.tsx') + src('SessionsPanel.tree.tsx')
-/** Hitungan seksi Sessions harus `rowCount` (per tab) — bukan `total`, yang selalu menghitung sesi. */
-const titleFollowsTab = (s: string) => /title="Sessions"\s+count=\{rowCount\}/.test(s)
+/** Judul side bar = nama view yang tampil; badge hitungan hanya untuk LAYERS (jumlah node board). */
+const titleFollowsView = (s: string) =>
+  /\{SIDE_BAR_VIEW_TITLE\[view\]\}/.test(s) && /view === 'layers' && layerCount !== undefined && <span className="sessions-sidebar__count">/.test(s)
 
 /** Blok render tab Status: dari gerbang `empty === 'none'` sampai pemetaan section-nya. */
 const statusGate = (s: string) => s.split("empty === 'none'")[1]?.split('.map((s) =>')[0] ?? ''
@@ -30,12 +31,12 @@ const OLD_STATUS_GATE = `          ? // komentar lama
             sections.map((s) => (
               <section key={s.kind} className="ss-status" aria-label={s.label}>`
 describe('judul sidebar', () => {
-  it('menamai dan menghitung himpunan yang benar-benar didaftar tab aktif', () => {
-    expect(titleFollowsTab(panelSrc())).toBe(true)
+  it('menamai view yang tampil dan hanya LAYERS yang membawa hitungan', () => {
+    expect(titleFollowsView(src('sideBar/SideBar.tsx'))).toBe(true)
   })
 
   it('guard menolak judul tetap "Sessions" dengan hitungan sesi', () => {
-    expect(titleFollowsTab(OLD_HEAD)).toBe(false)
+    expect(titleFollowsView(OLD_HEAD)).toBe(false)
   })
 })
 

@@ -15,7 +15,10 @@ import * as osNotify from './osNotify'
 import type { Workspace, WsNode } from '../shared/workspace'
 
 beforeAll(installCanvasDom)
-beforeEach(() => localStorage.setItem('webterm.sessionsPinned', '1')) // Sessions panel open
+beforeEach(() => { // side bar open on the Sessions view
+  localStorage.setItem('webterm.sessionsPinned', '1')
+  localStorage.setItem('webterm.sideBarView', 'sessions')
+})
 afterEach(() => { unmountCanvas(); vi.restoreAllMocks(); localStorage.clear() })
 
 /** Debounce (400ms) + a loaded CI machine; each wait ends as soon as its condition holds. */

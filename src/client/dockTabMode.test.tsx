@@ -13,7 +13,7 @@ const props: DockProps = {
   onAddTerminal: noop, onAddAgent: noop, onCreateWorkspace: noop, onBrowse: noop,
   onUndo: noop, onRedo: noop, canUndo: false, canRedo: false,
   onBack: noop, onForward: noop, canBack: false, canForward: false,
-  onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
+  onFit: noop, onToggleBoard: noop, sideBarOpen: false, sideBarView: 'layers', onSideBarView: noop,
   zoomPct: 100, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop,
 }
