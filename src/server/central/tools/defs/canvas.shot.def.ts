@@ -16,6 +16,8 @@ export interface CanvasShotDeps { shoot(maxWidth: number): Promise<ShotResult> }
 const HINTS: Record<string, string> = {
   no_visible_window: 'No webterm window answered: the user has no visible webterm tab. Ask them to open webterm, then retry.',
   busy: 'Other screenshots are still running; retry in a few seconds.',
+  page_too_large: 'The page has too much on screen to capture; ask the user to close or minimise some nodes, or zoom in, then try again.',
+  capture_busy: 'A screenshot is already being taken; wait for it and try once more.',
 }
 
 /** Builds canvas.screenshot over an injected capture (tests pass a fake). */

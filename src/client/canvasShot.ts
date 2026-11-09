@@ -6,6 +6,7 @@
 // otherwise `toDataURL` on it reads back blank. Browser nodes paint into a 2D canvas, which reads back as-is.
 import { useEffect } from 'react'
 import type { ShotMsg } from '../shared/protocol'
+import { countShotElements, MAX_SHOT_ELEMENTS, shotFilter } from './canvasShot.scope'
 import { subscribeShot } from './ws'
 
 export const SHOT_QUALITY = 0.8
@@ -16,33 +17,52 @@ export const SHOT_MAX_BYTES = 4 * 1024 * 1024
 
 export const shotUrl = (reqId: string): string => `/api/canvas-shot/${encodeURIComponent(reqId)}`
 
-/** The whole page, not one board: body also holds sidebar, tabs and portaled dialogs/notices. */
-async function capture(maxWidth: number): Promise<Blob> {
+const jsonError = (code: string): RequestInit =>
+  ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: code }) })
+
+/** The whole page clipped to the viewport: body also holds sidebar, tabs and portaled dialogs/notices.
+ *  Only on-screen elements are cloned (canvasShot.scope.ts); a page over MAX_SHOT_ELEMENTS is refused. */
+async function capture(maxWidth: number): Promise<RequestInit> {
   const root = document.body
-  const width = root.getBoundingClientRect().width || window.innerWidth
+  const width = window.innerWidth
+  const height = window.innerHeight
+  const filter = shotFilter({ width, height })
+  if (countShotElements(root, filter, MAX_SHOT_ELEMENTS) > MAX_SHOT_ELEMENTS) return jsonError('page_too_large')
   const scale = Math.min(1, maxWidth / Math.max(1, width))
   // Loaded on the first shot only: most sessions never take one.
   const { domToBlob } = await import('modern-screenshot')
   const blob = await domToBlob(root, {
     type: 'image/jpeg', quality: SHOT_QUALITY, scale, timeout: CAPTURE_TIMEOUT_MS,
+    // body is 100% of the viewport (styles.css), so these clip without resizing anything.
+    width, height, filter,
+    // Seven extra getComputedStyle calls per scrollable element, for scrollbar styling nobody needs.
+    features: { copyScrollbar: false },
     // JPEG has no alpha: a transparent page would come out black.
     backgroundColor: getComputedStyle(root).backgroundColor || '#000',
   })
   if (blob.size > SHOT_MAX_BYTES) throw new Error(`screenshot is ${blob.size} bytes, over the ${SHOT_MAX_BYTES} byte cap`)
-  return blob
+  // The browser falls back to PNG when it cannot encode JPEG; the blob's own type says which.
+  return { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob }
 }
+
+/** One capture at a time: a second full clone on top of the first is what freezes the tab. */
+let capturing = false
 
 /** Answer one shot request. Never rejects: capture and upload failures are logged with the request id. */
 export async function answerShot(msg: ShotMsg): Promise<void> {
   if (document.visibilityState !== 'visible') return
   let init: RequestInit
-  try {
-    const blob = await capture(msg.maxWidth)
-    // The browser falls back to PNG when it cannot encode JPEG; the blob's own type says which.
-    init = { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob }
-  } catch (err) {
-    console.warn(`[webterm] canvas screenshot ${msg.reqId}: capture failed`, err)
-    init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'capture_failed' }) }
+  if (capturing) init = jsonError('capture_busy')
+  else {
+    capturing = true
+    try {
+      init = await capture(msg.maxWidth)
+    } catch (err) {
+      console.warn(`[webterm] canvas screenshot ${msg.reqId}: capture failed`, err)
+      init = jsonError('capture_failed')
+    } finally {
+      capturing = false
+    }
   }
   try {
     const res = await fetch(shotUrl(msg.reqId), init)

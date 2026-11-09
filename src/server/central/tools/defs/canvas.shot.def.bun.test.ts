@@ -52,6 +52,13 @@ describe('canvas.screenshot def', () => {
     expect(String(r.data?.hint)).toContain('webterm')
   })
 
+  test('page too large: the hint asks the user to show less, not to retry blindly', async () => {
+    const { ctx } = harness({ ok: false, code: 'page_too_large' })
+    const r = await execTool(ctx, 'canvas.screenshot', {})
+    expect(r.code).toBe('page_too_large')
+    expect(String(r.data?.hint)).toContain('too much on screen')
+  })
+
   test('the audit event and the receipt carry no base64', async () => {
     const { ctx, db } = harness()
     const { receipt, result } = await execToolReceipt(ctx, 'canvas.screenshot', { maxWidth: 1024 })
