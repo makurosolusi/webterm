@@ -1,6 +1,6 @@
-// Nodes/cables the server added to, or nodes it removed from, a stored board (`t:'canvas'`, server
-// `canvas/canvasPush.ts`). The mounted board applies them to the live canvas without touching
-// selection or focus. They are already stored, so nothing is saved here; the save queue (`absorb`)
+// Nodes/cables the server added to, nodes it removed from, nodes it patched (position, size, look)
+// or cables it unlinked, or its Layers groups, on a stored board (`t:'canvas'`, server `canvas/canvasPush.ts`). The mounted
+// board applies them to the live canvas without touching selection, focus or drag state. They are already stored, so nothing is saved here; the save queue (`absorb`)
 // keeps unsent saves from dropping added nodes, resurrecting removed ones or 409ing on the push's
 // version. A removed node's sessions were already ended by the server, so no `close` is sent: the
 // node leaves the canvas directly (not through `onNodesChange`), and only lands in Reopen history.
@@ -8,10 +8,11 @@ import { useEffect } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasMsg } from '../shared/protocol'
-import type { Workspace } from '../shared/workspace'
+import type { Workspace, WsNode } from '../shared/workspace'
 import type { ClosedHistory } from './closedHistory'
 import { toBridge, toFlow, toFlowEdge, toWsNode } from './store'
 import { subscribeCanvas } from './ws'
+import { receiveGroups } from './tabLayout.store'
 
 export interface LiveBoard {
   activeWsRef: RefObject<Workspace | null>
@@ -36,10 +37,40 @@ function applyRemoved(live: LiveBoard, removed: readonly string[]): void {
   live.setEdges((prev) => prev.filter((e) => !touches(e)))
 }
 
+/** `n` with the pushed node's position, size and title/color/collapsed/hideLinks, as `toFlow` maps
+ *  them; every live-only prop (selected, dragging, measured, ...) and the rest of `data` kept. */
+function patchFlow(n: Node, pushed: WsNode): Node {
+  const f = toFlow(pushed)
+  const { title, color, collapsed, hideLinks } = f.data as Partial<WsNode>
+  return { ...n, position: f.position, width: f.width, height: f.height, data: { ...n.data, title, color, collapsed, hideLinks } }
+}
+
+/** Patch the updated nodes in place and drop the unlinked cables. */
+function applyUpdated(live: LiveBoard, updated: readonly WsNode[], unlinked: readonly string[]): void {
+  const byId = new Map(updated.map((n) => [n.id, n]))
+  const patch = (nodes: Node[]): Node[] => nodes.map((n) => { const p = byId.get(n.id); return p ? patchFlow(n, p) : n })
+  if (byId.size && live.nodesRef.current.some((n) => byId.has(n.id))) {
+    live.nodesRef.current = patch(live.nodesRef.current)
+    live.setNodes(patch)
+  }
+  const cut = new Set(unlinked)
+  if (cut.size && live.edgesRef.current.some((e) => cut.has(e.id))) {
+    live.edgesRef.current = live.edgesRef.current.filter((e) => !cut.has(e.id))
+    live.setEdges((prev) => prev.filter((e) => !cut.has(e.id)))
+  }
+}
+
 /** Apply a push to the mounted board; false (nothing touched) when it is for another board. */
 export function applyCanvasPush(live: LiveBoard, msg: CanvasMsg): boolean {
   if (live.activeWsRef.current?.id !== msg.workspaceId) return false
   if (msg.removed?.length) applyRemoved(live, msg.removed)
+  applyUpdated(live, msg.updated ?? [], msg.unlinked ?? [])
+  if (msg.groups) {
+    // The store shows them; the active payload carries them, so the next save does not revert them.
+    const layout = receiveGroups(msg.groups)
+    const cur = live.activeWsRef.current
+    if (cur) live.activeWsRef.current = { ...cur, layout }
+  }
   const nodeIds = new Set(live.nodesRef.current.map((n) => n.id))
   const edgeIds = new Set(live.edgesRef.current.map((e) => e.id))
   const nodes = msg.nodes.filter((n) => !nodeIds.has(n.id)).map(toFlow)

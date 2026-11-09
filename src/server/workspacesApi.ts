@@ -53,14 +53,28 @@ async function isDirectory(cwd: string): Promise<boolean> {
   }
 }
 
-/** Create body -> fields, or the 400 that names the first bad one (values never echoed). */
-async function createFields(b: Record<string, unknown>): Promise<{ name: string; cwd?: string; color?: string } | { status: number; body: unknown }> {
+/** The 400 for each create field `createFields` can refuse. */
+const BAD_FIELD = { name: BAD_NAME, cwd: BAD_CWD, color: BAD_COLOR } as const
+export type CreateRefusal = keyof typeof BAD_FIELD
+
+/** Create body -> fields, or the first bad field (values never echoed). */
+async function createFields(b: Record<string, unknown>): Promise<{ name: string; cwd?: string; color?: string } | { bad: CreateRefusal }> {
   const name = typeof b.name === 'string' ? b.name.trim() : ''
-  if (!name) return BAD_NAME
+  if (!name) return { bad: 'name' }
   const cwd = b.cwd === undefined || b.cwd === null || b.cwd === '' ? undefined : b.cwd
-  if (cwd !== undefined && (typeof cwd !== 'string' || !(await isDirectory(cwd)))) return BAD_CWD
-  if (b.color !== undefined && b.color !== null && typeof b.color !== 'string') return BAD_COLOR
+  if (cwd !== undefined && (typeof cwd !== 'string' || !(await isDirectory(cwd)))) return { bad: 'cwd' }
+  if (b.color !== undefined && b.color !== null && typeof b.color !== 'string') return { bad: 'color' }
   return { name, cwd, color: typeof b.color === 'string' ? b.color : undefined }
+}
+
+/** The human create (POST `/api/workspaces`) without HTTP: validate, store, log, secrets guard. Central's `workspace.create` calls it too. */
+export async function createWorkspaceFrom(store: Db, b: Record<string, unknown>): Promise<{ ok: true; workspace: Workspace } | { ok: false; bad: CreateRefusal }> {
+  const f = await createFields(b)
+  if ('bad' in f) return { ok: false, bad: f.bad }
+  const created = guarded('create', undefined, () => store.create(f.name, f.cwd, f.color))
+  afterCommit('create log', created.id, () => workspaceLog.created(created))
+  void guardWorkspaceRepos([created]) // secrets guard without a restart; never throws per repo
+  return { ok: true, workspace: created }
 }
 
 /** Run a post-commit side effect: the write already succeeded, so a throw is logged, never a 500. */
@@ -154,12 +168,8 @@ export async function workspacesRoute(
       if (!read.ok) return read.result
       const b = parseObjectBody<Record<string, unknown>>(read.raw)
       if (!b) return BAD_JSON
-      const f = await createFields(b)
-      if (!('name' in f)) return f
-      const created = guarded('create', undefined, () => store.create(f.name, f.cwd, f.color))
-      afterCommit('create log', created.id, () => workspaceLog.created(created))
-      void guardWorkspaceRepos([created]) // secrets guard without a restart; never throws per repo
-      return { status: 201, body: created }
+      const r = await createWorkspaceFrom(store, b)
+      return r.ok ? { status: 201, body: r.workspace } : BAD_FIELD[r.bad]
     }
   }
 

@@ -63,6 +63,14 @@ describe('canvas.show', () => {
     expect(frames).toEqual([{ t: 'view', workspaceId: 'w-p1', nodeId: 'n2' }, { t: 'view', workspaceId: 'w-p1', nodeId: 'n1' }])
   })
 
+  it('fit: true broadcasts a fit frame; fit with a node or a non-boolean fit is refused', async () => {
+    expect(await show({ projectId: 'p1', fit: true })).toMatchObject({ ok: true, data: { workspaceId: 'w-p1', fit: true } })
+    expect(await show({ projectId: 'p1', fit: false })).toMatchObject({ ok: true, data: { workspaceId: 'w-p1' } })
+    expect(await show({ projectId: 'p1', fit: true, nodeId: 'n1' })).toMatchObject({ ok: false, code: 'invalid_shape' })
+    expect(await show({ projectId: 'p1', fit: 'yes' })).toMatchObject({ ok: false, code: 'invalid_shape' })
+    expect(frames).toEqual([{ t: 'view', workspaceId: 'w-p1', fit: true }, { t: 'view', workspaceId: 'w-p1' }])
+  })
+
   it('rejects an unknown node, project or workspace, and extra keys, without switching', async () => {
     expect(await show({ projectId: 'p1', nodeId: 'ghost' })).toMatchObject({ ok: false, code: 'node_not_found', data: { unknown: ['ghost'] } })
     expect(await show({ projectId: 'nope' })).toMatchObject({ ok: false, code: 'project_not_found' })
