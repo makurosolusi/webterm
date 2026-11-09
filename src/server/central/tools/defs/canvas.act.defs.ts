@@ -4,6 +4,8 @@
 // Named `canvas.*`, not `node.*`: the control API's `node.close`/`node.spawn` (capability/control.capabilities.ts)
 // act on ONE session (node scope); these edit a project's board in bulk, a different capability.
 import { randomUUID } from 'node:crypto'
+import { realpathSync, statSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
 import type { Database } from 'bun:sqlite'
 import { agentConfig } from '../../../../shared/workspace'
 import { parseBrowserUrl } from '../../../../shared/browser.url'
@@ -13,7 +15,9 @@ import { claudeLaunchLine, resolveClaudeLaunch } from '../../../claudeLauncher/c
 import { allRows } from '../../../ledger/ledgerCore'
 import { AGENT_TERMINAL_STATES } from '../../contracts/agent.types'
 import { lookupWorkspace, projectWorkspace } from '../../workspaceLookup'
+import { isInsideRoot } from '../../../orchestrator/safePath'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
+import { containsForbidden } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
 import { clip, isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 
@@ -30,9 +34,15 @@ const MAX_CLOSE = 50
 const MAX_OPEN = 5
 const MAX_TITLE = 80
 const MAX_REASON = 200
-const KINDS = ['terminal', 'claude', 'browser'] as const
+const MAX_PATH = 1024
+const KINDS = ['terminal', 'claude', 'browser', 'files', 'editor', 'diff'] as const
+type Kind = (typeof KINDS)[number]
+/** Kinds that open in the project directory, so they need the workspace cwd. */
+const DIR_KINDS: readonly Kind[] = ['files', 'editor', 'diff']
 /** Same size as the client's URL-open path (`BROWSER_OPEN_SIZE`, client/browser.open.place.ts) and browser.agentOpen.ts. */
 const BROWSER_SIZE = { width: 640, height: 400 }
+/** The client's `EDITOR_SIZE` (client/fileOpen.ts). */
+const EDITOR_SIZE = { width: 660, height: 460 }
 
 const onlyKeys = (input: ToolInput, allowed: readonly string[]): boolean => Object.keys(input).every((k) => allowed.includes(k))
 const noControl = (s: string): boolean => !/[\x00-\x08\x0b-\x1f\x7f]/.test(s)
@@ -48,12 +58,32 @@ function closeShape(input: ToolInput): boolean {
 }
 
 function openShape(input: ToolInput): boolean {
-  const { kind, count, title, url } = input
-  if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url'])) return false
-  if (!KINDS.includes(kind as (typeof KINDS)[number])) return false
-  if (count !== undefined && (kind === 'browser' || !Number.isSafeInteger(count) || (count as number) < 1 || (count as number) > MAX_OPEN)) return false
+  const { kind, count, title, url, path } = input
+  if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url', 'path'])) return false
+  if (!KINDS.includes(kind as Kind)) return false
+  const many = kind === 'terminal' || kind === 'claude'
+  if (count !== undefined && (!many || !Number.isSafeInteger(count) || (count as number) < 1 || (count as number) > MAX_OPEN)) return false
   if (title !== undefined && !text(title, MAX_TITLE)) return false
+  if (kind === 'editor' ? !text(path, MAX_PATH) : path !== undefined && (kind !== 'files' || !text(path, MAX_PATH))) return false
   return url === undefined || (kind === 'browser' && parseBrowserUrl(url).ok)
+}
+
+/**
+ * `path` (relative = against `cwd`) as the absolute path the files node would hand the editor
+ * (cwd + relative, lexical), after checking its real path (symlinks followed) stays inside the
+ * real `cwd` and is a directory (`wantDir`) or a file. The lexical check runs first, so an escaping
+ * path is refused without probing whether it exists.
+ */
+export function resolveProjectPath(cwd: string, path: string, wantDir: boolean): { ok: true; path: string } | { ok: false; code: string } {
+  const abs = resolve(cwd, path)
+  if (!isInsideRoot(cwd, abs)) return { ok: false, code: 'path_outside_project' }
+  let real: string
+  try { real = realpathSync(abs) } catch { return { ok: false, code: 'path_not_found' } } // ENOENT/ENOTDIR/ELOOP: nothing to open
+  let root: string
+  try { root = realpathSync(cwd) } catch { return { ok: false, code: 'no_project_dir' } }
+  if (!isInsideRoot(root, real)) return { ok: false, code: 'path_outside_project' }
+  if (statSync(real).isDirectory() !== wantDir) return { ok: false, code: 'path_wrong_type' }
+  return { ok: true, path: abs }
 }
 
 /** Node ids (of `ids`) that are live Central-managed agent PTYs: those close through `agent.close`. */
@@ -68,10 +98,14 @@ function agentNodeIds(db: Database, projectId: string, ids: string[]): string[] 
   return ids.filter((id) => hit.has(id))
 }
 
-/** The node the client's add buttons build (App.board.ts terminal/agent, useBrowserOpen.ts); x/y are placed by CanvasPush. */
-function buildNode(kind: (typeof KINDS)[number], cwd: string | undefined, title: string | undefined, url: string | undefined): CanvasNode {
+/** The node the client builds (App.board.ts terminal/agent/files/diff, useBrowserOpen.ts, Omnibox.open.ts
+ *  editor); x/y are placed by CanvasPush. `path` is the resolved dir (files) or file (editor). */
+function buildNode(kind: Kind, cwd: string | undefined, title: string | undefined, url: string | undefined, path: string | undefined): CanvasNode {
   const base = { id: randomUUID(), x: 0, y: 0, ...(title ? { title } : {}) }
   if (kind === 'browser') return { ...base, kind: 'browser', ...BROWSER_SIZE, ...(url ? { url } : {}) }
+  if (kind === 'files') return { ...base, kind: 'files', dirPath: path ?? cwd }
+  if (kind === 'editor') return { ...base, kind: 'editor', title: title ?? basename(path!), filePath: path, ...EDITOR_SIZE }
+  if (kind === 'diff') return { ...base, kind: 'diff', cwd, title: title ?? 'Changes' }
   const where = cwd ? { cwd } : {}
   if (kind === 'terminal') return { ...base, kind: 'terminal', ...where }
   // Builtin claude records the default launch profile, as template.instantiate.ts does; no sessionId:
@@ -119,18 +153,23 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
 
   const open: ToolDef = {
     name: 'canvas.open',
-    summary: 'Open new terminal, Claude or browser nodes on a project canvas, in the project directory.',
+    summary: 'Open terminal, Claude, browser, files, file editor or git diff nodes on a project canvas.',
     tier: 'R1',
     flag: READ_TOOLS_FLAG,
-    usage: '{"projectId":"<id>","kind":"terminal"|"claude"|"browser","count":<1-5, default 1; terminal/claude only>,'
-      + '"title":"<optional, <=80 chars>","url":"<optional http(s) URL; browser only>"}. Nodes open in free space in the '
+    usage: '{"projectId":"<id>","kind":"terminal"|"claude"|"browser"|"files"|"editor"|"diff","count":<1-5, default 1; terminal/claude only>,'
+      + '"title":"<optional, <=80 chars>","url":"<optional http(s) URL; browser only>","path":"<files: optional folder, default the '
+      + 'project directory; editor: required file>"}. path is relative to the project directory (absolute also works) and must stay inside it. '
+      + 'An editor for a file already open is reused, not doubled. diff shows the project\'s git changes. Nodes open in free space in the '
       + 'project directory. A browser url passes the same navigation guard as the user; a blocked one leaves the page blank.',
-    input: obj({ kind: S.oneOf(...KINDS), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str() }, ['kind']),
+    input: obj({ kind: S.oneOf(...KINDS), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str(), path: S.str(MAX_PATH) }, ['kind']),
     output: S.keys('opened', 'count', 'kind', 'ids'),
     auditKeys: ['count', 'kind', 'ids'],
+    // `path` is a forbidden key for other tools but is this tool's own field, confined to the project
+    // directory by resolveProjectPath; every other key (deep) stays forbidden.
+    forbidden: ({ path: _path, ...rest }) => containsForbidden(rest),
     validate: (input) => (openShape(input) ? null : 'invalid_shape'),
     async handler(ctx, input, projectId): Promise<ToolResult> {
-      const kind = input.kind as (typeof KINDS)[number]
+      const kind = input.kind as Kind
       if (kind === 'browser' && !deps.browserOn()) {
         return fail('browser_disabled', { hint: 'The browser feature is off in Settings. Only the user can turn it on; do not retry.' })
       }
@@ -140,7 +179,17 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       const url = parsed?.ok ? parsed.url : undefined
       const cwd = lookupWorkspace(found.workspaceId)?.cwd || undefined
       const title = typeof input.title === 'string' ? input.title.trim() : undefined
-      const nodes = Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url))
+      if (DIR_KINDS.includes(kind) && !cwd) return fail('no_project_dir', { hint: 'This project has no directory; set one in webterm first.' })
+      let path: string | undefined
+      if (typeof input.path === 'string') {
+        const hit = resolveProjectPath(cwd!, input.path, kind === 'files')
+        if (!hit.ok) return fail(hit.code)
+        path = hit.path
+      }
+      // One file = one editor (client `openEditorFor`, fileOpen.ts): an open one is reported, not doubled.
+      const same = kind === 'editor' ? (found.nodes as CanvasNode[]).find((n) => n.kind === 'editor' && n.filePath === path) : undefined
+      if (same) return { ok: true, data: { opened: [{ id: same.id, name: same.name ?? null, kind: 'editor' }], count: 1, kind, ids: [same.id], alreadyOpen: true } }
+      const nodes = Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url, path))
       const res = (await deps.canvas()).add({ workspaceId: found.workspaceId, nodes })
       if (!res.ok) return fail(res.code)
       const opened = res.nodes.map((n) => ({ id: n.id, name: n.name ?? null, kind: n.kind }))

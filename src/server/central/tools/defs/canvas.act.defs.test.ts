@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CanvasAddInput, CanvasNode } from '../../../canvas/canvasPush'
 import type { Workspace } from '../../../../shared/workspace'
@@ -170,6 +173,95 @@ describe('canvas.open', () => {
 
   it('reports a project without a workspace and never calls add', async () => {
     expect(await execTool(ctx(), 'canvas.open', { projectId: 'p2', kind: 'terminal' })).toMatchObject({ ok: false, code: 'workspace_not_found' })
+    expect(adds).toEqual([])
+  })
+})
+
+describe('canvas.open files / editor / diff', () => {
+  // test-only tree: <tmp>/proj is the workspace cwd; <tmp>/outside is not.
+  let tmp: string
+  let proj: string
+  let cwd: string | undefined
+  const editorOn = (path: string): CanvasNode => ({ id: 'e1', kind: 'editor', x: 0, y: 0, name: 'Fern', filePath: path })
+  let board: CanvasNode[]
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'canvas-open-'))
+    proj = join(tmp, 'proj')
+    mkdirSync(join(proj, 'src', 'lib'), { recursive: true })
+    mkdirSync(join(tmp, 'outside'))
+    writeFileSync(join(proj, 'src', 'app.ts'), 'x')
+    writeFileSync(join(tmp, 'outside', 'secret.txt'), 's')
+    symlinkSync(join(tmp, 'outside'), join(proj, 'out'))
+    symlinkSync(join(proj, 'src', 'app.ts'), join(proj, 'app-link.ts'))
+    cwd = proj
+    board = []
+    registerWorkspaceLookup((id) => (id === 'w-p1' ? { id, name: 'Alpha WS', cwd, nodes: board } : null))
+  })
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }))
+
+  it('opens a file explorer on the project directory by default, or on a folder inside it', async () => {
+    await open({ kind: 'files' })
+    await open({ kind: 'files', path: 'src/lib' })
+    await open({ kind: 'files', path: join(proj, 'src') })
+    expect(adds.map((a) => a.nodes[0])).toEqual([
+      { id: expect.any(String), kind: 'files', x: 0, y: 0, dirPath: proj },
+      { id: expect.any(String), kind: 'files', x: 0, y: 0, dirPath: join(proj, 'src', 'lib') },
+      { id: expect.any(String), kind: 'files', x: 0, y: 0, dirPath: join(proj, 'src') },
+    ])
+  })
+
+  it('opens a file in an editor node sized and titled like the client, path kept as cwd + relative', async () => {
+    const res = await open({ kind: 'editor', path: './src/app.ts' })
+    expect(adds[0]!.nodes).toEqual([{ id: expect.any(String), kind: 'editor', x: 0, y: 0, title: 'app.ts', filePath: join(proj, 'src', 'app.ts'), width: 660, height: 460 }])
+    expect(res).toMatchObject({ ok: true, data: { count: 1, kind: 'editor' } })
+    await open({ kind: 'editor', path: 'app-link.ts', title: 'entry' }) // a symlink that stays inside is fine
+    expect(adds[1]!.nodes[0]).toMatchObject({ title: 'entry', filePath: join(proj, 'app-link.ts') })
+  })
+
+  it('reuses an editor already holding the file instead of opening a second one', async () => {
+    board = [editorOn(join(proj, 'src', 'app.ts'))]
+    expect(await open({ kind: 'editor', path: 'src/app.ts' })).toMatchObject({ ok: true, data: { ids: ['e1'], opened: [{ id: 'e1', name: 'Fern', kind: 'editor' }], alreadyOpen: true } })
+    expect(adds).toEqual([])
+  })
+
+  it('opens a diff node on the project directory, titled like the client', async () => {
+    await open({ kind: 'diff' })
+    expect(adds[0]!.nodes).toEqual([{ id: expect.any(String), kind: 'diff', x: 0, y: 0, cwd: proj, title: 'Changes' }])
+  })
+
+  it('refuses paths that leave the project, lexically or through a symlink', async () => {
+    for (const path of ['../outside/secret.txt', 'src/../../outside/secret.txt', join(tmp, 'outside', 'secret.txt'), 'out/secret.txt', '../nope.ts']) {
+      expect(await open({ kind: 'editor', path })).toMatchObject({ ok: false, code: 'path_outside_project' })
+    }
+    expect(await open({ kind: 'files', path: 'out' })).toMatchObject({ ok: false, code: 'path_outside_project' })
+    expect(adds).toEqual([])
+  })
+
+  it('reports a missing path and a file/folder mix-up', async () => {
+    expect(await open({ kind: 'editor', path: 'src/nope.ts' })).toMatchObject({ ok: false, code: 'path_not_found' })
+    expect(await open({ kind: 'editor', path: 'src' })).toMatchObject({ ok: false, code: 'path_wrong_type' })
+    expect(await open({ kind: 'files', path: 'src/app.ts' })).toMatchObject({ ok: false, code: 'path_wrong_type' })
+    expect(adds).toEqual([])
+  })
+
+  it('refuses these kinds when the project has no directory', async () => {
+    cwd = undefined
+    for (const input of [{ kind: 'files' }, { kind: 'editor', path: 'a.ts' }, { kind: 'diff' }]) {
+      expect(await open(input)).toMatchObject({ ok: false, code: 'no_project_dir' })
+    }
+    expect(adds).toEqual([])
+  })
+
+  it('rejects path where it does not apply, an editor without one, and counts on these kinds', async () => {
+    const bad = [
+      { kind: 'terminal', path: 'src' }, { kind: 'claude', path: 'src' }, { kind: 'browser', path: 'src' }, { kind: 'diff', path: 'src' },
+      { kind: 'editor' }, { kind: 'editor', path: '' }, { kind: 'editor', path: 'a\x00b' }, { kind: 'files', path: 'p'.repeat(1025) },
+      { kind: 'files', count: 2 }, { kind: 'editor', path: 'src/app.ts', count: 1 }, { kind: 'diff', count: 2 },
+      { kind: 'files', url: 'https://example.com' },
+    ]
+    for (const input of bad) expect(await open(input)).toMatchObject({ ok: false, code: 'invalid_shape' })
+    // `path` is allowed here, other forbidden keys still are not.
+    expect(await open({ kind: 'files', path: 'src', cwd: '/etc' })).toMatchObject({ ok: false, code: 'forbidden_key' })
     expect(adds).toEqual([])
   })
 })
