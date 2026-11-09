@@ -266,6 +266,21 @@ describe('canvas update push (patched nodes, unlinked cables)', () => {
     expect(b.setEdges).not.toHaveBeenCalled()
   })
 
+  it('an agent chat update carries the session id, config and mode into the live node and the pending payload', () => {
+    const CHAT: WsNode = { id: 'c1', kind: 'agentChat', x: 0, y: 0, chatSessionId: 's-old', permissionMode: 'manual' }
+    const pushed: WsNode = { ...CHAT, chatSessionId: 's-new', chatConfig: { model: 'opus', thinking: false }, permissionMode: 'plan' }
+    const chatUpdate: CanvasMsg = { t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], updated: [pushed] }
+    const { b, state } = live([{ id: 'c1', type: 'agentChat', position: { x: 0, y: 0 }, data: { kind: 'agentChat', chatSessionId: 's-old', permissionMode: 'manual', cwd: '/repo' } }], [])
+    expect(applyCanvasPush(b, chatUpdate)).toBe(true)
+    expect(state.nodes[0].data).toMatchObject({ kind: 'agentChat', cwd: '/repo', chatSessionId: 's-new', chatConfig: { model: 'opus', thinking: false }, permissionMode: 'plan' })
+    expect(mergeCanvasPush(board(10, 'w', [CHAT]), chatUpdate).nodes).toEqual([pushed])
+    // A fresh conversation clears the stored id: the pushed node lacks it, so the live and saved node do too.
+    const { chatSessionId: _gone, ...fresh } = pushed
+    applyCanvasPush(b, { ...chatUpdate, updated: [fresh] })
+    expect(state.nodes[0].data.chatSessionId).toBeUndefined()
+    expect(mergeCanvasPush(board(10, 'w', [pushed]), { nodes: [], bridges: [], updated: [fresh] }).nodes[0]).not.toHaveProperty('chatSessionId')
+  })
+
   it('a pending save locked before the push keeps the patched fields and loses the unlinked cable', async () => {
     const start = { ...board(10, 'w', [{ ...AGENT, color: '#f00' }, BROWSER]), bridges: [CABLE] }
     const srv = fakeServer(start)

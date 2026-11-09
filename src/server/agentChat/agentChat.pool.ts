@@ -4,7 +4,7 @@
 // Kept free of ./db (bun:sqlite): workspacesApi imports the close hooks under the node-env suite, so
 // the production lookup is injected by routes/agentChat.routes.ts.
 import type { AgentChatEvent, AgentChatImage } from '../../shared/agentChat.wire'
-import { AGENT_CHAT_KIND } from '../../shared/agentChat.shape'
+import { AGENT_CHAT_KIND, type AgentChatNodeConfig } from '../../shared/agentChat.shape'
 import type { AgentPermissionMode, Workspace, WsNode } from '../../shared/workspace'
 import { effectiveClaudeMode } from '../permission/permission.mode'
 import { resolveCwd } from '../ptyShell'
@@ -15,6 +15,7 @@ import { AgentChatSession } from './agentChat.session'
 import { AgentChatBroker } from './agentChat.broker'
 import { AgentChatLock } from './agentChat.lock'
 import { agentChatLadderPick } from './agentChat.ladder'
+import { nodeConfigOf, nodeModeOf, sameNodeConfig } from './agentChat.snapshot'
 
 /** Open Claude processes at once (same default as the browser's DEFAULT_MAX_LIVE). */
 export const AGENT_CHAT_MAX_LIVE = 3
@@ -26,12 +27,16 @@ export const AGENT_CHAT_FULL_REASON = (max: number): string =>
 export const AGENT_CHAT_BUSY_SWITCH_REASON = 'Claude is working in this chat. Stop it or wait for the turn to end before switching conversations.'
 
 export interface AgentChatTarget { ws: Workspace; node: WsNode }
+/** What a session changed on its node; `chatSessionId: null` = a fresh conversation (no id yet). */
+export interface AgentChatNodePatch { chatSessionId?: string | null; chatConfig?: AgentChatNodeConfig; permissionMode?: AgentPermissionMode }
 
 export interface AgentChatPoolDeps {
   /** The node and its workspace as stored now; undefined = unknown node. */
   lookup(nodeId: string): AgentChatTarget | undefined
   /** Opener for this node's current config (cwd, profile, mode); called on every (re)open. */
   opener(t: AgentChatTarget): AgentChatOpen
+  /** Store what the session changed on the node (production: CanvasPush.update, so open UIs follow); absent = memory only. */
+  persist?(workspaceId: string, nodeId: string, patch: AgentChatNodePatch): void
   gate?: AgentChatBroker
   lock?: AgentChatLock
   maxLive?: number
@@ -90,9 +95,31 @@ export class AgentChatPool {
       },
       ...(this.deps.idleMs ? { idleMs: this.deps.idleMs } : {}),
     }, t.node.chatSessionId)
-    const entry: Entry = { session, sessionId: t.node.chatSessionId, off: session.subscribe((e) => { if (e.t === 'init') entry.init = e }) }
+    const entry: Entry = { session, sessionId: t.node.chatSessionId, off: session.subscribe((e) => { if (e.t === 'init') entry.init = e; this.record(nodeId, e) }) }
     this.entries.set(nodeId, entry)
+    // Same start as a UI-opened chat: the node's stored model / effort / thinking (mode: the opener reads the node).
+    // No Query is open yet, so setConfig only stores and emits (it cannot reject).
+    if (t.node.chatConfig) void session.setConfig(t.node.chatConfig)
     return session
+  }
+
+  /** The node's session when one exists (never creates one). */
+  peek(nodeId: string): AgentChatSession | undefined { return this.entries.get(nodeId)?.session }
+
+  /**
+   * Store session id / config / mode the moment the session reports them, before any client sees the
+   * event: an open UI then gets the same values by push and its own save of them is a no-op.
+   */
+  private record(nodeId: string, e: AgentChatEvent): void {
+    if (!this.deps.persist || (e.t !== 'init' && e.t !== 'reset' && e.t !== 'config' && e.t !== 'mode')) return
+    const t = this.target(nodeId)
+    if (!t) return
+    const patch: AgentChatNodePatch = {}
+    if ((e.t === 'init' || e.t === 'reset') && (e.sessionId || undefined) !== t.node.chatSessionId) patch.chatSessionId = e.sessionId || null
+    if (e.t === 'config' && !sameNodeConfig(t.node.chatConfig, nodeConfigOf(e.config))) patch.chatConfig = nodeConfigOf(e.config)
+    const mode = e.t === 'init' || e.t === 'mode' ? nodeModeOf(e.mode) : undefined
+    if (mode && mode !== t.node.permissionMode) patch.permissionMode = mode
+    if (Object.keys(patch).length) this.deps.persist(t.ws.id, nodeId, patch)
   }
 
   /** Session id this node runs or will resume (memory first: the stored node may lag the client save). */

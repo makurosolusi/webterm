@@ -38,6 +38,21 @@ test('patches the allowed fields only, clears null title/color, stores them and 
   expect(sent).toEqual([{ t: 'canvas', workspaceId: ws.id, base: ws.updatedAt, updatedAt: stored.updatedAt, nodes: [], bridges: [], updated: res.nodes, unlinked: [] }])
 })
 
+test('patches an agent chat node session id, config and mode; null clears the session id; the broadcast carries them', () => {
+  const { db, sent, push, ws } = setup()
+  const chat: WsNode = { id: 'chat', kind: 'agentChat', x: 0, y: 900, chatSessionId: 's-old', permissionMode: 'manual' }
+  db.save({ ...ws, nodes: [...ws.nodes, chat] }, ws.updatedAt)
+  const res = push.update({ workspaceId: ws.id, patches: [{ id: 'chat', chatSessionId: 's-new', chatConfig: { model: 'opus', effort: 'high', thinking: false }, permissionMode: 'plan' }] })
+  if (!res.ok) throw new Error(`update refused: ${res.code}`)
+  const want: WsNode = { ...chat, chatSessionId: 's-new', chatConfig: { model: 'opus', effort: 'high', thinking: false }, permissionMode: 'plan' }
+  expect(db.get(ws.id)!.nodes.find((n) => n.id === 'chat')).toMatchObject(want) // plus the name the save gave it
+  expect(sent.at(-1)).toMatchObject({ t: 'canvas', updated: [want] })
+  const cleared = push.update({ workspaceId: ws.id, patches: [{ id: 'chat', chatSessionId: null }] })
+  if (!cleared.ok) throw new Error(`update refused: ${cleared.code}`)
+  expect('chatSessionId' in db.get(ws.id)!.nodes.find((n) => n.id === 'chat')!).toBe(false)
+  expect(db.get(ws.id)!.nodes.find((n) => n.id === 'chat')).toMatchObject({ permissionMode: 'plan', chatConfig: { model: 'opus' } })
+})
+
 test('adds and removes cables; an existing cable id is skipped', () => {
   const { db, sent, push, ws } = setup()
   const add = { id: 'l-b-c', source: 'b', target: 'c', kind: 'context' as const }

@@ -37,12 +37,13 @@ function applyRemoved(live: LiveBoard, removed: readonly string[]): void {
   live.setEdges((prev) => prev.filter((e) => !touches(e)))
 }
 
-/** `n` with the pushed node's position, size and title/color/collapsed/hideLinks, as `toFlow` maps
- *  them; every live-only prop (selected, dragging, measured, ...) and the rest of `data` kept. */
+/** `n` with the pushed node's position, size, title/color/collapsed/hideLinks and agent chat
+ *  session id / config / mode, as `toFlow` maps them; every live-only prop (selected, dragging,
+ *  measured, ...) and the rest of `data` kept. */
 function patchFlow(n: Node, pushed: WsNode): Node {
   const f = toFlow(pushed)
-  const { title, color, collapsed, hideLinks } = f.data as Partial<WsNode>
-  return { ...n, position: f.position, width: f.width, height: f.height, data: { ...n.data, title, color, collapsed, hideLinks } }
+  const { title, color, collapsed, hideLinks, chatSessionId, chatConfig, permissionMode } = f.data as Partial<WsNode>
+  return { ...n, position: f.position, width: f.width, height: f.height, data: { ...n.data, title, color, collapsed, hideLinks, chatSessionId, chatConfig, permissionMode } }
 }
 
 /** Patch the updated nodes in place and drop the unlinked cables. */
