@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Welcome from './Welcome'
 
@@ -32,14 +32,34 @@ describe('Welcome', () => {
     expect(screen.getByText('New project').closest('button')?.disabled).toBe(false)
   })
 
-  it('merender baris Recently closed yang bisa dibuka kembali', () => {
-    const onReopen = vi.fn()
+  describe('Recently closed', () => {
     const closedSessions = [
       { node: { id: 'n1', kind: 'terminal' as const, x: 0, y: 0, title: 'shell' }, workspaceId: 'w1', workspaceName: 'proj', closedAt: Date.now() },
     ]
-    render(<Welcome onNewProject={noop} onCreateEmpty={noop} closedSessions={closedSessions} onReopen={onReopen} />)
-    expect(screen.getByText('Recently closed')).toBeTruthy()
-    fireEvent.click(screen.getByText('proj'))
-    expect(onReopen).toHaveBeenCalledWith('n1')
+    const open = () => {
+      const onReopen = vi.fn()
+      render(<Welcome onNewProject={noop} onCreateEmpty={noop} closedSessions={closedSessions} onReopen={onReopen} />)
+      expect(screen.getByText('Recently closed')).toBeTruthy()
+      fireEvent.click(screen.getByText('proj'))
+      // A row click asks first; no workspace is open, so the copy says webterm switches.
+      expect(screen.getByText('Reopen “shell”?')).toBeTruthy()
+      expect(screen.getByText(/webterm switches to that workspace/)).toBeTruthy()
+      expect(onReopen).not.toHaveBeenCalled()
+      return onReopen
+    }
+
+    it('reopens the session once the confirm says Reopen', async () => {
+      const onReopen = open()
+      fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
+      await waitFor(() => expect(onReopen).toHaveBeenCalledWith('n1'))
+    })
+
+    it('does not reopen when the confirm is cancelled', async () => {
+      const onReopen = open()
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      await Promise.resolve()
+      expect(onReopen).not.toHaveBeenCalled()
+    })
   })
 })

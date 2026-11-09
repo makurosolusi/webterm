@@ -3,6 +3,7 @@
 import TimelineHost from './Timeline'
 import { BrowserLinkOfferHost } from './browserLinkOffer'
 import { NodeCloseConfirmHost } from './nodeCloseConfirm'
+import { ReopenConfirmHost } from './reopenConfirm'
 import BakeoffHost from './bakeoff/BakeoffHost'
 import ReplayHost from './replay/ReplayHost'
 import TemplatesHost, { type TemplatesHostProps } from './templates/TemplatesHost'
@@ -22,6 +23,7 @@ export default function AppHosts({ activeWs, onCreated, onPlace }: AppHostsProps
     <>
       <TimelineHost />
       <NodeCloseConfirmHost />
+      <ReopenConfirmHost />
       <BrowserLinkOfferHost />
       <BakeoffHost repo={activeWs?.cwd} workspaceId={activeId} />
       <ReplayHost workspaceId={activeId} nodes={(activeWs?.nodes ?? []).filter((n) => n.agentId)} />

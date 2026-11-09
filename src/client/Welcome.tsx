@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { sessionLabel } from './sessionList'
 import type { ClosedEntry } from './closedHistory'
+import { confirmReopen, ReopenConfirmHost } from './reopenConfirm'
 import { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import './welcome.css'
 
@@ -84,7 +85,8 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
                         type="button"
                         variant="link"
                         className="welcome__link"
-                        onClick={() => onReopen?.(e.node.id)}
+                        // Welcome shows when no workspace is open (`null`), so the reopen always switches.
+                        onClick={() => { void confirmReopen(e, null).then((ok) => { if (ok) onReopen?.(e.node.id) }) }}
                       >
                         <span>{sessionLabel(e.node)}</span>
                         <span className="welcome__path">{e.workspaceName}</span>
@@ -97,6 +99,9 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
           )}
         </div>
       </div>
+      {/* App.tsx mounts AppHosts (and its ReopenConfirmHost) only while a workspace exists, never
+          beside Welcome, so Welcome carries its own host for its closed list. */}
+      <ReopenConfirmHost />
     </div>
   )
 }
