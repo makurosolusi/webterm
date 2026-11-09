@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { CDP, CdpClient, ignoreClosed } from './cdp.client'
+import { CDP, CdpClient, CdpClosedError, CdpCommandError, ignoreClosed, isTargetGone } from './cdp.client'
 import { logBus } from '../logs'
 import { SILENT, startFakeCdp, waitFor } from './fakeCdp.testkit'
 import type { FakeCdp } from './fakeCdp.testkit'
@@ -51,6 +51,23 @@ describe('CdpClient', () => {
     const err = await client.send('Bad.call').catch((e: Error) => e)
     expect(err).toBeInstanceOf(Error)
     expect((err as Error).message).toMatch(/Bad\.call \(#\d+\) failed: No target \(code -32000\)/)
+    expect(err).toBeInstanceOf(CdpCommandError)
+    expect(err).toMatchObject({ method: 'Bad.call', code: -32000, cdpMessage: 'No target' })
+  })
+
+  it('isTargetGone recognises only CDP replies that mean the page target/session is gone', () => {
+    const reply = (code: number, msg: string) => new CdpCommandError(`cdp X (#1) failed: ${msg} (code ${code})`, 'X', code, msg)
+    const table: Array<[unknown, boolean]> = [
+      [reply(-32000, 'Not attached to an active page'), true],
+      [reply(-32000, 'Session with given id not found.'), true],
+      [reply(-32000, 'No target with given id found'), true],
+      [reply(-32000, 'Target closed'), true],
+      [reply(-32000, 'Cannot navigate to invalid URL'), false],
+      [reply(-32601, 'Not attached to an active page'), false],
+      [new CdpClosedError('cdp X (#1) aborted: cdp closed by client'), false],
+      [new Error('Not attached to an active page'), false],
+    ]
+    for (const [err, gone] of table) expect(isTargetGone(err), String((err as Error).message)).toBe(gone)
   })
 
   it('times out with method and id in the message', async () => {

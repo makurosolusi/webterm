@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BlockedError, MAX_FRAMES_IN_FLIGHT } from '../../shared/browser.contract'
 import { decodeFrameHeader } from '../../shared/browser.wire'
 import { BrowserHost } from './browserHost.service'
-import { BrowserError } from './browserHost.targets'
+import { BrowserError, TargetGoneError } from './browserHost.targets'
 import { CDP_EVENT } from './cdp.client'
 import { makeHostRig, waitFor as waitCdp } from './fakeCdp.testkit'
 import { makeRig, stateOf } from './browserWs.testkit'
@@ -210,6 +210,31 @@ describe('input, lease and errors', () => {
     const entry = logBus.snapshot().find((e) => e.event === 'browser.ws' && e.message === 'unexpected gateway failure')
     expect(entry?.ids).toMatchObject({ nodeId: 'n1' })
     expect(entry?.data).toMatchObject({ error: 'cdp connect timed out after 10000 ms', name: 'Error', cause: 'ECONNREFUSED 127.0.0.1:9222' })
+    expect(rig.host.opens).toEqual(['n1']) // only a lost target is retried
+  })
+
+  it('reopens once, silently, when attach finds the page target gone', async () => {
+    rig = await makeRig()
+    logBus.clear()
+    rig.host.failOnce.start = new TargetGoneError('node n1: browser target is gone (Page.startScreencast)')
+    const c = await rig.connect()
+    c.send(attach())
+    await wait(() => rig.host.starts.length === 1, 'screencast after reopen')
+    await settle()
+    expect(rig.host.opens).toEqual(['n1', 'n1'])
+    expect(c.json.some((m) => m.t === 'error')).toBe(false)
+    expect(logBus.snapshot().some((e) => e.message === 'unexpected gateway failure')).toBe(false)
+  })
+
+  it('reports crashed once and stops when the reopen loses the target too', async () => {
+    rig = await makeRig()
+    rig.host.fail.start = new TargetGoneError('node n1: browser target is gone (Page.startScreencast)')
+    const c = await rig.connect()
+    c.send(attach())
+    await wait(() => c.json.some((m) => m.t === 'error'), 'error')
+    await settle()
+    expect(c.json.filter((m) => m.t === 'error')).toEqual([{ t: 'error', id: 'n1', code: 'crashed' }])
+    expect(rig.host.opens).toEqual(['n1', 'n1'])
   })
 
   it('relays dialog events and copy results to the node viewers', async () => {

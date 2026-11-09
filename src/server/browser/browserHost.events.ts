@@ -105,7 +105,12 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
         return crashTarget(p.targetId)
       case CDP_EVENT.targetCreated: return onTargetInfo(p, true)
       case CDP_EVENT.targetInfoChanged: return onTargetInfo(p, false)
-      case CDP_EVENT.detachedFromTarget: return ops.detached(p)
+      case CDP_EVENT.detachedFromTarget: {
+        // Sesi UTAMA node lepas (target ditukar/ditutup tanpa `discard`) = target hilang; `discard` unbind lebih dulu.
+        const main = table.session(typeof p.sessionId === 'string' ? p.sessionId : undefined)
+        if (main) ops.crash(main)
+        return ops.detached(p)
+      }
     }
   }
 }
