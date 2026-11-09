@@ -1,16 +1,18 @@
 // The Central chat's model: `/model` writes the conversation's choice server-side
-// (GET/POST /api/central/conversations/:id/model) and the header badge shows what the next turn runs on.
-import { useEffect, useState } from 'react'
+// (GET/POST /api/central/conversations/:id/model); the header picker (centralModelPicker) shows and changes it.
 import { CHAT_PATH, requestJson } from '../chat/chatTransport'
 import type { EffortArg, ModelArg } from './centralCommands'
 
-/** Server `ConversationModelState`, the fields the badge reads. */
+/** Server `ConversationModelState`, the fields the picker reads. */
 export interface CentralModelState {
+  /** What the next turn runs on: the ladder-resolved alias even on Auto. */
   alias: string | null
   effort: string | null
   tier: string
   /** A `/model` choice waits for the fresh session the next message starts. */
   pending: boolean
+  /** The conversation's own `/model` choice; null = Auto (no override, the setting or the ladder decides). */
+  override: { model: string; effort?: string } | null
 }
 
 const path = (conversationId: string): string => `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/model`
@@ -24,23 +26,4 @@ export function setCentralModel(conversationId: string, model: ModelArg, effort?
   return requestJson<CentralModelState>(path(conversationId), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, ...(effort ? { effort } : {}) }),
   })
-}
-
-/** "sonnet · medium · T2", plus "next session" while a switch waits; hidden until loaded or on error. */
-export function CentralModelBadge(props: { conversationId: string; refreshKey: number; load?: typeof fetchCentralModel }) {
-  const [state, setState] = useState<CentralModelState | null>(null)
-  const load = props.load ?? fetchCentralModel
-  useEffect(() => {
-    const abort = new AbortController()
-    // A failed read only hides the badge: the chat itself reports runtime problems.
-    load(props.conversationId, abort.signal).then(setState, () => { if (!abort.signal.aborted) setState(null) })
-    return () => abort.abort()
-  }, [props.conversationId, props.refreshKey, load])
-  if (!state) return null
-  const text = [state.alias ?? 'default', state.effort, state.tier].filter(Boolean).join(' · ')
-  return (
-    <span className="chat-model-badge" title={state.pending ? 'New model starts with a fresh session on your next message' : 'Model for this chat (/model to change)'}>
-      {text}{state.pending ? ' · next session' : ''}
-    </span>
-  )
 }

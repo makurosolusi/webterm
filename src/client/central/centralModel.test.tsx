@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
-// The Central chat's model surface: `/model` reaches the server seam, the header badge, the per-turn cost chip.
+// The Central chat's model surface: `/model` reaches the server seam and the per-turn cost chip
+// (the header picker is in centralModelPicker.test).
 import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CentralModelBadge, type CentralModelState } from './centralModel'
+import type { CentralModelState } from './centralModel'
 import { useCentralChatCommands } from './centralChatCommands'
 import { ChatCostChip, cacheShare } from '../chat/chatCostChip'
 import { applyChatEvent } from '../chat/chatEventReducer'
@@ -11,7 +12,7 @@ import { normalizeMessage } from '../chat/chatWire'
 
 afterEach(cleanup)
 
-const STATE: CentralModelState = { alias: 'opus', effort: 'high', tier: 'T3', pending: true }
+const STATE: CentralModelState = { alias: 'opus', effort: 'high', tier: 'T3', pending: true, override: { model: 'opus', effort: 'high' } }
 
 describe('/model', () => {
   it('sends the choice to the conversation and reloads the badge; a usage hint sends nothing', async () => {
@@ -35,20 +36,6 @@ describe('/model', () => {
     const { result } = renderHook(() => useCentralChatCommands({ centralEnabled: false, newChat: vi.fn(), showHistory: vi.fn(), setModel }, vi.fn(), notice, 'central:global'))
     act(() => result.current.onSend('/model sonnet'))
     await waitFor(() => expect(notice).toHaveBeenCalled())
-  })
-})
-
-describe('CentralModelBadge', () => {
-  it('shows model, effort and tier, and marks a waiting switch', async () => {
-    render(<CentralModelBadge conversationId="central:global" refreshKey={0} load={async () => STATE} />)
-    expect(await screen.findByText('opus · high · T3 · next session')).toBeTruthy()
-  })
-
-  it('stays hidden when the model cannot be read', async () => {
-    const load = vi.fn(async () => { throw new Error('ledger off') })
-    const { container } = render(<CentralModelBadge conversationId="central:global" refreshKey={0} load={load} />)
-    await waitFor(() => expect(load).toHaveBeenCalled())
-    expect(container.textContent).toBe('')
   })
 })
 

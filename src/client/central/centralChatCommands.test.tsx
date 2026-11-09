@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // The Central chat's `/` menu end to end: ChatPanel (side bar mount) + the Central control panel.
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatPanel from '../ChatPanel'
 import type { ChatClient, ChatConversation } from '../chat/chatTypes'
@@ -11,6 +11,7 @@ import { GATE, serveLedger } from '../chat/needsYou.fixtures'
 import { resetNeedsYou } from '../chat/needsYouApi'
 import CentralControlPanel from './CentralControlPanel'
 import { fakeClient } from './centralFixtures.testutil'
+import { useCentralChatCommands } from './centralChatCommands'
 
 const skills = vi.hoisted(() => ({ list: vi.fn() }))
 vi.mock('./centralControlApi', async (orig) => ({ ...(await orig<typeof import('./centralControlApi')>()), listActiveSkills: skills.list }))
@@ -188,6 +189,19 @@ describe('Central chat / menu', () => {
     expect(client.sendMessage).not.toHaveBeenCalled()
   })
 
+  it('/model alone opens the header model picker instead of a usage error', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    const fetchMock = vi.fn(async () => Response.json({ alias: 'sonnet', effort: 'medium', tier: 'T2', pending: false, override: null })) // test-only
+    vi.stubGlobal('fetch', fetchMock)
+    const { client } = await setup()
+    const trigger = await screen.findByRole('button', { name: 'Model: sonnet · medium · T2' })
+    await send('/model')
+    await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'))
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.queryByText(/Usage: \/model/)).toBeNull()
+    expect(client.sendMessage).not.toHaveBeenCalled()
+  })
+
   it('/help opens the command list in the menu', async () => {
     const { client } = await setup()
     await send('/help')
@@ -254,5 +268,29 @@ describe('Central chat / commands with attachments', () => {
     await send('/history')
     expect(screen.getByRole('navigation', { name: 'Conversations' })).not.toBeNull()
     expect(client.sendMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('useCentralChatCommands /model', () => {
+  const host = { centralEnabled: false, newChat: vi.fn(), showHistory: vi.fn() }
+
+  it('bare /model bumps the picker request and neither sends nor shows a notice', () => {
+    const send = vi.fn()
+    const notice = vi.fn()
+    const { result } = renderHook(() => useCentralChatCommands(host, send, notice, 'central:global'))
+    expect(result.current.modelPickerRequest).toBe(0)
+    act(() => result.current.onSend('/model'))
+    act(() => result.current.onSend('/model   '))
+    expect(result.current.modelPickerRequest).toBe(2)
+    expect(send).not.toHaveBeenCalled()
+    expect(notice).not.toHaveBeenCalled()
+  })
+
+  it('without a conversation, bare /model says the model cannot be changed', () => {
+    const notice = vi.fn()
+    const { result } = renderHook(() => useCentralChatCommands(host, vi.fn(), notice))
+    act(() => result.current.onSend('/model'))
+    expect(notice).toHaveBeenCalledWith('This chat cannot change its model.')
+    expect(result.current.modelPickerRequest).toBe(0)
   })
 })

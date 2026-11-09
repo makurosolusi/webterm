@@ -26,7 +26,16 @@ describe('resolveCentralInput', () => {
     expect(resolveCentralInput('/model Haiku', ALL)).toEqual({ kind: 'model', model: 'haiku' })
     expect(resolveCentralInput('/model auto', ALL)).toEqual({ kind: 'model', model: 'auto' })
     const usage = { kind: 'usage', message: 'Usage: /model [haiku|sonnet|opus|fable|auto] [low|medium|high|xhigh|max]', draft: '/model ' }
-    for (const bad of ['/model', '/model gpt', '/model opus turbo', '/model auto high', '/model opus high extra']) expect(resolveCentralInput(bad, ALL)).toEqual(usage)
+    for (const bad of ['/model gpt', '/model opus turbo', '/model auto high', '/model opus high extra']) expect(resolveCentralInput(bad, ALL)).toEqual(usage)
+  })
+
+  // Policy: bare `/model` opens the picker (as Claude Code does); it is never a usage error.
+  it('bare /model opens the model picker, never a usage hint', () => {
+    for (const bare of ['/model', '/model ', '/model    ', '  /MODEL\t']) {
+      const d = resolveCentralInput(bare, ALL)
+      expect(d.kind).not.toBe('usage')
+      expect(d).toEqual({ kind: 'model-picker' })
+    }
   })
 
   it('prompt shortcuts expand into an English request; arguments are required where hinted', () => {

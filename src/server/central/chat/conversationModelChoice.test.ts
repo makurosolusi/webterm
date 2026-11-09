@@ -50,9 +50,10 @@ describe('model precedence (conversation > setting > ladder)', () => {
   it('uses WEBTERM_CENTRAL_MODEL over the ladder, and the conversation choice over both', () => {
     const env = { WEBTERM_CENTRAL_MODEL: 'opus' }
     expect(centralTurnModel(fixture.db, CONV, env, null)).toMatchObject({ model: 'opus', effort: 'high', tier: 'T3' })
-    choose('haiku', 'medium', env)
+    // `override` is how the client picker tells Auto (null) from an explicit choice: `alias` is resolved either way.
+    expect(choose('haiku', 'medium', env).override).toEqual({ model: 'haiku', effort: 'medium' })
     expect(centralTurnModel(fixture.db, CONV, env, null)).toMatchObject({ model: 'haiku', effort: 'medium', tier: 'T1' })
-    choose('auto', undefined, env)
+    expect(choose('auto', undefined, env)).toMatchObject({ override: null, alias: 'opus' })
     expect(centralTurnModel(fixture.db, CONV, env, null)).toMatchObject({ model: 'opus', tier: 'T3' })
   })
 
