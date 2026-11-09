@@ -163,9 +163,10 @@ body {
 }
 
 /* Sidebar is a real grid column in the VS Code layout, not a floating card. It collapses
-   to 0 while closed so the canvas keeps the full editor width. */
+   to 0 while closed so the canvas keeps the full editor width. Its width is `--ss-w`, set on
+   <html> by the side bar's sash (`sessionsPanel.width.ts`); 300px until the user drags it. */
 .app-shell--sidebar {
-  grid-template-columns: var(--activity-bar-w) 300px minmax(0, 1fr) var(--aux-w);
+  grid-template-columns: var(--activity-bar-w) var(--ss-w, 300px) minmax(0, 1fr) var(--aux-w);
 }
 
 /* Layar Login tidak punya chrome apa pun; grid 48px + 35px akan memotongnya. */

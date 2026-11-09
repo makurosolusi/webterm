@@ -36,8 +36,8 @@ afterEach(() => {
   localStorage.clear()
 })
 
-const toggle = () => screen.getByLabelText('Toggle sessions panel')
-const panel = () => screen.queryByLabelText('Sessions')
+const toggle = () => screen.getByLabelText('Toggle Side Bar')
+const panel = () => screen.queryByLabelText('Side Bar')
 const dock = () => {
   const el = document.querySelector('.dock')
   if (!el) throw new Error('dock tidak ada')
@@ -51,7 +51,7 @@ describe('tombol Sessions di dalam dock', () => {
     localStorage.setItem(PIN_KEY, '0')
     await mountCanvas({ nodes: [], dirs: {} })
 
-    expect(screen.getAllByLabelText('Toggle sessions panel')).toHaveLength(1)
+    expect(screen.getAllByLabelText('Toggle Side Bar')).toHaveLength(1)
     expect(toggle().closest('.dock')).not.toBeNull()
     // Pelontar lama: satu <div> terapung dengan tombol di dalamnya, diangkur ke tepi kiri yang sama.
     expect(document.querySelector('.sessions-icon-cluster')).toBeNull()
@@ -80,7 +80,7 @@ describe('tombol Sessions di dalam dock', () => {
     await mountCanvas({ nodes: [], dirs: {} })
     expect(panel()).not.toBeNull()
 
-    fireEvent.click(screen.getByLabelText('Hide sessions panel'))
+    fireEvent.click(screen.getByLabelText('Hide Side Bar'))
 
     await waitFor(() => expect(panel()).toBeNull())
     expect(toggle().getAttribute('aria-current')).toBeNull()

@@ -44,6 +44,17 @@ describe('File > New Files Node', () => {
   })
 })
 
+describe('View menu', () => {
+  // Policy: the node tab strip moved into the Layers side bar, so its toggle is gone for good.
+  it('has no Show Node Tabs item', () => {
+    mount()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+    expect(screen.getByRole('menuitem', { name: 'Clear Output' })).toBeTruthy()
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Show Node Tabs' })).toBeNull()
+    expect(screen.queryByText('Show Node Tabs')).toBeNull()
+  })
+})
+
 describe('title bar command center', () => {
   it('shows the Mod+K chord and opens the palette on click', () => {
     const onOpenPalette = vi.fn()
