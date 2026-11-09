@@ -1,10 +1,13 @@
 // Server-side writes onto a stored board: add nodes (placed in free space) and cables, remove nodes
 // (ending their sessions), or patch existing nodes' layout/look and add/remove cables, then tell every open UI so it applies that live (`t:'canvas'`, client
 // `workspaceCanvasPush.ts`) without a save conflict.
+import { randomUUID } from 'node:crypto'
 import type { Workspace } from '../../shared/workspace'
 import { CANVAS_PATCH_KEYS, type ServerMsg } from '../../shared/protocol'
 import { OPEN_GAP, placeBeside, type Rect } from '../../shared/canvasPlace'
 import { withNodeNames } from '../../shared/nodeNames'
+import { normalizeTabLayout, reconcileTabs, sameGroups, type TabGroup } from '../../shared/tabLayout.schema'
+import { applyGroupOp, type GroupOp, type GroupOpCode } from './canvasPush.layout'
 import type { Db } from '../db'
 import { resolveFsPath } from '../fsOps'
 import { createLogger } from '../logs'
@@ -41,12 +44,17 @@ export interface CanvasUpdateInput {
 export type CanvasUpdateResult =
   | { ok: true; updatedAt: number; nodes: CanvasNode[]; bridges: CanvasBridge[]; unlinked: string[] }
   | { ok: false; code: 'workspace_not_found' | 'node_not_found' | 'bridge_invalid' | 'bridge_not_found' }
+export type CanvasGroupsResult =
+  | { ok: true; updatedAt: number; groups: TabGroup[]; groupId?: string }
+  | { ok: false; code: 'workspace_not_found' | GroupOpCode }
 export interface CanvasPush {
   add(input: CanvasAddInput): CanvasAddResult
   /** Remove nodes (all-or-nothing) and every bridge touching them, end their sessions/pages, broadcast. */
   remove(input: { workspaceId: string; nodeIds: string[] }): CanvasRemoveResult
   /** Patch existing nodes and add/remove cables (all-or-nothing), broadcast `updated`/`bridges`/`unlinked`. */
   update(input: CanvasUpdateInput): CanvasUpdateResult
+  /** One Layers group edit on the board's tab layout (the human's rules, `canvasPush.layout.ts`), broadcast `groups`. */
+  groups(input: { workspaceId: string; op: GroupOp }): CanvasGroupsResult
   /** The stored board that contains `nodeId` (top-level node id), or null. */
   workspaceOfNode(nodeId: string): Workspace | null
   /** Best board for a directory: the one whose cwd equals `cwd` (or is its nearest ancestor), else the active board, else the most recently updated; null when there are none. */
@@ -190,6 +198,27 @@ export function createCanvasPush(deps: CanvasPushDeps): CanvasPush {
     throw new Error(`canvas update of workspace ${input.workspaceId} lost ${SAVE_ATTEMPTS} save races in a row`)
   }
 
+  const groups = (input: { workspaceId: string; op: GroupOp }): CanvasGroupsResult => {
+    const newId = `g-${randomUUID()}` // the store's group id shape
+    for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
+      const ws = db.get(input.workspaceId)
+      if (!ws) return { ok: false, code: 'workspace_not_found' }
+      // The stored order may predate nodes no window reconciled yet (one Central just opened): reconcile as the UI would.
+      const layout = reconcileTabs(normalizeTabLayout(ws.layout), ws.nodes)
+      const res = applyGroupOp(layout.tabs, input.op, newId)
+      if (!res.ok) return res
+      const groupId = res.groupId ? { groupId: res.groupId } : {}
+      if (sameGroups(res.tabs.groups, ws.layout?.tabs.groups ?? [])) return { ok: true, updatedAt: ws.updatedAt, groups: res.tabs.groups, ...groupId }
+      const outcome = db.save({ ...ws, layout: { ...layout, tabs: { ...layout.tabs, ...res.tabs } } }, ws.updatedAt)
+      if (outcome === 'missing') return { ok: false, code: 'workspace_not_found' }
+      if (outcome === 'stale') continue
+      const updatedAt = db.get(ws.id)?.updatedAt ?? ws.updatedAt
+      deps.broadcast({ t: 'canvas', workspaceId: ws.id, base: ws.updatedAt, updatedAt, nodes: [], bridges: [], groups: res.tabs.groups })
+      return { ok: true, updatedAt, groups: res.tabs.groups, ...groupId }
+    }
+    throw new Error(`canvas groups of workspace ${input.workspaceId} lost ${SAVE_ATTEMPTS} save races in a row`)
+  }
+
   const workspaceOfNode = (nodeId: string): Workspace | null =>
     db.list().find((w) => w.nodes.some((n) => n.id === nodeId)) ?? null
 
@@ -208,5 +237,5 @@ export function createCanvasPush(deps: CanvasPushDeps): CanvasPush {
     return all.find((w) => w.id === active) ?? all[0] ?? null
   }
 
-  return { add, remove, update, workspaceOfNode, workspaceForCwd }
+  return { add, remove, update, groups, workspaceOfNode, workspaceForCwd }
 }

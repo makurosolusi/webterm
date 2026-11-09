@@ -1,5 +1,5 @@
 // Nodes/cables the server added to, nodes it removed from, nodes it patched (position, size, look)
-// or cables it unlinked on a stored board (`t:'canvas'`, server `canvas/canvasPush.ts`). The mounted
+// or cables it unlinked, or its Layers groups, on a stored board (`t:'canvas'`, server `canvas/canvasPush.ts`). The mounted
 // board applies them to the live canvas without touching selection, focus or drag state. They are already stored, so nothing is saved here; the save queue (`absorb`)
 // keeps unsent saves from dropping added nodes, resurrecting removed ones or 409ing on the push's
 // version. A removed node's sessions were already ended by the server, so no `close` is sent: the
@@ -12,6 +12,7 @@ import type { Workspace, WsNode } from '../shared/workspace'
 import type { ClosedHistory } from './closedHistory'
 import { toBridge, toFlow, toFlowEdge, toWsNode } from './store'
 import { subscribeCanvas } from './ws'
+import { receiveGroups } from './tabLayout.store'
 
 export interface LiveBoard {
   activeWsRef: RefObject<Workspace | null>
@@ -64,6 +65,12 @@ export function applyCanvasPush(live: LiveBoard, msg: CanvasMsg): boolean {
   if (live.activeWsRef.current?.id !== msg.workspaceId) return false
   if (msg.removed?.length) applyRemoved(live, msg.removed)
   applyUpdated(live, msg.updated ?? [], msg.unlinked ?? [])
+  if (msg.groups) {
+    // The store shows them; the active payload carries them, so the next save does not revert them.
+    const layout = receiveGroups(msg.groups)
+    const cur = live.activeWsRef.current
+    if (cur) live.activeWsRef.current = { ...cur, layout }
+  }
   const nodeIds = new Set(live.nodesRef.current.map((n) => n.id))
   const edgeIds = new Set(live.edgesRef.current.map((e) => e.id))
   const nodes = msg.nodes.filter((n) => !nodeIds.has(n.id)).map(toFlow)

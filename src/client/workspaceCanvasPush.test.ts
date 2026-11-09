@@ -1,10 +1,12 @@
 // A server canvas push (`t:'canvas'`) while this window holds unsent saves: the next save carries
 // the pushed nodes (and lacks the removed ones) and is based on the push's version (no 409, no
 // dropped edit, no resurrected node), and the mounted board applies them live.
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasMsg } from '../shared/protocol'
 import { DEFAULT_VIEWPORT, type Workspace, type WsNode } from '../shared/workspace'
+import { defaultTabLayout } from '../shared/tabLayout.schema'
+import { connectTabLayout, getTabLayout } from './tabLayout.store'
 import { createSaveQueue } from './workspaceSaveQueue'
 import { mergeCanvasPush } from './workspaceCanvasMerge'
 import { applyCanvasPush, type LiveBoard } from './workspaceCanvasPush'
@@ -289,5 +291,34 @@ describe('canvas update push (patched nodes, unlinked cables)', () => {
     expect(mergeCanvasPush(ws, { nodes: [], bridges: [], unlinked: ['gone'] })).toBe(ws)
     expect(mergeCanvasPush(ws, { nodes: [], bridges: [], updated: [{ ...BROWSER }] })).toBe(ws)
     expect(mergeCanvasPush(ws, { nodes: [], bridges: [], updated: [MOVED] }).nodes).toEqual([MOVED])
+  })
+})
+
+describe('canvas groups push (Central canvas.group)', () => {
+  const GROUP = { id: 'g1', name: 'Docs', collapsed: false, ids: ['b1', 'agent-1'] }
+  const grouped: CanvasMsg = { t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], groups: [GROUP] }
+  const live = (activeId: string): LiveBoard => ({
+    recordClosed: vi.fn(),
+    activeWsRef: { current: { ...board(10, 'w', [AGENT, BROWSER]), id: activeId } },
+    nodesRef: { current: [] }, edgesRef: { current: [] }, setNodes: vi.fn(), setEdges: vi.fn(),
+  })
+  beforeEach(() => {
+    const base = defaultTabLayout()
+    connectTabLayout({ ...base, tabs: { ...base.tabs, order: ['agent-1', 'b1'], active: 'agent-1' } }, null)
+  })
+
+  it('shows the groups in the store and puts them in the active payload, so the next save carries them', () => {
+    const b = live('w1')
+    expect(applyCanvasPush(b, grouped)).toBe(true)
+    expect(getTabLayout().tabs.groups).toEqual([{ ...GROUP, ids: ['agent-1', 'b1'] }])
+    expect(b.activeWsRef.current?.layout).toBe(getTabLayout())
+  })
+
+  it('a groups push for another board leaves the store and the payload alone', () => {
+    const b = live('w2')
+    const before = getTabLayout()
+    expect(applyCanvasPush(b, grouped)).toBe(false)
+    expect(getTabLayout()).toBe(before)
+    expect(b.activeWsRef.current?.layout).toBeUndefined()
   })
 })

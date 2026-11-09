@@ -9,6 +9,7 @@ import {
   normalizeTabLayout, packGroups, reconcileTabs, sameGroups, type LayoutMode, type TabGroup, type TabLayout,
 } from '../shared/tabLayout.schema'
 import type { WsNodeKind } from '../shared/workspace.shape'
+import { withPushedGroups } from './workspaceCanvasMerge'
 
 let current: TabLayout = defaultTabLayout()
 /** Ids in `order` that tab mode docks instead of showing as a tab (Files), from the last reconcile. */
@@ -139,6 +140,14 @@ export function moveToGroup(id: string, groupId: string | null, beforeId?: strin
     index = others.length ? rest.indexOf(others[others.length - 1]) + 1 : at
   }
   commitTabs([...rest.slice(0, index), id, ...rest.slice(index)], groups)
+}
+
+/** Take a server-pushed group list (Central's canvas.group, already stored): shown at once, NOT
+ *  persisted (the caller writes the returned layout into the active workspace payload). */
+export function receiveGroups(groups: readonly TabGroup[]): TabLayout {
+  current = withPushedGroups(current, groups)
+  listeners.forEach((l) => l())
+  return current
 }
 
 /** Reconcile `order`/`active` with the board's nodes (both strips call this on every node change). */

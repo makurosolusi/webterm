@@ -3,6 +3,7 @@
 // reconnects so the server can re-attach a surviving PTY and replay its scrollback).
 
 import type { AgentId, AgentStatus, BridgeLink, WsNode } from './workspace'
+import type { TabGroup } from './tabLayout.schema'
 
 // `since` = the last chunk this client already drew of session `epoch`: a re-attach to that same
 // session replays only what came after it. Absent, stale or out of range = `reset` + full replay.
@@ -42,9 +43,12 @@ export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // `unlinked` = cable ids the server removed.
 /** The fields of an `updated` node a window takes from the push (server `canvasPush.update`). */
 export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks'] as const
-export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[]; updated?: WsNode[]; unlinked?: string[] }
-// Central asked the UI to show workspace `workspaceId` (and centre/reveal `nodeId` when given).
-export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string }
+// `groups` = the board's whole Layers group list after a server edit (`canvasPush.groups`); the UI
+// takes it as is and re-packs members into its own tab `order`.
+export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[]; updated?: WsNode[]; unlinked?: string[]; groups?: TabGroup[] }
+// Central asked the UI to show workspace `workspaceId` (and centre/reveal `nodeId` when given, or
+// with `fit` fit every node into view, the "View: Fit Canvas" command).
+export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string; fit?: boolean }
 // Central asked for a screenshot: the visible UI tab captures its view and POSTs it to /api/canvas-shot/<reqId>.
 export interface ShotMsg { t: 'shot'; reqId: string; maxWidth: number }
 export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg
