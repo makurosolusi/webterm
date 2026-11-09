@@ -108,10 +108,10 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
+- Sessions now lists every workspace top to bottom in tab order, including the one you have open. Each shows a status dot, its name, a "Current" chip on the open one, its folder and git branch, and its sessions right below. Clicking a session in another workspace still switches to it, and the list no longer reshuffles.
 - The left side bar now shows one view at a time, like VS Code: Layers (default), Sessions and Agent History each get the full height, chosen from their icons in the activity bar. Clicking the icon of the view already shown hides the side bar; ⌘⇧\ still toggles it. The last view shown is remembered, and all views share one width. The Sessions icon shows a badge with the number of sessions in other workspaces that need attention. New commands "View: Show Layers", "View: Show Sessions" and "View: Show Agent History" (no default keys).
 - The node tab strip above the canvas moved into the Layers view of the side bar.
 - The left side bar can be resized by dragging its right edge (220 px up to 40% of the window, remembered; double-click resets it) and hides with **Mod+Shift+\\** or the new Hide Side Bar button in its top row. The dock button and the command are now called "Toggle Side Bar".
-- Sessions (Project view) no longer repeats the workspace you have open, since Layers already lists it; Status view still shows every workspace.
 - Terminals keep their drawing buffer, so screenshots show the terminal text instead of a blank area.
 - The Claude permission mode options have plainer names: "Ask before every action", "Auto (default)", "Approve file edits automatically", "Plan only, change nothing" and "Never ask (no prompts)".
 - Node names are always generated words like "Mango" or "Mango 2". Any other value saved as a node's name is replaced automatically, so a name can never carry arbitrary text into what agents read.
@@ -189,6 +189,8 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Clicking a session in Sessions no longer makes the list jump between workspaces.
+- Clicking an entry under Recently closed (side bar or Welcome screen) now asks before reopening it and says which workspace it opens in. Undo and the "Reopen" menu item still reopen directly.
 - Expanding or collapsing a workspace group in Sessions no longer switches to that workspace. Switching is now an explicit "Switch to Workspace" button on the group header (also in its context menu).
 - The trash button on a session row can now be reached and pressed from the keyboard.
 - Typing `/model` alone in the Central chat now opens a model and effort picker instead of an error; clicking the model badge in the chat header opens it too.
