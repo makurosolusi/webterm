@@ -17,6 +17,14 @@ export class BrowserError extends Error {
   }
 }
 
+/** Target node hilang di bawah perintah (detach/tukar/tutup tanpa event); node sudah dilepas, `open` berikutnya membuat target baru. */
+export class TargetGoneError extends BrowserError {
+  constructor(message: string, cause?: unknown) {
+    super('crashed', message, undefined, cause)
+    this.name = 'TargetGoneError'
+  }
+}
+
 /**
  * Event di luar `BrowserHostApi`: dialog JS (jawab lewat `answerDialog`), galat tingkat node (mis. crash), dan
  * popup sah yang harus dibuka klien sebagai node browser baru di sebelah pembukanya.

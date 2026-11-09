@@ -27,7 +27,13 @@ export class FakeHost implements GatewayHost {
   hold: Record<string, Promise<void>> = {}
   private readonly states = new Map<string, BrowserState>()
 
-  private maybeFail(m: string) { if (this.fail[m]) throw this.fail[m] }
+  /** Seperti `fail`, tapi hanya untuk panggilan berikutnya (lalu terhapus). */
+  failOnce: Record<string, Error> = {}
+  private maybeFail(m: string) {
+    const once = this.failOnce[m]
+    if (once) { delete this.failOnce[m]; throw once }
+    if (this.fail[m]) throw this.fail[m]
+  }
   async open(id: string): Promise<BrowserState> { this.opens.push(id); await this.hold.open; this.maybeFail('open'); const s = stateOf(id); this.states.set(id, s); return s }
   async navigate(): Promise<void> { throw new Error('unused') }
   async setViewport(id: string, w: number, h: number, dpr: number) { this.viewports.push([id, w, h, dpr]) }

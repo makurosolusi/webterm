@@ -52,6 +52,19 @@ export async function readBrowserProduct(cdp: CdpClient): Promise<string> {
 /** A command cut short because the connection died (`close()` or the socket went away), not because CDP refused it. */
 export class CdpClosedError extends Error {}
 
+/** CDP answered the command with an error reply; `code`/`cdpMessage` are CDP's own, `message` is the contextual text. */
+export class CdpCommandError extends Error {
+  constructor(message: string, readonly method: string, readonly code: number, readonly cdpMessage: string) {
+    super(message)
+    this.name = 'CdpCommandError'
+  }
+}
+
+const TARGET_GONE = /not attached to an active page|session with given id not found|no target with given id|target closed/i
+/** The command's page target/session no longer exists in Chromium (detached, swapped or closed under us). */
+export const isTargetGone = (err: unknown): boolean =>
+  err instanceof CdpCommandError && err.code === -32000 && TARGET_GONE.test(err.cdpMessage)
+
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /**
@@ -149,7 +162,7 @@ export class CdpClient {
     if (typeof msg.id === 'number') {
       const p = this.pending.get(msg.id)
       if (!p) return // balasan terlambat setelah timeout
-      if (msg.error) this.settle(msg.id, new Error(`cdp ${p.method} (#${msg.id}) failed: ${msg.error.message} (code ${msg.error.code})`))
+      if (msg.error) this.settle(msg.id, new CdpCommandError(`cdp ${p.method} (#${msg.id}) failed: ${msg.error.message} (code ${msg.error.code})`, p.method, msg.error.code, msg.error.message))
       else this.settle(msg.id, undefined, msg.result ?? {})
       return
     }

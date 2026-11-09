@@ -4,7 +4,7 @@ import { TOUCH_POINTS_MAX, BlockedError } from '../../shared/browser.contract'
 import type { BrowserHostApi, BrowserInputEvent, BrowserState, Frame, NAV_ACTIONS } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
-import { CDP, ignoreClosed } from './cdp.client'
+import { CDP, ignoreClosed, isTargetGone } from './cdp.client'
 import type { CdpClient, CdpHandler } from './cdp.client'
 import type { BrowserLauncher } from './chromium.launch'
 import { screencastParams, toCdpCommands } from './browserHost.input'
@@ -16,10 +16,10 @@ import type { ShieldPolicy } from './adblock.shields'
 import { createConsoleLog } from './browserHost.console'
 import { createTargetLifecycle } from './browserHost.lifecycle'
 import type { TargetLifecycle } from './browserHost.lifecycle'
-import { blockOf, BrowserError, isAbortedNav, mergeState, notePendingInput, readHistory, TargetTable } from './browserHost.targets'
+import { blockOf, BrowserError, isAbortedNav, mergeState, notePendingInput, readHistory, TargetGoneError, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
-export { BrowserError } from './browserHost.targets'
+export { BrowserError, TargetGoneError } from './browserHost.targets'
 export type { HostEvent, NavGuard } from './browserHost.targets'
 
 const log = createLogger('browser.host')
@@ -203,8 +203,16 @@ export class BrowserHost implements BrowserHostApi {
   private cdpOf(rec: NodeRec): Promise<CdpClient> { return this.life.cdpOf(rec) }
 
   private async send<T = Record<string, unknown>>(rec: NodeRec, method: string, params?: object): Promise<T> {
-    if (!rec.sessionId) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
-    return (await this.cdpOf(rec)).send<T>(method, params, rec.sessionId)
+    const sid = rec.sessionId
+    if (!sid) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
+    try {
+      return await (await this.cdpOf(rec)).send<T>(method, params, sid)
+    } catch (err) {
+      if (!isTargetGone(err)) throw err
+      // Balasan galat bisa tiba sebelum event detach/destroy: lepas node di sini juga, supaya `open` membuat target baru.
+      if (rec.sessionId === sid) this.life.crash(rec)
+      throw new TargetGoneError(`node ${rec.nodeId}: browser target is gone (${method})`, err)
+    }
   }
   private io(rec: NodeRec): DeviceIo { return { send: (m, p) => this.send(rec, m, p), fire: (m, p) => this.fire(rec, m, p) } }
 

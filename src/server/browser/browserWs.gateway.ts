@@ -8,7 +8,7 @@ import { createLogger } from '../logs'
 import { createSerialQueue } from './browserWs.backpressure'
 import type { SerialQueue } from './browserWs.backpressure'
 import type { GatewayHost, Viewer, ViewerHub, ViewerSink } from './browserWs.viewers'
-import { BrowserError } from './browserHost.targets'
+import { BrowserError, TargetGoneError } from './browserHost.targets'
 
 const log = createLogger('browser.ws')
 /** Kode penutupan WS untuk fitur mati (policy violation). */
@@ -91,22 +91,32 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
     queues.clear()
   }
 
+  async function attach(m: Extract<ClientMsg, { t: 'attach' }>): Promise<void> {
+    const id = m.id
+    await host.open(id, deps.workspaceId, deps.initialUrl?.(id))
+    await host.setViewport(id, m.w, m.h, Math.min(m.dpr, DSF_MAX))
+    if (closed) return
+    hub.join(id, viewer)
+    const s = hub.stateMsg(id)
+    if (s) sink.sendJson(s)
+    const c = host.console?.snapshot(id)
+    if (c) sink.sendJson({ t: 'console', ...c })
+    await hub.sync(id)
+  }
+
   async function run(m: ClientMsg): Promise<void> {
     const id = m.id
     if (closed) return
     switch (m.t) {
-      case 'attach': {
-        await host.open(id, deps.workspaceId, deps.initialUrl?.(id))
-        await host.setViewport(id, m.w, m.h, Math.min(m.dpr, DSF_MAX))
-        if (closed) return
-        hub.join(id, viewer)
-        const s = hub.stateMsg(id)
-        if (s) sink.sendJson(s)
-        const c = host.console?.snapshot(id)
-        if (c) sink.sendJson({ t: 'console', ...c })
-        await hub.sync(id)
+      case 'attach':
+        try {
+          await attach(m)
+        } catch (err) {
+          // Target hilang diam-diam (host sudah melepas node): buka ulang SEKALI, seperti tab Chrome yang dibuang dimuat ulang.
+          if (!(err instanceof TargetGoneError) || closed) throw err
+          await attach(m)
+        }
         return
-      }
       case 'detach':
         attached.delete(id)
         await hub.leave(id, viewer)
