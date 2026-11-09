@@ -8,6 +8,10 @@ import { TreeItem } from './vscode/register'
 import { rowMeta, type SessionRowVM, type SignalCounts } from './sessionList'
 import { signalOf, UNREAD_LABEL } from './sessionSignal'
 import { SWITCH_WORKSPACE_LABEL } from './sessionMenu'
+import { WORKSPACE_DOT_LABEL, type WorkspaceDot } from './sessionList.workspace'
+
+/** Chip after the name of the workspace open on the board. */
+export const CURRENT_CHIP = 'Current'
 
 /** Glyph rule shared with the node tab strips (`./sessionSignal`). */
 const signalOfRow = (row: SessionRowVM) => signalOf(row.statusKind, row.unread === true, row.stateLabel)
@@ -171,7 +175,26 @@ export interface SessionGroupItemProps {
   workspace?: boolean
   /** Inline "Switch to Workspace" action; rendered for a workspace group that is not the open board. */
   onSwitchWorkspace?: (projectId: string) => void
+  /** Workspace header only: status dot and the "folder · branch" second line. */
+  dot?: WorkspaceDot
+  sub?: string
   children: ReactNode
+}
+
+/** Workspace header label (Orca layout): dot, name, Current chip, then folder · branch below. */
+function WorkspaceLabel({ label, isActive, dot, sub }: { label: string; isActive: boolean; dot?: WorkspaceDot; sub?: string }) {
+  return (
+    <span className="ss-ws">
+      <span className="ss-ws__line">
+        {dot && <span className={`ss-ws__dot ss-ws__dot--${dot}`} role="img" aria-label={WORKSPACE_DOT_LABEL[dot]} />}
+        <span className={isActive ? 'ss-tree__group-label ss-tree__group-label--active' : 'ss-tree__group-label'}>
+          {label}
+        </span>
+        {isActive && <span className="ss-ws__chip">{CURRENT_CHIP}</span>}
+      </span>
+      {sub && <span className="ss-ws__sub">{sub}</span>}
+    </span>
+  )
 }
 
 /** Header grup sebagai branch tree. Chevron, hover, dan tinggi 22px milik library; di sini hanya
@@ -191,8 +214,13 @@ export function SessionGroupItem(props: SessionGroupItemProps) {
     signals,
     workspace = false,
     onSwitchWorkspace,
+    dot,
+    sub,
     children,
   } = props
+  const groupClass = ['ss-tree__group', workspace && 'ss-tree__group--ws', isActive && 'ss-tree__group--active']
+    .filter(Boolean)
+    .join(' ')
 
   const iconSlots =
     monogram !== undefined ? (
@@ -224,7 +252,7 @@ export function SessionGroupItem(props: SessionGroupItemProps) {
     <TreeItem
       branch
       open={open}
-      className={isActive ? 'ss-tree__group ss-tree__group--active' : 'ss-tree__group'}
+      className={groupClass}
       aria-current={isActive ? 'true' : undefined}
       data-group={groupKey}
       ref={(el) =>
@@ -237,11 +265,11 @@ export function SessionGroupItem(props: SessionGroupItemProps) {
       }
     >
       {iconSlots}
-      <span
-        className={isActive ? 'ss-tree__group-label ss-tree__group-label--active' : 'ss-tree__group-label'}
-      >
-        {label}
-      </span>
+      {workspace ? (
+        <WorkspaceLabel label={label} isActive={isActive} dot={dot} sub={sub} />
+      ) : (
+        <span className="ss-tree__group-label">{label}</span>
+      )}
       <span slot="decoration" className="ss-tree__decoration">
         {signals && signals.attention > 0 && (
           <span className="ss-signal ss-signal--attention">{signals.attention}</span>

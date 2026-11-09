@@ -1,6 +1,6 @@
 // Body of the side bar's Sessions view (the container, head and sash live in `./sideBar`): one tree
-// of the OTHER workspaces, grouped per workspace or per status (Status stays cross-board for
-// triage). Kerangka pohonnya VS Code tree (`Tree`/`TreeItem` dari `./vscode/register`):
+// of ALL workspaces, grouped per workspace (stacked in tab order, the open one marked Current, like
+// Orca's workspace sidebar) or per status (cross-board triage). Kerangka pohonnya VS Code tree (`Tree`/`TreeItem` dari `./vscode/register`):
 // tinggi baris 22px, indent 8px, hover/seleksi VS Code — semuanya dari library, bukan tiruan CSS.
 // Props-driven untuk SEMUA data board (workspace, node, status): integrator yang menyuplainya.
 // SATU pengecualian, dan alasannya: tanda `unread` disubscribe langsung dari `./unread` di sini.
@@ -20,7 +20,6 @@ import {
   buildSessionList,
   buildStatusList,
   isProjectCollapsed,
-  otherWorkspaceGroups,
   parseCollapsed,
   projectCollapseKey,
   sidebarEmptyState,
@@ -28,6 +27,8 @@ import {
 } from './sessionList'
 import { CLOSED_KEY, SessionsTree } from './SessionsPanel.tree'
 import type { ClosedEntry } from './closedHistory'
+import { confirmReopen } from './reopenConfirm'
+import { useGitBranches } from './useGitBranches'
 import { useUnreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import './sessions-panel.css'
@@ -95,7 +96,8 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   }, [collapsed])
 
   const groups = useMemo(
-    () => otherWorkspaceGroups(buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter, unread)),
+    // Every workspace, in tab order: switching board (a row click does) must not reshape the list.
+    () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter, unread),
     [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
   )
   const sections = useMemo(
@@ -105,8 +107,8 @@ export default function SessionsPanel(props: SessionsPanelProps) {
 
   const total = sections.reduce((n, s) => n + s.rows.length, 0)
   const rowCount = grouping === 'status' ? total : groups.reduce((n, g) => n + g.sessions.length, 0)
-  const onlyActive = grouping === 'project' && workspaces.length > 0 && workspaces.every((w) => w.id === activeId)
-  const empty = sidebarEmptyState(rowCount === 0, filter, onlyActive)
+  const empty = sidebarEmptyState(rowCount === 0, filter)
+  const branches = useGitBranches(useMemo(() => workspaces.map((w) => w.cwd), [workspaces]))
 
   const treeRef = useRef<TreeElement>(null)
   // Elemen pohon → aksi. Klik/Enter di dalam shadow tree tidak sampai ke root React, jadi satu
@@ -137,13 +139,20 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     if (target.kind === 'group') {
       // Library membalik `open` SETELAH event ini, jadi nilai `open` di sini adalah keadaan
       // SEBELUM klik. Peta lipatan menyimpan "terlipat", yang persis sama dengan nilai itu.
-      // Click/Enter on a header ONLY expands/collapses: Project view lists other boards only, so
-      // switching here made every expand jump away. Switching = inline action, menu, or a row.
+      // Click/Enter on a header ONLY expands/collapses: switching here made every expand jump
+      // away. Switching = inline action, menu, or a row.
       setCollapsed((prev) => ({ ...prev, [target.key]: item.open === true }))
       return
     }
-    if (target.kind === 'reopen') onReopenSession?.(target.id)
-    else onFocusNode(target.id)
+    if (target.kind === 'reopen') {
+      // A list row is easy to hit by accident and the reopen can switch board, so it asks first.
+      // The context menu's "Reopen" item is already explicit and stays direct (`./sessionMenu`).
+      const entry = closedSessions.find((e) => e.node.id === target.id)
+      if (!entry || !onReopenSession) return
+      void confirmReopen(entry, activeId).then((ok) => {
+        if (ok) onReopenSession(target.id)
+      })
+    } else onFocusNode(target.id)
   }
 
   useEffect(() => {
@@ -219,11 +228,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             <p>No sessions yet.</p>
           </div>
         )}
-        {empty === 'only-active' && (
-          <div className="ss-empty">
-            <p>Other workspaces' sessions appear here.</p>
-          </div>
-        )}
 
         <SessionsTree
           treeRef={treeRef}
@@ -237,6 +241,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
           register={register}
           onCloseSession={onCloseSession}
           onSelectWorkspace={onSelectWorkspace}
+          branches={branches}
         />
       </div>
       <VscodeMenu

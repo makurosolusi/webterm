@@ -1,0 +1,62 @@
+/* Project tab: every workspace stacked in tab order (like Orca's workspace sidebar). The header is
+   two lines (dot, name, Current chip / folder · branch); the tree item's wrapper has min-height
+   22px and aligns to the top, so the chevron and monogram stay on the first line. */
+.ss-ws {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ss-ws__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: var(--ss-row-h);
+}
+
+.ss-ws__line .ss-tree__group-label {
+  min-width: 0;
+}
+
+.ss-ws__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-2);
+}
+
+.ss-ws__dot--attention {
+  background: var(--state-attention);
+}
+
+.ss-ws__dot--running {
+  background: var(--state-working);
+}
+
+.ss-ws__chip {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--vscode-badge-background, var(--raised));
+  color: var(--vscode-badge-foreground, var(--text));
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.ss-ws__sub {
+  overflow: hidden;
+  padding-bottom: 3px;
+  color: var(--vscode-descriptionForeground, var(--muted-2));
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The open workspace is a card: its header and its sessions share one background. */
+.ss-tree__group--ws.ss-tree__group--active {
+  border-radius: 4px;
+  background: var(--vscode-list-inactiveSelectionBackground, var(--raised));
+}

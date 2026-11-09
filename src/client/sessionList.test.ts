@@ -5,7 +5,6 @@ import {
   isProjectCollapsed,
   parseCollapsed,
   projectCollapseKey,
-  projectHeadClickAction,
   rowMeta,
   sessionLabel,
   sessionStatusGroup,
@@ -210,13 +209,6 @@ describe('parseCollapsed', () => {
     expect(parseCollapsed('{"project:p1":"true","project:p2":1,"project:p3":true}')).toEqual({
       'project:p3': true,
     })
-  })
-})
-
-describe('projectHeadClickAction', () => {
-  it('berpindah bila belum aktif, melipat bila sudah aktif', () => {
-    expect(projectHeadClickAction(false)).toBe('switch')
-    expect(projectHeadClickAction(true)).toBe('toggle-collapse')
   })
 })
 
