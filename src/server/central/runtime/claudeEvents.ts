@@ -17,7 +17,8 @@ import { stderrReason } from './runtimeShared'
 import { type ClaudeResultEvent, type ClaudeUsage, type Rec, parseClaudeResult, parseUsage, rec, str } from './claudeResult'
 
 export interface ClaudeToolUse { id: string; name: string; input: unknown }
-export interface ClaudeToolResult { toolUseId: string; isError: boolean; text: string }
+/** `texts` keeps each text block apart: an image result is `[Image: source: …]` text plus the receipt JSON. */
+export interface ClaudeToolResult { toolUseId: string; isError: boolean; texts: string[] }
 
 export type ClaudeEvent =
   | { type: 'init'; sessionId: string | null; tools: string[]; servers: string[] }
@@ -50,11 +51,11 @@ function parseAssistant(obj: Rec): ClaudeEvent {
   }
 }
 
-/** `tool_result.content` is a string or a list of `{type:'text', text}` blocks. */
-function resultText(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content.map((part) => (rec(part)?.type === 'text' ? str(rec(part)?.text) ?? '' : '')).join('')
+/** `tool_result.content` is a string or a list of blocks; only `{type:'text', text}` blocks carry text. */
+function resultTexts(content: unknown): string[] {
+  if (typeof content === 'string') return [content]
+  if (!Array.isArray(content)) return []
+  return content.flatMap((part) => (rec(part)?.type === 'text' ? [str(rec(part)?.text) ?? ''] : []))
 }
 
 function parseUser(obj: Rec): ClaudeEvent | null {
@@ -64,7 +65,7 @@ function parseUser(obj: Rec): ClaudeEvent | null {
   for (const block of content) {
     const b = rec(block)
     if (b?.type !== 'tool_result' || typeof b.tool_use_id !== 'string') continue
-    results.push({ toolUseId: b.tool_use_id, isError: b.is_error === true, text: resultText(b.content) })
+    results.push({ toolUseId: b.tool_use_id, isError: b.is_error === true, texts: resultTexts(b.content) })
   }
   return results.length > 0 ? { type: 'tool_results', results } : null
 }
@@ -113,15 +114,26 @@ const isWebtermTool = (name: string): boolean => name.startsWith(WEBTERM_MCP_TOO
 /** Chat-facing tool name: the MCP server prefix is noise to a human. */
 const shortName = (name: string): string => name.slice(WEBTERM_MCP_TOOL_PREFIX.length)
 
-/** Receipt JSON the webterm MCP server put in the result text; anything else is wrapped as plain text. */
-function receiptOf(text: string): Record<string, unknown> {
+/** Claude Code's marker for an image it saved to disk; a flattened string may lead with it. */
+const IMAGE_MARKERS = /^(\s*\[Image: [^\]\n]*\])+\s*/
+
+function jsonObject(text: string): Record<string, unknown> | null {
   try {
-    const value = JSON.parse(text) as unknown
+    const value = JSON.parse(text.replace(IMAGE_MARKERS, '')) as unknown
     if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
   } catch {
-    // Claude Code's own failure text (e.g. "permission denied") is not JSON; it becomes the detail below.
+    // Not JSON: an image marker block or Claude Code's own failure text (e.g. "permission denied").
   }
-  return { outcome: 'error', detail: 'tool_failed', text }
+  return null
+}
+
+/** Receipt JSON the webterm MCP server put in a result text block (last wins); anything else is wrapped as plain text. */
+function receiptOf(texts: readonly string[]): Record<string, unknown> {
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const receipt = jsonObject(texts[i])
+    if (receipt) return receipt
+  }
+  return { outcome: 'error', detail: 'tool_failed', text: texts.join('') }
 }
 
 /** Announces each new `mcp__webterm__*` call; any other tool name fails the turn closed. */
@@ -147,7 +159,7 @@ function applyToolResults(results: readonly ClaudeToolResult[], ctx: ApplyContex
     const open = ctx.state.openTools.get(r.toolUseId)
     if (!open) continue
     ctx.state.openTools.delete(r.toolUseId)
-    const receipt = receiptOf(r.text)
+    const receipt = receiptOf(r.texts)
     const ok = !r.isError && receipt.outcome === 'ok'
     const detail = typeof receipt.detail === 'string' ? receipt.detail : 'tool_failed'
     ctx.emitter.emit({
