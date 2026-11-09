@@ -24,6 +24,9 @@ const item = (id: string, label: string, onSelect: () => void, disabled = false)
 
 const SEPARATOR: VscodeMenuItem = { type: 'separator' }
 
+/** Shared with the group header's inline action, so both paths read as one action. */
+export const SWITCH_WORKSPACE_LABEL = 'Switch to Workspace'
+
 const copyPath = (path: string | undefined, a: SessionMenuActions): VscodeMenuItem =>
   item('copy-path', 'Copy Path', () => path && a.onCopyText(path), !path)
 
@@ -51,7 +54,7 @@ export function buildSessionMenu(target: TreeTarget, expanded: boolean, a: Sessi
       if (!target.projectId) return [toggle]
       const projectId = target.projectId
       return [
-        item('switch', 'Switch to Workspace', () => a.onSelectWorkspace(projectId), target.isActive === true),
+        item('switch', SWITCH_WORKSPACE_LABEL,() => a.onSelectWorkspace(projectId), target.isActive === true),
         SEPARATOR,
         toggle,
       ]

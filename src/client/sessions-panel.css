@@ -112,6 +112,25 @@
   outline-offset: -1px;
 }
 
+/* ---- Sessions view body (inside the side bar container): toolbar, filter, scrolling tree ---- */
+.sessions-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grouping tabs on the left, Collapse All on the right (same 24px row as the tabs). */
+.sessions-view__toolbar {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.sessions-view__toolbar .ss-action {
+  margin-left: auto;
+}
+
 /* ---- Tab Project / Status / Nodes: tab judul panel VS Code (uppercase 11px, garis bawah aktif) ---- */
 .ss-tabs {
   display: flex;
@@ -317,8 +336,9 @@
   vertical-align: top;
 }
 
-/* Tombol akhiri sesi di slot actions (muncul saat baris di-hover/di-fokus, diatur library). */
-.ss-tree__end {
+/* Inline actions di slot actions (End session, Switch to Workspace): muncul saat baris di-hover/
+   di-fokus, diatur library. */
+.ss-tree__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -340,11 +360,11 @@
   display: none;
 }
 
-.ss-tree__end:hover {
+.ss-tree__action:hover {
   background: var(--vscode-toolbar-hoverBackground, var(--raised));
 }
 
-.ss-tree__end:focus-visible {
+.ss-tree__action:focus-visible {
   outline: 1px solid var(--vscode-focusBorder, var(--accent));
   outline-offset: -1px;
 }

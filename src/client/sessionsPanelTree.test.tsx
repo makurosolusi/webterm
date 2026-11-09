@@ -3,7 +3,7 @@
 // shadow tree dan callback React — bukan tampilan barisnya (itu urusan CSS).
 //
 //   1. Grup jadi branch, sesi jadi leaf yang bisa dipilih → `onFocusNode`.
-//   2. Grup workspace memilih board lain lewat `onSelectWorkspace`.
+//   2. Header grup workspace hanya melipat; pindah board lewat inline action (lihat sessionsGroupSwitch.policy).
 //   3. Tombol akhiri sesi berjalan lewat listener natif (klik di dalam tree dihentikan library).
 //   4. Tab pengelompokan dan filter tetap memilih himpunan baris yang sama seperti sebelumnya.
 //
@@ -40,8 +40,7 @@ const CURRENT = ws('p0', 'Current', [])
 const STATUSES: Record<string, AgentStatus> = { t1: 'working', t2: 'done', t3: 'done' }
 
 const baseProps = (): SessionsPanelProps => ({
-  open: true,
-  onClose: () => {},
+  active: true,
   workspaces: [CURRENT, ALPHA, BETA],
   activeId: 'p0',
   liveActiveNodes: null,
@@ -106,7 +105,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     expect(onFocusNode).toHaveBeenCalledWith('t1')
   })
 
-  it('memilih grup workspace lain berpindah board, dan lipatannya tersinkron', async () => {
+  it('memilih grup workspace hanya melipat/membuka (tidak berpindah board), lipatannya tersinkron', async () => {
     const onSelectWorkspace = vi.fn()
     render(<SessionsPanel {...baseProps()} onSelectWorkspace={onSelectWorkspace} />)
 
@@ -117,7 +116,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     ;(beta as HTMLElement & { open: boolean }).open = true
     select(beta as Element)
 
-    expect(onSelectWorkspace).toHaveBeenCalledWith('p2')
+    expect(onSelectWorkspace).not.toHaveBeenCalled()
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('webterm.sessionsCollapsed') ?? '{}')).toMatchObject({
         'project:p2': true,
