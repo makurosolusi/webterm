@@ -48,7 +48,11 @@ const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?
 // Loaded on first call, not at import: the board runtime opens webterm.db and `sessions` boots the PTY
 // supervisor, neither of which a module that merely registers tools (or its tests) should trigger.
 const nodeDefs = (): ToolDef[] => [
-  ...createNodeReadDefs({ live: async () => { const { sessions } = await import('../../sessions'); return (id) => sessions.isLive(id) } }),
+  ...createNodeReadDefs({
+    live: async () => { const { sessions } = await import('../../sessions'); return (id) => sessions.isLive(id) },
+    sessions: async () => (await import('../../sessions')).sessions,
+    secrets: async () => (await import('../runtime/runtimeEvents')).brokerSecretValues(),
+  }),
   ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser') }),
   ...createCanvasViewDefs({
     ui: async () => {

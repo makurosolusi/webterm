@@ -8,18 +8,19 @@ import type { Pane } from '../../../../shared/workspace'
 import { projectWorkspace } from '../../workspaceLookup'
 import type { ToolDef, ToolResult } from '../toolTypes'
 import { clip, MAX_PAGE, READ_TOOLS_FLAG, readPage } from './read.shared'
+import { createNodeSightDef, type NodeSightDeps } from './read.node.inspect'
 import { obj, S } from '../../../capability/capability.schema'
 
 const MAX_TITLE = 80
 const PTY_KINDS = new Set(['terminal', 'agent'])
 interface StoredNode { id?: unknown; name?: unknown; kind?: unknown; title?: unknown; agentId?: unknown; url?: unknown; panes?: Pane }
 
-export interface NodeReadDeps {
+export interface NodeReadDeps extends NodeSightDeps {
   /** Session liveness, resolved per call (production: the process-wide sessions); absent = no `live` field. */
   live?(): ((sessionId: string) => boolean) | Promise<(sessionId: string) => boolean>
 }
 
-/** Builds the R0 node list tool. */
+/** Builds the R0 node tools: node.list and node.inspect. */
 export function createNodeReadDefs(deps: NodeReadDeps = {}): ToolDef[] {
   const nodeList: ToolDef = {
     name: 'node.list',
@@ -58,5 +59,5 @@ export function createNodeReadDefs(deps: NodeReadDeps = {}): ToolDef[] {
       }
     },
   }
-  return [nodeList]
+  return [nodeList, createNodeSightDef(deps)]
 }

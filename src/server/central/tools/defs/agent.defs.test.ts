@@ -108,6 +108,10 @@ describe('agent tools', () => {
     const s = setup()
     const id = String((await s.spawn()).data?.agentId)
     expect((await s.run('agent.status', { projectId: 'p2', agentRef: id })).code).toBe('agent_not_found')
+    // A canvas node the user opened (e.g. "Dill") is no agent record: the miss points at node.inspect.
+    for (const tool of ['agent.status', 'agent.read']) {
+      expect(await s.run(tool, { projectId: 'p1', agentRef: 'Dill' })).toMatchObject({ ok: false, code: 'agent_not_found', data: { hint: expect.stringContaining('node.inspect') } })
+    }
     expect((await s.run('agent.status', { projectId: 'p1', agentRef: '../x' })).code).toBe('invalid_shape')
     expect((await s.run('agent.read', { projectId: 'p1', agentRef: id, tail: 9999 })).code).toBe('invalid_shape')
   })
