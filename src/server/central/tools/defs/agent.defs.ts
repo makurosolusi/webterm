@@ -42,7 +42,8 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
     const a = store.get(String(input.agentRef))
     return a && a.projectId === projectId ? a : null
   }
-  const notFound: ToolResult = { ok: false, code: 'agent_not_found' }
+  // A canvas node the user opened is not in the agent store; point Central at node.inspect instead of a dead end.
+  const notFound: ToolResult = { ok: false, code: 'agent_not_found', data: { hint: 'Not an agent started with agent.spawn. For a canvas node (see node.list) use node.inspect.' } }
   const withAgent = (fn: (ctx: ToolCtx, input: ToolInput, projectId: string, agent: AgentRecord) => Promise<ToolResult> | ToolResult): ToolDef['handler'] =>
     flagged((ctx, input, projectId) => { const a = find(input, projectId); return a ? fn(ctx, input, projectId, a) : notFound })
   /** Non-central agents need R2 on top of the R1 the tool already passed. */

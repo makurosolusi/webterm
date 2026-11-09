@@ -16,9 +16,12 @@ function el(cls = '', parent: Element = document.body): HTMLElement {
   parent.appendChild(e)
   return e
 }
-function scrolling(e: HTMLElement): HTMLElement {
+/** Content taller than the box; `overflow` decides whether the box clips it (auto) or paints it (visible). */
+function overflowing(e: HTMLElement, overflow: 'auto' | 'visible' = 'auto'): HTMLElement {
   Object.defineProperty(e, 'scrollHeight', { configurable: true, value: 5000 })
   Object.defineProperty(e, 'clientHeight', { configurable: true, value: 500 })
+  e.style.overflowX = overflow // longhands: jsdom does not expand the `overflow` shorthand
+  e.style.overflowY = overflow
   return e
 }
 
@@ -35,6 +38,15 @@ describe('shotFilter', () => {
     expect(keep(e)).toBe(false)
   })
 
+  // Chrome's checkVisibility() is false for `display: contents` (no box of its own), yet its children
+  // paint; the terminal node body sits in one (.tab-host-guard), so skipping it emptied every node.
+  test('keeps a display:contents wrapper the browser reports as not visible', () => {
+    const e = el('tab-host-guard')
+    e.style.display = 'contents'
+    ;(e as unknown as { checkVisibility: () => boolean }).checkVisibility = () => false
+    expect(keep(e)).toBe(true)
+  })
+
   test('keeps an on-screen element and one with no box', () => {
     expect(keep(at(el('react-flow__node'), 10, 10))).toBe(true)
     expect(keep(el('react-flow__node'))).toBe(true)
@@ -46,13 +58,26 @@ describe('shotFilter', () => {
   })
 
   test('skips an off-screen child of a scrolling parent (scrolled-out chat rows)', () => {
-    const list = scrolling(el())
+    const list = overflowing(el())
     expect(keep(at(el('', list), 0, 2000))).toBe(false)
     expect(keep(at(el('', list), 0, 100))).toBe(true)
   })
 
   test('keeps an off-screen container that is not self-contained (.react-flow__viewport)', () => {
     expect(keep(at(el('react-flow__viewport'), -3000, -3000))).toBe(true)
+  })
+
+  // Geometry measured in headless Chrome with the canvas panned to a node at (2000, 1500): the
+  // viewport overflows (nodes outside its box) without clipping, and the full-size .react-flow__nodes
+  // box moves off-screen with the pan while the centred node is on screen. Skipping that box dropped
+  // every node and edge from the shot.
+  test('keeps an off-screen child of an overflowing parent that does not clip (.react-flow__nodes)', () => {
+    const viewport = overflowing(at(el('react-flow__viewport'), -1352, -1230, 1252, 908) as HTMLElement, 'visible')
+    const nodes = at(el('react-flow__nodes', viewport), -1352, -1230, 1252, 908) as HTMLElement
+    expect(keep(nodes)).toBe(true)
+    expect(keep(at(el('react-flow__node', nodes), 648, 270, 600, 400))).toBe(true)
+    expect(keep(at(el('react-flow__node', nodes), -1252, -1130, 500, 300))).toBe(false)
+    expect(countShotElements(viewport, keep, 100)).toBe(2)
   })
 })
 

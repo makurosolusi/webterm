@@ -17,9 +17,9 @@ describe('parseClaudeMessage', () => {
     expect(parse(toolUseRecord('m1', 'tu1', 'mcp__webterm__project_read', { projectId: 'p1' }))).toMatchObject({
       type: 'assistant', toolUses: [{ id: 'tu1', name: 'mcp__webterm__project_read', input: { projectId: 'p1' } }],
     })
-    expect(parse(toolResultRecord('tu1', '{"outcome":"ok"}'))).toEqual({ type: 'tool_results', results: [{ toolUseId: 'tu1', isError: false, text: '{"outcome":"ok"}' }] })
+    expect(parse(toolResultRecord('tu1', '{"outcome":"ok"}'))).toEqual({ type: 'tool_results', results: [{ toolUseId: 'tu1', isError: false, texts: ['{"outcome":"ok"}'] }] })
     expect(parse(toolResultRecord('tu2', [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }], true)))
-      .toEqual({ type: 'tool_results', results: [{ toolUseId: 'tu2', isError: true, text: 'ab' }] })
+      .toEqual({ type: 'tool_results', results: [{ toolUseId: 'tu2', isError: true, texts: ['a', 'b'] }] })
     expect(parse({ type: 'user', message: { content: 'plain' } })).toBeNull()
   })
 
@@ -183,5 +183,33 @@ describe('applyClaudeEvent', () => {
     const done = events.filter((e) => e.type === 'tool.completed')
     expect(done[0]).toMatchObject({ ok: false, errorCode: 'approval_required', output: { data: { approvalId: 'ct-1' } } })
     expect(done[1]).toMatchObject({ ok: false, errorCode: 'tool_failed', output: { text: 'Claude Code: permission denied' } })
+  })
+
+  it('finds the receipt next to an image (marker text, image block, or flattened string)', () => {
+    const { events, apply } = setup()
+    const receipt = JSON.stringify({ outcome: 'ok', detail: 'ok', data: { mimeType: 'image/jpeg', bytes: 132252 } })
+    const contents: unknown[] = [
+      [{ type: 'text', text: '[Image: source: /tmp/x.jpg]' }, { type: 'text', text: receipt }],
+      [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } }, { type: 'text', text: receipt }],
+      `[Image: source: /tmp/x.jpg]${receipt}`,
+    ]
+    contents.forEach((content, i) => {
+      apply(toolUseRecord(`m${i}`, `s${i}`, 'mcp__webterm__canvas_screenshot'))
+      apply(toolResultRecord(`s${i}`, content))
+    })
+    const done = events.filter((e) => e.type === 'tool.completed')
+    expect(done).toHaveLength(3)
+    for (const e of done) expect(e).toMatchObject({ ok: true, output: { outcome: 'ok', data: { bytes: 132252 } } })
+  })
+
+  it('keeps a non-JSON result (even beside an image marker) a tool_failed card', () => {
+    const { events, apply } = setup()
+    apply(toolUseRecord('m1', 'a', 'mcp__webterm__canvas_screenshot'))
+    apply(toolResultRecord('a', 'Claude Code: permission denied'))
+    apply(toolUseRecord('m2', 'b', 'mcp__webterm__canvas_screenshot'))
+    apply(toolResultRecord('b', [{ type: 'text', text: '[Image: source: /tmp/x.jpg]' }, { type: 'text', text: 'oops' }]))
+    const done = events.filter((e) => e.type === 'tool.completed')
+    expect(done[0]).toMatchObject({ ok: false, errorCode: 'tool_failed', output: { text: 'Claude Code: permission denied' } })
+    expect(done[1]).toMatchObject({ ok: false, errorCode: 'tool_failed', output: { text: '[Image: source: /tmp/x.jpg]oops' } })
   })
 })
