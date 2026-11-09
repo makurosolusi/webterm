@@ -11,6 +11,7 @@ import { createRegistry } from '../toolRegistry'
 import type { ToolCtx, Tier } from '../toolTypes'
 import { createCanvasActDefs, type NodeCanvas } from './canvas.act.defs'
 import { READ_TOOLS_FLAG } from './read.shared'
+import { resolveClaudeLaunch } from '../../../claudeLauncher/claudeLauncher'
 
 // test-only board of project p1 (workspace w-p1, seeded by seedPortfolio).
 const BOARD: CanvasNode[] = [
@@ -150,6 +151,24 @@ describe('canvas.open', () => {
     const node = adds[0]!.nodes[0]!
     expect(node).toMatchObject({ kind: 'agent', agentId: 'claude', cwd: '/srv/alpha', cmd: expect.stringContaining('claude'), claudeProfileId: expect.any(String) })
     expect(node.sessionId).toBeUndefined()
+  })
+
+  it('opens N Agent Chat nodes like the board does, with the resolved default launch profile', async () => {
+    const res = await open({ kind: 'chat', count: 2 })
+    await open({ kind: 'chat', title: 'review' })
+    const [two, one] = adds
+    const chat = { kind: 'agentChat', agentId: 'claude', cwd: '/srv/alpha', claudeProfileId: resolveClaudeLaunch().profile.id }
+    expect(two!.nodes).toEqual([expect.objectContaining({ ...chat, title: 'Agent Chat' }), expect.objectContaining({ ...chat, title: 'Agent Chat' })])
+    expect(one!.nodes[0]).toMatchObject({ ...chat, title: 'review' })
+    for (const n of [...two!.nodes, ...one!.nodes]) expect([n.chatSessionId, n.sessionId, n.cmd]).toEqual([undefined, undefined, undefined])
+    expect(res).toMatchObject({ ok: true, data: { count: 2, kind: 'chat', opened: [{ kind: 'agentChat' }, { kind: 'agentChat' }] } })
+  })
+
+  it('refuses a chat with a url, a path or a count out of range', async () => {
+    for (const bad of [{ url: 'https://example.com' }, { path: 'src' }, { count: 0 }, { count: 6 }]) {
+      expect(await open({ kind: 'chat', ...bad })).toMatchObject({ ok: false, code: 'invalid_shape' })
+    }
+    expect(adds).toEqual([])
   })
 
   it('opens a browser at the normalized url (page start applies the nav guard) or blank', async () => {

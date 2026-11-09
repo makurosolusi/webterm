@@ -6,6 +6,7 @@ import { createRegistry } from '../toolRegistry'
 import type { ToolCtx } from '../toolTypes'
 import { createNodeReadDefs, type NodeReadDeps } from './read.node'
 import { READ_TOOLS_FLAG } from './read.shared'
+import type { ChatPort, ChatSnapshot } from '../../../agentChat/agentChat.port'
 
 let f: Fixture
 let unregister = (): void => undefined
@@ -79,5 +80,15 @@ describe('node.list', () => {
       ['b1', undefined, 'github.com'], ['b2', undefined, undefined], ['f1', undefined, undefined],
     ])
     expect(JSON.stringify(items)).not.toContain('token=abc')
+  })
+  it('reports live for Agent Chat nodes from the chat port, and none without it', async () => {
+    workspace([{ id: 'c1', kind: 'agentChat', agentId: 'claude' }, { id: 'c2', kind: 'agentChat', agentId: 'claude' }, { id: 't1', kind: 'terminal' }])
+    const asked: string[] = []
+    const snap = (live: boolean): ChatSnapshot => ({ live, status: null, model: null, config: { model: null, effort: null, thinking: false }, permissionMode: null, costUsd: null, contextPct: null, pending: null })
+    const port = { snapshot: (ws: string, id: string) => { asked.push(`${ws}/${id}`); return snap(id === 'c2') } } as unknown as ChatPort
+    const items = async (deps: NodeReadDeps) => ((await execTool(ctx(deps), 'node.list', { projectId: 'p1' })).data as { items: Array<Record<string, unknown>> }).items
+    expect((await items({ chats: () => port })).map((i) => [i.id, i.live])).toEqual([['c1', false], ['c2', true], ['t1', undefined]])
+    expect(asked).toEqual(['w-p1/c1', 'w-p1/c2'])
+    expect((await items({})).map((i) => i.live)).toEqual([undefined, undefined, undefined])
   })
 })

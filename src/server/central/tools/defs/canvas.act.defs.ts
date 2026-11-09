@@ -8,6 +8,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import type { Database } from 'bun:sqlite'
 import { agentConfig } from '../../../../shared/workspace'
+import { buildAgentChatNode } from '../../../../shared/agentChat.node'
 import { parseBrowserUrl } from '../../../../shared/browser.url'
 import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import type { CanvasNode, CanvasPush } from '../../../canvas/canvasPush'
@@ -35,7 +36,7 @@ const MAX_OPEN = 5
 const MAX_TITLE = 80
 const MAX_REASON = 200
 const MAX_PATH = 1024
-const KINDS = ['terminal', 'claude', 'browser', 'files', 'editor', 'diff'] as const
+const KINDS = ['terminal', 'claude', 'chat', 'browser', 'files', 'editor', 'diff'] as const
 type Kind = (typeof KINDS)[number]
 /** Kinds that open in the project directory, so they need the workspace cwd. */
 const DIR_KINDS: readonly Kind[] = ['files', 'editor', 'diff']
@@ -61,7 +62,7 @@ function openShape(input: ToolInput): boolean {
   const { kind, count, title, url, path } = input
   if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url', 'path'])) return false
   if (!KINDS.includes(kind as Kind)) return false
-  const many = kind === 'terminal' || kind === 'claude'
+  const many = kind === 'terminal' || kind === 'claude' || kind === 'chat'
   if (count !== undefined && (!many || !Number.isSafeInteger(count) || (count as number) < 1 || (count as number) > MAX_OPEN)) return false
   if (title !== undefined && !text(title, MAX_TITLE)) return false
   if (kind === 'editor' ? !text(path, MAX_PATH) : path !== undefined && (kind !== 'files' || !text(path, MAX_PATH))) return false
@@ -103,7 +104,7 @@ export function liveAgentNodes(db: Database, projectId: string, ids: string[]): 
   return byNode
 }
 
-/** The node the client builds (App.board.ts terminal/agent/files/diff, useBrowserOpen.ts, Omnibox.open.ts
+/** The node the client builds (App.board.ts terminal/agent/files/diff, agentChat.add.ts chat, useBrowserOpen.ts, Omnibox.open.ts
  *  editor); x/y are placed by CanvasPush. `path` is the resolved dir (files) or file (editor). */
 function buildNode(kind: Kind, cwd: string | undefined, title: string | undefined, url: string | undefined, path: string | undefined): CanvasNode {
   const base = { id: randomUUID(), x: 0, y: 0, ...(title ? { title } : {}) }
@@ -111,6 +112,8 @@ function buildNode(kind: Kind, cwd: string | undefined, title: string | undefine
   if (kind === 'files') return { ...base, kind: 'files', dirPath: path ?? cwd }
   if (kind === 'editor') return { ...base, kind: 'editor', title: title ?? basename(path!), filePath: path, ...EDITOR_SIZE }
   if (kind === 'diff') return { ...base, kind: 'diff', cwd, title: title ?? 'Changes' }
+  // Agent Chat: the board's own builder (client agentChat.add.ts), with the resolved default profile.
+  if (kind === 'chat') return { ...buildAgentChatNode(base.id, cwd, resolveClaudeLaunch().profile.id), x: 0, y: 0, ...(title ? { title } : {}) }
   const where = cwd ? { cwd } : {}
   if (kind === 'terminal') return { ...base, kind: 'terminal', ...where }
   // Builtin claude records the default launch profile, as template.instantiate.ts does; no sessionId:
@@ -159,13 +162,13 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
 
   const open: ToolDef = {
     name: 'canvas.open',
-    summary: 'Open terminal, Claude, browser, files, file editor or git diff nodes on a project canvas.',
+    summary: 'Open terminal, Claude, Agent Chat, browser, files, file editor or git diff nodes on a project canvas.',
     tier: 'R1',
     flag: READ_TOOLS_FLAG,
-    usage: '{"projectId":"<id>","kind":"terminal"|"claude"|"browser"|"files"|"editor"|"diff","count":<1-5, default 1; terminal/claude only>,'
+    usage: '{"projectId":"<id>","kind":"terminal"|"claude"|"chat"|"browser"|"files"|"editor"|"diff","count":<1-5, default 1; terminal/claude/chat only>,'
       + '"title":"<optional, <=80 chars>","url":"<optional http(s) URL; browser only>","path":"<files: optional folder, default the '
       + 'project directory; editor: required file>"}. path is relative to the project directory (absolute also works) and must stay inside it. '
-      + 'An editor for a file already open is reused, not doubled. diff shows the project\'s git changes. Nodes open in free space in the '
+      + 'chat is an Agent Chat node (Claude without a terminal). An editor for a file already open is reused, not doubled. diff shows the project\'s git changes. Nodes open in free space in the '
       + 'project directory. A browser url passes the same navigation guard as the user; a blocked one leaves the page blank.',
     input: obj({ kind: S.oneOf(...KINDS), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str(), path: S.str(MAX_PATH) }, ['kind']),
     output: S.keys('opened', 'count', 'kind', 'ids'),

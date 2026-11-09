@@ -22,6 +22,7 @@ import { createCanvasGroupDefs } from './defs/canvas.group.defs'
 import { createCanvasShotDefs } from './defs/canvas.shot.def'
 import { createCanvasTypeDefs } from './defs/canvas.type.defs'
 import { createCanvasViewDefs } from './defs/canvas.view.defs'
+import { createChatDefs } from './defs/chat.defs'
 import { createNodeReadDefs } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
@@ -51,8 +52,10 @@ const on = (env: Env, name: string): boolean => flagOn(env[name])
 const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?? '').trim().toLowerCase())
 // Loaded on first call, not at import: the board runtime opens webterm.db and `sessions` boots the PTY
 // supervisor, neither of which a module that merely registers tools (or its tests) should trigger.
+const chats = async () => (await import('../../agentChat/agentChat.runtime')).agentChatPort()
 const nodeDefs = (): ToolDef[] => [
   ...createNodeReadDefs({
+    chats,
     live: async () => { const { sessions } = await import('../../sessions'); return (id) => sessions.isLive(id) },
     sessions: async () => (await import('../../sessions')).sessions,
     secrets: async () => (await import('../runtime/runtimeEvents')).brokerSecretValues(),
@@ -67,6 +70,7 @@ const nodeDefs = (): ToolDef[] => [
   ...createCanvasShotDefs(),
   ...createCanvasTypeDefs({ sessions: async () => (await import('../../sessions')).sessions }),
   ...createCanvasEditDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),
+  ...createChatDefs({ chats }),
   ...createCanvasGroupDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),
   ...createWorkspaceDefs({
     runtime: async () => {
