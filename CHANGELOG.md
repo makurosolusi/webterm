@@ -199,6 +199,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- A browser node whose page got detached from Chromium no longer stays broken with a false "unexpected gateway failure" error in the log: webterm notices the lost page and reopens it the next time the node is shown.
 - The Central chat no longer marks a canvas screenshot (or any tool that returns an image) as failed when it succeeded. Claude Code sends an image result as an `[Image: …]` text block plus the receipt JSON, and the two were joined before parsing.
 - `canvas.screenshot` now captures the nodes and edges. They were dropped when the canvas was panned (React Flow's viewport overflows but does not clip, yet was treated as a clipping container) and for terminal nodes, whose `display: contents` wrapper `checkVisibility()` reports as not visible.
 - Clicking a session in Sessions no longer makes the list jump between workspaces.
