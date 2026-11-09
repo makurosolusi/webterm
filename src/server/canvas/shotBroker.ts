@@ -27,7 +27,8 @@ export interface ShotBroker {
 
 /** Must outwait the client's capture timeout (canvasShot.ts CAPTURE_TIMEOUT_MS): modern-screenshot can be slow on fonts/images. */
 export const SHOT_TIMEOUT_MS = 15_000
-const MAX_PENDING = 4
+/** One screenshot at a time process-wide: a tab can only run one capture, and a second clones the page again. */
+const MAX_PENDING = 1
 /** Answered ids are remembered this long so a second tab gets 409 instead of 404. */
 const ANSWERED_CAP = 64
 

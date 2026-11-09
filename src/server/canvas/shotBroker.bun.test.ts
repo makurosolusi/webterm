@@ -49,6 +49,19 @@ describe('shot broker', () => {
     await Promise.all([a, c])
   })
 
+  test('by default one screenshot at a time: a second concurrent request is busy, then the slot frees', async () => {
+    const { b, frames } = broker()
+    const a = b.request(800)
+    expect(await b.request(800)).toEqual({ ok: false, code: 'busy' })
+    expect(frames).toHaveLength(1)
+    b.answer(frames[0]!.reqId, IMG)
+    expect(await a).toEqual(IMG)
+    const c = b.request(800)
+    expect(frames).toHaveLength(2)
+    b.answer(frames[1]!.reqId, IMG)
+    await c
+  })
+
   test('a failed broadcast rejects with a code and frees the slot', async () => {
     const b = createShotBroker({ broadcast: () => { throw new Error('socket gone') }, maxPending: 1 })
     expect(await b.request(800).catch((e: unknown) => e)).toMatchObject({ code: 'broadcast_failed' })
