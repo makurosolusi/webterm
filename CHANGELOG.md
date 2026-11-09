@@ -116,6 +116,10 @@ Operator notes:
 - Agent Chat: when you are close to or over your plan's usage limit, one notice says so and when the limit resets; it goes away after the next successful turn.
 - Agent Chat: a Tasks list above the composer shows the subagents and background tasks Claude starts, with their progress and a Stop button for a running one.
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
+- Central can drive Agent Chat nodes: `chat.send` sends a message (asks you first), `chat.config` sets the model (sonnet, opus, haiku or Auto), effort or thinking like the footer pickers, and `chat.mode` switches the permission mode (asks you first; bypass permissions stays your own switch).
+- Central's `node.inspect` reads an Agent Chat node: status, model and settings, permission mode, cost, context use, a waiting permission request and the last turns of the conversation, with secrets redacted. `node.list` shows whether a chat is live.
+- Central's `canvas.open` can open Agent Chat nodes (`kind: "chat"`).
+- When Central tries to type into an Agent Chat node, it is pointed to the chat tools instead.
 
 ### Changed
 - Sessions now lists every workspace top to bottom in tab order, including the one you have open. Each shows a status dot, its name, a "Current" chip on the open one, its folder and git branch, and its sessions right below. Clicking a session in another workspace still switches to it, and the list no longer reshuffles.
@@ -197,6 +201,7 @@ Operator notes:
 - Every start has an access token, loopback included: `WEBTERM_TOKEN`, else `<data dir>/secrets/WEBTERM_TOKEN`, created on first start (mode `600`). The terminal line names the file, never the value. Scripts send it in the `x-webterm-token` header.
 - The webterm page uses only its session cookie for `/api`, `/ws` and live streams. A `?token=` link still signs a browser in once and then disappears from the address bar; the server no longer accepts a token in any URL.
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
+- A terminal Claude node whose saved profile is a default that no longer exists now launches with Default without the missing-profile notice. A profile you picked yourself and then deleted still shows the notice.
 
 ### Fixed
 - A browser node whose page got detached from Chromium no longer stays broken with a false "unexpected gateway failure" error in the log: webterm notices the lost page and reopens it the next time the node is shown.
@@ -277,6 +282,10 @@ Operator notes:
 - Settings and feature toggles no longer fail with 403 in the signed-in web UI. Changes now also work from a remote web channel or behind a reverse proxy.
 - When a settings change is refused because your session has ended, the message now says "Your session has ended. Reload to sign in again." instead of pointing you to 127.0.0.1 or the access token.
 - Canvas nodes saved by a newer webterm version, or partly corrupted, are no longer deleted on the next save, and their running terminal sessions are no longer cleaned up as left behind.
+- An Agent Chat node no longer warns "This node's Claude launch profile no longer exists" and launches plain `claude` when it uses the default profile: chat and terminal nodes now pick the launch profile the same way.
+- Deleting the Claude launch profile that is the default (or Central's) moves that setting back to Default instead of leaving it pointing at nothing.
+- An Agent Chat's saved model, effort and thinking now apply when its session starts. Its session, settings and permission mode are saved on the server as they change, so they survive with no window open and other open windows follow live.
+- Closing an Agent Chat node from Central now ends its Claude process instead of leaving it running.
 
 ### Removed
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

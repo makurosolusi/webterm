@@ -19,7 +19,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settin
 import { applySettingsPatch } from '../shared/settings.patch'
 import { projectModelsPatchErrors } from '../shared/settings.projectModels'
 import { inputHistoryPatchErrors } from '../shared/settings.inputHistory'
-import { seedClaudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
+import { DEFAULT_CLAUDE_PROFILE, seedClaudeProfiles, type ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 import { createLogger } from './logs'
 
@@ -101,12 +101,33 @@ export function nextSettingsDocument(storedJson: string | null, patch: unknown):
   const historyErrors = inputHistoryPatchErrors(p.inputHistory)
   if (historyErrors.length) throw new SettingsValidationError(historyErrors)
   const accepted = Object.fromEntries(Object.entries(p).filter(([k, v]) => acceptsShape(k, v)))
-  const doc = applySettingsPatch(storedDocument(storedJson), accepted)
-  const settings = mergeSettings(doc, warnDropped)
+  const stored = storedDocument(storedJson)
+  const doc = applySettingsPatch(stored, accepted)
+  let settings = mergeSettings(doc, warnDropped)
   for (const k of Object.keys(accepted)) doc[k] = settings[k as keyof Settings]
+  const pointers = droppedProfilePointers(mergeSettings(stored), settings)
+  if (Object.keys(pointers).length) {
+    Object.assign(doc, pointers)
+    settings = { ...settings, ...pointers }
+  }
   // The one-time load migration (legacy claude command -> profile) is persisted with the write.
   Object.assign(doc, seedClaudeProfiles(doc, settings.agentLaunchCommands.claude))
   return { doc, settings }
+}
+
+/**
+ * Every writer (the profiles card, the provider card, any PUT): a write that removes the profile the
+ * default or Central points at moves that pointer to where launches fall back (Default / '' = follow the
+ * default), like the profiles card does. Only a removal in THIS write: an already-dangling default (old data)
+ * is left alone, the launcher reads it as Default (`claudeLauncher.effective`), so its nodes keep launching silently.
+ */
+function droppedProfilePointers(prev: Settings, next: Settings): Partial<ClaudeLaunchSettings> {
+  const removed = (id: string): boolean =>
+    prev.claudeLaunchProfiles.some((p) => p.id === id) && !next.claudeLaunchProfiles.some((p) => p.id === id)
+  return {
+    ...(removed(next.defaultClaudeProfileId) ? { defaultClaudeProfileId: DEFAULT_CLAUDE_PROFILE.id } : {}),
+    ...(removed(next.centralClaudeProfileId) ? { centralClaudeProfileId: '' } : {}),
+  }
 }
 
 /** The normalized snapshot after `patch` (see `nextSettingsDocument`). */

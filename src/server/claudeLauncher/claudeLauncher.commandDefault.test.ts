@@ -1,7 +1,7 @@
 // Provider command mode makes its launch profile the default for new agents, Central and helpers;
 // an explicit node profile still wins, and a deleted profile falls back to Default.
 import { afterEach, describe, expect, it } from 'vitest'
-import { applyNodeClaudeProfile, centralClaudeLaunch, claudeCommand, registerClaudeLaunchSettings, registerDefaultProfileOverride, resolveClaudeLaunch } from './claudeLauncher'
+import { applyNodeClaudeProfile, centralClaudeLaunch, claudeCommand, nodeClaudeLaunch, registerClaudeLaunchSettings, registerDefaultProfileOverride, resolveClaudeLaunch } from './claudeLauncher'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
 
 const SETTINGS = {
@@ -54,5 +54,27 @@ describe('default profile override', () => {
   it('no override = stored settings', () => {
     registerClaudeLaunchSettings(() => ({ ...SETTINGS, defaultClaudeProfileId: 'b' }))
     expect(resolveClaudeLaunch().profile.id).toBe('b')
+  })
+  it('a stale stored default (profile gone) + command mode: nodes carrying it follow the live profile, no notice', () => {
+    registerClaudeLaunchSettings(() => ({ ...SETTINGS, defaultClaudeProfileId: 'custom' }))
+    registerDefaultProfileOverride(() => 'a')
+    const r = nodeClaudeLaunch('custom')
+    expect(r.profile.id).toBe('a')
+    expect(r.missingId).toBe(undefined)
+    const t = applyNodeClaudeProfile({ agentId: 'claude', cmd: 'claude', claudeProfileId: 'custom' })
+    expect(t.msg.cmd).toBe('envman -e claude:a -- claude')
+    expect(t.notice).toBe(undefined)
+  })
+  it('a stale stored default without command mode reads as Default, silently (default, Central, nodes)', () => {
+    registerClaudeLaunchSettings(() => ({ ...SETTINGS, defaultClaudeProfileId: 'custom' }))
+    expect(resolveClaudeLaunch().missingId).toBe(undefined)
+    expect(centralClaudeLaunch().profile.id).toBe('default')
+    expect(applyNodeClaudeProfile({ agentId: 'claude', cmd: 'x', claudeProfileId: 'custom' })).toEqual({ msg: { agentId: 'claude', cmd: 'claude', claudeProfileId: 'custom' } })
+  })
+  it('a genuinely deleted non-default node profile is still missing, with the notice', () => {
+    registerClaudeLaunchSettings(() => ({ ...SETTINGS, defaultClaudeProfileId: 'custom' }))
+    registerDefaultProfileOverride(() => 'a')
+    expect(nodeClaudeLaunch('gone').missingId).toBe('gone')
+    expect(applyNodeClaudeProfile({ agentId: 'claude', cmd: 'x', claudeProfileId: 'gone' }).notice).toMatch(/no longer exists/)
   })
 })

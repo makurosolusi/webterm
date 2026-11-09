@@ -39,10 +39,11 @@ export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // version `updatedAt`: the UI merges ids it lacks (`base` tells a window whether it knew what lay underneath).
 // `removed` = node ids the server took off the board (their sessions already ended) along with every
 // cable touching them; such a frame carries empty `nodes`/`bridges`.
-// `updated` = existing nodes the server patched (full node; the UI takes its x/y/size/title/color/collapsed/hideLinks).
+// `updated` = existing nodes the server patched (full node; the UI takes its x/y/size/title/color/collapsed/hideLinks,
+// and an agent chat node's chatSessionId/chatConfig/permissionMode, which its server session stores as they change).
 // `unlinked` = cable ids the server removed.
 /** The fields of an `updated` node a window takes from the push (server `canvasPush.update`). */
-export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks'] as const
+export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks', 'chatSessionId', 'chatConfig', 'permissionMode'] as const
 // `groups` = the board's whole Layers group list after a server edit (`canvasPush.groups`); the UI
 // takes it as is and re-packs members into its own tab `order`.
 // `name` = the board's new name (Central's `workspace.rename`); versioned like every push, so an unsent

@@ -232,7 +232,7 @@ registerCanvasBroadcast((msg) => {
   const frame = JSON.stringify(msg)
   for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(frame)
 })
-registerCanvasTeardown(createCanvasTeardown({ sessions, browser: activeBrowser }))
+registerCanvasTeardown(createCanvasTeardown({ sessions, browser: activeBrowser, agentChats: activeAgentChatPool }))
 const browserWss = new WebSocketServer({ noServer: true }) // terpisah: handler 'connection' PTY tidak boleh melihat socket browser
 server.on('upgrade', (req, socket, head) => {
   // Only /ws is ours. In dev Vite's upgrade listener (same server) already claimed its HMR upgrade,

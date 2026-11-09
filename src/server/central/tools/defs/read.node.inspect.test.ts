@@ -11,6 +11,7 @@ import type { ToolCtx } from '../toolTypes'
 import { createNodeReadDefs, type NodeReadDeps } from './read.node'
 import { lastAssistantModel, type NodeSessionView } from './read.node.inspect'
 import { READ_TOOLS_FLAG } from './read.shared'
+import type { ChatPort, ChatSnapshot, ChatTurn } from '../../../agentChat/agentChat.port'
 
 /** Real registry behind the sessions (status, transcript path, exit tombstone); no PTY is ever started. */
 class Probe extends SessionsCore {
@@ -128,6 +129,58 @@ describe('node.inspect', () => {
     const res = await read({ sessions: () => { throw new Error('sessions must not be touched') } }, { nodeRef: 'Fig' })
     expect(res.data).toMatchObject({ kind: 'browser', live: false, status: null, model: null, output: [] })
     expect(JSON.stringify(res)).not.toContain('token=abc')
+  })
+})
+
+describe('node.inspect on an Agent Chat node', () => {
+  const snap: ChatSnapshot = {
+    live: true, status: 'thinking', model: 'claude-opus-4-6', config: { model: 'opus', effort: 'high', thinking: true },
+    permissionMode: 'default', costUsd: 0.42, contextPct: 37, pending: null,
+  }
+  function port(s: ChatSnapshot, turns: ChatTurn[]): { port: ChatPort; maxes: number[] } {
+    const maxes: number[] = []
+    const p = { snapshot: () => s, tail: async (_ws: string, _id: string, max: number) => { maxes.push(max); return turns.slice(-max) } } as unknown as ChatPort
+    return { port: p, maxes }
+  }
+  const turns: ChatTurn[] = Array.from({ length: 60 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `turn ${i}` }))
+
+  it('reports the chat status, config, cost and the last turns as lines', async () => {
+    workspace([{ id: 'ch1', kind: 'agentChat', agentId: 'claude', name: 'Plum', cwd: '/home/u/x', chatSessionId: 'sess-9' }])
+    const { port: p, maxes } = port(snap, turns)
+    const res = await read({ chats: () => p, sessions: () => { throw new Error('PTY sessions must not be touched') } }, { nodeRef: 'plum', tail: 3 })
+    expect(res.data).toEqual({
+      id: 'ch1', name: 'Plum', kind: 'agentChat', title: null, agentId: 'claude', live: true, status: 'thinking', model: 'claude-opus-4-6',
+      config: { model: 'opus', effort: 'high', thinking: true }, permissionMode: 'default', costUsd: 0.42, contextPct: 37, pending: null,
+      output: ['assistant: turn 57', 'user: turn 58', 'assistant: turn 59'],
+    })
+    expect(maxes).toEqual([3])
+    expect(((await read({ chats: () => p }, { nodeRef: 'Plum' })).data as { output: string[] }).output.length).toBe(50)
+    for (const leak of ['/home/u/x', 'sess-9']) expect(JSON.stringify(res)).not.toContain(leak)
+  })
+
+  it('redacts secrets in turns and the pending summary, clips long turns, hints at a pending permission', async () => {
+    workspace([{ id: 'ch1', kind: 'agentChat', agentId: 'claude', name: 'Plum' }])
+    const pending = { tool: 'Bash', summary: 'curl -H broker-secret-value-123 x' }
+    const { port: p } = port({ ...snap, status: 'awaiting', pending }, [
+      { role: 'user', text: 'use sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123 and broker-secret-value-123' },
+      { role: 'assistant', text: 'y'.repeat(5000) },
+    ])
+    const data = (await read({ chats: () => p, secrets: () => ['broker-secret-value-123'] }, { nodeRef: 'Plum' })).data as Record<string, unknown> & { output: string[] }
+    expect(data.output[0]).toMatch(/^user: use \[redacted\]/)
+    expect(data.output[1].length).toBe(2000)
+    expect(data.pending).toEqual({ tool: 'Bash', summary: 'curl -H [redacted] x' })
+    expect(data.hint).toMatch(/waiting for the user.*cannot answer/i)
+    const dump = JSON.stringify(data)
+    for (const leak of ['broker-secret-value-123', 'abcdefghijklmnopqrstuvwxyz0123']) expect(dump).not.toContain(leak)
+  })
+
+  it('without the chat port a chat node reads blank, and PTY nodes never touch the port', async () => {
+    workspace([{ id: 'ch1', kind: 'agentChat', agentId: 'claude', name: 'Plum' }, { id: 't1', kind: 'terminal', name: 'Mango' }])
+    expect((await read({}, { nodeRef: 'Plum' })).data).toEqual({ id: 'ch1', name: 'Plum', kind: 'agentChat', title: null, agentId: 'claude', live: false, status: null, model: null, output: [] })
+    const boom = () => { throw new Error('chat port must not be touched') }
+    const core = new Probe()
+    const res = await read({ chats: boom, sessions: () => ({ ...bind(core), getTerminal: () => 'hello' }) }, { nodeRef: 'Mango' })
+    expect(res.data).toEqual({ id: 't1', name: 'Mango', kind: 'terminal', title: null, agentId: null, live: false, status: null, model: null, output: ['hello'] })
   })
 })
 

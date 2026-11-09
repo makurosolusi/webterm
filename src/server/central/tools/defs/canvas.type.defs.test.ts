@@ -18,6 +18,7 @@ const BOARD: CanvasNode[] = [
   { id: 'n4', kind: 'terminal', x: 0, y: 0, name: 'Otter' },
   { id: 'c-ag1', kind: 'agent', x: 0, y: 0, agentId: 'claude' },
   { id: 'c-ag2', kind: 'agent', x: 0, y: 0, agentId: 'claude' },
+  { id: 'n5', kind: 'agentChat', x: 0, y: 0, name: 'Puffin' },
 ]
 const SECRET = 'export API_PASS=hunter2'
 
@@ -100,6 +101,11 @@ describe('canvas.type', () => {
       { keys: [1] }, { keys: ['Escape'], submit: true }, { submit: false },
     ]
     for (const input of bad) expect(await type({ nodeId: 'n1', ...input })).toMatchObject({ ok: false, code: 'invalid_shape' })
+    expect(typed).toEqual([])
+  })
+
+  it('points an Agent Chat node to the chat tools', async () => {
+    expect(await type({ nodeId: 'Puffin', text: 'hi' })).toMatchObject({ ok: false, code: 'use_chat_tool', data: { nodeId: 'n5', hint: expect.stringContaining('chat.send') } })
     expect(typed).toEqual([])
   })
 

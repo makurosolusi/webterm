@@ -10,7 +10,7 @@ import type { AgentChatConfig } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
 import { AGENT_CHAT_DEFAULT_CONFIG, configOptions } from './agentChat.controls'
 import { agentChatLadderPick, withLadderDefault } from './agentChat.ladder'
-import { missingProfileNotice, resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
+import { missingProfileNotice, nodeClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import { claudeSdkSpawn, type SpawnImpl } from '../claudeLauncher/claudeSdkSpawn'
 import { writeClaudeSettings, writeHouseRules } from '../hooksSettings'
 import { writeClaudeMcpConfig } from '../mcp/mcp.launch'
@@ -52,7 +52,8 @@ export interface AgentChatOptionsInput {
 
 /** SDK options for one `query()`; `notice` is set when the node's launch profile no longer exists. */
 export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Options; notice?: string } {
-  const launch = resolveClaudeLaunch(i.profileId)
+  // Same rule as a terminal node with this claudeProfileId (stored default follows command mode).
+  const launch = nodeClaudeLaunch(i.profileId)
   const mode = agentChatPermissionMode(i.mode)
   // Only this node's staged files, never other nodes': created first, the CLI expects an existing dir.
   const uploads = agentChatUploadsDir(i.nodeId, i.uploadsRoot)

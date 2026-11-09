@@ -27,6 +27,17 @@ describe('createCanvasTeardown', () => {
     await Promise.resolve()
     expect(closeNode).toHaveBeenCalledWith('b1')
   })
+
+  it('closes the chat session of each agent chat node only, and never boots a missing pool', () => {
+    const closeNodes = vi.fn()
+    const close = vi.fn()
+    const nodes: WsNode[] = [...NODES, { id: 'c1', kind: 'agentChat', x: 0, y: 0 }]
+    createCanvasTeardown({ sessions: { closeNodes }, browser: () => null, agentChats: () => ({ close }) })(nodes)
+    expect(close.mock.calls).toEqual([['c1', 'node removed']])
+    const noPool = vi.fn(() => undefined)
+    expect(() => createCanvasTeardown({ sessions: { closeNodes }, browser: () => null, agentChats: noPool })(nodes)).not.toThrow()
+    expect(noPool).toHaveBeenCalled()
+  })
 })
 
 describe('sessionIdsOf (shared by client and server close paths)', () => {

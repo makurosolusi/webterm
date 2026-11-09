@@ -2,6 +2,7 @@
 // Mango"), the same input path a human keystroke and the control API's node.prompt take (sessions.input).
 // It can also press named keys (Escape, C-c, arrows...) first, e.g. to leave a TUI panel before typing.
 // The typed text is never echoed in the output or the audit row: it may hold anything the user dictated.
+import { AGENT_CHAT_KIND } from '../../../../shared/agentChat.shape'
 import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import { MAX_PROMPT_CHARS } from '../../../control/controlTypes'
 import { projectWorkspace } from '../../workspaceLookup'
@@ -72,6 +73,9 @@ export function createCanvasTypeDefs(deps: CanvasTypeDeps): ToolDef[] {
       const hit = named.find((n) => n.id === ref) ?? named.find((n) => n.name.toLowerCase() === ref.toLowerCase())
       if (!hit) return fail('node_not_found', { nodeId: ref })
       const kind = board.find((n) => String(n.id) === hit.id)?.kind
+      if (kind === AGENT_CHAT_KIND) {
+        return fail('use_chat_tool', { nodeId: hit.id, hint: 'This is an Agent Chat node: send messages with chat.send and change its model with chat.config.' })
+      }
       if (!TYPEABLE.has(String(kind))) return fail('not_a_terminal', { nodeId: hit.id, kind: kind ?? null })
       // Same guard as canvas.close: a worker you spawned is driven through agent.*, not typed into.
       const agentRef = liveAgentNodes(ctx.db, String(projectId), [hit.id]).get(hit.id)
