@@ -7,7 +7,7 @@ export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'node.list': { title: 'List nodes', text: 'Lists the terminals, agents, browsers and files on a project canvas.' },
   'node.inspect': { title: 'Read a node', text: 'Reads what a terminal or Claude session on the canvas shows, its status and model.' },
   'canvas.open': { title: 'Open nodes', text: 'Opens new terminals, Claude sessions, a browser, files, an editor or a diff on a project canvas.' },
-  'canvas.type': { title: 'Type in a terminal', text: 'Types a command into a terminal or Claude node after you approve.' },
+  'canvas.type': { title: 'Type in a terminal', text: 'Types into or presses keys in a terminal or Claude node after you approve.' },
   'canvas.edit': { title: 'Arrange nodes', text: 'Moves, resizes, arranges, renames, recolors and connects nodes on a project canvas.' },
   'canvas.group': { title: 'Group nodes', text: 'Puts nodes into folders in the Layers panel.' },
   'canvas.close': { title: 'Close nodes', text: 'Closes nodes on a project canvas after you approve; you can reopen them.' },
