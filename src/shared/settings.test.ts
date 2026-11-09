@@ -130,3 +130,16 @@ describe('keybindings', () => {
     expect(Object.keys(normalizeKeybindings(many)).length).toBe(KEYBINDINGS_LIMITS.entries)
   })
 })
+
+describe('quickDrag', () => {
+  it('defaults to ⌘⌃ and keeps every known preset', () => {
+    expect(DEFAULT_SETTINGS.quickDrag).toBe('cmdCtrl')
+    for (const p of ['cmdCtrl', 'cmdShift', 'off'] as const) expect(mergeSettings({ quickDrag: p }).quickDrag).toBe(p)
+  })
+
+  it('an unknown or wrong-shaped value falls back to the default', () => {
+    expect(mergeSettings({ quickDrag: 'altDrag' }).quickDrag).toBe('cmdCtrl')
+    expect(mergeSettings({ quickDrag: '' }).quickDrag).toBe('cmdCtrl')
+    expect(mergeSettings({ quickDrag: 1 }).quickDrag).toBe('cmdCtrl')
+  })
+})

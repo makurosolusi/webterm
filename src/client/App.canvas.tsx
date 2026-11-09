@@ -8,6 +8,7 @@ import McpAppsWatcher from './mcpapps/McpAppsWatcher'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
 import { useNodeActions } from './nodeActions'
 import { useNodeResizeWiring } from './nodeResize/useNodeResizeWiring'
+import { QuickDrag } from './quickDrag/useQuickDrag'
 import { useRecordLegacyClaudeProfiles } from './claudeLauncher/useLegacyClaudeProfiles'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
@@ -103,6 +104,8 @@ export default function BoardCanvas({
       )}
       {/* Adds an App node when an agent publishes an MCP Apps ui:// view (mcpapps/McpAppsWatcher.tsx). */}
       <McpAppsWatcher />
+      {/* Hold ⌘⌃ (preset) and drag anywhere on a node to move or resize it (quickDrag/useQuickDrag.ts). */}
+      <QuickDrag preset={settings.quickDrag} />
       <NodeMaximizeOverlay nodes={nodes} />
       <MiniMap
         className="minimap-dock" pannable zoomable nodeColor={nodeColor}

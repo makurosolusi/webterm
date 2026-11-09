@@ -29,6 +29,11 @@ describe('nextSettings', () => {
     expect(s.snapToGrid).toBe(true)
   })
 
+  it('stores quickDrag normalized: an unknown preset is written as the default', () => {
+    expect(nextSettings(null, { quickDrag: 'off' }).quickDrag).toBe('off')
+    expect(nextSettingsDocument('{"quickDrag":"off"}', { quickDrag: 'bogus' }).doc.quickDrag).toBe('cmdCtrl')
+  })
+
   it('ignores a non-object patch rather than wiping the store', () => {
     expect(nextSettings('{"fontSize":21}', null).fontSize).toBe(21)
     expect(nextSettings('{"fontSize":21}', 'nope').fontSize).toBe(21)

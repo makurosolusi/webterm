@@ -6,7 +6,10 @@ import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
 import { nodeIdOf } from '../nodeRoot'
 import { IconButton } from '@/components/ui/icon-button'
 import type { VscodeMenuItem } from '../components/vscode/vscodeMenu'
-import { RESIZE_COMMAND_ID, exitNodeResize, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
+import { RESIZE_COMMAND_ID, exitNodeResize, setNodeResizeLimits, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
+
+/** NodeResizer's own default when a node passes no minimum. */
+const RESIZER_DEFAULT_MIN = 10
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
 
@@ -24,6 +27,13 @@ export function NodeLayoutResizer({ collapsed, ...props }: NodeLayoutResizerProp
   const editing = id !== null && editingId === id && !collapsed
 
   useEffect(() => { if (collapsed && id) exitNodeResize(id) }, [collapsed, id])
+  const minWidth = props.minWidth ?? RESIZER_DEFAULT_MIN
+  const minHeight = props.minHeight ?? RESIZER_DEFAULT_MIN
+  useEffect(() => {
+    if (!id) return
+    setNodeResizeLimits(id, { minWidth, minHeight, collapsed: !!collapsed })
+    return () => setNodeResizeLimits(id, null)
+  }, [id, minWidth, minHeight, collapsed])
   // Unmount = the node was deleted (or left the canvas): its mode must not outlive it.
   useEffect(() => () => { if (id) exitNodeResize(id) }, [id])
 

@@ -21,6 +21,7 @@ Operator notes:
 
 ### Added
 - **Layers** in the left side bar, like Figma: every node of the open board in tab order, with hover highlighting the node on the canvas, a filter, rename (double-click or F2), and groups. Drag rows to reorder them or move them into and out of groups; **Mod+G** groups the selected nodes and **Mod+Shift+G** ungroups them.
+- Quick move & resize: hold ⌘⌃ (Ctrl+Alt on Windows and Linux) and drag anywhere on a node. The middle moves it (with the selection), an edge or corner resizes it, a right-drag resizes from the nearest corner, and Esc puts it back. Pick ⌘⇧ (Ctrl+Shift) or turn it off in Settings › Canvas › Quick move & resize.
 - Central knows which project workspace you are looking at and which nodes are on it.
 - Central can switch your canvas to another project's workspace and centre a node for you: "show me Mango".
 - Central can take a screenshot of what you see in the webterm window. Only a visible tab answers; if no webterm window is open, Central says so after a short wait. It captures only what is on screen, one screenshot at a time, and a very busy page answers "too much on screen" instead of slowing the window. The picture is not saved in Central's history.
