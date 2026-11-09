@@ -52,7 +52,8 @@ describe('capability declarations', () => {
 
   it('registers every Central tool group (sanity: the full set is large)', () => {
     expect(defs.length).toBeGreaterThan(29)
-    expect(defs.map((d) => d.name)).toEqual(expect.arrayContaining(['cap.search', 'cap.describe', 'agent.spawn', 'kb.search', 'browser_act', 'task.run']))
+    expect(defs.map((d) => d.name)).toEqual(expect.arrayContaining(['cap.search', 'cap.describe', 'agent.spawn', 'kb.search', 'browser_act', 'task.run',
+      'canvas.type', 'canvas.edit', 'canvas.group', 'workspace.create', 'workspace.rename']))
   })
 
   for (const def of defs) it(`${def.name} declares summary, tier, input and output schema`, () => {

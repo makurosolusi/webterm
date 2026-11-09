@@ -17,13 +17,17 @@ import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
 import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
 import { createCanvasActDefs } from './defs/canvas.act.defs'
+import { createCanvasEditDefs } from './defs/canvas.edit.defs'
+import { createCanvasGroupDefs } from './defs/canvas.group.defs'
 import { createCanvasShotDefs } from './defs/canvas.shot.def'
+import { createCanvasTypeDefs } from './defs/canvas.type.defs'
 import { createCanvasViewDefs } from './defs/canvas.view.defs'
 import { createNodeReadDefs } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
 import { TASK_RUN_DEF } from './defs/task.run.def'
+import { createWorkspaceDefs } from './defs/workspace.defs'
 import { type ToolDef, type ToolRegistry, defEnabled } from './toolTypes'
 
 export { toolsHash } from './toolRegistry'
@@ -61,6 +65,17 @@ const nodeDefs = (): ToolDef[] => [
     },
   }),
   ...createCanvasShotDefs(),
+  ...createCanvasTypeDefs({ sessions: async () => (await import('../../sessions')).sessions }),
+  ...createCanvasEditDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),
+  ...createCanvasGroupDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),
+  ...createWorkspaceDefs({
+    runtime: async () => {
+      const [{ db }, { broadcastUi }, { createWorkspaceFrom }, { dataDir }] = await Promise.all([
+        import('../../db'), import('../../canvas/canvasPush.runtime'), import('../../workspacesApi'), import('../../config'),
+      ])
+      return { create: (f) => createWorkspaceFrom(db, f), db, broadcast: broadcastUi, dataDir }
+    },
+  }),
 ]
 
 /** Registers the groups whose flag is on and returns the names added (already-registered names are skipped). */

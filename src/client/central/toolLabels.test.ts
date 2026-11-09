@@ -20,6 +20,7 @@ describe('tool labels', () => {
     expect(serverTools.length).toBeGreaterThanOrEqual(37)
     expect(serverTools).toContain('repo.map')
     expect(serverTools).toContain('blackboard.read')
+    for (const n of ['canvas.edit', 'canvas.group', 'canvas.type', 'workspace.create', 'workspace.rename']) expect(serverTools).toContain(n)
   })
 
   it('every server tool has a plain title and sentence', () => {
