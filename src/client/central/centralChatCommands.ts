@@ -39,6 +39,8 @@ export function useCentralChatCommands<R extends unknown[]>(
   const hostRef = useRef(host)
   hostRef.current = host
   const [seed, setSeed] = useState<{ text: string; key: number; menu?: boolean }>()
+  // Bumped by bare `/model`; the header picker opens on each new value.
+  const [modelPickerRequest, setModelPickerRequest] = useState(0)
   const enabled = host?.centralEnabled
   const commands = useMemo(() => (enabled === undefined ? undefined : createCentralCommands({
     centralEnabled: enabled,
@@ -52,6 +54,10 @@ export function useCentralChatCommands<R extends unknown[]>(
     if (d.kind === 'send') send(d.text, ...rest)
     else if (d.kind === 'usage') { notice(d.message); reseed(d.draft) }
     else if (d.kind === 'panel') openCentralTab(d.tab, d.halt)
+    else if (d.kind === 'model-picker') {
+      if (!conversationId) notice('This chat cannot change its model.')
+      else setModelPickerRequest((n) => n + 1)
+    }
     else if (d.kind === 'model') {
       if (!conversationId) notice('This chat cannot change its model.')
       else (hostRef.current?.setModel ?? setCentralModel)(conversationId, d.model, d.effort).then(() => onModelSet?.(), (e: unknown) => notice(chatErrorMessage(e)))
@@ -63,5 +69,5 @@ export function useCentralChatCommands<R extends unknown[]>(
     else reseed('/', true)
   }
 
-  return { completion: commands?.completion, seed, onSend }
+  return { completion: commands?.completion, seed, onSend, modelPickerRequest }
 }

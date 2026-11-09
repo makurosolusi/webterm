@@ -69,6 +69,8 @@ export type CentralDecision =
   | { kind: 'panel'; tab: CentralTab; halt?: boolean }
   | { kind: 'usage'; message: string; draft: string }
   | { kind: 'model'; model: ModelArg; effort?: EffortArg }
+  /** Bare `/model`: open the header's model + effort picker (as Claude Code's `/model` does). */
+  | { kind: 'model-picker' }
 
 const COMMAND = /^\s*\/([A-Za-z0-9._:-]+)(?:\s+([\s\S]*))?$/
 
@@ -96,8 +98,9 @@ export function resolveCentralInput(text: string, commands: readonly CentralComm
   return { kind: 'send', text: cmd.run.prompt(arg) }
 }
 
-/** `/model <model> [effort]`; anything else is a usage hint, nothing is sent. */
+/** `/model <model> [effort]`; bare `/model` opens the picker; anything else is a usage hint, nothing is sent. */
 function modelDecision(arg: string): CentralDecision {
+  if (!arg) return { kind: 'model-picker' }
   const [model, effort, extra] = arg.toLowerCase().split(/\s+/).filter(Boolean)
   const okModel = MODEL_ARGS.includes(model as ModelArg)
   const okEffort = effort === undefined || EFFORT_ARGS.includes(effort as EffortArg)
