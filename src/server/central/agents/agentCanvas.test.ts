@@ -40,6 +40,7 @@ function fakeCanvas(boards: Record<string, string> = { [REPO]: 'w1' }, refuse = 
       return { ok: true, updatedAt: T0, nodes: input.nodes }
     },
     remove: () => ({ ok: false, code: 'workspace_not_found' }), // not exercised by spawn placement
+    update: () => ({ ok: false, code: 'workspace_not_found' }), // not exercised by spawn placement
     workspaceOfNode: (id) => (placed.has(id) ? ws(placed.get(id) as string) : null),
     workspaceForCwd: (cwd) => (boards[cwd] ? ws(boards[cwd] as string) : null),
   }

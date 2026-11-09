@@ -224,3 +224,70 @@ describe('applyCanvasPush (mounted board)', () => {
     expect(mergeCanvasPush(after, { nodes: [], bridges: [], removed: ['b1'] })).toBe(after)
   })
 })
+
+describe('canvas update push (patched nodes, unlinked cables)', () => {
+  const live = (nodes: Node[], edges: Edge[]) => {
+    const state = { nodes, edges }
+    const b: LiveBoard = {
+      recordClosed: vi.fn(),
+      activeWsRef: { current: board(10) },
+      nodesRef: { current: state.nodes },
+      edgesRef: { current: state.edges },
+      setNodes: vi.fn((u) => { state.nodes = typeof u === 'function' ? u(state.nodes) : u }),
+      setEdges: vi.fn((u) => { state.edges = typeof u === 'function' ? u(state.edges) : u }),
+    }
+    return { b, state }
+  }
+  const MOVED: WsNode = { ...AGENT, x: 300, y: 200, width: 700, title: 'Planner', collapsed: true } // no color, height: cleared
+  const update: CanvasMsg = { t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], updated: [MOVED], unlinked: [CABLE.id] }
+
+  it('patches position, size and look in place, keeping selection, drag, measured state and other data', () => {
+    const agent: Node = { id: 'agent-1', type: 'agent', position: { x: 0, y: 0 }, width: 400, height: 300, selected: true, dragging: true, measured: { width: 400, height: 300 }, data: { kind: 'agent', cmd: 'claude', color: '#f00', title: 'Old' } }
+    const other: Node = { id: 'b1', type: 'browser', position: { x: 432, y: 0 }, data: {} }
+    const keep = { id: 'keep', source: 'agent-1', target: 'b1' }
+    const { b, state } = live([agent, other], [{ id: CABLE.id, source: 'agent-1', target: 'b1' }, keep])
+    expect(applyCanvasPush(b, update)).toBe(true)
+    const [a, o] = state.nodes
+    expect(a).toMatchObject({ position: { x: 300, y: 200 }, width: 700, height: 300, selected: true, dragging: true, measured: { width: 400, height: 300 } })
+    expect(a.data).toEqual({ kind: 'agent', cmd: 'claude', color: undefined, title: 'Planner', collapsed: true, hideLinks: undefined })
+    expect(o).toBe(other)
+    expect(b.nodesRef.current).toEqual(state.nodes)
+    expect(state.edges).toEqual([keep])
+    expect(b.edgesRef.current).toEqual([keep])
+    expect(b.recordClosed).not.toHaveBeenCalled()
+  })
+
+  it('an update for nodes and cables the canvas lacks touches nothing', () => {
+    const { b } = live([{ id: 'x', position: { x: 0, y: 0 }, data: {} }], [])
+    applyCanvasPush(b, update)
+    expect(b.setNodes).not.toHaveBeenCalled()
+    expect(b.setEdges).not.toHaveBeenCalled()
+  })
+
+  it('a pending save locked before the push keeps the patched fields and loses the unlinked cable', async () => {
+    const start = { ...board(10, 'w', [{ ...AGENT, color: '#f00' }, BROWSER]), bridges: [CABLE] }
+    const srv = fakeServer(start)
+    const hooks = { onStale: vi.fn(), onMissing: vi.fn() }
+    const q = createSaveQueue(hooks, { save: srv.save })
+    void q.enqueue({ ...start, name: 'first' })
+    srv.hooks.after = () => {
+      const base = srv.get().updatedAt
+      srv.set(mergeCanvasPush({ ...srv.get(), updatedAt: base + 1 }, update))
+      q.absorb({ ...update, base, updatedAt: base + 1 })
+    }
+    await q.enqueue({ ...start, name: 'locked before the update' }) // still holds the old x/y/title + cable
+    expect(hooks.onStale).not.toHaveBeenCalled()
+    const stored = srv.get()
+    expect(stored.name).toBe('locked before the update')
+    expect(stored.nodes[0]).toEqual(MOVED)
+    expect(stored.nodes[1]).toEqual(BROWSER)
+    expect(stored.bridges).toEqual([])
+  })
+
+  it('merging an update for nodes or cables the board lacks returns the same object', () => {
+    const ws = { ...board(10, 'w', [AGENT]), bridges: [] }
+    expect(mergeCanvasPush(ws, { nodes: [], bridges: [], unlinked: ['gone'] })).toBe(ws)
+    expect(mergeCanvasPush(ws, { nodes: [], bridges: [], updated: [{ ...BROWSER }] })).toBe(ws)
+    expect(mergeCanvasPush(ws, { nodes: [], bridges: [], updated: [MOVED] }).nodes).toEqual([MOVED])
+  })
+})

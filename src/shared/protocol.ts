@@ -38,7 +38,11 @@ export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // version `updatedAt`: the UI merges ids it lacks (`base` tells a window whether it knew what lay underneath).
 // `removed` = node ids the server took off the board (their sessions already ended) along with every
 // cable touching them; such a frame carries empty `nodes`/`bridges`.
-export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[] }
+// `updated` = existing nodes the server patched (full node; the UI takes its x/y/size/title/color/collapsed/hideLinks).
+// `unlinked` = cable ids the server removed.
+/** The fields of an `updated` node a window takes from the push (server `canvasPush.update`). */
+export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks'] as const
+export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[]; updated?: WsNode[]; unlinked?: string[] }
 // Central asked the UI to show workspace `workspaceId` (and centre/reveal `nodeId` when given).
 export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string }
 // Central asked for a screenshot: the visible UI tab captures its view and POSTs it to /api/canvas-shot/<reqId>.
